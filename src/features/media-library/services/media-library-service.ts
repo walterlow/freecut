@@ -690,13 +690,17 @@ class MediaLibraryService {
   }
 
   /**
-   * @deprecated Use deleteMediaFromProject instead for proper reference counting
+   * Delete a media item globally — removes it from every project that uses
+   * it, then deletes metadata, thumbnails, transcripts, proxies, and any
+   * OPFS content when no longer referenced.
+   *
+   * Prefer `deleteMediaFromProject(projectId, mediaId)` when a project
+   * context exists: it preserves the media for other projects via
+   * reference counting. Use this variant only from the no-project view
+   * (global media library), or when the user explicitly wants a
+   * "delete everywhere" action.
    */
   async deleteMedia(id: string): Promise<void> {
-    logger.warn(
-      'deleteMedia is deprecated. Use deleteMediaFromProject for proper reference counting.'
-    );
-
     const media = await getMediaDB(id);
     if (!media) {
       throw new Error(`Media not found: ${id}`);
@@ -726,13 +730,10 @@ class MediaLibraryService {
   }
 
   /**
-   * @deprecated Use deleteMediaBatchFromProject instead
+   * Batch variant of `deleteMedia` — see its docs for when to use this
+   * vs. `deleteMediaBatchFromProject`.
    */
   async deleteMediaBatch(ids: string[]): Promise<void> {
-    logger.warn(
-      'deleteMediaBatch is deprecated. Use deleteMediaBatchFromProject for proper reference counting.'
-    );
-
     const errors: Array<{ id: string; error: unknown }> = [];
 
     for (const id of ids) {

@@ -35,6 +35,19 @@ import {
   writeWorkspaceIndex,
   type WorkspaceIndexEntry,
 } from './workspace-index';
+import { withKeyLock } from './with-key-lock';
+
+/**
+ * Single key for every `index.json` mutation.
+ *
+ * The index file is rebuilt from a directory scan then written. Without
+ * serialization, two concurrent creates can both read the directory
+ * before the other's project.json has landed, producing a stale index
+ * that drops the other tab's entry. File is self-healing (the missing
+ * entry re-appears on the next rebuild) but serializing removes the
+ * window entirely within one tab.
+ */
+const INDEX_LOCK_KEY = 'projects:index';
 
 const logger = createLogger('WorkspaceFS:Projects');
 
@@ -91,8 +104,10 @@ async function rebuildIndex(
 }
 
 async function refreshIndex(root: FileSystemDirectoryHandle): Promise<void> {
-  const entries = await rebuildIndex(root);
-  await writeWorkspaceIndex(root, entries);
+  await withKeyLock(INDEX_LOCK_KEY, async () => {
+    const entries = await rebuildIndex(root);
+    await writeWorkspaceIndex(root, entries);
+  });
 }
 
 /* ────────────────────────────── Public API ───────────────────────────── */

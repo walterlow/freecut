@@ -98,6 +98,52 @@ async function markMigrated(): Promise<void> {
   await writeJsonAtomic(root, [MARKER_FILENAME], updated);
 }
 
+/** Marker file kept alongside `.freecut-workspace.json` when migration had
+ *  per-store errors. Its presence drives a "retry failed items" UI. Cleared
+ *  by a successful re-run. */
+const MIGRATION_ERRORS_FILENAME = '.freecut-migration-errors.json';
+
+interface PersistedMigrationErrors {
+  recordedAt: number;
+  errors: MigrationReport['errors'];
+}
+
+async function writeMigrationErrors(errors: MigrationReport['errors']): Promise<void> {
+  const root = requireWorkspaceRoot();
+  if (errors.length === 0) {
+    // Clear any previous error marker from an earlier failed run.
+    try {
+      const { removeEntry } = await import(
+        '@/infrastructure/storage/workspace-fs/fs-primitives'
+      );
+      await removeEntry(root, [MIGRATION_ERRORS_FILENAME]);
+    } catch {
+      // Best-effort cleanup.
+    }
+    return;
+  }
+  const payload: PersistedMigrationErrors = {
+    recordedAt: Date.now(),
+    errors,
+  };
+  await writeJsonAtomic(root, [MIGRATION_ERRORS_FILENAME], payload);
+}
+
+/**
+ * Read the persisted error list from the last migration run, if any.
+ * UI can use this to show a "N items failed — retry" banner after a
+ * partial success.
+ */
+export async function getMigrationErrors(): Promise<MigrationReport['errors']> {
+  try {
+    const root = requireWorkspaceRoot();
+    const payload = await readJson<PersistedMigrationErrors>(root, [MIGRATION_ERRORS_FILENAME]);
+    return payload?.errors ?? [];
+  } catch {
+    return [];
+  }
+}
+
 function pushError(
   report: MigrationReport,
   store: string,
@@ -263,7 +309,23 @@ export async function migrateFromLegacyIDB(): Promise<MigrationReport> {
     await migrateWaveforms(report);
     await migrateDecodedAudio(report);
 
-    await markMigrated();
+    // Persist per-store errors so the UI can surface a retry banner on
+    // next launch. A clean run clears the error marker.
+    await writeMigrationErrors(report.errors);
+
+    // Set the "migration ran" marker only on a fully clean run. A run with
+    // any errors leaves the marker unset so re-running retries the whole
+    // migration — `create*` throws "already exists" for items that landed
+    // the first time, which gets caught as an error and is the right
+    // behavior (noise, but no data loss). Once every store succeeds, the
+    // marker is set and future launches skip the migration entirely.
+    if (report.errors.length === 0) {
+      await markMigrated();
+    } else {
+      logger.warn(
+        `Migration completed with ${report.errors.length} errors; marker not set to allow retry.`,
+      );
+    }
     report.durationMs = Date.now() - started;
 
     event.merge({
@@ -277,6 +339,7 @@ export async function migrateFromLegacyIDB(): Promise<MigrationReport> {
       decodedAudioRecords: report.decodedAudioRecords,
       errorCount: report.errors.length,
       durationMs: report.durationMs,
+      markedMigrated: report.errors.length === 0,
     });
     event.success();
     return report;

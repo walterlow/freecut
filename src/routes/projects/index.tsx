@@ -27,6 +27,7 @@ import type { ProjectFormData } from '@/features/projects/utils/validation';
 import type { ImportProgress } from '@/features/project-bundle/types/bundle';
 import { BUNDLE_EXTENSION } from '@/features/project-bundle/types/bundle';
 import { LegacyMigrationBanner } from '@/features/projects/components/legacy-migration-banner';
+import { LegacyMigrationErrors } from '@/features/projects/components/legacy-migration-errors';
 import { WorkspaceIndicator } from '@/features/workspace-gate';
 
 export const Route = createFileRoute('/projects/')({
@@ -300,8 +301,10 @@ function ProjectsIndex() {
         )}
 
         {/* Legacy IDB migration banner — appears only when old data is present and unmigrated */}
-        <div className="max-w-[1920px] mx-auto px-6 pt-6">
+        <div className="max-w-[1920px] mx-auto px-6 pt-6 space-y-3">
           <LegacyMigrationBanner onMigrated={loadProjects} />
+          {/* Retry banner — appears only when a previous migration left failed items behind */}
+          <LegacyMigrationErrors onRetried={loadProjects} />
         </div>
 
         {/* Loading state */}

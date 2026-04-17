@@ -14,6 +14,8 @@ import { createManagedWorkerPool } from '@/shared/utils/managed-worker-pool';
 import {
   getObjectUrlBlob,
   getObjectUrlDirectFileMetadata,
+  registerObjectUrl,
+  unregisterObjectUrl,
 } from '@/infrastructure/browser/object-url-registry';
 
 const logger = createLogger('FilmstripCache');
@@ -814,6 +816,15 @@ class FilmstripCacheService {
     }
 
     const blobUrl = URL.createObjectURL(source);
+    // Register so the worker-dispatch path (`startExtraction` → postMessage)
+    // can look the blob up synchronously via `getObjectUrlBlob(blobUrl)` and
+    // ship it to the worker as `fallbackBlob`. Without this, the worker has
+    // neither `sourceMetadata` (no opfsPath is known at import time yet)
+    // nor `fallbackBlob`, so mediabunny's input-source factory falls through
+    // to `new UrlSource(blobUrl)` — which then calls `fetch(blobUrl)` from
+    // the worker context and occasionally trips "Failed to fetch" retries.
+    // Registering here keeps the BlobSource path hot and silent.
+    registerObjectUrl(blobUrl, source);
     let cleanedUp = false;
     let needsDeferredUnsubscribe = false;
     let unsubscribe: (() => void) | null = null;
@@ -827,6 +838,7 @@ class FilmstripCacheService {
       } else {
         needsDeferredUnsubscribe = true;
       }
+      unregisterObjectUrl(blobUrl);
       URL.revokeObjectURL(blobUrl);
     };
 

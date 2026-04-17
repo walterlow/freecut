@@ -26,6 +26,17 @@ import {
 import { listDirectory } from './fs-primitives';
 import { getProject } from './projects';
 import { getMedia } from './media';
+import { withKeyLock } from './with-key-lock';
+
+/**
+ * Serialize mutations of `media-links.json` per project. Without this,
+ * two concurrent `associateMediaWithProject` calls on the same project
+ * both read the current list, each appends its own id, and the second
+ * write drops the first id on the floor.
+ */
+function linksLockKey(projectId: string): string {
+  return `project-media-links:${projectId}`;
+}
 
 const logger = createLogger('WorkspaceFS:ProjectMedia');
 
@@ -97,11 +108,13 @@ export async function associateMediaWithProject(
 ): Promise<void> {
   const root = requireWorkspaceRoot();
   try {
-    const links = await readLinks(root, projectId);
-    if (!links.mediaIds.some((entry) => entry.id === mediaId)) {
-      links.mediaIds.push({ id: mediaId, addedAt: Date.now() });
-      await writeLinks(root, projectId, links);
-    }
+    await withKeyLock(linksLockKey(projectId), async () => {
+      const links = await readLinks(root, projectId);
+      if (!links.mediaIds.some((entry) => entry.id === mediaId)) {
+        links.mediaIds.push({ id: mediaId, addedAt: Date.now() });
+        await writeLinks(root, projectId, links);
+      }
+    });
   } catch (error) {
     logger.error(`associateMediaWithProject(${projectId}, ${mediaId}) failed`, error);
     throw error;
@@ -114,11 +127,13 @@ export async function removeMediaFromProject(
 ): Promise<void> {
   const root = requireWorkspaceRoot();
   try {
-    const links = await readLinks(root, projectId);
-    const next = links.mediaIds.filter((entry) => entry.id !== mediaId);
-    if (next.length !== links.mediaIds.length) {
-      await writeLinks(root, projectId, { version: LINKS_VERSION, mediaIds: next });
-    }
+    await withKeyLock(linksLockKey(projectId), async () => {
+      const links = await readLinks(root, projectId);
+      const next = links.mediaIds.filter((entry) => entry.id !== mediaId);
+      if (next.length !== links.mediaIds.length) {
+        await writeLinks(root, projectId, { version: LINKS_VERSION, mediaIds: next });
+      }
+    });
   } catch (error) {
     logger.error(`removeMediaFromProject(${projectId}, ${mediaId}) failed`, error);
     throw error;

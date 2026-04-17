@@ -61,6 +61,73 @@ async function restoreFileHandle(serialized: SerializedMedia): Promise<MediaMeta
   return serialized as MediaMetadata;
 }
 
+/**
+ * Outcome of validating a stored `FileSystemFileHandle` against the
+ * `lastSeenSize` / `lastSeenMtime` captured at import time.
+ *
+ * - `ok`           — handle resolves to a file with matching size+mtime.
+ * - `no-handle`    — this media doesn't use a handle (OPFS or content-
+ *                    addressable storage); nothing to validate.
+ * - `permission`   — the browser rejected the handle with NotAllowedError
+ *                    (user revoked access at the OS/picker level).
+ * - `missing`      — handle can't resolve to a file (renamed, moved, or
+ *                    deleted on disk).
+ * - `changed`      — handle resolves but size or mtime differ from what
+ *                    we recorded. Callers should offer a relink flow
+ *                    because downstream caches (thumbnails, waveforms)
+ *                    may no longer match the current file bytes.
+ */
+export type MediaHandleValidation =
+  | { kind: 'ok' }
+  | { kind: 'no-handle' }
+  | { kind: 'permission' }
+  | { kind: 'missing' }
+  | { kind: 'changed'; currentSize: number; currentMtime: number };
+
+/**
+ * Validate a stored media file handle against its last-seen stats.
+ *
+ * Calls `handle.getFile()` which forces the browser to resolve the
+ * underlying file on disk. If the user renamed/moved/deleted the file
+ * externally, this throws NotFoundError. If the file exists but size or
+ * mtime changed, we flag `changed` so callers can rebuild caches.
+ *
+ * Cheap enough to call on project open for every handle-backed media
+ * (one stat per file). Do NOT call in hot paths.
+ */
+export async function validateMediaHandle(mediaId: string): Promise<MediaHandleValidation> {
+  const record = await getHandle('media', mediaId);
+  if (!record) return { kind: 'no-handle' };
+
+  const handle = record.handle as FileSystemFileHandle;
+  try {
+    const file = await handle.getFile();
+    const expectedSize = record.lastSeenSize;
+    const expectedMtime = record.lastSeenMtime;
+    if (
+      typeof expectedSize === 'number' &&
+      typeof expectedMtime === 'number' &&
+      (file.size !== expectedSize || file.lastModified !== expectedMtime)
+    ) {
+      return {
+        kind: 'changed',
+        currentSize: file.size,
+        currentMtime: file.lastModified,
+      };
+    }
+    return { kind: 'ok' };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'NotAllowedError') {
+      return { kind: 'permission' };
+    }
+    if (error instanceof DOMException && error.name === 'NotFoundError') {
+      return { kind: 'missing' };
+    }
+    logger.warn(`validateMediaHandle(${mediaId}) unexpected error`, error);
+    return { kind: 'missing' };
+  }
+}
+
 /* ────────────────────────────── Public API ───────────────────────────── */
 
 export async function getAllMedia(): Promise<MediaMetadata[]> {

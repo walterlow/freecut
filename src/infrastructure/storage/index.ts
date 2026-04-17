@@ -23,6 +23,8 @@ export {
   createMedia,
   updateMedia,
   deleteMedia,
+  validateMediaHandle,
+  type MediaHandleValidation,
 } from '@/infrastructure/storage/workspace-fs/media';
 
 // Thumbnails

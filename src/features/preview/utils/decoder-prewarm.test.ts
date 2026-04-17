@@ -117,7 +117,13 @@ describe('decoder prewarm', () => {
     expect(bitmap).toBe(mockBitmap);
   });
 
-  it('fails fast for stale blob URLs instead of falling back to worker fetch retries', async () => {
+  it('fails fast for unregistered blob URLs without ever calling fetch', async () => {
+    // Any blob: URL that isn't in the object-url registry is, by
+    // construction, unreachable from our JS — `blobUrlManager` is the
+    // only place we create blob URLs, and it always registers. Calling
+    // fetch() in that case would produce an uncatchable ERR_FILE_NOT_FOUND
+    // in the DevTools console (Chrome logs network errors before the JS
+    // .catch runs). The module now bails silently instead.
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
 
     const firstResult = await backgroundPreseek('blob:stale', 1);
@@ -129,7 +135,7 @@ describe('decoder prewarm', () => {
 
     expect(firstResult).toBeNull();
     expect(secondResult).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(preseekPosts).toHaveLength(0);
   });
 });

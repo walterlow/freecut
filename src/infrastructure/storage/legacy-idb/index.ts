@@ -10,6 +10,7 @@
 export {
   hasLegacyData,
   getMigrationStatus,
+  getMigrationErrors,
   migrateFromLegacyIDB,
   deleteLegacyIDB,
   type MigrationReport,
