@@ -19,7 +19,7 @@ import {
   hasLegacyData,
   migrateFromLegacyIDB,
   type MigrationReport,
-} from '@/infrastructure/storage/workspace-fs/migrate-from-idb';
+} from '@/infrastructure/storage/legacy-idb';
 
 const logger = createLogger('LegacyMigrationBanner');
 

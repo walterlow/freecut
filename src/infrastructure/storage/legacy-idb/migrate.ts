@@ -2,20 +2,20 @@
  * One-shot migration from legacy `video-editor-db` IndexedDB into the
  * workspace folder.
  *
- * Reads directly from the legacy stores via each module's relative path
- * (bypassing the barrel which has been flipped to the workspace-fs layer).
- * Writes through the new workspace-fs API so the normal path-computation
- * and handle-stashing logic runs.
- *
- * The legacy IDB is left untouched; users can opt to delete it after a
- * confirmed migration.
+ * Reads from the consolidated legacy reader (./reader) and writes through
+ * the workspace-fs write API so normal path computation and handle stashing
+ * runs. The legacy IDB is left untouched unless the user explicitly invokes
+ * `deleteLegacyIDB()` after a successful migration.
  */
 
 import { createLogger, createOperationId } from '@/shared/logging/logger';
-import { requireWorkspaceRoot } from './root';
-import { readJson, writeJsonAtomic } from './fs-primitives';
-import { MARKER_FILENAME } from './paths';
-import type { WorkspaceMarker } from './bootstrap';
+import { requireWorkspaceRoot } from '@/infrastructure/storage/workspace-fs/root';
+import {
+  readJson,
+  writeJsonAtomic,
+} from '@/infrastructure/storage/workspace-fs/fs-primitives';
+import { MARKER_FILENAME } from '@/infrastructure/storage/workspace-fs/paths';
+import type { WorkspaceMarker } from '@/infrastructure/storage/workspace-fs/bootstrap';
 
 // Legacy readers — consolidated read-only access to `video-editor-db`.
 import {
@@ -28,19 +28,19 @@ import {
   readGifFrames,
   readThumbnailByMediaId,
   readTranscript,
-} from './legacy-idb-reader';
+} from './reader';
 
 // New writers — workspace-fs.
-import { createProject } from './projects';
-import { createMedia } from './media';
-import { saveThumbnail } from './thumbnails';
-import { associateMediaWithProject } from './project-media';
-import { saveGifFrames } from './gif-frames';
-import { saveWaveformRecord } from './waveforms';
-import { saveDecodedPreviewAudio } from './decoded-preview-audio';
-import { saveTranscript } from './transcripts';
+import { createProject } from '@/infrastructure/storage/workspace-fs/projects';
+import { createMedia } from '@/infrastructure/storage/workspace-fs/media';
+import { saveThumbnail } from '@/infrastructure/storage/workspace-fs/thumbnails';
+import { associateMediaWithProject } from '@/infrastructure/storage/workspace-fs/project-media';
+import { saveGifFrames } from '@/infrastructure/storage/workspace-fs/gif-frames';
+import { saveWaveformRecord } from '@/infrastructure/storage/workspace-fs/waveforms';
+import { saveDecodedPreviewAudio } from '@/infrastructure/storage/workspace-fs/decoded-preview-audio';
+import { saveTranscript } from '@/infrastructure/storage/workspace-fs/transcripts';
 
-const logger = createLogger('WorkspaceFS:Migrate');
+const logger = createLogger('LegacyIDB:Migrate');
 
 export interface MigrationReport {
   projects: number;

@@ -1,13 +1,19 @@
 /**
  * WorkspaceGate
  *
- * Blocks the entire app until the user has picked a workspace folder and
- * granted read/write permission. Runs once at startup:
+ * Wraps the router and, when the current URL is a storage-dependent route
+ * (`/projects*` or `/editor*`), blocks it until the user has picked a
+ * workspace folder and granted read/write permission:
  *
  *   1. Check handles-db for a saved workspace handle
  *   2. If missing → show splash prompting user to pick a folder
  *   3. If present → queryPermission; if granted, set the active root and
  *      render the children. If revoked, show a Reconnect splash.
+ *
+ * The landing page (`/`) is not a storage-dependent route — it renders
+ * without waiting for the gate, so users see no splash flash on first
+ * visit. Navigating into a protected route after the handle is initialized
+ * falls through to the "ready" path without additional UI.
  *
  * Also listens for permission-lost signals from fs-primitives and flips
  * back to the Reconnect state mid-session.
@@ -15,6 +21,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ensureKnownWorkspaceForCurrent,
   getWorkspaceHandleRecord,
   isFileSystemAccessSupported,
   queryHandlePermission,
@@ -28,6 +35,16 @@ import {
 import { bootstrapWorkspace } from '@/infrastructure/storage/workspace-fs/bootstrap';
 import { createLogger } from '@/shared/logging/logger';
 import { WorkspaceGateSplash } from './workspace-gate-splash';
+import { usePathname } from './use-pathname';
+
+/**
+ * Routes that read/write the workspace and therefore need the gate to be
+ * ready before their loaders run. Anything else renders freely without
+ * waiting on storage initialization.
+ */
+function isStorageProtectedPath(pathname: string): boolean {
+  return pathname.startsWith('/projects') || pathname.startsWith('/editor');
+}
 
 const logger = createLogger('WorkspaceGate');
 
@@ -40,6 +57,8 @@ type GateStatus =
 
 export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<GateStatus>({ kind: 'initializing' });
+  const pathname = usePathname();
+  const needsWorkspace = isStorageProtectedPath(pathname);
 
   const activate = useCallback(async (handle: FileSystemDirectoryHandle) => {
     setWorkspaceRoot(handle);
@@ -59,6 +78,10 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
         if (!cancelled) setStatus({ kind: 'unavailable' });
         return;
       }
+      // Promote any legacy `workspace:current` into a proper known-workspace
+      // record before we read it, so the indicator's "known workspaces" list
+      // includes the one the user is about to use.
+      await ensureKnownWorkspaceForCurrent();
       const record = await getWorkspaceHandleRecord();
       if (!record) {
         if (!cancelled) setStatus({ kind: 'pick' });
@@ -132,8 +155,21 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
     }
   }, [activate]);
 
+  // Routes that don't touch storage never wait on the gate — no splash, no
+  // flash, even on first load while we're checking handles-db.
+  if (!needsWorkspace) {
+    return <>{children}</>;
+  }
+
   if (status.kind === 'ready') {
     return <>{children}</>;
+  }
+
+  // On protected routes during initialization, render a bare background
+  // block so the transition from "checking" to "ready" or "splash" is
+  // invisible instead of a logo+spinner flash.
+  if (status.kind === 'initializing') {
+    return <div className="min-h-screen bg-background" aria-hidden="true" />;
   }
 
   return (

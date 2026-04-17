@@ -36,6 +36,12 @@ export interface HandleRecord {
   lastSeenPath?: string;
   lastSeenSize?: number;
   lastSeenMtime?: number;
+  /**
+   * For the sentinel `workspace:current` record only — the stable id of the
+   * known-workspace entry (`workspace:{uuid}`) that is currently active.
+   * Lets the UI display the known-workspace list and mark the active one.
+   */
+  activeWorkspaceId?: string;
 }
 
 interface HandlesDBSchema extends DBSchema {
@@ -109,26 +115,139 @@ export async function listHandlesByKind(kind: HandleKind): Promise<HandleRecord[
 
 /* ───────────────────────────── Workspace shortcut ─────────────────────── */
 
+/**
+ * Workspaces are stored in two layers inside the `handles` store:
+ *
+ *  - `workspace:{uuid}` — one record per known workspace. Stable id across
+ *    activations, survives remove/re-add. These are listed in the UI.
+ *  - `workspace:current` — sentinel pointer to the active workspace. Its
+ *    `activeWorkspaceId` references the real record above, and its
+ *    `handle` / `name` mirror that record so existing consumers
+ *    (`getWorkspaceHandleRecord`) keep working without changes.
+ */
 const WORKSPACE_ID = 'current';
 
 export async function getWorkspaceHandleRecord(): Promise<HandleRecord | null> {
   return getHandle('workspace', WORKSPACE_ID);
 }
 
+/**
+ * List the known workspaces (everything except the `current` sentinel),
+ * most-recently-used first.
+ */
+export async function listKnownWorkspaces(): Promise<HandleRecord[]> {
+  const all = await listHandlesByKind('workspace');
+  return all
+    .filter((r) => r.id !== WORKSPACE_ID)
+    .sort((a, b) => b.pickedAt - a.pickedAt);
+}
+
+async function findKnownWorkspaceByHandle(
+  handle: FileSystemDirectoryHandle,
+): Promise<HandleRecord | null> {
+  const known = await listKnownWorkspaces();
+  for (const record of known) {
+    try {
+      const candidate = record.handle as FileSystemDirectoryHandle;
+      if (await candidate.isSameEntry(handle)) return record;
+    } catch {
+      // Stale handle — ignore.
+    }
+  }
+  return null;
+}
+
+/**
+ * Save (or reuse) a known-workspace record for the picked folder, then
+ * point `workspace:current` at it. Picking a folder already in the list
+ * just refreshes its `pickedAt` and activates it.
+ */
 export async function saveWorkspaceHandleRecord(
   handle: FileSystemDirectoryHandle,
 ): Promise<void> {
+  const existing = await findKnownWorkspaceByHandle(handle);
+  const workspaceId = existing?.id ?? crypto.randomUUID();
+  const pickedAt = Date.now();
+
+  await saveHandle({
+    kind: 'workspace',
+    id: workspaceId,
+    handle,
+    name: handle.name,
+    pickedAt,
+  });
+
   await saveHandle({
     kind: 'workspace',
     id: WORKSPACE_ID,
     handle,
     name: handle.name,
-    pickedAt: Date.now(),
+    pickedAt,
+    activeWorkspaceId: workspaceId,
   });
+}
+
+/**
+ * Activate an already-known workspace. Caller is responsible for
+ * verifying permission on the returned handle before using it.
+ */
+export async function activateWorkspaceHandle(
+  workspaceId: string,
+): Promise<HandleRecord | null> {
+  const record = await getHandle('workspace', workspaceId);
+  if (!record) return null;
+
+  await saveHandle({
+    kind: 'workspace',
+    id: WORKSPACE_ID,
+    handle: record.handle,
+    name: record.name,
+    pickedAt: Date.now(),
+    activeWorkspaceId: workspaceId,
+  });
+  return record;
+}
+
+/**
+ * Delete a known-workspace record. If it's the active one, also clear
+ * the `current` pointer so `WorkspaceGate` reverts to pick-folder state.
+ */
+export async function removeKnownWorkspace(workspaceId: string): Promise<void> {
+  await deleteHandle('workspace', workspaceId);
+  const current = await getWorkspaceHandleRecord();
+  if (current?.activeWorkspaceId === workspaceId) {
+    await clearWorkspaceHandleRecord();
+  }
 }
 
 export async function clearWorkspaceHandleRecord(): Promise<void> {
   await deleteHandle('workspace', WORKSPACE_ID);
+}
+
+/**
+ * One-shot migration for users whose `workspace:current` was written by
+ * an older version of the app that didn't track known workspaces.
+ *
+ * If `current` exists with no `activeWorkspaceId`, create a backing
+ * `workspace:{uuid}` record and rewrite `current` to reference it.
+ * No-op once migrated or when no workspace is set.
+ */
+export async function ensureKnownWorkspaceForCurrent(): Promise<void> {
+  const current = await getWorkspaceHandleRecord();
+  if (!current || current.activeWorkspaceId) return;
+
+  const workspaceId = crypto.randomUUID();
+  await saveHandle({
+    kind: 'workspace',
+    id: workspaceId,
+    handle: current.handle,
+    name: current.name,
+    pickedAt: current.pickedAt,
+  });
+  await saveHandle({
+    ...current,
+    activeWorkspaceId: workspaceId,
+  });
 }
 
 /* ───────────────────────────── Permission helpers ─────────────────────── */

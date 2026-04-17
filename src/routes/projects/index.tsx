@@ -27,6 +27,7 @@ import type { ProjectFormData } from '@/features/projects/utils/validation';
 import type { ImportProgress } from '@/features/project-bundle/types/bundle';
 import { BUNDLE_EXTENSION } from '@/features/project-bundle/types/bundle';
 import { LegacyMigrationBanner } from '@/features/projects/components/legacy-migration-banner';
+import { WorkspaceIndicator } from '@/features/workspace-gate';
 
 export const Route = createFileRoute('/projects/')({
   component: ProjectsIndex,
@@ -248,6 +249,7 @@ function ProjectsIndex() {
               <FreeCutLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
             </Link>
             <div className="flex items-center gap-3">
+              <WorkspaceIndicator />
               <Button
                 variant="outline"
                 size="icon"

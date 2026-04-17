@@ -1,11 +1,9 @@
 /**
- * Storage barrel — re-exports the workspace-fs layer under the legacy
- * import path so consumers don't need to change their imports.
+ * Storage barrel — re-exports the workspace-fs layer.
  *
  * All storage now lives in the user-picked workspace folder via
- * `workspace-fs/*`. Legacy `video-editor-db` IndexedDB reads are handled
- * separately by `workspace-fs/legacy-idb-reader.ts`, used only by the
- * one-time migration tool.
+ * `workspace-fs/*`. Legacy `video-editor-db` IndexedDB reads live under
+ * `legacy-idb/` and are only touched by the one-time migration banner.
  */
 
 // Projects

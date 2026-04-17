@@ -99,10 +99,58 @@ export function mediaThumbnailPath(id: string): string[] {
   return [...mediaDir(id), MEDIA_THUMBNAIL_FILENAME];
 }
 
-/** Segments for `media/{id}/source.{ext}`. */
+/** Segments for the legacy `media/{id}/source.{ext}` layout. */
 export function mediaSourcePath(id: string, extension: string): string[] {
   const ext = extension.startsWith('.') ? extension.slice(1) : extension;
   return [...mediaDir(id), `source.${ext}`];
+}
+
+/**
+ * Segments for `media/{id}/{sanitizedName}` — preserves the user-visible
+ * original filename inside the workspace folder so browsing on disk is
+ * intelligible (`MyVacation.mp4` rather than `source.mp4`).
+ */
+export function mediaSourceByFileName(id: string, fileName: string): string[] {
+  return [...mediaDir(id), sanitizeWorkspaceFileName(fileName)];
+}
+
+/** Never-allowed characters, per NTFS + ext4 intersection. */
+// eslint-disable-next-line no-control-regex -- control chars are exactly what we want to strip
+const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000-\u001F]/g;
+
+/** Names reserved by Windows; suffix with `_` to sidestep them. */
+const WINDOWS_RESERVED_NAMES = new Set([
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+]);
+
+const MAX_FILENAME_LENGTH = 200;
+
+/**
+ * Produce a cross-filesystem-safe variant of a user-supplied filename.
+ * Falls back to `source.bin` for empty / all-invalid inputs.
+ */
+export function sanitizeWorkspaceFileName(fileName: string): string {
+  const trimmed = (fileName ?? '').replace(/^\s+|[\s.]+$/g, '');
+  if (!trimmed) return 'source.bin';
+
+  let cleaned = trimmed.replace(INVALID_FILENAME_CHARS, '_');
+
+  // Extract the extension so truncation doesn't chop it off.
+  const dot = cleaned.lastIndexOf('.');
+  const hasExt = dot > 0 && dot < cleaned.length - 1;
+  const stem = hasExt ? cleaned.slice(0, dot) : cleaned;
+  const ext = hasExt ? cleaned.slice(dot) : '';
+
+  const stemBudget = Math.max(1, MAX_FILENAME_LENGTH - ext.length);
+  const bounded = stem.length > stemBudget ? stem.slice(0, stemBudget) : stem;
+
+  // Windows reserved names are matched case-insensitively against the stem.
+  const isReserved = WINDOWS_RESERVED_NAMES.has(bounded.toUpperCase());
+  cleaned = `${isReserved ? `${bounded}_` : bounded}${ext}`;
+
+  return cleaned || 'source.bin';
 }
 
 /** Segments for `media/{id}/source.link.json`. */
@@ -182,6 +230,7 @@ export function contentDataPath(hash: string, extension: string): string[] {
 export const WORKSPACE_PROXIES_DIR = 'proxies';
 export const WORKSPACE_FILMSTRIPS_DIR = 'filmstrips';
 export const WORKSPACE_PREVIEW_AUDIO_DIR = 'preview-audio';
+export const WORKSPACE_WAVEFORM_BIN_DIR = 'waveform-bin';
 
 export function proxyFilePath(proxyKey: string): string[] {
   return [WORKSPACE_PROXIES_DIR, proxyKey, 'proxy.mp4'];
@@ -202,4 +251,13 @@ export function filmstripMetaPath(mediaId: string): string[] {
 export function previewAudioPath(relativePath: string): string[] {
   // relativePath like 'm-123/track-left.wav' — keep original OPFS layout.
   return [WORKSPACE_PREVIEW_AUDIO_DIR, ...relativePath.split('/')];
+}
+
+/**
+ * Fast multi-resolution waveform binary — the OPFS-primary cache used by the
+ * timeline renderer, mirrored here for cross-origin reuse. Different from
+ * `waveformBinPath` above, which addresses bins inside the per-media cache.
+ */
+export function waveformBinaryPath(mediaId: string): string[] {
+  return [WORKSPACE_WAVEFORM_BIN_DIR, `${mediaId}.bin`];
 }

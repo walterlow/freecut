@@ -1,8 +1,11 @@
 /**
  * Media source bytes in the workspace folder.
  *
- * Stored at `media/{id}/source.{ext}` — the extension is determined from the
- * media's fileName on write, and discovered by directory scan on read.
+ * Stored at `media/{id}/{originalFileName}` (sanitized for cross-fs safety),
+ * preserving the user-visible filename so the workspace folder is
+ * intelligible when browsed on disk. Legacy `media/{id}/source.{ext}`
+ * files written before this change are still picked up by read, so existing
+ * workspaces keep working without migration.
  *
  * This is the bridge that makes media visible across origins: OPFS and
  * `FileSystemFileHandle` are both origin-scoped, but files inside the
@@ -15,12 +18,11 @@ import { createLogger } from '@/shared/logging/logger';
 
 import { requireWorkspaceRoot } from './root';
 import {
-  exists,
   listDirectory,
   readBlob,
   writeBlob,
 } from './fs-primitives';
-import { mediaDir, mediaSourcePath } from './paths';
+import { mediaDir, mediaSourceByFileName } from './paths';
 
 const logger = createLogger('WorkspaceFS:MediaSource');
 
@@ -33,16 +35,11 @@ const NON_SOURCE_NAMES = new Set([
   'cache',
 ]);
 
-function extractExtension(fileName: string | undefined): string {
-  if (!fileName) return 'bin';
-  const dot = fileName.lastIndexOf('.');
-  if (dot < 0 || dot === fileName.length - 1) return 'bin';
-  return fileName.slice(dot + 1).toLowerCase();
-}
-
 /**
- * Locate the source.* file for a media entry by scanning the media dir.
- * Returns the segments of the first match, or null.
+ * Locate the source file for a media entry by scanning the media dir.
+ * Returns the segments of the first file that isn't a reserved sibling
+ * (metadata, thumbnail, cache dir, or a link descriptor). Works for both
+ * the new real-filename layout and the legacy `source.{ext}` layout.
  */
 async function findSourceSegments(
   root: FileSystemDirectoryHandle,
@@ -52,7 +49,6 @@ async function findSourceSegments(
   for (const entry of entries) {
     if (entry.kind !== 'file') continue;
     if (NON_SOURCE_NAMES.has(entry.name)) continue;
-    if (!entry.name.startsWith('source.')) continue;
     return [...mediaDir(mediaId), entry.name];
   }
   return null;
@@ -82,8 +78,10 @@ export async function hasMediaSource(mediaId: string): Promise<boolean> {
 }
 
 /**
- * Write media source bytes to the workspace folder.
- * Derives the file extension from the fileName (falls back to 'bin').
+ * Write media source bytes to the workspace folder using the original
+ * filename (sanitized for cross-fs safety). Idempotent: re-calling for a
+ * media that already has any source file in its dir — including a legacy
+ * `source.{ext}` file from earlier versions — is a no-op.
  */
 export async function writeMediaSource(
   mediaId: string,
@@ -92,12 +90,16 @@ export async function writeMediaSource(
 ): Promise<void> {
   const root = requireWorkspaceRoot();
   try {
-    const ext = extractExtension(fileName);
-    const path = mediaSourcePath(mediaId, ext);
-    if (await exists(root, path)) return; // idempotent
+    // Already have a source file here (new layout or legacy) — don't write a
+    // second one under a different name.
+    if (await findSourceSegments(root, mediaId)) return;
+
+    const path = mediaSourceByFileName(mediaId, fileName ?? 'source.bin');
     const bytes = new Uint8Array(await blobToArrayBuffer(blob));
     await writeBlob(root, path, bytes);
-    logger.info(`Mirrored media source to workspace: ${mediaId} (.${ext}, ${bytes.byteLength} bytes)`);
+    logger.info(
+      `Mirrored media source to workspace: ${mediaId} (${path[path.length - 1]}, ${bytes.byteLength} bytes)`,
+    );
   } catch (error) {
     logger.warn(`writeMediaSource(${mediaId}) failed`, error);
   }
