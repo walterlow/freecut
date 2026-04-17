@@ -46,12 +46,8 @@
           "scope": "audio"
         },
         {
-          "title": "add What's New dialog with weekly changelog viewer",
+          "title": "What's New dialog shows weekly changelog",
           "scope": "editor"
-        },
-        {
-          "title": "weekly CalVer changelog with auto-append and rollup",
-          "scope": "changelog"
         }
       ],
       "fixed": [
@@ -78,10 +74,6 @@
         {
           "title": "UI accessibility, transition alpha, and viewport clamp fixes",
           "scope": "editor"
-        },
-        {
-          "title": "use github.event.before for range and full fetch depth",
-          "scope": "changelog"
         }
       ],
       "improved": [

@@ -13,7 +13,7 @@
 //
 // Does NOT commit or push. Operator runs:
 //   git add src/data/changelog.json CHANGELOG.md package.json
-//   git commit -m "chore(release): v<version>"
+//   git commit -m "chore(release): <version>"
 //   git push
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -148,7 +148,7 @@ Rollup complete.
 
 Next steps (run manually when ready):
   git add src/data/changelog.json CHANGELOG.md package.json
-  git commit -m "chore(release): v${version}"
+  git commit -m "chore(release): ${version}"
   git push
 `);
 }

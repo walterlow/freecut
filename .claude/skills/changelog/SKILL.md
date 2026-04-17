@@ -1,6 +1,6 @@
 ---
 name: changelog
-description: Maintain FreeCut's weekly changelog with a rolling current entry. Use when (1) backfilling historical weeks into CHANGELOG.md and src/data/changelog.json (backfill mode), (2) adding new bullets to the rolling current entry as commits land (append mode), or (3) closing the week and promoting current into a tagged weekly release (rollup mode). Handles commit curation, deduplication, version assignment, tag creation, and keeping both markdown and JSON artifacts in sync.
+description: Maintain FreeCut's weekly changelog with a rolling current entry. Use when (1) backfilling historical weeks into CHANGELOG.md and src/data/changelog.json (backfill mode), (2) adding new bullets to the rolling current entry as commits land (append mode), or (3) closing the week and promoting current into a weekly release (rollup mode). Handles commit curation, deduplication, version assignment, and keeping both markdown and JSON artifacts in sync.
 ---
 
 # Changelog skill
@@ -48,7 +48,7 @@ Pre-PR era (if any): collapse the entire foundation into a single initial releas
 
 Triggered ad-hoc to update `current` as new commits land.
 
-**Input**: commits since last read of `current` (or `git log v<lastTag>..HEAD` if current is empty).
+**Input**: commits since last read of `current`. When `current` is empty (just after a rollup), walk from the most recent `chore(release):` commit on `main` to HEAD.
 
 **Process**:
 1. Walk new commits, applying curation rules.
