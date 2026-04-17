@@ -859,7 +859,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   ]);
   const visualLeft = Math.round(frameToPixelsNow(visualLeftFrame));
   const visualWidth = Math.round(frameToPixelsNow(visualWidthFrames));
-  // Early width check Ã¢â‚¬â€ used to short-circuit expensive computations below.
+  // Early width check ââ‚¬” used to short-circuit expensive computations below.
   // The full useCompactClipShell (which also checks interaction/badge state) is computed later for JSX gating.
   const isCompactWidth = visualWidth > 0 && visualWidth <= COMPACT_CLIP_MAX_WIDTH_PX;
 
@@ -2756,7 +2756,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             />
           )}
 
-          {/* Join indicators Ã¢â‚¬â€ hide globally below a zoom threshold so they're always consistent between neighbors */}
+          {/* Join indicators ââ‚¬” hide globally below a zoom threshold so they're always consistent between neighbors */}
           {showJoinIndicators && (
             <JoinIndicators
               hasJoinableLeft={hasJoinableLeft}

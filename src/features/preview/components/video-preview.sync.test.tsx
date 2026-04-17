@@ -2555,9 +2555,11 @@ describe('VideoPreview sync behavior', () => {
       expect(lastCompositionMediaSources).toContain('blob:refreshed');
     });
 
-    const resolveCallsForMedia = resolveMediaUrlMock.mock.calls.filter(
-      ([id]) => id === mediaId
-    ).length;
-    expect(resolveCallsForMedia).toBeGreaterThan(1);
+    await waitFor(() => {
+      const resolveCallsForMedia = resolveMediaUrlMock.mock.calls.filter(
+        ([id]) => id === mediaId
+      ).length;
+      expect(resolveCallsForMedia).toBeGreaterThan(1);
+    });
   });
 });

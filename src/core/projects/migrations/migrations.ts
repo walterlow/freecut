@@ -775,6 +775,22 @@ const migrations: Record<number, Migration> = {
       };
     },
   },
+  10: {
+    version: 10,
+    description:
+      'Introduce project-scoped masterBusDb (split from per-device monitor volume). Defaults to 0 dB = unity.',
+    migrate: (project: Project): Project => {
+      if (!project.timeline) return project;
+      if (typeof project.timeline.masterBusDb === 'number') return project;
+      return {
+        ...project,
+        timeline: {
+          ...project.timeline,
+          masterBusDb: 0,
+        },
+      };
+    },
+  },
 };
 
 /**

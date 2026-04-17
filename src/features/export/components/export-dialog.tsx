@@ -102,8 +102,8 @@ function getResolutionOptions(projectWidth: number, projectHeight: number) {
 
     const label =
       scale === 1
-        ? `Same as project (${width}Ã—${height})`
-        : `${Math.min(width, height)}p (${width}Ã—${height})`;
+        ? `Same as project (${width}×${height})`
+        : `${Math.min(width, height)}p (${width}×${height})`;
 
     return { value: `${width}x${height}`, label };
   });

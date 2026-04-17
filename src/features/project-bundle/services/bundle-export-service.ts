@@ -14,7 +14,7 @@ import {
   BUNDLE_VERSION,
   BUNDLE_EXTENSION,
 } from '../types/bundle';
-import { getProject, getProjectMediaIds, getThumbnail } from '@/infrastructure/storage/indexeddb';
+import { getProject, getProjectMediaIds, getThumbnail } from '@/infrastructure/storage';
 import {
   mediaLibraryService,
   computeContentHashFromBuffer,
@@ -266,7 +266,7 @@ export async function exportProjectBundleStreaming(
     const totalItems = mediaItems.length;
     onProgress?.({ percent: 15, stage: 'hashing' });
 
-    // Step 4: Build manifest and prepare ZIP â€” stream chunks to disk
+    // Step 4: Build manifest and prepare ZIP — stream chunks to disk
     // Collect write promises since fflate's Zip callback is synchronous and won't await
     const zip = new Zip((err, chunk) => {
       if (err) { zipError = err; return; }

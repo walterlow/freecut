@@ -31,7 +31,7 @@ export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: M
   }
 
   if ((mediaType === 'video' || mediaType === 'image') && media.width > 0 && media.height > 0) {
-    rows.push({ icon: <Maximize2 className="w-3 h-3" />, label: 'Dimensions', value: `${media.width} Ã— ${media.height}` });
+    rows.push({ icon: <Maximize2 className="w-3 h-3" />, label: 'Dimensions', value: `${media.width} × ${media.height}` });
   }
 
   if (media.codec && media.codec !== 'importing...') {

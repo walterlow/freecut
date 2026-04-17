@@ -19,6 +19,13 @@ import { createManagedWorker } from '@/shared/utils/managed-worker';
 import { registerObjectUrl, unregisterObjectUrl } from '@/infrastructure/browser/object-url-registry';
 import { filmstripCache } from '@/features/media-library/deps/timeline-services';
 import { isVideoProxyCandidate } from '@/config/proxy-generation';
+import {
+  mirrorBlobToWorkspace,
+  mirrorJsonToWorkspace,
+  readWorkspaceBlob,
+  removeWorkspaceCacheEntry,
+} from '@/infrastructure/storage/workspace-fs/cache-mirror';
+import { proxyFilePath, proxyMetaPath, WORKSPACE_PROXIES_DIR } from '@/infrastructure/storage/workspace-fs/paths';
 import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants';
 import type {
   ProxyWorkerRequest,
@@ -338,6 +345,11 @@ class ProxyService {
     } catch {
       // Directory may not exist
     }
+
+    // Mirror deletion to workspace cache (best-effort, no-op when absent).
+    void removeWorkspaceCacheEntry([WORKSPACE_PROXIES_DIR, resolvedProxyKey], {
+      recursive: true,
+    });
   }
 
   /**
@@ -451,11 +463,78 @@ class ProxyService {
           await removeProxyEntry(proxyKey, 'invalid');
         }
       }
+
+      // Fall back to the workspace folder for any proxyKeys that weren't in
+      // OPFS (cross-origin reuse). Back-fill OPFS so the next local read is
+      // fast.
+      for (const proxyKey of requestedProxyKeys) {
+        if (this.proxyBlobUrlByKey.has(proxyKey)) continue;
+        const recovered = await this.hydrateProxyFromWorkspace(proxyKey, proxyRoot);
+        if (!recovered) continue;
+        logger.debug(`Hydrated proxy from workspace for ${proxyKey}`);
+      }
     } catch (error) {
       logger.warn('Failed to load existing proxies:', error);
     }
 
     return staleProxyIds;
+  }
+
+  /**
+   * If a proxy exists in the workspace folder but not OPFS, copy it back
+   * into OPFS and cache a blob URL. Returns true on success.
+   */
+  private async hydrateProxyFromWorkspace(
+    proxyKey: string,
+    opfsProxyRoot: FileSystemDirectoryHandle,
+  ): Promise<boolean> {
+    try {
+      const proxyBlob = await readWorkspaceBlob(proxyFilePath(proxyKey));
+      if (!proxyBlob || proxyBlob.size === 0) return false;
+
+      const metaBlob = await readWorkspaceBlob(proxyMetaPath(proxyKey));
+      if (!metaBlob) return false;
+
+      let metadata: ProxyMetadata;
+      try {
+        metadata = JSON.parse(await metaBlob.text()) as ProxyMetadata;
+      } catch {
+        return false;
+      }
+
+      if (metadata.status !== 'ready') return false;
+      if (metadata.version !== PROXY_SCHEMA_VERSION) return false;
+
+      // Back-fill OPFS with both files so subsequent local reads are fast
+      // and stay co-located with the rest of the proxy pipeline.
+      const mediaDir = await opfsProxyRoot.getDirectoryHandle(proxyKey, {
+        create: true,
+      });
+      const proxyHandle = await mediaDir.getFileHandle('proxy.mp4', { create: true });
+      const proxyWritable = await proxyHandle.createWritable();
+      await proxyWritable.write(proxyBlob);
+      await proxyWritable.close();
+
+      const metaHandle = await mediaDir.getFileHandle('meta.json', { create: true });
+      const metaWritable = await metaHandle.createWritable();
+      await metaWritable.write(JSON.stringify(metadata));
+      await metaWritable.close();
+
+      const opfsProxyFile = await (await mediaDir.getFileHandle('proxy.mp4')).getFile();
+      const blobUrl = URL.createObjectURL(opfsProxyFile);
+      registerObjectUrl(blobUrl, opfsProxyFile, {
+        storageType: 'opfs',
+        opfsPath: getProxyOpfsPath(proxyKey),
+        fileSize: opfsProxyFile.size,
+      });
+      this.proxyBlobUrlByKey.set(proxyKey, blobUrl);
+      this.emitStatusForProxyKey(proxyKey, 'ready');
+      this.prewarmFilmstripFromProxy(proxyKey, opfsProxyFile);
+      return true;
+    } catch (error) {
+      logger.warn(`hydrateProxyFromWorkspace(${proxyKey}) failed`, error);
+      return false;
+    }
   }
 
   /**
@@ -553,6 +632,20 @@ class ProxyService {
       this.proxyBlobUrlByKey.set(proxyKey, blobUrl);
       this.emitStatusForProxyKey(proxyKey, 'ready');
       this.prewarmFilmstripFromProxy(proxyKey, proxyFile);
+
+      // Mirror the proxy + meta to the workspace folder so other origins can
+      // reuse it without regenerating. Fire-and-forget.
+      void mirrorBlobToWorkspace(proxyFilePath(proxyKey), proxyFile);
+      void (async () => {
+        try {
+          const metaHandle = await mediaDir.getFileHandle('meta.json');
+          const metaFile = await metaHandle.getFile();
+          const metadata = JSON.parse(await metaFile.text()) as ProxyMetadata;
+          await mirrorJsonToWorkspace(proxyMetaPath(proxyKey), metadata);
+        } catch (error) {
+          logger.warn(`Failed to mirror proxy meta for ${proxyKey}`, error);
+        }
+      })();
 
       logger.debug(`Proxy ready for ${proxyKey}`);
     } catch (error) {

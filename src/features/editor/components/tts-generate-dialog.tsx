@@ -263,7 +263,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
   // Cleanup blob URL when dialog closes
   useEffect(() => {
     if (!isOpen && resultUrlRef.current) {
-      // Don't revoke if we inserted â€” the timeline item references it
+      // Don't revoke if we inserted — the timeline item references it
       if (!inserted) {
         URL.revokeObjectURL(resultUrlRef.current);
       }
@@ -314,7 +314,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       });
 
       if (sessionIdRef.current !== thisSession) {
-        // Dialog was closed/reopened â€” discard stale result
+        // Dialog was closed/reopened — discard stale result
         return;
       }
 
@@ -499,7 +499,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                 : 'border-border bg-secondary/20'
             }`}>
               <p className="text-[11px] text-muted-foreground">
-                {result.voice} Â· {result.model} Â· {result.duration > 0 ? `${result.duration.toFixed(1)}s` : 'â€”'}
+                {result.voice} Â· {result.model} Â· {result.duration > 0 ? `${result.duration.toFixed(1)}s` : '—'}
               </p>
               <MiniAudioPlayer src={result.objectUrl} />
 

@@ -1,1 +1,6 @@
-export { gifFrameCache, filmstripCache, schedulePreviewWork } from './timeline-contract';
+export {
+  gifFrameCache,
+  filmstripCache,
+  waveformCache,
+  schedulePreviewWork,
+} from './timeline-contract';

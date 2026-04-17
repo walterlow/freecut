@@ -9,6 +9,7 @@ import type { VideoItem } from '@/types/timeline';
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
 import { isVideoPoolAbortError } from '@/features/composition-runtime/deps/player';
 import { createLogger } from '@/shared/logging/logger';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { getVideoTargetTimeSeconds } from '../utils/video-timing';
 import {
   getVideoSyncTargetContext,
@@ -34,7 +35,7 @@ import {
 
 const videoLog = createLogger('NativePreviewVideo');
 const contentLog = createLogger('VideoContent');
-videoLog.setLevel(2); // WARN â€” suppress noisy per-frame debug logs
+videoLog.setLevel(2); // WARN — suppress noisy per-frame debug logs
 const POOL_RELEASE_STICKY_MS = 400;
 
 // Feature detection for requestVideoFrameCallback (avoids per-frame React sync)
@@ -669,7 +670,7 @@ const NativePreviewVideo: React.FC<{
                 if (gen === preWarmGenRef.current && !usePlaybackStore.getState().isPlaying) {
                   v.pause();
                 }
-                // Always unmute â€” if playback started or another scrub superseded
+                // Always unmute — if playback started or another scrub superseded
                 // this pre-warm, leaving muted=true causes silent playback.
                 v.muted = false;
               }).catch(() => {
@@ -826,15 +827,33 @@ export const VideoContent: React.FC<{
   // from the crossfade renderer.
   const audioVolume = item._sharedTransitionSync ? 0 : baseAudioVolume;
   const [hasError, setHasError] = useState(false);
+  // One-shot per-item retry: on first failure, invalidate the blob URL so
+  // the upstream resolver (driven by `useBlobUrlVersion`) produces a fresh
+  // one. Fixes `ERR_UPLOAD_FILE_CHANGED` / "Format error" when a blob URL
+  // was captured before a concurrent mirror-write completed, which manifests
+  // as "works on refresh, fails on direct URL first load".
+  const retriedRef = useRef(false);
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Handle media errors (e.g., invalid blob URL after HMR or cache cleanup)
+  // Handle media errors (e.g., invalid blob URL after HMR or cache cleanup).
   const handleError = useCallback((error: Error) => {
     contentLog.warn(`Media error for item ${item.id}:`, error.message);
+
+    const looksLikeStaleBlob =
+      /format error|unknown|empty src/i.test(error.message);
+    if (looksLikeStaleBlob && !retriedRef.current && item.mediaId) {
+      retriedRef.current = true;
+      contentLog.info(
+        `Retrying item ${item.id} with fresh blob URL for media ${item.mediaId}`,
+      );
+      blobUrlManager.invalidate(item.mediaId);
+      return;
+    }
+
     setHasError(true);
-  }, [item.id]);
+  }, [item.id, item.mediaId]);
 
   // Show error state if media failed to load
   if (hasError) {

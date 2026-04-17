@@ -24,6 +24,8 @@ export interface TimelineSnapshot {
   snapEnabled: boolean;
   currentFrame: number;
   busAudioEq?: AudioEqSettings;
+  /** Project-scoped master bus gain in dB (0 = unity). */
+  masterBusDb: number;
   projectId: string | null;
   projectMetadata: ProjectResolution | null;
 }

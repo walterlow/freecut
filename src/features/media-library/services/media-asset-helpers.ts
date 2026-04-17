@@ -6,8 +6,9 @@ import {
   deleteMedia as deleteMediaDB,
   deleteThumbnailsByMediaId,
   saveThumbnail as saveThumbnailDB,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { opfsService } from '@/features/media-library/services/opfs-service';
+import { writeMediaSource } from '@/infrastructure/storage/workspace-fs/media-source';
 
 const logger = createLogger('MediaAssetHelpers');
 
@@ -152,6 +153,12 @@ export async function persistGeneratedMediaAsset({
 
     await createMediaDB(mediaMetadata);
     metadataCreated = true;
+    // Mirror source into the workspace folder so the bytes are visible to
+    // other origins (cross-origin debug) and external agents reading from
+    // disk. Fire-and-forget; errors logged, not propagated.
+    void writeMediaSource(mediaMetadata.id, file, mediaMetadata.fileName).catch(
+      (error) => logger.warn(`writeMediaSource(${mediaMetadata.id}) failed`, error),
+    );
     await associateMediaWithProject(projectId, mediaMetadata.id);
     event.success({ projectId, mediaId: mediaMetadata.id });
     return mediaMetadata;

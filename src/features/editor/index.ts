@@ -1,4 +1,4 @@
-// Editor feature â€” public API
+// Editor feature — public API
 // Main UI shell for the video editor (properties panel, media sidebar, toolbar)
 
 export { useSelectionStore } from '@/shared/state/selection';

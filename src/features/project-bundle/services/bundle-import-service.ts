@@ -23,7 +23,7 @@ import {
   saveThumbnail,
   associateMediaWithProject,
   updateProject,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { generateThumbnail } from '@/features/project-bundle/deps/media-library';
 import { createLogger } from '@/shared/logging/logger';
 import { fileSystemService } from './file-system-service';

@@ -158,7 +158,7 @@ function LayoutCanvas({
   config,
   itemsLookup,
 }: {
-  /** Ordered chains â€” each chain is a group of item IDs sharing one layout cell */
+  /** Ordered chains — each chain is a group of item IDs sharing one layout cell */
   chainOrder: string[][];
   onSwap: (fromIndex: number, toIndex: number) => void;
   canvasWidth: number;
@@ -206,7 +206,7 @@ function LayoutCanvas({
     return computeLayout(layoutItems, safeCanvasWidth, safeCanvasHeight, config);
   }, [layoutItems, safeCanvasWidth, safeCanvasHeight, config]);
 
-  // Convert center-relative coords to absolute top-left, then scale â€” one rect per chain
+  // Convert center-relative coords to absolute top-left, then scale — one rect per chain
   const canvasRects: CanvasItemRect[] = useMemo(() => {
     const cx = safeCanvasWidth / 2;
     const cy = safeCanvasHeight / 2;

@@ -63,7 +63,7 @@ interface CompositionContentProps {
 
 /**
  * Resolve media URLs on sub-comp items using the centralized blob URL manager.
- * The parent preview has already acquired blob URLs for all mediaIds â€”
+ * The parent preview has already acquired blob URLs for all mediaIds —
  * we just need to look them up and set `src`.
  */
 function resolveSubCompItem(

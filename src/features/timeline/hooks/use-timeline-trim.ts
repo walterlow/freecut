@@ -126,7 +126,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         return { snappedFrame: targetFrame, snapTarget: null };
       }
 
-      // Read fresh targets from store â€” the memoized magneticSnapTargets can be
+      // Read fresh targets from store — the memoized magneticSnapTargets can be
       // stale after previous edits that shifted items (e.g. ripple edit).
       const targets = getMagneticSnapTargets();
       if (targets.length === 0) {
@@ -188,7 +188,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       // Calculate the target edge position and apply snapping
       // During rolling edit, exclude the neighbor from snap targets.
-      // During ripple edit, exclude downstream same-track items â€” their positions
+      // During ripple edit, exclude downstream same-track items — their positions
       // are stale because they will shift by the trim amount on commit.
       const snapExcludeIds = new Set<string>([currentItem.id]);
       if (neighborId) snapExcludeIds.add(neighborId);
@@ -213,7 +213,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
             snapExcludeIds.add(other.id);
           }
         }
-        // Also exclude transition-connected neighbors in both directions â€” in
+        // Also exclude transition-connected neighbors in both directions — in
         // the overlap model, their `from` can be before currentEnd, but their
         // edges/midpoints still sit on the active edit region.
         for (const t of transitions) {
@@ -224,7 +224,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       const initialEnd = initialFrom + initialDuration;
 
-      // Snap the edge the user is dragging â€” always the handle edge,
+      // Snap the edge the user is dragging — always the handle edge,
       // regardless of edit mode. Ripple commit logic (anchor from, move end,
       // shift downstream) is separate from the snap target.
       const targetEdgeFrame = handle === 'start'
@@ -258,7 +258,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       deltaFrames = clampedAmount;
 
       // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
-      // During ripple edit, skip adjacency clamping â€” downstream clips shift with the trim.
+      // During ripple edit, skip adjacency clamping — downstream clips shift with the trim.
       if (!isRippleEdit) {
         const transitionLinkedIds = new Set<string>();
         if (!trimStateRef.current.destroyTransitionAtHandle) {
@@ -267,7 +267,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
             if (t.rightClipId === currentItem.id) transitionLinkedIds.add(t.leftClipId);
           }
         }
-        // During rolling edit, exclude the neighbor from adjacency constraints â€”
+        // During rolling edit, exclude the neighbor from adjacency constraints —
         // it moves with the edit point, so the rolling edit clamp below handles it.
         if (isRollingEdit && neighborId) {
           transitionLinkedIds.add(neighborId);
@@ -372,7 +372,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       // Update ripple edit preview store for downstream item visual feedback.
       // Both the trimmed item's delta and the downstream shift are stored in the
-      // same Zustand store so they commit in a single render â€” preventing a
+      // same Zustand store so they commit in a single render — preventing a
       // one-frame gap between the extending clip and the shifting neighbours.
       if (isRippleEdit) {
         // Calculate the shift that downstream items would experience
@@ -380,7 +380,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         if (handle === 'end') {
           rippleShift = deltaFrames;
         } else {
-          // Start handle: anchor-from model â€” downstream shifts by -delta
+          // Start handle: anchor-from model — downstream shifts by -delta
           rippleShift = -deltaFrames;
         }
 
@@ -390,7 +390,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
           || rippleStore.handle !== handle
           || rippleStore.trackId !== currentItem.trackId
         ) {
-          // Compute downstream item IDs once â€” includes transition-connected
+          // Compute downstream item IDs once — includes transition-connected
           // neighbors whose `from` may be before the trimmed clip's end (overlap model).
           const currentEnd = currentItem.from + currentItem.durationInFrames;
           const dsIds = new Set<string>();

@@ -936,7 +936,7 @@ function SourcePlaybackControls({
       {/* Seek bar row with I/O region above and editing buttons */}
       <div className="border-t border-border panel-header flex items-center gap-2 px-4 h-7 shrink-0">
         <div className="flex-1 flex flex-col justify-center gap-[2px] min-w-0">
-          {/* I/O region strip ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â styled like timeline I/O controls */}
+          {/* I/O region strip — styled like timeline I/O controls */}
           {interactive && (inPct !== null || outPct !== null) && (
             <div ref={ioStripRef} className="w-full h-2.5 relative shrink-0">
               {/* Draggable range strip */}
@@ -957,7 +957,7 @@ function SourcePlaybackControls({
                   onMouseDown={handleIORangeDragStart}
                 />
               )}
-              {/* In handle ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â grip */}
+              {/* In handle — grip */}
               {inPct !== null && (
                 <div
                   className="absolute top-0 bottom-0"
@@ -986,7 +986,7 @@ function SourcePlaybackControls({
                   onMouseDown={(e) => handleIODragStart(e, 'in')}
                 />
               )}
-              {/* Out handle ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â grip */}
+              {/* Out handle — grip */}
               {outPct !== null && (
                 <div
                   className="absolute top-0 bottom-0"

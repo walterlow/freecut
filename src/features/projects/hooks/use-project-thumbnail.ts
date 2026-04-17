@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { getThumbnail } from '@/infrastructure/storage/indexeddb';
+import { getThumbnail } from '@/infrastructure/storage';
 import type { Project } from '@/types/project';
 import { createLogger } from '@/shared/logging/logger';
 

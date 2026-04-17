@@ -18,6 +18,7 @@ import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import { useMediaLibraryStore, mediaLibraryService } from '@/features/preview/deps/media-library-contract';
 import { formatTimecode } from '@/shared/utils/time-utils';
 import { toast } from 'sonner';
+import { MonitorVolumeControl } from './monitor-volume-control';
 
 interface PlaybackControlsProps {
   totalFrames: number;
@@ -268,9 +269,11 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         >
           <SkipForward className="w-3.5 h-3.5" />
         </Button>
+
+        <MonitorVolumeControl buttonStyle={btnSize} />
       </div>
 
-      {/* Save frame â€” hidden at narrow widths */}
+      {/* Save frame — hidden at narrow widths */}
       <div className="hidden @min-[440px]:flex items-center gap-0.5 flex-shrink-0">
         <Separator orientation="vertical" className="h-4 flex-shrink-0" />
 
@@ -294,7 +297,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         </Button>
       </div>
 
-      {/* Proxy toggle â€” hidden at narrow widths */}
+      {/* Proxy toggle — hidden at narrow widths */}
       <div className="hidden @min-[440px]:flex items-center gap-0.5 flex-shrink-0">
         <Separator orientation="vertical" className="h-4 flex-shrink-0" />
 

@@ -33,7 +33,10 @@ import {
   getProjectMediaIds,
   getDBStats,
   createProject,
-} from '@/infrastructure/storage/indexeddb';
+  sweepWorkspaceOrphans,
+  type OrphanSweepOptions,
+  type OrphanSweepReport,
+} from '@/infrastructure/storage';
 
 /**
  * Debug API interface
@@ -117,6 +120,13 @@ interface ProjectDebugAPI {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   filmstripMetrics: () => any;
   clearFilmstripCache: () => void;
+
+  /**
+   * Scan workspace-folder mirror caches for entries whose mediaId is no
+   * longer in `media/` and remove them. Pass `{ dryRun: true }` to get
+   * a report without touching disk.
+   */
+  cleanOrphans: (options?: OrphanSweepOptions) => Promise<OrphanSweepReport>;
 
   // Version info
   version: string;
@@ -526,6 +536,10 @@ function createDebugAPI(): ProjectDebugAPI {
       if (cache && typeof (cache as { clear?: () => void }).clear === 'function') {
         (cache as { clear: () => void }).clear();
       }
+    },
+
+    cleanOrphans: async (options) => {
+      return sweepWorkspaceOrphans(options);
     },
 
     // Version info

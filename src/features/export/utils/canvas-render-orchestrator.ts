@@ -2,9 +2,9 @@
  * Canvas Render Orchestrator
  *
  * Top-level entry points that drive the full render pipeline:
- * - {@link renderComposition} â€“ renders a full video composition (video + audio)
- * - {@link renderAudioOnly}  â€“ encodes only the audio tracks
- * - {@link renderSingleFrame} â€“ renders one frame to a Blob (thumbnails)
+ * - {@link renderComposition} – renders a full video composition (video + audio)
+ * - {@link renderAudioOnly}  – encodes only the audio tracks
+ * - {@link renderSingleFrame} – renders one frame to a Blob (thumbnails)
  *
  * These functions set up the mediabunny encoder, call into
  * {@link createCompositionRenderer} for per-frame rendering, and handle
@@ -138,7 +138,7 @@ function getPacketRemuxPlan(
   if (!Number.isFinite(sourceFps) || sourceFps <= 0) return null;
   if (Math.abs((settings.fps ?? composition.fps) - composition.fps) > EPSILON) return null;
 
-  // Require clip to start at source frame 0 â€” a trimmed-from-middle clip can't be
+  // Require clip to start at source frame 0 — a trimmed-from-middle clip can't be
   // remuxed directly and must fall back to frame-by-frame rendering.
   const sourceStartFrames = videoItem.sourceStart ?? videoItem.trimStart ?? videoItem.offset ?? 0;
   if (Math.abs(sourceStartFrames) > EPSILON) return null;
@@ -324,7 +324,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
 // ---------------------------------------------------------------------------
 
 /**
- * Main render function â€“ orchestrates the entire client-side render.
+ * Main render function – orchestrates the entire client-side render.
  */
 export async function renderComposition(options: RenderEngineOptions): Promise<ClientRenderResult> {
   const { settings, composition, onProgress, signal } = options;
@@ -414,11 +414,11 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     target,
   });
 
-  // Get composition (project) resolution â€“ this is what we render at
+  // Get composition (project) resolution – this is what we render at
   const compositionWidth = composition.width ?? settings.resolution.width;
   const compositionHeight = composition.height ?? settings.resolution.height;
 
-  // Export resolution â€“ this is what we output (may be different from composition)
+  // Export resolution – this is what we output (may be different from composition)
   const exportWidth = settings.resolution.width;
   const exportHeight = settings.resolution.height;
 
@@ -548,18 +548,18 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     let pendingEncode: Promise<void> | null = null;
 
     for (let frame = 0; frame < totalFrames; frame++) {
-      // Check for abort â€” drain any in-flight encode first so the encoder
+      // Check for abort — drain any in-flight encode first so the encoder
       // is idle before we cancel the output. Discard encoder errors since
       // we are aborting anyway and must always surface AbortError.
       if (signal?.aborted) {
         if (pendingEncode) {
-          try { await pendingEncode; } catch { /* discarded â€” aborting */ }
+          try { await pendingEncode; } catch { /* discarded — aborting */ }
         }
         await output.cancel();
         throw new DOMException('Render cancelled', 'AbortError');
       }
 
-      // Render frame to canvas first â€” this overlaps with the previous frame's
+      // Render frame to canvas first — this overlaps with the previous frame's
       // encode that is still in flight. The previous VideoSample already copied
       // its pixels, so writing to the canvas here cannot corrupt it.
       await frameRenderer.renderFrame(frame);
@@ -580,10 +580,10 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
       const frameDuration = 1 / fps;
 
       // Snapshot canvas pixels into a VideoSample. The constructor copies
-      // pixel data immediately â€” the canvas is free for the next render.
+      // pixel data immediately — the canvas is free for the next render.
       const sample = new VideoSample(outputCanvas, { timestamp, duration: frameDuration });
 
-      // Kick off encoding in the background. NOT awaited here â€” it runs
+      // Kick off encoding in the background. NOT awaited here — it runs
       // concurrently with the next iteration's renderFrame().
       const isKeyFrame = frame === 0;
       pendingEncode = (async () => {
@@ -710,7 +710,7 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
     throw new Error('Failed to get 2d context');
   }
 
-  // Use the SAME renderer as export â€“ single source of truth
+  // Use the SAME renderer as export – single source of truth
   const renderer = await createCompositionRenderer(composition, renderCanvas, renderCtx);
   try {
     await renderer.preload();
@@ -860,7 +860,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
       audioCodec = 'pcm-s16';
   }
 
-  // PCM codecs don't need browser encoding support â€“ they're raw samples
+  // PCM codecs don't need browser encoding support – they're raw samples
   const isPcmCodec = audioCodec === 'pcm-s16';
 
   if (!isPcmCodec) {

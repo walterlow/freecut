@@ -200,7 +200,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   }, [filteredMediaItems]);
   const compositions = useCompositionsStore((s) => s.compositions);
 
-  // Composition navigation â€” show banner when inside a sub-comp
+  // Composition navigation — show banner when inside a sub-comp
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
   const breadcrumbs = useCompositionNavigationStore((s) => s.breadcrumbs);
   const exitComposition = useCompositionNavigationStore((s) => s.exitComposition);
@@ -924,7 +924,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         </div>
       </div>
 
-      {/* Composition navigation banner â€” shown when inside a sub-composition */}
+      {/* Composition navigation banner — shown when inside a sub-composition */}
       {activeCompositionId !== null && activeCompLabel && (
         <div className="px-3 py-1.5 border-b border-violet-500/30 bg-violet-500/10 flex items-center gap-2 flex-shrink-0">
           <button
@@ -952,10 +952,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         >
           <MarqueeOverlay marqueeState={marqueeState} />
 
-          {/* Compositions section â€” collapsible, auto-hidden when empty */}
+          {/* Compositions section — collapsible, auto-hidden when empty */}
           <CompositionsSection />
 
-          {/* Media sections â€” grouped by type */}
+          {/* Media sections — grouped by type */}
           {mediaGroups.map((group) => (
             <MediaTypeGroup
               key={group.key}
@@ -986,7 +986,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           )}
         </div>
 
-        {/* Drag overlay â€” absolute sibling, always covers the visible viewport */}
+        {/* Drag overlay — absolute sibling, always covers the visible viewport */}
         {isDragging && (
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
             <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-primary" />

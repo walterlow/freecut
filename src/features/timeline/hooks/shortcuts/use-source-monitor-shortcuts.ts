@@ -18,7 +18,7 @@ import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 export function useSourceMonitorShortcuts() {
   const hotkeys = useResolvedHotkeys();
 
-  // Insert Edit: , (comma) â€” works globally when source monitor is open
+  // Insert Edit: , (comma) — works globally when source monitor is open
   useHotkeys(
     hotkeys.INSERT_EDIT,
     (event) => {
@@ -31,7 +31,7 @@ export function useSourceMonitorShortcuts() {
     []
   );
 
-  // Overwrite Edit: . (period) â€” works globally when source monitor is open
+  // Overwrite Edit: . (period) — works globally when source monitor is open
   useHotkeys(
     hotkeys.OVERWRITE_EDIT,
     (event) => {

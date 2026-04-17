@@ -699,7 +699,7 @@ export const MediaCard = memo(function MediaCard({
           )}
         </div>
 
-        {/* Info â€” single row: icon + name + duration */}
+        {/* Info — single row: icon + name + duration */}
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
           {isImporting ? (
             <span className="text-[10px] text-muted-foreground">Importing...</span>

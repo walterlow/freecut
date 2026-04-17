@@ -200,7 +200,7 @@ const MAX_LABELS = 100;
 /**
  * Tracks the config that was used to position existing pooled labels.
  * When PPS/FPS haven't changed, labels are absolutely positioned within
- * the scrolling container â€” their position is stable across scroll. We
+ * the scrolling container — their position is stable across scroll. We
  * only need to add/remove labels at the viewport edges, not update all
  * existing ones. When PPS or FPS changes we must update every label.
  */
@@ -208,7 +208,7 @@ let _labelConfigPPS = 0;
 let _labelConfigFPS = 0;
 
 /**
- * Imperative label pool â€” manages timecode `<span>` elements via direct DOM
+ * Imperative label pool — manages timecode `<span>` elements via direct DOM
  * manipulation instead of React reconciliation. Labels are absolutely positioned
  * within the scrolling container so the browser handles scroll offset natively;
  * the pool only adds/removes elements as they enter/leave the visible range.
@@ -217,7 +217,7 @@ let _labelConfigFPS = 0;
  * Also called on zoom/fps changes to rebuild with new intervals.
  *
  * Optimization: during pure scroll (no zoom/fps change), existing labels
- * keep their position â€” only edge additions/removals mutate the DOM.
+ * keep their position — only edge additions/removals mutate the DOM.
  * This cuts ~60 DOM mutations per scroll frame to ~2-4.
  */
 function syncLabels(
@@ -273,7 +273,7 @@ function syncLabels(
     // - New labels always need it
     // - Config change (PPS/FPS) means existing labels have stale positions
     // During pure scroll, labels are absolutely positioned in the scrolling
-    // container so their coordinates are stable â€” no DOM writes needed.
+    // container so their coordinates are stable — no DOM writes needed.
     if (isNew || configChanged) {
       const timeInSeconds = i * intervalInSeconds;
       span.style.left = `${timeInSeconds * quantizedPPS + 6}px`;
@@ -324,7 +324,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   const labelsContainerRef = useRef<HTMLDivElement>(null);
   const labelPoolRef = useRef<Map<number, HTMLSpanElement>>(new Map());
   const [viewportWidth, setViewportWidth] = useState(0);
-  // scrollLeft is ref-only â€” never React state. Tile + label updates are
+  // scrollLeft is ref-only — never React state. Tile + label updates are
   // driven imperatively from the scroll RAF callback, bypassing React render.
   const [isDragging, setIsDragging] = useState(false);
   const [isRangeDragging, setIsRangeDragging] = useState(false);
@@ -493,7 +493,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   });
 
   /**
-   * Imperative scroll sync â€” manages canvas tiles AND labels without any
+   * Imperative scroll sync — manages canvas tiles AND labels without any
    * React state or re-renders. Called from:
    *  - scroll RAF callback (every scroll frame)
    *  - config change effect (zoom / fps / width)
@@ -541,7 +541,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         canvasPool.set(tileIndex, canvas);
         tilesContainer.appendChild(canvas);
       }
-      // Existing canvases keep their transform â€” tileIndex is stable per pool entry
+      // Existing canvases keep their transform — tileIndex is stable per pool entry
 
       const tileCacheKey = `${tileIndex}-${ck}`;
 
@@ -617,7 +617,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   }, []);
 
   // Trigger sync on config changes (zoom, fps, width, height).
-  // Labels update in-place (position + text) â€” no clear needed.
+  // Labels update in-place (position + text) — no clear needed.
   useEffect(() => {
     syncRulerScroll();
   }, [quantizedPPS, fps, displayWidth, canvasHeight, viewportWidth, syncRulerScroll]);
@@ -903,7 +903,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         style={{ pointerEvents: 'none' }}
       />
 
-      {/* Imperative label pool â€” managed by syncRulerScroll, zero React re-renders on scroll */}
+      {/* Imperative label pool — managed by syncRulerScroll, zero React re-renders on scroll */}
       <div
         ref={labelsContainerRef}
         className="absolute inset-0 overflow-hidden pointer-events-none"

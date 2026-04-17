@@ -25,7 +25,7 @@ import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTimelineCommandStore } from './timeline-command-store';
 import { useCompositionsStore } from './compositions-store';
 import { useCompositionNavigationStore } from './composition-navigation-store';
-import { getProject, updateProject, saveThumbnail } from '@/infrastructure/storage/indexeddb';
+import { getProject, updateProject, saveThumbnail } from '@/infrastructure/storage';
 import {
   renderSingleFrame,
   convertTimelineToComposition,
@@ -612,6 +612,7 @@ export async function saveTimeline(projectId: string): Promise<void> {
   const markersState = useMarkersStore.getState();
     const currentFrame = usePlaybackStore.getState().currentFrame;
     const busAudioEq = usePlaybackStore.getState().busAudioEq;
+    const masterBusDb = usePlaybackStore.getState().masterBusDb;
     const zoomLevel = useZoomStore.getState().level;
 
   event.merge({
@@ -641,6 +642,7 @@ export async function saveTimeline(projectId: string): Promise<void> {
       tracks: itemsState.tracks as ProjectTimeline['tracks'],
       items: itemsState.items as ProjectTimeline['items'],
       ...(busAudioEq && { busAudioEq }),
+      masterBusDb,
       currentFrame,
       zoomLevel,
       scrollPosition: settingsState.scrollPosition,
@@ -915,6 +917,7 @@ export async function loadTimeline(
       useMarkersStore.getState().setOutPoint(sanitizedInOutPoints.outPoint);
       useTimelineSettingsStore.getState().setScrollPosition(t.scrollPosition || 0);
       usePlaybackStore.getState().setBusAudioEq(t.busAudioEq);
+      usePlaybackStore.getState().setMasterBusDb(t.masterBusDb ?? 0);
 
       // Restore sub-compositions
       if (t.compositions && t.compositions.length > 0) {

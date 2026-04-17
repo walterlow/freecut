@@ -185,7 +185,7 @@ export function usePreviewTransitionSessionController({
           try {
             el.currentTime = clamped;
           } catch {
-            // Element may be settling â€” ignore transient seek failures.
+            // Element may be settling — ignore transient seek failures.
           }
         } else if (drift > 0.016) {
           el.playbackRate = clipSpeed;

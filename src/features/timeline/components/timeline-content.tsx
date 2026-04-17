@@ -136,7 +136,7 @@ function useTrackSectionHasOverflow(
 
 /**
  * Scrollbar that tracks scroll position imperatively via DOM manipulation.
- * No React state for scrollTop â€” thumb updates bypass the React render cycle.
+ * No React state for scrollTop — thumb updates bypass the React render cycle.
  */
 function TrackSectionScrollbarOverlay({
   section,
@@ -182,7 +182,7 @@ function TrackSectionScrollbarOverlay({
     thumb.style.display = thumbHeight > 0 ? '' : 'none';
   }, [height, scrollRef]);
 
-  // Update thumb position only (cheaper â€” called on scroll)
+  // Update thumb position only (cheaper — called on scroll)
   const updateThumbPosition = useCallback(() => {
     const element = scrollRef?.current;
     const thumb = thumbRef.current;
@@ -953,7 +953,7 @@ export const TimelineContent = memo(function TimelineContent({
     const frameX = frameToPixelsRef.current(pendingScrollToFrame);
     const sl = container.scrollLeft;
     const vw = container.clientWidth;
-    // Already visible â€” nothing to do
+    // Already visible — nothing to do
     if (frameX >= sl && frameX <= sl + vw) return;
 
     // Center the frame in the viewport
@@ -1100,7 +1100,7 @@ export const TimelineContent = memo(function TimelineContent({
   };
 
   // Build snap targets for razor shift-snap (item edges, grid, playhead, markers)
-  // Called on-demand during mouse move â€” reads stores directly to avoid subscriptions
+  // Called on-demand during mouse move — reads stores directly to avoid subscriptions
   const buildRazorSnapTargets = useCallback((): RazorSnapTarget[] => {
     const items = useTimelineStore.getState().items;
     const tracks = useTimelineStore.getState().tracks;

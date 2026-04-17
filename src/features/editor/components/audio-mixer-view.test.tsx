@@ -409,7 +409,7 @@ describe('AudioMixerView', () => {
 
     const heightAfterPipeline = parseFloat(leftBar!.style.height);
 
-    // Re-render again with the same levels â€” height must not change.
+    // Re-render again with the same levels — height must not change.
     rerender(
       <AudioMixerView
         {...props}

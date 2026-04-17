@@ -267,6 +267,7 @@ export function useClientRender(): UseClientRenderReturn {
         // Get project metadata (background color and native resolution)
         const currentProject = useProjectStore.getState().currentProject;
         const busAudioEq = usePlaybackStore.getState().busAudioEq;
+        const masterBusDb = usePlaybackStore.getState().masterBusDb;
         const backgroundColor = currentProject?.metadata?.backgroundColor;
         // Use PROJECT resolution for composition (transform calculations match preview)
         const projectWidth = currentProject?.metadata?.width ?? 1920;
@@ -376,6 +377,7 @@ export function useClientRender(): UseClientRenderReturn {
           keyframes,
           backgroundColor,
           busAudioEq,
+          masterBusDb,
         );
 
         const totalCompositionItems = composition.tracks.reduce((sum, t) => sum + (t.items?.length ?? 0), 0);

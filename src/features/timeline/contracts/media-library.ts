@@ -32,6 +32,7 @@ export {
 export { autoMatchOrphanedClips } from '../utils/media-validation';
 export { gifFrameCache } from '../services/gif-frame-cache';
 export { filmstripCache } from '../services/filmstrip-cache';
+export { waveformCache } from '../services/waveform-cache';
 export { schedulePreviewWork } from '../hooks/preview-work-budget';
 export { resolveMediaUrl, resolveMediaUrls } from '../deps/media-library-contract';
 export { renderSingleFrame } from '../deps/export-contract';

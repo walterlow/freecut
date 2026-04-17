@@ -109,11 +109,11 @@ export function ProjectForm({
       )}
 
       {/* Form */}
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+      <div className={hideHeader ? '' : 'max-w-[1400px] mx-auto px-6 py-8'}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,420px)_1fr] gap-6 items-start">
             {/* Project Details */}
-            <div className="panel-bg border border-border rounded-lg p-6 lg:sticky lg:top-6">
+            <div className={`panel-bg border border-border rounded-lg p-6 ${hideHeader ? '' : 'lg:sticky lg:top-6'}`}>
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-8 w-1 bg-primary rounded-full" />
                 <h2 className="text-lg font-medium text-foreground">Project Details</h2>

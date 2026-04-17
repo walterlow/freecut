@@ -5,7 +5,7 @@
  * text, shape) to an OffscreenCanvas context.  Also contains the transition
  * compositing helper and shared geometry utilities.
  *
- * All functions are stateless â€“ mutable renderer state is passed in via the
+ * All functions are stateless – mutable renderer state is passed in via the
  * {@link ItemRenderContext} parameter.
  */
 
@@ -73,7 +73,7 @@ const log = createLogger('CanvasItemRenderer');
 // ---------------------------------------------------------------------------
 
 /**
- * Canvas settings for rendering â€“ width/height/fps of the composition.
+ * Canvas settings for rendering – width/height/fps of the composition.
  */
 export interface CanvasSettings {
   width: number;
@@ -106,7 +106,7 @@ const TIER2_VIDEO_FRAME_TOLERANCE_FACTOR = 0.9;
 const WORKER_PRESEEK_WAIT_MS = 12;
 
 // ---------------------------------------------------------------------------
-// ItemRenderContext â€“ closure state passed explicitly
+// ItemRenderContext – closure state passed explicitly
 // ---------------------------------------------------------------------------
 
 /**
@@ -202,7 +202,7 @@ export interface TransitionParticipantRenderState<TItem extends TimelineItem = T
 /**
  * Render a single timeline item to the given canvas context.
  *
- * @param sourceFrameOffset â€“ optional frame-level offset added to the video
+ * @param sourceFrameOffset – optional frame-level offset added to the video
  *   source timestamp (used by transitions that need to render a clip at an
  *   offset position).
  */
@@ -1331,7 +1331,7 @@ async function renderCompositionItem(
   }
 
   // Calculate the local frame within the sub-composition.
-  // sourceStart accounts for trim (left-edge drag) and IO marker offsets â€”
+  // sourceStart accounts for trim (left-edge drag) and IO marker offsets —
   // it tells us how many frames into the sub-comp to start playing.
   const effectiveRenderSpan = renderSpan ?? getItemRenderTimelineSpan(item);
   const sourceOffset = getRenderTimelineSourceStart(item, effectiveRenderSpan);

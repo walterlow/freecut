@@ -130,7 +130,7 @@ export function splitItem(
   const itemsToSplit = getLinkedItemsForEdit(items, id, isLinkedSelectionEnabled());
 
   for (const item of itemsToSplit) {
-    // Bounds check first â€” out-of-range splits are a silent no-op (handled by _splitItem),
+    // Bounds check first — out-of-range splits are a silent no-op (handled by _splitItem),
     // must not fall through to transition zone check which would false-positive.
     if (splitFrame <= item.from || splitFrame >= item.from + item.durationInFrames) {
       return null;
@@ -318,7 +318,7 @@ export function splitItemAtFrames(
         for (let index = 1; index < rightIds.length; index += 1) {
           useItemsStore.getState()._updateItem(rightIds[index]!, { fadeOut: 0 });
         }
-        // Clear fadeOut on the left piece (original ID) â€” its right edge is now an inner cut
+        // Clear fadeOut on the left piece (original ID) — its right edge is now an inner cut
         useItemsStore.getState()._updateItem(originalId, { fadeOut: 0 });
       }
     }
@@ -473,7 +473,7 @@ export function rateStretchItem(
     }
 
     if (endDelta !== 0) {
-      // End handle changed â€” shift downstream clips (at or past old end) on touched tracks
+      // End handle changed — shift downstream clips (at or past old end) on touched tracks
       for (const trackId of touchedTrackIds) {
         const downstreamItems = freshItems
           .filter((i) => i.trackId === trackId && !allSynchronizedIds.has(i.id) && i.from >= oldEnd)
@@ -522,7 +522,7 @@ export function rateStretchItem(
     }
 
     if (fromDelta !== 0) {
-      // Start handle changed â€” shift upstream clips (ending at or before old from) on touched tracks
+      // Start handle changed — shift upstream clips (ending at or before old from) on touched tracks
       for (const trackId of touchedTrackIds) {
         const upstreamItems = freshItems
           .filter((i) => {
@@ -745,7 +745,7 @@ export async function insertFreezeFrame(
   const item = items.find((i) => i.id === itemId);
   if (!item || item.type !== 'video') return false;
 
-  // Validate playhead is within item bounds (exclusive of edges â€” need room to split)
+  // Validate playhead is within item bounds (exclusive of edges — need room to split)
   const itemStart = item.from;
   const itemEnd = item.from + item.durationInFrames;
   if (playheadFrame <= itemStart || playheadFrame >= itemEnd) return false;
@@ -833,7 +833,7 @@ export async function insertFreezeFrame(
     input.dispose();
 
     // Step 3: Store frame as media in IndexedDB
-    const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/infrastructure/storage/indexeddb');
+    const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/infrastructure/storage');
     const currentProjectId = useMediaLibraryStore.getState().currentProjectId;
     if (!currentProjectId) {
       getLogger().error('[insertFreezeFrame] No project context');
@@ -1248,7 +1248,7 @@ export function slideItem(
       useTimelineSettingsStore.getState().fps,
     );
 
-    // Adjust neighbors (order: shrink first, then extend â€” same as rolling edit)
+    // Adjust neighbors (order: shrink first, then extend — same as rolling edit)
     if (clampedSlideDelta > 0) {
       // Sliding right: right neighbor shrinks start (frees space), left neighbor extends end
       if (rightNeighborId) {
@@ -1286,7 +1286,7 @@ export function slideItem(
       ? updatedItem.sourceStart - itemSourceStartBefore
       : 0;
 
-    // Find the companion's own adjacent neighbors â€” may differ from the
+    // Find the companion's own adjacent neighbors — may differ from the
     // primary's linked counterparts (e.g. a solo audio clip next to the
     // companion that has no video counterpart).
     let cpLeftAdj: TimelineItem | null = null;

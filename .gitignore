@@ -55,3 +55,16 @@ crates/*/Cargo.lock
 tmp
 
 .vercel
+
+# FreeCut workspace artifacts, if the repo folder itself is picked as a
+# workspace. Leading slash anchors to repo root so nested app code paths
+# (src/features/projects/, etc.) are not affected.
+/.freecut-workspace.json
+/index.json
+/projects/
+/media/
+/content/
+/proxies/
+/filmstrips/
+/preview-audio/
+/waveform-bin/

@@ -52,13 +52,13 @@ function clampToTrackWalls(
     const otherEnd = other.from + other.durationInFrames;
 
     if (otherEnd <= proposedFrom) {
-      // Item fully to the left â€” track its right edge as potential wall
+      // Item fully to the left — track its right edge as potential wall
       if (otherEnd > leftWall) leftWall = otherEnd;
     } else if (other.from >= proposedEnd) {
-      // Item fully to the right â€” track its left edge as potential wall
+      // Item fully to the right — track its left edge as potential wall
       if (other.from < rightWall) rightWall = other.from;
     } else {
-      // Item overlaps the proposed position â€” find which side is closer
+      // Item overlaps the proposed position — find which side is closer
       // and use the tighter wall
       const distToLeft = proposedFrom - other.from;
       const distToRight = otherEnd - proposedFrom;

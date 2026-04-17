@@ -128,8 +128,10 @@ const mediabunnyMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('@/infrastructure/storage/indexeddb/decoded-preview-audio', () => decodedPreviewAudioMocks);
-vi.mock('@/infrastructure/storage/indexeddb/media', () => mediaDbMocks);
+vi.mock('@/infrastructure/storage', () => ({
+  ...decodedPreviewAudioMocks,
+  ...mediaDbMocks,
+}));
 vi.mock('@/shared/media/ac3-decoder', () => ac3Mocks);
 vi.mock('@/infrastructure/browser/object-url-registry', () => objectUrlRegistryMocks);
 vi.mock('./preview-audio-conform', () => previewAudioConformMocks);

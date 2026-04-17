@@ -44,9 +44,14 @@ const gifFrameCacheMocks = vi.hoisted(() => ({
 
 const filmstripCacheMocks = vi.hoisted(() => ({
   prewarmPriorityWindow: vi.fn(async () => undefined),
+  clearMedia: vi.fn(async () => undefined),
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', () => ({
+const waveformCacheMocks = vi.hoisted(() => ({
+  clearMedia: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/infrastructure/storage', () => ({
   getAllMedia: vi.fn(),
   getMedia: vi.fn(),
   getTranscript: vi.fn(),
@@ -90,6 +95,7 @@ vi.mock('./media-processor-service', () => ({
 vi.mock('@/features/media-library/deps/timeline-services', () => ({
   gifFrameCache: gifFrameCacheMocks,
   filmstripCache: filmstripCacheMocks,
+  waveformCache: waveformCacheMocks,
 }));
 
 import { mediaLibraryService } from './media-library-service';

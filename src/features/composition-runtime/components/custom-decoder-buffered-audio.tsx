@@ -793,7 +793,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
 
     const isPremounted = frame < 0;
     const effectiveSourceFps = sourceFps ?? fps;
-    // IMPORTANT: trimBefore is in source FPS frames â€” must use effectiveSourceFps, not fps
+    // IMPORTANT: trimBefore is in source FPS frames — must use effectiveSourceFps, not fps
     const targetTime = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
     const audioStartTime = currentSlice.startTime;
     const targetOffsetInBuffer = targetTime - audioStartTime;

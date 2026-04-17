@@ -47,7 +47,7 @@ export interface AudioMixerViewProps {
   busEqActive?: boolean;
   busEqEnabled?: boolean;
   headerExtra?: ReactNode;
-  /** Expanded layout for floating panel â€” wider strips, bigger meters */
+  /** Expanded layout for floating panel — wider strips, bigger meters */
   expanded?: boolean;
 }
 
@@ -121,7 +121,7 @@ const SegmentedMeterBar = memo(function SegmentedMeterBar({
         style={{ background: UNLIT_LED_BG }}
       />
 
-      {/* Active fill â€” gradient with segment mask */}
+      {/* Active fill — gradient with segment mask */}
       <div
         ref={fillRef}
         {...fillProps}
@@ -134,7 +134,7 @@ const SegmentedMeterBar = memo(function SegmentedMeterBar({
         }}
       />
 
-      {/* Peak hold â€” single bright segment */}
+      {/* Peak hold — single bright segment */}
       {peakBottom != null && (
         <div
           className="absolute inset-x-0 h-[3px] rounded-[1px] bg-white/85 shadow-[0_0_4px_rgba(255,255,255,0.5)]"
@@ -179,9 +179,9 @@ function getMeterFallbackPercent(params: {
 interface ChannelFaderProps {
   trackId: string;
   volumeDb: number;
-  /** Item IDs on this track â€” used to set per-item live gain during drag */
+  /** Item IDs on this track — used to set per-item live gain during drag */
   itemIds: string[];
-  /** Called once on drag end â€” triggers store update + markDirty */
+  /** Called once on drag end — triggers store update + markDirty */
   onVolumeChange: (trackId: string, volumeDb: number) => void;
   /** Imperative ref for updating the dB readout during drag (no re-render) */
   dbReadoutRef?: RefObject<HTMLDivElement | null>;
@@ -245,7 +245,7 @@ const ChannelFader = memo(function ChannelFader({
     return currentPercent - ((pointerYFromBottom / rect.height) * 100);
   }, []);
 
-  // Pure DOM update + live audio gain â€” zero store writes, zero React renders of composition
+  // Pure DOM update + live audio gain — zero store writes, zero React renders of composition
   const applyDragValue = useCallback((db: number) => {
     latestDbRef.current = db;
     if (knobRef.current) {
@@ -355,7 +355,7 @@ const ChannelFader = memo(function ChannelFader({
       {/* Fader track line */}
       <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 bg-border/70" />
 
-      {/* Unity (0 dB) notch â€” small horizontal ticks */}
+      {/* Unity (0 dB) notch — small horizontal ticks */}
       <div
         className="absolute left-0 right-0 flex items-center justify-center"
         style={{ bottom: `${unityPercent}%`, transform: 'translateY(50%)' }}
@@ -363,7 +363,7 @@ const ChannelFader = memo(function ChannelFader({
         <div className="w-full h-px bg-muted-foreground/25" />
       </div>
 
-      {/* Fader knob â€” capsule shape */}
+      {/* Fader knob — capsule shape */}
       <div
         ref={knobRef}
         data-track-id={trackId}
@@ -381,7 +381,7 @@ const ChannelFader = memo(function ChannelFader({
           <div className="absolute inset-x-[3px] top-[7px] h-px bg-zinc-600/50" />
           <div className="absolute inset-x-[3px] top-[10px] h-px bg-zinc-600/50" />
           <div className="absolute inset-x-[3px] top-[13px] h-px bg-zinc-600/50" />
-          {/* Center notch â€” unity indicator */}
+          {/* Center notch — unity indicator */}
           <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-zinc-600/30 rounded-full mx-[2px]" />
         </div>
       </div>
@@ -475,7 +475,7 @@ const ChannelStrip = memo(function ChannelStrip({
 
   return (
     <div className={`flex h-full ${stripWidth}`}>
-      {/* Track color stripe â€” doubles as channel divider */}
+      {/* Track color stripe — doubles as channel divider */}
       <div
         className="w-[2px] shrink-0"
         style={{ backgroundColor: track.color || 'var(--border)' }}
@@ -573,7 +573,7 @@ const ChannelStrip = memo(function ChannelStrip({
           </div>
         </div>
 
-        {/* dB readout â€” color-coded */}
+        {/* dB readout — color-coded */}
         <div ref={dbReadoutRef} className={`text-[10px] font-mono py-0.5 leading-none ${dbColor}`}>
           {formatFaderDb(track.volume)}
         </div>
@@ -769,7 +769,7 @@ const BusMeter = memo(function BusMeter({
           </button>
         </div>
 
-        {/* Mute button â€” aligned with S/M row */}
+        {/* Mute button — aligned with S/M row */}
         <div className="flex justify-center py-0.5 shrink-0">
           <button
             type="button"
@@ -824,7 +824,7 @@ const BusMeter = memo(function BusMeter({
             </div>
           </div>
 
-          {/* Bus fader â€” same hit area structure as channel faders */}
+          {/* Bus fader — same hit area structure as channel faders */}
           <div className="min-w-[20px] w-[20px] shrink-0">
             <div
               ref={trackRef}
@@ -853,7 +853,7 @@ const BusMeter = memo(function BusMeter({
                 <div className="w-full h-px bg-muted-foreground/25" />
               </div>
 
-              {/* Fader knob â€” gold tint to distinguish from channel faders */}
+              {/* Fader knob — gold tint to distinguish from channel faders */}
               <div
                 ref={knobRef}
                 className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
@@ -915,7 +915,7 @@ const ScaleColumn = memo(function ScaleColumn() {
 });
 
 // ---------------------------------------------------------------------------
-// Tracks resize handle â€” drag to tuck channel strips behind the bus
+// Tracks resize handle — drag to tuck channel strips behind the bus
 // ---------------------------------------------------------------------------
 
 const TRACKS_PEEK_WIDTH = 4; // min visible sliver when fully tucked
@@ -1009,7 +1009,7 @@ const MixerBody = memo(function MixerBody({
 
   return (
     <div className={`flex-1 min-h-0 flex ${expanded ? 'px-1 py-1.5' : 'px-0.5 py-1'} gap-0.5`}>
-      {/* Drag handle â€” left edge of the mixer, click to toggle */}
+      {/* Drag handle — left edge of the mixer, click to toggle */}
       {tracks.length > 0 && (
         <button
           type="button"
@@ -1030,10 +1030,10 @@ const MixerBody = memo(function MixerBody({
         </button>
       )}
 
-      {/* dB scale â€” always visible */}
+      {/* dB scale — always visible */}
       <ScaleColumn />
 
-      {/* Channel strips â€” tuckable from the right (rightmost tracks hide first) */}
+      {/* Channel strips — tuckable from the right (rightmost tracks hide first) */}
       <div
         className={`min-h-0 overflow-hidden shrink-0 ${animating ? 'transition-[width] duration-200 ease-out' : ''}`}
         style={{ width: effectiveWidth }}
@@ -1068,7 +1068,7 @@ const MixerBody = memo(function MixerBody({
         </div>
       </div>
 
-      {/* Bus / master strip â€” ml-auto pins it to the right when tracks are tucked */}
+      {/* Bus / master strip — ml-auto pins it to the right when tracks are tucked */}
       <BusMeter
         masterEstimate={masterEstimate}
         isPlaying={isPlaying}
@@ -1120,7 +1120,7 @@ export const AudioMixerView = memo(function AudioMixerView({
       className={outerClassName}
       aria-label="Audio mixer"
     >
-      {/* Header â€” only shown when docked (floating panel has its own title bar) */}
+      {/* Header — only shown when docked (floating panel has its own title bar) */}
       {!expanded && (
         <div
           className="flex min-w-0 items-center justify-between gap-2 border-b border-border bg-secondary/20 px-2"

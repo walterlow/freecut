@@ -110,7 +110,7 @@ function isGifFormat(item: ImageItem): boolean {
   return isGifUrl(item.src) || (item.label?.toLowerCase() ?? '').endsWith('.gif');
 }
 
-// WebP frame extraction is handled by gifFrameCache.getWebpFrames() â€”
+// WebP frame extraction is handled by gifFrameCache.getWebpFrames() —
 // the cache service uses the ImageDecoder API and provides the same
 // CachedGifFrames structure used for GIF.
 
@@ -1349,7 +1349,7 @@ export async function createCompositionRenderer(
         return true;
       };
 
-      // Find occlusion cutoff â€“ the lowest track order with a fully occluding item
+      // Find occlusion cutoff – the lowest track order with a fully occluding item
       // If masks are active, disable occlusion culling (masks could reveal content)
       const {
         occlusionCutoffOrder,

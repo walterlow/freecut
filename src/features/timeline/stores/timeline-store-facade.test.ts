@@ -10,9 +10,13 @@ const indexedDbMocks = vi.hoisted(() => ({
 const playbackMocks = vi.hoisted(() => ({
   currentFrame: 0,
   busAudioEq: undefined,
+  masterBusDb: 0,
   setCurrentFrame: vi.fn(),
   setBusAudioEq: vi.fn((value) => {
     playbackMocks.busAudioEq = value;
+  }),
+  setMasterBusDb: vi.fn((value: number) => {
+    playbackMocks.masterBusDb = value;
   }),
   pause: vi.fn(),
   play: vi.fn(),
@@ -44,7 +48,7 @@ const mediaLibraryMocks = vi.hoisted(() => ({
   closeOrphanedClipsDialog: vi.fn(),
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', async (importOriginal) => {
+vi.mock('@/infrastructure/storage', async (importOriginal) => {
   const actual = await importOriginal() as Record<string, unknown>;
   return {
     ...actual,
@@ -102,11 +106,15 @@ describe('TimelineStoreFacade', () => {
     vi.clearAllMocks();
     playbackMocks.currentFrame = 0;
     playbackMocks.busAudioEq = undefined;
+    playbackMocks.masterBusDb = 0;
     playbackMocks.setCurrentFrame.mockImplementation((frame: number) => {
       playbackMocks.currentFrame = frame;
     });
     playbackMocks.setBusAudioEq.mockImplementation((value) => {
       playbackMocks.busAudioEq = value;
+    });
+    playbackMocks.setMasterBusDb.mockImplementation((value: number) => {
+      playbackMocks.masterBusDb = value;
     });
     zoomMocks.level = 1;
     zoomMocks.setZoomLevel.mockImplementation((level: number) => {

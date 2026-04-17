@@ -43,7 +43,7 @@ export const ClipIndicators = memo(function ClipIndicators({
 
   return (
     <>
-      {/* Label-row badges Ã¢â‚¬â€ single container to prevent overlap */}
+      {/* Label-row badges ââ‚¬” single container to prevent overlap */}
       {(hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
         <div
           className="absolute right-1 z-10 pointer-events-none flex items-center gap-1"

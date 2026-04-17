@@ -177,7 +177,7 @@ export function useTimelineSlipSlide(
         useLinkedEditPreviewStore.getState().setUpdates(updates);
       }
     }
-  // Note: clampSlideDelta intentionally omitted â€” it reads fps from store at
+  // Note: clampSlideDelta intentionally omitted — it reads fps from store at
   // call time, and including it would cause a TDZ error (defined after this hook).
   }, [findNeighbors, getItemFromStore, item.id, setDragState]);
 
@@ -516,7 +516,7 @@ export function useTimelineSlipSlide(
     [pixelsToTime, fps, trackLocked, item.id, getItemFromStore, clampSlipDelta, clampSlideDelta, snapEnabled, getMagneticSnapTargets, getSnapThresholdFrames],
   );
 
-  // Mouse up handler â€” commits changes
+  // Mouse up handler — commits changes
   const handleMouseUp = useCallback(() => {
     if (!stateRef.current.isActive) return;
 

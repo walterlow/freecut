@@ -50,7 +50,7 @@ window.addEventListener('vite:preloadError', () => {
       },
     });
   } else {
-    // Not in the editor â€” safe to reload immediately
+    // Not in the editor — safe to reload immediately
     window.location.reload();
   }
 });

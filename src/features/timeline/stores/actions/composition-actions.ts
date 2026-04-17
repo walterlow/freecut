@@ -1,5 +1,5 @@
 /**
- * Composition Actions â€” create, dissolve, and manage pre-compositions.
+ * Composition Actions — create, dissolve, and manage pre-compositions.
  */
 
 import type { AudioItem, TimelineItem, TimelineTrack, CompositionItem } from '@/types/timeline';

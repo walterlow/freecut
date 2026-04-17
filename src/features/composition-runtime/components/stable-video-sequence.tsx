@@ -230,7 +230,7 @@ const GroupRenderer: React.FC<{
   // When two items in the same group participate in a transition (Aâ†’A clip,
   // same media/origin split), the active index switches mid-transition at
   // the cut point. This causes the primary pool lane's video element to
-  // seek to a different source position and the shadow to remount â€” both
+  // seek to a different source position and the shadow to remount — both
   // stalling frame delivery for 200-500ms. Keep the LEFT clip as active
   // throughout the transition so pool lanes and shadows stay stable.
   const activeItemIndex = useMemo(() => {
@@ -285,7 +285,7 @@ const GroupRenderer: React.FC<{
       .join(',');
   }, [isPremounted, activeItemIndex, group.items, transitionWindows, globalFrame]);
 
-  // Build adjusted shadow items â€” only recalculated when overlap composition changes.
+  // Build adjusted shadow items — only recalculated when overlap composition changes.
   // String comparison is by value, so stable overlapKey prevents rebuilds every frame.
   const activeTransitionClipIds = useMemo(() => (
     collectTransitionParticipantClipIds({
@@ -315,7 +315,7 @@ const GroupRenderer: React.FC<{
         _sharedTransitionSync: activeTransitionClipIds.has(item.id),
       };
     });
-    // overlapKey is a string â€” React compares by value, so this only re-runs
+    // overlapKey is a string — React compares by value, so this only re-runs
     // when the set of overlapping items actually changes (transition boundaries)
   }, [activeTransitionClipIds, group.items, group.minFrom, overlapKey]);
 
@@ -350,7 +350,7 @@ const GroupRenderer: React.FC<{
     return renderItem(adjustedItem);
   }, [adjustedItem, renderItem]);
 
-  // Memoize shadow content â€” only changes at transition boundaries
+  // Memoize shadow content — only changes at transition boundaries
   const shadowContent = useMemo(() => {
     if (adjustedShadows.length === 0) return null;
     return adjustedShadows.map((shadow) => (

@@ -1,7 +1,7 @@
 /**
  * Shared transition UI configuration.
  * Single source of truth for transition presentation configs,
- * icons, and category metadata â€” derived from the transition registry.
+ * icons, and category metadata — derived from the transition registry.
  */
 
 import {
@@ -126,7 +126,7 @@ function generateConfigsFromRegistry(): PresentationConfig[] {
   ];
 }
 
-// Lazy-initialized caches â€” avoids TDZ when bundler orders this module
+// Lazy-initialized caches — avoids TDZ when bundler orders this module
 // before the transition registry is populated (see CLAUDE.md gotchas).
 let _presentationConfigs: PresentationConfig[] | null = null;
 let _configsByCategory: Record<string, PresentationConfig[]> | null = null;
