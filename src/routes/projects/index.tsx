@@ -28,6 +28,7 @@ import type { ImportProgress } from '@/features/project-bundle/types/bundle';
 import { BUNDLE_EXTENSION } from '@/features/project-bundle/types/bundle';
 import { LegacyMigrationBanner } from '@/features/projects/components/legacy-migration-banner';
 import { LegacyMigrationErrors } from '@/features/projects/components/legacy-migration-errors';
+import { TrashSection } from '@/features/projects/components/trash-section';
 import { WorkspaceIndicator } from '@/features/workspace-gate';
 
 export const Route = createFileRoute('/projects/')({
@@ -319,6 +320,7 @@ function ProjectsIndex() {
           /* Projects List */
           <div className="max-w-[1920px] mx-auto px-6 py-8">
             <ProjectList onEditProject={handleEditProject} />
+            <TrashSection />
           </div>
         )}
       </div>

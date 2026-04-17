@@ -128,6 +128,30 @@ export const useRestoreProject = () => {
 };
 
 /**
+ * Hook for permanently deleting a trashed project. Cleans up media
+ * references and wipes the project directory from disk. Cannot be
+ * undone — callers should confirm with the user first.
+ */
+export const usePermanentlyDeleteProject = () => {
+  const permanentlyDeleteProject = useProjectStore((s) => s.permanentlyDeleteProject);
+
+  return useCallback(
+    async (id: string) => {
+      try {
+        await permanentlyDeleteProject(id);
+        return { success: true, error: null };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to delete project',
+        };
+      }
+    },
+    [permanentlyDeleteProject],
+  );
+};
+
+/**
  * Hook for duplicating a project
  */
 export const useDuplicateProject = () => {
