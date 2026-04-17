@@ -1,6 +1,6 @@
 import { StrictMode, type ReactNode } from 'react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 
 const editorStoreState = vi.hoisted(() => ({
   sourcePreviewMediaId: 'media-1' as string | null,
@@ -11,6 +11,7 @@ const sourcePlayerStoreState = vi.hoisted(() => ({
   playerMethods: null as unknown,
   currentMediaId: null as string | null,
   currentSourceFrame: 0,
+  previewSourceFrame: null as number | null,
   inPoint: null as number | null,
   outPoint: null as number | null,
   pendingSeekFrame: null as number | null,
@@ -19,6 +20,7 @@ const sourcePlayerStoreState = vi.hoisted(() => ({
   setCurrentMediaId: vi.fn(),
   releaseCurrentMediaId: vi.fn(),
   setCurrentSourceFrame: vi.fn(),
+  setPreviewSourceFrame: vi.fn(),
   setInPoint: vi.fn(),
   setOutPoint: vi.fn(),
   clearInOutPoints: vi.fn(),
@@ -42,23 +44,31 @@ const itemsStoreState = vi.hoisted(() => ({
   tracks: [],
 }));
 
+const playerMethodsState = vi.hoisted(() => ({
+  seek: vi.fn(),
+  play: vi.fn(),
+  pause: vi.fn(),
+  toggle: vi.fn(),
+  frameBack: vi.fn(),
+  frameForward: vi.fn(),
+}));
+
+const clockState = vi.hoisted(() => ({
+  currentFrame: 0,
+  isPlaying: false,
+}));
+
 vi.mock('@/features/preview/deps/player-context', () => ({
   PlayerEmitterProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   ClockBridgeProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   VideoConfigProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   useClock: () => ({
-    currentFrame: 0,
-    isPlaying: false,
+    currentFrame: clockState.currentFrame,
+    isPlaying: clockState.isPlaying,
     onFrameChange: () => () => {},
   }),
-  useClockIsPlaying: () => false,
-  usePlayer: () => ({
-    seek: vi.fn(),
-    play: vi.fn(),
-    toggle: vi.fn(),
-    frameBack: vi.fn(),
-    frameForward: vi.fn(),
-  }),
+  useClockIsPlaying: () => clockState.isPlaying,
+  usePlayer: () => playerMethodsState,
 }));
 
 vi.mock('./source-composition', () => ({
@@ -165,11 +175,19 @@ describe('SourceMonitor current media ownership', () => {
     }
 
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => (
+      window.setTimeout(() => callback(performance.now()), 0)
+    ));
+    vi.stubGlobal('cancelAnimationFrame', (handle: number) => {
+      window.clearTimeout(handle);
+    });
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
     editorStoreState.sourcePreviewMediaId = 'media-1';
+    clockState.currentFrame = 0;
+    clockState.isPlaying = false;
   });
 
   it('does not release the current media during the initial Strict Mode remount', async () => {
@@ -197,6 +215,66 @@ describe('SourceMonitor current media ownership', () => {
     rendered.unmount();
 
     expect(sourcePlayerStoreState.releaseCurrentMediaId).toHaveBeenCalledWith('media-1');
+  });
+
+  it('batches seek bar drags and commits the final frame on mouseup', async () => {
+    const rendered = render(<SourceMonitor mediaId="media-1" />);
+
+    await waitFor(() => {
+      expect(sourcePlayerStoreState.setCurrentMediaId).toHaveBeenCalledWith('media-1');
+    });
+
+    const seekBar = rendered.getByTestId('source-monitor-seek-bar');
+    vi.spyOn(seekBar, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 100,
+      bottom: 10,
+      width: 100,
+      height: 10,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseDown(seekBar, { clientX: 25 });
+    fireEvent.mouseMove(document, { clientX: 75 });
+
+    expect(playerMethodsState.seek).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(sourcePlayerStoreState.setCurrentSourceFrame).toHaveBeenLastCalledWith(112);
+    });
+
+    fireEvent.mouseUp(document);
+
+    expect(playerMethodsState.seek).toHaveBeenCalledTimes(1);
+    expect(playerMethodsState.seek).toHaveBeenCalledWith(112);
+  });
+
+  it('pauses playback when seek-bar scrubbing starts', async () => {
+    clockState.isPlaying = true;
+    const rendered = render(<SourceMonitor mediaId="media-1" />);
+
+    await waitFor(() => {
+      expect(sourcePlayerStoreState.setCurrentMediaId).toHaveBeenCalledWith('media-1');
+    });
+
+    const seekBar = rendered.getByTestId('source-monitor-seek-bar');
+    vi.spyOn(seekBar, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 100,
+      bottom: 10,
+      width: 100,
+      height: 10,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseDown(seekBar, { clientX: 25 });
+
+    expect(playerMethodsState.pause).toHaveBeenCalledTimes(1);
   });
 
 });

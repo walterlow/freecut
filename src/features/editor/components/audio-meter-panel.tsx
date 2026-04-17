@@ -8,7 +8,7 @@ import {
   importWaveformCache,
 } from '@/features/editor/deps/timeline-store';
 import { importMediaLibraryService } from '@/features/editor/deps/media-library';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { getResolvedPlaybackFrame, usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useEditorStore } from '@/app/state/editor/store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
@@ -174,7 +174,14 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     lastTimestamp: 0,
   });
 
-  const effectiveFrame = previewFrame ?? displayedFrame ?? currentFrame;
+  const effectiveFrame = useMemo(() => getResolvedPlaybackFrame({
+    currentFrame,
+    currentFrameEpoch: usePlaybackStore.getState().currentFrameEpoch,
+    previewFrame,
+    previewFrameEpoch: usePlaybackStore.getState().previewFrameEpoch,
+    isPlaying,
+    displayedFrame,
+  }), [currentFrame, displayedFrame, isPlaying, previewFrame]);
   const combinedTracks = useMemo(() => {
     return tracks
       .filter((track) => !track.isGroup)

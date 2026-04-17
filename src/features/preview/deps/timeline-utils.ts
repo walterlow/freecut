@@ -12,3 +12,8 @@ export {
   getTrackKind,
   type DroppableMediaType,
 } from './timeline-contract';
+export {
+  createScrubThrottleState,
+  shouldCommitScrubFrame,
+  type ScrubThrottleState,
+} from '@/features/timeline/utils/scrub-throttle';

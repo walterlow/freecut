@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Activity } from 'lucide-react';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { getResolvedPlaybackFrame, usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { cn } from '@/shared/ui/cn';
 import { Button } from '@/components/ui/button';
@@ -602,8 +602,15 @@ export const ColorScopesView = memo(function ColorScopesView({
     if (!captureFrameImageData && !captureFrame) return;
 
     const getRequestedFrame = () => {
-      const s = usePlaybackStore.getState();
-      return s.previewFrame ?? s.currentFrame;
+      const playbackState = usePlaybackStore.getState();
+      return getResolvedPlaybackFrame({
+        currentFrame: playbackState.currentFrame,
+        currentFrameEpoch: playbackState.currentFrameEpoch,
+        previewFrame: playbackState.previewFrame,
+        previewFrameEpoch: playbackState.previewFrameEpoch,
+        isPlaying: playbackState.isPlaying,
+        displayedFrame: usePreviewBridgeStore.getState().displayedFrame,
+      });
     };
     const requestedFrame = getRequestedFrame();
 
@@ -715,21 +722,66 @@ export const ColorScopesView = memo(function ColorScopesView({
 
     scheduleDraw();
 
-    const unsubscribe = usePlaybackStore.subscribe((state, previousState) => {
+    const scheduleIfFrameChanged = (nextRequestedFrame: number, previousRequestedFrame: number) => {
+      if (nextRequestedFrame !== previousRequestedFrame) {
+        scheduleDraw();
+      }
+    };
+
+    const unsubscribePlayback = usePlaybackStore.subscribe((state, previousState) => {
       if (state.isPlaying) {
         return;
       }
 
-      const nextRequestedFrame = state.previewFrame ?? state.currentFrame;
-      const previousRequestedFrame = previousState.previewFrame ?? previousState.currentFrame;
+      const nextRequestedFrame = getResolvedPlaybackFrame({
+        currentFrame: state.currentFrame,
+        currentFrameEpoch: state.currentFrameEpoch,
+        previewFrame: state.previewFrame,
+        previewFrameEpoch: state.previewFrameEpoch,
+        isPlaying: state.isPlaying,
+        displayedFrame: usePreviewBridgeStore.getState().displayedFrame,
+      });
+      const previousRequestedFrame = getResolvedPlaybackFrame({
+        currentFrame: previousState.currentFrame,
+        currentFrameEpoch: previousState.currentFrameEpoch,
+        previewFrame: previousState.previewFrame,
+        previewFrameEpoch: previousState.previewFrameEpoch,
+        isPlaying: previousState.isPlaying,
+        displayedFrame: usePreviewBridgeStore.getState().displayedFrame,
+      });
 
-      if (nextRequestedFrame !== previousRequestedFrame) {
-        scheduleDraw();
+      scheduleIfFrameChanged(nextRequestedFrame, previousRequestedFrame);
+    });
+
+    const unsubscribePreviewBridge = usePreviewBridgeStore.subscribe((bridgeState, previousBridgeState) => {
+      const playbackState = usePlaybackStore.getState();
+      if (playbackState.isPlaying) {
+        return;
       }
+
+      const nextRequestedFrame = getResolvedPlaybackFrame({
+        currentFrame: playbackState.currentFrame,
+        currentFrameEpoch: playbackState.currentFrameEpoch,
+        previewFrame: playbackState.previewFrame,
+        previewFrameEpoch: playbackState.previewFrameEpoch,
+        isPlaying: playbackState.isPlaying,
+        displayedFrame: bridgeState.displayedFrame,
+      });
+      const previousRequestedFrame = getResolvedPlaybackFrame({
+        currentFrame: playbackState.currentFrame,
+        currentFrameEpoch: playbackState.currentFrameEpoch,
+        previewFrame: playbackState.previewFrame,
+        previewFrameEpoch: playbackState.previewFrameEpoch,
+        isPlaying: playbackState.isPlaying,
+        displayedFrame: previousBridgeState.displayedFrame,
+      });
+
+      scheduleIfFrameChanged(nextRequestedFrame, previousRequestedFrame);
     });
 
     return () => {
-      unsubscribe();
+      unsubscribePlayback();
+      unsubscribePreviewBridge();
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }

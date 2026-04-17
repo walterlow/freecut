@@ -41,6 +41,7 @@ import { useEditorStore } from '@/app/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { useSelectionStore } from '@/shared/state/selection';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout';
+import { createScrubThrottleState, shouldCommitScrubFrame } from '../deps/timeline-utils';
 import { cn } from '@/shared/ui/cn';
 import { formatTimecodeCompact } from '@/shared/utils/time-utils';
 import type { TimelineTrack } from '@/types/timeline';
@@ -559,6 +560,12 @@ function SourcePlaybackControls({
     [fps, formatFrameNumber],
   );
 
+  const clearPreviewSourceFrame = useCallback(() => {
+    if (interactive) {
+      useSourcePlayerStore.getState().setPreviewSourceFrame(null);
+    }
+  }, [interactive]);
+
   const updateFrameDisplay = useCallback((frame: number) => {
     currentFrameRef.current = frame;
     if (interactive) {
@@ -575,21 +582,41 @@ function SourcePlaybackControls({
     }
   }, [fps, formatFrameNumber, interactive, lastFrame]);
 
+  const commitSourceSeek = useCallback((frame: number) => {
+    clearPreviewSourceFrame();
+    updateFrameDisplay(frame);
+    player.seek(frame);
+  }, [clearPreviewSourceFrame, player, updateFrameDisplay]);
+
   // Bridge player methods into the source player store for keyboard shortcuts
   useEffect(() => {
     if (!interactive) return;
     const setPlayerMethods = useSourcePlayerStore.getState().setPlayerMethods;
     setPlayerMethods({
-      toggle: player.toggle,
-      seek: player.seek,
-      frameBack: player.frameBack,
-      frameForward: player.frameForward,
+      toggle: () => {
+        const previewFrame = useSourcePlayerStore.getState().previewSourceFrame;
+        if (previewFrame !== null) {
+          commitSourceSeek(previewFrame);
+        }
+        player.toggle();
+      },
+      seek: (frame) => {
+        commitSourceSeek(frame);
+      },
+      frameBack: (frames) => {
+        clearPreviewSourceFrame();
+        player.frameBack(frames);
+      },
+      frameForward: (frames) => {
+        clearPreviewSourceFrame();
+        player.frameForward(frames);
+      },
       getDurationInFrames: () => durationInFrames,
     });
     return () => {
       useSourcePlayerStore.getState().setPlayerMethods(null);
     };
-  }, [durationInFrames, interactive, player.toggle, player.seek, player.frameBack, player.frameForward]);
+  }, [clearPreviewSourceFrame, commitSourceSeek, durationInFrames, interactive, player.frameBack, player.frameForward, player.toggle]);
 
   useEffect(() => {
     updateFrameDisplay(clock.currentFrame);
@@ -608,15 +635,15 @@ function SourcePlaybackControls({
   useEffect(() => {
     if (!interactive) return;
     if (pendingSeekFrame !== null) {
-      player.seek(pendingSeekFrame);
+      commitSourceSeek(pendingSeekFrame);
       useSourcePlayerStore.getState().setPendingSeekFrame(null);
     }
-  }, [interactive, pendingSeekFrame, player]);
+  }, [commitSourceSeek, interactive, pendingSeekFrame]);
 
   useEffect(() => {
     if (seekFrame === null) return;
-    player.seek(seekFrame);
-  }, [player, seekFrame]);
+    commitSourceSeek(seekFrame);
+  }, [commitSourceSeek, seekFrame]);
 
   // Read I/O points from store
   const inPoint = useSourcePlayerStore((s) => s.inPoint);
@@ -630,29 +657,124 @@ function SourcePlaybackControls({
   const draggingRef = useRef(false);
   const onMoveRef = useRef<((ev: MouseEvent) => void) | null>(null);
   const onUpRef = useRef<(() => void) | null>(null);
+  const pendingBarSeekFrameRef = useRef<number | null>(null);
+  const pendingBarPointerXRef = useRef<number | null>(null);
+  const barSeekRafRef = useRef<number | null>(null);
+  const lastIssuedBarSeekFrameRef = useRef<number | null>(null);
+  const scrubThrottleStateRef = useRef(createScrubThrottleState({
+    frame: clock.currentFrame,
+    nowMs: performance.now(),
+  }));
 
-  const seekFromX = useCallback(
+  const frameFromBarX = useCallback(
     (clientX: number) => {
       const bar = barRef.current;
-      if (!bar) return;
+      if (!bar) return null;
       const rect = bar.getBoundingClientRect();
+      if (rect.width <= 0) {
+        return 0;
+      }
       const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      player.seek(Math.round(pct * lastFrame));
+      return Math.round(pct * lastFrame);
     },
-    [player, lastFrame],
+    [lastFrame],
   );
+
+  const flushBarSeekFrame = useCallback((frame: number) => {
+    lastIssuedBarSeekFrameRef.current = frame;
+    commitSourceSeek(frame);
+  }, [commitSourceSeek]);
+
+  const getBarPixelsPerSecond = useCallback(() => {
+    const bar = barRef.current;
+    if (!bar || durationInFrames <= 0 || fps <= 0) {
+      return 0;
+    }
+
+    return (bar.clientWidth * fps) / durationInFrames;
+  }, [durationInFrames, fps]);
+
+  const previewBarSeekFrame = useCallback((frame: number) => {
+    pendingBarSeekFrameRef.current = frame;
+
+    if (interactive) {
+      useSourcePlayerStore.getState().setPreviewSourceFrame(frame);
+    }
+    if (currentFrameRef.current !== frame) {
+      updateFrameDisplay(frame);
+    }
+  }, [interactive, updateFrameDisplay]);
+
+  const scheduleBarSeekFrame = useCallback((frame: number, pointerX: number, force = false) => {
+    pendingBarSeekFrameRef.current = frame;
+    pendingBarPointerXRef.current = pointerX;
+
+    if (force) {
+      previewBarSeekFrame(frame);
+      return;
+    }
+
+    if (barSeekRafRef.current !== null) {
+      return;
+    }
+
+    barSeekRafRef.current = requestAnimationFrame(() => {
+      barSeekRafRef.current = null;
+      const pendingFrame = pendingBarSeekFrameRef.current;
+      const pendingPointerX = pendingBarPointerXRef.current;
+      if (pendingFrame === null || pendingPointerX === null) {
+        return;
+      }
+
+      if (shouldCommitScrubFrame({
+        state: scrubThrottleStateRef.current,
+        pointerX: pendingPointerX,
+        targetFrame: pendingFrame,
+        pixelsPerSecond: getBarPixelsPerSecond(),
+        nowMs: performance.now(),
+      })) {
+        previewBarSeekFrame(pendingFrame);
+      }
+    });
+  }, [getBarPixelsPerSecond, previewBarSeekFrame]);
 
   const handleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       draggingRef.current = true;
-      seekFromX(e.clientX);
+      if (playing) {
+        player.pause();
+        replayingRef.current = false;
+      }
+      const initialFrame = frameFromBarX(e.clientX);
+      if (initialFrame !== null) {
+        scrubThrottleStateRef.current = createScrubThrottleState({
+          pointerX: e.clientX,
+          frame: initialFrame,
+          nowMs: performance.now(),
+        });
+        scheduleBarSeekFrame(initialFrame, e.clientX, true);
+      }
       const onMove = (ev: MouseEvent) => {
-        if (draggingRef.current) seekFromX(ev.clientX);
+        if (!draggingRef.current) return;
+        const nextFrame = frameFromBarX(ev.clientX);
+        if (nextFrame !== null) {
+          scheduleBarSeekFrame(nextFrame, ev.clientX);
+        }
       };
       const onUp = () => {
+        const pendingFrame = pendingBarSeekFrameRef.current;
         draggingRef.current = false;
+        pendingBarSeekFrameRef.current = null;
+        pendingBarPointerXRef.current = null;
+        if (barSeekRafRef.current !== null) {
+          cancelAnimationFrame(barSeekRafRef.current);
+          barSeekRafRef.current = null;
+        }
+        if (pendingFrame !== null) {
+          flushBarSeekFrame(pendingFrame);
+        }
         if (onMoveRef.current) {
           document.removeEventListener('mousemove', onMoveRef.current);
           onMoveRef.current = null;
@@ -667,12 +789,19 @@ function SourcePlaybackControls({
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     },
-    [seekFromX],
+    [flushBarSeekFrame, frameFromBarX, player, playing, scheduleBarSeekFrame],
   );
 
   // Clean up document listeners on unmount
   useEffect(() => {
     return () => {
+      pendingBarSeekFrameRef.current = null;
+      pendingBarPointerXRef.current = null;
+      lastIssuedBarSeekFrameRef.current = null;
+      if (barSeekRafRef.current !== null) {
+        cancelAnimationFrame(barSeekRafRef.current);
+        barSeekRafRef.current = null;
+      }
       if (onMoveRef.current) {
         document.removeEventListener('mousemove', onMoveRef.current);
         onMoveRef.current = null;
@@ -803,9 +932,35 @@ function SourcePlaybackControls({
     const { inPoint: ip, outPoint: op } = useSourcePlayerStore.getState();
     if (ip === null && op === null) return;
     replayingRef.current = true;
-    player.seek(ip ?? 0);
+    commitSourceSeek(ip ?? 0);
     player.play();
-  }, [player]);
+  }, [commitSourceSeek, player]);
+
+  const handleGoToStart = useCallback(() => {
+    commitSourceSeek(0);
+  }, [commitSourceSeek]);
+
+  const handleStepBack = useCallback(() => {
+    clearPreviewSourceFrame();
+    player.frameBack(1);
+  }, [clearPreviewSourceFrame, player]);
+
+  const handleTogglePlayback = useCallback(() => {
+    const previewFrame = useSourcePlayerStore.getState().previewSourceFrame;
+    if (previewFrame !== null) {
+      commitSourceSeek(previewFrame);
+    }
+    player.toggle();
+  }, [commitSourceSeek, player]);
+
+  const handleStepForward = useCallback(() => {
+    clearPreviewSourceFrame();
+    player.frameForward(1);
+  }, [clearPreviewSourceFrame, player]);
+
+  const handleGoToEnd = useCallback(() => {
+    commitSourceSeek(lastFrame);
+  }, [commitSourceSeek, lastFrame]);
 
   const activeTrack = useMemo(
     () => (activeTrackId ? tracks.find((track) => track.id === activeTrackId) ?? null : null),
@@ -1021,6 +1176,7 @@ function SourcePlaybackControls({
           {/* Seek bar */}
           <div
             ref={barRef}
+            data-testid="source-monitor-seek-bar"
             className="w-full h-1.5 bg-muted rounded cursor-pointer relative"
             onMouseDown={handleBarMouseDown}
           >
@@ -1098,7 +1254,7 @@ function SourcePlaybackControls({
         <div className="flex items-center gap-0.5 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.seek(0)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleGoToStart}>
                 <SkipBack className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -1106,7 +1262,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.frameBack(1)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleStepBack}>
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -1114,7 +1270,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.toggle()}>
+              <Button size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleTogglePlayback}>
                 {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
               </Button>
             </TooltipTrigger>
@@ -1122,7 +1278,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.frameForward(1)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleStepForward}>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -1130,7 +1286,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.seek(lastFrame)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleGoToEnd}>
                 <SkipForward className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>

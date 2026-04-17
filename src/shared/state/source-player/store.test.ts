@@ -8,6 +8,7 @@ describe('source-player-store', () => {
       playerMethods: null,
       currentMediaId: null,
       currentSourceFrame: 0,
+      previewSourceFrame: null,
       inPoint: null,
       outPoint: null,
       pendingSeekFrame: null,
@@ -25,6 +26,7 @@ describe('source-player-store', () => {
     expect(useSourcePlayerStore.getState()).toMatchObject({
       currentMediaId: null,
       currentSourceFrame: 0,
+      previewSourceFrame: null,
       inPoint: null,
       outPoint: null,
     });
@@ -44,6 +46,7 @@ describe('source-player-store', () => {
       currentMediaId: 'media-2',
       inPoint: 75,
       outPoint: 150,
+      previewSourceFrame: null,
       pendingSeekFrame: 75,
     });
   });

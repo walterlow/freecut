@@ -11,6 +11,7 @@ export interface SourcePlayerState {
   playerMethods: SourcePlayerMethods | null;
   currentMediaId: string | null;
   currentSourceFrame: number;
+  previewSourceFrame: number | null;
   inPoint: number | null;
   outPoint: number | null;
   pendingSeekFrame: number | null;
@@ -19,6 +20,7 @@ export interface SourcePlayerState {
   setCurrentMediaId: (id: string | null) => void;
   releaseCurrentMediaId: (id: string) => void;
   setCurrentSourceFrame: (frame: number) => void;
+  setPreviewSourceFrame: (frame: number | null) => void;
   setInPoint: (frame: number | null) => void;
   setOutPoint: (frame: number | null) => void;
   clearInOutPoints: () => void;

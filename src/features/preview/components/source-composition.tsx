@@ -16,7 +16,14 @@ import {
   type VideoFrameSource,
 } from '@/features/preview/deps/export';
 import { resolveProxyUrl } from '../utils/media-resolver';
+import {
+  backgroundBatchPreseek,
+  getCachedPredecodedBitmap,
+  waitForInflightPredecodedBitmap,
+} from '../utils/decoder-prewarm';
+import { getDirectionalPrewarmOffsets } from '../utils/fast-scrub-prewarm';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { useMediaLibraryStore } from '@/features/preview/deps/media-library';
 import { FileAudio } from 'lucide-react';
 
@@ -35,6 +42,12 @@ const SOURCE_MONITOR_STRICT_DECODE_FALLBACK_FAILURES = 2;
 const SOURCE_MONITOR_FRAME_CACHE_MAX = 90;
 const SOURCE_MONITOR_CACHE_TIME_QUANTUM = 1 / 60;
 const SOURCE_MONITOR_PLAYING_RESYNC_THRESHOLD_FRAMES = 6;
+const SOURCE_MONITOR_PREWARM_MAX_TIMESTAMPS = 6;
+const SOURCE_MONITOR_PREWARM_FORWARD_STEPS = 4;
+const SOURCE_MONITOR_PREWARM_BACKWARD_STEPS = 6;
+const SOURCE_MONITOR_PREWARM_OPPOSITE_STEPS = 2;
+const SOURCE_MONITOR_PREWARM_NEUTRAL_RADIUS = 2;
+const SOURCE_MONITOR_SHARED_CACHE_WAIT_MS = 4;
 
 function getSourceMonitorDecoderPool(): SharedVideoExtractorPool {
   if (!globalSourceMonitorDecoderPool) {
@@ -81,6 +94,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   const clock = useClock();
   const playing = useClockIsPlaying();
   const playbackRate = useClockPlaybackRate();
+  const isPreviewScrubbing = useSourcePlayerStore((s) => s.previewSourceFrame !== null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -99,17 +113,41 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   const consecutiveDecodeFailuresRef = useRef(0);
   const frameCacheRef = useRef<Map<number, ImageBitmap>>(new Map());
   const frameCacheOrderRef = useRef<number[]>([]);
+  const prewarmInFlightRef = useRef(false);
+  const queuedPrewarmTimesRef = useRef<number[]>([]);
+  const prewarmAnchorFrameRef = useRef<number | null>(null);
   const { fps } = useVideoConfig();
   const lastFrameRef = useRef(clock.currentFrame);
   const playingRef = useRef(playing);
+  const currentSourceFrameRef = useRef<number>(useSourcePlayerStore.getState().currentSourceFrame);
+  const previewSourceFrameRef = useRef<number | null>(useSourcePlayerStore.getState().previewSourceFrame);
+  const pausedRenderTargetKeyRef = useRef<number | null>(null);
   const decoderItemId = `${mediaId ?? 'source-monitor'}:${decodeLaneRef.current}`;
   const [useLegacyPausedSeek, setUseLegacyPausedSeek] = useState(false);
   const [strictDecodeReady, setStrictDecodeReady] = useState(false);
   const [hasDecodedFrame, setHasDecodedFrame] = useState(false);
+  const [decodedFrameKey, setDecodedFrameKey] = useState<number | null>(null);
+  const [pausedRenderTargetKey, setPausedRenderTargetKey] = useState<number | null>(null);
 
   useEffect(() => {
     playingRef.current = playing;
   }, [playing]);
+
+  useEffect(() => {
+    return useSourcePlayerStore.subscribe((state) => {
+      currentSourceFrameRef.current = state.currentSourceFrame;
+      previewSourceFrameRef.current = state.previewSourceFrame;
+    });
+  }, []);
+
+  const getResolvedPausedSourceFrame = useCallback(() => {
+    const previewFrame = previewSourceFrameRef.current;
+    if (previewFrame !== null) {
+      return previewFrame;
+    }
+
+    return currentSourceFrameRef.current;
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -120,13 +158,122 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       }
       frameCacheRef.current.clear();
       frameCacheOrderRef.current = [];
+      prewarmInFlightRef.current = false;
+      queuedPrewarmTimesRef.current = [];
+      prewarmAnchorFrameRef.current = null;
     };
   }, []);
 
   useEffect(() => {
     setUseLegacyPausedSeek(false);
     setHasDecodedFrame(false);
+    setDecodedFrameKey(null);
+    setPausedRenderTargetKey(null);
+    pausedRenderTargetKeyRef.current = null;
+    prewarmInFlightRef.current = false;
+    queuedPrewarmTimesRef.current = [];
+    prewarmAnchorFrameRef.current = null;
   }, [activeSrc, mediaId]);
+
+  const pumpDirectionalPrewarm = useCallback(() => {
+    if (
+      prewarmInFlightRef.current
+      || !decoderReadyRef.current
+      || !mountedRef.current
+      || playingRef.current
+      || pendingTimeRef.current !== null
+    ) {
+      return;
+    }
+
+    if (!activeSrc) {
+      queuedPrewarmTimesRef.current = [];
+      return;
+    }
+
+    const timestamps = queuedPrewarmTimesRef.current;
+    if (timestamps.length === 0) {
+      return;
+    }
+
+    prewarmInFlightRef.current = true;
+    queuedPrewarmTimesRef.current = [];
+
+    const run = async () => {
+      try {
+        await backgroundBatchPreseek(activeSrc, timestamps);
+      } finally {
+        prewarmInFlightRef.current = false;
+        if (
+          mountedRef.current
+          && !playingRef.current
+          && pendingTimeRef.current === null
+          && queuedPrewarmTimesRef.current.length > 0
+        ) {
+          queueMicrotask(() => {
+            if (!mountedRef.current) return;
+            pumpDirectionalPrewarm();
+          });
+        }
+      }
+    };
+
+    void run();
+  }, [activeSrc]);
+
+  const queueDirectionalPrewarm = useCallback((targetTime: number) => {
+    const extractor = extractorRef.current;
+    if (
+      !extractor
+      || !decoderReadyRef.current
+      || playingRef.current
+      || pendingTimeRef.current !== null
+    ) {
+      return;
+    }
+
+    const duration = extractor.getDuration();
+    if (!Number.isFinite(duration) || duration <= 0) {
+      return;
+    }
+
+    const targetFrame = Math.max(0, Math.round(targetTime * fps));
+    const previousAnchorFrame = prewarmAnchorFrameRef.current;
+    const direction: -1 | 0 | 1 = previousAnchorFrame === null || previousAnchorFrame === targetFrame
+      ? 0
+      : targetFrame > previousAnchorFrame
+        ? 1
+        : -1;
+    prewarmAnchorFrameRef.current = targetFrame;
+
+    const offsets = getDirectionalPrewarmOffsets(direction, {
+      forwardSteps: SOURCE_MONITOR_PREWARM_FORWARD_STEPS,
+      backwardSteps: SOURCE_MONITOR_PREWARM_BACKWARD_STEPS,
+      oppositeSteps: SOURCE_MONITOR_PREWARM_OPPOSITE_STEPS,
+      neutralRadius: SOURCE_MONITOR_PREWARM_NEUTRAL_RADIUS,
+    });
+
+    const maxFrame = Math.max(0, Math.floor(duration * fps) - 1);
+    const cache = frameCacheRef.current;
+    const nextPrewarmTimes: number[] = [];
+    const seen = new Set<number>();
+
+    for (const offset of offsets) {
+      const prewarmFrame = targetFrame + offset;
+      if (prewarmFrame < 0 || prewarmFrame > maxFrame) continue;
+      const prewarmTime = quantizeSourceMonitorTime(prewarmFrame / fps);
+      if (prewarmTime === quantizeSourceMonitorTime(targetTime)) continue;
+      if (cache.has(prewarmTime) || seen.has(prewarmTime)) continue;
+      seen.add(prewarmTime);
+      nextPrewarmTimes.push(prewarmTime);
+      if (nextPrewarmTimes.length >= SOURCE_MONITOR_PREWARM_MAX_TIMESTAMPS) {
+        break;
+      }
+    }
+
+    queuedPrewarmTimesRef.current = nextPrewarmTimes;
+    pumpDirectionalPrewarm();
+  }, [fps, pumpDirectionalPrewarm]);
 
   const drawDecodedFrame = useCallback(async (targetTime: number) => {
     const extractor = extractorRef.current;
@@ -150,6 +297,10 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     }
 
     const cacheKey = quantizeSourceMonitorTime(targetTime);
+    const markDecodedFrame = () => {
+      setHasDecodedFrame(true);
+      setDecodedFrameKey((prev) => (prev === cacheKey ? prev : cacheKey));
+    };
     const cache = frameCacheRef.current;
     const cacheOrder = frameCacheOrderRef.current;
     const cached = cache.get(cacheKey);
@@ -161,7 +312,33 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
         cacheOrder.splice(cacheIndex, 1);
         cacheOrder.push(cacheKey);
       }
+      markDecodedFrame();
       return true;
+    }
+
+    const drawSharedBitmap = (bitmap: ImageBitmap): boolean => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      return true;
+    };
+
+    if (activeSrc) {
+      const sharedBitmap = getCachedPredecodedBitmap(activeSrc, Math.max(0, targetTime), SOURCE_MONITOR_CACHE_TIME_QUANTUM);
+      if (sharedBitmap && drawSharedBitmap(sharedBitmap)) {
+        markDecodedFrame();
+        return true;
+      }
+
+      const inflightBitmap = await waitForInflightPredecodedBitmap(
+        activeSrc,
+        Math.max(0, targetTime),
+        SOURCE_MONITOR_CACHE_TIME_QUANTUM,
+        SOURCE_MONITOR_SHARED_CACHE_WAIT_MS,
+      ).catch(() => null);
+      if (inflightBitmap && drawSharedBitmap(inflightBitmap)) {
+        markDecodedFrame();
+        return true;
+      }
     }
 
     const didDraw = await extractor.drawFrame(
@@ -190,8 +367,9 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       // Cache population is best-effort only.
     }
 
+    markDecodedFrame();
     return true;
-  }, []);
+  }, [activeSrc]);
 
   const pumpLatestDecodedFrame = useCallback(() => {
     if (renderInFlightRef.current) return;
@@ -211,7 +389,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
           const didDraw = await drawDecodedFrame(targetTime).catch(() => false);
           if (didDraw) {
             consecutiveDecodeFailuresRef.current = 0;
-            setHasDecodedFrame(true);
+            queueDirectionalPrewarm(targetTime);
             continue;
           }
 
@@ -243,7 +421,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     };
 
     void run();
-  }, [drawDecodedFrame]);
+  }, [drawDecodedFrame, queueDirectionalPrewarm]);
 
   // Acquire/release pooled element when source changes.
   useEffect(() => {
@@ -292,6 +470,9 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     pendingTimeRef.current = null;
     consecutiveDecodeFailuresRef.current = 0;
     contextRef.current = null;
+    prewarmInFlightRef.current = false;
+    queuedPrewarmTimesRef.current = [];
+    prewarmAnchorFrameRef.current = null;
 
     for (const bitmap of frameCacheRef.current.values()) {
       bitmap.close();
@@ -339,15 +520,22 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     const video = videoRef.current;
     const audio = audioRef.current;
     const targetTime = frame / fps;
+    const targetCacheKey = quantizeSourceMonitorTime(targetTime);
     latestTargetTimeRef.current = targetTime;
 
     lastFrameRef.current = frame;
 
-    if (!playingRef.current && !useLegacyPausedSeek) {
+    if (!playingRef.current && !useLegacyPausedSeek && !isPreviewScrubbing) {
+      if (pausedRenderTargetKeyRef.current !== targetCacheKey) {
+        pausedRenderTargetKeyRef.current = targetCacheKey;
+        setPausedRenderTargetKey(targetCacheKey);
+      }
       pendingTimeRef.current = targetTime;
       if (decoderReadyRef.current) {
         pumpLatestDecodedFrame();
       }
+    } else if (isPreviewScrubbing) {
+      pendingTimeRef.current = null;
     }
 
     const syncAudioTime = () => {
@@ -376,7 +564,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     const canSeek = video.readyState >= 1;
     if (!canSeek) return;
 
-    if (!playingRef.current && strictDecodeReady && hasDecodedFrame && !useLegacyPausedSeek) {
+    if (!playingRef.current && strictDecodeReady && hasDecodedFrame && !useLegacyPausedSeek && !isPreviewScrubbing) {
       syncAudioTime();
       return;
     }
@@ -395,25 +583,63 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       return;
     }
 
-    try {
-      poolRef.current.seekClip(poolClipIdRef.current, frame / fps, { fast: true });
-    } catch {
-      // Ignore seek errors while media is loading
+    if (isPreviewScrubbing) {
+      if (Math.abs(video.currentTime - targetTime) >= 0.016) {
+        try {
+          video.currentTime = targetTime;
+        } catch {
+          // Ignore seek errors while media is loading
+        }
+      }
+    } else {
+      try {
+        poolRef.current.seekClip(poolClipIdRef.current, frame / fps, { fast: true });
+      } catch {
+        // Ignore seek errors while media is loading
+      }
     }
 
     syncAudioTime();
-  }, [activeSrc, fps, hasDecodedFrame, pumpLatestDecodedFrame, src, strictDecodeReady, useLegacyPausedSeek]);
+  }, [
+    activeSrc,
+    fps,
+    hasDecodedFrame,
+    isPreviewScrubbing,
+    pumpLatestDecodedFrame,
+    src,
+    strictDecodeReady,
+    useLegacyPausedSeek,
+  ]);
 
   useEffect(() => {
-    syncSourceFrame(clock.currentFrame);
+    syncSourceFrame(playing ? clock.currentFrame : getResolvedPausedSourceFrame());
     return clock.onFrameChange((frame) => {
+      if (!playingRef.current) {
+        return;
+      }
       syncSourceFrame(frame);
     });
-  }, [clock, syncSourceFrame]);
+  }, [clock, getResolvedPausedSourceFrame, playing, syncSourceFrame]);
 
   useEffect(() => {
-    syncSourceFrame(clock.currentFrame);
-  }, [clock, playing, syncSourceFrame]);
+    syncSourceFrame(playing ? clock.currentFrame : getResolvedPausedSourceFrame());
+  }, [clock, getResolvedPausedSourceFrame, playing, syncSourceFrame]);
+
+  useEffect(() => {
+    return useSourcePlayerStore.subscribe((state, prevState) => {
+      if (
+        playingRef.current
+        || (
+          state.previewSourceFrame === prevState.previewSourceFrame
+          && state.currentSourceFrame === prevState.currentSourceFrame
+        )
+      ) {
+        return;
+      }
+
+      syncSourceFrame(state.previewSourceFrame ?? state.currentSourceFrame);
+    });
+  }, [clock, syncSourceFrame]);
 
   // Handle play/pause sync
   useEffect(() => {
@@ -454,7 +680,15 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     }
   }, [playbackRate, playing, src]);
 
-  const showDecodedCanvas = !playing && strictDecodeReady && hasDecodedFrame && !useLegacyPausedSeek;
+  const showDecodedCanvas = (
+    !playing
+    && !isPreviewScrubbing
+    && strictDecodeReady
+    && hasDecodedFrame
+    && !useLegacyPausedSeek
+    && decodedFrameKey !== null
+    && decodedFrameKey === pausedRenderTargetKey
+  );
 
   return (
     <AbsoluteFill>
