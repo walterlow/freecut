@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// Close the current week and promote `current` into a tagged weekly release.
+// Close the current week and promote `current` into a weekly release.
 //
 // Usage:
-//   node scripts/changelog-rollup.mjs             # tag at latest main merge commit
-//   node scripts/changelog-rollup.mjs <sha>       # tag at explicit commit
+//   node scripts/changelog-rollup.mjs
 //   node scripts/changelog-rollup.mjs --date YYYY-MM-DD
 //
 // Steps:
@@ -11,14 +10,13 @@
 //   2. Move `current` into `releases` with that version and date.
 //   3. Update CHANGELOG.md with the new entry.
 //   4. Bump package.json version.
-//   5. Create an annotated git tag locally.
 //
-// Does NOT commit, push, or publish tags. Operator runs:
-//   git add . && git commit -m "chore(release): v<version>"
-//   git push && git push --tags
+// Does NOT commit or push. Operator runs:
+//   git add src/data/changelog.json CHANGELOG.md package.json
+//   git commit -m "chore(release): <version>"
+//   git push
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { execFileSync, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -33,18 +31,15 @@ const GROUP_LABEL = { added: 'Added', fixed: 'Fixed', improved: 'Improved' };
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  let sha;
   let dateOverride;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
     if (a === '--date') {
       dateOverride = args[i + 1];
       i += 1;
-    } else if (!a.startsWith('--')) {
-      sha = a;
     }
   }
-  return { sha, dateOverride };
+  return { dateOverride };
 }
 
 function lastMondayIso(today = new Date()) {
@@ -59,14 +54,6 @@ function lastMondayIso(today = new Date()) {
   const daysBack = ((dayOfWeek + 6) % 7) + 7;
   d.setUTCDate(d.getUTCDate() - daysBack);
   return d.toISOString().slice(0, 10);
-}
-
-function formatWeekRange(mondayIso) {
-  const monday = new Date(`${mondayIso}T00:00:00Z`);
-  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
-  const fmt = (d) =>
-    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  return `${fmt(monday)} to ${fmt(sunday)}`;
 }
 
 function loadJson(path) {
@@ -120,19 +107,10 @@ function insertIntoMarkdown(newEntryMd) {
   writeFileSync(CHANGELOG_MD, `${before}${newEntryMd}\n${after}`);
 }
 
-function latestMainMergeSha() {
-  const out = execSync(
-    'git log --first-parent main -1 --pretty=format:%H',
-    { encoding: 'utf8' },
-  ).trim();
-  return out;
-}
-
 function main() {
-  const { sha: shaArg, dateOverride } = parseArgs();
+  const { dateOverride } = parseArgs();
   const mondayIso = dateOverride ?? lastMondayIso();
   const version = mondayIso.replaceAll('-', '.');
-  const tagName = `v${version}`;
 
   const data = loadJson(CHANGELOG_JSON);
   if (!data.current || Object.keys(data.current.groups ?? {}).length === 0) {
@@ -163,28 +141,15 @@ function main() {
   pkg.version = version;
   writeJson(PACKAGE_JSON, pkg);
 
-  const sha = shaArg ?? latestMainMergeSha();
-  const highlightLine = releaseEntry.highlights?.[0] ?? `Week of ${formatWeekRange(mondayIso)}`;
-  const tagMessage = `${tagName} — ${highlightLine}`;
-
-  console.log(`\nTagging ${tagName} at ${sha.slice(0, 8)}`);
-  // Pass args as an array and bypass the shell so backticks, $(), or other
-  // metacharacters inside tagMessage can't be interpreted.
-  execFileSync('git', ['tag', '-a', tagName, sha, '-m', tagMessage], {
-    stdio: 'inherit',
-  });
-
   console.log(`
 Rollup complete.
   Version:   ${version}
-  Tag:       ${tagName} at ${sha.slice(0, 12)}
   Files:     src/data/changelog.json, CHANGELOG.md, package.json
 
 Next steps (run manually when ready):
   git add src/data/changelog.json CHANGELOG.md package.json
-  git commit -m "chore(release): ${tagName}"
+  git commit -m "chore(release): ${version}"
   git push
-  git push origin ${tagName}
 `);
 }
 

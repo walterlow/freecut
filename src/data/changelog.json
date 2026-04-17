@@ -44,6 +44,10 @@
         {
           "title": "Separate project master bus from per-device monitor volume",
           "scope": "audio"
+        },
+        {
+          "title": "What's New dialog shows weekly changelog",
+          "scope": "editor"
         }
       ],
       "fixed": [

@@ -1,6 +1,6 @@
 ---
 name: changelog
-description: Maintain FreeCut's weekly changelog with a rolling current entry. Use when (1) backfilling historical weeks into CHANGELOG.md and src/data/changelog.json (backfill mode), (2) adding new bullets to the rolling current entry as commits land (append mode), or (3) closing the week and promoting current into a tagged weekly release (rollup mode). Handles commit curation, deduplication, version assignment, tag creation, and keeping both markdown and JSON artifacts in sync.
+description: Maintain FreeCut's weekly changelog with a rolling current entry. Use when (1) backfilling historical weeks into CHANGELOG.md and src/data/changelog.json (backfill mode), (2) adding new bullets to the rolling current entry as commits land (append mode), or (3) closing the week and promoting current into a weekly release (rollup mode). Handles commit curation, deduplication, version assignment, and keeping both markdown and JSON artifacts in sync.
 ---
 
 # Changelog skill
@@ -16,16 +16,17 @@ Both are generated from the same data. Always update both or neither.
 
 The changelog has two tiers:
 
-1. **`current`** — a single rolling entry for the in-progress week. It accumulates bullets as commits land, dedupes when the same feature is touched multiple times, and is shown in the UI as a "This Week" card. **Not tagged, not versioned with a final version number.**
-2. **`releases`** — one entry per completed week, newest first. Each has a version, a date, and a git tag.
+1. **`current`** — a single rolling entry for the in-progress week. It accumulates bullets as commits land, dedupes when the same feature is touched multiple times, and is shown in the UI as a "This Week" card.
+2. **`releases`** — one entry per completed week, newest first. Each has a version and a date.
 
 ### Versioning: CalVer, Monday-start weeks
 
 - Format: `YYYY.MM.DD` where the date is the **Monday** that opens the week (Mon–Sun).
-- Tag: `v2026.04.13` (leading `v`, always).
 - A week "closes" on Monday morning of the following week. Rollup is **manually triggered**.
 - If a mid-week hotfix needs its own release, add `.N` suffix (`2026.04.13.2`). Rare.
-- `package.json` `version` field mirrors the most recent released version.
+- `package.json` `version` field is the authoritative version — mirrors the most recent released week.
+
+**No git tags.** The web app ships continuously via Vercel; tags add maintenance overhead without buying anything. `changelog.json` + `package.json` are the source of truth. If GitHub Releases pages are wanted later, tag from `package.json` history at that point.
 
 Separate packages (future CLI/API) get their own semver and their own changelog under their package directory. This file is for the web app only.
 
@@ -47,7 +48,7 @@ Pre-PR era (if any): collapse the entire foundation into a single initial releas
 
 Triggered ad-hoc to update `current` as new commits land.
 
-**Input**: commits since last read of `current` (or `git log v<lastTag>..HEAD` if current is empty).
+**Input**: commits since last read of `current`. When `current` is empty (just after a rollup), walk from the most recent `chore(release):` commit on `main` to HEAD.
 
 **Process**:
 1. Walk new commits, applying curation rules.
@@ -62,12 +63,12 @@ Triggered manually on Monday to close the previous week.
 **Input**: none (reads `current` and today's date).
 
 **Process**:
-1. Determine last week's Monday date → new version `vYYYY.MM.DD`.
+1. Determine last week's Monday date → new version `YYYY.MM.DD`.
 2. Move `current` into `releases` with that version and the Monday date.
 3. Empty `current` (or seed with any commits landed since Monday).
 4. Bump `package.json` `version` to the new release.
-5. Create annotated tag locally: `git tag -a v<version> <mergeCommitSha> -m "<version> — <highlights>"`. The tag should point at the last PR merge commit of the closed week, not today's HEAD (since dev continues on develop).
-6. **Do not `git push --tags`** — print the plan and wait for user confirmation.
+5. Update `CHANGELOG.md` with the new entry at the top.
+6. Print the commit/push commands for the operator to run manually.
 
 ## Curation rules
 
@@ -161,18 +162,7 @@ All notable changes to FreeCut. Versioning follows weekly CalVer: `YYYY.MM.DD` =
 ...
 ```
 
-Do **not** include PR links in weekly entries. Weekly entries aggregate many PRs; PR links add noise. Optionally link the GitHub compare view at the bottom of each entry:
-
-```markdown
-[Compare](https://github.com/walterlow/freecut/compare/v2026.03.30...v2026.04.06)
-```
-
-## Git tag discipline
-
-- Always annotated (`git tag -a`), never lightweight.
-- Tag message = version + 1-line summary of highlights.
-- Tag points at the **last PR merge commit of that week** on `main`, not develop HEAD.
-- Print the plan (tag → sha → date) before creating tags; never push without the user asking.
+Do **not** include PR links in weekly entries. Weekly entries aggregate many PRs; PR links add noise.
 
 ## When in doubt
 
