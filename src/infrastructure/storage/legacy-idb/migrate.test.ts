@@ -331,4 +331,77 @@ describe('legacy-idb migration round trip', () => {
     await deleteLegacyIDB();
     expect(deleteDatabase).toHaveBeenCalledWith('video-editor-db');
   });
+
+  it('reports progress monotonically and ends at processed === total', async () => {
+    seedStore('projects').set('p1', makeProject('p1'));
+    seedStore('projects').set('p2', makeProject('p2'));
+    seedStore('media').set('m1', makeMedia('m1'));
+    seedStore('thumbnails').set('thumb-m1', makeThumbnail('m1'));
+    seedStore('projectMedia').set(['p1', 'm1'], makeAssociation('p1', 'm1'));
+
+    const events: Array<{ phase: string; processed: number; total: number }> =
+      [];
+    await migrateFromLegacyIDB({
+      onProgress: (p) => {
+        events.push({
+          phase: p.phase,
+          processed: p.processed,
+          total: p.total,
+        });
+      },
+    });
+
+    // Non-empty + monotonic (processed never decreases, total is constant).
+    expect(events.length).toBeGreaterThan(0);
+    const total = events[0]!.total;
+    expect(total).toBeGreaterThan(0);
+    let lastProcessed = -1;
+    for (const event of events) {
+      expect(event.total).toBe(total);
+      expect(event.processed).toBeGreaterThanOrEqual(lastProcessed);
+      lastProcessed = event.processed;
+    }
+
+    // The last per-work-unit tick should land at processed === total. A
+    // trailing 'finalizing' event may come after at the same processed
+    // value.
+    const lastWorkTick = [...events]
+      .reverse()
+      .find((e) => e.phase !== 'finalizing');
+    expect(lastWorkTick?.processed).toBe(total);
+  });
+
+  it('emits a finalizing phase event after all writes complete', async () => {
+    seedStore('projects').set('p1', makeProject('p1'));
+
+    const phases: string[] = [];
+    await migrateFromLegacyIDB({
+      onProgress: (p) => phases.push(p.phase),
+    });
+
+    expect(phases[phases.length - 1]).toBe('finalizing');
+  });
+
+  it('runs to completion when no legacy data is present (total === 0)', async () => {
+    const events: Array<{ processed: number; total: number }> = [];
+    const report = await migrateFromLegacyIDB({
+      onProgress: (p) => events.push({ processed: p.processed, total: p.total }),
+    });
+
+    expect(report.projects).toBe(0);
+    expect(events.every((e) => e.total === 0)).toBe(true);
+  });
+
+  it('continues the migration when the progress callback throws', async () => {
+    seedStore('projects').set('p1', makeProject('p1'));
+
+    const report = await migrateFromLegacyIDB({
+      onProgress: () => {
+        throw new Error('UI blew up');
+      },
+    });
+
+    expect(report.projects).toBe(1);
+    expect(report.errors).toEqual([]);
+  });
 });

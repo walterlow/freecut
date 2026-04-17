@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Database, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ import {
   getMigrationStatus,
   hasLegacyData,
   migrateFromLegacyIDB,
+  type MigrationProgress,
   type MigrationReport,
 } from '@/infrastructure/storage/legacy-idb';
 
@@ -31,13 +33,30 @@ type State =
   | { kind: 'checking' }
   | { kind: 'idle' }
   | { kind: 'prompt' }
-  | { kind: 'running' }
+  | { kind: 'running'; progress: MigrationProgress | null }
   | { kind: 'done'; report: MigrationReport }
   | { kind: 'dismissed' };
+
+/**
+ * Clamp to [0, 100] for the progress bar. A `total` of 0 (no work) maps to
+ * full progress so the bar doesn't appear stuck at 0 while the finalizing
+ * step runs against an empty legacy DB.
+ */
+function computePercent(progress: MigrationProgress | null): number {
+  if (!progress) return 0;
+  if (progress.total === 0) return 100;
+  const pct = (progress.processed / progress.total) * 100;
+  return Math.max(0, Math.min(100, pct));
+}
 
 export function LegacyMigrationBanner({ onMigrated }: Props) {
   const [state, setState] = useState<State>({ kind: 'checking' });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The progress callback fires rapidly (once per write). We keep a ref
+  // so React batches updates via a single setState per tick without
+  // stale-closure hazards.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     let cancelled = false;
@@ -62,9 +81,18 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
   }, []);
 
   const handleMigrate = useCallback(async () => {
-    setState({ kind: 'running' });
+    setState({ kind: 'running', progress: null });
     try {
-      const report = await migrateFromLegacyIDB();
+      const report = await migrateFromLegacyIDB({
+        onProgress: (progress) => {
+          // Only update while the banner is in the running state. If the
+          // user has navigated away (component unmounts) the state setter
+          // is a no-op; the ref guard avoids a needless state flip if a
+          // late progress event arrives after the run resolved.
+          if (stateRef.current.kind !== 'running') return;
+          setState({ kind: 'running', progress });
+        },
+      });
       setState({ kind: 'done', report });
       toast.success(
         `Migrated ${report.projects} project(s) and ${report.media} media item(s)`,
@@ -99,10 +127,47 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
   }
 
   if (state.kind === 'running') {
+    const { progress } = state;
+    const percent = computePercent(progress);
+    // Show label from progress if available; fall back to a generic line
+    // during the brief gap before the first tick arrives.
+    const label = progress?.phaseLabel ?? 'Preparing migration…';
+    const countsLine = progress
+      ? `${progress.processed} of ${progress.total}`
+      : null;
+
     return (
-      <div className="panel-bg border border-border rounded-lg p-4 flex items-center gap-3 text-sm">
-        <Database className="h-4 w-4 animate-pulse" />
-        <span>Migrating legacy projects to your workspace…</span>
+      <div
+        className="panel-bg border border-border rounded-lg p-4 space-y-3 text-sm"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex items-center gap-3">
+          <Database className="h-4 w-4 animate-pulse shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="font-medium truncate">{label}</div>
+            <div className="text-muted-foreground text-xs mt-0.5">
+              This can take a moment for large libraries. Please don't close
+              this tab.
+            </div>
+          </div>
+          <div className="text-xs font-mono tabular-nums text-muted-foreground shrink-0">
+            {Math.round(percent)}%
+          </div>
+        </div>
+        <Progress
+          value={percent}
+          className="h-2"
+          aria-label={label}
+          aria-valuenow={Math.round(percent)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        />
+        {countsLine && (
+          <div className="text-xs text-muted-foreground font-mono tabular-nums">
+            {countsLine}
+          </div>
+        )}
       </div>
     );
   }

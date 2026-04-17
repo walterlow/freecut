@@ -14,4 +14,7 @@ export {
   migrateFromLegacyIDB,
   deleteLegacyIDB,
   type MigrationReport,
+  type MigrationProgress,
+  type MigrationPhase,
+  type MigrateOptions,
 } from './migrate';
