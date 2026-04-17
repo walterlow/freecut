@@ -3,7 +3,7 @@ import {
   getTranscript,
   getTranscriptMediaIds,
   saveTranscript,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
 import { createLogger } from '@/shared/logging/logger';

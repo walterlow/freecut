@@ -12,7 +12,7 @@ import {
   deleteGifFrames,
   getGifFrames as getGifFramesFromDB,
   saveGifFrames,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('GifFrameCache');
@@ -758,7 +758,7 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
   window.__clearAllGifCache = async () => {
     gifFrameCache.clearAll();
     // Clear IndexedDB gifFrames store
-    const { clearAllGifFrames } = await import('@/infrastructure/storage/indexeddb');
+    const { clearAllGifFrames } = await import('@/infrastructure/storage');
     await clearAllGifFrames();
     logger.debug('[GifFrameCache] All caches cleared');
   };

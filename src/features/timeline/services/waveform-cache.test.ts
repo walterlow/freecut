@@ -12,7 +12,7 @@ vi.mock('./waveform-opfs-storage', () => ({
   },
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', () => ({
+vi.mock('@/infrastructure/storage', () => ({
   getWaveform: vi.fn(async () => undefined),
   getWaveformRecord: vi.fn(async () => undefined),
   getWaveformMeta: vi.fn(async () => undefined),

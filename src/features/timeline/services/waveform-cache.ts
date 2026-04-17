@@ -33,7 +33,7 @@ import {
   saveWaveformBin as saveWaveformBinToIndexedDB,
   saveWaveformMeta as saveWaveformMetaToIndexedDB,
   deleteWaveform as deleteWaveformFromIndexedDB,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 
 const logger = createLogger('WaveformCache');
 

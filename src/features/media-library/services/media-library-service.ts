@@ -55,7 +55,7 @@ import {
   getProjectsUsingMedia,
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { filmstripCache, gifFrameCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';

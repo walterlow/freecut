@@ -25,7 +25,7 @@ import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTimelineCommandStore } from './timeline-command-store';
 import { useCompositionsStore } from './compositions-store';
 import { useCompositionNavigationStore } from './composition-navigation-store';
-import { getProject, updateProject, saveThumbnail } from '@/infrastructure/storage/indexeddb';
+import { getProject, updateProject, saveThumbnail } from '@/infrastructure/storage';
 import {
   renderSingleFrame,
   convertTimelineToComposition,

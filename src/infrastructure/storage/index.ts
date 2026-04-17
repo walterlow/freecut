@@ -1,18 +1,14 @@
 /**
- * Storage barrel — transitioning from IndexedDB to workspace-fs.
+ * Storage barrel — re-exports the workspace-fs layer under the legacy
+ * import path so consumers don't need to change their imports.
  *
- * Function signatures are preserved exactly so consumers don't change.
- * Each line below either re-exports from the new workspace-fs layer
- * (migrated) or from the legacy IDB module (pending migration).
- *
- * Migration status tracked in `plans/dazzling-beaming-diffie.md`.
- *
- * Legacy IDB modules (projects.ts, media.ts, etc.) remain in place so the
- * one-time migration tool can read from them. Call them via their explicit
- * relative paths (e.g. `./projects`) rather than through this barrel.
+ * All storage now lives in the user-picked workspace folder via
+ * `workspace-fs/*`. Legacy `video-editor-db` IndexedDB reads are handled
+ * separately by `workspace-fs/legacy-idb-reader.ts`, used only by the
+ * one-time migration tool.
  */
 
-// Project exports — MIGRATED to workspace-fs (Phase 1).
+// Projects
 export {
   getAllProjects,
   getProject,
@@ -22,7 +18,7 @@ export {
   getDBStats,
 } from '@/infrastructure/storage/workspace-fs/projects';
 
-// Media exports — MIGRATED to workspace-fs (Phase 3).
+// Media
 export {
   getAllMedia,
   getMedia,
@@ -31,7 +27,7 @@ export {
   deleteMedia,
 } from '@/infrastructure/storage/workspace-fs/media';
 
-// Thumbnail exports — MIGRATED to workspace-fs (Phase 3).
+// Thumbnails
 export {
   saveThumbnail,
   getThumbnail,
@@ -39,14 +35,14 @@ export {
   deleteThumbnailsByMediaId,
 } from '@/infrastructure/storage/workspace-fs/thumbnails';
 
-// Content exports — MIGRATED to workspace-fs (Phase 4).
+// Content-addressable blob references
 export {
   incrementContentRef,
   decrementContentRef,
   deleteContent,
 } from '@/infrastructure/storage/workspace-fs/content';
 
-// Project-media association exports — MIGRATED to workspace-fs (Phase 2).
+// Project-media associations
 export {
   associateMediaWithProject,
   removeMediaFromProject,
@@ -55,7 +51,7 @@ export {
   getMediaForProject,
 } from '@/infrastructure/storage/workspace-fs/project-media';
 
-// Waveform exports — MIGRATED to workspace-fs (Phase 8).
+// Waveforms
 export {
   getWaveform,
   getWaveformRecord,
@@ -67,7 +63,7 @@ export {
   deleteWaveform,
 } from '@/infrastructure/storage/workspace-fs/waveforms';
 
-// GIF frames exports — MIGRATED to workspace-fs (Phase 7).
+// GIF frames
 export {
   saveGifFrames,
   getGifFrames,
@@ -75,14 +71,14 @@ export {
   clearAllGifFrames,
 } from '@/infrastructure/storage/workspace-fs/gif-frames';
 
-// Decoded preview audio exports — MIGRATED to workspace-fs (Phase 9).
+// Decoded preview audio
 export {
   getDecodedPreviewAudio,
   saveDecodedPreviewAudio,
   deleteDecodedPreviewAudio,
 } from '@/infrastructure/storage/workspace-fs/decoded-preview-audio';
 
-// Transcript exports — MIGRATED to workspace-fs (Phase 5).
+// Transcripts
 export {
   getTranscript,
   getTranscriptMediaIds,

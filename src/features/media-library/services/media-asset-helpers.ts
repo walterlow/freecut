@@ -6,7 +6,7 @@ import {
   deleteMedia as deleteMediaDB,
   deleteThumbnailsByMediaId,
   saveThumbnail as saveThumbnailDB,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { opfsService } from '@/features/media-library/services/opfs-service';
 import { writeMediaSource } from '@/infrastructure/storage/workspace-fs/media-source';
 

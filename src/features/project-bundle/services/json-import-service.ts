@@ -25,7 +25,7 @@ import {
   createProject,
   getAllMedia,
   associateMediaWithProject,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { migrateProject } from '@/core/projects/migrations';
 
 /**

@@ -17,18 +17,18 @@ import { readJson, writeJsonAtomic } from './fs-primitives';
 import { MARKER_FILENAME } from './paths';
 import type { WorkspaceMarker } from './bootstrap';
 
-// Legacy readers — explicit relative paths so we hit the IDB-backed
-// implementations, not the workspace-fs re-exports.
-import { getAllProjects as legacyGetAllProjects } from '@/infrastructure/storage/indexeddb/projects';
-import { getAllMedia as legacyGetAllMedia } from '@/infrastructure/storage/indexeddb/media';
-import { getDB as legacyGetDB } from '@/infrastructure/storage/indexeddb/connection';
-import { getThumbnailByMediaId as legacyGetThumbnailByMediaId } from '@/infrastructure/storage/indexeddb/thumbnails';
+// Legacy readers — consolidated read-only access to `video-editor-db`.
 import {
-  getGifFrames as legacyGetGifFrames,
-} from '@/infrastructure/storage/indexeddb/gif-frames';
-import {
-  getTranscript as legacyGetTranscript,
-} from '@/infrastructure/storage/indexeddb/transcripts';
+  closeAndDeleteLegacyDB,
+  readAllDecodedPreviewAudio,
+  readAllMedia,
+  readAllProjectMedia,
+  readAllProjects,
+  readAllWaveforms,
+  readGifFrames,
+  readThumbnailByMediaId,
+  readTranscript,
+} from './legacy-idb-reader';
 
 // New writers — workspace-fs.
 import { createProject } from './projects';
@@ -61,7 +61,7 @@ export interface MigrationReport {
  */
 export async function hasLegacyData(): Promise<boolean> {
   try {
-    const projects = await legacyGetAllProjects();
+    const projects = await readAllProjects();
     return projects.length > 0;
   } catch (error) {
     logger.warn('hasLegacyData failed', error);
@@ -113,7 +113,7 @@ function pushError(
 
 async function migrateProjects(report: MigrationReport): Promise<Set<string>> {
   const ids = new Set<string>();
-  const projects = await legacyGetAllProjects();
+  const projects = await readAllProjects();
   for (const project of projects) {
     try {
       await createProject(project);
@@ -130,7 +130,7 @@ async function migrateMedia(
   report: MigrationReport,
 ): Promise<Set<string>> {
   const ids = new Set<string>();
-  const media = await legacyGetAllMedia();
+  const media = await readAllMedia();
   for (const item of media) {
     try {
       await createMedia(item);
@@ -149,7 +149,7 @@ async function migrateThumbnails(
 ): Promise<void> {
   for (const mediaId of mediaIds) {
     try {
-      const thumb = await legacyGetThumbnailByMediaId(mediaId);
+      const thumb = await readThumbnailByMediaId(mediaId);
       if (!thumb) continue;
       await saveThumbnail(thumb);
       report.thumbnails++;
@@ -163,9 +163,7 @@ async function migrateProjectMedia(
   report: MigrationReport,
   projectIds: Set<string>,
 ): Promise<void> {
-  const db = await legacyGetDB();
-  if (!db.objectStoreNames.contains('projectMedia')) return;
-  const all = await db.getAll('projectMedia');
+  const all = await readAllProjectMedia();
   for (const assoc of all) {
     if (!projectIds.has(assoc.projectId)) continue;
     try {
@@ -183,7 +181,7 @@ async function migrateTranscripts(
 ): Promise<void> {
   for (const mediaId of mediaIds) {
     try {
-      const transcript = await legacyGetTranscript(mediaId);
+      const transcript = await readTranscript(mediaId);
       if (!transcript) continue;
       await saveTranscript(transcript);
       report.transcripts++;
@@ -199,7 +197,7 @@ async function migrateGifFrames(
 ): Promise<void> {
   for (const mediaId of mediaIds) {
     try {
-      const frames = await legacyGetGifFrames(mediaId);
+      const frames = await readGifFrames(mediaId);
       if (!frames) continue;
       await saveGifFrames(frames);
       report.gifFrames++;
@@ -210,9 +208,7 @@ async function migrateGifFrames(
 }
 
 async function migrateWaveforms(report: MigrationReport): Promise<void> {
-  const db = await legacyGetDB();
-  if (!db.objectStoreNames.contains('waveforms')) return;
-  const all = await db.getAll('waveforms');
+  const all = await readAllWaveforms();
   for (const record of all) {
     try {
       await saveWaveformRecord(record);
@@ -224,9 +220,7 @@ async function migrateWaveforms(report: MigrationReport): Promise<void> {
 }
 
 async function migrateDecodedAudio(report: MigrationReport): Promise<void> {
-  const db = await legacyGetDB();
-  if (!db.objectStoreNames.contains('decodedPreviewAudio')) return;
-  const all = await db.getAll('decodedPreviewAudio');
+  const all = await readAllDecodedPreviewAudio();
   for (const record of all) {
     try {
       await saveDecodedPreviewAudio(record);
@@ -298,14 +292,5 @@ export async function migrateFromLegacyIDB(): Promise<MigrationReport> {
  * Only invoke from a user-confirmed action after a successful migration.
  */
 export async function deleteLegacyIDB(): Promise<void> {
-  const db = await legacyGetDB();
-  db.close();
-  await new Promise<void>((resolve, reject) => {
-    const req = indexedDB.deleteDatabase('video-editor-db');
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-    req.onblocked = () => {
-      logger.warn('Legacy IDB delete blocked — close other tabs of this app.');
-    };
-  });
+  await closeAndDeleteLegacyDB();
 }

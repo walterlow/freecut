@@ -66,7 +66,7 @@ const backgroundMediaWorkMocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', () => indexedDbMocks);
+vi.mock('@/infrastructure/storage', () => indexedDbMocks);
 
 vi.mock('./opfs-service', () => ({
   opfsService: opfsMocks,

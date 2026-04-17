@@ -128,7 +128,7 @@ const mediabunnyMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('@/infrastructure/storage/indexeddb', () => ({
+vi.mock('@/infrastructure/storage', () => ({
   ...decodedPreviewAudioMocks,
   ...mediaDbMocks,
 }));

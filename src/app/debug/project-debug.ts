@@ -33,7 +33,7 @@ import {
   getProjectMediaIds,
   getDBStats,
   createProject,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 
 /**
  * Debug API interface

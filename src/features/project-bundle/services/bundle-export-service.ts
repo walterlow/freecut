@@ -14,7 +14,7 @@ import {
   BUNDLE_VERSION,
   BUNDLE_EXTENSION,
 } from '../types/bundle';
-import { getProject, getProjectMediaIds, getThumbnail } from '@/infrastructure/storage/indexeddb';
+import { getProject, getProjectMediaIds, getThumbnail } from '@/infrastructure/storage';
 import {
   mediaLibraryService,
   computeContentHashFromBuffer,

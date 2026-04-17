@@ -21,7 +21,7 @@ import {
   getObjectUrlDirectFileMetadata,
 } from '@/infrastructure/browser/object-url-registry';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
-import { updateMedia } from '@/infrastructure/storage/indexeddb';
+import { updateMedia } from '@/infrastructure/storage';
 import { getKeyframeTimestamps, registerKeyframeIndex } from '@/shared/utils/keyframe-index-registry';
 
 const log = createLogger('DecoderPrewarm');

@@ -15,7 +15,7 @@ import { getSharedProxyKey } from '../utils/proxy-key';
 import { createImportActions } from './media-import-actions';
 import { createDeleteActions } from './media-delete-actions';
 import { createRelinkingActions } from './media-relinking-actions';
-import { getTranscriptMediaIds } from '@/infrastructure/storage/indexeddb';
+import { getTranscriptMediaIds } from '@/infrastructure/storage';
 import { mergeTranscriptionProgress } from '@/shared/utils/transcription-progress';
 
 const logger = createLogger('MediaLibraryStore');

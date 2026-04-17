@@ -7,7 +7,7 @@ import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useCompositionsStore } from '../compositions-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useProjectStore } from '@/features/timeline/deps/projects';
-import { updateProject } from '@/infrastructure/storage/indexeddb';
+import { updateProject } from '@/infrastructure/storage';
 import { createLogger } from '@/shared/logging/logger';
 import {
   getEffectiveTimelineMaxFrame,

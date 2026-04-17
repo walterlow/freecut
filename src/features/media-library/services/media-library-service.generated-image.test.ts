@@ -46,7 +46,7 @@ const filmstripCacheMocks = vi.hoisted(() => ({
   prewarmPriorityWindow: vi.fn(async () => undefined),
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', () => ({
+vi.mock('@/infrastructure/storage', () => ({
   getAllMedia: vi.fn(),
   getMedia: vi.fn(),
   getTranscript: vi.fn(),

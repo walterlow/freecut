@@ -8,7 +8,7 @@
  * project's media-links.json. With O(10–100) projects this is fast enough;
  * a session-level memo keyed on workspace root handle protects hot paths.
  *
- * The barrel `@/infrastructure/storage/indexeddb` re-exports these; consumer
+ * The barrel `@/infrastructure/storage` re-exports these; consumer
  * code doesn't change. `getMediaForProject` pulls media metadata through the
  * barrel so it follows the Phase 3 swap automatically.
  */

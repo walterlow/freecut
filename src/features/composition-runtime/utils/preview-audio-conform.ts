@@ -1,5 +1,5 @@
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
-import { getMedia, updateMedia } from '@/infrastructure/storage/indexeddb';
+import { getMedia, updateMedia } from '@/infrastructure/storage';
 import { opfsService } from '@/features/composition-runtime/deps/media-library';
 import { createLogger } from '@/shared/logging/logger';
 import type { MediaMetadata } from '@/types/storage';

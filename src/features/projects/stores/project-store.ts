@@ -12,7 +12,7 @@ import {
   deleteProject as deleteProjectDB,
   getProjectMediaIds,
   associateMediaWithProject,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { createProjectObject, duplicateProject } from '../utils/project-helpers';
 // v3: Import media service for cascade operations
 import { mediaLibraryService } from '@/features/projects/deps/media-library-contract';

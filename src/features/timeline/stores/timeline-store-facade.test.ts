@@ -44,7 +44,7 @@ const mediaLibraryMocks = vi.hoisted(() => ({
   closeOrphanedClipsDialog: vi.fn(),
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', async (importOriginal) => {
+vi.mock('@/infrastructure/storage', async (importOriginal) => {
   const actual = await importOriginal() as Record<string, unknown>;
   return {
     ...actual,

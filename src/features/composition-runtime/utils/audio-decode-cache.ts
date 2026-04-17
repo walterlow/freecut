@@ -22,7 +22,7 @@ import {
   saveDecodedPreviewAudio,
   deleteDecodedPreviewAudio,
   getMedia,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
 import type { DecodedPreviewAudioMeta, DecodedPreviewAudioBin } from '@/types/storage';
 import { persistPreviewAudioConform } from './preview-audio-conform';

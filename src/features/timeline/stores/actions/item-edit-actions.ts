@@ -833,7 +833,7 @@ export async function insertFreezeFrame(
     input.dispose();
 
     // Step 3: Store frame as media in IndexedDB
-    const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/infrastructure/storage/indexeddb');
+    const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/infrastructure/storage');
     const currentProjectId = useMediaLibraryStore.getState().currentProjectId;
     if (!currentProjectId) {
       getLogger().error('[insertFreezeFrame] No project context');
