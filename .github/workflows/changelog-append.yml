@@ -19,8 +19,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # Full history so HEAD~1..HEAD can walk side-branch commits
+          # brought in by merge commits from staging.
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute range
+        id: range
+        run: |
+          # github.event.before is main's tip *before* this push. Walk
+          # everything from that point to HEAD so we capture all commits
+          # that actually arrived, regardless of merge/fast-forward shape.
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            # First push / branch creation; just process HEAD.
+            echo "range=HEAD~1..HEAD" >> "$GITHUB_OUTPUT"
+          else
+            echo "range=$BEFORE..HEAD" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -28,7 +44,7 @@ jobs:
           node-version: 22
 
       - name: Run append script
-        run: node scripts/changelog-append.mjs HEAD~1..HEAD
+        run: node scripts/changelog-append.mjs ${{ steps.range.outputs.range }}
 
       - name: Commit updated changelog
         run: |
