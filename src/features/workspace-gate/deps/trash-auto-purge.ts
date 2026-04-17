@@ -16,7 +16,7 @@ import {
   DEFAULT_TRASH_TTL_MS,
   sweepTrashOlderThan,
 } from '@/infrastructure/storage';
-import { useProjectStore } from '@/features/projects/stores/project-store';
+import { useProjectStore } from './projects-contract';
 
 const logger = createLogger('TrashAutoPurge');
 
