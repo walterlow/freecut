@@ -26,12 +26,12 @@ interface TimelinePlayheadProps {
 export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayheadProps) {
   // Don't subscribe to currentFrame - use ref + manual subscription instead
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
-  const setScrubFrame = usePlaybackStore((s) => s.setScrubFrame);
   const { frameToPixels, pixelsToFrame, pixelsPerSecond } = useTimelineZoomContext();
 
   const [isDragging, setIsDragging] = useState(false);
   const [isExternalDrag, setIsExternalDrag] = useState(false);
   const playheadRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
 
   // Track activeTool via ref subscription to avoid re-renders during playback
   // This prevents mode toggle from interrupting frame updates
@@ -45,7 +45,6 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
   // Use refs to avoid stale closures
   const pixelsToFrameRef = useRef(pixelsToFrame);
   const setCurrentFrameRef = useRef(setCurrentFrame);
-  const setScrubFrameRef = useRef(setScrubFrame);
   const maxFrameRef = useRef(maxFrame);
   const frameToPixelsRef = useRef(frameToPixels);
   const pixelsPerSecondRef = useRef(pixelsPerSecond);
@@ -69,13 +68,18 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
   useEffect(() => {
     pixelsToFrameRef.current = pixelsToFrame;
     setCurrentFrameRef.current = setCurrentFrame;
-    setScrubFrameRef.current = setScrubFrame;
     maxFrameRef.current = maxFrame;
     frameToPixelsRef.current = frameToPixels;
     pixelsPerSecondRef.current = pixelsPerSecond;
-  }, [pixelsToFrame, setCurrentFrame, setScrubFrame, maxFrame, frameToPixels, pixelsPerSecond]);
+  }, [pixelsToFrame, setCurrentFrame, maxFrame, frameToPixels, pixelsPerSecond]);
 
-  // Subscribe to currentFrame changes and update position directly (no React re-renders)
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
+
+  // Subscribe to playback frame changes and update position directly.
+  // During playhead drags, follow previewFrame so the handle tracks the cursor,
+  // but only commit currentFrame once the drag is released.
   useEffect(() => {
     const updatePosition = (frame: number) => {
       if (!playheadRef.current) return;
@@ -88,17 +92,24 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
 
     // Subscribe to store changes
     return usePlaybackStore.subscribe((state) => {
-      updatePosition(state.currentFrame);
+      updatePosition(
+        isDraggingRef.current && state.previewFrame !== null
+          ? state.previewFrame
+          : state.currentFrame
+      );
     });
   }, []);
 
   // Also update position when frameToPixels changes (zoom changes)
   useLayoutEffect(() => {
     if (!playheadRef.current) return;
-    const frame = usePlaybackStore.getState().currentFrame;
+    const playbackState = usePlaybackStore.getState();
+    const frame = isDraggingRef.current && playbackState.previewFrame !== null
+      ? playbackState.previewFrame
+      : playbackState.currentFrame;
     const leftPosition = Math.round(frameToPixels(frame));
     playheadRef.current.style.left = `${leftPosition}px`;
-  }, [frameToPixels]);
+  }, [frameToPixels, isDragging]);
 
   // Track external drag operations to disable pointer events on hit areas
   useEffect(() => {
@@ -180,7 +191,7 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
               pixelsPerSecond: pixelsPerSecondRef.current,
               nowMs: performance.now(),
             })) {
-              setScrubFrameRef.current(targetFrame);
+              setPreviewFrameRef.current(targetFrame);
             }
           }
         });

@@ -54,4 +54,30 @@ describe('TimecodeDisplay', () => {
     expect(button).toHaveTextContent('0012');
     expect(button).toHaveTextContent('0999');
   });
+
+  it('shows the skim preview frame in the timecode readout', () => {
+    render(<TimecodeDisplay fps={30} totalFrames={1000} />);
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveTextContent('00:00:12');
+
+    usePlaybackStore.getState().setPreviewFrame(48);
+
+    expect(button).toHaveTextContent('00:01:18');
+  });
+
+  it('prefers the displayed overlay frame when fast scrub owns presentation', () => {
+    render(<TimecodeDisplay fps={30} totalFrames={1000} />);
+
+    const button = screen.getByRole('button');
+    usePlaybackStore.setState({
+      currentFrame: 12,
+      currentFrameEpoch: 1,
+      previewFrame: 48,
+      previewFrameEpoch: 2,
+    });
+    usePreviewBridgeStore.getState().setDisplayedFrame(50);
+
+    expect(button).toHaveTextContent('00:01:20');
+  });
 });

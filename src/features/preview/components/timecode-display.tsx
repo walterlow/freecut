@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { getResolvedPlaybackFrame, usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { formatTimecodeCompact } from '@/shared/utils/time-utils';
 
 interface TimecodeDisplayProps {
@@ -38,7 +39,20 @@ export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
     return frame.toString().padStart(maxDigits, '0');
   }, []);
 
-  // Subscribe to currentFrame changes and update DOM directly (no React re-renders)
+  const getVisibleFrame = useCallback(() => {
+    const playbackState = usePlaybackStore.getState();
+    return getResolvedPlaybackFrame({
+      currentFrame: playbackState.currentFrame,
+      currentFrameEpoch: playbackState.currentFrameEpoch,
+      previewFrame: playbackState.previewFrame,
+      previewFrameEpoch: playbackState.previewFrameEpoch,
+      isPlaying: playbackState.isPlaying,
+      displayedFrame: usePreviewBridgeStore.getState().displayedFrame,
+    });
+  }, []);
+
+  // Subscribe to the resolved visible preview frame and update DOM directly
+  // (no React re-renders during playback/scrub).
   useEffect(() => {
     const updateDisplay = (frame: number) => {
       if (!currentTimeRef.current) return;
@@ -48,22 +62,29 @@ export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
     };
 
     // Initial update
-    updateDisplay(usePlaybackStore.getState().currentFrame);
+    updateDisplay(getVisibleFrame());
 
-    // Subscribe to store changes
-    return usePlaybackStore.subscribe((state) => {
-      updateDisplay(state.currentFrame);
-    });
-  }, [formatFrameNumber]);
+    const syncDisplay = () => {
+      updateDisplay(getVisibleFrame());
+    };
+
+    const unsubscribePlayback = usePlaybackStore.subscribe(syncDisplay);
+    const unsubscribePreviewBridge = usePreviewBridgeStore.subscribe(syncDisplay);
+
+    return () => {
+      unsubscribePlayback();
+      unsubscribePreviewBridge();
+    };
+  }, [formatFrameNumber, getVisibleFrame]);
 
   // Update display when showFrames or fps changes (rare - can trigger re-render)
   useEffect(() => {
     if (!currentTimeRef.current) return;
-    const frame = usePlaybackStore.getState().currentFrame;
+    const frame = getVisibleFrame();
     currentTimeRef.current.textContent = showFrames
       ? formatFrameNumber(frame)
       : formatTimecodeCompact(frame, fps);
-  }, [showFrames, fps, formatFrameNumber]);
+  }, [showFrames, fps, formatFrameNumber, getVisibleFrame]);
 
   return (
     <button
@@ -76,7 +97,7 @@ export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
         ref={currentTimeRef}
         className="text-primary font-semibold"
       >
-        {showFrames ? formatFrameNumber(usePlaybackStore.getState().currentFrame) : formatTimecodeCompact(usePlaybackStore.getState().currentFrame, fps)}
+        {showFrames ? formatFrameNumber(getVisibleFrame()) : formatTimecodeCompact(getVisibleFrame(), fps)}
       </span>
       <span className="text-muted-foreground/50">/</span>
       <span>
