@@ -8,10 +8,29 @@ vi.mock('../deps/timeline-contract', () => ({
     timelineFps: number,
     sourceFps: number,
   ) => Math.max(0, Math.round((timelineFrames / timelineFps) * sourceFps * speed)),
+  getNextClassicTrackName: (tracks: Array<{ name: string; kind?: string }>, kind: 'video' | 'audio') => {
+    const prefix = kind === 'video' ? 'V' : 'A';
+    const regex = new RegExp(`^${prefix}(\\d+)$`, 'i');
+    const used = new Set(
+      tracks
+        .filter((track) => track.kind === undefined || track.kind === kind)
+        .map((track) => {
+          const match = track.name.match(regex);
+          return match?.[1] ? Number.parseInt(match[1], 10) : NaN;
+        })
+        .filter((value) => Number.isFinite(value) && value > 0),
+    );
+    let next = 1;
+    while (used.has(next)) next += 1;
+    return `${prefix}${next}`;
+  },
 }));
 
 import {
+  aiCaptionsToSegments,
   buildCaptionTextItems,
+  buildCaptionTrack,
+  buildCaptionTrackAbove,
   findGeneratedCaptionItemsForClip,
   findReplaceableCaptionItemsForClip,
   getCaptionTextItemTemplate,
@@ -21,6 +40,7 @@ import {
   normalizeCaptionSegments,
 } from './caption-items';
 import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
+import { getTrackKind } from '@/features/timeline/utils/classic-tracks';
 
 describe('caption-items', () => {
   it('normalizes empty and invalid transcript segments', () => {
@@ -292,5 +312,97 @@ describe('caption-items', () => {
     );
 
     expect(replaceableCaptions.map((item) => item.id)).toEqual(['legacy-caption']);
+  });
+});
+
+function makeTrack(id: string, order: number): TimelineTrack {
+  return {
+    id,
+    name: id,
+    height: 40,
+    locked: false,
+    visible: true,
+    muted: false,
+    solo: false,
+    order,
+    items: [],
+  };
+}
+
+describe('aiCaptionsToSegments', () => {
+  it('returns [] for empty input', () => {
+    expect(aiCaptionsToSegments([])).toEqual([]);
+  });
+
+  it('derives end from next caption start for all but the last', () => {
+    const segments = aiCaptionsToSegments([
+      { timeSec: 0, text: 'a' },
+      { timeSec: 3, text: 'b' },
+      { timeSec: 7, text: 'c' },
+    ]);
+    expect(segments).toEqual([
+      { text: 'a', start: 0, end: 3 },
+      { text: 'b', start: 3, end: 7 },
+      { text: 'c', start: 7, end: 10 }, // 3s fallback for the tail
+    ]);
+  });
+
+  it('uses provided sampleIntervalSec for the trailing caption', () => {
+    const segments = aiCaptionsToSegments([{ timeSec: 0, text: 'only' }], 5);
+    expect(segments).toEqual([{ text: 'only', start: 0, end: 5 }]);
+  });
+
+  it('sorts captions by timeSec before converting', () => {
+    const segments = aiCaptionsToSegments([
+      { timeSec: 5, text: 'b' },
+      { timeSec: 0, text: 'a' },
+    ]);
+    expect(segments.map((s) => s.text)).toEqual(['a', 'b']);
+  });
+});
+
+describe('buildCaptionTrackAbove', () => {
+  it('places the caption track halfway between the reference and the next track up', () => {
+    const tracks = [makeTrack('a', 0), makeTrack('b', 1), makeTrack('c', 2)];
+    const captionTrack = buildCaptionTrackAbove(tracks, 2);
+    expect(captionTrack.order).toBe(1.5);
+  });
+
+  it('places the track a full integer above when nothing sits higher', () => {
+    const tracks = [makeTrack('a', 5)];
+    const captionTrack = buildCaptionTrackAbove(tracks, 5);
+    expect(captionTrack.order).toBe(4);
+  });
+
+  it('sorts visually higher than the reference clip track after insertion', () => {
+    const tracks = [makeTrack('a', 0), makeTrack('clip', 1), makeTrack('b', 2)];
+    const captionTrack = buildCaptionTrackAbove(tracks, 1);
+    const sorted = [...tracks, captionTrack].sort((x, y) => x.order - y.order);
+    const clipIndex = sorted.findIndex((t) => t.id === 'clip');
+    const captionIndex = sorted.findIndex((t) => t.id === captionTrack.id);
+    // CLAUDE.md convention: lower order = visually higher (top of timeline).
+    expect(captionIndex).toBeLessThan(clipIndex);
+  });
+
+  it('creates a video-kind overlay track so the timeline renders it immediately', () => {
+    const tracks = [makeTrack('clip', 1)];
+    const captionTrack = buildCaptionTrackAbove(tracks, 1);
+    expect(captionTrack.kind).toBe('video');
+    expect(getTrackKind(captionTrack)).toBe('video');
+    expect(captionTrack.name).toBe('V1');
+  });
+});
+
+describe('buildCaptionTrack (append-to-bottom helper)', () => {
+  it('still creates tracks at maxOrder + 1', () => {
+    const tracks = [
+      { ...makeTrack('a', 0), name: 'V1', kind: 'video' as const },
+      { ...makeTrack('b', 1), name: 'A1', kind: 'audio' as const },
+      { ...makeTrack('c', 2), name: 'V2', kind: 'video' as const },
+    ];
+    const captionTrack = buildCaptionTrack(tracks);
+    expect(captionTrack.order).toBe(3);
+    expect(captionTrack.kind).toBe('video');
+    expect(captionTrack.name).toBe('V3');
   });
 });

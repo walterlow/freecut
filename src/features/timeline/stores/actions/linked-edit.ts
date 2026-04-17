@@ -1,6 +1,7 @@
 import type { TimelineItem } from '@/types/timeline';
 import {
   buildSynchronizedLinkedMoveUpdates,
+  expandItemIdsWithAttachedCaptions,
   expandSelectionWithLinkedItems,
   getLinkedItems,
   getMatchingSynchronizedLinkedCounterpart,
@@ -19,10 +20,10 @@ export function expandIdsWithLinkedItems(
   linkedSelectionEnabled: boolean,
 ): string[] {
   if (!linkedSelectionEnabled) {
-    return Array.from(new Set(ids));
+    return expandItemIdsWithAttachedCaptions(items, Array.from(new Set(ids)));
   }
 
-  return expandSelectionWithLinkedItems(items, ids);
+  return expandItemIdsWithAttachedCaptions(items, expandSelectionWithLinkedItems(items, ids));
 }
 
 export function getLinkedItemsForEdit(
@@ -78,8 +79,16 @@ export function buildLinkedLeftShiftUpdates(
   linkedSelectionEnabled: boolean,
 ): Array<{ id: string; from: number }> {
   if (!linkedSelectionEnabled) {
+    const shiftByItemId = new Map(baseShiftByItemId);
+    for (const [itemId, shiftAmount] of baseShiftByItemId) {
+      if (shiftAmount <= 0) continue;
+      for (const attachedId of expandItemIdsWithAttachedCaptions(items, [itemId])) {
+        shiftByItemId.set(attachedId, Math.max(shiftByItemId.get(attachedId) ?? 0, shiftAmount));
+      }
+    }
+
     return items.flatMap((item) => {
-      const shiftAmount = baseShiftByItemId.get(item.id) ?? 0;
+      const shiftAmount = shiftByItemId.get(item.id) ?? 0;
       return shiftAmount > 0
         ? [{ id: item.id, from: item.from - shiftAmount }]
         : [];
@@ -108,6 +117,13 @@ export function buildLinkedLeftShiftUpdates(
 
     for (const linkedItem of linkedItems) {
       shiftByItemId.set(linkedItem.id, groupShift);
+    }
+  }
+
+  for (const [itemId, shiftAmount] of shiftByItemId) {
+    if (shiftAmount <= 0) continue;
+    for (const attachedId of expandItemIdsWithAttachedCaptions(items, [itemId])) {
+      shiftByItemId.set(attachedId, Math.max(shiftByItemId.get(attachedId) ?? 0, shiftAmount));
     }
   }
 

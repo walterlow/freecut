@@ -40,6 +40,10 @@ import {
 } from '../../deps/analysis';
 import { resolveMediaUrl } from '../../deps/media-library-resolver';
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
+import { createLogger } from '@/shared/logging/logger';
+import { saveScenes } from '@/infrastructure/storage/workspace-fs/scenes';
+
+const logger = createLogger('UseTimelineItemActions');
 
 const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
 const SCENE_DETECTION_OVERLAY_ID = 'scene-detection';
@@ -413,6 +417,21 @@ export function useTimelineItemActions({
             });
           },
         });
+
+        // Persist scene cuts to the workspace so the next session/window
+        // doesn't need to recompute. Fire-and-forget — UX proceeds regardless.
+        if (cuts.length > 0) {
+          void saveScenes({
+            mediaId,
+            service: method === 'histogram' ? 'scene-detect-histogram' : 'scene-detect-optical-flow',
+            model: verificationModel ?? method,
+            method,
+            sampleIntervalMs: method === 'histogram' ? 250 : 500,
+            verificationModel,
+            fps: mediaFps,
+            cuts,
+          }).catch((error) => logger.warn('Failed to persist scene cuts', error));
+        }
 
         if (cuts.length === 0) {
           toast.info('No scene cuts detected');

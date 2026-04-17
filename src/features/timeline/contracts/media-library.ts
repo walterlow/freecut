@@ -7,6 +7,7 @@ export { useTimelineStore } from '../stores/timeline-store';
 export { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 export { DEFAULT_TRACK_HEIGHT } from '../constants';
 export { timelineToSourceFrames, sourceToTimelineFrames } from '../utils/source-calculations';
+export { getNextClassicTrackName } from '../utils/classic-tracks';
 export {
   useCompositionsStore,
   type SubComposition,

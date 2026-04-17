@@ -29,7 +29,11 @@ import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { clampSlideDeltaToPreserveTransitions } from '../../utils/transition-utils';
 import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
-import { getLinkedItemIds, getUniqueLinkedItemAnchorIds } from '../../utils/linked-items';
+import {
+  expandItemIdsWithAttachedCaptions,
+  getLinkedItemIds,
+  getUniqueLinkedItemAnchorIds,
+} from '../../utils/linked-items';
 import {
   propagateInsertedGapToSyncLockedTracks,
   propagateRemovedIntervalsToSyncLockedTracks,
@@ -485,7 +489,7 @@ export function rateStretchItem(
           moveUpdates.push({ id: downstream.id, from: downstream.from + endDelta });
 
           // Also move linked companions on other tracks
-          const linkedIds = getLinkedItemIds(freshItems, downstream.id);
+          const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, downstream.id));
           for (const linkedId of linkedIds) {
             if (linkedId === downstream.id || movedIds.has(linkedId)) continue;
             const linked = freshItems.find((i) => i.id === linkedId);
@@ -506,7 +510,7 @@ export function rateStretchItem(
             if (neighbor) {
               movedIds.add(neighbor.id);
               moveUpdates.push({ id: neighbor.id, from: neighbor.from + endDelta });
-              const linkedIds = getLinkedItemIds(freshItems, neighbor.id);
+              const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, neighbor.id));
               for (const linkedId of linkedIds) {
                 if (linkedId === neighbor.id || movedIds.has(linkedId)) continue;
                 const linked = freshItems.find((i) => i.id === linkedId);
@@ -537,7 +541,7 @@ export function rateStretchItem(
           movedIds.add(upstream.id);
           moveUpdates.push({ id: upstream.id, from: Math.max(0, upstream.from + fromDelta) });
 
-          const linkedIds = getLinkedItemIds(freshItems, upstream.id);
+          const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, upstream.id));
           for (const linkedId of linkedIds) {
             if (linkedId === upstream.id || movedIds.has(linkedId)) continue;
             const linked = freshItems.find((i) => i.id === linkedId);
@@ -557,7 +561,7 @@ export function rateStretchItem(
             if (neighbor) {
               movedIds.add(neighbor.id);
               moveUpdates.push({ id: neighbor.id, from: Math.max(0, neighbor.from + fromDelta) });
-              const linkedIds = getLinkedItemIds(freshItems, neighbor.id);
+              const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, neighbor.id));
               for (const linkedId of linkedIds) {
                 if (linkedId === neighbor.id || movedIds.has(linkedId)) continue;
                 const linked = freshItems.find((i) => i.id === linkedId);
@@ -703,7 +707,7 @@ export function resetSpeedWithRipple(itemIds: string[]): void {
           moveUpdates.push({ id: downstream.id, from: downstream.from + growth });
 
           // Also move linked companions on other tracks
-          const linkedIds = getLinkedItemIds(freshItems, downstream.id);
+          const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, downstream.id));
           for (const linkedId of linkedIds) {
             if (linkedId === downstream.id || movedIds.has(linkedId)) continue;
             const linked = freshItems.find((i) => i.id === linkedId);

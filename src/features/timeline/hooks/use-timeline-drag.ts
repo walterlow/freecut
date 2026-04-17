@@ -10,6 +10,7 @@ import { useSnapCalculator } from './use-snap-calculator';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { getTrackKind } from '../utils/classic-tracks';
 import {
+  expandItemIdsWithAttachedCaptions,
   buildLinkedMovePreviewUpdates,
   expandSelectionWithLinkedItems,
   filterUnlockedItemIds,
@@ -577,12 +578,13 @@ export function useTimelineDrag(
       }
 
       // Determine which items to drag
-      const itemsToDrag = isInSelection
+      const baseItemsToDrag = isInSelection
         ? (linkedSelectionEnabled ? expandSelectionWithLinkedItems(allItems, currentSelectedIds) : currentSelectedIds)
         : linkedIds;
+      const itemsToDrag = expandItemIdsWithAttachedCaptions(allItems, baseItemsToDrag);
       const draggableItemIds = filterUnlockedItemIds(allItems, currentTracks, itemsToDrag);
-      if (isInSelection && itemsToDrag.length !== currentSelectedIds.length) {
-        selectItems(itemsToDrag);
+      if (isInSelection && baseItemsToDrag.length !== currentSelectedIds.length) {
+        selectItems(baseItemsToDrag);
       }
 
       // Store initial state for all dragged items

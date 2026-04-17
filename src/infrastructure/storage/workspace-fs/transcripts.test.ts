@@ -23,6 +23,8 @@ import {
 } from './transcripts';
 import { setWorkspaceRoot } from './root';
 import { asHandle, createRoot } from './__tests__/in-memory-handle';
+import { writeJsonAtomic } from './fs-primitives';
+import { legacyTranscriptPath, aiOutputPath } from './paths';
 
 function makeTranscript(mediaId: string): MediaTranscript {
   return {
@@ -74,5 +76,34 @@ describe('workspace-fs transcripts', () => {
     await saveTranscript(makeTranscript('m1'));
     await deleteTranscript('m1');
     expect(await getTranscript('m1')).toBeUndefined();
+  });
+
+  it('reads a legacy cache/transcript.json written before the ai/ migration', async () => {
+    const root = createRoot();
+    setWorkspaceRoot(asHandle(root));
+    await writeJsonAtomic(asHandle(root), legacyTranscriptPath('legacy-id'), makeTranscript('legacy-id'));
+
+    const loaded = await getTranscript('legacy-id');
+    expect(loaded?.mediaId).toBe('legacy-id');
+    expect(loaded?.segments[0]?.text).toBe('hello');
+  });
+
+  it('saveTranscript migrates legacy path to ai/ envelope', async () => {
+    const root = createRoot();
+    setWorkspaceRoot(asHandle(root));
+    await writeJsonAtomic(asHandle(root), legacyTranscriptPath('m2'), makeTranscript('m2'));
+
+    // Round-trip through save rewrites to the new path.
+    await saveTranscript(makeTranscript('m2'));
+
+    // Allow the fire-and-forget legacy cleanup to settle.
+    await Promise.resolve();
+
+    const { readJson } = await import('./fs-primitives');
+    const legacy = await readJson(asHandle(root), legacyTranscriptPath('m2'));
+    expect(legacy).toBeNull();
+
+    const envelope = await readJson(asHandle(root), aiOutputPath('m2', 'transcript'));
+    expect(envelope).toBeTruthy();
   });
 });

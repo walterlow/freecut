@@ -62,6 +62,18 @@ describe('linked-edit helpers', () => {
     const items: TimelineItem[] = [
       makeVideoItem({ id: 'video-2', from: 90, linkedGroupId: 'group-2' }),
       makeAudioItem({ id: 'audio-2', from: 90, linkedGroupId: 'group-2' }),
+      {
+        id: 'caption-2',
+        type: 'text',
+        trackId: 'caption-track',
+        from: 90,
+        durationInFrames: 60,
+        label: 'Caption',
+        text: 'Caption',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: { type: 'transcript', clipId: 'video-2', mediaId: 'media-1' },
+      },
     ];
 
     expect(
@@ -71,6 +83,7 @@ describe('linked-edit helpers', () => {
     ).toEqual([
       { id: 'video-2', from: 60 },
       { id: 'audio-2', from: 60 },
+      { id: 'caption-2', from: 60 },
     ]);
   });
 
@@ -117,5 +130,25 @@ describe('linked-edit helpers', () => {
     expect(
       getMatchingSynchronizedLinkedCounterpartForEdit(items, 'video-left', 'audio-track', 'audio', true)?.id
     ).toBe('audio-left');
+  });
+
+  it('includes attached captions when expanding ids for deletion', () => {
+    const items: TimelineItem[] = [
+      makeVideoItem({ id: 'video-1', linkedGroupId: undefined }),
+      {
+        id: 'caption-1',
+        type: 'text',
+        trackId: 'caption-track',
+        from: 0,
+        durationInFrames: 60,
+        label: 'Caption',
+        text: 'Caption',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: { type: 'transcript', clipId: 'video-1', mediaId: 'media-1' },
+      },
+    ];
+
+    expect(expandIdsWithLinkedItems(items, ['video-1'], false)).toEqual(['video-1', 'caption-1']);
   });
 });

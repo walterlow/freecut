@@ -1235,6 +1235,24 @@ export const TimelineContent = memo(function TimelineContent({
 
   actualDurationRef.current = actualDuration;
 
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const maxScrollLeft = Math.max(0, timelineWidth - container.clientWidth);
+    if (container.scrollLeft <= maxScrollLeft + 1) {
+      return;
+    }
+
+    // Clamp stale scroll after timeline shrink so ruler and tracks stay aligned
+    // without subscribing broad UI surfaces to item-array churn.
+    container.scrollLeft = maxScrollLeft;
+    scrollLeftRef.current = maxScrollLeft;
+    syncViewportFromContainer();
+  }, [timelineWidth, syncViewportFromContainer]);
+
   // NOTE: itemsByTrack removed - TimelineTrack now fetches its own items
   // This prevents cascade re-renders when only one track's items change
 

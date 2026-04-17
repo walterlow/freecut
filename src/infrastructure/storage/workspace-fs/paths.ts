@@ -28,7 +28,11 @@
  * │           ├── waveform/{meta.json,bin-N.bin}
  * │           ├── gif-frames/{meta.json,frame-N.png}
  * │           ├── decoded-audio/{meta.json,left-N.bin,right-N.bin}
- * │           └── transcript.json
+ * │           └── ai/
+ * │               ├── transcript.json
+ * │               ├── captions.json
+ * │               ├── scenes.json
+ * │               └── {kind}.json          # new AI outputs go here, one file per kind
  * └── content/
  *     └── {hash[0:2]}/{hash}/
  *         ├── refs.json
@@ -71,7 +75,13 @@ export const CACHE_FILMSTRIP_DIR = 'filmstrip';
 export const CACHE_WAVEFORM_DIR = 'waveform';
 export const CACHE_GIF_FRAMES_DIR = 'gif-frames';
 export const CACHE_DECODED_AUDIO_DIR = 'decoded-audio';
-export const CACHE_TRANSCRIPT_FILENAME = 'transcript.json';
+export const CACHE_AI_DIR = 'ai';
+/**
+ * Legacy path for transcripts — was `cache/transcript.json` before AI outputs
+ * were consolidated under `cache/ai/`. Readers fall back to this on miss; a
+ * subsequent save rewrites to the new path.
+ */
+export const CACHE_TRANSCRIPT_FILENAME_LEGACY = 'transcript.json';
 export const CACHE_META_FILENAME = 'meta.json';
 
 export const CONTENT_REFS_FILENAME = 'refs.json';
@@ -216,8 +226,28 @@ export function decodedAudioBinPath(
   return [...decodedAudioDir(mediaId), `${channel}-${binIndex}.bin`];
 }
 
-export function transcriptPath(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_TRANSCRIPT_FILENAME];
+/**
+ * Segments for `media/{id}/cache/ai/` — home for AI-derived analysis outputs
+ * (transcripts, captions, scene cuts, etc.). One file per `AiOutputKind`.
+ */
+export function aiOutputsDir(mediaId: string): string[] {
+  return [...mediaCacheDir(mediaId), CACHE_AI_DIR];
+}
+
+/**
+ * Segments for `media/{id}/cache/ai/{kind}.json`. The caller owns the `kind`
+ * enum (see `ai-outputs/types.ts`) — this helper only does path assembly.
+ */
+export function aiOutputPath(mediaId: string, kind: string): string[] {
+  return [...aiOutputsDir(mediaId), `${kind}.json`];
+}
+
+/**
+ * Legacy path kept only for read-fallback. New writes go through
+ * `aiOutputPath(mediaId, 'transcript')`.
+ */
+export function legacyTranscriptPath(mediaId: string): string[] {
+  return [...mediaCacheDir(mediaId), CACHE_TRANSCRIPT_FILENAME_LEGACY];
 }
 
 export function cacheMetaPath(dir: string[]): string[] {

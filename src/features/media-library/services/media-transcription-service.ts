@@ -17,7 +17,7 @@ import {
 import { mediaLibraryService } from './media-library-service';
 import {
   buildCaptionTextItems,
-  buildCaptionTrack,
+  buildCaptionTrackAbove,
   findReplaceableCaptionItemsForClip,
   findCompatibleCaptionTrackForRanges,
   getCaptionTextItemTemplate,
@@ -143,7 +143,7 @@ class MediaTranscriptionService {
     const generatedCaptionIdsToRemove = options.replaceExisting
       ? new Set(
           targetClips.flatMap((clip) =>
-            findReplaceableCaptionItemsForClip(timeline.items, clip).map((item) => item.id)
+            findReplaceableCaptionItemsForClip(timeline.items, clip, 'transcript').map((item) => item.id)
           )
         )
       : new Set<string>();
@@ -157,7 +157,7 @@ class MediaTranscriptionService {
       }
 
       const existingGeneratedCaptions = options.replaceExisting
-        ? findReplaceableCaptionItemsForClip(timeline.items, clip)
+        ? findReplaceableCaptionItemsForClip(timeline.items, clip, 'transcript')
         : [];
       const preferredTrackId = this.resolvePreferredCaptionTrackId(
         newTracks,
@@ -175,7 +175,10 @@ class MediaTranscriptionService {
           );
 
       if (!targetTrack) {
-        targetTrack = buildCaptionTrack(newTracks);
+        const clipTrack = newTracks.find((track) => track.id === clip.trackId);
+        targetTrack = clipTrack
+          ? buildCaptionTrackAbove(newTracks, clipTrack.order)
+          : buildCaptionTrackAbove(newTracks, 0);
         newTracks.push(targetTrack);
         newTracks.sort((a, b) => a.order - b.order);
       }

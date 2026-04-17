@@ -105,7 +105,7 @@ const textStrokeSchema = z.object({
 });
 
 const captionSourceSchema = z.object({
-  type: z.literal('transcript'),
+  type: z.enum(['transcript', 'ai-captions']),
   clipId: z.string().min(1),
   mediaId: z.string().min(1),
 });
@@ -306,6 +306,7 @@ const timelineItemSchema = z.object({
   trimEnd: z.number().optional(),
   // Text fields
   text: z.string().optional(),
+  textRole: z.literal('caption').optional(),
   captionSource: captionSourceSchema.optional(),
   fontSize: z.number().optional(),
   fontFamily: z.string().optional(),

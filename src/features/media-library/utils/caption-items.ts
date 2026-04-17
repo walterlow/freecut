@@ -1,5 +1,6 @@
-import { DEFAULT_TRACK_HEIGHT } from '../deps/timeline-contract';
+import { DEFAULT_TRACK_HEIGHT, getNextClassicTrackName } from '../deps/timeline-contract';
 import type { MediaTranscriptSegment } from '@/types/storage';
+import type { MediaCaption } from '@/lib/analysis';
 import type {
   AudioItem,
   GeneratedCaptionSource,
@@ -10,6 +11,13 @@ import type {
 } from '@/types/timeline';
 import { timelineToSourceFrames } from '../deps/timeline-contract';
 
+/**
+ * Fallback segment duration when AI captions can't infer an `end` time from
+ * the next caption (i.e. for the last caption, or when the sample interval is
+ * unknown). Seconds.
+ */
+const AI_CAPTION_FALLBACK_DURATION_SEC = 3;
+
 interface BuildCaptionTextItemsOptions {
   mediaId: string;
   trackId: string;
@@ -19,6 +27,13 @@ interface BuildCaptionTextItemsOptions {
   canvasWidth: number;
   canvasHeight: number;
   styleTemplate?: CaptionTextItemTemplate;
+  /**
+   * Discriminator for the `captionSource.type` stamped on the generated
+   * text items. Defaults to `'transcript'` (whisper flow); AI captioning
+   * flows pass `'ai-captions'` so later replace/remove operations can tell
+   * the two kinds apart on the same clip.
+   */
+  sourceType?: GeneratedCaptionSource['type'];
 }
 
 export type CaptionTextItemTemplate = Pick<
@@ -257,30 +272,107 @@ export function buildCaptionTrack(tracks: readonly TimelineTrack[]): TimelineTra
   const maxOrder = tracks.reduce((highest, track) => Math.max(highest, track.order), -1);
   return {
     id: `track-captions-${Date.now()}`,
-    name: 'Captions',
+    name: getNextClassicTrackName([...tracks], 'video'),
+    kind: 'video',
     height: DEFAULT_TRACK_HEIGHT,
     locked: false,
+    syncLock: true,
     visible: true,
     muted: false,
     solo: false,
+    volume: 0,
     order: maxOrder + 1,
     items: [],
   };
 }
 
-function buildCaptionSource(mediaId: string, clipId: string): GeneratedCaptionSource {
+/**
+ * Build a captions track positioned *above* a reference track (the clip's
+ * own track in the AI-captions flow). The new track's `order` is set halfway
+ * between `referenceOrder` and the next track up, so both stay unique and no
+ * existing tracks need to shift.
+ *
+ * If nothing sits above the reference, we land a full integer lower than it.
+ * Matches the fractional-order pattern used by `insertTrack` in
+ * `use-timeline-tracks.ts`.
+ */
+export function buildCaptionTrackAbove(
+  tracks: readonly TimelineTrack[],
+  referenceOrder: number,
+): TimelineTrack {
+  const ordersStrictlyAbove = tracks
+    .map((t) => t.order)
+    .filter((order) => order < referenceOrder);
+  const previousOrder = ordersStrictlyAbove.length > 0
+    ? Math.max(...ordersStrictlyAbove)
+    : referenceOrder - 2;
+  const newOrder = (previousOrder + referenceOrder) / 2;
+
   return {
-    type: 'transcript',
+    id: `track-captions-${Date.now()}`,
+    name: getNextClassicTrackName([...tracks], 'video'),
+    kind: 'video',
+    height: DEFAULT_TRACK_HEIGHT,
+    locked: false,
+    syncLock: true,
+    visible: true,
+    muted: false,
+    solo: false,
+    volume: 0,
+    order: newOrder,
+    items: [],
+  };
+}
+
+function buildCaptionSource(
+  mediaId: string,
+  clipId: string,
+  type: GeneratedCaptionSource['type'] = 'transcript',
+): GeneratedCaptionSource {
+  return {
+    type,
     mediaId,
     clipId,
   };
+}
+
+/**
+ * Convert AI captions (point-in-time frame descriptions) into segments with
+ * start/end pairs consumable by {@link buildCaptionTextItems}.
+ *
+ * AI captions have no intrinsic duration — the end time is derived from the
+ * next caption's `timeSec`, with a fallback to the provider's sample interval
+ * (or {@link AI_CAPTION_FALLBACK_DURATION_SEC}) for the final caption.
+ */
+export function aiCaptionsToSegments(
+  captions: readonly MediaCaption[],
+  sampleIntervalSec?: number,
+): MediaTranscriptSegment[] {
+  if (captions.length === 0) return [];
+  const sorted = [...captions].sort((a, b) => a.timeSec - b.timeSec);
+  const fallbackEndDelta = sampleIntervalSec && sampleIntervalSec > 0
+    ? sampleIntervalSec
+    : AI_CAPTION_FALLBACK_DURATION_SEC;
+
+  return sorted.map((caption, index) => {
+    const next = sorted[index + 1];
+    const start = Math.max(0, caption.timeSec);
+    const end = next !== undefined
+      ? Math.max(start + 0.01, next.timeSec)
+      : start + fallbackEndDelta;
+    return {
+      text: caption.text,
+      start,
+      end,
+    };
+  });
 }
 
 export function isGeneratedCaptionTextItem(
   item: TimelineItem,
 ): item is TextItem & { captionSource: GeneratedCaptionSource } {
   return item.type === 'text'
-    && item.captionSource?.type === 'transcript'
+    && (item.captionSource?.type === 'transcript' || item.captionSource?.type === 'ai-captions')
     && item.captionSource.clipId.length > 0
     && item.captionSource.mediaId.length > 0;
 }
@@ -288,9 +380,12 @@ export function isGeneratedCaptionTextItem(
 export function findGeneratedCaptionItemsForClip(
   items: readonly TimelineItem[],
   clipId: string,
+  sourceType?: GeneratedCaptionSource['type'],
 ): Array<TextItem & { captionSource: GeneratedCaptionSource }> {
   return items.filter((item): item is TextItem & { captionSource: GeneratedCaptionSource } =>
-    isGeneratedCaptionTextItem(item) && item.captionSource.clipId === clipId
+    isGeneratedCaptionTextItem(item)
+      && item.captionSource.clipId === clipId
+      && (sourceType === undefined || item.captionSource.type === sourceType)
   );
 }
 
@@ -313,12 +408,18 @@ function isLegacyGeneratedCaptionItemForClip(
 export function findReplaceableCaptionItemsForClip(
   items: readonly TimelineItem[],
   clip: AudioItem | VideoItem,
+  sourceType?: GeneratedCaptionSource['type'],
 ): TextItem[] {
-  const generatedCaptionItems = findGeneratedCaptionItemsForClip(items, clip.id);
+  const generatedCaptionItems = findGeneratedCaptionItemsForClip(items, clip.id, sourceType);
   if (generatedCaptionItems.length > 0) {
     return generatedCaptionItems;
   }
 
+  // Legacy fallback only applies to transcript-generated captions (the only
+  // kind that predates the `captionSource` discriminator).
+  if (sourceType !== undefined && sourceType !== 'transcript') {
+    return [];
+  }
   return items.filter((item): item is TextItem => isLegacyGeneratedCaptionItemForClip(item, clip));
 }
 
@@ -352,6 +453,7 @@ export function buildCaptionTextItems({
   canvasWidth,
   canvasHeight,
   styleTemplate,
+  sourceType = 'transcript',
 }: BuildCaptionTextItemsOptions): TextItem[] {
   const normalizedSegments = normalizeCaptionSegments(segments);
   const { sourceStart, sourceEnd, sourceFps, speed } = getClipSourceBounds(clip, timelineFps);
@@ -387,11 +489,12 @@ export function buildCaptionTextItems({
     const defaultCaptionItem: TextItem = {
       id: crypto.randomUUID(),
       type: 'text',
+      textRole: 'caption',
       trackId,
       from,
       durationInFrames,
       mediaId,
-      captionSource: buildCaptionSource(mediaId, clip.id),
+      captionSource: buildCaptionSource(mediaId, clip.id, sourceType),
       label: segment.text.slice(0, 48),
       text: segment.text,
       fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),

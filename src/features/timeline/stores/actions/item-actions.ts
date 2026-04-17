@@ -22,6 +22,7 @@ import {
   expandSelectionWithLinkedItems,
   getLinkedItemIds,
 } from '../../utils/linked-items';
+import { isTrackSyncLockEnabled } from '../../utils/track-sync-lock';
 import { placeItemsWithoutTimelineOverlap } from './item-placement';
 
 function isLinkedSelectionEnabled(): boolean {
@@ -167,8 +168,9 @@ export function rippleDeleteItems(ids: string[]): void {
     }));
 
   // Per-track: shift downstream items on the same track as each deleted item.
-  // Linked counterparts on other tracks shift via buildLinkedLeftShiftUpdates.
-  // Solo clips on unrelated tracks are left in place.
+  // Linked counterparts and attached captions on tracks that won't be handled
+  // by sync-lock ripple get shifted manually. Solo clips on unrelated tracks
+  // are left in place.
   for (const item of remainingItems) {
     const shiftAmount = items
       .filter((candidate) => idsToDelete.has(candidate.id))
@@ -180,8 +182,30 @@ export function rippleDeleteItems(ids: string[]): void {
     }
   }
 
+  const trackById = new Map(useItemsStore.getState().tracks.map((track) => [track.id, track]));
+  const itemById = new Map(remainingItems.map((item) => [item.id, item]));
+  const shiftByItemId = new Map<string, number>();
+
+  for (const [itemId, shiftAmount] of baseShiftByItemId) {
+    if (shiftAmount <= 0) continue;
+
+    const relatedIds = expandIdsWithLinkedItems(remainingItems, [itemId], linkedSelectionEnabled);
+    for (const relatedId of relatedIds) {
+      const relatedItem = itemById.get(relatedId);
+      if (!relatedItem) continue;
+
+      const handledBySyncLock = !editedTrackIds.has(relatedItem.trackId)
+        && isTrackSyncLockEnabled(trackById.get(relatedItem.trackId));
+      if (handledBySyncLock) {
+        continue;
+      }
+
+      shiftByItemId.set(relatedId, Math.max(shiftByItemId.get(relatedId) ?? 0, shiftAmount));
+    }
+  }
+
   const updates = remainingItems.flatMap((item) => {
-    const shiftAmount = baseShiftByItemId.get(item.id) ?? 0;
+    const shiftAmount = shiftByItemId.get(item.id) ?? 0;
     return shiftAmount > 0
       ? [{ id: item.id, from: item.from - shiftAmount }]
       : [];

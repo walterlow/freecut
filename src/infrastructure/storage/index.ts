@@ -86,6 +86,34 @@ export {
   deleteTranscript,
 } from '@/infrastructure/storage/workspace-fs/transcripts';
 
+// AI captions (vision-language-model frame descriptions)
+export {
+  getCaptions,
+  saveCaptions,
+  deleteCaptions,
+} from '@/infrastructure/storage/workspace-fs/captions';
+
+// Scene-detection results
+export {
+  getScenes,
+  saveScenes,
+  deleteScenes,
+  type SavedScenes,
+} from '@/infrastructure/storage/workspace-fs/scenes';
+
+// Generic AI-output envelope (use these directly for new AI services)
+export {
+  readAiOutput,
+  writeAiOutput,
+  deleteAiOutput,
+  listAiOutputs,
+  getMediaIdsWithAiOutput,
+  AI_OUTPUT_SCHEMA_VERSION,
+  type AiOutput,
+  type AiOutputKind,
+  type AiOutputPayloads,
+} from '@/infrastructure/storage/workspace-fs/ai-outputs';
+
 // Orphan cache sweep
 export {
   sweepWorkspaceOrphans,

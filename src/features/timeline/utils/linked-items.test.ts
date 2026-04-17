@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelineItem } from '@/types/timeline';
 import {
+  expandItemIdsWithAttachedCaptions,
   buildLinkedMovePreviewUpdates,
   canLinkSelection,
   canLinkItems,
   expandSelectionWithLinkedItems,
   filterUnlockedItemIds,
+  getAttachedCaptionItemIds,
+  getLinkedAndAttachedItemIds,
   getLinkedItemIds,
   getLinkedSyncOffsetFrames,
   getUniqueLinkedItemAnchorIds,
@@ -68,6 +71,46 @@ describe('linked items', () => {
     ];
 
     expect(expandSelectionWithLinkedItems(items, ['video-1', 'video-2'])).toEqual(['video-1', 'audio-1', 'video-2']);
+  });
+
+  it('finds caption-role text attached to a clip', () => {
+    const items = [
+      makeItem({ id: 'video-1', type: 'video' }),
+      makeItem({
+        id: 'caption-1',
+        type: 'text',
+        text: 'Hello',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: { type: 'transcript', clipId: 'video-1', mediaId: 'media-1' },
+      }),
+      makeItem({
+        id: 'manual-text',
+        type: 'text',
+        text: 'Manual',
+        color: '#fff',
+      }),
+    ];
+
+    expect(getAttachedCaptionItemIds(items, 'video-1')).toEqual(['caption-1']);
+    expect(expandItemIdsWithAttachedCaptions(items, ['video-1'])).toEqual(['video-1', 'caption-1']);
+  });
+
+  it('includes attached captions when expanding a linked clip pair', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video' }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'group-1', type: 'audio' }),
+      makeItem({
+        id: 'caption-1',
+        type: 'text',
+        text: 'Caption',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: { type: 'transcript', clipId: 'video-1', mediaId: 'media-1' },
+      }),
+    ];
+
+    expect(getLinkedAndAttachedItemIds(items, 'audio-1')).toEqual(['video-1', 'audio-1', 'caption-1']);
   });
 
   it('dedupes linked groups down to one split anchor', () => {

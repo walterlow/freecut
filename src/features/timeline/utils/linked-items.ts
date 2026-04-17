@@ -30,6 +30,43 @@ export function getLinkedItemIds(items: TimelineItem[], itemId: string): string[
   return getLinkedItems(items, itemId).map((item) => item.id);
 }
 
+export function getAttachedCaptionItemIds(items: TimelineItem[], itemId: string): string[] {
+  const anchor = items.find((item) => item.id === itemId);
+  if (!anchor || anchor.type === 'text') {
+    return [];
+  }
+
+  return items
+    .filter((item) =>
+      item.type === 'text'
+      && (item.textRole === 'caption' || item.captionSource !== undefined)
+      && item.captionSource?.clipId === anchor.id
+    )
+    .map((item) => item.id);
+}
+
+export function expandItemIdsWithAttachedCaptions(items: TimelineItem[], itemIds: string[]): string[] {
+  const expandedIds = new Set<string>();
+  const captionIds = new Set<string>();
+
+  for (const itemId of itemIds) {
+    expandedIds.add(itemId);
+    for (const captionId of getAttachedCaptionItemIds(items, itemId)) {
+      captionIds.add(captionId);
+    }
+  }
+
+  for (const captionId of captionIds) {
+    expandedIds.add(captionId);
+  }
+
+  return Array.from(expandedIds);
+}
+
+export function getLinkedAndAttachedItemIds(items: TimelineItem[], itemId: string): string[] {
+  return expandItemIdsWithAttachedCaptions(items, getLinkedItemIds(items, itemId));
+}
+
 export function filterUnlockedItemIds(
   items: TimelineItem[],
   tracks: Pick<TimelineTrack, 'id' | 'locked'>[],

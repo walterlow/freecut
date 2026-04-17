@@ -16,7 +16,11 @@ import {
   timelineToSourceFrames,
 } from '../utils/source-calculations';
 import { useLinkedEditPreviewStore } from '../stores/linked-edit-preview-store';
-import { getSynchronizedLinkedItems, getLinkedItemIds } from '../utils/linked-items';
+import {
+  expandItemIdsWithAttachedCaptions,
+  getSynchronizedLinkedItems,
+  getLinkedItemIds,
+} from '../utils/linked-items';
 import { applyRateStretchPreview, applyMovePreview } from '../utils/item-edit-preview';
 import type { PreviewItemUpdate } from '../utils/item-edit-preview';
 import { useTransitionsStore } from '../stores/transitions-store';
@@ -69,7 +73,7 @@ function computeRipplePreviewUpdates(
     movedIds.add(itemId);
     updates.push(applyMovePreview(it, delta));
 
-    for (const linkedId of getLinkedItemIds(items, itemId)) {
+    for (const linkedId of expandItemIdsWithAttachedCaptions(items, getLinkedItemIds(items, itemId))) {
       if (linkedId === itemId || movedIds.has(linkedId)) continue;
       const linked = items.find((i) => i.id === linkedId);
       if (linked) {

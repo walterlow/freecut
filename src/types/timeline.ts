@@ -94,7 +94,13 @@ type BaseTimelineItem = {
 };
 
 export interface GeneratedCaptionSource {
-  type: 'transcript';
+  /**
+   * `transcript` — generated from whisper speech-to-text segments.
+   * `ai-captions` — generated from vision-language-model frame descriptions
+   *   (e.g. LFM captioning). Distinguished so replace/remove flows can target
+   *   one kind without disturbing the other on the same clip.
+   */
+  type: 'transcript' | 'ai-captions';
   clipId: string;
   mediaId: string;
 }
@@ -122,6 +128,7 @@ export type AudioItem = BaseTimelineItem & {
 export type TextItem = BaseTimelineItem & {
   type: 'text';
   text: string;
+  textRole?: 'caption';
   captionSource?: GeneratedCaptionSource;
   // Typography
   fontSize?: number; // Font size in pixels (default: 60)

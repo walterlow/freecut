@@ -80,8 +80,9 @@ export interface ProjectTimeline {
     sourceDuration?: number; // Total duration of source media (frames)
     sourceFps?: number; // Source media frame rate for source* frame fields
     text?: string;
+    textRole?: 'caption';
     captionSource?: {
-      type: 'transcript';
+      type: 'transcript' | 'ai-captions';
       clipId: string;
       mediaId: string;
     };

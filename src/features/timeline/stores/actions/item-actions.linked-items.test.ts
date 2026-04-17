@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline';
+import type { AudioItem, TextItem, TimelineTrack, VideoItem } from '@/types/timeline';
 import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
@@ -47,6 +47,20 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
     mediaId: 'media-1',
     linkedGroupId: 'group-1',
     originId: 'origin-1',
+    ...overrides,
+  };
+}
+
+function makeTextItem(overrides: Partial<TextItem> = {}): TextItem {
+  return {
+    id: 'text-1',
+    type: 'text',
+    trackId: 'caption-track',
+    from: 0,
+    durationInFrames: 60,
+    text: 'Caption',
+    style: {},
+    textRole: 'caption',
     ...overrides,
   };
 }
@@ -597,6 +611,65 @@ describe('linked timeline items', () => {
     expect(items.find((item) => item.id === 'audio-downstream')).toMatchObject({ from: 0 });
     // Solo audio at 50-80 overlapped by audio-downstream shifting to 0-60 â†’ deleted
     expect(items.find((item) => item.id === 'solo-audio')).toBeUndefined();
+  });
+
+  it('ripple delete shifts attached captions with their surviving clip', () => {
+    useItemsStore.getState().setTracks([
+      makeTrack({ id: 'video-track', name: 'V1', order: 0, kind: 'video' }),
+      makeTrack({ id: 'audio-track', name: 'A1', order: 1, kind: 'audio' }),
+      makeTrack({ id: 'video-track-2', name: 'V2', order: 2, kind: 'video', syncLock: false }),
+    ]);
+    useItemsStore.getState().setItems([
+      makeVideoItem({
+        id: 'video-delete',
+        durationInFrames: 100,
+        linkedGroupId: 'group-del',
+        originId: 'origin-del',
+        mediaId: 'media-del',
+      }),
+      makeAudioItem({
+        id: 'audio-delete',
+        durationInFrames: 100,
+        linkedGroupId: 'group-del',
+        originId: 'origin-del',
+        mediaId: 'media-del',
+      }),
+      makeVideoItem({
+        id: 'video-survivor',
+        from: 100,
+        durationInFrames: 60,
+        linkedGroupId: 'group-survivor',
+        originId: 'origin-survivor',
+        mediaId: 'media-survivor',
+      }),
+      makeAudioItem({
+        id: 'audio-survivor',
+        from: 100,
+        durationInFrames: 60,
+        linkedGroupId: 'group-survivor',
+        originId: 'origin-survivor',
+        mediaId: 'media-survivor',
+      }),
+      makeTextItem({
+        id: 'caption-survivor',
+        trackId: 'video-track-2',
+        from: 100,
+        durationInFrames: 60,
+        captionSource: {
+          type: 'transcript',
+          clipId: 'video-survivor',
+          mediaId: 'media-survivor',
+        },
+      }),
+    ]);
+
+    rippleDeleteItems(['video-delete']);
+
+    const state = useItemsStore.getState();
+    expect(state.items.find((item) => item.id === 'video-survivor')).toMatchObject({ from: 0 });
+    expect(state.items.find((item) => item.id === 'audio-survivor')).toMatchObject({ from: 0 });
+    expect(state.items.find((item) => item.id === 'caption-survivor')).toMatchObject({ from: 0 });
+    expect(state.maxItemEndFrame).toBe(60);
   });
 
   it('links an arbitrary multi-selection with a fresh group id', () => {

@@ -56,6 +56,8 @@ import {
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
 } from '@/infrastructure/storage';
+import { saveCaptions, deleteCaptions } from '@/infrastructure/storage/workspace-fs/captions';
+import { deleteScenes } from '@/infrastructure/storage/workspace-fs/scenes';
 import { filmstripCache, gifFrameCache, waveformCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
@@ -107,6 +109,22 @@ class MediaLibraryService {
       await deleteTranscript(mediaId);
     } catch (error) {
       logger.warn('Failed to delete transcript:', error);
+    }
+  }
+
+  private async deleteCaptionsSafely(mediaId: string): Promise<void> {
+    try {
+      await deleteCaptions(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete captions:', error);
+    }
+  }
+
+  private async deleteScenesSafely(mediaId: string): Promise<void> {
+    try {
+      await deleteScenes(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete scenes:', error);
     }
   }
 
@@ -656,6 +674,8 @@ class MediaLibraryService {
       await deleteMediaDB(mediaId);
 
       await this.deleteTranscriptSafely(mediaId);
+      await this.deleteCaptionsSafely(mediaId);
+      await this.deleteScenesSafely(mediaId);
       await this.deleteThumbnailsSafely(mediaId);
       await this.clearGifFrameCacheSafely(mediaId);
       await this.clearFilmstripCacheSafely(mediaId);
@@ -758,6 +778,8 @@ class MediaLibraryService {
     await deleteMediaDB(id);
 
     await this.deleteTranscriptSafely(id);
+    await this.deleteCaptionsSafely(id);
+    await this.deleteScenesSafely(id);
   }
 
   /**
@@ -1009,11 +1031,29 @@ class MediaLibraryService {
 
   /**
    * Update AI-generated captions for a media item.
+   *
+   * Captions live in `cache/ai/captions.json` as the authoritative source.
+   * We also mirror them onto `MediaMetadata.aiCaptions` so in-memory zustand
+   * consumers and search (`media-library-store.ts`) don't need a separate
+   * hydration pass — the mirror stays consistent because this is the only
+   * writer.
    */
   async updateMediaCaptions(
     mediaId: string,
     captions: Array<{ timeSec: number; text: string }>,
+    options?: { service?: string; model?: string; sampleIntervalSec?: number },
   ): Promise<MediaMetadata> {
+    try {
+      await saveCaptions({
+        mediaId,
+        captions,
+        service: options?.service ?? 'lfm-captioning',
+        model: options?.model ?? 'lfm-2.5-vl',
+        sampleIntervalSec: options?.sampleIntervalSec,
+      });
+    } catch (error) {
+      logger.warn(`Failed to persist captions for ${mediaId}; metadata mirror will still update`, error);
+    }
     return updateMediaDB(mediaId, { aiCaptions: captions });
   }
 

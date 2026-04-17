@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useItemsStore } from '../stores/items-store';
 import { useZoomStore } from '../stores/zoom-store';
 import { cn } from '@/shared/ui/cn';
 import { getNavigatorResizeDragResult, getNavigatorThumbMetrics } from './timeline-navigator-utils';
@@ -32,9 +33,7 @@ export function TimelineNavigator({
   const [dragStartThumbLeft, setDragStartThumbLeft] = useState(0);
   const [dragStartThumbWidth, setDragStartThumbWidth] = useState(0);
 
-  const maxFrame = useTimelineStore((s) =>
-    s.items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
-  );
+  const maxFrame = useItemsStore((s) => s.maxItemEndFrame);
 
   const contentDuration = useMemo(() => {
     const furthestEndSeconds = maxFrame / fps;
