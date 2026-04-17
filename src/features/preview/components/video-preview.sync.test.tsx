@@ -1653,6 +1653,65 @@ describe('VideoPreview sync behavior', () => {
     expect(getDisplayedFrame()).toBeNull();
   });
 
+  it('prefers the Player path for generated caption scrubs', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-caption',
+        name: 'V2',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'caption-1',
+        type: 'text',
+        trackId: 'track-caption',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Caption',
+        text: 'Caption line',
+        textRole: 'caption',
+        captionSource: {
+          type: 'transcript',
+          clipId: 'video-1',
+          mediaId: 'media-1',
+        },
+      } as unknown as (typeof useItemsStore.getState)['items'][number],
+    ]);
+    useTimelineStore.setState({ keyframes: [] });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(48);
+    });
+
+    expect(scrubCanvas.style.visibility).toBe('hidden');
+    expect(getDisplayedFrame()).toBeNull();
+  });
+
   it('keeps fast-scrub overlay visible until Player confirms the exact scrub release frame', async () => {
     const { container } = render(
       <VideoPreview

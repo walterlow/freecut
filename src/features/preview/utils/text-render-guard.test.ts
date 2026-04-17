@@ -86,6 +86,33 @@ describe('shouldPreferPlayerForStyledTextScrub', () => {
     expect(shouldPreferPlayerForStyledTextScrub(tracks, [])).toBe(false);
   });
 
+  it('returns true for visible generated captions even without styling or animation', () => {
+    const tracks: TimelineTrack[] = [
+      {
+        ...BASE_TRACK,
+        items: [
+          {
+            id: 'caption-1',
+            type: 'text',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 90,
+            label: 'Caption',
+            text: 'Hello world',
+            textRole: 'caption',
+            captionSource: {
+              type: 'transcript',
+              clipId: 'video-1',
+              mediaId: 'media-1',
+            },
+          },
+        ],
+      },
+    ];
+
+    expect(shouldPreferPlayerForStyledTextScrub(tracks, [])).toBe(true);
+  });
+
   it('ignores hidden tracks', () => {
     const tracks: TimelineTrack[] = [
       {

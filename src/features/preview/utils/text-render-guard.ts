@@ -10,6 +10,11 @@ function hasVisibleStyledAnimatedText(
   for (const item of track.items) {
     if (item.type !== 'text') continue;
 
+    const isGeneratedCaption = item.textRole === 'caption' || item.captionSource !== undefined;
+    if (isGeneratedCaption) {
+      return true;
+    }
+
     const hasStyledText = !!item.textShadow || (item.stroke?.width ?? 0) > 0;
     if (!hasStyledText) continue;
 
