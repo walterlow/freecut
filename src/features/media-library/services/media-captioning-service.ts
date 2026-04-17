@@ -10,7 +10,7 @@
 
 import { useSelectionStore } from '@/shared/state/selection';
 import { createLogger } from '@/shared/logging/logger';
-import type { MediaCaption } from '@/lib/analysis';
+import type { MediaCaption } from '@/infrastructure/analysis';
 import type {
   AudioItem,
   TextItem,

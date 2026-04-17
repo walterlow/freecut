@@ -6,7 +6,7 @@
  * read-path convenience for UI consumers — writers must keep them in sync.
  */
 
-import type { MediaCaption } from '@/lib/analysis';
+import type { MediaCaption } from '@/infrastructure/analysis';
 import { createLogger } from '@/shared/logging/logger';
 
 import { readAiOutput, writeAiOutput, deleteAiOutput } from './ai-outputs';

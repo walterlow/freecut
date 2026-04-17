@@ -1,6 +1,6 @@
 import { DEFAULT_TRACK_HEIGHT, getNextClassicTrackName } from '../deps/timeline-contract';
 import type { MediaTranscriptSegment } from '@/types/storage';
-import type { MediaCaption } from '@/lib/analysis';
+import type { MediaCaption } from '@/infrastructure/analysis';
 import type {
   AudioItem,
   GeneratedCaptionSource,
