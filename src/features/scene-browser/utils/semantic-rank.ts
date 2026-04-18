@@ -8,7 +8,7 @@
  */
 
 import type { PaletteEntry } from '../deps/analysis';
-import { colorBoostFor, extractQueryColors, type ColorBoostResult } from './color-boost';
+import { colorBoostFor, parseColorQuery, type ColorBoostResult } from './color-boost';
 import type { RankableScene, ScoredScene } from './rank';
 
 /** Minimum cosine score to treat a scene as a match. */
@@ -83,9 +83,13 @@ export function semanticRank(
   const imageMap = options.imageEmbeddings;
   const paletteMap = options.palettes;
 
-  // Parse color terms from the query once so the per-scene loop stays tight.
-  const queryColors = options.query ? extractQueryColors(options.query) : [];
+  // Parse color intent once so the per-scene loop stays tight. Explicit
+  // palette queries bypass text/CLIP scoring; mixed queries still get a
+  // palette boost on top of semantic meaning.
+  const colorQuery = options.query ? parseColorQuery(options.query) : { colors: [], paletteOnly: false };
+  const queryColors = colorQuery.colors;
   const hasColorQuery = queryColors.length > 0;
+  const paletteOnly = colorQuery.paletteOnly;
 
   const scored: ScoredScene[] = [];
   for (const scene of scenes) {
@@ -102,8 +106,8 @@ export function semanticRank(
       colorBoost = colorBoostFor(queryColors, paletteMap.get(scene.id));
     }
 
-    const textOk = textVector && textScore >= threshold;
-    const imageOk = imageVector && imageScore >= imageThreshold;
+    const textOk = !paletteOnly && textVector && textScore >= threshold;
+    const imageOk = !paletteOnly && imageVector && imageScore >= imageThreshold;
     const colorOk = !!colorBoost;
     if (!textOk && !imageOk && !colorOk) continue;
 
@@ -124,8 +128,8 @@ export function semanticRank(
       matchSpans: [],
       signals: {
         ranker: 'semantic',
-        textScore: textVector ? textScore : undefined,
-        imageScore: imageVector ? imageScore : undefined,
+        textScore: !paletteOnly && textVector ? textScore : undefined,
+        imageScore: !paletteOnly && imageVector ? imageScore : undefined,
         colorMatch: colorBoost?.family,
       },
     });

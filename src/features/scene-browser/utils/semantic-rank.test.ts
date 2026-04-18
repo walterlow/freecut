@@ -202,4 +202,64 @@ describe('semanticRank with CLIP image signal', () => {
     });
     expect(result).toEqual([]); // image was strong but query image embed absent
   });
+
+  it('uses palette-only ranking for explicit pure color queries', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0]);
+    const scenes = [scene('a:0', 'A person in a yellow jacket'), scene('b:0', 'A dark blue hallway')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])], // strong text match that should be ignored
+      ['b:0', unit([0, 1])],
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])], // strong visual match that should be ignored
+      ['b:0', unit([0, 1])],
+    ]);
+    const palettes = new Map([
+      ['a:0', [{ l: 40, a: 15, b: -60, weight: 0.9 }]], // blue
+      ['b:0', [{ l: 90, a: -5, b: 80, weight: 0.9 }]], // yellow
+    ]);
+
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      query: 'yellow color',
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+      palettes,
+    });
+
+    expect(result.map((s) => s.id)).toEqual(['b:0']);
+    expect(result[0]?.signals.colorMatch).toBe('yellow');
+    expect(result[0]?.signals.textScore).toBeUndefined();
+    expect(result[0]?.signals.imageScore).toBeUndefined();
+  });
+
+  it('keeps semantic text/image scoring for mixed color-content queries', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0]);
+    const scenes = [scene('a:0', 'Yellow kitchen interior'), scene('b:0', 'Blue hallway')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])],
+      ['b:0', unit([0, 1])],
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])],
+      ['b:0', unit([0, 1])],
+    ]);
+    const palettes = new Map([
+      ['a:0', [{ l: 90, a: -5, b: 80, weight: 0.9 }]],
+      ['b:0', [{ l: 40, a: 15, b: -60, weight: 0.9 }]],
+    ]);
+
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      query: 'yellow color kitchen',
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+      palettes,
+    });
+
+    expect(result[0]?.id).toBe('a:0');
+    expect(result[0]?.signals.colorMatch).toBe('yellow');
+    expect(result[0]?.signals.textScore).toBeDefined();
+    expect(result[0]?.signals.imageScore).toBeDefined();
+  });
 });

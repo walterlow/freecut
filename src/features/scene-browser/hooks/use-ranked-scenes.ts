@@ -9,6 +9,7 @@ import {
   getImageEmbeddingsSnapshot,
   getPalettesSnapshot,
 } from '../utils/embeddings-cache';
+import { parseColorQuery } from '../utils/color-boost';
 import { rankScenes, type RankableScene, type ScoredScene } from '../utils/rank';
 import { semanticRank } from '../utils/semantic-rank';
 
@@ -69,6 +70,7 @@ export function useRankedScenes(): RankedScenesResult {
   const scope = useSceneBrowserStore((s) => s.scope);
   const sortMode = useSceneBrowserStore((s) => s.sortMode);
   const captionSearchMode = useSettingsStore((s) => s.captionSearchMode);
+  const colorQuery = useMemo(() => parseColorQuery(query), [query]);
 
   // Embed the query with both text models when semantic mode is active.
   // Keeping each in a separate state slot (rather than a Suspense promise
@@ -83,6 +85,11 @@ export function useRankedScenes(): RankedScenesResult {
     if (captionSearchMode !== 'semantic' || query.trim().length === 0) {
       setQueryEmbedding(null);
       setQueryTextState('idle');
+      return;
+    }
+    if (colorQuery.paletteOnly) {
+      setQueryEmbedding(new Float32Array(0));
+      setQueryTextState('ready');
       return;
     }
     let cancelled = false;
@@ -102,13 +109,17 @@ export function useRankedScenes(): RankedScenesResult {
         }
       });
     return () => { cancelled = true; };
-  }, [captionSearchMode, query]);
+  }, [captionSearchMode, query, colorQuery.paletteOnly]);
 
   // CLIP text-encoder embedding for the visual side. Loaded independently
   // so a slow CLIP download doesn't block text-side ranking — scenes can
   // be shown via text-only cosine until the CLIP query vector lands.
   useEffect(() => {
-    if (captionSearchMode !== 'semantic' || query.trim().length === 0) {
+    if (
+      captionSearchMode !== 'semantic'
+      || query.trim().length === 0
+      || colorQuery.paletteOnly
+    ) {
       setQueryImageEmbedding(null);
       setQueryImageState('idle');
       return;
@@ -138,7 +149,7 @@ export function useRankedScenes(): RankedScenesResult {
         }
       });
     return () => { cancelled = true; };
-  }, [captionSearchMode, query]);
+  }, [captionSearchMode, query, colorQuery.paletteOnly]);
 
   return useMemo<RankedScenesResult>(() => {
     const allScenes: RankableScene[] = [];
@@ -236,5 +247,6 @@ export function useRankedScenes(): RankedScenesResult {
     queryImageEmbedding,
     queryTextState,
     queryImageState,
+    colorQuery.paletteOnly,
   ]);
 }

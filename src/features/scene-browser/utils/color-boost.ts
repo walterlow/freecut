@@ -57,10 +57,20 @@ function boostFromDeltaE(deltaE: number, weight: number): number {
  * ("rose" as a flower vs. "rose" as a color — we accept the color
  * reading; users can always add descriptive words to disambiguate).
  */
-interface ColorFamilyDefinition {
+export interface ColorFamilyDefinition {
   family: string;
   lab: LabColor;
   synonyms: string[];
+}
+
+export interface ParsedColorQuery {
+  colors: ColorFamilyDefinition[];
+  /**
+   * True when the query is asking for palette alone (e.g. `color:yellow`,
+   * `yellow color`, `crimson tones`) rather than "yellow jacket" /
+   * "blue car" object semantics.
+   */
+  paletteOnly: boolean;
 }
 
 const COLOR_FAMILIES: ColorFamilyDefinition[] = [
@@ -83,26 +93,100 @@ for (const def of COLOR_FAMILIES) {
   for (const synonym of def.synonyms) SYNONYM_TO_FAMILY.set(synonym, def);
 }
 
+const COLOR_INTENT_TOKENS = new Set([
+  'color',
+  'colors',
+  'palette',
+  'palettes',
+  'tint',
+  'tints',
+  'tone',
+  'tones',
+  'hue',
+  'hues',
+  'grade',
+  'graded',
+  'grading',
+  'dominant',
+  'swatch',
+  'swatches',
+]);
+
+const COLOR_QUERY_FILLER_TOKENS = new Set([
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'of',
+  'with',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
+  'from',
+  'by',
+  'show',
+  'find',
+  'me',
+  'shot',
+  'shots',
+  'scene',
+  'scenes',
+  'clip',
+  'clips',
+  'frame',
+  'frames',
+  'image',
+  'images',
+  'video',
+  'videos',
+  'please',
+]);
+
 function tokenize(text: string): string[] {
   return text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
 }
 
 /**
- * Return the color families (with Lab coordinates) that the query
- * references. Empty array means no color-aware ranking for this query.
+ * Parse whether the query is explicitly asking for palette matching.
+ * Bare color words stay in the normal semantic lane so queries like
+ * "yellow jacket" or "orange sunset" don't get treated as palette-only.
  */
-export function extractQueryColors(query: string): ColorFamilyDefinition[] {
+export function parseColorQuery(query: string): ParsedColorQuery {
   const tokens = tokenize(query);
+  const explicitIntent = tokens.some((token) => COLOR_INTENT_TOKENS.has(token));
   const seen = new Set<string>();
-  const out: ColorFamilyDefinition[] = [];
+  const colors: ColorFamilyDefinition[] = [];
   for (const token of tokens) {
     const def = SYNONYM_TO_FAMILY.get(token);
     if (def && !seen.has(def.family)) {
       seen.add(def.family);
-      out.push(def);
+      colors.push(def);
     }
   }
-  return out;
+
+  if (!explicitIntent || colors.length === 0) {
+    return { colors: [], paletteOnly: false };
+  }
+
+  const paletteOnly = !tokens.some((token) => (
+    !COLOR_INTENT_TOKENS.has(token)
+    && !COLOR_QUERY_FILLER_TOKENS.has(token)
+    && !SYNONYM_TO_FAMILY.has(token)
+  ));
+
+  return { colors, paletteOnly };
+}
+
+/**
+ * Return the color families (with Lab coordinates) that the query
+ * explicitly asks to match by palette. Empty array means no color-aware
+ * ranking for this query.
+ */
+export function extractQueryColors(query: string): ColorFamilyDefinition[] {
+  return parseColorQuery(query).colors;
 }
 
 /**
