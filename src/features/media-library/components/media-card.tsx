@@ -23,6 +23,7 @@ import { useSourcePlayerStore } from '@/shared/state/source-player';
 import {
   captionVideo,
   captionImage,
+  type MediaCaption,
   embeddingsProvider,
   EMBEDDING_MODEL_ID,
   EMBEDDING_MODEL_DIM,
@@ -463,7 +464,7 @@ export const MediaCard = memo(function MediaCard({
       await deleteCaptionThumbnails(media.id);
       await deleteCaptionEmbeddings(media.id);
 
-      let captions: Array<{ timeSec: number; text: string; thumbRelPath?: string }>;
+      let captions: MediaCaption[];
 
       const persistThumbnail = async (index: number, blob: Blob): Promise<string | undefined> => {
         try {
@@ -586,6 +587,7 @@ export const MediaCard = memo(function MediaCard({
 
           const texts = captions.map((caption, i) => buildEmbeddingText({
             caption: { text: caption.text, timeSec: caption.timeSec },
+            sceneData: caption.sceneData,
             transcriptSegments: transcript?.segments,
             colorPhrase: colorResults[i]?.phrase ?? '',
             motionLabel: motionByIndex[i]?.label ?? '',
@@ -642,15 +644,15 @@ export const MediaCard = memo(function MediaCard({
         });
         store.updateMediaCaptions(media.id, captionsWithEmbeddings);
 
-        const descriptionCountLabel = `${captions.length} description${captions.length === 1 ? '' : 's'}`;
+        const sceneCaptionCountLabel = `${captions.length} scene caption${captions.length === 1 ? '' : 's'}`;
         store.showNotification({
           type: 'success',
-          message: `Generated ${descriptionCountLabel} for "${media.fileName}"`,
+          message: `Generated ${sceneCaptionCountLabel} for "${media.fileName}"`,
         });
       } else {
         store.showNotification({
           type: 'info',
-          message: `No descriptions generated for "${media.fileName}"`,
+          message: `No scene captions generated for "${media.fileName}"`,
         });
       }
     } catch (error) {

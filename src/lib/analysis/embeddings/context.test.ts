@@ -3,6 +3,7 @@ import {
   buildEmbeddingText,
   sliceTranscript,
 } from './context';
+import { parseSceneCaptionResponse } from '../captioning/scene-caption-format';
 
 describe('sliceTranscript', () => {
   const segments = [
@@ -53,6 +54,20 @@ describe('buildEmbeddingText', () => {
     expect(result.startsWith('SCENE: A tree with orange leaves.')).toBe(true);
   });
 
+  it('includes structured scene metadata when supplied', () => {
+    const result = buildEmbeddingText({
+      ...base,
+      sceneData: {
+        shotType: 'medium close-up',
+        timeOfDay: 'dusk',
+        weather: 'rainy',
+      },
+    });
+    expect(result).toMatch(/SHOT: medium close-up/);
+    expect(result).toMatch(/TIME: dusk/);
+    expect(result).toMatch(/WEATHER: rainy/);
+  });
+
   it('omits SPEECH: when transcript is missing or unmatched', () => {
     const result = buildEmbeddingText(base);
     expect(result).not.toMatch(/SPEECH:/);
@@ -66,7 +81,7 @@ describe('buildEmbeddingText', () => {
     expect(result).toMatch(/SPEECH: and here is hokkaido/);
   });
 
-  it('does not emit SOURCE: — filename was dropped from context', () => {
+  it('does not emit SOURCE: because filename was dropped from context', () => {
     const result = buildEmbeddingText(base);
     expect(result).not.toMatch(/SOURCE:/);
   });
@@ -81,18 +96,29 @@ describe('buildEmbeddingText', () => {
     expect(result).not.toMatch(/COLORS:/);
   });
 
-  it('preserves SCENE → SPEECH → COLORS → MOTION ordering', () => {
+  it('preserves scene metadata before transcript, colors, and motion', () => {
     const result = buildEmbeddingText({
       ...base,
+      sceneData: {
+        shotType: 'wide shot',
+        timeOfDay: 'dusk',
+        weather: 'foggy',
+      },
       transcriptSegments: [{ text: 'speech here', start: 9, end: 11 }],
       colorPhrase: 'deep blue',
       motionLabel: 'fast action',
     });
     const sceneIdx = result.indexOf('SCENE:');
+    const shotIdx = result.indexOf('SHOT:');
+    const timeIdx = result.indexOf('TIME:');
+    const weatherIdx = result.indexOf('WEATHER:');
     const speechIdx = result.indexOf('SPEECH:');
     const colorsIdx = result.indexOf('COLORS:');
     const motionIdx = result.indexOf('MOTION:');
-    expect(sceneIdx).toBeLessThan(speechIdx);
+    expect(sceneIdx).toBeLessThan(shotIdx);
+    expect(shotIdx).toBeLessThan(timeIdx);
+    expect(timeIdx).toBeLessThan(weatherIdx);
+    expect(weatherIdx).toBeLessThan(speechIdx);
     expect(speechIdx).toBeLessThan(colorsIdx);
     expect(colorsIdx).toBeLessThan(motionIdx);
   });
@@ -112,5 +138,36 @@ describe('buildEmbeddingText', () => {
       caption: { text: 'Minimal scene.', timeSec: 0 },
     });
     expect(result).toBe('SCENE: Minimal scene.');
+  });
+
+  it('preserves richer scene captions verbatim for downstream semantic indexing', () => {
+    const result = buildEmbeddingText({
+      caption: { text: 'Medium close-up of a singer on a rainy street at dusk.', timeSec: 12 },
+      sceneData: {
+        shotType: 'medium close-up',
+        timeOfDay: 'dusk',
+        weather: 'rainy',
+      },
+    });
+    expect(result).toBe(
+      'SCENE: Medium close-up of a singer on a rainy street at dusk.\n'
+      + 'SHOT: medium close-up\n'
+      + 'TIME: dusk\n'
+      + 'WEATHER: rainy',
+    );
+  });
+
+  it('turns json-ish caption model output into clean embedding text', () => {
+    const parsed = parseSceneCaptionResponse(
+      'Json ["caption":"A dimly lit corridor illuminated by hanging lanterns, with a text overlay in Chinese at the bottom.","shotType":"medium wide shot","subjects":["lanterns","corridor","text"],"action":"glowing softly","setting":"interior corridor","lighting":"golden lantern light","timeOfDay":null,"weather":null}.',
+    );
+
+    expect(buildEmbeddingText({
+      caption: { text: parsed.text, timeSec: 9 },
+      sceneData: parsed.sceneData,
+    })).toBe(
+      'SCENE: A dimly lit corridor illuminated by hanging lanterns, with a text overlay in Chinese at the bottom.\n'
+      + 'SHOT: medium-wide shot',
+    );
   });
 });

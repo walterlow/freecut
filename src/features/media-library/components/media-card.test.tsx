@@ -476,7 +476,16 @@ describe('MediaCard', () => {
       blob: async () => new Blob(['image-data']),
     } as Response);
     analysisMocks.captionImage.mockResolvedValue([
-      { timeSec: 1.25, text: 'First line' },
+      {
+        timeSec: 1.25,
+        text: 'First line',
+        sceneData: {
+          caption: 'First line',
+          shotType: 'medium close-up',
+          timeOfDay: 'dusk',
+          weather: 'rainy',
+        },
+      },
       { timeSec: 2.5, text: 'Second line' },
     ]);
 
@@ -488,7 +497,16 @@ describe('MediaCard', () => {
       expect(mediaLibraryServiceMocks.updateMediaCaptions).toHaveBeenCalledWith(
         'media-1',
         [
-          { timeSec: 1.25, text: 'First line' },
+          {
+            timeSec: 1.25,
+            text: 'First line',
+            sceneData: {
+              caption: 'First line',
+              shotType: 'medium close-up',
+              timeOfDay: 'dusk',
+              weather: 'rainy',
+            },
+          },
           { timeSec: 2.5, text: 'Second line' },
         ],
         expect.objectContaining({ sampleIntervalSec: expect.any(Number) }),
@@ -496,12 +514,21 @@ describe('MediaCard', () => {
     });
 
     expect(mediaStoreState.updateMediaCaptions).toHaveBeenCalledWith('media-1', [
-      { timeSec: 1.25, text: 'First line' },
+      {
+        timeSec: 1.25,
+        text: 'First line',
+        sceneData: {
+          caption: 'First line',
+          shotType: 'medium close-up',
+          timeOfDay: 'dusk',
+          weather: 'rainy',
+        },
+      },
       { timeSec: 2.5, text: 'Second line' },
     ]);
     expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
       type: 'success',
-      message: 'Generated 2 descriptions for "frame.png"',
+      message: 'Generated 2 scene captions for "frame.png"',
     });
     fetchMock.mockRestore();
   });

@@ -197,6 +197,7 @@ export function indexMediaCaptions(mediaId: string): Promise<void> {
 
     const texts = media.aiCaptions.map((caption, i) => buildEmbeddingText({
       caption: { text: caption.text, timeSec: caption.timeSec },
+      sceneData: caption.sceneData,
       transcriptSegments: transcript?.segments,
       colorPhrase: colorResults[i]?.phrase ?? '',
       motionLabel: motionByIndex[i]?.label ?? '',

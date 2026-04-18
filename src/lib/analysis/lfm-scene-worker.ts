@@ -22,6 +22,10 @@ import {
   RawImage,
   env,
 } from '@huggingface/transformers';
+import {
+  LFM_SCENE_CAPTION_PROMPT,
+  parseSceneCaptionResponse,
+} from './captioning/scene-caption-format';
 
 const MODEL_ID = 'LiquidAI/LFM2.5-VL-450M-ONNX';
 
@@ -36,6 +40,7 @@ let model: any = null;
 let loading = false;
 let disposed = false;
 let loadGeneration = 0;
+const DESCRIBE_MAX_NEW_TOKENS = 160;
 
 function post(msg: Record<string, unknown>): void {
   self.postMessage(msg);
@@ -192,8 +197,6 @@ async function verifyCandidate(
   }
 }
 
-const DESCRIBE_PROMPT = 'Describe the scene in one sentence.';
-
 async function describeImage(id: number, imageBlob: Blob): Promise<void> {
   if (!model || !processor) {
     post({ type: 'error', message: 'Model not loaded' });
@@ -208,7 +211,7 @@ async function describeImage(id: number, imageBlob: Blob): Promise<void> {
         role: 'user',
         content: [
           { type: 'image' },
-          { type: 'text', text: DESCRIBE_PROMPT },
+          { type: 'text', text: LFM_SCENE_CAPTION_PROMPT },
         ],
       },
     ];
@@ -221,7 +224,7 @@ async function describeImage(id: number, imageBlob: Blob): Promise<void> {
 
     const outputs = await model.generate({
       ...inputs,
-      max_new_tokens: 128,
+      max_new_tokens: DESCRIBE_MAX_NEW_TOKENS,
       do_sample: false,
       repetition_penalty: 1.05,
     });
@@ -231,8 +234,13 @@ async function describeImage(id: number, imageBlob: Blob): Promise<void> {
       { skip_special_tokens: true },
     );
 
-    const caption = (decoded[0] ?? '').trim();
-    post({ type: 'caption', id, caption });
+    const parsed = parseSceneCaptionResponse(decoded[0] ?? '');
+    post({
+      type: 'caption',
+      id,
+      caption: parsed.text,
+      sceneData: parsed.sceneData,
+    });
   } catch (err) {
     post({ type: 'caption', id, caption: '', error: (err as Error).message });
   }

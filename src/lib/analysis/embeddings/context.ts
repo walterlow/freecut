@@ -1,3 +1,5 @@
+import type { SceneCaptionData } from '../captioning/types';
+
 /**
  * Embedding context builder.
  *
@@ -27,6 +29,7 @@ export interface TranscriptSegment {
 
 export interface BuildEmbeddingTextInput {
   caption: { text: string; timeSec: number };
+  sceneData?: SceneCaptionData;
   /**
    * Retained for call-site compatibility but unused — filename tokens
    * turned out to be noise for editor workflows (proxied filenames,
@@ -100,6 +103,15 @@ export function buildEmbeddingText(input: BuildEmbeddingTextInput): string {
   const lines: string[] = [];
   const caption = input.caption.text.trim();
   lines.push(`SCENE: ${caption}`);
+
+  const shotType = input.sceneData?.shotType?.trim();
+  if (shotType) lines.push(`SHOT: ${shotType}`);
+
+  const timeOfDay = input.sceneData?.timeOfDay?.trim();
+  if (timeOfDay) lines.push(`TIME: ${timeOfDay}`);
+
+  const weather = input.sceneData?.weather?.trim();
+  if (weather) lines.push(`WEATHER: ${weather}`);
 
   const speech = sliceTranscript(input.transcriptSegments, input.caption.timeSec);
   if (speech) lines.push(`SPEECH: ${speech}`);

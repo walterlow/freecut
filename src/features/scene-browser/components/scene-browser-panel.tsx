@@ -313,7 +313,7 @@ function EmptyState({
         <p className="text-[12px]">No AI captions yet.</p>
         <p className="max-w-xs text-[11px] text-muted-foreground/80">
           Run <span className="font-medium">Analyze with AI</span> on a clip from the media
-          library to generate searchable scene descriptions.
+          library to generate searchable scene captions.
         </p>
       </div>
     );

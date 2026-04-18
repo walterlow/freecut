@@ -85,6 +85,16 @@ export interface MediaMetadata {
   aiCaptions?: Array<{
     timeSec: number;
     text: string;
+    sceneData?: {
+      caption?: string;
+      shotType?: string;
+      subjects?: string[];
+      action?: string;
+      setting?: string;
+      lighting?: string;
+      timeOfDay?: string;
+      weather?: string;
+    };
     thumbRelPath?: string;
     embedding?: number[];
     palette?: Array<{ l: number; a: number; b: number; weight: number }>;

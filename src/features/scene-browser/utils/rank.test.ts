@@ -83,6 +83,18 @@ describe('rankScenes', () => {
     expect(result.map((s) => s.id)).toEqual(['a']);
   });
 
+  it('matches richer scene-caption vocabulary for shot size and weather terms', () => {
+    const scenes = [
+      scene('a', 'Wide shot of a city skyline at dusk.'),
+      scene('b', 'Medium close-up of a singer on a rainy street.'),
+      scene('c', 'Close-up of hands slicing limes on a cutting board.'),
+    ];
+
+    expect(rankScenes('wide shot dusk skyline', scenes).map((s) => s.id)).toEqual(['a']);
+    expect(rankScenes('rainy singer', scenes).map((s) => s.id)).toEqual(['b']);
+    expect(rankScenes('close up limes', scenes)[0]?.id).toBe('c');
+  });
+
   it('is stable in sort by filename then timestamp when scores tie', () => {
     const scenes = [
       scene('b', 'chef pans', { timeSec: 10, mediaFileName: 'b.mp4' }),

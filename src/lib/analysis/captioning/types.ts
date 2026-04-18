@@ -1,6 +1,23 @@
+export interface SceneCaptionData {
+  caption?: string;
+  shotType?: string;
+  subjects?: string[];
+  action?: string;
+  setting?: string;
+  lighting?: string;
+  timeOfDay?: string;
+  weather?: string;
+}
+
 export interface MediaCaption {
   timeSec: number;
   text: string;
+  /**
+   * Structured scene metadata emitted by the caption model. Preserved for
+   * future semantic/indexing work while `text` remains the user-facing and
+   * search-facing sentence.
+   */
+  sceneData?: SceneCaptionData;
   /**
    * Workspace-relative path to a captured JPEG thumbnail for this scene,
    * e.g. `media/{mediaId}/cache/ai/captions-thumbs/{index}.jpg`. Absent on
