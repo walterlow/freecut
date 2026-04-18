@@ -46,12 +46,6 @@ export interface BuildEmbeddingTextInput {
    * `paletteForLab` is what powers exact color-query ranking.
    */
   colorPhrase?: string;
-  /**
-   * Motion classification from optical flow (e.g. `"slow pan right"`,
-   * `"fast action"`, `"static shot"`). Short phrase, dropped into the
-   * context line so queries like "action" or "pan" can match semantically.
-   */
-  motionLabel?: string;
 }
 
 /** ± radius in seconds around the caption timestamp to pull transcript from. */
@@ -118,9 +112,6 @@ export function buildEmbeddingText(input: BuildEmbeddingTextInput): string {
 
   const colors = input.colorPhrase?.trim();
   if (colors) lines.push(`COLORS: ${colors}`);
-
-  const motion = input.motionLabel?.trim();
-  if (motion) lines.push(`MOTION: ${motion}`);
 
   return lines.join('\n');
 }

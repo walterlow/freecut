@@ -96,7 +96,7 @@ describe('buildEmbeddingText', () => {
     expect(result).not.toMatch(/COLORS:/);
   });
 
-  it('preserves scene metadata before transcript, colors, and motion', () => {
+  it('preserves scene metadata before transcript and colors', () => {
     const result = buildEmbeddingText({
       ...base,
       sceneData: {
@@ -106,7 +106,6 @@ describe('buildEmbeddingText', () => {
       },
       transcriptSegments: [{ text: 'speech here', start: 9, end: 11 }],
       colorPhrase: 'deep blue',
-      motionLabel: 'fast action',
     });
     const sceneIdx = result.indexOf('SCENE:');
     const shotIdx = result.indexOf('SHOT:');
@@ -114,23 +113,11 @@ describe('buildEmbeddingText', () => {
     const weatherIdx = result.indexOf('WEATHER:');
     const speechIdx = result.indexOf('SPEECH:');
     const colorsIdx = result.indexOf('COLORS:');
-    const motionIdx = result.indexOf('MOTION:');
     expect(sceneIdx).toBeLessThan(shotIdx);
     expect(shotIdx).toBeLessThan(timeIdx);
     expect(timeIdx).toBeLessThan(weatherIdx);
     expect(weatherIdx).toBeLessThan(speechIdx);
     expect(speechIdx).toBeLessThan(colorsIdx);
-    expect(colorsIdx).toBeLessThan(motionIdx);
-  });
-
-  it('includes MOTION: when a motion label is supplied', () => {
-    const result = buildEmbeddingText({ ...base, motionLabel: 'slow pan right' });
-    expect(result).toMatch(/MOTION: slow pan right/);
-  });
-
-  it('omits MOTION: when label is empty', () => {
-    const result = buildEmbeddingText({ ...base, motionLabel: '  ' });
-    expect(result).not.toMatch(/MOTION:/);
   });
 
   it('produces a valid string even with only a caption', () => {

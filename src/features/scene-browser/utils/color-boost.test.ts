@@ -17,9 +17,16 @@ describe('extractQueryColors', () => {
     expect(extractQueryColors('a man fighting')).toEqual([]);
   });
 
-  it('returns empty for bare color words without explicit palette intent', () => {
-    expect(extractQueryColors('ruby scarlet red')).toEqual([]);
-    expect(extractQueryColors('orange sunset over navy water')).toEqual([]);
+  it('extracts color families for bare color-only queries', () => {
+    // A query that is *only* color words has no object semantics — the
+    // ranker should match against the palette instead of sending CLIP
+    // chasing unrelated captions that happen to cluster near the token.
+    expect(extractQueryColors('ruby scarlet red').map((c) => c.family)).toEqual(['red']);
+    expect(extractQueryColors('pink').map((c) => c.family)).toEqual(['pink']);
+  });
+
+  it('returns empty when non-color content words are present without explicit palette intent', () => {
+    expect(extractQueryColors('orange sunset navy water')).toEqual([]);
   });
 
   it('supports color prefix syntax and multiple distinct families', () => {
@@ -44,6 +51,20 @@ describe('parseColorQuery', () => {
     expect(parseColorQuery('yellow color jacket')).toMatchObject({
       colors: [{ family: 'yellow' }],
       paletteOnly: false,
+    });
+  });
+
+  it('treats bare single-color queries as palette intent', () => {
+    expect(parseColorQuery('pink')).toMatchObject({
+      colors: [{ family: 'pink' }],
+      paletteOnly: true,
+    });
+  });
+
+  it('treats multi-color-only queries as palette intent', () => {
+    expect(parseColorQuery('pink purple')).toMatchObject({
+      colors: [{ family: 'pink' }, { family: 'purple' }],
+      paletteOnly: true,
     });
   });
 });
@@ -94,5 +115,47 @@ describe('colorBoostFor', () => {
       { l: 42, a: 18, b: -58, weight: 0.7 },
     ]);
     expect(result?.family).toBe('blue');
+  });
+
+  it('does not match pink against warm skin-tone palette entries', () => {
+    // Lab ~(65, 20, 20) is a common medium skin tone — warm, moderate
+    // chroma. It sat within the old pink boost range and polluted "pink"
+    // results with face-dominated dim scenes.
+    const queries = extractQueryColors('pink');
+    const result = colorBoostFor(queries, [
+      { l: 65, a: 20, b: 20, weight: 0.5 },
+      { l: 40, a: 10, b: 15, weight: 0.3 },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('matches pink against genuinely pink palette entries', () => {
+    const queries = extractQueryColors('pink');
+    const result = colorBoostFor(queries, [
+      { l: 65, a: 55, b: -5, weight: 0.4 },
+      { l: 20, a: 5, b: 5, weight: 0.4 },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result?.family).toBe('pink');
+    expect(result?.boost).toBeGreaterThan(0.1);
+  });
+
+  it('does not match chromatic families against low-chroma gray palette entries', () => {
+    const queries = extractQueryColors('red');
+    const result = colorBoostFor(queries, [
+      { l: 55, a: 2, b: 1, weight: 0.8 }, // near-gray
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('still matches neutral families against low-chroma entries', () => {
+    // The chroma/hue gate applies only to chromatic families — gray,
+    // black, white should still match near-neutral palette entries.
+    const queries = extractQueryColors('gray tones');
+    const result = colorBoostFor(queries, [
+      { l: 55, a: 2, b: 1, weight: 0.6 },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result?.family).toBe('gray');
   });
 });

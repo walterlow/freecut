@@ -15,7 +15,6 @@ export {
   extractDominantColorPhrase,
   deltaE2000,
   rgbToLab,
-  describeMotion,
 } from '@/infrastructure/analysis';
 export type {
   EmbeddingsOptions,
@@ -25,7 +24,4 @@ export type {
   TranscriptSegment,
   PaletteEntry,
   LabColor,
-  MotionDescription,
-  MotionKind,
-  MotionSignal,
 } from '@/infrastructure/analysis';

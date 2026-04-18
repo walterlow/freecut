@@ -32,7 +32,6 @@ import {
   CLIP_EMBEDDING_DIM,
   buildEmbeddingText,
   extractDominantColors,
-  describeMotion,
 } from '../deps/analysis';
 import {
   useSettingsStore,
@@ -46,7 +45,6 @@ import {
   saveCaptionImageEmbeddings,
   getCaptionThumbnailBlob,
   getTranscript,
-  getScenes,
 } from '@/infrastructure/storage';
 import { invalidateMediaCaptionThumbnails } from '../deps/scene-browser';
 import {
@@ -543,40 +541,15 @@ export const MediaCard = memo(function MediaCard({
         );
         const palettesByIndex = colorResults.map((r) => r.palette);
 
-        // Pair captions with the nearest scene-cut's motion (within ±4s).
-        // Scene detection may not have run — that's fine, motionByIndex
-        // comes back as all-null and nothing gets tagged.
-        const MOTION_WINDOW_SEC = 4;
-        const scenes = mediaType === 'video' ? await getScenes(media.id).catch(() => null) : null;
-        const sortedCuts = scenes?.cuts
-          ? [...scenes.cuts].sort((a, b) => a.time - b.time)
-          : null;
-        const motionByIndex = captions.map((caption) => {
-          if (!sortedCuts || sortedCuts.length === 0) return null;
-          let nearest: typeof sortedCuts[number] | null = null;
-          let nearestDelta = Number.POSITIVE_INFINITY;
-          for (const cut of sortedCuts) {
-            const delta = Math.abs(cut.time - caption.timeSec);
-            if (delta < nearestDelta) { nearest = cut; nearestDelta = delta; }
-            else if (cut.time > caption.timeSec + MOTION_WINDOW_SEC) break;
-          }
-          if (!nearest || nearestDelta > MOTION_WINDOW_SEC) return null;
-          const desc = describeMotion(nearest.motion);
-          return desc ? { kind: desc.kind, label: desc.label, intensity: desc.intensity } : null;
-        });
-
-        // Apply palettes + motion to captions up front so every downstream
-        // code path (text embedding, image embedding, store update,
-        // failure fallback) carries the structural metadata.
+        // Apply palettes to captions up front so every downstream code
+        // path (text embedding, image embedding, store update, failure
+        // fallback) carries the structural metadata.
         captionsWithEmbeddings = captions.map((caption, i) => {
           const palette = palettesByIndex[i];
-          const motion = motionByIndex[i];
           const next = { ...caption } as typeof caption & {
             palette?: typeof palette;
-            motion?: NonNullable<typeof motion>;
           };
           if (palette && palette.length > 0) next.palette = [...palette];
-          if (motion) next.motion = motion;
           return next;
         });
 
@@ -590,7 +563,6 @@ export const MediaCard = memo(function MediaCard({
             sceneData: caption.sceneData,
             transcriptSegments: transcript?.segments,
             colorPhrase: colorResults[i]?.phrase ?? '',
-            motionLabel: motionByIndex[i]?.label ?? '',
           }));
 
           const vectors = await embeddingsProvider.embedBatch(texts);

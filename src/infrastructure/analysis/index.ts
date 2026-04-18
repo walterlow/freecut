@@ -4,7 +4,11 @@
  */
 
 export { detectScenes, clearSceneCache } from '@/lib/analysis';
-export type { SceneCut, SceneDetectionProgress, VerificationModel } from '@/lib/analysis';
+export type {
+  SceneCut,
+  SceneDetectionProgress,
+  VerificationModel,
+} from '@/lib/analysis';
 export {
   getSceneVerificationModelLabel,
   getSceneVerificationModelOptions,
@@ -25,7 +29,6 @@ export {
   rgbToLab,
   deltaE76,
   deltaE2000,
-  describeMotion,
 } from '@/lib/analysis';
 export type {
   EmbeddingsOptions,
@@ -35,7 +38,4 @@ export type {
   TranscriptSegment,
   PaletteEntry,
   LabColor,
-  MotionDescription,
-  MotionKind,
-  MotionSignal,
 } from '@/lib/analysis';

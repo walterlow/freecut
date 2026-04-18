@@ -17,7 +17,6 @@ export {
   buildEmbeddingText,
   extractDominantColors,
   extractDominantColorPhrase,
-  describeMotion,
 } from '@/infrastructure/analysis';
 export type {
   EmbeddingsOptions,
@@ -26,6 +25,4 @@ export type {
   BuildEmbeddingTextInput,
   TranscriptSegment,
   PaletteEntry,
-  MotionDescription,
-  MotionSignal,
 } from '@/infrastructure/analysis';

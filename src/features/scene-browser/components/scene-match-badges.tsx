@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Activity, Eye, MessageSquareText, Palette, Sparkles, Type } from 'lucide-react';
+import { Eye, MessageSquareText, Palette, Sparkles, Type } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
 import type { SceneMatchSignals } from '../utils/rank';
 
@@ -81,8 +81,6 @@ interface SceneMatchBadgesProps {
   score: number;
   /** `true` for the first scene in the list — earns a "Top" label. */
   isTop?: boolean;
-  /** Motion label to display as an always-on metadata chip. */
-  motionLabel?: string;
   className?: string;
 }
 
@@ -90,7 +88,6 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
   signals,
   score,
   isTop,
-  motionLabel,
   className,
 }: SceneMatchBadgesProps) {
   const chips: React.ReactNode[] = [];
@@ -166,17 +163,7 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
     }
   }
 
-  const motionChip = motionLabel ? (
-    <Chip
-      key="motion"
-      tone="motion"
-      icon={<Activity className="h-2.5 w-2.5" />}
-      label={motionLabel}
-      hint="Motion classified from optical flow at the nearest scene cut"
-    />
-  ) : null;
-
-  if (chips.length === 0 && !motionChip && !isTop) return null;
+  if (chips.length === 0 && !isTop) return null;
 
   return (
     <div className={cn('flex flex-wrap items-center gap-1', className)}>
@@ -189,13 +176,12 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
         />
       )}
       {chips}
-      {motionChip}
     </div>
   );
 });
 
 interface ChipProps {
-  tone: 'keyword' | 'text' | 'visual' | 'top' | 'palette' | 'motion';
+  tone: 'keyword' | 'text' | 'visual' | 'top' | 'palette';
   icon: React.ReactNode;
   label: string;
   hint?: string;
@@ -212,8 +198,6 @@ function Chip({ tone, icon, label, hint }: ChipProps) {
         return 'bg-purple-400/15 text-purple-300 border-purple-400/30';
       case 'palette':
         return 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30';
-      case 'motion':
-        return 'bg-rose-400/10 text-rose-300/90 border-rose-400/25';
       case 'top':
         return 'bg-primary/15 text-primary border-primary/40';
     }

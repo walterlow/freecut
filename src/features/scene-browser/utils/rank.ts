@@ -26,12 +26,6 @@ export interface RankableScene {
    * color-query ranking. Plumbed through from `MediaCaption.palette`.
    */
   palette?: Array<{ l: number; a: number; b: number; weight: number }>;
-  /**
-   * Motion classification inherited from the nearest scene-cut, plumbed
-   * through from `MediaCaption.motion`. Drives the Motion chip and
-   * (via the MOTION: embedding line) semantic matching on motion queries.
-   */
-  motion?: { kind: string; label: string; intensity: number };
 }
 
 /**

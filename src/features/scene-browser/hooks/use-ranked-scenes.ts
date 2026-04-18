@@ -179,7 +179,6 @@ export function useRankedScenes(): RankedScenesResult {
           text: caption.text,
           thumbRelPath: caption.thumbRelPath,
           palette: caption.palette,
-          motion: caption.motion,
         });
       });
     }

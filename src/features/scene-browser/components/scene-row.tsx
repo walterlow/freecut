@@ -121,7 +121,6 @@ export const SceneRow = memo(function SceneRow({
                 signals={scene.signals}
                 score={scene.score}
                 isTop={isTop}
-                motionLabel={scene.motion?.label}
               />
               <ScenePaletteSwatches
                 palette={scene.palette}

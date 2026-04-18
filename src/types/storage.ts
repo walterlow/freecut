@@ -98,7 +98,6 @@ export interface MediaMetadata {
     thumbRelPath?: string;
     embedding?: number[];
     palette?: Array<{ l: number; a: number; b: number; weight: number }>;
-    motion?: { kind: string; label: string; intensity: number };
   }>;
   createdAt: number;
   updatedAt: number;

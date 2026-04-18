@@ -14,5 +14,3 @@ export { extractDominantColors, extractDominantColorPhrase } from './dominant-co
 export type { PaletteEntry } from './dominant-colors';
 export { rgbToLab, deltaE76, deltaE2000 } from './lab-color';
 export type { LabColor } from './lab-color';
-export { describeMotion } from './motion-label';
-export type { MotionDescription, MotionKind, MotionSignal } from './motion-label';

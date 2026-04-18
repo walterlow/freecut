@@ -1,7 +1,12 @@
 export { OpticalFlowAnalyzer } from './optical-flow-analyzer';
 export type { MotionResult } from './optical-flow-analyzer';
 export { detectScenes, clearSceneCache } from './scene-detection';
-export type { SceneCut, SceneDetectionProgress, DetectScenesOptions, VerificationModel } from './scene-detection';
+export type {
+  SceneCut,
+  SceneDetectionProgress,
+  DetectScenesOptions,
+  VerificationModel,
+} from './scene-detection';
 export {
   getDefaultSceneVerificationProvider,
   getSceneVerificationModelLabel,
@@ -28,7 +33,6 @@ export {
   rgbToLab,
   deltaE76,
   deltaE2000,
-  describeMotion,
 } from './embeddings';
 export type {
   EmbeddingsOptions,
@@ -38,8 +42,5 @@ export type {
   TranscriptSegment,
   PaletteEntry,
   LabColor,
-  MotionDescription,
-  MotionKind,
-  MotionSignal,
 } from './embeddings';
 export { ANALYSIS_WIDTH, ANALYSIS_HEIGHT, PYRAMID_LEVELS } from './optical-flow-shaders';

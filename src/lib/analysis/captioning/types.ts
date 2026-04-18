@@ -38,17 +38,6 @@ export interface MediaCaption {
    * happens to associate with the token.
    */
   palette?: Array<{ l: number; a: number; b: number; weight: number }>;
-  /**
-   * Optical-flow motion summary inherited from the nearest scene cut
-   * (when scene detection has run on the source media). Drives the
-   * `MOTION:` embedding line + row chip so queries like "fast action"
-   * or "slow pan" find the right shots.
-   */
-  motion?: {
-    kind: string;
-    label: string;
-    intensity: number;
-  };
 }
 
 export interface CaptioningProgress {

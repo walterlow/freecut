@@ -46,6 +46,50 @@ function boostFromDeltaE(deltaE: number, weight: number): number {
   return MAX_BOOST * linear * weightFactor;
 }
 
+/** Families that demand a visibly chromatic palette entry to match. */
+const CHROMATIC_FAMILIES = new Set([
+  'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'coral',
+]);
+
+/** Minimum chroma (sqrt(a²+b²)) for a palette entry to match a chromatic family. */
+const MIN_ENTRY_CHROMA = 15;
+
+/** Max hue-angle difference (degrees) between palette entry and chromatic family. */
+const MAX_HUE_DELTA_DEG = 45;
+
+function labHueDeg(a: number, b: number): number {
+  const deg = (Math.atan2(b, a) * 180) / Math.PI;
+  return deg < 0 ? deg + 360 : deg;
+}
+
+function labChroma(a: number, b: number): number {
+  return Math.sqrt(a * a + b * b);
+}
+
+function hueDelta(h1: number, h2: number): number {
+  const diff = Math.abs(h1 - h2) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
+/**
+ * Gate low-chroma or off-hue palette entries out of chromatic family
+ * matches. ∆E 2000 gracefully collapses hue weight for gray-ish colors,
+ * which is correct for color science but wrong for user intent: a user
+ * asking for "pink" doesn't want a beige scene that happens to sit
+ * near-ish to the pink Lab reference. Neutral families (white/black/
+ * gray/brown) bypass the gate — their whole point is low-chroma matching.
+ */
+function paletteEntryCompatibleWithFamily(
+  family: ColorFamilyDefinition,
+  entry: PaletteEntry,
+): boolean {
+  if (!CHROMATIC_FAMILIES.has(family.family)) return true;
+  if (labChroma(entry.a, entry.b) < MIN_ENTRY_CHROMA) return false;
+  const familyHue = labHueDeg(family.lab.a, family.lab.b);
+  const entryHue = labHueDeg(entry.a, entry.b);
+  return hueDelta(familyHue, entryHue) <= MAX_HUE_DELTA_DEG;
+}
+
 /**
  * Canonical Lab coordinates for each color family, plus the synonyms
  * that map into it. Values are mid-saturation reference points — for
@@ -81,7 +125,11 @@ const COLOR_FAMILIES: ColorFamilyDefinition[] = [
   { family: 'teal',   lab: { l: 60, a: -40, b: -15 },synonyms: ['teal', 'turquoise', 'cyan', 'aqua'] },
   { family: 'blue',   lab: { l: 40, a: 15, b: -60 }, synonyms: ['blue', 'navy', 'azure', 'cobalt', 'indigo', 'sapphire'] },
   { family: 'purple', lab: { l: 40, a: 50, b: -45 }, synonyms: ['purple', 'violet', 'magenta', 'lavender', 'plum', 'lilac'] },
-  { family: 'pink',   lab: { l: 75, a: 40, b: 5 },   synonyms: ['pink', 'rose', 'salmon', 'fuchsia', 'coral'] },
+  // Pink hue sits around 340-355° (negative b*), not the 5-10° range —
+  // at b=+5 we drift into salmon/coral and start matching warm skin
+  // tones in dimly lit scenes. Classic "pink" needs a cool shift.
+  { family: 'pink',   lab: { l: 70, a: 50, b: -8 },  synonyms: ['pink', 'rose', 'fuchsia'] },
+  { family: 'coral',  lab: { l: 68, a: 45, b: 25 },  synonyms: ['coral', 'salmon'] },
   { family: 'brown',  lab: { l: 40, a: 15, b: 35 },  synonyms: ['brown', 'tan', 'beige', 'chocolate', 'khaki', 'sepia'] },
   { family: 'white',  lab: { l: 95, a: 0, b: 0 },    synonyms: ['white', 'ivory', 'cream', 'snow', 'pearl'] },
   { family: 'black',  lab: { l: 10, a: 0, b: 0 },    synonyms: ['black', 'ebony', 'charcoal', 'midnight', 'onyx'] },
@@ -167,6 +215,17 @@ export function parseColorQuery(query: string): ParsedColorQuery {
     }
   }
 
+  // A query composed only of color words (e.g. "pink", "red blue") has no
+  // object semantics to chase — treat it as palette intent so CLIP's
+  // weakness on bare color tokens doesn't surface unrelated scenes above
+  // palette-matching ones. Multi-word queries like "pink jacket" still
+  // flow through the normal semantic path with an additive color boost.
+  const allTokensAreColors = tokens.length > 0
+    && tokens.every((token) => SYNONYM_TO_FAMILY.has(token));
+  if (allTokensAreColors) {
+    return { colors, paletteOnly: true };
+  }
+
   if (!explicitIntent || colors.length === 0) {
     return { colors: [], paletteOnly: false };
   }
@@ -203,6 +262,7 @@ export function colorBoostFor(
   let best: ColorBoostResult | null = null;
   for (const query of queryColors) {
     for (const entry of palette) {
+      if (!paletteEntryCompatibleWithFamily(query, entry)) continue;
       const distance = deltaE2000(query.lab, { l: entry.l, a: entry.a, b: entry.b });
       const boost = boostFromDeltaE(distance, entry.weight);
       if (boost <= 0) continue;
