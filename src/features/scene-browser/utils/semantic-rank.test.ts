@@ -172,6 +172,60 @@ describe('semanticRank with CLIP image signal', () => {
     expect(result).toEqual([]);
   });
 
+  it('drops a scene whose only signal is a Fair-tier visual match with no text support', () => {
+    // The "seated down → doorknob close-up" failure: CLIP cosine just
+    // above the 0.22 floor but no text corroboration. Should not pass.
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0]);
+    const scenes = [scene('doorknob:0', 'Close-up of a hand gripping a doorknob')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['doorknob:0', unit([0.1, 1])], // text cosine ≈ 0.1, below Fair floor
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['doorknob:0', unit([0.25, Math.sqrt(1 - 0.25 * 0.25)])], // image cosine ≈ 0.25
+    ]);
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+    });
+    expect(result).toEqual([]);
+  });
+
+  it('accepts a Fair-Fair scene where both sides mutually confirm', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0]);
+    const scenes = [scene('a:0', 'An elderly couple sits in a wheelchair')];
+    // 0.32 text (Fair) × 0.23 image (Fair) — weak alone, confirming together.
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.32, Math.sqrt(1 - 0.32 * 0.32)])],
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.23, Math.sqrt(1 - 0.23 * 0.23)])],
+    ]);
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+    });
+    expect(result.map((s) => s.id)).toEqual(['a:0']);
+  });
+
+  it('accepts a scene on strong text alone, even when image is weak', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0]);
+    const scenes = [scene('a:0', 'strong text')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.5, Math.sqrt(1 - 0.5 * 0.5)])], // text cosine = 0.5, strong
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.15, Math.sqrt(1 - 0.15 * 0.15)])], // below Fair floor
+    ]);
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+    });
+    expect(result.map((s) => s.id)).toEqual(['a:0']);
+  });
+
   it('still ranks a scene that has no image embedding on text alone', () => {
     const textQuery = unit([1, 0]);
     const imageQuery = unit([1, 0]);

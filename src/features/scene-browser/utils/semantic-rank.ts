@@ -11,24 +11,29 @@ import type { PaletteEntry } from '../deps/analysis';
 import { colorBoostFor, parseColorQuery, type ColorBoostResult } from './color-boost';
 import type { RankableScene, ScoredScene } from './rank';
 
-/** Minimum cosine score to treat a scene as a match. */
+/** "Fair" tier floor for text cosines — a weakly confirming signal. */
 export const SEMANTIC_MATCH_THRESHOLD = 0.3;
 
 /**
  * CLIP cosine scores cluster in a much narrower range than all-MiniLM
  * text-to-text scores — even a strong visual match rarely clears 0.35,
  * whereas a strong text match can hit 0.7+. Using separate thresholds
- * keeps both signals on equal footing when we take max() below.
+ * keeps both signals on equal footing when we combine them below.
  *
- * The threshold has been raised from 0.20 to 0.22 after empirical tuning
- * — at 0.20 one-word queries ("fighting", "cooking") surfaced unrelated
- * thumbnails like vertical towers and skyline shots because CLIP's
- * output distribution for short queries bottoms out right around 0.20.
- * The prompt-ensembling path in {@link clipProvider.embedQueryForImages}
- * boosts real matches well above 0.22, so the raised floor cuts noise
- * without losing true positives.
+ * 0.22 is the "Fair" floor — a weakly confirming signal. It used to be
+ * the *accept* threshold, but at that level CLIP's short-query
+ * distribution put ~50% of a 200-scene corpus past it on almost any
+ * prompt (the "seated down → skateboarding, doorknobs" failure). Now
+ * it gates combined weak-signal acceptance: Fair-Fair only counts when
+ * the text side ALSO clears its Fair floor.
  */
 export const SEMANTIC_IMAGE_MATCH_THRESHOLD = 0.22;
+
+/** "Good" tier floor for text — strong enough to accept alone. */
+export const SEMANTIC_TEXT_STRONG_THRESHOLD = 0.4;
+
+/** "Strong" tier floor for CLIP image cosines — strong enough to accept alone. */
+export const SEMANTIC_IMAGE_STRONG_THRESHOLD = 0.3;
 
 export interface SemanticRankOptions {
   /** Minimum text cosine to retain a scene (default 0.3). */
@@ -106,10 +111,39 @@ export function semanticRank(
       colorBoost = colorBoostFor(queryColors, paletteMap.get(scene.id));
     }
 
-    const textOk = !paletteOnly && textVector && textScore >= threshold;
-    const imageOk = !paletteOnly && imageVector && imageScore >= imageThreshold;
+    // Accept logic is side-aware:
+    //   - When both text and image sides exist for this scene, weak
+    //     "Fair" signals are only accepted when mutually confirmed —
+    //     without this gate ~50% of a 200-scene corpus clears the Fair
+    //     CLIP floor on almost any short query (cosines cluster tight),
+    //     so unrelated thumbnails (doorknobs, skateboarding) surface.
+    //   - When only one side is available (CLIP still loading, or scene
+    //     not image-indexed yet), fall back to the per-side floor so
+    //     honest single-signal matches still show up.
+    //   - Image-alone is held to the strong bar — a CLIP-only Fair match
+    //     is the exact noise pattern we're trying to kill.
+    const hasTextSide = !paletteOnly && !!textVector;
+    const hasImageSide = !paletteOnly && !!imageVector;
+    const fairText = hasTextSide && textScore >= threshold;
+    const fairImage = hasImageSide && imageScore >= imageThreshold;
+    const strongText = hasTextSide && textScore >= SEMANTIC_TEXT_STRONG_THRESHOLD;
+    const strongImage = hasImageSide && imageScore >= SEMANTIC_IMAGE_STRONG_THRESHOLD;
+
+    let accept: boolean;
+    if (hasTextSide && hasImageSide) {
+      accept = strongText || strongImage || (fairText && fairImage);
+    } else if (hasTextSide) {
+      accept = fairText;
+    } else if (hasImageSide) {
+      accept = strongImage;
+    } else {
+      accept = false;
+    }
+
+    const textOk = accept && fairText;
+    const imageOk = accept && fairImage;
     const colorOk = !!colorBoost;
-    if (!textOk && !imageOk && !colorOk) continue;
+    if (!accept && !colorOk) continue;
 
     // Max of text / image / color signals — weakest side doesn't drag
     // down a strong one. The color boost is already in cosine-compatible
