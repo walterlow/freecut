@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
+import type { Transition } from '@/types/transition';
 import { commitPreviewFrameToCurrentFrame } from '@/shared/state/playback';
 import { useEditorStore } from '@/app/state/editor';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
@@ -24,7 +25,7 @@ import {
   getMatchingSynchronizedLinkedCounterpart,
   getSynchronizedLinkedItems,
 } from '../utils/linked-items';
-import { clampSlipDeltaToPreserveTransitions, clampSlideDeltaToPreserveTransitions } from '../utils/transition-utils';
+import { canAddTransition, clampSlipDeltaToPreserveTransitions, clampSlideDeltaToPreserveTransitions } from '../utils/transition-utils';
 import {
   applyMovePreview,
   applySlipPreview,
@@ -33,6 +34,7 @@ import {
   type PreviewItemUpdate,
 } from '../utils/item-edit-preview';
 import { hasExceededDragThreshold } from '../utils/drag-threshold';
+import { computeSlideContinuitySourceDelta } from '../utils/slide-utils';
 
 interface SlipSlideState {
   isActive: boolean;
@@ -48,6 +50,153 @@ interface SlipSlideState {
 
 interface SlipSlideStartOptions {
   activateOnMoveThreshold?: boolean;
+}
+
+interface SlideParticipantConstraintContext {
+  participant: TimelineItem;
+  leftAdjacent: TimelineItem | null;
+  rightAdjacent: TimelineItem | null;
+  nearestNeighbors: ReturnType<typeof findNearestNeighbors>;
+  excludeIds: Set<string>;
+  leftAdjacentNearestStart: number | null;
+  rightAdjacentNearestEnd: number | null;
+}
+
+interface SlideGestureContext {
+  currentItem: TimelineItem;
+  allItems: TimelineItem[];
+  itemsById: Map<string, TimelineItem>;
+  transitions: Transition[];
+  leftNeighbor: TimelineItem | null;
+  rightNeighbor: TimelineItem | null;
+  snapTargets: SnapTarget[];
+  snapExcludeIds: Set<string>;
+  linkedSelectionEnabled: boolean;
+  synchronizedCounterpart: TimelineItem | null;
+  leftCounterpart: TimelineItem | null;
+  rightCounterpart: TimelineItem | null;
+  slideItemIds: Set<string>;
+  primaryNearestNeighbors: ReturnType<typeof findNearestNeighbors>;
+  leftNeighborNearestStart: number | null;
+  rightNeighborNearestEnd: number | null;
+  participantContexts: SlideParticipantConstraintContext[];
+  relatedTransitions: Transition[];
+}
+
+function findAdjacentTrackNeighbors(
+  item: TimelineItem,
+  items: TimelineItem[],
+): { leftAdjacent: TimelineItem | null; rightAdjacent: TimelineItem | null } {
+  const itemEnd = item.from + item.durationInFrames;
+  let leftAdjacent: TimelineItem | null = null;
+  let rightAdjacent: TimelineItem | null = null;
+
+  for (const other of items) {
+    if (other.id === item.id || other.trackId !== item.trackId) continue;
+    const otherEnd = other.from + other.durationInFrames;
+
+    if (otherEnd === item.from && (!leftAdjacent || other.from > leftAdjacent.from)) {
+      leftAdjacent = other;
+    }
+    if (other.from === itemEnd && (!rightAdjacent || other.from < rightAdjacent.from)) {
+      rightAdjacent = other;
+    }
+  }
+
+  return { leftAdjacent, rightAdjacent };
+}
+
+function findNearestStartAtOrAfter(
+  item: TimelineItem,
+  items: TimelineItem[],
+  excludeIds: ReadonlySet<string>,
+): number | null {
+  const itemEnd = item.from + item.durationInFrames;
+  let nearestStart = Infinity;
+
+  for (const other of items) {
+    if (other.id === item.id || other.trackId !== item.trackId || excludeIds.has(other.id)) continue;
+    if (other.from >= itemEnd) {
+      nearestStart = Math.min(nearestStart, other.from);
+    }
+  }
+
+  return Number.isFinite(nearestStart) ? nearestStart : null;
+}
+
+function findNearestEndAtOrBefore(
+  item: TimelineItem,
+  items: TimelineItem[],
+  excludeIds: ReadonlySet<string>,
+): number | null {
+  let nearestEnd = -Infinity;
+
+  for (const other of items) {
+    if (other.id === item.id || other.trackId !== item.trackId || excludeIds.has(other.id)) continue;
+    const otherEnd = other.from + other.durationInFrames;
+    if (otherEnd <= item.from) {
+      nearestEnd = Math.max(nearestEnd, otherEnd);
+    }
+  }
+
+  return Number.isFinite(nearestEnd) ? nearestEnd : null;
+}
+
+function clampEndAgainstNearestStart(
+  item: TimelineItem,
+  trimAmount: number,
+  nearestStart: number | null,
+): number {
+  if (trimAmount <= 0 || nearestStart === null) return trimAmount;
+  const itemEnd = item.from + item.durationInFrames;
+  const maxExtend = nearestStart - itemEnd;
+  return trimAmount > maxExtend ? maxExtend : trimAmount;
+}
+
+function clampStartAgainstNearestEnd(
+  item: TimelineItem,
+  trimAmount: number,
+  nearestEnd: number | null,
+): number {
+  if (trimAmount >= 0 || nearestEnd === null) return trimAmount;
+  const maxExtend = item.from - nearestEnd;
+  if (-trimAmount > maxExtend) {
+    return maxExtend > 0 ? -maxExtend : 0;
+  }
+  return trimAmount;
+}
+
+function applyPreviewUpdate(
+  item: TimelineItem,
+  previewUpdate: PreviewItemUpdate | null | undefined,
+): TimelineItem {
+  return previewUpdate
+    ? ({ ...item, ...previewUpdate } as TimelineItem)
+    : item;
+}
+
+function clampDeltaToLastValidValue(
+  requestedDelta: number,
+  isValid: (delta: number) => boolean,
+): number {
+  if (!isValid(0)) return 0;
+  if (isValid(requestedDelta)) return requestedDelta;
+
+  const sign = requestedDelta < 0 ? -1 : 1;
+  let low = 0;
+  let high = Math.abs(requestedDelta);
+
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = sign * mid;
+    if (isValid(candidate)) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return sign * low;
 }
 
 /**
@@ -88,6 +237,7 @@ export function useTimelineSlipSlide(
   stateRef.current = state;
   const latestDeltaRef = useRef(0);
   const pendingStartCleanupRef = useRef<(() => void) | null>(null);
+  const slideGestureContextRef = useRef<SlideGestureContext | null>(null);
 
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
@@ -103,6 +253,96 @@ export function useTimelineSlipSlide(
     const transitions = useTransitionsStore.getState().transitions;
     return findEditNeighborsWithTransitions(currentItem, allItems, transitions);
   }, [getItemFromStore]);
+
+  const buildSlideGestureContext = useCallback((
+    currentItem: TimelineItem,
+    leftNeighbor: TimelineItem | null,
+    rightNeighbor: TimelineItem | null,
+  ): SlideGestureContext => {
+    const allItems = useTimelineStore.getState().items;
+    const transitions = useTransitionsStore.getState().transitions;
+    const itemsById = new Map(allItems.map((candidate) => [candidate.id, candidate]));
+    const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
+    const synchronizedItems = linkedSelectionEnabled
+      ? getSynchronizedLinkedItems(allItems, currentItem.id)
+      : [currentItem];
+    const synchronizedCounterpart = synchronizedItems.find((candidate) => candidate.id !== currentItem.id) ?? null;
+    const leftCounterpart = leftNeighbor && synchronizedCounterpart
+      ? getMatchingSynchronizedLinkedCounterpart(allItems, leftNeighbor.id, synchronizedCounterpart.trackId, synchronizedCounterpart.type)
+      : null;
+    const rightCounterpart = rightNeighbor && synchronizedCounterpart
+      ? getMatchingSynchronizedLinkedCounterpart(allItems, rightNeighbor.id, synchronizedCounterpart.trackId, synchronizedCounterpart.type)
+      : null;
+    const slideItemIds = new Set<string>([
+      currentItem.id,
+      leftNeighbor?.id ?? '',
+      rightNeighbor?.id ?? '',
+    ].filter(Boolean));
+    const snapExcludeIds = new Set<string>(slideItemIds);
+    const snapTargets = snapEnabled ? getMagneticSnapTargets() : [];
+    const primaryNearestNeighbors = findNearestNeighbors(currentItem, allItems);
+    const leftNeighborNearestStart = leftNeighbor
+      ? findNearestStartAtOrAfter(leftNeighbor, allItems, slideItemIds)
+      : null;
+    const rightNeighborNearestEnd = rightNeighbor
+      ? findNearestEndAtOrBefore(rightNeighbor, allItems, slideItemIds)
+      : null;
+
+    const participantContexts: SlideParticipantConstraintContext[] = synchronizedItems
+      .filter((candidate) => candidate.id !== currentItem.id)
+      .map((participant) => {
+        const excludeIds = new Set<string>(slideItemIds);
+        for (const synchronizedItem of synchronizedItems) {
+          excludeIds.add(synchronizedItem.id);
+        }
+
+        const { leftAdjacent, rightAdjacent } = findAdjacentTrackNeighbors(participant, allItems);
+        if (leftAdjacent) excludeIds.add(leftAdjacent.id);
+        if (rightAdjacent) excludeIds.add(rightAdjacent.id);
+
+        return {
+          participant,
+          leftAdjacent,
+          rightAdjacent,
+          nearestNeighbors: findNearestNeighbors(participant, allItems),
+          excludeIds,
+          leftAdjacentNearestStart: leftAdjacent
+            ? findNearestStartAtOrAfter(leftAdjacent, allItems, excludeIds)
+            : null,
+          rightAdjacentNearestEnd: rightAdjacent
+            ? findNearestEndAtOrBefore(rightAdjacent, allItems, excludeIds)
+            : null,
+        };
+      });
+
+    const affectedIds = new Set<string>([currentItem.id]);
+    if (leftNeighbor) affectedIds.add(leftNeighbor.id);
+    if (rightNeighbor) affectedIds.add(rightNeighbor.id);
+    const relatedTransitions = transitions.filter((transition) => (
+      affectedIds.has(transition.leftClipId) || affectedIds.has(transition.rightClipId)
+    ));
+
+    return {
+      currentItem,
+      allItems,
+      itemsById,
+      transitions,
+      leftNeighbor,
+      rightNeighbor,
+      snapTargets,
+      snapExcludeIds,
+      linkedSelectionEnabled,
+      synchronizedCounterpart,
+      leftCounterpart,
+      rightCounterpart,
+      slideItemIds,
+      primaryNearestNeighbors,
+      leftNeighborNearestStart,
+      rightNeighborNearestEnd,
+      participantContexts,
+      relatedTransitions,
+    };
+  }, [getMagneticSnapTargets, snapEnabled]);
 
   const beginSlipSlideGesture = useCallback((startX: number, mode: 'slip' | 'slide') => {
     commitPreviewFrameToCurrentFrame();
@@ -137,6 +377,7 @@ export function useTimelineSlipSlide(
         trackId: currentItem.trackId,
         slipDelta: 0,
       });
+      slideGestureContextRef.current = null;
     } else {
       // Compute the effective slide range (tightest across all tracks),
       // incorporating transition constraints so the initial limit box matches
@@ -162,6 +403,7 @@ export function useTimelineSlipSlide(
         minDelta: slideMinDelta,
         maxDelta: slideMaxDelta,
       });
+      slideGestureContextRef.current = buildSlideGestureContext(currentItem, leftNeighbor ?? null, rightNeighbor ?? null);
     }
 
     // Seed linked companion previews with zero-delta so their overlays appear immediately
@@ -179,7 +421,7 @@ export function useTimelineSlipSlide(
     }
   // Note: clampSlideDelta intentionally omitted — it reads fps from store at
   // call time, and including it would cause a TDZ error (defined after this hook).
-  }, [findNeighbors, getItemFromStore, item.id, setDragState]);
+  }, [buildSlideGestureContext, findNeighbors, getItemFromStore, item.id, setDragState]);
 
   /**
    * Clamp slip delta to source boundaries.
@@ -303,6 +545,152 @@ export function useTimelineSlipSlide(
     return clamped;
   }, [getItemFromStore, fps, item.id]);
 
+  const clampSlideDeltaWithContext = useCallback((delta: number, context: SlideGestureContext): number => {
+    let clamped = delta;
+    const { currentItem } = context;
+
+    if (currentItem.from + clamped < 0) {
+      clamped = -currentItem.from;
+    }
+
+    if (context.leftNeighbor) {
+      const { clampedAmount } = clampTrimAmount(context.leftNeighbor, 'end', clamped, fps);
+      if (Math.abs(clampedAmount) < Math.abs(clamped)) {
+        clamped = clampedAmount;
+      }
+      clamped = clampEndAgainstNearestStart(
+        context.leftNeighbor,
+        clamped,
+        context.leftNeighborNearestStart,
+      );
+    }
+
+    if (context.rightNeighbor) {
+      const { clampedAmount } = clampTrimAmount(context.rightNeighbor, 'start', clamped, fps);
+      if (Math.abs(clampedAmount) < Math.abs(clamped)) {
+        clamped = clampedAmount;
+      }
+      clamped = clampStartAgainstNearestEnd(
+        context.rightNeighbor,
+        clamped,
+        context.rightNeighborNearestEnd,
+      );
+    }
+
+    for (const participantContext of context.participantContexts) {
+      if (participantContext.leftAdjacent) {
+        const { clampedAmount } = clampTrimAmount(participantContext.leftAdjacent, 'end', clamped, fps);
+        if (Math.abs(clampedAmount) < Math.abs(clamped)) {
+          clamped = clampedAmount;
+        }
+        clamped = clampEndAgainstNearestStart(
+          participantContext.leftAdjacent,
+          clamped,
+          participantContext.leftAdjacentNearestStart,
+        );
+      }
+
+      if (participantContext.rightAdjacent) {
+        const { clampedAmount } = clampTrimAmount(participantContext.rightAdjacent, 'start', clamped, fps);
+        if (Math.abs(clampedAmount) < Math.abs(clamped)) {
+          clamped = clampedAmount;
+        }
+        clamped = clampStartAgainstNearestEnd(
+          participantContext.rightAdjacent,
+          clamped,
+          participantContext.rightAdjacentNearestEnd,
+        );
+      }
+
+      const leftWall = participantContext.nearestNeighbors.leftNeighbor;
+      if (leftWall && !participantContext.excludeIds.has(leftWall.id)) {
+        const wallRight = leftWall.from + leftWall.durationInFrames;
+        const maxLeft = -(participantContext.participant.from - wallRight);
+        if (clamped < maxLeft) clamped = maxLeft;
+      }
+
+      const rightWall = participantContext.nearestNeighbors.rightNeighbor;
+      if (rightWall && !participantContext.excludeIds.has(rightWall.id)) {
+        const participantEnd = participantContext.participant.from + participantContext.participant.durationInFrames;
+        const maxRight = rightWall.from - participantEnd;
+        if (clamped > maxRight) clamped = maxRight;
+      }
+    }
+
+    const primaryLeftWall = context.primaryNearestNeighbors.leftNeighbor;
+    if (primaryLeftWall && !context.slideItemIds.has(primaryLeftWall.id)) {
+      const wallRight = primaryLeftWall.from + primaryLeftWall.durationInFrames;
+      const maxLeft = -(currentItem.from - wallRight);
+      if (clamped < maxLeft) clamped = maxLeft;
+    }
+
+    const primaryRightWall = context.primaryNearestNeighbors.rightNeighbor;
+    if (primaryRightWall && !context.slideItemIds.has(primaryRightWall.id)) {
+      const primaryEnd = currentItem.from + currentItem.durationInFrames;
+      const maxRight = primaryRightWall.from - primaryEnd;
+      if (clamped > maxRight) clamped = maxRight;
+    }
+
+    return clamped;
+  }, [fps]);
+
+  const clampSlideDeltaToPreserveTransitionsWithContext = useCallback((
+    requestedDelta: number,
+    context: SlideGestureContext,
+  ): number => {
+    if (requestedDelta === 0 || context.relatedTransitions.length === 0) {
+      return requestedDelta;
+    }
+
+    const isValid = (delta: number): boolean => {
+      const previewById = new Map<string, TimelineItem>();
+
+      if (context.leftNeighbor) {
+        previewById.set(
+          context.leftNeighbor.id,
+          applyPreviewUpdate(context.leftNeighbor, applyTrimEndPreview(context.leftNeighbor, delta, fps)),
+        );
+      }
+
+      if (context.rightNeighbor) {
+        previewById.set(
+          context.rightNeighbor.id,
+          applyPreviewUpdate(context.rightNeighbor, applyTrimStartPreview(context.rightNeighbor, delta, fps)),
+        );
+      }
+
+      let slidItemPreview = applyPreviewUpdate(context.currentItem, applyMovePreview(context.currentItem, delta));
+      const continuitySourceDelta = computeSlideContinuitySourceDelta(
+        context.currentItem,
+        context.leftNeighbor,
+        context.rightNeighbor,
+        delta,
+        fps,
+      );
+      if (
+        continuitySourceDelta !== 0
+        && (slidItemPreview.type === 'video' || slidItemPreview.type === 'audio' || slidItemPreview.type === 'composition')
+        && slidItemPreview.sourceEnd !== undefined
+      ) {
+        slidItemPreview = {
+          ...slidItemPreview,
+          sourceStart: (slidItemPreview.sourceStart ?? 0) + continuitySourceDelta,
+          sourceEnd: slidItemPreview.sourceEnd + continuitySourceDelta,
+        };
+      }
+      previewById.set(context.currentItem.id, slidItemPreview);
+
+      return context.relatedTransitions.every((transition) => {
+        const leftClip = previewById.get(transition.leftClipId) ?? context.itemsById.get(transition.leftClipId) ?? null;
+        const rightClip = previewById.get(transition.rightClipId) ?? context.itemsById.get(transition.rightClipId) ?? null;
+        if (!leftClip || !rightClip) return true;
+        return canAddTransition(leftClip, rightClip, transition.durationInFrames, transition.alignment).canAdd;
+      });
+    };
+
+    return clampDeltaToLastValidValue(requestedDelta, isValid);
+  }, [fps]);
+
   // Mouse move handler
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
@@ -385,15 +773,18 @@ export function useTimelineSlipSlide(
         useLinkedEditPreviewStore.getState().setUpdates(linkedPreviewUpdates);
 
       } else if (mode === 'slide') {
+        const slideContext = slideGestureContextRef.current;
         const { leftNeighborId, rightNeighborId } = stateRef.current;
-        const storeItem = getItemFromStore();
+        const storeItem = slideContext?.currentItem ?? getItemFromStore();
 
         // Apply snapping for slide (clip edges snap to items/playhead/grid)
         if (snapEnabled) {
-          const targets = getMagneticSnapTargets();
-          const excludeIds = new Set<string>([item.id]);
-          if (leftNeighborId) excludeIds.add(leftNeighborId);
-          if (rightNeighborId) excludeIds.add(rightNeighborId);
+          const targets = slideContext?.snapTargets ?? getMagneticSnapTargets();
+          const excludeIds = slideContext?.snapExcludeIds ?? new Set<string>([
+            item.id,
+            leftNeighborId ?? '',
+            rightNeighborId ?? '',
+          ].filter(Boolean));
 
           const newStart = storeItem.from + deltaFrames;
           const newEnd = newStart + storeItem.durationInFrames;
@@ -425,17 +816,21 @@ export function useTimelineSlipSlide(
           }
         }
 
-        const allItems = useTimelineStore.getState().items;
-        const sourceClamped = clampSlideDelta(deltaFrames, leftNeighborId, rightNeighborId);
-        const transitionClamped = clampSlideDeltaToPreserveTransitions(
-          storeItem,
-          sourceClamped,
-          leftNeighborId ? (allItems.find((candidate) => candidate.id === leftNeighborId) ?? null) : null,
-          rightNeighborId ? (allItems.find((candidate) => candidate.id === rightNeighborId) ?? null) : null,
-          allItems,
-          useTransitionsStore.getState().transitions,
-          fps,
-        );
+        const allItems = slideContext?.allItems ?? useTimelineStore.getState().items;
+        const sourceClamped = slideContext
+          ? clampSlideDeltaWithContext(deltaFrames, slideContext)
+          : clampSlideDelta(deltaFrames, leftNeighborId, rightNeighborId);
+        const transitionClamped = slideContext
+          ? clampSlideDeltaToPreserveTransitionsWithContext(sourceClamped, slideContext)
+          : clampSlideDeltaToPreserveTransitions(
+            storeItem,
+            sourceClamped,
+            leftNeighborId ? (allItems.find((candidate) => candidate.id === leftNeighborId) ?? null) : null,
+            rightNeighborId ? (allItems.find((candidate) => candidate.id === rightNeighborId) ?? null) : null,
+            allItems,
+            useTransitionsStore.getState().transitions,
+            fps,
+          );
         const clamped = transitionClamped;
         const isConstrained = clamped !== deltaFrames;
         const constraintEdge = !isConstrained
@@ -485,21 +880,27 @@ export function useTimelineSlipSlide(
         }
 
         const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
-        const synchronizedCounterpart = linkedSelectionEnabled
-          ? getSynchronizedLinkedItems(allItems, storeItem.id)
-            .find((candidate) => candidate.id !== storeItem.id) ?? null
-          : null;
+        const synchronizedCounterpart = slideContext
+          ? slideContext.synchronizedCounterpart
+          : linkedSelectionEnabled
+            ? getSynchronizedLinkedItems(allItems, storeItem.id)
+              .find((candidate) => candidate.id !== storeItem.id) ?? null
+            : null;
         const linkedPreviewUpdates: PreviewItemUpdate[] = [];
 
         if (synchronizedCounterpart) {
           linkedPreviewUpdates.push(applyMovePreview(synchronizedCounterpart, clamped));
 
-          const leftCounterpart = leftNeighborId
-            ? getMatchingSynchronizedLinkedCounterpart(allItems, leftNeighborId, synchronizedCounterpart.trackId, synchronizedCounterpart.type)
-            : null;
-          const rightCounterpart = rightNeighborId
-            ? getMatchingSynchronizedLinkedCounterpart(allItems, rightNeighborId, synchronizedCounterpart.trackId, synchronizedCounterpart.type)
-            : null;
+          const leftCounterpart = slideContext
+            ? slideContext.leftCounterpart
+            : leftNeighborId
+              ? getMatchingSynchronizedLinkedCounterpart(allItems, leftNeighborId, synchronizedCounterpart.trackId, synchronizedCounterpart.type)
+              : null;
+          const rightCounterpart = slideContext
+            ? slideContext.rightCounterpart
+            : rightNeighborId
+              ? getMatchingSynchronizedLinkedCounterpart(allItems, rightNeighborId, synchronizedCounterpart.trackId, synchronizedCounterpart.type)
+              : null;
 
           if (leftCounterpart) {
             linkedPreviewUpdates.push(applyTrimEndPreview(leftCounterpart, clamped, fps));
@@ -513,7 +914,20 @@ export function useTimelineSlipSlide(
 
       }
     },
-    [pixelsToTime, fps, trackLocked, item.id, getItemFromStore, clampSlipDelta, clampSlideDelta, snapEnabled, getMagneticSnapTargets, getSnapThresholdFrames],
+    [
+      pixelsToTime,
+      fps,
+      trackLocked,
+      item.id,
+      getItemFromStore,
+      clampSlipDelta,
+      clampSlideDelta,
+      clampSlideDeltaToPreserveTransitionsWithContext,
+      clampSlideDeltaWithContext,
+      snapEnabled,
+      getMagneticSnapTargets,
+      getSnapThresholdFrames,
+    ],
   );
 
   // Mouse up handler — commits changes
@@ -552,6 +966,7 @@ export function useTimelineSlipSlide(
         constraintLabel: null,
       });
       latestDeltaRef.current = 0;
+      slideGestureContextRef.current = null;
     }
   }, [item.id, setDragState]);
 
@@ -571,6 +986,7 @@ export function useTimelineSlipSlide(
           useLinkedEditPreviewStore.getState().clear();
           setDragState(null);
           latestDeltaRef.current = 0;
+          slideGestureContextRef.current = null;
         }
       };
     }
@@ -578,6 +994,7 @@ export function useTimelineSlipSlide(
 
   useEffect(() => () => {
     pendingStartCleanupRef.current?.();
+    slideGestureContextRef.current = null;
   }, []);
 
   // Start slip/slide drag
