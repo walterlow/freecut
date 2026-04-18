@@ -91,6 +91,16 @@ export {
   getCaptions,
   saveCaptions,
   deleteCaptions,
+  saveCaptionThumbnail,
+  getCaptionThumbnailBlob,
+  probeCaptionThumbnail,
+  deleteCaptionThumbnails,
+  saveCaptionEmbeddings,
+  getCaptionEmbeddings,
+  getCaptionsEmbeddingsMeta,
+  deleteCaptionEmbeddings,
+  saveCaptionImageEmbeddings,
+  getCaptionImageEmbeddings,
 } from '@/infrastructure/storage/workspace-fs/captions';
 
 // Scene-detection results

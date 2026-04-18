@@ -20,7 +20,34 @@ import { mediaTranscriptionService } from '../services/media-transcription-servi
 import { useEditorStore } from '@/app/state/editor';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
-import { captionVideo, captionImage } from '../deps/analysis';
+import {
+  captionVideo,
+  captionImage,
+  embeddingsProvider,
+  EMBEDDING_MODEL_ID,
+  EMBEDDING_MODEL_DIM,
+  clipProvider,
+  CLIP_MODEL_ID,
+  CLIP_EMBEDDING_DIM,
+  buildEmbeddingText,
+  extractDominantColors,
+  describeMotion,
+} from '../deps/analysis';
+import {
+  useSettingsStore,
+  resolveCaptioningIntervalSec,
+} from '../deps/settings-contract';
+import {
+  saveCaptionThumbnail,
+  deleteCaptionThumbnails,
+  deleteCaptionEmbeddings,
+  saveCaptionEmbeddings,
+  saveCaptionImageEmbeddings,
+  getCaptionThumbnailBlob,
+  getTranscript,
+  getScenes,
+} from '@/infrastructure/storage';
+import { invalidateMediaCaptionThumbnails } from '../deps/scene-browser';
 import {
   getTranscriptionOverallPercent,
   getTranscriptionStageLabel,
@@ -409,10 +436,42 @@ export const MediaCard = memo(function MediaCard({
     e.stopPropagation();
 
     const store = useMediaLibraryStore.getState();
+    const { captioningIntervalUnit, captioningIntervalValue } = useSettingsStore.getState();
+    const sampleIntervalSec = resolveCaptioningIntervalSec(
+      captioningIntervalUnit,
+      captioningIntervalValue,
+      media.fps,
+    );
+
     store.setTaggingMedia(media.id, true);
 
     try {
-      let captions: Array<{ timeSec: number; text: string }>;
+      // Drop every in-memory thumbnail URL and lazy-thumb result tied to
+      // this media before the directory is wiped — without this, rows
+      // keep rendering the pre-reanalyze JPEG even after the file on
+      // disk is overwritten (the blob URL is cached against the old
+      // content). The tagging flag we just set also blocks any in-flight
+      // lazy-thumb from writing after the delete below.
+      invalidateMediaCaptionThumbnails(media.id);
+
+      // Old thumbnails are replaced wholesale on re-run — indexes may not
+      // line up with the fresh caption list, and stale files would leak.
+      // Same story for both embedding bins: if the new caption count
+      // differs from the old one, a partial save could leave us with a
+      // stale `.bin` on disk. Wiping up front keeps captions.json +
+      // bin + thumbs consistent no matter which step fails later.
+      await deleteCaptionThumbnails(media.id);
+      await deleteCaptionEmbeddings(media.id);
+
+      let captions: Array<{ timeSec: number; text: string; thumbRelPath?: string }>;
+
+      const persistThumbnail = async (index: number, blob: Blob): Promise<string | undefined> => {
+        try {
+          return await saveCaptionThumbnail(media.id, index, blob);
+        } catch {
+          return undefined;
+        }
+      };
 
       if (mediaType === 'video') {
         const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
@@ -429,7 +488,10 @@ export const MediaCard = memo(function MediaCard({
         });
 
         try {
-          captions = await captionVideo(video);
+          captions = await captionVideo(video, {
+            sampleIntervalSec,
+            saveThumbnail: persistThumbnail,
+          });
         } finally {
           video.src = '';
           URL.revokeObjectURL(blobUrl);
@@ -441,12 +503,144 @@ export const MediaCard = memo(function MediaCard({
         const response = await fetch(blobUrl);
         const blob = await response.blob();
         URL.revokeObjectURL(blobUrl);
-        captions = await captionImage(blob);
+        captions = await captionImage(blob, { saveThumbnail: persistThumbnail });
       }
 
       if (captions.length > 0) {
-        await mediaLibraryService.updateMediaCaptions(media.id, captions);
-        store.updateMediaCaptions(media.id, captions);
+        // Best-effort semantic-search indexing: if embeddings succeed, the
+        // Scene Browser can immediately rank by meaning; on failure we
+        // still persist the captions themselves so keyword search works.
+        let embeddingModel: string | undefined;
+        let embeddingDim: number | undefined;
+        let imageEmbeddingModel: string | undefined;
+        let imageEmbeddingDim: number | undefined;
+        let captionsWithEmbeddings = captions;
+
+        // Reusable thumb blob map so we only read each JPEG once across
+        // color extraction, text embedding context, and CLIP image embed.
+        const thumbBlobs = await Promise.all(
+          captions.map(async (caption) => {
+            if (!caption.thumbRelPath) return null;
+            try {
+              return await getCaptionThumbnailBlob(caption.thumbRelPath);
+            } catch {
+              return null;
+            }
+          }),
+        );
+
+        // One-pass color analysis — returns both the embedding-visible
+        // phrase and the structural Lab palette, so we only read each
+        // thumbnail once. Palette gets stored on each MediaCaption so
+        // the Scene Browser can do ∆E-based color-query ranking.
+        const colorResults = await Promise.all(
+          thumbBlobs.map(async (blob) => {
+            if (!blob) return { phrase: '', palette: [] as const };
+            try { return await extractDominantColors(blob); }
+            catch { return { phrase: '', palette: [] as const }; }
+          }),
+        );
+        const palettesByIndex = colorResults.map((r) => r.palette);
+
+        // Pair captions with the nearest scene-cut's motion (within ±4s).
+        // Scene detection may not have run — that's fine, motionByIndex
+        // comes back as all-null and nothing gets tagged.
+        const MOTION_WINDOW_SEC = 4;
+        const scenes = mediaType === 'video' ? await getScenes(media.id).catch(() => null) : null;
+        const sortedCuts = scenes?.cuts
+          ? [...scenes.cuts].sort((a, b) => a.time - b.time)
+          : null;
+        const motionByIndex = captions.map((caption) => {
+          if (!sortedCuts || sortedCuts.length === 0) return null;
+          let nearest: typeof sortedCuts[number] | null = null;
+          let nearestDelta = Number.POSITIVE_INFINITY;
+          for (const cut of sortedCuts) {
+            const delta = Math.abs(cut.time - caption.timeSec);
+            if (delta < nearestDelta) { nearest = cut; nearestDelta = delta; }
+            else if (cut.time > caption.timeSec + MOTION_WINDOW_SEC) break;
+          }
+          if (!nearest || nearestDelta > MOTION_WINDOW_SEC) return null;
+          const desc = describeMotion(nearest.motion);
+          return desc ? { kind: desc.kind, label: desc.label, intensity: desc.intensity } : null;
+        });
+
+        // Apply palettes + motion to captions up front so every downstream
+        // code path (text embedding, image embedding, store update,
+        // failure fallback) carries the structural metadata.
+        captionsWithEmbeddings = captions.map((caption, i) => {
+          const palette = palettesByIndex[i];
+          const motion = motionByIndex[i];
+          const next = { ...caption } as typeof caption & {
+            palette?: typeof palette;
+            motion?: NonNullable<typeof motion>;
+          };
+          if (palette && palette.length > 0) next.palette = [...palette];
+          if (motion) next.motion = motion;
+          return next;
+        });
+
+        try {
+          await embeddingsProvider.ensureReady();
+
+          const transcript = await getTranscript(media.id).catch(() => null);
+
+          const texts = captions.map((caption, i) => buildEmbeddingText({
+            caption: { text: caption.text, timeSec: caption.timeSec },
+            transcriptSegments: transcript?.segments,
+            colorPhrase: colorResults[i]?.phrase ?? '',
+            motionLabel: motionByIndex[i]?.label ?? '',
+          }));
+
+          const vectors = await embeddingsProvider.embedBatch(texts);
+          if (vectors.length === captions.length) {
+            await saveCaptionEmbeddings(media.id, vectors, EMBEDDING_MODEL_DIM);
+            embeddingModel = EMBEDDING_MODEL_ID;
+            embeddingDim = EMBEDDING_MODEL_DIM;
+            captionsWithEmbeddings = captionsWithEmbeddings.map((caption, i) => ({
+              ...caption,
+              embedding: Array.from(vectors[i]!),
+            }));
+          }
+        } catch (error) {
+          // Embeddings are optional — keep going with keyword-only captions.
+          // Users will see a yellow "Semantic indexing failed" pill in the
+          // Scene Browser and can retry by re-analyzing.
+          store.showNotification({
+            type: 'warning',
+            message: `Semantic indexing skipped for "${media.fileName}" — keyword search still works.`,
+          });
+          void error;
+        }
+
+        // CLIP image embeddings run as a separate, independent pass so
+        // text-embedding failure doesn't cascade into losing visual
+        // search, and vice versa.
+        try {
+          const validBlobs = thumbBlobs.filter((b): b is Blob => b !== null);
+          if (validBlobs.length > 0 && validBlobs.length === captions.length) {
+            await clipProvider.ensureReady();
+            const imageVectors = await clipProvider.embedImages(validBlobs);
+            if (imageVectors.length === captions.length) {
+              await saveCaptionImageEmbeddings(media.id, imageVectors, CLIP_EMBEDDING_DIM);
+              imageEmbeddingModel = CLIP_MODEL_ID;
+              imageEmbeddingDim = CLIP_EMBEDDING_DIM;
+            }
+          }
+        } catch (error) {
+          // Visual indexing is a bonus signal on top of text embeddings —
+          // a CLIP download failure or decode error shouldn't regress
+          // the rest of the pipeline.
+          void error;
+        }
+
+        await mediaLibraryService.updateMediaCaptions(media.id, captionsWithEmbeddings, {
+          sampleIntervalSec,
+          embeddingModel,
+          embeddingDim,
+          imageEmbeddingModel,
+          imageEmbeddingDim,
+        });
+        store.updateMediaCaptions(media.id, captionsWithEmbeddings);
 
         const descriptionCountLabel = `${captions.length} description${captions.length === 1 ? '' : 's'}`;
         store.showNotification({
@@ -467,7 +661,7 @@ export const MediaCard = memo(function MediaCard({
     } finally {
       store.setTaggingMedia(media.id, false);
     }
-  }, [media.id, media.fileName, mediaType]);
+  }, [media.id, media.fileName, media.fps, mediaType]);
 
   const handleDragStart = useCallback((e: React.DragEvent) => {
     // Set drag data for timeline drop

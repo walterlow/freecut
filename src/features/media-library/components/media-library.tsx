@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles, FileText } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles, FileText, ScanSearch } from 'lucide-react';
+import { SceneBrowserPanel, useSceneBrowserStore } from '../deps/scene-browser';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibrary');
@@ -185,6 +186,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const setSortBy = useMediaLibraryStore((s) => s.setSortBy);
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const setViewMode = useMediaLibraryStore((s) => s.setViewMode);
+  const sceneBrowserOpen = useSceneBrowserStore((s) => s.open);
+  const toggleSceneBrowser = useSceneBrowserStore((s) => s.toggleBrowser);
   const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
   const setMediaItemSize = useMediaLibraryStore((s) => s.setMediaItemSize);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
@@ -976,6 +979,23 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 aria-label="Grid item size"
               />
             )}
+            <HeaderActionTooltip label="Search scenes (Ctrl+Shift+F)">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleSceneBrowser}
+                className={cn(
+                  'h-6 px-2 gap-1 flex-shrink-0 text-[11px]',
+                  sceneBrowserOpen
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                aria-pressed={sceneBrowserOpen}
+              >
+                <ScanSearch className="w-3 h-3" />
+                Scenes
+              </Button>
+            </HeaderActionTooltip>
             <div className="flex items-center border border-border rounded bg-secondary flex-shrink-0">
               <Button
                 variant="ghost"
@@ -1023,9 +1043,13 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       {/* Scrollable content: wrapper provides relative context for the drag overlay */}
       <div className="flex-1 relative min-h-0">
+        {sceneBrowserOpen && <SceneBrowserPanel className="absolute inset-0 bg-background" />}
         <div
           ref={scrollContainerRef}
-          className="relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]"
+          className={cn(
+            'relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]',
+            sceneBrowserOpen && 'hidden',
+          )}
           onClick={handleScrollContentClick}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}

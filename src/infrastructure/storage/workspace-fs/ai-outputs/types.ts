@@ -65,6 +65,22 @@ export interface TranscriptPayload {
 
 export type CaptionsPayload = {
   sampleIntervalSec?: number;
+  /**
+   * Identifier of the text embedding model whose vectors live in the
+   * companion `captions-embeddings.bin` file. Absence means embeddings
+   * haven't been computed yet (keyword search still works).
+   */
+  embeddingModel?: string;
+  /** Dimension of each text embedding vector, e.g. 384 for all-MiniLM-L6-v2. */
+  embeddingDim?: number;
+  /**
+   * Identifier of the image (CLIP) embedding model whose vectors live
+   * in `captions-image-embeddings.bin`. Independent of the text model;
+   * present only when thumbnails have been visually indexed.
+   */
+  imageEmbeddingModel?: string;
+  /** Dimension of each image embedding vector, e.g. 512 for CLIP base. */
+  imageEmbeddingDim?: number;
   captions: MediaCaption[];
 };
 

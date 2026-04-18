@@ -75,8 +75,21 @@ export interface MediaMetadata {
   gopInterval?: number;
   thumbnailId?: string;
   tags: string[];
-  /** AI-generated timestamped captions from LFM vision-language model. */
-  aiCaptions?: Array<{ timeSec: number; text: string }>;
+  /**
+   * AI-generated timestamped captions from LFM vision-language model.
+   * Mirrors the canonical `cache/ai/captions.json` payload for in-memory
+   * consumers (search, Scene Browser). See `MediaCaption` in
+   * `lib/analysis/captioning/types.ts` for the full shape including optional
+   * thumbnail paths, semantic embeddings, and color palettes.
+   */
+  aiCaptions?: Array<{
+    timeSec: number;
+    text: string;
+    thumbRelPath?: string;
+    embedding?: number[];
+    palette?: Array<{ l: number; a: number; b: number; weight: number }>;
+    motion?: { kind: string; label: string; intensity: number };
+  }>;
   createdAt: number;
   updatedAt: number;
 }

@@ -145,6 +145,7 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
       onProgress,
       signal,
       sampleIntervalSec: rawSampleInterval = DEFAULT_SAMPLE_INTERVAL_SEC,
+      saveThumbnail,
     } = options;
     const sampleIntervalSec = Number.isFinite(rawSampleInterval) && rawSampleInterval > 0
       ? rawSampleInterval
@@ -193,9 +194,18 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
 
         const text = await captionSingle(worker, index, blob, signal);
         if (text) {
+          let thumbRelPath: string | undefined;
+          if (saveThumbnail) {
+            try {
+              thumbRelPath = await saveThumbnail(index, blob);
+            } catch (error) {
+              log.warn('Caption thumbnail persist failed — skipping', { index, error });
+            }
+          }
           captions.push({
             timeSec: Math.round(timeSec * 10) / 10,
             text,
+            ...(thumbRelPath ? { thumbRelPath } : {}),
           });
         }
 

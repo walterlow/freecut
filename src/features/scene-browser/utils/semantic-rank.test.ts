@@ -1,0 +1,205 @@
+import { describe, expect, it } from 'vitest';
+import {
+  cosineSimilarity,
+  semanticRank,
+  SEMANTIC_MATCH_THRESHOLD,
+} from './semantic-rank';
+import type { RankableScene } from './rank';
+
+function unit(values: number[]): Float32Array {
+  const magnitude = Math.sqrt(values.reduce((sum, x) => sum + x * x, 0)) || 1;
+  return Float32Array.from(values.map((x) => x / magnitude));
+}
+
+function scene(id: string, text: string): RankableScene {
+  return {
+    id,
+    mediaId: id.split(':')[0] ?? 'm1',
+    mediaFileName: `${id}.mp4`,
+    timeSec: 0,
+    text,
+  };
+}
+
+describe('cosineSimilarity', () => {
+  it('returns 1 for identical unit vectors', () => {
+    const a = unit([1, 2, 3]);
+    expect(cosineSimilarity(a, a)).toBeCloseTo(1, 5);
+  });
+
+  it('returns 0 for orthogonal vectors', () => {
+    const a = unit([1, 0]);
+    const b = unit([0, 1]);
+    expect(cosineSimilarity(a, b)).toBeCloseTo(0, 5);
+  });
+
+  it('returns 0 when dimensions differ', () => {
+    expect(cosineSimilarity(unit([1, 0]), unit([1, 0, 0]))).toBe(0);
+  });
+});
+
+describe('semanticRank', () => {
+  it('orders scenes by descending cosine similarity to the query', () => {
+    const query = unit([1, 0, 0]);
+    const scenes = [scene('a:0', 'first'), scene('b:0', 'second'), scene('c:0', 'third')];
+    const embeddings = new Map<string, Float32Array>([
+      ['a:0', unit([0.9, 0.1, 0])],
+      ['b:0', unit([0.2, 1, 0])],
+      ['c:0', unit([1, 0, 0])],
+    ]);
+    const result = semanticRank(query, scenes, embeddings, { threshold: 0 });
+    expect(result.map((s) => s.id)).toEqual(['c:0', 'a:0', 'b:0']);
+  });
+
+  it('drops scenes below the threshold', () => {
+    const query = unit([1, 0]);
+    const scenes = [scene('a:0', 'a'), scene('b:0', 'b')];
+    const embeddings = new Map<string, Float32Array>([
+      ['a:0', unit([0.99, 0.01])],
+      ['b:0', unit([0.01, 0.99])],
+    ]);
+    const result = semanticRank(query, scenes, embeddings);
+    expect(result.map((s) => s.id)).toEqual(['a:0']);
+    expect(result[0]!.score).toBeGreaterThan(SEMANTIC_MATCH_THRESHOLD);
+  });
+
+  it('skips scenes that have no embedding in the map', () => {
+    const query = unit([1, 0]);
+    const scenes = [scene('a:0', 'with'), scene('b:0', 'without')];
+    const embeddings = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])],
+    ]);
+    const result = semanticRank(query, scenes, embeddings, { threshold: 0 });
+    expect(result.map((s) => s.id)).toEqual(['a:0']);
+  });
+
+  it('returns empty matchSpans so highlighting stays sane', () => {
+    const query = unit([1, 0]);
+    const scenes = [scene('a:0', 'orange sky over water')];
+    const embeddings = new Map<string, Float32Array>([['a:0', unit([1, 0])]]);
+    const [top] = semanticRank(query, scenes, embeddings, { threshold: 0 });
+    expect(top!.matchSpans).toEqual([]);
+  });
+
+  it('stable-sorts ties by filename then timestamp', () => {
+    const query = unit([1, 0]);
+    const scenes: RankableScene[] = [
+      { id: 'b:0', mediaId: 'b', mediaFileName: 'b.mp4', timeSec: 5, text: 'b' },
+      { id: 'a:0', mediaId: 'a', mediaFileName: 'a.mp4', timeSec: 10, text: 'a' },
+    ];
+    const embeddings = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])],
+      ['b:0', unit([1, 0])],
+    ]);
+    const result = semanticRank(query, scenes, embeddings, { threshold: 0 });
+    expect(result.map((s) => s.id)).toEqual(['a:0', 'b:0']);
+  });
+});
+
+describe('semanticRank with CLIP image signal', () => {
+  it('falls through to image match when caption text is weak', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0, 0]);
+    const scenes = [scene('a:0', 'terse caption')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.05, 1])], // nearly orthogonal to text query
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.9, 0.1, 0])],
+    ]);
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+    });
+    expect(result.map((s) => s.id)).toEqual(['a:0']);
+    expect(result[0]!.score).toBeGreaterThan(0.5);
+  });
+
+  it('takes max of text and image scores when both are present', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0, 0]);
+    const scenes = [scene('a:0', 'strong text'), scene('b:0', 'strong image')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])],     // text cosine ≈ 1
+      ['b:0', unit([0.1, 1])],   // text cosine low
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.1, 1, 0])], // image cosine low
+      ['b:0', unit([1, 0, 0])],    // image cosine ≈ 1
+    ]);
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+      threshold: 0.2,
+      imageThreshold: 0.2,
+    });
+    expect(result.map((s) => s.id).sort()).toEqual(['a:0', 'b:0']);
+    expect(result[0]!.score).toBeGreaterThan(0.9);
+    expect(result[1]!.score).toBeGreaterThan(0.9);
+  });
+
+  it('drops a scene only when both signals are below their thresholds', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0]);
+    const scenes = [scene('a:0', 'weak everywhere')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.1, 1])], // cosine ≈ 0.1
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.05, 1])], // cosine ≈ 0.05
+    ]);
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+    });
+    expect(result).toEqual([]);
+  });
+
+  it('drops a scene whose only signal is a 0.21 visual match (below 0.22 threshold)', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0]);
+    const scenes = [scene('tower:0', 'A tall green tower at night')];
+    const textEmbeds = new Map<string, Float32Array>(); // no text match at all
+    // 0.21 cosine — the exact false-positive level observed in the wild
+    // for one-word queries before we raised the threshold.
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['tower:0', unit([0.21, Math.sqrt(1 - 0.21 * 0.21)])],
+    ]);
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+    });
+    expect(result).toEqual([]);
+  });
+
+  it('still ranks a scene that has no image embedding on text alone', () => {
+    const textQuery = unit([1, 0]);
+    const imageQuery = unit([1, 0]);
+    const scenes = [scene('a:0', 'text-only scene')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])],
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>(); // empty
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: imageQuery,
+      imageEmbeddings: imageEmbeds,
+    });
+    expect(result.map((s) => s.id)).toEqual(['a:0']);
+  });
+
+  it('ignores image side when queryImageEmbedding is null', () => {
+    const textQuery = unit([1, 0]);
+    const scenes = [scene('a:0', 'has image not text')];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([0.1, 1])], // weak text
+    ]);
+    const imageEmbeds = new Map<string, Float32Array>([
+      ['a:0', unit([1, 0])], // strong image
+    ]);
+    const result = semanticRank(textQuery, scenes, textEmbeds, {
+      queryImageEmbedding: null,
+      imageEmbeddings: imageEmbeds,
+    });
+    expect(result).toEqual([]); // image was strong but query image embed absent
+  });
+});

@@ -1,0 +1,18 @@
+export { embeddingsProvider, EMBEDDING_MODEL_ID, EMBEDDING_MODEL_DIM } from './embeddings-provider';
+export { clipProvider, CLIP_MODEL_ID, CLIP_EMBEDDING_DIM } from './clip-provider';
+export type {
+  EmbeddingsOptions,
+  EmbeddingsProgress,
+  EmbeddingsProvider,
+} from './types';
+export {
+  buildEmbeddingText,
+  sliceTranscript,
+} from './context';
+export type { BuildEmbeddingTextInput, TranscriptSegment } from './context';
+export { extractDominantColors, extractDominantColorPhrase } from './dominant-colors';
+export type { PaletteEntry } from './dominant-colors';
+export { rgbToLab, deltaE76, deltaE2000 } from './lab-color';
+export type { LabColor } from './lab-color';
+export { describeMotion } from './motion-label';
+export type { MotionDescription, MotionKind, MotionSignal } from './motion-label';

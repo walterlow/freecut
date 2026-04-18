@@ -1,4 +1,4 @@
-import { Info, Video, FileAudio, Image as ImageIcon, Film, Clock, Maximize2, HardDrive, FileType, Sparkles, Loader2, FileText } from 'lucide-react';
+import { Info, Video, FileAudio, Image as ImageIcon, Film, Clock, Maximize2, HardDrive, FileType, Sparkles, Loader2, FileText, ScanSearch } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { MediaMetadata, MediaTranscript } from '@/types/storage';
@@ -6,6 +6,9 @@ import { getMediaType, formatDuration } from '../utils/validation';
 import { formatBytes } from '@/shared/utils/format-utils';
 import { mediaTranscriptionService } from '../services/media-transcription-service';
 import { getMediaTranscriptionModelLabel } from '../transcription/registry';
+import { useSceneBrowserStore } from '../deps/scene-browser';
+
+const CAPTION_PREVIEW_COUNT = 3;
 
 function formatTimestamp(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -25,6 +28,7 @@ export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: M
   const [open, setOpen] = useState(false);
   const [transcript, setTranscript] = useState<MediaTranscript | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const openSceneBrowser = useSceneBrowserStore((s) => s.openBrowser);
   const mediaType = getMediaType(media.mimeType);
   const typeLabel = mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Audio' : 'Image';
   const isTranscribable = mediaType === 'video' || mediaType === 'audio';
@@ -118,7 +122,7 @@ export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: M
           ))}
         </div>
 
-        {/* AI Captions section */}
+        {/* AI Captions section — compact preview; deep browsing lives in the Scene Browser */}
         {media.aiCaptions && media.aiCaptions.length > 0 && (
           <div className="border-t border-border/50">
             <div className="flex items-center gap-1.5 px-3 py-1.5">
@@ -127,8 +131,8 @@ export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: M
                 AI Captions ({media.aiCaptions.length})
               </span>
             </div>
-            <div className="px-3 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
-              {media.aiCaptions.map((caption, i) => (
+            <div className="px-3 pb-1.5 space-y-1.5">
+              {media.aiCaptions.slice(0, CAPTION_PREVIEW_COUNT).map((caption, i) => (
                 <div key={i} className="flex gap-2 text-[10px]">
                   <button
                     type="button"
@@ -138,10 +142,25 @@ export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: M
                   >
                     {formatTimestamp(caption.timeSec)}
                   </button>
-                  <span className="text-foreground leading-snug">{caption.text}</span>
+                  <span className="text-foreground leading-snug line-clamp-2">{caption.text}</span>
                 </div>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                openSceneBrowser({ mediaId: media.id, focus: true });
+              }}
+              className="flex w-full items-center gap-1.5 border-t border-border/30 px-3 py-1.5 text-[10px] text-primary hover:bg-primary/10"
+            >
+              <ScanSearch className="h-3 w-3" />
+              Open in Scene Browser
+              {media.aiCaptions.length > CAPTION_PREVIEW_COUNT
+                ? ` (${media.aiCaptions.length - CAPTION_PREVIEW_COUNT} more)`
+                : ''}
+            </button>
           </div>
         )}
 

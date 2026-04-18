@@ -204,6 +204,35 @@ vi.mock('@/shared/state/local-inference', () => ({
 
 vi.mock('../deps/analysis', () => analysisMocks);
 
+const settingsStoreState = vi.hoisted(() => ({
+  captioningIntervalUnit: 'seconds' as const,
+  captioningIntervalValue: 3,
+}));
+
+vi.mock('../deps/settings-contract', () => ({
+  useSettingsStore: {
+    getState: () => settingsStoreState,
+  },
+  resolveCaptioningIntervalSec: (unit: 'seconds' | 'frames', value: number, fps: number) => (
+    unit === 'seconds' ? value : value / (fps > 0 ? fps : 30)
+  ),
+  DEFAULT_CAPTIONING_INTERVAL_SECONDS: 3,
+}));
+
+vi.mock('@/infrastructure/storage', () => ({
+  saveCaptionThumbnail: vi.fn(async () => undefined),
+  deleteCaptionThumbnails: vi.fn(async () => undefined),
+  deleteCaptionEmbeddings: vi.fn(async () => undefined),
+  saveCaptionEmbeddings: vi.fn(async () => undefined),
+  saveCaptionImageEmbeddings: vi.fn(async () => undefined),
+  getCaptionThumbnailBlob: vi.fn(async () => null),
+  getTranscript: vi.fn(async () => null),
+}));
+
+vi.mock('../deps/scene-browser', () => ({
+  invalidateMediaCaptionThumbnails: vi.fn(),
+}));
+
 import { MediaCard } from './media-card';
 
 function makeMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
@@ -456,10 +485,14 @@ describe('MediaCard', () => {
     fireEvent.click(screen.getByText('Analyze with AI'));
 
     await waitFor(() => {
-      expect(mediaLibraryServiceMocks.updateMediaCaptions).toHaveBeenCalledWith('media-1', [
-        { timeSec: 1.25, text: 'First line' },
-        { timeSec: 2.5, text: 'Second line' },
-      ]);
+      expect(mediaLibraryServiceMocks.updateMediaCaptions).toHaveBeenCalledWith(
+        'media-1',
+        [
+          { timeSec: 1.25, text: 'First line' },
+          { timeSec: 2.5, text: 'Second line' },
+        ],
+        expect.objectContaining({ sampleIntervalSec: expect.any(Number) }),
+      );
     });
 
     expect(mediaStoreState.updateMediaCaptions).toHaveBeenCalledWith('media-1', [

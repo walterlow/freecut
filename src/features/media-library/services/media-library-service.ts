@@ -1041,8 +1041,16 @@ class MediaLibraryService {
    */
   async updateMediaCaptions(
     mediaId: string,
-    captions: Array<{ timeSec: number; text: string }>,
-    options?: { service?: string; model?: string; sampleIntervalSec?: number },
+    captions: NonNullable<MediaMetadata['aiCaptions']>,
+    options?: {
+      service?: string;
+      model?: string;
+      sampleIntervalSec?: number;
+      embeddingModel?: string;
+      embeddingDim?: number;
+      imageEmbeddingModel?: string;
+      imageEmbeddingDim?: number;
+    },
   ): Promise<MediaMetadata> {
     try {
       await saveCaptions({
@@ -1051,6 +1059,10 @@ class MediaLibraryService {
         service: options?.service ?? 'lfm-captioning',
         model: options?.model ?? 'lfm-2.5-vl',
         sampleIntervalSec: options?.sampleIntervalSec,
+        embeddingModel: options?.embeddingModel,
+        embeddingDim: options?.embeddingDim,
+        imageEmbeddingModel: options?.imageEmbeddingModel,
+        imageEmbeddingDim: options?.imageEmbeddingDim,
       });
     } catch (error) {
       logger.warn(`Failed to persist captions for ${mediaId}; metadata mirror will still update`, error);

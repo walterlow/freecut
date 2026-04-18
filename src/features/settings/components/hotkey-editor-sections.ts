@@ -113,6 +113,7 @@ export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
     items: [
       { label: 'Save project', keys: ['SAVE'] },
       { label: 'Export video', keys: ['EXPORT'] },
+      { label: 'Open Scene Browser (search AI captions)', keys: ['OPEN_SCENE_BROWSER'] },
     ],
   },
 ] as const;

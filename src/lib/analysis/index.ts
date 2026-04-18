@@ -14,4 +14,32 @@ export type { HistogramDetectOptions } from './histogram-scene-detection';
 export { seekVideo, deduplicateCuts } from './scene-detection-utils';
 export { captionVideo, captionImage } from './media-tagger';
 export type { MediaCaption, CaptioningProgress, CaptioningOptions } from './media-tagger';
+export {
+  embeddingsProvider,
+  EMBEDDING_MODEL_ID,
+  EMBEDDING_MODEL_DIM,
+  clipProvider,
+  CLIP_MODEL_ID,
+  CLIP_EMBEDDING_DIM,
+  buildEmbeddingText,
+  sliceTranscript,
+  extractDominantColors,
+  extractDominantColorPhrase,
+  rgbToLab,
+  deltaE76,
+  deltaE2000,
+  describeMotion,
+} from './embeddings';
+export type {
+  EmbeddingsOptions,
+  EmbeddingsProgress,
+  EmbeddingsProvider,
+  BuildEmbeddingTextInput,
+  TranscriptSegment,
+  PaletteEntry,
+  LabColor,
+  MotionDescription,
+  MotionKind,
+  MotionSignal,
+} from './embeddings';
 export { ANALYSIS_WIDTH, ANALYSIS_HEIGHT, PYRAMID_LEVELS } from './optical-flow-shaders';

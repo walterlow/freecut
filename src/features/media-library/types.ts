@@ -185,5 +185,5 @@ export interface MediaLibraryActions {
 
   // AI captioning
   setTaggingMedia: (mediaId: string, active: boolean) => void;
-  updateMediaCaptions: (mediaId: string, captions: Array<{ timeSec: number; text: string }>) => void;
+  updateMediaCaptions: (mediaId: string, captions: NonNullable<MediaMetadata['aiCaptions']>) => void;
 }

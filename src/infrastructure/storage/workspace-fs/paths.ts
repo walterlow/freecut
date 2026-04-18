@@ -75,6 +75,8 @@ export const CACHE_WAVEFORM_DIR = 'waveform';
 export const CACHE_GIF_FRAMES_DIR = 'gif-frames';
 export const CACHE_DECODED_AUDIO_DIR = 'decoded-audio';
 export const CACHE_AI_DIR = 'ai';
+/** Per-caption thumbnail JPEGs captured alongside LFM caption generation. */
+export const CACHE_CAPTION_THUMBS_DIR = 'captions-thumbs';
 /**
  * Legacy path for transcripts — was `cache/transcript.json` before AI outputs
  * were consolidated under `cache/ai/`. Readers fall back to this on miss; a
@@ -231,6 +233,43 @@ export function aiOutputsDir(mediaId: string): string[] {
  */
 export function aiOutputPath(mediaId: string, kind: string): string[] {
   return [...aiOutputsDir(mediaId), `${kind}.json`];
+}
+
+/** Segments for `media/{id}/cache/ai/captions-thumbs/`. */
+export function captionThumbsDir(mediaId: string): string[] {
+  return [...aiOutputsDir(mediaId), CACHE_CAPTION_THUMBS_DIR];
+}
+
+/** Segments for `media/{id}/cache/ai/captions-thumbs/{index}.jpg`. */
+export function captionThumbPath(mediaId: string, index: number): string[] {
+  return [...captionThumbsDir(mediaId), `${index}.jpg`];
+}
+
+/**
+ * Segments for `media/{id}/cache/ai/captions-embeddings.bin`. Stored as a
+ * contiguous `Float32Array` so 384-dim * N-caption embeddings stay compact
+ * (e.g. 500 captions = 750 KB vs ~4 MB if round-tripped through JSON).
+ */
+export function captionEmbeddingsPath(mediaId: string): string[] {
+  return [...aiOutputsDir(mediaId), 'captions-embeddings.bin'];
+}
+
+/**
+ * Segments for `media/{id}/cache/ai/captions-image-embeddings.bin`. Same
+ * packing as the text embeddings bin but in the CLIP joint embedding
+ * space (typically 512-dim), so semantic queries can fall back to
+ * matching on what the clip *looks like* when caption text is thin.
+ */
+export function captionImageEmbeddingsPath(mediaId: string): string[] {
+  return [...aiOutputsDir(mediaId), 'captions-image-embeddings.bin'];
+}
+
+/**
+ * Workspace-root-relative path (forward-slash separated) for a caption thumb,
+ * safe to persist in JSON / `MediaCaption.thumbRelPath`.
+ */
+export function captionThumbRelPath(mediaId: string, index: number): string {
+  return captionThumbPath(mediaId, index).join('/');
 }
 
 /**
