@@ -496,6 +496,7 @@ export async function createCompositionRenderer(
     renderMode,
     scrubbingCache,
     getCurrentItemSnapshot: getCurrentItem,
+    getLiveItemSnapshotById: getLiveItemSnapshot,
     getCurrentKeyframes,
     getPreviewTransformOverride,
     getPreviewCornerPinOverride,
@@ -1202,6 +1203,7 @@ export async function createCompositionRenderer(
           adjustmentLayers,
           frame,
           renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
+          renderMode === 'preview' ? getLiveItemSnapshot : undefined,
         );
         const combinedEffects = combineEffects(itemEffects, adjEffects);
         const applicableMasks = activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, trackOrder));
@@ -1341,6 +1343,7 @@ export async function createCompositionRenderer(
           adjustmentLayers,
           frame,
           renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
+          renderMode === 'preview' ? getLiveItemSnapshot : undefined,
         );
         const allEffects = [...itemEffects, ...adjEffects];
 

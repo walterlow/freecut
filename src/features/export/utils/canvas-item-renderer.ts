@@ -123,6 +123,7 @@ export interface ItemRenderContext {
   renderMode: 'export' | 'preview';
   scrubbingCache?: ScrubbingCache | null;
   getCurrentItemSnapshot?: <TItem extends TimelineItem>(item: TItem) => TItem;
+  getLiveItemSnapshotById?: (itemId: string) => TimelineItem | undefined;
   getCurrentKeyframes?: (itemId: string) => ItemKeyframes | undefined;
   getPreviewTransformOverride?: (itemId: string) => Partial<ItemTransform> | undefined;
   getPreviewCornerPinOverride?: (itemId: string) => TimelineItem['cornerPin'] | undefined;
@@ -1670,6 +1671,7 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
     rctx.adjustmentLayers,
     frame,
     rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride : undefined,
+    rctx.renderMode === 'preview' ? rctx.getLiveItemSnapshotById : undefined,
   );
 
   return {

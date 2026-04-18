@@ -29,6 +29,7 @@ interface UsePreviewRendererControllerParams {
   fps: number;
   isResolving: boolean;
   forceFastScrubOverlay: boolean;
+  items: TimelineItem[];
   playerRenderSize: { width: number; height: number };
   renderSize: { width: number; height: number };
   fastScrubInputProps: CompositionInputProps;
@@ -95,6 +96,7 @@ export function usePreviewRendererController({
   fps,
   isResolving,
   forceFastScrubOverlay,
+  items,
   playerRenderSize,
   renderSize,
   fastScrubInputProps,
@@ -161,6 +163,7 @@ export function usePreviewRendererController({
     tracks: fastScrubScaledTracks,
     keyframes: fastScrubScaledKeyframes,
   });
+  const previousItemsRef = useRef(items);
   const previousIsResolvingRef = useRef(isResolving);
   const pendingPostEditWarmRequestRef = useRef<PostEditWarmRequest | null>(null);
   const postEditWarmInFlightRef = useRef(false);
@@ -585,6 +588,54 @@ export function usePreviewRendererController({
     forceFastScrubOverlay,
     isResolving,
     resumeScrubLoopRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
+
+  useEffect(() => {
+    const previousItems = previousItemsRef.current;
+    previousItemsRef.current = items;
+
+    if (previousItems === items) {
+      return;
+    }
+
+    const scrubRenderer = scrubRendererRef.current;
+    const scrubRendererMatchesStructure = (
+      scrubRendererStructureKeyRef.current === fastScrubRendererStructureKey
+    );
+    if (!scrubRenderer || !scrubRendererMatchesStructure) {
+      return;
+    }
+
+    const playbackState = usePlaybackStore.getState();
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    const needsRenderedFrame = (
+      forceFastScrubOverlay
+      || playbackState.previewFrame !== null
+      || showFastScrubOverlayRef.current
+      || showPlaybackTransitionOverlayRef.current
+    );
+
+    if (!needsRenderedFrame) {
+      return;
+    }
+
+    scrubRenderer.invalidateFrameCache({ frames: [targetFrame] });
+    if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+      scrubOffscreenRenderedFrameRef.current = null;
+    }
+    scrubRequestedFrameRef.current = targetFrame;
+    void resumeScrubLoopRef.current();
+  }, [
+    fastScrubRendererStructureKey,
+    forceFastScrubOverlay,
+    items,
+    resumeScrubLoopRef,
+    scrubOffscreenRenderedFrameRef,
+    scrubRendererRef,
+    scrubRendererStructureKeyRef,
     scrubRequestedFrameRef,
     showFastScrubOverlayRef,
     showPlaybackTransitionOverlayRef,

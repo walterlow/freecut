@@ -79,6 +79,27 @@ describe('getAdjustmentLayerEffects', () => {
     expect(effects).toEqual([committedEffect]);
   });
 
+  it('uses the live adjustment layer snapshot when committed effects change in preview mode', () => {
+    const committedEffect = createGpuEffect('effect-1', 0.25);
+    const updatedEffect = createGpuEffect('effect-1', 0.8);
+    const adjustmentLayers = [createAdjustmentLayer('adj-1', 1, [committedEffect])];
+
+    const effects = getAdjustmentLayerEffects(
+      3,
+      adjustmentLayers,
+      10,
+      undefined,
+      (itemId) => itemId === 'adj-1'
+        ? {
+            ...adjustmentLayers[0]!.layer,
+            effects: [updatedEffect],
+          }
+        : undefined,
+    );
+
+    expect(effects).toEqual([updatedEffect]);
+  });
+
   it('ignores inactive or out-of-scope adjustment layers before checking overrides', () => {
     const activeEffect = createGpuEffect('active', 0.4);
     const inactiveEffect = createGpuEffect('inactive', 0.7);

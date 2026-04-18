@@ -1114,6 +1114,103 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('re-renders the paused currentFrame when committed gpu effect params change', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-effected',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+        effects: [
+          {
+            id: 'effect-sepia',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.5 },
+            },
+          },
+        ],
+      } as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    renderer.invalidateFrameCache.mockClear();
+    renderer.renderFrame.mockClear();
+
+    act(() => {
+      useItemsStore.getState().setItems([
+        {
+          id: 'item-effected',
+          type: 'video',
+          trackId: 'track-video',
+          from: 0,
+          durationInFrames: 120,
+          src: 'blob:mock-video',
+          effects: [
+            {
+              id: 'effect-sepia',
+              enabled: true,
+              effect: {
+                type: 'gpu-effect',
+                gpuEffectType: 'gpu-sepia',
+                params: { amount: 0.8 },
+              },
+            },
+          ],
+        } as TimelineItem,
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({
+        ranges: [{ startFrame: 0, endFrame: 120 }],
+      });
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
   it('re-renders the paused currentFrame after media resolution finishes on refresh', async () => {
     const mediaId = 'media-effected';
     setMockBlobUrl(mediaId, 'blob:effected-video');
@@ -1295,6 +1392,110 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
+  it('re-renders the paused currentFrame when a live gpu effect preview is committed', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-previewed',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+        effects: [
+          {
+            id: 'effect-preview',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.5 },
+            },
+          },
+        ],
+      } as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      useGizmoStore.getState().setEffectsPreviewNew({
+        'item-previewed': [
+          {
+            id: 'effect-preview',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.8 },
+            },
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+    });
+
+    renderer.invalidateFrameCache.mockClear();
+    renderer.renderFrame.mockClear();
+
+    act(() => {
+      useTimelineStore.getState().updateEffect('item-previewed', 'effect-preview', {
+        effect: {
+          type: 'gpu-effect',
+          gpuEffectType: 'gpu-sepia',
+          params: { amount: 0.8 },
+        },
+      });
+      useGizmoStore.getState().clearPreview();
+    });
+
+    await waitFor(() => {
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({
+        ranges: [{ startFrame: 0, endFrame: 120 }],
+      });
       expect(renderer.renderFrame).toHaveBeenCalledWith(24);
       expect(getDisplayedFrame()).toBe(24);
       expect(scrubCanvas.style.visibility).toBe('visible');

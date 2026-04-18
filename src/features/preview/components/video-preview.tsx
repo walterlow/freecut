@@ -383,6 +383,7 @@ export const VideoPreview = memo(function VideoPreview({
     fps,
     isResolving,
     forceFastScrubOverlay,
+    items,
     playerRenderSize,
     renderSize,
     fastScrubInputProps,

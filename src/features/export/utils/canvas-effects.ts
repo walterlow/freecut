@@ -5,7 +5,7 @@
  */
 
 import type { ItemEffect, GpuEffect } from '@/types/effects';
-import type { AdjustmentItem } from '@/types/timeline';
+import type { AdjustmentItem, TimelineItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
 import type { EffectsPipeline, GpuEffectInstance } from '@/infrastructure/gpu/effects';
 import { applyMasks, type MaskCanvasSettings } from './canvas-masks';
@@ -165,10 +165,18 @@ export function getAdjustmentLayerEffects(
   adjustmentLayers: AdjustmentLayerWithTrackOrder[],
   frame: number,
   getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined,
+  getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined,
 ): ItemEffect[] {
   if (adjustmentLayers.length === 0) return [];
 
   return adjustmentLayers
+    .map(({ layer, trackOrder }) => {
+      const liveLayer = getLiveItemSnapshot?.(layer.id);
+      return {
+        layer: liveLayer?.type === 'adjustment' ? liveLayer : layer,
+        trackOrder,
+      };
+    })
     .filter(({ layer, trackOrder }) => {
       // Item must be BEHIND the adjustment (higher track order = lower zIndex)
       if (itemTrackOrder <= trackOrder) return false;
