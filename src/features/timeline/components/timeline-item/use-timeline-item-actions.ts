@@ -10,7 +10,6 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog';
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog';
-import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
 import { scheduleAfterPaint } from '@/shared/utils/schedule-after-paint';
 import {
   isTranscriptionCancellationError,

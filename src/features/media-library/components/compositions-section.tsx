@@ -201,6 +201,7 @@ export function CompositionsSection() {
                 composition={comp}
                 viewMode={viewMode}
                 selected={selectedCompositionIdSet.has(comp.id)}
+                isTranscriptionDialogOpen={isTranscriptionDialogOpen}
                 dragDisabled={wouldCreateCompositionCycle({
                   parentCompositionId: activeCompositionId,
                   insertedCompositionId: comp.id,
@@ -264,6 +265,7 @@ interface CompositionCardProps {
   composition: SubComposition;
   viewMode: 'grid' | 'list';
   selected: boolean;
+  isTranscriptionDialogOpen: boolean;
   dragDisabled: boolean;
   isEditing: boolean;
   editValue: string;
@@ -280,6 +282,7 @@ const CompositionCard = memo(function CompositionCard({
   composition,
   viewMode,
   selected,
+  isTranscriptionDialogOpen,
   dragDisabled,
   isEditing,
   editValue,
