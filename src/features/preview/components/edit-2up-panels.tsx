@@ -4,6 +4,19 @@ import {
   type VideoFrameSource,
 } from '@/features/preview/deps/export';
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
+import {
+  backgroundBatchPreseek,
+  backgroundPreseek,
+  getCachedPredecodedBitmap,
+  waitForInflightPredecodedBitmap,
+} from '@/features/preview/utils/decoder-prewarm';
+import {
+  getCachedEditOverlayFrame,
+  getEditOverlayFrameCacheKey,
+  hasCachedEditOverlayFrame,
+  putCachedEditOverlayFrame,
+} from '@/features/preview/utils/edit-overlay-frame-cache';
+import { collectEditOverlayDirectionalPrewarmTimes } from '@/features/preview/utils/edit-overlay-prewarm-plan';
 import type { TimelineItem } from '@/types/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
@@ -13,6 +26,7 @@ import {
   renderPanelMedia,
 } from './edit-panel-media-utils';
 import { useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
+import { useEditOverlayPanelPrewarm } from './use-edit-overlay-panel-prewarm';
 
 const TYPE_PLACEHOLDER_COLORS: Record<string, string> = {
   image: '#22c55e',
@@ -29,10 +43,9 @@ const GAP = 8;
 const FALLBACK_CANVAS_WIDTH = 280;
 const FALLBACK_CANVAS_HEIGHT = 158;
 const STRICT_DECODE_FALLBACK_FAILURES = 2;
-/** Frame cache for edit overlay panels — instant revisits during drag reversal */
-const EDIT_PANEL_CACHE_MAX = 60;
-/** Quantize source time to ~frame-level resolution for cache keys */
 const CACHE_TIME_QUANTUM = 1 / 60;
+const STRICT_DECODE_SHARED_CACHE_WAIT_MS = 6;
+const EDIT_OVERLAY_PREWARM_MAX_TIMESTAMPS = 6;
 let previewVideoInstanceCounter = 0;
 let strictDecodeInstanceCounter = 0;
 let globalEditOverlayDecoderPool: SharedVideoExtractorPool | null = null;
@@ -107,6 +120,7 @@ interface EditTwoUpPanelsProps {
 export function EditTwoUpPanels({ leftPanel, rightPanel }: EditTwoUpPanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  useEditOverlayPanelPrewarm([leftPanel, rightPanel]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -239,10 +253,6 @@ interface StrictDecodedVideoFrameProps extends VideoFrameProps {
   onDecodeFailure: () => void;
 }
 
-function quantizeTime(t: number): number {
-  return Math.round(t / CACHE_TIME_QUANTUM) * CACHE_TIME_QUANTUM;
-}
-
 function StrictDecodedVideoFrame({
   item,
   sourceTime,
@@ -251,6 +261,7 @@ function StrictDecodedVideoFrame({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const decoderPoolRef = useRef(getEditOverlayDecoderPool());
   const decodeLaneRef = useRef<string>(`edit-preview-strict-${++strictDecodeInstanceCounter}`);
+  const prewarmFps = Math.max(1, Math.round(item.sourceFps ?? 60));
   const extractorRef = useRef<VideoFrameSource | null>(null);
   const mountedRef = useRef(true);
   const decoderReadyRef = useRef(false);
@@ -262,21 +273,93 @@ function StrictDecodedVideoFrame({
   const blobUrl = useResolvedVideoBlobUrl(item.mediaId, useProxy);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const decoderItemId = `${item.id}:${decodeLaneRef.current}`;
-  // Frame cache: quantized source time → ImageBitmap for instant revisits
-  const frameCacheRef = useRef<Map<number, ImageBitmap>>(new Map());
-  const frameCacheOrderRef = useRef<number[]>([]);
+  const prewarmInFlightRef = useRef(false);
+  const queuedPrewarmTimesRef = useRef<number[]>([]);
+  const prewarmAnchorFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      // Clean up cached bitmaps on unmount
-      for (const bitmap of frameCacheRef.current.values()) {
-        bitmap.close();
-      }
-      frameCacheRef.current.clear();
+      prewarmInFlightRef.current = false;
+      queuedPrewarmTimesRef.current = [];
+      prewarmAnchorFrameRef.current = null;
     };
   }, []);
+
+  const pumpDirectionalPrewarm = useCallback(() => {
+    if (
+      prewarmInFlightRef.current
+      || !decoderReadyRef.current
+      || !mountedRef.current
+      || pendingTimeRef.current !== null
+    ) {
+      return;
+    }
+
+    if (!blobUrl) {
+      queuedPrewarmTimesRef.current = [];
+      return;
+    }
+
+    const timestamps = queuedPrewarmTimesRef.current;
+    if (timestamps.length === 0) {
+      return;
+    }
+
+    prewarmInFlightRef.current = true;
+    queuedPrewarmTimesRef.current = [];
+
+    const run = async () => {
+      try {
+        await backgroundBatchPreseek(blobUrl, timestamps);
+      } finally {
+        prewarmInFlightRef.current = false;
+        if (
+          mountedRef.current
+          && pendingTimeRef.current === null
+          && queuedPrewarmTimesRef.current.length > 0
+        ) {
+          queueMicrotask(() => {
+            if (!mountedRef.current) return;
+            pumpDirectionalPrewarm();
+          });
+        }
+      }
+    };
+
+    void run();
+  }, [blobUrl]);
+
+  const queueDirectionalPrewarm = useCallback((targetTime: number) => {
+    const extractor = extractorRef.current;
+    if (
+      !extractor
+      || !decoderReadyRef.current
+      || pendingTimeRef.current !== null
+      || !blobUrl
+    ) {
+      return;
+    }
+
+    const result = collectEditOverlayDirectionalPrewarmTimes({
+      targetTime,
+      duration: extractor.getDuration(),
+      fps: prewarmFps,
+      previousAnchorFrame: prewarmAnchorFrameRef.current,
+      quantumSeconds: CACHE_TIME_QUANTUM,
+      maxTimestamps: EDIT_OVERLAY_PREWARM_MAX_TIMESTAMPS,
+      isCached: (time) => {
+        const overlayCacheKey = getEditOverlayFrameCacheKey(blobUrl, time, CACHE_TIME_QUANTUM);
+        return hasCachedEditOverlayFrame(overlayCacheKey)
+          || getCachedPredecodedBitmap(blobUrl, time, CACHE_TIME_QUANTUM) !== null;
+      },
+    });
+
+    prewarmAnchorFrameRef.current = result.targetFrame;
+    queuedPrewarmTimesRef.current = result.times;
+    pumpDirectionalPrewarm();
+  }, [blobUrl, prewarmFps, pumpDirectionalPrewarm]);
 
   const drawFrame = useCallback(async (targetTime: number) => {
     const extractor = extractorRef.current;
@@ -299,45 +382,62 @@ function StrictDecodedVideoFrame({
       canvas.height = targetHeight;
     }
 
-    // Check frame cache first
-    const cacheKey = quantizeTime(targetTime);
-    const cache = frameCacheRef.current;
-    const cacheOrder = frameCacheOrderRef.current;
-    const cached = cache.get(cacheKey);
-    if (cached) {
-      ctx.drawImage(cached, 0, 0, canvas.width, canvas.height);
-      // Move to end of LRU order
-      const idx = cacheOrder.indexOf(cacheKey);
-      if (idx !== -1) {
-        cacheOrder.splice(idx, 1);
-        cacheOrder.push(cacheKey);
+    const cacheKey = blobUrl
+      ? getEditOverlayFrameCacheKey(blobUrl, targetTime, CACHE_TIME_QUANTUM)
+      : null;
+    const drawBitmap = (bitmap: CanvasImageSource) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    };
+
+    if (cacheKey) {
+      const sharedCachedFrame = getCachedEditOverlayFrame(cacheKey);
+      if (sharedCachedFrame) {
+        drawBitmap(sharedCachedFrame);
+        return true;
       }
-      return true;
     }
 
-    const didDraw = await extractor.drawFrame(ctx, Math.max(0, targetTime), 0, 0, canvas.width, canvas.height);
+    if (blobUrl) {
+      const predecodedBitmap = getCachedPredecodedBitmap(blobUrl, targetTime, CACHE_TIME_QUANTUM);
+      if (predecodedBitmap) {
+        drawBitmap(predecodedBitmap);
+        return true;
+      }
+
+      const inflightBitmap = await waitForInflightPredecodedBitmap(
+        blobUrl,
+        targetTime,
+        CACHE_TIME_QUANTUM,
+        STRICT_DECODE_SHARED_CACHE_WAIT_MS,
+      ).catch(() => null);
+      if (inflightBitmap) {
+        drawBitmap(inflightBitmap);
+        return true;
+      }
+    }
+
+    const didDraw = await extractor.drawFrame(
+      ctx,
+      Math.max(0, targetTime),
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
     if (!didDraw) return false;
 
-    // Cache the decoded frame as ImageBitmap
-    try {
-      const bitmap = await createImageBitmap(canvas);
-      cache.set(cacheKey, bitmap);
-      cacheOrder.push(cacheKey);
-      // LRU eviction
-      while (cacheOrder.length > EDIT_PANEL_CACHE_MAX) {
-        const evictKey = cacheOrder.shift()!;
-        const evicted = cache.get(evictKey);
-        if (evicted) {
-          evicted.close();
-          cache.delete(evictKey);
-        }
+    if (cacheKey) {
+      try {
+        const bitmap = await createImageBitmap(canvas);
+        putCachedEditOverlayFrame(cacheKey, bitmap);
+      } catch {
+        // Shared overlay cache population is best-effort only.
       }
-    } catch {
-      // createImageBitmap can fail on empty canvas — not critical
     }
 
     return true;
-  }, []);
+  }, [blobUrl]);
 
   const pumpLatestFrame = useCallback(() => {
     if (renderInFlightRef.current) return;
@@ -352,6 +452,7 @@ function StrictDecodedVideoFrame({
           const didDraw = await drawFrame(targetTime).catch(() => false);
           if (didDraw) {
             consecutiveDecodeFailuresRef.current = 0;
+            queueDirectionalPrewarm(targetTime);
             continue;
           }
 
@@ -376,7 +477,7 @@ function StrictDecodedVideoFrame({
     };
 
     void run();
-  }, [drawFrame, onDecodeFailure]);
+  }, [drawFrame, onDecodeFailure, queueDirectionalPrewarm]);
 
   useEffect(() => {
     decoderReadyRef.current = false;
@@ -384,12 +485,9 @@ function StrictDecodedVideoFrame({
     pendingTimeRef.current = null;
     consecutiveDecodeFailuresRef.current = 0;
     contextRef.current = null;
-    // Clear frame cache on source change
-    for (const bitmap of frameCacheRef.current.values()) {
-      bitmap.close();
-    }
-    frameCacheRef.current.clear();
-    frameCacheOrderRef.current.length = 0;
+    prewarmInFlightRef.current = false;
+    queuedPrewarmTimesRef.current = [];
+    prewarmAnchorFrameRef.current = null;
 
     if (!blobUrl) return;
 
@@ -425,12 +523,18 @@ function StrictDecodedVideoFrame({
   }, [blobUrl, decoderItemId, onDecodeFailure, pumpLatestFrame]);
 
   useEffect(() => {
-    latestTargetTimeRef.current = Math.max(0, sourceTime);
-    pendingTimeRef.current = latestTargetTimeRef.current;
+    const targetTime = Math.max(0, sourceTime);
+    latestTargetTimeRef.current = targetTime;
+    pendingTimeRef.current = targetTime;
+
+    if (blobUrl) {
+      void backgroundPreseek(blobUrl, targetTime).catch(() => null);
+    }
+
     if (decoderReadyRef.current) {
       pumpLatestFrame();
     }
-  }, [sourceTime, pumpLatestFrame]);
+  }, [blobUrl, sourceTime, pumpLatestFrame]);
 
   return (
     <canvas

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   }),
   initTransitionChainSubscription: vi.fn(() => vi.fn()),
   createProjectUpgradeBackup: vi.fn(),
+  resizablePanelGroup: vi.fn(),
 }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -42,7 +43,18 @@ vi.mock('@/shared/logging/logger', () => ({
 }));
 
 vi.mock('@/components/ui/resizable', () => ({
-  ResizablePanelGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ResizablePanelGroup: ({
+    children,
+    ...props
+  }: {
+    children: ReactNode;
+    autoSaveId?: string;
+    className?: string;
+    direction?: string;
+  }) => {
+    mocks.resizablePanelGroup(props);
+    return <div>{children}</div>;
+  },
   ResizablePanel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   ResizableHandle: () => <div data-testid="resizable-handle" />,
 }));
@@ -325,5 +337,32 @@ describe('LoadedEditor migration metadata refresh', () => {
     expect(mocks.loadMediaItems).toHaveBeenCalledTimes(1);
 
     await waitFor(() => expect(mocks.invalidate).not.toHaveBeenCalled());
+  });
+
+  it('persists the timeline split layout in localStorage', async () => {
+    render(
+      <LoadedEditor
+        projectId="project-1"
+        project={{
+          id: 'project-1',
+          name: 'Current Project',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+        }}
+        migration={{
+          storedSchemaVersion: 9,
+          currentSchemaVersion: 9,
+          requiresUpgrade: false,
+        }}
+      />
+    );
+
+    expect(mocks.resizablePanelGroup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        autoSaveId: 'editor:timeline-layout',
+        direction: 'vertical',
+      })
+    );
   });
 });

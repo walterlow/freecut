@@ -461,7 +461,11 @@ export const LoadedEditor = memo(function LoadedEditor({
         )}
 
         {/* Right side: Preview/Properties + Timeline */}
-        <ResizablePanelGroup direction="vertical" className="flex-1 min-w-0">
+        <ResizablePanelGroup
+          direction="vertical"
+          className="flex-1 min-w-0"
+          autoSaveId="editor:timeline-layout"
+        >
           {/* Top - Preview + Properties (inline mode) */}
           <ResizablePanel
             defaultSize={100 - editorLayout.timelineDefaultSize}

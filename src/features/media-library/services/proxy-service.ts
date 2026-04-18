@@ -346,8 +346,8 @@ class ProxyService {
       // Directory may not exist
     }
 
-    // Mirror deletion to workspace cache (best-effort, no-op when absent).
-    void removeWorkspaceCacheEntry([WORKSPACE_PROXIES_DIR, resolvedProxyKey], {
+    // Mirror deletion to workspace cache before reporting completion.
+    await removeWorkspaceCacheEntry([WORKSPACE_PROXIES_DIR, resolvedProxyKey], {
       recursive: true,
     });
   }

@@ -5,6 +5,7 @@ import {
   ImageFrame,
   TypePlaceholder,
 } from './edit-2up-panels';
+import { useEditOverlayPanelPrewarm } from './use-edit-overlay-panel-prewarm';
 import type { TimelineItem } from '@/types/timeline';
 import {
   getItemAspectRatio,
@@ -31,6 +32,12 @@ export function EditFourUpPanels({
 }: EditFourUpPanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  useEditOverlayPanelPrewarm([
+    leftPanel,
+    rightPanel,
+    topLeftCorner ?? { item: null },
+    topRightCorner ?? { item: null },
+  ]);
 
   useEffect(() => {
     const el = containerRef.current;
