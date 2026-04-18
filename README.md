@@ -8,7 +8,7 @@
 
 ![FreeCut Timeline Editor](./public/assets/landing/timeline.png)
 
-FreeCut is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebGPU, WebCodecs, OPFS, and the File System Access API.
+FreeCut is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebGPU, WebCodecs, and the File System Access API. Projects, media metadata, thumbnails, waveforms, and transcripts are written as plain files to a workspace folder you pick on disk.
 
 ## Features
 
@@ -45,8 +45,10 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 
 ### Transitions
 
-- **CPU transitions** — fade, wipe, slide, 3D flip, clock wipe, iris — each with directional variants
-- **GPU transitions** — dissolve, sparkles, glitch, light leak, pixelate, chromatic aberration, radial blur
+All transitions are WebGPU-accelerated with a Canvas 2D fallback for non-WebGPU environments.
+
+- Fade, wipe, slide, 3D flip, clock wipe, iris — each with directional variants
+- Dissolve, sparkles, glitch, light leak, pixelate, chromatic aberration, radial blur
 - Adjustable duration and alignment
 
 ### Keyframe Animation
@@ -78,7 +80,7 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 - **Audio:** MP3, WAV, AAC, OGG, Opus
 - **Image:** JPG, PNG, GIF (animated), WebP
 - Up to 5 GB per file
-- OPFS proxy video generation for smooth preview
+- Proxy video generation for smooth preview (cached to the workspace folder)
 - Media relinking for moved or deleted files
 - Scene detection and optical flow analysis
 
@@ -89,19 +91,24 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 - Auto-generate caption text items from transcripts
 - Multi-language support
 
+### Text-to-Speech
+
+- In-browser voiceover generation via KittenTTS (WebGPU)
+- Adds the generated audio clip directly to the timeline
+
 ### Other
 
 - Native SVG shapes — rectangle, circle, triangle, ellipse, star, polygon, heart
 - Text overlays with custom fonts, colors, and positioning
 - Project bundles — export/import projects as ZIP files with Zod-validated schemas
-- IndexedDB persistence with content-addressable storage
+- Workspace folder persistence via File System Access API — your projects live as plain files on disk, not locked away in browser storage
 - Auto-save
 - Customizable keyboard shortcuts with preset import/export
 - Configurable settings (default FPS, snap, waveforms, filmstrips, preview quality, export defaults, undo depth, auto-save interval)
 
 ## Quick Start
 
-**Prerequisites:** Node.js 18+
+**Prerequisites:** Node.js 20+
 
 ```bash
 git clone https://github.com/walterlow/freecut.git
@@ -114,12 +121,13 @@ Open [http://localhost:5173](http://localhost:5173) in Chrome.
 
 ### Workflow
 
-1. Create a project from the projects page
-2. Import media by dragging files into the media library
-3. Drag clips to the timeline — trim, arrange, add effects and transitions
-4. Animate with the keyframe editor
-5. Preview your edit in real time
-6. Export directly from the browser
+1. Pick a workspace folder when prompted — FreeCut writes all projects, media metadata, and caches into this folder
+2. Create a project from the projects page
+3. Import media by dragging files into the media library
+4. Drag clips to the timeline — trim, arrange, add effects and transitions
+5. Animate with the keyframe editor
+6. Preview your edit in real time
+7. Export directly from the browser
 
 ## Browser Support
 
@@ -184,7 +192,9 @@ Brave disables the File System Access API by default. To enable it:
 - [Tailwind CSS 4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) — styling and UI components
 - [Mediabunny](https://mediabunny.dev/) — media decoding and metadata extraction
 - [WebCodecs](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API) — composition rendering and export
-- [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) + [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) — local persistence
+- [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API) — workspace folder persistence
+- [Transformers.js](https://huggingface.co/docs/transformers.js) — in-browser Whisper transcription
+- [KittenTTS](https://github.com/KittenML/kitten-tts-webgpu) — WebGPU text-to-speech
 - Web Workers — heavy processing off the main thread
 
 ## Development
@@ -235,7 +245,7 @@ src/
 |  |- animation/             # Easing functions and interpolation
 |  |- projects/              # Project domain types
 |  \- timeline/              # Transitions (engine, registry, renderers)
-|- infrastructure/          # Browser/storage/GPU adapters
+|- infrastructure/          # Browser/storage/GPU adapters (workspace-fs, handles-db, gpu facades)
 |- lib/
 |  |- gpu-effects/           # WebGPU effect pipeline + shader definitions
 |  |- gpu-transitions/       # WebGPU transition pipeline + shaders
@@ -256,10 +266,11 @@ src/
 |  |- export/                # WebCodecs export pipeline (Web Worker)
 |  |- effects/               # GPU effect system and UI panels
 |  |- keyframes/             # Keyframe animation, Bezier editor, easing
-|  |- media-library/         # Media import, metadata, OPFS proxies, transcription
+|  |- media-library/         # Media import, metadata, proxy cache, transcription, TTS
 |  |- project-bundle/        # Project ZIP export/import
 |  |- projects/              # Project management
-|  \- settings/              # App settings, keyboard shortcut editor
+|  |- settings/              # App settings, keyboard shortcut editor
+|  \- workspace-gate/        # Workspace folder picker / permission gate
 |- shared/                  # Shared UI/state/utilities across layers
 |- components/ui/            # shadcn/ui components
 |- config/hotkeys.ts         # Keyboard shortcut definitions
