@@ -1,12 +1,13 @@
-import { memo, useState, useEffect, useRef, useCallback } from 'react';
-import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText, Play, Square, Sparkles } from 'lucide-react';
+import { Fragment, memo, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { Video, FileAudio, Image as ImageIcon, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText, Play, Square, Sparkles } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Button } from '@/components/ui/button';
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { mediaAnalysisService } from '../services/media-analysis-service';
@@ -58,7 +59,6 @@ interface MediaCardActionMenuProps {
   transcriptBusyLabel: string;
   isTaggable: boolean;
   isTagging: boolean;
-  hasTags: boolean;
   onGenerateProxy: (event: React.MouseEvent) => void | Promise<void>;
   onCancelProxy: (event: React.MouseEvent) => void | Promise<void>;
   onDeleteProxy: (event: React.MouseEvent) => Promise<void>;
@@ -85,7 +85,6 @@ function MediaCardActionMenuItems({
   transcriptBusyLabel,
   isTaggable,
   isTagging,
-  hasTags,
   onGenerateProxy,
   onCancelProxy,
   onDeleteProxy,
@@ -95,99 +94,155 @@ function MediaCardActionMenuItems({
   onAnalyzeWithAI,
   onDelete,
 }: MediaCardActionMenuProps) {
-  return (
-    <>
-      {isBroken && onRelink && (
-        <DropdownMenuItem onClick={(event) => { event.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
+  const hasBrokenGroup = isBroken && !!onRelink;
+  const showProxyGroup =
+    !isBroken
+    && (
+      (canGenerateProxy && !hasProxy && proxyStatus !== 'generating')
+      || proxyStatus === 'generating'
+      || hasProxy
+    );
+  const showTranscriptGroup = isTranscribable && !isBroken;
+  const showAiGroup = isTaggable && !isBroken;
+
+  const groups: ReactNode[] = [];
+
+  if (hasBrokenGroup) {
+    groups.push(
+      <Fragment key="broken">
+        <ContextMenuLabel>File</ContextMenuLabel>
+        <ContextMenuItem
+          onClick={(event) => { event.stopPropagation(); onRelink!(); }}
+          className="text-primary focus:text-primary"
+        >
           <RefreshCw className="w-3 h-3 mr-2" />
           Relink File...
-        </DropdownMenuItem>
-      )}
-      {canGenerateProxy && !hasProxy && proxyStatus !== 'generating' && (
-        <DropdownMenuItem onClick={onGenerateProxy}>
-          <Zap className="w-3 h-3 mr-2" />
-          Generate Proxy
-        </DropdownMenuItem>
-      )}
-      {isTranscribable && !isBroken && !isTranscribing && (
-        <DropdownMenuItem onClick={onGenerateTranscript}>
-          <FileText className="w-3 h-3 mr-2" />
-          {hasTranscript ? 'Refresh Transcript' : 'Generate Transcript'}
-        </DropdownMenuItem>
-      )}
-      {isTranscribable && !isBroken && hasTranscript && !isTranscribing && (
-        <DropdownMenuItem onClick={onDeleteTranscript} className="text-destructive focus:text-destructive">
-          <Trash2 className="w-3 h-3 mr-2" />
-          Delete Transcript
-        </DropdownMenuItem>
-      )}
-      {isTranscribable && !isBroken && isTranscribing && (
-        <DropdownMenuItem disabled>
-          <div className="flex w-full min-w-48 flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
-              <span className="min-w-0 truncate">
-                {transcriptBusyLabel}
-              </span>
-            </div>
-            {transcriptProgressPercent !== null && (
-              <div
-                role="progressbar"
-                aria-label="Transcript menu progress"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={transcriptProgressPercent}
-                className="h-1 overflow-hidden rounded-full bg-secondary"
-              >
-                <div
-                  className="h-full rounded-full bg-blue-500 transition-all duration-300"
-                  style={{ width: `${transcriptProgressPercent}%` }}
-                />
+        </ContextMenuItem>
+      </Fragment>
+    );
+  }
+
+  if (showProxyGroup) {
+    groups.push(
+      <Fragment key="proxy">
+        <ContextMenuLabel>Proxy</ContextMenuLabel>
+        {canGenerateProxy && !hasProxy && proxyStatus !== 'generating' && (
+          <ContextMenuItem onClick={onGenerateProxy}>
+            <Zap className="w-3 h-3 mr-2" />
+            Generate Proxy
+          </ContextMenuItem>
+        )}
+        {proxyStatus === 'generating' && (
+          <>
+            <ContextMenuItem disabled>
+              <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+              Generating{proxyProgress != null ? ` (${Math.round(proxyProgress * 100)}%)` : '...'}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={onCancelProxy}>
+              <Square className="w-3 h-3 mr-2" />
+              Cancel Generation
+            </ContextMenuItem>
+          </>
+        )}
+        {hasProxy && (
+          <ContextMenuItem onClick={onDeleteProxy} className="text-destructive focus:text-destructive">
+            <Trash2 className="w-3 h-3 mr-2" />
+            Delete Proxy
+          </ContextMenuItem>
+        )}
+      </Fragment>
+    );
+  }
+
+  if (showTranscriptGroup) {
+    groups.push(
+      <Fragment key="transcript">
+        <ContextMenuLabel>Transcript</ContextMenuLabel>
+        {!isTranscribing && (
+          <ContextMenuItem onClick={onGenerateTranscript}>
+            <FileText className="w-3 h-3 mr-2" />
+            {hasTranscript ? 'Refresh Transcript' : 'Generate Transcript'}
+          </ContextMenuItem>
+        )}
+        {isTranscribing && (
+          <>
+            <ContextMenuItem disabled>
+              <div className="flex w-full min-w-48 flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                  <span className="min-w-0 truncate">
+                    {transcriptBusyLabel}
+                  </span>
+                </div>
+                {transcriptProgressPercent !== null && (
+                  <div
+                    role="progressbar"
+                    aria-label="Transcript menu progress"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={transcriptProgressPercent}
+                    className="h-1 overflow-hidden rounded-full bg-secondary"
+                  >
+                    <div
+                      className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${transcriptProgressPercent}%` }}
+                    />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </DropdownMenuItem>
-      )}
-      {isTranscribable && !isBroken && isTranscribing && (
-        <DropdownMenuItem onClick={onCancelTranscript}>
-          <Square className="w-3 h-3 mr-2" />
-          Cancel Transcript
-        </DropdownMenuItem>
-      )}
-      {proxyStatus === 'generating' && (
-        <>
-          <DropdownMenuItem disabled>
+            </ContextMenuItem>
+            <ContextMenuItem onClick={onCancelTranscript}>
+              <Square className="w-3 h-3 mr-2" />
+              Cancel Transcript
+            </ContextMenuItem>
+          </>
+        )}
+        {hasTranscript && !isTranscribing && (
+          <ContextMenuItem onClick={onDeleteTranscript} className="text-destructive focus:text-destructive">
+            <Trash2 className="w-3 h-3 mr-2" />
+            Delete Transcript
+          </ContextMenuItem>
+        )}
+      </Fragment>
+    );
+  }
+
+  if (showAiGroup) {
+    groups.push(
+      <Fragment key="ai">
+        <ContextMenuLabel>AI</ContextMenuLabel>
+        {!isTagging ? (
+          <ContextMenuItem onClick={onAnalyzeWithAI}>
+            <Sparkles className="w-3 h-3 mr-2" />
+            Analyze with AI
+          </ContextMenuItem>
+        ) : (
+          <ContextMenuItem disabled>
             <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-            Generating Proxy{proxyProgress != null ? ` (${Math.round(proxyProgress * 100)}%)` : '...'}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onCancelProxy}>
-            <Square className="w-3 h-3 mr-2" />
-            Cancel Proxy Generation
-          </DropdownMenuItem>
-        </>
-      )}
-      {hasProxy && (
-        <DropdownMenuItem onClick={onDeleteProxy} className="text-destructive focus:text-destructive">
-          <Trash2 className="w-3 h-3 mr-2" />
-          Delete Proxy
-        </DropdownMenuItem>
-      )}
-      {isTaggable && !isBroken && !isTagging && (
-        <DropdownMenuItem onClick={onAnalyzeWithAI}>
-          <Sparkles className="w-3 h-3 mr-2" />
-          {hasTags ? 'Re-analyze with AI' : 'Analyze with AI'}
-        </DropdownMenuItem>
-      )}
-      {isTaggable && !isBroken && isTagging && (
-        <DropdownMenuItem disabled>
-          <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-          Analyzing...
-        </DropdownMenuItem>
-      )}
-      <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+            Analyzing...
+          </ContextMenuItem>
+        )}
+      </Fragment>
+    );
+  }
+
+  groups.push(
+    <Fragment key="destructive">
+      <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
         <Trash2 className="w-3 h-3 mr-2" />
         Delete
-      </DropdownMenuItem>
+      </ContextMenuItem>
+    </Fragment>
+  );
+
+  return (
+    <>
+      {groups.map((group, index) => (
+        <Fragment key={index}>
+          {index > 0 && <ContextMenuSeparator />}
+          {group}
+        </Fragment>
+      ))}
     </>
   );
 }
@@ -698,7 +753,6 @@ export const MediaCard = memo(function MediaCard({
       transcriptBusyLabel={transcriptBusyLabel}
       isTaggable={isTaggable}
       isTagging={isTagging}
-      hasTags={hasCaptions}
       onGenerateProxy={handleGenerateProxy}
       onCancelProxy={handleCancelProxy}
       onDeleteProxy={handleDeleteProxy}
@@ -728,6 +782,8 @@ export const MediaCard = memo(function MediaCard({
     return (
       <>
       {transcribeDialog}
+      <ContextMenu>
+      <ContextMenuTrigger asChild disabled={isImporting}>
       <div
         style={CARD_PERF_STYLE}
         className={`
@@ -866,23 +922,14 @@ export const MediaCard = memo(function MediaCard({
               triggerClassName="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
               onSeekToCaption={handleSeekToCaption}
             />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
-                >
-                  <MoreVertical className="w-3 h-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                {actionMenuItems}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         )}
       </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+        {actionMenuItems}
+      </ContextMenuContent>
+      </ContextMenu>
       </>
     );
   }
@@ -891,6 +938,8 @@ export const MediaCard = memo(function MediaCard({
   return (
     <>
     {transcribeDialog}
+    <ContextMenu>
+    <ContextMenuTrigger asChild disabled={isImporting}>
     <div
       style={CARD_PERF_STYLE}
       className={`
@@ -1052,24 +1101,6 @@ export const MediaCard = memo(function MediaCard({
               {media.fileName}
             </h3>
           </div>
-
-          {/* Actions dropdown - hidden during upload */}
-          {!isImporting && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
-                >
-                  <MoreVertical className="w-2.5 h-2.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                {actionMenuItems}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
       </div>
 
@@ -1077,6 +1108,11 @@ export const MediaCard = memo(function MediaCard({
       <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
       <div className="absolute right-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
     </div>
+    </ContextMenuTrigger>
+    <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+      {actionMenuItems}
+    </ContextMenuContent>
+    </ContextMenu>
     </>
   );
 });

@@ -73,11 +73,11 @@ const sourcePlayerStoreState = vi.hoisted(() => ({
   setPendingSeekFrame: vi.fn(),
 }));
 
-vi.mock('@/components/ui/dropdown-menu', () => ({
-  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuItem: ({
+vi.mock('@/components/ui/context-menu', () => ({
+  ContextMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuItem: ({
     children,
     onClick,
     disabled,
@@ -86,18 +86,8 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
     onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
     disabled?: boolean;
   }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
-}));
-
-vi.mock('@/components/ui/button', () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: ReactNode;
-    onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
-    disabled?: boolean;
-  }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
+  ContextMenuLabel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuSeparator: () => <hr />,
 }));
 
 vi.mock('./transcribe-dialog', () => ({
@@ -400,7 +390,7 @@ describe('MediaCard', () => {
 
     render(<MediaCard media={makeMedia()} viewMode="list" />);
 
-    fireEvent.click(screen.getByText('Cancel Proxy Generation'));
+    fireEvent.click(screen.getByText('Cancel Generation'));
 
     expect(proxyServiceMocks.cancelProxy).toHaveBeenCalledWith('media-1', 'proxy-media-1');
   });
