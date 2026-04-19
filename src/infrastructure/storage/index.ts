@@ -33,6 +33,9 @@ export {
   getThumbnail,
   getThumbnailByMediaId,
   deleteThumbnailsByMediaId,
+  saveProjectThumbnail,
+  loadProjectThumbnail,
+  deleteProjectThumbnail,
 } from '@/infrastructure/storage/workspace-fs/thumbnails';
 
 // Content-addressable blob references

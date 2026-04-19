@@ -6,9 +6,9 @@ const indexedDbMocks = vi.hoisted(() => ({
   deleteProject: vi.fn(),
   getProject: vi.fn(),
   getProjectMediaIds: vi.fn(),
-  getThumbnail: vi.fn(),
+  loadProjectThumbnail: vi.fn(),
   removeMediaFromProject: vi.fn(),
-  saveThumbnail: vi.fn(),
+  saveProjectThumbnail: vi.fn(),
   updateProject: vi.fn(),
 }));
 
@@ -35,14 +35,7 @@ describe('createProjectUpgradeBackup', () => {
       timeline: { tracks: [], items: [] },
     });
     indexedDbMocks.getProjectMediaIds.mockResolvedValue(['media-1', 'media-2']);
-    indexedDbMocks.getThumbnail.mockResolvedValue({
-      id: 'project:project-1:cover',
-      mediaId: 'project-1',
-      blob: new Blob(['thumb']),
-      timestamp: 10,
-      width: 320,
-      height: 180,
-    });
+    indexedDbMocks.loadProjectThumbnail.mockResolvedValue(new Blob(['thumb']));
 
     const backup = await createProjectUpgradeBackup('project-1', {
       fromVersion: 4,
@@ -58,12 +51,11 @@ describe('createProjectUpgradeBackup', () => {
     );
     expect(indexedDbMocks.associateMediaWithProject).toHaveBeenNthCalledWith(1, backup.id, 'media-1');
     expect(indexedDbMocks.associateMediaWithProject).toHaveBeenNthCalledWith(2, backup.id, 'media-2');
-    expect(indexedDbMocks.saveThumbnail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: `project:${backup.id}:cover`,
-        mediaId: backup.id,
-      })
+    expect(indexedDbMocks.saveProjectThumbnail).toHaveBeenCalledWith(
+      backup.id,
+      expect.any(Blob),
     );
+    expect(indexedDbMocks.loadProjectThumbnail).toHaveBeenCalledWith('project-1');
     expect(indexedDbMocks.updateProject).toHaveBeenCalledWith(backup.id, {
       thumbnailId: `project:${backup.id}:cover`,
       thumbnail: undefined,

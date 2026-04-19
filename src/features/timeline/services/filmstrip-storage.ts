@@ -1,8 +1,9 @@
 /**
  * Filmstrip Storage
  *
- * Filmstrip frames are now persisted in the selected workspace folder:
- *   filmstrips/{mediaId}/
+ * Filmstrip frames are persisted in the workspace under the owning media
+ * cache directory:
+ *   media/{mediaId}/cache/filmstrip/
  *     meta.json - { width, height, isComplete, frameCount }
  *     0.jpg, 1.jpg, 2.jpg, ... (legacy caches may still use .webp)
  *
@@ -22,9 +23,9 @@ import {
 } from '@/infrastructure/storage/workspace-fs/fs-primitives';
 import { requireWorkspaceRoot } from '@/infrastructure/storage/workspace-fs/root';
 import {
-  filmstripFileFramePath,
+  filmstripDir,
+  filmstripFramePath,
   filmstripMetaPath,
-  WORKSPACE_FILMSTRIPS_DIR,
 } from '@/infrastructure/storage/workspace-fs/paths';
 
 const logger = createLogger('FilmstripStorage');
@@ -227,7 +228,7 @@ class FilmstripStorage {
         if (file.size <= 0) continue;
         await writeBlob(
           requireWorkspaceRoot(),
-          filmstripFileFramePath(mediaId, parsed.index, parsed.ext),
+          filmstripFramePath(mediaId, parsed.index, parsed.ext),
           file,
         );
       }
@@ -250,7 +251,7 @@ class FilmstripStorage {
   async saveFrameBlob(mediaId: string, index: number, blob: Blob): Promise<void> {
     await writeBlob(
       requireWorkspaceRoot(),
-      filmstripFileFramePath(mediaId, index, PRIMARY_FRAME_EXT),
+      filmstripFramePath(mediaId, index, PRIMARY_FRAME_EXT),
       blob,
     );
   }
@@ -260,7 +261,7 @@ class FilmstripStorage {
       const metadata = await this.ensureWorkspaceFilmstrip(mediaId);
       if (!metadata) return null;
 
-      const entries = await listDirectory(requireWorkspaceRoot(), [WORKSPACE_FILMSTRIPS_DIR, mediaId]);
+      const entries = await listDirectory(requireWorkspaceRoot(), filmstripDir(mediaId));
       const frameFilesByIndex = new Map<number, { blob: Blob; ext: string }>();
 
       for (const entry of entries) {
@@ -270,7 +271,7 @@ class FilmstripStorage {
 
         const blob = await readBlob(
           requireWorkspaceRoot(),
-          filmstripFileFramePath(mediaId, parsed.index, parsed.ext),
+          filmstripFramePath(mediaId, parsed.index, parsed.ext),
         );
         if (!blob || blob.size <= 0) continue;
 
@@ -323,7 +324,7 @@ class FilmstripStorage {
     const metadata = await this.ensureWorkspaceFilmstrip(mediaId);
     if (!metadata) return [];
 
-    const entries = await listDirectory(requireWorkspaceRoot(), [WORKSPACE_FILMSTRIPS_DIR, mediaId]);
+    const entries = await listDirectory(requireWorkspaceRoot(), filmstripDir(mediaId));
     const indices = new Set<number>();
 
     for (const entry of entries) {
@@ -337,7 +338,7 @@ class FilmstripStorage {
       if (!parsed) continue;
       const blob = await readBlob(
         requireWorkspaceRoot(),
-        filmstripFileFramePath(mediaId, parsed.index, parsed.ext),
+        filmstripFramePath(mediaId, parsed.index, parsed.ext),
       );
       if (blob && blob.size > 0) {
         indices.add(index);
@@ -353,12 +354,12 @@ class FilmstripStorage {
 
     let blob = await readBlob(
       requireWorkspaceRoot(),
-      filmstripFileFramePath(mediaId, index, PRIMARY_FRAME_EXT),
+      filmstripFramePath(mediaId, index, PRIMARY_FRAME_EXT),
     );
     if (!blob || blob.size === 0) {
       blob = await readBlob(
         requireWorkspaceRoot(),
-        filmstripFileFramePath(mediaId, index, LEGACY_FRAME_EXT),
+        filmstripFramePath(mediaId, index, LEGACY_FRAME_EXT),
       );
     }
     if (!blob || blob.size === 0) return null;
@@ -407,7 +408,7 @@ class FilmstripStorage {
 
   async delete(mediaId: string): Promise<void> {
     this.revokeUrls(mediaId);
-    await removeEntry(requireWorkspaceRoot(), [WORKSPACE_FILMSTRIPS_DIR, mediaId], {
+    await removeEntry(requireWorkspaceRoot(), filmstripDir(mediaId), {
       recursive: true,
     });
     await this.deleteLegacyFilmstrip(mediaId);
@@ -429,17 +430,21 @@ class FilmstripStorage {
       this.revokeUrls(mediaId);
     }
 
-    await removeEntry(requireWorkspaceRoot(), [WORKSPACE_FILMSTRIPS_DIR], {
-      recursive: true,
-    }).catch(() => undefined);
-    await this.clearLegacyFilmstrips();
-  }
+    // In v2, filmstrips live per-media under `media/<id>/cache/filmstrip/`.
+    // Enumerate media dirs and prune each one's filmstrip subtree.
+    try {
+      const mediaEntries = await listDirectory(requireWorkspaceRoot(), ['media']);
+      for (const entry of mediaEntries) {
+        if (entry.kind !== 'directory') continue;
+        await removeEntry(requireWorkspaceRoot(), filmstripDir(entry.name), {
+          recursive: true,
+        }).catch(() => undefined);
+      }
+    } catch {
+      // media dir may not exist yet — nothing to clear
+    }
 
-  async list(): Promise<string[]> {
-    const entries = await listDirectory(requireWorkspaceRoot(), [WORKSPACE_FILMSTRIPS_DIR]);
-    return entries
-      .filter((entry) => entry.kind === 'directory')
-      .map((entry) => entry.name);
+    await this.clearLegacyFilmstrips();
   }
 }
 

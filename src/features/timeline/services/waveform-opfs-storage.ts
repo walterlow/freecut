@@ -35,8 +35,7 @@ import {
   removeWorkspaceCacheEntry,
 } from '@/infrastructure/storage/workspace-fs/cache-mirror';
 import {
-  waveformBinaryPath,
-  WORKSPACE_WAVEFORM_BIN_DIR,
+  waveformMultiResPath,
 } from '@/infrastructure/storage/workspace-fs/paths';
 
 const logger = createLogger('WaveformOPFS');
@@ -371,7 +370,7 @@ class WaveformOPFSStorage {
 
       // Mirror the binary to the workspace folder so other origins can reuse
       // the multi-resolution waveform without regenerating. Fire-and-forget.
-      void mirrorBytesToWorkspace(waveformBinaryPath(mediaId), buffer);
+      void mirrorBytesToWorkspace(waveformMultiResPath(mediaId), buffer);
 
       logger.debug(
         `Saved waveform ${mediaId}: ${levelCount} levels, ${(totalSize / 1024).toFixed(1)}KB`
@@ -402,7 +401,7 @@ class WaveformOPFSStorage {
    */
   private async hydrateFromWorkspace(mediaId: string): Promise<boolean> {
     try {
-      const blob = await readWorkspaceBlob(waveformBinaryPath(mediaId));
+      const blob = await readWorkspaceBlob(waveformMultiResPath(mediaId));
       if (!blob || blob.size === 0) return false;
 
       const bytes = await blob.arrayBuffer();
@@ -629,7 +628,7 @@ class WaveformOPFSStorage {
     } catch {
       // File may not exist, ignore
     }
-    void removeWorkspaceCacheEntry(waveformBinaryPath(mediaId));
+    void removeWorkspaceCacheEntry(waveformMultiResPath(mediaId));
   }
 
   /**
@@ -698,7 +697,8 @@ class WaveformOPFSStorage {
     } catch (error) {
       logger.error('Failed to clear waveforms:', error);
     }
-    void removeWorkspaceCacheEntry([WORKSPACE_WAVEFORM_BIN_DIR], { recursive: true });
+    // Workspace waveforms live per-media under `media/<id>/cache/waveform/`
+    // and are cleaned up with the enclosing media entry — no top-level sweep.
   }
 }
 

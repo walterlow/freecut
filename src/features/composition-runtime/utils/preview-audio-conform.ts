@@ -14,17 +14,10 @@ import { audioBufferToWavBlob } from './audio-buffer-wav';
 
 const log = createLogger('PreviewAudioConform');
 
-const PREVIEW_AUDIO_CONFORM_DIR = 'preview-audio';
 const PREVIEW_AUDIO_CONFORM_MIME_TYPE = 'audio/wav';
 
 const pendingPreviewAudioConformLoads = new Map<string, Promise<string | null>>();
 const pendingPreviewAudioConformPersists = new Map<string, Promise<void>>();
-
-function buildPreviewAudioConformPath(mediaId: string): string {
-  const shard1 = mediaId.slice(0, 2) || '00';
-  const shard2 = mediaId.slice(2, 4) || '00';
-  return `${PREVIEW_AUDIO_CONFORM_DIR}/${shard1}/${shard2}/${mediaId}.wav`;
-}
 
 export function getPreviewAudioConformCacheKey(mediaId: string): string {
   return `preview-audio:${mediaId}`;
@@ -49,13 +42,12 @@ export async function resolvePreviewAudioConformUrl(mediaId: string): Promise<st
   const promise = (async () => {
     try {
       const media = await getMedia(mediaId);
-      if (!media?.previewAudioOpfsPath) {
+      if (!media?.previewAudioConformedAt && !media?.previewAudioOpfsPath) {
         return null;
       }
-      const persistedPath = media.previewAudioOpfsPath;
       const mimeType = media.previewAudioMimeType || PREVIEW_AUDIO_CONFORM_MIME_TYPE;
 
-      const workspaceBlob = await readWorkspaceBlob(previewAudioPath(persistedPath));
+      const workspaceBlob = await readWorkspaceBlob(previewAudioPath(mediaId));
       if (workspaceBlob) {
         return blobUrlManager.acquire(
           cacheKey,
@@ -63,13 +55,18 @@ export async function resolvePreviewAudioConformUrl(mediaId: string): Promise<st
         );
       }
 
-      // Legacy fallback: older sessions wrote only to OPFS. If found there,
-      // hydrate the workspace copy so subsequent reads stay workspace-first.
+      // Legacy fallback: older sessions wrote only to OPFS under a sharded
+      // path recorded in `previewAudioOpfsPath`. If found there, hydrate the
+      // workspace v2 copy so subsequent reads stay workspace-first.
+      const legacyPath = media.previewAudioOpfsPath;
+      if (!legacyPath) {
+        return null;
+      }
       try {
-        const bytes = await opfsService.getFile(persistedPath);
+        const bytes = await opfsService.getFile(legacyPath);
         await writeBlob(
           requireWorkspaceRoot(),
-          previewAudioPath(persistedPath),
+          previewAudioPath(mediaId),
           new Uint8Array(bytes),
         );
         return blobUrlManager.acquire(
@@ -79,7 +76,7 @@ export async function resolvePreviewAudioConformUrl(mediaId: string): Promise<st
       } catch (err) {
         log.warn('Failed to resolve preview audio conform asset from legacy OPFS', {
           mediaId,
-          path: persistedPath,
+          path: legacyPath,
           err,
         });
         return null;
@@ -120,16 +117,14 @@ export async function persistPreviewAudioConform(
     }
 
     const nextBlob = wavBlob ?? audioBufferToWavBlob(buffer);
-    const persistedPath = media.previewAudioOpfsPath ?? buildPreviewAudioConformPath(mediaId);
     const bytes = await nextBlob.arrayBuffer();
     await writeBlob(
       requireWorkspaceRoot(),
-      previewAudioPath(persistedPath),
+      previewAudioPath(mediaId),
       new Uint8Array(bytes),
     );
 
     await updateMedia(mediaId, {
-      previewAudioOpfsPath: persistedPath,
       previewAudioMimeType: PREVIEW_AUDIO_CONFORM_MIME_TYPE,
       previewAudioConformedAt: Date.now(),
     });
@@ -156,25 +151,22 @@ export async function deletePreviewAudioConform(
   pendingPreviewAudioConformPersists.delete(mediaId);
   blobUrlManager.invalidate(getPreviewAudioConformCacheKey(mediaId));
 
-  if (!media) {
-    return;
-  }
+  void removeWorkspaceCacheEntry(previewAudioPath(mediaId));
 
-  if (media.previewAudioOpfsPath) {
-    const persistedPath = media.previewAudioOpfsPath;
+  if (media?.previewAudioOpfsPath) {
+    const legacyPath = media.previewAudioOpfsPath;
     try {
-      await opfsService.deleteFile(persistedPath);
+      await opfsService.deleteFile(legacyPath);
     } catch (err) {
       log.debug('Legacy OPFS preview audio conform asset was already absent or unreadable', {
         mediaId,
-        path: persistedPath,
+        path: legacyPath,
         err,
       });
     }
-    void removeWorkspaceCacheEntry(previewAudioPath(persistedPath));
   }
 
-  if (options?.clearMetadata) {
+  if (options?.clearMetadata && media) {
     try {
       await updateMedia(mediaId, {
         previewAudioOpfsPath: undefined,

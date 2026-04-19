@@ -14,7 +14,7 @@ import {
   BUNDLE_VERSION,
   BUNDLE_EXTENSION,
 } from '../types/bundle';
-import { getProject, getProjectMediaIds, getThumbnail } from '@/infrastructure/storage';
+import { getProject, getProjectMediaIds, loadProjectThumbnail } from '@/infrastructure/storage';
 import {
   mediaLibraryService,
   computeContentHashFromBuffer,
@@ -169,9 +169,9 @@ export async function exportProjectBundle(
   // Step 7: Add project cover thumbnail if exists
   if (project.thumbnailId) {
     try {
-      const thumbnailData = await getThumbnail(project.thumbnailId);
-      if (thumbnailData?.blob) {
-        const thumbnailBuffer = await thumbnailData.blob.arrayBuffer();
+      const thumbnailBlob = await loadProjectThumbnail(project.id);
+      if (thumbnailBlob) {
+        const thumbnailBuffer = await thumbnailBlob.arrayBuffer();
         const thumbnailFile = new ZipPassThrough('cover.jpg');
         zip.add(thumbnailFile);
         thumbnailFile.push(new Uint8Array(thumbnailBuffer), true);
@@ -371,9 +371,9 @@ export async function exportProjectBundleStreaming(
     // Step 7: Add project cover thumbnail if exists
     if (project.thumbnailId) {
       try {
-        const thumbnailData = await getThumbnail(project.thumbnailId);
-        if (thumbnailData?.blob) {
-          const thumbnailBuffer = await thumbnailData.blob.arrayBuffer();
+        const thumbnailBlob = await loadProjectThumbnail(project.id);
+        if (thumbnailBlob) {
+          const thumbnailBuffer = await thumbnailBlob.arrayBuffer();
           const thumbnailFile = new ZipPassThrough('cover.jpg');
           zip.add(thumbnailFile);
           thumbnailFile.push(new Uint8Array(thumbnailBuffer), true);

@@ -25,7 +25,7 @@ import {
   readWorkspaceBlob,
   removeWorkspaceCacheEntry,
 } from '@/infrastructure/storage/workspace-fs/cache-mirror';
-import { proxyFilePath, proxyMetaPath, WORKSPACE_PROXIES_DIR } from '@/infrastructure/storage/workspace-fs/paths';
+import { proxyDir, proxyFilePath, proxyMetaPath } from '@/infrastructure/storage/workspace-fs/paths';
 import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants';
 import type {
   ProxyWorkerRequest,
@@ -347,7 +347,7 @@ class ProxyService {
     }
 
     // Mirror deletion to workspace cache before reporting completion.
-    await removeWorkspaceCacheEntry([WORKSPACE_PROXIES_DIR, resolvedProxyKey], {
+    await removeWorkspaceCacheEntry(proxyDir(resolvedProxyKey), {
       recursive: true,
     });
   }

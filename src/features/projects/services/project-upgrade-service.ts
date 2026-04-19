@@ -4,9 +4,9 @@ import {
   deleteProject,
   getProject,
   getProjectMediaIds,
-  getThumbnail,
+  loadProjectThumbnail,
   removeMediaFromProject,
-  saveThumbnail,
+  saveProjectThumbnail,
   updateProject,
 } from '@/infrastructure/storage';
 import { createLogger } from '@/shared/logging/logger';
@@ -76,18 +76,13 @@ export async function createProjectUpgradeBackup(
   }
 
   try {
-    const thumbnail = await getThumbnail(project.thumbnailId);
-    if (!thumbnail) {
+    const thumbnailBlob = await loadProjectThumbnail(project.id);
+    if (!thumbnailBlob) {
       return backup;
     }
 
     const backupThumbnailId = `project:${backup.id}:cover`;
-    await saveThumbnail({
-      ...thumbnail,
-      id: backupThumbnailId,
-      mediaId: backup.id,
-      timestamp: Date.now(),
-    });
+    await saveProjectThumbnail(backup.id, thumbnailBlob);
 
     await updateProject(backup.id, {
       thumbnailId: backupThumbnailId,

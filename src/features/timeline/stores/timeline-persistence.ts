@@ -25,7 +25,7 @@ import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTimelineCommandStore } from './timeline-command-store';
 import { useCompositionsStore } from './compositions-store';
 import { useCompositionNavigationStore } from './composition-navigation-store';
-import { getProject, updateProject, saveThumbnail } from '@/infrastructure/storage';
+import { getProject, updateProject, saveProjectThumbnail } from '@/infrastructure/storage';
 import {
   renderSingleFrame,
   convertTimelineToComposition,
@@ -770,14 +770,7 @@ export async function saveTimeline(projectId: string): Promise<void> {
 
         // Save thumbnail to workspace storage
         thumbnailId = `project:${projectId}:cover`;
-        await saveThumbnail({
-          id: thumbnailId,
-          mediaId: projectId,
-          blob: thumbnailBlob,
-          timestamp: Date.now(),
-          width: thumbWidth,
-          height: thumbHeight,
-        });
+        await saveProjectThumbnail(projectId, thumbnailBlob);
       } catch (thumbError) {
         // Thumbnail generation failure shouldn't block save
         event.set('thumbnailError', thumbError instanceof Error ? thumbError.message : String(thumbError));
