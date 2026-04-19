@@ -33,7 +33,6 @@ import {
   deleteCaptionEmbeddings,
   saveCaptionEmbeddings,
   saveCaptionImageEmbeddings,
-  getCaptionThumbnailBlob,
   getTranscript,
 } from '@/infrastructure/storage';
 import { invalidateMediaCaptionThumbnails } from '../deps/scene-browser';
@@ -109,31 +108,18 @@ class MediaAnalysisService {
     store.setTaggingMedia(media.id, true);
 
     try {
-      // Drop every in-memory thumbnail URL and lazy-thumb result tied to
-      // this media before the directory is wiped — without this, rows
-      // keep rendering the pre-reanalyze JPEG even after the file on
-      // disk is overwritten (the blob URL is cached against the old
-      // content). The tagging flag we just set also blocks any in-flight
-      // lazy-thumb from writing after the delete below.
+      // Drop every in-memory thumbnail URL and semantic cache entry tied to
+      // this media before re-analysis starts. If the rerun fails, the old
+      // on-disk assets still exist and can be rehydrated on demand; if it
+      // succeeds, fresh thumbs/embeddings repopulate the caches below.
       invalidateMediaCaptionThumbnails(media.id);
 
-      // Old thumbnails are replaced wholesale on re-run — indexes may not
-      // line up with the fresh caption list, and stale files would leak.
-      // Same story for both embedding bins: if the new caption count
-      // differs from the old one, a partial save could leave us with a
-      // stale `.bin` on disk. Wiping up front keeps captions.json +
-      // bin + thumbs consistent no matter which step fails later.
-      await deleteCaptionThumbnails(media.id);
-      await deleteCaptionEmbeddings(media.id);
-
       let captions: MediaCaption[];
+      const stagedThumbnailBlobs = new Map<number, Blob>();
 
-      const persistThumbnail = async (index: number, blob: Blob): Promise<string | undefined> => {
-        try {
-          return await saveCaptionThumbnail(media.id, index, blob);
-        } catch {
-          return undefined;
-        }
+      const stageThumbnail = async (index: number, blob: Blob): Promise<string | undefined> => {
+        stagedThumbnailBlobs.set(index, blob);
+        return undefined;
       };
 
       if (mediaType === 'video') {
@@ -153,7 +139,7 @@ class MediaAnalysisService {
         try {
           captions = await captionVideo(video, {
             sampleIntervalSec,
-            saveThumbnail: persistThumbnail,
+            saveThumbnail: stageThumbnail,
           });
         } finally {
           video.src = '';
@@ -166,7 +152,7 @@ class MediaAnalysisService {
         const response = await fetch(blobUrl);
         const blob = await response.blob();
         URL.revokeObjectURL(blobUrl);
-        captions = await captionImage(blob, { saveThumbnail: persistThumbnail });
+        captions = await captionImage(blob, { saveThumbnail: stageThumbnail });
       }
 
       if (captions.length > 0) {
@@ -176,15 +162,8 @@ class MediaAnalysisService {
         let imageEmbeddingDim: number | undefined;
         let captionsWithEmbeddings = captions;
 
-        const thumbBlobs = await Promise.all(
-          captions.map(async (caption) => {
-            if (!caption.thumbRelPath) return null;
-            try {
-              return await getCaptionThumbnailBlob(caption.thumbRelPath);
-            } catch {
-              return null;
-            }
-          }),
+        const thumbBlobs = captions.map((_, index) =>
+          stagedThumbnailBlobs.get(index) ?? null,
         );
 
         const colorResults = await Promise.all(
@@ -250,6 +229,21 @@ class MediaAnalysisService {
           void error;
         }
 
+        if (stagedThumbnailBlobs.size > 0) {
+          captionsWithEmbeddings = await Promise.all(
+            captionsWithEmbeddings.map(async (caption, index) => {
+              const blob = stagedThumbnailBlobs.get(index);
+              if (!blob) return caption;
+              try {
+                const thumbRelPath = await saveCaptionThumbnail(media.id, index, blob);
+                return { ...caption, thumbRelPath };
+              } catch {
+                return caption;
+              }
+            }),
+          );
+        }
+
         await mediaLibraryService.updateMediaCaptions(media.id, captionsWithEmbeddings, {
           sampleIntervalSec,
           embeddingModel,
@@ -265,6 +259,12 @@ class MediaAnalysisService {
           message: `Generated ${sceneCaptionCountLabel} for "${media.fileName}"`,
         });
       } else {
+        await mediaLibraryService.updateMediaCaptions(media.id, [], {
+          sampleIntervalSec,
+        });
+        store.updateMediaCaptions(media.id, []);
+        await deleteCaptionThumbnails(media.id);
+        await deleteCaptionEmbeddings(media.id);
         store.showNotification({
           type: 'info',
           message: `No scene captions generated for "${media.fileName}"`,

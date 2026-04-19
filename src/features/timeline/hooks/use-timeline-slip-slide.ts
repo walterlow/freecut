@@ -9,6 +9,7 @@ import { useTransitionsStore } from '../stores/transitions-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { pixelsToTimeNow } from '../utils/zoom-conversions';
 import { useSnapCalculator } from './use-snap-calculator';
+import type { SnapTarget } from '../types/drag';
 import { useSlipEditPreviewStore } from '../stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
 import { useLinkedEditPreviewStore } from '../stores/linked-edit-preview-store';

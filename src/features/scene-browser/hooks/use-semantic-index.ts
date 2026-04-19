@@ -58,7 +58,10 @@ export function useSemanticIndex(): SemanticIndexProgress {
     const candidates = mediaItems.filter((media) => (
       (media.aiCaptions?.length ?? 0) > 0 && !taggingMediaIds.has(media.id)
     ));
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) {
+      setProgress(INITIAL_PROGRESS);
+      return;
+    }
 
     let cancelled = false;
 
@@ -73,7 +76,10 @@ export function useSemanticIndex(): SemanticIndexProgress {
       const needsTextIndex = candidates.filter((media) => isMediaMissingEmbeddings(media.id));
       const needsImageIndex = candidates.filter((media) => isMediaMissingImageEmbeddings(media.id));
       const totalToIndex = needsTextIndex.length + needsImageIndex.length;
-      if (totalToIndex === 0) return;
+      if (totalToIndex === 0) {
+        setProgress(INITIAL_PROGRESS);
+        return;
+      }
 
       setProgress({
         indexing: 0,
