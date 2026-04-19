@@ -1,7 +1,8 @@
-import { create } from 'zustand';
+import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import type { PaletteEntry } from '../deps/analysis';
 
 export type SceneBrowserSortMode = 'relevance' | 'time' | 'name';
+export type SceneBrowserViewMode = 'list' | 'grid';
 
 export interface SceneBrowserReference {
   /** Scene id whose palette is the reference — for dedupe and the clear chip. */
@@ -37,6 +38,12 @@ interface SceneBrowserState {
    * it off. Not persisted so the default is always "text search".
    */
   colorMode: boolean;
+  /**
+   * List vs grid layout for the results area. Grid is a responsive
+   * thumbnail-first layout (good for color/visual scanning); list is
+   * thumbnail + caption text (good for reading matches).
+   */
+  viewMode: SceneBrowserViewMode;
 }
 
 interface SceneBrowserActions {
@@ -49,6 +56,7 @@ interface SceneBrowserActions {
   requestFocus: () => void;
   setReference: (reference: SceneBrowserReference | null) => void;
   setColorMode: (colorMode: boolean) => void;
+  setViewMode: (viewMode: SceneBrowserViewMode) => void;
   reset: () => void;
 }
 
@@ -60,9 +68,21 @@ const INITIAL_STATE: SceneBrowserState = {
   focusNonce: 0,
   reference: null,
   colorMode: false,
+  viewMode: 'list',
 };
 
-export const useSceneBrowserStore = create<SceneBrowserState & SceneBrowserActions>((set) => ({
+type SceneBrowserStoreApi = UseBoundStore<StoreApi<SceneBrowserState & SceneBrowserActions>>;
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __FREECUT_SCENE_BROWSER_STORE__: SceneBrowserStoreApi | undefined;
+}
+
+const hotStore = import.meta.env.DEV ? globalThis.__FREECUT_SCENE_BROWSER_STORE__ : undefined;
+
+// Preserve query/scope/color-mode/reference across Vite HMR in dev so a
+// file save doesn't wipe the panel's current search context.
+const sceneBrowserStore: SceneBrowserStoreApi = hotStore ?? create<SceneBrowserState & SceneBrowserActions>((set) => ({
   ...INITIAL_STATE,
 
   openBrowser: (options) => set((state) => ({
@@ -88,6 +108,8 @@ export const useSceneBrowserStore = create<SceneBrowserState & SceneBrowserActio
 
   setReference: (reference) => set({ reference }),
 
+  setViewMode: (viewMode) => set({ viewMode }),
+
   setColorMode: (colorMode) => set((state) => ({
     colorMode,
     // Leaving color mode clears any active reference — the mode is the
@@ -98,3 +120,9 @@ export const useSceneBrowserStore = create<SceneBrowserState & SceneBrowserActio
 
   reset: () => set(INITIAL_STATE),
 }));
+
+if (import.meta.env.DEV) {
+  globalThis.__FREECUT_SCENE_BROWSER_STORE__ = sceneBrowserStore;
+}
+
+export const useSceneBrowserStore = sceneBrowserStore;

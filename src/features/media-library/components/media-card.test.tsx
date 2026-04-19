@@ -42,6 +42,11 @@ const mediaStoreState = vi.hoisted(() => ({
   setTaggingMedia: vi.fn(),
   updateMediaCaptions: vi.fn(),
   showNotification: vi.fn(),
+  analysisProgress: null as null | { total: number; completed: number; cancelRequested: boolean },
+  beginAnalysisRun: vi.fn(),
+  incrementAnalysisCompleted: vi.fn(),
+  requestAnalysisCancel: vi.fn(),
+  endAnalysisRun: vi.fn(),
 }));
 
 const analysisMocks = vi.hoisted(() => ({

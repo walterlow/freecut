@@ -56,6 +56,7 @@ import { useProjectStore } from '@/features/media-library/deps/projects';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
 import { mediaTranscriptionService } from '../services/media-transcription-service';
+import { mediaAnalysisService } from '../services/media-analysis-service';
 import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { getMediaType } from '../utils/validation';
@@ -207,7 +208,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
   const transcriptStatus = useMediaLibraryStore((s) => s.transcriptStatus);
   const transcriptProgress = useMediaLibraryStore((s) => s.transcriptProgress);
-  const taggingMediaIds = useMediaLibraryStore((s) => s.taggingMediaIds);
   const filteredMediaItems = useFilteredMediaItems();
   const mediaGroups = useMemo(() => {
     const groups: { key: string; label: string; icon: 'video' | 'audio' | 'image' | 'gif'; items: MediaMetadata[] }[] = [];
@@ -520,7 +520,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return count;
   }, [proxyStatus]);
 
-  const analyzingCount = taggingMediaIds.size;
+  const analysisProgress = useMediaLibraryStore((s) => s.analysisProgress);
+  const analysisPercent = analysisProgress && analysisProgress.total > 0
+    ? (analysisProgress.completed / analysisProgress.total) * 100
+    : 0;
 
   const transcribingCount = useMemo(() => {
     let count = 0;
@@ -1128,13 +1131,32 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       </div>
 
       {/* Background AI analysis status */}
-      {analyzingCount > 0 && (
+      {analysisProgress && (
         <BackgroundTaskProgress
           icon={<Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin flex-shrink-0" />}
-          label={`Analyzing ${analyzingCount} ${analyzingCount === 1 ? 'item' : 'items'} with AI`}
+          label={
+            analysisProgress.total > 1
+              ? `Analyzing ${Math.min(analysisProgress.completed + 1, analysisProgress.total)} of ${analysisProgress.total} with AI`
+              : 'Analyzing 1 item with AI'
+          }
           progressAriaLabel="AI analysis progress"
-          indeterminate
-          meta={<span>Working...</span>}
+          progressPercent={analysisPercent}
+          meta={(
+            <>
+              <span className="tabular-nums">{Math.round(analysisPercent)}%</span>
+              {!analysisProgress.cancelRequested ? (
+                <button
+                  type="button"
+                  onClick={() => mediaAnalysisService.requestCancel()}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              ) : (
+                <span className="text-muted-foreground/80">Cancelling…</span>
+              )}
+            </>
+          )}
           trailing={<Sparkles className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />}
           fillClassName="bg-purple-500"
         />

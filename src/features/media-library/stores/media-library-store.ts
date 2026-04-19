@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+﻿import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type {
   MediaLibraryState,
@@ -74,7 +74,16 @@ async function initializeProxyState(mediaItems: MediaMetadata[]): Promise<void> 
   await proxyService.loadExistingProxies(videoItems.map((item) => item.id));
 }
 
-export const useMediaLibraryStore = create<
+type MediaLibraryStoreApi = UseBoundStore<StoreApi<MediaLibraryState & MediaLibraryActions>>;
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __FREECUT_MEDIA_LIBRARY_STORE__: MediaLibraryStoreApi | undefined;
+}
+
+const hotStore = import.meta.env.DEV ? globalThis.__FREECUT_MEDIA_LIBRARY_STORE__ : undefined;
+
+const newStore: MediaLibraryStoreApi = hotStore ?? create<
   MediaLibraryState & MediaLibraryActions
 >()(
   devtools(
@@ -120,6 +129,7 @@ export const useMediaLibraryStore = create<
 
       // AI tagging
       taggingMediaIds: new Set(),
+      analysisProgress: null,
 
       // v3: Set current project context
       setCurrentProject: (projectId: string | null) => {
@@ -141,6 +151,7 @@ export const useMediaLibraryStore = create<
           transcriptStatus: new Map(),
           transcriptProgress: new Map(),
           taggingMediaIds: new Set(),
+          analysisProgress: null,
         });
         // Note: loadMediaItems is triggered by the component's useEffect
         // Don't call it here to avoid double loading
@@ -361,6 +372,54 @@ export const useMediaLibraryStore = create<
           return { mediaItems };
         });
       },
+
+      beginAnalysisRun: (count) => {
+        if (count <= 0) return;
+        set((state) => {
+          const current = state.analysisProgress;
+          if (!current) {
+            return { analysisProgress: { total: count, completed: 0, cancelRequested: false } };
+          }
+          // Merge concurrent runs (e.g. a per-card analyze while a batch is
+          // in flight) by growing the total so the percent keeps decreasing
+          // toward completion instead of snapping back.
+          return {
+            analysisProgress: {
+              total: current.total + count,
+              completed: current.completed,
+              cancelRequested: current.cancelRequested,
+            },
+          };
+        });
+      },
+
+      incrementAnalysisCompleted: (n = 1) => {
+        set((state) => {
+          if (!state.analysisProgress) return state;
+          return {
+            analysisProgress: {
+              ...state.analysisProgress,
+              completed: Math.min(
+                state.analysisProgress.total,
+                state.analysisProgress.completed + n,
+              ),
+            },
+          };
+        });
+      },
+
+      requestAnalysisCancel: () => {
+        set((state) => {
+          if (!state.analysisProgress) return state;
+          return {
+            analysisProgress: { ...state.analysisProgress, cancelRequested: true },
+          };
+        });
+      },
+
+      endAnalysisRun: () => {
+        set({ analysisProgress: null });
+      },
     }),
     {
       name: 'MediaLibraryStore',
@@ -369,28 +428,46 @@ export const useMediaLibraryStore = create<
   )
 );
 
-// Keep mediaById synchronized even when action modules update mediaItems directly.
-let prevMediaItemsRef = useMediaLibraryStore.getState().mediaItems;
-useMediaLibraryStore.subscribe((state) => {
-  if (state.mediaItems === prevMediaItemsRef) {
-    return;
-  }
-  prevMediaItemsRef = state.mediaItems;
-  useMediaLibraryStore.setState({ mediaById: buildMediaById(state.mediaItems) });
-});
+// Preserve the store instance across Vite HMR so that mediaItems and the
+// rest of project state don't reset to `[]` on every file save — without
+// this, editing a feature component wipes the scene browser's "X clips · Y
+// scenes" and requires a hard refresh to reload via `loadMediaItems`.
+// DEV-only: prod builds don't HMR so the cache is harmless to skip.
+if (import.meta.env.DEV) {
+  globalThis.__FREECUT_MEDIA_LIBRARY_STORE__ = newStore;
+}
 
-// Wire up proxy service status listener to update store state
-proxyService.onStatusChange((mediaId, status, progress) => {
-  const store = useMediaLibraryStore.getState();
-  if (status === 'idle') {
-    store.clearProxyStatus(mediaId);
-    return;
-  }
-  store.setProxyStatus(mediaId, status);
-  if (progress !== undefined) {
-    store.setProxyProgress(mediaId, progress);
-  }
-});
+export const useMediaLibraryStore = newStore;
+
+// Subscriptions (below) must only be wired the first time the store is
+// created. On HMR, `hotStore` is non-null and the subscription from the
+// previous module execution is still live on the store — re-wiring here
+// would leak a listener on every file save, eventually double-updating
+// `mediaById` and double-firing proxy status changes.
+if (!hotStore) {
+  // Keep mediaById synchronized even when action modules update mediaItems directly.
+  let prevMediaItemsRef = useMediaLibraryStore.getState().mediaItems;
+  useMediaLibraryStore.subscribe((state) => {
+    if (state.mediaItems === prevMediaItemsRef) {
+      return;
+    }
+    prevMediaItemsRef = state.mediaItems;
+    useMediaLibraryStore.setState({ mediaById: buildMediaById(state.mediaItems) });
+  });
+
+  // Wire up proxy service status listener to update store state
+  proxyService.onStatusChange((mediaId, status, progress) => {
+    const store = useMediaLibraryStore.getState();
+    if (status === 'idle') {
+      store.clearProxyStatus(mediaId);
+      return;
+    }
+    store.setProxyStatus(mediaId, status);
+    if (progress !== undefined) {
+      store.setProxyProgress(mediaId, progress);
+    }
+  });
+}
 
 // Selector hooks for common use cases (optional, but recommended)
 export const useFilteredMediaItems = () => {
