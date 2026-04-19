@@ -695,7 +695,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {/* Header toolbar */}
       <div className="@container px-3 py-2 border-b border-border flex-shrink-0">
         <TooltipProvider>
-          <div className="flex flex-wrap items-center gap-2 text-xs min-w-0">
+          <div className="flex flex-nowrap items-center gap-2 text-xs min-w-0 overflow-hidden">
             {/* Import action */}
             <HeaderActionTooltip label="Import media files">
               <button
@@ -708,7 +708,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   transition-colors duration-150"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
-                <span className="hidden @[220px]:inline">Import</span>
+                <span className="hidden @[260px]:inline">Import</span>
               </button>
             </HeaderActionTooltip>
 
@@ -728,7 +728,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 aria-pressed={sceneBrowserOpen}
               >
                 <ScanSearch className="w-3.5 h-3.5" />
-                <span className="hidden @[260px]:inline">Scenes</span>
+                <span className="hidden @[340px]:inline">Scenes</span>
               </button>
             </HeaderActionTooltip>
 
@@ -743,7 +743,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                     transition-colors duration-150"
                 >
                   <Link2Off className="w-3.5 h-3.5" />
-                  <span className="hidden @[250px]:inline">{currentProjectBrokenMediaIds.length} Missing</span>
+                  <span className="hidden @[340px]:inline">{currentProjectBrokenMediaIds.length} Missing</span>
                 </button>
               </HeaderActionTooltip>
             )}
@@ -752,12 +752,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             {/* Selection indicator & actions */}
             {selectedAssetCount > 0 && (
               <>
-                <div className="h-4 w-px bg-border hidden @[240px]:block" />
+                <div className="h-4 w-px bg-border hidden @[300px]:block" />
 
                 {/* Selection badge */}
                 <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border min-w-0 max-w-full">
                   <span className="tabular-nums shrink-0">{selectedAssetCount}</span>
-                  <span className="text-muted-foreground hidden @[260px]:inline">selected</span>
+                  <span className="text-muted-foreground hidden @[360px]:inline">selected</span>
                   <HeaderActionTooltip label="Clear selection">
                     <button
                       onClick={clearSelection}
@@ -779,7 +779,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                         transition-colors duration-150"
                     >
                       <Zap className="w-3.5 h-3.5" />
-                      <span className="hidden @[320px]:inline">Proxy ({selectedProxyEligibleCount})</span>
+                      <span className="hidden @[440px]:inline">Proxy ({selectedProxyEligibleCount})</span>
                     </button>
                   </HeaderActionTooltip>
                 )}
@@ -794,7 +794,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                       transition-colors duration-150"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span className="hidden @[280px]:inline">Delete</span>
+                    <span className="hidden @[400px]:inline">Delete</span>
                   </button>
                 </HeaderActionTooltip>
               </>
