@@ -12,4 +12,5 @@ export {
   useTimelineSettingsStore,
   useTimelineViewportStore,
   useMediaDependencyStore,
+  useCompositionsStore,
 } from './timeline-contract';

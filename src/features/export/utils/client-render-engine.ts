@@ -866,11 +866,25 @@ export async function createCompositionRenderer(
             subKfMap.set(kf.itemId, kf);
           }
 
+          // Collect adjustment layers from VISIBLE tracks so their effects apply
+          // to items below them inside the sub-composition (parity with main timeline).
+          const subAdjustmentLayers: AdjustmentLayerWithTrackOrder[] = [];
+          for (const t of subComp.tracks) {
+            if (t.visible === false) continue;
+            const trackOrder = t.order ?? 0;
+            for (const i of subComp.items) {
+              if (i.trackId === t.id && i.type === 'adjustment') {
+                subAdjustmentLayers.push({ layer: i, trackOrder });
+              }
+            }
+          }
+
           subCompRenderData.set(compositionId, {
             fps: subComp.fps,
             durationInFrames: subComp.durationInFrames,
             sortedTracks: sortedWithItems,
             keyframesMap: subKfMap,
+            adjustmentLayers: subAdjustmentLayers,
           });
         }
 
@@ -1135,15 +1149,34 @@ export async function createCompositionRenderer(
         });
       }
 
+      const hasGpuEffects = (effects: TimelineItem['effects']): boolean =>
+        effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false;
       let hasAnyGpuEffects = false;
       for (const track of sortedTracks) {
         if (!visibleTrackIds.has(track.id)) continue;
         for (const baseItem of track.items ?? []) {
           const item = getCurrentItem(baseItem);
           if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
-          if (item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')) {
+          if (hasGpuEffects(item.effects)) {
             hasAnyGpuEffects = true;
             break;
+          }
+          // Compound clips: also check GPU effects on sub-comp items and
+          // adjustment layers so the pipeline is initialized before
+          // renderCompositionItem needs it.
+          if (item.type === 'composition') {
+            const subData = subCompRenderData.get(item.compositionId);
+            if (!subData) continue;
+            const trackItemWithGpu = subData.sortedTracks.some((t) =>
+              t.items.some((subItem) => hasGpuEffects(subItem.effects)),
+            );
+            const adjustmentWithGpu = (subData.adjustmentLayers ?? []).some((entry) =>
+              hasGpuEffects(entry.layer.effects),
+            );
+            if (trackItemWithGpu || adjustmentWithGpu) {
+              hasAnyGpuEffects = true;
+              break;
+            }
           }
         }
         if (hasAnyGpuEffects) break;

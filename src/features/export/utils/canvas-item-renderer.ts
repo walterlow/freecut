@@ -188,6 +188,8 @@ export interface SubCompRenderData {
   }>;
   /** O(1) keyframe lookup by item ID */
   keyframesMap: Map<string, ItemKeyframes>;
+  /** Adjustment layers from visible tracks, with their track orders */
+  adjustmentLayers?: AdjustmentLayerWithTrackOrder[];
 }
 
 export interface TransitionParticipantRenderState<TItem extends TimelineItem = TimelineItem> {
@@ -1446,6 +1448,8 @@ async function renderCompositionItem(
       }
     }
 
+    const subAdjustmentLayers = subData.adjustmentLayers ?? [];
+
     let renderedSubItems = 0;
     for (const track of subData.sortedTracks) {
       if (!track.visible) continue;
@@ -1477,15 +1481,56 @@ async function renderCompositionItem(
           });
         }
 
-        if (applicableMasks.length === 0) {
+        const itemEffects = (
+          rctx.renderMode === 'preview'
+            ? rctx.getPreviewEffectsOverride?.(subItem.id)
+            : undefined
+        ) ?? subItem.effects;
+        const adjEffects = getAdjustmentLayerEffects(
+          track.order,
+          subAdjustmentLayers,
+          localFrame,
+          rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride : undefined,
+          rctx.renderMode === 'preview' ? rctx.getLiveItemSnapshotById : undefined,
+        );
+        const combinedEffects = combineEffects(itemEffects, adjEffects);
+        const hasEffects = combinedEffects.length > 0;
+
+        if (!hasEffects && applicableMasks.length === 0) {
           await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
-        } else {
+        } else if (!hasEffects) {
           const { canvas: maskedItemCanvas, ctx: maskedItemCtx } = rctx.canvasPool.acquire();
           try {
+            maskedItemCanvas.width = item.compositionWidth;
+            maskedItemCanvas.height = item.compositionHeight;
+            maskedItemCtx.clearRect(0, 0, maskedItemCanvas.width, maskedItemCanvas.height);
             await renderItem(maskedItemCtx, subItem, subItemTransform, localFrame, subRctx);
             applyMasks(subContentCtx, maskedItemCanvas, applicableMasks, subMaskSettings);
           } finally {
             rctx.canvasPool.release(maskedItemCanvas);
+          }
+        } else {
+          const { canvas: itemCanvas, ctx: itemCtx } = rctx.canvasPool.acquire();
+          itemCanvas.width = item.compositionWidth;
+          itemCanvas.height = item.compositionHeight;
+          itemCtx.clearRect(0, 0, itemCanvas.width, itemCanvas.height);
+          try {
+            await renderItem(itemCtx, subItem, subItemTransform, localFrame, subRctx);
+            const { source, poolCanvases } = await renderEffectsFromMaskedSource(
+              rctx.canvasPool,
+              itemCanvas,
+              combinedEffects,
+              applicableMasks,
+              localFrame,
+              subMaskSettings,
+              rctx.gpuPipeline,
+            );
+            subContentCtx.drawImage(source, 0, 0);
+            for (const poolCanvas of poolCanvases) {
+              rctx.canvasPool.release(poolCanvas);
+            }
+          } finally {
+            rctx.canvasPool.release(itemCanvas);
           }
         }
         renderedSubItems++;
