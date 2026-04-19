@@ -27,6 +27,8 @@ import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout';
 import { useTrackHeightResize } from '../hooks/use-track-height-resize';
 import { resizeTracksOfKindByDelta } from '../utils/track-resize';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
+import { useZoomStore } from '../stores/zoom-store';
+import { computeWheelZoomStep } from '../constants';
 import {
   clampSectionDividerPosition,
   getTrackSectionLayout,
@@ -187,33 +189,60 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     return () => observer.disconnect();
   }, []);
 
-  // Alt+scroll in track headers = resize track heights (mirrors timeline-content behavior)
+  // Wheel handling in track headers:
+  //   Alt+scroll  = resize track heights in the hovered zone
+  //   Shift+scroll = vertical scroll of the hovered zone
+  //   Ctrl/Cmd+scroll = zoom timeline in/out
+  const zoomHandlersRef = useRef(zoomHandlers);
+  useEffect(() => {
+    zoomHandlersRef.current = zoomHandlers;
+  }, [zoomHandlers]);
   useEffect(() => {
     const el = trackHeadersViewportRef.current;
     if (!el) return;
 
     const handler = (event: WheelEvent) => {
-      if (!event.altKey) return;
-      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const z = zoomHandlersRef.current;
+        if (!z) return;
+        z.handleZoomChange(computeWheelZoomStep(useZoomStore.getState().level, event.deltaY));
+        return;
+      }
 
       const sectionEl = (event.target instanceof Element)
         ? event.target.closest('[data-track-section-scroll]') as HTMLElement | null
         : null;
       const zone = sectionEl?.dataset.trackSectionScroll as 'video' | 'audio' | undefined;
-      if (!zone) return;
 
-      const delta = event.deltaY > 0 ? -4 : 4;
-      const currentTracks = useItemsStore.getState().tracks;
-      const nextTracks = resizeTracksOfKindByDelta(currentTracks, zone, delta);
-      if (nextTracks !== currentTracks) {
-        useItemsStore.getState().setTracks(nextTracks);
-        useTimelineSettingsStore.getState().markDirty();
+      if (event.altKey) {
+        event.preventDefault();
+        if (!zone) return;
+        const delta = event.deltaY > 0 ? -4 : 4;
+        const currentTracks = useItemsStore.getState().tracks;
+        const nextTracks = resizeTracksOfKindByDelta(currentTracks, zone, delta);
+        if (nextTracks !== currentTracks) {
+          useItemsStore.getState().setTracks(nextTracks);
+          useTimelineSettingsStore.getState().markDirty();
+        }
+        return;
+      }
+
+      if (event.shiftKey) {
+        event.preventDefault();
+        const contentScroll = hasTrackSections
+          ? zone === 'audio'
+            ? audioTrackContentScrollRef.current
+            : videoTrackContentScrollRef.current
+          : allTrackContentScrollRef.current;
+        if (!contentScroll) return;
+        contentScroll.scrollTop += event.deltaY || event.deltaX;
       }
     };
 
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
-  }, []);
+  }, [hasTrackSections]);
 
   const handleSectionDividerMouseDown = useCallback((event: React.MouseEvent) => {
     if (!hasTrackSections) return;

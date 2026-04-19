@@ -27,6 +27,7 @@ import {
   ZOOM_MIN_VELOCITY,
   TIMELINE_RULER_HEIGHT,
   TRACK_SECTION_DIVIDER_HEIGHT,
+  computeWheelZoomStep,
 } from '../constants';
 
 // Components
@@ -1561,23 +1562,7 @@ export const TimelineContent = memo(function TimelineContent({
         const rect = container.getBoundingClientRect();
         zoomCursorXRef.current = event.clientX - rect.left;
 
-        const currentZoom = zoomLevelRef.current;
-        // Use logarithmic zoom (multiplicative) for uniform perceptual speed
-        // This matches the slider's logarithmic behavior
-        const ZOOM_FACTOR = 1.15; // ~15% perceptual change per tick
-        const MIN_ZOOM = 0.01; // 1%
-        const MAX_ZOOM = 2; // 200%
-
-        let newZoom: number;
-        if (event.deltaY > 0) {
-          // Scroll down = zoom out (divide by factor)
-          newZoom = Math.max(MIN_ZOOM, currentZoom / ZOOM_FACTOR);
-        } else {
-          // Scroll up = zoom in (multiply by factor)
-          newZoom = Math.min(MAX_ZOOM, currentZoom * ZOOM_FACTOR);
-        }
-
-        applyZoomWithCursorAnchor(newZoom);
+        applyZoomWithCursorAnchor(computeWheelZoomStep(zoomLevelRef.current, event.deltaY));
         return;
       }
 
