@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo } from 'react';
-import { Play, Clock, Film, Palette } from 'lucide-react';
+import { Clock, Film, Palette, Search } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
 import { formatDuration } from '../deps/media-library';
 import { useCaptionThumbnail } from '../hooks/use-caption-thumbnail';
@@ -110,7 +110,7 @@ export const SceneRow = memo(function SceneRow({
         // stealing focus from lower-scoring but still-relevant rows.
         showSignals && isTop && 'bg-primary/5',
       )}
-      title="Seek source monitor to this scene — drag to add to the timeline"
+      title="Click to preview in source monitor — drag to add to the timeline"
     >
       <div className="relative h-[54px] w-24 shrink-0 overflow-hidden rounded-md bg-secondary">
         {thumbUrl ? (
@@ -127,7 +127,7 @@ export const SceneRow = memo(function SceneRow({
           </div>
         )}
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-          <Play className="h-4 w-4 text-white/90" fill="currentColor" />
+          <Search className="h-4 w-4 text-white/90" />
         </div>
         <span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 font-mono text-[10px] leading-none text-white/90">
           {timestampLabel}

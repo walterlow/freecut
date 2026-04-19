@@ -25,6 +25,10 @@ export function seekToScene(mediaId: string, timeSec: number): void {
   );
 
   const source = useSourcePlayerStore.getState();
+  // Pause the current scene synchronously — waiting for the seek-consume
+  // effect leaves the video element decoding the old frame, which is
+  // what the user sees as "flash of the old scene" when switching.
+  source.playerMethods?.pause();
   source.setCurrentMediaId(mediaId);
   source.clearInOutPoints();
   source.setInPoint(frame);

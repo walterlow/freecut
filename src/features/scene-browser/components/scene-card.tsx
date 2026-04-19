@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { Film, Palette, Play } from 'lucide-react';
+import { Film, Palette, Search } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
 import { formatDuration } from '../deps/media-library';
 import { useCaptionThumbnail } from '../hooks/use-caption-thumbnail';
@@ -104,7 +104,7 @@ export const SceneCard = memo(function SceneCard({
         'focus-visible:border-primary/60 focus-visible:bg-primary/10',
         showSignals && isTop && 'border-primary/40 bg-primary/5',
       )}
-      title="Seek source monitor to this scene — drag to add to the timeline"
+      title="Click to preview in source monitor — drag to add to the timeline"
     >
       <div className="relative aspect-video max-h-32 w-full shrink-0 overflow-hidden rounded-md bg-secondary">
         {thumbUrl ? (
@@ -121,7 +121,7 @@ export const SceneCard = memo(function SceneCard({
           </div>
         )}
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-          <Play className="h-5 w-5 text-white/90" fill="currentColor" />
+          <Search className="h-5 w-5 text-white/90" />
         </div>
         <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 font-mono text-[10px] leading-none text-white/90">
           {timestampLabel}

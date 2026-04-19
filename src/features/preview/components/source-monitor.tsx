@@ -600,6 +600,9 @@ function SourcePlaybackControls({
         }
         player.toggle();
       },
+      pause: () => {
+        player.pause();
+      },
       seek: (frame) => {
         commitSourceSeek(frame);
       },
@@ -616,7 +619,7 @@ function SourcePlaybackControls({
     return () => {
       useSourcePlayerStore.getState().setPlayerMethods(null);
     };
-  }, [clearPreviewSourceFrame, commitSourceSeek, durationInFrames, interactive, player.frameBack, player.frameForward, player.toggle]);
+  }, [clearPreviewSourceFrame, commitSourceSeek, durationInFrames, interactive, player]);
 
   useEffect(() => {
     updateFrameDisplay(clock.currentFrame);
@@ -630,15 +633,24 @@ function SourcePlaybackControls({
     });
   }, [clock, player, updateFrameDisplay]);
 
-  // Consume pending seek (e.g. double-click opens clip at its In point)
+  // Consume pending seek. Always pause → seek → (optionally) play so
+  // switching scenes lands a clean transition: no `player.play()` short-
+  // circuiting because the previous scene was still playing (the ref
+  // `imperativePlaying.current` blocks a second play), and the video
+  // element isn't decoding the old frame while the seek is in flight.
   const pendingSeekFrame = useSourcePlayerStore((s) => s.pendingSeekFrame);
   useEffect(() => {
     if (!interactive) return;
     if (pendingSeekFrame !== null) {
+      player.pause();
       commitSourceSeek(pendingSeekFrame);
-      useSourcePlayerStore.getState().setPendingSeekFrame(null);
+      const store = useSourcePlayerStore.getState();
+      store.setPendingSeekFrame(null);
+      const shouldPlay = store.pendingPlay;
+      store.setPendingPlay(false);
+      if (shouldPlay) player.play();
     }
-  }, [commitSourceSeek, interactive, pendingSeekFrame]);
+  }, [commitSourceSeek, interactive, pendingSeekFrame, player]);
 
   useEffect(() => {
     if (seekFrame === null) return;

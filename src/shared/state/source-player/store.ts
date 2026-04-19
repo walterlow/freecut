@@ -10,6 +10,7 @@ export const useSourcePlayerStore = create<SourcePlayerState>((set) => ({
   inPoint: null,
   outPoint: null,
   pendingSeekFrame: null,
+  pendingPlay: false,
   setHoveredPanel: (panel) => set({ hoveredPanel: panel }),
   setPlayerMethods: (methods) => set({ playerMethods: methods }),
   setCurrentMediaId: (id) => set((state) => {
@@ -21,6 +22,7 @@ export const useSourcePlayerStore = create<SourcePlayerState>((set) => ({
       currentSourceFrame: 0,
       previewSourceFrame: null,
       pendingSeekFrame: null,
+      pendingPlay: false,
     };
   }),
   releaseCurrentMediaId: (id) => set((state) => {
@@ -32,6 +34,7 @@ export const useSourcePlayerStore = create<SourcePlayerState>((set) => ({
       currentSourceFrame: 0,
       previewSourceFrame: null,
       pendingSeekFrame: null,
+      pendingPlay: false,
     };
   }),
   setCurrentSourceFrame: (frame) => set({ currentSourceFrame: frame }),
@@ -50,4 +53,5 @@ export const useSourcePlayerStore = create<SourcePlayerState>((set) => ({
   }),
   clearInOutPoints: () => set({ inPoint: null, outPoint: null }),
   setPendingSeekFrame: (frame) => set({ pendingSeekFrame: frame }),
+  setPendingPlay: (play) => set({ pendingPlay: play }),
 }));
