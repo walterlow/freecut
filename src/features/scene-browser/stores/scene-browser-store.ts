@@ -74,7 +74,6 @@ const INITIAL_STATE: SceneBrowserState = {
 type SceneBrowserStoreApi = UseBoundStore<StoreApi<SceneBrowserState & SceneBrowserActions>>;
 
 declare global {
-  // eslint-disable-next-line no-var
   var __FREECUT_SCENE_BROWSER_STORE__: SceneBrowserStoreApi | undefined;
 }
 

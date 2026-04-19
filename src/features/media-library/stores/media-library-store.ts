@@ -77,7 +77,6 @@ async function initializeProxyState(mediaItems: MediaMetadata[]): Promise<void> 
 type MediaLibraryStoreApi = UseBoundStore<StoreApi<MediaLibraryState & MediaLibraryActions>>;
 
 declare global {
-  // eslint-disable-next-line no-var
   var __FREECUT_MEDIA_LIBRARY_STORE__: MediaLibraryStoreApi | undefined;
 }
 
