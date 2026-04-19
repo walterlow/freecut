@@ -432,7 +432,7 @@ const TimelineMarqueeLayer = memo(function TimelineMarqueeLayer({
     [containerRef, itemIds]
   );
 
-  const { marqueeState } = useMarqueeSelection({
+  const { marquee, isActive } = useMarqueeSelection({
     containerRef: containerRef as React.RefObject<HTMLElement>,
     items: marqueeItems,
     onSelectionChange,
@@ -444,10 +444,10 @@ const TimelineMarqueeLayer = memo(function TimelineMarqueeLayer({
   });
 
   useEffect(() => {
-    onMarqueeActiveChange(marqueeState.active);
-  }, [marqueeState.active, onMarqueeActiveChange]);
+    onMarqueeActiveChange(isActive);
+  }, [isActive, onMarqueeActiveChange]);
 
-  return <MarqueeOverlay marqueeState={marqueeState} />;
+  return <MarqueeOverlay marquee={marquee} />;
 });
 
 interface TimelineTrackSectionsSurfaceProps {

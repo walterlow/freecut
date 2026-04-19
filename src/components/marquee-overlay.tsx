@@ -1,8 +1,9 @@
-import { getMarqueeRect, type MarqueeState } from '@/hooks/use-marquee-selection';
+import { useSyncExternalStore } from 'react';
+import { getMarqueeRect, type MarqueeController } from '@/hooks/use-marquee-selection';
 
 interface MarqueeOverlayProps {
-  /** Current marquee state */
-  marqueeState: MarqueeState;
+  /** Subscription-based controller returned from `useMarqueeSelection` */
+  marquee: MarqueeController;
 
   /** Custom className for styling */
   className?: string;
@@ -12,29 +13,16 @@ interface MarqueeOverlayProps {
  * Visual overlay for marquee selection rectangle
  *
  * Renders a draggable selection box that appears when the user
- * click-drags to select multiple items.
- *
- * @example
- * ```tsx
- * const { marqueeState } = useMarqueeSelection({ ... });
- *
- * return (
- *   <div className="relative">
- *     <MarqueeOverlay marqueeState={marqueeState} />
- *     {items.map(item => <Item key={item.id} />)}
- *   </div>
- * );
- * ```
+ * click-drags to select multiple items. Subscribes directly to the
+ * marquee controller so only this component re-renders per pointer move —
+ * the tree above stays quiet.
  */
-export function MarqueeOverlay({ marqueeState, className }: MarqueeOverlayProps) {
-  if (!marqueeState.active) return null;
+export function MarqueeOverlay({ marquee, className }: MarqueeOverlayProps) {
+  const state = useSyncExternalStore(marquee.subscribe, marquee.getSnapshot, marquee.getSnapshot);
 
-  const rect = getMarqueeRect(
-    marqueeState.startX,
-    marqueeState.startY,
-    marqueeState.currentX,
-    marqueeState.currentY
-  );
+  if (!state.active) return null;
+
+  const rect = getMarqueeRect(state.startX, state.startY, state.currentX, state.currentY);
 
   return (
     <div

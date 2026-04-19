@@ -346,7 +346,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     [compositions, filteredMediaItems]
   );
 
-  const { marqueeState } = useMarqueeSelection({
+  const { marquee } = useMarqueeSelection({
     containerRef: scrollContainerRef as React.RefObject<HTMLElement>,
     items: marqueeItems,
     enabled: marqueeItems.length > 0,
@@ -369,30 +369,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     },
   });
 
-  // Track focus and clear selection when clicking outside the media library
+  // Track focus scope for the Delete hotkey. Selection itself is only cleared
+  // by explicit user action (empty-area click or marquee), never by focus
+  // changes — otherwise selection leaks away when the user clicks the timeline
+  // or another panel.
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
-      const isInside = containerRef.current?.contains(event.target as Node);
-
-      if (isInside) {
-        // Clicked inside - mark as focused
-        isFocusedRef.current = true;
-      } else {
-        // Clicked outside - clear focus and selection
-        isFocusedRef.current = false;
-        if (selectedAssetCount > 0) {
-          clearSelection();
-        }
-      }
+      isFocusedRef.current = !!containerRef.current?.contains(event.target as Node);
     };
 
-    // Use capture phase to catch events before they're stopped by other handlers
     document.addEventListener('mousedown', handleMouseDown, true);
-
     return () => {
       document.removeEventListener('mousedown', handleMouseDown, true);
     };
-  }, [selectedAssetCount, clearSelection]);
+  }, []);
 
   // Handle Delete key to delete selected items
   useEffect(() => {
@@ -783,11 +773,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   <HeaderActionTooltip label={`Generate proxies for ${selectedProxyEligibleCount} selected item${selectedProxyEligibleCount === 1 ? '' : 's'}`}>
                     <button
                       onClick={handleGenerateSelectedProxies}
-                      className="flex items-center gap-1 h-7 px-2 rounded-md shrink-0
-                        text-muted-foreground hover:text-primary hover:bg-primary/10
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                        bg-secondary border-border text-muted-foreground
+                        hover:text-primary hover:bg-primary/10 hover:border-primary/40
                         transition-colors duration-150"
                     >
-                      <Zap className="w-3 h-3" />
+                      <Zap className="w-3.5 h-3.5" />
                       <span className="hidden @[320px]:inline">Proxy ({selectedProxyEligibleCount})</span>
                     </button>
                   </HeaderActionTooltip>
@@ -797,11 +788,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 <HeaderActionTooltip label="Delete selected assets">
                   <button
                     onClick={handleDeleteSelected}
-                    className="flex items-center gap-1 h-7 px-2 rounded-md shrink-0
-                      text-destructive/80 hover:text-destructive hover:bg-destructive/10
+                    className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                      bg-destructive/10 border border-destructive/25 text-destructive
+                      hover:bg-destructive/20 hover:border-destructive/40
                       transition-colors duration-150"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3.5 h-3.5" />
                     <span className="hidden @[280px]:inline">Delete</span>
                   </button>
                 </HeaderActionTooltip>
@@ -1065,7 +1057,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <MarqueeOverlay marqueeState={marqueeState} />
+          <MarqueeOverlay marquee={marquee} />
 
           {/* Compositions section — collapsible, auto-hidden when empty */}
           <CompositionsSection />

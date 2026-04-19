@@ -23,17 +23,19 @@ vi.mock('../hooks/use-timeline-zoom', () => ({
   }),
 }));
 
-vi.mock('@/hooks/use-marquee-selection', () => ({
-  useMarqueeSelection: () => ({
-    marqueeState: {
-      active: false,
-      startX: 0,
-      startY: 0,
-      currentX: 0,
-      currentY: 0,
-    },
-  }),
-}));
+vi.mock('@/hooks/use-marquee-selection', () => {
+  const INACTIVE = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0 };
+  return {
+    useMarqueeSelection: () => ({
+      isActive: false,
+      marquee: {
+        subscribe: () => () => {},
+        getSnapshot: () => INACTIVE,
+      },
+      selectedIds: [],
+    }),
+  };
+});
 
 vi.mock('../hooks/use-waveform-prefetch', () => ({
   useWaveformPrefetch: () => {},

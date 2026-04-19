@@ -311,7 +311,7 @@ export function GizmoOverlay({
 
   // Marquee selection hook
   // Use hitAreaRef for bounds checking (fills container), overlayRef for coordinate display
-  const { marqueeState } = useMarqueeSelection({
+  const { marquee } = useMarqueeSelection({
     containerRef: overlayRef as React.RefObject<HTMLElement>,
     hitAreaRef: hitAreaRef as React.RefObject<HTMLElement> | undefined,
     items: marqueeItems,
@@ -641,7 +641,7 @@ export function GizmoOverlay({
       onDoubleClick={(e) => e.stopPropagation()}
     >
       {/* Marquee selection rectangle - hidden during corner pin / mask editing */}
-      {!isCornerPinEditing && !isMaskEditing && <MarqueeOverlay marqueeState={marqueeState} />}
+      {!isCornerPinEditing && !isMaskEditing && <MarqueeOverlay marquee={marquee} />}
 
       {/* Player area - receives clicks for deselection and contains gizmos */}
       {/* Disabled entirely during corner pin / mask editing so the overlay gets exclusive input */}
