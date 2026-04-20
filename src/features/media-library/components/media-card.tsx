@@ -304,10 +304,14 @@ export const MediaCard = memo(function MediaCard({
     const targets = getTargetMediaItems().filter(
       (m) => useMediaLibraryStore.getState().proxyStatus.get(m.id) === 'ready'
     );
+    const uniqueKeys = new Map<string, MediaMetadata>();
     for (const item of targets) {
+      const key = getSharedProxyKey(item);
+      if (!uniqueKeys.has(key)) uniqueKeys.set(key, item);
+    }
+    for (const [sharedProxyKey, representative] of uniqueKeys) {
       try {
-        const sharedProxyKey = getSharedProxyKey(item);
-        await proxyService.deleteProxy(item.id, sharedProxyKey);
+        await proxyService.deleteProxy(representative.id, sharedProxyKey);
 
         const store = useMediaLibraryStore.getState();
         for (const other of store.mediaItems) {
@@ -317,7 +321,12 @@ export const MediaCard = memo(function MediaCard({
           }
         }
       } catch {
-        useMediaLibraryStore.getState().setProxyStatus(item.id, 'error');
+        const store = useMediaLibraryStore.getState();
+        for (const other of store.mediaItems) {
+          if (other.mimeType.startsWith('video/') && getSharedProxyKey(other) === sharedProxyKey) {
+            store.setProxyStatus(other.id, 'error');
+          }
+        }
       }
     }
   };
@@ -330,63 +339,90 @@ export const MediaCard = memo(function MediaCard({
 
   const handleStartTranscription = useCallback((values: TranscribeDialogValues) => {
     const store = useMediaLibraryStore.getState();
-    const previousStatus = store.transcriptStatus.get(media.id) ?? 'idle';
+    const targets = getTargetMediaItems();
+    const previousStatusById = new Map<string, ReturnType<typeof store.transcriptStatus.get>>(
+      targets.map((t) => [t.id, store.transcriptStatus.get(t.id) ?? 'idle']),
+    );
 
     setTranscribeErrorMessage(null);
-    store.setTranscriptStatus(media.id, 'queued');
-    store.setTranscriptProgress(media.id, { stage: 'queued', progress: 0 });
+    for (const t of targets) {
+      store.setTranscriptStatus(t.id, 'queued');
+      store.setTranscriptProgress(t.id, { stage: 'queued', progress: 0 });
+    }
 
     scheduleAfterPaint(() => {
       void (async () => {
-        try {
-          await mediaTranscriptionService.transcribeMedia(media.id, {
-            model: values.model,
-            quantization: values.quantization,
-            language: values.language || undefined,
-            onQueueStatusChange: (state) => {
-              if (state === 'queued') {
-                store.setTranscriptStatus(media.id, 'queued');
-                store.setTranscriptProgress(media.id, { stage: 'queued', progress: 0 });
-                return;
-              }
+        let succeeded = 0;
+        let failed = 0;
+        let lastErrorMessage: string | null = null;
 
-              store.setTranscriptStatus(media.id, 'transcribing');
-              store.setTranscriptProgress(media.id, { stage: 'loading', progress: 0 });
-            },
-            onProgress: (progress) => {
-              store.setTranscriptProgress(media.id, progress);
-            },
-          });
-          store.setTranscriptStatus(media.id, 'ready');
-          store.clearTranscriptProgress(media.id);
-          store.showNotification({
-            type: 'success',
-            message: `Transcript ready for "${media.fileName}"`,
-          });
-          setTranscribeDialogOpen(false);
-        } catch (error) {
-          if (isTranscriptionCancellationError(error)) {
-            store.setTranscriptStatus(media.id, previousStatus);
-            store.clearTranscriptProgress(media.id);
-            return;
+        for (const target of targets) {
+          const previousStatus = previousStatusById.get(target.id) ?? 'idle';
+          try {
+            await mediaTranscriptionService.transcribeMedia(target.id, {
+              model: values.model,
+              quantization: values.quantization,
+              language: values.language || undefined,
+              onQueueStatusChange: (state) => {
+                if (state === 'queued') {
+                  store.setTranscriptStatus(target.id, 'queued');
+                  store.setTranscriptProgress(target.id, { stage: 'queued', progress: 0 });
+                  return;
+                }
+                store.setTranscriptStatus(target.id, 'transcribing');
+                store.setTranscriptProgress(target.id, { stage: 'loading', progress: 0 });
+              },
+              onProgress: (progress) => {
+                store.setTranscriptProgress(target.id, progress);
+              },
+            });
+            store.setTranscriptStatus(target.id, 'ready');
+            store.clearTranscriptProgress(target.id);
+            succeeded += 1;
+          } catch (error) {
+            if (isTranscriptionCancellationError(error)) {
+              store.setTranscriptStatus(target.id, previousStatus);
+              store.clearTranscriptProgress(target.id);
+              continue;
+            }
+
+            store.setTranscriptStatus(target.id, previousStatus === 'ready' ? 'ready' : 'error');
+            store.clearTranscriptProgress(target.id);
+
+            const baseMessage = error instanceof Error ? error.message : 'Failed to transcribe media';
+            lastErrorMessage = isTranscriptionOutOfMemoryError(error) ? TRANSCRIPTION_OOM_HINT : baseMessage;
+            failed += 1;
           }
+        }
 
-          store.setTranscriptStatus(media.id, previousStatus === 'ready' ? 'ready' : 'error');
-          store.clearTranscriptProgress(media.id);
-
-          const baseMessage = error instanceof Error ? error.message : 'Failed to transcribe media';
-          const dialogMessage = isTranscriptionOutOfMemoryError(error)
-            ? TRANSCRIPTION_OOM_HINT
-            : baseMessage;
-          setTranscribeErrorMessage(dialogMessage);
+        if (failed === 0 && succeeded > 0) {
+          if (targets.length === 1) {
+            store.showNotification({
+              type: 'success',
+              message: `Transcript ready for "${targets[0]!.fileName}"`,
+            });
+          } else {
+            store.showNotification({
+              type: 'success',
+              message: `Transcripts ready for ${succeeded} media files`,
+            });
+          }
+          setTranscribeDialogOpen(false);
+        } else if (failed > 0) {
+          const msg = lastErrorMessage ?? 'Failed to transcribe media';
+          setTranscribeErrorMessage(msg);
           store.showNotification({
             type: 'error',
-            message: dialogMessage,
+            message: targets.length === 1
+              ? msg
+              : `Transcription failed for ${failed} of ${targets.length} media files`,
           });
+        } else {
+          setTranscribeDialogOpen(false);
         }
       })();
     });
-  }, [media.id, media.fileName]);
+  }, [getTargetMediaItems]);
 
   const handleCancelTranscript = (e?: React.MouseEvent) => {
     e?.preventDefault();
@@ -443,11 +479,23 @@ export const MediaCard = memo(function MediaCard({
 
   const handleAnalyzeWithAI = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const targets = getTargetMediaItems();
-    if (targets.length > 1) {
-      await mediaAnalysisService.analyzeBatch({ mediaIds: targets.map((m) => m.id) });
+    const store = useMediaLibraryStore.getState();
+    const analyzable = getTargetMediaItems().filter((m) => {
+      const type = getMediaType(m.mimeType);
+      if (type !== 'video' && type !== 'image') return false;
+      if (store.brokenMediaIds?.includes(m.id)) return false;
+      if (store.importingIds?.includes(m.id)) return false;
+      return true;
+    });
+    if (analyzable.length > 1) {
+      await mediaAnalysisService.analyzeBatch({ mediaIds: analyzable.map((m) => m.id) });
+    } else if (analyzable.length === 1) {
+      await mediaAnalysisService.analyzeMedia(analyzable[0]!);
     } else {
-      await mediaAnalysisService.analyzeMedia(media);
+      const type = getMediaType(media.mimeType);
+      if (type === 'video' || type === 'image') {
+        await mediaAnalysisService.analyzeMedia(media);
+      }
     }
   }, [media, getTargetMediaItems]);
 

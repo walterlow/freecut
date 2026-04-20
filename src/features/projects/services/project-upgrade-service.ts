@@ -71,11 +71,10 @@ export async function createProjectUpgradeBackup(
     throw error;
   }
 
-  if (!project.thumbnailId) {
-    return backup;
-  }
-
   try {
+    // `thumbnailId` is a presence sentinel, not a storage key — always try to
+    // load from the project-scoped thumbnail path and bail only if nothing is
+    // actually stored.
     const thumbnailBlob = await loadProjectThumbnail(project.id);
     if (!thumbnailBlob) {
       return backup;

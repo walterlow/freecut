@@ -12,6 +12,16 @@ import { requestLazyCaptionThumbnail } from '../utils/lazy-thumb';
  */
 const blobUrlCache = new Map<string, string>();
 const pendingLoads = new Map<string, Promise<string | null>>();
+// Monotonic version per relPath. Incremented on every invalidation so an
+// in-flight loadBlobUrl that started before an invalidate cannot repopulate
+// the cache with pre-invalidation bytes.
+const versionByKey = new Map<string, number>();
+
+function bumpVersion(key: string): number {
+  const next = (versionByKey.get(key) ?? 0) + 1;
+  versionByKey.set(key, next);
+  return next;
+}
 
 /**
  * Revoke and drop every blob URL tied to a media's caption thumbnails.
@@ -33,10 +43,14 @@ export function invalidateMediaCaptionThumbBlobs(
     if (key.startsWith(prefix) || explicitKeys.has(key)) {
       URL.revokeObjectURL(url);
       blobUrlCache.delete(key);
+      bumpVersion(key);
     }
   }
   for (const key of pendingLoads.keys()) {
-    if (key.startsWith(prefix) || explicitKeys.has(key)) pendingLoads.delete(key);
+    if (key.startsWith(prefix) || explicitKeys.has(key)) {
+      pendingLoads.delete(key);
+      bumpVersion(key);
+    }
   }
 }
 
@@ -46,10 +60,19 @@ async function loadBlobUrl(relPath: string): Promise<string | null> {
   const pending = pendingLoads.get(relPath);
   if (pending) return pending;
 
+  const startVersion = versionByKey.get(relPath) ?? 0;
   const promise = (async () => {
     const blob = await getCaptionThumbnailBlob(relPath);
     if (!blob) return null;
+    // Invalidation may have run while this read was in flight. In that case
+    // the freshly-loaded blob is stale; drop it instead of repopulating the
+    // cache with pre-invalidation bytes.
+    if ((versionByKey.get(relPath) ?? 0) !== startVersion) return null;
     const url = URL.createObjectURL(blob);
+    if ((versionByKey.get(relPath) ?? 0) !== startVersion) {
+      URL.revokeObjectURL(url);
+      return null;
+    }
     blobUrlCache.set(relPath, url);
     return url;
   })();

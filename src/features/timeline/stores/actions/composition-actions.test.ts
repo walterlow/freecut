@@ -323,6 +323,7 @@ describe('composition-actions split wrappers', () => {
     const subItem = subComp!.items[0]!;
     expect(subItem.trackId).toBe(subTrack.id);
     expect(subItem.type).toBe('shape');
+    expect(subItem.type === 'shape' && subItem.isMask).toBe(true);
 
     useCompositionNavigationStore.getState().enterComposition(subComp!.id, 'Compound Mask');
     const loadedTracks = useItemsStore.getState().tracks;
@@ -332,6 +333,8 @@ describe('composition-actions split wrappers', () => {
     const loadedItems = useItemsStore.getState().items;
     expect(loadedItems).toHaveLength(1);
     expect(loadedItems[0]!.trackId).toBe(subTrack.id);
+    const loadedItem = loadedItems[0]!;
+    expect(loadedItem.type === 'shape' && loadedItem.isMask).toBe(true);
   });
 
   it('creates nested compound clips while editing inside another compound clip', () => {

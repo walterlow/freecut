@@ -77,9 +77,10 @@ export const ZOOM_MAX = MAX_ZOOM_LEVEL;
 export const WHEEL_ZOOM_FACTOR = 1.15;
 
 export function computeWheelZoomStep(currentZoom: number, deltaY: number): number {
-  return deltaY > 0
-    ? Math.max(ZOOM_MIN, currentZoom / WHEEL_ZOOM_FACTOR)
-    : Math.min(ZOOM_MAX, currentZoom * WHEEL_ZOOM_FACTOR);
+  if (deltaY > 0) return Math.max(ZOOM_MIN, currentZoom / WHEEL_ZOOM_FACTOR);
+  if (deltaY < 0) return Math.min(ZOOM_MAX, currentZoom * WHEEL_ZOOM_FACTOR);
+  // Pure horizontal wheel events — leave zoom unchanged.
+  return currentZoom;
 }
 
 // Temporary gate: keep slip/slide implementation in code, but hide the UI and

@@ -290,6 +290,11 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
   const handleTimelineAreaMouseDown = useCallback((event: React.MouseEvent) => {
     if (event.button !== 1) return;
     if (!hasTrackSections) return;
+    // Only start a section-divider drag when the middle-click actually lands
+    // on the divider itself — otherwise middle-clicks on clips / gizmos /
+    // buttons inside the timeline row would hijack into an unwanted drag.
+    if (!(event.target instanceof Element)) return;
+    if (!event.target.closest('[data-track-section-divider]')) return;
     handleSectionDividerMouseDown(event);
   }, [handleSectionDividerMouseDown, hasTrackSections]);
 

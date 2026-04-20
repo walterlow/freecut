@@ -151,7 +151,7 @@ export async function deletePreviewAudioConform(
   pendingPreviewAudioConformPersists.delete(mediaId);
   blobUrlManager.invalidate(getPreviewAudioConformCacheKey(mediaId));
 
-  void removeWorkspaceCacheEntry(previewAudioPath(mediaId));
+  await removeWorkspaceCacheEntry(previewAudioPath(mediaId));
 
   if (media?.previewAudioOpfsPath) {
     const legacyPath = media.previewAudioOpfsPath;

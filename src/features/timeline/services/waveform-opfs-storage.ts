@@ -691,14 +691,18 @@ class WaveformOPFSStorage {
 
       for (const name of entries) {
         await dir.removeEntry(name);
+        // Remove the corresponding workspace mirror so a later hydrate can't
+        // silently restore a waveform we just cleared.
+        if (name.endsWith('.bin')) {
+          const mediaId = name.slice(0, -'.bin'.length);
+          await removeWorkspaceCacheEntry(waveformMultiResPath(mediaId));
+        }
       }
 
       logger.debug(`Cleared ${entries.length} waveforms from OPFS`);
     } catch (error) {
       logger.error('Failed to clear waveforms:', error);
     }
-    // Workspace waveforms live per-media under `media/<id>/cache/waveform/`
-    // and are cleaned up with the enclosing media entry — no top-level sweep.
   }
 }
 

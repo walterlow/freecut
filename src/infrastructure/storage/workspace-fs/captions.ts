@@ -123,9 +123,20 @@ async function resolveSharedCaptionCache(
 
   const legacyEnvelope = await readAiOutputAt(contentCaptionsJsonPath(hash), 'captions');
   if (!legacyEnvelope) return undefined;
+  const legacyInterval = resolveSampleIntervalSec(legacyEnvelope.data, legacyEnvelope.params);
+  // When a specific interval was requested, a legacy envelope is only
+  // acceptable if its resolved interval matches — otherwise callers would
+  // silently reuse captions generated at a different density.
+  if (
+    sampleIntervalSec !== undefined
+    && legacyInterval !== undefined
+    && Math.abs(legacyInterval - sampleIntervalSec) >= 0.01
+  ) {
+    return undefined;
+  }
   return {
     envelope: legacyEnvelope,
-    sampleIntervalSec: resolveSampleIntervalSec(legacyEnvelope.data, legacyEnvelope.params),
+    sampleIntervalSec: legacyInterval,
   };
 }
 
@@ -169,6 +180,22 @@ export async function saveCaptions(input: SaveCaptionsInput): Promise<MediaCapti
     captions: input.captions,
   };
 
+  // Read any prior per-media envelope *before* overwriting — when the same
+  // media is re-analyzed with different source bytes, we need to release the
+  // old shared-cache ref so it doesn't leak a stale entry.
+  let priorContentHash: string | undefined;
+  let priorSampleIntervalSec: number | undefined;
+  if (input.contentHash) {
+    try {
+      const prior = await readAiOutput(input.mediaId, 'captions');
+      priorContentHash = prior?.data.contentHash;
+      priorSampleIntervalSec = resolveSampleIntervalSec(prior?.data, prior?.params);
+    } catch {
+      priorContentHash = undefined;
+      priorSampleIntervalSec = undefined;
+    }
+  }
+
   try {
     const written = await writeAiOutput({
       mediaId: input.mediaId,
@@ -180,8 +207,10 @@ export async function saveCaptions(input: SaveCaptionsInput): Promise<MediaCapti
     });
 
     if (input.contentHash) {
+      const mirrorPath = contentCaptionsJsonPath(input.contentHash, input.sampleIntervalSec);
+      let mirrorWritten = false;
       try {
-        await writeAiOutputAt(contentCaptionsJsonPath(input.contentHash, input.sampleIntervalSec), {
+        await writeAiOutputAt(mirrorPath, {
           mediaId: input.mediaId,
           kind: 'captions',
           service: input.service,
@@ -189,11 +218,43 @@ export async function saveCaptions(input: SaveCaptionsInput): Promise<MediaCapti
           params: input.sampleIntervalSec !== undefined ? { sampleIntervalSec: input.sampleIntervalSec } : {},
           data,
         });
+        mirrorWritten = true;
         await addAiContentRef(input.contentHash, input.mediaId, input.sampleIntervalSec);
+        // Release the prior ref once the new ref has landed. Same hash/interval
+        // is idempotent so we skip; only call for genuine changes. Failures are
+        // logged, not rethrown — the new ref is already in place.
+        if (
+          priorContentHash
+          && (priorContentHash !== input.contentHash
+            || priorSampleIntervalSec !== input.sampleIntervalSec)
+        ) {
+          try {
+            await deleteSharedCaptionsIfUnreferenced(
+              priorContentHash,
+              input.mediaId,
+              priorSampleIntervalSec,
+            );
+          } catch (error) {
+            logger.warn(
+              `saveCaptions: failed to release prior ref ${priorContentHash} for ${input.mediaId}`,
+              error,
+            );
+          }
+        }
       } catch (error) {
         // Per-media envelope is already the authoritative record; log and move
-        // on so caption save doesn't fail the whole analyze pipeline.
+        // on so caption save doesn't fail the whole analyze pipeline. If the
+        // mirror was written but ref registration failed, roll back the mirror
+        // so it doesn't orphan — GC only runs when a ref is removed.
         logger.warn(`saveCaptions: content-cache mirror failed for ${input.contentHash}`, error);
+        if (mirrorWritten) {
+          await deleteAiOutputAt(mirrorPath).catch((rollbackError) => {
+            logger.warn(
+              `saveCaptions: failed to roll back orphaned mirror at ${input.contentHash}`,
+              rollbackError,
+            );
+          });
+        }
       }
     }
 
@@ -568,6 +629,15 @@ export async function adoptCaptionsFromCache(
   if (!resolved) return undefined;
   const { envelope, sampleIntervalSec: resolvedInterval } = resolved;
 
+  const adoptedEnvelope: AiOutput<'captions'> = {
+    ...envelope,
+    data: {
+      ...envelope.data,
+      contentHash: hash,
+      sampleIntervalSec: resolvedInterval ?? envelope.data.sampleIntervalSec,
+    },
+  };
+
   try {
     await writeAiOutputAt(aiOutputPath(mediaId, 'captions'), {
       mediaId,
@@ -575,14 +645,10 @@ export async function adoptCaptionsFromCache(
       service: envelope.service,
       model: envelope.model,
       params: envelope.params,
-      data: {
-        ...envelope.data,
-        contentHash: hash,
-        sampleIntervalSec: resolvedInterval ?? envelope.data.sampleIntervalSec,
-      },
+      data: adoptedEnvelope.data,
     });
     await addAiContentRef(hash, mediaId, resolvedInterval);
-    return envelope;
+    return adoptedEnvelope;
   } catch (error) {
     logger.warn(`adoptCaptionsFromCache(${mediaId}, ${hash}) failed`, error);
     // On failure the mediaId has no local envelope — caller should fall

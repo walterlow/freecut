@@ -334,7 +334,13 @@ class MediaLibraryService {
     // reuse is covered by 3a.
     const projectMedia = await getMediaForProjectDB(projectId);
     const existingMedia = projectMedia.find(
-      (m) => m.fileName === file.name && m.fileSize === file.size,
+      (m) =>
+        m.fileName === file.name
+        && m.fileSize === file.size
+        // Only consider legacy records that lack `fileLastModified` — current
+        // records with a different mtime must not be collapsed onto the new
+        // file since they describe different bytes.
+        && (m.fileLastModified === null || m.fileLastModified === undefined),
     );
     if (existingMedia) {
       return { ...existingMedia, isDuplicate: true };

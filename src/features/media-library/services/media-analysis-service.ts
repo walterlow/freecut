@@ -128,7 +128,18 @@ class MediaAnalysisService {
       if (contentHash) {
         const cached = await getCaptionsByContentHash(contentHash, sampleIntervalSec).catch(() => undefined);
         if (cached && this.isCacheCompatible(cached, sampleIntervalSec)) {
-          const adopted = await adoptCaptionsFromCache(media.id, contentHash, sampleIntervalSec);
+          // Treat an adopt failure as a cache miss and fall through to a full
+          // run rather than aborting the whole analysis.
+          let adopted: Awaited<ReturnType<typeof adoptCaptionsFromCache>> | undefined;
+          try {
+            adopted = await adoptCaptionsFromCache(media.id, contentHash, sampleIntervalSec);
+          } catch (error) {
+            logger.warn('adoptCaptionsFromCache threw — falling through to full analysis', {
+              mediaId: media.id,
+              error,
+            });
+            adopted = undefined;
+          }
           if (adopted) {
             const captions = adopted.data.captions;
             store.updateMediaCaptions(media.id, captions);
@@ -466,7 +477,14 @@ class MediaAnalysisService {
   ): boolean {
     if (!envelope) return false;
     const envInterval = (envelope.params as { sampleIntervalSec?: number }).sampleIntervalSec;
-    if (envInterval === undefined) return true;
+    if (envInterval === undefined) {
+      // Legacy cache (pre-versioning): fall back to the interval recorded in
+      // `data` so users who changed their interval get a fresh analysis
+      // instead of silently reusing the old density.
+      const dataInterval = (envelope.data as { sampleIntervalSec?: number }).sampleIntervalSec;
+      if (dataInterval === undefined) return true;
+      return Math.abs(dataInterval - sampleIntervalSec) < 0.01;
+    }
     return Math.abs(envInterval - sampleIntervalSec) < 0.01;
   }
 }

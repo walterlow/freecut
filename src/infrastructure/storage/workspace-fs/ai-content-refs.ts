@@ -133,8 +133,21 @@ export async function deleteAiContent(
   const root = requireWorkspaceRoot();
   try {
     await withKeyLock(lockKey(hash, sampleIntervalSec), async () => {
+      // Re-check for refs inside the lock. A concurrent `addAiContentRef` that
+      // landed between the caller's ref-removal and our lock acquisition would
+      // otherwise be orphaned by the deletion below.
+      const currentRefs = await readJson<AiContentRefs>(root, contentAiRefsPath(hash, sampleIntervalSec));
+      if (currentRefs && currentRefs.mediaIds.length > 0) {
+        return;
+      }
+
       if (contentCaptionCacheVariantKey(sampleIntervalSec)) {
         await removeEntry(root, contentCaptionCacheDir(hash, sampleIntervalSec), { recursive: true });
+        // Sweep the parent ai/ dir if this was the last variant.
+        const remaining = await listDirectory(root, contentAiDir(hash)).catch(() => []);
+        if (remaining.length === 0) {
+          await removeEntry(root, contentAiDir(hash), { recursive: true }).catch(() => undefined);
+        }
         return;
       }
 

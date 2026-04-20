@@ -403,9 +403,11 @@ export function getCompositionVisualSegments(params: {
 
     if (mapped.type === 'video' && mapped.mediaId) {
       const sourceFps = mapped.sourceFps ?? mediaFpsById?.[mapped.mediaId] ?? parentFps;
+      // `durationInFrames` is in project FPS; convert to source-native frames
+      // when falling back so `sourceDurationFrames` is always consistent.
       const sourceDurationFrames = mediaDurationFramesById?.[mapped.mediaId]
         ?? mapped.sourceDuration
-        ?? mapped.durationInFrames;
+        ?? Math.round(mapped.durationInFrames * (sourceFps / parentFps));
 
       segments.push({
         itemId: subItem.id,

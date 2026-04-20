@@ -1464,6 +1464,11 @@ async function renderCompositionItem(
         if (subItem.type === 'shape' && subItem.isMask) {
           continue;
         }
+        // Adjustment layers are applied via getAdjustmentLayerEffects; they
+        // are not renderable visible content themselves.
+        if (subItem.type === 'adjustment') {
+          continue;
+        }
 
         const subItemKeyframes = subData.keyframesMap.get(subItem.id);
         const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);

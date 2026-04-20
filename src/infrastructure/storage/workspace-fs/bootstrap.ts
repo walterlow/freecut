@@ -113,13 +113,47 @@ async function stripProxyKeyPrefixes(
         continue;
       }
 
+      // Read every file up front. Aborting on the first unreadable file
+      // avoids a destructive half-move: we only delete oldDir once every
+      // expected file has been successfully copied to newDir.
       const files = await listDirectory(root, oldDir);
+      const filePayloads: Array<{ name: string; blob: Blob }> = [];
+      let allReadable = true;
       for (const file of files) {
         if (file.kind !== 'file') continue;
-        const blob = await readBlob(root, [...oldDir, file.name]);
-        if (!blob) continue;
-        await writeBlob(root, [...newDir, file.name], blob);
+        const blob = await readBlob(root, [...oldDir, file.name]).catch(() => null);
+        if (!blob) {
+          allReadable = false;
+          break;
+        }
+        filePayloads.push({ name: file.name, blob });
       }
+      if (!allReadable) {
+        logger.warn(`stripProxyKeyPrefixes: aborting ${oldName} — unreadable file, leaving source intact`);
+        continue;
+      }
+
+      let allWritten = true;
+      const written: string[] = [];
+      for (const payload of filePayloads) {
+        try {
+          await writeBlob(root, [...newDir, payload.name], payload.blob);
+          written.push(payload.name);
+        } catch (error) {
+          logger.warn(`stripProxyKeyPrefixes: write failed for ${oldName}/${payload.name}`, error);
+          allWritten = false;
+          break;
+        }
+      }
+      if (!allWritten) {
+        // Roll back partial writes so we leave the new location empty and the
+        // old directory untouched for a retry on next bootstrap.
+        for (const name of written) {
+          await removeEntry(root, [...newDir, name], { recursive: false }).catch(() => undefined);
+        }
+        continue;
+      }
+
       await removeEntry(root, oldDir, { recursive: true });
       renamed++;
     } catch (error) {

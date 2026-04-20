@@ -380,8 +380,21 @@ async function fixProjectThumbnailContamination(
       }
 
       const thumbnailBlob = await readBlob(root, [...mediaDir(id), LEGACY_MEDIA_THUMBNAIL_FILENAME]);
-      if (thumbnailBlob) {
-        await writeBlob(root, projectThumbnailPath(id), thumbnailBlob);
+      if (!thumbnailBlob) {
+        // Nothing usable to recover; don't drop the directory because we
+        // can't confirm this is actually contaminated state.
+        continue;
+      }
+      await writeBlob(root, projectThumbnailPath(id), thumbnailBlob);
+
+      // Only delete the directory when its contents match the expected
+      // contamination shape (just the legacy thumbnail file). Anything else
+      // is unknown state we don't want to silently discard.
+      const unexpectedContents = contents.some(
+        (e) => !(e.kind === 'file' && e.name === LEGACY_MEDIA_THUMBNAIL_FILENAME),
+      );
+      if (unexpectedContents) {
+        continue;
       }
       await removeEntry(root, mediaDir(id), { recursive: true });
       fixed++;
