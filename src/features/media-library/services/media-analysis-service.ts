@@ -119,10 +119,16 @@ class MediaAnalysisService {
       // content tree (or so the adoptCaptionsFromCache fast-path can run).
       const contentHash = await this.resolveContentHash(media);
 
+      // Drop every in-memory thumbnail URL and semantic cache entry tied to
+      // this media before either adopting cached captions or writing fresh
+      // outputs. Otherwise a re-analyze can keep serving stale per-media
+      // blobs/embeddings until the next reload.
+      invalidateMediaCaptionThumbnails(media.id);
+
       if (contentHash) {
-        const cached = await getCaptionsByContentHash(contentHash).catch(() => undefined);
+        const cached = await getCaptionsByContentHash(contentHash, sampleIntervalSec).catch(() => undefined);
         if (cached && this.isCacheCompatible(cached, sampleIntervalSec)) {
-          const adopted = await adoptCaptionsFromCache(media.id, contentHash);
+          const adopted = await adoptCaptionsFromCache(media.id, contentHash, sampleIntervalSec);
           if (adopted) {
             const captions = adopted.data.captions;
             store.updateMediaCaptions(media.id, captions);
@@ -141,12 +147,6 @@ class MediaAnalysisService {
           }
         }
       }
-
-      // Drop every in-memory thumbnail URL and semantic cache entry tied to
-      // this media before re-analysis starts. If the rerun fails, the old
-      // on-disk assets still exist and can be rehydrated on demand; if it
-      // succeeds, fresh thumbs/embeddings repopulate the caches below.
-      invalidateMediaCaptionThumbnails(media.id);
 
       let captions: MediaCaption[];
       const stagedThumbnailBlobs = new Map<number, Blob>();
@@ -232,7 +232,10 @@ class MediaAnalysisService {
 
           const vectors = await embeddingsProvider.embedBatch(texts);
           if (vectors.length === captions.length) {
-            await saveCaptionEmbeddings(media.id, vectors, EMBEDDING_MODEL_DIM, { contentHash });
+            await saveCaptionEmbeddings(media.id, vectors, EMBEDDING_MODEL_DIM, {
+              contentHash,
+              sampleIntervalSec,
+            });
             embeddingModel = EMBEDDING_MODEL_ID;
             embeddingDim = EMBEDDING_MODEL_DIM;
             captionsWithEmbeddings = captionsWithEmbeddings.map((caption, i) => ({
@@ -254,7 +257,10 @@ class MediaAnalysisService {
             await clipProvider.ensureReady();
             const imageVectors = await clipProvider.embedImages(validBlobs);
             if (imageVectors.length === captions.length) {
-              await saveCaptionImageEmbeddings(media.id, imageVectors, CLIP_EMBEDDING_DIM, { contentHash });
+              await saveCaptionImageEmbeddings(media.id, imageVectors, CLIP_EMBEDDING_DIM, {
+                contentHash,
+                sampleIntervalSec,
+              });
               imageEmbeddingModel = CLIP_MODEL_ID;
               imageEmbeddingDim = CLIP_EMBEDDING_DIM;
             }
@@ -269,7 +275,10 @@ class MediaAnalysisService {
               const blob = stagedThumbnailBlobs.get(index);
               if (!blob) return caption;
               try {
-                const thumbRelPath = await saveCaptionThumbnail(media.id, index, blob, { contentHash });
+                const thumbRelPath = await saveCaptionThumbnail(media.id, index, blob, {
+                  contentHash,
+                  sampleIntervalSec,
+                });
                 return { ...caption, thumbRelPath };
               } catch {
                 return caption;

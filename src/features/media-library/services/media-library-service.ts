@@ -55,6 +55,7 @@ import {
   getProjectsUsingMedia,
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
+  readAiOutput,
 } from '@/infrastructure/storage';
 import { saveCaptions, deleteCaptions } from '@/infrastructure/storage/workspace-fs/captions';
 import { deleteScenes } from '@/infrastructure/storage/workspace-fs/scenes';
@@ -308,12 +309,23 @@ class MediaLibraryService {
         && m.fileLastModified === file.lastModified,
     );
     if (workspaceDuplicate) {
-      const projectMediaIds = await getProjectMediaIds(projectId).catch(() => [] as string[]);
-      const alreadyInThisProject = projectMediaIds.includes(workspaceDuplicate.id);
-      if (!alreadyInThisProject) {
-        await associateMediaWithProject(projectId, workspaceDuplicate.id);
+      let resolvedDuplicate = workspaceDuplicate;
+      if (workspaceDuplicate.storageType === 'handle') {
+        resolvedDuplicate = await updateMediaDB(workspaceDuplicate.id, {
+          fileHandle: handle,
+          fileName: file.name,
+          fileSize: file.size,
+          fileLastModified: file.lastModified,
+          updatedAt: Date.now(),
+        });
       }
-      return { ...workspaceDuplicate, isDuplicate: alreadyInThisProject };
+      mirrorSourceToWorkspaceInBackground(resolvedDuplicate.id, file, file.name);
+      const projectMediaIds = await getProjectMediaIds(projectId).catch(() => [] as string[]);
+      const alreadyInThisProject = projectMediaIds.includes(resolvedDuplicate.id);
+      if (!alreadyInThisProject) {
+        await associateMediaWithProject(projectId, resolvedDuplicate.id);
+      }
+      return { ...resolvedDuplicate, isDuplicate: alreadyInThisProject };
     }
 
     // Stage 3b: Project-scoped name+size fallback for legacy records missing
@@ -1090,18 +1102,37 @@ class MediaLibraryService {
       contentHash?: string;
     },
   ): Promise<MediaMetadata> {
+    const existingEnvelope = await readAiOutput(mediaId, 'captions').catch(() => undefined);
+    const existingSampleInterval = (() => {
+      const fromData = existingEnvelope?.data.sampleIntervalSec;
+      if (typeof fromData === 'number') return fromData;
+      const fromParams = (existingEnvelope?.params as { sampleIntervalSec?: unknown } | undefined)?.sampleIntervalSec;
+      return typeof fromParams === 'number' ? fromParams : undefined;
+    })();
+
+    const resolvedOptions = {
+      service: options?.service ?? existingEnvelope?.service ?? 'lfm-captioning',
+      model: options?.model ?? existingEnvelope?.model ?? 'lfm-2.5-vl',
+      sampleIntervalSec: options?.sampleIntervalSec ?? existingSampleInterval,
+      embeddingModel: options?.embeddingModel ?? existingEnvelope?.data.embeddingModel,
+      embeddingDim: options?.embeddingDim ?? existingEnvelope?.data.embeddingDim,
+      imageEmbeddingModel: options?.imageEmbeddingModel ?? existingEnvelope?.data.imageEmbeddingModel,
+      imageEmbeddingDim: options?.imageEmbeddingDim ?? existingEnvelope?.data.imageEmbeddingDim,
+      contentHash: options?.contentHash ?? existingEnvelope?.data.contentHash,
+    };
+
     try {
       await saveCaptions({
         mediaId,
         captions,
-        service: options?.service ?? 'lfm-captioning',
-        model: options?.model ?? 'lfm-2.5-vl',
-        sampleIntervalSec: options?.sampleIntervalSec,
-        embeddingModel: options?.embeddingModel,
-        embeddingDim: options?.embeddingDim,
-        imageEmbeddingModel: options?.imageEmbeddingModel,
-        imageEmbeddingDim: options?.imageEmbeddingDim,
-        contentHash: options?.contentHash,
+        service: resolvedOptions.service,
+        model: resolvedOptions.model,
+        sampleIntervalSec: resolvedOptions.sampleIntervalSec,
+        embeddingModel: resolvedOptions.embeddingModel,
+        embeddingDim: resolvedOptions.embeddingDim,
+        imageEmbeddingModel: resolvedOptions.imageEmbeddingModel,
+        imageEmbeddingDim: resolvedOptions.imageEmbeddingDim,
+        contentHash: resolvedOptions.contentHash,
       });
     } catch (error) {
       logger.warn(`Failed to persist captions for ${mediaId}; metadata mirror will still update`, error);

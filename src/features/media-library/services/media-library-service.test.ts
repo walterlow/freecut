@@ -18,6 +18,12 @@ const indexedDbMocks = vi.hoisted(() => ({
   getProjectsUsingMedia: vi.fn(),
   getMediaForProject: vi.fn(),
   deleteTranscript: vi.fn(),
+  readAiOutput: vi.fn(),
+}));
+
+const captionsStorageMocks = vi.hoisted(() => ({
+  saveCaptions: vi.fn(async () => []),
+  deleteCaptions: vi.fn(async () => undefined),
 }));
 
 const opfsMocks = vi.hoisted(() => ({
@@ -72,6 +78,8 @@ const backgroundMediaWorkMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/infrastructure/storage', () => indexedDbMocks);
+
+vi.mock('@/infrastructure/storage/workspace-fs/captions', () => captionsStorageMocks);
 
 vi.mock('./opfs-service', () => ({
   opfsService: opfsMocks,
@@ -144,6 +152,7 @@ describe('MediaLibraryService', () => {
     compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(false);
     compositionRuntimeMocks.startPreviewAudioStartupWarm.mockResolvedValue(undefined);
     filmstripCacheMocks.prewarmPriorityWindow.mockResolvedValue(undefined);
+    indexedDbMocks.readAiOutput.mockResolvedValue(undefined);
   });
 
   describe('getAllMedia', () => {
@@ -199,6 +208,7 @@ describe('MediaLibraryService', () => {
         thumbnail: new Blob(['thumb'], { type: 'image/webp' }),
       });
       mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false });
+      indexedDbMocks.getAllMedia.mockResolvedValue([]);
       indexedDbMocks.getMediaForProject.mockResolvedValue([]);
 
       const result = await mediaLibraryService.importMediaWithHandle(mockHandle, 'project-1');
@@ -231,6 +241,7 @@ describe('MediaLibraryService', () => {
         fileName: 'video.mp4',
         fileSize: 4,
       });
+      indexedDbMocks.getAllMedia.mockResolvedValue([]);
       indexedDbMocks.getMediaForProject.mockResolvedValue([existingMedia]);
 
       const mockFile = new File(['data'], 'video.mp4', { type: 'video/mp4' });
@@ -246,6 +257,46 @@ describe('MediaLibraryService', () => {
       expect(result.isDuplicate).toBe(true);
       expect(result.id).toBe('existing-1');
       expect(indexedDbMocks.createMedia).not.toHaveBeenCalled();
+    });
+
+    it('refreshes the stored handle when reusing a workspace duplicate', async () => {
+      const existingMedia = makeMediaMetadata({
+        id: 'existing-1',
+        fileName: 'video.mp4',
+        fileSize: 4,
+        fileLastModified: 1234,
+        storageType: 'handle',
+      });
+      const refreshedMedia = {
+        ...existingMedia,
+        fileHandle: {} as FileSystemFileHandle,
+      };
+      indexedDbMocks.getAllMedia.mockResolvedValue([existingMedia]);
+      indexedDbMocks.getProjectMediaIds.mockResolvedValue([]);
+      indexedDbMocks.updateMedia.mockResolvedValue(refreshedMedia);
+
+      const mockFile = new File(['data'], 'video.mp4', {
+        type: 'video/mp4',
+        lastModified: 1234,
+      });
+      const mockHandle = {
+        name: 'video.mp4',
+        getFile: vi.fn().mockResolvedValue(mockFile),
+        queryPermission: vi.fn().mockResolvedValue('granted'),
+        requestPermission: vi.fn().mockResolvedValue('granted'),
+      } as unknown as FileSystemFileHandle;
+
+      const result = await mediaLibraryService.importMediaWithHandle(mockHandle, 'project-2');
+
+      expect(indexedDbMocks.updateMedia).toHaveBeenCalledWith('existing-1', expect.objectContaining({
+        fileHandle: mockHandle,
+        fileName: 'video.mp4',
+        fileSize: 4,
+        fileLastModified: 1234,
+      }));
+      expect(indexedDbMocks.associateMediaWithProject).toHaveBeenCalledWith('project-2', 'existing-1');
+      expect(result.id).toBe('existing-1');
+      expect(result.isDuplicate).toBe(false);
     });
 
     it('starts preview audio conform in background for custom-decoded imports', async () => {
@@ -271,6 +322,7 @@ describe('MediaLibraryService', () => {
         },
       });
       mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false });
+      indexedDbMocks.getAllMedia.mockResolvedValue([]);
       indexedDbMocks.getMediaForProject.mockResolvedValue([]);
       compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(true);
 
@@ -475,6 +527,47 @@ describe('MediaLibraryService', () => {
       await expect(
         mediaLibraryService.copyMediaToProject('nonexistent', 'project-2')
       ).rejects.toThrow('Media not found');
+    });
+  });
+
+  describe('updateMediaCaptions', () => {
+    it('preserves existing analysis metadata on partial caption rewrites', async () => {
+      const media = makeMediaMetadata({ id: 'm1' });
+      indexedDbMocks.readAiOutput.mockResolvedValue({
+        service: 'lfm-captioning',
+        model: 'lfm-2.5-vl',
+        params: { sampleIntervalSec: 3 },
+        data: {
+          sampleIntervalSec: 3,
+          embeddingModel: 'embed-old',
+          embeddingDim: 384,
+          imageEmbeddingModel: 'clip-old',
+          imageEmbeddingDim: 512,
+          contentHash: 'hash-abc',
+          captions: [{ timeSec: 0, text: 'old' }],
+        },
+      });
+      indexedDbMocks.updateMedia.mockResolvedValue({
+        ...media,
+        aiCaptions: [{ timeSec: 0, text: 'new' }],
+      });
+
+      await mediaLibraryService.updateMediaCaptions('m1', [{ timeSec: 0, text: 'new' }]);
+
+      expect(captionsStorageMocks.saveCaptions).toHaveBeenCalledWith(expect.objectContaining({
+        mediaId: 'm1',
+        sampleIntervalSec: 3,
+        embeddingModel: 'embed-old',
+        embeddingDim: 384,
+        imageEmbeddingModel: 'clip-old',
+        imageEmbeddingDim: 512,
+        contentHash: 'hash-abc',
+        service: 'lfm-captioning',
+        model: 'lfm-2.5-vl',
+      }));
+      expect(indexedDbMocks.updateMedia).toHaveBeenCalledWith('m1', {
+        aiCaptions: [{ timeSec: 0, text: 'new' }],
+      });
     });
   });
 

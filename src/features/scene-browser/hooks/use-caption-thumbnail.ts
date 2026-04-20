@@ -14,21 +14,29 @@ const blobUrlCache = new Map<string, string>();
 const pendingLoads = new Map<string, Promise<string | null>>();
 
 /**
- * Revoke and drop every blob URL that lives under a media's
- * captions-thumbs directory. Callers should invoke this before a
- * re-analysis run so the next render loads the freshly-written JPEG
- * instead of the cached pre-overwrite blob.
+ * Revoke and drop every blob URL tied to a media's caption thumbnails.
+ * Callers should invoke this before a re-analysis run so the next render
+ * loads the freshly-written JPEG instead of the cached pre-overwrite blob.
+ *
+ * `thumbRelPaths` is needed for content-keyed thumbnails shared under
+ * `content/{hash}/ai/...`, which do not live under a media-specific prefix.
  */
-export function invalidateMediaCaptionThumbBlobs(mediaId: string): void {
+export function invalidateMediaCaptionThumbBlobs(
+  mediaId: string,
+  thumbRelPaths: readonly (string | undefined)[] = [],
+): void {
   const prefix = `media/${mediaId}/cache/ai/captions-thumbs/`;
+  const explicitKeys = new Set(
+    thumbRelPaths.filter((path): path is string => typeof path === 'string' && path.length > 0),
+  );
   for (const [key, url] of blobUrlCache) {
-    if (key.startsWith(prefix)) {
+    if (key.startsWith(prefix) || explicitKeys.has(key)) {
       URL.revokeObjectURL(url);
       blobUrlCache.delete(key);
     }
   }
   for (const key of pendingLoads.keys()) {
-    if (key.startsWith(prefix)) pendingLoads.delete(key);
+    if (key.startsWith(prefix) || explicitKeys.has(key)) pendingLoads.delete(key);
   }
 }
 

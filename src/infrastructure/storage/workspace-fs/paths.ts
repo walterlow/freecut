@@ -321,40 +321,71 @@ export function captionThumbRelPath(mediaId: string, index: number): string {
 
 /* ---------------- Content-keyed caption storage (shared cache) ---------------- */
 //
-// Captions are a pure function of source bytes, so when contentHash is known
-// the envelope, packed embedding bins, and per-scene thumbnail JPEGs live in
-// the content-addressable tree and are shared across every mediaId that
-// resolves to the same hash. Reference counts for this cache live in the
-// sibling `ai/refs.json` and are independent of the source-blob `refs.json`
-// — media items using `handle` storage dedup their captions even though their
-// source bytes never land in `content/{hash}/data.{ext}`.
+// Captions are a pure function of source bytes plus the analysis parameters
+// that affect output cardinality (today: sampleIntervalSec). When contentHash
+// is known, the envelope, packed embedding bins, and per-scene thumbnail JPEGs
+// live in the content-addressable tree and are shared across every mediaId
+// that resolves to the same hash AND caption-cache variant. Reference counts
+// for this cache live in a sibling `refs.json` and are independent of the
+// source-blob `refs.json` — media items using `handle` storage dedup their
+// captions even though their source bytes never land in `content/{hash}/data.{ext}`.
 
 export function contentAiDir(hash: string): string[] {
   return [...contentDir(hash), CACHE_AI_DIR];
 }
 
-export function contentAiRefsPath(hash: string): string[] {
-  return [...contentAiDir(hash), CONTENT_REFS_FILENAME];
+/**
+ * Shared caption cache variant key. Rounded to centiseconds so values that
+ * differ only by tiny float noise still resolve to the same on-disk cache.
+ * Returns null for legacy/unversioned cache records.
+ */
+export function contentCaptionCacheVariantKey(sampleIntervalSec?: number): string | null {
+  if (
+    sampleIntervalSec === undefined
+    || !Number.isFinite(sampleIntervalSec)
+    || sampleIntervalSec <= 0
+  ) {
+    return null;
+  }
+  return `si-${Math.round(sampleIntervalSec * 100)}`;
 }
 
-export function contentCaptionsJsonPath(hash: string): string[] {
-  return [...contentAiDir(hash), 'captions.json'];
+/**
+ * Segments for the shared caption cache root. Legacy caches live directly
+ * under `content/{hash}/ai/`; interval-versioned caches live under
+ * `content/{hash}/ai/{variantKey}/`.
+ */
+export function contentCaptionCacheDir(hash: string, sampleIntervalSec?: number): string[] {
+  const variantKey = contentCaptionCacheVariantKey(sampleIntervalSec);
+  return variantKey ? [...contentAiDir(hash), variantKey] : contentAiDir(hash);
 }
 
-export function contentCaptionEmbeddingsPath(hash: string): string[] {
-  return [...contentAiDir(hash), 'captions-embeddings.bin'];
+export function contentAiRefsPath(hash: string, sampleIntervalSec?: number): string[] {
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), CONTENT_REFS_FILENAME];
 }
 
-export function contentCaptionImageEmbeddingsPath(hash: string): string[] {
-  return [...contentAiDir(hash), 'captions-image-embeddings.bin'];
+export function contentCaptionsJsonPath(hash: string, sampleIntervalSec?: number): string[] {
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions.json'];
 }
 
-export function contentCaptionThumbsDir(hash: string): string[] {
-  return [...contentAiDir(hash), CACHE_CAPTION_THUMBS_DIR];
+export function contentCaptionEmbeddingsPath(hash: string, sampleIntervalSec?: number): string[] {
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions-embeddings.bin'];
 }
 
-export function contentCaptionThumbPath(hash: string, index: number): string[] {
-  return [...contentCaptionThumbsDir(hash), `${index}.jpg`];
+export function contentCaptionImageEmbeddingsPath(hash: string, sampleIntervalSec?: number): string[] {
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions-image-embeddings.bin'];
+}
+
+export function contentCaptionThumbsDir(hash: string, sampleIntervalSec?: number): string[] {
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), CACHE_CAPTION_THUMBS_DIR];
+}
+
+export function contentCaptionThumbPath(
+  hash: string,
+  index: number,
+  sampleIntervalSec?: number,
+): string[] {
+  return [...contentCaptionThumbsDir(hash, sampleIntervalSec), `${index}.jpg`];
 }
 
 /**
@@ -362,8 +393,12 @@ export function contentCaptionThumbPath(hash: string, index: number): string[] {
  * on `MediaCaption.thumbRelPath` when captions are shared — different mediaIds
  * sharing a hash all resolve their thumbs through this path.
  */
-export function contentCaptionThumbRelPath(hash: string, index: number): string {
-  return contentCaptionThumbPath(hash, index).join('/');
+export function contentCaptionThumbRelPath(
+  hash: string,
+  index: number,
+  sampleIntervalSec?: number,
+): string {
+  return contentCaptionThumbPath(hash, index, sampleIntervalSec).join('/');
 }
 
 /**

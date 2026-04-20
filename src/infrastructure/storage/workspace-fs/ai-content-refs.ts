@@ -13,8 +13,17 @@
 
 import { createLogger } from '@/shared/logging/logger';
 
-import { readJson, removeEntry, writeJsonAtomic } from './fs-primitives';
-import { contentAiDir, contentAiRefsPath } from './paths';
+import { listDirectory, readJson, removeEntry, writeJsonAtomic } from './fs-primitives';
+import {
+  contentAiDir,
+  contentAiRefsPath,
+  contentCaptionCacheDir,
+  contentCaptionEmbeddingsPath,
+  contentCaptionImageEmbeddingsPath,
+  contentCaptionThumbsDir,
+  contentCaptionsJsonPath,
+  contentCaptionCacheVariantKey,
+} from './paths';
 import { requireWorkspaceRoot } from './root';
 import { withKeyLock } from './with-key-lock';
 
@@ -29,14 +38,18 @@ interface AiContentRefs {
   updatedAt: number;
 }
 
-function lockKey(hash: string): string {
-  return `ai-content-refs:${hash}`;
+function lockKey(hash: string, sampleIntervalSec?: number): string {
+  const variantKey = contentCaptionCacheVariantKey(sampleIntervalSec) ?? 'legacy';
+  return `ai-content-refs:${hash}:${variantKey}`;
 }
 
-export async function getAiContentRefs(hash: string): Promise<AiContentRefs | null> {
+export async function getAiContentRefs(
+  hash: string,
+  sampleIntervalSec?: number,
+): Promise<AiContentRefs | null> {
   const root = requireWorkspaceRoot();
   try {
-    return await readJson<AiContentRefs>(root, contentAiRefsPath(hash));
+    return await readJson<AiContentRefs>(root, contentAiRefsPath(hash, sampleIntervalSec));
   } catch (error) {
     logger.warn(`getAiContentRefs(${hash}) failed`, error);
     return null;
@@ -48,11 +61,15 @@ export async function getAiContentRefs(hash: string): Promise<AiContentRefs | nu
  * doesn't exist. Returns the post-add reference count. Idempotent — calling
  * twice with the same mediaId is a no-op.
  */
-export async function addAiContentRef(hash: string, mediaId: string): Promise<number> {
+export async function addAiContentRef(
+  hash: string,
+  mediaId: string,
+  sampleIntervalSec?: number,
+): Promise<number> {
   const root = requireWorkspaceRoot();
   try {
-    return await withKeyLock(lockKey(hash), async () => {
-      const existing = await readJson<AiContentRefs>(root, contentAiRefsPath(hash));
+    return await withKeyLock(lockKey(hash, sampleIntervalSec), async () => {
+      const existing = await readJson<AiContentRefs>(root, contentAiRefsPath(hash, sampleIntervalSec));
       const now = Date.now();
       const set = new Set(existing?.mediaIds ?? []);
       set.add(mediaId);
@@ -62,7 +79,7 @@ export async function addAiContentRef(hash: string, mediaId: string): Promise<nu
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
-      await writeJsonAtomic(root, contentAiRefsPath(hash), updated);
+      await writeJsonAtomic(root, contentAiRefsPath(hash, sampleIntervalSec), updated);
       return updated.mediaIds.length;
     });
   } catch (error) {
@@ -76,11 +93,15 @@ export async function addAiContentRef(hash: string, mediaId: string): Promise<nu
  * Idempotent — removing a mediaId that isn't in the set is a no-op that
  * returns the unchanged count. Missing refs file also returns 0.
  */
-export async function removeAiContentRef(hash: string, mediaId: string): Promise<number> {
+export async function removeAiContentRef(
+  hash: string,
+  mediaId: string,
+  sampleIntervalSec?: number,
+): Promise<number> {
   const root = requireWorkspaceRoot();
   try {
-    return await withKeyLock(lockKey(hash), async () => {
-      const existing = await readJson<AiContentRefs>(root, contentAiRefsPath(hash));
+    return await withKeyLock(lockKey(hash, sampleIntervalSec), async () => {
+      const existing = await readJson<AiContentRefs>(root, contentAiRefsPath(hash, sampleIntervalSec));
       if (!existing) return 0;
       const remaining = existing.mediaIds.filter((id) => id !== mediaId);
       if (remaining.length === existing.mediaIds.length) {
@@ -91,7 +112,7 @@ export async function removeAiContentRef(hash: string, mediaId: string): Promise
         mediaIds: remaining,
         updatedAt: Date.now(),
       };
-      await writeJsonAtomic(root, contentAiRefsPath(hash), updated);
+      await writeJsonAtomic(root, contentAiRefsPath(hash, sampleIntervalSec), updated);
       return remaining.length;
     });
   } catch (error) {
@@ -105,11 +126,33 @@ export async function removeAiContentRef(hash: string, mediaId: string): Promise
  * this only after {@link removeAiContentRef} returns 0 — this is the GC step
  * for the shared cache.
  */
-export async function deleteAiContent(hash: string): Promise<void> {
+export async function deleteAiContent(
+  hash: string,
+  sampleIntervalSec?: number,
+): Promise<void> {
   const root = requireWorkspaceRoot();
   try {
-    await withKeyLock(lockKey(hash), async () => {
-      await removeEntry(root, contentAiDir(hash), { recursive: true });
+    await withKeyLock(lockKey(hash, sampleIntervalSec), async () => {
+      if (contentCaptionCacheVariantKey(sampleIntervalSec)) {
+        await removeEntry(root, contentCaptionCacheDir(hash, sampleIntervalSec), { recursive: true });
+        return;
+      }
+
+      const legacyEntries = [
+        contentCaptionsJsonPath(hash),
+        contentCaptionEmbeddingsPath(hash),
+        contentCaptionImageEmbeddingsPath(hash),
+        contentCaptionThumbsDir(hash),
+        contentAiRefsPath(hash),
+      ];
+      for (const segments of legacyEntries) {
+        await removeEntry(root, segments, { recursive: true }).catch(() => undefined);
+      }
+
+      const aiEntries = await listDirectory(root, contentAiDir(hash)).catch(() => []);
+      if (aiEntries.length === 0) {
+        await removeEntry(root, contentAiDir(hash), { recursive: true }).catch(() => undefined);
+      }
     });
   } catch (error) {
     logger.warn(`deleteAiContent(${hash}) failed`, error);
