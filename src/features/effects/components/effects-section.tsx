@@ -246,6 +246,18 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   const openPicker = useCallback(() => {
     triggerPreviews();
     setSearchQuery('');
+    // Measure the trigger synchronously so the portal mounts already
+    // positioned — otherwise the first render flashes a full-width,
+    // unconstrained panel before the positioning effect runs.
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPanelStyle({
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+      });
+    }
     setPickerOpen(true);
   }, [triggerPreviews]);
 
@@ -255,17 +267,9 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     triggerRef.current?.blur();
   }, []);
 
-  // Position panel when opened
+  // Focus the search input after the panel mounts.
   useEffect(() => {
-    if (!pickerOpen || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setPanelStyle({
-      position: 'fixed',
-      top: `${rect.bottom + 4}px`,
-      left: `${rect.left}px`,
-      width: `${rect.width}px`,
-    });
-    // Focus search input after render
+    if (!pickerOpen) return;
     requestAnimationFrame(() => searchInputRef.current?.focus());
   }, [pickerOpen]);
 

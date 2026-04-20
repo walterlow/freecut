@@ -32,6 +32,7 @@ import { useEditorStore } from '@/app/state/editor';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { importExportDialog } from '@/features/editor/deps/export-contract';
+import { prewarmEffectPreviews } from '@/features/editor/deps/effects-contract';
 import { getEditorLayout, getEditorLayoutCssVars } from '@/app/editor-layout';
 import { createProjectUpgradeBackup, formatProjectUpgradeBackupName } from '@/features/editor/deps/projects';
 import { ProjectUpgradeDialog } from './project-upgrade-dialog';
@@ -237,6 +238,13 @@ export const LoadedEditor = memo(function LoadedEditor({
       preloadExportDialog();
       preloadBundleExportDialog();
     });
+    return () => cancelIdleCallback(id);
+  }, []);
+
+  // Prewarm effect preview thumbnails so the Add Effect picker has no
+  // placeholder → image flash on first open.
+  useEffect(() => {
+    const id = requestIdleCallback(() => prewarmEffectPreviews());
     return () => cancelIdleCallback(id);
   }, []);
 
