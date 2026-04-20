@@ -1,11 +1,6 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { CompositionInputProps } from '@/types/export';
-import {
-  PlayerEmitterProvider,
-  ClockBridgeProvider,
-  VideoConfigProvider,
-  useClock,
-} from '@/features/preview/deps/player-context';
+import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import {
@@ -25,16 +20,6 @@ interface InlineCompositionPreviewProps {
     width: number;
     height: number;
   };
-}
-
-function InlineCompositionPreviewClockSync({ frame }: { frame: number | null }) {
-  const clock = useClock();
-
-  useEffect(() => {
-    clock.seekToFrame(frame ?? 0);
-  }, [clock, frame]);
-
-  return null;
 }
 
 export const InlineCompositionPreview = memo(function InlineCompositionPreview({
@@ -101,12 +86,17 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
     };
   }, [composition, compositionById, compositionId, compositionInput, useProxy]);
 
+  const playerRef = useRef<PlayerRef | null>(null);
   const compositionWidth = composition?.width || 640;
   const compositionHeight = composition?.height || 360;
   const clampedSeekFrame = Math.min(
     Math.max(1, composition?.durationInFrames ?? 1) - 1,
     Math.max(0, seekFrame ?? 0),
   );
+
+  useEffect(() => {
+    playerRef.current?.seekTo(clampedSeekFrame);
+  }, [clampedSeekFrame, resolvedTracks]);
 
   const playerSize = useMemo(() => {
     const aspectRatio = compositionWidth / compositionHeight;
@@ -170,28 +160,24 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
             }}
           >
             {resolvedTracks ? (
-              <PlayerEmitterProvider>
-                <ClockBridgeProvider
-                  fps={composition.fps}
-                  durationInFrames={durationInFrames}
-                  initialFrame={clampedSeekFrame}
-                  onVolumeChange={() => {}}
-                >
-                  <VideoConfigProvider
-                    fps={composition.fps}
-                    width={composition.width}
-                    height={composition.height}
-                    durationInFrames={durationInFrames}
-                  >
-                    <InlineCompositionPreviewClockSync frame={clampedSeekFrame} />
-                    <MainComposition
-                      {...compositionInput}
-                      tracks={resolvedTracks}
-                      useProxyMedia={useProxy}
-                    />
-                  </VideoConfigProvider>
-                </ClockBridgeProvider>
-              </PlayerEmitterProvider>
+              <Player
+                ref={playerRef}
+                durationInFrames={durationInFrames}
+                fps={composition.fps}
+                width={composition.width}
+                height={composition.height}
+                initialFrame={clampedSeekFrame}
+                autoPlay={false}
+                loop={false}
+                controls={false}
+                style={{ width: '100%', height: '100%' }}
+              >
+                <MainComposition
+                  {...compositionInput}
+                  tracks={resolvedTracks}
+                  useProxyMedia={useProxy}
+                />
+              </Player>
             ) : (
               <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
                 Loading compound clip...
