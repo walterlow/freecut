@@ -319,6 +319,53 @@ export function captionThumbRelPath(mediaId: string, index: number): string {
   return captionThumbPath(mediaId, index).join('/');
 }
 
+/* ---------------- Content-keyed caption storage (shared cache) ---------------- */
+//
+// Captions are a pure function of source bytes, so when contentHash is known
+// the envelope, packed embedding bins, and per-scene thumbnail JPEGs live in
+// the content-addressable tree and are shared across every mediaId that
+// resolves to the same hash. Reference counts for this cache live in the
+// sibling `ai/refs.json` and are independent of the source-blob `refs.json`
+// — media items using `handle` storage dedup their captions even though their
+// source bytes never land in `content/{hash}/data.{ext}`.
+
+export function contentAiDir(hash: string): string[] {
+  return [...contentDir(hash), CACHE_AI_DIR];
+}
+
+export function contentAiRefsPath(hash: string): string[] {
+  return [...contentAiDir(hash), CONTENT_REFS_FILENAME];
+}
+
+export function contentCaptionsJsonPath(hash: string): string[] {
+  return [...contentAiDir(hash), 'captions.json'];
+}
+
+export function contentCaptionEmbeddingsPath(hash: string): string[] {
+  return [...contentAiDir(hash), 'captions-embeddings.bin'];
+}
+
+export function contentCaptionImageEmbeddingsPath(hash: string): string[] {
+  return [...contentAiDir(hash), 'captions-image-embeddings.bin'];
+}
+
+export function contentCaptionThumbsDir(hash: string): string[] {
+  return [...contentAiDir(hash), CACHE_CAPTION_THUMBS_DIR];
+}
+
+export function contentCaptionThumbPath(hash: string, index: number): string[] {
+  return [...contentCaptionThumbsDir(hash), `${index}.jpg`];
+}
+
+/**
+ * Workspace-root-relative path for a content-keyed caption thumbnail. Stored
+ * on `MediaCaption.thumbRelPath` when captions are shared — different mediaIds
+ * sharing a hash all resolve their thumbs through this path.
+ */
+export function contentCaptionThumbRelPath(hash: string, index: number): string {
+  return contentCaptionThumbPath(hash, index).join('/');
+}
+
 /**
  * Legacy path kept only for read-fallback. New writes go through
  * `aiOutputPath(mediaId, 'transcript')`.

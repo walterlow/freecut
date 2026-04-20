@@ -284,15 +284,47 @@ class MediaLibraryService {
       throw new Error(validationResult.error);
     }
 
-    // Stage 3: Check for duplicates (by fileName + fileSize)
-    const projectMedia = await getMediaForProjectDB(projectId);
-
-    const existingMedia = projectMedia.find(
-      (m) => m.fileName === file.name && m.fileSize === file.size
+    // Stage 3a: Cross-workspace dedup by (fileName + fileSize + lastModified).
+    // A File's triple-tuple is effectively unique: the same bytes re-saved
+    // bumps lastModified, and two different files sharing name + exact byte
+    // size + exact mtime is a practical non-occurrence. Zero file I/O — all
+    // three fields come from File metadata — so unique imports pay nothing.
+    // A match reuses the existing media record across projects instead of
+    // re-mirroring the bytes into a fresh `media/{id}/` directory.
+    //
+    // `isDuplicate` is only set when the matched media is already in THIS
+    // project. Cross-project reuse (new project importing the same file) is
+    // a successful import from the UI's perspective — the media just happens
+    // to already live in the workspace, so we associate and return it as a
+    // regular import result. `getAllMedia` includes media whose only project
+    // is trashed; re-associating into the new project effectively brings
+    // those records forward, and the trash sweep's ref-counted delete still
+    // keeps the bytes alive because the new project now references them.
+    const workspaceMedia = await getAllMediaDB();
+    const workspaceDuplicate = workspaceMedia.find(
+      (m) =>
+        m.fileName === file.name
+        && m.fileSize === file.size
+        && m.fileLastModified === file.lastModified,
     );
+    if (workspaceDuplicate) {
+      const projectMediaIds = await getProjectMediaIds(projectId).catch(() => [] as string[]);
+      const alreadyInThisProject = projectMediaIds.includes(workspaceDuplicate.id);
+      if (!alreadyInThisProject) {
+        await associateMediaWithProject(projectId, workspaceDuplicate.id);
+      }
+      return { ...workspaceDuplicate, isDuplicate: alreadyInThisProject };
+    }
 
+    // Stage 3b: Project-scoped name+size fallback for legacy records missing
+    // `fileLastModified` (imported before that field was persisted). Only
+    // fires for records already in the current project — cross-project
+    // reuse is covered by 3a.
+    const projectMedia = await getMediaForProjectDB(projectId);
+    const existingMedia = projectMedia.find(
+      (m) => m.fileName === file.name && m.fileSize === file.size,
+    );
     if (existingMedia) {
-      // File already exists in project - return existing with duplicate flag
       return { ...existingMedia, isDuplicate: true };
     }
 
@@ -1050,6 +1082,12 @@ class MediaLibraryService {
       embeddingDim?: number;
       imageEmbeddingModel?: string;
       imageEmbeddingDim?: number;
+      /**
+       * When provided, the captions envelope and heavy assets are mirrored
+       * into the shared content-addressable cache so other mediaIds with the
+       * same source bytes skip re-analysis.
+       */
+      contentHash?: string;
     },
   ): Promise<MediaMetadata> {
     try {
@@ -1063,6 +1101,7 @@ class MediaLibraryService {
         embeddingDim: options?.embeddingDim,
         imageEmbeddingModel: options?.imageEmbeddingModel,
         imageEmbeddingDim: options?.imageEmbeddingDim,
+        contentHash: options?.contentHash,
       });
     } catch (error) {
       logger.warn(`Failed to persist captions for ${mediaId}; metadata mirror will still update`, error);

@@ -210,7 +210,8 @@ async function generateOne(request: PendingRequest): Promise<string | null> {
     if (useMediaLibraryStore.getState().taggingMediaIds.has(mediaId)) {
       return null;
     }
-    const relPath = await saveCaptionThumbnail(mediaId, captionIndex, jpeg);
+    const contentHash = useMediaLibraryStore.getState().mediaById[mediaId]?.contentHash;
+    const relPath = await saveCaptionThumbnail(mediaId, captionIndex, jpeg, { contentHash });
     patchStoreThumbPath(mediaId, captionIndex, relPath);
     return relPath;
   } catch (error) {
@@ -260,7 +261,8 @@ export function requestLazyCaptionThumbnail(
   if (pending) return pending;
 
   const promise = (async () => {
-    const existing = await probeCaptionThumbnail(mediaId, captionIndex);
+    const contentHash = useMediaLibraryStore.getState().mediaById[mediaId]?.contentHash;
+    const existing = await probeCaptionThumbnail(mediaId, captionIndex, { contentHash });
     if (existing) {
       patchStoreThumbPath(mediaId, captionIndex, existing);
       resultCache.set(key, existing);

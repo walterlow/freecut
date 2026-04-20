@@ -92,8 +92,11 @@ export {
 // AI captions (vision-language-model frame descriptions)
 export {
   getCaptions,
+  getCaptionsByContentHash,
   saveCaptions,
+  adoptCaptionsFromCache,
   deleteCaptions,
+  deleteSharedCaptionsIfUnreferenced,
   saveCaptionThumbnail,
   getCaptionThumbnailBlob,
   probeCaptionThumbnail,
