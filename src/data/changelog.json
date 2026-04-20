@@ -1,7 +1,7 @@
 {
   "current": {
     "version": "current",
-    "date": "2026-04-17",
+    "date": "2026-04-20",
     "highlights": [
       "Projects now live on disk in a workspace folder you choose",
       "Per-clip pitch shift in semitones and cents",
@@ -48,6 +48,46 @@
         {
           "title": "What's New dialog shows weekly changelog",
           "scope": "editor"
+        },
+        {
+          "title": "add What's New dialog with weekly changelog viewer",
+          "scope": "editor"
+        },
+        {
+          "title": "weekly CalVer changelog with auto-append and rollup",
+          "scope": "changelog"
+        },
+        {
+          "title": "multi-select with marquee, bulk delete, and double-click to open",
+          "scope": "projects"
+        },
+        {
+          "title": "add trash section with permanent delete",
+          "scope": "projects"
+        },
+        {
+          "title": "report legacy IDB migration progress to banner",
+          "scope": "migration"
+        },
+        {
+          "title": "soft-delete with undo, orphan sweep, and write-path locking",
+          "scope": "projects"
+        },
+        {
+          "title": "harden workspace concurrency, handle validation, and migration retry",
+          "scope": "storage"
+        },
+        {
+          "title": "split project master bus from per-device monitor volume",
+          "scope": "audio"
+        },
+        {
+          "title": "multi-workspace support, waveform mirroring, and real-filename media sources",
+          "scope": "storage"
+        },
+        {
+          "title": "migrate to workspace folder via File System Access API",
+          "scope": "storage"
         }
       ],
       "fixed": [
@@ -74,6 +114,25 @@
         {
           "title": "UI accessibility, transition alpha, and viewport clamp fixes",
           "scope": "editor"
+        },
+        {
+          "title": "use github.event.before for range and full fetch depth",
+          "scope": "changelog"
+        },
+        {
+          "title": "route projects import through contract adapter",
+          "scope": "workspace-gate"
+        },
+        {
+          "title": "skip fetch for unregistered blob URLs in decoder prewarm",
+          "scope": "preview"
+        },
+        {
+          "title": "retry video with fresh blob URL on stale-blob load errors",
+          "scope": "preview"
+        },
+        {
+          "title": "reset timeline and preview UI state by component identity"
         }
       ],
       "improved": [
