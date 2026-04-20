@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { render, waitFor } from '@testing-library/react';
 import type { CompositionInputProps } from '@/types/export';
+
+class FakeOffscreenCanvas {
+  constructor(public width: number, public height: number) {}
+  getContext() {
+    return {} as unknown;
+  }
+}
+if (typeof globalThis.OffscreenCanvas === 'undefined') {
+  (globalThis as unknown as { OffscreenCanvas: typeof FakeOffscreenCanvas }).OffscreenCanvas = FakeOffscreenCanvas;
+}
 
 const playbackState = vi.hoisted(() => ({
   zoom: -1,
@@ -35,6 +44,7 @@ const buildSubCompositionInputMock = vi.hoisted(() => vi.fn());
 const collectSubCompositionMediaIdsMock = vi.hoisted(() => vi.fn());
 const resolveMediaUrlMock = vi.hoisted(() => vi.fn());
 const resolveMediaUrlsMock = vi.hoisted(() => vi.fn());
+const createCompositionRendererMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/shared/state/playback', () => {
   const usePlaybackStore = Object.assign(
@@ -44,15 +54,6 @@ vi.mock('@/shared/state/playback', () => {
 
   return { usePlaybackStore };
 });
-
-vi.mock('@/features/preview/deps/player-context', () => ({
-  PlayerEmitterProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  ClockBridgeProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  VideoConfigProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  useClock: () => ({
-    seekToFrame: vi.fn(),
-  }),
-}));
 
 vi.mock('@/features/preview/deps/timeline-contract', () => {
   const useCompositionsStore = Object.assign(
@@ -72,10 +73,8 @@ vi.mock('@/features/preview/deps/media-library-contract', () => ({
   resolveMediaUrls: resolveMediaUrlsMock,
 }));
 
-vi.mock('@/features/preview/deps/composition-runtime-contract', () => ({
-  MainComposition: ({ useProxyMedia }: { useProxyMedia?: boolean }) => (
-    <div data-testid="main-composition" data-use-proxy-media={useProxyMedia ? 'true' : 'false'} />
-  ),
+vi.mock('@/features/preview/deps/export', () => ({
+  createCompositionRenderer: createCompositionRendererMock,
 }));
 
 import { InlineCompositionPreview } from './inline-composition-preview';
@@ -108,10 +107,18 @@ describe('InlineCompositionPreview', () => {
       backgroundColor: '#000000',
     };
 
+    const resolvedTracks = inputProps.tracks.map((track) => ({ ...track, resolved: true }));
+
     buildSubCompositionInputMock.mockReturnValue(inputProps);
     collectSubCompositionMediaIdsMock.mockReturnValue(['media-1']);
     resolveMediaUrlMock.mockResolvedValue('blob:media-1');
-    resolveMediaUrlsMock.mockResolvedValue(inputProps.tracks);
+    resolveMediaUrlsMock.mockResolvedValue(resolvedTracks);
+    createCompositionRendererMock.mockResolvedValue({
+      preload: vi.fn().mockResolvedValue(undefined),
+      renderFrame: vi.fn().mockResolvedValue(undefined),
+      warmGpuPipeline: vi.fn().mockResolvedValue(undefined),
+      dispose: vi.fn(),
+    });
   });
 
   it('resolves compound clip tracks with proxy playback when enabled', async () => {
@@ -127,6 +134,11 @@ describe('InlineCompositionPreview', () => {
       expect(resolveMediaUrlsMock).toHaveBeenCalledWith(expect.any(Array), { useProxy: true });
     });
 
-    expect(screen.getByTestId('main-composition')).toHaveAttribute('data-use-proxy-media', 'true');
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+    });
+
+    const [compositionInput] = createCompositionRendererMock.mock.calls[0] ?? [];
+    expect(compositionInput.tracks[0]).toMatchObject({ resolved: true });
   });
 });
