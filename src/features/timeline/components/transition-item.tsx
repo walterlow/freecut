@@ -1,4 +1,4 @@
-﻿import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { Transition } from '@/types/transition';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -26,7 +26,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { cn } from '@/shared/ui/cn';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import { Trash2 } from 'lucide-react';
 import {
   applyPreviewGeometryToClip,

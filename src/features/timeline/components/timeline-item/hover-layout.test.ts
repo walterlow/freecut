@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EDITOR_LAYOUT } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT } from '@/app/editor-layout';
 import { getTimelineClipLabelRowHeightPx } from './hover-layout';
 
 describe('hover layout', () => {

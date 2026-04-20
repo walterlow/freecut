@@ -4,7 +4,7 @@ import {
   DEFAULT_EDITOR_DENSITY_PRESET,
   getEditorLayout,
   getLeftEditorSidebarBounds,
-} from '@/shared/ui/editor-layout';
+} from '@/app/editor-layout';
 import { useSettingsStore } from '@/features/editor/deps/settings';
 
 describe('editor-store', () => {

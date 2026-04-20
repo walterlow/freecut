@@ -34,13 +34,32 @@ export function FontPicker({
   const [fonts, setFonts] = useState<readonly FontCatalogEntry[]>(FONT_CATALOG);
   const [isLoading, setIsLoading] = useState(false);
 
+  const closePicker = useCallback(() => {
+    setHoveredFontValue(null);
+    setOpen(false);
+  }, []);
+
+  const openPicker = useCallback(() => {
+    setSearchQuery('');
+    setHoveredFontValue(null);
+    setOpen(true);
+  }, []);
+
+  const togglePicker = useCallback(() => {
+    if (open) {
+      closePicker();
+      return;
+    }
+
+    openPicker();
+  }, [closePicker, open, openPicker]);
+
   useEffect(() => {
     if (!open) {
       return;
     }
 
     let cancelled = false;
-    setSearchQuery('');
     setIsLoading(true);
 
     void getGoogleFontsCatalog()
@@ -107,15 +126,6 @@ export function FontPicker({
 
   useEffect(() => {
     if (!open) {
-      setHoveredFontValue(null);
-      return;
-    }
-
-    setHoveredFontValue(value ?? null);
-  }, [open, value]);
-
-  useEffect(() => {
-    if (!open) {
       return;
     }
 
@@ -124,7 +134,7 @@ export function FontPicker({
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && rootRef.current && !rootRef.current.contains(target)) {
-        setOpen(false);
+        closePicker();
       }
     };
 
@@ -134,7 +144,7 @@ export function FontPicker({
         return;
       }
 
-      setOpen(false);
+      closePicker();
     };
 
     window.addEventListener('pointerdown', handlePointerDown);
@@ -143,15 +153,15 @@ export function FontPicker({
       window.removeEventListener('pointerdown', handlePointerDown);
       rootElement?.removeEventListener('focusout', handleFocusOut);
     };
-  }, [open]);
+  }, [closePicker, open]);
 
   const handleSelect = useCallback(
     (font: FontCatalogEntry) => {
       void ensureFontsLoaded([font.value], font.weights);
       onValueChange(font.value);
-      setOpen(false);
+      closePicker();
     },
-    [onValueChange]
+    [closePicker, onValueChange]
   );
 
   const focusFontByIndex = useCallback(
@@ -177,7 +187,7 @@ export function FontPicker({
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        setOpen(false);
+        closePicker();
         return;
       }
 
@@ -217,7 +227,7 @@ export function FontPicker({
           break;
       }
     },
-    [filteredFonts, focusFontByIndex, handleSelect]
+    [closePicker, filteredFonts, focusFontByIndex, handleSelect]
   );
 
   const triggerLabel = value ?? placeholder;
@@ -228,7 +238,7 @@ export function FontPicker({
         type="button"
         variant="outline"
         className="h-7 w-full justify-between px-2 text-xs font-normal"
-        onClick={() => setOpen((current) => !current)}
+        onClick={togglePicker}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -336,4 +346,3 @@ export function FontPicker({
     </div>
   );
 }
-

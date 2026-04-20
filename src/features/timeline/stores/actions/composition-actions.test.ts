@@ -9,7 +9,7 @@ import { useTimelineCommandStore } from '../timeline-command-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useCompositionsStore } from '../compositions-store';
 import { useCompositionNavigationStore } from '../composition-navigation-store';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import {
   createPreComp,
   deleteCompoundClips,

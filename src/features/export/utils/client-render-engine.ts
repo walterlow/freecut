@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Client Render Engine
  *
  * Contains the `createCompositionRenderer` factory that builds the per-frame
@@ -54,7 +54,7 @@ import {
   type ActiveTransition,
 } from './canvas-transitions';
 import { type CachedGifFrames, gifFrameCache } from '@/features/export/deps/timeline';
-import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
+import { isGifUrl, isWebpUrl } from '@/shared/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
 import { getCompositeOperation } from '@/types/blend-mode-css';
@@ -110,7 +110,7 @@ function isGifFormat(item: ImageItem): boolean {
   return isGifUrl(item.src) || (item.label?.toLowerCase() ?? '').endsWith('.gif');
 }
 
-// WebP frame extraction is handled by gifFrameCache.getWebpFrames() â€”
+// WebP frame extraction is handled by gifFrameCache.getWebpFrames() —
 // the cache service uses the ImageDecoder API and provides the same
 // CachedGifFrames structure used for GIF.
 
@@ -1349,7 +1349,7 @@ export async function createCompositionRenderer(
         return true;
       };
 
-      // Find occlusion cutoff â€“ the lowest track order with a fully occluding item
+      // Find occlusion cutoff – the lowest track order with a fully occluding item
       // If masks are active, disable occlusion culling (masks could reveal content)
       const {
         occlusionCutoffOrder,

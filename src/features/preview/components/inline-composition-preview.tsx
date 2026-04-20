@@ -7,7 +7,7 @@ import {
   useClock,
 } from '@/features/preview/deps/player-context';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import {
   buildSubCompositionInput,
   collectSubCompositionMediaIds,
@@ -38,6 +38,24 @@ function InlineCompositionPreviewClockSync({ frame }: { frame: number | null }) 
 }
 
 export const InlineCompositionPreview = memo(function InlineCompositionPreview({
+  compositionId,
+  seekFrame,
+  containerSize,
+}: InlineCompositionPreviewProps) {
+  const useProxy = usePlaybackStore((s) => s.useProxy);
+  const requestKey = `${compositionId}:${useProxy ? 'proxy' : 'source'}`;
+
+  return (
+    <InlineCompositionPreviewContent
+      key={requestKey}
+      compositionId={compositionId}
+      seekFrame={seekFrame}
+      containerSize={containerSize}
+    />
+  );
+});
+
+const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewContent({
   compositionId,
   seekFrame,
   containerSize,

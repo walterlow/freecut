@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type { MediaMetadata } from '@/types/storage';
 import {
   Dialog,
@@ -55,7 +55,7 @@ import {
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
 import { cn } from '@/shared/ui/cn';
-import { EDITOR_DENSITY_OPTIONS } from '@/shared/ui/editor-layout';
+import { EDITOR_DENSITY_OPTIONS } from '@/app/editor-layout';
 import {
   getWhisperQuantizationOption,
   getWhisperLanguageSelectValue,
@@ -93,17 +93,13 @@ async function clearProjectCaches(mediaIds: string[]): Promise<void> {
   if (mediaIds.length === 0) return;
 
   const [
-    { deleteWaveform },
-    { deleteGifFrames },
-    { deleteDecodedPreviewAudio },
+    { deleteWaveform, deleteGifFrames, deleteDecodedPreviewAudio },
     { deletePreviewAudioConform },
     { gifFrameCache },
     { filmstripCache },
     { waveformCache },
   ] = await Promise.all([
-    import('@/infrastructure/storage/indexeddb/waveforms'),
-    import('@/infrastructure/storage/indexeddb/gif-frames'),
-    import('@/infrastructure/storage/indexeddb/decoded-preview-audio'),
+    import('@/infrastructure/storage'),
     import('@/features/editor/deps/composition-runtime'),
     importGifFrameCache(),
     importFilmstripCache(),
@@ -160,13 +156,11 @@ async function regenerateProjectThumbnails(
   const [
     { mediaLibraryService },
     { generateThumbnail },
-    { saveThumbnail },
-    { updateMedia },
+    { saveThumbnail, updateMedia },
   ] = await Promise.all([
     importMediaLibraryService(),
     importThumbnailGenerator(),
-    import('@/infrastructure/storage/indexeddb/thumbnails'),
-    import('@/infrastructure/storage/indexeddb/media'),
+    import('@/infrastructure/storage'),
   ]);
 
   let regenerated = 0;

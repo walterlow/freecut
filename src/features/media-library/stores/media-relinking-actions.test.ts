@@ -159,7 +159,7 @@ describe('createRelinkingActions', () => {
       expect(currentState.brokenMediaInfo.has('media-1')).toBe(true);
     });
 
-    it('is idempotent â€” does not duplicate entries', () => {
+    it('is idempotent — does not duplicate entries', () => {
       let currentState: RelinkingState = {
         brokenMediaIds: ['media-1'],
         brokenMediaInfo: new Map([

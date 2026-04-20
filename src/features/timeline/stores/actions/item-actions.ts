@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Item Actions - Cross-domain operations that affect items, transitions, and keyframes.
  */
 
@@ -7,7 +7,7 @@ import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
 import { execute, applyTransitionRepairs, warnIfOverlapping } from './shared';
 import {

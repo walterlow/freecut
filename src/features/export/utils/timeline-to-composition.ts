@@ -37,6 +37,7 @@ export function convertTimelineToComposition(
   keyframes?: ItemKeyframes[],
   backgroundColor?: string,
   busAudioEq?: AudioEqSettings,
+  masterBusDb?: number,
 ): CompositionInputProps {
   // Resolve group gate behavior: parent group mute/hide propagates to children.
   // Also filters out group container tracks (which hold no items).
@@ -198,6 +199,7 @@ export function convertTimelineToComposition(
     keyframes: processedKeyframes,
     backgroundColor,
     busAudioEq,
+    masterBusDb,
   };
 }
 

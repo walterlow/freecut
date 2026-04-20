@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import { linearLevelToPercent, setLiveTrackVolumeOverride, clearLiveTrackVolumeOverride, setLiveBusVolumeOverride, clearLiveBusVolumeOverride } from './audio-meter-utils';
 import { getMixerLiveGain, setMixerLiveGains } from '@/shared/state/mixer-live-gain';
 

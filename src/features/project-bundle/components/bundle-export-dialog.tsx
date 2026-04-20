@@ -25,8 +25,8 @@ import {
   exportProjectBundleStreaming,
   downloadBundle,
 } from '../services/bundle-export-service';
-import { formatDuration } from '@/utils/time-utils';
-import { formatBytes } from '@/utils/format-utils';
+import { formatDuration } from '@/shared/utils/time-utils';
+import { formatBytes } from '@/shared/utils/format-utils';
 
 export interface BundleExportDialogProps {
   open: boolean;

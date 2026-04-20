@@ -13,9 +13,9 @@ import { useSettingsStore } from '@/features/timeline/deps/settings';
 
 // Utilities and hooks
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
-import { formatTimecode, secondsToFrames } from '@/utils/time-utils';
+import { formatTimecode, secondsToFrames } from '@/shared/utils/time-utils';
 import { createScrubThrottleState, shouldCommitScrubFrame } from '../utils/scrub-throttle';
-import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout';
 import { sanitizeInOutPoints } from '../utils/in-out-points';
 
 // Edge-scrolling configuration
@@ -512,7 +512,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     const ck = cacheKeyRef.current;
     if (dw <= 0 || ch <= 0 || qPPS <= 0) return;
 
-    // ── Tile visibility ──
+    // â”€â”€ Tile visibility â”€â”€
     const startTile = Math.max(0, Math.floor(sl / TILE_WIDTH));
     const endTile = Math.min(
       Math.ceil(dw / TILE_WIDTH) - 1,
@@ -610,7 +610,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       );
     }
 
-    // ── Labels ──
+    // â”€â”€ Labels â”€â”€
     if (labelsContainer) {
       syncLabels(labelsContainer, labelPoolRef.current, sl, vw, qPPS, fpsRef.current);
     }

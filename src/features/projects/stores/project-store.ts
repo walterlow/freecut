@@ -12,7 +12,10 @@ import {
   deleteProject as deleteProjectDB,
   getProjectMediaIds,
   associateMediaWithProject,
-} from '@/infrastructure/storage/indexeddb';
+  softDeleteProject,
+  restoreProject as restoreProjectDB,
+  getTrashedProjectMediaIds,
+} from '@/infrastructure/storage';
 import { createProjectObject, duplicateProject } from '../utils/project-helpers';
 // v3: Import media service for cascade operations
 import { mediaLibraryService } from '@/features/projects/deps/media-library-contract';
@@ -43,7 +46,27 @@ interface ProjectActions {
   loadProject: (id: string) => Promise<Project | null>;
   createProject: (data: ProjectFormData) => Promise<Project>;
   updateProject: (id: string, data: Partial<ProjectFormData>) => Promise<Project>;
-  deleteProject: (id: string, clearLocalFiles?: boolean) => Promise<{ localFilesDeleted: boolean }>;
+  /**
+   * Soft-delete: moves the project to the workspace trash (marker file;
+   * content preserved). Returns the trash state so the caller can surface
+   * an "Undo" toast. External-folder cleanup (`clearLocalFiles`) runs
+   * immediately and has no undo — the user explicitly opted in to
+   * destroying those files.
+   */
+  deleteProject: (id: string, clearLocalFiles?: boolean) => Promise<{
+    localFilesDeleted: boolean;
+    trashed: true;
+    deletedAt: number;
+    originalName: string;
+  }>;
+  /** Un-trash a project and add it back to the visible list. */
+  restoreProject: (id: string) => Promise<void>;
+  /**
+   * Permanently remove a trashed project: runs media cleanup for any
+   * media exclusive to this project, then wipes the project directory.
+   * No-op for live projects.
+   */
+  permanentlyDeleteProject: (id: string) => Promise<void>;
   duplicateProject: (id: string) => Promise<Project>;
 
   // Project folder management
@@ -235,7 +258,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
             if (!fsPermissionGranted) {
               logger.warn(`Permission denied to clear local files for project ${id}`);
               set({ isLoading: false });
-              throw new Error('Filesystem permission denied â€” project was not deleted. Please grant access and try again.');
+              throw new Error('Filesystem permission denied — project was not deleted. Please grant access and try again.');
             }
           }
 
@@ -286,31 +309,79 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
               }
             }
 
-            // v3: Delete all media associations for this project
-            // This handles reference counting - files are only deleted
-            // if no other projects reference them
-            await mediaLibraryService.deleteAllMediaFromProject(id);
-
-            // Then delete the project itself
-            await deleteProjectDB(id);
+            // Soft-delete: move to workspace trash. Media cleanup is
+            // deferred to `permanentlyDeleteProject` — the media files
+            // stay intact so `restoreProject` restores a complete
+            // project. An auto-purge sweep (see `sweepTrashOlderThan`
+            // on bootstrap) runs media cleanup on trashed projects past
+            // their TTL.
+            const marker = await softDeleteProject(id);
 
             set({ isLoading: false });
-            return { localFilesDeleted };
+            return {
+              localFilesDeleted,
+              trashed: true as const,
+              deletedAt: marker.deletedAt,
+              originalName: marker.originalName,
+            };
           } catch (error) {
             if (localFilesDeleted || partialLocalDeletion) {
-              // Local files already deleted (fully or partially) â€” rolling back the UI would be misleading
+              // Local files already deleted (fully or partially) — rolling back the UI would be misleading
               const scope = localFilesDeleted ? 'All local files deleted' : 'Some local files deleted';
-              const errorMessage = `${scope} but database cleanup failed â€” project may be inconsistent`;
+              const errorMessage = `${scope} but soft-delete failed — project may be inconsistent`;
               logger.error(errorMessage, error);
               set({ error: errorMessage, isLoading: false });
               throw new Error(errorMessage, { cause: error });
             }
-            // Rollback on error (safe â€” no local files were touched)
+            // Rollback on error (safe — no local files were touched)
             set({ projects: previousProjects, currentProject: previousCurrentProject });
 
             const errorMessage =
               error instanceof Error ? error.message : 'Failed to delete project';
             set({ error: errorMessage, isLoading: false });
+            throw error;
+          }
+        },
+
+        restoreProject: async (id: string) => {
+          set({ isLoading: true, error: null });
+          try {
+            await restoreProjectDB(id);
+            // Refresh the visible list so the restored project reappears.
+            const projects = await getAllProjects();
+            set({ projects, isLoading: false });
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : 'Failed to restore project';
+            logger.error(`restoreProject(${id}) failed`, error);
+            set({ error: errorMessage, isLoading: false });
+            throw error;
+          }
+        },
+
+        permanentlyDeleteProject: async (id: string) => {
+          try {
+            // Read the trashed project's media links so we can clean up
+            // any media that becomes fully-dereferenced once this project
+            // is gone. (deleteAllMediaFromProject reads media-links via
+            // `getProjectMediaIds`, which works for trashed projects too
+            // because media-links.json lives alongside the marker.)
+            const mediaIds = await getTrashedProjectMediaIds(id);
+            for (const mediaId of mediaIds) {
+              try {
+                await mediaLibraryService.deleteMediaFromProject(id, mediaId);
+              } catch (mediaError) {
+                logger.warn(
+                  `permanentlyDeleteProject(${id}): media cleanup for ${mediaId} failed`,
+                  mediaError,
+                );
+              }
+            }
+            // Wipe the project directory. This also drops the trashed
+            // marker along with the rest of the directory.
+            await deleteProjectDB(id);
+          } catch (error) {
+            logger.error(`permanentlyDeleteProject(${id}) failed`, error);
             throw error;
           }
         },
@@ -443,7 +514,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         clearError: () => set({ error: null }),
       }),
       {
-        // Zundo options â€” no static limit; trimmed dynamically via subscription below
+        // Zundo options — no static limit; trimmed dynamically via subscription below
         partialize: (state) => {
           // Only include projects in undo/redo history
           // Exclude UI state like loading, error, filters

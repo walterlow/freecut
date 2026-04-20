@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Item edit actions split from item-actions.ts to keep the main entry point smaller.
  */
 
@@ -8,7 +8,7 @@ import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import {
@@ -28,7 +28,7 @@ import { timelineToSourceFrames, sourceToTimelineFrames } from '../../utils/sour
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { clampSlideDeltaToPreserveTransitions } from '../../utils/transition-utils';
-import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
+import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
 import { getLinkedItemIds, getUniqueLinkedItemAnchorIds } from '../../utils/linked-items';
 import {
   propagateInsertedGapToSyncLockedTracks,
@@ -455,8 +455,8 @@ export function rateStretchItem(
     }
 
     // Ripple phase: push/pull adjacent clips to maintain adjacency and prevent overlaps.
-    // End handle: endDelta !== 0 → shift downstream clips.
-    // Start handle: fromDelta !== 0, end stays fixed → shift upstream clips.
+    // End handle: endDelta !== 0 â†’ shift downstream clips.
+    // Start handle: fromDelta !== 0, end stays fixed â†’ shift upstream clips.
     const newEnd = actualFrom + actualDuration;
     const endDelta = newEnd - oldEnd;
     const allSynchronizedIds = new Set(synchronizedItems.map((si) => si.id));
@@ -833,7 +833,7 @@ export async function insertFreezeFrame(
     input.dispose();
 
     // Step 3: Store frame as media in IndexedDB
-    const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/infrastructure/storage/indexeddb');
+    const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/infrastructure/storage');
     const currentProjectId = useMediaLibraryStore.getState().currentProjectId;
     if (!currentProjectId) {
       getLogger().error('[insertFreezeFrame] No project context');

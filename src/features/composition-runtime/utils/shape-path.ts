@@ -195,7 +195,7 @@ export function getShapePath(
 
     case 'heart': {
       // Use Composition's makeHeart for consistent path generation
-      // Heart output width = 1.1 Ã— input height, so we scale input to fit within baseSize
+      // Heart output width = 1.1 × input height, so we scale input to fit within baseSize
       // Using height = baseSize / 1.1 ensures output width = baseSize (matches ShapeContent)
       const heartHeight = baseSize / 1.1;
       const result = makeHeart({ height: heartHeight });

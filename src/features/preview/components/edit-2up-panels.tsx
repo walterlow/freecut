@@ -191,7 +191,13 @@ function FramePanel({
           style={{ width: mediaWidth, height: mediaHeight }}
         >
           {renderPanelMedia(item, sourceTime, placeholderText, {
-            renderVideo: (videoItem, time) => <VideoFrame item={videoItem} sourceTime={time} />,
+            renderVideo: (videoItem, time) => (
+              <VideoFrame
+                key={`${videoItem.id}:${videoItem.mediaId ?? 'none'}`}
+                item={videoItem}
+                sourceTime={time}
+              />
+            ),
             renderImage: (imageItem) => <ImageFrame item={imageItem} />,
             renderPlaceholder: (type, text) => <TypePlaceholder type={type} text={text} />,
           })}
@@ -211,10 +217,6 @@ interface VideoFrameProps {
 
 function VideoFrameImpl({ item, sourceTime }: VideoFrameProps) {
   const [useLegacyFallback, setUseLegacyFallback] = useState(false);
-
-  useEffect(() => {
-    setUseLegacyFallback(false);
-  }, [item.id, item.mediaId]);
 
   const handleStrictDecodeFailure = useCallback(() => {
     setUseLegacyFallback((prev) => (prev ? prev : true));

@@ -4,7 +4,7 @@ import type {
   UploadProgress,
 } from '../workers/opfs-worker';
 import { createManagedWorker } from '@/shared/utils/managed-worker';
-import { formatBytes } from '@/utils/format-utils';
+import { formatBytes } from '@/shared/utils/format-utils';
 
 /**
  * OPFS Service - Wrapper for OPFS worker communication

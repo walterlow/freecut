@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
-import { MoreVertical, PlayCircle, Edit2, Copy, Trash2, AlertTriangle, HardDrive } from 'lucide-react';
+import { MoreVertical, PlayCircle, Edit2, Copy, Trash2, AlertTriangle, HardDrive, Check } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,20 +22,29 @@ import {
 import { Button } from '@/components/ui/button';
 import type { Project } from '@/types/project';
 import { formatRelativeTime } from '../utils/project-helpers';
-import { useDeleteProject, useDuplicateProject } from '../hooks/use-project-actions';
+import {
+  useDeleteProject,
+  useDuplicateProject,
+  useRestoreProject,
+} from '../hooks/use-project-actions';
 import { useProjectThumbnail } from '../hooks/use-project-thumbnail';
 
 interface ProjectCardProps {
   project: Project;
   onEdit?: (project: Project) => void;
+  isSelected?: boolean;
+  onCardMouseDown?: (e: React.MouseEvent, project: Project) => void;
+  onCardClick?: (e: React.MouseEvent, project: Project) => void;
 }
 
-export function ProjectCard({ project, onEdit }: ProjectCardProps) {
+export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDown, onCardClick }: ProjectCardProps) {
+  const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [clearLocalFiles, setClearLocalFiles] = useState(false);
   const deleteProject = useDeleteProject();
+  const restoreProject = useRestoreProject();
   const duplicateProject = useDuplicateProject();
   const thumbnailUrl = useProjectThumbnail(project);
 
@@ -49,17 +58,40 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
     setIsDeleting(true);
     setShowDeleteDialog(false);
     const wantedLocalDelete = clearLocalFiles;
-    const result = await deleteProject(project.id, clearLocalFiles);
+    const projectId = project.id;
+    const result = await deleteProject(projectId, clearLocalFiles);
     setIsDeleting(false);
     setClearLocalFiles(false);
 
     if (!result.success) {
       toast.error('Failed to delete project', { description: result.error });
-    } else if (wantedLocalDelete && !result.localFilesDeleted) {
-      toast.warning('Project deleted but local files were not removed', {
-        description: 'Filesystem cleanup failed — you may need to delete the folder manually.',
-      });
+      return;
     }
+
+    if (wantedLocalDelete && !result.localFilesDeleted) {
+      toast.warning(`Moved "${result.originalName}" to trash`, {
+        description: 'Local files were not removed — you may need to delete the folder manually.',
+      });
+      return;
+    }
+
+    toast.success(`Moved "${result.originalName}" to trash`, {
+      description: wantedLocalDelete
+        ? 'Local files deleted — undo will not restore them.'
+        : 'You can undo this for the next few seconds.',
+      duration: 8000,
+      action: {
+        label: 'Undo',
+        onClick: async () => {
+          const undo = await restoreProject(projectId);
+          if (undo.success) {
+            toast.success(`Restored "${result.originalName}"`);
+          } else {
+            toast.error('Failed to restore project', { description: undo.error });
+          }
+        },
+      },
+    });
   };
 
   const handleDuplicate = async (e: React.MouseEvent) => {
@@ -81,6 +113,20 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
     onEdit?.(project);
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    onCardClick?.(e, project);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigate({ to: '/editor/$projectId', params: { projectId: project.id } });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    onCardMouseDown?.(e, project);
+  };
+
   // Safe metadata access with defaults
   const width = project?.metadata?.width || 1920;
   const height = project?.metadata?.height || 1080;
@@ -100,19 +146,34 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
             : `${width}:${height}`;
 
   return (
-    <div className="group relative panel-bg border border-border rounded-lg overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
+    <div
+      data-project-card
+      data-project-id={project.id}
+      onMouseDown={handleMouseDown}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
+      className={`group relative panel-bg border rounded-lg overflow-hidden transition-all cursor-pointer select-none ${
+        isSelected
+          ? 'border-primary ring-2 ring-primary/40 shadow-lg shadow-primary/10'
+          : 'border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5'
+      }`}
+    >
+      {/* Selection check badge */}
+      {isSelected && (
+        <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md pointer-events-none">
+          <Check className="w-4 h-4" strokeWidth={3} />
+        </div>
+      )}
+
       {/* Thumbnail */}
-      <Link
-        to="/editor/$projectId"
-        params={{ projectId: project.id }}
-        className="block relative aspect-video bg-secondary/30 overflow-hidden"
-      >
+      <div className="block relative aspect-video bg-secondary/30 overflow-hidden">
         {thumbnailUrl ? (
           <img
-            key={project.updatedAt} // Force re-render when project is updated
+            key={project.updatedAt}
             src={thumbnailUrl}
             alt={project.name}
-            className="w-full h-full object-contain bg-black/40"
+            draggable={false}
+            className="w-full h-full object-contain bg-black/40 pointer-events-none"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/40 to-secondary/20">
@@ -121,18 +182,18 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
         )}
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
           <div className="flex items-center gap-2 text-white">
             <PlayCircle className="w-6 h-6" />
-            <span className="font-medium">Open in Editor</span>
+            <span className="font-medium">Double-click to open</span>
           </div>
         </div>
 
         {/* Resolution badge */}
-        <div className="absolute top-2 right-2 px-2 py-1 bg-black/80 backdrop-blur-sm rounded text-xs font-mono text-white">
+        <div className="absolute top-2 right-2 px-2 py-1 bg-black/80 backdrop-blur-sm rounded text-xs font-mono text-white pointer-events-none">
           {resolution}
         </div>
-      </Link>
+      </div>
 
       {/* Content */}
       <div className="p-4">
@@ -155,7 +216,12 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
               >
                 <MoreVertical className="w-4 h-4" />
               </Button>
@@ -201,7 +267,7 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
           setShowDeleteDialog(open);
           if (!open) setClearLocalFiles(false);
         }}>
-          <AlertDialogContent>
+          <AlertDialogContent onClick={(e) => e.stopPropagation()}>
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-destructive" />

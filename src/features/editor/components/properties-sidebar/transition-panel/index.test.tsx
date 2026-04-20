@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { transitionRegistry } from '@/domain/timeline/transitions';
+import { transitionRegistry } from '@/core/timeline/transitions';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import type { Transition } from '@/types/transition';
 import type { VideoItem } from '@/types/timeline';
-import type { TransitionRenderer } from '@/domain/timeline/transitions/registry';
+import type { TransitionRenderer } from '@/core/timeline/transitions/registry';
 import { TransitionPanel } from './index';
 
 vi.mock('../components', () => ({

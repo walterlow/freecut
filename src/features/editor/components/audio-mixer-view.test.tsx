@@ -2,8 +2,8 @@ import { fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AudioMixerView } from './audio-mixer-view';
 
-vi.mock('@/shared/ui/editor-layout', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/ui/editor-layout')>();
+vi.mock('@/app/editor-layout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/app/editor-layout')>();
   return {
     ...actual,
     EDITOR_LAYOUT_CSS_VALUES: {
@@ -317,7 +317,7 @@ describe('AudioMixerView', () => {
     const initialHeight = parseFloat(leftBar!.style.height);
 
     // Simulate the estimation pipeline delivering boosted levels (e.g. after
-    // a fader drag triggers setLiveTrackVolumeOverride → pipeline recalc).
+    // a fader drag triggers setLiveTrackVolumeOverride â†’ pipeline recalc).
     rerender(
       <AudioMixerView
         {...props}

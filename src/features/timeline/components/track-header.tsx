@@ -11,7 +11,7 @@ import { Power, PowerOff, Lock, GripVertical, Radio, FoldHorizontal, Link2 } fro
 import type { TimelineTrack } from '@/types/timeline';
 import { useTrackDrag } from '../hooks/use-track-drag';
 import { TIMELINE_SIDEBAR_WIDTH } from '../constants';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import { useItemsStore } from '../stores/items-store';
 import { isTrackDisabled } from '@/features/timeline/utils/classic-tracks';
 import { isTrackSyncLockActive } from '../utils/track-sync-lock';

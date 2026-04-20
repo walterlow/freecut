@@ -21,7 +21,7 @@ import {
   WandSparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -54,7 +54,7 @@ import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampLeftEditorSidebarWidth,
   getEditorLayout,
-} from '@/shared/ui/editor-layout';
+} from '@/app/editor-layout';
 
 const logger = createLogger('MediaSidebar');
 
@@ -284,7 +284,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     handleAddAdjustmentLayer(preset.effects, preset.name);
   }, [handleAddAdjustmentLayer]);
 
-  // Add a single GPU effect — to selected clips, or as adjustment layer if nothing selected
+  // Add a single GPU effect ââ‚¬” to selected clips, or as adjustment layer if nothing selected
   const handleAddGpuEffect = useCallback((gpuEffectId: string) => {
     const { selectedItemIds } = useSelectionStore.getState();
     const { items, addEffect } = useTimelineStore.getState();
@@ -304,7 +304,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
       };
       visualIds.forEach((id) => addEffect(id, effect));
     } else {
-      // No visual selection — create adjustment layer with this effect
+      // No visual selection ââ‚¬” create adjustment layer with this effect
       const defaults = getGpuEffectDefaultParams(gpuEffectId);
       handleAddAdjustmentLayer(
         [{ type: 'gpu-effect', gpuEffectType: gpuEffectId, params: defaults }],
@@ -458,7 +458,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
             placement="top"
           />
 
-          {/* Panel Header — sits with the tab content, below the keyframe editor */}
+          {/* Panel Header ââ‚¬” sits with the tab content, below the keyframe editor */}
           <div
             className="flex items-center justify-between px-3 border-b border-border flex-shrink-0"
             style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderHeight }}

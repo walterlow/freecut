@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { toast } from 'sonner';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -294,8 +294,8 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
           }
         } else {
           // For the left neighbor's end, pass deltaFrames directly to clampTrimAmount
-          // delta > 0 (shrink this item's start, edit point moves right) → neighbor extends end (positive for trimEnd = extend)
-          // delta < 0 (extend this item's start, edit point moves left) → neighbor shrinks end (negative for trimEnd = shrink)
+          // delta > 0 (shrink this item's start, edit point moves right) â†’ neighbor extends end (positive for trimEnd = extend)
+          // delta < 0 (extend this item's start, edit point moves left) â†’ neighbor shrinks end (negative for trimEnd = shrink)
           const { clampedAmount: neighborClamped } = clampTrimAmount(neighbor, 'end', deltaFrames, fps);
           if (Math.abs(neighborClamped) < Math.abs(deltaFrames)) {
             isConstrained = true;

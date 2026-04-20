@@ -10,8 +10,8 @@ import {
 import { importMediaLibraryService } from '@/features/editor/deps/media-library';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
-import { useEditorStore } from '@/shared/state/editor/store';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { useEditorStore } from '@/app/state/editor/store';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { FloatingPanel } from '@/components/ui/floating-panel';
 import { WindowPortal } from '@/components/ui/window-portal';
-import { MoreHorizontal } from 'lucide-react';
+import { Check, MoreHorizontal } from 'lucide-react';
 import {
   AUDIO_METER_SCALE_MARKS,
   compileAudioMeterGraph,
@@ -152,8 +152,12 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const volume = usePlaybackStore((s) => s.volume);
-  const setVolume = usePlaybackStore((s) => s.setVolume);
+  const masterBusDb = usePlaybackStore((s) => s.masterBusDb);
+  const setMasterBusDb = usePlaybackStore((s) => s.setMasterBusDb);
+  // Monitor (per-device) values — used only to post-multiply meter readings
+  // so the display matches what the user actually hears. Does not affect
+  // the master fader (which drives the project-scoped masterBusDb).
+  const monitorVolume = usePlaybackStore((s) => s.volume);
   const muted = usePlaybackStore((s) => s.muted);
   const toggleMute = usePlaybackStore((s) => s.toggleMute);
   const busAudioEq = usePlaybackStore((s) => s.busAudioEq);
@@ -221,9 +225,14 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   // Read bus override inside the same version-gated render cycle so playbackGain
   // recomputes whenever the bus fader moves (subscription above guarantees re-render).
   const liveBusOverrideDb = getLiveBusVolumeOverride();
-  const playbackGain = isPlaying && !muted
-    ? (liveBusOverrideDb !== null ? Math.pow(10, liveBusOverrideDb / 20) : volume)
-    : 0;
+  // Meter readings reflect what the user hears: project master bus (or live
+  // drag override) × per-device monitor volume. Fader drags bypass the
+  // stored masterBusDb via liveBusOverrideDb for no-lag feedback.
+  const effectiveMasterGain =
+    liveBusOverrideDb !== null
+      ? Math.pow(10, liveBusOverrideDb / 20)
+      : Math.pow(10, masterBusDb / 20);
+  const playbackGain = isPlaying && !muted ? effectiveMasterGain * monitorVolume : 0;
 
   const preloadSources = useMemo(() => {
     return resolveCompiledAudioMeterSources({
@@ -608,7 +617,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       return true;
     }
 
-    // Size is fixed from DETACHED_EQ_DEFAULT_BOUNDS; position is a hint —
+    // Size is fixed from DETACHED_EQ_DEFAULT_BOUNDS; position is a hint ââ‚¬”
     // WindowPortal will apply the persisted position and force correct size
     // via resizeTo on mount.
     const nextWindow = window.open(
@@ -668,7 +677,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     }
   }, [getTrackItemIds]);
 
-  // In-place mutation for mute/solo — same pattern as volume change.
+  // In-place mutation for mute/solo ââ‚¬” same pattern as volume change.
   // setTracks() triggers full composition re-render which stalls playback.
   // Live gains bridge the gap so audio responds immediately.
   const handleTrackMuteToggle = useCallback((trackId: string) => {
@@ -745,21 +754,19 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }, [ensureDetachedEqWindow, eqPanelTarget, handleBusEqEnabledChange]);
 
   // ---------------------------------------------------------------------------
-  // Master volume (dB <-> linear gain for bus fader)
+  // Master bus fader — drives the project-scoped masterBusDb. This affects
+  // both preview and export and is saved with the project. The per-device
+  // monitor slider near the playback controls is a separate post-bus gain.
   // ---------------------------------------------------------------------------
 
-  const masterVolumeDb = useMemo(() => {
-    if (volume <= 0) return -60;
-    return Math.max(-60, Math.min(12, 20 * Math.log10(volume)));
-  }, [volume]);
+  const masterVolumeDb = useMemo(
+    () => Math.max(-60, Math.min(12, masterBusDb)),
+    [masterBusDb],
+  );
 
   const handleMasterVolumeChange = useCallback((db: number) => {
-    if (db <= -60) {
-      setVolume(0);
-    } else {
-      setVolume(Math.pow(10, db / 20));
-    }
-  }, [setVolume]);
+    setMasterBusDb(db);
+  }, [setMasterBusDb]);
 
   // ---------------------------------------------------------------------------
   // Mode dropdown (shared across both views)
@@ -777,11 +784,15 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[120px]">
         <DropdownMenuItem onClick={() => setPanelMode('meter')}>
-          <span className="w-4 inline-block">{panelMode === 'meter' ? '✓' : ''}</span>
+          <span className="w-4 inline-flex items-center justify-start">
+            {panelMode === 'meter' && <Check className="h-3.5 w-3.5" />}
+          </span>
           Meters
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setPanelMode('mixer')}>
-          <span className="w-4 inline-block">{panelMode === 'mixer' ? '✓' : ''}</span>
+          <span className="w-4 inline-flex items-center justify-start">
+            {panelMode === 'mixer' && <Check className="h-3.5 w-3.5" />}
+          </span>
           Mixer
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -789,7 +800,9 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
           if (!mixerFloating) setPanelMode('mixer');
           setMixerFloating(!mixerFloating);
         }}>
-          <span className="w-4 inline-block">{mixerFloating ? '✓' : ''}</span>
+          <span className="w-4 inline-flex items-center justify-start">
+            {mixerFloating && <Check className="h-3.5 w-3.5" />}
+          </span>
           Float Mixer
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -909,10 +922,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }
 
   // ---------------------------------------------------------------------------
-  // Meter mode (default) — also shows floating mixer if enabled
+  // Meter mode (default) ââ‚¬” also shows floating mixer if enabled
   // ---------------------------------------------------------------------------
 
-  // Segmented LED mask — matches the mixer view segments
+  // Segmented LED mask ââ‚¬” matches the mixer view segments
   const segmentMask = 'repeating-linear-gradient(to top, black 0px, black 3px, transparent 3px, transparent 4px)';
   const unlitLedBg = 'repeating-linear-gradient(to top, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 3px, transparent 3px, transparent 4px)';
   const isScanningMeter = estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0;
@@ -974,7 +987,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
                       WebkitMaskImage: segmentMask,
                     }}
                   />
-                  {/* Peak hold — single bright segment */}
+                  {/* Peak hold ââ‚¬” single bright segment */}
                   <div
                     className="absolute inset-x-0 h-[3px] bg-white/85 shadow-[0_0_5px_rgba(255,255,255,0.5)] transition-[bottom] duration-100 ease-out"
                     style={{
@@ -997,7 +1010,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
                       WebkitMaskImage: segmentMask,
                     }}
                   />
-                  {/* Peak hold — single bright segment */}
+                  {/* Peak hold ââ‚¬” single bright segment */}
                   <div
                     className="absolute inset-x-0 h-[3px] bg-white/85 shadow-[0_0_5px_rgba(255,255,255,0.5)] transition-[bottom] duration-100 ease-out"
                     style={{

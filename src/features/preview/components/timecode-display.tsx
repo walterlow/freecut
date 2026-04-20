@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { formatTimecodeCompact } from '@/utils/time-utils';
+import { formatTimecodeCompact } from '@/shared/utils/time-utils';
 
 interface TimecodeDisplayProps {
   fps: number;

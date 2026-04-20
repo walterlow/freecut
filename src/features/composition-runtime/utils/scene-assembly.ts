@@ -14,7 +14,7 @@ import type { Transition } from '@/types/transition';
 import {
   resolveTransitionWindows,
   type ResolvedTransitionWindow,
-} from '@/domain/timeline/transitions/transition-planner';
+} from '@/core/timeline/transitions/transition-planner';
 
 export interface TrackRenderState<TTrack extends TimelineTrack = TimelineTrack> {
   hasSoloTracks: boolean;

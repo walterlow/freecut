@@ -43,7 +43,7 @@ import {
   importTestFixtures,
   type FixtureType,
 } from '@/features/editor/deps/project-bundle';
-import { createProject, getDBStats } from '@/infrastructure/storage/indexeddb';
+import { createProject, getDBStats } from '@/infrastructure/storage';
 
 const logger = createLogger('DebugPanel');
 

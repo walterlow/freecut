@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import type { PlayerRef } from '@/features/preview/deps/player-core';
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
+import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
 import { createAdaptivePreviewQualityState } from '../utils/adaptive-preview-quality';
 import type { PreviewCompositionRenderer } from './use-preview-renderer-controller';
 import type {

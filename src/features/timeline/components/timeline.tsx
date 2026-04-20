@@ -9,7 +9,7 @@ import { TrackRowFrame, TrackSectionDivider } from './track-row-frame';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
 import { useItemsStore } from '../stores/items-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useTimelineStore } from '../stores/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
@@ -23,7 +23,7 @@ import { trackDropIndexRef, trackDragOffsetRef, trackDragJustDroppedRef } from '
 import { createClassicTrack, getAdjacentTrackOrder, getTrackKind } from '../utils/classic-tracks';
 import { getEmptyTrackIdsForRemoval } from '../utils/track-removal';
 import { createLogger } from '@/shared/logging/logger';
-import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout';
 import { useTrackHeightResize } from '../hooks/use-track-height-resize';
 import { resizeTracksOfKindByDelta } from '../utils/track-resize';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';

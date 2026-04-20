@@ -29,6 +29,15 @@
 
 import { createLogger } from '@/shared/logging/logger';
 import { getCacheMigration } from '@/infrastructure/storage/cache-version';
+import {
+  mirrorBytesToWorkspace,
+  readWorkspaceBlob,
+  removeWorkspaceCacheEntry,
+} from '@/infrastructure/storage/workspace-fs/cache-mirror';
+import {
+  waveformBinaryPath,
+  WORKSPACE_WAVEFORM_BIN_DIR,
+} from '@/infrastructure/storage/workspace-fs/paths';
 
 const logger = createLogger('WaveformOPFS');
 
@@ -360,6 +369,10 @@ class WaveformOPFSStorage {
       await writable.write(buffer);
       await writable.close();
 
+      // Mirror the binary to the workspace folder so other origins can reuse
+      // the multi-resolution waveform without regenerating. Fire-and-forget.
+      void mirrorBytesToWorkspace(waveformBinaryPath(mediaId), buffer);
+
       logger.debug(
         `Saved waveform ${mediaId}: ${levelCount} levels, ${(totalSize / 1024).toFixed(1)}KB`
       );
@@ -383,6 +396,30 @@ class WaveformOPFSStorage {
   }
 
   /**
+   * If OPFS has no binary for this media, try pulling it from the workspace
+   * folder and copying it into OPFS. Returns true when a file was restored.
+   * Used by all read paths to transparently recover across origins.
+   */
+  private async hydrateFromWorkspace(mediaId: string): Promise<boolean> {
+    try {
+      const blob = await readWorkspaceBlob(waveformBinaryPath(mediaId));
+      if (!blob || blob.size === 0) return false;
+
+      const bytes = await blob.arrayBuffer();
+      const dir = await this.ensureDirectory();
+      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(bytes);
+      await writable.close();
+      logger.debug(`Hydrated waveform ${mediaId} from workspace`);
+      return true;
+    } catch (error) {
+      logger.warn(`hydrateFromWorkspace(${mediaId}) failed`, error);
+      return false;
+    }
+  }
+
+  /**
    * Get waveform metadata without loading data
    */
   async getMetadata(
@@ -390,7 +427,13 @@ class WaveformOPFSStorage {
   ): Promise<{ header: WaveformHeader; levels: LevelIndex[] } | null> {
     try {
       const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+      let fileHandle: FileSystemFileHandle;
+      try {
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+      } catch {
+        if (!(await this.hydrateFromWorkspace(mediaId))) return null;
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+      }
       const file = await fileHandle.getFile();
 
       // Read header
@@ -429,7 +472,8 @@ class WaveformOPFSStorage {
       try {
         fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
       } catch {
-        return null;
+        if (!(await this.hydrateFromWorkspace(mediaId))) return null;
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
       }
 
       const file = await fileHandle.getFile();
@@ -485,7 +529,8 @@ class WaveformOPFSStorage {
       try {
         fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
       } catch {
-        return null;
+        if (!(await this.hydrateFromWorkspace(mediaId))) return null;
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
       }
       const file = await fileHandle.getFile();
 
@@ -584,6 +629,7 @@ class WaveformOPFSStorage {
     } catch {
       // File may not exist, ignore
     }
+    void removeWorkspaceCacheEntry(waveformBinaryPath(mediaId));
   }
 
   /**
@@ -652,6 +698,7 @@ class WaveformOPFSStorage {
     } catch (error) {
       logger.error('Failed to clear waveforms:', error);
     }
+    void removeWorkspaceCacheEntry([WORKSPACE_WAVEFORM_BIN_DIR], { recursive: true });
   }
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -99,36 +99,6 @@ export function MediaPickerDialog({
   filterType,
   title = 'Select Media',
 }: MediaPickerDialogProps) {
-  const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
-  const isLoading = useMediaLibraryStore((s) => s.isLoading);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Reset search when dialog opens
-  useEffect(() => {
-    if (open) {
-      setSearchQuery('');
-    }
-  }, [open]);
-
-  // Filter media items
-  const filteredItems = useMemo(() => {
-    let items = mediaItems;
-
-    // Filter by type if specified
-    if (filterType) {
-      const mimePrefix = `${filterType}/`;
-      items = items.filter((m) => m.mimeType.startsWith(mimePrefix));
-    }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      items = items.filter((m) => m.fileName.toLowerCase().includes(query));
-    }
-
-    return items;
-  }, [mediaItems, filterType, searchQuery]);
-
   const handleSelect = (mediaId: string) => {
     onSelect(mediaId);
     onClose();
@@ -143,45 +113,78 @@ export function MediaPickerDialog({
             Choose a {filterType || 'media'} file from your library.
           </DialogDescription>
         </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Search input */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search media..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-
-          {/* Media list */}
-          <div className="max-h-[400px] overflow-y-auto space-y-1 pr-2">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : filteredItems.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                {searchQuery
-                  ? 'No media found matching your search.'
-                  : filterType
-                  ? `No ${filterType} files in library.`
-                  : 'No media in library.'}
-              </div>
-            ) : (
-              filteredItems.map((media) => (
-                <MediaPickerItem
-                  key={media.id}
-                  media={media}
-                  onSelect={() => handleSelect(media.id)}
-                />
-              ))
-            )}
-          </div>
-        </div>
+        <MediaPickerDialogBody
+          key={`${filterType ?? 'all'}:${open ? 'open' : 'closed'}`}
+          filterType={filterType}
+          onSelect={handleSelect}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function MediaPickerDialogBody({
+  filterType,
+  onSelect,
+}: {
+  filterType?: 'video' | 'audio' | 'image';
+  onSelect: (mediaId: string) => void;
+}) {
+  const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
+  const isLoading = useMediaLibraryStore((s) => s.isLoading);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredItems = useMemo(() => {
+    let items = mediaItems;
+
+    if (filterType) {
+      const mimePrefix = `${filterType}/`;
+      items = items.filter((m) => m.mimeType.startsWith(mimePrefix));
+    }
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      items = items.filter((m) => m.fileName.toLowerCase().includes(query));
+    }
+
+    return items;
+  }, [mediaItems, filterType, searchQuery]);
+
+  return (
+    <div className="space-y-4">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search media..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      <div className="max-h-[400px] overflow-y-auto space-y-1 pr-2">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            {searchQuery
+              ? 'No media found matching your search.'
+              : filterType
+              ? `No ${filterType} files in library.`
+              : 'No media in library.'}
+          </div>
+        ) : (
+          filteredItems.map((media) => (
+            <MediaPickerItem
+              key={media.id}
+              media={media}
+              onSelect={() => onSelect(media.id)}
+            />
+          ))
+        )}
+      </div>
+    </div>
   );
 }

@@ -5,7 +5,7 @@ import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineCommandStore } from '../timeline-command-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
 import {
   closeAllGapsOnTrack,
@@ -466,7 +466,7 @@ describe('linked timeline items', () => {
 
     const items = useItemsStore.getState().items;
     expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: 60 });
-    // Solo audio shifted left by gapSize (60): 150 → 90
+    // Solo audio shifted left by gapSize (60): 150 â†’ 90
     expect(items.find((item) => item.id === 'solo-audio')).toMatchObject({ from: 90 });
   });
 
@@ -595,7 +595,7 @@ describe('linked timeline items', () => {
     // Downstream items shifted left by 100
     expect(items.find((item) => item.id === 'video-downstream')).toMatchObject({ from: 0 });
     expect(items.find((item) => item.id === 'audio-downstream')).toMatchObject({ from: 0 });
-    // Solo audio at 50-80 overlapped by audio-downstream shifting to 0-60 → deleted
+    // Solo audio at 50-80 overlapped by audio-downstream shifting to 0-60 â†’ deleted
     expect(items.find((item) => item.id === 'solo-audio')).toBeUndefined();
   });
 

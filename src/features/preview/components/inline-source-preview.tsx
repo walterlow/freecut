@@ -9,7 +9,7 @@ import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/medi
 import { resolveMediaUrl } from '../utils/media-resolver';
 import { SourceComposition } from './source-composition';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 
 interface InlineSourcePreviewProps {
   mediaId: string;
@@ -31,6 +31,21 @@ function InlineSourcePreviewClockSync({ frame }: { frame: number | null }) {
 }
 
 export const InlineSourcePreview = memo(function InlineSourcePreview({
+  mediaId,
+  seekFrame,
+  containerSize,
+}: InlineSourcePreviewProps) {
+  return (
+    <InlineSourcePreviewContent
+      key={mediaId}
+      mediaId={mediaId}
+      seekFrame={seekFrame}
+      containerSize={containerSize}
+    />
+  );
+});
+
+const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
   mediaId,
   seekFrame,
   containerSize,

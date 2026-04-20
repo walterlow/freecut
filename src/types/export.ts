@@ -41,4 +41,6 @@ export interface CompositionInputProps {
   backgroundColor?: string; // Hex color for canvas background
   keyframes?: ItemKeyframes[]; // Keyframe animations for items
   busAudioEq?: AudioEqSettings;
+  /** Project-scoped master bus gain in dB (0 = unity). Applied to final mix. */
+  masterBusDb?: number;
 }

@@ -5,7 +5,7 @@ import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineCommandStore } from '../timeline-command-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import {
   addTransition,
 } from './transition-actions';

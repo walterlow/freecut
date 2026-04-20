@@ -11,7 +11,7 @@
 
 import { useHotkeys } from 'react-hotkeys-hook';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { performInsertEdit, performOverwriteEdit } from '../../stores/actions/source-edit-actions';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 

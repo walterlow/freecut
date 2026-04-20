@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useEffectEvent } from 'react';
 import type { TimelineItem } from '@/types/timeline';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { usePlaybackStore } from '@/shared/state/playback';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';

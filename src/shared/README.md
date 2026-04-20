@@ -32,11 +32,16 @@ modules or route modules.
 
 - `async/async-utils.ts`: shared async concurrency helpers.
 
+## Utility Modules
+
+- `utils/time-utils.ts`: frame/time formatting and conversion helpers.
+- `utils/format-utils.ts`: human-readable number and byte formatting helpers.
+- `utils/media-utils.ts`: generic media URL/type helpers.
+
 ## State Modules
 
 - `state/selection/*`: cross-feature selection state (items/tracks/tools/drag)
-- `state/editor/*`: editor shell UI state (panels, sidebar sizes, source monitor)
 - `state/clipboard/*`: timeline copy/paste clipboard state
-- `state/clear-keyframes-dialog/*`: clear keyframes dialog state
 - `state/playback/*`: shared transport/playhead state (frame, play/pause, zoom, quality)
+- `state/preview-bridge/*`: shared preview presentation state
 - `state/source-player/*`: shared source monitor state (in/out points, source frame, player methods)

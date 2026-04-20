@@ -184,6 +184,7 @@ export function useVideoAudioState(
   // Read master preview volume from playback store (only used during preview, not render)
   const previewMasterVolume = usePlaybackStore((s) => s.volume);
   const previewMasterMuted = usePlaybackStore((s) => s.muted);
+  const masterBusDb = usePlaybackStore((s) => s.masterBusDb);
 
   // Get keyframes for this item (context-first for render mode, store-fallback for preview)
   const contextKeyframes = useItemKeyframesFromContext(item.id);
@@ -266,8 +267,9 @@ export function useVideoAudioState(
   // Item volume with fades - allow values > 1 for volume boost (Web Audio API handles this)
   const itemVolume = Math.max(0, linearVolume * fadeMultiplier);
 
-  // Apply master preview volume from playback controls
-  const effectiveMasterVolume = previewMasterMuted ? 0 : previewMasterVolume;
+  // Apply master bus gain (project) then monitor volume (per-device).
+  const masterBusGain = Math.pow(10, masterBusDb / 20);
+  const effectiveMonitorVolume = previewMasterMuted ? 0 : previewMasterVolume;
 
   // Mixer fader live gain — updated during drag without re-rendering the composition.
   // Clear when the composition re-renders with updated track volume (trackVolumeDb changes).
@@ -276,7 +278,7 @@ export function useVideoAudioState(
   useEffect(() => { clearMixerLiveGain(item.id); }, [trackVolumeDb, item.id]);
 
   return {
-    audioVolume: itemVolume * effectiveMasterVolume * mixerGain,
+    audioVolume: itemVolume * masterBusGain * effectiveMonitorVolume * mixerGain,
     resolvedAudioEqStages,
   };
 }

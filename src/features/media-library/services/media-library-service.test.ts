@@ -54,6 +54,11 @@ const gifFrameCacheMocks = vi.hoisted(() => ({
 
 const filmstripCacheMocks = vi.hoisted(() => ({
   prewarmPriorityWindow: vi.fn(async () => undefined),
+  clearMedia: vi.fn(async () => undefined),
+}));
+
+const waveformCacheMocks = vi.hoisted(() => ({
+  clearMedia: vi.fn(async () => undefined),
 }));
 
 const backgroundMediaWorkMocks = vi.hoisted(() => ({
@@ -66,7 +71,7 @@ const backgroundMediaWorkMocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', () => indexedDbMocks);
+vi.mock('@/infrastructure/storage', () => indexedDbMocks);
 
 vi.mock('./opfs-service', () => ({
   opfsService: opfsMocks,
@@ -98,6 +103,7 @@ vi.mock('@/features/composition-runtime/utils/preview-audio-conform', () => ({
 vi.mock('@/features/media-library/deps/timeline-services', () => ({
   gifFrameCache: gifFrameCacheMocks,
   filmstripCache: filmstripCacheMocks,
+  waveformCache: waveformCacheMocks,
 }));
 
 vi.mock('../utils/validation', () => ({

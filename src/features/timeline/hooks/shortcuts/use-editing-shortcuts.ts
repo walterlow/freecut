@@ -5,7 +5,7 @@
 import { useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
@@ -14,7 +14,7 @@ import { canLinkSelection, hasLinkedItems } from '@/features/timeline/utils/link
 import { insertFreezeFrame, linkItems, splitAllItemsAtFrame, unlinkItems } from '../../stores/actions/item-actions';
 import type { TransformProperties } from '@/types/transform';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
-import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
+import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 import { useKeyframeSelectionStore } from '../../stores/keyframe-selection-store';
 

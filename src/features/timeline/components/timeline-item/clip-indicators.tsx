@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Link2Off, Diamond } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 
 interface ClipIndicatorsProps {
   /** Whether the item has keyframe animations */
@@ -43,7 +43,7 @@ export const ClipIndicators = memo(function ClipIndicators({
 
   return (
     <>
-      {/* Label-row badges â€” single container to prevent overlap */}
+      {/* Label-row badges ââ‚¬” single container to prevent overlap */}
       {(hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
         <div
           className="absolute right-1 z-10 pointer-events-none flex items-center gap-1"

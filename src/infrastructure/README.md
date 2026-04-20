@@ -10,3 +10,4 @@ browser/runtime integrations.
 - `browser/blob-url-manager.ts`: blob URL lifecycle and subscription adapter.
 - `storage/indexeddb/*`: IndexedDB persistence modules.
 - `storage/cache-version.ts`: cache version constants/helpers.
+- `thumbnails/*`: browser and GPU-backed thumbnail generation adapters.

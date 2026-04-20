@@ -1,4 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../deps/timeline-contract', () => ({
+  DEFAULT_TRACK_HEIGHT: 100,
+  timelineToSourceFrames: (
+    timelineFrames: number,
+    speed = 1,
+    timelineFps: number,
+    sourceFps: number,
+  ) => Math.max(0, Math.round((timelineFrames / timelineFps) * sourceFps * speed)),
+}));
+
 import {
   buildCaptionTextItems,
   findGeneratedCaptionItemsForClip,

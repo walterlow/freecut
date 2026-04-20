@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { EDITOR_LAYOUT } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT } from '@/app/editor-layout';
 import { ToolOperationOverlay } from './tool-operation-overlay';
 
 describe('ToolOperationOverlay', () => {

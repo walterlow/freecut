@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { ColorScopesPanel } from './color-scopes-panel';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 
 interface ColorScopesMonitorProps {
   onClose: () => void;

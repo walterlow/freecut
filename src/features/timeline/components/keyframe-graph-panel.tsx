@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Keyframe Graph Panel Component
  *
  * Panel that shows the value graph editor for selected items.
@@ -42,7 +42,7 @@ import { useTimelineCommandStore } from '../stores/timeline-command-store';
 import { captureSnapshot } from '../stores/commands/snapshot';
 import type { TimelineSnapshot } from '../stores/commands/types';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import {
   DEFAULT_BEZIER_POINTS,
@@ -206,6 +206,23 @@ function clampSpringValue(key: SpringInputKey, value: number): number {
   }
 }
 
+function toBezierDraft(points: BezierControlPoints): Record<BezierInputKey, string> {
+  return {
+    x1: String(points.x1),
+    y1: String(points.y1),
+    x2: String(points.x2),
+    y2: String(points.y2),
+  };
+}
+
+function toSpringDraft(params: SpringParameters): Record<SpringInputKey, string> {
+  return {
+    tension: String(params.tension),
+    friction: String(params.friction),
+    mass: String(params.mass),
+  };
+}
+
 function loadKeyframeEditorMode(): KeyframeEditorMode {
   try {
     const value = localStorage.getItem(KEYFRAME_EDITOR_MODE_STORAGE_KEY);
@@ -219,6 +236,197 @@ function loadKeyframeEditorMode(): KeyframeEditorMode {
     // ignore localStorage read errors
   }
   return 'graph';
+}
+
+interface AdvancedEasingControlsProps {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  selectedBezierPoints: BezierControlPoints | null;
+  selectedBezierPreset: BezierPresetValue;
+  hasMixedBezierConfig: boolean;
+  selectedSpringParameters: SpringParameters | null;
+  hasMixedSpringConfig: boolean;
+  applyBezier: (bezier: BezierControlPoints) => void;
+  applySpring: (spring: SpringParameters) => void;
+}
+
+function AdvancedEasingControls({
+  containerRef,
+  selectedBezierPoints,
+  selectedBezierPreset,
+  hasMixedBezierConfig,
+  selectedSpringParameters,
+  hasMixedSpringConfig,
+  applyBezier,
+  applySpring,
+}: AdvancedEasingControlsProps) {
+  const [bezierDraft, setBezierDraft] = useState<Record<BezierInputKey, string>>(
+    () => selectedBezierPoints ? toBezierDraft(selectedBezierPoints) : toBezierDraft(DEFAULT_BEZIER_POINTS)
+  );
+  const [springDraft, setSpringDraft] = useState<Record<SpringInputKey, string>>(
+    () => selectedSpringParameters ? toSpringDraft(selectedSpringParameters) : toSpringDraft(DEFAULT_SPRING_PARAMS)
+  );
+
+  const handleBezierPresetChange = useCallback((value: string) => {
+    if (value === 'custom') return;
+
+    const preset = BEZIER_PRESETS.find((candidate) => candidate.value === value);
+    if (!preset) return;
+
+    setBezierDraft(toBezierDraft(preset.points));
+    applyBezier({ ...preset.points });
+  }, [applyBezier]);
+
+  const handleBezierDraftChange = useCallback((key: BezierInputKey, value: string) => {
+    setBezierDraft((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const commitBezierDraft = useCallback((key: BezierInputKey) => {
+    if (!selectedBezierPoints) return;
+
+    const parsed = Number(bezierDraft[key]);
+    if (!Number.isFinite(parsed)) {
+      setBezierDraft((prev) => ({
+        ...prev,
+        [key]: String(selectedBezierPoints[key]),
+      }));
+      return;
+    }
+
+    const nextBezier = {
+      ...selectedBezierPoints,
+      [key]: clampBezierValue(key, parsed),
+    };
+
+    setBezierDraft(toBezierDraft(nextBezier));
+    applyBezier(nextBezier);
+  }, [applyBezier, bezierDraft, selectedBezierPoints]);
+
+  const handleSpringDraftChange = useCallback((key: SpringInputKey, value: string) => {
+    setSpringDraft((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const commitSpringDraft = useCallback((key: SpringInputKey) => {
+    if (!selectedSpringParameters) return;
+
+    const parsed = Number(springDraft[key]);
+    if (!Number.isFinite(parsed)) {
+      setSpringDraft((prev) => ({
+        ...prev,
+        [key]: String(selectedSpringParameters[key]),
+      }));
+      return;
+    }
+
+    const nextSpring = {
+      ...selectedSpringParameters,
+      [key]: clampSpringValue(key, parsed),
+    };
+
+    setSpringDraft(toSpringDraft(nextSpring));
+    applySpring(nextSpring);
+  }, [applySpring, selectedSpringParameters, springDraft]);
+
+  const handleDraftKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>, commit: () => void) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+        event.currentTarget.blur();
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.currentTarget.blur();
+      }
+    },
+    []
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      className="mb-2 rounded-md border border-border bg-secondary/20 px-2 py-1.5"
+    >
+      {selectedBezierPoints && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-medium text-foreground">Bezier</span>
+          <Select value={selectedBezierPreset} onValueChange={handleBezierPresetChange}>
+            <SelectTrigger className="h-7 w-[130px] text-xs focus:ring-0 focus:ring-offset-0">
+              <SelectValue placeholder="Preset" />
+            </SelectTrigger>
+            <SelectContent>
+              {BEZIER_PRESETS.map((preset) => (
+                <SelectItem key={preset.value} value={preset.value} className="text-xs">
+                  {preset.label}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom" className="text-xs">
+                Custom
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          {BEZIER_INPUT_KEYS.map((key) => (
+            <label key={key} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <span className="uppercase">{key}</span>
+              <Input
+                value={bezierDraft[key]}
+                onChange={(event) => handleBezierDraftChange(key, event.target.value)}
+                onBlur={() => commitBezierDraft(key)}
+                onKeyDown={(event) => handleDraftKeyDown(event, () => commitBezierDraft(key))}
+                className="h-7 w-16 px-2 text-xs"
+                inputMode="decimal"
+              />
+            </label>
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-[11px]"
+            onClick={() => handleBezierPresetChange('soft')}
+          >
+            Reset
+          </Button>
+          <span className="text-[11px] text-muted-foreground">
+            {hasMixedBezierConfig ? 'Mixed curves selected' : 'Drag graph handles for custom curves'}
+          </span>
+        </div>
+      )}
+      {selectedSpringParameters && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-medium text-foreground">Spring</span>
+          {SPRING_INPUT_KEYS.map((key) => (
+            <label key={key} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <span className="capitalize">{key}</span>
+              <Input
+                value={springDraft[key]}
+                onChange={(event) => handleSpringDraftChange(key, event.target.value)}
+                onBlur={() => commitSpringDraft(key)}
+                onKeyDown={(event) => handleDraftKeyDown(event, () => commitSpringDraft(key))}
+                className={cn(
+                  'h-7 px-2 text-xs',
+                  key === 'mass' ? 'w-16' : 'w-[72px]'
+                )}
+                inputMode="decimal"
+              />
+            </label>
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-[11px]"
+            onClick={() => {
+              setSpringDraft(toSpringDraft(DEFAULT_SPRING_PARAMS));
+              applySpring({ ...DEFAULT_SPRING_PARAMS });
+            }}
+          >
+            Reset
+          </Button>
+          <span className="text-[11px] text-muted-foreground">
+            {hasMixedSpringConfig ? 'Mixed spring settings selected' : 'Lower friction increases bounce'}
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -398,17 +606,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   const [selectedProperty, setSelectedProperty] = useState<AnimatableProperty | null>(null);
   const [editorMode, setEditorMode] = useState<KeyframeEditorMode>(() => loadKeyframeEditorMode());
   const [advancedControlsHeight, setAdvancedControlsHeight] = useState(0);
-  const [bezierDraft, setBezierDraft] = useState<Record<BezierInputKey, string>>({
-    x1: String(DEFAULT_BEZIER_POINTS.x1),
-    y1: String(DEFAULT_BEZIER_POINTS.y1),
-    x2: String(DEFAULT_BEZIER_POINTS.x2),
-    y2: String(DEFAULT_BEZIER_POINTS.y2),
-  });
-  const [springDraft, setSpringDraft] = useState<Record<SpringInputKey, string>>({
-    tension: String(DEFAULT_SPRING_PARAMS.tension),
-    friction: String(DEFAULT_SPRING_PARAMS.friction),
-    mass: String(DEFAULT_SPRING_PARAMS.mass),
-  });
   const advancedControlsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -452,12 +649,14 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     () => selectedItemForEditor ? getAnimatablePropertiesForItem(selectedItemForEditor) : [],
     [selectedItemForEditor]
   );
-
-  useEffect(() => {
-    if (selectedProperty && !availableProperties.includes(selectedProperty)) {
-      setSelectedProperty(null);
-    }
-  }, [availableProperties, selectedProperty]);
+  const effectiveSelectedProperty = useMemo(
+    () => (
+      selectedProperty && availableProperties.includes(selectedProperty)
+        ? selectedProperty
+        : null
+    ),
+    [availableProperties, selectedProperty]
+  );
 
   // Build keyframes by property for the graph editor
   const keyframesByProperty = useMemo(() => {
@@ -590,25 +789,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       selectedItemTransitions
     );
   }, [selectedItemForEditor, selectedItemTransitions]);
-
-  useEffect(() => {
-    if (!selectedBezierPoints) return;
-    setBezierDraft({
-      x1: String(selectedBezierPoints.x1),
-      y1: String(selectedBezierPoints.y1),
-      x2: String(selectedBezierPoints.x2),
-      y2: String(selectedBezierPoints.y2),
-    });
-  }, [selectedBezierPoints]);
-
-  useEffect(() => {
-    if (!selectedSpringParameters) return;
-    setSpringDraft({
-      tension: String(selectedSpringParameters.tension),
-      friction: String(selectedSpringParameters.friction),
-      mass: String(selectedSpringParameters.mass),
-    });
-  }, [selectedSpringParameters]);
 
   useEffect(() => {
     const node = advancedControlsRef.current;
@@ -776,124 +956,25 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     [selectedEditorKeyframes]
   );
 
-  const handleBezierPresetChange = useCallback(
-    (value: string) => {
-      if (value === 'custom') return;
+  const applyBezierToSelection = useCallback((bezier: BezierControlPoints) => {
+    applySelectedKeyframeUpdates(() => ({
+      easing: 'cubic-bezier',
+      easingConfig: {
+        type: 'cubic-bezier',
+        bezier,
+      },
+    }));
+  }, [applySelectedKeyframeUpdates]);
 
-      const preset = BEZIER_PRESETS.find((candidate) => candidate.value === value);
-      if (!preset) return;
-
-      setBezierDraft({
-        x1: String(preset.points.x1),
-        y1: String(preset.points.y1),
-        x2: String(preset.points.x2),
-        y2: String(preset.points.y2),
-      });
-
-      applySelectedKeyframeUpdates(() => ({
-        easing: 'cubic-bezier',
-        easingConfig: {
-          type: 'cubic-bezier',
-          bezier: { ...preset.points },
-        },
-      }));
-    },
-    [applySelectedKeyframeUpdates]
-  );
-
-  const handleBezierDraftChange = useCallback((key: BezierInputKey, value: string) => {
-    setBezierDraft((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const commitBezierDraft = useCallback(
-    (key: BezierInputKey) => {
-      if (!selectedBezierPoints) return;
-
-      const parsed = Number(bezierDraft[key]);
-      if (!Number.isFinite(parsed)) {
-        setBezierDraft((prev) => ({
-          ...prev,
-          [key]: String(selectedBezierPoints[key]),
-        }));
-        return;
-      }
-
-      const nextBezier = {
-        ...selectedBezierPoints,
-        [key]: clampBezierValue(key, parsed),
-      };
-
-      setBezierDraft({
-        x1: String(nextBezier.x1),
-        y1: String(nextBezier.y1),
-        x2: String(nextBezier.x2),
-        y2: String(nextBezier.y2),
-      });
-
-      applySelectedKeyframeUpdates(() => ({
-        easing: 'cubic-bezier',
-        easingConfig: {
-          type: 'cubic-bezier',
-          bezier: nextBezier,
-        },
-      }));
-    },
-    [applySelectedKeyframeUpdates, bezierDraft, selectedBezierPoints]
-  );
-
-  const handleSpringDraftChange = useCallback((key: SpringInputKey, value: string) => {
-    setSpringDraft((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const commitSpringDraft = useCallback(
-    (key: SpringInputKey) => {
-      if (!selectedSpringParameters) return;
-
-      const parsed = Number(springDraft[key]);
-      if (!Number.isFinite(parsed)) {
-        setSpringDraft((prev) => ({
-          ...prev,
-          [key]: String(selectedSpringParameters[key]),
-        }));
-        return;
-      }
-
-      const nextSpring = {
-        ...selectedSpringParameters,
-        [key]: clampSpringValue(key, parsed),
-      };
-
-      setSpringDraft({
-        tension: String(nextSpring.tension),
-        friction: String(nextSpring.friction),
-        mass: String(nextSpring.mass),
-      });
-
-      applySelectedKeyframeUpdates(() => ({
-        easing: 'spring',
-        easingConfig: {
-          type: 'spring',
-          spring: nextSpring,
-        },
-      }));
-    },
-    [applySelectedKeyframeUpdates, selectedSpringParameters, springDraft]
-  );
-
-  const handleDraftKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>, commit: () => void) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        commit();
-        event.currentTarget.blur();
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.currentTarget.blur();
-      }
-    },
-    []
-  );
+  const applySpringToSelection = useCallback((spring: SpringParameters) => {
+    applySelectedKeyframeUpdates(() => ({
+      easing: 'spring',
+      easingConfig: {
+        type: 'spring',
+        spring,
+      },
+    }));
+  }, [applySelectedKeyframeUpdates]);
 
   const handlePasteKeyframes = useCallback(() => {
     if (!selectedItemForEditor || !keyframeClipboard || keyframeClipboard.keyframes.length === 0) {
@@ -1280,6 +1361,18 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   const showBezierControls = selectedEditorEasing === 'cubic-bezier';
   const showSpringControls = selectedEditorEasing === 'spring';
   const showAdvancedControls = showBezierControls || showSpringControls;
+  const advancedControlsKey = useMemo(
+    () => selectedEditorKeyframes
+      .map(({ ref, keyframe }) => JSON.stringify({
+        itemId: ref.itemId,
+        property: ref.property,
+        keyframeId: ref.keyframeId,
+        easing: keyframe.easing,
+        easingConfig: keyframe.easingConfig ?? null,
+      }))
+      .join('|'),
+    [selectedEditorKeyframes]
+  );
   const editorHeight = Math.max(
     0,
     clampedContentHeight - 16 - advancedControlsHeight - (showAdvancedControls ? 8 : 0)
@@ -1402,100 +1495,17 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       {isOpen && (
         <div ref={containerRef} className="p-2" style={{ height: clampedContentHeight }}>
           {showAdvancedControls && (
-            <div
-              ref={advancedControlsRef}
-              className="mb-2 rounded-md border border-border bg-secondary/20 px-2 py-1.5"
-            >
-              {showBezierControls && selectedBezierPoints && (
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="font-medium text-foreground">Bezier</span>
-                  <Select value={selectedBezierPreset} onValueChange={handleBezierPresetChange}>
-                    <SelectTrigger className="h-7 w-[130px] text-xs focus:ring-0 focus:ring-offset-0">
-                      <SelectValue placeholder="Preset" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BEZIER_PRESETS.map((preset) => (
-                        <SelectItem key={preset.value} value={preset.value} className="text-xs">
-                          {preset.label}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="custom" className="text-xs">
-                        Custom
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {BEZIER_INPUT_KEYS.map((key) => (
-                    <label key={key} className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <span className="uppercase">{key}</span>
-                      <Input
-                        value={bezierDraft[key]}
-                        onChange={(event) => handleBezierDraftChange(key, event.target.value)}
-                        onBlur={() => commitBezierDraft(key)}
-                        onKeyDown={(event) => handleDraftKeyDown(event, () => commitBezierDraft(key))}
-                        className="h-7 w-16 px-2 text-xs"
-                        inputMode="decimal"
-                      />
-                    </label>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => handleBezierPresetChange('soft')}
-                  >
-                    Reset
-                  </Button>
-                  <span className="text-[11px] text-muted-foreground">
-                    {hasMixedBezierConfig ? 'Mixed curves selected' : 'Drag graph handles for custom curves'}
-                  </span>
-                </div>
-              )}
-              {showSpringControls && selectedSpringParameters && (
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="font-medium text-foreground">Spring</span>
-                  {SPRING_INPUT_KEYS.map((key) => (
-                    <label key={key} className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <span className="capitalize">{key}</span>
-                      <Input
-                        value={springDraft[key]}
-                        onChange={(event) => handleSpringDraftChange(key, event.target.value)}
-                        onBlur={() => commitSpringDraft(key)}
-                        onKeyDown={(event) => handleDraftKeyDown(event, () => commitSpringDraft(key))}
-                        className={cn(
-                          'h-7 px-2 text-xs',
-                          key === 'mass' ? 'w-16' : 'w-[72px]'
-                        )}
-                        inputMode="decimal"
-                      />
-                    </label>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => {
-                      setSpringDraft({
-                        tension: String(DEFAULT_SPRING_PARAMS.tension),
-                        friction: String(DEFAULT_SPRING_PARAMS.friction),
-                        mass: String(DEFAULT_SPRING_PARAMS.mass),
-                      });
-                      applySelectedKeyframeUpdates(() => ({
-                        easing: 'spring',
-                        easingConfig: {
-                          type: 'spring',
-                          spring: { ...DEFAULT_SPRING_PARAMS },
-                        },
-                      }));
-                    }}
-                  >
-                    Reset
-                  </Button>
-                  <span className="text-[11px] text-muted-foreground">
-                    {hasMixedSpringConfig ? 'Mixed spring settings selected' : 'Lower friction increases bounce'}
-                  </span>
-                </div>
-              )}
-            </div>
+            <AdvancedEasingControls
+              key={advancedControlsKey}
+              containerRef={advancedControlsRef}
+              selectedBezierPoints={showBezierControls ? selectedBezierPoints : null}
+              selectedBezierPreset={selectedBezierPreset}
+              hasMixedBezierConfig={hasMixedBezierConfig}
+              selectedSpringParameters={showSpringControls ? selectedSpringParameters : null}
+              hasMixedSpringConfig={hasMixedSpringConfig}
+              applyBezier={applyBezierToSelection}
+              applySpring={applySpringToSelection}
+            />
           )}
           {selectedItemForEditor && containerWidth > 0 ? (
             <ErrorBoundary level="component">
@@ -1503,7 +1513,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                 itemId={selectedItemForEditor.id}
                 keyframesByProperty={keyframesByProperty}
                 propertyValues={propertyValues}
-                selectedProperty={selectedProperty}
+                selectedProperty={effectiveSelectedProperty}
                 selectedKeyframeIds={selectedKeyframeIds}
                 currentFrame={relativeFrame}
                 globalFrame={currentFrame}

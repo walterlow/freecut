@@ -1,4 +1,4 @@
-import { useProjectMediaMatchDialogStore } from '@/shared/state/project-media-match-dialog';
+import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import {
   getMimeType,

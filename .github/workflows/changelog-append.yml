@@ -1,0 +1,90 @@
+name: Changelog append
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  # Serialize runs on the same ref so two pushes in quick succession can't
+  # race each other when committing back to main.
+  group: changelog-append-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  append:
+    # Skip the commits we push ourselves from this workflow.
+    if: |
+      !contains(github.event.head_commit.message, '[skip changelog]') &&
+      !startsWith(github.event.head_commit.message, 'chore(changelog)')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so github.event.before..HEAD can walk side-branch
+          # commits brought in by merge commits from staging.
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute range
+        id: range
+        run: |
+          # github.event.before is main's tip *before* this push. Walk
+          # everything from that point to HEAD so we capture all commits
+          # that actually arrived, regardless of merge/fast-forward shape.
+          # Fall back to HEAD~1..HEAD when before is missing (branch
+          # creation) or not in local history (force-push).
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "range=HEAD~1..HEAD" >> "$GITHUB_OUTPUT"
+          elif ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "Warning: before-sha $BEFORE not in history; falling back to HEAD~1..HEAD"
+            echo "range=HEAD~1..HEAD" >> "$GITHUB_OUTPUT"
+          else
+            echo "range=$BEFORE..HEAD" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run append script
+        run: node scripts/changelog-append.mjs "${{ steps.range.outputs.range }}"
+
+      - name: Commit and push updated changelog
+        run: |
+          if git diff --quiet src/data/changelog.json; then
+            echo "No changelog updates."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          COMMIT_MSG="chore(changelog): append bullets from $(git rev-parse --short HEAD^) [skip ci]"
+          git add src/data/changelog.json
+          git commit -m "$COMMIT_MSG"
+
+          # Rebase-and-retry: if another push lands between our checkout and
+          # our push, rebase onto the new tip and retry. Give up after 5
+          # attempts.
+          BRANCH="${GITHUB_REF_NAME}"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:$BRANCH"; then
+              echo "Pushed on attempt $attempt."
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; rebasing onto origin/$BRANCH and retrying."
+            git fetch origin "$BRANCH"
+            git rebase "origin/$BRANCH" || {
+              echo "Rebase conflict; aborting."
+              git rebase --abort || true
+              exit 1
+            }
+          done
+          echo "Exhausted push retries."
+          exit 1

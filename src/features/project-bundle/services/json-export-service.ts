@@ -14,7 +14,7 @@ import {
   SNAPSHOT_VERSION,
   mediaToSnapshotReference,
 } from '../types/snapshot';
-import { getProject, getProjectMediaIds } from '@/infrastructure/storage/indexeddb';
+import { getProject, getProjectMediaIds } from '@/infrastructure/storage';
 import { mediaLibraryService } from '@/features/project-bundle/deps/media-library';
 
 // App version - should be imported from a config

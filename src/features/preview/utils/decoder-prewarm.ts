@@ -21,7 +21,7 @@ import {
   getObjectUrlDirectFileMetadata,
 } from '@/infrastructure/browser/object-url-registry';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
-import { updateMedia } from '@/infrastructure/storage/indexeddb/media';
+import { updateMedia } from '@/infrastructure/storage';
 import { getKeyframeTimestamps, registerKeyframeIndex } from '@/shared/utils/keyframe-index-registry';
 
 const log = createLogger('DecoderPrewarm');
@@ -300,17 +300,25 @@ async function resolveBlobForUrl(src: string): Promise<Blob | null> {
     return null;
   }
 
-  try {
-    const response = await fetch(src);
-    const blob = await response.blob();
-    blobByUrl.set(src, blob);
-    unavailableBlobUrls.delete(src);
-    return blob;
-  } catch (error) {
-    unavailableBlobUrls.add(src);
-    log.debug('Failed to resolve blob URL for decoder prewarm', { src, error });
-    return null;
-  }
+  // If the URL is a `blob:` URL but not registered with blobUrlManager /
+  // object-url-registry, it is structurally unreachable from our JS:
+  // `blobUrlManager.acquire()` is the only place we create blob URLs, and
+  // it registers every one. Calling `fetch(src)` on an unregistered URL
+  // would always fail with ERR_FILE_NOT_FOUND — and Chrome logs that
+  // network failure to DevTools *before* our .catch runs, producing a
+  // red console line we cannot suppress.
+  //
+  // This case is almost always a false positive: a timeline item briefly
+  // holding a stale `src` from a previous render cycle. The next render
+  // pass rebinds to a fresh URL, and prewarm retries then. True "media
+  // missing" failures surface on the real playback path via
+  // `<video>.onerror`, which knows the mediaId and can present a proper
+  // relink / error UI — prewarm is not the right layer to detect them.
+  //
+  // Track the URL in `unavailableBlobUrls` so we don't re-check the
+  // registry repeatedly in the same session for a known-stale URL.
+  unavailableBlobUrls.add(src);
+  return null;
 }
 
 export function backgroundPreseek(src: string, timestamp: number): Promise<ImageBitmap | null> {

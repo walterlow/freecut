@@ -7,6 +7,7 @@ import { useSelectionStore } from '@/shared/state/selection';
 import type { AudioItem, VideoItem } from '@/types/timeline';
 
 import { useWaveformPrefetch } from './use-waveform-prefetch';
+import { _resetPreviewWorkBudgetForTest } from './preview-work-budget';
 import { waveformCache } from '../services/waveform-cache';
 import { useItemsStore } from '../stores/items-store';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
@@ -86,6 +87,7 @@ describe('waveform prefetch filtering', () => {
   const pps = 100;
 
   beforeEach(() => {
+    _resetPreviewWorkBudgetForTest();
     useTimelineSettingsStore.setState({
       fps,
       scrollPosition: 0,
@@ -106,7 +108,10 @@ describe('waveform prefetch filtering', () => {
   });
 
   afterEach(() => {
+    _resetPreviewWorkBudgetForTest();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('prefetches clips in the ahead zone but not in the visible zone', () => {

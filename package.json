@@ -1,7 +1,7 @@
 {
   "name": "freecut",
   "private": true,
-  "version": "0.0.0",
+  "version": "2026.04.06",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -28,6 +28,8 @@
     "test:preview-sync": "vitest run src/features/preview/components/video-preview.sync.test.tsx",
     "test:preview-sync:stress": "node scripts/preview-sync-stress.mjs --runs 20",
     "test:coverage": "vitest run --coverage",
+    "changelog:append": "node scripts/changelog-append.mjs",
+    "changelog:rollup": "node scripts/changelog-rollup.mjs",
     "prepare": "husky"
   },
   "dependencies": {

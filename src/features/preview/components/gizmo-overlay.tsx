@@ -326,9 +326,16 @@ export function GizmoOverlay({
   });
 
 
-  // Handle transform start - nothing needed, gizmo store handles it
   const handleTransformStart = useCallback(() => {
-    // Optionally: could pause playback here
+    const playback = usePlaybackStore.getState();
+    if (playback.previewFrame === null) {
+      return;
+    }
+
+    if (playback.currentFrame !== playback.previewFrame) {
+      playback.setCurrentFrame(playback.previewFrame);
+    }
+    playback.setPreviewFrame(null);
   }, []);
 
   // Handle transform end - commit the transform to the timeline with auto-keyframing

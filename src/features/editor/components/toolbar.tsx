@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   Keyboard,
   Save,
   Settings,
+  Sparkles,
   Video,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,9 @@ import { ProjectDebugPanel } from './project-debug-panel';
 import { SettingsDialog } from './settings-dialog';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { WhatsNewDialog } from './whats-new-dialog';
+import { hasUnseenChangelog } from './whats-new-seen';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import { cn } from '@/shared/ui/cn';
 import { useDebugStore } from '@/features/editor/stores/debug-store';
 
@@ -57,6 +60,17 @@ export const Toolbar = memo(function Toolbar({
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showWhatsNewDialog, setShowWhatsNewDialog] = useState(false);
+  const [hasUnseenWhatsNew, setHasUnseenWhatsNew] = useState(false);
+
+  useEffect(() => {
+    setHasUnseenWhatsNew(hasUnseenChangelog());
+  }, []);
+
+  const openWhatsNew = () => {
+    setHasUnseenWhatsNew(false);
+    setShowWhatsNewDialog(true);
+  };
 
   const handleBackClick = () => {
     if (isDirty) {
@@ -125,10 +139,32 @@ export const Toolbar = memo(function Toolbar({
         onOpenChange={setShowSettingsDialog}
       />
 
+      <WhatsNewDialog
+        open={showWhatsNewDialog}
+        onOpenChange={setShowWhatsNewDialog}
+      />
+
       <div className="flex items-center gap-1.5">
         {import.meta.env.DEV && import.meta.env.VITE_SHOW_DEBUG_PANEL !== 'false' && (
           <DebugPopover projectId={projectId} />
         )}
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7 relative"
+          onClick={openWhatsNew}
+          data-tooltip="What's New"
+          data-tooltip-side="bottom"
+          aria-label="What's new"
+        >
+          <Sparkles className="h-4 w-4" />
+          {hasUnseenWhatsNew && (
+            <span
+              className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary"
+              aria-hidden="true"
+            />
+          )}
+        </Button>
         <Button
           variant="outline"
           size="icon"

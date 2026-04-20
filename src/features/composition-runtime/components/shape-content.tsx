@@ -190,7 +190,7 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
 
     case 'heart': {
       // Heart: use Composition's Heart component for consistency with mask path generation
-      // Heart output width = 1.1 Ã— input height, so we scale input to fit within baseSize
+      // Heart output width = 1.1 × input height, so we scale input to fit within baseSize
       // Using height = baseSize / 1.1 ensures output width = baseSize (fits container)
       const heartHeight = baseSize / 1.1;
       return (

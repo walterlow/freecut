@@ -381,4 +381,4 @@ export function getVideoBitrateForQuality(quality: ExportSettings['quality']): n
 }
 
 // Re-export formatBytes from central location
-export { formatBytes } from '@/utils/format-utils';
+export { formatBytes } from '@/shared/utils/format-utils';

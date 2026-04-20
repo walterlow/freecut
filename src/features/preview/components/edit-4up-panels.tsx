@@ -123,7 +123,13 @@ function MainPanel({ data, areaHeight, panelWidth }: MainPanelProps) {
           style={{ width: mediaWidth, height: mediaHeight }}
         >
           {renderPanelMedia(data.item, data.sourceTime, data.placeholderText, {
-            renderVideo: (videoItem, time) => <VideoFrame item={videoItem} sourceTime={time} />,
+            renderVideo: (videoItem, time) => (
+              <VideoFrame
+                key={`${videoItem.id}:${videoItem.mediaId ?? 'none'}`}
+                item={videoItem}
+                sourceTime={time}
+              />
+            ),
             renderImage: (imageItem) => <ImageFrame item={imageItem} />,
             renderPlaceholder: (type, text) => <TypePlaceholder type={type} text={text} />,
           })}
@@ -154,7 +160,11 @@ function CornerThumbnail({ item, sourceTime, width, height, position }: CornerTh
       style={{ width, height }}
     >
       {isVideo ? (
-        <VideoFrame item={item} sourceTime={sourceTime ?? 0} />
+        <VideoFrame
+          key={`${item.id}:${item.mediaId ?? 'none'}`}
+          item={item}
+          sourceTime={sourceTime ?? 0}
+        />
       ) : isImage ? (
         <ImageFrame item={item} />
       ) : (

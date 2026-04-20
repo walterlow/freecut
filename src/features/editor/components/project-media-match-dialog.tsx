@@ -12,7 +12,7 @@ import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { useTimelineSettingsStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { toast } from 'sonner';
-import { useProjectMediaMatchDialogStore } from '@/shared/state/project-media-match-dialog';
+import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog';
 import {
   getProjectMediaMatchSuggestion,
   isProjectMatchableVideo,

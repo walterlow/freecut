@@ -1,4 +1,4 @@
-import { CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrations';
+import { CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations';
 import type { Project } from '@/types/project';
 
 /**

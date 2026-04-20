@@ -25,7 +25,7 @@ vi.mock('@/features/timeline/deps/media-library-resolver', () => ({
   },
 }));
 
-vi.mock('@/shared/state/project-media-match-dialog', () => ({
+vi.mock('@/app/state/project-media-match-dialog', () => ({
   useProjectMediaMatchDialogStore: {
     getState: () => ({
       requestProjectMediaMatch: mocks.requestProjectMediaMatch,

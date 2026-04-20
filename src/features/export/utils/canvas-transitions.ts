@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canvas Transition Rendering System
  *
  * Renders visual transitions between adjacent clips for client-side export.
@@ -7,8 +7,8 @@
 
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
-import { transitionRegistry } from '@/domain/timeline/transitions/registry';
-import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
+import { transitionRegistry } from '@/core/timeline/transitions/registry';
+import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner';
 import {
   resolveTransitionFrameState,
 } from '@/features/export/deps/composition-runtime';
@@ -47,7 +47,7 @@ export interface ActiveTransition {
  * Build once per render, then reuse for every frame.
  */
 export interface TransitionFrameIndex {
-  windows: ReturnType<typeof import('@/domain/timeline/transitions/transition-planner').resolveTransitionWindows>;
+  windows: ReturnType<typeof import('@/core/timeline/transitions/transition-planner').resolveTransitionWindows>;
 }
 
 /**

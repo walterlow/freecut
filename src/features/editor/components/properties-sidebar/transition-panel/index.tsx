@@ -30,7 +30,7 @@ import {
   type PresentationConfig,
 } from '@/types/transition';
 import { cn } from '@/shared/ui/cn';
-import { transitionRegistry } from '@/domain/timeline/transitions';
+import { transitionRegistry } from '@/core/timeline/transitions';
 import {
   TRANSITION_CATEGORY_INFO,
   getTransitionConfigsByCategory,

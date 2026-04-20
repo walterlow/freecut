@@ -1,1 +1,1 @@
-export { useEditorStore } from '@/shared/state/editor';
+export { useEditorStore } from '@/app/state/editor';

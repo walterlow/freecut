@@ -1,7 +1,7 @@
 import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOTKEYS } from '@/config/hotkeys';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineStore } from '../../stores/timeline-store';

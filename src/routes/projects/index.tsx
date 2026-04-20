@@ -26,6 +26,10 @@ import type { Project } from '@/types/project';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
 import type { ImportProgress } from '@/features/project-bundle/types/bundle';
 import { BUNDLE_EXTENSION } from '@/features/project-bundle/types/bundle';
+import { LegacyMigrationBanner } from '@/features/projects/components/legacy-migration-banner';
+import { LegacyMigrationErrors } from '@/features/projects/components/legacy-migration-errors';
+import { TrashSection } from '@/features/projects/components/trash-section';
+import { WorkspaceIndicator } from '@/features/workspace-gate';
 
 export const Route = createFileRoute('/projects/')({
   component: ProjectsIndex,
@@ -241,12 +245,13 @@ function ProjectsIndex() {
     <>
       <div className="min-h-screen bg-background">
         {/* Header */}
-        <div className="panel-header border-b border-border">
+        <div className="panel-header border-b border-border" data-no-marquee>
           <div className="max-w-[1920px] mx-auto px-6 py-5 flex items-center justify-between">
             <Link to="/">
               <FreeCutLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
             </Link>
             <div className="flex items-center gap-3">
+              <WorkspaceIndicator />
               <Button
                 variant="outline"
                 size="icon"
@@ -296,6 +301,13 @@ function ProjectsIndex() {
           </div>
         )}
 
+        {/* Legacy IDB migration banner — appears only when old data is present and unmigrated */}
+        <div className="max-w-[1920px] mx-auto px-6 pt-6 space-y-3">
+          <LegacyMigrationBanner onMigrated={loadProjects} />
+          {/* Retry banner — appears only when a previous migration left failed items behind */}
+          <LegacyMigrationErrors onRetried={loadProjects} />
+        </div>
+
         {/* Loading state */}
         {isLoading ? (
           <div className="max-w-[1920px] mx-auto px-6 py-16 flex items-center justify-center">
@@ -308,15 +320,17 @@ function ProjectsIndex() {
           /* Projects List */
           <div className="max-w-[1920px] mx-auto px-6 py-8">
             <ProjectList onEditProject={handleEditProject} />
+            <TrashSection />
           </div>
         )}
       </div>
 
       {/* Edit Project Dialog */}
       <Dialog open={!!editingProject} onOpenChange={(open) => !open && setEditingProject(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Project Settings</DialogTitle>
+            <DialogTitle className="text-2xl">Edit Project</DialogTitle>
+            <DialogDescription>Update your project settings</DialogDescription>
           </DialogHeader>
           {editingProject && (
             <ProjectForm
@@ -331,6 +345,7 @@ function ProjectsIndex() {
               }}
               isEditing={true}
               isSubmitting={isSubmitting}
+              hideHeader
             />
           )}
         </DialogContent>

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Lightweight JSON Import Service
  *
  * Imports project data from JSON snapshots for debugging, testing,
@@ -25,8 +25,8 @@ import {
   createProject,
   getAllMedia,
   associateMediaWithProject,
-} from '@/infrastructure/storage/indexeddb';
-import { migrateProject } from '@/domain/projects/migrations';
+} from '@/infrastructure/storage';
+import { migrateProject } from '@/core/projects/migrations';
 
 /**
  * Validate a snapshot without importing

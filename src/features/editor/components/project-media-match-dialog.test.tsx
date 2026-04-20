@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import type { MediaMetadata } from '@/types/storage';
-import { useProjectMediaMatchDialogStore } from '@/shared/state/project-media-match-dialog';
+import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog';
 
 const mocks = vi.hoisted(() => ({
   updateProject: vi.fn(),

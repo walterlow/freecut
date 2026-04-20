@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { cn } from '@/shared/ui/cn';
-import { EDITOR_LAYOUT } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT } from '@/app/editor-layout';
 import type { OperationBoundsVisual } from './tool-operation-overlay-utils';
 
 interface ToolOperationOverlayProps {

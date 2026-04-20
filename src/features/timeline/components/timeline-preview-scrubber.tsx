@@ -2,7 +2,7 @@ import { useRef, useEffect, useLayoutEffect } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
-import { formatTimecode } from '@/utils/time-utils';
+import { formatTimecode } from '@/shared/utils/time-utils';
 
 interface TimelinePreviewScrubberProps {
   inRuler?: boolean;

@@ -1,6 +1,6 @@
 import type { TimelineItem } from '@/types/timeline';
 import { getVideoTargetTimeSeconds } from '@/features/preview/deps/composition-runtime';
-import { formatTimecode } from '@/utils/time-utils';
+import { formatTimecode } from '@/shared/utils/time-utils';
 
 export interface SourceFrameInfo {
   sourceTime: number;

@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Settings2 } from 'lucide-react';
 import { useItemsStore } from '@/features/editor/deps/timeline-store';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
 import type { TimelineItem } from '@/types/timeline';
 import { CanvasPanel } from './canvas-panel';
@@ -15,7 +15,7 @@ import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampRightEditorSidebarWidth,
   getEditorLayout,
-} from '@/shared/ui/editor-layout';
+} from '@/app/editor-layout';
 
 type HeaderItem = Pick<TimelineItem, 'id' | 'label' | 'linkedGroupId' | 'type'>;
 

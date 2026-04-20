@@ -95,7 +95,7 @@ export function ProjectForm({
       {/* Header */}
       {!hideHeader && (
         <div className="panel-header border-b border-border">
-          <div className="max-w-3xl mx-auto px-6 py-5">
+          <div className="max-w-[1400px] mx-auto px-6 py-5">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-1">
               {isEditing ? 'Edit Project' : 'Create New Project'}
             </h1>
@@ -109,133 +109,129 @@ export function ProjectForm({
       )}
 
       {/* Form */}
-      <div className="max-w-3xl mx-auto px-6 py-8">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-          {/* Project Details */}
-          <div className="panel-bg border border-border rounded-lg p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-8 w-1 bg-primary rounded-full" />
-              <h2 className="text-lg font-medium text-foreground">Project Details</h2>
+      <div className={hideHeader ? '' : 'max-w-[1400px] mx-auto px-6 py-8'}>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,420px)_1fr] gap-6 items-start">
+            {/* Project Details */}
+            <div className={`panel-bg border border-border rounded-lg p-6 ${hideHeader ? '' : 'lg:sticky lg:top-6'}`}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-8 w-1 bg-primary rounded-full" />
+                <h2 className="text-lg font-medium text-foreground">Project Details</h2>
+              </div>
+
+              <div className="space-y-5">
+                {/* Project Name */}
+                <div>
+                  <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
+                    Project Name <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    {...register('name')}
+                    className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                    placeholder="Enter project name..."
+                  />
+                  {errors.name && (
+                    <p className="mt-1.5 text-sm text-destructive">{errors.name.message}</p>
+                  )}
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label
+                    htmlFor="description"
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    id="description"
+                    rows={4}
+                    {...register('description')}
+                    className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all resize-none"
+                    placeholder="Brief description of your project..."
+                  />
+                  {errors.description && (
+                    <p className="mt-1.5 text-sm text-destructive">{errors.description.message}</p>
+                  )}
+                </div>
+
+                {/* Frame Rate */}
+                <div>
+                  <label htmlFor="fps" className="block text-sm font-medium text-foreground mb-2">
+                    Frame Rate
+                  </label>
+                  <Select
+                    value={fps.toString()}
+                    onValueChange={(value) => setValue('fps', Number(value), { shouldValidate: true })}
+                  >
+                    <SelectTrigger id="fps">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fpsOptions.map((preset) => (
+                        <SelectItem key={preset.value} value={preset.value.toString()}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.fps && (
+                    <p className="mt-1.5 text-sm text-destructive">{errors.fps.message}</p>
+                  )}
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-5">
-              {/* Project Name */}
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
-                  Project Name <span className="text-destructive">*</span>
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  {...register('name')}
-                  className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                  placeholder="Enter project name..."
-                />
-                {errors.name && (
-                  <p className="mt-1.5 text-sm text-destructive">{errors.name.message}</p>
-                )}
+            {/* Video Settings */}
+            <div className="panel-bg border border-border rounded-lg p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-8 w-1 bg-primary rounded-full" />
+                <h2 className="text-lg font-medium text-foreground">Resolution</h2>
               </div>
 
-              {/* Description */}
-              <div>
-                <label
-                  htmlFor="description"
-                  className="block text-sm font-medium text-foreground mb-2"
-                >
-                  Description
-                </label>
-                <textarea
-                  id="description"
-                  rows={3}
-                  {...register('description')}
-                  className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all resize-none"
-                  placeholder="Brief description of your project..."
-                />
-                {errors.description && (
-                  <p className="mt-1.5 text-sm text-destructive">{errors.description.message}</p>
-                )}
-              </div>
+              <ProjectTemplatePicker
+                selectedTemplateId={selectedTemplateId === 'custom' ? undefined : selectedTemplateId}
+                onSelectTemplate={handleSelectTemplate}
+                onSelectCustom={handleCustomSelect}
+                isCustomSelected={selectedTemplateId === 'custom'}
+              />
+              {selectedTemplateId === 'custom' && (
+                <div className="mt-5 flex items-center gap-3">
+                  <div className="flex-1">
+                    <label htmlFor="width" className="block text-xs font-medium text-muted-foreground mb-1">Width (px)</label>
+                    <input
+                      id="width"
+                      type="number"
+                      {...register('width', { valueAsNumber: true })}
+                      className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                      placeholder="1920"
+                      min={320}
+                    />
+                    {errors.width && <p className="mt-1 text-xs text-destructive">{errors.width.message}</p>}
+                  </div>
+                  <span className="text-muted-foreground mt-4">×</span>
+                  <div className="flex-1">
+                    <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">Height (px)</label>
+                    <input
+                      id="height"
+                      type="number"
+                      {...register('height', { valueAsNumber: true })}
+                      className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                      placeholder="1080"
+                      min={240}
+                    />
+                    {errors.height && <p className="mt-1 text-xs text-destructive">{errors.height.message}</p>}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           <Separator />
 
-           {/* Video Settings */}
-           <div className="panel-bg border border-border rounded-lg p-6">
-             <div className="flex items-center gap-3 mb-6">
-               <div className="h-8 w-1 bg-primary rounded-full" />
-               <h2 className="text-lg font-medium text-foreground">Video Settings</h2>
-             </div>
-
-             <div className="space-y-6">
-               {/* Resolution — visual template picker */}
-               <div>
-                 <p className="text-sm font-medium text-foreground mb-3">Resolution</p>
-                 <ProjectTemplatePicker
-                   selectedTemplateId={selectedTemplateId === 'custom' ? undefined : selectedTemplateId}
-                   onSelectTemplate={handleSelectTemplate}
-                   onSelectCustom={handleCustomSelect}
-                   isCustomSelected={selectedTemplateId === 'custom'}
-                 />
-                 {selectedTemplateId === 'custom' && (
-                   <div className="mt-4 flex items-center gap-3">
-                     <div className="flex-1">
-                       <label htmlFor="width" className="block text-xs font-medium text-muted-foreground mb-1">Width (px)</label>
-                       <input
-                         id="width"
-                         type="number"
-                         {...register('width', { valueAsNumber: true })}
-                         className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                          placeholder="1920"
-                          min={320}
-                        />
-                        {errors.width && <p className="mt-1 text-xs text-destructive">{errors.width.message}</p>}
-                      </div>
-                      <span className="text-muted-foreground mt-4">×</span>
-                      <div className="flex-1">
-                        <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">Height (px)</label>
-                        <input
-                          id="height"
-                          type="number"
-                          {...register('height', { valueAsNumber: true })}
-                          className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                          placeholder="1080"
-                          min={240}
-                        />
-                       {errors.height && <p className="mt-1 text-xs text-destructive">{errors.height.message}</p>}
-                     </div>
-                   </div>
-                 )}
-               </div>
-
-               {/* Frame Rate */}
-               <div>
-                 <label htmlFor="fps" className="block text-sm font-medium text-foreground mb-2">
-                   Frame Rate
-                 </label>
-                 <Select
-                   value={fps.toString()}
-                   onValueChange={(value) => setValue('fps', Number(value), { shouldValidate: true })}
-                 >
-                   <SelectTrigger id="fps">
-                     <SelectValue />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {fpsOptions.map((preset) => (
-                       <SelectItem key={preset.value} value={preset.value.toString()}>
-                         {preset.label}
-                       </SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {errors.fps && (
-                   <p className="mt-1.5 text-sm text-destructive">{errors.fps.message}</p>
-                 )}
-               </div>
-             </div>
-           </div>
-
-           {/* Actions */}
+          {/* Actions */}
           <div className="flex gap-3 justify-end">
             {onCancel ? (
               <Button type="button" variant="outline" size="lg" disabled={isSubmitting} onClick={onCancel}>

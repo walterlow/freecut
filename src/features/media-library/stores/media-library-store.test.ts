@@ -68,7 +68,7 @@ vi.mock('../utils/proxy-key', () => ({
   getSharedProxyKey: vi.fn((media: { id: string }) => `proxy-${media.id}`),
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', () => ({
+vi.mock('@/infrastructure/storage', () => ({
   getTranscriptMediaIds: indexedDbMocks.getTranscriptMediaIds,
 }));
 

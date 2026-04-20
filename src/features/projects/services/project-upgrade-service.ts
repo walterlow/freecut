@@ -8,7 +8,7 @@ import {
   removeMediaFromProject,
   saveThumbnail,
   updateProject,
-} from '@/infrastructure/storage/indexeddb';
+} from '@/infrastructure/storage';
 import { createLogger } from '@/shared/logging/logger';
 import type { Project } from '@/types/project';
 import {

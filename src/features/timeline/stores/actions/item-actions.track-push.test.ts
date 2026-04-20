@@ -3,7 +3,7 @@ import type { AudioItem, VideoItem } from '@/types/timeline';
 import { useItemsStore } from '../items-store';
 import { useTimelineCommandStore } from '../timeline-command-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { trackPushItems } from './item-actions';
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {

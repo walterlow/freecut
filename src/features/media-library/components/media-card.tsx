@@ -18,7 +18,7 @@ import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { proxyService } from '../services/proxy-service';
 import { mediaTranscriptionService } from '../services/media-transcription-service';
 import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { captionVideo, captionImage } from '../deps/analysis';
 import {

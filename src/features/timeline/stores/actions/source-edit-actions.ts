@@ -6,7 +6,7 @@ import type { TimelineItem, TimelineTrack, VideoItem, AudioItem, ImageItem } fro
 import { useItemsStore } from '../items-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';

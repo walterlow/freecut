@@ -6,8 +6,8 @@ import {
   DEFAULT_WHISPER_MODEL,
   DEFAULT_WHISPER_QUANTIZATION,
 } from '@/shared/utils/whisper-settings';
-import type { EditorDensityPresetName } from '@/shared/ui/editor-layout';
-import { DEFAULT_EDITOR_DENSITY_PRESET } from '@/shared/ui/editor-layout';
+import type { EditorDensityPresetName } from '@/app/editor-layout';
+import { DEFAULT_EDITOR_DENSITY_PRESET } from '@/app/editor-layout';
 import {
   HOTKEYS,
   normalizeHotkeyBinding,

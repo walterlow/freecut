@@ -9,7 +9,7 @@ import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 import { registerZoomTo100, useZoomStore } from '../stores/zoom-store';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
 
 // Hooks

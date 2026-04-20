@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canvas Audio Processing System
  *
  * Handles audio extraction, processing, mixing, and encoding for client-side export.
@@ -11,7 +11,7 @@ import type { AudioEqSettings, ResolvedAudioEqSettings } from '@/types/audio';
 import type { Keyframe as VolumeKeyframe } from '@/types/keyframe';
 import type { Transition } from '@/types/transition';
 import { createLogger } from '@/shared/logging/logger';
-import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
+import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner';
 import {
   timelineToSourceFrames,
   sourceToTimelineFrames,
@@ -69,7 +69,7 @@ interface AudioSegment {
   src: string;
   startFrame: number;        // Timeline position
   durationFrames: number;
-  sourceStartFrame: number;  // In source media (for trim) â€” in source-native FPS frames
+  sourceStartFrame: number;  // In source media (for trim) — in source-native FPS frames
   sourceFps: number;         // Source media FPS (sourceStartFrame is in these frames)
   volume: number;            // -60 to +12 dB
   fadeInFrames: number;
@@ -1747,10 +1747,24 @@ export async function processAudio(
   // Mix all segments
   const mixedSamples = mixAudioTracks(processedSegments, config);
 
+  // Apply project-scoped master bus gain to the final mix. Monitor volume
+  // (per-device) is intentionally NOT applied during export — it's a
+  // preview-only setting.
+  const masterBusDb = composition.masterBusDb;
+  if (typeof masterBusDb === 'number' && masterBusDb !== 0) {
+    const masterBusGain = dbToGain(masterBusDb);
+    for (const channel of mixedSamples) {
+      for (let i = 0; i < channel.length; i++) {
+        channel[i] = channel[i]! * masterBusGain;
+      }
+    }
+  }
+
   log.info('Audio processing complete', {
     outputSamples: mixedSamples[0]?.length,
     channels: mixedSamples.length,
     durationSeconds: (mixedSamples[0]?.length ?? 0) / config.sampleRate,
+    masterBusDb: masterBusDb ?? 0,
   });
 
   return {

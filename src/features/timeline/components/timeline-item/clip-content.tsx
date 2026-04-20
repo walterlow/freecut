@@ -11,11 +11,11 @@ import { useCompositionsStore } from '../../stores/compositions-store';
 import { useItemsStore } from '../../stores/items-store';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { useZoomStore } from '../../stores/zoom-store';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import { summarizeCompositionClipContent } from '../../utils/composition-clip-summary';
 import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
-import { formatSignedFrameDelta } from '@/utils/time-utils';
-import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
+import { formatSignedFrameDelta } from '@/shared/utils/time-utils';
+import { isGifUrl, isWebpUrl } from '@/shared/utils/media-utils';
 
 const EMPTY_COMPOSITION_LOOKUP: Record<string, never> = {};
 const FILMSTRIP_MIN_WIDTH_PX = 5;

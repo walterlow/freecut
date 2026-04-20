@@ -177,7 +177,7 @@ vi.mock('@/shared/state/playback', () => {
   return { usePlaybackStore };
 });
 
-vi.mock('@/shared/state/editor', () => ({
+vi.mock('@/app/state/editor', () => ({
   useEditorStore: (selector: (state: { syncSidebarLayout: typeof mocks.syncSidebarLayout }) => unknown) =>
     selector({ syncSidebarLayout: mocks.syncSidebarLayout }),
 }));
@@ -200,8 +200,8 @@ vi.mock('@/features/editor/deps/export-contract', () => ({
   importExportDialog: mocks.importExportDialog,
 }));
 
-vi.mock('@/shared/ui/editor-layout', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/ui/editor-layout')>();
+vi.mock('@/app/editor-layout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/app/editor-layout')>();
   const layout = {
     ...actual.EDITOR_LAYOUT,
     timelineDefaultSize: 35,

@@ -247,7 +247,7 @@ export class VideoFrameExtractor {
       const candidate = await this.peekNextSample();
       if (!candidate) break;
       if (candidate.timestamp <= timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON) {
-        // Moving to a new sample â€” release the cached VideoFrame first
+        // Moving to a new sample — release the cached VideoFrame first
         // so it's closed before the old sample is closed.
         this.closeCachedVideoFrame();
         this.closeSample(this.currentSample);
@@ -373,7 +373,7 @@ export class VideoFrameExtractor {
       }
       return true;
     } catch (error) {
-      // Draw failed â€” discard the cached frame so next attempt gets a fresh one
+      // Draw failed — discard the cached frame so next attempt gets a fresh one
       this.closeCachedVideoFrame();
       this.sampleLoopError = error;
       this.lastFailureKind = 'decode-error';

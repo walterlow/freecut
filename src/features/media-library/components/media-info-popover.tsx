@@ -2,7 +2,7 @@ import { Info, Video, FileAudio, Image as ImageIcon, Film, Clock, Maximize2, Har
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { MediaMetadata } from '@/types/storage';
 import { getMediaType, formatDuration } from '../utils/validation';
-import { formatBytes } from '@/utils/format-utils';
+import { formatBytes } from '@/shared/utils/format-utils';
 
 function formatTimestamp(sec: number): string {
   const m = Math.floor(sec / 60);

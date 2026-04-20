@@ -1,6 +1,6 @@
 import { useCallback, type MutableRefObject } from 'react';
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
+import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
   getBestDomVideoElementForItem,

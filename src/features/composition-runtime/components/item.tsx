@@ -23,7 +23,7 @@ import {
   getSafeTrimBefore,
   DEFAULT_SPEED,
 } from '@/features/composition-runtime/deps/timeline';
-import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
+import { isGifUrl, isWebpUrl } from '@/shared/utils/media-utils';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { createLogger } from '@/shared/logging/logger';
 import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';

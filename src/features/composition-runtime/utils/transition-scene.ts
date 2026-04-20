@@ -1,6 +1,6 @@
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/domain/animation/easing';
+import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
+import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing';
 
 export interface ActiveTransition<TItem extends TimelineItem = TimelineItem> {
   transition: ResolvedTransitionWindow<TItem>['transition'];

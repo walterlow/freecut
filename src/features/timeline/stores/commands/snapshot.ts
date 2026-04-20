@@ -7,7 +7,7 @@ import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useCompositionsStore } from '../compositions-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useProjectStore } from '@/features/timeline/deps/projects';
-import { updateProject } from '@/infrastructure/storage/indexeddb';
+import { updateProject } from '@/infrastructure/storage';
 import { createLogger } from '@/shared/logging/logger';
 import {
   getEffectiveTimelineMaxFrame,
@@ -105,6 +105,7 @@ export function captureSnapshot(): TimelineSnapshot {
     snapEnabled: settingsState.snapEnabled,
     currentFrame: playbackState.currentFrame,
     busAudioEq: playbackState.busAudioEq,
+    masterBusDb: playbackState.masterBusDb,
     projectId: currentProject?.id ?? null,
     projectMetadata: currentProject
       ? { ...currentProject.metadata }
@@ -149,6 +150,7 @@ export function restoreSnapshot(snapshot: TimelineSnapshot): void {
   // Restore playhead position
   usePlaybackStore.getState().setCurrentFrame(snapshot.currentFrame);
   usePlaybackStore.getState().setBusAudioEq(snapshot.busAudioEq);
+  usePlaybackStore.getState().setMasterBusDb(snapshot.masterBusDb ?? 0);
 
   // Restore current project metadata so canvas/project changes undo with the editor history.
   restoreProjectMetadata(snapshot);
@@ -174,6 +176,7 @@ export function snapshotsEqual(a: TimelineSnapshot, b: TimelineSnapshot): boolea
     a.snapEnabled === b.snapEnabled &&
     a.currentFrame === b.currentFrame &&
     JSON.stringify(a.busAudioEq ?? null) === JSON.stringify(b.busAudioEq ?? null) &&
+    a.masterBusDb === b.masterBusDb &&
     a.projectId === b.projectId &&
     projectMetadataEqual(a.projectMetadata, b.projectMetadata)
   );

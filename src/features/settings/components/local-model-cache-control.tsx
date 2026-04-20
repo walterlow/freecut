@@ -10,7 +10,7 @@ import {
   type LocalModelCacheSummary,
 } from '@/shared/utils/local-model-cache';
 import { cn } from '@/shared/ui/cn';
-import { formatBytes } from '@/utils/format-utils';
+import { formatBytes } from '@/shared/utils/format-utils';
 
 const log = createLogger('LocalModelCacheControl');
 

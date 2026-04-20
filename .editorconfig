@@ -1,0 +1,23 @@
+# EditorConfig — https://editorconfig.org
+# Pins file encoding to UTF-8 (no BOM) to prevent mojibake like "Ã—" (× double-encoded)
+# and "â€"" (— double-encoded) from creeping in when files round-trip through
+# editors configured with a non-UTF-8 default (e.g. Windows-1252 on Windows).
+#
+# Respected out-of-the-box by VS Code, JetBrains IDEs, Sublime, Vim (with plugin),
+# and most modern editors. No install needed for VS Code / JetBrains.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{bat,cmd}]
+end_of_line = crlf

@@ -37,12 +37,12 @@ import {
 import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library';
 import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { useSettingsStore } from '@/features/preview/deps/settings';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { useSelectionStore } from '@/shared/state/selection';
-import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout';
 import { cn } from '@/shared/ui/cn';
-import { formatTimecodeCompact } from '@/utils/time-utils';
+import { formatTimecodeCompact } from '@/shared/utils/time-utils';
 import type { TimelineTrack } from '@/types/timeline';
 
 interface SourceMonitorProps {
@@ -143,6 +143,25 @@ function SourcePatchDestinationPicker({
 }
 
 export const SourceMonitor = memo(function SourceMonitor({
+  mediaId,
+  onClose,
+  variant = 'panel',
+  interactive = true,
+  seekFrame = null,
+}: SourceMonitorProps) {
+  return (
+    <SourceMonitorContent
+      key={mediaId}
+      mediaId={mediaId}
+      onClose={onClose}
+      variant={variant}
+      interactive={interactive}
+      seekFrame={seekFrame}
+    />
+  );
+});
+
+const SourceMonitorContent = memo(function SourceMonitorContent({
   mediaId,
   onClose,
   variant = 'panel',
@@ -917,7 +936,7 @@ function SourcePlaybackControls({
       {/* Seek bar row with I/O region above and editing buttons */}
       <div className="border-t border-border panel-header flex items-center gap-2 px-4 h-7 shrink-0">
         <div className="flex-1 flex flex-col justify-center gap-[2px] min-w-0">
-          {/* I/O region strip — styled like timeline I/O controls */}
+          {/* I/O region strip — styled like timeline I/O controls */}
           {interactive && (inPct !== null || outPct !== null) && (
             <div ref={ioStripRef} className="w-full h-2.5 relative shrink-0">
               {/* Draggable range strip */}
@@ -938,7 +957,7 @@ function SourcePlaybackControls({
                   onMouseDown={handleIORangeDragStart}
                 />
               )}
-              {/* In handle — grip */}
+              {/* In handle — grip */}
               {inPct !== null && (
                 <div
                   className="absolute top-0 bottom-0"
@@ -967,7 +986,7 @@ function SourcePlaybackControls({
                   onMouseDown={(e) => handleIODragStart(e, 'in')}
                 />
               )}
-              {/* Out handle — grip */}
+              {/* Out handle — grip */}
               {outPct !== null && (
                 <div
                   className="absolute top-0 bottom-0"
@@ -1091,7 +1110,7 @@ function SourcePlaybackControls({
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Previous frame (←)</TooltipContent>
+            <TooltipContent side="top">Previous frame (Left Arrow)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1107,7 +1126,7 @@ function SourcePlaybackControls({
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Next frame (→)</TooltipContent>
+            <TooltipContent side="top">Next frame (Right Arrow)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>

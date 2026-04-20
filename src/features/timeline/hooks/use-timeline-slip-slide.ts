@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTransitionsStore } from '../stores/transitions-store';
@@ -315,7 +315,7 @@ export function useTimelineSlipSlide(
 
       if (mode === 'slip') {
         // Convert timeline frame delta to source frame delta.
-        // Inverted: drag right → source window moves left (reveals earlier content),
+        // Inverted: drag right â†’ source window moves left (reveals earlier content),
         // matching DaVinci Resolve convention.
         const currentItem = getItemFromStore();
         const { speed, sourceFps } = getSourceProperties(currentItem);

@@ -33,6 +33,13 @@ export interface Project {
 }
 
 export interface ProjectTimeline {
+  /**
+   * Master bus gain in dB applied after all track-level volume/fade math but
+   * before the per-device monitor gain. Stored with the project so exports
+   * and cross-device previews see the same audible level. Defaults to 0
+   * (unity) when absent.
+   */
+  masterBusDb?: number;
   tracks: Array<{
     id: string;
     name: string;

@@ -12,7 +12,7 @@ const indexedDbMocks = vi.hoisted(() => ({
   updateProject: vi.fn(),
 }));
 
-vi.mock('@/infrastructure/storage/indexeddb', () => indexedDbMocks);
+vi.mock('@/infrastructure/storage', () => indexedDbMocks);
 
 import { createProjectUpgradeBackup } from './project-upgrade-service';
 

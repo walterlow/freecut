@@ -18,8 +18,19 @@ export interface PlaybackState {
   isPlaying: boolean;
   playbackRate: number;
   loop: boolean;
+  /**
+   * Per-device monitor gain (linear, 1 = unity). Persisted to localStorage,
+   * affects only the preview player — not exports. Separate from the
+   * project-scoped master bus gain below.
+   */
   volume: number;
   muted: boolean;
+  /**
+   * Project-scoped master bus gain in dB, applied to the final mix in both
+   * preview and export. Loaded from / saved to the active project's timeline.
+   * Defaults to 0 (unity) for new/loaded projects.
+   */
+  masterBusDb: number;
   busAudioEq?: AudioEqSettings;
   zoom: number;
   /** Frame to preview on hover (null when not hovering) */
@@ -47,6 +58,7 @@ export interface PlaybackActions {
   toggleLoop: () => void;
   setVolume: (volume: number) => void;
   toggleMute: () => void;
+  setMasterBusDb: (db: number) => void;
   setBusAudioEq: (eq: AudioEqSettings | undefined) => void;
   setZoom: (zoom: number) => void;
   setPreviewFrame: (frame: number | null, itemId?: string | null) => void;

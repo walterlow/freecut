@@ -158,7 +158,7 @@ function LayoutCanvas({
   config,
   itemsLookup,
 }: {
-  /** Ordered chains â€” each chain is a group of item IDs sharing one layout cell */
+  /** Ordered chains — each chain is a group of item IDs sharing one layout cell */
   chainOrder: string[][];
   onSwap: (fromIndex: number, toIndex: number) => void;
   canvasWidth: number;
@@ -206,7 +206,7 @@ function LayoutCanvas({
     return computeLayout(layoutItems, safeCanvasWidth, safeCanvasHeight, config);
   }, [layoutItems, safeCanvasWidth, safeCanvasHeight, config]);
 
-  // Convert center-relative coords to absolute top-left, then scale â€” one rect per chain
+  // Convert center-relative coords to absolute top-left, then scale — one rect per chain
   const canvasRects: CanvasItemRect[] = useMemo(() => {
     const cx = safeCanvasWidth / 2;
     const cy = safeCanvasHeight / 2;
@@ -332,46 +332,42 @@ type SelectedPreset =
   | { kind: 'builtin'; index: number }
   | { kind: 'custom'; id: string };
 
-// â”€â”€ Main dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function buildChainOrder(itemIds: string[], transitions: ReturnType<typeof useTransitionsStore.getState>['transitions']) {
+  const { transitionsByClipId } = buildTransitionIndexes(transitions);
+  return buildTransitionChains(itemIds, transitionsByClipId);
+}
 
-export function BentoLayoutDialog() {
-  const isOpen = useBentoLayoutDialogStore((s) => s.isOpen);
-  const itemIds = useBentoLayoutDialogStore((s) => s.itemIds);
-  const close = useBentoLayoutDialogStore((s) => s.close);
+interface BentoLayoutDialogBodyProps {
+  itemIds: string[];
+  transitions: ReturnType<typeof useTransitionsStore.getState>['transitions'];
+  close: () => void;
+  customPresets: ReturnType<typeof useBentoPresetsStore.getState>['customPresets'];
+  addPreset: ReturnType<typeof useBentoPresetsStore.getState>['addPreset'];
+  removePreset: ReturnType<typeof useBentoPresetsStore.getState>['removePreset'];
+  canvasWidth: number;
+  canvasHeight: number;
+}
 
-  const customPresets = useBentoPresetsStore((s) => s.customPresets);
-  const addPreset = useBentoPresetsStore((s) => s.addPreset);
-  const removePreset = useBentoPresetsStore((s) => s.removePreset);
-
-  const canvasWidth = useProjectStore((s) => s.currentProject?.metadata.width ?? 1920);
-  const canvasHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080);
-
+function BentoLayoutDialogBody({
+  itemIds,
+  transitions,
+  close,
+  customPresets,
+  addPreset,
+  removePreset,
+  canvasWidth,
+  canvasHeight,
+}: BentoLayoutDialogBodyProps) {
+  const initialChainOrder = useMemo(() => buildChainOrder(itemIds, transitions), [itemIds, transitions]);
   const [selected, setSelected] = useState<SelectedPreset>({ kind: 'builtin', index: 0 });
   const [gap, setGap] = useState(0);
   const [padding, setPadding] = useState(0);
-  /** Chain order â€” each entry is a chain (group of transition-connected item IDs) */
-  const [chainOrder, setChainOrder] = useState<string[][]>([]);
+  /** Chain order — each entry is a chain (group of transition-connected item IDs) */
+  const [chainOrder, setChainOrder] = useState<string[][]>(() => initialChainOrder);
 
   // Save preset inline state
   const [isSaving, setIsSaving] = useState(false);
   const [presetName, setPresetName] = useState('');
-
-  // Build transition chains when dialog opens
-  const transitions = useTransitionsStore((s) => s.transitions);
-
-  // Sync chainOrder when dialog opens or itemIds change
-  useEffect(() => {
-    if (isOpen && itemIds.length > 0) {
-      const { transitionsByClipId } = buildTransitionIndexes(transitions);
-      const chains = buildTransitionChains(itemIds, transitionsByClipId);
-      setChainOrder(chains);
-      setSelected({ kind: 'builtin', index: 0 });
-      setGap(0);
-      setPadding(0);
-      setIsSaving(false);
-      setPresetName('');
-    }
-  }, [isOpen, itemIds, transitions]);
 
   // Look up items from store (reactive)
   const items = useItemsStore((state) => state.items);
@@ -457,8 +453,7 @@ export function BentoLayoutDialog() {
     (sel: SelectedPreset) => {
       setSelected(sel);
       // Reset chain order to original when switching presets
-      const { transitionsByClipId } = buildTransitionIndexes(transitions);
-      setChainOrder(buildTransitionChains(itemIds, transitionsByClipId));
+      setChainOrder(initialChainOrder);
 
       // For custom presets, also apply their gap/padding
       if (sel.kind === 'custom') {
@@ -469,38 +464,44 @@ export function BentoLayoutDialog() {
         }
       }
     },
-    [itemIds, transitions, customPresets],
-  );
-
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open) {
-        close();
-        setIsSaving(false);
-        setPresetName('');
-      }
-    },
-    [close],
+    [customPresets, initialChainOrder],
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Bento Layout</DialogTitle>
-          <DialogDescription>
-            Arrange {itemCount} selected clip{itemCount !== 1 ? 's' : ''} â€” drag items to swap positions
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <DialogHeader>
+        <DialogTitle>Bento Layout</DialogTitle>
+        <DialogDescription>
+          Arrange {itemCount} selected clip{itemCount !== 1 ? 's' : ''} — drag items to swap positions
+        </DialogDescription>
+      </DialogHeader>
 
-        {/* Preset strip */}
-        <div className="flex flex-wrap gap-1.5">
-          {BUILT_IN_PRESETS.map((preset, idx) => {
-            const isSelected = selected.kind === 'builtin' && selected.index === idx;
-            return (
+      {/* Preset strip */}
+      <div className="flex flex-wrap gap-1.5">
+        {BUILT_IN_PRESETS.map((preset, idx) => {
+          const isSelected = selected.kind === 'builtin' && selected.index === idx;
+          return (
+            <button
+              key={`${preset.type}-${idx}`}
+              onClick={() => handleSelectPreset({ kind: 'builtin', index: idx })}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                'hover:bg-accent',
+                isSelected
+                  ? 'ring-2 ring-primary bg-accent text-accent-foreground'
+                  : 'bg-muted text-muted-foreground',
+              )}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
+        {customPresets.map((preset) => {
+          const isSelected = selected.kind === 'custom' && selected.id === preset.id;
+          return (
+            <div key={preset.id} className="relative group">
               <button
-                key={`${preset.type}-${idx}`}
-                onClick={() => handleSelectPreset({ kind: 'builtin', index: idx })}
+                onClick={() => handleSelectPreset({ kind: 'custom', id: preset.id })}
                 className={cn(
                   'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
                   'hover:bg-accent',
@@ -509,109 +510,147 @@ export function BentoLayoutDialog() {
                     : 'bg-muted text-muted-foreground',
                 )}
               >
-                {preset.label}
+                {preset.name}
               </button>
-            );
-          })}
-          {customPresets.map((preset) => {
-            const isSelected = selected.kind === 'custom' && selected.id === preset.id;
-            return (
-              <div key={preset.id} className="relative group">
-                <button
-                  onClick={() => handleSelectPreset({ kind: 'custom', id: preset.id })}
-                  className={cn(
-                    'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
-                    'hover:bg-accent',
-                    isSelected
-                      ? 'ring-2 ring-primary bg-accent text-accent-foreground'
-                      : 'bg-muted text-muted-foreground',
-                  )}
-                >
-                  {preset.name}
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removePreset(preset.id);
-                    if (isSelected) {
-                      setSelected({ kind: 'builtin', index: 0 });
-                    }
-                  }}
-                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removePreset(preset.id);
+                  if (isSelected) {
+                    setSelected({ kind: 'builtin', index: 0 });
+                  }
+                }}
+                className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
 
-        {/* Interactive canvas */}
-        <LayoutCanvas
-          chainOrder={chainOrder}
-          onSwap={handleSwap}
-          canvasWidth={canvasWidth}
-          canvasHeight={canvasHeight}
-          config={config}
-          itemsLookup={itemsLookup}
-        />
+      {/* Interactive canvas */}
+      <LayoutCanvas
+        chainOrder={chainOrder}
+        onSwap={handleSwap}
+        canvasWidth={canvasWidth}
+        canvasHeight={canvasHeight}
+        config={config}
+        itemsLookup={itemsLookup}
+      />
 
-        {/* Options bar */}
-        <div className="flex items-center gap-4">
-          <NumberInput label="Gap" value={gap} onChange={setGap} min={0} max={200} />
-          <NumberInput label="Padding" value={padding} onChange={setPadding} min={0} max={200} />
-        </div>
+      {/* Options bar */}
+      <div className="flex items-center gap-4">
+        <NumberInput label="Gap" value={gap} onChange={setGap} min={0} max={200} />
+        <NumberInput label="Padding" value={padding} onChange={setPadding} min={0} max={200} />
+      </div>
 
-        {/* Save preset inline */}
-        {isSaving ? (
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="Preset name"
-              value={presetName}
-              onChange={(e) => setPresetName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSavePreset();
-                if (e.key === 'Escape') {
-                  setIsSaving(false);
-                  setPresetName('');
-                }
-              }}
-              className="h-8 text-sm flex-1"
-              autoFocus
-            />
-            <Button size="sm" variant="secondary" onClick={handleSavePreset} disabled={!presetName.trim()}>
-              Save
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
+      {/* Save preset inline */}
+      {isSaving ? (
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Preset name"
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSavePreset();
+              if (e.key === 'Escape') {
                 setIsSaving(false);
                 setPresetName('');
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        ) : null}
+              }
+            }}
+            className="h-8 text-sm flex-1"
+            autoFocus
+          />
+          <Button size="sm" variant="secondary" onClick={handleSavePreset} disabled={!presetName.trim()}>
+            Save
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setIsSaving(false);
+              setPresetName('');
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : null}
 
-        <DialogFooter className="flex-row justify-between sm:justify-between">
-          {!isSaving ? (
-            <Button variant="secondary" size="sm" onClick={() => setIsSaving(true)}>
-              Save as Preset
-            </Button>
-          ) : (
-            <div />
-          )}
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={close}>
-              Cancel
-            </Button>
-            <Button onClick={handleApply}>Apply</Button>
-          </div>
-        </DialogFooter>
+      <DialogFooter className="flex-row justify-between sm:justify-between">
+        {!isSaving ? (
+          <Button variant="secondary" size="sm" onClick={() => setIsSaving(true)}>
+            Save as Preset
+          </Button>
+        ) : (
+          <div />
+        )}
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={close}>
+            Cancel
+          </Button>
+          <Button onClick={handleApply}>Apply</Button>
+        </div>
+      </DialogFooter>
+    </>
+  );
+}
+
+// â”€â”€ Main dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export function BentoLayoutDialog() {
+  const isOpen = useBentoLayoutDialogStore((s) => s.isOpen);
+  const itemIds = useBentoLayoutDialogStore((s) => s.itemIds);
+  const close = useBentoLayoutDialogStore((s) => s.close);
+
+  const customPresets = useBentoPresetsStore((s) => s.customPresets);
+  const addPreset = useBentoPresetsStore((s) => s.addPreset);
+  const removePreset = useBentoPresetsStore((s) => s.removePreset);
+
+  const canvasWidth = useProjectStore((s) => s.currentProject?.metadata.width ?? 1920);
+  const canvasHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080);
+
+  // Build transition chains when dialog opens
+  const transitions = useTransitionsStore((s) => s.transitions);
+  const dialogBodyKey = useMemo(
+    () => JSON.stringify({
+      itemIds,
+      transitions: transitions.map((transition) => ({
+        id: transition.id,
+        leftClipId: transition.leftClipId,
+        rightClipId: transition.rightClipId,
+      })),
+    }),
+    [itemIds, transitions]
+  );
+
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        close();
+      }
+    },
+    [close],
+  );
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-lg">
+        {isOpen ? (
+          <BentoLayoutDialogBody
+            key={dialogBodyKey}
+            itemIds={itemIds}
+            transitions={transitions}
+            close={close}
+            customPresets={customPresets}
+            addPreset={addPreset}
+            removePreset={removePreset}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   );
 }
-

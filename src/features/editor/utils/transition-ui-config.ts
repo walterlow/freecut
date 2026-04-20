@@ -23,7 +23,7 @@ import {
   Sun,
   type LucideIcon,
 } from 'lucide-react';
-import { transitionRegistry } from '@/domain/timeline/transitions';
+import { transitionRegistry } from '@/core/timeline/transitions';
 import type { PresentationConfig, TransitionCategory } from '@/types/transition';
 
 /** Lucide icon lookup by name string */
@@ -65,7 +65,7 @@ export const TRANSITION_CATEGORY_ORDER: TransitionCategory[] = [
   'basic', 'wipe', 'slide', 'flip', 'mask', 'light', 'chromatic', 'custom',
 ];
 
-/** Direction string → display label + icon name */
+/** Direction string â†’ display label + icon name */
 const DIRECTION_LABELS: Record<string, { label: string; icon: string }> = {
   'from-left': { label: 'Left', icon: 'ArrowRight' },
   'from-right': { label: 'Right', icon: 'ArrowLeft' },

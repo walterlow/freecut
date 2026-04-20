@@ -1,4 +1,4 @@
-import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
+import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
 
 export interface RollingPreviewLike {
   trimmedItemId: string | null;

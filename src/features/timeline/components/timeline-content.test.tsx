@@ -2,7 +2,7 @@ import { createRef, type ReactNode } from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useSelectionStore } from '@/shared/state/selection';

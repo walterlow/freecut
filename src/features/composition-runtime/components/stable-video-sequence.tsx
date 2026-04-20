@@ -21,7 +21,7 @@ import { useVideoConfig } from '../hooks/use-player-compat';
 import { useTransitionParticipantSync } from '../hooks/use-transition-participant-sync';
 import type { TimelineItem, VideoItem } from '@/types/timeline';
 import type { AudioEqSettings } from '@/types/audio';
-import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
+import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
 import { VideoContent } from './video-content';
 import {
   findActiveVideoItemIndex,
@@ -227,7 +227,7 @@ const GroupRenderer: React.FC<{
   const rawActiveItemIndex = isPremounted ? -1 : findActiveVideoItemIndex(group.items, globalFrame);
 
   // Stabilize active index during same-origin transitions.
-  // When two items in the same group participate in a transition (A→A clip,
+  // When two items in the same group participate in a transition (Aâ†’A clip,
   // same media/origin split), the active index switches mid-transition at
   // the cut point. This causes the primary pool lane's video element to
   // seek to a different source position and the shadow to remount — both

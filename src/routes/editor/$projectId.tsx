@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrations';
-import { getProject } from '@/infrastructure/storage/indexeddb';
+import { CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations';
+import { getProject } from '@/infrastructure/storage';
 
 export const Route = createFileRoute('/editor/$projectId')({
   // Editor loader data is tiny and migration state must be fresh on reopen.

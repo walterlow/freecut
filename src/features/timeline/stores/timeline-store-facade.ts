@@ -214,7 +214,7 @@ type TimelineStoreFacade = {
  * This mimics Zustand's API for backward compatibility.
  */
 function createTimelineStoreFacade(): TimelineStoreFacade {
-  // The main hook function â€” uses selector memoization so components only
+  // The main hook function — uses selector memoization so components only
   // re-render when their *selected* value changes, not on every domain change.
   function useTimelineStore<T>(selector: (state: TimelineState & TimelineActions) => T): T {
     const selectorRef = useRef(selector);
@@ -227,7 +227,7 @@ function createTimelineStoreFacade(): TimelineStoreFacade {
 
     // Stable callback: compares the selected value across snapshot changes.
     // If the selector returns the same value (via Object.is), the previous
-    // reference is returned â€” useSyncExternalStore sees no change and skips
+    // reference is returned — useSyncExternalStore sees no change and skips
     // the re-render for this component.
     const getSelection = useCallback((): T => {
       const snapshot = getSnapshot();

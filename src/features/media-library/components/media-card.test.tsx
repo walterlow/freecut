@@ -113,7 +113,7 @@ vi.mock('../stores/media-library-store', () => {
   return { useMediaLibraryStore };
 });
 
-vi.mock('@/shared/state/editor', () => {
+vi.mock('@/app/state/editor', () => {
   const useEditorStore = Object.assign(
     (selector: (state: typeof editorStoreState) => unknown) => selector(editorStoreState),
     {

@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import type { CompositionInputProps } from '@/types/export';
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
-import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
+import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
+import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner';
 import { shouldForceContinuousPreviewOverlay } from '../hooks/use-gpu-effects-overlay';
 
 interface UsePreviewTransitionModelParams {

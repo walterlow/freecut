@@ -14,7 +14,7 @@ import { useTrackPushPreviewStore } from '../../stores/track-push-preview-store'
 import { useSlipEditPreviewStore } from '../../stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '../../stores/slide-edit-preview-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
@@ -98,7 +98,7 @@ import { getTransitionBridgeBounds } from '../../utils/transition-preview-geomet
 import { getAudioFadeRatio, getAudioFadeSecondsFromOffset, type AudioFadeHandle } from '../../utils/audio-fade';
 import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset, getAudioFadeCurvePath } from '../../utils/audio-fade-curve';
 import { getAudioVolumeDbFromDragDelta, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import { findHandleNeighborWithTransitions, findNearestNeighbors } from '../../utils/transition-linked-neighbors';
 const EMPTY_SEGMENT_OVERLAYS = [] as const;
 const EMPTY_LINKED_ITEMS: TimelineItemType[] = [];
@@ -859,7 +859,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   ]);
   const visualLeft = Math.round(frameToPixelsNow(visualLeftFrame));
   const visualWidth = Math.round(frameToPixelsNow(visualWidthFrames));
-  // Early width check — used to short-circuit expensive computations below.
+  // Early width check ââ‚¬” used to short-circuit expensive computations below.
   // The full useCompactClipShell (which also checks interaction/badge state) is computed later for JSX gating.
   const isCompactWidth = visualWidth > 0 && visualWidth <= COMPACT_CLIP_MAX_WIDTH_PX;
 
@@ -2756,7 +2756,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             />
           )}
 
-          {/* Join indicators — hide globally below a zoom threshold so they're always consistent between neighbors */}
+          {/* Join indicators ââ‚¬” hide globally below a zoom threshold so they're always consistent between neighbors */}
           {showJoinIndicators && (
             <JoinIndicators
               hasJoinableLeft={hasJoinableLeft}

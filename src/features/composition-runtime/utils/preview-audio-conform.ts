@@ -1,8 +1,13 @@
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
-import { getMedia, updateMedia } from '@/infrastructure/storage/indexeddb/media';
+import { getMedia, updateMedia } from '@/infrastructure/storage';
 import { opfsService } from '@/features/composition-runtime/deps/media-library';
 import { createLogger } from '@/shared/logging/logger';
 import type { MediaMetadata } from '@/types/storage';
+import {
+  mirrorBytesToWorkspace,
+  readWorkspaceBlob,
+  removeWorkspaceCacheEntry,
+} from '@/infrastructure/storage/workspace-fs/cache-mirror';
 import { audioBufferToWavBlob } from './audio-buffer-wav';
 
 const log = createLogger('PreviewAudioConform');
@@ -45,13 +50,32 @@ export async function resolvePreviewAudioConformUrl(mediaId: string): Promise<st
       if (!media?.previewAudioOpfsPath) {
         return null;
       }
+      const opfsPath = media.previewAudioOpfsPath;
+      const mimeType = media.previewAudioMimeType || PREVIEW_AUDIO_CONFORM_MIME_TYPE;
 
-      const data = await opfsService.getFile(media.previewAudioOpfsPath);
+      let bytes: ArrayBuffer | null = null;
+      try {
+        bytes = await opfsService.getFile(opfsPath);
+      } catch {
+        // Fall through to workspace fallback below.
+      }
+
+      if (!bytes) {
+        // Cross-origin fallback: try to hydrate from the workspace folder.
+        const wsBlob = await readWorkspaceBlob(opfsPath.split('/'));
+        if (!wsBlob) return null;
+        const wsBytes = await wsBlob.arrayBuffer();
+        try {
+          await opfsService.saveFile(opfsPath, wsBytes);
+        } catch (err) {
+          log.warn('Failed to back-fill OPFS from workspace', { mediaId, err });
+        }
+        bytes = wsBytes;
+      }
+
       return blobUrlManager.acquire(
         cacheKey,
-        new Blob([data], {
-          type: media.previewAudioMimeType || PREVIEW_AUDIO_CONFORM_MIME_TYPE,
-        }),
+        new Blob([bytes], { type: mimeType }),
       );
     } catch (err) {
       log.warn('Failed to resolve preview audio conform asset', { mediaId, err });
@@ -100,7 +124,8 @@ export async function persistPreviewAudioConform(
 
     const nextBlob = wavBlob ?? audioBufferToWavBlob(buffer);
     const opfsPath = buildPreviewAudioConformOpfsPath(mediaId);
-    await opfsService.saveFile(opfsPath, await nextBlob.arrayBuffer());
+    const bytes = await nextBlob.arrayBuffer();
+    await opfsService.saveFile(opfsPath, bytes);
 
     try {
       await updateMedia(mediaId, {
@@ -112,6 +137,10 @@ export async function persistPreviewAudioConform(
       await opfsService.deleteFile(opfsPath).catch(() => undefined);
       throw err;
     }
+
+    // Mirror to the workspace folder so other origins can reuse the
+    // conformed WAV without re-running the decode/encode. Fire-and-forget.
+    void mirrorBytesToWorkspace(opfsPath.split('/'), bytes);
   })()
     .catch((err) => {
       log.warn('Failed to persist preview audio conform asset', { mediaId, err });
@@ -149,6 +178,7 @@ export async function deletePreviewAudioConform(
         err,
       });
     }
+    void removeWorkspaceCacheEntry(media.previewAudioOpfsPath.split('/'));
   }
 
   if (options?.clearMetadata) {

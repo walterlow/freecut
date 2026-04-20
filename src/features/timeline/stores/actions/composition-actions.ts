@@ -18,7 +18,7 @@ import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useCompositionsStore, type SubComposition } from '../compositions-store';
-import { useEditorStore } from '@/shared/state/editor';
+import { useEditorStore } from '@/app/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
 import { DEFAULT_TRACK_HEIGHT } from '../../constants';
 import { useCompositionNavigationStore } from '../composition-navigation-store';
@@ -452,7 +452,7 @@ export function createPreComp(name?: string, itemIds?: string[]): TimelineItem |
       };
     });
 
-    // Map old trackId → new trackId
+    // Map old trackId â†’ new trackId
     const trackIdMapping = new Map<string, string>();
     sourceTrackIds.forEach((oldId, index) => {
       trackIdMapping.set(oldId, subCompTracks[index]!.id);
