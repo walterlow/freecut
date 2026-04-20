@@ -55,6 +55,7 @@ import {
   getProjectsUsingMedia,
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
+  readAiOutput,
 } from '@/infrastructure/storage';
 import { saveCaptions, deleteCaptions } from '@/infrastructure/storage/workspace-fs/captions';
 import { deleteScenes } from '@/infrastructure/storage/workspace-fs/scenes';
@@ -284,15 +285,64 @@ class MediaLibraryService {
       throw new Error(validationResult.error);
     }
 
-    // Stage 3: Check for duplicates (by fileName + fileSize)
-    const projectMedia = await getMediaForProjectDB(projectId);
-
-    const existingMedia = projectMedia.find(
-      (m) => m.fileName === file.name && m.fileSize === file.size
+    // Stage 3a: Cross-workspace dedup by (fileName + fileSize + lastModified).
+    // A File's triple-tuple is effectively unique: the same bytes re-saved
+    // bumps lastModified, and two different files sharing name + exact byte
+    // size + exact mtime is a practical non-occurrence. Zero file I/O — all
+    // three fields come from File metadata — so unique imports pay nothing.
+    // A match reuses the existing media record across projects instead of
+    // re-mirroring the bytes into a fresh `media/{id}/` directory.
+    //
+    // `isDuplicate` is only set when the matched media is already in THIS
+    // project. Cross-project reuse (new project importing the same file) is
+    // a successful import from the UI's perspective — the media just happens
+    // to already live in the workspace, so we associate and return it as a
+    // regular import result. `getAllMedia` includes media whose only project
+    // is trashed; re-associating into the new project effectively brings
+    // those records forward, and the trash sweep's ref-counted delete still
+    // keeps the bytes alive because the new project now references them.
+    const workspaceMedia = await getAllMediaDB();
+    const workspaceDuplicate = workspaceMedia.find(
+      (m) =>
+        m.fileName === file.name
+        && m.fileSize === file.size
+        && m.fileLastModified === file.lastModified,
     );
+    if (workspaceDuplicate) {
+      let resolvedDuplicate = workspaceDuplicate;
+      if (workspaceDuplicate.storageType === 'handle') {
+        resolvedDuplicate = await updateMediaDB(workspaceDuplicate.id, {
+          fileHandle: handle,
+          fileName: file.name,
+          fileSize: file.size,
+          fileLastModified: file.lastModified,
+          updatedAt: Date.now(),
+        });
+      }
+      mirrorSourceToWorkspaceInBackground(resolvedDuplicate.id, file, file.name);
+      const projectMediaIds = await getProjectMediaIds(projectId).catch(() => [] as string[]);
+      const alreadyInThisProject = projectMediaIds.includes(resolvedDuplicate.id);
+      if (!alreadyInThisProject) {
+        await associateMediaWithProject(projectId, resolvedDuplicate.id);
+      }
+      return { ...resolvedDuplicate, isDuplicate: alreadyInThisProject };
+    }
 
+    // Stage 3b: Project-scoped name+size fallback for legacy records missing
+    // `fileLastModified` (imported before that field was persisted). Only
+    // fires for records already in the current project — cross-project
+    // reuse is covered by 3a.
+    const projectMedia = await getMediaForProjectDB(projectId);
+    const existingMedia = projectMedia.find(
+      (m) =>
+        m.fileName === file.name
+        && m.fileSize === file.size
+        // Only consider legacy records that lack `fileLastModified` — current
+        // records with a different mtime must not be collapsed onto the new
+        // file since they describe different bytes.
+        && (m.fileLastModified === null || m.fileLastModified === undefined),
+    );
     if (existingMedia) {
-      // File already exists in project - return existing with duplicate flag
       return { ...existingMedia, isDuplicate: true };
     }
 
@@ -1050,19 +1100,45 @@ class MediaLibraryService {
       embeddingDim?: number;
       imageEmbeddingModel?: string;
       imageEmbeddingDim?: number;
+      /**
+       * When provided, the captions envelope and heavy assets are mirrored
+       * into the shared content-addressable cache so other mediaIds with the
+       * same source bytes skip re-analysis.
+       */
+      contentHash?: string;
     },
   ): Promise<MediaMetadata> {
+    const existingEnvelope = await readAiOutput(mediaId, 'captions').catch(() => undefined);
+    const existingSampleInterval = (() => {
+      const fromData = existingEnvelope?.data.sampleIntervalSec;
+      if (typeof fromData === 'number') return fromData;
+      const fromParams = (existingEnvelope?.params as { sampleIntervalSec?: unknown } | undefined)?.sampleIntervalSec;
+      return typeof fromParams === 'number' ? fromParams : undefined;
+    })();
+
+    const resolvedOptions = {
+      service: options?.service ?? existingEnvelope?.service ?? 'lfm-captioning',
+      model: options?.model ?? existingEnvelope?.model ?? 'lfm-2.5-vl',
+      sampleIntervalSec: options?.sampleIntervalSec ?? existingSampleInterval,
+      embeddingModel: options?.embeddingModel ?? existingEnvelope?.data.embeddingModel,
+      embeddingDim: options?.embeddingDim ?? existingEnvelope?.data.embeddingDim,
+      imageEmbeddingModel: options?.imageEmbeddingModel ?? existingEnvelope?.data.imageEmbeddingModel,
+      imageEmbeddingDim: options?.imageEmbeddingDim ?? existingEnvelope?.data.imageEmbeddingDim,
+      contentHash: options?.contentHash ?? existingEnvelope?.data.contentHash,
+    };
+
     try {
       await saveCaptions({
         mediaId,
         captions,
-        service: options?.service ?? 'lfm-captioning',
-        model: options?.model ?? 'lfm-2.5-vl',
-        sampleIntervalSec: options?.sampleIntervalSec,
-        embeddingModel: options?.embeddingModel,
-        embeddingDim: options?.embeddingDim,
-        imageEmbeddingModel: options?.imageEmbeddingModel,
-        imageEmbeddingDim: options?.imageEmbeddingDim,
+        service: resolvedOptions.service,
+        model: resolvedOptions.model,
+        sampleIntervalSec: resolvedOptions.sampleIntervalSec,
+        embeddingModel: resolvedOptions.embeddingModel,
+        embeddingDim: resolvedOptions.embeddingDim,
+        imageEmbeddingModel: resolvedOptions.imageEmbeddingModel,
+        imageEmbeddingDim: resolvedOptions.imageEmbeddingDim,
+        contentHash: resolvedOptions.contentHash,
       });
     } catch (error) {
       logger.warn(`Failed to persist captions for ${mediaId}; metadata mirror will still update`, error);

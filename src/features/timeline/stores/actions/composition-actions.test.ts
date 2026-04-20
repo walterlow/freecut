@@ -293,6 +293,50 @@ describe('composition-actions split wrappers', () => {
     expect(useItemsStore.getState().items.some((item) => item.type === 'video' && item.id !== 'comp-a-second')).toBe(true);
   });
 
+  it('creates compound clip track with video kind when selection is a single mask shape', () => {
+    useItemsStore.getState().setTracks([
+      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'shape-mask-1',
+        type: 'shape',
+        trackId: 'track-v1',
+        from: 0,
+        durationInFrames: 60,
+        shapeType: 'rect',
+        fillColor: '#ffffff',
+        isMask: true,
+      },
+    ]);
+    useSelectionStore.getState().selectItems(['shape-mask-1']);
+
+    const created = createPreComp('Compound Mask');
+    expect(created).toMatchObject({ type: 'composition', trackId: 'track-v1' });
+
+    const subComp = useCompositionsStore.getState().compositions[0];
+    expect(subComp).toBeDefined();
+    expect(subComp!.tracks).toHaveLength(1);
+    const subTrack = subComp!.tracks[0]!;
+    expect(subTrack.kind).toBe('video');
+    expect(subComp!.items).toHaveLength(1);
+    const subItem = subComp!.items[0]!;
+    expect(subItem.trackId).toBe(subTrack.id);
+    expect(subItem.type).toBe('shape');
+    expect(subItem.type === 'shape' && subItem.isMask).toBe(true);
+
+    useCompositionNavigationStore.getState().enterComposition(subComp!.id, 'Compound Mask');
+    const loadedTracks = useItemsStore.getState().tracks;
+    expect(loadedTracks).toHaveLength(1);
+    expect(loadedTracks[0]!.kind).toBe('video');
+    expect(loadedTracks[0]!.id).toBe(subTrack.id);
+    const loadedItems = useItemsStore.getState().items;
+    expect(loadedItems).toHaveLength(1);
+    expect(loadedItems[0]!.trackId).toBe(subTrack.id);
+    const loadedItem = loadedItems[0]!;
+    expect(loadedItem.type === 'shape' && loadedItem.isMask).toBe(true);
+  });
+
   it('creates nested compound clips while editing inside another compound clip', () => {
     useItemsStore.getState().setTracks([]);
     useItemsStore.getState().setItems([]);

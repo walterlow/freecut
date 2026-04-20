@@ -26,17 +26,22 @@ function fnv1a32(input: string): string {
 /**
  * Build a stable proxy identity key for shared proxy files.
  * Uses strongest source identity available:
- * 1) content hash
- * 2) OPFS path (content-addressable)
+ * 1) content hash (SHA-256 hex, 64 chars)
+ * 2) OPFS path hash + size
  * 3) file fingerprint fallback for handle-based media
+ *
+ * The three formats are distinguishable by shape (hex-length vs dashed
+ * fingerprint), so no source-type tag is needed in the key. Keeping the
+ * key tag-free means on-disk folder names under `content/proxies/` read
+ * as the underlying fingerprint rather than `f-…` / `h-…` / `o-…`.
  */
 export function getSharedProxyKey(media: ProxyKeyMedia): string {
   if (media.contentHash) {
-    return `h-${media.contentHash}`;
+    return media.contentHash;
   }
 
   if (media.storageType === 'opfs' && media.opfsPath) {
-    return `o-${fnv1a32(media.opfsPath)}-${media.fileSize}`;
+    return `${fnv1a32(media.opfsPath)}-${media.fileSize}`;
   }
 
   const fingerprint = [
@@ -48,5 +53,5 @@ export function getSharedProxyKey(media: ProxyKeyMedia): string {
     media.height,
   ].join('|');
 
-  return `f-${fnv1a32(fingerprint)}-${media.fileSize}-${media.fileLastModified ?? 0}`;
+  return `${fnv1a32(fingerprint)}-${media.fileSize}-${media.fileLastModified ?? 0}`;
 }

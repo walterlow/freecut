@@ -13,7 +13,11 @@
 
 import { createLogger } from '@/shared/logging/logger';
 import { mediaLibraryService, useMediaLibraryStore, type MediaMetadata } from '../deps/media-library';
-import { probeCaptionThumbnail, saveCaptionThumbnail } from '../deps/storage';
+import {
+  getCaptionsEmbeddingsMeta,
+  probeCaptionThumbnail,
+  saveCaptionThumbnail,
+} from '../deps/storage';
 
 const log = createLogger('SceneBrowser:LazyThumb');
 
@@ -159,6 +163,17 @@ function patchStoreThumbPath(mediaId: string, captionIndex: number, relPath: str
   schedulePersist(mediaId);
 }
 
+async function getCaptionStorageOptions(
+  mediaId: string,
+): Promise<{ contentHash?: string; sampleIntervalSec?: number }> {
+  const media = useMediaLibraryStore.getState().mediaById[mediaId];
+  const meta = await getCaptionsEmbeddingsMeta(mediaId).catch(() => null);
+  return {
+    contentHash: meta?.contentHash ?? media?.contentHash,
+    sampleIntervalSec: meta?.sampleIntervalSec,
+  };
+}
+
 async function generateOne(request: PendingRequest): Promise<string | null> {
   const { mediaId, captionIndex, timeSec } = request;
   const state = useMediaLibraryStore.getState();
@@ -210,7 +225,8 @@ async function generateOne(request: PendingRequest): Promise<string | null> {
     if (useMediaLibraryStore.getState().taggingMediaIds.has(mediaId)) {
       return null;
     }
-    const relPath = await saveCaptionThumbnail(mediaId, captionIndex, jpeg);
+    const cacheOptions = await getCaptionStorageOptions(mediaId);
+    const relPath = await saveCaptionThumbnail(mediaId, captionIndex, jpeg, cacheOptions);
     patchStoreThumbPath(mediaId, captionIndex, relPath);
     return relPath;
   } catch (error) {
@@ -260,7 +276,8 @@ export function requestLazyCaptionThumbnail(
   if (pending) return pending;
 
   const promise = (async () => {
-    const existing = await probeCaptionThumbnail(mediaId, captionIndex);
+    const cacheOptions = await getCaptionStorageOptions(mediaId);
+    const existing = await probeCaptionThumbnail(mediaId, captionIndex, cacheOptions);
     if (existing) {
       patchStoreThumbPath(mediaId, captionIndex, existing);
       resultCache.set(key, existing);

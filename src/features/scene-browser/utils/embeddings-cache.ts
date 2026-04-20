@@ -59,6 +59,17 @@ function sceneId(mediaId: string, captionIndex: number): string {
   return `${mediaId}:${captionIndex}`;
 }
 
+async function getCaptionStorageOptions(
+  mediaId: string,
+  fallbackContentHash?: string,
+): Promise<{ contentHash?: string; sampleIntervalSec?: number }> {
+  const meta = await getCaptionsEmbeddingsMeta(mediaId).catch(() => null);
+  return {
+    contentHash: meta?.contentHash ?? fallbackContentHash,
+    sampleIntervalSec: meta?.sampleIntervalSec,
+  };
+}
+
 function populateFromInMemory(media: MediaMetadata): boolean {
   const captions = media.aiCaptions;
   if (!captions || captions.length === 0) return false;
@@ -86,9 +97,16 @@ async function hydrateFromDisk(mediaId: string, expectedCount: number): Promise<
   const meta = await getCaptionsEmbeddingsMeta(mediaId);
   if (!meta) return { text: false, image: false };
 
+  // When the envelope was persisted via the shared content-addressable cache,
+  // the packed bins live under `content/{hash}/ai/` rather than per-media;
+  // pass the hash so the reader looks up the right file.
+  const opts = meta.contentHash
+    ? { contentHash: meta.contentHash, sampleIntervalSec: meta.sampleIntervalSec }
+    : undefined;
+
   let textOk = false;
   if (meta.embeddingModel === EMBEDDING_MODEL_ID && meta.embeddingDim === EMBEDDING_MODEL_DIM) {
-    const vectors = await getCaptionEmbeddings(mediaId, meta.embeddingDim, expectedCount);
+    const vectors = await getCaptionEmbeddings(mediaId, meta.embeddingDim, expectedCount, opts);
     if (vectors) {
       vectors.forEach((vector, i) => embeddings.set(sceneId(mediaId, i), vector));
       textOk = true;
@@ -100,7 +118,7 @@ async function hydrateFromDisk(mediaId: string, expectedCount: number): Promise<
     meta.imageEmbeddingModel === CLIP_MODEL_ID
     && meta.imageEmbeddingDim === CLIP_EMBEDDING_DIM
   ) {
-    const vectors = await getCaptionImageEmbeddings(mediaId, meta.imageEmbeddingDim, expectedCount);
+    const vectors = await getCaptionImageEmbeddings(mediaId, meta.imageEmbeddingDim, expectedCount, opts);
     if (vectors) {
       vectors.forEach((vector, i) => imageEmbeddings.set(sceneId(mediaId, i), vector));
       imageOk = true;
@@ -198,7 +216,8 @@ export function indexMediaCaptions(mediaId: string): Promise<void> {
       throw new Error(`Embedding returned ${vectors.length} vectors for ${texts.length} captions`);
     }
 
-    await saveCaptionEmbeddings(mediaId, vectors, EMBEDDING_MODEL_DIM);
+    const storageOptions = await getCaptionStorageOptions(mediaId, media.contentHash);
+    await saveCaptionEmbeddings(mediaId, vectors, EMBEDDING_MODEL_DIM, storageOptions);
     // Persist the model metadata on captions.json so future sessions know
     // the bin matches. We rewrite the full captions payload — cheap, since
     // retroactive indexing is an explicit user action, not a hot path.
@@ -213,6 +232,8 @@ export function indexMediaCaptions(mediaId: string): Promise<void> {
     await mediaLibraryService.updateMediaCaptions(mediaId, capturedCaptions, {
       embeddingModel: EMBEDDING_MODEL_ID,
       embeddingDim: EMBEDDING_MODEL_DIM,
+      contentHash: storageOptions.contentHash,
+      sampleIntervalSec: storageOptions.sampleIntervalSec,
     });
     useMediaLibraryStore.getState().updateMediaCaptions(mediaId, capturedCaptions);
 
@@ -268,7 +289,8 @@ export function indexMediaImageCaptions(mediaId: string): Promise<void> {
       throw new Error(`CLIP returned ${vectors.length} vectors for ${blobs.length} thumbnails`);
     }
 
-    await saveCaptionImageEmbeddings(mediaId, vectors, CLIP_EMBEDDING_DIM);
+    const storageOptions = await getCaptionStorageOptions(mediaId, media.contentHash);
+    await saveCaptionImageEmbeddings(mediaId, vectors, CLIP_EMBEDDING_DIM, storageOptions);
 
     // Patch captions.json with the image-model metadata. Fetch the latest
     // captions from the store so we preserve concurrent edits (rare, but
@@ -280,6 +302,8 @@ export function indexMediaImageCaptions(mediaId: string): Promise<void> {
         embeddingDim: EMBEDDING_MODEL_DIM,
         imageEmbeddingModel: CLIP_MODEL_ID,
         imageEmbeddingDim: CLIP_EMBEDDING_DIM,
+        contentHash: storageOptions.contentHash ?? latest.contentHash,
+        sampleIntervalSec: storageOptions.sampleIntervalSec,
       });
     }
 

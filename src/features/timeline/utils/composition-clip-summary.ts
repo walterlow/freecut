@@ -22,6 +22,30 @@ export interface CompositionVisualSource {
   speed: number;
 }
 
+/**
+ * A single visual clip from the sub-composition, mapped into the parent
+ * wrapper's local timeline. Multiple segments can cover a compound clip
+ * when the sub-comp contains several video clips. Segments on lower tracks
+ * (smaller `trackOrder`) render on top.
+ */
+export interface CompositionVisualSegment {
+  itemId: string;
+  mediaId: string;
+  /** Source-media start frame (native source fps) */
+  sourceStart: number;
+  /** Source-media total duration in native source frames (for the media file, not the sub-clip) */
+  sourceDurationFrames: number;
+  sourceFps: number;
+  /** Effective speed = nested item speed × wrapper speed */
+  speed: number;
+  /** Wrapper-local start frame in parent timeline fps */
+  from: number;
+  /** Wrapper-local duration in parent timeline frames */
+  durationInFrames: number;
+  /** Track order from the sub-comp (smaller = visually higher) */
+  trackOrder: number;
+}
+
 export interface CompositionClipSummary {
   visualMediaId: string | null;
   audioMediaId: string | null;
@@ -324,6 +348,106 @@ export function getCompositionOwnedAudioSources(params: {
 
     return [];
   });
+}
+
+/**
+ * Return ordered visual segments for a compound clip wrapper.
+ * Each segment represents one video clip from the sub-comp that covers part
+ * of the wrapper's displayed window. Nested composition items are recursed
+ * into so arbitrarily deep compounds contribute their own video segments.
+ * Segments are sorted with bottom tracks first so the DOM render order puts
+ * top tracks on top.
+ */
+export function getCompositionVisualSegments(params: {
+  wrapper: TimelineItem;
+  parentFps: number;
+  compositionById?: CompositionLookup;
+  mediaFpsById?: Record<string, number | undefined>;
+  mediaDurationFramesById?: Record<string, number | undefined>;
+  activeCompositionPath?: ReadonlySet<string>;
+}): CompositionVisualSegment[] {
+  const {
+    wrapper,
+    parentFps,
+    compositionById,
+    mediaFpsById,
+    mediaDurationFramesById,
+    activeCompositionPath = new Set<string>(),
+  } = params;
+  if (!compositionById) return [];
+  if (wrapper.type !== 'composition' || !wrapper.compositionId) return [];
+  if (activeCompositionPath.has(wrapper.compositionId)) return [];
+
+  const subComp = compositionById[wrapper.compositionId];
+  if (!subComp) return [];
+
+  const visibleTrackIds = getVisibleTrackIds(subComp.tracks);
+  const trackOrderMap = new Map(subComp.tracks.map((track) => [track.id, track.order ?? 0]));
+  const nextPath = new Set(activeCompositionPath);
+  nextPath.add(wrapper.compositionId);
+
+  const segments: CompositionVisualSegment[] = [];
+  for (const subItem of subComp.items) {
+    if (!visibleTrackIds.has(subItem.trackId)) continue;
+    if (subItem.type !== 'video' && subItem.type !== 'composition') continue;
+
+    const mapped = mapNestedItemToWrapperWindow({
+      subItem,
+      wrapper: wrapper as Extract<TimelineItem, { compositionId?: string }>,
+      parentFps,
+      subCompFps: subComp.fps,
+    });
+    if (!mapped) continue;
+
+    const trackOrder = trackOrderMap.get(subItem.trackId) ?? 0;
+
+    if (mapped.type === 'video' && mapped.mediaId) {
+      const sourceFps = mapped.sourceFps ?? mediaFpsById?.[mapped.mediaId] ?? parentFps;
+      // `durationInFrames` is in project FPS; convert to source-native frames
+      // when falling back so `sourceDurationFrames` is always consistent.
+      const sourceDurationFrames = mediaDurationFramesById?.[mapped.mediaId]
+        ?? mapped.sourceDuration
+        ?? Math.round(mapped.durationInFrames * (sourceFps / parentFps));
+
+      segments.push({
+        itemId: subItem.id,
+        mediaId: mapped.mediaId,
+        sourceStart: mapped.sourceStart ?? 0,
+        sourceDurationFrames,
+        sourceFps,
+        speed: mapped.speed ?? 1,
+        from: mapped.from,
+        durationInFrames: mapped.durationInFrames,
+        trackOrder,
+      });
+      continue;
+    }
+
+    if (mapped.type === 'composition' && mapped.compositionId) {
+      const nestedSegments = getCompositionVisualSegments({
+        wrapper: mapped,
+        parentFps,
+        compositionById,
+        mediaFpsById,
+        mediaDurationFramesById,
+        activeCompositionPath: nextPath,
+      });
+      for (const nested of nestedSegments) {
+        segments.push({
+          ...nested,
+          from: mapped.from + nested.from,
+          // Collapse nested ordering onto the outer item's track so DOM
+          // layering respects the sub-comp's track stack, not the grandchild's.
+          trackOrder,
+        });
+      }
+    }
+  }
+
+  // Higher trackOrder = visually lower. Render those first so lower-order
+  // (topmost) segments paint on top via DOM order.
+  segments.sort((a, b) => b.trackOrder - a.trackOrder);
+  return segments;
 }
 
 export function summarizeCompositionClipContent(params: {

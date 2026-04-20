@@ -14,8 +14,11 @@ export {
 } from './types';
 export {
   readAiOutput,
+  readAiOutputAt,
   writeAiOutput,
+  writeAiOutputAt,
   deleteAiOutput,
+  deleteAiOutputAt,
   listAiOutputs,
   getMediaIdsWithAiOutput,
 } from './io';

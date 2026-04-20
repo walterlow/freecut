@@ -135,7 +135,7 @@ function getSectionDividerBounds(
   if (!hasTrackSections) {
     return {
       hasTrackSections,
-      availablePaneHeight: 0,
+      availablePaneHeight: Math.max(0, viewportHeight),
       minimumSectionDividerPosition: 0,
       maximumSectionDividerPosition: 0,
     };

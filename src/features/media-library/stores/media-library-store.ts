@@ -23,6 +23,15 @@ const logger = createLogger('MediaLibraryStore');
 /** Tracked timeout for notification auto-clear */
 let notificationTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+function sameStringList(a: readonly string[], b: readonly string[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 function buildMediaById(mediaItems: MediaMetadata[]): Record<string, MediaMetadata> {
   const mediaById: Record<string, MediaMetadata> = {};
   for (const item of mediaItems) {
@@ -77,7 +86,6 @@ async function initializeProxyState(mediaItems: MediaMetadata[]): Promise<void> 
 type MediaLibraryStoreApi = UseBoundStore<StoreApi<MediaLibraryState & MediaLibraryActions>>;
 
 declare global {
-  // eslint-disable-next-line no-var
   var __FREECUT_MEDIA_LIBRARY_STORE__: MediaLibraryStoreApi | undefined;
 }
 
@@ -216,14 +224,30 @@ const newStore: MediaLibraryStoreApi = hotStore ?? create<
       ...createRelinkingActions(set, get),
 
       // Selection management
-      setSelection: ({ mediaIds, compositionIds }) => set({
-        selectedMediaIds: mediaIds,
-        selectedCompositionIds: compositionIds,
-      }),
+      setSelection: ({ mediaIds, compositionIds }) => {
+        const state = get();
+        const mediaUnchanged = sameStringList(state.selectedMediaIds, mediaIds);
+        const compUnchanged = sameStringList(state.selectedCompositionIds, compositionIds);
+        // Marquee live-commits fire at ~15fps even when the intersecting set
+        // hasn't changed — skip the write so subscribers don't thrash.
+        if (mediaUnchanged && compUnchanged) return;
+        set({
+          selectedMediaIds: mediaUnchanged ? state.selectedMediaIds : mediaIds,
+          selectedCompositionIds: compUnchanged ? state.selectedCompositionIds : compositionIds,
+        });
+      },
 
-      selectMedia: (ids) => set({ selectedMediaIds: ids }),
+      selectMedia: (ids) => {
+        const state = get();
+        if (sameStringList(state.selectedMediaIds, ids)) return;
+        set({ selectedMediaIds: ids });
+      },
 
-      selectCompositions: (ids) => set({ selectedCompositionIds: ids }),
+      selectCompositions: (ids) => {
+        const state = get();
+        if (sameStringList(state.selectedCompositionIds, ids)) return;
+        set({ selectedCompositionIds: ids });
+      },
 
       toggleMediaSelection: (id) =>
         set((state) => ({
@@ -239,7 +263,11 @@ const newStore: MediaLibraryStoreApi = hotStore ?? create<
             : [...state.selectedCompositionIds, id],
         })),
 
-      clearSelection: () => set({ selectedMediaIds: [], selectedCompositionIds: [] }),
+      clearSelection: () => {
+        const state = get();
+        if (state.selectedMediaIds.length === 0 && state.selectedCompositionIds.length === 0) return;
+        set({ selectedMediaIds: [], selectedCompositionIds: [] });
+      },
 
       // Filters and search
       setSearchQuery: (query) => set({ searchQuery: query }),

@@ -10,8 +10,8 @@
  * only need to be generated once per session.
  */
 
-import { useState, useCallback, useRef } from 'react';
-import { EffectsPipeline } from '@/infrastructure/gpu/effects';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { EffectsPipeline, getGpuCategoriesWithEffects } from '@/infrastructure/gpu/effects';
 import type { GpuEffectInstance, GpuEffectDefinition } from '@/infrastructure/gpu/effects';
 import { EFFECT_PRESETS } from '@/types/effects';
 
@@ -22,6 +22,10 @@ const PREVIEW_HEIGHT = 45;
 const previewCache = new Map<string, string>();
 let pipelineInstance: EffectsPipeline | null = null;
 let pipelinePromise: Promise<EffectsPipeline | null> | null = null;
+// Shared generation guard — both `trigger()` and `prewarmEffectPreviews()`
+// route through this so the render loop runs at most once per session.
+let generationPromise: Promise<void> | null = null;
+const generationListeners = new Set<() => void>();
 
 async function getOrCreatePipeline(): Promise<EffectsPipeline | null> {
   if (pipelineInstance) return pipelineInstance;
@@ -164,6 +168,72 @@ export interface EffectPreviewEntry {
 }
 
 /**
+ * Generate blob URLs for every registered GPU effect + preset into the
+ * module-level cache. Idempotent — concurrent callers share one promise,
+ * and subsequent calls after completion no-op. Failures (no GPU, etc.) are
+ * swallowed so callers can treat this as fire-and-forget.
+ */
+function generateAllPreviews(): Promise<void> {
+  if (generationPromise) return generationPromise;
+
+  generationPromise = (async () => {
+    const pipeline = await getOrCreatePipeline();
+    if (!pipeline) return;
+
+    const source = createSampleCanvas();
+
+    for (const { effects } of getGpuCategoriesWithEffects()) {
+      for (const def of effects) {
+        if (previewCache.has(def.id)) continue;
+        const url = await renderEffectPreview(pipeline, source, def.id, def);
+        if (url) {
+          previewCache.set(def.id, url);
+          generationListeners.forEach((fn) => fn());
+        }
+      }
+    }
+
+    for (const preset of EFFECT_PRESETS) {
+      const cacheKey = `preset:${preset.id}`;
+      if (previewCache.has(cacheKey)) continue;
+      const url = await renderPresetPreview(pipeline, source, preset.id);
+      if (url) {
+        previewCache.set(cacheKey, url);
+        generationListeners.forEach((fn) => fn());
+      }
+    }
+  })();
+
+  return generationPromise;
+}
+
+/**
+ * Kick off GPU-rendering of all effect preview thumbnails into the shared
+ * cache. Safe to call on editor mount (via `requestIdleCallback`) so that
+ * by the time the user opens the Add Effect picker, the cache is warm and
+ * no placeholder → thumbnail flash occurs.
+ */
+export function prewarmEffectPreviews(): void {
+  void generateAllPreviews();
+}
+
+function buildPreviewsMap(
+  effects: EffectPreviewEntry[],
+  presetIds: string[],
+): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const { id } of effects) {
+    const url = previewCache.get(id);
+    if (url) result.set(id, url);
+  }
+  for (const id of presetIds) {
+    const url = previewCache.get(`preset:${id}`);
+    if (url) result.set(`preset:${id}`, url);
+  }
+  return result;
+}
+
+/**
  * Hook that generates GPU-rendered preview thumbnails for effects.
  *
  * Returns a Map of effect/preset ID → blob URL, plus a trigger function.
@@ -174,63 +244,34 @@ export function useEffectPreviews(
   effects: EffectPreviewEntry[],
   presetIds: string[],
 ): { previews: Map<string, string>; trigger: () => void } {
-  const [previews, setPreviews] = useState<Map<string, string>>(() => {
-    // Populate from module-level cache on mount
-    const cached = new Map<string, string>();
-    for (const { id } of effects) {
-      const url = previewCache.get(id);
-      if (url) cached.set(id, url);
-    }
-    for (const id of presetIds) {
-      const url = previewCache.get(`preset:${id}`);
-      if (url) cached.set(`preset:${id}`, url);
-    }
-    return cached;
-  });
+  const [previews, setPreviews] = useState<Map<string, string>>(() =>
+    buildPreviewsMap(effects, presetIds),
+  );
 
-  const generatingRef = useRef(false);
+  // Keep latest args in refs so the listener always sees current inputs
+  // without re-subscribing every render.
+  const effectsRef = useRef(effects);
+  const presetIdsRef = useRef(presetIds);
+  effectsRef.current = effects;
+  presetIdsRef.current = presetIds;
+
+  // Subscribe to cache updates from concurrent prewarm/trigger calls so the
+  // UI reflects entries as they stream in, not only at the end.
+  useEffect(() => {
+    const listener = () => {
+      setPreviews(buildPreviewsMap(effectsRef.current, presetIdsRef.current));
+    };
+    generationListeners.add(listener);
+    // Sync once on mount in case generation finished before subscribing.
+    listener();
+    return () => {
+      generationListeners.delete(listener);
+    };
+  }, []);
 
   const trigger = useCallback(() => {
-    const allIds = [
-      ...effects.map(({ id }) => id),
-      ...presetIds.map((id) => `preset:${id}`),
-    ];
-    const missing = allIds.filter((id) => !previewCache.has(id));
-    if (missing.length === 0 || generatingRef.current) return;
-
-    generatingRef.current = true;
-
-    (async () => {
-      const pipeline = await getOrCreatePipeline();
-      if (!pipeline) {
-        generatingRef.current = false;
-        return;
-      }
-
-      const source = createSampleCanvas();
-
-      for (const { id, def } of effects) {
-        if (previewCache.has(id)) continue;
-        const url = await renderEffectPreview(pipeline, source, id, def);
-        if (url) previewCache.set(id, url);
-      }
-
-      for (const presetId of presetIds) {
-        const cacheKey = `preset:${presetId}`;
-        if (previewCache.has(cacheKey)) continue;
-        const url = await renderPresetPreview(pipeline, source, presetId);
-        if (url) previewCache.set(cacheKey, url);
-      }
-
-      const result = new Map<string, string>();
-      for (const id of allIds) {
-        const url = previewCache.get(id);
-        if (url) result.set(id, url);
-      }
-      setPreviews(result);
-      generatingRef.current = false;
-    })();
-  }, [effects, presetIds]);
+    void generateAllPreviews();
+  }, []);
 
   return { previews, trigger };
 }

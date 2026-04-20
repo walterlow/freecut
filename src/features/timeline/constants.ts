@@ -73,6 +73,16 @@ export const ZOOM_MIN_VELOCITY = 0.001;
 export const ZOOM_MIN = MIN_ZOOM_LEVEL;
 export const ZOOM_MAX = MAX_ZOOM_LEVEL;
 
+// Wheel zoom step — multiplicative for uniform perceptual speed, matches slider's log scale
+export const WHEEL_ZOOM_FACTOR = 1.15;
+
+export function computeWheelZoomStep(currentZoom: number, deltaY: number): number {
+  if (deltaY > 0) return Math.max(ZOOM_MIN, currentZoom / WHEEL_ZOOM_FACTOR);
+  if (deltaY < 0) return Math.min(ZOOM_MAX, currentZoom * WHEEL_ZOOM_FACTOR);
+  // Pure horizontal wheel events — leave zoom unchanged.
+  return currentZoom;
+}
+
 // Temporary gate: keep slip/slide implementation in code, but hide the UI and
 // disable their keyboard shortcuts until the tools are ready to expose again.
 export const SLIP_SLIDE_TOOLS_ENABLED = false;

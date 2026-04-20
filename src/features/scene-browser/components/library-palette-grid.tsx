@@ -4,7 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/shared/ui/cn';
 import { useLibraryPalette } from '../hooks/use-library-palette';
 import { useSceneBrowserStore } from '../stores/scene-browser-store';
-import { labToRgb } from './scene-palette-swatches';
+import { labToRgb } from '../utils/color-convert';
 
 /**
  * Color Mode picker — a weighted-k-means grid of the library's actual

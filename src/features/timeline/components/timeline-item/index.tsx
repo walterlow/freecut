@@ -729,6 +729,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const contentPreviewItem = useMemo<TimelineItemType>(() => {
     let nextItem = previewBaseItem;
     let previewStartTrimDelta = 0;
+    let previewEndTrimDelta = 0;
     let previewDurationDelta = 0;
 
     // Active local trim (normal / rolling / ripple on trimmed item).
@@ -737,6 +738,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         previewStartTrimDelta += trimDelta;
         previewDurationDelta += -trimDelta;
       } else {
+        previewEndTrimDelta += trimDelta;
         previewDurationDelta += trimDelta;
       }
     }
@@ -749,6 +751,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         previewDurationDelta += -rollingEditDelta;
       } else if (rollingEditHandle === 'start') {
         // Neighbor end handle equivalent.
+        previewEndTrimDelta += rollingEditDelta;
         previewDurationDelta += rollingEditDelta;
       }
     }
@@ -759,6 +762,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         previewStartTrimDelta += slideNeighborDelta;
         previewDurationDelta += -slideNeighborDelta;
       } else {
+        previewEndTrimDelta += slideNeighborDelta;
         previewDurationDelta += slideNeighborDelta;
       }
     }
@@ -795,8 +799,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       };
     }
 
+    // Composition wrappers clip their inner segments by sourceEnd/sourceStart,
+    // so treat them like video/audio for source-frame trims.
+    const isCompositionWrapper = nextItem.type === 'composition'
+      || (nextItem.type === 'audio' && !!nextItem.compositionId);
+
     // Start-trim equivalents shift sourceStart in source-frame units.
-    if ((previewBaseItem.type === 'video' || previewBaseItem.type === 'audio') && previewStartTrimDelta !== 0) {
+    const supportsStartTrimSourceShift = previewBaseItem.type === 'video'
+      || previewBaseItem.type === 'audio'
+      || isCompositionWrapper;
+    if (supportsStartTrimSourceShift && previewStartTrimDelta !== 0) {
       const sourceFramesDelta = timelineToSourceFrames(
         previewStartTrimDelta,
         nextItem.speed ?? 1,
@@ -813,6 +825,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       nextItem = {
         ...nextItem,
         durationInFrames: Math.max(1, nextItem.durationInFrames + previewDurationDelta),
+      };
+    }
+
+    // Composition wrappers clip their inner segments by sourceEnd, so live
+    // end-trim needs sourceEnd bumped alongside durationInFrames — otherwise
+    // the filmstrip stops at the stale committed value while the clip grows.
+    if (isCompositionWrapper && previewEndTrimDelta !== 0 && nextItem.sourceEnd !== undefined) {
+      const endSourceFramesDelta = timelineToSourceFrames(
+        previewEndTrimDelta,
+        nextItem.speed ?? 1,
+        fps,
+        effectiveSourceFps,
+      );
+      nextItem = {
+        ...nextItem,
+        sourceEnd: Math.max((nextItem.sourceStart ?? 0) + 1, nextItem.sourceEnd + endSourceFramesDelta),
       };
     }
 

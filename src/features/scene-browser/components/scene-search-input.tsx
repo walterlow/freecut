@@ -33,7 +33,7 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
         type="button"
         onClick={() => setColorMode(!colorMode)}
         className={cn(
-          'flex h-8 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors',
+          'flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors',
           colorMode
             ? 'border-primary/60 bg-primary/10 text-primary'
             : 'border-border bg-secondary text-muted-foreground hover:text-foreground',
@@ -51,7 +51,7 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
             <button
               type="button"
               className={cn(
-                'flex h-8 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors',
+                'flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors',
                 semanticActive
                   ? 'border-primary/60 bg-primary/10 text-primary'
                   : 'border-border bg-secondary text-muted-foreground hover:text-foreground',

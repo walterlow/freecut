@@ -53,6 +53,14 @@ export function GizmoOverlay({
   overlayPadding = 100,
 }: GizmoOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Track the marquee portal target (the full preview background) in state so
+  // React re-renders once the parent's ref is populated. Refs alone don't
+  // trigger re-renders.
+  const [marqueePortalTarget, setMarqueePortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setMarqueePortalTarget(hitAreaRef?.current ?? null);
+  }, [hitAreaRef]);
   const getResolvedFrameForPlaybackState = useCallback(
     (
       playbackState: ReturnType<typeof usePlaybackStore.getState>,
@@ -310,10 +318,13 @@ export function GizmoOverlay({
   }, [visibleItems, coordParams, containerRect, visualTransformsMap]);
 
   // Marquee selection hook
-  // Use hitAreaRef for bounds checking (fills container), overlayRef for coordinate display
-  const { marqueeState } = useMarqueeSelection({
-    containerRef: overlayRef as React.RefObject<HTMLElement>,
-    hitAreaRef: hitAreaRef as React.RefObject<HTMLElement> | undefined,
+  // Use the full preview background as both the hit area and the coordinate
+  // space so drag-started-outside-the-player positions don't get clipped to a
+  // smaller overlay, which previously produced a phantom marquee pinned to the
+  // overlay's edge.
+  const marqueeContainerRef = (hitAreaRef ?? overlayRef) as React.RefObject<HTMLElement>;
+  const { marquee } = useMarqueeSelection({
+    containerRef: marqueeContainerRef,
     items: marqueeItems,
     onSelectionChange: useCallback(
       (ids: string[]) => {
@@ -640,8 +651,11 @@ export function GizmoOverlay({
       }}
       onDoubleClick={(e) => e.stopPropagation()}
     >
-      {/* Marquee selection rectangle - hidden during corner pin / mask editing */}
-      {!isCornerPinEditing && !isMaskEditing && <MarqueeOverlay marqueeState={marqueeState} />}
+      {/* Marquee selection rectangle — portaled into the preview background so
+          it renders in the same coordinate space the marquee hook tracks.
+          Hidden during corner pin / mask editing. */}
+      {!isCornerPinEditing && !isMaskEditing && marqueePortalTarget &&
+        createPortal(<MarqueeOverlay marquee={marquee} />, marqueePortalTarget)}
 
       {/* Player area - receives clicks for deselection and contains gizmos */}
       {/* Disabled entirely during corner pin / mask editing so the overlay gets exclusive input */}

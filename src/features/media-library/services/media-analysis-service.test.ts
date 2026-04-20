@@ -43,6 +43,11 @@ vi.mock('../deps/settings-contract', () => ({
   resolveCaptioningIntervalSec: resolveCaptioningIntervalSecMock,
 }));
 
+const getCaptionsByContentHashMock = vi.fn();
+const adoptCaptionsFromCacheMock = vi.fn();
+const updateMediaDBMock = vi.fn();
+const getMediaFileMock = vi.fn();
+
 vi.mock('@/infrastructure/storage', () => ({
   saveCaptionThumbnail: saveCaptionThumbnailMock,
   deleteCaptionThumbnails: deleteCaptionThumbnailsMock,
@@ -50,6 +55,13 @@ vi.mock('@/infrastructure/storage', () => ({
   saveCaptionEmbeddings: vi.fn(),
   saveCaptionImageEmbeddings: vi.fn(),
   getTranscript: vi.fn(),
+  getCaptionsByContentHash: getCaptionsByContentHashMock,
+  adoptCaptionsFromCache: adoptCaptionsFromCacheMock,
+  updateMedia: updateMediaDBMock,
+}));
+
+vi.mock('../utils/content-hash', () => ({
+  computeContentHashFromBuffer: vi.fn(async () => 'hash-abc'),
 }));
 
 vi.mock('../deps/scene-browser', () => ({
@@ -66,6 +78,7 @@ vi.mock('./media-library-service', () => ({
   mediaLibraryService: {
     getMediaBlobUrl: getMediaBlobUrlMock,
     updateMediaCaptions: updateMediaCaptionsMock,
+    getMediaFile: getMediaFileMock,
   },
 }));
 
@@ -129,6 +142,11 @@ describe('mediaAnalysisService.analyzeMedia', () => {
     captionVideoMock.mockReset();
     captionImageMock.mockReset();
     resolveCaptioningIntervalSecMock.mockReturnValue(3);
+    // By default the captions cache miss — each test opts into a hit.
+    getCaptionsByContentHashMock.mockResolvedValue(undefined);
+    adoptCaptionsFromCacheMock.mockResolvedValue(undefined);
+    getMediaFileMock.mockResolvedValue(null);
+    updateMediaDBMock.mockResolvedValue(undefined);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['image-bytes'], { type: 'image/png' }))));
     Object.defineProperty(URL, 'revokeObjectURL', {
       configurable: true,
@@ -147,6 +165,7 @@ describe('mediaAnalysisService.analyzeMedia', () => {
     expect(deleteCaptionThumbnailsMock).not.toHaveBeenCalled();
     expect(deleteCaptionEmbeddingsMock).not.toHaveBeenCalled();
     expect(updateMediaCaptionsMock).not.toHaveBeenCalled();
+    expect(invalidateMediaCaptionThumbnailsMock).toHaveBeenCalledWith(media.id);
   });
 
   it('clears caption metadata and old assets when a rerun finds no scenes', async () => {
@@ -157,11 +176,76 @@ describe('mediaAnalysisService.analyzeMedia', () => {
 
     await expect(mediaAnalysisService.analyzeMedia(media)).resolves.toBe(true);
 
-    expect(updateMediaCaptionsMock).toHaveBeenCalledWith(media.id, [], {
-      sampleIntervalSec: 3,
-    });
+    expect(updateMediaCaptionsMock).toHaveBeenCalledWith(
+      media.id,
+      [],
+      expect.objectContaining({ sampleIntervalSec: 3 }),
+    );
     expect(storeState.updateMediaCaptions).toHaveBeenCalledWith(media.id, []);
     expect(deleteCaptionThumbnailsMock).toHaveBeenCalledWith(media.id);
     expect(deleteCaptionEmbeddingsMock).toHaveBeenCalledWith(media.id);
+    expect(invalidateMediaCaptionThumbnailsMock).toHaveBeenCalledWith(media.id);
+  });
+
+  it('short-circuits when the content-addressable cache already has captions for the same source', async () => {
+    const media = makeMedia({ contentHash: 'hash-abc' });
+    const cachedCaptions = [
+      { timeSec: 0, text: 'Cached caption', thumbRelPath: 'content/ha/hash-abc/ai/captions-thumbs/0.jpg' },
+    ];
+    getCaptionsByContentHashMock.mockResolvedValue({
+      schemaVersion: 1,
+      kind: 'captions',
+      mediaId: 'other-media',
+      service: 'lfm-captioning',
+      model: 'lfm-2.5-vl',
+      params: { sampleIntervalSec: 3 },
+      createdAt: 1,
+      updatedAt: 1,
+      data: { captions: cachedCaptions, contentHash: 'hash-abc' },
+    });
+    adoptCaptionsFromCacheMock.mockResolvedValue({
+      schemaVersion: 1,
+      kind: 'captions',
+      mediaId: media.id,
+      service: 'lfm-captioning',
+      model: 'lfm-2.5-vl',
+      params: { sampleIntervalSec: 3 },
+      createdAt: 1,
+      updatedAt: 2,
+      data: { captions: cachedCaptions, contentHash: 'hash-abc' },
+    });
+
+    await expect(mediaAnalysisService.analyzeMedia(media)).resolves.toBe(true);
+
+    expect(captionImageMock).not.toHaveBeenCalled();
+    expect(captionVideoMock).not.toHaveBeenCalled();
+    expect(getCaptionsByContentHashMock).toHaveBeenCalledWith('hash-abc', 3);
+    expect(adoptCaptionsFromCacheMock).toHaveBeenCalledWith(media.id, 'hash-abc', 3);
+    expect(storeState.updateMediaCaptions).toHaveBeenCalledWith(media.id, cachedCaptions);
+    expect(updateMediaDBMock).toHaveBeenCalledWith(media.id, { aiCaptions: cachedCaptions });
+    expect(invalidateMediaCaptionThumbnailsMock).toHaveBeenCalledWith(media.id);
+  });
+
+  it('falls through to full analysis when the cached captions were generated at a different sample interval', async () => {
+    const media = makeMedia({ contentHash: 'hash-abc' });
+    captionImageMock.mockResolvedValue([]);
+    getCaptionsByContentHashMock.mockResolvedValue({
+      schemaVersion: 1,
+      kind: 'captions',
+      mediaId: 'other-media',
+      service: 'lfm-captioning',
+      model: 'lfm-2.5-vl',
+      // Sample interval differs from the test's configured 3s → cache miss.
+      params: { sampleIntervalSec: 10 },
+      createdAt: 1,
+      updatedAt: 1,
+      data: { captions: [], contentHash: 'hash-abc' },
+    });
+
+    await expect(mediaAnalysisService.analyzeMedia(media)).resolves.toBe(true);
+
+    expect(adoptCaptionsFromCacheMock).not.toHaveBeenCalled();
+    expect(captionImageMock).toHaveBeenCalled();
+    expect(invalidateMediaCaptionThumbnailsMock).toHaveBeenCalledWith(media.id);
   });
 });

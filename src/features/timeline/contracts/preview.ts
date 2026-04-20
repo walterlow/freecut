@@ -31,6 +31,12 @@ export { createClassicTrack } from '../utils/classic-tracks';
 export {
   useCompositionsStore,
 } from '../stores/compositions-store';
+export type {
+  SubComposition,
+} from '../stores/compositions-store';
+export {
+  useCompositionNavigationStore,
+} from '../stores/composition-navigation-store';
 export {
   buildSubCompositionInput,
   collectSubCompositionMediaIds,

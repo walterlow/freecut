@@ -5,6 +5,7 @@
 
 export { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 export { useCompositionsStore } from '@/features/timeline/stores/compositions-store';
+export type { SubComposition } from '@/features/timeline/stores/compositions-store';
 export { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
 export {
   timelineToSourceFrames,

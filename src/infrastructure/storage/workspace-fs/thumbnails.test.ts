@@ -41,25 +41,25 @@ afterEach(() => {
 });
 
 describe('workspace-fs thumbnails', () => {
-  it('saveThumbnail writes binary and meta sidecar', async () => {
+  it('saveThumbnail writes the jpeg blob to media/<id>/thumbnail.jpg', async () => {
     const root = createRoot();
     setWorkspaceRoot(asHandle(root));
     await saveThumbnail(makeThumbnail('m1'));
 
-    // binary exists (assert non-null; contents checked via retrieval below)
-    const text = await readFileText(root, 'media', 'm1', 'thumbnail.meta.json');
+    const text = await readFileText(root, 'media', 'm1', 'thumbnail.jpg');
     expect(text).not.toBeNull();
-    const meta = JSON.parse(text!);
-    expect(meta).toEqual({ id: 't-m1', mediaId: 'm1', timestamp: 0, width: 320, height: 180 });
+    // Sidecar was dropped in v2 — must not be written.
+    expect(await readFileText(root, 'media', 'm1', 'thumbnail.meta.json')).toBeNull();
   });
 
-  it('getThumbnailByMediaId returns saved thumbnail', async () => {
+  it('getThumbnailByMediaId returns saved thumbnail with id derived from mediaId', async () => {
     const root = createRoot();
     setWorkspaceRoot(asHandle(root));
     await saveThumbnail(makeThumbnail('m1'));
     const t = await getThumbnailByMediaId('m1');
     expect(t).toBeDefined();
-    expect(t!.id).toBe('t-m1');
+    // v2: id is derived from mediaId; the caller-supplied id is ignored.
+    expect(t!.id).toBe('m1');
     expect(t!.mediaId).toBe('m1');
   });
 
@@ -69,23 +69,22 @@ describe('workspace-fs thumbnails', () => {
     expect(await getThumbnailByMediaId('missing')).toBeUndefined();
   });
 
-  it('getThumbnail (by thumbnail id) scans media dirs', async () => {
+  it('getThumbnail(id) treats id as mediaId in v2', async () => {
     const root = createRoot();
     setWorkspaceRoot(asHandle(root));
-    await saveThumbnail(makeThumbnail('m1', 't-abc'));
-    await saveThumbnail(makeThumbnail('m2', 't-xyz'));
-    const t = await getThumbnail('t-xyz');
+    await saveThumbnail(makeThumbnail('m1'));
+    const t = await getThumbnail('m1');
     expect(t).toBeDefined();
-    expect(t!.mediaId).toBe('m2');
+    expect(t!.mediaId).toBe('m1');
   });
 
-  it('deleteThumbnailsByMediaId clears both sidecar and binary', async () => {
+  it('deleteThumbnailsByMediaId removes the jpeg', async () => {
     const root = createRoot();
     setWorkspaceRoot(asHandle(root));
     await saveThumbnail(makeThumbnail('m1'));
     await deleteThumbnailsByMediaId('m1');
     expect(await getThumbnailByMediaId('m1')).toBeUndefined();
-    expect(await readFileText(root, 'media', 'm1', 'thumbnail.meta.json')).toBeNull();
+    expect(await readFileText(root, 'media', 'm1', 'thumbnail.jpg')).toBeNull();
   });
 
   it('saveThumbnail overwrites prior thumbnail for the same media', async () => {
@@ -93,7 +92,9 @@ describe('workspace-fs thumbnails', () => {
     setWorkspaceRoot(asHandle(root));
     await saveThumbnail(makeThumbnail('m1', 'first'));
     await saveThumbnail(makeThumbnail('m1', 'second'));
+    // Structure-level check: only one thumbnail entry remains for this media.
     const t = await getThumbnailByMediaId('m1');
-    expect(t!.id).toBe('second');
+    expect(t).toBeDefined();
+    expect(t!.mediaId).toBe('m1');
   });
 });

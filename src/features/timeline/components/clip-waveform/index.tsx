@@ -319,6 +319,7 @@ export const ClipWaveform = memo(function ClipWaveform({
   const renderVersion = useAdaptiveWaveformRenderVersion({
     baseVersion: `${loadedSamples}:${height}`,
     pixelsPerSecond,
+    renderWidth: renderClipWidth,
     activeTileCount,
     phaseKey: mediaId,
   });

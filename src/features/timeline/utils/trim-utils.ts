@@ -7,12 +7,31 @@ import {
   timelineToSourceFrames,
 } from './source-calculations';
 import { useCompositionsStore } from '../stores/compositions-store';
+import { isCompositionAudioItem } from '@/shared/utils/linked-media';
 
 export type TrimHandle = 'start' | 'end';
 
 interface TrimClampResult {
   clampedAmount: number;
   maxExtend: number | null;
+}
+
+/**
+ * For composition wrappers, the cached sourceDuration can grow stale when
+ * inner edits extend the sub-comp. Read the live sub-comp duration instead
+ * so the wrapper can be ripple/slide resized to match.
+ */
+function getEffectiveSourceDuration(item: TimelineItem): number | undefined {
+  const compositionId = item.type === 'composition'
+    ? item.compositionId
+    : isCompositionAudioItem(item)
+      ? item.compositionId
+      : null;
+  if (compositionId) {
+    const subComp = useCompositionsStore.getState().getComposition(compositionId);
+    if (subComp) return subComp.durationInFrames;
+  }
+  return getSourceProperties(item).sourceDuration;
 }
 
 /**
@@ -42,7 +61,8 @@ export function clampTrimAmount(
   let maxExtend: number | null = null;
 
   if (isMediaItem(item)) {
-    const { sourceStart, sourceDuration, sourceFps, speed } = getSourceProperties(item);
+    const { sourceStart, sourceFps, speed } = getSourceProperties(item);
+    const sourceDuration = getEffectiveSourceDuration(item);
     const effectiveSourceFps = sourceFps ?? timelineFps;
 
     if (handle === 'start') {
@@ -63,24 +83,6 @@ export function clampTrimAmount(
 
         if (item.durationInFrames + trimAmount > maxDuration) {
           clampedAmount = maxDuration - item.durationInFrames;
-        }
-      }
-    }
-  } else if (item.type === 'composition') {
-    const subComp = useCompositionsStore.getState().getComposition(item.compositionId);
-    if (subComp) {
-      const maxDuration = subComp.durationInFrames;
-      if (handle === 'end') {
-        // End handle: positive trimAmount = extending right
-        if (item.durationInFrames + trimAmount > maxDuration) {
-          clampedAmount = maxDuration - item.durationInFrames;
-          maxExtend = maxDuration - item.durationInFrames;
-        }
-      } else {
-        // Start handle: negative trimAmount = extending left
-        if (trimAmount < 0 && item.durationInFrames - trimAmount > maxDuration) {
-          clampedAmount = -(maxDuration - item.durationInFrames);
-          maxExtend = maxDuration - item.durationInFrames;
         }
       }
     }
@@ -193,7 +195,8 @@ export function calculateTrimSourceUpdate(
 ): TrimSourceUpdate | null {
   if (!isMediaItem(item)) return null;
 
-  const { sourceStart, sourceDuration, sourceFps, speed } = getSourceProperties(item);
+  const { sourceStart, sourceFps, speed } = getSourceProperties(item);
+  const sourceDuration = getEffectiveSourceDuration(item);
   const effectiveSourceFps = sourceFps ?? timelineFps;
 
   if (handle === 'start') {

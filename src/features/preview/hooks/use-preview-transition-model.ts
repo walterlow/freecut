@@ -4,6 +4,7 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
 import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner';
 import { shouldForceContinuousPreviewOverlay } from '../hooks/use-gpu-effects-overlay';
+import { useCompositionsStore } from '@/features/preview/deps/timeline-store';
 
 interface UsePreviewTransitionModelParams {
   fps: number;
@@ -80,7 +81,14 @@ export function usePreviewTransitionModel({
     if (getTransitionWindowForFrame(frame) !== null) {
       return true;
     }
-    return shouldForceContinuousPreviewOverlay(fastScrubPreviewItems, (transitions ?? []).length, frame);
+    const compositionById = useCompositionsStore.getState().compositionById;
+    return shouldForceContinuousPreviewOverlay(
+      fastScrubPreviewItems,
+      (transitions ?? []).length,
+      frame,
+      undefined,
+      compositionById,
+    );
   }, [fastScrubPreviewItems, getTransitionWindowForFrame, transitions]);
 
   return {

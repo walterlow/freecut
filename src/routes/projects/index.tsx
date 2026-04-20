@@ -20,7 +20,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { useProjectActions } from '@/features/projects/hooks/use-project-actions';
-import { useProjectsLoading, useProjectsError } from '@/features/projects/hooks/use-project-selectors';
+import { useProjects, useProjectsLoading, useProjectsError } from '@/features/projects/hooks/use-project-selectors';
 import { cleanupBlobUrls } from '@/features/media-library/utils/media-resolver';
 import type { Project } from '@/types/project';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
@@ -80,8 +80,13 @@ function ProjectsIndex() {
   };
 
   const isLoading = useProjectsLoading();
+  const projects = useProjects();
   const error = useProjectsError();
   const { loadProjects, updateProject } = useProjectActions();
+
+  // Only show the full-page spinner for the genuine initial load — mutations
+  // (delete/duplicate/update) should never blank the populated list.
+  const showInitialLoadingSpinner = isLoading && projects.length === 0;
 
   // Load projects on mount
   useEffect(() => {
@@ -309,7 +314,7 @@ function ProjectsIndex() {
         </div>
 
         {/* Loading state */}
-        {isLoading ? (
+        {showInitialLoadingSpinner ? (
           <div className="max-w-[1920px] mx-auto px-6 py-16 flex items-center justify-center">
             <div className="text-center">
               <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />

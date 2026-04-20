@@ -150,7 +150,7 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
             />
           ) : (
             <Select value={scope ?? 'all'} onValueChange={handleScopeChange}>
-              <SelectTrigger className="h-8 w-36 text-[11px]">
+              <SelectTrigger className="h-6 w-36 text-[11px]">
                 <SelectValue placeholder="Scope" />
               </SelectTrigger>
               <SelectContent>
@@ -299,7 +299,7 @@ function CompactScopePicker({
         <button
           type="button"
           className={cn(
-            'relative flex h-8 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors',
+            'relative flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors',
             scope
               ? 'border-primary/60 bg-primary/10 text-primary'
               : 'border-border bg-secondary text-muted-foreground hover:text-foreground',
@@ -354,7 +354,7 @@ function AnalyzeMenu({
           type="button"
           disabled={disabled || busy}
           className={cn(
-            'flex h-8 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors',
+            'flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors',
             'border-border bg-secondary text-muted-foreground hover:text-foreground',
             (disabled || busy) && 'cursor-not-allowed opacity-60',
           )}

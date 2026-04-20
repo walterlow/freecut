@@ -11,6 +11,9 @@ interface WaveformActiveTileCountOptions {
 interface AdaptiveWaveformRenderVersionOptions {
   baseVersion: string;
   pixelsPerSecond: number;
+  /** Total canvas render width in px. Included in the throttled zoom signal so
+   *  trim-extend (which grows width without changing pps) also triggers redraws. */
+  renderWidth: number;
   activeTileCount: number;
   phaseKey?: string;
 }
@@ -75,12 +78,13 @@ export function getWaveformZoomCommitPhaseMs(activeTileCount: number, phaseKey?:
 export function useAdaptiveWaveformRenderVersion({
   baseVersion,
   pixelsPerSecond,
+  renderWidth,
   activeTileCount,
   phaseKey,
 }: AdaptiveWaveformRenderVersionOptions): string {
   const zoomVersion = useMemo(
-    () => `e${Math.round(Math.max(1, pixelsPerSecond) * 1000)}`,
-    [pixelsPerSecond],
+    () => `e${Math.round(Math.max(1, pixelsPerSecond) * 1000)}:w${Math.round(renderWidth)}`,
+    [pixelsPerSecond, renderWidth],
   );
   const redrawIntervalMs = useMemo(
     () => getWaveformZoomRedrawIntervalMs(activeTileCount),

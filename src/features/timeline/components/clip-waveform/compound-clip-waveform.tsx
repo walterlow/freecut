@@ -301,6 +301,7 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
   const renderVersion = useAdaptiveWaveformRenderVersion({
     baseVersion: `${peaks?.length ?? 0}:${height}:${waveformsByMediaId.size}`,
     pixelsPerSecond,
+    renderWidth: renderClipWidth,
     activeTileCount,
     phaseKey: mediaIdsKey,
   });

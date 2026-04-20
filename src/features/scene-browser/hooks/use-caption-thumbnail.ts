@@ -12,23 +12,45 @@ import { requestLazyCaptionThumbnail } from '../utils/lazy-thumb';
  */
 const blobUrlCache = new Map<string, string>();
 const pendingLoads = new Map<string, Promise<string | null>>();
+// Monotonic version per relPath. Incremented on every invalidation so an
+// in-flight loadBlobUrl that started before an invalidate cannot repopulate
+// the cache with pre-invalidation bytes.
+const versionByKey = new Map<string, number>();
+
+function bumpVersion(key: string): number {
+  const next = (versionByKey.get(key) ?? 0) + 1;
+  versionByKey.set(key, next);
+  return next;
+}
 
 /**
- * Revoke and drop every blob URL that lives under a media's
- * captions-thumbs directory. Callers should invoke this before a
- * re-analysis run so the next render loads the freshly-written JPEG
- * instead of the cached pre-overwrite blob.
+ * Revoke and drop every blob URL tied to a media's caption thumbnails.
+ * Callers should invoke this before a re-analysis run so the next render
+ * loads the freshly-written JPEG instead of the cached pre-overwrite blob.
+ *
+ * `thumbRelPaths` is needed for content-keyed thumbnails shared under
+ * `content/{hash}/ai/...`, which do not live under a media-specific prefix.
  */
-export function invalidateMediaCaptionThumbBlobs(mediaId: string): void {
+export function invalidateMediaCaptionThumbBlobs(
+  mediaId: string,
+  thumbRelPaths: readonly (string | undefined)[] = [],
+): void {
   const prefix = `media/${mediaId}/cache/ai/captions-thumbs/`;
+  const explicitKeys = new Set(
+    thumbRelPaths.filter((path): path is string => typeof path === 'string' && path.length > 0),
+  );
   for (const [key, url] of blobUrlCache) {
-    if (key.startsWith(prefix)) {
+    if (key.startsWith(prefix) || explicitKeys.has(key)) {
       URL.revokeObjectURL(url);
       blobUrlCache.delete(key);
+      bumpVersion(key);
     }
   }
   for (const key of pendingLoads.keys()) {
-    if (key.startsWith(prefix)) pendingLoads.delete(key);
+    if (key.startsWith(prefix) || explicitKeys.has(key)) {
+      pendingLoads.delete(key);
+      bumpVersion(key);
+    }
   }
 }
 
@@ -38,10 +60,19 @@ async function loadBlobUrl(relPath: string): Promise<string | null> {
   const pending = pendingLoads.get(relPath);
   if (pending) return pending;
 
+  const startVersion = versionByKey.get(relPath) ?? 0;
   const promise = (async () => {
     const blob = await getCaptionThumbnailBlob(relPath);
     if (!blob) return null;
+    // Invalidation may have run while this read was in flight. In that case
+    // the freshly-loaded blob is stale; drop it instead of repopulating the
+    // cache with pre-invalidation bytes.
+    if ((versionByKey.get(relPath) ?? 0) !== startVersion) return null;
     const url = URL.createObjectURL(blob);
+    if ((versionByKey.get(relPath) ?? 0) !== startVersion) {
+      URL.revokeObjectURL(url);
+      return null;
+    }
     blobUrlCache.set(relPath, url);
     return url;
   })();

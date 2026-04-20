@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { getThumbnail } from '@/infrastructure/storage';
+import { loadProjectThumbnail } from '@/infrastructure/storage';
 import type { Project } from '@/types/project';
 import { createLogger } from '@/shared/logging/logger';
 
@@ -20,12 +20,12 @@ export function useProjectThumbnail(project: Project): string | undefined {
     let cancelled = false;
 
     async function loadThumbnail() {
-      // Try to load from thumbnailId first (workspace-backed blob storage)
+      // Try to load the workspace-backed project thumbnail blob.
       if (project.thumbnailId) {
         try {
-          const thumbnailData = await getThumbnail(project.thumbnailId);
-          if (thumbnailData && !cancelled) {
-            objectUrl = URL.createObjectURL(thumbnailData.blob);
+          const blob = await loadProjectThumbnail(project.id);
+          if (blob && !cancelled) {
+            objectUrl = URL.createObjectURL(blob);
             setThumbnailUrl(objectUrl);
             return;
           }

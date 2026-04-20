@@ -58,7 +58,7 @@ import { isGifUrl, isWebpUrl } from '@/shared/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
 import { getCompositeOperation } from '@/types/blend-mode-css';
-import { useCompositionsStore } from '@/features/export/deps/timeline';
+import { useCompositionsStore, type SubComposition } from '@/features/export/deps/timeline';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 import type { FrameInvalidationRequest } from '@/shared/utils/frame-invalidation';
 import { collectReachableCompositionIdsFromItems, collectReachableCompositionIdsFromTracks } from '@/features/export/deps/timeline';
@@ -480,8 +480,44 @@ export async function createCompositionRenderer(
   const inFlightInitByItem = new Map<string, Promise<boolean>>();
   let isDisposed = false;
 
-  // Pre-computed sub-composition render data (populated during preload)
+  // Pre-computed sub-composition render data. Populated synchronously at
+  // renderer creation (so the first renderFrame sees compound-clip structure
+  // even before preload finishes) and refreshed during preload.
   const subCompRenderData = new Map<string, SubCompRenderData>();
+
+  const buildSubCompRenderDataEntry = (subComp: SubComposition): SubCompRenderData => {
+    const sorted = [...subComp.tracks].sort(
+      (a, b) => (b.order ?? 0) - (a.order ?? 0)
+    );
+    const sortedWithItems = sorted.map((t) => ({
+      order: t.order ?? 0,
+      visible: t.visible !== false,
+      items: subComp.items.filter(
+        (i) => i.trackId === t.id && i.type !== 'audio' && i.type !== 'adjustment'
+      ),
+    }));
+    const subKfMap = new Map<string, ItemKeyframes>();
+    for (const kf of subComp.keyframes ?? []) {
+      subKfMap.set(kf.itemId, kf);
+    }
+    const subAdjustmentLayers: AdjustmentLayerWithTrackOrder[] = [];
+    for (const t of subComp.tracks) {
+      if (t.visible === false) continue;
+      const trackOrder = t.order ?? 0;
+      for (const i of subComp.items) {
+        if (i.trackId === t.id && i.type === 'adjustment') {
+          subAdjustmentLayers.push({ layer: i, trackOrder });
+        }
+      }
+    }
+    return {
+      fps: subComp.fps,
+      durationInFrames: subComp.durationInFrames,
+      sortedTracks: sortedWithItems,
+      keyframesMap: subKfMap,
+      adjustmentLayers: subAdjustmentLayers,
+    };
+  };
   const PREWARM_DECODE_MAX_ITEMS = 6;
   let prewarmCanvas: OffscreenCanvas | HTMLCanvasElement | null = null;
   let prewarmCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
@@ -516,6 +552,29 @@ export async function createCompositionRenderer(
     gpuTransitionPipeline: null,
     domVideoElementProvider,
   };
+
+  // Track the SubComposition identity we last built each entry from so we only
+  // rebuild when the Zustand store produced a new reference (effects added,
+  // items changed, etc.). Using reference equality keeps the per-frame cost
+  // near-zero when nothing edited the sub-comp.
+  const subCompRenderDataSource = new Map<string, SubComposition>();
+
+  const refreshSubCompRenderData = (compositionById: Record<string, SubComposition>) => {
+    const reachableIds = collectReachableCompositionIdsFromTracks(tracks, compositionById);
+    for (const compositionId of reachableIds) {
+      const subComp = compositionById[compositionId];
+      if (!subComp) continue;
+      if (subCompRenderDataSource.get(compositionId) === subComp) continue;
+      subCompRenderData.set(compositionId, buildSubCompRenderDataEntry(subComp));
+      subCompRenderDataSource.set(compositionId, subComp);
+    }
+  };
+
+  // Synchronously populate sub-comp render data from the current compositions
+  // store. Without this, the first renderFrame after creation would fall into
+  // the `if (!subData) return;` path in renderCompositionItem and skip all
+  // compound clips — producing a black frame until preload() finishes.
+  refreshSubCompRenderData(useCompositionsStore.getState().compositionById);
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
     if (prewarmAttempted) return prewarmCtx;
@@ -656,7 +715,11 @@ export async function createCompositionRenderer(
   };
 
   return {
-    async preload(options: { priorityFrame?: number; priorityWindowFrames?: number } = {}) {
+    async preload(options: {
+      priorityFrame?: number;
+      priorityWindowFrames?: number;
+      onPriorityMediaReady?: () => void;
+    } = {}) {
       // Composition items require the compositions store which only exists on main thread.
       // Workers get a fresh, empty Zustand store, so sub-comp data can never be resolved.
       // Bail early to trigger the main-thread fallback path.
@@ -850,28 +913,9 @@ export async function createCompositionRenderer(
           continue;
         }
 
-        if (!subCompRenderData.has(compositionId)) {
-          const sorted = [...subComp.tracks].sort(
-            (a, b) => (b.order ?? 0) - (a.order ?? 0)
-          );
-          const sortedWithItems = sorted.map((t) => ({
-            order: t.order ?? 0,
-            visible: t.visible !== false,
-            items: subComp.items.filter(
-              (i) => i.trackId === t.id && i.type !== 'audio' && i.type !== 'adjustment'
-            ),
-          }));
-          const subKfMap = new Map<string, ItemKeyframes>();
-          for (const kf of subComp.keyframes ?? []) {
-            subKfMap.set(kf.itemId, kf);
-          }
-
-          subCompRenderData.set(compositionId, {
-            fps: subComp.fps,
-            durationInFrames: subComp.durationInFrames,
-            sortedTracks: sortedWithItems,
-            keyframesMap: subKfMap,
-          });
+        if (subCompRenderDataSource.get(compositionId) !== subComp) {
+          subCompRenderData.set(compositionId, buildSubCompRenderDataEntry(subComp));
+          subCompRenderDataSource.set(compositionId, subComp);
         }
 
         for (const subItem of subComp.items) {
@@ -924,6 +968,18 @@ export async function createCompositionRenderer(
         if (prioritizedSubVideoItemIds.length > 0) {
           await initializeMediabunnyForItems(prioritizedSubVideoItemIds);
         }
+
+        // Signal that priority media for the current frame is ready. The
+        // preview controller uses this to trigger a re-render before the
+        // rest of preload (remaining videos, sub images, GIF/WebP frames)
+        // finishes — so the user sees the correct frame faster after
+        // exiting a sub-composition.
+        try {
+          options.onPriorityMediaReady?.();
+        } catch (err) {
+          getLog().warn('onPriorityMediaReady callback threw', { error: err });
+        }
+
         const remainingSubVideoItemIds = subVideoItemIds.filter(
           (itemId) => !prioritySubCompVideoItemIds.has(itemId)
         );
@@ -1094,6 +1150,16 @@ export async function createCompositionRenderer(
         }
       }
 
+      // Refresh sub-comp render data so edits inside compound clips (effects,
+      // items, keyframes) show up during playback. Reference-equality keeps
+      // unchanged compositions at ~zero cost; only mutated entries rebuild.
+      // This matters for nested compounds where `renderCompositionItem` reads
+      // sub-item effects directly from the cached snapshot — without this
+      // refresh, effects added after renderer creation stay invisible.
+      if (renderMode === 'preview') {
+        refreshSubCompRenderData(useCompositionsStore.getState().compositionById);
+      }
+
       // Clear canvas
       ctx.fillStyle = backgroundColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1135,15 +1201,34 @@ export async function createCompositionRenderer(
         });
       }
 
+      const hasGpuEffects = (effects: TimelineItem['effects']): boolean =>
+        effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false;
       let hasAnyGpuEffects = false;
       for (const track of sortedTracks) {
         if (!visibleTrackIds.has(track.id)) continue;
         for (const baseItem of track.items ?? []) {
           const item = getCurrentItem(baseItem);
           if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
-          if (item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')) {
+          if (hasGpuEffects(item.effects)) {
             hasAnyGpuEffects = true;
             break;
+          }
+          // Compound clips: also check GPU effects on sub-comp items and
+          // adjustment layers so the pipeline is initialized before
+          // renderCompositionItem needs it.
+          if (item.type === 'composition') {
+            const subData = subCompRenderData.get(item.compositionId);
+            if (!subData) continue;
+            const trackItemWithGpu = subData.sortedTracks.some((t) =>
+              t.items.some((subItem) => hasGpuEffects(subItem.effects)),
+            );
+            const adjustmentWithGpu = (subData.adjustmentLayers ?? []).some((entry) =>
+              hasGpuEffects(entry.layer.effects),
+            );
+            if (trackItemWithGpu || adjustmentWithGpu) {
+              hasAnyGpuEffects = true;
+              break;
+            }
           }
         }
         if (hasAnyGpuEffects) break;
@@ -1908,6 +1993,7 @@ export async function createCompositionRenderer(
       imageElements.clear();
       gifFramesMap.clear(); // Clear GIF frame references (actual frames are managed by gifFrameCache)
       subCompRenderData.clear(); // Release sub-composition render data references
+      subCompRenderDataSource.clear();
       prewarmCtx = null;
       prewarmCanvas = null;
       prewarmAttempted = false;

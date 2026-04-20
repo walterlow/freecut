@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { clampToAdjacentItems } from './trim-utils';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { clampToAdjacentItems, clampTrimAmount, calculateTrimSourceUpdate } from './trim-utils';
+import { useCompositionsStore } from '../stores/compositions-store';
 import type { TimelineItem } from '@/types/timeline';
 
 function makeItem(overrides: Partial<TimelineItem> & { id: string; trackId: string; from: number; durationInFrames: number }): TimelineItem {
@@ -96,6 +97,116 @@ describe('clampToAdjacentItems', () => {
       const otherTrack = makeItem({ id: 'b', trackId: 'track-2', from: 50, durationInFrames: 100 });
       const result = clampToAdjacentItems(item, 'start', -80, [item, otherTrack]);
       expect(result).toBe(-80);
+    });
+  });
+
+  describe('clampTrimAmount for composition items', () => {
+    beforeEach(() => {
+      useCompositionsStore.setState({
+        compositions: [],
+        compositionById: {},
+        mediaDependencyIds: [],
+        mediaDependencyVersion: 0,
+      });
+    });
+
+    it('uses live sub-comp duration instead of stale cached sourceDuration when extending', () => {
+      useCompositionsStore.getState().addComposition({
+        id: 'sub-1',
+        name: 'Sub',
+        items: [],
+        tracks: [],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 10800,
+      });
+
+      const wrapper = {
+        type: 'composition',
+        id: 'wrap-1',
+        trackId,
+        compositionId: 'sub-1',
+        from: 0,
+        durationInFrames: 3902,
+        sourceStart: 0,
+        sourceEnd: 3902,
+        sourceDuration: 3902,
+        sourceFps: 30,
+        speed: 1,
+      } as unknown as TimelineItem;
+
+      const result = clampTrimAmount(wrapper, 'end', 3000, 30);
+      expect(result.clampedAmount).toBe(3000);
+      expect(result.maxExtend).toBe(10800 - 3902);
+    });
+
+    it('uses live sub-comp duration for composition audio wrapper (type=audio with compositionId)', () => {
+      useCompositionsStore.getState().addComposition({
+        id: 'sub-audio',
+        name: 'Sub',
+        items: [],
+        tracks: [],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 10800,
+      });
+
+      const audioWrapper = {
+        type: 'audio',
+        id: 'wrap-audio',
+        trackId,
+        compositionId: 'sub-audio',
+        linkedGroupId: 'lg-1',
+        from: 0,
+        durationInFrames: 3902,
+        sourceStart: 0,
+        sourceEnd: 3902,
+        sourceDuration: 3902,
+        sourceFps: 30,
+        speed: 1,
+      } as unknown as TimelineItem;
+
+      const result = clampTrimAmount(audioWrapper, 'end', 3000, 30);
+      expect(result.clampedAmount).toBe(3000);
+      expect(result.maxExtend).toBe(10800 - 3902);
+    });
+
+    it('calculateTrimSourceUpdate respects live sub-comp duration when clamping sourceEnd', () => {
+      useCompositionsStore.getState().addComposition({
+        id: 'sub-2',
+        name: 'Sub',
+        items: [],
+        tracks: [],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 10800,
+      });
+
+      const wrapper = {
+        type: 'composition',
+        id: 'wrap-2',
+        trackId,
+        compositionId: 'sub-2',
+        from: 0,
+        durationInFrames: 3902,
+        sourceStart: 0,
+        sourceEnd: 3902,
+        sourceDuration: 3902,
+        sourceFps: 30,
+        speed: 1,
+      } as unknown as TimelineItem;
+
+      const update = calculateTrimSourceUpdate(wrapper, 'end', 3000, 6902, 30);
+      expect(update?.sourceEnd).toBe(6902);
     });
   });
 

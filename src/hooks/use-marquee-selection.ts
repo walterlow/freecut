@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useEffectEvent } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, useEffectEvent } from 'react';
 
 /**
  * Marquee selection state
@@ -34,6 +34,16 @@ export interface MarqueeItem {
 interface ResolvedMarqueeItem {
   id: string;
   rect: Rect | null;
+}
+
+/**
+ * Subscription-based marquee controller. The snapshot updates on every RAF
+ * tick during a drag without causing the hook's consumer to re-render —
+ * only the overlay component (via `useSyncExternalStore`) re-renders.
+ */
+export interface MarqueeController {
+  subscribe: (listener: () => void) => () => void;
+  getSnapshot: () => MarqueeState;
 }
 
 /**
@@ -124,26 +134,24 @@ function areStringListsEqual(previous: readonly string[], next: readonly string[
   return true;
 }
 
+const INACTIVE_SNAPSHOT: MarqueeState = Object.freeze({
+  active: false,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+});
+
 /**
  * Reusable marquee selection hook
  *
  * Provides mouse-based marquee (drag rectangle) selection for any grid/canvas of items.
  * Can be used for media library, timeline clips, preview gizmos, etc.
  *
- * @example
- * ```tsx
- * const { marqueeState, selectedIds } = useMarqueeSelection({
- *   containerRef,
- *   items: mediaItems.map(item => ({
- *     id: item.id,
- *     getBoundingRect: () => {
- *       const el = document.getElementById(item.id);
- *       return el?.getBoundingClientRect() || defaultRect;
- *     }
- *   })),
- *   onSelectionChange: (ids) => updateSelection(ids)
- * });
- * ```
+ * The rect state is exposed via an external-store subscription (`marquee.subscribe`
+ * / `marquee.getSnapshot`) rather than React state, so only `<MarqueeOverlay />`
+ * re-renders on each pointer move — the rest of the consuming tree stays quiet.
+ * Use `isActive` for effects that only need to fire on drag start/end.
  */
 // Global flag to track when marquee selection just finished
 // Used to prevent background click handlers from clearing selection
@@ -171,14 +179,30 @@ export function useMarqueeSelection({
   // Use refs for high-frequency updates during drag to avoid React re-renders
   const marqueeRef = useRef({ startX: 0, startY: 0, currentX: 0, currentY: 0 });
 
-  // React state for rendering - only updates on RAF (batched) or active state changes
-  const [marqueeState, setMarqueeState] = useState<MarqueeState>({
-    active: false,
-    startX: 0,
-    startY: 0,
-    currentX: 0,
-    currentY: 0,
-  });
+  // Subscription-based snapshot: updates on every RAF tick without forcing a
+  // re-render in the hook's consumer. Only the overlay subscribes.
+  const snapshotRef = useRef<MarqueeState>(INACTIVE_SNAPSHOT);
+  const listenersRef = useRef<Set<() => void>>(new Set());
+
+  const subscribe = useCallback((listener: () => void) => {
+    const listeners = listenersRef.current;
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
+
+  const getSnapshot = useCallback(() => snapshotRef.current, []);
+
+  const publishSnapshot = useCallback((next: MarqueeState) => {
+    snapshotRef.current = next;
+    listenersRef.current.forEach((listener) => listener());
+  }, []);
+
+  // `isActive` is React state — flips only at drag start/end, so effects that
+  // gate on active state (e.g. disabling panel shortcuts) re-run only twice
+  // per drag instead of 60+ times.
+  const [isActive, setIsActive] = useState(false);
 
   const isDraggingRef = useRef(false);
   const hasMovedRef = useRef(false);
@@ -401,8 +425,9 @@ export function useMarqueeSelection({
       if (deltaX > threshold || deltaY > threshold) {
         hasMovedRef.current = true;
         captureResolvedItems();
-        // Activate marquee (triggers one re-render)
-        setMarqueeState({
+        // Flip isActive — one re-render, not one per frame.
+        setIsActive(true);
+        publishSnapshot({
           active: true,
           startX: m.startX,
           startY: m.startY,
@@ -424,12 +449,14 @@ export function useMarqueeSelection({
         rafIdRef.current = null;
         const m = marqueeRef.current;
 
-        // Update React state for rendering
-        setMarqueeState((prev) => ({
-          ...prev,
+        // Publish via subscription — only the overlay re-renders.
+        publishSnapshot({
+          active: true,
+          startX: m.startX,
+          startY: m.startY,
           currentX: m.currentX,
           currentY: m.currentY,
-        }));
+        });
 
         // Update selection
         updateSelectionFromRefs();
@@ -457,13 +484,8 @@ export function useMarqueeSelection({
     marqueeRef.current = { startX: 0, startY: 0, currentX: 0, currentY: 0 };
     resolvedItemsRef.current = null;
 
-    setMarqueeState({
-      active: false,
-      startX: 0,
-      startY: 0,
-      currentX: 0,
-      currentY: 0,
-    });
+    setIsActive(false);
+    publishSnapshot(INACTIVE_SNAPSHOT);
 
     // Only prevent background click if an actual marquee drag happened
     if (wasActualDrag) {
@@ -523,8 +545,11 @@ export function useMarqueeSelection({
     };
   }, []);
 
+  const marquee = useMemo<MarqueeController>(() => ({ subscribe, getSnapshot }), [subscribe, getSnapshot]);
+
   return {
-    marqueeState,
+    isActive,
+    marquee,
     selectedIds: prevSelectedIdsRef.current,
   };
 }

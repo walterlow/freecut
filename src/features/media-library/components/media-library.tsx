@@ -188,7 +188,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const setViewMode = useMediaLibraryStore((s) => s.setViewMode);
   const sceneBrowserOpen = useSceneBrowserStore((s) => s.open);
-  const toggleSceneBrowser = useSceneBrowserStore((s) => s.toggleBrowser);
+  const openSceneBrowser = useSceneBrowserStore((s) => s.openBrowser);
+  const closeSceneBrowser = useSceneBrowserStore((s) => s.closeBrowser);
   const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
   const setMediaItemSize = useMediaLibraryStore((s) => s.setMediaItemSize);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
@@ -346,7 +347,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     [compositions, filteredMediaItems]
   );
 
-  const { marqueeState } = useMarqueeSelection({
+  const { marquee } = useMarqueeSelection({
     containerRef: scrollContainerRef as React.RefObject<HTMLElement>,
     items: marqueeItems,
     enabled: marqueeItems.length > 0,
@@ -369,30 +370,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     },
   });
 
-  // Track focus and clear selection when clicking outside the media library
+  // Track focus scope for the Delete hotkey. Selection itself is only cleared
+  // by explicit user action (empty-area click or marquee), never by focus
+  // changes — otherwise selection leaks away when the user clicks the timeline
+  // or another panel.
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
-      const isInside = containerRef.current?.contains(event.target as Node);
-
-      if (isInside) {
-        // Clicked inside - mark as focused
-        isFocusedRef.current = true;
-      } else {
-        // Clicked outside - clear focus and selection
-        isFocusedRef.current = false;
-        if (selectedAssetCount > 0) {
-          clearSelection();
-        }
-      }
+      isFocusedRef.current = !!containerRef.current?.contains(event.target as Node);
     };
 
-    // Use capture phase to catch events before they're stopped by other handlers
     document.addEventListener('mousedown', handleMouseDown, true);
-
     return () => {
       document.removeEventListener('mousedown', handleMouseDown, true);
     };
-  }, [selectedAssetCount, clearSelection]);
+  }, []);
 
   // Handle Delete key to delete selected items
   useEffect(() => {
@@ -705,7 +696,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {/* Header toolbar */}
       <div className="@container px-3 py-2 border-b border-border flex-shrink-0">
         <TooltipProvider>
-          <div className="flex flex-wrap items-center gap-2 text-xs min-w-0">
+          <div className="flex flex-nowrap items-center gap-2 text-xs min-w-0 overflow-hidden">
             {/* Import action */}
             <HeaderActionTooltip label="Import media files">
               <button
@@ -718,27 +709,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   transition-colors duration-150"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
-                <span className="hidden @[220px]:inline">Import</span>
-              </button>
-            </HeaderActionTooltip>
-
-            {/* Scene browser view toggle — lives here with Import (not in
-                the filter row) because it switches the whole panel between
-                media-library and scene-captioner views; the search/filter
-                bar below only scopes whichever view is mounted. */}
-            <HeaderActionTooltip label="Search scenes (Ctrl+Shift+F)">
-              <button
-                onClick={toggleSceneBrowser}
-                className={cn(
-                  'flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border transition-colors duration-150',
-                  sceneBrowserOpen
-                    ? 'bg-primary/10 border-primary/40 text-primary'
-                    : 'bg-secondary border-border text-muted-foreground hover:text-foreground hover:bg-foreground/5',
-                )}
-                aria-pressed={sceneBrowserOpen}
-              >
-                <ScanSearch className="w-3.5 h-3.5" />
-                <span className="hidden @[260px]:inline">Scenes</span>
+                <span className="hidden @[260px]:inline">Import</span>
               </button>
             </HeaderActionTooltip>
 
@@ -753,7 +724,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                     transition-colors duration-150"
                 >
                   <Link2Off className="w-3.5 h-3.5" />
-                  <span className="hidden @[250px]:inline">{currentProjectBrokenMediaIds.length} Missing</span>
+                  <span className="hidden @[340px]:inline">{currentProjectBrokenMediaIds.length} Missing</span>
                 </button>
               </HeaderActionTooltip>
             )}
@@ -762,12 +733,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             {/* Selection indicator & actions */}
             {selectedAssetCount > 0 && (
               <>
-                <div className="h-4 w-px bg-border hidden @[240px]:block" />
+                <div className="h-4 w-px bg-border hidden @[300px]:block" />
 
                 {/* Selection badge */}
                 <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border min-w-0 max-w-full">
                   <span className="tabular-nums shrink-0">{selectedAssetCount}</span>
-                  <span className="text-muted-foreground hidden @[260px]:inline">selected</span>
+                  <span className="text-muted-foreground hidden @[360px]:inline">selected</span>
                   <HeaderActionTooltip label="Clear selection">
                     <button
                       onClick={clearSelection}
@@ -783,12 +754,13 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   <HeaderActionTooltip label={`Generate proxies for ${selectedProxyEligibleCount} selected item${selectedProxyEligibleCount === 1 ? '' : 's'}`}>
                     <button
                       onClick={handleGenerateSelectedProxies}
-                      className="flex items-center gap-1 h-7 px-2 rounded-md shrink-0
-                        text-muted-foreground hover:text-primary hover:bg-primary/10
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                        bg-secondary border-border text-muted-foreground
+                        hover:text-primary hover:bg-primary/10 hover:border-primary/40
                         transition-colors duration-150"
                     >
-                      <Zap className="w-3 h-3" />
-                      <span className="hidden @[320px]:inline">Proxy ({selectedProxyEligibleCount})</span>
+                      <Zap className="w-3.5 h-3.5" />
+                      <span className="hidden @[440px]:inline">Proxy ({selectedProxyEligibleCount})</span>
                     </button>
                   </HeaderActionTooltip>
                 )}
@@ -797,12 +769,13 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 <HeaderActionTooltip label="Delete selected assets">
                   <button
                     onClick={handleDeleteSelected}
-                    className="flex items-center gap-1 h-7 px-2 rounded-md shrink-0
-                      text-destructive/80 hover:text-destructive hover:bg-destructive/10
+                    className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                      bg-destructive/10 border border-destructive/25 text-destructive
+                      hover:bg-destructive/20 hover:border-destructive/40
                       transition-colors duration-150"
                   >
-                    <Trash2 className="w-3 h-3" />
-                    <span className="hidden @[280px]:inline">Delete</span>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden @[400px]:inline">Delete</span>
                   </button>
                 </HeaderActionTooltip>
               </>
@@ -880,28 +853,77 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         </div>
       )}
 
-      {/* Search and filters — hidden in Scene mode since they only scope
-          the media library grid; the scene browser has its own search. */}
-      {!sceneBrowserOpen && (
+      {/* Search + view toggle always render so the toggle stays reachable
+          in Scene mode. The search input and the filter row below only scope
+          the media-library grid, so they're hidden when the Scene browser is
+          mounted (it has its own search). */}
       <div className="px-4 pt-3 pb-2 space-y-2 flex-shrink-0">
-        {/* Search */}
-        <div className="relative group">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-          <Input
-            placeholder="Search media..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
-            >
-              <X className="w-3 h-3" />
-            </button>
+        {/* Search + Media/Scenes toggle group */}
+        <div className="@container flex items-center gap-2">
+          {!sceneBrowserOpen && (
+            <div className="relative group flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <Input
+                placeholder="Search media..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           )}
+          {sceneBrowserOpen && <div className="flex-1 min-w-0" aria-hidden />}
+          <div
+            role="group"
+            aria-label="Library view"
+            className="inline-flex items-center h-7 rounded-md border border-border bg-secondary p-0.5 shrink-0"
+          >
+            <HeaderActionTooltip label="Show media library">
+              <button
+                onClick={() => {
+                  if (sceneBrowserOpen) closeSceneBrowser();
+                }}
+                aria-pressed={!sceneBrowserOpen}
+                className={cn(
+                  'flex items-center gap-1 h-6 px-1.5 @[280px]:px-2 rounded-[3px] text-[11px] transition-colors duration-150',
+                  !sceneBrowserOpen
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Film className="w-3 h-3" />
+                <span className="hidden @[280px]:inline">Media</span>
+              </button>
+            </HeaderActionTooltip>
+            <HeaderActionTooltip label="Search scenes (Ctrl+Shift+F)">
+              <button
+                onClick={() => {
+                  if (!sceneBrowserOpen) openSceneBrowser();
+                }}
+                aria-pressed={sceneBrowserOpen}
+                className={cn(
+                  'flex items-center gap-1 h-6 px-1.5 @[280px]:px-2 rounded-[3px] text-[11px] transition-colors duration-150',
+                  sceneBrowserOpen
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <ScanSearch className="w-3 h-3" />
+                <span className="hidden @[280px]:inline">Scenes</span>
+              </button>
+            </HeaderActionTooltip>
+          </div>
         </div>
+
+        {!sceneBrowserOpen && (<>
+
 
         {/* Filters and sort */}
         <div className="@container flex items-center gap-1.5 min-w-0">
@@ -1032,8 +1054,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </div>
           </div>
         </div>
+        </>)}
       </div>
-      )}
 
       {/* Composition navigation banner — shown when inside a sub-composition */}
       {activeCompositionId !== null && activeCompLabel && (
@@ -1065,7 +1087,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <MarqueeOverlay marqueeState={marqueeState} />
+          <MarqueeOverlay marquee={marquee} />
 
           {/* Compositions section — collapsible, auto-hidden when empty */}
           <CompositionsSection />

@@ -102,6 +102,7 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
    */
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
       const target = e.target;
       if (
         target instanceof Element &&

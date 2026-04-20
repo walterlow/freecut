@@ -25,18 +25,19 @@ normal tools. AI coding agents can read them directly without a browser.
 |       |-- source.link.json   <- OR a link descriptor to an external file
 |       |-- thumbnail.jpg
 |       `-- cache/
-|           |-- waveform/      <- audio peaks (binned binary)
+|           |-- filmstrip/     <- timeline frame thumbnails (0.jpg, 1.jpg, ...)
+|           |-- waveform/      <- audio peaks (binned binary + multi-res.bin)
 |           |-- gif-frames/    <- pre-extracted GIF frames
-|           |-- decoded-audio/ <- preview audio for non-browser codecs
-|           `-- transcript.json
-|-- filmstrips/
-|   `-- <mediaId>/             <- timeline thumbnail cache
-|       |-- meta.json
-|       `-- 0.jpg, 1.jpg, ...
+|           |-- decoded-audio/ <- chunked PCM for preview playback
+|           |-- preview-audio.wav  <- conformed WAV for non-browser codecs
+|           `-- ai/            <- transcripts, captions, scene cuts, ...
 `-- content/
-    `-- <hash>/
-        |-- refs.json          <- reference count
-        `-- data.<ext>         <- deduped blob
+    |-- <hash[0:2]>/<hash>/    <- content-addressable source dedup (reserved)
+    |   |-- refs.json
+    |   `-- data.<ext>
+    `-- proxies/<proxyKey>/    <- shared proxies (keyed by content fingerprint)
+        |-- proxy.mp4
+        `-- meta.json
 ```
 
 ## Safe to edit?

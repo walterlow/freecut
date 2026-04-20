@@ -34,7 +34,11 @@ import {
   saveCaptionEmbeddings,
   saveCaptionImageEmbeddings,
   getTranscript,
+  getCaptionsByContentHash,
+  adoptCaptionsFromCache,
 } from '@/infrastructure/storage';
+import { computeContentHashFromBuffer } from '../utils/content-hash';
+import { updateMedia as updateMediaDB } from '@/infrastructure/storage';
 import { invalidateMediaCaptionThumbnails } from '../deps/scene-browser';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { mediaLibraryService } from './media-library-service';
@@ -108,11 +112,52 @@ class MediaAnalysisService {
     store.setTaggingMedia(media.id, true);
 
     try {
+      // Content-addressable cache lookup: if another media item with the
+      // same source bytes already produced captions, reuse them instead of
+      // re-running the VLM. We resolve the hash once here and thread it
+      // through every save* call so the shared bins/thumbs land in the
+      // content tree (or so the adoptCaptionsFromCache fast-path can run).
+      const contentHash = await this.resolveContentHash(media);
+
       // Drop every in-memory thumbnail URL and semantic cache entry tied to
-      // this media before re-analysis starts. If the rerun fails, the old
-      // on-disk assets still exist and can be rehydrated on demand; if it
-      // succeeds, fresh thumbs/embeddings repopulate the caches below.
+      // this media before either adopting cached captions or writing fresh
+      // outputs. Otherwise a re-analyze can keep serving stale per-media
+      // blobs/embeddings until the next reload.
       invalidateMediaCaptionThumbnails(media.id);
+
+      if (contentHash) {
+        const cached = await getCaptionsByContentHash(contentHash, sampleIntervalSec).catch(() => undefined);
+        if (cached && this.isCacheCompatible(cached, sampleIntervalSec)) {
+          // Treat an adopt failure as a cache miss and fall through to a full
+          // run rather than aborting the whole analysis.
+          let adopted: Awaited<ReturnType<typeof adoptCaptionsFromCache>> | undefined;
+          try {
+            adopted = await adoptCaptionsFromCache(media.id, contentHash, sampleIntervalSec);
+          } catch (error) {
+            logger.warn('adoptCaptionsFromCache threw — falling through to full analysis', {
+              mediaId: media.id,
+              error,
+            });
+            adopted = undefined;
+          }
+          if (adopted) {
+            const captions = adopted.data.captions;
+            store.updateMediaCaptions(media.id, captions);
+            try {
+              await updateMediaDB(media.id, { aiCaptions: captions });
+            } catch (error) {
+              logger.warn('Failed to mirror cached captions to media DB', { mediaId: media.id, error });
+            }
+            store.showNotification({
+              type: 'success',
+              message: captions.length === 0
+                ? `Reused cached analysis for "${media.fileName}" (no scenes)`
+                : `Reused cached analysis: ${captions.length} scene caption${captions.length === 1 ? '' : 's'} for "${media.fileName}"`,
+            });
+            return true;
+          }
+        }
+      }
 
       let captions: MediaCaption[];
       const stagedThumbnailBlobs = new Map<number, Blob>();
@@ -198,7 +243,10 @@ class MediaAnalysisService {
 
           const vectors = await embeddingsProvider.embedBatch(texts);
           if (vectors.length === captions.length) {
-            await saveCaptionEmbeddings(media.id, vectors, EMBEDDING_MODEL_DIM);
+            await saveCaptionEmbeddings(media.id, vectors, EMBEDDING_MODEL_DIM, {
+              contentHash,
+              sampleIntervalSec,
+            });
             embeddingModel = EMBEDDING_MODEL_ID;
             embeddingDim = EMBEDDING_MODEL_DIM;
             captionsWithEmbeddings = captionsWithEmbeddings.map((caption, i) => ({
@@ -220,7 +268,10 @@ class MediaAnalysisService {
             await clipProvider.ensureReady();
             const imageVectors = await clipProvider.embedImages(validBlobs);
             if (imageVectors.length === captions.length) {
-              await saveCaptionImageEmbeddings(media.id, imageVectors, CLIP_EMBEDDING_DIM);
+              await saveCaptionImageEmbeddings(media.id, imageVectors, CLIP_EMBEDDING_DIM, {
+                contentHash,
+                sampleIntervalSec,
+              });
               imageEmbeddingModel = CLIP_MODEL_ID;
               imageEmbeddingDim = CLIP_EMBEDDING_DIM;
             }
@@ -235,7 +286,10 @@ class MediaAnalysisService {
               const blob = stagedThumbnailBlobs.get(index);
               if (!blob) return caption;
               try {
-                const thumbRelPath = await saveCaptionThumbnail(media.id, index, blob);
+                const thumbRelPath = await saveCaptionThumbnail(media.id, index, blob, {
+                  contentHash,
+                  sampleIntervalSec,
+                });
                 return { ...caption, thumbRelPath };
               } catch {
                 return caption;
@@ -250,6 +304,7 @@ class MediaAnalysisService {
           embeddingDim,
           imageEmbeddingModel,
           imageEmbeddingDim,
+          contentHash,
         });
         store.updateMediaCaptions(media.id, captionsWithEmbeddings);
 
@@ -261,6 +316,7 @@ class MediaAnalysisService {
       } else {
         await mediaLibraryService.updateMediaCaptions(media.id, [], {
           sampleIntervalSec,
+          contentHash,
         });
         store.updateMediaCaptions(media.id, []);
         await deleteCaptionThumbnails(media.id);
@@ -375,6 +431,61 @@ class MediaAnalysisService {
 
   isBatchInFlight(): boolean {
     return this.batchInFlight;
+  }
+
+  /**
+   * Resolve the SHA-256 content hash for a media item. Prefers the cached
+   * value on `MediaMetadata.contentHash` when present; otherwise reads the
+   * source blob once, hashes, and persists the result so future analyze
+   * runs (and the shared-cache check) skip the hashing step.
+   *
+   * Returns `undefined` only when the source blob can't be loaded — the
+   * cache lookup is skipped in that case and analysis proceeds as usual.
+   */
+  private async resolveContentHash(media: MediaMetadata): Promise<string | undefined> {
+    if (media.contentHash) return media.contentHash;
+    try {
+      const file = await mediaLibraryService.getMediaFile(media.id);
+      if (!file) return undefined;
+      const buffer = await file.arrayBuffer();
+      const hash = await computeContentHashFromBuffer(buffer);
+      try {
+        await updateMediaDB(media.id, { contentHash: hash });
+      } catch (error) {
+        logger.warn('Failed to persist contentHash on media metadata', { mediaId: media.id, error });
+      }
+      return hash;
+    } catch (error) {
+      logger.warn('Failed to compute contentHash; skipping caption cache lookup', {
+        mediaId: media.id,
+        error,
+      });
+      return undefined;
+    }
+  }
+
+  /**
+   * Cache-hit acceptance check. Today we only gate on sampleIntervalSec
+   * since that's the one user-visible param that changes output cardinality.
+   * When the captioner or embedding model versions bump, callers should flush
+   * the shared cache rather than relying on a version check here — shared
+   * cache GC is cheap via the ai-refs file.
+   */
+  private isCacheCompatible(
+    envelope: Awaited<ReturnType<typeof getCaptionsByContentHash>>,
+    sampleIntervalSec: number,
+  ): boolean {
+    if (!envelope) return false;
+    const envInterval = (envelope.params as { sampleIntervalSec?: number }).sampleIntervalSec;
+    if (envInterval === undefined) {
+      // Legacy cache (pre-versioning): fall back to the interval recorded in
+      // `data` so users who changed their interval get a fresh analysis
+      // instead of silently reusing the old density.
+      const dataInterval = (envelope.data as { sampleIntervalSec?: number }).sampleIntervalSec;
+      if (dataInterval === undefined) return true;
+      return Math.abs(dataInterval - sampleIntervalSec) < 0.01;
+    }
+    return Math.abs(envInterval - sampleIntervalSec) < 0.01;
   }
 }
 

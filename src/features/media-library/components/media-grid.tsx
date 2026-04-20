@@ -36,7 +36,7 @@ interface MediaGridProps {
 
 export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'grid', itemSize = 3, items }: MediaGridProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [mediaIdToDelete, setMediaIdToDelete] = useState<string | null>(null);
+  const [mediaIdsToDelete, setMediaIdsToDelete] = useState<string[]>([]);
   const lastSelectedIdRef = useRef<string | null>(null);
 
   const allFilteredItems = useFilteredMediaItems();
@@ -46,6 +46,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
   const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds);
   const deleteMedia = useMediaLibraryStore((s) => s.deleteMedia);
+  const deleteMediaBatch = useMediaLibraryStore((s) => s.deleteMediaBatch);
   const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
   const setSourcePreviewMediaId = useEditorStore((s) => s.setSourcePreviewMediaId);
@@ -57,10 +58,10 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
   }, [filteredItems]);
 
   const affectedMediaImpact = useMemo(() => (
-    mediaIdToDelete
-      ? getMediaDeletionImpact([mediaIdToDelete])
+    mediaIdsToDelete.length > 0
+      ? getMediaDeletionImpact(mediaIdsToDelete)
       : { itemIds: [], rootReferenceCount: 0, nestedReferenceCount: 0, totalReferenceCount: 0 }
-  ), [mediaIdToDelete]);
+  ), [mediaIdsToDelete]);
 
   const handleCardSelect = useCallback((mediaId: string, event?: React.MouseEvent) => {
     const currentFilteredItems = filteredItemsRef.current;
@@ -98,14 +99,15 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
   }, [onMediaSelect]);
 
   // Show delete confirmation dialog (called from MediaCard)
-  const handleCardDelete = useCallback((mediaId: string) => {
-    setMediaIdToDelete(mediaId);
+  const handleCardDelete = useCallback((mediaIds: string[]) => {
+    if (mediaIds.length === 0) return;
+    setMediaIdsToDelete(mediaIds);
     setShowDeleteDialog(true);
   }, []);
 
   // Actually delete after confirmation
   const handleConfirmDelete = async () => {
-    if (!mediaIdToDelete) return;
+    if (mediaIdsToDelete.length === 0) return;
 
     setShowDeleteDialog(false);
     try {
@@ -115,18 +117,22 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
       }
 
       // Then delete the media from the library
-      await deleteMedia(mediaIdToDelete);
+      if (mediaIdsToDelete.length === 1) {
+        await deleteMedia(mediaIdsToDelete[0]!);
+      } else {
+        await deleteMediaBatch(mediaIdsToDelete);
+      }
     } catch (error) {
       logger.error('Failed to delete media:', error);
       // Error is already set in store
     } finally {
-      setMediaIdToDelete(null);
+      setMediaIdsToDelete([]);
     }
   };
 
   const handleCancelDelete = useCallback(() => {
     setShowDeleteDialog(false);
-    setMediaIdToDelete(null);
+    setMediaIdsToDelete([]);
   }, []);
 
   // Handle relinking a broken media file
@@ -159,7 +165,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
     filteredItems.map((media) => [media.id, {
       onSelect: (event: React.MouseEvent) => handleCardSelect(media.id, event),
       onDoubleClick: () => setSourcePreviewMediaId(media.id),
-      onDelete: () => handleCardDelete(media.id),
+      onDelete: (mediaIds: string[]) => handleCardDelete(mediaIds),
       onRelink: () => {
         void handleRelink(media.id);
       },
@@ -237,12 +243,18 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
       <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !open && handleCancelDelete()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete media file?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {mediaIdsToDelete.length > 1
+                ? `Delete ${mediaIdsToDelete.length} media files?`
+                : 'Delete media file?'}
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Are you sure you want to delete "{filteredItems.find(m => m.id === mediaIdToDelete)?.fileName}"?
-                  This action cannot be undone.
+                  {mediaIdsToDelete.length > 1
+                    ? `Are you sure you want to delete ${mediaIdsToDelete.length} selected media files? This action cannot be undone.`
+                    : `Are you sure you want to delete "${filteredItems.find(m => m.id === mediaIdsToDelete[0])?.fileName}"? This action cannot be undone.`
+                  }
                 </p>
                 {affectedMediaImpact.totalReferenceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">

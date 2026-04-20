@@ -29,13 +29,26 @@ export async function readAiOutput<K extends AiOutputKind>(
   mediaId: string,
   kind: K,
 ): Promise<AiOutput<K> | undefined> {
+  return readAiOutputAt(aiOutputPath(mediaId, kind), kind, `readAiOutput(${mediaId}, ${kind})`);
+}
+
+/**
+ * Read an AI output envelope from an arbitrary workspace path. Used by the
+ * content-keyed caption cache where the envelope lives under
+ * `content/{shard}/{hash}/ai/` rather than `media/{id}/cache/ai/`.
+ */
+export async function readAiOutputAt<K extends AiOutputKind>(
+  segments: string[],
+  kind: K,
+  context = `readAiOutputAt(${segments.join('/')}, ${kind})`,
+): Promise<AiOutput<K> | undefined> {
   const root = requireWorkspaceRoot();
   try {
-    const result = await readJson<AiOutput<K>>(root, aiOutputPath(mediaId, kind));
+    const result = await readJson<AiOutput<K>>(root, segments);
     return result ?? undefined;
   } catch (error) {
-    logger.error(`readAiOutput(${mediaId}, ${kind}) failed`, error);
-    throw new Error(`Failed to load AI output ${kind} for ${mediaId}`);
+    logger.error(`${context} failed`, error);
+    throw new Error(`Failed to load AI output ${kind}`);
   }
 }
 
@@ -55,9 +68,21 @@ interface WriteInput<K extends AiOutputKind> {
 export async function writeAiOutput<K extends AiOutputKind>(
   input: WriteInput<K>,
 ): Promise<AiOutput<K>> {
+  return writeAiOutputAt(aiOutputPath(input.mediaId, input.kind), input);
+}
+
+/**
+ * Same as {@link writeAiOutput} but at an explicit path. The envelope still
+ * records `mediaId` from the input for provenance — for the content-keyed
+ * cache, this is the mediaId of the run that populated the cache first.
+ */
+export async function writeAiOutputAt<K extends AiOutputKind>(
+  segments: string[],
+  input: WriteInput<K>,
+): Promise<AiOutput<K>> {
   const root = requireWorkspaceRoot();
   const now = Date.now();
-  const existing = await readJson<AiOutput<K>>(root, aiOutputPath(input.mediaId, input.kind));
+  const existing = await readJson<AiOutput<K>>(root, segments);
 
   const envelope: AiOutput<K> = {
     schemaVersion: AI_OUTPUT_SCHEMA_VERSION,
@@ -72,11 +97,11 @@ export async function writeAiOutput<K extends AiOutputKind>(
   };
 
   try {
-    await writeJsonAtomic(root, aiOutputPath(input.mediaId, input.kind), envelope);
+    await writeJsonAtomic(root, segments, envelope);
     return envelope;
   } catch (error) {
-    logger.error(`writeAiOutput(${input.mediaId}, ${input.kind}) failed`, error);
-    throw new Error(`Failed to save AI output ${input.kind} for ${input.mediaId}`);
+    logger.error(`writeAiOutputAt(${segments.join('/')}, ${input.kind}) failed`, error);
+    throw new Error(`Failed to save AI output ${input.kind}`);
   }
 }
 
@@ -84,12 +109,19 @@ export async function deleteAiOutput(
   mediaId: string,
   kind: AiOutputKind,
 ): Promise<void> {
+  return deleteAiOutputAt(aiOutputPath(mediaId, kind), `deleteAiOutput(${mediaId}, ${kind})`);
+}
+
+export async function deleteAiOutputAt(
+  segments: string[],
+  context = `deleteAiOutputAt(${segments.join('/')})`,
+): Promise<void> {
   const root = requireWorkspaceRoot();
   try {
-    await removeEntry(root, aiOutputPath(mediaId, kind));
+    await removeEntry(root, segments);
   } catch (error) {
-    logger.error(`deleteAiOutput(${mediaId}, ${kind}) failed`, error);
-    throw new Error(`Failed to delete AI output ${kind} for ${mediaId}`);
+    logger.error(`${context} failed`, error);
+    throw new Error(`Failed to delete AI output`);
   }
 }
 

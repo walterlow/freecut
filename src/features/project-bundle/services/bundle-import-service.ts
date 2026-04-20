@@ -21,6 +21,7 @@ import {
   createProject,
   createMedia,
   saveThumbnail,
+  saveProjectThumbnail,
   associateMediaWithProject,
   updateProject,
 } from '@/infrastructure/storage';
@@ -208,17 +209,8 @@ export async function importProjectBundle(
     try {
       const blob = new Blob([new Uint8Array(coverData)], { type: 'image/jpeg' });
       const thumbnailId = `project:${newProjectId}:cover`;
-      await saveThumbnail({
-        id: thumbnailId,
-        mediaId: newProjectId, // Use project ID as mediaId for cover thumbnails
-        blob,
-        timestamp: Date.now(),
-        width: 320, // Default thumbnail dimensions
-        height: 180,
-      });
-      // Update project with thumbnailId
+      await saveProjectThumbnail(newProjectId, blob);
       project.thumbnailId = thumbnailId;
-      // Note: Project already created above, need to update it
       await updateProject(newProjectId, { thumbnailId });
     } catch (err) {
       // Thumbnail restoration is optional, continue without it

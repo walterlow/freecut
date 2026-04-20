@@ -81,6 +81,14 @@ export type CaptionsPayload = {
   imageEmbeddingModel?: string;
   /** Dimension of each image embedding vector, e.g. 512 for CLIP base. */
   imageEmbeddingDim?: number;
+  /**
+   * SHA-256 of the source media bytes. When present, this envelope was
+   * saved via the shared content-addressable cache — embedding bins and
+   * caption thumbnails live under `content/{shard}/{hash}/ai/` and are
+   * shared across every mediaId that resolves to the same hash. Per-caption
+   * `thumbRelPath` values point into the content tree in this mode.
+   */
+  contentHash?: string;
   captions: MediaCaption[];
 };
 

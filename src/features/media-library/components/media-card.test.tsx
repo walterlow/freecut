@@ -73,11 +73,11 @@ const sourcePlayerStoreState = vi.hoisted(() => ({
   setPendingSeekFrame: vi.fn(),
 }));
 
-vi.mock('@/components/ui/dropdown-menu', () => ({
-  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuItem: ({
+vi.mock('@/components/ui/context-menu', () => ({
+  ContextMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuItem: ({
     children,
     onClick,
     disabled,
@@ -86,18 +86,8 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
     onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
     disabled?: boolean;
   }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
-}));
-
-vi.mock('@/components/ui/button', () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: ReactNode;
-    onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
-    disabled?: boolean;
-  }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
+  ContextMenuLabel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuSeparator: () => <hr />,
 }));
 
 vi.mock('./transcribe-dialog', () => ({
@@ -337,7 +327,7 @@ describe('MediaCard', () => {
     expect(screen.getByText('Delete Transcript')).toBeInTheDocument();
   });
 
-  it('shows transcript progress bars while transcribing', () => {
+  it('shows the inline transcript progress bar while transcribing', () => {
     mediaStoreState.transcriptStatus = new Map([['media-1', 'queued']]);
     mediaStoreState.transcriptProgress = new Map([
       ['media-1', { stage: 'queued', progress: 0 }],
@@ -345,25 +335,8 @@ describe('MediaCard', () => {
 
     render(<MediaCard media={makeMedia()} viewMode="list" />);
 
-    expect(screen.getByText('Queued (0%)')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Transcript menu progress' }))
-      .toHaveAttribute('aria-valuenow', '0');
     expect(screen.getByRole('progressbar', { name: 'Transcript progress' }))
       .toHaveAttribute('aria-valuenow', '0');
-    expect(screen.getByText('Cancel Transcript')).toBeInTheDocument();
-  });
-
-  it('cancels transcript generation from the action menu', () => {
-    mediaStoreState.transcriptStatus = new Map([['media-1', 'queued']]);
-    mediaStoreState.transcriptProgress = new Map([
-      ['media-1', { stage: 'queued', progress: 0 }],
-    ]);
-
-    render(<MediaCard media={makeMedia()} viewMode="list" />);
-
-    fireEvent.click(screen.getByText('Cancel Transcript'));
-
-    expect(mediaTranscriptionServiceMocks.cancelTranscription).toHaveBeenCalledWith('media-1');
   });
 
   it('deletes a transcript from the media action menu', async () => {
@@ -392,17 +365,6 @@ describe('MediaCard', () => {
     fireEvent.click(screen.getByText('Relink File...'));
 
     expect(onRelink).toHaveBeenCalledTimes(1);
-  });
-
-  it('allows cancelling proxy generation from the action menu', () => {
-    mediaStoreState.proxyStatus = new Map([['media-1', 'generating']]);
-    mediaStoreState.proxyProgress = new Map([['media-1', 0.42]]);
-
-    render(<MediaCard media={makeMedia()} viewMode="list" />);
-
-    fireEvent.click(screen.getByText('Cancel Proxy Generation'));
-
-    expect(proxyServiceMocks.cancelProxy).toHaveBeenCalledWith('media-1', 'proxy-media-1');
   });
 
   it('shows an active AI analysis badge in list view while analysis is running', () => {
