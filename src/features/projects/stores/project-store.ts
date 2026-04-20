@@ -140,7 +140,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
         // Create a new project with optimistic update
         createProject: async (data: ProjectFormData) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
 
           const newProject = createProjectObject(data);
 
@@ -150,7 +150,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
           try {
             await createProjectDB(newProject);
-            set({ isLoading: false, currentProject: newProject });
+            set({ currentProject: newProject });
             return newProject;
           } catch (error) {
             // Rollback on error
@@ -158,14 +158,14 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
             const errorMessage =
               error instanceof Error ? error.message : 'Failed to create project';
-            set({ error: errorMessage, isLoading: false });
+            set({ error: errorMessage });
             throw error;
           }
         },
 
         // Update an existing project with optimistic update
         updateProject: async (id: string, data: Partial<ProjectFormData>) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
 
           const previousProjects = get().projects;
           const currentProject = get().currentProject;
@@ -180,7 +180,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
           }
 
           if (!existingProject) {
-            set({ error: `Project not found: ${id}`, isLoading: false });
+            set({ error: `Project not found: ${id}` });
             throw new Error(`Project not found: ${id}`);
           }
 
@@ -217,7 +217,6 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
               set({ currentProject: updated });
             }
 
-            set({ isLoading: false });
             return updated;
           } catch (error) {
             // Rollback on error
@@ -230,7 +229,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
             const errorMessage =
               error instanceof Error ? error.message : 'Failed to update project';
-            set({ error: errorMessage, isLoading: false });
+            set({ error: errorMessage });
             throw error;
           }
         },
@@ -238,7 +237,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         // Delete a project with optimistic update
         // v3: Also deletes media associations (with reference counting)
         deleteProject: async (id: string, clearLocalFiles?: boolean) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
 
           const previousProjects = get().projects;
           const projectToDelete = previousProjects.find((p) => p.id === id);
@@ -257,7 +256,6 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
             fsPermissionGranted = permission === 'granted';
             if (!fsPermissionGranted) {
               logger.warn(`Permission denied to clear local files for project ${id}`);
-              set({ isLoading: false });
               throw new Error('Filesystem permission denied — project was not deleted. Please grant access and try again.');
             }
           }
@@ -317,7 +315,6 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
             // their TTL.
             const marker = await softDeleteProject(id);
 
-            set({ isLoading: false });
             return {
               localFilesDeleted,
               trashed: true as const,
@@ -330,7 +327,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
               const scope = localFilesDeleted ? 'All local files deleted' : 'Some local files deleted';
               const errorMessage = `${scope} but soft-delete failed — project may be inconsistent`;
               logger.error(errorMessage, error);
-              set({ error: errorMessage, isLoading: false });
+              set({ error: errorMessage });
               throw new Error(errorMessage, { cause: error });
             }
             // Rollback on error (safe — no local files were touched)
@@ -338,23 +335,23 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
             const errorMessage =
               error instanceof Error ? error.message : 'Failed to delete project';
-            set({ error: errorMessage, isLoading: false });
+            set({ error: errorMessage });
             throw error;
           }
         },
 
         restoreProject: async (id: string) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
           try {
             await restoreProjectDB(id);
             // Refresh the visible list so the restored project reappears.
             const projects = await getAllProjects();
-            set({ projects, isLoading: false });
+            set({ projects });
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : 'Failed to restore project';
             logger.error(`restoreProject(${id}) failed`, error);
-            set({ error: errorMessage, isLoading: false });
+            set({ error: errorMessage });
             throw error;
           }
         },
@@ -388,12 +385,12 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
         // Duplicate an existing project
         duplicateProject: async (id: string) => {
-          set({ isLoading: true, error: null });
+          set({ error: null });
 
           const originalProject = get().projects.find((p) => p.id === id);
 
           if (!originalProject) {
-            set({ error: `Project not found: ${id}`, isLoading: false });
+            set({ error: `Project not found: ${id}` });
             throw new Error(`Project not found: ${id}`);
           }
 
@@ -413,7 +410,6 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
               await associateMediaWithProject(newProject.id, mediaId);
             }
 
-            set({ isLoading: false });
             return newProject;
           } catch (error) {
             // Rollback on error
@@ -421,7 +417,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
             const errorMessage =
               error instanceof Error ? error.message : 'Failed to duplicate project';
-            set({ error: errorMessage, isLoading: false });
+            set({ error: errorMessage });
             throw error;
           }
         },
