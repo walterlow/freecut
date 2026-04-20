@@ -508,8 +508,16 @@ const NativePreviewVideo: React.FC<{
       video.playbackRate = playbackRate;
     }
 
-    // Update sequenceFrom for rVFC callback (global frame minus local frame)
-    sequenceFromRef.current = clock.currentFrame - frame;
+    // Update sequenceFrom for rVFC callback.
+    // Use the SequenceContext's `from` (the absolute global frame where this
+    // Sequence starts) directly, rather than reconstructing it as
+    // `clock.currentFrame - frame`. The subtraction reads the clock imperatively
+    // while `frame` was captured at parent-render time, and React propagation
+    // through nested SequenceContext providers makes those two values
+    // inconsistent during commits. For deeply nested compositions, the stale
+    // delta encoded a nonzero offset that caused rVFC drift correction to seek
+    // the video to a wrong target (10s+) every frame, producing black flashes.
+    sequenceFromRef.current = sequenceContext?.from ?? 0;
 
     // Detect if frame actually changed (for scrub detection)
     const frameChanged = frame !== lastFrameRef.current;
