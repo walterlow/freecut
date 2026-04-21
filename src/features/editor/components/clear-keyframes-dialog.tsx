@@ -40,13 +40,13 @@ export function ClearKeyframesDialog() {
   };
 
   const itemCount = itemIds.length;
-  const itemText = itemCount === 1 ? 'clip' : 'clips';
+  const itemText = '个片段';
   const propertyLabel = property ? PROPERTY_LABELS[property] : null;
 
-  const title = property ? `Clear ${propertyLabel} Keyframes` : 'Clear All Keyframes';
+  const title = property ? `清除 ${propertyLabel} 关键帧` : '清除全部关键帧';
   const description = property
-    ? `Are you sure you want to clear all ${propertyLabel} keyframes from ${itemCount} ${itemText}?`
-    : `Are you sure you want to clear all keyframes from ${itemCount} ${itemText}?`;
+    ? `确定要清除 ${itemCount} ${itemText}中的全部 ${propertyLabel} 关键帧吗？`
+    : `确定要清除 ${itemCount} ${itemText}中的全部关键帧吗？`;
 
   return (
     <AlertDialog open={isOpen} onOpenChange={(open) => !open && close()}>
@@ -57,14 +57,14 @@ export function ClearKeyframesDialog() {
             {description}
             <br />
             <span className="text-muted-foreground text-xs mt-1 block">
-              This action can be undone with Ctrl+Z.
+              此操作可通过 Ctrl+Z 撤销。
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>取消</AlertDialogCancel>
           <AlertDialogAction onClick={handleConfirm}>
-            Clear Keyframes
+            清除关键帧
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

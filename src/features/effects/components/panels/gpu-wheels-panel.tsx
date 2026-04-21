@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
 import { PropertyRow, SliderInput } from '@/shared/ui/property-controls';
+import { tEffectText } from '../../utils/effect-localization';
 
 interface GpuWheelsPanelProps {
   effect: ItemEffect;
@@ -161,7 +162,7 @@ const WheelControl = memo(function WheelControl({
         className="h-5 w-5"
         onClick={onReset}
         disabled={disabled}
-        title={`Reset ${label}`}
+        title={`重置${tEffectText(label)}`}
       >
         <RotateCcw className="w-3 h-3" />
       </Button>
@@ -170,9 +171,9 @@ const WheelControl = memo(function WheelControl({
 });
 
 const WHEEL_DESCRIPTORS = [
-  { label: 'Shadows', hueKey: 'shadowsHue', amountKey: 'shadowsAmount' },
-  { label: 'Midtones', hueKey: 'midtonesHue', amountKey: 'midtonesAmount' },
-  { label: 'Highlights', hueKey: 'highlightsHue', amountKey: 'highlightsAmount' },
+  { label: '阴影', hueKey: 'shadowsHue', amountKey: 'shadowsAmount' },
+  { label: '中间调', hueKey: 'midtonesHue', amountKey: 'midtonesAmount' },
+  { label: '高光', hueKey: 'highlightsHue', amountKey: 'highlightsAmount' },
 ] as const;
 
 const TONAL_PARAMS = ['temperature', 'tint', 'saturation'] as const;
@@ -219,14 +220,14 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
 
   return (
     <div className="space-y-0">
-      <PropertyRow label={definition.name}>
+      <PropertyRow label={tEffectText(definition.name)}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
           <Button
             variant="ghost"
             size="icon"
             className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}
             onClick={() => onReset(effect.id)}
-            title="Reset to defaults"
+            title="重置为默认"
             disabled={isDefault}
           >
             <RotateCcw className="w-3 h-3" />
@@ -236,7 +237,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
             size="icon"
             className="h-6 w-6 flex-shrink-0"
             onClick={() => onToggle(effect.id)}
-            title={effect.enabled ? 'Disable effect' : 'Enable effect'}
+            title={effect.enabled ? '禁用效果' : '启用效果'}
           >
             {effect.enabled ? (
               <Eye className="w-3 h-3" />
@@ -249,7 +250,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
             size="icon"
             className="h-6 w-6 flex-shrink-0"
             onClick={() => onRemove(effect.id)}
-            title="Remove effect"
+            title="删除效果"
           >
             <Trash2 className="w-3 h-3" />
           </Button>
@@ -294,7 +295,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
         if (!param) return null;
         const value = (gpuEffect.params[key] as number) ?? param.default;
         return (
-          <PropertyRow key={key} label={param.label} className={tonalRowClass}>
+          <PropertyRow key={key} label={tEffectText(param.label)} className={tonalRowClass}>
             <div className="flex items-center gap-1 min-w-0 w-full">
               <SliderInput
                 value={value}

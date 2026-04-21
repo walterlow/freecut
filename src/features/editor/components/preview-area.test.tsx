@@ -85,16 +85,16 @@ describe('PreviewArea mask editor toolbar', () => {
       />
     );
 
-    expect(screen.getByText('Path Edit')).toBeInTheDocument();
-    expect(screen.getByText('4 points')).toBeInTheDocument();
+    expect(screen.getByText('路径编辑')).toBeInTheDocument();
+    expect(screen.getByText('4 个点')).toBeInTheDocument();
     expect(
-      screen.getByText('Drag points, handles, or the path body to adjust the shape.')
+      screen.getByText('拖动点、手柄或路径主体可调整形状。')
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Corner' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Bezier' })).toBeDisabled();
-    expect(screen.queryByText('Pen Tool')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '角点' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '贝塞尔' })).toBeDisabled();
+    expect(screen.queryByText('钢笔工具')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    fireEvent.click(screen.getByRole('button', { name: '完成' }));
 
     expect(useMaskEditorStore.getState().isEditing).toBe(false);
   });
@@ -219,10 +219,10 @@ describe('PreviewArea mask editor toolbar', () => {
       useMaskEditorStore.getState().selectVertex(1);
     });
 
-    expect(screen.getByRole('button', { name: 'Corner' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Bezier' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '角点' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '贝塞尔' })).toBeEnabled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bezier' }));
+    fireEvent.click(screen.getByRole('button', { name: '贝塞尔' }));
 
     expect(useMaskEditorStore.getState().convertSelectedVertexRequestMode).toBe('bezier');
     expect(useMaskEditorStore.getState().convertSelectedVertexRequestVersion).toBe(1);
@@ -267,8 +267,8 @@ describe('PreviewArea mask editor toolbar', () => {
       useMaskEditorStore.getState().selectVertices([0, 1, 2, 3], 3);
     });
 
-    expect(screen.getByRole('button', { name: 'Corner' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Bezier' })).toBeEnabled();
-    expect(screen.getByText('4 points selected for knot conversion.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '角点' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '贝塞尔' })).toBeEnabled();
+    expect(screen.getByText('已选中 4 个点，可进行节点转换。')).toBeInTheDocument();
   });
 });

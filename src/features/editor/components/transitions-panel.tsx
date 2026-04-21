@@ -207,16 +207,16 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
           <div className="text-muted-foreground leading-relaxed">
             {hasValidClickTarget ? (
               <span className="text-primary">
-                Click to apply to the selected cut, or drag a transition onto any valid cut in the timeline.
+                点击可应用到当前剪切点，或将转场拖拽到时间线上任意有效剪切点。
               </span>
             ) : adjacentInfo?.reason ? (
-              <span>Drag a transition onto a valid cut. Click-to-apply is unavailable here: {adjacentInfo.reason}.</span>
+              <span>可拖拽转场到有效剪切点。当前无法点击应用：{adjacentInfo.reason}。</span>
             ) : selectionCount === 1 ? (
-              <span>Drag a transition onto a valid cut, or place clips next to each other and select one clip to click-apply.</span>
+              <span>可拖拽转场到有效剪切点，或将片段首尾相接后选中其中一个片段再点击应用。</span>
             ) : selectionCount > 1 ? (
-              <span>Drag a transition onto a valid cut, or select a single video or image clip to click-apply.</span>
+              <span>可拖拽转场到有效剪切点，或只选中一个视频/图片片段后点击应用。</span>
             ) : (
-              <span>Drag a transition onto a valid cut, or select a video or image clip to add a transition to its neighbor.</span>
+              <span>可拖拽转场到有效剪切点，或选中一个视频/图片片段为其相邻片段添加转场。</span>
             )}
           </div>
         </div>

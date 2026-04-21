@@ -41,7 +41,7 @@ export function InteractionLockRegion({
             'absolute inset-0 z-10 cursor-not-allowed rounded-[inherit] bg-background/10',
             overlayClassName
           )}
-          title="Finish or exit mask editing to continue"
+          title="请先完成或退出蒙版编辑后再继续"
         />
       ) : null}
     </div>

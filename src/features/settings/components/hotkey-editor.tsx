@@ -66,9 +66,9 @@ const KEYBOARD_ROWS: readonly KeyboardRowPair[] = [
       { id: 'backspace', token: 'backspace', width: 2 },
     ],
     nav: [
-      { id: 'insert', label: 'Ins' },
+      { id: 'insert', label: '插入' },
       { id: 'home', token: 'home' },
-      { id: 'pageup', label: 'PgUp' },
+      { id: 'pageup', label: '上页' },
     ],
   },
   {
@@ -91,12 +91,12 @@ const KEYBOARD_ROWS: readonly KeyboardRowPair[] = [
     nav: [
       { id: 'delete', token: 'delete' },
       { id: 'end', token: 'end' },
-      { id: 'pagedown', label: 'PgDn' },
+      { id: 'pagedown', label: '下页' },
     ],
   },
   {
     main: [
-      { id: 'caps', label: 'Caps', width: 1.8 },
+      { id: 'caps', label: '大写', width: 1.8 },
       { id: 'a', token: 'a' },
       { id: 's', token: 's' },
       { id: 'd', token: 'd' },
@@ -157,10 +157,10 @@ const HOTKEY_ITEM_BY_KEY = Object.fromEntries(
 
 function getSlotLabel(item: HotkeyEditorItem, key: HotkeyKey): string {
   if (item.keys.length === 1) {
-    return 'Shortcut';
+    return '快捷键';
   }
 
-  return item.keys[0] === key ? 'Primary shortcut' : 'Alternate shortcut';
+  return item.keys[0] === key ? '主快捷键' : '备用快捷键';
 }
 
 function getBindingTokens(binding: string): string[] {
@@ -216,13 +216,13 @@ function HotkeyBindingPill({
       ))}
       {isCustom ? (
         <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-primary">
-          Custom
+          自定义
         </span>
       ) : null}
     </span>
   ) : (
     <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-      Unassigned
+      未分配
     </span>
   );
 
@@ -573,9 +573,9 @@ export function HotkeyEditor() {
       const exportDocument = createHotkeyExportDocument(hotkeyOverrides);
       const fileName = `freecut-hotkeys-${exportDocument.exportedAt.slice(0, 10)}.json`;
       downloadJsonFile(`${JSON.stringify(exportDocument, null, 2)}\n`, fileName);
-      toast.success(`Downloaded ${fileName}`);
+      toast.success(`已下载 ${fileName}`);
     } catch {
-      toast.error('Failed to export keyboard shortcuts');
+      toast.error('导出快捷键失败');
     }
   };
 
@@ -587,20 +587,20 @@ export function HotkeyEditor() {
       replaceHotkeyOverrides(importResult.overrides);
       stopCapture();
 
-      const messages = [`Imported ${importResult.importedCommandCount} commands`];
+      const messages = [`已导入 ${importResult.importedCommandCount} 条命令`];
       if (importResult.remappedCommandCount > 0) {
-        messages.push(`remapped ${importResult.remappedCommandCount}`);
+        messages.push(`重映射 ${importResult.remappedCommandCount} 条`);
       }
       if (importResult.ignoredCommandCount > 0) {
-        messages.push(`ignored ${importResult.ignoredCommandCount}`);
+        messages.push(`忽略 ${importResult.ignoredCommandCount} 条`);
       }
       if (importResult.sourceVersion !== null) {
-        messages.push(`preset v${importResult.sourceVersion}`);
+        messages.push(`预设 v${importResult.sourceVersion}`);
       }
 
       toast.success(messages.join(' - '));
     } catch {
-      toast.error('Failed to import keyboard shortcut preset');
+      toast.error('导入快捷键预设失败');
     }
   };
 
@@ -632,15 +632,15 @@ export function HotkeyEditor() {
       <div className="flex items-center gap-4 border-b border-white/6 px-5 py-2.5">
         <div className="flex flex-1 items-center gap-2.5">
           <Keyboard className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">Keyboard Shortcuts</span>
-          <span className="text-sm text-muted-foreground">&mdash; select a command, then record a new combo</span>
+          <span className="text-sm font-medium text-foreground">键盘快捷键</span>
+          <span className="text-sm text-muted-foreground">&mdash; 选择一条命令后录制新的按键组合</span>
         </div>
         <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
-          {customCount} custom
+          {customCount} 项自定义
         </span>
         <DialogPrimitive.Close className="shrink-0 rounded-md border border-white/10 bg-white/5 p-1.5 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground">
           <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">关闭</span>
         </DialogPrimitive.Close>
       </div>
 
@@ -659,7 +659,7 @@ export function HotkeyEditor() {
                   : 'text-muted-foreground hover:bg-white/5 hover:text-foreground/80'
               )}
             >
-              All
+              全部
             </button>
             <div className="my-1 border-t border-white/6" />
             {HOTKEY_EDITOR_SECTIONS.map((section) => (
@@ -700,7 +700,7 @@ export function HotkeyEditor() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                    Selected Command
+                    当前命令
                   </div>
                   <div className="mt-1 text-base font-semibold tracking-tight text-foreground">
                     {selectedItem.label}
@@ -708,7 +708,7 @@ export function HotkeyEditor() {
                 </div>
                 {isSelectedCustom ? (
                   <span className="mt-1 shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] text-primary">
-                    Custom
+                    自定义
                   </span>
                 ) : null}
               </div>
@@ -716,11 +716,11 @@ export function HotkeyEditor() {
 
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Current</div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">当前</div>
                 <div className="mt-1 font-medium text-foreground">{formatHotkeyBinding(hotkeys[selectedKey])}</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Default</div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">默认</div>
                 <div className="mt-1 text-muted-foreground">{formatHotkeyBinding(HOTKEYS[selectedKey])}</div>
               </div>
             </div>
@@ -742,10 +742,10 @@ export function HotkeyEditor() {
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/8 p-3 text-xs">
                 <div className="flex items-center gap-1.5 text-amber-300">
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  Browser override
+                  浏览器冲突
                 </div>
                 <p className="mt-1 leading-4 text-foreground/84">
-                  {formatHotkeyBinding(selectedBrowserHotkey.binding)} may override {selectedBrowserHotkey.browserAction.toLowerCase()}.
+                  {formatHotkeyBinding(selectedBrowserHotkey.binding)} 可能会触发浏览器动作：{selectedBrowserHotkey.browserAction}。
                 </p>
               </div>
             ) : null}
@@ -753,17 +753,17 @@ export function HotkeyEditor() {
              <div className="grid grid-cols-2 gap-1.5">
                {isCapturingSelectedKey ? (
                  <>
-                  <Button size="sm" className="w-full" onClick={saveCapture} disabled={!canSaveCapture}>
-                    Save
+                 <Button size="sm" className="w-full" onClick={saveCapture} disabled={!canSaveCapture}>
+                    保存
                   </Button>
                   <Button size="sm" variant="outline" className="w-full" onClick={stopCapture}>
-                    Cancel
+                    取消
                   </Button>
                 </>
               ) : (
                 <>
                   <Button size="sm" className="w-full" onClick={() => startCapture(selectedKey)}>
-                    Record
+                    录制
                   </Button>
                   <Button
                     size="sm"
@@ -772,7 +772,7 @@ export function HotkeyEditor() {
                     onClick={resetSelectedHotkey}
                     disabled={!isSelectedCustom}
                   >
-                    Reset
+                    重置
                   </Button>
                 </>
               )}
@@ -786,7 +786,7 @@ export function HotkeyEditor() {
                 onClick={handleImportButtonClick}
               >
                 <Upload className="h-3.5 w-3.5" />
-                Import
+                导入
               </Button>
               <Button
                 size="sm"
@@ -795,15 +795,15 @@ export function HotkeyEditor() {
                 onClick={exportHotkeys}
               >
                 <Download className="h-3.5 w-3.5" />
-                Export
+                导出
               </Button>
             </div>
 
             {isCapturingSelectedKey ? (
               <div className="rounded-lg border border-primary/20 bg-primary/8 p-3">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-primary">Listening</div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-primary">正在监听</div>
                 <p className="mt-1 text-xs leading-4 text-foreground/88">
-                  Hold modifiers, then press the final key. Escape to cancel.
+                  先按住组合键，再按最终按键。按 Esc 取消。
                 </p>
                 {captureConflicts.length > 0 ? (
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
@@ -815,7 +815,7 @@ export function HotkeyEditor() {
                   <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-300">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>
-                      This overrides {pendingBrowserHotkey.browserAction.toLowerCase()}.
+                      这会触发浏览器动作：{pendingBrowserHotkey.browserAction}。
                     </span>
                   </div>
                 ) : null}
@@ -823,7 +823,7 @@ export function HotkeyEditor() {
             ) : null}
 
             <p className="text-[11px] leading-4 text-muted-foreground">
-              Import or export a keybind preset.
+              可导入或导出快捷键预设。
             </p>
 
             <div className="border-t border-white/6 pt-3">
@@ -835,7 +835,7 @@ export function HotkeyEditor() {
                 disabled={customCount === 0}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                Reset All
+                全部重置
               </Button>
             </div>
           </div>

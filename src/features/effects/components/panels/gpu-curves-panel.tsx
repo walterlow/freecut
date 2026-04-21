@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
 import { PropertyRow, SliderInput } from '@/shared/ui/property-controls';
+import { tEffectText } from '../../utils/effect-localization';
 
 interface GpuCurvesPanelProps {
   effect: ItemEffect;
@@ -119,10 +120,10 @@ function solveParam(
 type ChannelKey = 'master' | 'red' | 'green' | 'blue';
 
 const CHANNELS: Array<{ key: ChannelKey; label: string; color: string }> = [
-  { key: 'master', label: 'Master', color: '#e5e7eb' },
-  { key: 'red', label: 'Red', color: '#ef4444' },
-  { key: 'green', label: 'Green', color: '#22c55e' },
-  { key: 'blue', label: 'Blue', color: '#3b82f6' },
+  { key: 'master', label: '主通道', color: '#e5e7eb' },
+  { key: 'red', label: '红', color: '#ef4444' },
+  { key: 'green', label: '绿', color: '#22c55e' },
+  { key: 'blue', label: '蓝', color: '#3b82f6' },
 ];
 
 const HANDLES: Array<{
@@ -356,14 +357,14 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
 
   return (
     <div className="space-y-0">
-      <PropertyRow label={definition.name}>
+      <PropertyRow label={tEffectText(definition.name)}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
           <Button
             variant="ghost"
             size="icon"
             className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}
             onClick={() => onReset(effect.id)}
-            title="Reset to defaults"
+            title="重置为默认"
             disabled={isDefault}
           >
             <RotateCcw className="w-3 h-3" />
@@ -373,7 +374,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             size="icon"
             className="h-6 w-6 flex-shrink-0"
             onClick={() => onToggle(effect.id)}
-            title={effect.enabled ? 'Disable effect' : 'Enable effect'}
+            title={effect.enabled ? '禁用效果' : '启用效果'}
           >
             {effect.enabled ? (
               <Eye className="w-3 h-3" />
@@ -386,7 +387,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             size="icon"
             className="h-6 w-6 flex-shrink-0"
             onClick={() => onRemove(effect.id)}
-            title="Remove effect"
+            title="删除效果"
           >
             <Trash2 className="w-3 h-3" />
           </Button>
@@ -394,7 +395,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
       </PropertyRow>
 
       {/* Channel tabs */}
-      <PropertyRow label="Channel">
+      <PropertyRow label="通道">
         <div className="flex items-center gap-1 flex-wrap">
           {CHANNELS.map((channel) => (
             <Button
@@ -489,7 +490,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
         </div>
         {activeChannel !== 'master' && (
           <div className="text-[10px] text-muted-foreground text-center mt-1">
-            Drag curve up/down to adjust {activeChannel} offset
+            上下拖动曲线可调整{activeChannelMeta.label}偏移
           </div>
         )}
       </div>
@@ -501,7 +502,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             const param = definition.params[key];
             if (!param) return null;
             return (
-              <PropertyRow key={key} label={param.label}>
+              <PropertyRow key={key} label={tEffectText(param.label)}>
                 <SliderInput
                   value={draft[key]}
                   onChange={(v) => onParamChange(effect.id, key, v)}
@@ -522,7 +523,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             const param = definition.params[key];
             if (!param) return null;
             return (
-              <PropertyRow key={key} label={param.label}>
+              <PropertyRow key={key} label={tEffectText(param.label)}>
                 <SliderInput
                   value={draft[key]}
                   onChange={(v) => onParamChange(effect.id, key, v)}

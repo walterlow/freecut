@@ -751,6 +751,7 @@ export const ColorScopesView = memo(function ColorScopesView({
   }, [gpuReady, open, isPlaying, runSerializedCpuDraw]);
 
   if (!open) return null;
+  const rangeModeLabel = rangeMode === 'full' ? '全范围' : '视频范围';
 
   return (
     <div
@@ -762,7 +763,7 @@ export const ColorScopesView = memo(function ColorScopesView({
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Scopes</div>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">示波器</div>
           <div className="flex items-center gap-1">
             <Button
               variant={colorMatrix === 'bt709' ? 'secondary' : 'ghost'}
@@ -788,7 +789,7 @@ export const ColorScopesView = memo(function ColorScopesView({
               className="h-5 px-1.5 text-[10px]"
               onClick={() => setRangeMode('full')}
             >
-              Full
+              全范围
             </Button>
             <Button
               variant={rangeMode === 'legal' ? 'secondary' : 'ghost'}
@@ -796,7 +797,7 @@ export const ColorScopesView = memo(function ColorScopesView({
               className="h-5 px-1.5 text-[10px]"
               onClick={() => setRangeMode('legal')}
             >
-              Legal
+              视频范围
             </Button>
           </div>
           {isEmbeddedStackLayout && (
@@ -807,7 +808,7 @@ export const ColorScopesView = memo(function ColorScopesView({
                 className="h-5 px-1.5 text-[10px]"
                 onClick={() => setStackLayout('three-up')}
               >
-                3-Up
+                三栏
               </Button>
               <Button
                 variant={stackLayout === 'all' ? 'secondary' : 'ghost'}
@@ -815,7 +816,7 @@ export const ColorScopesView = memo(function ColorScopesView({
                 className="h-5 px-1.5 text-[10px]"
                 onClick={() => setStackLayout('all')}
               >
-                All
+                全部
               </Button>
             </div>
           )}
@@ -825,7 +826,7 @@ export const ColorScopesView = memo(function ColorScopesView({
             className={`w-3 h-3 ${status === 'live' ? 'text-emerald-500' : status === 'error' ? 'text-red-500' : ''}`}
           />
           {status === 'live'
-            ? `${gpuReady ? 'gpu' : 'cpu'} ${colorMatrix === 'bt709' ? '709' : '601'} ${rangeMode}`
+            ? `${gpuReady ? 'gpu' : 'cpu'} ${colorMatrix === 'bt709' ? '709' : '601'} ${rangeModeLabel}`
             : status === 'error'
               ? 'err'
               : 'idle'}
@@ -836,7 +837,7 @@ export const ColorScopesView = memo(function ColorScopesView({
           <div className="h-[calc(100%-22px)] min-h-0 flex flex-col gap-3">
             <div className="flex min-h-0 flex-[1.02] flex-col">
               <div className="mb-1 flex items-center justify-between">
-                <div className="text-[10px] text-muted-foreground">Waveform</div>
+                <div className="text-[10px] text-muted-foreground">波形图</div>
                 {gpuReady && (
                   <ScopeModeBar mode={waveformMode} onChange={setWaveformMode} />
                 )}
@@ -850,7 +851,7 @@ export const ColorScopesView = memo(function ColorScopesView({
             </div>
 
             <div className="flex min-h-0 flex-[1.08] flex-col">
-              <div className="text-[10px] mb-1 text-muted-foreground">RGB Parade</div>
+              <div className="text-[10px] mb-1 text-muted-foreground">RGB 分量图</div>
               <div
                 ref={paradeContainerRef}
                 className="flex-1 min-h-[104px] rounded border border-border/70 bg-black/80"
@@ -860,7 +861,7 @@ export const ColorScopesView = memo(function ColorScopesView({
             </div>
 
             <div className={cn('flex min-h-0 min-w-0 flex-col', showHistogram ? 'flex-[0.9]' : 'flex-[1.02]')}>
-              <div className="text-[10px] mb-1 text-muted-foreground">Vectorscope</div>
+              <div className="text-[10px] mb-1 text-muted-foreground">矢量示波器</div>
               <div
                 ref={vectorscopeContainerRef}
                 className={cn(
@@ -875,7 +876,7 @@ export const ColorScopesView = memo(function ColorScopesView({
             {showHistogram && (
               <div className="flex min-h-0 flex-[0.88] flex-col">
                 <div className="mb-1 flex items-center justify-between">
-                  <div className="text-[10px] text-muted-foreground">Histogram</div>
+                  <div className="text-[10px] text-muted-foreground">直方图</div>
                   {gpuReady && (
                     <ScopeModeBar mode={histogramMode} onChange={setHistogramMode} />
                   )}
@@ -894,7 +895,7 @@ export const ColorScopesView = memo(function ColorScopesView({
           <div className="min-w-0 flex-1 grid grid-cols-2 gap-3 auto-rows-fr">
             <div className="flex min-h-0 flex-col">
               <div className="flex items-center justify-between mb-1">
-                <div className="text-[10px] text-muted-foreground">Waveform</div>
+                <div className="text-[10px] text-muted-foreground">波形图</div>
                 {gpuReady && (
                   <ScopeModeBar mode={waveformMode} onChange={setWaveformMode} />
                 )}
@@ -904,14 +905,14 @@ export const ColorScopesView = memo(function ColorScopesView({
               </div>
             </div>
             <div className="flex min-h-0 flex-col">
-              <div className="text-[10px] mb-1 text-muted-foreground">RGB Parade</div>
+              <div className="text-[10px] mb-1 text-muted-foreground">RGB 分量图</div>
               <div ref={paradeContainerRef} className="flex-1 min-h-[160px] rounded border border-border/70 bg-black/80">
                 <canvas ref={paradeCanvasRef} className="w-full h-full" />
               </div>
             </div>
             <div className="col-span-2 flex min-h-0 flex-col">
               <div className="flex items-center justify-between mb-1">
-                <div className="text-[10px] text-muted-foreground">Histogram</div>
+                <div className="text-[10px] text-muted-foreground">直方图</div>
                 {gpuReady && (
                   <ScopeModeBar mode={histogramMode} onChange={setHistogramMode} />
                 )}
@@ -922,7 +923,7 @@ export const ColorScopesView = memo(function ColorScopesView({
             </div>
           </div>
           <div className="basis-[32%] min-w-[220px] max-w-[380px] flex min-h-0 flex-col">
-            <div className="text-[10px] mb-1 text-muted-foreground">Vectorscope</div>
+            <div className="text-[10px] mb-1 text-muted-foreground">矢量示波器</div>
             <div
               ref={vectorscopeContainerRef}
               className="flex flex-1 min-h-0 items-center justify-center rounded border border-border/70 bg-black/80"
@@ -936,7 +937,7 @@ export const ColorScopesView = memo(function ColorScopesView({
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[10px] text-muted-foreground">Waveform</div>
+              <div className="text-[10px] text-muted-foreground">波形图</div>
               {gpuReady && (
                 <ScopeModeBar mode={waveformMode} onChange={setWaveformMode} />
               )}
@@ -946,7 +947,7 @@ export const ColorScopesView = memo(function ColorScopesView({
             </div>
           </div>
           <div>
-            <div className="text-[10px] mb-1 text-muted-foreground">Vectorscope</div>
+            <div className="text-[10px] mb-1 text-muted-foreground">矢量示波器</div>
             <div ref={vectorscopeContainerRef} className="w-[160px] h-[160px] rounded border border-border/70 bg-black/80">
               <canvas ref={vectorscopeCanvasRef} className="w-full h-full" />
             </div>

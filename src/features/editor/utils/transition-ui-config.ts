@@ -50,14 +50,14 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
 
 /** Display labels for transition categories */
 export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
-  basic: { title: 'Basic' },
-  wipe: { title: 'Wipe' },
-  slide: { title: 'Slide' },
-  flip: { title: 'Flip' },
-  mask: { title: 'Mask' },
-  light: { title: 'Light' },
-  chromatic: { title: 'Chromatic' },
-  custom: { title: 'Custom' },
+  basic: { title: '基础' },
+  wipe: { title: '擦除' },
+  slide: { title: '滑动' },
+  flip: { title: '翻转' },
+  mask: { title: '遮罩' },
+  light: { title: '光效' },
+  chromatic: { title: '色差' },
+  custom: { title: '创意' },
 };
 
 /** Ordered list of categories for UI rendering */
@@ -67,20 +67,61 @@ export const TRANSITION_CATEGORY_ORDER: TransitionCategory[] = [
 
 /** Direction string â†’ display label + icon name */
 const DIRECTION_LABELS: Record<string, { label: string; icon: string }> = {
-  'from-left': { label: 'Left', icon: 'ArrowRight' },
-  'from-right': { label: 'Right', icon: 'ArrowLeft' },
-  'from-top': { label: 'Top', icon: 'ArrowDown' },
-  'from-bottom': { label: 'Bottom', icon: 'ArrowUp' },
+  'from-left': { label: '从左', icon: 'ArrowRight' },
+  'from-right': { label: '从右', icon: 'ArrowLeft' },
+  'from-top': { label: '从上', icon: 'ArrowDown' },
+  'from-bottom': { label: '从下', icon: 'ArrowUp' },
 };
 
+const TRANSITION_LABELS: Record<string, string> = {
+  Fade: '淡入淡出',
+  Dissolve: '溶解',
+  Wipe: '擦除',
+  Slide: '滑动',
+  Flip: '翻转',
+  'Clock Wipe': '时钟擦除',
+  Iris: '光圈',
+  Sparkles: '闪光',
+  Glitch: '故障',
+  'Light Leak': '漏光',
+  Pixelate: '像素化',
+  Chromatic: '色差',
+  'Radial Blur': '径向模糊',
+};
+
+const TRANSITION_DESCRIPTIONS: Record<string, string> = {
+  'Simple crossfade between clips': '在两个片段间进行简单交叉淡化',
+  'Noise-based organic dissolve between clips': '基于噪声的有机溶解转场',
+  'Wipe reveal from one direction': '从单一方向擦除显示下一片段',
+  'Slide in from a direction': '从指定方向滑入',
+  '3D flip transition': '3D 翻转转场',
+  'Circular wipe like a clock hand': '类似时钟指针的圆形擦除',
+  'Circular iris expanding/contracting': '圆形光圈扩张/收缩',
+  'Twinkling star bursts reveal the next clip': '闪烁星芒揭示下一个片段',
+  'Digital glitch with RGB split and block displacement': 'RGB 分离与块状位移的数字故障效果',
+  'Warm light sweep revealing the next clip': '暖色光扫过并揭示下一个片段',
+  'Mosaic pixelation dissolve between clips': '马赛克像素化溶解转场',
+  'RGB channel split with directional sweep': '带方向扫过的 RGB 通道分离',
+  'Zoom and spin blur transition': '缩放与旋转模糊转场',
+};
+
+function tTransitionLabel(value: string): string {
+  return TRANSITION_LABELS[value] ?? value;
+}
+
+function tTransitionDescription(value: string): string {
+  return TRANSITION_DESCRIPTIONS[value] ?? value;
+}
+
 function createConfigsForDefinition(def: ReturnType<typeof transitionRegistry.getDefinitions>[number]): PresentationConfig[] {
+  const localizedBaseLabel = tTransitionLabel(def.label);
   if (def.hasDirection && def.directions && def.directions.length > 0) {
     return def.directions.map((dir) => {
       const dirInfo = DIRECTION_LABELS[dir] || { label: dir, icon: def.icon };
       return {
         id: def.id,
         label: dirInfo.label,
-        description: `${def.label} ${dirInfo.label.toLowerCase()}`,
+        description: `${localizedBaseLabel}（${dirInfo.label}）`,
         icon: dirInfo.icon,
         category: def.category,
         direction: dir,
@@ -90,8 +131,8 @@ function createConfigsForDefinition(def: ReturnType<typeof transitionRegistry.ge
 
   return [{
     id: def.id,
-    label: def.label,
-    description: def.description,
+    label: localizedBaseLabel,
+    description: tTransitionDescription(def.description),
     icon: def.icon,
     category: def.category,
   }];

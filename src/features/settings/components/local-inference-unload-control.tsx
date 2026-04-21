@@ -53,7 +53,7 @@ export function LocalInferenceUnloadControl({
 
   const description = useMemo(() => {
     if (!summary) {
-      return 'No local inference runtimes are active or resident.';
+      return '当前没有活跃或驻留的本地推理运行时。';
     }
 
     const estimateLabel = formatEstimatedBytes(summary.totalEstimatedBytes);
@@ -61,7 +61,7 @@ export function LocalInferenceUnloadControl({
       summary.primaryLabel,
       summary.backendLabel,
       summary.activeJobs > 0
-        ? `${summary.activeJobs} active job${summary.activeJobs === 1 ? '' : 's'}`
+        ? `${summary.activeJobs} 个活动任务`
         : null,
       estimateLabel,
     ].filter(Boolean);
@@ -81,21 +81,21 @@ export function LocalInferenceUnloadControl({
       setUnloadState('done');
       toast.success(
         unloadedCount === 1
-          ? 'Unloaded 1 local runtime'
-          : `Unloaded ${unloadedCount} local runtimes`
+          ? '已卸载 1 个本地运行时'
+          : `已卸载 ${unloadedCount} 个本地运行时`
       );
       scheduleReset();
     } catch (error) {
       log.error('Failed to unload local inference runtimes', error);
       setUnloadState('idle');
-      toast.error('Failed to unload local runtimes');
+      toast.error('卸载本地运行时失败');
     }
   }, [scheduleReset, summary, unloadState]);
 
   return (
     <div className={cn('flex items-start justify-between gap-4', className)}>
       <div className="min-w-0">
-        <Label className={cn('text-sm', labelClassName)}>Unload Local Models</Label>
+        <Label className={cn('text-sm', labelClassName)}>卸载本地模型</Label>
         <p className={cn('mt-0.5 text-xs text-muted-foreground', descriptionClassName)}>
           {description}
         </p>
@@ -113,10 +113,10 @@ export function LocalInferenceUnloadControl({
         {unloadState === 'done' && <Check className="h-3.5 w-3.5" />}
         {unloadState === 'idle' && <Trash2 className="h-3.5 w-3.5" />}
         {unloadState === 'unloading'
-          ? 'Unloading...'
+          ? '卸载中...'
           : unloadState === 'done'
-            ? 'Unloaded'
-            : 'Unload'}
+            ? '已卸载'
+            : '卸载'}
       </Button>
     </div>
   );

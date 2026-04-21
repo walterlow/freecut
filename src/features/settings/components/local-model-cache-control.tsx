@@ -58,7 +58,7 @@ export function LocalModelCacheControl({ className }: LocalModelCacheControlProp
     } catch (error) {
       log.error('Failed to inspect local model cache state', error);
       if (mountedRef.current) {
-        toast.error('Failed to inspect local model cache');
+        toast.error('检查本地模型缓存失败');
       }
     } finally {
       if (mountedRef.current) {
@@ -95,12 +95,12 @@ export function LocalModelCacheControl({ className }: LocalModelCacheControlProp
       scheduleReset(summary.id);
       toast.success(
         deleted
-          ? `Cleared ${summary.label}`
-          : `${summary.label} was already empty`
+          ? `已清理 ${summary.label}`
+          : `${summary.label} 已为空`
       );
     } catch (error) {
       log.error(`Failed to clear local model cache ${summary.id}`, error);
-      toast.error(`Failed to clear ${summary.label}`);
+      toast.error(`清理 ${summary.label} 失败`);
     } finally {
       if (mountedRef.current) {
         setClearingCacheId(null);
@@ -112,9 +112,9 @@ export function LocalModelCacheControl({ className }: LocalModelCacheControlProp
     <div className={cn('space-y-3', className)}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium">Local AI Model Cache</p>
+          <p className="text-sm font-medium">本地 AI 模型缓存</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Shows cached model size. Clear a model to force a fresh download next time.
+            显示模型缓存大小。清理后下次会重新下载。
           </p>
         </div>
         <Button
@@ -127,13 +127,13 @@ export function LocalModelCacheControl({ className }: LocalModelCacheControlProp
           disabled={!inspectionSupported || isLoading}
         >
           <RotateCcw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
-          {isLoading ? 'Checking...' : 'Refresh'}
+          {isLoading ? '检查中...' : '刷新'}
         </Button>
       </div>
 
       {!inspectionSupported && (
         <p className="text-xs text-muted-foreground">
-          Cache inspection is unavailable in this environment.
+          当前环境不支持缓存检测。
         </p>
       )}
 
@@ -141,14 +141,14 @@ export function LocalModelCacheControl({ className }: LocalModelCacheControlProp
         const isClearing = clearingCacheId === summary.id;
         const isCleared = clearedCacheId === summary.id;
         const sizeLabel = summary.inspectionState === 'timed-out'
-          ? 'Unavailable'
+          ? '不可用'
           : summary.inspectionState === 'error'
-            ? 'Unavailable'
+            ? '不可用'
             : !summary.downloaded
               ? '0 B'
               : summary.sizeStatus === 'exact' || summary.sizeStatus === 'partial'
-                ? `Approx. ${formatBytes(summary.totalBytes)}`
-                : 'Unavailable';
+                ? `约 ${formatBytes(summary.totalBytes)}`
+                : '不可用';
 
         return (
           <div
@@ -173,7 +173,7 @@ export function LocalModelCacheControl({ className }: LocalModelCacheControlProp
               {isClearing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {isCleared && !isClearing && <Check className="h-3.5 w-3.5" />}
               {!isClearing && !isCleared && <Trash2 className="h-3.5 w-3.5" />}
-              {isClearing ? 'Clearing...' : isCleared ? 'Cleared' : 'Clear'}
+              {isClearing ? '清理中...' : isCleared ? '已清理' : '清理'}
             </Button>
           </div>
         );

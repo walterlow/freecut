@@ -50,6 +50,7 @@ import { useEffectPreviews } from '@/features/editor/deps/effects-contract';
 import { createLogger } from '@/shared/logging/logger';
 import { useSettingsStore } from '@/features/editor/deps/settings';
 import { AiPanel } from './ai-panel';
+import { tEffectCategory, tEffectText } from '@/features/effects/utils/effect-localization';
 import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampLeftEditorSidebarWidth,
@@ -330,7 +331,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     { id: 'shapes' as const, icon: Pentagon, label: '图形' },
     { id: 'effects' as const, icon: Layers, label: '效果' },
     { id: 'transitions' as const, icon: Blend, label: '转场' },
-    { id: 'ai' as const, icon: WandSparkles, label: 'AI' },
+    { id: 'ai' as const, icon: WandSparkles, label: '智能' },
   ];
 
   const shouldSuppressGeneratedItemClick = useCallback(() => {
@@ -691,7 +692,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       draggable={true}
                       onDragStart={handleTemplateDragStart({
                         itemType: 'adjustment',
-                        label: preset.name,
+                        label: tEffectText(preset.name),
                         effects: preset.effects,
                       })}
                       onDragEnd={handleTemplateDragEnd}
@@ -714,7 +715,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                         </div>
                       )}
                       <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
-                        {preset.name}
+                        {tEffectText(preset.name)}
                       </span>
                     </button>
                   ))}
@@ -725,7 +726,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               {gpuCategories.map(({ category, effects: catEffects }) => (
                 <div key={category}>
                   <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                    {category}
+                    {tEffectCategory(category)}
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">
                     {catEffects.map((def) => (
@@ -734,7 +735,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                         draggable={true}
                         onDragStart={handleTemplateDragStart({
                           itemType: 'adjustment',
-                          label: def.name,
+                          label: tEffectText(def.name),
                           effects: [{
                             type: 'gpu-effect',
                             gpuEffectType: def.id,
@@ -759,7 +760,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                           <div className="w-full aspect-video rounded-sm bg-muted" />
                         )}
                         <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight truncate w-full">
-                          {def.name}
+                          {tEffectText(def.name)}
                         </span>
                       </button>
                     ))}

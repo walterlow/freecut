@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
 import { ColorPicker, PropertyRow, SliderInput } from '@/shared/ui/property-controls';
+import { tEffectText } from '../../utils/effect-localization';
 
 interface GpuEffectPanelProps {
   effect: ItemEffect;
@@ -42,7 +43,7 @@ function ActionButtons({
         size="icon"
         className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}
         onClick={() => onReset(effectId)}
-        title="Reset to defaults"
+        title="重置为默认"
         disabled={isDefault}
       >
         <RotateCcw className="w-3 h-3" />
@@ -52,7 +53,7 @@ function ActionButtons({
         size="icon"
         className="h-6 w-6 flex-shrink-0"
         onClick={() => onToggle(effectId)}
-        title={enabled ? 'Disable effect' : 'Enable effect'}
+        title={enabled ? '禁用效果' : '启用效果'}
       >
         {enabled ? (
           <Eye className="w-3 h-3" />
@@ -65,7 +66,7 @@ function ActionButtons({
         size="icon"
         className="h-6 w-6 flex-shrink-0"
         onClick={() => onRemove(effectId)}
-        title="Remove effect"
+        title="删除效果"
       >
         <Trash2 className="w-3 h-3" />
       </Button>
@@ -93,7 +94,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
     const [key, param] = paramEntries[0]!;
     const currentValue = (gpuEffect.params[key] ?? param.default) as number;
     return (
-      <PropertyRow label={definition.name}>
+      <PropertyRow label={tEffectText(definition.name)}>
         <div className="flex items-center gap-1 min-w-0 w-full">
           <SliderInput
             value={currentValue}
@@ -121,7 +122,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
   // Zero params: header-only row with action buttons
   if (paramEntries.length === 0) {
     return (
-      <PropertyRow label={definition.name}>
+      <PropertyRow label={tEffectText(definition.name)}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
           <ActionButtons
             effectId={effect.id}
@@ -139,7 +140,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
   // Multi-param: header row with buttons, then one row per param
   return (
     <div className="space-y-0">
-      <PropertyRow label={definition.name}>
+      <PropertyRow label={tEffectText(definition.name)}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
           <ActionButtons
             effectId={effect.id}
@@ -162,7 +163,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
           return (
             <PropertyRow
               key={key}
-              label={param.label}
+              label={tEffectText(param.label)}
               className={!paramEnabled ? 'opacity-50' : undefined}
             >
               <SliderInput
@@ -183,7 +184,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
           return (
             <PropertyRow
               key={key}
-              label={param.label}
+              label={tEffectText(param.label)}
               className={!paramEnabled ? 'opacity-50' : undefined}
             >
               <Button
@@ -193,7 +194,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 onClick={() => onParamChange(effect.id, key, !currentValue)}
                 disabled={!paramEnabled}
               >
-                {currentValue ? 'On' : 'Off'}
+                {currentValue ? '开启' : '关闭'}
               </Button>
             </PropertyRow>
           );
@@ -203,7 +204,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
           return (
             <PropertyRow
               key={key}
-              label={param.label}
+              label={tEffectText(param.label)}
               className={!paramEnabled ? 'opacity-50' : undefined}
             >
               <Select
@@ -217,7 +218,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 <SelectContent>
                   {param.options.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
+                      {tEffectText(opt.label)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -230,7 +231,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
           return (
             <PropertyRow
               key={key}
-              label={param.label}
+              label={tEffectText(param.label)}
               className={!paramEnabled ? 'opacity-50' : undefined}
             >
               <ColorPicker

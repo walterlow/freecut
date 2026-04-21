@@ -138,14 +138,14 @@ export interface ItemKeyframes {
  * Display labels for animatable properties
  */
 export const PROPERTY_LABELS: Record<AnimatableProperty, string> = {
-  x: 'X Position',
-  y: 'Y Position',
-  width: 'Width',
-  height: 'Height',
-  rotation: 'Rotation',
-  opacity: 'Opacity',
-  cornerRadius: 'Corner Radius',
-  volume: 'Volume (dB)',
+  x: 'X 位置',
+  y: 'Y 位置',
+  width: '宽度',
+  height: '高度',
+  rotation: '旋转',
+  opacity: '不透明度',
+  cornerRadius: '圆角半径',
+  volume: '音量 (dB)',
 };
 
 /**

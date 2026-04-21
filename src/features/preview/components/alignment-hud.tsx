@@ -34,14 +34,14 @@ const ALIGNMENT_ACTIONS: Array<{
   label: string;
   minItems: number;
 }> = [
-  { type: 'left', icon: AlignStartVertical, label: 'Align Left', minItems: 1 },
-  { type: 'center-h', icon: AlignCenterVertical, label: 'Center Horizontally', minItems: 1 },
-  { type: 'right', icon: AlignEndVertical, label: 'Align Right', minItems: 1 },
-  { type: 'top', icon: AlignStartHorizontal, label: 'Align Top', minItems: 1 },
-  { type: 'center-v', icon: AlignCenterHorizontal, label: 'Center Vertically', minItems: 1 },
-  { type: 'bottom', icon: AlignEndHorizontal, label: 'Align Bottom', minItems: 1 },
-  { type: 'distribute-h', icon: AlignHorizontalDistributeCenter, label: 'Distribute Horizontally', minItems: 3 },
-  { type: 'distribute-v', icon: AlignVerticalDistributeCenter, label: 'Distribute Vertically', minItems: 3 },
+  { type: 'left', icon: AlignStartVertical, label: '左对齐', minItems: 1 },
+  { type: 'center-h', icon: AlignCenterVertical, label: '水平居中', minItems: 1 },
+  { type: 'right', icon: AlignEndVertical, label: '右对齐', minItems: 1 },
+  { type: 'top', icon: AlignStartHorizontal, label: '顶部对齐', minItems: 1 },
+  { type: 'center-v', icon: AlignCenterHorizontal, label: '垂直居中', minItems: 1 },
+  { type: 'bottom', icon: AlignEndHorizontal, label: '底部对齐', minItems: 1 },
+  { type: 'distribute-h', icon: AlignHorizontalDistributeCenter, label: '水平均匀分布', minItems: 3 },
+  { type: 'distribute-v', icon: AlignVerticalDistributeCenter, label: '垂直均匀分布', minItems: 3 },
 ];
 
 const BUTTON_STYLE = { height: 22, width: 22 };

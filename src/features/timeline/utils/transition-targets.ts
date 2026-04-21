@@ -70,7 +70,7 @@ function resolveTargetForPair(
       maxDurationInFrames: 0,
       suggestedDurationInFrames: 0,
       alignment,
-      reason: 'Not enough source handle for a transition at this cut',
+      reason: '该剪切点源素材余量不足，无法添加转场',
     };
   }
 
