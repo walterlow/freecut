@@ -474,55 +474,54 @@ export function joinItems(itemIds: string[]): void {
   }, { itemIds });
 }
 
-export function rateStretchItem(
+export function rateStretchItemWithoutHistory(
   id: string,
   newFrom: number,
   newDuration: number,
   newSpeed: number
 ): void {
-  execute('RATE_STRETCH_ITEM', () => {
-    const itemsStore = useItemsStore.getState();
-    const itemsBefore = itemsStore.items;
-    const synchronizedItems = getSynchronizedLinkedItemsForEdit(itemsBefore, id, isLinkedSelectionEnabled());
-    const anchorBefore = synchronizedItems.find((item) => item.id === id);
-    if (!anchorBefore) return;
+  const itemsStore = useItemsStore.getState();
+  const itemsBefore = itemsStore.items;
+  const synchronizedItems = getSynchronizedLinkedItemsForEdit(itemsBefore, id, isLinkedSelectionEnabled());
+  const anchorBefore = synchronizedItems.find((item) => item.id === id);
+  if (!anchorBefore) return;
 
-    // Capture old boundaries BEFORE stretch (needed for ripple + keyframe scaling)
-    const oldDuration = anchorBefore.durationInFrames;
-    const oldFrom = anchorBefore.from;
-    const oldEnd = oldFrom + oldDuration;
+  // Capture old boundaries BEFORE stretch (needed for ripple + keyframe scaling)
+  const oldDuration = anchorBefore.durationInFrames;
+  const oldFrom = anchorBefore.from;
+  const oldEnd = oldFrom + oldDuration;
 
-    itemsStore._rateStretchItem(id, newFrom, newDuration, newSpeed);
+  itemsStore._rateStretchItem(id, newFrom, newDuration, newSpeed);
 
-    const anchorAfter = useItemsStore.getState().itemById[id];
-    if (!anchorAfter) return;
+  const anchorAfter = useItemsStore.getState().itemById[id];
+  if (!anchorAfter) return;
 
-    const actualFrom = anchorAfter.from;
-    const actualDuration = anchorAfter.durationInFrames;
-    const actualSpeed = anchorAfter.speed ?? newSpeed;
-    const fromDelta = actualFrom - anchorBefore.from;
+  const actualFrom = anchorAfter.from;
+  const actualDuration = anchorAfter.durationInFrames;
+  const actualSpeed = anchorAfter.speed ?? newSpeed;
+  const fromDelta = actualFrom - anchorBefore.from;
 
+  for (const synchronizedItem of synchronizedItems) {
+    if (synchronizedItem.id === id) continue;
+    itemsStore._rateStretchItem(
+      synchronizedItem.id,
+      synchronizedItem.from + fromDelta,
+      actualDuration,
+      actualSpeed,
+    );
+  }
+
+  // Scale keyframes proportionally to match new duration
+  // This ensures animations maintain their relative timing within the clip
+  if (oldDuration !== actualDuration) {
     for (const synchronizedItem of synchronizedItems) {
-      if (synchronizedItem.id === id) continue;
-      itemsStore._rateStretchItem(
+      useKeyframesStore.getState()._scaleKeyframesForItem(
         synchronizedItem.id,
-        synchronizedItem.from + fromDelta,
+        synchronizedItem.durationInFrames,
         actualDuration,
-        actualSpeed,
       );
     }
-
-    // Scale keyframes proportionally to match new duration
-    // This ensures animations maintain their relative timing within the clip
-    if (oldDuration !== actualDuration) {
-      for (const synchronizedItem of synchronizedItems) {
-        useKeyframesStore.getState()._scaleKeyframesForItem(
-          synchronizedItem.id,
-          synchronizedItem.durationInFrames,
-          actualDuration,
-        );
-      }
-    }
+  }
 
     // Ripple phase: push/pull adjacent clips to maintain adjacency and prevent overlaps.
     // End handle: endDelta !== 0 â†’ shift downstream clips.
@@ -642,16 +641,26 @@ export function rateStretchItem(
       }
     }
 
-    if (moveUpdates.length > 0) {
-      useItemsStore.getState()._moveItems(moveUpdates);
-    }
+  if (moveUpdates.length > 0) {
+    useItemsStore.getState()._moveItems(moveUpdates);
+  }
 
-    // Repair transitions for all affected clips
-    const allAffectedIds = [...allSynchronizedIds, ...movedIds];
-    applyTransitionRepairs(allAffectedIds);
-    requestPostEditWarmForItems(allAffectedIds);
+  // Repair transitions for all affected clips
+  const allAffectedIds = [...allSynchronizedIds, ...movedIds];
+  applyTransitionRepairs(allAffectedIds);
+  requestPostEditWarmForItems(allAffectedIds);
 
-    useTimelineSettingsStore.getState().markDirty();
+  useTimelineSettingsStore.getState().markDirty();
+}
+
+export function rateStretchItem(
+  id: string,
+  newFrom: number,
+  newDuration: number,
+  newSpeed: number
+): void {
+  execute('RATE_STRETCH_ITEM', () => {
+    rateStretchItemWithoutHistory(id, newFrom, newDuration, newSpeed);
   }, { id, newFrom, newDuration, newSpeed });
 }
 

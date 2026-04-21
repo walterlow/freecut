@@ -1,8 +1,13 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { Crop, RotateCcw, Video } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem, VideoItem, AudioItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import {
+  captureSnapshot,
+  rateStretchItemWithoutHistory,
+  useTimelineCommandStore,
+  useTimelineStore,
+} from '@/features/editor/deps/timeline-store';
 import { useGizmoStore } from '@/features/editor/deps/preview';
 import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
 import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/editor/deps/timeline-utils';
@@ -85,7 +90,6 @@ function formatCropValue(value: number): string {
  * - Slower speed = longer clip (same content plays slower)
  */
 export function VideoSection({ items }: VideoSectionProps) {
-  const rateStretchItem = useTimelineStore((s: TimelineState & TimelineActions) => s.rateStretchItem);
   const updateItem = useTimelineStore((s: TimelineState & TimelineActions) => s.updateItem);
 
   // Gizmo store for live previews
@@ -131,10 +135,9 @@ export function VideoSection({ items }: VideoSectionProps) {
     () => Math.max(1, ...videoItems.map(getCropSoftnessDimension)),
     [videoItems]
   );
+  const speedDragSnapshotRef = useRef<ReturnType<typeof captureSnapshot> | null>(null);
 
-  // Handle speed change - uses rate stretch to adjust duration
-  // Read current values from store to avoid depending on videoItems
-  const handleSpeedChange = useCallback(
+  const applySpeedChangeWithoutHistory = useCallback(
     (newSpeed: number) => {
       // Round to 2 decimal places to match clip label precision and avoid floating point drift
       const roundedSpeed = Math.round(newSpeed * 100) / 100;
@@ -157,11 +160,38 @@ export function VideoSection({ items }: VideoSectionProps) {
               : timelineToSourceFrames(item.durationInFrames, currentSpeed, fps, sourceFps);
           // Calculate new duration based on new speed using FPS-aware conversion.
           const newDuration = Math.max(1, sourceToTimelineFrames(effectiveSourceFrames, clampedSpeed, sourceFps, fps));
-          // Keep start position the same (stretch from end)
-          rateStretchItem(item.id, item.from, newDuration, clampedSpeed);
+          rateStretchItemWithoutHistory(item.id, item.from, newDuration, clampedSpeed);
         });
+
+      return clampedSpeed;
     },
-    [rateStretchableIds, rateStretchItem]
+    [rateStretchableIds]
+  );
+
+  const commitSpeedChange = useCallback(
+    (newSpeed: number) => {
+      const beforeSnapshot = speedDragSnapshotRef.current ?? captureSnapshot();
+      const clampedSpeed = applySpeedChangeWithoutHistory(newSpeed);
+      useTimelineCommandStore.getState().addUndoEntry(
+        {
+          type: 'RATE_STRETCH_ITEM',
+          payload: { ids: rateStretchableIds, newSpeed: clampedSpeed },
+        },
+        beforeSnapshot
+      );
+      speedDragSnapshotRef.current = null;
+    },
+    [applySpeedChangeWithoutHistory, rateStretchableIds]
+  );
+
+  const handleSpeedLiveChange = useCallback(
+    (newSpeed: number) => {
+      if (!speedDragSnapshotRef.current) {
+        speedDragSnapshotRef.current = captureSnapshot();
+      }
+      applySpeedChangeWithoutHistory(newSpeed);
+    },
+    [applySpeedChangeWithoutHistory]
   );
 
   const commitPreviewClear = useCallback(() => {
@@ -331,7 +361,8 @@ export function VideoSection({ items }: VideoSectionProps) {
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={speed}
-              onChange={handleSpeedChange}
+              onChange={commitSpeedChange}
+              onLiveChange={handleSpeedLiveChange}
               min={MIN_SPEED}
               max={MAX_SPEED}
               step={0.01}

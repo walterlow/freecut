@@ -100,6 +100,7 @@ import { useCompositionNavigationStore } from './composition-navigation-store';
 import { useTimelineStore } from './timeline-store-facade';
 import { useProjectStore } from '@/features/timeline/deps/projects';
 import { captureSnapshot } from './commands/snapshot';
+import { rateStretchItemWithoutHistory } from './actions/item-edit-actions';
 
 describe('TimelineStoreFacade', () => {
   beforeEach(() => {
@@ -532,6 +533,62 @@ describe('TimelineStoreFacade', () => {
           }),
         })
       );
+    });
+
+    it('collapses multiple rate-stretch preview steps into one undo entry when committed once', () => {
+      useItemsStore.getState().setTracks([
+        {
+          id: 'track-v1',
+          name: 'V1',
+          kind: 'video',
+          height: 80,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: 0,
+          items: [],
+        },
+      ]);
+      useItemsStore.getState().setItems([
+        {
+          id: 'video-1',
+          type: 'video',
+          trackId: 'track-v1',
+          from: 0,
+          durationInFrames: 120,
+          label: 'clip.mp4',
+          src: 'blob:video',
+          mediaId: 'media-v1',
+          sourceStart: 0,
+          sourceEnd: 120,
+          sourceDuration: 120,
+          sourceFps: 30,
+          speed: 1,
+        },
+      ]);
+
+      const beforeSnapshot = captureSnapshot();
+
+      rateStretchItemWithoutHistory('video-1', 0, 96, 1.25);
+      rateStretchItemWithoutHistory('video-1', 0, 80, 1.5);
+      useTimelineCommandStore.getState().addUndoEntry(
+        { type: 'RATE_STRETCH_ITEM', payload: { ids: ['video-1'], newSpeed: 1.5 } },
+        beforeSnapshot
+      );
+
+      expect(useTimelineCommandStore.getState().undoStack).toHaveLength(1);
+      expect(useItemsStore.getState().itemById['video-1']).toMatchObject({
+        durationInFrames: 80,
+        speed: 1.5,
+      });
+
+      useTimelineCommandStore.getState().undo();
+
+      expect(useItemsStore.getState().itemById['video-1']).toMatchObject({
+        durationInFrames: 120,
+        speed: 1,
+      });
     });
   });
 

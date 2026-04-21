@@ -32,6 +32,7 @@ export { findCompatibleTrackForItemType } from '../utils/track-item-compatibilit
 export { getTrackKind } from '../utils/classic-tracks';
 export { resolveEffectiveTrackStates } from '../utils/group-utils';
 export { linkItems } from '../stores/actions/item-actions';
+export { rateStretchItemWithoutHistory } from '../stores/actions/item-edit-actions';
 export {
   timelineToSourceFrames,
   sourceToTimelineFrames,

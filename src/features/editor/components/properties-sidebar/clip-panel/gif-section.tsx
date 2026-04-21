@@ -1,9 +1,13 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { Image, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem, ImageItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
-import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
+import {
+  captureSnapshot,
+  rateStretchItemWithoutHistory,
+  useTimelineCommandStore,
+  useTimelineStore,
+} from '@/features/editor/deps/timeline-store';
 import {
   PropertySection,
   PropertyRow,
@@ -37,8 +41,6 @@ function isAnimatedImageItem(item: TimelineItem): item is ImageItem {
  * - Slower speed = animation plays slower within same duration
  */
 export function GifSection({ items }: GifSectionProps) {
-  const rateStretchItem = useTimelineStore((s: TimelineState & TimelineActions) => s.rateStretchItem);
-
   const gifItems = useMemo(
     () => items.filter(isAnimatedImageItem),
     [items]
@@ -46,12 +48,12 @@ export function GifSection({ items }: GifSectionProps) {
 
   // Memoize item IDs for stable callback dependencies
   const itemIds = useMemo(() => gifItems.map((item) => item.id), [gifItems]);
+  const speedDragSnapshotRef = useRef<ReturnType<typeof captureSnapshot> | null>(null);
 
   // Get current speed (defaults to 1)
   const speed = getMixedValue(gifItems, (item) => item.speed, 1);
 
-  // Handle speed change - for GIFs, duration stays the same, only speed changes
-  const handleSpeedChange = useCallback(
+  const applySpeedChangeWithoutHistory = useCallback(
     (newSpeed: number) => {
       // Round to 2 decimal places to match clip label precision and avoid floating point drift
       const roundedSpeed = Math.round(newSpeed * 100) / 100;
@@ -62,27 +64,53 @@ export function GifSection({ items }: GifSectionProps) {
       currentItems
         .filter((item: TimelineItem): item is ImageItem => isAnimatedImageItem(item) && itemIds.includes(item.id))
         .forEach((item: ImageItem) => {
-          // For GIFs, duration stays the same, only speed changes
-          rateStretchItem(item.id, item.from, item.durationInFrames, clampedSpeed);
+          rateStretchItemWithoutHistory(item.id, item.from, item.durationInFrames, clampedSpeed);
         });
+
+      return clampedSpeed;
     },
-    [itemIds, rateStretchItem]
+    [itemIds]
+  );
+
+  const commitSpeedChange = useCallback(
+    (newSpeed: number) => {
+      const beforeSnapshot = speedDragSnapshotRef.current ?? captureSnapshot();
+      const clampedSpeed = applySpeedChangeWithoutHistory(newSpeed);
+      useTimelineCommandStore.getState().addUndoEntry(
+        {
+          type: 'RATE_STRETCH_ITEM',
+          payload: { ids: itemIds, newSpeed: clampedSpeed },
+        },
+        beforeSnapshot
+      );
+      speedDragSnapshotRef.current = null;
+    },
+    [applySpeedChangeWithoutHistory, itemIds]
+  );
+
+  const handleSpeedLiveChange = useCallback(
+    (newSpeed: number) => {
+      if (!speedDragSnapshotRef.current) {
+        speedDragSnapshotRef.current = captureSnapshot();
+      }
+      applySpeedChangeWithoutHistory(newSpeed);
+    },
+    [applySpeedChangeWithoutHistory]
   );
 
   // Reset speed to 1x
   const handleResetSpeed = useCallback(() => {
     const tolerance = 0.01;
-    const currentItems = useTimelineStore.getState().items;
-    currentItems
-      .filter((item: TimelineItem): item is ImageItem => isAnimatedImageItem(item) && itemIds.includes(item.id))
-      .forEach((item: ImageItem) => {
-        const currentSpeed = item.speed || 1;
-        if (Math.abs(currentSpeed - 1) <= tolerance) return;
+    const needsReset = useTimelineStore.getState().items.some(
+      (item: TimelineItem) =>
+        isAnimatedImageItem(item)
+        && itemIds.includes(item.id)
+        && Math.abs((item.speed || 1) - 1) > tolerance
+    );
+    if (!needsReset) return;
 
-        // Reset to 1x speed, keep duration the same
-        rateStretchItem(item.id, item.from, item.durationInFrames, 1);
-      });
-  }, [itemIds, rateStretchItem]);
+    commitSpeedChange(1);
+  }, [commitSpeedChange, itemIds]);
 
   if (gifItems.length === 0) return null;
 
@@ -93,7 +121,8 @@ export function GifSection({ items }: GifSectionProps) {
         <div className="flex items-center gap-1 w-full">
           <NumberInput
             value={speed}
-            onChange={handleSpeedChange}
+            onChange={commitSpeedChange}
+            onLiveChange={handleSpeedLiveChange}
             min={MIN_SPEED}
             max={MAX_SPEED}
             step={0.1}
@@ -114,4 +143,3 @@ export function GifSection({ items }: GifSectionProps) {
     </PropertySection>
   );
 }
-
