@@ -479,8 +479,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     }
 
     return {
-      title: 'Bus 1',
-      targetLabel: 'Bus 1',
+      title: '总线 1',
+      targetLabel: '总线 1',
       busEq: busAudioEq,
       eqEnabled: busAudioEq?.enabled !== false,
     };
@@ -777,7 +777,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       <DropdownMenuTrigger asChild>
         <button
           className="h-5 w-5 shrink-0 flex items-center justify-center rounded text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50 transition-colors"
-          aria-label="Panel mode"
+          aria-label="面板模式"
         >
           <MoreHorizontal size={14} />
         </button>
@@ -787,13 +787,13 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
           <span className="w-4 inline-flex items-center justify-start">
             {panelMode === 'meter' && <Check className="h-3.5 w-3.5" />}
           </span>
-          Meters
+          电平表
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setPanelMode('mixer')}>
           <span className="w-4 inline-flex items-center justify-start">
             {panelMode === 'mixer' && <Check className="h-3.5 w-3.5" />}
           </span>
-          Mixer
+          混音器
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => {
@@ -803,7 +803,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
           <span className="w-4 inline-flex items-center justify-start">
             {mixerFloating && <Check className="h-3.5 w-3.5" />}
           </span>
-          Float Mixer
+          悬浮混音器
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -839,7 +839,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   const floatingMixer = mixerFloating ? (
     <FloatingPanel
-      title="Mixer"
+      title="混音器"
       defaultBounds={FLOATING_MIXER_DEFAULT_BOUNDS}
       minWidth={200}
       minHeight={280}
@@ -870,7 +870,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   const detachedEqPanel = eqPanelDescriptor && eqPanelContentProps ? (
     <WindowPortal
-      title={`Equalizer - ${eqPanelDescriptor.title}`}
+      title={`均衡器 - ${eqPanelDescriptor.title}`}
       width={DETACHED_EQ_DEFAULT_BOUNDS.width}
       height={DETACHED_EQ_DEFAULT_BOUNDS.height}
       storageKey={DETACHED_EQ_STORAGE_KEY}
@@ -937,14 +937,14 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     <aside
       className="panel-bg border-l border-border flex h-full flex-col overflow-hidden"
       style={{ width: EDITOR_LAYOUT_CSS_VALUES.timelineMeterWidth }}
-      aria-label="Audio meter"
+      aria-label="音频电平表"
     >
       <div
         className="flex min-w-0 items-center justify-between gap-1 border-b border-border bg-secondary/20 px-1.5"
         style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
       >
         <span className="min-w-0 text-xs text-muted-foreground font-mono uppercase tracking-[0.12em]">
-          Meters
+          电平表
         </span>
         {modeDropdown}
       </div>
@@ -952,7 +952,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       <div className="flex-1 px-2 py-3 min-h-0">
         <div className="h-full rounded-md border border-border/50 bg-black/30 px-2 py-3 shadow-[inset_0_1px_4px_rgba(0,0,0,0.4)]">
           <div className="mb-3 text-center text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70 font-mono">
-            Master
+            主控
           </div>
 
           <div className="flex h-[calc(100%-2.75rem)] items-stretch gap-3">

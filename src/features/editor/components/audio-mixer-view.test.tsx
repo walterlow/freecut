@@ -686,7 +686,7 @@ describe('AudioMixerView', () => {
     );
 
     const trackEqButton = container.querySelector('[aria-label="EQ A1"]') as HTMLButtonElement | null;
-    const busEqButton = container.querySelector('[aria-label="EQ Bus 1"]') as HTMLButtonElement | null;
+    const busEqButton = container.querySelector('[aria-label="EQ 总线 1"]') as HTMLButtonElement | null;
 
     expect(trackEqButton).not.toBeNull();
     expect(busEqButton).not.toBeNull();
@@ -737,7 +737,7 @@ describe('AudioMixerView', () => {
     );
 
     const trackEqButton = container.querySelector('[aria-label="EQ A1"]') as HTMLButtonElement | null;
-    const busEqButton = container.querySelector('[aria-label="EQ Bus 1"]') as HTMLButtonElement | null;
+    const busEqButton = container.querySelector('[aria-label="EQ 总线 1"]') as HTMLButtonElement | null;
 
     expect(trackEqButton).not.toBeNull();
     expect(busEqButton).not.toBeNull();

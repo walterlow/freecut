@@ -751,7 +751,7 @@ const BusMeter = memo(function BusMeter({
       <div className="flex flex-col items-center h-full w-full rounded-[3px] bg-black/30 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)] border border-border/20 px-1">
         {/* Label */}
         <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 py-1 leading-tight font-mono whitespace-nowrap">
-          Bus 1
+          总线 1
         </div>
         <div className="flex justify-center py-0.5 shrink-0">
           <button
@@ -762,7 +762,7 @@ const BusMeter = memo(function BusMeter({
                 : 'border border-transparent bg-muted/30 text-muted-foreground/45 hover:bg-sky-500/10 hover:text-sky-300'
             } ${!onEqToggle ? 'pointer-events-none opacity-50' : ''}`}
             onClick={onEqToggle}
-            aria-label="EQ Bus 1"
+            aria-label="EQ 总线 1"
             aria-pressed={eqActive}
           >
             EQ
@@ -779,7 +779,7 @@ const BusMeter = memo(function BusMeter({
                 : 'bg-muted/40 text-muted-foreground/40 hover:bg-muted/70 hover:text-muted-foreground/70'
             }`}
             onClick={onMuteToggle}
-            aria-label="Mute master"
+            aria-label="静音主控"
             aria-pressed={muted}
           >
             M
@@ -1013,7 +1013,7 @@ const MixerBody = memo(function MixerBody({
       {tracks.length > 0 && (
         <button
           type="button"
-          aria-label="Tuck mixer"
+          aria-label="收起混音器"
           aria-pressed={isTucked}
           className="w-[5px] shrink-0 flex items-center justify-center cursor-col-resize select-none group border-0 bg-transparent p-0"
           onPointerDown={handlePointerDown}
@@ -1062,7 +1062,7 @@ const MixerBody = memo(function MixerBody({
 
           {tracks.length === 0 && (
             <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground/30 italic">
-              No audio tracks
+              暂无音频轨道
             </div>
           )}
         </div>
@@ -1118,7 +1118,7 @@ export const AudioMixerView = memo(function AudioMixerView({
   return (
     <aside
       className={outerClassName}
-      aria-label="Audio mixer"
+      aria-label="音频混音器"
     >
       {/* Header — only shown when docked (floating panel has its own title bar) */}
       {!expanded && (
@@ -1127,7 +1127,7 @@ export const AudioMixerView = memo(function AudioMixerView({
           style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
         >
           <span className="min-w-0 text-xs text-muted-foreground font-mono uppercase tracking-[0.18em]">
-            Mixer
+            混音器
           </span>
           {headerExtra ?? (
             <span
