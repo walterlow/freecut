@@ -3,6 +3,15 @@ import type { ItemEffect } from './effects';
 import type { BlendMode } from './blend-modes';
 import type { AudioEqSettings } from './audio';
 
+export interface TimelineItemCornerPin {
+  topLeft: [number, number];
+  topRight: [number, number];
+  bottomRight: [number, number];
+  bottomLeft: [number, number];
+  referenceWidth?: number;
+  referenceHeight?: number;
+}
+
 // Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
   id: string;
@@ -85,12 +94,7 @@ type BaseTimelineItem = {
   // Blend mode for layer compositing (default: 'normal')
   blendMode?: BlendMode;
   // Corner pin transform (perspective warp)
-  cornerPin?: {
-    topLeft: [number, number];
-    topRight: [number, number];
-    bottomRight: [number, number];
-    bottomLeft: [number, number];
-  };
+  cornerPin?: TimelineItemCornerPin;
 };
 
 export interface GeneratedCaptionSource {

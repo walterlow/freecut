@@ -17,6 +17,7 @@ import {
   type CornerPinHandle,
   type CornerPinValues,
 } from '../stores/corner-pin-store';
+import { withCornerPinReferenceSize } from '@/features/preview/deps/composition-runtime';
 import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { useTimelineStore } from '@/features/preview/deps/timeline-store';
 import type { CoordinateParams, Transform } from '../types/gizmo';
@@ -317,7 +318,10 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
       const finalPreview = useCornerPinStore.getState().previewCornerPin;
       const itemId = editingItemIdRef.current;
       if (finalPreview && itemId && handle) {
-        useTimelineStore.getState().updateItem(itemId, { cornerPin: finalPreview });
+        const { width, height } = itemTransformRef.current;
+        useTimelineStore.getState().updateItem(itemId, {
+          cornerPin: withCornerPinReferenceSize(finalPreview, width, height),
+        });
       }
 
       // Wait 2 animation frames before clearing preview to ensure React has

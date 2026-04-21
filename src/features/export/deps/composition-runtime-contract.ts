@@ -40,5 +40,9 @@ export {
   resolveTransitionFrameState,
 } from '@/features/composition-runtime/utils/transition-scene';
 export { getShapePath, rotatePath } from '@/features/composition-runtime/utils/shape-path';
-export { hasCornerPin, drawCornerPinImage } from '@/features/composition-runtime/utils/corner-pin';
+export {
+  hasCornerPin,
+  drawCornerPinImage,
+  resolveCornerPinForSize,
+} from '@/features/composition-runtime/utils/corner-pin';
 export { snapSourceTime } from '@/features/composition-runtime/utils/video-timing';

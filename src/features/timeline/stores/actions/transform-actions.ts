@@ -85,7 +85,11 @@ export function updateItemTransform(
   execute('UPDATE_TRANSFORM', () => {
     useItemsStore.getState()._updateItemTransform(id, transform);
     useTimelineSettingsStore.getState().markDirty();
-  }, { id, operation, properties: [...getTransformKeys(transform)] });
+  }, {
+    id,
+    operation,
+    properties: [...getTransformKeys(transform)],
+  });
 }
 
 export function commitMaskEdit(
@@ -193,7 +197,10 @@ export function updateItemsTransformMap(
   execute('UPDATE_TRANSFORMS', () => {
     useItemsStore.getState()._updateItemsTransformMap(transformsMap);
     useTimelineSettingsStore.getState().markDirty();
-  }, { count: transformsMap.size, operation });
+  }, {
+    count: transformsMap.size,
+    operation,
+  });
 }
 
 /** Transform properties that bento layout controls (cleared from keyframes) */

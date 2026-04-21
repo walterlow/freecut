@@ -16,6 +16,10 @@ export {
 } from '@/features/composition-runtime/utils/frame-scene';
 export type { PreviewPathVerticesOverride } from '@/features/composition-runtime/utils/preview-path-override';
 export { expandTextTransformToFitContent } from '@/features/composition-runtime/utils/text-layout';
+export {
+  resolveCornerPinForSize,
+  withCornerPinReferenceSize,
+} from '@/features/composition-runtime/utils/corner-pin';
 export { getBestDomVideoElementForItem } from '@/features/composition-runtime/utils/dom-video-element-registry';
 export { getVideoTargetTimeSeconds, snapSourceTime } from '@/features/composition-runtime/utils/video-timing';
 export { transitionSafePlay, muteTransitionElement, unmuteTransitionElement } from '@/features/composition-runtime/components/video-audio-context';

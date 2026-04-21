@@ -24,9 +24,9 @@ import {
   type AutoKeyframeOperation,
 } from '@/features/preview/deps/keyframes';
 import type { TransformAnimatableProperty } from '@/types/keyframe';
+import type { TimelineItem } from '@/types/timeline';
 import type { CoordinateParams, Transform, Point } from '../types/gizmo';
 import type { TransformProperties } from '@/types/transform';
-import type { TimelineItem } from '@/types/timeline';
 
 interface GizmoOverlayProps {
   containerRect: DOMRect | null;
@@ -424,7 +424,10 @@ export function GizmoOverlay({
 
   // Handle group transform end - commit transforms for all items as a single undo operation
   const handleGroupTransformEnd = useCallback(
-    (transforms: Map<string, Transform>, operation: 'move' | 'resize' | 'rotate') => {
+    (
+      transforms: Map<string, Transform>,
+      operation: 'move' | 'resize' | 'rotate',
+    ) => {
       // Convert Transform to TransformProperties for the batch update
       const transformsMap = new Map<string, Partial<TransformProperties>>();
       for (const [itemId, transform] of transforms) {

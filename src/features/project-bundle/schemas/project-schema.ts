@@ -294,6 +294,8 @@ const cornerPinSchema = z.object({
   topRight: z.tuple([z.number(), z.number()]),
   bottomRight: z.tuple([z.number(), z.number()]),
   bottomLeft: z.tuple([z.number(), z.number()]),
+  referenceWidth: z.number().positive().optional(),
+  referenceHeight: z.number().positive().optional(),
 });
 
 const timelineItemSchema = z.object({

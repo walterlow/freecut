@@ -55,6 +55,7 @@ import {
   applyPreviewPathVerticesToShape,
   hasCornerPin,
   drawCornerPinImage,
+  resolveCornerPinForSize,
   getShapePath,
   rotatePath,
   type PreviewPathVerticesOverride,
@@ -368,6 +369,8 @@ async function renderItemWithCornerPin(
   const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
   const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
   const needsFlattenedOpacity = transform.opacity !== 1;
+  const resolvedCornerPin = resolveCornerPinForSize(item.cornerPin, itemW, itemH);
+  if (!resolvedCornerPin) return;
 
   ctx.save();
   if (needsFlattenedOpacity) {
@@ -392,14 +395,14 @@ async function renderItemWithCornerPin(
           itemH,
           left,
           top,
-          item.cornerPin!,
+          resolvedCornerPin,
         );
         ctx.drawImage(flatCanvas, 0, 0);
       } finally {
         rctx.canvasPool.release(flatCanvas);
       }
     } else {
-      drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, item.cornerPin!);
+      drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, resolvedCornerPin);
     }
   } finally {
     ctx.restore();

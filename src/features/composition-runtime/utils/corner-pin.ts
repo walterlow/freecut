@@ -12,6 +12,8 @@
  * When all offsets are [0, 0], there is no distortion.
  */
 
+import type { TimelineItemCornerPin } from '@/types/timeline';
+
 export interface CornerPinOffsets {
   topLeft: [number, number];
   topRight: [number, number];
@@ -28,6 +30,43 @@ export function hasCornerPin(pin: CornerPinOffsets | undefined): boolean {
     pin.bottomRight[0] !== 0 || pin.bottomRight[1] !== 0 ||
     pin.bottomLeft[0] !== 0 || pin.bottomLeft[1] !== 0
   );
+}
+
+export function resolveCornerPinForSize(
+  pin: TimelineItemCornerPin | undefined,
+  width: number,
+  height: number,
+): CornerPinOffsets | undefined {
+  if (!pin) return undefined;
+
+  const referenceWidth = pin.referenceWidth && pin.referenceWidth > 1e-6
+    ? pin.referenceWidth
+    : width;
+  const referenceHeight = pin.referenceHeight && pin.referenceHeight > 1e-6
+    ? pin.referenceHeight
+    : height;
+  const scaleX = referenceWidth > 1e-6 ? width / referenceWidth : 1;
+  const scaleY = referenceHeight > 1e-6 ? height / referenceHeight : 1;
+  const scaleCorner = ([x, y]: [number, number]): [number, number] => [x * scaleX, y * scaleY];
+
+  return {
+    topLeft: scaleCorner(pin.topLeft),
+    topRight: scaleCorner(pin.topRight),
+    bottomRight: scaleCorner(pin.bottomRight),
+    bottomLeft: scaleCorner(pin.bottomLeft),
+  };
+}
+
+export function withCornerPinReferenceSize(
+  pin: CornerPinOffsets,
+  width: number,
+  height: number,
+): TimelineItemCornerPin {
+  return {
+    ...pin,
+    referenceWidth: width > 0 ? width : undefined,
+    referenceHeight: height > 0 ? height : undefined,
+  };
 }
 
 /**

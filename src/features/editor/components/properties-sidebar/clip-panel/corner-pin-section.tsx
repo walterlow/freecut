@@ -2,6 +2,7 @@ import { useCallback, useMemo, memo } from 'react';
 import { Maximize2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/types/timeline';
+import { withCornerPinReferenceSize } from '@/features/editor/deps/composition-runtime';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useCornerPinStore } from '@/features/editor/deps/preview';
 import {
@@ -16,7 +17,7 @@ interface CornerPinSectionProps {
 
 type CornerKey = 'topLeft' | 'topRight' | 'bottomRight' | 'bottomLeft';
 
-const DEFAULT_PIN = {
+const DEFAULT_PIN: NonNullable<TimelineItem['cornerPin']> = {
   topLeft: [0, 0] as [number, number],
   topRight: [0, 0] as [number, number],
   bottomRight: [0, 0] as [number, number],
@@ -65,8 +66,14 @@ export const CornerPinSection = memo(function CornerPinSection({
       const current = item.cornerPin ?? DEFAULT_PIN;
       const newCorner: [number, number] = [...current[corner]];
       newCorner[axis] = value;
+      const width = item.transform?.width ?? current.referenceWidth ?? 0;
+      const height = item.transform?.height ?? current.referenceHeight ?? 0;
       updateItem(item.id, {
-        cornerPin: { ...current, [corner]: newCorner },
+        cornerPin: withCornerPinReferenceSize(
+          { ...current, [corner]: newCorner },
+          width,
+          height,
+        ),
       });
     },
     [item, updateItem],

@@ -2,7 +2,11 @@ import React, { useMemo } from 'react';
 import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
-import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
+import {
+  hasCornerPin,
+  computeCornerPinMatrix3d,
+  resolveCornerPinForSize,
+} from '../utils/corner-pin';
 import { useCornerPinStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import {
@@ -108,12 +112,14 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
   const effectiveCornerPin = cornerPinPreview ?? item.cornerPin;
 
   const cornerPinStyle = useMemo((): React.CSSProperties | null => {
-    if (!hasCornerPin(effectiveCornerPin)) return null;
     const w = state.transform.width;
     const h = state.transform.height;
+    const resolvedCornerPin = resolveCornerPinForSize(effectiveCornerPin, w, h);
+    if (!resolvedCornerPin || !hasCornerPin(resolvedCornerPin)) return null;
+    const activeCornerPin = resolvedCornerPin;
     return {
       transformOrigin: '0 0',
-      transform: computeCornerPinMatrix3d(w, h, effectiveCornerPin!),
+      transform: computeCornerPinMatrix3d(w, h, activeCornerPin),
     };
   }, [effectiveCornerPin, state.transform.width, state.transform.height]);
 

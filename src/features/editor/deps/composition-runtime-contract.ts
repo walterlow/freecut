@@ -20,5 +20,6 @@ export {
   resolveTransform,
   getSourceDimensions,
 } from '@/features/composition-runtime/utils/transform-resolver';
+export { withCornerPinReferenceSize } from '@/features/composition-runtime/utils/corner-pin';
 export { clearPreviewAudioCache } from '@/features/composition-runtime/utils/audio-decode-cache';
 export { deletePreviewAudioConform } from '@/features/composition-runtime/utils/preview-audio-conform';

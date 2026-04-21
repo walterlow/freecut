@@ -156,6 +156,20 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
       : clampAudioEqCutSlopeDbPerOct(item.audioEqHighCutSlopeDbPerOct),
   };
 
+  if (normalized.cornerPin) {
+    normalized.cornerPin = {
+      ...normalized.cornerPin,
+      referenceWidth: normalized.cornerPin.referenceWidth
+        ?? (normalized.transform?.width && normalized.transform.width > 0
+          ? normalized.transform.width
+          : undefined),
+      referenceHeight: normalized.cornerPin.referenceHeight
+        ?? (normalized.transform?.height && normalized.transform.height > 0
+          ? normalized.transform.height
+          : undefined),
+    };
+  }
+
   // Legacy split clips can have sourceEnd without sourceStart.
   // Treat them as explicitly bounded from 0 to sourceEnd so rate stretch
   // operates on the split segment rather than the full media duration.
