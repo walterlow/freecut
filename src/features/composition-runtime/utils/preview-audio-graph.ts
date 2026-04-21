@@ -205,16 +205,23 @@ function getBand6ExitNode(stageNodes: PreviewClipAudioEqStageNodes, stage = stag
 }
 
 function connectStageInternals(stageNodes: PreviewClipAudioEqStageNodes): void {
+  const band1Exit = getBand1ExitNode(stageNodes);
+  const band6Entry = getBand6EntryNode(stageNodes);
+  const band6Exit = getBand6ExitNode(stageNodes);
+
   for (let i = 1; i < stageNodes.band1PassNodes.length; i++) {
     stageNodes.band1PassNodes[i - 1]!.connect(stageNodes.band1PassNodes[i]!);
   }
   for (let i = 1; i < stageNodes.band6PassNodes.length; i++) {
     stageNodes.band6PassNodes[i - 1]!.connect(stageNodes.band6PassNodes[i]!);
   }
+  band1Exit.connect(stageNodes.lowNode);
   stageNodes.lowNode.connect(stageNodes.lowMidNode);
   stageNodes.lowMidNode.connect(stageNodes.midPeakingNode);
   stageNodes.midPeakingNode.connect(stageNodes.highMidNode);
   stageNodes.highMidNode.connect(stageNodes.highNode);
+  stageNodes.highNode.connect(band6Entry);
+  band6Exit.connect(stageNodes.outputGainNode);
 }
 
 function disconnectStageInternals(stageNodes: PreviewClipAudioEqStageNodes): void {
@@ -293,17 +300,62 @@ function reconnectPreviewClipAudioGraph(graph: PreviewClipAudioGraph): void {
   let previousNode: AudioNode = graph.sourceInputNode;
   for (const stageNodes of graph.eqStageNodes) {
     const band1Entry = getBand1EntryNode(stageNodes);
-    const band1Exit = getBand1ExitNode(stageNodes);
-    const band6Entry = getBand6EntryNode(stageNodes);
-    const band6Exit = getBand6ExitNode(stageNodes);
     previousNode.connect(band1Entry);
-    band1Exit.connect(stageNodes.lowNode);
-    stageNodes.highNode.connect(band6Entry);
-    band6Exit.connect(stageNodes.outputGainNode);
     previousNode = stageNodes.outputGainNode;
   }
 
   previousNode.connect(graph.outputGainNode);
+}
+
+function disconnectNodeFromTarget(source: AudioNode, target: AudioNode): void {
+  try {
+    source.disconnect(target);
+  } catch {
+    source.disconnect();
+  }
+}
+
+function getStagePreviousNode(
+  graph: PreviewClipAudioGraph,
+  index: number,
+): AudioNode {
+  return index === 0
+    ? graph.sourceInputNode
+    : graph.eqStageNodes[index - 1]!.outputGainNode;
+}
+
+function getStageNextNode(
+  graph: PreviewClipAudioGraph,
+  index: number,
+): AudioNode {
+  if (index >= graph.eqStageNodes.length - 1) {
+    return graph.outputGainNode;
+  }
+
+  return getBand1EntryNode(graph.eqStageNodes[index + 1]!);
+}
+
+function replacePreviewClipEqStage(
+  graph: PreviewClipAudioGraph,
+  index: number,
+  currentStage: PreviewClipAudioEqStageNodes,
+  targetStage: ResolvedAudioEqSettings,
+): PreviewClipAudioEqStageNodes {
+  const previousNode = getStagePreviousNode(graph, index);
+  const nextNode = getStageNextNode(graph, index);
+  const currentEntryNode = getBand1EntryNode(currentStage);
+  const replacementStage = createPreviewClipAudioEqStage(graph.context, targetStage);
+  const replacementEntryNode = getBand1EntryNode(replacementStage);
+
+  previousNode.connect(replacementEntryNode);
+  replacementStage.outputGainNode.connect(nextNode);
+
+  disconnectNodeFromTarget(previousNode, currentEntryNode);
+  disconnectNodeFromTarget(currentStage.outputGainNode, nextNode);
+  disconnectStageInternals(currentStage);
+
+  graph.eqStageNodes[index] = replacementStage;
+  return replacementStage;
 }
 
 function shouldRebuildStageTopology(
@@ -372,10 +424,7 @@ function ensurePreviewClipEqStage(
   }
 
   if (shouldRebuildStageTopology(currentStage.resolvedStage, targetStage)) {
-    disconnectStageInternals(currentStage);
-    graph.eqStageNodes[index] = createPreviewClipAudioEqStage(graph.context, targetStage);
-    reconnectPreviewClipAudioGraph(graph);
-    return graph.eqStageNodes[index]!;
+    return replacePreviewClipEqStage(graph, index, currentStage, targetStage);
   }
 
   return currentStage;

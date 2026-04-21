@@ -40,14 +40,27 @@ class AudioParamMock {
 class ConnectableNodeMock {
   readonly connections: unknown[] = [];
   disconnected = false;
+  disconnectAllCalls = 0;
+  disconnectTargetCalls = 0;
 
   connect(target: unknown) {
     this.connections.push(target);
   }
 
-  disconnect() {
+  disconnect(target?: unknown) {
     this.disconnected = true;
-    this.connections.length = 0;
+    if (target === undefined) {
+      this.disconnectAllCalls += 1;
+      this.connections.length = 0;
+      return;
+    }
+
+    this.disconnectTargetCalls += 1;
+    let index = this.connections.indexOf(target);
+    while (index !== -1) {
+      this.connections.splice(index, 1);
+      index = this.connections.indexOf(target);
+    }
   }
 }
 
@@ -222,5 +235,30 @@ describe('preview-audio-graph', () => {
     expect(getRampCalls(stage.highNode.frequency).at(-1)).toEqual({ value: 6500, time: 2.25 });
     expect(getRampCalls(stage.highNode.gain).at(-1)).toEqual({ value: -5, time: 2.25 });
     expect(getRampCalls(stage.outputGainNode.gain).at(-1)).toEqual({ value: Math.pow(10, -3 / 20), time: 2.25 });
+  });
+
+  it('hot-swaps topology-changing EQ updates without disconnecting the source input node again', () => {
+    const graph = createPreviewClipAudioGraph({ eqStageCount: 1 });
+    expect(graph).not.toBeNull();
+
+    const sourceInputNode = graph!.sourceInputNode as unknown as ConnectableNodeMock;
+    const disconnectAllCallsBefore = sourceInputNode.disconnectAllCalls;
+
+    setPreviewClipEq(graph!, [resolveAudioEqSettings({
+      lowCutEnabled: true,
+      lowCutFrequencyHz: 90,
+      lowCutSlopeDbPerOct: 18,
+      highCutEnabled: true,
+      highCutFrequencyHz: 6000,
+      highCutSlopeDbPerOct: 24,
+    })]);
+
+    const stage = graph!.eqStageNodes[0]!;
+    expect(sourceInputNode.disconnectAllCalls).toBe(disconnectAllCallsBefore);
+    expect(sourceInputNode.disconnectTargetCalls).toBeGreaterThan(0);
+    expect(stage.band1PassNodes).toHaveLength(3);
+    expect(stage.band6PassNodes).toHaveLength(4);
+    expect(getConnections(graph!.sourceInputNode)).toEqual([stage.band1PassNodes[0]]);
+    expect(getConnections(stage.outputGainNode)).toEqual([graph!.outputGainNode]);
   });
 });

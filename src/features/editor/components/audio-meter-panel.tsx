@@ -7,6 +7,7 @@ import {
   captureSnapshot,
   importWaveformCache,
 } from '@/features/editor/deps/timeline-store';
+import { useGizmoStore } from '@/features/editor/deps/preview';
 import { importMediaLibraryService } from '@/features/editor/deps/media-library';
 import { getResolvedPlaybackFrame, usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
@@ -562,6 +563,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         : track
     ));
     itemsState.setTracks(nextTracks);
+    const trackItemIds = (itemsState.itemsByTrackId[trackId] ?? []).map((item) => item.id);
+    if (trackItemIds.length > 0) {
+      useGizmoStore.getState().clearPreviewForItems(trackItemIds);
+    }
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_TRACK_EQ', payload: { id: trackId } },
@@ -586,6 +591,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         : track
     ));
     itemsState.setTracks(nextTracks);
+    const trackItemIds = (itemsState.itemsByTrackId[trackId] ?? []).map((item) => item.id);
+    if (trackItemIds.length > 0) {
+      useGizmoStore.getState().clearPreviewForItems(trackItemIds);
+    }
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_TRACK_EQ_ENABLED', payload: { id: trackId } },

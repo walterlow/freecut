@@ -567,7 +567,7 @@ export function AudioEqPanelContent({
   const eqEnabled = enabled !== false;
   const updateItem = useTimelineStore((s) => s.updateItem);
   const setPropertiesPreviewNew = useGizmoStore((s) => s.setPropertiesPreviewNew);
-  const clearPreview = useGizmoStore((s) => s.clearPreview);
+  const clearPreviewForItems = useGizmoStore((s) => s.clearPreviewForItems);
 
   const audioItems = useMemo(
     () => isTrackMode ? [] : getAudioSectionItems(items ?? []),
@@ -787,6 +787,28 @@ export function AudioEqPanelContent({
   const previewThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPreviewRef = useRef<AudioEqPatch | null>(null);
 
+  const clearClipEqPreview = useCallback(() => {
+    if (isTrackMode || itemIds.length === 0) {
+      return;
+    }
+    clearPreviewForItems(itemIds);
+  }, [clearPreviewForItems, isTrackMode, itemIds]);
+
+  useEffect(() => {
+    if (isTrackMode) {
+      return;
+    }
+
+    return () => {
+      if (previewThrottleRef.current) {
+        clearTimeout(previewThrottleRef.current);
+        previewThrottleRef.current = null;
+      }
+      pendingPreviewRef.current = null;
+      clearClipEqPreview();
+    };
+  }, [clearClipEqPreview, isTrackMode]);
+
   const handleEqPatchLiveChange = useCallback((patch: AudioEqPatch) => {
     const normalizedPatch = normalizeUiEqPatch(patch);
     setLivePatch(normalizedPatch);
@@ -828,9 +850,9 @@ export function AudioEqPanelContent({
     } else {
       const normalizedPatch = toTimelineEqPatch(patch);
       itemIds.forEach((id) => updateItem(id, normalizedPatch));
-      queueMicrotask(() => clearPreview());
+      queueMicrotask(() => clearClipEqPreview());
     }
-  }, [clearPreview, isTrackMode, itemIds, onTrackEqChange, updateItem]);
+  }, [clearClipEqPreview, isTrackMode, itemIds, onTrackEqChange, updateItem]);
 
   const handleEqPresetChange = useCallback((presetId: string) => {
     const preset = getAudioEqPresetById(presetId as AudioEqPresetId);
@@ -847,9 +869,9 @@ export function AudioEqPanelContent({
     } else {
       const patch = buildTimelineEqPatchFromResolvedSettings(preset.settings);
       itemIds.forEach((id) => updateItem(id, patch));
-      queueMicrotask(() => clearPreview());
+      queueMicrotask(() => clearClipEqPreview());
     }
-  }, [clearPreview, isTrackMode, itemIds, onTrackEqChange, updateItem]);
+  }, [clearClipEqPreview, isTrackMode, itemIds, onTrackEqChange, updateItem]);
 
   const handleEqFieldChange = useCallback(<K extends keyof AudioEqPatch>(field: K, value: NonNullable<AudioEqPatch[K]>) => {
     handleEqPatchChange({ [field]: value } as AudioEqPatch);
