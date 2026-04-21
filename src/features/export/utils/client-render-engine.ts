@@ -62,6 +62,7 @@ import { useCompositionsStore, type SubComposition } from '@/features/export/dep
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 import type { FrameInvalidationRequest } from '@/shared/utils/frame-invalidation';
 import { collectReachableCompositionIdsFromItems, collectReachableCompositionIdsFromTracks } from '@/features/export/deps/timeline';
+import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes';
 
 // Item renderer
 import {
@@ -1282,13 +1283,21 @@ export async function createCompositionRenderer(
         }
 
         // Get effects (preview override → item effects + adjustment layer effects)
-        const itemEffects = (renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined) ?? effectiveItem.effects;
+        const baseItemEffects =
+          (renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined)
+          ?? effectiveItem.effects;
+        const itemEffects = resolveAnimatedColorEffects(
+          baseItemEffects,
+          getCurrentKeyframes(effectiveItem.id),
+          frame - effectiveItem.from,
+        );
         const adjEffects = getAdjustmentLayerEffects(
           trackOrder,
           adjustmentLayers,
           frame,
           renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
           renderMode === 'preview' ? getLiveItemSnapshot : undefined,
+          getCurrentKeyframes,
         );
         const combinedEffects = combineEffects(itemEffects, adjEffects);
         const applicableMasks = activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, trackOrder));
@@ -1423,13 +1432,18 @@ export async function createCompositionRenderer(
         if (itemRight < canvas.width - tolerance || itemBottom < canvas.height - tolerance) return false;
 
         // Check for effects that might add transparency
-        const itemEffects = item.effects ?? [];
+        const itemEffects = resolveAnimatedColorEffects(
+          item.effects ?? [],
+          getCurrentKeyframes(item.id),
+          frame - item.from,
+        ) ?? [];
         const adjEffects = getAdjustmentLayerEffects(
           trackOrder,
           adjustmentLayers,
           frame,
           renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
           renderMode === 'preview' ? getLiveItemSnapshot : undefined,
+          getCurrentKeyframes,
         );
         const allEffects = [...itemEffects, ...adjEffects];
 

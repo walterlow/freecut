@@ -4,12 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
+import { KeyframeToggle } from '@/features/keyframes/components/keyframe-toggle';
+import type { AnimatableProperty } from '@/types/keyframe';
 import { ColorPicker, PropertyRow, SliderInput } from '@/shared/ui/property-controls';
 
 interface GpuEffectPanelProps {
+  itemIds: string[];
   effect: ItemEffect;
   gpuEffect: GpuEffect;
   definition: GpuEffectDefinition;
+  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null;
   onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
   onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
   onReset: (effectId: string) => void;
@@ -74,9 +78,11 @@ function ActionButtons({
 }
 
 export const GpuEffectPanel = memo(function GpuEffectPanel({
+  itemIds,
   effect,
   gpuEffect,
   definition,
+  getKeyframeProperty,
   onParamChange,
   onParamLiveChange,
   onReset,
@@ -92,6 +98,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
   if (paramEntries.length === 1 && paramEntries[0]![1].type === 'number') {
     const [key, param] = paramEntries[0]!;
     const currentValue = (gpuEffect.params[key] ?? param.default) as number;
+    const keyframeProperty = getKeyframeProperty(effect.id, key);
     return (
       <PropertyRow label={definition.name}>
         <div className="flex items-center gap-1 min-w-0 w-full">
@@ -105,6 +112,14 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
             disabled={!effect.enabled}
             className="flex-1 min-w-0"
           />
+          {keyframeProperty ? (
+            <KeyframeToggle
+              itemIds={itemIds}
+              property={keyframeProperty}
+              currentValue={currentValue}
+              disabled={!effect.enabled}
+            />
+          ) : null}
           <ActionButtons
             effectId={effect.id}
             enabled={effect.enabled}
@@ -159,6 +174,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
         const paramEnabled = effect.enabled;
 
         if (param.type === 'number') {
+          const keyframeProperty = getKeyframeProperty(effect.id, key);
           return (
             <PropertyRow
               key={key}
@@ -175,6 +191,14 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 disabled={!paramEnabled}
                 className="flex-1 min-w-0"
               />
+              {keyframeProperty ? (
+                <KeyframeToggle
+                  itemIds={itemIds}
+                  property={keyframeProperty}
+                  currentValue={currentValue as number}
+                  disabled={!paramEnabled}
+                />
+              ) : null}
             </PropertyRow>
           );
         }

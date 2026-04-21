@@ -1,4 +1,10 @@
-import type { AnimatableProperty } from '@/types/keyframe';
+import { getGpuEffect } from '@/infrastructure/gpu/effects';
+import {
+  isBuiltInAnimatableProperty,
+  parseEffectAnimatableProperty,
+  type AnimatableProperty,
+  type BuiltInAnimatableProperty,
+} from '@/types/keyframe';
 
 export interface PropertyValueRange {
   property: AnimatableProperty;
@@ -8,7 +14,7 @@ export interface PropertyValueRange {
   decimals: number;
 }
 
-export const PROPERTY_VALUE_RANGES: Record<AnimatableProperty, PropertyValueRange> = {
+const BUILT_IN_PROPERTY_VALUE_RANGES: Record<BuiltInAnimatableProperty, PropertyValueRange> = {
   x: { property: 'x', min: -1000, max: 2000, unit: 'px', decimals: 0 },
   y: { property: 'y', min: -1000, max: 2000, unit: 'px', decimals: 0 },
   width: { property: 'width', min: 0, max: 2000, unit: 'px', decimals: 0 },
@@ -25,3 +31,59 @@ export const PROPERTY_VALUE_RANGES: Record<AnimatableProperty, PropertyValueRang
   cropSoftness: { property: 'cropSoftness', min: -2000, max: 2000, unit: 'px', decimals: 0 },
   volume: { property: 'volume', min: -60, max: 20, unit: 'dB', decimals: 1 },
 };
+
+function getDecimalsFromStep(step: number | undefined): number {
+  if (step === undefined || !Number.isFinite(step) || step >= 1) {
+    return 0;
+  }
+
+  const normalized = step.toString();
+  const decimalIndex = normalized.indexOf('.');
+  return decimalIndex === -1 ? 0 : normalized.length - decimalIndex - 1;
+}
+
+function inferUnit(label: string): string {
+  if (label.includes('Hue')) return '°';
+  if (label.includes('(EV)')) return 'EV';
+  return '';
+}
+
+export function getPropertyValueRange(
+  property: AnimatableProperty,
+): PropertyValueRange | null {
+  if (isBuiltInAnimatableProperty(property)) {
+    return BUILT_IN_PROPERTY_VALUE_RANGES[property];
+  }
+
+  const parsed = parseEffectAnimatableProperty(property);
+  if (!parsed) {
+    return null;
+  }
+
+  const definition = getGpuEffect(parsed.gpuEffectType);
+  const param = definition?.params[parsed.paramKey];
+  if (!definition || !param || param.type !== 'number') {
+    return null;
+  }
+
+  return {
+    property,
+    min: param.min ?? 0,
+    max: param.max ?? 1,
+    unit: inferUnit(param.label),
+    decimals: getDecimalsFromStep(param.step),
+  };
+}
+
+export const PROPERTY_VALUE_RANGES = new Proxy<Record<string, PropertyValueRange>>(
+  { ...BUILT_IN_PROPERTY_VALUE_RANGES },
+  {
+    get(target, prop) {
+      if (typeof prop !== 'string') {
+        return undefined;
+      }
+
+      return target[prop] ?? getPropertyValueRange(prop as AnimatableProperty) ?? undefined;
+    },
+  },
+) as Record<AnimatableProperty, PropertyValueRange>;

@@ -12,17 +12,7 @@ import { SNAPSHOT_VERSION } from '../types/snapshot';
 // Keyframe Schemas
 // ============================================================================
 
-const animatablePropertySchema = z.enum([
-  'x',
-  'y',
-  'width',
-  'height',
-  'anchorX',
-  'anchorY',
-  'rotation',
-  'opacity',
-  'cornerRadius',
-]);
+const animatablePropertySchema = z.string().min(1);
 
 const easingTypeSchema = z.enum([
   'linear',

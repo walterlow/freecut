@@ -615,8 +615,8 @@ export function useGraphInteraction({
               property: dragPoint.property,
               frame: dragPoint.keyframe.frame,
               value: dragPoint.keyframe.value,
-              minValue: range.min,
-              maxValue: range.max,
+              minValue: range?.min ?? Number.NEGATIVE_INFINITY,
+              maxValue: range?.max ?? Number.POSITIVE_INFINITY,
             };
           })(),
         ])

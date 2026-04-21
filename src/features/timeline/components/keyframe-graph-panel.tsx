@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import {
   DopesheetEditor,
+  getEffectPropertyBaseValue,
   getBezierPresetForEasing,
   getCropPropertyValue,
   getTransitionBlockedRanges,
@@ -63,6 +64,7 @@ import type { TimelineItem } from '@/types/timeline';
 import * as timelineActions from '../stores/timeline-actions';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
+import { isEffectAnimatableProperty } from '@/types/keyframe';
 
 /** Height of the panel header bar in pixels */
 const GRAPH_PANEL_HEADER_HEIGHT = 32;
@@ -137,6 +139,10 @@ function getBaseKeyframeValue(
   property: AnimatableProperty,
   canvas: CanvasSettings
 ): number {
+  if (isEffectAnimatableProperty(property)) {
+    return getEffectPropertyBaseValue(item, property) ?? 0;
+  }
+
   if (property === 'volume') {
     return item.volume ?? 0;
   }

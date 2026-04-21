@@ -4,12 +4,16 @@ import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
+import { KeyframeToggle } from '@/features/keyframes/components/keyframe-toggle';
+import type { AnimatableProperty } from '@/types/keyframe';
 import { PropertyRow, SliderInput } from '@/shared/ui/property-controls';
 
 interface GpuWheelsPanelProps {
+  itemIds: string[];
   effect: ItemEffect;
   gpuEffect: GpuEffect;
   definition: GpuEffectDefinition;
+  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null;
   onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
   onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
   onParamsBatchChange: (effectId: string, updates: Record<string, number | boolean | string>) => void;
@@ -178,9 +182,11 @@ const WHEEL_DESCRIPTORS = [
 const TONAL_PARAMS = ['temperature', 'tint', 'saturation'] as const;
 
 export const GpuWheelsPanel = memo(function GpuWheelsPanel({
+  itemIds,
   effect,
   gpuEffect,
   definition,
+  getKeyframeProperty,
   onParamChange,
   onParamLiveChange,
   onParamsBatchChange,
@@ -293,6 +299,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
         const param = definition.params[key];
         if (!param) return null;
         const value = (gpuEffect.params[key] as number) ?? param.default;
+        const keyframeProperty = getKeyframeProperty(effect.id, key);
         return (
           <PropertyRow key={key} label={param.label} className={tonalRowClass}>
             <div className="flex items-center gap-1 min-w-0 w-full">
@@ -306,6 +313,14 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
                 disabled={!effect.enabled}
                 className="flex-1 min-w-0"
               />
+              {keyframeProperty ? (
+                <KeyframeToggle
+                  itemIds={itemIds}
+                  property={keyframeProperty}
+                  currentValue={value}
+                  disabled={!effect.enabled}
+                />
+              ) : null}
             </div>
           </PropertyRow>
         );

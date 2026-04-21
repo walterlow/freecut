@@ -1103,7 +1103,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const formatPropertyValue = useCallback((property: AnimatableProperty, value: number | undefined) => {
     if (value === undefined || Number.isNaN(value)) return '';
-    const decimals = PROPERTY_VALUE_RANGES[property].decimals;
+    const decimals = PROPERTY_VALUE_RANGES[property]?.decimals ?? 2;
     return decimals === 0 ? String(Math.round(value)) : value.toFixed(decimals);
   }, []);
 
@@ -2013,7 +2013,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         return;
       }
 
-      const clampedValue = Math.max(range.min, Math.min(range.max, parsed));
+      const clampedValue = Math.max((range?.min ?? parsed), Math.min((range?.max ?? parsed), parsed));
       onPropertyValueCommit?.(property, clampedValue, options);
       setValueDrafts((prev) => ({
         ...prev,
@@ -2870,9 +2870,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 event.currentTarget.blur();
               }
             }}
-            step={PROPERTY_VALUE_RANGES[row.property].decimals === 0 ? 1 : 0.1}
-            min={PROPERTY_VALUE_RANGES[row.property].min}
-            max={PROPERTY_VALUE_RANGES[row.property].max}
+            step={(PROPERTY_VALUE_RANGES[row.property]?.decimals ?? 2) === 0 ? 1 : 0.1}
+            min={PROPERTY_VALUE_RANGES[row.property]?.min}
+            max={PROPERTY_VALUE_RANGES[row.property]?.max}
             inputMode="decimal"
             className="h-[18px] w-[44px] border-border/70 bg-background/85 px-1 py-0 text-right text-[9px] leading-none tabular-nums md:text-[9px]"
             disabled={

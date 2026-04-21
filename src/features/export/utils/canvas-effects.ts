@@ -4,12 +4,14 @@
  * Applies GPU shader effects to canvas items for client-side export.
  */
 
+import type { ItemKeyframes } from '@/types/keyframe';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { AdjustmentItem, TimelineItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
 import type { EffectsPipeline, GpuEffectInstance } from '@/infrastructure/gpu/effects';
 import { applyMasks, type MaskCanvasSettings } from './canvas-masks';
 import type { CanvasPool } from './canvas-pool';
+import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes';
 
 const log = createLogger('CanvasEffects');
 
@@ -166,6 +168,7 @@ export function getAdjustmentLayerEffects(
   frame: number,
   getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined,
   getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined,
+  getCurrentKeyframes?: (itemId: string) => ItemKeyframes | undefined,
 ): ItemEffect[] {
   if (adjustmentLayers.length === 0) return [];
 
@@ -186,7 +189,12 @@ export function getAdjustmentLayerEffects(
     .sort((a, b) => a.trackOrder - b.trackOrder) // Apply in track order
     .flatMap(({ layer }) => {
       const effectiveEffects = getPreviewEffectsOverride?.(layer.id) ?? layer.effects;
-      return effectiveEffects?.filter((e) => e.enabled) ?? [];
+      const animatedEffects = resolveAnimatedColorEffects(
+        effectiveEffects,
+        getCurrentKeyframes?.(layer.id),
+        frame - layer.from,
+      );
+      return animatedEffects?.filter((e) => e.enabled) ?? [];
     });
 }
 

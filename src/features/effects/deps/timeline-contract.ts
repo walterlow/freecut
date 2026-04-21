@@ -4,3 +4,4 @@
  */
 
 export { useTimelineStore } from '@/features/timeline/stores/timeline-store';
+export { useKeyframesStore } from '@/features/timeline/stores/keyframes-store';
