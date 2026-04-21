@@ -116,6 +116,8 @@ describe('canvas-item-renderer corner pin export path', () => {
       y: 0,
       width: 300,
       height: 180,
+      anchorX: 150,
+      anchorY: 90,
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
@@ -182,6 +184,8 @@ describe('canvas-item-renderer corner pin export path', () => {
       y: 0,
       width: 300,
       height: 180,
+      anchorX: 150,
+      anchorY: 90,
       rotation: 0,
       opacity: 0.35,
       cornerRadius: 0,
@@ -247,6 +251,8 @@ describe('canvas-item-renderer corner pin export path', () => {
       y: 0,
       width: 300,
       height: 180,
+      anchorX: 150,
+      anchorY: 90,
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
@@ -257,5 +263,70 @@ describe('canvas-item-renderer corner pin export path', () => {
     expect(ctx.translate).toHaveBeenCalled();
     expect(ctx.scale).toHaveBeenCalledWith(-1, 1);
     expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rotates around the configured anchor point', async () => {
+    const item: ShapeItem = {
+      id: 'shape-4',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Pinned shape',
+      shapeType: 'rectangle',
+      fillColor: '#ffffff',
+      cornerPin: {
+        topLeft: [0, 0],
+        topRight: [12, -6],
+        bottomRight: [6, 10],
+        bottomLeft: [-8, 4],
+      },
+      transform: {
+        x: 40,
+        y: 20,
+        width: 300,
+        height: 180,
+        anchorX: 20,
+        anchorY: 30,
+        rotation: 45,
+        opacity: 1,
+      },
+    };
+
+    const ctx = createMockCtx();
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1280, height: 720, fps: 30 },
+      canvasPool: {} as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+    };
+    const transform: ItemTransform = {
+      x: 40,
+      y: 20,
+      width: 300,
+      height: 180,
+      anchorX: 20,
+      anchorY: 30,
+      rotation: 45,
+      opacity: 1,
+      cornerRadius: 0,
+    };
+
+    await renderItem(ctx, item, transform, 0, rctx);
+
+    expect(ctx.translate).toHaveBeenNthCalledWith(1, 550, 320);
+    expect(ctx.rotate).toHaveBeenCalledWith((45 * Math.PI) / 180);
+    expect(ctx.translate).toHaveBeenNthCalledWith(2, -550, -320);
   });
 });

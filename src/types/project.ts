@@ -110,6 +110,8 @@ export interface ProjectTimeline {
       y?: number;
       width?: number;
       height?: number;
+      anchorX?: number;
+      anchorY?: number;
       rotation?: number;
       flipHorizontal?: boolean;
       flipVertical?: boolean;

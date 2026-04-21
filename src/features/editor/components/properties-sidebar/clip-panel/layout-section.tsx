@@ -42,6 +42,8 @@ type TransformValues = {
   y: number;
   width: number;
   height: number;
+  anchorX: number;
+  anchorY: number;
   rotation: number;
 };
 
@@ -84,8 +86,14 @@ export const LayoutSection = memo(function LayoutSection({
   // Gizmo store for live preview (both for properties panel and gizmo drag sync)
   const setTransformPreview = useGizmoStore((s) => s.setTransformPreview);
   const clearPreview = useGizmoStore((s) => s.clearPreview);
+  const clearInteraction = useGizmoStore((s) => s.clearInteraction);
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
   const previewTransform = useGizmoStore((s) => s.previewTransform);
+
+  const clearTransformUiState = useCallback(() => {
+    clearPreview();
+    clearInteraction();
+  }, [clearInteraction, clearPreview]);
 
   // Build gizmo preview context if gizmo is active for one of our items
   const gizmoPreview = useMemo(() => {
@@ -120,6 +128,8 @@ export const LayoutSection = memo(function LayoutSection({
         y: transform.y,
         width: transform.width,
         height: transform.height,
+        anchorX: transform.anchorX,
+        anchorY: transform.anchorY,
         rotation: transform.rotation,
       });
     }
@@ -170,6 +180,31 @@ export const LayoutSection = memo(function LayoutSection({
       ? firstValue
       : 'mixed';
   }, [videoItems]);
+
+  const { videoAnchorX, videoAnchorY } = useMemo(() => {
+    if (videoItems.length === 0) {
+      return { videoAnchorX: 0 as MixedValue, videoAnchorY: 0 as MixedValue };
+    }
+
+    const resolvedValues = videoItems
+      .map((item) => resolvedTransformsByItem.get(item.id))
+      .filter((value): value is TransformValues => value !== undefined);
+
+    if (resolvedValues.length === 0) {
+      return { videoAnchorX: 0 as MixedValue, videoAnchorY: 0 as MixedValue };
+    }
+
+    const getValue = (getter: (resolved: TransformValues) => number): MixedValue => {
+      const values = resolvedValues.map(getter);
+      const firstValue = values[0]!;
+      return values.every((v) => Math.abs(v - firstValue) < 0.1) ? firstValue : 'mixed';
+    };
+
+    return {
+      videoAnchorX: getValue((r) => r.anchorX),
+      videoAnchorY: getValue((r) => r.anchorY),
+    };
+  }, [resolvedTransformsByItem, videoItems]);
 
   // Store current aspect ratio for linked dimensions
   const currentAspectRatio = useMemo(() => {
@@ -425,6 +460,36 @@ export const LayoutSection = memo(function LayoutSection({
     [itemIds, onTransformChange, clearPreview, getAutoKeyframeOperation, applyAutoKeyframeOperations]
   );
 
+  const handleAnchorXLiveChange = useCallback((value: number) => {
+    if (videoItems.length === 0) return;
+    const previews: Record<string, { anchorX: number }> = {};
+    videoItems.forEach((item) => {
+      previews[item.id] = { anchorX: value };
+    });
+    setTransformPreview(previews);
+  }, [setTransformPreview, videoItems]);
+
+  const handleAnchorXChange = useCallback((value: number) => {
+    if (videoItemIds.length === 0) return;
+    onTransformChange(videoItemIds, { anchorX: value });
+    queueMicrotask(() => clearPreview());
+  }, [clearPreview, onTransformChange, videoItemIds]);
+
+  const handleAnchorYLiveChange = useCallback((value: number) => {
+    if (videoItems.length === 0) return;
+    const previews: Record<string, { anchorY: number }> = {};
+    videoItems.forEach((item) => {
+      previews[item.id] = { anchorY: value };
+    });
+    setTransformPreview(previews);
+  }, [setTransformPreview, videoItems]);
+
+  const handleAnchorYChange = useCallback((value: number) => {
+    if (videoItemIds.length === 0) return;
+    onTransformChange(videoItemIds, { anchorY: value });
+    queueMicrotask(() => clearPreview());
+  }, [clearPreview, onTransformChange, videoItemIds]);
+
   // Get media items for fallback source dimensions lookup
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
 
@@ -484,7 +549,8 @@ export const LayoutSection = memo(function LayoutSection({
 
       onTransformChange([item.id], updates);
     });
-  }, [items, onTransformChange, mediaItems, canvas]);
+    queueMicrotask(clearTransformUiState);
+  }, [items, onTransformChange, mediaItems, canvas, clearTransformUiState]);
 
   // Reset position to center (x=0, y=0)
   const handleResetPosition = useCallback(() => {
@@ -500,7 +566,8 @@ export const LayoutSection = memo(function LayoutSection({
       if (Object.keys(updates).length === 0) return;
       onTransformChange([item.id], updates);
     });
-  }, [items, onTransformChange, canvas]);
+    queueMicrotask(clearTransformUiState);
+  }, [items, onTransformChange, canvas, clearTransformUiState]);
 
   // Reset rotation to 0°
   const handleResetRotation = useCallback(() => {
@@ -512,7 +579,8 @@ export const LayoutSection = memo(function LayoutSection({
       if (Math.abs(resolved.rotation) <= tolerance) return;
       onTransformChange([item.id], { rotation: 0 });
     });
-  }, [items, onTransformChange, canvas]);
+    queueMicrotask(clearTransformUiState);
+  }, [items, onTransformChange, canvas, clearTransformUiState]);
 
   const handleFlipHorizontalChange = useCallback((checked: boolean) => {
     if (videoItemIds.length === 0) return;
@@ -523,6 +591,20 @@ export const LayoutSection = memo(function LayoutSection({
     if (videoItemIds.length === 0) return;
     onTransformChange(videoItemIds, { flipVertical: checked });
   }, [onTransformChange, videoItemIds]);
+
+  const handleResetAnchor = useCallback(() => {
+    if (videoItems.length === 0) return;
+    const needsReset = videoItems.some((item) =>
+      item.transform?.anchorX !== undefined || item.transform?.anchorY !== undefined
+    );
+    if (needsReset) {
+      onTransformChange(videoItemIds, {
+        anchorX: undefined,
+        anchorY: undefined,
+      });
+    }
+    queueMicrotask(clearTransformUiState);
+  }, [onTransformChange, videoItemIds, videoItems, clearTransformUiState]);
 
   return (
     <PropertySection title="Transform" icon={Move} defaultOpen={true}>
@@ -664,6 +746,40 @@ export const LayoutSection = memo(function LayoutSection({
           </Button>
         </div>
       </PropertyRow>
+
+      {videoItems.length > 0 && (
+        <PropertyRow label="Anchor">
+          <div className="flex items-center gap-1 w-full">
+            <NumberInput
+              value={videoAnchorX}
+              onChange={handleAnchorXChange}
+              onLiveChange={handleAnchorXLiveChange}
+              label="X"
+              unit="px"
+              step={1}
+              className="flex-1 min-w-0"
+            />
+            <NumberInput
+              value={videoAnchorY}
+              onChange={handleAnchorYChange}
+              onLiveChange={handleAnchorYLiveChange}
+              label="Y"
+              unit="px"
+              step={1}
+              className="flex-1 min-w-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetAnchor}
+              title="Reset anchor to center"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </PropertyRow>
+      )}
 
       {videoItems.length > 0 && (
         <PropertyRow label="Flip">

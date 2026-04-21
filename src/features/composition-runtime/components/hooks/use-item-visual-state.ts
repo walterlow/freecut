@@ -225,6 +225,8 @@ export function useItemVisualState(
       y: resolved.y * scaleY,
       width: resolved.width * scaleX,
       height: resolved.height * scaleY,
+      anchorX: resolved.anchorX * scaleX,
+      anchorY: resolved.anchorY * scaleY,
       cornerRadius: resolved.cornerRadius * uniformScale,
       opacity: computedFinalOpacity,
     };

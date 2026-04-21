@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { CoordinateParams, Transform } from '../types/gizmo';
-import { transformToScreenBounds } from '../utils/coordinate-transform';
+import { getScreenTransformOrigin, transformToScreenBounds } from '../utils/coordinate-transform';
 
 interface SelectableItemProps {
   item: TimelineItem;
@@ -27,6 +27,9 @@ export function SelectableItem({
   onDragStart,
 }: SelectableItemProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const transformOrigin = useMemo(() => {
+    return getScreenTransformOrigin(transform, coordParams);
+  }, [coordParams, transform.anchorX, transform.anchorY, transform.height, transform.width]);
 
   // Convert to screen bounds for positioning, expanding for stroke width on shapes
   const screenBounds = useMemo(() => {
@@ -78,7 +81,7 @@ export function SelectableItem({
         width: screenBounds.width,
         height: screenBounds.height,
         transform: `rotate(${transform.rotation}deg)`,
-        transformOrigin: 'center center',
+        transformOrigin,
         // Z-index to render above GroupGizmo border but below handles
         zIndex: 5,
         // Subtle hover indicator (only for unselected items) - outline only

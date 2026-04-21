@@ -111,8 +111,8 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
       }
 
       if (itemTransform.rotation !== 0) {
-        const centerX = projectSize.width / 2 + itemTransform.x;
-        const centerY = projectSize.height / 2 + itemTransform.y;
+        const centerX = itemLeft + (itemTransform.anchorX ?? (w / 2));
+        const centerY = itemTop + (itemTransform.anchorY ?? (h / 2));
         const rad = (itemTransform.rotation * Math.PI) / 180;
         const cos = Math.cos(rad);
         const sin = Math.sin(rad);
@@ -141,8 +141,10 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
       let canvasY = (py - PADDING) / sc;
 
       if (it.rotation !== 0) {
-        const centerX = projectSize.width / 2 + it.x;
-        const centerY = projectSize.height / 2 + it.y;
+        const itemLeft = projectSize.width / 2 + it.x - w / 2;
+        const itemTop = projectSize.height / 2 + it.y - h / 2;
+        const centerX = itemLeft + (it.anchorX ?? (w / 2));
+        const centerY = itemTop + (it.anchorY ?? (h / 2));
         const rad = (-it.rotation * Math.PI) / 180;
         const cos = Math.cos(rad);
         const sin = Math.sin(rad);

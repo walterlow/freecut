@@ -57,6 +57,8 @@ export function applyTransformOverride(
   return {
     ...baseTransform,
     ...override,
+    anchorX: override.anchorX ?? baseTransform.anchorX,
+    anchorY: override.anchorY ?? baseTransform.anchorY,
     opacity: override.opacity ?? baseTransform.opacity,
     cornerRadius: override.cornerRadius ?? baseTransform.cornerRadius,
   };

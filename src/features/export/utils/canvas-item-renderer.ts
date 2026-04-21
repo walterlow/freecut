@@ -90,6 +90,8 @@ export interface ItemTransform {
   y: number;
   width: number;
   height: number;
+  anchorX: number;
+  anchorY: number;
   rotation: number;
   opacity: number;
   cornerRadius: number;
@@ -101,8 +103,10 @@ function applyItemTransformToContext(
   transform: ItemTransform,
   canvasSettings: CanvasSettings,
 ): void {
-  const centerX = canvasSettings.width / 2 + transform.x;
-  const centerY = canvasSettings.height / 2 + transform.y;
+  const left = canvasSettings.width / 2 + transform.x - transform.width / 2;
+  const top = canvasSettings.height / 2 + transform.y - transform.height / 2;
+  const centerX = left + transform.anchorX;
+  const centerY = top + transform.anchorY;
   const flipScaleX = item.transform?.flipHorizontal ? -1 : 1;
   const flipScaleY = item.transform?.flipVertical ? -1 : 1;
   const hasFlip = flipScaleX !== 1 || flipScaleY !== 1;

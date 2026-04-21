@@ -1,5 +1,5 @@
 import type { GizmoState, GizmoHandle, Transform, Point } from '../types/gizmo';
-import { rotatePoint, getAngleFromCenter } from './coordinate-transform';
+import { rotatePoint, getAngleFromCenter, getTransformAnchor } from './coordinate-transform';
 
 const MIN_SIZE = 20;
 
@@ -214,10 +214,7 @@ function calculateRotation(
   canvasWidth: number,
   canvasHeight: number
 ): Transform {
-  // Get center in canvas coordinates
-  const centerX = canvasWidth / 2 + start.x;
-  const centerY = canvasHeight / 2 + start.y;
-  const center: Point = { x: centerX, y: centerY };
+  const center = getTransformAnchor(start, canvasWidth, canvasHeight);
 
   // Calculate angle change
   const startAngle = getAngleFromCenter(startPoint, center);

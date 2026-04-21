@@ -291,6 +291,8 @@ function normalizeItem(
       rotation: normalized.transform.rotation !== undefined
         ? ((normalized.transform.rotation % 360) + 360) % 360
         : undefined,
+      anchorX: normalized.transform.anchorX,
+      anchorY: normalized.transform.anchorY,
       flipHorizontal: normalized.transform.flipHorizontal !== undefined
         ? !!normalized.transform.flipHorizontal
         : undefined,

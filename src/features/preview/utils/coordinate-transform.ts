@@ -85,6 +85,36 @@ export function getTransformCenter(
 }
 
 /**
+ * Get the absolute canvas-space rotation anchor for a transform.
+ * Anchor defaults to the item center when not explicitly set.
+ */
+export function getTransformAnchor(
+  transform: Transform,
+  canvasWidth: number,
+  canvasHeight: number
+): Point {
+  const center = getTransformCenter(transform, canvasWidth, canvasHeight);
+  const left = center.x - transform.width / 2;
+  const top = center.y - transform.height / 2;
+
+  return {
+    x: left + (transform.anchorX ?? (transform.width / 2)),
+    y: top + (transform.anchorY ?? (transform.height / 2)),
+  };
+}
+
+/**
+ * Get CSS transform-origin for a preview overlay in screen pixels.
+ */
+export function getScreenTransformOrigin(
+  transform: Transform,
+  params: CoordinateParams
+): string {
+  const scale = getEffectiveScale(params);
+  return `${(transform.anchorX ?? (transform.width / 2)) * scale}px ${(transform.anchorY ?? (transform.height / 2)) * scale}px`;
+}
+
+/**
  * Convert transform bounds to screen rectangle.
  * Used for positioning the gizmo overlay.
  */

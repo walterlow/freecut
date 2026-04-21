@@ -261,6 +261,8 @@ const transformSchema = z.object({
   y: z.number().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
+  anchorX: z.number().optional(),
+  anchorY: z.number().optional(),
   rotation: z.number().optional(),
   flipHorizontal: z.boolean().optional(),
   flipVertical: z.boolean().optional(),

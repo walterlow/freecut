@@ -59,12 +59,16 @@ export function resolveTransform(
   // Resolve each property (use explicit value or compute default)
   const width = transform?.width ?? defaultWidth;
   const height = transform?.height ?? defaultHeight;
+  const anchorX = transform?.anchorX ?? (width / 2);
+  const anchorY = transform?.anchorY ?? (height / 2);
 
   return {
     x: transform?.x ?? 0, // Centered (offset from center)
     y: transform?.y ?? 0,
     width,
     height,
+    anchorX,
+    anchorY,
     rotation: transform?.rotation ?? 0,
     opacity: transform?.opacity ?? 1,
     cornerRadius: transform?.cornerRadius ?? 0,
@@ -140,7 +144,7 @@ export function toTransformStyle(
     height: resolved.height,
     // Rotate/flip around center (matches canvas/export item transforms)
     transform: buildCssTransform(rotation, transform),
-    transformOrigin: 'center center',
+    transformOrigin: `${resolved.anchorX}px ${resolved.anchorY}px`,
     opacity: resolved.opacity,
     borderRadius: resolved.cornerRadius > 0 ? resolved.cornerRadius : undefined,
     willChange: 'transform', // Hint for GPU acceleration
