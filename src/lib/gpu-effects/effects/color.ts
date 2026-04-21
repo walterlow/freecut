@@ -1,4 +1,10 @@
 import type { GpuEffectDefinition } from '../types';
+import {
+  GPU_CURVES_CHANNELS,
+  getDefaultGpuCurvesChannelControl,
+  getGpuCurvesChannelParamKeys,
+  readGpuCurvesChannelControl,
+} from '@/shared/utils/gpu-curves';
 
 export const brightness: GpuEffectDefinition = {
   id: 'gpu-brightness',
@@ -265,62 +271,144 @@ export const curves: GpuEffectDefinition = {
   name: 'Curves',
   category: 'color',
   entryPoint: 'curvesFragment',
-  uniformSize: 48,
+  uniformSize: 64,
   shader: /* wgsl */ `
 struct CurvesParams {
-  shadows: f32, midtones: f32, highlights: f32, contrast: f32,
-  red: f32, green: f32, blue: f32, _pad1: f32,
-  _pad2: f32, _pad3: f32, _pad4: f32, _pad5: f32,
+  masterShadowX: f32, masterShadowY: f32, masterHighlightX: f32, masterHighlightY: f32,
+  redShadowX: f32, redShadowY: f32, redHighlightX: f32, redHighlightY: f32,
+  greenShadowX: f32, greenShadowY: f32, greenHighlightX: f32, greenHighlightY: f32,
+  blueShadowX: f32, blueShadowY: f32, blueHighlightX: f32, blueHighlightY: f32,
 };
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: CurvesParams;
 
-fn applyShadows(c: f32, amount: f32) -> f32 {
-  let shadow = 1.0 - c;
-  return c + shadow * shadow * amount * 0.5;
+fn evaluateCurve(inputValue: f32, shadowPoint: vec2f, highlightPoint: vec2f) -> f32 {
+  let inputX = clamp(inputValue, 0.0, 1.0);
+  let shadowX = clamp(shadowPoint.x, 0.02, 0.94);
+  let highlightX = clamp(highlightPoint.x, shadowX + 0.04, 0.98);
+  let shadowY = clamp(shadowPoint.y, 0.0, 1.0);
+  let highlightY = clamp(highlightPoint.y, 0.0, 1.0);
+
+  var xs: array<f32, 4>;
+  xs[0] = 0.0;
+  xs[1] = shadowX;
+  xs[2] = highlightX;
+  xs[3] = 1.0;
+
+  var ys: array<f32, 4>;
+  ys[0] = 0.0;
+  ys[1] = shadowY;
+  ys[2] = highlightY;
+  ys[3] = 1.0;
+
+  var slopes: array<f32, 3>;
+  for (var i = 0u; i < 3u; i = i + 1u) {
+    let width = max(0.0001, xs[i + 1u] - xs[i]);
+    slopes[i] = (ys[i + 1u] - ys[i]) / width;
+  }
+
+  var tangents: array<f32, 4>;
+  tangents[0] = slopes[0];
+  tangents[3] = slopes[2];
+  tangents[1] = select(0.0, 0.5 * (slopes[0] + slopes[1]), slopes[0] * slopes[1] > 0.0);
+  tangents[2] = select(0.0, 0.5 * (slopes[1] + slopes[2]), slopes[1] * slopes[2] > 0.0);
+
+  for (var i = 0u; i < 3u; i = i + 1u) {
+    let slope = slopes[i];
+    if (abs(slope) < 0.00001) {
+      tangents[i] = 0.0;
+      tangents[i + 1u] = 0.0;
+    } else {
+      let a = tangents[i] / slope;
+      let b = tangents[i + 1u] / slope;
+      let magnitude = a * a + b * b;
+      if (magnitude > 9.0) {
+        let scale = 3.0 / sqrt(magnitude);
+        tangents[i] = scale * a * slope;
+        tangents[i + 1u] = scale * b * slope;
+      }
+    }
+  }
+
+  var segment = 0u;
+  if (inputX > xs[1]) {
+    segment = 1u;
+  }
+  if (inputX > xs[2]) {
+    segment = 2u;
+  }
+
+  let leftX = xs[segment];
+  let rightX = xs[segment + 1u];
+  let width = max(0.0001, rightX - leftX);
+  let t = clamp((inputX - leftX) / width, 0.0, 1.0);
+  let t2 = t * t;
+  let t3 = t2 * t;
+
+  let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+  let h10 = t3 - 2.0 * t2 + t;
+  let h01 = -2.0 * t3 + 3.0 * t2;
+  let h11 = t3 - t2;
+
+  let value =
+    h00 * ys[segment]
+    + h10 * width * tangents[segment]
+    + h01 * ys[segment + 1u]
+    + h11 * width * tangents[segment + 1u];
+
+  return clamp(value, 0.0, 1.0);
 }
-fn applyHighlights(c: f32, amount: f32) -> f32 {
-  return c + c * c * amount * 0.5;
-}
-fn applyMidtones(c: f32, amount: f32) -> f32 {
-  let mid = 4.0 * c * (1.0 - c);
-  return c + mid * amount * 0.25;
+
+fn applyChannelCurve(value: f32, shadowPoint: vec2f, highlightPoint: vec2f) -> f32 {
+  return evaluateCurve(value, shadowPoint, highlightPoint);
 }
 
 @fragment
 fn curvesFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = textureSample(inputTex, texSampler, input.uv);
-  var c = color.rgb;
-  let sh = params.shadows / 100.0;
-  let mt = params.midtones / 100.0;
-  let hl = params.highlights / 100.0;
-  let ct = params.contrast / 100.0;
-  c = vec3f(applyShadows(c.r, sh), applyShadows(c.g, sh), applyShadows(c.b, sh));
-  c = vec3f(applyMidtones(c.r, mt), applyMidtones(c.g, mt), applyMidtones(c.b, mt));
-  c = vec3f(applyHighlights(c.r, hl), applyHighlights(c.g, hl), applyHighlights(c.b, hl));
-  c = (c - 0.5) * (1.0 + ct) + 0.5;
-  c.r += params.red / 200.0;
-  c.g += params.green / 200.0;
-  c.b += params.blue / 200.0;
-  return vec4f(clamp(c, vec3f(0.0), vec3f(1.0)), color.a);
+  let masterShadow = vec2f(params.masterShadowX, params.masterShadowY);
+  let masterHighlight = vec2f(params.masterHighlightX, params.masterHighlightY);
+  let mappedMaster = vec3f(
+    evaluateCurve(color.r, masterShadow, masterHighlight),
+    evaluateCurve(color.g, masterShadow, masterHighlight),
+    evaluateCurve(color.b, masterShadow, masterHighlight),
+  );
+
+  let c = vec3f(
+    applyChannelCurve(mappedMaster.r, vec2f(params.redShadowX, params.redShadowY), vec2f(params.redHighlightX, params.redHighlightY)),
+    applyChannelCurve(mappedMaster.g, vec2f(params.greenShadowX, params.greenShadowY), vec2f(params.greenHighlightX, params.greenHighlightY)),
+    applyChannelCurve(mappedMaster.b, vec2f(params.blueShadowX, params.blueShadowY), vec2f(params.blueHighlightX, params.blueHighlightY)),
+  );
+
+  return vec4f(c, color.a);
 }`,
-  params: {
-    shadows: { type: 'number', label: 'Shadows', default: 0, min: -100, max: 100, step: 1, animatable: true },
-    midtones: { type: 'number', label: 'Midtones', default: 0, min: -100, max: 100, step: 1, animatable: true },
-    highlights: { type: 'number', label: 'Highlights', default: 0, min: -100, max: 100, step: 1, animatable: true },
-    contrast: { type: 'number', label: 'Contrast', default: 0, min: -100, max: 100, step: 1, animatable: true },
-    red: { type: 'number', label: 'Red', default: 0, min: -100, max: 100, step: 1, animatable: true },
-    green: { type: 'number', label: 'Green', default: 0, min: -100, max: 100, step: 1, animatable: true },
-    blue: { type: 'number', label: 'Blue', default: 0, min: -100, max: 100, step: 1, animatable: true },
+  params: Object.fromEntries(
+    GPU_CURVES_CHANNELS.flatMap((channel) => {
+      const keys = getGpuCurvesChannelParamKeys(channel);
+      const defaults = getDefaultGpuCurvesChannelControl();
+      const prefix = channel.charAt(0).toUpperCase() + channel.slice(1);
+      return [
+        [keys.shadowX, { type: 'number', label: `${prefix} Shadow X`, default: defaults.shadow.x, min: 0, max: 1, step: 0.001, animatable: true }],
+        [keys.shadowY, { type: 'number', label: `${prefix} Shadow Y`, default: defaults.shadow.y, min: 0, max: 1, step: 0.001, animatable: true }],
+        [keys.highlightX, { type: 'number', label: `${prefix} Highlight X`, default: defaults.highlight.x, min: 0, max: 1, step: 0.001, animatable: true }],
+        [keys.highlightY, { type: 'number', label: `${prefix} Highlight Y`, default: defaults.highlight.y, min: 0, max: 1, step: 0.001, animatable: true }],
+      ];
+    }),
+  ),
+  packUniforms: (p) => {
+    const floats: number[] = [];
+    for (const channel of GPU_CURVES_CHANNELS) {
+      const control = readGpuCurvesChannelControl(p, channel);
+      floats.push(
+        control.shadow.x,
+        control.shadow.y,
+        control.highlight.x,
+        control.highlight.y,
+      );
+    }
+    return new Float32Array(floats);
   },
-  packUniforms: (p) => new Float32Array([
-    p.shadows as number ?? 0, p.midtones as number ?? 0,
-    p.highlights as number ?? 0, p.contrast as number ?? 0,
-    p.red as number ?? 0, p.green as number ?? 0,
-    p.blue as number ?? 0, 0,
-    0, 0, 0, 0,
-  ]),
 };
 
 export const colorWheels: GpuEffectDefinition = {
