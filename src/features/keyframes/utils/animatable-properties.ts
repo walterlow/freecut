@@ -11,6 +11,11 @@ export const VISUAL_ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
   'cornerRadius',
 ];
 
+export const VIDEO_ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
+  'anchorX',
+  'anchorY',
+];
+
 export const AUDIO_ANIMATABLE_PROPERTIES: AnimatableProperty[] = ['volume'];
 
 export function getAnimatablePropertiesForItem(item: TimelineItem): AnimatableProperty[] {
@@ -18,7 +23,12 @@ export function getAnimatablePropertiesForItem(item: TimelineItem): AnimatablePr
     case 'audio':
       return AUDIO_ANIMATABLE_PROPERTIES;
     case 'video':
-      return [...VISUAL_ANIMATABLE_PROPERTIES, ...AUDIO_ANIMATABLE_PROPERTIES];
+    case 'composition':
+      return [
+        ...VISUAL_ANIMATABLE_PROPERTIES,
+        ...VIDEO_ANIMATABLE_PROPERTIES,
+        ...AUDIO_ANIMATABLE_PROPERTIES,
+      ];
     default:
       return VISUAL_ANIMATABLE_PROPERTIES;
   }

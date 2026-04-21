@@ -14,7 +14,7 @@ const PROPERTY_GROUP_DEFINITIONS: Array<{
   {
     id: 'transform',
     label: 'Transform',
-    properties: ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'cornerRadius'],
+    properties: ['x', 'y', 'width', 'height', 'anchorX', 'anchorY', 'rotation', 'opacity', 'cornerRadius'],
   },
   {
     id: 'audio',

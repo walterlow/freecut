@@ -3,7 +3,7 @@ import { Move, RotateCcw, Link2, Link2Off } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import type { TimelineItem, VideoItem } from '@/types/timeline';
+import type { TimelineItem, VideoItem, CompositionItem } from '@/types/timeline';
 import type { TransformProperties, CanvasSettings } from '@/types/transform';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
@@ -27,7 +27,7 @@ import {
 
 interface LayoutSectionProps {
   items: TimelineItem[];
-  videoItems?: VideoItem[];
+  mediaTransformItems?: Array<VideoItem | CompositionItem>;
   canvas: CanvasSettings;
   onTransformChange: (ids: string[], updates: Partial<TransformProperties>) => void;
   aspectLocked: boolean;
@@ -53,14 +53,14 @@ type TransformValues = {
  */
 export const LayoutSection = memo(function LayoutSection({
   items,
-  videoItems = [],
+  mediaTransformItems = [],
   canvas,
   onTransformChange,
   aspectLocked,
   onAspectLockToggle,
 }: LayoutSectionProps) {
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
-  const videoItemIds = useMemo(() => videoItems.map((item) => item.id), [videoItems]);
+  const mediaTransformItemIds = useMemo(() => mediaTransformItems.map((item) => item.id), [mediaTransformItems]);
   const itemIdSet = useMemo(() => new Set(itemIds), [itemIds]);
   const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
@@ -166,32 +166,32 @@ export const LayoutSection = memo(function LayoutSection({
   }, [items, resolvedTransformsByItem]);
 
   const flipHorizontal = useMemo(() => {
-    if (videoItems.length === 0) return false as boolean | 'mixed';
-    const firstValue = videoItems[0]?.transform?.flipHorizontal ?? false;
-    return videoItems.every((item) => (item.transform?.flipHorizontal ?? false) === firstValue)
+    if (mediaTransformItems.length === 0) return false as boolean | 'mixed';
+    const firstValue = mediaTransformItems[0]?.transform?.flipHorizontal ?? false;
+    return mediaTransformItems.every((item) => (item.transform?.flipHorizontal ?? false) === firstValue)
       ? firstValue
       : 'mixed';
-  }, [videoItems]);
+  }, [mediaTransformItems]);
 
   const flipVertical = useMemo(() => {
-    if (videoItems.length === 0) return false as boolean | 'mixed';
-    const firstValue = videoItems[0]?.transform?.flipVertical ?? false;
-    return videoItems.every((item) => (item.transform?.flipVertical ?? false) === firstValue)
+    if (mediaTransformItems.length === 0) return false as boolean | 'mixed';
+    const firstValue = mediaTransformItems[0]?.transform?.flipVertical ?? false;
+    return mediaTransformItems.every((item) => (item.transform?.flipVertical ?? false) === firstValue)
       ? firstValue
       : 'mixed';
-  }, [videoItems]);
+  }, [mediaTransformItems]);
 
-  const { videoAnchorX, videoAnchorY } = useMemo(() => {
-    if (videoItems.length === 0) {
-      return { videoAnchorX: 0 as MixedValue, videoAnchorY: 0 as MixedValue };
+  const { mediaAnchorX, mediaAnchorY } = useMemo(() => {
+    if (mediaTransformItems.length === 0) {
+      return { mediaAnchorX: 0 as MixedValue, mediaAnchorY: 0 as MixedValue };
     }
 
-    const resolvedValues = videoItems
+    const resolvedValues = mediaTransformItems
       .map((item) => resolvedTransformsByItem.get(item.id))
       .filter((value): value is TransformValues => value !== undefined);
 
     if (resolvedValues.length === 0) {
-      return { videoAnchorX: 0 as MixedValue, videoAnchorY: 0 as MixedValue };
+      return { mediaAnchorX: 0 as MixedValue, mediaAnchorY: 0 as MixedValue };
     }
 
     const getValue = (getter: (resolved: TransformValues) => number): MixedValue => {
@@ -201,10 +201,10 @@ export const LayoutSection = memo(function LayoutSection({
     };
 
     return {
-      videoAnchorX: getValue((r) => r.anchorX),
-      videoAnchorY: getValue((r) => r.anchorY),
+      mediaAnchorX: getValue((r) => r.anchorX),
+      mediaAnchorY: getValue((r) => r.anchorY),
     };
-  }, [resolvedTransformsByItem, videoItems]);
+  }, [mediaTransformItems, resolvedTransformsByItem]);
 
   // Store current aspect ratio for linked dimensions
   const currentAspectRatio = useMemo(() => {
@@ -220,7 +220,7 @@ export const LayoutSection = memo(function LayoutSection({
   const getAutoKeyframeOperation = useCallback(
     (
       itemId: string,
-      property: 'x' | 'y' | 'width' | 'height' | 'rotation' | 'opacity',
+      property: 'x' | 'y' | 'width' | 'height' | 'anchorX' | 'anchorY' | 'rotation' | 'opacity',
       value: number
     ): AutoKeyframeOperation | null => {
       const item = itemsById.get(itemId);
@@ -461,34 +461,64 @@ export const LayoutSection = memo(function LayoutSection({
   );
 
   const handleAnchorXLiveChange = useCallback((value: number) => {
-    if (videoItems.length === 0) return;
+    if (mediaTransformItems.length === 0) return;
     const previews: Record<string, { anchorX: number }> = {};
-    videoItems.forEach((item) => {
+    mediaTransformItems.forEach((item) => {
       previews[item.id] = { anchorX: value };
     });
     setTransformPreview(previews);
-  }, [setTransformPreview, videoItems]);
+  }, [mediaTransformItems, setTransformPreview]);
 
   const handleAnchorXChange = useCallback((value: number) => {
-    if (videoItemIds.length === 0) return;
-    onTransformChange(videoItemIds, { anchorX: value });
+    if (mediaTransformItemIds.length === 0) return;
+    const autoOps: AutoKeyframeOperation[] = [];
+    const fallbackItemIds: string[] = [];
+    for (const itemId of mediaTransformItemIds) {
+      const operation = getAutoKeyframeOperation(itemId, 'anchorX', value);
+      if (operation) {
+        autoOps.push(operation);
+      } else {
+        fallbackItemIds.push(itemId);
+      }
+    }
+    if (autoOps.length > 0) {
+      applyAutoKeyframeOperations(autoOps);
+    }
+    if (fallbackItemIds.length > 0) {
+      onTransformChange(fallbackItemIds, { anchorX: value });
+    }
     queueMicrotask(() => clearPreview());
-  }, [clearPreview, onTransformChange, videoItemIds]);
+  }, [applyAutoKeyframeOperations, clearPreview, getAutoKeyframeOperation, mediaTransformItemIds, onTransformChange]);
 
   const handleAnchorYLiveChange = useCallback((value: number) => {
-    if (videoItems.length === 0) return;
+    if (mediaTransformItems.length === 0) return;
     const previews: Record<string, { anchorY: number }> = {};
-    videoItems.forEach((item) => {
+    mediaTransformItems.forEach((item) => {
       previews[item.id] = { anchorY: value };
     });
     setTransformPreview(previews);
-  }, [setTransformPreview, videoItems]);
+  }, [mediaTransformItems, setTransformPreview]);
 
   const handleAnchorYChange = useCallback((value: number) => {
-    if (videoItemIds.length === 0) return;
-    onTransformChange(videoItemIds, { anchorY: value });
+    if (mediaTransformItemIds.length === 0) return;
+    const autoOps: AutoKeyframeOperation[] = [];
+    const fallbackItemIds: string[] = [];
+    for (const itemId of mediaTransformItemIds) {
+      const operation = getAutoKeyframeOperation(itemId, 'anchorY', value);
+      if (operation) {
+        autoOps.push(operation);
+      } else {
+        fallbackItemIds.push(itemId);
+      }
+    }
+    if (autoOps.length > 0) {
+      applyAutoKeyframeOperations(autoOps);
+    }
+    if (fallbackItemIds.length > 0) {
+      onTransformChange(fallbackItemIds, { anchorY: value });
+    }
     queueMicrotask(() => clearPreview());
-  }, [clearPreview, onTransformChange, videoItemIds]);
+  }, [applyAutoKeyframeOperations, clearPreview, getAutoKeyframeOperation, mediaTransformItemIds, onTransformChange]);
 
   // Get media items for fallback source dimensions lookup
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
@@ -583,28 +613,28 @@ export const LayoutSection = memo(function LayoutSection({
   }, [items, onTransformChange, canvas, clearTransformUiState]);
 
   const handleFlipHorizontalChange = useCallback((checked: boolean) => {
-    if (videoItemIds.length === 0) return;
-    onTransformChange(videoItemIds, { flipHorizontal: checked });
-  }, [onTransformChange, videoItemIds]);
+    if (mediaTransformItemIds.length === 0) return;
+    onTransformChange(mediaTransformItemIds, { flipHorizontal: checked });
+  }, [mediaTransformItemIds, onTransformChange]);
 
   const handleFlipVerticalChange = useCallback((checked: boolean) => {
-    if (videoItemIds.length === 0) return;
-    onTransformChange(videoItemIds, { flipVertical: checked });
-  }, [onTransformChange, videoItemIds]);
+    if (mediaTransformItemIds.length === 0) return;
+    onTransformChange(mediaTransformItemIds, { flipVertical: checked });
+  }, [mediaTransformItemIds, onTransformChange]);
 
   const handleResetAnchor = useCallback(() => {
-    if (videoItems.length === 0) return;
-    const needsReset = videoItems.some((item) =>
+    if (mediaTransformItems.length === 0) return;
+    const needsReset = mediaTransformItems.some((item) =>
       item.transform?.anchorX !== undefined || item.transform?.anchorY !== undefined
     );
     if (needsReset) {
-      onTransformChange(videoItemIds, {
+      onTransformChange(mediaTransformItemIds, {
         anchorX: undefined,
         anchorY: undefined,
       });
     }
     queueMicrotask(clearTransformUiState);
-  }, [onTransformChange, videoItemIds, videoItems, clearTransformUiState]);
+  }, [clearTransformUiState, mediaTransformItemIds, mediaTransformItems, onTransformChange]);
 
   return (
     <PropertySection title="Transform" icon={Move} defaultOpen={true}>
@@ -747,27 +777,41 @@ export const LayoutSection = memo(function LayoutSection({
         </div>
       </PropertyRow>
 
-      {videoItems.length > 0 && (
+      {mediaTransformItems.length > 0 && (
         <PropertyRow label="Anchor">
           <div className="flex items-center gap-1 w-full">
-            <NumberInput
-              value={videoAnchorX}
-              onChange={handleAnchorXChange}
-              onLiveChange={handleAnchorXLiveChange}
-              label="X"
-              unit="px"
-              step={1}
-              className="flex-1 min-w-0"
-            />
-            <NumberInput
-              value={videoAnchorY}
-              onChange={handleAnchorYChange}
-              onLiveChange={handleAnchorYLiveChange}
-              label="Y"
-              unit="px"
-              step={1}
-              className="flex-1 min-w-0"
-            />
+            <div className="flex items-center gap-0.5 flex-1 min-w-0">
+              <NumberInput
+                value={mediaAnchorX}
+                onChange={handleAnchorXChange}
+                onLiveChange={handleAnchorXLiveChange}
+                label="X"
+                unit="px"
+                step={1}
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={mediaTransformItemIds}
+                property="anchorX"
+                currentValue={mediaAnchorX === 'mixed' ? 0 : mediaAnchorX}
+              />
+            </div>
+            <div className="flex items-center gap-0.5 flex-1 min-w-0">
+              <NumberInput
+                value={mediaAnchorY}
+                onChange={handleAnchorYChange}
+                onLiveChange={handleAnchorYLiveChange}
+                label="Y"
+                unit="px"
+                step={1}
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={mediaTransformItemIds}
+                property="anchorY"
+                currentValue={mediaAnchorY === 'mixed' ? 0 : mediaAnchorY}
+              />
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -781,7 +825,7 @@ export const LayoutSection = memo(function LayoutSection({
         </PropertyRow>
       )}
 
-      {videoItems.length > 0 && (
+      {mediaTransformItems.length > 0 && (
         <PropertyRow label="Flip">
           <div className="flex items-center justify-between gap-3 w-full">
             <label className="flex items-center gap-2 text-xs text-muted-foreground">

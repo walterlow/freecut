@@ -368,6 +368,8 @@ export function GizmoOverlay({
         y: transform.y,
         width: transform.width,
         height: transform.height,
+        anchorX: transform.anchorX ?? (transform.width / 2),
+        anchorY: transform.anchorY ?? (transform.height / 2),
         rotation: transform.rotation,
         opacity: transform.opacity,
         cornerRadius: transform.cornerRadius ?? 0,

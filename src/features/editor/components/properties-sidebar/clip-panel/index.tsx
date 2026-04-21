@@ -11,7 +11,7 @@ import type { ClipInspectorTab } from '@/app/state/editor';
 import type { SelectionState, SelectionActions } from '@/shared/state/selection';
 import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
 import type { TransformProperties } from '@/types/transform';
-import type { TimelineItem, VideoItem } from '@/types/timeline';
+import type { TimelineItem, VideoItem, CompositionItem } from '@/types/timeline';
 
 import { LayoutSection } from './layout-section';
 import { FillSection } from './fill-section';
@@ -117,8 +117,10 @@ export const ClipPanel = memo(function ClipPanel() {
     [selectedItems]
   );
 
-  const videoItems = useMemo(
-    () => selectedItems.filter((item): item is VideoItem => item.type === 'video'),
+  const mediaTransformItems = useMemo(
+    () => selectedItems.filter(
+      (item): item is VideoItem | CompositionItem => item.type === 'video' || item.type === 'composition'
+    ),
     [selectedItems]
   );
 
@@ -228,7 +230,7 @@ export const ClipPanel = memo(function ClipPanel() {
               {showVideoTab && (
                 <LayoutSection
                   items={layoutFillItems}
-                  videoItems={videoItems}
+                  mediaTransformItems={mediaTransformItems}
                   canvas={canvas}
                   onTransformChange={handleTransformChange}
                   aspectLocked={aspectLocked}

@@ -4,7 +4,17 @@
  */
 
 /** Properties that can be animated via keyframes */
-export type AnimatableProperty = 'x' | 'y' | 'width' | 'height' | 'rotation' | 'opacity' | 'cornerRadius' | 'volume';
+export type AnimatableProperty =
+  | 'x'
+  | 'y'
+  | 'width'
+  | 'height'
+  | 'anchorX'
+  | 'anchorY'
+  | 'rotation'
+  | 'opacity'
+  | 'cornerRadius'
+  | 'volume';
 
 /** Transform/visual properties animatable via gizmo (excludes non-spatial props like volume) */
 export type TransformAnimatableProperty = Exclude<AnimatableProperty, 'volume'>;
@@ -142,6 +152,8 @@ export const PROPERTY_LABELS: Record<AnimatableProperty, string> = {
   y: 'Y Position',
   width: 'Width',
   height: 'Height',
+  anchorX: 'Anchor X',
+  anchorY: 'Anchor Y',
   rotation: 'Rotation',
   opacity: 'Opacity',
   cornerRadius: 'Corner Radius',

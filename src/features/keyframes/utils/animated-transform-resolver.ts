@@ -15,6 +15,8 @@ const ANIMATABLE_TRANSFORM_PROPERTIES: TransformAnimatableProperty[] = [
   'y',
   'width',
   'height',
+  'anchorX',
+  'anchorY',
   'rotation',
   'opacity',
   'cornerRadius',
