@@ -43,6 +43,7 @@ export { getShapePath, rotatePath } from '@/features/composition-runtime/utils/s
 export {
   hasCornerPin,
   drawCornerPinImage,
+  resolveCornerPinTargetRect,
   resolveCornerPinForSize,
 } from '@/features/composition-runtime/utils/corner-pin';
 export { snapSourceTime } from '@/features/composition-runtime/utils/video-timing';

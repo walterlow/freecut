@@ -2,7 +2,11 @@ import { useCallback, useMemo, memo } from 'react';
 import { Maximize2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/types/timeline';
-import { withCornerPinReferenceSize } from '@/features/editor/deps/composition-runtime';
+import {
+  resolveCornerPinTargetRect,
+  resolveCornerPinForSize,
+  withCornerPinReferenceSize,
+} from '@/features/editor/deps/composition-runtime';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useCornerPinStore } from '@/features/editor/deps/preview';
 import {
@@ -47,7 +51,25 @@ export const CornerPinSection = memo(function CornerPinSection({
   } = useCornerPinStore();
 
   const item = items.length === 1 ? items[0]! : null;
-  const cornerPin = item?.cornerPin ?? DEFAULT_PIN;
+  const cornerPin = useMemo(() => {
+    if (!item) return DEFAULT_PIN;
+    const targetRect = resolveCornerPinTargetRect(
+      item.transform?.width ?? item.cornerPin?.referenceWidth ?? 0,
+      item.transform?.height ?? item.cornerPin?.referenceHeight ?? 0,
+      item.type === 'video' || item.type === 'image'
+        ? {
+          sourceWidth: item.sourceWidth,
+          sourceHeight: item.sourceHeight,
+          crop: item.crop,
+        }
+        : undefined,
+    );
+    return resolveCornerPinForSize(
+      item.cornerPin,
+      targetRect.width,
+      targetRect.height,
+    ) ?? DEFAULT_PIN;
+  }, [item]);
   const isEditingThisItem = isCornerPinEditing && editingItemId === item?.id;
 
   const hasAnyOffset = useMemo(() => {
@@ -66,13 +88,22 @@ export const CornerPinSection = memo(function CornerPinSection({
       const current = item.cornerPin ?? DEFAULT_PIN;
       const newCorner: [number, number] = [...current[corner]];
       newCorner[axis] = value;
-      const width = item.transform?.width ?? current.referenceWidth ?? 0;
-      const height = item.transform?.height ?? current.referenceHeight ?? 0;
+      const targetRect = resolveCornerPinTargetRect(
+        item.transform?.width ?? current.referenceWidth ?? 0,
+        item.transform?.height ?? current.referenceHeight ?? 0,
+        item.type === 'video' || item.type === 'image'
+          ? {
+            sourceWidth: item.sourceWidth,
+            sourceHeight: item.sourceHeight,
+            crop: item.crop,
+          }
+          : undefined,
+      );
       updateItem(item.id, {
         cornerPin: withCornerPinReferenceSize(
           { ...current, [corner]: newCorner },
-          width,
-          height,
+          targetRect.width,
+          targetRect.height,
         ),
       });
     },

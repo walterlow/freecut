@@ -11,13 +11,17 @@
  * Drag uses pointer capture for reliable release detection.
  */
 
-import { useRef, useEffect, useCallback, memo } from 'react';
+import { useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   useCornerPinStore,
   type CornerPinHandle,
   type CornerPinValues,
 } from '../stores/corner-pin-store';
-import { withCornerPinReferenceSize } from '@/features/preview/deps/composition-runtime';
+import {
+  resolveCornerPinTargetRect,
+  resolveCornerPinForSize,
+  withCornerPinReferenceSize,
+} from '@/features/preview/deps/composition-runtime';
 import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { useTimelineStore } from '@/features/preview/deps/timeline-store';
 import type { CoordinateParams, Transform } from '../types/gizmo';
@@ -63,8 +67,30 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
   const items = useItemsStore((s) => s.items);
 
   const item = items.find((i) => i.id === editingItemId);
-  const baseCornerPin = item?.cornerPin ?? DEFAULT_PIN;
-  const cornerPin = previewCornerPin ?? baseCornerPin;
+  const cornerPinTargetRect = useCallback(
+    (transform: Transform) => resolveCornerPinTargetRect(
+      transform.width,
+      transform.height,
+      item?.type === 'video' || item?.type === 'image'
+        ? {
+          sourceWidth: item.sourceWidth,
+          sourceHeight: item.sourceHeight,
+          crop: item.crop,
+        }
+        : undefined,
+    ),
+    [item],
+  );
+  const resolvedBaseCornerPin = useMemo(() => {
+    if (!item) return DEFAULT_PIN;
+    const targetRect = cornerPinTargetRect(itemTransform);
+    return resolveCornerPinForSize(
+      item.cornerPin,
+      targetRect.width,
+      targetRect.height,
+    ) ?? DEFAULT_PIN;
+  }, [cornerPinTargetRect, item, itemTransform]);
+  const cornerPin = previewCornerPin ?? resolvedBaseCornerPin;
 
   const scale = getEffectiveScale(coordParams);
 
@@ -77,18 +103,17 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
   scaleRef.current = scale;
   const editingItemIdRef = useRef(editingItemId);
   editingItemIdRef.current = editingItemId;
-  const baseCornerPinRef = useRef(baseCornerPin);
-  baseCornerPinRef.current = baseCornerPin;
+  const baseCornerPinRef = useRef(resolvedBaseCornerPin);
+  baseCornerPinRef.current = resolvedBaseCornerPin;
 
   // Convert item-local corner position to canvas draw coordinates (with padding offset)
   const cornerToCanvas = useCallback(
     (corner: CornerPinHandle): [number, number] => {
       const { projectSize } = coordParams;
-      const w = itemTransform.width;
-      const h = itemTransform.height;
+      const targetRect = cornerPinTargetRect(itemTransform);
 
-      const itemLeft = projectSize.width / 2 + itemTransform.x - w / 2;
-      const itemTop = projectSize.height / 2 + itemTransform.y - h / 2;
+      const itemLeft = projectSize.width / 2 + itemTransform.x - itemTransform.width / 2 + targetRect.x;
+      const itemTop = projectSize.height / 2 + itemTransform.y - itemTransform.height / 2 + targetRect.y;
 
       let cx: number, cy: number;
       const pin = cornerPin[corner];
@@ -98,22 +123,24 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
           cy = itemTop + pin[1];
           break;
         case 'topRight':
-          cx = itemLeft + w + pin[0];
+          cx = itemLeft + targetRect.width + pin[0];
           cy = itemTop + pin[1];
           break;
         case 'bottomRight':
-          cx = itemLeft + w + pin[0];
-          cy = itemTop + h + pin[1];
+          cx = itemLeft + targetRect.width + pin[0];
+          cy = itemTop + targetRect.height + pin[1];
           break;
         case 'bottomLeft':
           cx = itemLeft + pin[0];
-          cy = itemTop + h + pin[1];
+          cy = itemTop + targetRect.height + pin[1];
           break;
       }
 
       if (itemTransform.rotation !== 0) {
-        const centerX = itemLeft + (itemTransform.anchorX ?? (w / 2));
-        const centerY = itemTop + (itemTransform.anchorY ?? (h / 2));
+        const itemBoxLeft = projectSize.width / 2 + itemTransform.x - itemTransform.width / 2;
+        const itemBoxTop = projectSize.height / 2 + itemTransform.y - itemTransform.height / 2;
+        const centerX = itemBoxLeft + (itemTransform.anchorX ?? (itemTransform.width / 2));
+        const centerY = itemBoxTop + (itemTransform.anchorY ?? (itemTransform.height / 2));
         const rad = (itemTransform.rotation * Math.PI) / 180;
         const cos = Math.cos(rad);
         const sin = Math.sin(rad);
@@ -125,7 +152,7 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
 
       return [cx * scale + PADDING, cy * scale + PADDING];
     },
-    [coordParams, itemTransform, cornerPin, scale],
+    [coordParams, cornerPin, cornerPinTargetRect, itemTransform, scale],
   );
 
   // Convert pointer position (relative to canvas element) to item-local offset
@@ -134,18 +161,17 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
       const it = itemTransformRef.current;
       const sc = scaleRef.current;
       const { projectSize } = coordParamsRef.current;
-      const w = it.width;
-      const h = it.height;
+      const targetRect = cornerPinTargetRect(it);
 
       // Remove padding, then convert from screen to project space
       let canvasX = (px - PADDING) / sc;
       let canvasY = (py - PADDING) / sc;
 
       if (it.rotation !== 0) {
-        const itemLeft = projectSize.width / 2 + it.x - w / 2;
-        const itemTop = projectSize.height / 2 + it.y - h / 2;
-        const centerX = itemLeft + (it.anchorX ?? (w / 2));
-        const centerY = itemTop + (it.anchorY ?? (h / 2));
+        const itemLeft = projectSize.width / 2 + it.x - it.width / 2;
+        const itemTop = projectSize.height / 2 + it.y - it.height / 2;
+        const centerX = itemLeft + (it.anchorX ?? (it.width / 2));
+        const centerY = itemTop + (it.anchorY ?? (it.height / 2));
         const rad = (-it.rotation * Math.PI) / 180;
         const cos = Math.cos(rad);
         const sin = Math.sin(rad);
@@ -155,21 +181,21 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
         canvasY = centerY + dx * sin + dy * cos;
       }
 
-      const itemLeft = projectSize.width / 2 + it.x - w / 2;
-      const itemTop = projectSize.height / 2 + it.y - h / 2;
+      const itemLeft = projectSize.width / 2 + it.x - it.width / 2 + targetRect.x;
+      const itemTop = projectSize.height / 2 + it.y - it.height / 2 + targetRect.y;
 
       switch (corner) {
         case 'topLeft':
           return [canvasX - itemLeft, canvasY - itemTop];
         case 'topRight':
-          return [canvasX - (itemLeft + w), canvasY - itemTop];
+          return [canvasX - (itemLeft + targetRect.width), canvasY - itemTop];
         case 'bottomRight':
-          return [canvasX - (itemLeft + w), canvasY - (itemTop + h)];
+          return [canvasX - (itemLeft + targetRect.width), canvasY - (itemTop + targetRect.height)];
         case 'bottomLeft':
-          return [canvasX - itemLeft, canvasY - (itemTop + h)];
+          return [canvasX - itemLeft, canvasY - (itemTop + targetRect.height)];
       }
     },
-    [],
+    [cornerPinTargetRect],
   );
 
   // Draw the overlay
@@ -318,9 +344,9 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
       const finalPreview = useCornerPinStore.getState().previewCornerPin;
       const itemId = editingItemIdRef.current;
       if (finalPreview && itemId && handle) {
-        const { width, height } = itemTransformRef.current;
+        const targetRect = cornerPinTargetRect(itemTransformRef.current);
         useTimelineStore.getState().updateItem(itemId, {
-          cornerPin: withCornerPinReferenceSize(finalPreview, width, height),
+          cornerPin: withCornerPinReferenceSize(finalPreview, targetRect.width, targetRect.height),
         });
       }
 

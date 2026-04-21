@@ -4,21 +4,32 @@
  * Computes CSS matrix3d transforms and Canvas2D mesh-based rendering
  * for perspective warp (4-corner pin distortion).
  *
- * Corner pin offsets are in item-local pixel space:
+ * Corner pin offsets are in pin-target-local pixel space:
  * - topLeft: offset from (0, 0)
  * - topRight: offset from (width, 0)
  * - bottomRight: offset from (width, height)
  * - bottomLeft: offset from (0, height)
+ *
+ * For normal items, the pin target is the full item box.
+ * For contain-fit media, the pin target is the contained media rect.
  * When all offsets are [0, 0], there is no distortion.
  */
 
 import type { TimelineItemCornerPin } from '@/types/timeline';
+import type { CropSettings } from '@/types/transform';
+import { calculateMediaCropLayout, type Rect } from '@/shared/utils/media-crop';
 
 export interface CornerPinOffsets {
   topLeft: [number, number];
   topRight: [number, number];
   bottomRight: [number, number];
   bottomLeft: [number, number];
+}
+
+export interface CornerPinTargetRectOptions {
+  sourceWidth?: number;
+  sourceHeight?: number;
+  crop?: CropSettings;
 }
 
 /** Check if corner pin has any non-zero offset */
@@ -66,6 +77,34 @@ export function withCornerPinReferenceSize(
     ...pin,
     referenceWidth: width > 0 ? width : undefined,
     referenceHeight: height > 0 ? height : undefined,
+  };
+}
+
+export function resolveCornerPinTargetRect(
+  containerWidth: number,
+  containerHeight: number,
+  options?: CornerPinTargetRectOptions,
+): Rect {
+  if (
+    options?.sourceWidth !== undefined
+    && options.sourceWidth > 0
+    && options.sourceHeight !== undefined
+    && options.sourceHeight > 0
+  ) {
+    return calculateMediaCropLayout(
+      options.sourceWidth,
+      options.sourceHeight,
+      containerWidth,
+      containerHeight,
+      options.crop,
+    ).mediaRect;
+  }
+
+  return {
+    x: 0,
+    y: 0,
+    width: containerWidth,
+    height: containerHeight,
   };
 }
 

@@ -7,6 +7,7 @@ export {
   resolveTransform,
   getSourceDimensions,
 } from '@/features/composition-runtime/utils/transform-resolver';
+export { resolveCornerPinTargetRect } from '@/features/composition-runtime/utils/corner-pin';
 export { needsCustomAudioDecoder } from '@/features/composition-runtime/utils/audio-codec-detection';
 export {
   getOrDecodeAudioSliceForPlayback,

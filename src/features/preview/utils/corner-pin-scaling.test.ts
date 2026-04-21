@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveCornerPinTargetRect,
   resolveCornerPinForSize,
   withCornerPinReferenceSize,
 } from '@/features/preview/deps/composition-runtime';
@@ -14,6 +15,17 @@ const baseCornerPin = {
 };
 
 describe('corner pin reference sizing', () => {
+  it('targets the contained media rect instead of the full item box', () => {
+    const rect = resolveCornerPinTargetRect(500, 500, {
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+    });
+    expect(rect.x).toBeCloseTo(0);
+    expect(rect.y).toBeCloseTo(109.375);
+    expect(rect.width).toBeCloseTo(500);
+    expect(rect.height).toBeCloseTo(281.25);
+  });
+
   it('scales authored offsets against the current render size', () => {
     expect(resolveCornerPinForSize(baseCornerPin, 400, 50)).toEqual({
       topLeft: [20, 10],

@@ -5,6 +5,7 @@ import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
 import {
   hasCornerPin,
   computeCornerPinMatrix3d,
+  resolveCornerPinTargetRect,
   resolveCornerPinForSize,
 } from '../utils/corner-pin';
 import { useCornerPinStore } from '@/features/composition-runtime/deps/stores';
@@ -110,10 +111,61 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     s.editingItemId === item.id ? s.previewCornerPin : null
   );
   const effectiveCornerPin = cornerPinPreview ?? item.cornerPin;
+  const effectiveCrop = state.propertiesPreview?.crop ?? mediaContent?.crop;
+  const cornerPinTargetRect = useMemo(() => {
+    if (mediaContent?.fitMode === 'contain') {
+      return resolveCornerPinTargetRect(
+        state.transform.width,
+        state.transform.height,
+        {
+          sourceWidth: mediaContent.sourceWidth ?? state.transform.width,
+          sourceHeight: mediaContent.sourceHeight ?? state.transform.height,
+          crop: effectiveCrop,
+        },
+      );
+    }
+
+    return resolveCornerPinTargetRect(
+      state.transform.width,
+      state.transform.height,
+    );
+  }, [
+    effectiveCrop,
+    mediaContent?.fitMode,
+    mediaContent?.sourceHeight,
+    mediaContent?.sourceWidth,
+    state.transform.height,
+    state.transform.width,
+  ]);
+  const containedMediaStyle = useMemo((): React.CSSProperties => {
+    const width = state.transform.width;
+    const height = state.transform.height;
+    const toPercent = (value: number, total: number) => {
+      if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) {
+        return '0%';
+      }
+      return `${(value / total) * 100}%`;
+    };
+
+    return {
+      position: 'absolute',
+      left: toPercent(cornerPinTargetRect.x, width),
+      top: toPercent(cornerPinTargetRect.y, height),
+      width: toPercent(cornerPinTargetRect.width, width),
+      height: toPercent(cornerPinTargetRect.height, height),
+    };
+  }, [
+    cornerPinTargetRect.height,
+    cornerPinTargetRect.width,
+    cornerPinTargetRect.x,
+    cornerPinTargetRect.y,
+    state.transform.height,
+    state.transform.width,
+  ]);
 
   const cornerPinStyle = useMemo((): React.CSSProperties | null => {
-    const w = state.transform.width;
-    const h = state.transform.height;
+    const w = cornerPinTargetRect.width;
+    const h = cornerPinTargetRect.height;
     const resolvedCornerPin = resolveCornerPinForSize(effectiveCornerPin, w, h);
     if (!resolvedCornerPin || !hasCornerPin(resolvedCornerPin)) return null;
     const activeCornerPin = resolvedCornerPin;
@@ -121,7 +173,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       transformOrigin: '0 0',
       transform: computeCornerPinMatrix3d(w, h, activeCornerPin),
     };
-  }, [effectiveCornerPin, state.transform.width, state.transform.height]);
+  }, [cornerPinTargetRect.height, cornerPinTargetRect.width, effectiveCornerPin]);
 
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
@@ -211,7 +263,38 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     )
     : children;
 
-  const innerContent = (
+  const innerContent = mediaContent?.fitMode === 'contain' && cornerPinStyle ? (
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div
+        style={{
+          ...containedMediaStyle,
+          ...cornerPinStyle,
+          willChange: 'transform',
+          backfaceVisibility: 'hidden' as const,
+          overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
+        }}
+      >
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            position: 'relative',
+            filter: state.cssFilter || undefined,
+          }}
+        >
+          <ContainedMediaLayout
+            sourceWidth={cornerPinTargetRect.width}
+            sourceHeight={cornerPinTargetRect.height}
+            containerWidth={cornerPinTargetRect.width}
+            containerHeight={cornerPinTargetRect.height}
+            crop={effectiveCrop}
+          >
+            {children}
+          </ContainedMediaLayout>
+        </div>
+      </div>
+    </div>
+  ) : (
     <>
       {/* Corner Pin wrapper (only when active) */}
       {/* When corner pin is active, will-change + backfaceVisibility force Chrome

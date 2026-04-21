@@ -55,6 +55,7 @@ import {
   applyPreviewPathVerticesToShape,
   hasCornerPin,
   drawCornerPinImage,
+  resolveCornerPinTargetRect,
   resolveCornerPinForSize,
   getShapePath,
   rotatePath,
@@ -369,8 +370,46 @@ async function renderItemWithCornerPin(
   const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
   const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
   const needsFlattenedOpacity = transform.opacity !== 1;
-  const resolvedCornerPin = resolveCornerPinForSize(item.cornerPin, itemW, itemH);
+  const cornerPinTargetRect = resolveCornerPinTargetRect(
+    itemW,
+    itemH,
+    item.type === 'video' || item.type === 'image'
+      ? {
+        sourceWidth: item.sourceWidth,
+        sourceHeight: item.sourceHeight,
+        crop: item.crop,
+      }
+      : undefined,
+  );
+  const pinSourceWidth = Math.max(1, Math.round(cornerPinTargetRect.width));
+  const pinSourceHeight = Math.max(1, Math.round(cornerPinTargetRect.height));
+  const resolvedCornerPin = resolveCornerPinForSize(item.cornerPin, pinSourceWidth, pinSourceHeight);
   if (!resolvedCornerPin) return;
+  const pinCanvas = (
+    pinSourceWidth === itemW
+    && pinSourceHeight === itemH
+    && Math.abs(cornerPinTargetRect.x) < 0.01
+    && Math.abs(cornerPinTargetRect.y) < 0.01
+  )
+    ? tempCanvas
+    : new OffscreenCanvas(pinSourceWidth, pinSourceHeight);
+
+  if (pinCanvas !== tempCanvas) {
+    const pinCtx = pinCanvas.getContext('2d');
+    if (!pinCtx) return;
+    pinCtx.clearRect(0, 0, pinSourceWidth, pinSourceHeight);
+    pinCtx.drawImage(
+      tempCanvas,
+      cornerPinTargetRect.x,
+      cornerPinTargetRect.y,
+      cornerPinTargetRect.width,
+      cornerPinTargetRect.height,
+      0,
+      0,
+      pinSourceWidth,
+      pinSourceHeight,
+    );
+  }
 
   ctx.save();
   if (needsFlattenedOpacity) {
@@ -390,11 +429,11 @@ async function renderItemWithCornerPin(
         flatCtx.clearRect(0, 0, flatCanvas.width, flatCanvas.height);
         drawCornerPinImage(
           flatCtx,
-          tempCanvas,
-          itemW,
-          itemH,
-          left,
-          top,
+          pinCanvas,
+          pinSourceWidth,
+          pinSourceHeight,
+          left + cornerPinTargetRect.x,
+          top + cornerPinTargetRect.y,
           resolvedCornerPin,
         );
         ctx.drawImage(flatCanvas, 0, 0);
@@ -402,7 +441,15 @@ async function renderItemWithCornerPin(
         rctx.canvasPool.release(flatCanvas);
       }
     } else {
-      drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, resolvedCornerPin);
+      drawCornerPinImage(
+        ctx,
+        pinCanvas,
+        pinSourceWidth,
+        pinSourceHeight,
+        left + cornerPinTargetRect.x,
+        top + cornerPinTargetRect.y,
+        resolvedCornerPin,
+      );
     }
   } finally {
     ctx.restore();

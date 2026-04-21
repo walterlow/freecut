@@ -49,6 +49,7 @@ import {
   getEffectiveTimelineMaxFrame,
   sanitizeInOutPoints,
 } from '../utils/in-out-points';
+import { resolveCornerPinTargetRect } from '@/features/timeline/deps/composition-runtime';
 
 function getLog() { return createLogger('ItemsStore'); }
 
@@ -157,15 +158,26 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
   };
 
   if (normalized.cornerPin) {
+    const cornerPinTargetRect = resolveCornerPinTargetRect(
+      normalized.transform?.width ?? 0,
+      normalized.transform?.height ?? 0,
+      normalized.type === 'video' || normalized.type === 'image'
+        ? {
+          sourceWidth: normalized.sourceWidth,
+          sourceHeight: normalized.sourceHeight,
+          crop: normalized.crop,
+        }
+        : undefined,
+    );
     normalized.cornerPin = {
       ...normalized.cornerPin,
       referenceWidth: normalized.cornerPin.referenceWidth
-        ?? (normalized.transform?.width && normalized.transform.width > 0
-          ? normalized.transform.width
+        ?? (cornerPinTargetRect.width > 0
+          ? cornerPinTargetRect.width
           : undefined),
       referenceHeight: normalized.cornerPin.referenceHeight
-        ?? (normalized.transform?.height && normalized.transform.height > 0
-          ? normalized.transform.height
+        ?? (cornerPinTargetRect.height > 0
+          ? cornerPinTargetRect.height
           : undefined),
     };
   }
