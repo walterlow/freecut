@@ -29,6 +29,10 @@ interface AudioSectionProps {
 
 const AUDIO_GAIN_DB_MIN = -60;
 const AUDIO_GAIN_DB_MAX = 12;
+// SoundTouch's WSOLA pipeline produces audible artifacts when the pitch factor
+// is reassigned at 60Hz. 50ms is still perceptually live but lets each window
+// settle between updates.
+const AUDIO_PITCH_LIVE_THROTTLE_MS = 50;
 
 /**
  * Audio section - volume, EQ, and audio fades.
@@ -371,6 +375,7 @@ export function AudioSection({ items }: AudioSectionProps) {
               value={pitchSemitones}
               onChange={(value) => handleAudioPitchChange('audioPitchSemitones', value)}
               onLiveChange={(value) => handleAudioPitchLiveChange('audioPitchSemitones', value)}
+              liveChangeThrottleMs={AUDIO_PITCH_LIVE_THROTTLE_MS}
               min={AUDIO_PITCH_SEMITONES_MIN}
               max={AUDIO_PITCH_SEMITONES_MAX}
               step={1}
@@ -395,6 +400,7 @@ export function AudioSection({ items }: AudioSectionProps) {
               value={pitchCents}
               onChange={(value) => handleAudioPitchChange('audioPitchCents', value)}
               onLiveChange={(value) => handleAudioPitchLiveChange('audioPitchCents', value)}
+              liveChangeThrottleMs={AUDIO_PITCH_LIVE_THROTTLE_MS}
               min={AUDIO_PITCH_CENTS_MIN}
               max={AUDIO_PITCH_CENTS_MAX}
               step={1}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { AbsoluteFill } from '@/features/composition-runtime/deps/player';
-import { useDebugStore } from '@/features/composition-runtime/deps/stores';
+import { useDebugStore, useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import type { AudioItem, TimelineItem, ShapeItem } from '@/types/timeline';
 import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { TransformProperties } from '@/types/transform';
@@ -27,7 +27,10 @@ import { isGifUrl, isWebpUrl } from '@/shared/utils/media-utils';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { createLogger } from '@/shared/logging/logger';
 import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
-import { getAudioPitchShiftSemitones, isAudioPitchShiftActive } from '@/shared/utils/audio-pitch';
+import {
+  isAudioPitchShiftActive,
+  resolvePreviewAudioPitchShiftSemitones,
+} from '@/shared/utils/audio-pitch';
 import { needsCustomAudioDecoder } from '../utils/audio-codec-detection';
 
 function getLogger() { return createLogger('CompositionItem'); }
@@ -86,9 +89,22 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
     () => appendResolvedAudioEqStage(audioEqStages, getAudioEqSettings(item)),
     [audioEqStages, item],
   );
+  // Subscribe to this item's gizmo preview so live pitch-slider drags route the
+  // video's audio through the pitch-corrected path immediately (not only after
+  // commit). resolvePreviewAudioPitchShiftSemitones falls back to the committed
+  // pitch fields when no preview is set.
+  const itemPreviewProperties = useGizmoStore(
+    React.useCallback((s) => s.preview?.[item.id]?.properties, [item.id]),
+  );
   const itemLocalPitchShiftSemitones = React.useMemo(
-    () => getAudioPitchShiftSemitones(item),
-    [item],
+    () => resolvePreviewAudioPitchShiftSemitones({
+      base: {
+        audioPitchSemitones: item.audioPitchSemitones,
+        audioPitchCents: item.audioPitchCents,
+      },
+      preview: itemPreviewProperties,
+    }),
+    [item.audioPitchSemitones, item.audioPitchCents, itemPreviewProperties],
   );
 
   if (item.type === 'video') {

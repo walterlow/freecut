@@ -23,6 +23,7 @@ import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 import {
+  hasAudioPitchOverride,
   isAudioPitchShiftActive,
   resolvePreviewAudioPitchShiftSemitones,
 } from '@/shared/utils/audio-pitch';
@@ -576,7 +577,12 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     preview: itemPreview?.properties,
     additionalSemitones: props.audioPitchShiftSemitones,
   });
-  const requiresPitchCorrection = isAudioPitchShiftActive(resolvedPitchShiftSemitones);
+  // Stay on the decoded SoundTouch path while the user is actively previewing a
+  // pitch change — even if the resolved shift currently lands on 0 — so crossing
+  // the zero boundary during a drag doesn't tear down and re-decode the graph.
+  const hasActivePitchPreview = hasAudioPitchOverride(itemPreview?.properties);
+  const requiresPitchCorrection =
+    hasActivePitchPreview || isAudioPitchShiftActive(resolvedPitchShiftSemitones);
   const decodeMediaId = props.mediaId ?? `legacy-src:${props.src}`;
 
   if (!requiresPitchCorrection && Math.abs(playbackRate - 1) <= PLAYBACK_RATE_TOLERANCE) {

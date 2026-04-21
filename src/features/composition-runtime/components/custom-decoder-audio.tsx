@@ -10,6 +10,7 @@ import { getAudioTargetTimeSeconds } from '../utils/video-timing';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import {
+  hasAudioPitchOverride,
   isAudioPitchShiftActive,
   resolvePreviewAudioPitchShiftSemitones,
 } from '@/shared/utils/audio-pitch';
@@ -457,7 +458,11 @@ export const CustomDecoderAudio: React.FC<CustomDecoderAudioProps> = React.memo(
     preview: itemPreview?.properties,
     additionalSemitones: props.audioPitchShiftSemitones,
   });
+  // Stay on the SoundTouch path while a pitch preview is active so crossing the
+  // zero boundary mid-drag doesn't remount between buffered and pitch-preserved.
+  const hasActivePitchPreview = hasAudioPitchOverride(itemPreview?.properties);
   const shouldUseBufferedPlayback = Math.abs(playbackRate - 1) <= 0.0001
+    && !hasActivePitchPreview
     && !isAudioPitchShiftActive(resolvedPitchShiftSemitones);
 
   if (shouldUseBufferedPlayback) {
