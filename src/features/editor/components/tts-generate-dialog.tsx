@@ -567,12 +567,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
           {/* Text input */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="tts-dialog-text">Text</Label>
-              <span className={`text-[11px] ${trimmedText.length <= 500 ? 'text-muted-foreground' : 'text-amber-400'}`}>
-                {trimmedText.length}/500 recommended
-              </span>
-            </div>
+            <Label htmlFor="tts-dialog-text">Text</Label>
             <Textarea
               id="tts-dialog-text"
               value={text}
