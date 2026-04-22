@@ -143,11 +143,13 @@ export type TextItem = BaseTimelineItem & {
   // Colors
   color: string; // Text color (hex or oklch)
   backgroundColor?: string; // Background color behind text (optional)
+  backgroundRadius?: number; // Background box radius in pixels (default: 0)
   // Text layout
   textAlign?: 'left' | 'center' | 'right'; // Horizontal alignment (default: 'center')
   verticalAlign?: 'top' | 'middle' | 'bottom'; // Vertical alignment (default: 'middle')
   lineHeight?: number; // Line height multiplier (default: 1.2)
   letterSpacing?: number; // Letter spacing in pixels (default: 0)
+  textPadding?: number; // Inset padding inside the text box in pixels (default: 16)
   // Text effects
   textShadow?: {
     offsetX: number;

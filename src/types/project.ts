@@ -88,7 +88,27 @@ export interface ProjectTimeline {
     };
     fontSize?: number;
     fontFamily?: string;
+    fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+    fontStyle?: 'normal' | 'italic';
+    underline?: boolean;
     color?: string;
+    backgroundColor?: string;
+    backgroundRadius?: number;
+    textAlign?: 'left' | 'center' | 'right';
+    verticalAlign?: 'top' | 'middle' | 'bottom';
+    lineHeight?: number;
+    letterSpacing?: number;
+    textPadding?: number;
+    textShadow?: {
+      offsetX: number;
+      offsetY: number;
+      blur: number;
+      color: string;
+    };
+    stroke?: {
+      width: number;
+      color: string;
+    };
     shapeType?: 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon';
     fillColor?: string;
     strokeColor?: string;

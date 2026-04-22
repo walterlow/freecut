@@ -191,10 +191,13 @@ export function TextSection({
       fontStyle: textItems.every(i => (i.fontStyle ?? 'normal') === (first.fontStyle ?? 'normal')) ? (first.fontStyle ?? 'normal') : undefined,
       underline: textItems.every(i => (i.underline ?? false) === (first.underline ?? false)) ? (first.underline ?? false) : undefined,
       color: textItems.every(i => i.color === first.color) ? first.color : undefined,
+      backgroundColor: textItems.every(i => (i.backgroundColor ?? '') === (first.backgroundColor ?? '')) ? (first.backgroundColor ?? '') : undefined,
+      backgroundRadius: textItems.every(i => (i.backgroundRadius ?? 0) === (first.backgroundRadius ?? 0)) ? (first.backgroundRadius ?? 0) : 'mixed' as const,
       textAlign: textItems.every(i => (i.textAlign ?? 'center') === (first.textAlign ?? 'center')) ? (first.textAlign ?? 'center') : undefined,
       verticalAlign: textItems.every(i => (i.verticalAlign ?? 'middle') === (first.verticalAlign ?? 'middle')) ? (first.verticalAlign ?? 'middle') : undefined,
       letterSpacing: textItems.every(i => (i.letterSpacing ?? 0) === (first.letterSpacing ?? 0)) ? (first.letterSpacing ?? 0) : 'mixed' as const,
       lineHeight: textItems.every(i => (i.lineHeight ?? 1.2) === (first.lineHeight ?? 1.2)) ? (first.lineHeight ?? 1.2) : 'mixed' as const,
+      textPadding: textItems.every(i => (i.textPadding ?? 16) === (first.textPadding ?? 16)) ? (first.textPadding ?? 16) : 'mixed' as const,
       shadowColor: textItems.every(i => (i.textShadow?.color ?? '') === (first.textShadow?.color ?? '')) ? (first.textShadow?.color ?? '') : undefined,
       shadowOffsetX: textItems.every(i => (i.textShadow?.offsetX ?? 0) === (first.textShadow?.offsetX ?? 0)) ? (first.textShadow?.offsetX ?? 0) : 'mixed' as const,
       shadowOffsetY: textItems.every(i => (i.textShadow?.offsetY ?? 0) === (first.textShadow?.offsetY ?? 0)) ? (first.textShadow?.offsetY ?? 0) : 'mixed' as const,
@@ -357,6 +360,41 @@ export function TextSection({
     [finalizePreviewChange, updateTextItems]
   );
 
+  const handleBackgroundColorLiveChange = useCallback(
+    (value: string) => {
+      setTextPropertiesPreview({ backgroundColor: value });
+    },
+    [setTextPropertiesPreview]
+  );
+
+  const handleBackgroundColorChange = useCallback(
+    (value: string) => {
+      updateTextItems({ backgroundColor: value });
+      finalizePreviewChange();
+    },
+    [finalizePreviewChange, updateTextItems]
+  );
+
+  const handleBackgroundColorClear = useCallback(() => {
+    updateTextItems({ backgroundColor: undefined });
+    finalizePreviewChange();
+  }, [finalizePreviewChange, updateTextItems]);
+
+  const handleBackgroundRadiusLiveChange = useCallback(
+    (value: number) => {
+      setTextPropertiesPreview({ backgroundRadius: value });
+    },
+    [setTextPropertiesPreview]
+  );
+
+  const handleBackgroundRadiusChange = useCallback(
+    (value: number) => {
+      updateTextItems({ backgroundRadius: value });
+      finalizePreviewChange();
+    },
+    [finalizePreviewChange, updateTextItems]
+  );
+
   const handleTextAlignChange = useCallback(
     (value: string) => {
       updateTextItems({ textAlign: value as TextItem['textAlign'] });
@@ -400,6 +438,21 @@ export function TextSection({
   const handleLineHeightChange = useCallback(
     (value: number) => {
       updateTextItems({ lineHeight: value });
+      finalizePreviewChange();
+    },
+    [finalizePreviewChange, updateTextItems]
+  );
+
+  const handleTextPaddingLiveChange = useCallback(
+    (value: number) => {
+      setTextPropertiesPreview({ textPadding: value });
+    },
+    [setTextPropertiesPreview]
+  );
+
+  const handleTextPaddingChange = useCallback(
+    (value: number) => {
+      updateTextItems({ textPadding: value });
       finalizePreviewChange();
     },
     [finalizePreviewChange, updateTextItems]
@@ -621,6 +674,10 @@ export function TextSection({
   const shadowOffsetY = sharedValues.shadowOffsetY;
   const shadowBlur = sharedValues.shadowBlur;
   const strokeWidth = sharedValues.strokeWidth;
+  const backgroundColorValue = sharedValues.backgroundColor || textItems[0]?.backgroundColor || '#000000';
+  const hasAnyBackground = textItems.some((item) => item.backgroundColor !== undefined);
+  const textPadding = sharedValues.textPadding;
+  const backgroundRadius = sharedValues.backgroundRadius;
 
   return (
     <>
@@ -791,6 +848,28 @@ export function TextSection({
             defaultColor="#ffffff"
           />
 
+          <PropertyRow label="Background">
+            <div className="flex flex-1 min-w-0 gap-1">
+              <div className="flex-1 min-w-0">
+                <ColorPicker
+                  color={backgroundColorValue}
+                  onChange={handleBackgroundColorChange}
+                  onLiveChange={handleBackgroundColorLiveChange}
+                />
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px]"
+                onClick={handleBackgroundColorClear}
+                disabled={!hasAnyBackground}
+                title="Clear background"
+              >
+                Clear
+              </Button>
+            </div>
+          </PropertyRow>
+
           {/* Letter Spacing */}
           <PropertyRow label="Spacing">
             <NumberInput
@@ -815,6 +894,32 @@ export function TextSection({
               max={3}
               step={0.1}
               unit="x"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Padding">
+            <NumberInput
+              value={textPadding}
+              onChange={handleTextPaddingChange}
+              onLiveChange={handleTextPaddingLiveChange}
+              min={0}
+              max={160}
+              step={1}
+              unit="px"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Radius">
+            <NumberInput
+              value={backgroundRadius}
+              onChange={handleBackgroundRadiusChange}
+              onLiveChange={handleBackgroundRadiusLiveChange}
+              min={0}
+              max={200}
+              step={1}
+              unit="px"
               className="flex-1 min-w-0"
             />
           </PropertyRow>

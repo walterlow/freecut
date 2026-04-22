@@ -66,6 +66,8 @@ export interface ItemPropertiesPreview {
   lineHeight?: number;
   color?: string;
   backgroundColor?: string;
+  backgroundRadius?: number;
+  textPadding?: number;
   textShadow?: {
     offsetX: number;
     offsetY: number;

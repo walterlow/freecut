@@ -1162,7 +1162,11 @@ function renderTextItem(
   const letterSpacing = item.letterSpacing ?? 0;
   const textAlign = item.textAlign ?? 'center';
   const verticalAlign = item.verticalAlign ?? 'middle';
-  const padding = 16;
+  const padding = Math.max(0, item.textPadding ?? 16);
+  const backgroundRadius = Math.max(
+    0,
+    Math.min(item.backgroundRadius ?? 0, transform.width / 2, transform.height / 2),
+  );
 
   const itemLeft = canvasSettings.width / 2 + transform.x - transform.width / 2;
   const itemTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
@@ -1176,10 +1180,21 @@ function renderTextItem(
     ctx.clip();
   }
 
+  if (item.backgroundColor) {
+    ctx.fillStyle = item.backgroundColor;
+    if (backgroundRadius > 0) {
+      ctx.beginPath();
+      ctx.roundRect(itemLeft, itemTop, transform.width, transform.height, backgroundRadius);
+      ctx.fill();
+    } else {
+      ctx.fillRect(itemLeft, itemTop, transform.width, transform.height);
+    }
+  }
+
   ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`;
   ctx.fillStyle = item.color ?? '#ffffff';
 
-  const availableWidth = transform.width - padding * 2;
+  const availableWidth = Math.max(1, transform.width - padding * 2);
   const lineHeightPx = fontSize * lineHeight;
 
   const metrics = ctx.measureText('Hg');

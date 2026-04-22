@@ -99,4 +99,19 @@ describe('expandTextTransformForPreview', () => {
 
     expect(expanded.height).toBeGreaterThan(48);
   });
+
+  it('accounts for previewed text padding when growing bounds', () => {
+    const expanded = expandTextTransformForPreview(
+      baseItem,
+      {
+        ...baseTransform,
+        height: 64,
+      },
+      {
+        textPadding: 48,
+      }
+    );
+
+    expect(expanded.height).toBeGreaterThan(64);
+  });
 });

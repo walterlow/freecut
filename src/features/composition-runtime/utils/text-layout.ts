@@ -6,11 +6,13 @@ export interface TextLayoutPreviewProperties {
   fontSize?: number;
   letterSpacing?: number;
   lineHeight?: number;
+  textPadding?: number;
+  backgroundRadius?: number;
   textShadow?: TextItem['textShadow'];
   stroke?: TextItem['stroke'];
 }
 
-const TEXT_PADDING = 16;
+const DEFAULT_TEXT_PADDING = 16;
 
 type TextMeasureContext = Pick<CanvasRenderingContext2D, 'font' | 'measureText'>
   | Pick<OffscreenCanvasRenderingContext2D, 'font' | 'measureText'>;
@@ -146,7 +148,8 @@ function getTextRequiredHeight(
   const fontFamily = item.fontFamily ?? 'Inter';
   const fontStyle = item.fontStyle ?? 'normal';
   const fontWeight = FONT_WEIGHT_MAP[item.fontWeight ?? 'normal'] ?? 400;
-  const availableWidth = Math.max(1, width - TEXT_PADDING * 2);
+  const textPadding = Math.max(0, previewProperties?.textPadding ?? item.textPadding ?? DEFAULT_TEXT_PADDING);
+  const availableWidth = Math.max(1, width - textPadding * 2);
 
   const ctx = getMeasureContext();
   if (ctx) {
@@ -171,7 +174,7 @@ function getTextRequiredHeight(
     ? Math.abs(textShadow.offsetY) + textShadow.blur
     : 0;
 
-  return contentHeight + TEXT_PADDING * 2 + strokePad + shadowPad * 2;
+  return contentHeight + textPadding * 2 + strokePad + shadowPad * 2;
 }
 
 /**

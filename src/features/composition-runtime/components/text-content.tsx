@@ -26,6 +26,8 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
   const lineHeight = preview?.lineHeight ?? item.lineHeight ?? 1.2;
   const color = preview?.color ?? item.color;
   const backgroundColor = preview?.backgroundColor ?? item.backgroundColor;
+  const backgroundRadius = preview?.backgroundRadius ?? item.backgroundRadius ?? 0;
+  const textPadding = Math.max(0, preview?.textPadding ?? item.textPadding ?? 16);
   const hasTextShadowPreview = preview !== undefined && Object.prototype.hasOwnProperty.call(preview, 'textShadow');
   const hasStrokePreview = preview !== undefined && Object.prototype.hasOwnProperty.call(preview, 'stroke');
   const textShadow = hasTextShadowPreview
@@ -73,8 +75,9 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
         display: 'flex',
         alignItems,
         justifyContent,
-        padding: `${16 * scale}px`,
+        padding: `${textPadding * scale}px`,
         backgroundColor,
+        borderRadius: `${backgroundRadius * scale}px`,
         boxSizing: 'border-box',
       }}
     >

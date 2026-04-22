@@ -321,10 +321,12 @@ const timelineItemSchema = z.object({
   underline: z.boolean().optional(),
   color: z.string().optional(),
   backgroundColor: z.string().optional(),
+  backgroundRadius: z.number().min(0).optional(),
   textAlign: textAlignSchema.optional(),
   verticalAlign: verticalAlignSchema.optional(),
   lineHeight: z.number().optional(),
   letterSpacing: z.number().optional(),
+  textPadding: z.number().min(0).optional(),
   textShadow: textShadowSchema.optional(),
   stroke: textStrokeSchema.optional(),
   // Shape fields
