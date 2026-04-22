@@ -216,6 +216,79 @@ describe('CompositionContent masks', () => {
     expect(after).not.toBe(before);
   });
 
+  it('keeps clip masks on the full-canvas mask wrapper when corner pin is active', () => {
+    const contentItem: ShapeItem = {
+      id: 'pinned-shape',
+      type: 'shape',
+      trackId: 'content-track',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Pinned shape',
+      shapeType: 'rectangle',
+      fillColor: '#ff0000',
+      cornerPin: {
+        topLeft: [0, 0],
+        topRight: [48, -24],
+        bottomRight: [24, 18],
+        bottomLeft: [-20, 16],
+      },
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+
+    const maskItem: ShapeItem = {
+      id: 'heart-mask',
+      type: 'shape',
+      trackId: 'mask-track',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Heart mask',
+      shapeType: 'heart',
+      fillColor: '#ffffff',
+      isMask: true,
+      maskType: 'clip',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+
+    const { container } = render(
+      <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
+        <Item
+          item={contentItem}
+          muted={false}
+          masks={[
+            {
+              shape: maskItem,
+              transform: maskItem.transform!,
+              trackOrder: 1,
+            },
+          ]}
+        />
+      </VideoConfigProvider>
+    );
+
+    const pinnedElement = Array.from(container.querySelectorAll('div')).find((element) =>
+      (element as HTMLElement).style.transform.includes('matrix3d')
+    ) as HTMLElement | undefined;
+    const maskedWrapper = container.querySelector('[style*="clip-path"]');
+
+    expect(pinnedElement).toBeDefined();
+    expect(maskedWrapper).not.toBeNull();
+    expect(pinnedElement?.querySelector('[style*="clip-path"]')).toBeNull();
+  });
+
   it('keeps clip masks hard-edged even if a feather value is present', () => {
     const contentItem: ShapeItem = {
       id: 'content-shape',

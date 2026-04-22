@@ -77,7 +77,8 @@ interface EffectCanvasSettings {
 }
 
 export interface EffectSourceMask {
-  path: Path2D;
+  path?: Path2D;
+  bitmapMask?: OffscreenCanvas;
   inverted: boolean;
   feather: number;
   maskType: 'clip' | 'alpha';

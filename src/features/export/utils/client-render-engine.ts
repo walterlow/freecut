@@ -67,6 +67,7 @@ import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes';
 // Item renderer
 import {
   createFrameCompositionSceneCache,
+  hasCornerPin,
   type PreviewPathVerticesOverride,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
@@ -1318,7 +1319,10 @@ export async function createCompositionRenderer(
           effectiveItem,
           transform,
           frame,
-          itemRenderContext
+          itemRenderContext,
+          0,
+          undefined,
+          applicableMasks,
         );
 
         // Apply effects (per-item — GPU effects applied here for both preview and export)
@@ -1334,7 +1338,7 @@ export async function createCompositionRenderer(
             canvasPool,
             itemCanvas,
             combinedEffects,
-            applicableMasks,
+            hasCornerPin(effectiveItem.cornerPin) ? [] : applicableMasks,
             frame,
             maskSettings,
             itemRenderContext.gpuPipeline,
@@ -1547,8 +1551,12 @@ export async function createCompositionRenderer(
         const applyTrackScopedMasks = (
           result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null,
           trackOrder: number,
+          skipMasks: boolean,
         ): { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null => {
           if (!result) return null;
+          if (skipMasks) {
+            return result;
+          }
 
           const applicableMasks = activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, trackOrder));
           if (applicableMasks.length === 0) {
@@ -1617,7 +1625,14 @@ export async function createCompositionRenderer(
 
           for (let i = 0; i < results.length; i++) {
             const task = renderTasks[i]!;
-            const result = applyTrackScopedMasks(results[i] ?? null, task.trackOrder);
+            const result = applyTrackScopedMasks(
+              results[i] ?? null,
+              task.trackOrder,
+              task.type === 'item'
+                ? hasCornerPin(getCurrentItem(task.item).cornerPin)
+                : hasCornerPin(getCurrentItem(task.transition.leftClip).cornerPin)
+                  || hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin),
+            );
             if (!result) continue;
             compositedResults.push({ task, result });
 
@@ -1676,7 +1691,14 @@ export async function createCompositionRenderer(
           // Canvas2D compositing fallback
           for (let i = 0; i < results.length; i++) {
             const task = renderTasks[i]!;
-            const result = applyTrackScopedMasks(results[i] ?? null, task.trackOrder);
+            const result = applyTrackScopedMasks(
+              results[i] ?? null,
+              task.trackOrder,
+              task.type === 'item'
+                ? hasCornerPin(getCurrentItem(task.item).cornerPin)
+                : hasCornerPin(getCurrentItem(task.transition.leftClip).cornerPin)
+                  || hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin),
+            );
             if (!result) continue;
 
             const blendMode = task.type === 'item'

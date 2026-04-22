@@ -37,7 +37,7 @@ import {
   type ActiveTransition,
   type TransitionCanvasSettings,
 } from './canvas-transitions';
-import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
+import { applyMasks, buildPreparedMask, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
 import type { ScrubbingCache } from '@/features/export/deps/preview';
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline';
@@ -57,8 +57,6 @@ import {
   drawCornerPinImage,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
-  getShapePath,
-  rotatePath,
   type PreviewPathVerticesOverride,
 } from '@/features/export/deps/composition-runtime';
 import { calculateMediaCropLayout } from '@/shared/utils/media-crop';
@@ -272,12 +270,22 @@ export async function renderItem(
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
   renderSpan?: RenderTimelineSpan,
+  preCornerPinMasks: EffectSourceMask[] = [],
 ): Promise<void> {
   const frameResolvedItem = applyAnimatedCropToItem(item, frame, rctx, renderSpan);
 
   // Corner pin: render to temp canvas, then warp onto main canvas
   if (hasCornerPin(frameResolvedItem.cornerPin)) {
-    await renderItemWithCornerPin(ctx, frameResolvedItem, transform, frame, rctx, sourceFrameOffset, renderSpan);
+    await renderItemWithCornerPin(
+      ctx,
+      frameResolvedItem,
+      transform,
+      frame,
+      rctx,
+      sourceFrameOffset,
+      renderSpan,
+      preCornerPinMasks,
+    );
     return;
   }
 
@@ -356,6 +364,7 @@ async function renderItemWithCornerPin(
   rctx: ItemRenderContext,
   sourceFrameOffset: number,
   renderSpan?: RenderTimelineSpan,
+  preCornerPinMasks: EffectSourceMask[] = [],
 ): Promise<void> {
   const itemW = Math.ceil(transform.width);
   const itemH = Math.ceil(transform.height);
@@ -377,8 +386,36 @@ async function renderItemWithCornerPin(
     canvasSettings: { width: itemW, height: itemH, fps: rctx.canvasSettings.fps },
   };
 
-  // Render content to temp canvas
-  await renderItemContent(tempCtx, item, tempTransform, frame, tempRctx, sourceFrameOffset, renderSpan);
+  if (preCornerPinMasks.length > 0) {
+    const maskedSourceCanvas = new OffscreenCanvas(rctx.canvasSettings.width, rctx.canvasSettings.height);
+    const maskedSourceCtx = maskedSourceCanvas.getContext('2d');
+    if (!maskedSourceCtx) return;
+
+    await renderItemContent(maskedSourceCtx, item, transform, frame, rctx, sourceFrameOffset, renderSpan);
+
+    const maskedCanvas = new OffscreenCanvas(rctx.canvasSettings.width, rctx.canvasSettings.height);
+    const maskedCtx = maskedCanvas.getContext('2d');
+    if (!maskedCtx) return;
+
+    applyMasks(maskedCtx, maskedSourceCanvas, preCornerPinMasks, rctx.canvasSettings);
+
+    const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
+    const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
+    tempCtx.drawImage(
+      maskedCanvas,
+      left,
+      top,
+      itemW,
+      itemH,
+      0,
+      0,
+      itemW,
+      itemH,
+    );
+  } else {
+    // Render content to temp canvas
+    await renderItemContent(tempCtx, item, tempTransform, frame, tempRctx, sourceFrameOffset, renderSpan);
+  }
 
   // Apply corner radius clipping on temp canvas if needed
   if (transform.cornerRadius > 0) {
@@ -397,13 +434,15 @@ async function renderItemWithCornerPin(
   const cornerPinTargetRect = resolveCornerPinTargetRect(
     itemW,
     itemH,
-    item.type === 'video' || item.type === 'image'
-      ? {
-        sourceWidth: item.sourceWidth,
-        sourceHeight: item.sourceHeight,
-        crop: item.crop,
-      }
-      : undefined,
+    preCornerPinMasks.length > 0
+      ? undefined
+      : item.type === 'video' || item.type === 'image'
+        ? {
+          sourceWidth: item.sourceWidth,
+          sourceHeight: item.sourceHeight,
+          crop: item.crop,
+        }
+        : undefined,
   );
   const pinSourceWidth = Math.max(1, Math.round(cornerPinTargetRect.width));
   const pinSourceHeight = Math.max(1, Math.round(cornerPinTargetRect.height));
@@ -1480,7 +1519,8 @@ async function renderCompositionItem(
     // Resolve all active masks up front so each item can be masked only by
     // shapes on higher tracks.
     const activeSubMasks: Array<{
-      path: Path2D;
+      path?: Path2D;
+      bitmapMask?: OffscreenCanvas;
       inverted: boolean;
       feather: number;
       maskType: 'clip' | 'alpha';
@@ -1499,40 +1539,13 @@ async function renderCompositionItem(
 
         const subItemKeyframes = subData.keyframesMap.get(subItem.id);
         const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
-        const maskType = subItem.maskType ?? 'clip';
-        const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
         const effectiveMaskItem = (
           rctx.renderMode === 'preview'
             ? applyPreviewPathVerticesToShape(subItem, rctx.getPreviewPathVerticesOverride)
             : subItem
         );
-        let svgPath = getShapePath(
-          effectiveMaskItem,
-          {
-            x: subItemTransform.x,
-            y: subItemTransform.y,
-            width: subItemTransform.width,
-            height: subItemTransform.height,
-            rotation: 0,
-            opacity: subItemTransform.opacity,
-          },
-          {
-            canvasWidth: subCanvasSettings.width,
-            canvasHeight: subCanvasSettings.height,
-          }
-        );
-
-        if (subItemTransform.rotation !== 0) {
-          const centerX = subCanvasSettings.width / 2 + subItemTransform.x;
-          const centerY = subCanvasSettings.height / 2 + subItemTransform.y;
-          svgPath = rotatePath(svgPath, subItemTransform.rotation, centerX, centerY);
-        }
-
         activeSubMasks.push({
-          path: svgPathToPath2D(svgPath),
-          inverted: effectiveMaskItem.maskInvert ?? false,
-          feather,
-          maskType,
+          ...buildPreparedMask(effectiveMaskItem, subItemTransform, subMaskSettings),
           trackOrder: track.order,
         });
       }
@@ -1599,8 +1612,21 @@ async function renderCompositionItem(
             maskedItemCanvas.width = item.compositionWidth;
             maskedItemCanvas.height = item.compositionHeight;
             maskedItemCtx.clearRect(0, 0, maskedItemCanvas.width, maskedItemCanvas.height);
-            await renderItem(maskedItemCtx, subItem, subItemTransform, localFrame, subRctx);
-            applyMasks(subContentCtx, maskedItemCanvas, applicableMasks, subMaskSettings);
+            await renderItem(
+              maskedItemCtx,
+              subItem,
+              subItemTransform,
+              localFrame,
+              subRctx,
+              0,
+              undefined,
+              applicableMasks,
+            );
+            if (hasCornerPin(subItem.cornerPin)) {
+              subContentCtx.drawImage(maskedItemCanvas, 0, 0);
+            } else {
+              applyMasks(subContentCtx, maskedItemCanvas, applicableMasks, subMaskSettings);
+            }
           } finally {
             rctx.canvasPool.release(maskedItemCanvas);
           }
@@ -1610,12 +1636,21 @@ async function renderCompositionItem(
           itemCanvas.height = item.compositionHeight;
           itemCtx.clearRect(0, 0, itemCanvas.width, itemCanvas.height);
           try {
-            await renderItem(itemCtx, subItem, subItemTransform, localFrame, subRctx);
+            await renderItem(
+              itemCtx,
+              subItem,
+              subItemTransform,
+              localFrame,
+              subRctx,
+              0,
+              undefined,
+              applicableMasks,
+            );
             const { source, poolCanvases } = await renderEffectsFromMaskedSource(
               rctx.canvasPool,
               itemCanvas,
               combinedEffects,
-              applicableMasks,
+              hasCornerPin(subItem.cornerPin) ? [] : applicableMasks,
               localFrame,
               subMaskSettings,
               rctx.gpuPipeline,
@@ -1696,8 +1731,8 @@ export async function renderTransitionToCanvas(
   const prevTransitionFlag = rctx.isRenderingTransition;
   rctx.isRenderingTransition = true;
   await Promise.all([
-    renderItem(leftCtx, leftParticipant.item, leftParticipant.transform, frame, rctx, 0, leftParticipant.renderSpan),
-    renderItem(rightCtx, rightParticipant.item, rightParticipant.transform, frame, rctx, 0, rightParticipant.renderSpan),
+    renderItem(leftCtx, leftParticipant.item, leftParticipant.transform, frame, rctx, 0, leftParticipant.renderSpan, trackMasks),
+    renderItem(rightCtx, rightParticipant.item, rightParticipant.transform, frame, rctx, 0, rightParticipant.renderSpan, trackMasks),
   ]);
   rctx.isRenderingTransition = prevTransitionFlag;
 
@@ -1723,7 +1758,7 @@ export async function renderTransitionToCanvas(
         canvasPool,
         leftCanvas,
         leftCombinedEffects,
-        trackMasks,
+        hasCornerPin(leftParticipant.item.cornerPin) ? [] : trackMasks,
         frame,
         canvasSettings,
         rctx.gpuPipeline,
@@ -1734,7 +1769,7 @@ export async function renderTransitionToCanvas(
         canvasPool,
         rightCanvas,
         rightCombinedEffects,
-        trackMasks,
+        hasCornerPin(rightParticipant.item.cornerPin) ? [] : trackMasks,
         frame,
         canvasSettings,
         rctx.gpuPipeline,

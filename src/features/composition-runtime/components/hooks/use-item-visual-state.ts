@@ -374,7 +374,7 @@ export function useItemVisualState(
         maskInvert: false,
         maskFeather: 0,
         svgMaskId: null,
-        svgMaskPaths: null,
+        svgMaskPaths: maskPathsWithStroke,
       };
     }
 
@@ -387,7 +387,7 @@ export function useItemVisualState(
         maskInvert: true,
         maskFeather: 0,
         svgMaskId: null,
-        svgMaskPaths: null,
+        svgMaskPaths: maskPathsWithStroke,
       };
     }
 

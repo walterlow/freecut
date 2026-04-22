@@ -5,9 +5,11 @@ import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
 import {
   hasCornerPin,
   computeCornerPinMatrix3d,
+  drawCornerPinImage,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
 } from '../utils/corner-pin';
+import { getShapePath, rotatePath } from '../utils/shape-path';
 import { useCornerPinStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import {
@@ -55,6 +57,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
   const shouldRasterizeSvgMask = state.maskType === 'svg-mask'
     && !!state.svgMaskPaths
     && state.maskFeather > 0;
+  const hasCornerPinnedMask = masks.some((mask) => hasCornerPin(mask.shape.cornerPin));
 
   // Compute mask style based on mask type
   const rasterSvgMaskDataUrl = useMemo(() => {
@@ -77,8 +80,160 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     canvasWidth,
     canvasHeight,
   ]);
+  const rasterCornerPinnedMaskDataUrl = useMemo(() => {
+    if (!hasCornerPinnedMask || masks.length === 0 || typeof document === 'undefined') {
+      return null;
+    }
+
+    const width = Math.max(1, Math.round(canvasWidth));
+    const height = Math.max(1, Math.round(canvasHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return null;
+    }
+
+    const firstMask = masks[0]!;
+    const maskType = firstMask.shape.maskType ?? 'clip';
+    const feather = maskType === 'alpha' ? (firstMask.shape.maskFeather ?? 0) : 0;
+    const invert = firstMask.shape.maskInvert ?? false;
+
+    ctx.clearRect(0, 0, width, height);
+    if (invert) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'destination-out';
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    for (const mask of masks) {
+      const { shape, transform } = mask;
+      const localWidth = Math.max(1, Math.round(transform.width));
+      const localHeight = Math.max(1, Math.round(transform.height));
+      const left = width / 2 + transform.x - transform.width / 2;
+      const top = height / 2 + transform.y - transform.height / 2;
+      const centerX = left + transform.width / 2;
+      const centerY = top + transform.height / 2;
+      const resolvedPin = resolveCornerPinForSize(shape.cornerPin, transform.width, transform.height);
+
+      ctx.save();
+      if ((transform.rotation ?? 0) !== 0) {
+        ctx.translate(centerX, centerY);
+        ctx.rotate(((transform.rotation ?? 0) * Math.PI) / 180);
+        ctx.translate(-centerX, -centerY);
+      }
+
+      if (resolvedPin && hasCornerPin(resolvedPin)) {
+        const localCanvas = document.createElement('canvas');
+        localCanvas.width = localWidth;
+        localCanvas.height = localHeight;
+        const localCtx = localCanvas.getContext('2d');
+        if (!localCtx) {
+          ctx.restore();
+          continue;
+        }
+
+        const localPath = getShapePath(
+          shape,
+          {
+            x: 0,
+            y: 0,
+            width: localWidth,
+            height: localHeight,
+            rotation: 0,
+            opacity: 1,
+          },
+          {
+            canvasWidth: localWidth,
+            canvasHeight: localHeight,
+          },
+        );
+
+        localCtx.fillStyle = '#ffffff';
+        localCtx.fill(new Path2D(localPath));
+        if ((shape.strokeWidth ?? 0) > 0) {
+          localCtx.strokeStyle = '#ffffff';
+          localCtx.lineWidth = shape.strokeWidth ?? 0;
+          localCtx.stroke(new Path2D(localPath));
+        }
+
+        drawCornerPinImage(
+          ctx as unknown as OffscreenCanvasRenderingContext2D,
+          localCanvas,
+          localWidth,
+          localHeight,
+          left,
+          top,
+          resolvedPin,
+        );
+      } else {
+        let svgPath = getShapePath(
+          shape,
+          {
+            x: transform.x,
+            y: transform.y,
+            width: transform.width,
+            height: transform.height,
+            rotation: 0,
+            opacity: transform.opacity ?? 1,
+          },
+          {
+            canvasWidth: width,
+            canvasHeight: height,
+          },
+        );
+
+        if ((transform.rotation ?? 0) !== 0) {
+          svgPath = rotatePath(svgPath, transform.rotation ?? 0, centerX, centerY);
+        }
+
+        const path2d = new Path2D(svgPath);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill(path2d);
+        if ((shape.strokeWidth ?? 0) > 0) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = shape.strokeWidth ?? 0;
+          ctx.stroke(path2d);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (feather > 0) {
+      const blurredCanvas = document.createElement('canvas');
+      blurredCanvas.width = width;
+      blurredCanvas.height = height;
+      const blurredCtx = blurredCanvas.getContext('2d');
+      if (!blurredCtx) {
+        return canvas.toDataURL('image/png');
+      }
+      blurredCtx.filter = `blur(${feather}px)`;
+      blurredCtx.drawImage(canvas, 0, 0);
+      return blurredCanvas.toDataURL('image/png');
+    }
+
+    return canvas.toDataURL('image/png');
+  }, [canvasHeight, canvasWidth, hasCornerPinnedMask, masks]);
 
   const maskStyle = useMemo((): React.CSSProperties => {
+    if (rasterCornerPinnedMaskDataUrl) {
+      return {
+        maskImage: `url("${rasterCornerPinnedMaskDataUrl}")`,
+        WebkitMaskImage: `url("${rasterCornerPinnedMaskDataUrl}")`,
+        maskRepeat: 'no-repeat',
+        WebkitMaskRepeat: 'no-repeat',
+        maskSize: '100% 100%',
+        WebkitMaskSize: '100% 100%',
+        maskPosition: '0 0',
+        WebkitMaskPosition: '0 0',
+      };
+    }
     if (state.maskType === 'clip' && state.maskClipPath) {
       return { clipPath: state.maskClipPath };
     }
@@ -104,7 +259,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       };
     }
     return {};
-  }, [state.maskType, state.maskClipPath, state.svgMaskId, rasterSvgMaskDataUrl]);
+  }, [state.maskType, state.maskClipPath, state.svgMaskId, rasterCornerPinnedMaskDataUrl, rasterSvgMaskDataUrl]);
 
   // Corner pin CSS matrix3d — use preview during drag for smooth interaction
   const cornerPinPreview = useCornerPinStore((s) =>
@@ -113,6 +268,13 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
   const effectiveCornerPin = cornerPinPreview ?? item.cornerPin;
   const effectiveCrop = state.propertiesPreview?.crop ?? state.animatedCrop ?? mediaContent?.crop;
   const cornerPinTargetRect = useMemo(() => {
+    if (state.maskType !== null) {
+      return resolveCornerPinTargetRect(
+        state.transform.width,
+        state.transform.height,
+      );
+    }
+
     if (mediaContent?.fitMode === 'contain') {
       return resolveCornerPinTargetRect(
         state.transform.width,
@@ -134,6 +296,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     mediaContent?.fitMode,
     mediaContent?.sourceHeight,
     mediaContent?.sourceWidth,
+    state.maskType,
     state.transform.height,
     state.transform.width,
   ]);
@@ -162,7 +325,6 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     state.transform.height,
     state.transform.width,
   ]);
-
   const cornerPinStyle = useMemo((): React.CSSProperties | null => {
     const w = cornerPinTargetRect.width;
     const h = cornerPinTargetRect.height;
@@ -263,57 +425,71 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     )
     : children;
 
-  const innerContent = mediaContent?.fitMode === 'contain' && cornerPinStyle ? (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+  const cornerPinFrameStyle = useMemo((): React.CSSProperties => {
+    if (mediaContent?.fitMode === 'contain' && cornerPinStyle) {
+      return containedMediaStyle;
+    }
+
+    return {
+      width: '100%',
+      height: '100%',
+    };
+  }, [containedMediaStyle, cornerPinStyle, mediaContent?.fitMode]);
+
+  const pinnedMediaBody = mediaContent?.fitMode === 'contain'
+    ? (
+      <ContainedMediaLayout
+        sourceWidth={cornerPinTargetRect.width}
+        sourceHeight={cornerPinTargetRect.height}
+        containerWidth={cornerPinTargetRect.width}
+        containerHeight={cornerPinTargetRect.height}
+        crop={effectiveCrop}
+      >
+        {children}
+      </ContainedMediaLayout>
+    )
+    : children;
+
+  const pinnedMediaContent = (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        filter: state.cssFilter || undefined,
+      }}
+    >
+      {pinnedMediaBody}
+    </div>
+  );
+
+  const pinnedCornerPinContent = cornerPinStyle ? (
+    <div
+      style={{
+        ...cornerPinFrameStyle,
+        ...cornerPinStyle,
+        willChange: 'transform',
+        backfaceVisibility: 'hidden' as const,
+        overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
+      }}
+    >
+      {pinnedMediaContent}
+    </div>
+  ) : null;
+
+  const innerContent = cornerPinStyle
+    ? (
+      <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+        {pinnedCornerPinContent}
+      </div>
+    )
+    : (
       <div
         style={{
-          ...containedMediaStyle,
-          ...cornerPinStyle,
-          willChange: 'transform',
-          backfaceVisibility: 'hidden' as const,
-          overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
-        }}
-      >
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'relative',
-            filter: state.cssFilter || undefined,
-          }}
-        >
-          <ContainedMediaLayout
-            sourceWidth={cornerPinTargetRect.width}
-            sourceHeight={cornerPinTargetRect.height}
-            containerWidth={cornerPinTargetRect.width}
-            containerHeight={cornerPinTargetRect.height}
-            crop={effectiveCrop}
-          >
-            {children}
-          </ContainedMediaLayout>
-        </div>
-      </div>
-    </div>
-  ) : (
-    <>
-      {/* Corner Pin wrapper (only when active) */}
-      {/* When corner pin is active, will-change + backfaceVisibility force Chrome
-          to composite through the CSS pipeline instead of video hardware overlay,
-          which would otherwise ignore the matrix3d transform. */}
-      <div
-        style={cornerPinStyle ? {
-          width: '100%',
-          height: '100%',
-          ...cornerPinStyle,
-          willChange: 'transform',
-          backfaceVisibility: 'hidden' as const,
-          overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
-        } : {
           width: '100%',
           height: '100%',
         }}
       >
-        {/* Inner: Effects + Content */}
         <div
           style={{
             width: '100%',
@@ -325,8 +501,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
           {effectiveMediaChildren}
         </div>
       </div>
-    </>
-  );
+    );
 
   // When there's no mask, skip the full-canvas mask container div entirely
   if (state.maskType === null) {
