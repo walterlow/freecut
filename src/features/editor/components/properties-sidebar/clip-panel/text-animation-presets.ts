@@ -13,7 +13,9 @@ export type TextAnimationPresetId =
   | 'drop'
   | 'left'
   | 'right'
-  | 'tilt';
+  | 'tilt'
+  | 'pop'
+  | 'swing';
 
 export type TextAnimationPresetOptionId = 'none' | TextAnimationPresetId;
 export type TextAnimationPhase = 'intro' | 'outro';
@@ -44,6 +46,8 @@ const TEXT_ANIMATION_EFFECT_PRESETS: TextAnimationPreset[] = [
   { id: 'left', label: 'Left' },
   { id: 'right', label: 'Right' },
   { id: 'tilt', label: 'Tilt' },
+  { id: 'pop', label: 'Pop' },
+  { id: 'swing', label: 'Swing' },
 ];
 
 export const TEXT_ANIMATION_PRESETS: TextAnimationPresetOption[] = [
@@ -60,6 +64,8 @@ type TextAnimationAnchorTransform = Pick<
 interface AnimationValuePair {
   startValue: number;
   endValue: number;
+  startEasing?: EasingType;
+  startEasingConfig?: EasingConfig;
 }
 
 const TEXT_ANIMATION_PROPERTIES: TextAnimationProperty[] = [
@@ -68,14 +74,54 @@ const TEXT_ANIMATION_PROPERTIES: TextAnimationProperty[] = [
   'y',
   'rotation',
 ];
-const TEXT_ANIMATION_DURATION_SECONDS = 0.35;
-const TEXT_ANIMATION_EASING: EasingType = 'ease-out';
+const TEXT_ANIMATION_DURATION_SECONDS = 0.45;
 const DEFAULT_END_EASING: EasingType = 'linear';
 const ROTATION_OFFSET_DEGREES = 8;
 const VALUE_EPSILON = 0.01;
+const SOFT_EASE_OUT: EasingConfig = {
+  type: 'cubic-bezier',
+  bezier: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
+};
+const SOFT_EASE_IN: EasingConfig = {
+  type: 'cubic-bezier',
+  bezier: { x1: 0.7, y1: 0, x2: 0.84, y2: 0 },
+};
+const TITLE_SPRING: EasingConfig = {
+  type: 'spring',
+  spring: { tension: 220, friction: 18, mass: 0.9 },
+};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function buildOpacityPair(
+  isIntro: boolean,
+  endOpacity: number,
+): AnimationValuePair {
+  return {
+    startValue: isIntro ? 0 : endOpacity,
+    endValue: isIntro ? endOpacity : 0,
+    startEasing: 'cubic-bezier',
+    startEasingConfig: isIntro ? SOFT_EASE_OUT : SOFT_EASE_IN,
+  };
+}
+
+function buildMotionPair(
+  isIntro: boolean,
+  restingValue: number,
+  offsetValue: number,
+  introEasing: EasingType = 'spring',
+  introEasingConfig: EasingConfig = TITLE_SPRING,
+  outroEasing: EasingType = 'cubic-bezier',
+  outroEasingConfig: EasingConfig = SOFT_EASE_IN,
+): AnimationValuePair {
+  return {
+    startValue: isIntro ? offsetValue : restingValue,
+    endValue: isIntro ? restingValue : offsetValue,
+    startEasing: isIntro ? introEasing : outroEasing,
+    startEasingConfig: isIntro ? introEasingConfig : outroEasingConfig,
+  };
 }
 
 function getKeyframeAtFrame(
@@ -133,74 +179,69 @@ function getTextAnimationValues(
 ): Partial<Record<TextAnimationProperty, AnimationValuePair>> {
   const xOffset = clamp(anchorTransform.width * 0.12, 32, 120);
   const yOffset = clamp(anchorTransform.height * 0.2, 24, 96);
+  const popYOffset = clamp(anchorTransform.height * 0.12, 16, 44);
+  const swingRotation = clamp(anchorTransform.width * 0.03, 8, 18);
+  const popRotation = clamp(anchorTransform.width * 0.015, 4, 8);
   const isIntro = phase === 'intro';
 
   switch (presetId) {
     case 'fade':
       return {
-        opacity: {
-          startValue: isIntro ? 0 : anchorTransform.opacity,
-          endValue: isIntro ? anchorTransform.opacity : 0,
-        },
+        opacity: buildOpacityPair(isIntro, anchorTransform.opacity),
       };
     case 'rise':
       return {
-        opacity: {
-          startValue: isIntro ? 0 : anchorTransform.opacity,
-          endValue: isIntro ? anchorTransform.opacity : 0,
-        },
-        y: {
-          startValue: isIntro ? anchorTransform.y + yOffset : anchorTransform.y,
-          endValue: isIntro ? anchorTransform.y : anchorTransform.y - yOffset,
-        },
+        opacity: buildOpacityPair(isIntro, anchorTransform.opacity),
+        y: buildMotionPair(isIntro, anchorTransform.y, anchorTransform.y + yOffset),
       };
     case 'drop':
       return {
-        opacity: {
-          startValue: isIntro ? 0 : anchorTransform.opacity,
-          endValue: isIntro ? anchorTransform.opacity : 0,
-        },
-        y: {
-          startValue: isIntro ? anchorTransform.y - yOffset : anchorTransform.y,
-          endValue: isIntro ? anchorTransform.y : anchorTransform.y + yOffset,
-        },
+        opacity: buildOpacityPair(isIntro, anchorTransform.opacity),
+        y: buildMotionPair(isIntro, anchorTransform.y, anchorTransform.y - yOffset),
       };
     case 'left':
       return {
-        opacity: {
-          startValue: isIntro ? 0 : anchorTransform.opacity,
-          endValue: isIntro ? anchorTransform.opacity : 0,
-        },
-        x: {
-          startValue: isIntro ? anchorTransform.x - xOffset : anchorTransform.x,
-          endValue: isIntro ? anchorTransform.x : anchorTransform.x - xOffset,
-        },
+        opacity: buildOpacityPair(isIntro, anchorTransform.opacity),
+        x: buildMotionPair(isIntro, anchorTransform.x, anchorTransform.x - xOffset),
       };
     case 'right':
       return {
-        opacity: {
-          startValue: isIntro ? 0 : anchorTransform.opacity,
-          endValue: isIntro ? anchorTransform.opacity : 0,
-        },
-        x: {
-          startValue: isIntro ? anchorTransform.x + xOffset : anchorTransform.x,
-          endValue: isIntro ? anchorTransform.x : anchorTransform.x + xOffset,
-        },
+        opacity: buildOpacityPair(isIntro, anchorTransform.opacity),
+        x: buildMotionPair(isIntro, anchorTransform.x, anchorTransform.x + xOffset),
       };
     case 'tilt':
       return {
-        opacity: {
-          startValue: isIntro ? 0 : anchorTransform.opacity,
-          endValue: isIntro ? anchorTransform.opacity : 0,
-        },
-        rotation: {
-          startValue: isIntro
+        opacity: buildOpacityPair(isIntro, anchorTransform.opacity),
+        rotation: buildMotionPair(
+          isIntro,
+          anchorTransform.rotation,
+          isIntro
             ? anchorTransform.rotation - ROTATION_OFFSET_DEGREES
-            : anchorTransform.rotation,
-          endValue: isIntro
-            ? anchorTransform.rotation
             : anchorTransform.rotation + ROTATION_OFFSET_DEGREES,
-        },
+        ),
+      };
+    case 'pop':
+      return {
+        opacity: buildOpacityPair(isIntro, anchorTransform.opacity),
+        y: buildMotionPair(isIntro, anchorTransform.y, anchorTransform.y + popYOffset),
+        rotation: buildMotionPair(
+          isIntro,
+          anchorTransform.rotation,
+          isIntro
+            ? anchorTransform.rotation - popRotation
+            : anchorTransform.rotation + popRotation,
+        ),
+      };
+    case 'swing':
+      return {
+        opacity: buildOpacityPair(isIntro, anchorTransform.opacity),
+        rotation: buildMotionPair(
+          isIntro,
+          anchorTransform.rotation,
+          isIntro
+            ? anchorTransform.rotation - swingRotation
+            : anchorTransform.rotation + swingRotation,
+        ),
       };
   }
 }
@@ -301,7 +342,8 @@ export function buildTextAnimationKeyframes({
       property,
       frame: frameRange.startFrame,
       value: values.startValue,
-      easing: TEXT_ANIMATION_EASING,
+      easing: values.startEasing ?? 'ease-out',
+      easingConfig: values.startEasingConfig,
     });
     payloads.push({
       itemId: item.id,
