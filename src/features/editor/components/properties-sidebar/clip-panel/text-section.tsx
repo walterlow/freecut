@@ -29,7 +29,7 @@ import {
   resolveTransform,
   getSourceDimensions,
 } from '@/features/editor/deps/composition-runtime';
-import { resolveAnimatedTransform } from '@/features/editor/deps/keyframes';
+import { KeyframeToggle, resolveAnimatedTransform } from '@/features/editor/deps/keyframes';
 import {
   PropertySection,
   PropertyRow,
@@ -58,6 +58,13 @@ import {
   getTextItemPrimaryText,
   getTextItemSpans,
 } from '@/shared/utils/text-item-spans';
+import {
+  buildEditableBaseSpans,
+  buildTextSingleLayoutDraft,
+  cloneTextLayoutDrafts,
+  getTextItemLayoutMode,
+  type TextLayoutMode,
+} from '@/shared/utils/text-layout-drafts';
 
 const FONT_WEIGHT_OPTIONS = [
   { value: 'normal', label: 'Regular' },
@@ -163,6 +170,10 @@ function areTextSpansEqual(left: TextSpan[], right: TextSpan[]): boolean {
 
 function cloneTextSpans(spans: TextSpan[]): TextSpan[] {
   return spans.map((span) => ({ ...span }));
+}
+
+function getLayoutDraftKey(layout: Exclude<TextLayoutMode, 'single'>): 'twoSpans' | 'threeSpans' {
+  return layout === 'two' ? 'twoSpans' : 'threeSpans';
 }
 
 function buildSpanLayout(
@@ -320,6 +331,7 @@ export function TextSection({
     [sharedTextSpans, textItems]
   );
   const firstTextItem = textItems[0];
+  const hasStructuredSpanEditor = Boolean(firstTextItem?.textSpans?.length);
 
   // Get shared values across selected text items
   const sharedValues = useMemo(() => {
@@ -399,6 +411,27 @@ export function TextSection({
     [itemIds, setPropertiesPreviewNew]
   );
 
+  const setSpanPreview = useCallback(
+    (
+      nextSpans: TextSpan[] | undefined,
+      options?: {
+        collapseToSingle?: boolean;
+      },
+    ) => {
+      const sanitizedSpans = nextSpans?.map((span) => ({ ...span })) ?? undefined;
+      const plainText = sanitizedSpans
+        ? sanitizedSpans.map((span) => span.text).join('\n')
+        : options?.collapseToSingle
+          ? (activeEditorSpans[0]?.text ?? (firstTextItem ? getTextItemPrimaryText(firstTextItem) : ''))
+          : (sharedValues?.text ?? firstTextItem?.text ?? '');
+      setTextPropertiesPreview({
+        text: plainText,
+        textSpans: sanitizedSpans,
+      });
+    },
+    [activeEditorSpans, firstTextItem, setTextPropertiesPreview, sharedValues?.text],
+  );
+
   const finalizePreviewChange = useCallback(() => {
     queueMicrotask(() => clearPreview());
   }, [clearPreview]);
@@ -447,21 +480,49 @@ export function TextSection({
 
   const handleApplySpanLayout = useCallback(
     (layout: 'single' | 'two' | 'three') => {
-      if (!firstTextItem) {
-        return;
-      }
-      if (layout === 'single') {
-        updateTextItemsFromSpans(undefined, { collapseToSingle: true });
-        return;
-      }
-      const nextSpans = buildSpanLayout(
-        activeEditorSpans,
-        firstTextItem,
-        layout === 'two' ? 2 : 3,
-      );
-      updateTextItemsFromSpans(nextSpans);
+      textItems.forEach((item) => {
+        const currentLayout = getTextItemLayoutMode(item);
+        const nextDrafts = cloneTextLayoutDrafts(item.textLayoutDrafts) ?? {};
+
+        if (currentLayout === 'single') {
+          nextDrafts.single = buildTextSingleLayoutDraft(item);
+        } else {
+          nextDrafts[getLayoutDraftKey(currentLayout)] = cloneTextSpans(item.textSpans ?? []);
+        }
+
+        if (layout === 'single') {
+          const singleDraft = nextDrafts.single ?? buildTextSingleLayoutDraft(item);
+          updateItem(item.id, {
+            text: singleDraft.text,
+            textSpans: undefined,
+            label: buildTextItemLabelFromText(singleDraft.text),
+            fontSize: singleDraft.fontSize,
+            fontFamily: singleDraft.fontFamily,
+            fontWeight: singleDraft.fontWeight,
+            fontStyle: singleDraft.fontStyle,
+            underline: singleDraft.underline,
+            color: singleDraft.color ?? item.color,
+            letterSpacing: singleDraft.letterSpacing,
+            textLayoutDrafts: nextDrafts,
+          });
+          return;
+        }
+
+        const draftKey = getLayoutDraftKey(layout);
+        const nextSpans = buildSpanLayout(
+          nextDrafts[draftKey] ?? buildEditableBaseSpans(item),
+          item,
+          layout === 'two' ? 2 : 3,
+        );
+        updateItem(item.id, {
+          text: nextSpans.map((span) => span.text).join('\n'),
+          textSpans: nextSpans,
+          label: buildTextItemLabelFromText(nextSpans.map((span) => span.text).join('\n')),
+          textLayoutDrafts: nextDrafts,
+        });
+      });
     },
-    [activeEditorSpans, firstTextItem, updateTextItemsFromSpans]
+    [textItems, updateItem]
   );
 
   const handleSpanTextChange = useCallback(
@@ -484,8 +545,34 @@ export function TextSection({
         fontSize: value,
       };
       updateTextItemsFromSpans(nextSpans);
+      finalizePreviewChange();
     },
-    [activeEditorSpans, updateTextItemsFromSpans]
+    [activeEditorSpans, finalizePreviewChange, updateTextItemsFromSpans]
+  );
+
+  const handleSpanFontSizeLiveChange = useCallback(
+    (index: number, value: number) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        fontSize: value,
+      };
+      setSpanPreview(nextSpans);
+    },
+    [activeEditorSpans, setSpanPreview]
+  );
+
+  const handleSpanFontFamilyChange = useCallback(
+    (index: number, value: string) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        fontFamily: value,
+      };
+      updateTextItemsFromSpans(nextSpans);
+      finalizePreviewChange();
+    },
+    [activeEditorSpans, finalizePreviewChange, updateTextItemsFromSpans]
   );
 
   const handleSpanColorChange = useCallback(
@@ -496,8 +583,21 @@ export function TextSection({
         color: value,
       };
       updateTextItemsFromSpans(nextSpans);
+      finalizePreviewChange();
     },
-    [activeEditorSpans, updateTextItemsFromSpans]
+    [activeEditorSpans, finalizePreviewChange, updateTextItemsFromSpans]
+  );
+
+  const handleSpanColorLiveChange = useCallback(
+    (index: number, value: string) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        color: value,
+      };
+      setSpanPreview(nextSpans);
+    },
+    [activeEditorSpans, setSpanPreview]
   );
 
   const handleSpanWeightChange = useCallback(
@@ -1022,10 +1122,19 @@ export function TextSection({
                         className="min-h-[52px] text-xs"
                               rows={config.rows}
                       />
+                      <div className="mt-2">
+                        <FontPicker
+                          value={span.fontFamily ?? firstTextItem.fontFamily}
+                          placeholder="Select font"
+                          previewText={span.text || config.label}
+                          onValueChange={(value) => handleSpanFontFamilyChange(index, value)}
+                        />
+                      </div>
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         <NumberInput
                           value={span.fontSize ?? firstTextItem.fontSize ?? 60}
                           onChange={(value) => handleSpanFontSizeChange(index, value)}
+                          onLiveChange={(value) => handleSpanFontSizeLiveChange(index, value)}
                           min={8}
                           max={500}
                           step={1}
@@ -1053,6 +1162,7 @@ export function TextSection({
                           <ColorPicker
                             color={span.color ?? firstTextItem.color ?? '#ffffff'}
                             onChange={(value) => handleSpanColorChange(index, value)}
+                            onLiveChange={(value) => handleSpanColorLiveChange(index, value)}
                           />
                         </div>
                             {config.allowItalic ? (
@@ -1107,42 +1217,58 @@ export function TextSection({
 
           {sharedValues.textStylePresetId && (
             <PropertyRow label="Scale">
-              <SliderInput
-                value={sharedValues.textStyleScale}
-                onChange={handleTextStyleScaleChange}
-                min={0.5}
-                max={3}
-                step={0.05}
-                unit="x"
-                formatValue={(value) => `${value.toFixed(2)}x`}
-                className="flex-1 min-w-0"
+              <div className="flex items-center gap-1 min-w-0 w-full">
+                <SliderInput
+                  value={sharedValues.textStyleScale}
+                  onChange={handleTextStyleScaleChange}
+                  min={0.5}
+                  max={3}
+                  step={0.05}
+                  unit="x"
+                  formatValue={(value) => `${value.toFixed(2)}x`}
+                  className="flex-1 min-w-0"
+                />
+                <KeyframeToggle
+                  itemIds={itemIds}
+                  property="textStyleScale"
+                  currentValue={firstTextItem?.textStyleScale ?? 1}
+                />
+              </div>
+            </PropertyRow>
+          )}
+
+          {!hasStructuredSpanEditor && (
+            <PropertyRow label="Font" className="items-start">
+              <FontPicker
+                value={sharedValues.fontFamily}
+                placeholder={sharedValues.fontFamily === undefined ? 'Mixed' : 'Select font'}
+                previewText={fontPreviewText}
+                onValueChange={handleFontFamilyChange}
               />
             </PropertyRow>
           )}
 
-          {/* Font Family */}
-          <PropertyRow label="Font" className="items-start">
-            <FontPicker
-              value={sharedValues.fontFamily}
-              placeholder={sharedValues.fontFamily === undefined ? 'Mixed' : 'Select font'}
-              previewText={fontPreviewText}
-              onValueChange={handleFontFamilyChange}
-            />
-          </PropertyRow>
-
-          {/* Font Size */}
-          <PropertyRow label="Size">
-            <NumberInput
-              value={sharedValues.fontSize}
-              onChange={handleFontSizeChange}
-              onLiveChange={handleFontSizeLiveChange}
-              min={8}
-              max={500}
-              step={1}
-              unit="px"
-              className="flex-1 min-w-0"
-            />
-          </PropertyRow>
+          {!hasStructuredSpanEditor && (
+            <PropertyRow label="Size">
+              <div className="flex items-center gap-1 min-w-0 w-full">
+                <NumberInput
+                  value={sharedValues.fontSize}
+                  onChange={handleFontSizeChange}
+                  onLiveChange={handleFontSizeLiveChange}
+                  min={8}
+                  max={500}
+                  step={1}
+                  unit="px"
+                  className="flex-1 min-w-0"
+                />
+                <KeyframeToggle
+                  itemIds={itemIds}
+                  property="fontSize"
+                  currentValue={firstTextItem?.fontSize ?? 60}
+                />
+              </div>
+            </PropertyRow>
+          )}
 
           {/* Font Weight */}
           <PropertyRow label="Weight">
@@ -1312,42 +1438,63 @@ export function TextSection({
 
           {/* Line Height */}
           <PropertyRow label="Line H.">
-            <NumberInput
-              value={sharedValues.lineHeight}
-              onChange={handleLineHeightChange}
-              onLiveChange={handleLineHeightLiveChange}
-              min={0.5}
-              max={3}
-              step={0.1}
-              unit="x"
-              className="flex-1 min-w-0"
-            />
+            <div className="flex items-center gap-1 min-w-0 w-full">
+              <NumberInput
+                value={sharedValues.lineHeight}
+                onChange={handleLineHeightChange}
+                onLiveChange={handleLineHeightLiveChange}
+                min={0.5}
+                max={3}
+                step={0.1}
+                unit="x"
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="lineHeight"
+                currentValue={firstTextItem?.lineHeight ?? 1.2}
+              />
+            </div>
           </PropertyRow>
 
           <PropertyRow label="Padding">
-            <NumberInput
-              value={textPadding}
-              onChange={handleTextPaddingChange}
-              onLiveChange={handleTextPaddingLiveChange}
-              min={0}
-              max={160}
-              step={1}
-              unit="px"
-              className="flex-1 min-w-0"
-            />
+            <div className="flex items-center gap-1 min-w-0 w-full">
+              <NumberInput
+                value={textPadding}
+                onChange={handleTextPaddingChange}
+                onLiveChange={handleTextPaddingLiveChange}
+                min={0}
+                max={160}
+                step={1}
+                unit="px"
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="textPadding"
+                currentValue={firstTextItem?.textPadding ?? 16}
+              />
+            </div>
           </PropertyRow>
 
           <PropertyRow label="Radius">
-            <NumberInput
-              value={backgroundRadius}
-              onChange={handleBackgroundRadiusChange}
-              onLiveChange={handleBackgroundRadiusLiveChange}
-              min={0}
-              max={200}
-              step={1}
-              unit="px"
-              className="flex-1 min-w-0"
-            />
+            <div className="flex items-center gap-1 min-w-0 w-full">
+              <NumberInput
+                value={backgroundRadius}
+                onChange={handleBackgroundRadiusChange}
+                onLiveChange={handleBackgroundRadiusLiveChange}
+                min={0}
+                max={200}
+                step={1}
+                unit="px"
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="backgroundRadius"
+                currentValue={firstTextItem?.backgroundRadius ?? 0}
+              />
+            </div>
           </PropertyRow>
         </PropertySection>
       )}
@@ -1380,55 +1527,83 @@ export function TextSection({
           />
 
           <PropertyRow label="Shadow X">
-            <NumberInput
-              value={shadowOffsetX}
-              onChange={handleShadowOffsetXChange}
-              onLiveChange={handleShadowOffsetXLiveChange}
-              min={-100}
-              max={100}
-              step={1}
-              unit="px"
-              className="flex-1 min-w-0"
-            />
+            <div className="flex items-center gap-1 min-w-0 w-full">
+              <NumberInput
+                value={shadowOffsetX}
+                onChange={handleShadowOffsetXChange}
+                onLiveChange={handleShadowOffsetXLiveChange}
+                min={-100}
+                max={100}
+                step={1}
+                unit="px"
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="textShadowOffsetX"
+                currentValue={firstTextItem?.textShadow?.offsetX ?? 0}
+              />
+            </div>
           </PropertyRow>
 
           <PropertyRow label="Shadow Y">
-            <NumberInput
-              value={shadowOffsetY}
-              onChange={handleShadowOffsetYChange}
-              onLiveChange={handleShadowOffsetYLiveChange}
-              min={-100}
-              max={100}
-              step={1}
-              unit="px"
-              className="flex-1 min-w-0"
-            />
+            <div className="flex items-center gap-1 min-w-0 w-full">
+              <NumberInput
+                value={shadowOffsetY}
+                onChange={handleShadowOffsetYChange}
+                onLiveChange={handleShadowOffsetYLiveChange}
+                min={-100}
+                max={100}
+                step={1}
+                unit="px"
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="textShadowOffsetY"
+                currentValue={firstTextItem?.textShadow?.offsetY ?? 0}
+              />
+            </div>
           </PropertyRow>
 
           <PropertyRow label="Shadow B.">
-            <NumberInput
-              value={shadowBlur}
-              onChange={handleShadowBlurChange}
-              onLiveChange={handleShadowBlurLiveChange}
-              min={0}
-              max={80}
-              step={1}
-              unit="px"
-              className="flex-1 min-w-0"
-            />
+            <div className="flex items-center gap-1 min-w-0 w-full">
+              <NumberInput
+                value={shadowBlur}
+                onChange={handleShadowBlurChange}
+                onLiveChange={handleShadowBlurLiveChange}
+                min={0}
+                max={80}
+                step={1}
+                unit="px"
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="textShadowBlur"
+                currentValue={firstTextItem?.textShadow?.blur ?? 0}
+              />
+            </div>
           </PropertyRow>
 
           <PropertyRow label="Stroke W.">
-            <NumberInput
-              value={strokeWidth}
-              onChange={handleStrokeWidthChange}
-              onLiveChange={handleStrokeWidthLiveChange}
-              min={0}
-              max={24}
-              step={1}
-              unit="px"
-              className="flex-1 min-w-0"
-            />
+            <div className="flex items-center gap-1 min-w-0 w-full">
+              <NumberInput
+                value={strokeWidth}
+                onChange={handleStrokeWidthChange}
+                onLiveChange={handleStrokeWidthLiveChange}
+                min={0}
+                max={24}
+                step={1}
+                unit="px"
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="strokeWidth"
+                currentValue={firstTextItem?.stroke?.width ?? 0}
+              />
+            </div>
           </PropertyRow>
 
           {(strokeWidth === 'mixed' || strokeWidth > 0) && (

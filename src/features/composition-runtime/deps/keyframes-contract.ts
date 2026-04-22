@@ -11,3 +11,4 @@ export {
   getPropertyKeyframes,
   interpolatePropertyValue,
 } from '@/features/keyframes/utils/interpolation';
+export { resolveAnimatedTextItem } from '@/features/keyframes/utils/animated-text-item';

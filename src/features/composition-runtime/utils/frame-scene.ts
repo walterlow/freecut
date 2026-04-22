@@ -15,6 +15,7 @@ import { expandTextTransformToFitContent } from './text-layout';
 import {
   resolveAnimatedTransform,
   hasKeyframeAnimation,
+  resolveAnimatedTextItem,
 } from '../deps/keyframes';
 import {
   resolveTransitionFrameState,
@@ -86,7 +87,10 @@ export function resolveItemTransformAtRelativeFrame(
   const resolved = applyTransformOverride(animatedResolved, previewTransform);
 
   return item.type === 'text'
-    ? expandTextTransformToFitContent(item, resolved)
+    ? expandTextTransformToFitContent(
+        resolveAnimatedTextItem(item, keyframes, relativeFrame, canvas),
+        resolved,
+      )
     : resolved;
 }
 

@@ -104,6 +104,38 @@ export interface ProjectTimeline {
       color?: string;
       letterSpacing?: number;
     }>;
+    textLayoutDrafts?: {
+      single?: {
+        text: string;
+        fontSize?: number;
+        fontFamily?: string;
+        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+        fontStyle?: 'normal' | 'italic';
+        underline?: boolean;
+        color?: string;
+        letterSpacing?: number;
+      };
+      twoSpans?: Array<{
+        text: string;
+        fontSize?: number;
+        fontFamily?: string;
+        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+        fontStyle?: 'normal' | 'italic';
+        underline?: boolean;
+        color?: string;
+        letterSpacing?: number;
+      }>;
+      threeSpans?: Array<{
+        text: string;
+        fontSize?: number;
+        fontFamily?: string;
+        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+        fontStyle?: 'normal' | 'italic';
+        underline?: boolean;
+        color?: string;
+        letterSpacing?: number;
+      }>;
+    };
     backgroundColor?: string;
     backgroundRadius?: number;
     textAlign?: 'left' | 'center' | 'right';

@@ -6,6 +6,7 @@ import {
   useKeyframesStore,
   useTimelineSettingsStore,
 } from '@/features/preview/deps/timeline-store';
+import { resolveAnimatedTextItem } from '@/features/preview/deps/keyframes';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
@@ -24,10 +25,10 @@ interface ProjectSize {
 function applyTextExpansion(
   item: TimelineItem,
   transform: ResolvedTransform,
-  preview: Record<string, { properties?: Parameters<typeof expandTextTransformForPreview>[2] }> | null,
+  previewProperties?: Parameters<typeof expandTextTransformForPreview>[2],
 ): ResolvedTransform {
-  if (item.type !== 'text') return transform;
-  return expandTextTransformForPreview(item, transform, preview?.[item.id]?.properties);
+  if (item.type !== 'text' || !previewProperties) return transform;
+  return expandTextTransformForPreview(item, transform, previewProperties);
 }
 
 /**
@@ -71,6 +72,10 @@ export function useVisualTransforms(
 
     for (const [index, item] of items.entries()) {
       const itemKeyframe = itemKeyframes[index] ?? undefined;
+      const previewProperties = preview?.[item.id]?.properties;
+      const animatedTextItem = item.type === 'text'
+        ? resolveAnimatedTextItem(item, itemKeyframe ?? undefined, animationFrame - item.from, canvas)
+        : item;
       const animatedTransform = resolveItemTransformAtFrame(item, {
         canvas,
         frame: animationFrame,
@@ -79,7 +84,7 @@ export function useVisualTransforms(
 
       if (activeGizmo?.itemId === item.id && gizmoPreviewTransform) {
         let gizmoTransform = applyTransformOverride(animatedTransform, gizmoPreviewTransform);
-        gizmoTransform = applyTextExpansion(item, gizmoTransform, preview);
+        gizmoTransform = applyTextExpansion(animatedTextItem, gizmoTransform, previewProperties);
         transforms.set(item.id, gizmoTransform);
         continue;
       }
@@ -87,12 +92,12 @@ export function useVisualTransforms(
       const previewTransform = preview?.[item.id]?.transform;
       if (previewTransform) {
         let resolvedPreview = applyTransformOverride(animatedTransform, previewTransform);
-        resolvedPreview = applyTextExpansion(item, resolvedPreview, preview);
+        resolvedPreview = applyTextExpansion(animatedTextItem, resolvedPreview, previewProperties);
         transforms.set(item.id, resolvedPreview);
         continue;
       }
 
-      transforms.set(item.id, applyTextExpansion(item, animatedTransform, preview));
+      transforms.set(item.id, applyTextExpansion(animatedTextItem, animatedTransform, previewProperties));
     }
 
     return transforms;

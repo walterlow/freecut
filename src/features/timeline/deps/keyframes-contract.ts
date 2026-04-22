@@ -12,6 +12,10 @@ export {
 export { interpolatePropertyValue } from '@/features/keyframes/utils/interpolation';
 export { getAnimatablePropertiesForItem } from '@/features/keyframes/utils/animatable-properties';
 export { getEffectPropertyBaseValue } from '@/features/keyframes/utils/effect-animatable-properties';
+export {
+  getTextAnimatableBaseValue,
+  isTextAnimatableProperty,
+} from '@/features/keyframes/utils/animated-text-item';
 export { getBezierPresetForEasing } from '@/features/keyframes/utils/easing-presets';
 export {
   isFrameInTransitionRegion,

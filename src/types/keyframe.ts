@@ -21,7 +21,16 @@ export type BuiltInAnimatableProperty =
   | 'cropTop'
   | 'cropBottom'
   | 'cropSoftness'
-  | 'volume';
+  | 'volume'
+  | 'textStyleScale'
+  | 'fontSize'
+  | 'lineHeight'
+  | 'textPadding'
+  | 'backgroundRadius'
+  | 'textShadowOffsetX'
+  | 'textShadowOffsetY'
+  | 'textShadowBlur'
+  | 'strokeWidth';
 
 export type EffectAnimatableProperty = `effect:${string}:${string}:${string}`;
 
@@ -190,6 +199,15 @@ const BUILT_IN_PROPERTY_LABELS: Record<BuiltInAnimatableProperty, string> = {
   cropBottom: 'Crop Bottom',
   cropSoftness: 'Crop Softness',
   volume: 'Volume (dB)',
+  textStyleScale: 'Preset Scale',
+  fontSize: 'Font Size',
+  lineHeight: 'Line Height',
+  textPadding: 'Text Padding',
+  backgroundRadius: 'Background Radius',
+  textShadowOffsetX: 'Shadow X',
+  textShadowOffsetY: 'Shadow Y',
+  textShadowBlur: 'Shadow Blur',
+  strokeWidth: 'Stroke Width',
 };
 
 const BUILT_IN_ANIMATABLE_PROPERTIES = new Set<BuiltInAnimatableProperty>(

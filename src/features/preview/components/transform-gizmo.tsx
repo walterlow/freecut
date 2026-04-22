@@ -65,7 +65,7 @@ export function TransformGizmo({
       cornerRadius: animatedTransform.cornerRadius,
     };
 
-    if (item.type === 'text') {
+    if (item.type === 'text' && itemPreview?.properties) {
       baseTransform = expandTextTransformForPreview(
         item,
         baseTransform,

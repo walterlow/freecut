@@ -29,6 +29,8 @@ import {
   getTransitionBlockedRanges,
   interpolatePropertyValue,
   getAnimatablePropertiesForItem,
+  getTextAnimatableBaseValue,
+  isTextAnimatableProperty,
 } from '@/features/timeline/deps/keyframes';
 import {
   resolveTransform,
@@ -145,6 +147,10 @@ function getBaseKeyframeValue(
 
   if (property === 'volume') {
     return item.volume ?? 0;
+  }
+
+  if (item.type === 'text' && isTextAnimatableProperty(property)) {
+    return getTextAnimatableBaseValue(item, property);
   }
 
   if (

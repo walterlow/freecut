@@ -61,6 +61,8 @@ export interface ItemPropertiesPreview {
   audioEqHighCutFrequencyHz?: number;
   audioEqHighCutSlopeDbPerOct?: 6 | 12 | 18 | 24;
   // Text properties
+  text?: string;
+  textSpans?: import('@/types/timeline').TextSpan[];
   fontSize?: number;
   letterSpacing?: number;
   lineHeight?: number;

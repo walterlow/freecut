@@ -21,7 +21,10 @@ import {
 } from '../../utils/frame-scene';
 import { applyPreviewPathVerticesToShape } from '../../utils/preview-path-override';
 import { expandTextTransformToFitContent } from '../../utils/text-layout';
-import { resolveAnimatedCrop } from '@/features/composition-runtime/deps/keyframes';
+import {
+  resolveAnimatedCrop,
+  resolveAnimatedTextItem,
+} from '@/features/composition-runtime/deps/keyframes';
 
 /**
  * Consolidated visual state for an item.
@@ -170,7 +173,11 @@ export function useItemVisualState(
     }
 
     if (item.type === 'text') {
-      resolved = expandTextTransformToFitContent(item, resolved, propertiesPreview);
+      resolved = expandTextTransformToFitContent(
+        resolveAnimatedTextItem(item, itemKeyframes ?? undefined, relativeFrame, logicalCanvas),
+        resolved,
+        propertiesPreview,
+      );
     }
 
     // Calculate fade opacity based on fadeIn/fadeOut (in seconds)

@@ -1,6 +1,7 @@
 import type { AnimatableProperty } from '@/types/keyframe';
 import type { TimelineItem } from '@/types/timeline';
 import { getAnimatableEffectPropertiesForItem } from './effect-animatable-properties';
+import { TEXT_ANIMATABLE_PROPERTIES } from './animated-text-item';
 
 export const VISUAL_ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
   'x',
@@ -43,6 +44,12 @@ export function getAnimatablePropertiesForItem(item: TimelineItem): AnimatablePr
         'anchorX',
         'anchorY',
         ...AUDIO_ANIMATABLE_PROPERTIES,
+        ...effectProperties,
+      ];
+    case 'text':
+      return [
+        ...VISUAL_ANIMATABLE_PROPERTIES,
+        ...TEXT_ANIMATABLE_PROPERTIES,
         ...effectProperties,
       ];
     default:

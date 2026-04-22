@@ -7,3 +7,4 @@ export {
   resolveTransform,
   getSourceDimensions,
 } from '@/features/composition-runtime/utils/transform-resolver';
+export { expandTextTransformToFitContent } from '@/features/composition-runtime/utils/text-layout';

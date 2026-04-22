@@ -65,4 +65,29 @@ describe('getAnimatablePropertiesForItem', () => {
       'cornerRadius',
     ]);
   });
+
+  it('includes text-specific properties for text items', () => {
+    expect(getAnimatablePropertiesForItem({
+      ...createItem('text'),
+      text: 'Hello world',
+      color: '#ffffff',
+    })).toEqual([
+      'x',
+      'y',
+      'width',
+      'height',
+      'rotation',
+      'opacity',
+      'cornerRadius',
+      'textStyleScale',
+      'fontSize',
+      'lineHeight',
+      'textPadding',
+      'backgroundRadius',
+      'textShadowOffsetX',
+      'textShadowOffsetY',
+      'textShadowBlur',
+      'strokeWidth',
+    ]);
+  });
 });

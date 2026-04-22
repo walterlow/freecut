@@ -103,7 +103,13 @@ describe('canvas-item-renderer text backgrounds', () => {
 
     await renderItem(ctx, item, transform, 0, rctx);
 
-    expect(ctx.roundRect).toHaveBeenCalledWith(480, 300, 320, 120, 18);
+    expect(ctx.roundRect).toHaveBeenCalled();
+    const [x, y, width, height, radius] = vi.mocked(ctx.roundRect).mock.calls[0]!;
+    expect(x).toBe(480);
+    expect(y).toBeLessThan(300);
+    expect(width).toBe(320);
+    expect(height).toBeGreaterThan(120);
+    expect(radius).toBe(18);
     expect(ctx.fill).toHaveBeenCalled();
     expect(ctx.fillText).toHaveBeenCalled();
   });

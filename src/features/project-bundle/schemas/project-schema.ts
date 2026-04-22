@@ -125,6 +125,23 @@ const textSpanSchema = z.object({
   letterSpacing: z.number().optional(),
 });
 
+const textSingleLayoutDraftSchema = z.object({
+  text: z.string(),
+  fontSize: z.number().optional(),
+  fontFamily: z.string().optional(),
+  fontWeight: fontWeightSchema.optional(),
+  fontStyle: fontStyleSchema.optional(),
+  underline: z.boolean().optional(),
+  color: z.string().optional(),
+  letterSpacing: z.number().optional(),
+});
+
+const textLayoutDraftsSchema = z.object({
+  single: textSingleLayoutDraftSchema.optional(),
+  twoSpans: z.array(textSpanSchema).optional(),
+  threeSpans: z.array(textSpanSchema).optional(),
+});
+
 const captionSourceSchema = z.object({
   type: z.enum(['transcript', 'ai-captions']),
   clipId: z.string().min(1),
@@ -334,6 +351,7 @@ const timelineItemSchema = z.object({
   // Text fields
   text: z.string().optional(),
   textSpans: z.array(textSpanSchema).optional(),
+  textLayoutDrafts: textLayoutDraftsSchema.optional(),
   textRole: z.literal('caption').optional(),
   captionSource: captionSourceSchema.optional(),
   fontSize: z.number().optional(),

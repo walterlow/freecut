@@ -140,10 +140,28 @@ export type TextSpan = {
   letterSpacing?: number;
 };
 
+export type TextSingleLayoutDraft = {
+  text: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  fontStyle?: 'normal' | 'italic';
+  underline?: boolean;
+  color?: string;
+  letterSpacing?: number;
+};
+
+export type TextLayoutDrafts = {
+  single?: TextSingleLayoutDraft;
+  twoSpans?: TextSpan[];
+  threeSpans?: TextSpan[];
+};
+
 export type TextItem = BaseTimelineItem & {
   type: 'text';
   text: string;
   textSpans?: TextSpan[];
+  textLayoutDrafts?: TextLayoutDrafts;
   textStylePresetId?: 'clean-title' | 'lower-third' | 'cinematic' | 'quote' | 'neon' | 'headline-stack' | 'event-card' | 'badge';
   textStyleScale?: number;
   textRole?: 'caption';

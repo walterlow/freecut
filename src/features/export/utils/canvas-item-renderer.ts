@@ -58,8 +58,10 @@ import {
   drawCornerPinImage,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
+  expandTextTransformToFitContent,
   type PreviewPathVerticesOverride,
 } from '@/features/export/deps/composition-runtime';
+import { resolveAnimatedTextItem } from '@/features/export/deps/keyframes';
 import { calculateMediaCropLayout } from '@/shared/utils/media-crop';
 import {
   getItemRenderTimelineSpan,
@@ -273,14 +275,21 @@ export async function renderItem(
   renderSpan?: RenderTimelineSpan,
   preCornerPinMasks: EffectSourceMask[] = [],
 ): Promise<void> {
-  const frameResolvedItem = applyAnimatedCropToItem(item, frame, rctx, renderSpan);
+  const itemKeyframes = rctx.getCurrentKeyframes?.(item.id) ?? rctx.keyframesMap.get(item.id);
+  const animatedTextItem = item.type === 'text'
+    ? resolveAnimatedTextItem(item, itemKeyframes, frame - item.from, rctx.canvasSettings)
+    : item;
+  const frameResolvedItem = applyAnimatedCropToItem(animatedTextItem, frame, rctx, renderSpan);
+  const frameResolvedTransform = frameResolvedItem.type === 'text'
+    ? expandTextTransformToFitContent(frameResolvedItem, transform)
+    : transform;
 
   // Corner pin: render to temp canvas, then warp onto main canvas
   if (hasCornerPin(frameResolvedItem.cornerPin)) {
     await renderItemWithCornerPin(
       ctx,
       frameResolvedItem,
-      transform,
+      frameResolvedTransform,
       frame,
       rctx,
       sourceFrameOffset,
@@ -293,22 +302,36 @@ export async function renderItem(
   ctx.save();
 
   // Apply opacity only if it's not the default value (1.0)
-  if (transform.opacity !== 1) {
-    ctx.globalAlpha = transform.opacity;
+  if (frameResolvedTransform.opacity !== 1) {
+    ctx.globalAlpha = frameResolvedTransform.opacity;
   }
 
-  applyItemTransformToContext(ctx, frameResolvedItem, transform, rctx.canvasSettings);
+  applyItemTransformToContext(ctx, frameResolvedItem, frameResolvedTransform, rctx.canvasSettings);
 
   // Apply corner radius clipping
-  if (transform.cornerRadius > 0) {
-    const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
-    const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
+  if (frameResolvedTransform.cornerRadius > 0) {
+    const left = rctx.canvasSettings.width / 2 + frameResolvedTransform.x - frameResolvedTransform.width / 2;
+    const top = rctx.canvasSettings.height / 2 + frameResolvedTransform.y - frameResolvedTransform.height / 2;
     ctx.beginPath();
-    ctx.roundRect(left, top, transform.width, transform.height, transform.cornerRadius);
+    ctx.roundRect(
+      left,
+      top,
+      frameResolvedTransform.width,
+      frameResolvedTransform.height,
+      frameResolvedTransform.cornerRadius,
+    );
     ctx.clip();
   }
 
-  await renderItemContent(ctx, frameResolvedItem, transform, frame, rctx, sourceFrameOffset, renderSpan);
+  await renderItemContent(
+    ctx,
+    frameResolvedItem,
+    frameResolvedTransform,
+    frame,
+    rctx,
+    sourceFrameOffset,
+    renderSpan,
+  );
 
   ctx.restore();
 }

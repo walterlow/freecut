@@ -4,6 +4,8 @@ import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
 import { getTextItemSpans } from '@/shared/utils/text-item-spans';
 
 export interface TextLayoutPreviewProperties {
+  text?: string;
+  textSpans?: TextItem['textSpans'];
   fontSize?: number;
   letterSpacing?: number;
   lineHeight?: number;
@@ -149,7 +151,12 @@ function getTextRequiredHeight(
   const availableWidth = Math.max(1, width - textPadding * 2);
 
   const ctx = getMeasureContext();
-  const spans = getTextItemSpans(item);
+  const previewTextItem = {
+    ...item,
+    text: previewProperties?.text ?? item.text,
+    textSpans: previewProperties?.textSpans ?? item.textSpans,
+  };
+  const spans = getTextItemSpans(previewTextItem);
   let contentHeight = 0;
 
   for (const span of spans) {

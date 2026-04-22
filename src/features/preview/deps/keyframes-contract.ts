@@ -14,3 +14,4 @@ export {
 } from '@/features/keyframes/utils/auto-keyframe';
 export { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
 export { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
+export { resolveAnimatedTextItem } from '@/features/keyframes/utils/animated-text-item';

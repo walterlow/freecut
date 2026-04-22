@@ -8,8 +8,10 @@ import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resoluti
 import {
   resolveTransform,
   getSourceDimensions,
+  expandTextTransformToFitContent,
 } from '@/features/keyframes/deps/composition-runtime-contract';
 import { resolveAnimatedTransform } from '../utils/animated-transform-resolver';
+import { resolveAnimatedTextItem } from '../utils/animated-text-item';
 
 interface AnimatedTransformResult {
   /** The fully resolved transform with keyframe animation applied */
@@ -67,19 +69,27 @@ export function useAnimatedTransform(
 
   // Resolve the animated transform
   const transform = useMemo(() => {
+    const canvas = { width: projectSize.width, height: projectSize.height, fps: 30 };
     const sourceDimensions = getSourceDimensions(item);
     const baseResolved = resolveTransform(
       item,
-      { width: projectSize.width, height: projectSize.height, fps: 30 },
+      canvas,
       sourceDimensions
     );
+    const animatedTextItem = item.type === 'text'
+      ? resolveAnimatedTextItem(item, itemKeyframes, relativeFrame, canvas)
+      : undefined;
 
     // Apply keyframe animation if item has keyframes
-    if (itemKeyframes) {
-      return resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame);
+    const resolvedTransform = itemKeyframes
+      ? resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame)
+      : baseResolved;
+
+    if (animatedTextItem) {
+      return expandTextTransformToFitContent(animatedTextItem, resolvedTransform);
     }
 
-    return baseResolved;
+    return resolvedTransform;
   }, [item, projectSize, itemKeyframes, relativeFrame]);
 
   return {
@@ -120,23 +130,36 @@ export function useAnimatedTransforms(
   // Resolve transforms for all items
   return useMemo(() => {
     const transforms = new Map<string, ResolvedTransform>();
+    const canvas = { width: projectSize.width, height: projectSize.height, fps: 30 };
 
     for (const item of items) {
       const sourceDimensions = getSourceDimensions(item);
       const baseResolved = resolveTransform(
         item,
-        { width: projectSize.width, height: projectSize.height, fps: 30 },
+        canvas,
         sourceDimensions
       );
 
       // Apply keyframe animation if item has keyframes
       const itemKeyframes = allKeyframes.find((k) => k.itemId === item.id);
-      if (itemKeyframes) {
-        const relativeFrame = animationFrame - item.from;
+      const relativeFrame = animationFrame - item.from;
+      const animatedTextItem = item.type === 'text'
+        ? resolveAnimatedTextItem(item, itemKeyframes, relativeFrame, canvas)
+        : undefined;
+      const resolvedTransform = itemKeyframes
+        ? resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame)
+        : baseResolved;
+
+      if (animatedTextItem) {
         transforms.set(
           item.id,
-          resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame)
+          expandTextTransformToFitContent(animatedTextItem, resolvedTransform)
         );
+        continue;
+      }
+
+      if (itemKeyframes) {
+        transforms.set(item.id, resolvedTransform);
       } else {
         transforms.set(item.id, baseResolved);
       }
