@@ -39,11 +39,12 @@ import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog';
 import type { AudioItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
 import {
-  KITTEN_TTS_MODEL_OPTIONS,
-  KITTEN_TTS_VOICE_OPTIONS,
-  kittenTtsService,
-  type KittenTtsVoice,
-} from '@/features/editor/services/kitten-tts-service';
+  KOKORO_TTS_MODEL_OPTIONS,
+  KOKORO_TTS_VOICE_OPTIONS,
+  kokoroTtsService,
+  type KokoroTtsModel,
+  type KokoroTtsVoice,
+} from '@/features/editor/services/kokoro-tts-service';
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -215,8 +216,8 @@ interface GenerationResult {
   file: File;
   objectUrl: string;
   duration: number;
-  voice: KittenTtsVoice;
-  model: string;
+  voice: KokoroTtsVoice;
+  model: KokoroTtsModel;
 }
 
 export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
@@ -230,8 +231,8 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
   const showNotification = useMediaLibraryStore((state) => state.showNotification);
 
   const [text, setText] = useState('');
-  const [voice, setVoice] = useState<KittenTtsVoice>('Bella');
-  const [model, setModel] = useState<'nano' | 'micro' | 'mini'>('mini');
+  const [voice, setVoice] = useState<KokoroTtsVoice>('af_heart');
+  const [model, setModel] = useState<KokoroTtsModel>('q8');
   const [speed, setSpeed] = useState(1.25);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isInserting, setIsInserting] = useState(false);
@@ -271,7 +272,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     }
   }, [isOpen, inserted]);
 
-  const isWebGpuSupported = kittenTtsService.isSupported();
+  const isWebGpuSupported = kokoroTtsService.isSupported();
   const trimmedText = text.trim();
 
   const handleGenerate = useCallback(async () => {
@@ -284,7 +285,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       return;
     }
     if (!isWebGpuSupported) {
-      setError('WebGPU is required for Kitten TTS. Try Chrome 113+, Edge 113+, or Safari 26+.');
+      setError('WebGPU is required for Kokoro TTS. Try Chrome 113+, Edge 113+, or Safari 26+.');
       return;
     }
 
@@ -303,7 +304,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     const thisSession = sessionIdRef.current;
 
     try {
-      const { blob, file, duration } = await kittenTtsService.generateSpeechFile({
+      const { blob, file, duration } = await kokoroTtsService.generateSpeechFile({
         text: trimmedText,
         voice,
         speed,
@@ -349,9 +350,9 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       const media = await mediaLibraryService.importGeneratedAudio(result.file, currentProjectId, {
         tags: [
           'ai-generated',
-          'kitten-tts',
-          `kitten-model:${result.model}`,
-          `kitten-voice:${result.voice.toLowerCase()}`,
+          'kokoro-tts',
+          `kokoro-quality:${result.model}`,
+          `kokoro-voice:${result.voice}`,
         ],
       });
 
@@ -408,7 +409,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         <div className="space-y-4">
           {!isWebGpuSupported && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-              WebGPU is not available in this browser. Kitten TTS needs Chrome 113+, Edge 113+, or Safari 26+.
+              WebGPU is not available in this browser. Kokoro TTS needs Chrome 113+, Edge 113+, or Safari 26+.
             </div>
           )}
 
@@ -430,16 +431,16 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
             />
           </div>
 
-          {/* Model + Voice */}
+          {/* Quality + Voice */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Model</Label>
+              <Label>Quality</Label>
               <Select value={model} onValueChange={(value) => setModel(value as typeof model)} disabled={isGenerating || isInserting}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {KITTEN_TTS_MODEL_OPTIONS.map((option) => (
+                  {KOKORO_TTS_MODEL_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value} className="text-xs">
                       {option.label} ({option.downloadLabel})
                     </SelectItem>
@@ -450,12 +451,12 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
             <div className="space-y-1.5">
               <Label>Voice</Label>
-              <Select value={voice} onValueChange={(value) => setVoice(value as KittenTtsVoice)} disabled={isGenerating || isInserting}>
+              <Select value={voice} onValueChange={(value) => setVoice(value as KokoroTtsVoice)} disabled={isGenerating || isInserting}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {KITTEN_TTS_VOICE_OPTIONS.map((option) => (
+                  {KOKORO_TTS_VOICE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value} className="text-xs">
                       {option.label}
                     </SelectItem>

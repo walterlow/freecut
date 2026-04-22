@@ -3,7 +3,6 @@ import {
   LOCAL_MODEL_CACHE_DEFINITIONS,
   clearLocalModelCache,
   inspectAllLocalModelCaches,
-  KITTEN_TTS_MODEL_CACHE_NAME,
   TRANSFORMERS_CACHE_NAME,
 } from './local-model-cache';
 import {
@@ -90,13 +89,11 @@ describe('local-model-cache', () => {
         'https://huggingface.co/onnx-community/gemma-4-E4B-it-ONNX/resolve/main/model.onnx': new Response(new Uint8Array(9), {
           headers: { 'content-length': '9' },
         }),
+        'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model_quantized.onnx': new Response(new Uint8Array(21), {
+          headers: { 'content-length': '21' },
+        }),
         'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/ort-wasm-simd-threaded.wasm': new Response(new Uint8Array(7), {
           headers: { 'content-length': '7' },
-        }),
-      },
-      [KITTEN_TTS_MODEL_CACHE_NAME]: {
-        'https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/main/kitten_tts_mini_v0_8.onnx': new Response(new Uint8Array(21), {
-          headers: { 'content-length': '21' },
         }),
       },
     }));
@@ -114,7 +111,7 @@ describe('local-model-cache', () => {
       'whisper',
       ...SCENE_VERIFICATION_MODEL_IDS,
       ...MUSICGEN_MODEL_IDS,
-      'kitten-tts',
+      'kokoro-tts',
     ]);
 
     expect(summaries).toContainEqual(expect.objectContaining({
@@ -161,8 +158,8 @@ describe('local-model-cache', () => {
       inspectionState: 'ready',
     }));
     expect(summaries).toContainEqual(expect.objectContaining({
-      id: 'kitten-tts',
-      cacheName: KITTEN_TTS_MODEL_CACHE_NAME,
+      id: 'kokoro-tts',
+      cacheName: TRANSFORMERS_CACHE_NAME,
       exists: true,
       downloaded: true,
       entryCount: 1,

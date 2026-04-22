@@ -12,11 +12,11 @@ import {
 } from './musicgen-models';
 
 export const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
-export const KITTEN_TTS_MODEL_CACHE_NAME = 'kitten-tts-models';
 export const LOCAL_MODEL_CACHE_STORAGE_LABEL = 'Browser cache storage';
 const WHISPER_CACHE_MATCH_FRAGMENTS = ['/onnx-community/whisper-'];
+const KOKORO_TTS_CACHE_MATCH_FRAGMENTS = ['/onnx-community/kokoro-82m-v1.0-onnx/'];
 
-export type LocalModelCacheId = 'whisper' | SceneVerificationModelId | MusicgenModelId | 'kitten-tts';
+export type LocalModelCacheId = 'whisper' | SceneVerificationModelId | MusicgenModelId | 'kokoro-tts';
 
 export interface LocalModelCacheDefinition {
   id: LocalModelCacheId;
@@ -67,10 +67,11 @@ export const LOCAL_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = [
   ...SCENE_VERIFICATION_MODEL_CACHE_DEFINITIONS,
   ...MUSICGEN_MODEL_CACHE_DEFINITIONS,
   {
-    id: 'kitten-tts',
-    label: 'Kitten TTS',
-    description: 'Kitten TTS ONNX voice synthesis model and voice data.',
-    cacheName: KITTEN_TTS_MODEL_CACHE_NAME,
+    id: 'kokoro-tts',
+    label: 'Kokoro TTS',
+    description: 'Kokoro ONNX model weights and tokenizer files.',
+    cacheName: TRANSFORMERS_CACHE_NAME,
+    matchPathFragments: KOKORO_TTS_CACHE_MATCH_FRAGMENTS,
   },
 ];
 

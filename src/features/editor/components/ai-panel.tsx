@@ -48,11 +48,14 @@ import { useSelectionStore } from '@/shared/state/selection';
 import type { AudioItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
 import {
-  KITTEN_TTS_MODEL_OPTIONS,
-  KITTEN_TTS_VOICE_OPTIONS,
-  kittenTtsService,
-  type KittenTtsVoice,
-} from '../services/kitten-tts-service';
+  KOKORO_TTS_MODEL_OPTIONS,
+  KOKORO_TTS_VOICE_OPTIONS,
+  getKokoroTtsModelOption,
+  getKokoroTtsVoiceOption,
+  kokoroTtsService,
+  type KokoroTtsModel,
+  type KokoroTtsVoice,
+} from '../services/kokoro-tts-service';
 import {
   DEFAULT_MUSICGEN_MODEL,
   MUSICGEN_MODEL_OPTIONS,
@@ -256,8 +259,8 @@ export const AiPanel = memo(function AiPanel() {
   const showNotification = useMediaLibraryStore((state) => state.showNotification);
 
   const [ttsText, setTtsText] = useState(DEFAULT_PROMPT);
-  const [ttsVoice, setTtsVoice] = useState<KittenTtsVoice>('Bella');
-  const [ttsModel, setTtsModel] = useState<'nano' | 'micro' | 'mini'>('mini');
+  const [ttsVoice, setTtsVoice] = useState<KokoroTtsVoice>('af_heart');
+  const [ttsModel, setTtsModel] = useState<KokoroTtsModel>('q8');
   const [ttsSpeed, setTtsSpeed] = useState(1.25);
   const [isTtsGenerating, setIsTtsGenerating] = useState(false);
   const [ttsProgress, setTtsProgress] = useState<string | null>(null);
@@ -299,7 +302,7 @@ export const AiPanel = memo(function AiPanel() {
     };
   }, []);
 
-  const isTtsSupported = kittenTtsService.isSupported();
+  const isTtsSupported = kokoroTtsService.isSupported();
   const isMusicSupported = musicgenService.isSupported();
   const trimmedTtsText = ttsText.trim();
   const trimmedMusicPrompt = musicPrompt.trim();
@@ -346,7 +349,7 @@ export const AiPanel = memo(function AiPanel() {
       return;
     }
     if (!isTtsSupported) {
-      setTtsError('WebGPU is required for Kitten TTS. Try Chrome 113+, Edge 113+, or Safari 26+.');
+      setTtsError('WebGPU is required for Kokoro TTS. Try Chrome 113+, Edge 113+, or Safari 26+.');
       return;
     }
 
@@ -355,7 +358,7 @@ export const AiPanel = memo(function AiPanel() {
     setTtsProgress('Preparing local TTS...');
 
     try {
-      const { blob, file, duration } = await kittenTtsService.generateSpeechFile({
+      const { blob, file, duration } = await kokoroTtsService.generateSpeechFile({
         text: trimmedTtsText,
         voice: ttsVoice,
         speed: ttsSpeed,
@@ -365,6 +368,8 @@ export const AiPanel = memo(function AiPanel() {
 
       const objectUrl = URL.createObjectURL(blob);
       generationUrlsRef.current.add(objectUrl);
+      const voiceLabel = getKokoroTtsVoiceOption(ttsVoice).label;
+      const modelLabel = getKokoroTtsModelOption(ttsModel).label;
 
       const generation: AudioGeneration = {
         id: crypto.randomUUID(),
@@ -373,15 +378,15 @@ export const AiPanel = memo(function AiPanel() {
         byteSize: blob.size,
         duration,
         textSnippet: trimmedTtsText,
-        voice: ttsVoice,
-        model: ttsModel,
+        voice: voiceLabel,
+        model: modelLabel,
         summary: trimmedTtsText,
-        details: `${ttsVoice} / ${ttsModel} / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
+        details: `${voiceLabel} / ${modelLabel} / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
         tags: [
           'ai-generated',
-          'kitten-tts',
-          `kitten-model:${ttsModel}`,
-          `kitten-voice:${ttsVoice.toLowerCase()}`,
+          'kokoro-tts',
+          `kokoro-quality:${ttsModel}`,
+          `kokoro-voice:${ttsVoice}`,
         ],
         savedMediaId: null,
         saving: false,
@@ -633,11 +638,11 @@ export const AiPanel = memo(function AiPanel() {
                 </span>
               </div>
               <p className="leading-relaxed text-muted-foreground">
-                Runs entirely in the browser using Kitten TTS on WebGPU. No data is sent to a server.
+                Runs entirely in the browser using Kokoro TTS on WebGPU. No data is sent to a server.
               </p>
               <table className="w-full text-[11px]">
                 <tbody>
-                  {KITTEN_TTS_MODEL_OPTIONS.map((opt) => (
+                  {KOKORO_TTS_MODEL_OPTIONS.map((opt) => (
                     <tr key={opt.value} className="border-t border-border/50">
                       <td className="py-1 pr-2 font-medium text-foreground">{opt.label}</td>
                       <td className="py-1 pr-2 text-muted-foreground">{opt.qualityLabel}</td>
@@ -647,7 +652,7 @@ export const AiPanel = memo(function AiPanel() {
                 </tbody>
               </table>
               <p className="leading-relaxed text-muted-foreground">
-                Models are cached after the first download.
+                Models and voices are cached after the first download.
               </p>
             </PopoverContent>
           </Popover>
@@ -655,7 +660,7 @@ export const AiPanel = memo(function AiPanel() {
 
         {!isTtsSupported && (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-            WebGPU is not available in this browser. Kitten TTS needs Chrome 113+, Edge 113+, or Safari 26+.
+            WebGPU is not available in this browser. Kokoro TTS needs Chrome 113+, Edge 113+, or Safari 26+.
           </div>
         )}
 
@@ -677,16 +682,16 @@ export const AiPanel = memo(function AiPanel() {
           />
         </div>
 
-        {/* Model + Voice */}
+        {/* Quality + Voice */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label>Model</Label>
+            <Label>Quality</Label>
             <Select value={model} onValueChange={(value) => setModel(value as typeof model)} disabled={isGenerating}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {KITTEN_TTS_MODEL_OPTIONS.map((option) => (
+                {KOKORO_TTS_MODEL_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value} className="text-xs">
                     {option.label} ({option.downloadLabel})
                   </SelectItem>
@@ -697,12 +702,12 @@ export const AiPanel = memo(function AiPanel() {
 
           <div className="space-y-1.5">
             <Label>Voice</Label>
-            <Select value={voice} onValueChange={(value) => setVoice(value as KittenTtsVoice)} disabled={isGenerating}>
+            <Select value={voice} onValueChange={(value) => setVoice(value as KokoroTtsVoice)} disabled={isGenerating}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {KITTEN_TTS_VOICE_OPTIONS.map((option) => (
+                {KOKORO_TTS_VOICE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value} className="text-xs">
                     {option.label}
                   </SelectItem>

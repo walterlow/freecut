@@ -61,7 +61,7 @@
     "fflate": "^0.8.2",
     "gifuct-js": "^2.1.2",
     "idb": "^8.0.3",
-    "kitten-tts-webgpu": "^0.1.1",
+    "kokoro-js": "^1.2.1",
     "lucide-react": "^0.468.0",
     "mediabunny": "^1.40.1",
     "react": "^19.2.0",

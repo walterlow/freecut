@@ -93,7 +93,7 @@ All transitions are WebGPU-accelerated with a Canvas 2D fallback for non-WebGPU 
 
 ### Text-to-Speech
 
-- In-browser voiceover generation via KittenTTS (WebGPU)
+- In-browser voiceover generation via Kokoro TTS (WebGPU)
 - Adds the generated audio clip directly to the timeline
 
 ### Other
@@ -194,7 +194,7 @@ Brave disables the File System Access API by default. To enable it:
 - [WebCodecs](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API) — composition rendering and export
 - [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API) — workspace folder persistence
 - [Transformers.js](https://huggingface.co/docs/transformers.js) — in-browser Whisper transcription
-- [KittenTTS](https://github.com/KittenML/kitten-tts-webgpu) — WebGPU text-to-speech
+- [Kokoro.js](https://www.npmjs.com/package/kokoro-js) — WebGPU text-to-speech
 - Web Workers — heavy processing off the main thread
 
 ## Development

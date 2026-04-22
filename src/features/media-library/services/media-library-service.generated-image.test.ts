@@ -159,7 +159,7 @@ describe('MediaLibraryService.importGeneratedAudio', () => {
     const file = new File(['wav-bytes'], 'ai-voice.wav', { type: 'audio/wav' });
 
     const result = await mediaLibraryService.importGeneratedAudio(file, 'project-1', {
-      tags: ['ai-generated', 'kitten-tts'],
+      tags: ['ai-generated', 'kokoro-tts'],
     });
 
     expect(mediaProcessorMocks.processMedia).toHaveBeenCalledWith(
@@ -185,7 +185,7 @@ describe('MediaLibraryService.importGeneratedAudio', () => {
       duration: 2.75,
       codec: 'pcm_s16le',
       bitrate: 384000,
-      tags: ['ai-generated', 'kitten-tts'],
+      tags: ['ai-generated', 'kokoro-tts'],
       thumbnailId: expect.any(String),
     }));
     expect(indexedDbMocks.associateMediaWithProject).toHaveBeenCalledWith('project-1', result.id);
