@@ -7,6 +7,7 @@ export {
   createDefaultAdjustmentItem,
   createDefaultShapeItem,
   createDefaultTextItem,
+  createTextTemplateItem,
   findCompatibleTrackForItemType,
   findNearestAvailableSpace,
   getDefaultGeneratedLayerDurationInFrames,

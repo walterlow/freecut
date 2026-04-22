@@ -89,6 +89,16 @@ const directionSchema = z.enum(['up', 'down', 'left', 'right']);
 // Text-specific schemas
 const fontWeightSchema = z.enum(['normal', 'medium', 'semibold', 'bold']);
 const fontStyleSchema = z.enum(['normal', 'italic']);
+const textStylePresetIdSchema = z.enum([
+  'clean-title',
+  'lower-third',
+  'cinematic',
+  'quote',
+  'neon',
+  'headline-stack',
+  'event-card',
+  'badge',
+]);
 const textAlignSchema = z.enum(['left', 'center', 'right']);
 const verticalAlignSchema = z.enum(['top', 'middle', 'bottom']);
 
@@ -332,6 +342,8 @@ const timelineItemSchema = z.object({
   fontStyle: fontStyleSchema.optional(),
   underline: z.boolean().optional(),
   color: z.string().optional(),
+  textStylePresetId: textStylePresetIdSchema.optional(),
+  textStyleScale: z.number().positive().optional(),
   backgroundColor: z.string().optional(),
   backgroundRadius: z.number().min(0).optional(),
   textAlign: textAlignSchema.optional(),

@@ -144,6 +144,8 @@ export type TextItem = BaseTimelineItem & {
   type: 'text';
   text: string;
   textSpans?: TextSpan[];
+  textStylePresetId?: 'clean-title' | 'lower-third' | 'cinematic' | 'quote' | 'neon' | 'headline-stack' | 'event-card' | 'badge';
+  textStyleScale?: number;
   textRole?: 'caption';
   captionSource?: GeneratedCaptionSource;
   // Typography

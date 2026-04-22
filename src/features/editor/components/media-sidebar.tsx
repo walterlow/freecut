@@ -21,6 +21,7 @@ import {
   WandSparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/shared/ui/cn';
 import { useEditorStore } from '@/app/state/editor';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -36,7 +37,7 @@ import { TransitionsPanel } from './transitions-panel';
 import {
   createDefaultAdjustmentItem,
   createDefaultShapeItem,
-  createDefaultTextItem,
+  createTextTemplateItem,
   findCompatibleTrackForItemType,
   findNearestAvailableSpace,
   getDefaultGeneratedLayerDurationInFrames,
@@ -51,12 +52,139 @@ import { createLogger } from '@/shared/logging/logger';
 import { useSettingsStore } from '@/features/editor/deps/settings';
 import { AiPanel } from './ai-panel';
 import {
+  TEXT_STYLE_PRESETS,
+  type TextStylePreset,
+} from '@/shared/typography/text-style-presets';
+import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampLeftEditorSidebarWidth,
   getEditorLayout,
 } from '@/app/editor-layout';
 
 const logger = createLogger('MediaSidebar');
+
+function renderTextTemplatePreview(preset?: TextStylePreset) {
+  if (!preset) {
+    return (
+      <div className="w-full aspect-video rounded-sm border border-border bg-secondary/50 flex flex-col items-center justify-center gap-1">
+        <Type className="w-3.5 h-3.5 text-muted-foreground/80" />
+        <div className="text-[9px] leading-none tracking-wide text-muted-foreground/80 uppercase">
+          Text
+        </div>
+      </div>
+    );
+  }
+
+  const copy = preset.sample;
+
+  if (preset.previewKind === 'lower-third') {
+    return (
+      <div className="w-full aspect-video rounded-sm border border-border bg-slate-900/90 relative overflow-hidden">
+        <div className="absolute inset-x-1.5 bottom-1.5 rounded-sm bg-slate-800/95 px-1.5 py-1 text-left">
+          <div className="text-[8px] font-semibold leading-none text-slate-50">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] leading-none text-slate-300">
+            {copy.subtitle}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'cinematic') {
+    return (
+      <div className="w-full aspect-video rounded-sm border border-amber-900/60 bg-neutral-950 flex flex-col items-center justify-center px-1">
+        <div className="text-[7px] tracking-[0.22em] text-amber-200/80 uppercase">
+          {copy.subtitle}
+        </div>
+        <div className="mt-1 text-[11px] tracking-[0.28em] text-amber-100 uppercase leading-none">
+          {copy.title}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'quote') {
+    return (
+      <div className="w-full aspect-video rounded-sm border border-slate-700 bg-slate-800/95 px-2 py-1.5 flex flex-col justify-center text-center">
+        <div className="text-[12px] leading-none text-slate-200/90">"</div>
+        <div className="mt-0.5 text-[8px] italic leading-tight text-slate-50">
+          {copy.title}
+        </div>
+        <div className="mt-0.5 text-[7px] leading-none text-slate-300">
+          {copy.subtitle}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'neon') {
+    return (
+      <div className="w-full aspect-video rounded-sm border border-cyan-800/70 bg-cyan-950/90 flex flex-col items-center justify-center">
+        <div className="text-[10px] font-semibold tracking-[0.16em] text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.85)] uppercase">
+          {copy.title}
+        </div>
+        <div className="mt-0.5 text-[7px] leading-none text-cyan-200/85 uppercase">
+          {copy.subtitle}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'stacked') {
+    return (
+      <div className="w-full aspect-video rounded-sm border border-border bg-gradient-to-b from-slate-800 to-slate-950 flex flex-col items-center justify-center px-1.5">
+        <div className="text-[6px] font-semibold tracking-[0.2em] text-amber-300 uppercase">
+          {copy.eyebrow}
+        </div>
+        <div className="mt-1 text-[10px] font-bold tracking-[-0.04em] text-white leading-none">
+          {copy.title}
+        </div>
+        <div className="mt-0.5 text-[7px] leading-none text-slate-300">
+          {copy.subtitle}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'event') {
+    return (
+      <div className="w-full aspect-video rounded-sm border border-slate-700 bg-slate-900 px-1.5 py-1 flex flex-col items-center justify-center text-center">
+        <div className="text-[6px] font-bold tracking-[0.22em] text-rose-300 uppercase">
+          {copy.eyebrow}
+        </div>
+        <div className="mt-1 text-[9px] font-bold text-slate-50 leading-tight">
+          {copy.title}
+        </div>
+        <div className="mt-0.5 text-[7px] text-blue-200 leading-none uppercase">
+          {copy.subtitle}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'badge') {
+    return (
+      <div className="w-full aspect-video rounded-sm border border-border bg-slate-950 flex items-center justify-center px-1.5">
+        <div className="rounded-full border border-slate-600 bg-slate-800 px-2 py-1 text-[7px] font-bold tracking-[0.18em] text-slate-50 uppercase leading-none">
+          {copy.title}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full aspect-video rounded-sm border border-border bg-gradient-to-b from-slate-800 to-slate-950 flex flex-col items-center justify-center px-1.5">
+      <div className="text-[10px] font-bold tracking-[-0.04em] text-white uppercase leading-none">
+        {copy.title}
+      </div>
+      <div className="mt-0.5 text-[7px] leading-none text-slate-300 uppercase">
+        {copy.subtitle}
+      </div>
+    </div>
+  );
+}
 
 export const MediaSidebar = memo(function MediaSidebar() {
   const editorDensity = useSettingsStore((s) => s.editorDensity);
@@ -141,7 +269,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
   // Read from store directly in callbacks using getState()
 
   // Add text item to timeline at the best available position
-  const handleAddText = useCallback(() => {
+  const handleAddText = useCallback((presetId?: (typeof TEXT_STYLE_PRESETS)[number]['id']) => {
     // Read all needed state from stores directly to avoid subscriptions
     const { tracks, items, fps, addItem } = useTimelineStore.getState();
     const { activeTrackId, selectItems } = useSelectionStore.getState();
@@ -174,12 +302,20 @@ export const MediaSidebar = memo(function MediaSidebar() {
     const canvasWidth = currentProject?.metadata.width ?? 1920;
     const canvasHeight = currentProject?.metadata.height ?? 1080;
 
-    const textItem: TextItem = createDefaultTextItem({
-      trackId: targetTrack.id,
-      from: finalPosition,
-      durationInFrames,
-      canvasWidth,
-      canvasHeight,
+    const textStylePreset = presetId
+      ? TEXT_STYLE_PRESETS.find((preset) => preset.id === presetId)
+      : undefined;
+    const textItem: TextItem = createTextTemplateItem({
+      placement: {
+        trackId: targetTrack.id,
+        from: finalPosition,
+        durationInFrames,
+        canvasWidth,
+        canvasHeight,
+        fps,
+      },
+      label: textStylePreset?.label,
+      textStylePresetId: presetId,
     });
 
     addItem(textItem);
@@ -345,6 +481,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
   const handleTemplateDragStart = useCallback((payload: {
     itemType: 'text' | 'shape' | 'adjustment';
     label: string;
+    textStylePresetId?: (typeof TEXT_STYLE_PRESETS)[number]['id'];
     shapeType?: ShapeType;
     effects?: VisualEffect[];
   }) => (event: React.DragEvent<HTMLButtonElement>) => {
@@ -491,23 +628,54 @@ export const MediaSidebar = memo(function MediaSidebar() {
           {/* Text Tab */}
           <div className={`min-h-0 flex-1 overflow-y-auto p-3 ${activeTab === 'text' ? 'block' : 'hidden'}`}>
             <div className="space-y-3">
-              <button
-                draggable={true}
-                onDragStart={handleTemplateDragStart({ itemType: 'text', label: 'Text' })}
-                onDragEnd={handleTemplateDragEnd}
-                onClick={() => {
-                  if (shouldSuppressGeneratedItemClick()) return;
-                  handleAddText();
-                }}
-                className="w-full flex items-center gap-3 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-              >
-                <div className="w-9 h-9 rounded-md bg-timeline-text/20 border border-timeline-text/50 flex items-center justify-center group-hover:bg-timeline-text/30 flex-shrink-0">
-                  <Type className="w-4 h-4 text-timeline-text" />
+              <div className="space-y-2">
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Templates
                 </div>
-                <span className="text-sm text-muted-foreground group-hover:text-foreground">
-                  Add Text
-                </span>
-              </button>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    draggable={true}
+                    onDragStart={handleTemplateDragStart({ itemType: 'text', label: 'Text' })}
+                    onDragEnd={handleTemplateDragEnd}
+                    onClick={() => {
+                      if (shouldSuppressGeneratedItemClick()) return;
+                      handleAddText();
+                    }}
+                    className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                  >
+                      {renderTextTemplatePreview()}
+                    <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
+                      Add Text
+                    </span>
+                  </button>
+                  {TEXT_STYLE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      draggable={true}
+                      onDragStart={handleTemplateDragStart({
+                        itemType: 'text',
+                        label: preset.label,
+                        textStylePresetId: preset.id,
+                      })}
+                      onDragEnd={handleTemplateDragEnd}
+                      onClick={() => {
+                        if (shouldSuppressGeneratedItemClick()) return;
+                        handleAddText(preset.id);
+                      }}
+                      className={cn(
+                        'flex flex-col items-center gap-1 p-1.5 rounded-md border border-border',
+                        'bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50',
+                        'transition-colors group'
+                      )}
+                    >
+                      {renderTextTemplatePreview(preset)}
+                      <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
+                        {preset.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 

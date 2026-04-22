@@ -35,6 +35,7 @@ import {
   PropertyRow,
   NumberInput,
   ColorPicker,
+  SliderInput,
 } from '../components';
 import { FontPicker } from './font-picker';
 import { FONT_CATALOG, FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
@@ -46,13 +47,14 @@ import {
   type TextAnimationPresetOptionId,
 } from './text-animation-presets';
 import {
+  applyTextStylePresetToItem,
   TEXT_STYLE_PRESETS,
-  buildTextStylePresetUpdates,
   type TextStylePresetId,
 } from './text-style-presets';
 import {
   buildTextItemLabelFromText,
   getTextItemPlainText,
+  getTextItemPrimaryText,
   getTextItemSpans,
 } from '@/shared/utils/text-item-spans';
 
@@ -168,12 +170,18 @@ function buildSpanLayout(
   count: 2 | 3,
 ): TextSpan[] {
   const existing = cloneTextSpans(baseSpans);
+  const hasStructuredSpans = Array.isArray(item.textSpans) && item.textSpans.length > 0;
+  const primaryText = getTextItemPrimaryText(item);
   const baseSize = item.fontSize ?? 60;
   const defaults: TextSpan[] = count === 2
     ? [
-        { text: existing[0]?.text || item.text || 'Headline' },
         {
-          text: existing[1]?.text || 'Subtitle',
+          text: hasStructuredSpans
+            ? (existing[0]?.text || primaryText || 'Headline')
+            : (primaryText || 'Headline'),
+        },
+        {
+          text: hasStructuredSpans ? (existing[1]?.text || 'Subtitle') : 'Subtitle',
           fontSize: Math.max(24, Math.round(baseSize * 0.48)),
           fontWeight: 'medium',
           color: '#cbd5e1',
@@ -182,17 +190,19 @@ function buildSpanLayout(
       ]
     : [
         {
-          text: existing[0]?.text || 'Tag',
+          text: hasStructuredSpans ? (existing[0]?.text || 'Tag') : 'Tag',
           fontSize: Math.max(18, Math.round(baseSize * 0.3)),
           fontWeight: 'semibold',
           color: '#cbd5e1',
           letterSpacing: 2,
         },
         {
-          text: existing[1]?.text || item.text || 'Headline',
+          text: hasStructuredSpans
+            ? (existing[1]?.text || primaryText || 'Headline')
+            : (primaryText || 'Headline'),
         },
         {
-          text: existing[2]?.text || 'Subtitle',
+          text: hasStructuredSpans ? (existing[2]?.text || 'Subtitle') : 'Subtitle',
           fontSize: Math.max(22, Math.round(baseSize * 0.42)),
           fontWeight: 'medium',
           color: '#cbd5e1',
@@ -267,6 +277,8 @@ export function TextSection({
       fontStyle: textItems.every(i => (i.fontStyle ?? 'normal') === (first.fontStyle ?? 'normal')) ? (first.fontStyle ?? 'normal') : undefined,
       underline: textItems.every(i => (i.underline ?? false) === (first.underline ?? false)) ? (first.underline ?? false) : undefined,
       color: textItems.every(i => i.color === first.color) ? first.color : undefined,
+      textStylePresetId: textItems.every(i => (i.textStylePresetId ?? '') === (first.textStylePresetId ?? '')) ? first.textStylePresetId : undefined,
+      textStyleScale: textItems.every(i => (i.textStyleScale ?? 1) === (first.textStyleScale ?? 1)) ? (first.textStyleScale ?? 1) : 'mixed' as const,
       backgroundColor: textItems.every(i => (i.backgroundColor ?? '') === (first.backgroundColor ?? '')) ? (first.backgroundColor ?? '') : undefined,
       backgroundRadius: textItems.every(i => (i.backgroundRadius ?? 0) === (first.backgroundRadius ?? 0)) ? (first.backgroundRadius ?? 0) : 'mixed' as const,
       textAlign: textItems.every(i => (i.textAlign ?? 'center') === (first.textAlign ?? 'center')) ? (first.textAlign ?? 'center') : undefined,
@@ -333,13 +345,20 @@ export function TextSection({
   }, [clearPreview]);
 
   const updateTextItemsFromSpans = useCallback(
-    (nextSpans: TextSpan[] | undefined) => {
+    (
+      nextSpans: TextSpan[] | undefined,
+      options?: {
+        collapseToSingle?: boolean;
+      },
+    ) => {
       const sanitizedSpans = nextSpans
         ?.map((span) => ({ ...span }))
         ?? undefined;
       const plainText = sanitizedSpans
         ? sanitizedSpans.map((span) => span.text).join('\n')
-        : (sharedValues?.text ?? firstTextItem?.text ?? '');
+        : options?.collapseToSingle
+          ? (activeEditorSpans[0]?.text ?? (firstTextItem ? getTextItemPrimaryText(firstTextItem) : ''))
+          : (sharedValues?.text ?? firstTextItem?.text ?? '');
       const label = buildTextItemLabelFromText(plainText);
       textItems.forEach((item) => {
         updateItem(item.id, {
@@ -349,7 +368,7 @@ export function TextSection({
         });
       });
     },
-    [firstTextItem?.text, sharedValues?.text, textItems, updateItem]
+    [activeEditorSpans, firstTextItem, firstTextItem?.text, sharedValues?.text, textItems, updateItem]
   );
 
   // Handlers
@@ -373,7 +392,7 @@ export function TextSection({
         return;
       }
       if (layout === 'single') {
-        updateTextItemsFromSpans(undefined);
+        updateTextItemsFromSpans(undefined, { collapseToSingle: true });
         return;
       }
       const nextSpans = buildSpanLayout(
@@ -804,10 +823,29 @@ export function TextSection({
 
   const handleApplyTextStylePreset = useCallback(
     (presetId: TextStylePresetId) => {
-      updateTextItems(buildTextStylePresetUpdates(presetId, canvas));
+      textItems.forEach((item) => {
+        updateItem(item.id, applyTextStylePresetToItem(item, presetId, canvas, 1));
+      });
       finalizePreviewChange();
     },
-    [canvas, finalizePreviewChange, updateTextItems]
+    [canvas, finalizePreviewChange, textItems, updateItem]
+  );
+
+  const handleTextStyleScaleChange = useCallback(
+    (value: number) => {
+      textItems.forEach((item) => {
+        if (!item.textStylePresetId) {
+          return;
+        }
+
+        updateItem(
+          item.id,
+          applyTextStylePresetToItem(item, item.textStylePresetId, canvas, value),
+        );
+      });
+      finalizePreviewChange();
+    },
+    [canvas, finalizePreviewChange, textItems, updateItem]
   );
 
   const handleApplyTextAnimationPreset = useCallback(
@@ -987,6 +1025,21 @@ export function TextSection({
               ))}
             </div>
           </PropertyRow>
+
+          {sharedValues.textStylePresetId && (
+            <PropertyRow label="Scale">
+              <SliderInput
+                value={sharedValues.textStyleScale}
+                onChange={handleTextStyleScaleChange}
+                min={0.5}
+                max={3}
+                step={0.05}
+                unit="x"
+                formatValue={(value) => `${value.toFixed(2)}x`}
+                className="flex-1 min-w-0"
+              />
+            </PropertyRow>
+          )}
 
           {/* Font Family */}
           <PropertyRow label="Font" className="items-start">

@@ -92,6 +92,8 @@ export interface ProjectTimeline {
     fontStyle?: 'normal' | 'italic';
     underline?: boolean;
     color?: string;
+    textStylePresetId?: 'clean-title' | 'lower-third' | 'cinematic' | 'quote' | 'neon' | 'headline-stack' | 'event-card' | 'badge';
+    textStyleScale?: number;
     textSpans?: Array<{
       text: string;
       fontSize?: number;

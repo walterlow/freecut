@@ -1,4 +1,5 @@
 import type { VisualEffect } from '@/types/effects';
+import type { TextStylePresetId } from '@/shared/typography/text-style-presets';
 
 /**
  * Cache for media drag data
@@ -37,6 +38,7 @@ export interface TimelineTemplateDragData {
   type: 'timeline-template';
   itemType: 'text' | 'shape' | 'adjustment';
   label: string;
+  textStylePresetId?: TextStylePresetId;
   shapeType?: 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon' | 'heart' | 'path';
   effects?: VisualEffect[];
 }

@@ -5,6 +5,11 @@ import type {
   ShapeType,
   TextItem,
 } from '@/types/timeline';
+import {
+  TEXT_STYLE_PRESETS,
+  buildTextStylePresetTemplate,
+  type TextStylePresetId,
+} from '@/shared/typography/text-style-presets';
 
 export const DEFAULT_GENERATED_LAYER_DURATION_SECONDS = 60;
 
@@ -12,6 +17,7 @@ export interface TimelineTemplateDragData {
   type: 'timeline-template';
   itemType: 'text' | 'shape' | 'adjustment';
   label: string;
+  textStylePresetId?: TextStylePresetId;
   shapeType?: ShapeType;
   effects?: VisualEffect[];
 }
@@ -25,6 +31,7 @@ interface LayerPlacement {
 interface VisualLayerPlacement extends LayerPlacement {
   canvasWidth: number;
   canvasHeight: number;
+  fps?: number;
 }
 
 export function isTimelineTemplateDragData(value: unknown): value is TimelineTemplateDragData {
@@ -34,6 +41,12 @@ export function isTimelineTemplateDragData(value: unknown): value is TimelineTem
   if (candidate.type !== 'timeline-template') return false;
   if (candidate.itemType !== 'text' && candidate.itemType !== 'shape' && candidate.itemType !== 'adjustment') return false;
   if (typeof candidate.label !== 'string' || candidate.label.trim().length === 0) return false;
+  if (
+    candidate.textStylePresetId !== undefined
+    && !TEXT_STYLE_PRESETS.some((preset) => preset.id === candidate.textStylePresetId)
+  ) {
+    return false;
+  }
   if (candidate.effects !== undefined && !Array.isArray(candidate.effects)) return false;
 
   return candidate.itemType !== 'shape'
@@ -91,6 +104,32 @@ export function createDefaultTextItem(params: VisualLayerPlacement): TextItem {
       rotation: 0,
       opacity: 1,
     },
+  };
+}
+
+export function createTextTemplateItem(params: {
+  placement: VisualLayerPlacement;
+  label?: string;
+  textStylePresetId?: TextStylePresetId;
+}): TextItem {
+  const { placement, label, textStylePresetId } = params;
+  const baseTextItem = createDefaultTextItem(placement);
+
+  if (!textStylePresetId) {
+    return {
+      ...baseTextItem,
+      label: label ?? baseTextItem.label,
+    };
+  }
+
+  return {
+    ...baseTextItem,
+    ...buildTextStylePresetTemplate(textStylePresetId, {
+      width: placement.canvasWidth,
+      height: placement.canvasHeight,
+      fps: placement.fps ?? 30,
+    }),
+    label: label ?? TEXT_STYLE_PRESETS.find((preset) => preset.id === textStylePresetId)?.label ?? baseTextItem.label,
   };
 }
 
@@ -154,7 +193,11 @@ export function createTimelineTemplateItem(params: {
   const { template, placement } = params;
 
   if (template.itemType === 'text') {
-    return createDefaultTextItem(placement);
+    return createTextTemplateItem({
+      placement,
+      label: template.label,
+      textStylePresetId: template.textStylePresetId,
+    });
   }
 
   if (template.itemType === 'adjustment') {

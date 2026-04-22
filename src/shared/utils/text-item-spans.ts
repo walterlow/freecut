@@ -22,6 +22,16 @@ export function getTextItemPlainText(
   return spans.map((span) => span.text).join('\n');
 }
 
+export function getTextItemPrimaryText(
+  item: Pick<TextItem, 'text' | 'textSpans'>,
+): string {
+  if (Array.isArray(item.textSpans) && item.textSpans.length > 0) {
+    return item.textSpans[0]?.text ?? '';
+  }
+
+  return (item.text ?? '').split('\n')[0] ?? '';
+}
+
 export function buildTextItemLabelFromText(text: string): string {
   const firstLine = text.split('\n')[0]?.trim() ?? '';
   return firstLine || 'Text';
