@@ -49,6 +49,7 @@ import {
 import {
   applyTextStylePresetToItem,
   TEXT_STYLE_PRESETS,
+  buildTextStylePresetTemplate,
   type TextStylePresetId,
 } from './text-style-presets';
 import {
@@ -214,6 +215,64 @@ function buildSpanLayout(
     ...span,
     ...(existing[index] ?? {}),
   }));
+}
+
+interface SpanEditorConfig {
+  label: string;
+  placeholder: string;
+  rows: number;
+  allowItalic: boolean;
+}
+
+function getSpanEditorConfigs(spanCount: number): SpanEditorConfig[] {
+  if (spanCount >= 3) {
+    return [
+      {
+        label: 'Eyebrow',
+        placeholder: 'Eyebrow text',
+        rows: 1,
+        allowItalic: false,
+      },
+      {
+        label: 'Title',
+        placeholder: 'Title text',
+        rows: 2,
+        allowItalic: true,
+      },
+      {
+        label: 'Subtitle',
+        placeholder: 'Subtitle text',
+        rows: 2,
+        allowItalic: true,
+      },
+    ];
+  }
+
+  if (spanCount === 2) {
+    return [
+      {
+        label: 'Title',
+        placeholder: 'Title text',
+        rows: 2,
+        allowItalic: true,
+      },
+      {
+        label: 'Subtitle',
+        placeholder: 'Subtitle text',
+        rows: 2,
+        allowItalic: true,
+      },
+    ];
+  }
+
+  return [
+    {
+      label: 'Text',
+      placeholder: 'Enter text...',
+      rows: 3,
+      allowItalic: true,
+    },
+  ];
 }
 
 /**
@@ -824,7 +883,7 @@ export function TextSection({
   const handleApplyTextStylePreset = useCallback(
     (presetId: TextStylePresetId) => {
       textItems.forEach((item) => {
-        updateItem(item.id, applyTextStylePresetToItem(item, presetId, canvas, 1));
+        updateItem(item.id, buildTextStylePresetTemplate(presetId, canvas, 1));
       });
       finalizePreviewChange();
     },
@@ -904,6 +963,7 @@ export function TextSection({
   const hasAnyBackground = textItems.some((item) => item.backgroundColor !== undefined);
   const textPadding = sharedValues.textPadding;
   const backgroundRadius = sharedValues.backgroundRadius;
+  const spanEditorConfigs = getSpanEditorConfigs(activeEditorSpans.length);
 
   return (
     <>
@@ -942,15 +1002,25 @@ export function TextSection({
                 <div className="space-y-2">
                   {activeEditorSpans.map((span, index) => (
                     <div key={`${index}:${span.text}`} className="rounded-md border border-border/70 p-2">
+                      {(() => {
+                        const config = spanEditorConfigs[index] ?? {
+                          label: `Span ${index + 1}`,
+                          placeholder: `Span ${index + 1} text`,
+                          rows: 2,
+                          allowItalic: true,
+                        };
+
+                        return (
+                          <>
                       <div className="mb-2 text-[11px] font-medium text-muted-foreground">
-                        {`Span ${index + 1}`}
+                              {config.label}
                       </div>
                       <Textarea
                         value={span.text}
                         onChange={(e) => handleSpanTextChange(index, e.target.value)}
-                        placeholder={`Span ${index + 1} text`}
+                              placeholder={config.placeholder}
                         className="min-h-[52px] text-xs"
-                        rows={2}
+                              rows={config.rows}
                       />
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         <NumberInput
@@ -985,16 +1055,23 @@ export function TextSection({
                             onChange={(value) => handleSpanColorChange(index, value)}
                           />
                         </div>
-                        <Button
-                          variant={(span.fontStyle ?? 'normal') === 'italic' ? 'secondary' : 'ghost'}
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => handleSpanItalicToggle(index)}
-                          title="Italic span"
-                        >
-                          <Italic className="w-3.5 h-3.5" />
-                        </Button>
+                            {config.allowItalic ? (
+                              <Button
+                                variant={(span.fontStyle ?? 'normal') === 'italic' ? 'secondary' : 'ghost'}
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => handleSpanItalicToggle(index)}
+                                title={`Italic ${config.label.toLowerCase()}`}
+                              >
+                                <Italic className="w-3.5 h-3.5" />
+                              </Button>
+                            ) : (
+                              <div className="w-7 h-7 flex-shrink-0" />
+                            )}
                       </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -1010,20 +1087,22 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Presets" className="items-start">
-            <div className="grid w-full grid-cols-2 gap-1.5">
-              {TEXT_STYLE_PRESETS.map((preset) => (
-                <Button
-                  key={preset.id}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px]"
-                  onClick={() => handleApplyTextStylePreset(preset.id)}
-                >
-                  {preset.label}
-                </Button>
-              ))}
-            </div>
+          <PropertyRow label="Preset">
+            <Select
+              value={sharedValues.textStylePresetId}
+              onValueChange={(value) => handleApplyTextStylePreset(value as TextStylePresetId)}
+            >
+              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                <SelectValue placeholder={sharedValues.textStylePresetId === undefined ? 'Mixed / None' : 'Select preset'} />
+              </SelectTrigger>
+              <SelectContent>
+                {TEXT_STYLE_PRESETS.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id} className="text-xs">
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </PropertyRow>
 
           {sharedValues.textStylePresetId && (
