@@ -53,6 +53,7 @@ import { useSettingsStore } from '@/features/editor/deps/settings';
 import { AiPanel } from './ai-panel';
 import {
   TEXT_STYLE_PRESETS,
+  type TextStylePresetLayout,
   type TextStylePreset,
 } from '@/shared/typography/text-style-presets';
 import {
@@ -185,6 +186,15 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
     </div>
   );
 }
+
+const TEXT_TEMPLATE_GROUPS: ReadonlyArray<{
+  key: TextStylePresetLayout;
+  label: string;
+}> = [
+  { key: 'single', label: 'Single' },
+  { key: 'two', label: '2 Spans' },
+  { key: 'three', label: '3 Spans' },
+];
 
 export const MediaSidebar = memo(function MediaSidebar() {
   const editorDensity = useSettingsStore((s) => s.editorDensity);
@@ -458,6 +468,19 @@ export const MediaSidebar = memo(function MediaSidebar() {
   );
   const presetIds = useMemo(() => EFFECT_PRESETS.map((p) => p.id), []);
   const { previews: effectPreviews, trigger: triggerPreviews } = useEffectPreviews(allEffectEntries, presetIds);
+  const textTemplatesByLayout = useMemo(() => {
+    const grouped = {
+      single: [] as TextStylePreset[],
+      two: [] as TextStylePreset[],
+      three: [] as TextStylePreset[],
+    };
+
+    for (const preset of TEXT_STYLE_PRESETS) {
+      grouped[preset.layout].push(preset);
+    }
+
+    return grouped;
+  }, []);
 
   // Category items for the vertical nav
   const categories = [
@@ -628,53 +651,71 @@ export const MediaSidebar = memo(function MediaSidebar() {
           {/* Text Tab */}
           <div className={`min-h-0 flex-1 overflow-y-auto p-3 ${activeTab === 'text' ? 'block' : 'hidden'}`}>
             <div className="space-y-3">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                   Templates
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'text', label: 'Text' })}
-                    onDragEnd={handleTemplateDragEnd}
-                    onClick={() => {
-                      if (shouldSuppressGeneratedItemClick()) return;
-                      handleAddText();
-                    }}
-                    className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                  >
-                      {renderTextTemplatePreview()}
-                    <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
-                      Add Text
-                    </span>
-                  </button>
-                  {TEXT_STYLE_PRESETS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      draggable={true}
-                      onDragStart={handleTemplateDragStart({
-                        itemType: 'text',
-                        label: preset.label,
-                        textStylePresetId: preset.id,
-                      })}
-                      onDragEnd={handleTemplateDragEnd}
-                      onClick={() => {
-                        if (shouldSuppressGeneratedItemClick()) return;
-                        handleAddText(preset.id);
-                      }}
-                      className={cn(
-                        'flex flex-col items-center gap-1 p-1.5 rounded-md border border-border',
-                        'bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50',
-                        'transition-colors group'
-                      )}
-                    >
-                      {renderTextTemplatePreview(preset)}
-                      <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
-                        {preset.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                {TEXT_TEMPLATE_GROUPS.map((group) => {
+                  const presets = textTemplatesByLayout[group.key];
+                  const showAddText = group.key === 'single';
+
+                  if (!showAddText && presets.length === 0) {
+                    return null;
+                  }
+
+                  return (
+                    <div key={group.key} className="space-y-1.5">
+                      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                        {group.label}
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {showAddText ? (
+                          <button
+                            draggable={true}
+                            onDragStart={handleTemplateDragStart({ itemType: 'text', label: 'Text' })}
+                            onDragEnd={handleTemplateDragEnd}
+                            onClick={() => {
+                              if (shouldSuppressGeneratedItemClick()) return;
+                              handleAddText();
+                            }}
+                            className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                          >
+                            {renderTextTemplatePreview()}
+                            <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
+                              Add Text
+                            </span>
+                          </button>
+                        ) : null}
+                        {presets.map((preset) => (
+                          <button
+                            key={preset.id}
+                            draggable={true}
+                            onDragStart={handleTemplateDragStart({
+                              itemType: 'text',
+                              label: preset.label,
+                              textStylePresetId: preset.id,
+                            })}
+                            onDragEnd={handleTemplateDragEnd}
+                            onClick={() => {
+                              if (shouldSuppressGeneratedItemClick()) return;
+                              handleAddText(preset.id);
+                            }}
+                            className={cn(
+                              'flex flex-col items-center gap-1 p-1.5 rounded-md border border-border',
+                              'bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50',
+                              'transition-colors group'
+                            )}
+                          >
+                            {renderTextTemplatePreview(preset)}
+                            <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
+                              {preset.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -22,10 +22,13 @@ export type TextStylePresetPreviewKind =
   | 'event'
   | 'badge';
 
+export type TextStylePresetLayout = 'single' | 'two' | 'three';
+
 export interface TextStylePreset {
   id: TextStylePresetId;
   label: string;
   previewKind: TextStylePresetPreviewKind;
+  layout: TextStylePresetLayout;
   sample: {
     eyebrow?: string;
     title: string;
@@ -86,6 +89,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
     id: 'clean-title',
     label: 'Clean',
     previewKind: 'clean',
+    layout: 'single',
     sample: { title: 'Main', subtitle: 'Title' },
     style: {
       fontFamily: 'Inter Tight',
@@ -112,6 +116,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
     id: 'lower-third',
     label: 'Lower Third',
     previewKind: 'lower-third',
+    layout: 'two',
     sample: { title: 'Name', subtitle: 'Role or subtitle' },
     style: {
       fontFamily: 'Inter',
@@ -138,6 +143,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
     id: 'cinematic',
     label: 'Cinematic',
     previewKind: 'cinematic',
+    layout: 'single',
     sample: { title: 'CINEMA', subtitle: 'PRESENTS' },
     style: {
       fontFamily: 'Bebas Neue',
@@ -167,6 +173,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
     id: 'quote',
     label: 'Quote',
     previewKind: 'quote',
+    layout: 'two',
     sample: { title: 'Quote', subtitle: 'Attribution' },
     style: {
       fontFamily: 'Playfair Display',
@@ -193,6 +200,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
     id: 'neon',
     label: 'Neon',
     previewKind: 'neon',
+    layout: 'single',
     sample: { title: 'NEON', subtitle: 'Glow' },
     style: {
       fontFamily: 'Orbitron',
@@ -222,6 +230,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
     id: 'headline-stack',
     label: 'Headline',
     previewKind: 'stacked',
+    layout: 'three',
     sample: { eyebrow: 'TOP STORY', title: 'Headline', subtitle: 'Subhead' },
     style: {
       fontFamily: 'Inter Tight',
@@ -248,6 +257,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
     id: 'event-card',
     label: 'Event',
     previewKind: 'event',
+    layout: 'three',
     sample: { eyebrow: 'LIVE', title: 'Summer Fest', subtitle: 'Friday 8 PM' },
     style: {
       fontFamily: 'Inter Tight',
@@ -274,6 +284,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
     id: 'badge',
     label: 'Badge',
     previewKind: 'badge',
+    layout: 'single',
     sample: { title: 'NEW DROP', subtitle: 'Tag' },
     style: {
       fontFamily: 'Inter',
@@ -302,10 +313,11 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
 };
 
 export const TEXT_STYLE_PRESETS: readonly TextStylePreset[] = Object.values(TEXT_STYLE_RECIPES).map(
-  ({ id, label, previewKind, sample }) => ({
+  ({ id, label, previewKind, layout, sample }) => ({
     id,
     label,
     previewKind,
+    layout,
     sample,
   }),
 );
