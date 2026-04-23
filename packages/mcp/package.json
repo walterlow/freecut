@@ -1,0 +1,31 @@
+{
+  "name": "@freecut/mcp",
+  "version": "0.0.1",
+  "description": "MCP server that bridges AI agents (Claude Desktop, Cursor, etc.) into a running FreeCut browser tab via Chrome DevTools Protocol.",
+  "type": "module",
+  "bin": {
+    "freecut-mcp": "./bin/freecut-mcp.mjs"
+  },
+  "main": "./src/server.mjs",
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node bin/freecut-mcp.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "chrome-remote-interface": "^0.33.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.17"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
 import { App } from './app';
 import { initializeDebugUtils } from '@/app/debug';
+import { initializeAgentApi } from '@/app/agent-api';
 import { createLogger } from '@/shared/logging/logger';
 import './index.css';
 
@@ -10,6 +11,10 @@ const log = createLogger('App');
 
 // Initialize debug utilities in development mode
 initializeDebugUtils();
+
+// Expose window.__FREECUT__ for agent automation.
+// Always on in dev; in prod requires ?agent=1 or localStorage['freecut.agent'].
+initializeAgentApi();
 
 // Global error handlers
 window.addEventListener('unhandledrejection', (event) => {

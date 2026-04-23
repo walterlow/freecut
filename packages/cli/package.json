@@ -1,0 +1,25 @@
+{
+  "name": "@freecut/cli",
+  "version": "0.0.1",
+  "description": "Command-line interface for authoring FreeCut projects. Ships the `freecut` binary.",
+  "type": "module",
+  "bin": {
+    "freecut": "./bin/freecut.mjs"
+  },
+  "main": "./src/index.mjs",
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.17"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

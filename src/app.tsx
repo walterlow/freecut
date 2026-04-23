@@ -9,6 +9,12 @@ import { routeTree } from './routeTree.gen';
 
 const router = createRouter({ routeTree });
 
+// Expose the router to the agent API so `openProject` / `createProject`
+// can perform real SPA navigation instead of falling back to pushState.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __FREECUT_ROUTER__?: typeof router }).__FREECUT_ROUTER__ = router;
+}
+
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;
