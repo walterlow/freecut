@@ -307,7 +307,13 @@ function createWavBlob(chunks: Float32Array[], sampleRate: number): Blob {
   writeString(36, 'data');
   view.setUint32(40, totalLength * 4, true);
 
-  return new Blob([headerBuffer, ...chunks], { type: 'audio/wav' });
+  const audioBuffers = chunks.map((chunk) => {
+    const buffer = new ArrayBuffer(chunk.byteLength);
+    new Uint8Array(buffer).set(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+    return buffer;
+  });
+
+  return new Blob([headerBuffer, ...audioBuffers], { type: 'audio/wav' });
 }
 
 function getAudioDurationSeconds(chunks: Float32Array[], sampleRate: number): number {

@@ -813,8 +813,7 @@ function getSpanStyle(span?: TextSpan): Omit<TextSpan, 'text'> {
     return {};
   }
 
-  const style = { ...span };
-  delete style.text;
+  const { text: _text, ...style } = span;
   return style;
 }
 

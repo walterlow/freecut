@@ -9,7 +9,7 @@ import {
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
 } from '../utils/corner-pin';
-import { getShapePath, rotatePath } from '../utils/shape-path';
+import { getShapePath } from '../utils/shape-path';
 import { useCornerPinStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import {
@@ -149,10 +149,6 @@ function renderRasterizedMaskLayer(
         canvasHeight,
       },
     );
-
-    if (resolvedTransform.rotation !== 0) {
-      svgPath = rotatePath(svgPath, resolvedTransform.rotation, centerX, centerY);
-    }
 
     const path2d = new Path2D(svgPath);
     ctx.fillStyle = '#ffffff';

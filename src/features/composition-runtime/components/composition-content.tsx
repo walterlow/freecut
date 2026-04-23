@@ -263,11 +263,15 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
       resolved = {
         ...animatedResolved,
         ...unifiedPreviewTransform,
+        anchorX: unifiedPreviewTransform.anchorX ?? animatedResolved.anchorX,
+        anchorY: unifiedPreviewTransform.anchorY ?? animatedResolved.anchorY,
         cornerRadius: unifiedPreviewTransform.cornerRadius ?? animatedResolved.cornerRadius,
       } as ResolvedTransform;
     } else if (isGizmoTarget && previewTransform !== null) {
       resolved = {
         ...previewTransform,
+        anchorX: previewTransform.anchorX ?? (previewTransform.width / 2),
+        anchorY: previewTransform.anchorY ?? (previewTransform.height / 2),
         cornerRadius: previewTransform.cornerRadius ?? animatedResolved.cornerRadius,
       };
     }
