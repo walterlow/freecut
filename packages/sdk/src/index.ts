@@ -26,6 +26,13 @@ export { createProject, ProjectBuilder } from './builder.js';
 export type { CreateProjectOptions } from './builder.js';
 export { serialize, parse, toSnapshot, SnapshotParseError } from './serialize.js';
 export type { SerializeOptions } from './serialize.js';
+export { validateSnapshot, lintSnapshot } from './validate.js';
+export type {
+  ValidateSnapshotOptions,
+  ValidationFinding,
+  ValidationResult,
+  ValidationSeverity,
+} from './validate.js';
 export { secondsToFrames, framesToSeconds } from './time.js';
 export { randomIds, deterministicIds } from './ids.js';
 export type { IdGenerator } from './ids.js';

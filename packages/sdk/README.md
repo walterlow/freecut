@@ -71,6 +71,8 @@ writeFileSync('out.fcproject', serialize(p));
   `addMarker()`
 - `builder.secondsToFrames()`, `endOfTrack()`, `touch()`
 - `serialize(p)` / `parse(json)` — JSON round-trip
+- `validateSnapshot(snapshot)` / `lintSnapshot(snapshot)` — structural checks
+  for agent-authored project files
 - `deterministicIds()` / `randomIds` — id generation
 
 ## Relationship to the editor

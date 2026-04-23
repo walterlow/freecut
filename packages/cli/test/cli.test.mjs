@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from '../src/index.mjs';
@@ -176,6 +176,47 @@ describe('freecut CLI', () => {
     expect(parsed.tracks).toHaveLength(1);
     expect(parsed.items).toHaveLength(1);
     expect(parsed.items[0].type).toBe('text');
+  });
+
+  it('lint passes for valid snapshots', async () => {
+    const file = join(tmp, 'lint-valid.fcproject');
+    await run(['new', file, '--fps', '30']);
+    const streams = await run(['lint', file, '--json']);
+    const result = JSON.parse(streams.stdout.text);
+    expect(result.ok).toBe(true);
+    expect(result.errorCount).toBe(0);
+  });
+
+  it('lint rejects invalid snapshots after printing JSON', async () => {
+    const file = join(tmp, 'lint-invalid.fcproject');
+    await run(['new', file, '--fps', '30']);
+    const snap = JSON.parse(await readFile(file, 'utf8'));
+    snap.project.timeline.items.push({
+      id: 'bad-item',
+      type: 'text',
+      trackId: 'missing-track',
+      from: 0,
+      durationInFrames: 30,
+      label: 'bad',
+      text: '',
+      color: '#fff',
+    });
+    await writeFile(file, JSON.stringify(snap, null, 2), 'utf8');
+
+    const streams = io();
+    await expect(main(['lint', file, '--json'], streams)).rejects.toThrow(/lint failed/);
+    const result = JSON.parse(streams.stdout.text);
+    expect(result.ok).toBe(false);
+    expect(result.findings.map((finding) => finding.code)).toContain('item_track_missing');
+  });
+
+  it('doctor reports environment checks', async () => {
+    const file = join(tmp, 'doctor.fcproject');
+    await run(['new', file, '--fps', '30']);
+    const streams = await run(['doctor', file, '--json']);
+    const result = JSON.parse(streams.stdout.text);
+    expect(result.fail).toBe(0);
+    expect(result.checks.map((check) => check.name)).toContain('snapshot');
   });
 
   it('rejects cross-track transitions', async () => {

@@ -2,6 +2,9 @@
   "name": "freecut",
   "private": true,
   "version": "2026.04.06",
+  "workspaces": [
+    "packages/*"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -25,6 +28,9 @@
     "routes": "tsr generate",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:sdk": "npm test --workspace @freecut/sdk",
+    "test:cli": "npm test --workspace @freecut/cli",
+    "test:mcp": "npm test --workspace @freecut/mcp",
     "test:preview-sync": "vitest run src/features/preview/components/video-preview.sync.test.tsx",
     "test:preview-sync:stress": "node scripts/preview-sync-stress.mjs --runs 20",
     "test:coverage": "vitest run --coverage",

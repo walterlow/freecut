@@ -15,12 +15,16 @@ import { runMediaAdd } from './commands/media.mjs';
 import { runEffectAdd } from './commands/effect.mjs';
 import { runTransitionAdd } from './commands/transition.mjs';
 import { runMarkerAdd } from './commands/marker.mjs';
+import { runLint } from './commands/lint.mjs';
+import { runDoctor } from './commands/doctor.mjs';
 
 const HELP = `freecut — programmatic FreeCut project authoring
 
 usage:
+  freecut doctor [file] [--json]
   freecut new <file> [--name X --fps 30 --width 1920 --height 1080]
   freecut inspect <file> [--json]
+  freecut lint <file> [--json] [--strict]
   freecut track add <file> [--kind video|audio --name X]
   freecut clip add <file> --type video|audio|image|text|shape|adjustment \\
                           --track <id> --from <sec> --duration <sec> [options]
@@ -41,11 +45,17 @@ export async function main(argv, io = { stdout: process.stdout, stderr: process.
   const [first, second, ...rest] = argv;
 
   switch (first) {
+    case 'doctor':
+      await runDoctor(argv.slice(1), io);
+      return;
     case 'new':
       await runNew(argv.slice(1), io);
       return;
     case 'inspect':
       await runInspect(argv.slice(1), io);
+      return;
+    case 'lint':
+      await runLint(argv.slice(1), io);
       return;
     case 'track':
       if (second !== 'add') throw usage(`unknown track subcommand: ${second ?? '(none)'}`);
