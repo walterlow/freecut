@@ -8,15 +8,19 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalDistributeCenter,
+  Magnet,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/shared/ui/cn';
 import { useSelectionStore } from '@/shared/state/selection';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useSettingsStore } from '@/features/preview/deps/settings';
 import { useTimelineStore, useKeyframesStore } from '@/features/preview/deps/timeline-store';
 import { getAutoKeyframeOperation, type AutoKeyframeOperation } from '../deps/keyframes';
 import { useVisualTransforms } from '../hooks/use-visual-transform';
 import type { TransformProperties } from '@/types/transform';
+
 
 type AlignmentType =
   | 'left'
@@ -54,6 +58,8 @@ export function AlignmentToolbar({ projectSize }: AlignmentToolbarProps) {
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap);
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
+  const canvasSnapEnabled = useSettingsStore((s) => s.canvasSnapEnabled);
+  const setSetting = useSettingsStore((s) => s.setSetting);
 
   const visualItems = useTimelineStore(
     useShallow((s) =>
@@ -202,6 +208,26 @@ export function AlignmentToolbar({ projectSize }: AlignmentToolbarProps) {
       {ALIGNMENT_ACTIONS.slice(3, 6).map(renderButton)}
       <div className="w-px h-3.5 bg-border mx-0.5" />
       {ALIGNMENT_ACTIONS.slice(6).map(renderButton)}
+      <div className="w-px h-3.5 bg-border mx-0.5" />
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          'flex-shrink-0 text-muted-foreground hover:text-foreground',
+          canvasSnapEnabled && 'text-foreground bg-accent'
+        )}
+        style={BUTTON_STYLE}
+        onClick={() => setSetting('canvasSnapEnabled', !canvasSnapEnabled)}
+        data-tooltip={
+          canvasSnapEnabled
+            ? 'Disable Canvas Snapping (hold Alt while dragging to bypass)'
+            : 'Enable Canvas Snapping'
+        }
+        aria-label="Toggle Canvas Snapping"
+        aria-pressed={canvasSnapEnabled}
+      >
+        <Magnet className="w-3.5 h-3.5" />
+      </Button>
     </>
   );
 }

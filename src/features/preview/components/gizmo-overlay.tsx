@@ -2,6 +2,7 @@ import { useMemo, useCallback, useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { useSelectionStore } from '@/shared/state/selection';
+import { useSettingsStore } from '@/features/preview/deps/settings';
 import { useKeyframesStore, useTimelineStore } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
@@ -13,7 +14,8 @@ import { TransformGizmo } from './transform-gizmo';
 import { GroupGizmo } from './group-gizmo';
 import { SelectableItem } from './selectable-item';
 import { SnapGuides } from './snap-guides';
-import { screenToCanvas, transformToScreenBounds } from '../utils/coordinate-transform';
+import { getEffectiveScale, screenToCanvas, transformToScreenBounds } from '../utils/coordinate-transform';
+import { computeItemAabb } from '../utils/canvas-snap-utils';
 import { useMarqueeSelection, isMarqueeJustFinished, type Rect } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { useVisualTransforms } from '../hooks/use-visual-transform';
@@ -25,7 +27,7 @@ import {
 } from '@/features/preview/deps/keyframes';
 import type { TransformAnimatableProperty } from '@/types/keyframe';
 import type { TimelineItem } from '@/types/timeline';
-import type { CoordinateParams, Transform, Point } from '../types/gizmo';
+import type { BoundingBox, CoordinateParams, Transform, Point } from '../types/gizmo';
 import type { TransformProperties } from '@/types/transform';
 
 interface GizmoOverlayProps {
@@ -96,7 +98,7 @@ export function GizmoOverlay({
     )
   );
   const tracks = useTimelineStore((s) => s.tracks);
-  const snapEnabled = useTimelineStore((s) => s.snapEnabled);
+  const canvasSnapEnabled = useSettingsStore((s) => s.canvasSnapEnabled);
   const updateItemTransform = useTimelineStore((s) => s.updateItemTransform);
   const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap);
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
@@ -194,7 +196,9 @@ export function GizmoOverlay({
 
   // Gizmo store
   const setCanvasSize = useGizmoStore((s) => s.setCanvasSize);
+  const setCanvasScale = useGizmoStore((s) => s.setCanvasScale);
   const setSnappingEnabled = useGizmoStore((s) => s.setSnappingEnabled);
+  const setOtherItemBounds = useGizmoStore((s) => s.setOtherItemBounds);
   const snapLines = useGizmoStore((s) => s.snapLines);
   const isCornerPinEditing = useCornerPinStore((s) => s.isEditing);
   const isMaskEditing = useMaskEditorStore((s) => s.isEditing);
@@ -209,8 +213,8 @@ export function GizmoOverlay({
   }, [projectSize.width, projectSize.height, setCanvasSize]);
 
   useEffect(() => {
-    setSnappingEnabled(snapEnabled);
-  }, [snapEnabled, setSnappingEnabled]);
+    setSnappingEnabled(canvasSnapEnabled);
+  }, [canvasSnapEnabled, setSnappingEnabled]);
 
   // Get visual items visible at current frame (excluding hidden tracks and locked tracks)
   // Sorted by track order: items on top tracks (lower order) come LAST for proper stacking/click priority
@@ -266,6 +270,13 @@ export function GizmoOverlay({
       zoom,
     };
   }, [containerRect, playerSize, projectSize, zoom]);
+
+  // Publish the effective preview scale so snap thresholds (authored in
+  // screen pixels) convert to the correct canvas-pixel distance at any zoom.
+  useEffect(() => {
+    if (!coordParams) return;
+    setCanvasScale(getEffectiveScale(coordParams));
+  }, [coordParams, setCanvasScale]);
 
   const {
     dropState,
@@ -339,15 +350,41 @@ export function GizmoOverlay({
 
   const handleTransformStart = useCallback(() => {
     const playback = usePlaybackStore.getState();
-    if (playback.previewFrame === null) {
-      return;
+    if (playback.previewFrame !== null) {
+      if (playback.currentFrame !== playback.previewFrame) {
+        playback.setCurrentFrame(playback.previewFrame);
+      }
+      playback.setPreviewFrame(null);
     }
 
-    if (playback.currentFrame !== playback.previewFrame) {
-      playback.setCurrentFrame(playback.previewFrame);
+    // Collect AABBs of non-selected visible items so snap can align to them.
+    // Snapshot at drag start — other items don't move during the drag.
+    const bounds: BoundingBox[] = [];
+    for (const item of unselectedItems) {
+      const resolved = visualTransformsMap.get(item.id);
+      if (!resolved) continue;
+      const strokeExpansion =
+        item.type === 'shape' && typeof item.strokeWidth === 'number'
+          ? item.strokeWidth
+          : 0;
+      bounds.push(
+        computeItemAabb(
+          {
+            x: resolved.x,
+            y: resolved.y,
+            width: resolved.width,
+            height: resolved.height,
+            rotation: resolved.rotation,
+            opacity: resolved.opacity,
+          },
+          projectSize.width,
+          projectSize.height,
+          strokeExpansion
+        )
+      );
     }
-    playback.setPreviewFrame(null);
-  }, []);
+    setOtherItemBounds(bounds);
+  }, [unselectedItems, visualTransformsMap, projectSize.width, projectSize.height, setOtherItemBounds]);
 
   // Handle transform end - commit the transform to the timeline with auto-keyframing
   const handleTransformEnd = useCallback(
@@ -418,8 +455,9 @@ export function GizmoOverlay({
       setTimeout(() => {
         justFinishedDragRef.current = false;
       }, 100);
+      setOtherItemBounds([]);
     },
-    [visualItems, updateItemTransform, applyAutoKeyframeOperations]
+    [visualItems, updateItemTransform, applyAutoKeyframeOperations, setOtherItemBounds]
   );
 
   // Handle group transform end - commit transforms for all items as a single undo operation
@@ -451,8 +489,9 @@ export function GizmoOverlay({
       setTimeout(() => {
         justFinishedDragRef.current = false;
       }, 100);
+      setOtherItemBounds([]);
     },
-    [updateItemsTransformMap]
+    [updateItemsTransformMap, setOtherItemBounds]
   );
 
   // Handle click on overlay background to deselect

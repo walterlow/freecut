@@ -14,6 +14,11 @@ import {
   calculateGroupScaleFactor,
   calculateGroupRotationDelta,
 } from '../utils/group-transform-calculations';
+import {
+  applyGroupTranslationSnapping,
+  applyGroupScaleSnapping,
+  type SnapLine,
+} from '../utils/canvas-snap-utils';
 import { useGizmoStore, type ItemPreview } from '../stores/gizmo-store';
 
 interface GroupGizmoProps {
@@ -57,6 +62,11 @@ export function GroupGizmo({
   // Unified preview store actions
   const setPreview = useGizmoStore((s) => s.setPreview);
   const clearPreview = useGizmoStore((s) => s.clearPreview);
+  const setSnapLines = useGizmoStore((s) => s.setSnapLines);
+
+  // Snap lines from the previous mousemove — used for hysteresis so the group
+  // feels sticky once it latches onto a snap point, matching single-item snap.
+  const snapLinesRef = useRef<SnapLine[]>([]);
 
   const { projectSize } = coordParams;
   const scale = getEffectiveScale(coordParams);
@@ -250,8 +260,35 @@ export function GroupGizmo({
         }
 
         const movePoint = toCanvasPoint(moveEvent);
-        const deltaX = movePoint.x - point.x;
-        const deltaY = movePoint.y - point.y;
+        let deltaX = movePoint.x - point.x;
+        let deltaY = movePoint.y - point.y;
+
+        // Snap the group AABB to canvas edges/center. Alt overrides snap, matching
+        // the single-item gizmo's override semantics.
+        const { snappingEnabled } = useGizmoStore.getState();
+        let snapLines: SnapLine[] = [];
+        if (snappingEnabled && !moveEvent.altKey) {
+          const tentative = applyGroupTranslation(groupState, deltaX, deltaY);
+          const tentativeBounds = calculateGroupBounds(
+            tentative,
+            projectSize.width,
+            projectSize.height
+          );
+          const { otherItemBounds } = useGizmoStore.getState();
+          const snap = applyGroupTranslationSnapping(
+            tentativeBounds,
+            projectSize.width,
+            projectSize.height,
+            snapLinesRef.current,
+            scale,
+            otherItemBounds
+          );
+          deltaX += snap.deltaX;
+          deltaY += snap.deltaY;
+          snapLines = snap.snapLines;
+        }
+        snapLinesRef.current = snapLines;
+        setSnapLines(snapLines);
 
         const newTransforms = applyGroupTranslation(groupState, deltaX, deltaY);
         setPreviewTransforms(newTransforms);
@@ -261,6 +298,8 @@ export function GroupGizmo({
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
         document.body.style.cursor = '';
+        snapLinesRef.current = [];
+        setSnapLines([]);
 
         // If no drag happened (just a click), check if clicking on a specific item
         if (!hasDragged && onItemClick) {
@@ -292,7 +331,7 @@ export function GroupGizmo({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, setPreviewTransforms, onItemClick, findItemAtPoint]
+    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, setPreviewTransforms, setSnapLines, onItemClick, findItemAtPoint]
   );
 
   // Start scale interaction
@@ -318,8 +357,43 @@ export function GroupGizmo({
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const movePoint = toCanvasPoint(moveEvent);
-        const scaleFactor = calculateGroupScaleFactor(groupState, point, movePoint);
+        let scaleFactor = calculateGroupScaleFactor(groupState, point, movePoint);
         const maintainAspectRatio = !moveEvent.shiftKey;
+
+        // Snap group scale to canvas edges/percentage points. Only applied for
+        // aspect-preserving scale — free-scale (shift) is intentionally unsnapped
+        // so the user can reach arbitrary dimensions. Alt overrides snap.
+        const { snappingEnabled } = useGizmoStore.getState();
+        let snapLines: SnapLine[] = [];
+        if (snappingEnabled && maintainAspectRatio && !moveEvent.altKey) {
+          const tentative = applyGroupScale(
+            groupState,
+            scaleFactor,
+            scaleFactor,
+            projectSize.width,
+            projectSize.height,
+            true
+          );
+          const tentativeBounds = calculateGroupBounds(
+            tentative,
+            projectSize.width,
+            projectSize.height
+          );
+          const snap = applyGroupScaleSnapping(
+            tentativeBounds,
+            groupState.groupCenter,
+            groupState.groupBounds.width,
+            groupState.groupBounds.height,
+            projectSize.width,
+            projectSize.height,
+            snapLinesRef.current,
+            scale
+          );
+          scaleFactor = snap.scaleFactor;
+          snapLines = snap.snapLines;
+        }
+        snapLinesRef.current = snapLines;
+        setSnapLines(snapLines);
 
         const newTransforms = applyGroupScale(
           groupState,
@@ -336,6 +410,8 @@ export function GroupGizmo({
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
         document.body.style.cursor = '';
+        snapLinesRef.current = [];
+        setSnapLines([]);
 
         // Use ref to get latest preview transforms (avoids closure issues)
         const finalTransforms = previewTransformsRef.current ?? itemTransforms;
@@ -352,7 +428,7 @@ export function GroupGizmo({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, groupRotation, setPreviewTransforms]
+    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, groupRotation, setPreviewTransforms, setSnapLines]
   );
 
   // Start rotate interaction
@@ -380,8 +456,10 @@ export function GroupGizmo({
         const movePoint = toCanvasPoint(moveEvent);
         let rotationDelta = calculateGroupRotationDelta(groupState, point, movePoint);
 
-        // Snap to 15 degree increments when shift is held
-        if (moveEvent.shiftKey) {
+        // Snap to 15° increments by default (alt overrides to free rotation),
+        // matching single-gizmo rotation semantics.
+        const { snappingEnabled } = useGizmoStore.getState();
+        if (snappingEnabled && !moveEvent.altKey) {
           rotationDelta = Math.round(rotationDelta / 15) * 15;
         }
 
@@ -423,10 +501,12 @@ export function GroupGizmo({
     useCallback(() => {
       setInteractionMode('idle');
       setPreviewTransforms(null);
+      snapLinesRef.current = [];
+      setSnapLines([]);
       groupStateRef.current = null;
       startPointRef.current = null;
       document.body.style.cursor = '';
-    }, [setPreviewTransforms])
+    }, [setPreviewTransforms, setSnapLines])
   );
 
   const isInteracting = interactionMode !== 'idle';

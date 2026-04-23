@@ -8,7 +8,7 @@ import { useZoomStore, getZoomTo100Handler } from '../../stores/zoom-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
-import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
+import { useResolvedHotkeys, useSettingsStore } from '@/features/timeline/deps/settings';
 
 export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
   const hotkeys = useResolvedHotkeys();
@@ -59,6 +59,18 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
     },
     HOTKEY_OPTIONS,
     [toggleSnap]
+  );
+
+  // UI: Shift+S - Toggle Canvas (gizmo) Snap — independent from timeline snap.
+  useHotkeys(
+    hotkeys.TOGGLE_CANVAS_SNAP,
+    (event) => {
+      event.preventDefault();
+      const s = useSettingsStore.getState();
+      s.setSetting('canvasSnapEnabled', !s.canvasSnapEnabled);
+    },
+    HOTKEY_OPTIONS,
+    []
   );
 
   const zoomHotkeyOptions = { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } };

@@ -23,6 +23,8 @@ import {
 interface AppSettings {
   // Timeline defaults
   snapEnabled: boolean;
+  // Canvas/gizmo snap (preview area) — independent from timeline frame snap
+  canvasSnapEnabled: boolean;
   showWaveforms: boolean;
   showFilmstrips: boolean;
 
@@ -124,6 +126,7 @@ function areHotkeyOverridesEqual(
 const DEFAULT_SETTINGS: AppSettings = {
   // Timeline defaults
   snapEnabled: true,
+  canvasSnapEnabled: true,
   showWaveforms: true,
   showFilmstrips: true,
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GizmoState, GizmoHandle, Transform, Point } from '../types/gizmo';
+import type { BoundingBox, GizmoState, GizmoHandle, Transform, Point } from '../types/gizmo';
 import type { ItemEffect } from '@/types/effects';
 import type { CropSettings } from '@/types/transform';
 import { calculateTransform } from '../utils/transform-calculations';
@@ -128,10 +128,22 @@ interface GizmoStoreState {
   previewTransform: Transform | null;
   /** Canvas dimensions for calculations */
   canvasSize: { width: number; height: number };
+  /**
+   * Effective screen-px / canvas-px ratio of the preview area. Used so snap
+   * thresholds (which are authored in screen pixels for a consistent feel)
+   * convert to the correct canvas-pixel amount at any zoom level.
+   */
+  canvasScale: number;
   /** Active snap lines for visual feedback */
   snapLines: SnapLine[];
   /** Whether snapping is enabled */
   snappingEnabled: boolean;
+  /**
+   * AABBs (canvas coordinates) of the other visible items that the active
+   * gizmo can align to. Populated by the gizmo overlay at interaction start
+   * and cleared at end. Empty array disables item-to-item snapping.
+   */
+  otherItemBounds: BoundingBox[];
   /**
    * Unified preview state for all items (itemId -> preview data).
    * Consolidates: transform previews, item properties, effects.
@@ -149,8 +161,14 @@ interface GizmoStoreActions {
   /** Set canvas size for coordinate calculations */
   setCanvasSize: (width: number, height: number) => void;
 
+  /** Set the effective screen-px / canvas-px ratio of the preview area */
+  setCanvasScale: (scale: number) => void;
+
   /** Toggle snapping on/off */
   setSnappingEnabled: (enabled: boolean) => void;
+
+  /** Replace the set of other-item AABBs used for item-to-item snap. */
+  setOtherItemBounds: (bounds: BoundingBox[]) => void;
 
   /** Start translate interaction (drag to move) */
   startTranslate: (
@@ -195,6 +213,12 @@ interface GizmoStoreActions {
 
   /** Cancel interaction without committing changes */
   cancelInteraction: () => void;
+
+  /**
+   * Publish snap lines from external interaction (e.g. GroupGizmo which
+   * manages its own drag state but shares the same SnapGuides overlay).
+   */
+  setSnapLines: (lines: SnapLine[]) => void;
 
   // === New unified preview actions ===
 
@@ -241,8 +265,10 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
     activeGizmo: null,
     previewTransform: null,
     canvasSize: { width: 1920, height: 1080 },
+    canvasScale: 1,
     snapLines: [],
     snappingEnabled: true,
+    otherItemBounds: [],
     preview: null,
     canvasBackgroundPreview: null,
 
@@ -250,8 +276,12 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
     setCanvasSize: (width, height) =>
       set({ canvasSize: { width, height } }),
 
+    setCanvasScale: (scale) => set({ canvasScale: scale > 0 ? scale : 1 }),
+
     setSnappingEnabled: (enabled) =>
       set({ snappingEnabled: enabled }),
+
+    setOtherItemBounds: (bounds) => set({ otherItemBounds: bounds }),
 
     startTranslate: (itemId, startPoint, transform, strokeWidth) =>
       set({
@@ -310,7 +340,7 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
       }),
 
     updateInteraction: (currentPoint, shiftKey, ctrlKey = false, altKey = false) => {
-      const { activeGizmo, canvasSize, snappingEnabled } = get();
+      const { activeGizmo, canvasSize, canvasScale, snappingEnabled, otherItemBounds } = get();
       if (!activeGizmo) return;
 
       // Determine if aspect ratio should be locked:
@@ -343,15 +373,39 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
       const { snapLines: currentSnapLines } = get();
       let snapLines: SnapLine[] = [];
       const strokeExpansion = activeGizmo.strokeWidth ?? 0;
-      if (snappingEnabled && !altKey && activeGizmo.mode !== 'rotate') {
+      if (snappingEnabled && !altKey && activeGizmo.mode === 'rotate') {
+        // Snap rotation to 15° increments unless alt overrides. Normalize to
+        // (-180, 180] to keep parity with calculateTransform's output range.
+        const step = 15;
+        let snapped = Math.round(newTransform.rotation / step) * step;
+        while (snapped > 180) snapped -= 360;
+        while (snapped <= -180) snapped += 360;
+        newTransform = { ...newTransform, rotation: snapped };
+      } else if (snappingEnabled && !altKey && activeGizmo.mode !== 'rotate') {
         const snapResult =
           activeGizmo.mode === 'translate'
-            ? applySnapping(newTransform, canvasSize.width, canvasSize.height, currentSnapLines, strokeExpansion)
-            : applyScaleSnapping(newTransform, canvasSize.width, canvasSize.height, currentSnapLines, strokeExpansion);
+            ? applySnapping(
+                newTransform,
+                canvasSize.width,
+                canvasSize.height,
+                currentSnapLines,
+                strokeExpansion,
+                canvasScale,
+                otherItemBounds
+              )
+            : applyScaleSnapping(
+                newTransform,
+                canvasSize.width,
+                canvasSize.height,
+                currentSnapLines,
+                strokeExpansion,
+                canvasScale,
+                !effectiveAspectLocked ? false : true
+              );
         newTransform = snapResult.transform;
         snapLines = snapResult.snapLines;
       } else {
-        // Round values when snapping is disabled or for rotation
+        // Round values when snapping is disabled or altKey overriding
         newTransform = {
           ...newTransform,
           x: Math.round(newTransform.x),
@@ -380,6 +434,8 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
 
     cancelInteraction: () =>
       set({ activeGizmo: null, previewTransform: null, snapLines: [] }),
+
+    setSnapLines: (lines) => set({ snapLines: lines }),
 
     // === New unified preview actions ===
 
