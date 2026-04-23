@@ -79,6 +79,16 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
 
   const copy = preset.sample;
 
+  if (preset.previewKind === 'clean') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex items-center justify-center px-1.5`}>
+        <div className="text-[10px] font-bold tracking-[-0.05em] text-white uppercase leading-none">
+          {copy.title}
+        </div>
+      </div>
+    );
+  }
+
   if (preset.previewKind === 'lower-third') {
     return (
       <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} relative overflow-hidden`}>
@@ -117,10 +127,7 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
   if (preset.previewKind === 'cinematic') {
     return (
       <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex flex-col items-center justify-center px-1`}>
-        <div className="text-[7px] tracking-[0.22em] text-amber-200/80 uppercase">
-          {copy.subtitle}
-        </div>
-        <div className="mt-1 text-[11px] tracking-[0.28em] text-amber-100 uppercase leading-none">
+        <div className="text-[11px] tracking-[0.28em] text-amber-100 uppercase leading-none [text-shadow:0_2px_8px_rgba(17,24,39,0.9)]">
           {copy.title}
         </div>
       </div>
@@ -129,13 +136,14 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
 
   if (preset.previewKind === 'quote') {
     return (
-      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} px-2 py-1.5 flex flex-col justify-center text-center`}>
-        <div className="text-[12px] leading-none text-slate-200/90">"</div>
-        <div className="mt-0.5 text-[8px] italic leading-tight text-slate-50">
-          {copy.title}
-        </div>
-        <div className="mt-0.5 text-[7px] leading-none text-slate-300">
-          {copy.subtitle}
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm bg-slate-800 px-2 py-1.5 text-center">
+          <div className="text-[8px] italic leading-tight text-slate-50">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] leading-none tracking-[0.08em] text-slate-300">
+            {copy.subtitle}
+          </div>
         </div>
       </div>
     );
@@ -158,12 +166,11 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
 
   if (preset.previewKind === 'neon') {
     return (
-      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex flex-col items-center justify-center`}>
-        <div className="text-[10px] font-semibold tracking-[0.16em] text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.85)] uppercase">
-          {copy.title}
-        </div>
-        <div className="mt-0.5 text-[7px] leading-none text-cyan-200/85 uppercase">
-          {copy.subtitle}
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm bg-cyan-950 px-1.5 py-1.5 text-center">
+          <div className="text-[10px] font-semibold tracking-[0.16em] text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.85)] uppercase">
+            {copy.title}
+          </div>
         </div>
       </div>
     );
@@ -187,15 +194,17 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
 
   if (preset.previewKind === 'breaking') {
     return (
-      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} px-1.5 py-1 flex flex-col justify-center`}>
-        <div className="self-start rounded-sm bg-red-500 px-1 py-0.5 text-[5px] font-bold tracking-[0.18em] text-white uppercase leading-none">
-          {copy.eyebrow}
-        </div>
-        <div className="mt-1 text-[9px] font-bold tracking-[-0.04em] text-slate-50 leading-none">
-          {copy.title}
-        </div>
-        <div className="mt-0.5 text-[7px] leading-none text-amber-200">
-          {copy.subtitle}
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm bg-slate-900 px-1.5 py-1 text-left">
+          <div className="text-[6px] font-bold tracking-[0.18em] text-red-300 uppercase leading-none">
+            {copy.eyebrow}
+          </div>
+          <div className="mt-1 text-[9px] font-bold tracking-[-0.04em] text-slate-50 leading-none">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] font-semibold leading-none text-amber-200">
+            {copy.subtitle}
+          </div>
         </div>
       </div>
     );
@@ -203,15 +212,17 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
 
   if (preset.previewKind === 'launch') {
     return (
-      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} px-1.5 py-1 flex flex-col items-center justify-center text-center`}>
-        <div className="text-[6px] font-bold tracking-[0.22em] text-cyan-300 uppercase">
-          {copy.eyebrow}
-        </div>
-        <div className="mt-1 text-[9px] font-bold tracking-[-0.04em] text-slate-50 leading-tight">
-          {copy.title}
-        </div>
-        <div className="mt-0.5 text-[7px] leading-none text-blue-200">
-          {copy.subtitle}
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm border border-blue-800/80 bg-slate-900 px-1.5 py-1 text-center">
+          <div className="text-[6px] font-bold tracking-[0.22em] text-cyan-300 uppercase">
+            {copy.eyebrow}
+          </div>
+          <div className="mt-1 text-[9px] font-bold tracking-[-0.04em] text-slate-50 leading-tight">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] leading-none text-blue-200">
+            {copy.subtitle}
+          </div>
         </div>
       </div>
     );
@@ -219,15 +230,17 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
 
   if (preset.previewKind === 'event') {
     return (
-      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} px-1.5 py-1 flex flex-col items-center justify-center text-center`}>
-        <div className="text-[6px] font-bold tracking-[0.22em] text-rose-300 uppercase">
-          {copy.eyebrow}
-        </div>
-        <div className="mt-1 text-[9px] font-bold text-slate-50 leading-tight">
-          {copy.title}
-        </div>
-        <div className="mt-0.5 text-[7px] text-blue-200 leading-none uppercase">
-          {copy.subtitle}
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm bg-slate-900 px-1.5 py-1 text-center">
+          <div className="text-[6px] font-bold tracking-[0.22em] text-rose-300 uppercase">
+            {copy.eyebrow}
+          </div>
+          <div className="mt-1 text-[9px] font-bold text-slate-50 leading-tight">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] text-blue-200 leading-none uppercase">
+            {copy.subtitle}
+          </div>
         </div>
       </div>
     );
