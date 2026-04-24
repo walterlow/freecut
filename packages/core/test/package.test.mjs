@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildRange,
   parseSnapshot,
   secondsToFrames,
   validateSnapshot,
@@ -13,10 +12,6 @@ describe('package exports', () => {
     expect(typeof parseSnapshot).toBe('function');
     expect(typeof validateSnapshot).toBe('function');
     expect(secondsToFrames(1, 30)).toBe(30);
-    expect(buildRange({ start: '0', duration: '1' })).toEqual({
-      startSeconds: 0,
-      durationSeconds: 1,
-    });
   });
 
   it('imports public subpath modules', () => {

@@ -4,11 +4,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  buildRange,
   collectProjectMediaUsage,
-  loadWorkspaceRenderSource,
   resolveProjectRenderRange,
 } from '../src/index.ts';
+import {
+  buildRange,
+  loadWorkspaceRenderSource,
+} from '../src/workspace.ts';
 
 let tmp;
 beforeAll(() => {

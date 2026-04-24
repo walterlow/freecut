@@ -7,12 +7,14 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { connectBridge } from '../cdp-bridge.mjs';
 import {
-  buildRange,
   lintSnapshot,
-  loadWorkspaceRenderSource,
-  mimeTypeFromFileName,
   parseSnapshot,
 } from '@freecut/core';
+import {
+  buildRange,
+  loadWorkspaceRenderSource,
+  mimeTypeFromFileName,
+} from '@freecut/core/workspace';
 
 const options = {
   output: { type: 'string', short: 'o' },

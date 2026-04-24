@@ -72,13 +72,3 @@ export type {
 } from './snapshot.js';
 export { framesToSeconds, secondsToFrames } from './time.js';
 export { lintSnapshot, validateSnapshot } from './validation.js';
-export {
-  buildRange,
-  findWorkspaceMediaSource,
-  inspectWorkspaceMedia,
-  inspectWorkspaceProject,
-  listWorkspaceProjects,
-  loadWorkspaceRenderSource,
-  mimeTypeFromFileName,
-  readWorkspaceProject,
-} from './workspace.js';
