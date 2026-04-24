@@ -1,0 +1,165 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import {
+  buildRange,
+  collectProjectMediaUsage,
+  loadWorkspaceRenderSource,
+  resolveProjectRenderRange,
+} from '../src/workspace-core.mjs';
+
+let tmp;
+beforeAll(() => {
+  tmp = mkdtempSync(join(tmpdir(), 'freecut-cli-workspace-core-'));
+});
+afterAll(() => {
+  rmSync(tmp, { recursive: true, force: true });
+});
+
+describe('workspace core planning', () => {
+  it('builds seconds and frame render ranges from CLI values', () => {
+    expect(buildRange({ start: '1.5', duration: '2' })).toEqual({
+      startSeconds: 1.5,
+      durationSeconds: 2,
+    });
+    expect(buildRange({ 'in-frame': '12', 'out-frame': '42' })).toEqual({
+      inFrame: 12,
+      outFrame: 42,
+    });
+    expect(() => buildRange({ start: '0', 'out-frame': '30' })).toThrow(/either seconds range flags/);
+    expect(() => buildRange({ start: '2', end: '1' })).toThrow(/--start must be before --end/);
+  });
+
+  it('resolves requested ranges before timeline IO markers', () => {
+    const project = {
+      metadata: { fps: 30 },
+      timeline: { inPoint: 30, outPoint: 90 },
+    };
+
+    expect(resolveProjectRenderRange(project, null, false)).toEqual({ inFrame: 30, outFrame: 90 });
+    expect(resolveProjectRenderRange(project, { startSeconds: 0, durationSeconds: 1 }, false)).toEqual({
+      inFrame: 0,
+      outFrame: 30,
+    });
+    expect(resolveProjectRenderRange(project, { inFrame: 12, outFrame: 24 }, false)).toEqual({
+      inFrame: 12,
+      outFrame: 24,
+    });
+    expect(resolveProjectRenderRange(project, { startSeconds: 0, durationSeconds: 1 }, true)).toBeNull();
+  });
+
+  it('collects media usage for the effective render range', () => {
+    const project = {
+      timeline: {
+        items: [
+          {
+            id: 'early',
+            type: 'video',
+            mediaId: 'media-early',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 30,
+          },
+          {
+            id: 'late',
+            type: 'audio',
+            mediaId: 'media-late',
+            trackId: 'track-1',
+            from: 90,
+            durationInFrames: 30,
+          },
+          {
+            id: 'title',
+            type: 'text',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 120,
+          },
+        ],
+      },
+    };
+
+    const usage = collectProjectMediaUsage(project, { inFrame: 0, outFrame: 60 });
+    expect([...usage.keys()]).toEqual(['media-early']);
+    expect(usage.get('media-early')).toMatchObject({
+      mediaId: 'media-early',
+      itemCount: 1,
+      items: [{ id: 'early', type: 'video', trackId: 'track-1' }],
+    });
+  });
+
+  it('loads a workspace render source with deterministic media readiness', async () => {
+    const workspace = join(tmp, 'render-source');
+    const projectId = 'project-plan';
+    const readyMediaId = 'media-ready';
+    const lateMediaId = 'media-late';
+    await mkdir(join(workspace, 'projects', projectId), { recursive: true });
+    await mkdir(join(workspace, 'media', readyMediaId), { recursive: true });
+    await mkdir(join(workspace, 'media', lateMediaId), { recursive: true });
+
+    const project = {
+      id: projectId,
+      name: 'Plan Project',
+      metadata: { width: 1920, height: 1080, fps: 30 },
+      timeline: {
+        items: [
+          {
+            id: 'clip-ready',
+            type: 'video',
+            mediaId: readyMediaId,
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 150,
+          },
+          {
+            id: 'clip-late',
+            type: 'video',
+            mediaId: lateMediaId,
+            trackId: 'track-1',
+            from: 300,
+            durationInFrames: 150,
+          },
+        ],
+      },
+    };
+    await writeFile(join(workspace, 'projects', projectId, 'project.json'), JSON.stringify(project), 'utf8');
+    await writeFile(join(workspace, 'index.json'), JSON.stringify({
+      projects: [{ id: projectId, name: project.name }],
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', readyMediaId, 'metadata.json'), JSON.stringify({
+      id: readyMediaId,
+      fileName: 'ready.mp4',
+      mimeType: 'video/mp4',
+      keyframeTimestamps: [0, 1],
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', readyMediaId, 'ready.mp4'), 'media', 'utf8');
+    await writeFile(join(workspace, 'media', lateMediaId, 'metadata.json'), JSON.stringify({
+      id: lateMediaId,
+      fileName: 'late.mp4',
+      mimeType: 'video/mp4',
+    }), 'utf8');
+
+    const source = await loadWorkspaceRenderSource(
+      workspace,
+      { project: 'Plan Project' },
+      { range: { startSeconds: 0, durationSeconds: 5 } },
+    );
+
+    expect(source.project.id).toBe(projectId);
+    expect(source.effectiveRange).toEqual({ inFrame: 0, outFrame: 150 });
+    expect(source.requiredMedia).toEqual([{
+      mediaId: readyMediaId,
+      fileName: 'ready.mp4',
+      mimeType: 'video/mp4',
+      fileSize: null,
+      sourceFile: resolve(join(workspace, 'media', readyMediaId, 'ready.mp4')),
+      sourceExists: true,
+      itemCount: 1,
+    }]);
+    expect(Object.keys(source.mediaSources)).toEqual([readyMediaId]);
+    expect(source.mediaSources[readyMediaId].keyframeTimestamps).toEqual([0, 1]);
+    expect(source.missingSources).toEqual([]);
+  });
+});

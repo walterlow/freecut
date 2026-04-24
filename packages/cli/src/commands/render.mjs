@@ -1,12 +1,17 @@
 import { parseArgs } from 'node:util';
 import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { basename, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { lintSnapshot, parse } from '../sdk.mjs';
 import { connectBridge } from '../cdp-bridge.mjs';
+import {
+  buildRange,
+  loadWorkspaceRenderSource,
+  mimeTypeFromFileName,
+} from '../workspace-core.mjs';
 
 const options = {
   output: { type: 'string', short: 'o' },
@@ -345,89 +350,6 @@ async function stopBrowserProcess(pid) {
   }
 }
 
-async function loadWorkspaceRenderSource(workspace, selector, renderConfig = {}, deps = {}) {
-  const read = deps.readFile ?? readFile;
-  const project = await readWorkspaceProject(workspace, selector, read);
-  const effectiveRange = resolveProjectRenderRange(
-    project,
-    renderConfig.range,
-    renderConfig.renderWholeProject,
-  );
-  const mediaUsage = collectProjectMediaUsage(project, effectiveRange);
-  const mediaIds = [...mediaUsage.keys()];
-  const mediaSources = {};
-  const missingSources = [];
-  const requiredMedia = [];
-  for (const mediaId of mediaIds) {
-    const mediaDir = join(workspace, 'media', mediaId);
-    const metadata = await readJsonIfExists(join(mediaDir, 'metadata.json'), read);
-    const filePath = await findWorkspaceMediaSource(mediaDir, deps);
-    if (!filePath) {
-      const missing = {
-        mediaId,
-        fileName: metadata?.fileName ?? null,
-        mimeType: metadata?.mimeType ?? null,
-        fileSize: metadata?.fileSize ?? null,
-        sourceFile: null,
-        sourceExists: false,
-        itemCount: mediaUsage.get(mediaId)?.itemCount ?? 0,
-      };
-      missingSources.push(missing);
-      requiredMedia.push(missing);
-      continue;
-    }
-    const mediaPlan = {
-      mediaId,
-      fileName: metadata?.fileName ?? basename(filePath),
-      mimeType: metadata?.mimeType ?? mimeTypeFromFileName(filePath),
-      fileSize: metadata?.fileSize ?? null,
-      sourceFile: resolve(filePath),
-      sourceExists: true,
-      itemCount: mediaUsage.get(mediaId)?.itemCount ?? 0,
-    };
-    requiredMedia.push(mediaPlan);
-    mediaSources[mediaId] = {
-      filePath,
-      mimeType: metadata?.mimeType,
-      keyframeTimestamps: Array.isArray(metadata?.keyframeTimestamps)
-        ? metadata.keyframeTimestamps
-        : undefined,
-    };
-  }
-  return { project, mediaSources, requiredMedia, missingSources, effectiveRange, workspace };
-}
-
-async function readWorkspaceProject(workspace, selector, read) {
-  if (selector.projectId) {
-    return readJson(join(workspace, 'projects', selector.projectId, 'project.json'), read);
-  }
-
-  const index = await readJsonIfExists(join(workspace, 'index.json'), read);
-  const indexed = index?.projects?.find((entry) =>
-    entry.name === selector.project ||
-    entry.id === selector.project ||
-    entry.name?.toLowerCase?.() === selector.project.toLowerCase()
-  );
-  if (indexed) {
-    return readJson(join(workspace, 'projects', indexed.id, 'project.json'), read);
-  }
-
-  const dirs = await readdir(join(workspace, 'projects'), { withFileTypes: true });
-  const available = [];
-  for (const entry of dirs) {
-    if (!entry.isDirectory()) continue;
-    const project = await readJsonIfExists(join(workspace, 'projects', entry.name, 'project.json'), read);
-    if (!project) continue;
-    available.push(project.name ?? entry.name);
-    if (project.id === selector.project || project.name === selector.project) return project;
-    if (project.name?.toLowerCase?.() === selector.project.toLowerCase()) return project;
-  }
-
-  throw new Error(
-    `no workspace project matched ${JSON.stringify(selector.project)}; available projects: ${available.join(', ')}`,
-  );
-}
-
 function writeWorkspaceRenderCheck(stdout, workspaceRender, opts) {
   const project = workspaceRender.project;
   const fps = project.metadata?.fps ?? 0;
@@ -486,134 +408,6 @@ function writeWorkspaceRenderCheck(stdout, workspaceRender, opts) {
       `${media.sourceExists ? 'ok' : 'missing'}\t${media.mediaId}\t` +
       `${media.fileName ?? '(unknown)'}\t${media.itemCount} item(s)\n`,
     );
-  }
-}
-
-function collectProjectMediaUsage(project, range) {
-  const usage = new Map();
-  const compositions = new Map((project.timeline?.compositions ?? []).map((composition) => [
-    composition.id,
-    composition,
-  ]));
-
-  for (const item of project.timeline?.items ?? []) {
-    if (!itemOverlapsRange(item, range)) continue;
-    collectMediaFromItem(item, usage);
-    if (item.type === 'composition' && item.compositionId) {
-      collectMediaIdsFromItems(compositions.get(item.compositionId)?.items, usage, null);
-    }
-  }
-
-  return usage;
-}
-
-function collectMediaIdsFromItems(items, usage, range) {
-  for (const item of items ?? []) {
-    if (!itemOverlapsRange(item, range)) continue;
-    collectMediaFromItem(item, usage);
-  }
-}
-
-function collectMediaFromItem(item, usage) {
-  if (!item?.mediaId || (item.type !== 'video' && item.type !== 'audio' && item.type !== 'image')) {
-    return;
-  }
-  const existing = usage.get(item.mediaId) ?? {
-    mediaId: item.mediaId,
-    itemCount: 0,
-  };
-  existing.itemCount += 1;
-  usage.set(item.mediaId, existing);
-}
-
-function itemOverlapsRange(item, range) {
-  if (!range) return true;
-  const start = Number(item?.from ?? 0);
-  const end = start + Number(item?.durationInFrames ?? 0);
-  return end > range.inFrame && start < range.outFrame;
-}
-
-function resolveProjectRenderRange(project, requestedRange, renderWholeProject) {
-  if (renderWholeProject) return null;
-  const fps = project.metadata?.fps ?? 30;
-  if (requestedRange) return resolveRangeFrames(requestedRange, fps);
-  const inPoint = project.timeline?.inPoint;
-  const outPoint = project.timeline?.outPoint;
-  if (inPoint !== undefined && inPoint !== null && outPoint !== undefined && outPoint !== null) {
-    return validateRangeFrames(inPoint, outPoint);
-  }
-  return null;
-}
-
-function resolveRangeFrames(range, fps) {
-  const startFrame = firstDefined(
-    range.inFrame,
-    range.startFrame,
-    range.startSeconds === undefined ? undefined : Math.round(range.startSeconds * fps),
-  ) ?? 0;
-  const outFrame = firstDefined(
-    range.outFrame,
-    range.endFrame,
-    range.endSeconds === undefined ? undefined : Math.round(range.endSeconds * fps),
-    range.durationInFrames === undefined ? undefined : startFrame + range.durationInFrames,
-    range.durationSeconds === undefined ? undefined : startFrame + Math.round(range.durationSeconds * fps),
-  );
-  if (outFrame === undefined) {
-    throw new Error('render range requires outFrame, endFrame, endSeconds, durationInFrames, or durationSeconds');
-  }
-  return validateRangeFrames(startFrame, outFrame);
-}
-
-function validateRangeFrames(inFrame, outFrame) {
-  if (!Number.isInteger(inFrame) || inFrame < 0) {
-    throw new RangeError(`inFrame must be a non-negative integer, got ${inFrame}`);
-  }
-  if (!Number.isInteger(outFrame) || outFrame <= 0) {
-    throw new RangeError(`outFrame must be a positive integer, got ${outFrame}`);
-  }
-  if (inFrame >= outFrame) {
-    throw new RangeError(`inFrame must be before outFrame, got ${inFrame} >= ${outFrame}`);
-  }
-  return { inFrame, outFrame };
-}
-
-function firstDefined(...values) {
-  return values.find((value) => value !== undefined);
-}
-
-const NON_SOURCE_NAMES = new Set([
-  'metadata.json',
-  'thumbnail.jpg',
-  'thumbnail.meta.json',
-  'source.link.json',
-  'cache',
-]);
-
-async function findWorkspaceMediaSource(mediaDir, deps = {}) {
-  const list = deps.readdir ?? readdir;
-  let entries;
-  try {
-    entries = await list(mediaDir, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (NON_SOURCE_NAMES.has(entry.name)) continue;
-    return join(mediaDir, entry.name);
-  }
-  return null;
-}
-
-async function readJson(file, read) {
-  return JSON.parse(await read(file, 'utf8'));
-}
-
-async function readJsonIfExists(file, read) {
-  try {
-    return await readJson(file, read);
-  } catch {
-    return null;
   }
 }
 
@@ -728,22 +522,6 @@ function parseRange(range, total) {
   return { start, end: Math.min(end, total - 1) };
 }
 
-function mimeTypeFromFileName(file) {
-  const lower = basename(file).toLowerCase();
-  if (lower.endsWith('.mp4') || lower.endsWith('.m4v')) return 'video/mp4';
-  if (lower.endsWith('.webm')) return 'video/webm';
-  if (lower.endsWith('.mov')) return 'video/quicktime';
-  if (lower.endsWith('.mkv')) return 'video/x-matroska';
-  if (lower.endsWith('.mp3')) return 'audio/mpeg';
-  if (lower.endsWith('.wav')) return 'audio/wav';
-  if (lower.endsWith('.aac')) return 'audio/aac';
-  if (lower.endsWith('.png')) return 'image/png';
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-  if (lower.endsWith('.gif')) return 'image/gif';
-  if (lower.endsWith('.webp')) return 'image/webp';
-  return 'application/octet-stream';
-}
-
 function validateMode(value) {
   if (value === 'video' || value === 'audio') return value;
   throw new Error(`--mode must be video or audio, got ${value}`);
@@ -760,66 +538,6 @@ function intOpt(raw, label) {
     throw new RangeError(`${label} must be a positive integer, got ${raw}`);
   }
   return n;
-}
-
-function nonNegativeNumberOpt(raw, label) {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0) {
-    throw new RangeError(`${label} must be a non-negative number, got ${raw}`);
-  }
-  return n;
-}
-
-function positiveNumberOpt(raw, label) {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) {
-    throw new RangeError(`${label} must be a positive number, got ${raw}`);
-  }
-  return n;
-}
-
-function frameOpt(raw, label, allowZero = true) {
-  const n = Number.parseInt(raw, 10);
-  const min = allowZero ? 0 : 1;
-  if (!Number.isInteger(n) || n < min) {
-    throw new RangeError(`${label} must be an integer >= ${min}, got ${raw}`);
-  }
-  return n;
-}
-
-function buildRange(values) {
-  const hasSeconds = values.start !== undefined || values.end !== undefined || values.duration !== undefined;
-  const hasFrames = values['in-frame'] !== undefined || values['out-frame'] !== undefined;
-  if (!hasSeconds && !hasFrames) return null;
-  if (values['render-whole-project']) {
-    throw new Error('range flags cannot be used with --render-whole-project');
-  }
-  if (hasSeconds && hasFrames) {
-    throw new Error('use either seconds range flags (--start/--end/--duration) or frame flags (--in-frame/--out-frame), not both');
-  }
-  if (hasFrames) {
-    if (values['in-frame'] === undefined || values['out-frame'] === undefined) {
-      throw new Error('--in-frame and --out-frame must be set together');
-    }
-    const inFrame = frameOpt(values['in-frame'], '--in-frame');
-    const outFrame = frameOpt(values['out-frame'], '--out-frame', false);
-    if (inFrame >= outFrame) throw new Error('--in-frame must be before --out-frame');
-    return { inFrame, outFrame };
-  }
-  const startSeconds = values.start === undefined ? 0 : nonNegativeNumberOpt(values.start, '--start');
-  if (values.end !== undefined && values.duration !== undefined) {
-    throw new Error('use --end or --duration, not both');
-  }
-  if (values.end !== undefined) {
-    const endSeconds = positiveNumberOpt(values.end, '--end');
-    if (startSeconds >= endSeconds) throw new Error('--start must be before --end');
-    return { startSeconds, endSeconds };
-  }
-  if (values.duration !== undefined) {
-    const durationSeconds = positiveNumberOpt(values.duration, '--duration');
-    return { startSeconds, durationSeconds };
-  }
-  throw new Error('range requires --duration or --end when --start is used');
 }
 
 async function openProject(bridge, { project, projectId }) {
