@@ -1,16 +1,37 @@
-// @ts-nocheck
 export const SNAPSHOT_VERSION = '1.0';
 export const CORE_VERSION = '0.0.1';
 
 export class SnapshotParseError extends Error {
-  constructor(message, cause) {
+  constructor(message: string, cause?: unknown) {
     super(message);
     this.name = 'SnapshotParseError';
     this.cause = cause;
   }
 }
 
-export function toSnapshot(source, opts = {}) {
+export interface SnapshotLike {
+  version: string;
+  exportedAt: string;
+  editorVersion: string;
+  project: Record<string, unknown>;
+  mediaReferences: unknown[];
+}
+
+export interface SnapshotSource {
+  project?: Record<string, unknown>;
+  mediaReferences?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface SnapshotOptions {
+  version?: string;
+  exportedAt?: string;
+  editorVersion?: string;
+  mediaReferences?: unknown[];
+  pretty?: boolean;
+}
+
+export function toSnapshot(source: SnapshotSource, opts: SnapshotOptions = {}): SnapshotLike {
   const project = extractProject(source);
   const sourceRefs = Array.isArray(source?.mediaReferences) ? source.mediaReferences : [];
   const mediaReferences = [...sourceRefs, ...(opts.mediaReferences ?? [])];
@@ -24,14 +45,14 @@ export function toSnapshot(source, opts = {}) {
   };
 }
 
-export function serializeSnapshot(source, opts = {}) {
+export function serializeSnapshot(source: SnapshotSource, opts: SnapshotOptions = {}): string {
   const snapshot = toSnapshot(source, opts);
   return opts.pretty === false
     ? JSON.stringify(snapshot)
     : JSON.stringify(snapshot, null, 2);
 }
 
-export function parseSnapshot(json) {
+export function parseSnapshot(json: string): SnapshotLike {
   let raw;
   try {
     raw = JSON.parse(json);
@@ -56,7 +77,7 @@ export function parseSnapshot(json) {
   return raw;
 }
 
-function extractProject(source) {
+function extractProject(source: SnapshotSource): Record<string, unknown> {
   if (!source || typeof source !== 'object') {
     throw new TypeError('snapshot source must be a project or object with a project property');
   }
