@@ -1,8 +1,33 @@
-// @ts-nocheck
 import { readFile, readdir, stat } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { collectProjectMediaUsage } from './media-plan.js';
 import { planProjectRender } from './render-plan.js';
+import type { RenderRangeInput } from './range.js';
+
+type ReadFileFn = (file: string, encoding: 'utf8') => Promise<string>;
+type ReaddirFn = (path: string, opts: { withFileTypes: true }) => Promise<Dirent[]>;
+type StatFn = (file: string) => Promise<{ isFile?: () => boolean; size: number }>;
+
+interface WorkspaceFsDeps {
+  readFile?: ReadFileFn;
+  readdir?: ReaddirFn;
+  stat?: StatFn;
+}
+
+interface ListWorkspaceProjectsOptions extends WorkspaceFsDeps {
+  includeTrashed?: boolean;
+}
+
+interface WorkspaceProjectSelector {
+  project?: string;
+  projectId?: string;
+}
+
+interface WorkspaceRenderOptions extends WorkspaceFsDeps {
+  range?: RenderRangeInput | null;
+  renderWholeProject?: boolean;
+}
 
 const NON_SOURCE_NAMES = new Set([
   'metadata.json',
@@ -12,7 +37,7 @@ const NON_SOURCE_NAMES = new Set([
   'cache',
 ]);
 
-export async function listWorkspaceProjects(workspace, opts = {}) {
+export async function listWorkspaceProjects(workspace: string, opts: ListWorkspaceProjectsOptions = {}) {
   const read = opts.readFile ?? readFile;
   const list = opts.readdir ?? readdir;
   const ids = await listProjectIds(workspace, read, list);
@@ -48,7 +73,7 @@ export async function listWorkspaceProjects(workspace, opts = {}) {
   return projects.sort((a, b) => b.updatedAt - a.updatedAt || a.name.localeCompare(b.name));
 }
 
-export async function inspectWorkspaceProject(workspace, selector, opts = {}) {
+export async function inspectWorkspaceProject(workspace: string, selector: WorkspaceProjectSelector, opts: WorkspaceFsDeps = {}) {
   const read = opts.readFile ?? readFile;
   const list = opts.readdir ?? readdir;
   const project = await readWorkspaceProject(workspace, selector, { readFile: read, readdir: list });
@@ -132,7 +157,7 @@ export async function inspectWorkspaceProject(workspace, selector, opts = {}) {
   };
 }
 
-export async function inspectWorkspaceMedia(workspace, selector, opts = {}) {
+export async function inspectWorkspaceMedia(workspace: string, selector: WorkspaceProjectSelector, opts: WorkspaceRenderOptions = {}) {
   const read = opts.readFile ?? readFile;
   const list = opts.readdir ?? readdir;
   const statFile = opts.stat ?? stat;
@@ -190,7 +215,12 @@ export async function inspectWorkspaceMedia(workspace, selector, opts = {}) {
   };
 }
 
-export async function loadWorkspaceRenderSource(workspace, selector, renderConfig = {}, deps = {}) {
+export async function loadWorkspaceRenderSource(
+  workspace: string,
+  selector: WorkspaceProjectSelector,
+  renderConfig: WorkspaceRenderOptions = {},
+  deps: WorkspaceFsDeps = {},
+) {
   const read = deps.readFile ?? readFile;
   const list = deps.readdir ?? readdir;
   const project = await readWorkspaceProject(workspace, selector, { readFile: read, readdir: list });
@@ -247,7 +277,7 @@ export async function loadWorkspaceRenderSource(workspace, selector, renderConfi
   return { project, mediaSources, requiredMedia, missingSources, effectiveRange, workspace };
 }
 
-export async function readWorkspaceProject(workspace, selector, opts = {}) {
+export async function readWorkspaceProject(workspace: string, selector: WorkspaceProjectSelector, opts: WorkspaceFsDeps = {}) {
   const read = opts.readFile ?? readFile;
   const list = opts.readdir ?? readdir;
   if (selector.projectId) {
@@ -314,7 +344,7 @@ export function buildRange(values) {
   throw new Error('range requires --duration or --end when --start is used');
 }
 
-export async function findWorkspaceMediaSource(mediaDir, opts = {}) {
+export async function findWorkspaceMediaSource(mediaDir: string, opts: WorkspaceFsDeps = {}) {
   const list = opts.readdir ?? readdir;
   let entries;
   try {
