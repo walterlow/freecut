@@ -32,6 +32,48 @@ if (typeof testGlobal.ImageData === 'undefined') {
   testGlobal.ImageData = MockImageData as unknown as typeof ImageData;
 }
 
+function hasUsableLocalStorage(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return (
+      Boolean(window.localStorage) &&
+      typeof window.localStorage.getItem === 'function' &&
+      typeof window.localStorage.removeItem === 'function'
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (!hasUsableLocalStorage()) {
+  const values = new Map<string, string>();
+  const localStorage = {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key: string) {
+      return values.get(String(key)) ?? null;
+    },
+    key(index: number) {
+      return [...values.keys()][index] ?? null;
+    },
+    removeItem(key: string) {
+      values.delete(String(key));
+    },
+    setItem(key: string, value: string) {
+      values.set(String(key), String(value));
+    },
+  } satisfies Storage;
+
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: localStorage,
+  });
+}
+
 afterEach(() => {
   resetAutoKeyframeStore();
 });

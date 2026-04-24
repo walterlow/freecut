@@ -25,6 +25,7 @@ import type {
   AgentTransition,
   AgentTransform,
 } from './types';
+import { resolveRangeFrames } from '@freecut/core/range';
 import type { ExportMode, ExportSettings } from '@/types/export';
 import type { Project } from '@/types/project';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
@@ -335,22 +336,8 @@ function resolveRenderRange(
   fps: number,
 ): { inPoint: number; outPoint: number } | null {
   if (!range) return null;
-  const startFrame = firstDefined(
-    range.inFrame,
-    range.startFrame,
-    range.startSeconds === undefined ? undefined : Math.round(range.startSeconds * fps),
-  ) ?? 0;
-  const outFrame = firstDefined(
-    range.outFrame,
-    range.endFrame,
-    range.endSeconds === undefined ? undefined : Math.round(range.endSeconds * fps),
-    range.durationInFrames === undefined ? undefined : startFrame + range.durationInFrames,
-    range.durationSeconds === undefined ? undefined : startFrame + Math.round(range.durationSeconds * fps),
-  );
-  if (outFrame === undefined) {
-    throw new Error('render range requires outFrame, endFrame, endSeconds, durationInFrames, or durationSeconds');
-  }
-  return validateInOutPoints(startFrame, outFrame);
+  const resolved = resolveRangeFrames(range, fps);
+  return { inPoint: resolved.inFrame, outPoint: resolved.outFrame };
 }
 
 function validateInOutPoints(inPoint: number | null, outPoint: number | null): { inPoint: number; outPoint: number } | null {
@@ -368,10 +355,6 @@ function validateInOutPoints(inPoint: number | null, outPoint: number | null): {
     throw new RangeError(`inPoint must be before outPoint, got ${inPoint} >= ${outPoint}`);
   }
   return { inPoint, outPoint };
-}
-
-function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
-  return values.find((value) => value !== undefined);
 }
 
 // ---------------------------------------------------------------------------

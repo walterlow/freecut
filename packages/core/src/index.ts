@@ -1,5 +1,7 @@
 export { deterministicIds, randomIds } from './ids.js';
 export type { IdGenerator } from './ids.js';
+export { resolveRangeFrames, validateRangeFrames } from './range.js';
+export type { FrameRange, RenderRangeInput } from './range.js';
 export {
   CORE_VERSION,
   SNAPSHOT_VERSION,

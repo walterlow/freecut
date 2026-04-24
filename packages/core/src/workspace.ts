@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { resolveRangeFrames, validateRangeFrames } from './range.js';
 
 const NON_SOURCE_NAMES = new Set([
   'metadata.json',
@@ -454,38 +455,6 @@ function itemOverlapsRange(item, range) {
   return end > range.inFrame && start < range.outFrame;
 }
 
-function resolveRangeFrames(range, fps) {
-  const startFrame = firstDefined(
-    range.inFrame,
-    range.startFrame,
-    range.startSeconds === undefined ? undefined : Math.round(range.startSeconds * fps),
-  ) ?? 0;
-  const outFrame = firstDefined(
-    range.outFrame,
-    range.endFrame,
-    range.endSeconds === undefined ? undefined : Math.round(range.endSeconds * fps),
-    range.durationInFrames === undefined ? undefined : startFrame + range.durationInFrames,
-    range.durationSeconds === undefined ? undefined : startFrame + Math.round(range.durationSeconds * fps),
-  );
-  if (outFrame === undefined) {
-    throw new Error('render range requires outFrame, endFrame, endSeconds, durationInFrames, or durationSeconds');
-  }
-  return validateRangeFrames(startFrame, outFrame);
-}
-
-function validateRangeFrames(inFrame, outFrame) {
-  if (!Number.isInteger(inFrame) || inFrame < 0) {
-    throw new RangeError(`inFrame must be a non-negative integer, got ${inFrame}`);
-  }
-  if (!Number.isInteger(outFrame) || outFrame <= 0) {
-    throw new RangeError(`outFrame must be a positive integer, got ${outFrame}`);
-  }
-  if (inFrame >= outFrame) {
-    throw new RangeError(`inFrame must be before outFrame, got ${inFrame} >= ${outFrame}`);
-  }
-  return { inFrame, outFrame };
-}
-
 function frameOpt(raw, label, allowZero = true) {
   const n = Number.parseInt(raw, 10);
   const min = allowZero ? 0 : 1;
@@ -529,8 +498,4 @@ async function readJsonIfExists(file, read) {
 
 async function readJson(file, read) {
   return JSON.parse(await read(file, 'utf8'));
-}
-
-function firstDefined(...values) {
-  return values.find((value) => value !== undefined);
 }
