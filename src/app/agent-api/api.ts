@@ -16,7 +16,6 @@ import type {
   AgentRenderRange,
   AgentRenderExportOptions,
   AgentRenderExportResult,
-  AgentRenderMediaSource,
   AgentRenderProjectExportOptions,
   AgentSubscriber,
   AgentTimelineItem,
@@ -25,6 +24,11 @@ import type {
   AgentTransition,
   AgentTransform,
 } from './types';
+import {
+  assertRenderMediaSources,
+  collectMediaUsageFromTracks,
+  planRenderMediaSources,
+} from '@freecut/core/media-plan';
 import { resolveRangeFrames } from '@freecut/core/range';
 import type { ExportMode, ExportSettings } from '@/types/export';
 import type { Project } from '@/types/project';
@@ -284,8 +288,13 @@ function applyRenderMediaSources(
   sources: AgentRenderProjectExportOptions['mediaSources'],
   registerKeyframeIndex: (src: string, timestamps: number[]) => void,
 ): TimelineTrack[] {
-  const normalizedSources = normalizeRenderMediaSources(sources);
   const resolvedTracks = JSON.parse(JSON.stringify(tracks)) as TimelineTrack[];
+  const mediaPlan = planRenderMediaSources(
+    collectMediaUsageFromTracks(resolvedTracks, null, { requireExternalSource: true }).keys(),
+    sources,
+  );
+  assertRenderMediaSources(mediaPlan);
+
   for (const track of resolvedTracks) {
     for (const item of track.items) {
       if (
@@ -295,7 +304,7 @@ function applyRenderMediaSources(
         continue;
       }
 
-      const source = normalizedSources.get(item.mediaId);
+      const source = mediaPlan.sources.get(item.mediaId);
       if (!source) {
         if (item.src) continue;
         throw new Error(`missing media source URL for ${item.mediaId}`);
@@ -311,24 +320,6 @@ function applyRenderMediaSources(
     }
   }
   return resolvedTracks;
-}
-
-function normalizeRenderMediaSources(
-  sources: AgentRenderProjectExportOptions['mediaSources'],
-): Map<string, AgentRenderMediaSource> {
-  const out = new Map<string, AgentRenderMediaSource>();
-  if (!sources) return out;
-  for (const [mediaId, source] of Object.entries(sources)) {
-    if (typeof source === 'string') {
-      out.set(mediaId, { url: source });
-      continue;
-    }
-    if (!source || typeof source.url !== 'string') {
-      throw new Error(`invalid media source for ${mediaId}`);
-    }
-    out.set(mediaId, source);
-  }
-  return out;
 }
 
 function resolveRenderRange(

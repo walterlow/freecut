@@ -13,6 +13,10 @@
     "./range": {
       "types": "./dist/range.d.ts",
       "default": "./dist/range.js"
+    },
+    "./media-plan": {
+      "types": "./dist/media-plan.d.ts",
+      "default": "./dist/media-plan.js"
     }
   },
   "files": [

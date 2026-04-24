@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { collectProjectMediaUsage } from './media-plan.js';
 import { resolveRangeFrames, validateRangeFrames } from './range.js';
 
 const NON_SOURCE_NAMES = new Set([
@@ -274,24 +275,6 @@ export async function readWorkspaceProject(workspace, selector, opts = {}) {
   );
 }
 
-export function collectProjectMediaUsage(project, range) {
-  const usage = new Map();
-  const compositions = new Map((project.timeline?.compositions ?? []).map((composition) => [
-    composition.id,
-    composition,
-  ]));
-
-  for (const item of project.timeline?.items ?? []) {
-    if (!itemOverlapsRange(item, range)) continue;
-    collectMediaFromItem(item, usage);
-    if (item.type === 'composition' && item.compositionId) {
-      collectMediaIdsFromItems(compositions.get(item.compositionId)?.items, usage, null);
-    }
-  }
-
-  return usage;
-}
-
 export function resolveProjectRenderRange(project, requestedRange, renderWholeProject) {
   if (renderWholeProject) return null;
   const fps = project.metadata?.fps ?? 30;
@@ -396,20 +379,7 @@ async function listProjectIds(workspace, read, list) {
 }
 
 function collectAllProjectMediaIds(project) {
-  const ids = new Set();
-  collectMediaIds(project.timeline?.items, ids);
-  for (const composition of project.timeline?.compositions ?? []) {
-    collectMediaIds(composition.items, ids);
-  }
-  return [...ids].sort();
-}
-
-function collectMediaIds(items, ids) {
-  for (const item of items ?? []) {
-    if (item?.mediaId && (item.type === 'video' || item.type === 'audio' || item.type === 'image')) {
-      ids.add(item.mediaId);
-    }
-  }
+  return [...collectProjectMediaUsage(project, null).keys()].sort();
 }
 
 function countKeyframes(keyframes) {
@@ -418,41 +388,6 @@ function countKeyframes(keyframes) {
       propertySum + (property.keyframes?.length ?? 0)
     ), 0)
   ), 0);
-}
-
-function collectMediaIdsFromItems(items, usage, range) {
-  for (const item of items ?? []) {
-    if (!itemOverlapsRange(item, range)) continue;
-    collectMediaFromItem(item, usage);
-  }
-}
-
-function collectMediaFromItem(item, usage) {
-  if (!item?.mediaId || (item.type !== 'video' && item.type !== 'audio' && item.type !== 'image')) {
-    return;
-  }
-  const existing = usage.get(item.mediaId) ?? {
-    mediaId: item.mediaId,
-    itemCount: 0,
-    items: [],
-  };
-  existing.itemCount += 1;
-  existing.items.push({
-    id: item.id,
-    type: item.type,
-    label: item.label ?? '',
-    from: Number(item.from ?? 0),
-    durationInFrames: Number(item.durationInFrames ?? 0),
-    trackId: item.trackId ?? null,
-  });
-  usage.set(item.mediaId, existing);
-}
-
-function itemOverlapsRange(item, range) {
-  if (!range) return true;
-  const start = Number(item?.from ?? 0);
-  const end = start + Number(item?.durationInFrames ?? 0);
-  return end > range.inFrame && start < range.outFrame;
 }
 
 function frameOpt(raw, label, allowZero = true) {
