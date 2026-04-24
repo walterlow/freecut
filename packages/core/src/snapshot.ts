@@ -13,12 +13,12 @@ export interface SnapshotLike {
   version: string;
   exportedAt: string;
   editorVersion: string;
-  project: Record<string, unknown>;
+  project: object;
   mediaReferences: unknown[];
 }
 
 export interface SnapshotSource {
-  project?: Record<string, unknown>;
+  project?: object;
   mediaReferences?: unknown[];
   [key: string]: unknown;
 }
@@ -77,7 +77,7 @@ export function parseSnapshot(json: string): SnapshotLike {
   return raw;
 }
 
-function extractProject(source: SnapshotSource): Record<string, unknown> {
+function extractProject(source: SnapshotSource): object {
   if (!source || typeof source !== 'object') {
     throw new TypeError('snapshot source must be a project or object with a project property');
   }

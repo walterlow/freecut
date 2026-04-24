@@ -1,15 +1,39 @@
-// @ts-nocheck
 const SOURCE_TIMED_TYPES = new Set(['video', 'audio', 'composition']);
 const MEDIA_TYPES = new Set(['video', 'audio', 'image']);
 
-export function validateSnapshot(snapshot, opts = {}) {
-  const findings = [];
+export type SnapshotFindingSeverity = 'error' | 'warning' | 'info';
+
+export interface SnapshotFinding {
+  severity: SnapshotFindingSeverity;
+  code: string;
+  message: string;
+  path?: string;
+  entityId?: string;
+}
+
+export interface SnapshotValidationOptions {
+  warnOnMissingMedia?: boolean;
+}
+
+export interface SnapshotValidationResult {
+  ok: boolean;
+  errorCount: number;
+  warningCount: number;
+  infoCount: number;
+  findings: SnapshotFinding[];
+}
+
+type PushFinding = (finding: SnapshotFinding) => void;
+type ReportFinding = (code: string, message: string, path?: string, entityId?: string) => void;
+
+export function validateSnapshot(snapshot: any, opts: SnapshotValidationOptions = {}): SnapshotValidationResult {
+  const findings: SnapshotFinding[] = [];
   const warnOnMissingMedia = opts.warnOnMissingMedia ?? true;
 
   const push = (finding) => findings.push(finding);
-  const error = (code, message, path, entityId) =>
+  const error: ReportFinding = (code, message, path, entityId) =>
     push({ severity: 'error', code, message, path, entityId });
-  const warning = (code, message, path, entityId) =>
+  const warning: ReportFinding = (code, message, path, entityId) =>
     push({ severity: 'warning', code, message, path, entityId });
 
   if (!snapshot || typeof snapshot !== 'object') {
@@ -57,11 +81,11 @@ export function validateSnapshot(snapshot, opts = {}) {
   }
 }
 
-export function lintSnapshot(snapshot, opts = {}) {
+export function lintSnapshot(snapshot: any, opts: SnapshotValidationOptions = {}): SnapshotValidationResult {
   return validateSnapshot(snapshot, opts);
 }
 
-function validateMediaReferences(mediaReferences, push) {
+function validateMediaReferences(mediaReferences, push: PushFinding) {
   const ids = new Set();
   const seen = new Set();
 
