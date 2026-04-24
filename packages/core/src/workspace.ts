@@ -8,7 +8,7 @@ import type { RenderRangeInput } from './range.js';
 type ReadFileFn = (file: string, encoding: 'utf8') => Promise<string>;
 type ReaddirFn = (path: string, opts: { withFileTypes: true }) => Promise<Dirent[]>;
 type StatFn = (file: string) => Promise<{ isFile?: () => boolean; size: number }>;
-type JsonRecord = Record<string, any>;
+type JsonRecord = Record<string, unknown>;
 
 interface WorkspaceFsDeps {
   readFile?: ReadFileFn;
@@ -57,7 +57,7 @@ export async function listWorkspaceProjects(workspace: string, opts: ListWorkspa
   const read = opts.readFile ?? readFile;
   const list = opts.readdir ?? readdir;
   const ids = await listProjectIds(workspace, read, list);
-  const projects: any[] = [];
+  const projects = [];
 
   for (const id of ids) {
     const projectDir = join(workspace, 'projects', id);
@@ -66,22 +66,25 @@ export async function listWorkspaceProjects(workspace: string, opts: ListWorkspa
 
     const project = await readJsonIfExists(join(projectDir, 'project.json'), read);
     if (!project) continue;
+    const metadata = asRecord(project.metadata);
+    const timeline = asRecord(project.timeline);
 
     const links = await readJsonIfExists(join(projectDir, 'media-links.json'), read);
+    const mediaLinks = recordsFromArray(links?.mediaIds);
     projects.push({
-      id: project.id ?? id,
-      name: project.name ?? id,
-      description: project.description ?? '',
-      width: project.metadata?.width ?? 0,
-      height: project.metadata?.height ?? 0,
-      fps: project.metadata?.fps ?? 0,
+      id: stringValue(project.id) ?? id,
+      name: stringValue(project.name) ?? id,
+      description: stringValue(project.description) ?? '',
+      width: numberValue(metadata?.width) ?? 0,
+      height: numberValue(metadata?.height) ?? 0,
+      fps: numberValue(metadata?.fps) ?? 0,
       duration: Number(project.duration ?? 0),
       updatedAt: Number(project.updatedAt ?? 0),
       createdAt: Number(project.createdAt ?? 0),
-      schemaVersion: project.schemaVersion ?? null,
-      trackCount: project.timeline?.tracks?.length ?? 0,
-      itemCount: project.timeline?.items?.length ?? 0,
-      mediaCount: links?.mediaIds?.length ?? 0,
+      schemaVersion: numberValue(project.schemaVersion),
+      trackCount: arrayLength(timeline?.tracks),
+      itemCount: arrayLength(timeline?.items),
+      mediaCount: mediaLinks.length,
       trashed: Boolean(trashed),
     });
   }
@@ -93,33 +96,37 @@ export async function inspectWorkspaceProject(workspace: string, selector: Works
   const read = opts.readFile ?? readFile;
   const list = opts.readdir ?? readdir;
   const project = await readWorkspaceProject(workspace, selector, { readFile: read, readdir: list });
-  const projectDir = join(workspace, 'projects', project.id);
+  const projectId = stringValue(project.id) ?? '';
+  const projectDir = join(workspace, 'projects', projectId);
   const links = await readJsonIfExists(join(projectDir, 'media-links.json'), read);
-  const timeline = project.timeline ?? {};
-  const tracks = timeline.tracks ?? [];
-  const items = timeline.items ?? [];
-  const transitions = timeline.transitions ?? [];
-  const markers = timeline.markers ?? [];
-  const keyframes = timeline.keyframes ?? [];
-  const compositions = timeline.compositions ?? [];
+  const metadata = asRecord(project.metadata);
+  const timeline = asRecord(project.timeline) ?? {};
+  const tracks = recordsFromArray(timeline.tracks);
+  const items = recordsFromArray(timeline.items);
+  const transitions = arrayFrom(timeline.transitions);
+  const markers = arrayFrom(timeline.markers);
+  const keyframes = recordsFromArray(timeline.keyframes);
+  const compositions = recordsFromArray(timeline.compositions);
   const mediaIds = collectAllProjectMediaIds(project);
-  const linkedMediaIds = links?.mediaIds?.map((entry: any) => entry.id).filter(Boolean) ?? [];
+  const linkedMediaIds = recordsFromArray(links?.mediaIds)
+    .map((entry) => stringValue(entry.id))
+    .filter((id): id is string => Boolean(id));
 
   return {
     workspace,
     project: {
-      id: project.id,
-      name: project.name,
-      description: project.description ?? '',
+      id: projectId,
+      name: stringValue(project.name) ?? projectId,
+      description: stringValue(project.description) ?? '',
       duration: Number(project.duration ?? 0),
-      schemaVersion: project.schemaVersion ?? null,
+      schemaVersion: numberValue(project.schemaVersion),
       createdAt: Number(project.createdAt ?? 0),
       updatedAt: Number(project.updatedAt ?? 0),
       resolution: {
-        width: project.metadata?.width ?? 0,
-        height: project.metadata?.height ?? 0,
-        fps: project.metadata?.fps ?? 0,
-        backgroundColor: project.metadata?.backgroundColor,
+        width: numberValue(metadata?.width) ?? 0,
+        height: numberValue(metadata?.height) ?? 0,
+        fps: numberValue(metadata?.fps) ?? 0,
+        backgroundColor: stringValue(metadata?.backgroundColor),
       },
     },
     counts: {
@@ -133,36 +140,36 @@ export async function inspectWorkspaceProject(workspace: string, selector: Works
       linkedMedia: linkedMediaIds.length,
       referencedMedia: mediaIds.length,
     },
-    tracks: tracks.map((track: any) => ({
-      id: track.id,
-      name: track.name,
-      kind: track.kind ?? null,
-      order: track.order ?? 0,
-      visible: track.visible ?? true,
-      muted: track.muted ?? false,
-      locked: track.locked ?? false,
-      itemCount: items.filter((item: any) => item.trackId === track.id).length,
+    tracks: tracks.map((track) => ({
+      id: stringValue(track.id) ?? '',
+      name: stringValue(track.name) ?? '',
+      kind: stringValue(track.kind) ?? null,
+      order: numberValue(track.order) ?? 0,
+      visible: booleanValue(track.visible) ?? true,
+      muted: booleanValue(track.muted) ?? false,
+      locked: booleanValue(track.locked) ?? false,
+      itemCount: items.filter((item) => item.trackId === track.id).length,
     })),
-    items: items.map((item: any) => ({
-      id: item.id,
-      type: item.type,
-      trackId: item.trackId,
+    items: items.map((item) => ({
+      id: stringValue(item.id) ?? '',
+      type: stringValue(item.type) ?? '',
+      trackId: stringValue(item.trackId) ?? '',
       from: Number(item.from ?? 0),
       durationInFrames: Number(item.durationInFrames ?? 0),
-      label: item.label ?? '',
-      mediaId: item.mediaId ?? null,
+      label: stringValue(item.label) ?? '',
+      mediaId: stringValue(item.mediaId) ?? null,
     })),
     transitions,
     markers,
-    compositions: compositions.map((composition: any) => ({
-      id: composition.id,
-      name: composition.name,
-      width: composition.width,
-      height: composition.height,
-      fps: composition.fps,
-      durationInFrames: composition.durationInFrames,
-      itemCount: composition.items?.length ?? 0,
-      trackCount: composition.tracks?.length ?? 0,
+    compositions: compositions.map((composition) => ({
+      id: stringValue(composition.id) ?? '',
+      name: stringValue(composition.name) ?? '',
+      width: numberValue(composition.width) ?? 0,
+      height: numberValue(composition.height) ?? 0,
+      fps: numberValue(composition.fps) ?? 0,
+      durationInFrames: numberValue(composition.durationInFrames) ?? 0,
+      itemCount: arrayLength(composition.items),
+      trackCount: arrayLength(composition.tracks),
     })),
     media: {
       linkedIds: linkedMediaIds,
@@ -178,13 +185,15 @@ export async function inspectWorkspaceMedia(workspace: string, selector: Workspa
   const list = opts.readdir ?? readdir;
   const statFile = opts.stat ?? stat;
   const project = await readWorkspaceProject(workspace, selector, { readFile: read, readdir: list });
+  const metadata = asRecord(project.metadata);
+  const timeline = asRecord(project.timeline);
   const renderPlan = planProjectRender(project, {
     range: opts.range,
     renderWholeProject: opts.renderWholeProject,
   });
   const range = renderPlan.effectiveRange;
   const usages = renderPlan.mediaUsage;
-  const media: any[] = [];
+  const media = [];
 
   for (const usage of usages.values()) {
     const mediaDir = join(workspace, 'media', usage.mediaId);
@@ -194,18 +203,18 @@ export async function inspectWorkspaceMedia(workspace: string, selector: Workspa
     const sourceStats = sourceFile ? await statIfExists(sourceFile, statFile) : null;
     media.push({
       mediaId: usage.mediaId,
-      fileName: metadata?.fileName ?? (sourceFile ? basename(sourceFile) : null),
-      mimeType: metadata?.mimeType ?? (sourceFile ? mimeTypeFromFileName(sourceFile) : null),
+      fileName: stringValue(metadata?.fileName) ?? (sourceFile ? basename(sourceFile) : null),
+      mimeType: stringValue(metadata?.mimeType) ?? (sourceFile ? mimeTypeFromFileName(sourceFile) : null),
       metadataExists: Boolean(metadata),
       metadataFile: metadata ? metadataPath : null,
       sourceExists: Boolean(sourceFile),
       sourceFile: sourceFile ? resolve(sourceFile) : null,
       sourceFileSize: sourceStats?.size ?? null,
-      expectedFileSize: metadata?.fileSize ?? null,
-      duration: metadata?.duration ?? null,
-      width: metadata?.width ?? null,
-      height: metadata?.height ?? null,
-      fps: metadata?.fps ?? null,
+      expectedFileSize: numberValue(metadata?.fileSize),
+      duration: numberValue(metadata?.duration),
+      width: numberValue(metadata?.width),
+      height: numberValue(metadata?.height),
+      fps: numberValue(metadata?.fps),
       itemCount: usage.itemCount,
       items: usage.items,
       ready: Boolean(metadata && sourceFile),
@@ -218,12 +227,12 @@ export async function inspectWorkspaceMedia(workspace: string, selector: Workspa
     ok: missing.length === 0,
     workspace,
     project: {
-      id: project.id,
-      name: project.name,
-      width: project.metadata?.width ?? 0,
-      height: project.metadata?.height ?? 0,
-      fps: project.metadata?.fps ?? 0,
-      itemCount: project.timeline?.items?.length ?? 0,
+      id: stringValue(project.id) ?? '',
+      name: stringValue(project.name) ?? '',
+      width: numberValue(metadata?.width) ?? 0,
+      height: numberValue(metadata?.height) ?? 0,
+      fps: numberValue(metadata?.fps) ?? 0,
+      itemCount: arrayLength(timeline?.items),
     },
     range: rangeToSeconds(project, range),
     media,
@@ -259,9 +268,9 @@ export async function loadWorkspaceRenderSource(
     if (!filePath) {
       const missing: WorkspaceRequiredMedia = {
         mediaId,
-        fileName: metadata?.fileName ?? null,
-        mimeType: metadata?.mimeType ?? null,
-        fileSize: metadata?.fileSize ?? null,
+        fileName: stringValue(metadata?.fileName) ?? null,
+        mimeType: stringValue(metadata?.mimeType) ?? null,
+        fileSize: numberValue(metadata?.fileSize),
         sourceFile: null,
         sourceExists: false,
         itemCount: usage?.itemCount ?? 0,
@@ -273,9 +282,9 @@ export async function loadWorkspaceRenderSource(
 
     const mediaPlan = {
       mediaId,
-      fileName: metadata?.fileName ?? basename(filePath),
-      mimeType: metadata?.mimeType ?? mimeTypeFromFileName(filePath),
-      fileSize: metadata?.fileSize ?? null,
+      fileName: stringValue(metadata?.fileName) ?? basename(filePath),
+      mimeType: stringValue(metadata?.mimeType) ?? mimeTypeFromFileName(filePath),
+      fileSize: numberValue(metadata?.fileSize),
       sourceFile: resolve(filePath),
       sourceExists: true,
       itemCount: usage?.itemCount ?? 0,
@@ -283,9 +292,9 @@ export async function loadWorkspaceRenderSource(
     requiredMedia.push(mediaPlan);
     mediaSources[mediaId] = {
       filePath,
-      mimeType: metadata?.mimeType,
+      mimeType: stringValue(metadata?.mimeType),
       keyframeTimestamps: Array.isArray(metadata?.keyframeTimestamps)
-        ? metadata.keyframeTimestamps
+        ? metadata.keyframeTimestamps.filter((timestamp): timestamp is number => typeof timestamp === 'number')
         : undefined,
     };
   }
@@ -305,13 +314,14 @@ export async function readWorkspaceProject(workspace: string, selector: Workspac
   }
 
   const index = await readJsonIfExists(join(workspace, 'index.json'), read);
-  const indexed = index?.projects?.find((entry: any) =>
+  const indexed = recordsFromArray(index?.projects).find((entry) =>
     entry.name === projectSelector ||
     entry.id === projectSelector ||
-    entry.name?.toLowerCase?.() === projectSelector.toLowerCase()
+    stringValue(entry.name)?.toLowerCase() === projectSelector.toLowerCase()
   );
   if (indexed) {
-    return readJson(join(workspace, 'projects', indexed.id, 'project.json'), read);
+    const indexedId = stringValue(indexed.id);
+    if (indexedId) return readJson(join(workspace, 'projects', indexedId, 'project.json'), read);
   }
 
   const ids = await listProjectIds(workspace, read, list);
@@ -319,9 +329,10 @@ export async function readWorkspaceProject(workspace: string, selector: Workspac
   for (const id of ids) {
     const project = await readJsonIfExists(join(workspace, 'projects', id, 'project.json'), read);
     if (!project) continue;
-    available.push(project.name ?? id);
+    const name = stringValue(project.name);
+    available.push(name ?? id);
     if (project.id === projectSelector || project.name === projectSelector) return project;
-    if (project.name?.toLowerCase?.() === projectSelector.toLowerCase()) return project;
+    if (name?.toLowerCase() === projectSelector.toLowerCase()) return project;
   }
 
   throw new Error(
@@ -329,7 +340,7 @@ export async function readWorkspaceProject(workspace: string, selector: Workspac
   );
 }
 
-export function buildRange(values: Record<string, any>) {
+export function buildRange(values: Record<string, unknown>) {
   const hasSeconds = values.start !== undefined || values.end !== undefined || values.duration !== undefined;
   const hasFrames = values['in-frame'] !== undefined || values['out-frame'] !== undefined;
   if (!hasSeconds && !hasFrames) return null;
@@ -396,21 +407,23 @@ export function mimeTypeFromFileName(file: string): string {
   return 'application/octet-stream';
 }
 
-function rangeToSeconds(project: any, range: { inFrame: number; outFrame: number } | null) {
+function rangeToSeconds(project: JsonRecord, range: { inFrame: number; outFrame: number } | null) {
+  const metadata = asRecord(project.metadata);
+  const fps = numberValue(metadata?.fps) ?? 0;
   return range
     ? {
         inFrame: range.inFrame,
         outFrame: range.outFrame,
-        startSeconds: project.metadata?.fps > 0 ? range.inFrame / project.metadata.fps : null,
-        durationSeconds: project.metadata?.fps > 0 ? (range.outFrame - range.inFrame) / project.metadata.fps : null,
+        startSeconds: fps > 0 ? range.inFrame / fps : null,
+        durationSeconds: fps > 0 ? (range.outFrame - range.inFrame) / fps : null,
       }
     : null;
 }
 
 async function listProjectIds(workspace: string, read: ReadFileFn, list: ReaddirFn): Promise<string[]> {
   const index = await readJsonIfExists(join(workspace, 'index.json'), read);
-  const indexedIds = index?.projects
-    ?.map((entry: any) => entry?.id)
+  const indexedIds = recordsFromArray(index?.projects)
+    .map((entry) => entry.id)
     .filter((id: unknown) => typeof id === 'string' && id.length > 0);
   if (indexedIds?.length) return [...new Set(indexedIds)] as string[];
 
@@ -424,10 +437,10 @@ function collectAllProjectMediaIds(project: unknown): string[] {
   return [...collectProjectMediaUsage(project, null).keys()].sort();
 }
 
-function countKeyframes(keyframes: any[]): number {
-  return keyframes.reduce((sum: number, item: any) => (
-    sum + (item.properties ?? []).reduce((propertySum: number, property: any) => (
-      propertySum + (property.keyframes?.length ?? 0)
+function countKeyframes(keyframes: JsonRecord[]): number {
+  return keyframes.reduce((sum: number, item: JsonRecord) => (
+    sum + recordsFromArray(item.properties).reduce((propertySum: number, property: JsonRecord) => (
+      propertySum + arrayLength(property.keyframes)
     ), 0)
   ), 0);
 }
@@ -475,4 +488,32 @@ async function readJsonIfExists(file: string, read: ReadFileFn): Promise<JsonRec
 
 async function readJson(file: string, read: ReadFileFn): Promise<JsonRecord> {
   return JSON.parse(await read(file, 'utf8'));
+}
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === 'object' ? value as JsonRecord : null;
+}
+
+function arrayFrom(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function recordsFromArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.map(asRecord).filter((entry): entry is JsonRecord => entry !== null) : [];
+}
+
+function arrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function booleanValue(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
 }
