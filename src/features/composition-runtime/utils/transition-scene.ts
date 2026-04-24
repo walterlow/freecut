@@ -1,9 +1,10 @@
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
+import type { Transition } from '@/types/transition';
+import type { ResolvedTransitionWindow } from '@freecut/core/transition-plan';
 import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing';
 
 export interface ActiveTransition<TItem extends TimelineItem = TimelineItem> {
-  transition: ResolvedTransitionWindow<TItem>['transition'];
+  transition: ResolvedTransitionWindow<TItem, Transition>['transition'];
   leftClip: TItem;
   rightClip: TItem;
   progress: number;
@@ -26,7 +27,7 @@ export function collectTransitionParticipantClipIds<TItem extends TimelineItem>(
   lookaheadFrames,
   lookbehindFrames = 0,
 }: {
-  transitionWindows: ResolvedTransitionWindow<TItem>[];
+  transitionWindows: ResolvedTransitionWindow<TItem, Transition>[];
   frame: number;
   lookaheadFrames: number;
   lookbehindFrames?: number;
@@ -72,7 +73,7 @@ export function resolveTransitionFrameState<TItem extends TimelineItem>({
   transitionWindows,
   frame,
 }: {
-  transitionWindows: ResolvedTransitionWindow<TItem>[];
+  transitionWindows: ResolvedTransitionWindow<TItem, Transition>[];
   frame: number;
 }): TransitionFrameState<TItem> {
   const activeTransitions: ActiveTransition<TItem>[] = [];

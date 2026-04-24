@@ -18,7 +18,7 @@
 import type { TimelineItem } from '@/types/timeline';
 import type { CanAddTransitionResult, Transition } from '@/types/transition';
 import { getSourceProperties, sourceToTimelineFrames, getAvailableSourceFrames } from './source-calculations';
-import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
+import { calculateTransitionPortions } from '@freecut/core/transition-plan';
 import { calculateTrimSourceUpdate, type TrimHandle } from './trim-utils';
 import { computeSlideContinuitySourceDelta } from './slide-utils';
 import { applyMovePreview, applyTrimEndPreview, applyTrimStartPreview, type PreviewItemUpdate } from './item-edit-preview';

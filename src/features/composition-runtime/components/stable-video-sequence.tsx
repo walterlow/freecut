@@ -21,7 +21,8 @@ import { useVideoConfig } from '../hooks/use-player-compat';
 import { useTransitionParticipantSync } from '../hooks/use-transition-participant-sync';
 import type { TimelineItem, VideoItem } from '@/types/timeline';
 import type { AudioEqSettings } from '@/types/audio';
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
+import type { Transition } from '@/types/transition';
+import type { ResolvedTransitionWindow } from '@freecut/core/transition-plan';
 import { VideoContent } from './video-content';
 import {
   findActiveVideoItemIndex,
@@ -58,7 +59,7 @@ interface StableVideoSequenceProps {
   /** All video items that might share the same origin */
   items: StableVideoSequenceItem[];
   /** Shared transition windows for current composition */
-  transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
+  transitionWindows?: ResolvedTransitionWindow<TimelineItem, Transition>[];
   /** Render function for the video content */
   renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
   /** Number of frames to premount */
@@ -82,12 +83,12 @@ function areGroupPropsEqual(
   prevProps: {
     group: StableVideoGroup<StableVideoSequenceItem>;
     renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
-    transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
+    transitionWindows?: ResolvedTransitionWindow<TimelineItem, Transition>[];
   },
   nextProps: {
     group: StableVideoGroup<StableVideoSequenceItem>;
     renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
-    transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
+    transitionWindows?: ResolvedTransitionWindow<TimelineItem, Transition>[];
   }
 ): boolean {
   // Quick reference check first
@@ -205,7 +206,7 @@ HiddenShadowVideoBridge.displayName = 'HiddenShadowVideoBridge';
 
 const GroupRenderer: React.FC<{
   group: StableVideoGroup<StableVideoSequenceItem>;
-  transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
+  transitionWindows?: ResolvedTransitionWindow<TimelineItem, Transition>[];
   renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
 }> = React.memo(({ group, transitionWindows = [], renderItem }) => {
   // Get local frame from Sequence context (0-based within this Sequence)

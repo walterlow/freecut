@@ -3,7 +3,7 @@ import type { PlayerRef } from '@/features/preview/deps/player-core';
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import { usePlaybackStore } from '@/shared/state/playback';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
+import type { ResolvedTransitionWindow } from '@freecut/core/transition-plan';
 import { useGizmoStore } from '../stores/gizmo-store';
 import { useCornerPinStore } from '../stores/corner-pin-store';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
@@ -49,7 +49,7 @@ import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('VideoPreview');
 
-type TransitionWindow = ResolvedTransitionWindow<TimelineItem>;
+type TransitionWindow = ResolvedTransitionWindow<TimelineItem, import('@/types/transition').Transition>;
 type PlaybackTransitionOverlayWindows = Parameters<typeof resolvePlaybackTransitionOverlayState>[0];
 type PlaybackStoreSnapshot = ReturnType<typeof usePlaybackStore.getState>;
 

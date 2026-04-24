@@ -366,7 +366,7 @@ function createDebugAPI(): ProjectDebugAPI {
         import('@/features/timeline/stores/timeline-store'),
       ]);
       const { resolveTransitionWindows } = await import(
-        '@/core/timeline/transitions/transition-planner'
+        '@freecut/core/transition-plan'
       );
       const transitions = useTransitionsStore.getState().transitions;
       const itemsByTrackId = useItemsStore.getState().itemsByTrackId;

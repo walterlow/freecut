@@ -1,7 +1,8 @@
 import { useMemo, useRef } from 'react';
 import type { PlayerRef } from '@/features/preview/deps/player-core';
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
+import type { Transition } from '@/types/transition';
+import type { ResolvedTransitionWindow } from '@freecut/core/transition-plan';
 import { createAdaptivePreviewQualityState } from '../utils/adaptive-preview-quality';
 import type { PreviewCompositionRenderer } from './use-preview-renderer-controller';
 import type {
@@ -9,7 +10,7 @@ import type {
   TransitionPreviewTelemetry,
 } from './use-preview-transition-session-controller';
 
-type TransitionWindow = ResolvedTransitionWindow<TimelineItem>;
+type TransitionWindow = ResolvedTransitionWindow<TimelineItem, Transition>;
 
 export function usePreviewRuntimeRefs() {
   const playerRef = useRef<PlayerRef>(null);

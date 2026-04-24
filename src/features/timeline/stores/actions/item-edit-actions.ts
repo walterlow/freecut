@@ -31,7 +31,7 @@ import { timelineToSourceFrames, sourceToTimelineFrames } from '../../utils/sour
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { clampSlideDeltaToPreserveTransitions } from '../../utils/transition-utils';
-import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
+import { calculateTransitionPortions } from '@freecut/core/transition-plan';
 import {
   expandItemIdsWithAttachedCaptions,
   getAttachedCaptionItemIds,

@@ -14,7 +14,7 @@ import type { Transition } from '@/types/transition';
 import {
   resolveTransitionWindows,
   type ResolvedTransitionWindow,
-} from '@/core/timeline/transitions/transition-planner';
+} from '@freecut/core/transition-plan';
 
 export interface TrackRenderState<TTrack extends TimelineTrack = TimelineTrack> {
   hasSoloTracks: boolean;
@@ -83,7 +83,7 @@ export interface CompositionRenderPlan<TTrack extends TimelineTrack = TimelineTr
   visibleTextFontFamilies: string[];
   transitionClipItems: TransitionClipItem[];
   transitionClipMap: Map<string, TransitionClipItem>;
-  transitionWindows: ResolvedTransitionWindow<TransitionClipItem>[];
+  transitionWindows: ResolvedTransitionWindow<TransitionClipItem, Transition>[];
 }
 
 export function groupTransitionsByTrackOrder<TTransition>({
@@ -308,8 +308,8 @@ export function buildItemIdMap<TItem extends TimelineItem>(
 export function resolveTransitionWindowsForItems<TItem extends TimelineItem>(
   transitions: Transition[],
   items: TItem[],
-): ResolvedTransitionWindow<TItem>[] {
-  return resolveTransitionWindows(transitions, buildItemIdMap(items)) as ResolvedTransitionWindow<TItem>[];
+): ResolvedTransitionWindow<TItem, Transition>[] {
+  return resolveTransitionWindows(transitions, buildItemIdMap(items));
 }
 
 export function buildFrameRenderTasks<TTransition>({

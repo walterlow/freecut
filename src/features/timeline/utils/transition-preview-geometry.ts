@@ -1,4 +1,4 @@
-import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
+import { calculateTransitionPortions } from '@freecut/core/transition-plan';
 
 export interface RollingPreviewLike {
   trimmedItemId: string | null;

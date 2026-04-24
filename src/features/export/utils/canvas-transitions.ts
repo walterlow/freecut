@@ -8,8 +8,8 @@
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
 import { transitionRegistry } from '@/core/timeline/transitions/registry';
-import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner';
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
+import { resolveTransitionWindows } from '@freecut/core/transition-plan';
+import type { ResolvedTransitionWindow } from '@freecut/core/transition-plan';
 import {
   resolveTransitionFrameState,
 } from '@/features/export/deps/composition-runtime';

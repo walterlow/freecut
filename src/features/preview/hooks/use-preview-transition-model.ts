@@ -1,8 +1,9 @@
 import { useCallback, useMemo } from 'react';
 import type { CompositionInputProps } from '@/types/export';
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
-import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner';
+import type { Transition } from '@/types/transition';
+import type { ResolvedTransitionWindow } from '@freecut/core/transition-plan';
+import { resolveTransitionWindows } from '@freecut/core/transition-plan';
 import { shouldForceContinuousPreviewOverlay } from '../hooks/use-gpu-effects-overlay';
 import { useCompositionsStore } from '@/features/preview/deps/timeline-store';
 
@@ -43,7 +44,7 @@ export function usePreviewTransitionModel({
     });
   }, [fastScrubScaledTracks, fps, transitions]);
 
-  const transitionWindowUsesDomProvider = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
+  const transitionWindowUsesDomProvider = useCallback((window: ResolvedTransitionWindow<TimelineItem, Transition> | null) => {
     if (!window) return true;
     return !playbackTransitionComplexStartFrames.has(window.startFrame);
   }, [playbackTransitionComplexStartFrames]);
@@ -53,7 +54,7 @@ export function usePreviewTransitionModel({
     return playbackTransitionWindows.find((window) => window.startFrame === startFrame) ?? null;
   }, [playbackTransitionWindows]);
 
-  const getTransitionCooldownForWindow = useCallback((window: ResolvedTransitionWindow<TimelineItem>) => {
+  const getTransitionCooldownForWindow = useCallback((window: ResolvedTransitionWindow<TimelineItem, Transition>) => {
     const leftOriginId = window.leftClip.originId;
     const rightOriginId = window.rightClip.originId;
 

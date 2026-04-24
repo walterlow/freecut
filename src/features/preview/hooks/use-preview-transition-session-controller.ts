@@ -1,6 +1,7 @@
 import { useCallback, type MutableRefObject } from 'react';
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
+import type { Transition } from '@/types/transition';
+import type { ResolvedTransitionWindow } from '@freecut/core/transition-plan';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
   getBestDomVideoElementForItem,
@@ -59,13 +60,13 @@ interface UsePreviewTransitionSessionControllerParams {
   forceFastScrubOverlay: boolean;
   pausedTransitionPrearmFrames: number;
   playingComplexTransitionPrearmFrames: number;
-  playbackTransitionWindows: ResolvedTransitionWindow<TimelineItem>[];
+  playbackTransitionWindows: ResolvedTransitionWindow<TimelineItem, Transition>[];
   playbackTransitionComplexStartFrames: Set<number>;
   playbackTransitionPrerenderRunwayFrames: number;
   playbackTransitionCooldownFrames: number;
-  transitionWindowUsesDomProvider: (window: ResolvedTransitionWindow<TimelineItem> | null) => boolean;
-  getTransitionWindowByStartFrame: (startFrame: number) => ResolvedTransitionWindow<TimelineItem> | null;
-  getActiveTransitionWindowForFrame: (frame: number) => ResolvedTransitionWindow<TimelineItem> | null;
+  transitionWindowUsesDomProvider: (window: ResolvedTransitionWindow<TimelineItem, Transition> | null) => boolean;
+  getTransitionWindowByStartFrame: (startFrame: number) => ResolvedTransitionWindow<TimelineItem, Transition> | null;
+  getActiveTransitionWindowForFrame: (frame: number) => ResolvedTransitionWindow<TimelineItem, Transition> | null;
   pushTransitionTrace: (phase: string, data?: Record<string, unknown>) => void;
   ensureFastScrubRendererRef: MutableRefObject<() => Promise<TransitionRenderer | null>>;
   scrubMountedRef: MutableRefObject<boolean>;
@@ -76,7 +77,7 @@ interface UsePreviewTransitionSessionControllerParams {
   resumeScrubLoopRef: MutableRefObject<() => void>;
   playbackTransitionPreparePromiseRef: MutableRefObject<Promise<boolean> | null>;
   playbackTransitionPreparingFrameRef: MutableRefObject<number | null>;
-  transitionSessionWindowRef: MutableRefObject<ResolvedTransitionWindow<TimelineItem> | null>;
+  transitionSessionWindowRef: MutableRefObject<ResolvedTransitionWindow<TimelineItem, Transition> | null>;
   transitionSessionPinnedElementsRef: MutableRefObject<Map<string, HTMLVideoElement | null>>;
   transitionExitElementsRef: MutableRefObject<Map<string, HTMLVideoElement | null>>;
   transitionSessionStallCountRef: MutableRefObject<Map<string, { ct: number; count: number }>>;
@@ -215,7 +216,7 @@ export function usePreviewTransitionSessionController({
     transitionTelemetryRef,
   ]);
 
-  const pinTransitionPlaybackSession = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
+  const pinTransitionPlaybackSession = useCallback((window: ResolvedTransitionWindow<TimelineItem, Transition> | null) => {
     if (!window) {
       clearTransitionPlaybackSession();
       return null;

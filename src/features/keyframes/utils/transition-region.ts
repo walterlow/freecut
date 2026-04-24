@@ -8,7 +8,7 @@
 
 import type { Transition } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
-import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
+import { calculateTransitionPortions } from '@freecut/core/transition-plan';
 
 /**
  * Frame range representing a blocked region (inclusive start, exclusive end)
@@ -145,4 +145,3 @@ export function getTransitionBlockedMessage(range: BlockedFrameRange): string {
   const position = range.role === 'outgoing' ? 'end' : 'start';
   return `Keyframes cannot be added here. This region is part of a transition at the ${position} of the clip.`;
 }
-

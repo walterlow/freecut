@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VideoItem, ImageItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
-import { resolveTransitionWindows } from './transition-planner';
+import { resolveTransitionWindows } from '@freecut/core/transition-plan';
 
 function createVideoClip(id: string, from: number, durationInFrames: number): VideoItem {
   return {
