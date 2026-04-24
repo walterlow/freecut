@@ -12,6 +12,8 @@ into this package instead of duplicating project/range/media rules.
 
 ## Current surface
 
+- `validateSnapshot(snapshot, opts)`
+- `lintSnapshot(snapshot, opts)`
 - `buildRange(values)`
 - `resolveProjectRenderRange(project, requestedRange, renderWholeProject)`
 - `collectProjectMediaUsage(project, range)`

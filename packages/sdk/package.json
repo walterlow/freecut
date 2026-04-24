@@ -31,6 +31,9 @@
     "sdk"
   ],
   "license": "MIT",
+  "dependencies": {
+    "@freecut/core": "0.0.1"
+  },
   "devDependencies": {
     "typescript": "~5.9.3",
     "vitest": "^4.0.17"
