@@ -20,10 +20,9 @@ interface ListWorkspaceProjectsOptions extends WorkspaceFsDeps {
   includeTrashed?: boolean;
 }
 
-interface WorkspaceProjectSelector {
-  project?: string;
-  projectId?: string;
-}
+type WorkspaceProjectSelector =
+  | { project: string; projectId?: string }
+  | { project?: string; projectId: string };
 
 interface WorkspaceRenderOptions extends WorkspaceFsDeps {
   range?: RenderRangeInput | null;
@@ -300,12 +299,16 @@ export async function readWorkspaceProject(workspace: string, selector: Workspac
   if (selector.projectId) {
     return readJson(join(workspace, 'projects', selector.projectId, 'project.json'), read);
   }
+  const projectSelector = selector.project;
+  if (!projectSelector) {
+    throw new Error('workspace project selector requires project or projectId');
+  }
 
   const index = await readJsonIfExists(join(workspace, 'index.json'), read);
   const indexed = index?.projects?.find((entry: any) =>
-    entry.name === selector.project ||
-    entry.id === selector.project ||
-    entry.name?.toLowerCase?.() === selector.project.toLowerCase()
+    entry.name === projectSelector ||
+    entry.id === projectSelector ||
+    entry.name?.toLowerCase?.() === projectSelector.toLowerCase()
   );
   if (indexed) {
     return readJson(join(workspace, 'projects', indexed.id, 'project.json'), read);
@@ -317,12 +320,12 @@ export async function readWorkspaceProject(workspace: string, selector: Workspac
     const project = await readJsonIfExists(join(workspace, 'projects', id, 'project.json'), read);
     if (!project) continue;
     available.push(project.name ?? id);
-    if (project.id === selector.project || project.name === selector.project) return project;
-    if (project.name?.toLowerCase?.() === selector.project.toLowerCase()) return project;
+    if (project.id === projectSelector || project.name === projectSelector) return project;
+    if (project.name?.toLowerCase?.() === projectSelector.toLowerCase()) return project;
   }
 
   throw new Error(
-    `no workspace project matched ${JSON.stringify(selector.project)}; available projects: ${available.join(', ')}`,
+    `no workspace project matched ${JSON.stringify(projectSelector)}; available projects: ${available.join(', ')}`,
   );
 }
 
