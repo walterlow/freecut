@@ -7,13 +7,11 @@
 
 import type { Project } from '@/types/project';
 import type { MediaMetadata } from '@/types/storage';
-import type {
-  MediaReference as CoreMediaReference,
-  ProjectSnapshot as CoreProjectSnapshot,
-} from '@freecut/core';
+import type { MediaReference as CoreMediaReference } from '@freecut/core/project';
+import type { ProjectSnapshot as CoreProjectSnapshot } from '@freecut/core/snapshot';
 
 // Snapshot format version
-export { SNAPSHOT_VERSION } from '@freecut/core';
+export { SNAPSHOT_VERSION } from '@freecut/core/snapshot';
 
 /**
  * Media reference in snapshot (metadata only, no file content)
