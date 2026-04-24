@@ -34,6 +34,7 @@ import { resolveMediaUrls } from '@/features/export/deps/media-library';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
 import { createManagedWorker } from '@/shared/utils/managed-worker';
+import { resolveProjectRenderRange } from '@freecut/core/render-plan';
 import type {
   ExportRenderWorkerRequest,
   ExportRenderWorkerResponse,
@@ -279,9 +280,12 @@ export function useClientRender(): UseClientRenderReturn {
         const audioContainer = isExtendedSettings(settings) ? settings.audioContainer : undefined;
         const renderWholeProject = isExtendedSettings(settings) ? settings.renderWholeProject : false;
 
-        // When renderWholeProject is true, ignore in/out points
-        const effectiveInPoint = renderWholeProject ? null : inPoint;
-        const effectiveOutPoint = renderWholeProject ? null : outPoint;
+        const effectiveRange = resolveProjectRenderRange({
+          metadata: { fps },
+          timeline: { inPoint, outPoint },
+        }, null, renderWholeProject);
+        const effectiveInPoint = effectiveRange?.inFrame ?? null;
+        const effectiveOutPoint = effectiveRange?.outFrame ?? null;
 
         event.merge({
           mode: exportMode,
