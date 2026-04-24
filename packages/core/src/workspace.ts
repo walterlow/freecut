@@ -2,7 +2,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { collectProjectMediaUsage } from './media-plan.js';
-import { resolveRangeFrames, validateRangeFrames } from './range.js';
+import { resolveProjectRenderRange } from './render-plan.js';
 
 const NON_SOURCE_NAMES = new Set([
   'metadata.json',
@@ -273,18 +273,6 @@ export async function readWorkspaceProject(workspace, selector, opts = {}) {
   throw new Error(
     `no workspace project matched ${JSON.stringify(selector.project)}; available projects: ${available.join(', ')}`,
   );
-}
-
-export function resolveProjectRenderRange(project, requestedRange, renderWholeProject) {
-  if (renderWholeProject) return null;
-  const fps = project.metadata?.fps ?? 30;
-  if (requestedRange) return resolveRangeFrames(requestedRange, fps);
-  const inPoint = project.timeline?.inPoint;
-  const outPoint = project.timeline?.outPoint;
-  if (inPoint !== undefined && inPoint !== null && outPoint !== undefined && outPoint !== null) {
-    return validateRangeFrames(inPoint, outPoint);
-  }
-  return null;
 }
 
 export function buildRange(values) {

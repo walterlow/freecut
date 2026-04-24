@@ -17,6 +17,10 @@
     "./media-plan": {
       "types": "./dist/media-plan.d.ts",
       "default": "./dist/media-plan.js"
+    },
+    "./render-plan": {
+      "types": "./dist/render-plan.d.ts",
+      "default": "./dist/render-plan.js"
     }
   },
   "files": [

@@ -21,6 +21,8 @@ export type {
 } from './media-plan.js';
 export { resolveRangeFrames, validateRangeFrames } from './range.js';
 export type { FrameRange, RenderRangeInput } from './range.js';
+export { planProjectRender, resolveProjectRenderRange } from './render-plan.js';
+export type { ProjectRenderPlan, ProjectRenderPlanOptions } from './render-plan.js';
 export {
   CORE_VERSION,
   SNAPSHOT_VERSION,
@@ -40,5 +42,4 @@ export {
   loadWorkspaceRenderSource,
   mimeTypeFromFileName,
   readWorkspaceProject,
-  resolveProjectRenderRange,
 } from './workspace.js';

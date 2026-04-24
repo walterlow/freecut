@@ -13,7 +13,6 @@ import type {
   AgentGpuEffect,
   AgentMarker,
   AgentPlaybackState,
-  AgentRenderRange,
   AgentRenderExportOptions,
   AgentRenderExportResult,
   AgentRenderProjectExportOptions,
@@ -29,7 +28,7 @@ import {
   collectMediaUsageFromTracks,
   planRenderMediaSources,
 } from '@freecut/core/media-plan';
-import { resolveRangeFrames } from '@freecut/core/range';
+import { resolveProjectRenderRange } from '@freecut/core/render-plan';
 import type { ExportMode, ExportSettings } from '@/types/export';
 import type { Project } from '@/types/project';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
@@ -320,15 +319,6 @@ function applyRenderMediaSources(
     }
   }
   return resolvedTracks;
-}
-
-function resolveRenderRange(
-  range: AgentRenderRange | undefined,
-  fps: number,
-): { inPoint: number; outPoint: number } | null {
-  if (!range) return null;
-  const resolved = resolveRangeFrames(range, fps);
-  return { inPoint: resolved.inFrame, outPoint: resolved.outFrame };
 }
 
 function validateInOutPoints(inPoint: number | null, outPoint: number | null): { inPoint: number; outPoint: number } | null {
@@ -979,9 +969,15 @@ export function createAgentAPI(): FreecutAgentAPI {
       }
 
       const renderWholeProject = opts.renderWholeProject ?? false;
-      const requestedRange = renderWholeProject ? null : resolveRenderRange(opts.range, fps);
-      const effectiveInPoint = renderWholeProject ? null : (requestedRange?.inPoint ?? timeline.inPoint);
-      const effectiveOutPoint = renderWholeProject ? null : (requestedRange?.outPoint ?? timeline.outPoint);
+      const effectiveRange = resolveProjectRenderRange({
+        metadata: { fps },
+        timeline: {
+          inPoint: timeline.inPoint,
+          outPoint: timeline.outPoint,
+        },
+      }, opts.range, renderWholeProject);
+      const effectiveInPoint = effectiveRange?.inFrame ?? null;
+      const effectiveOutPoint = effectiveRange?.outFrame ?? null;
       const playback = usePlaybackStore.getState();
       const composition = timelineConverter.convertTimelineToComposition(
         timeline.tracks,
@@ -1094,9 +1090,9 @@ export function createAgentAPI(): FreecutAgentAPI {
       }
 
       const renderWholeProject = opts.renderWholeProject ?? false;
-      const requestedRange = renderWholeProject ? null : resolveRenderRange(opts.range, fps);
-      const effectiveInPoint = renderWholeProject ? null : (requestedRange?.inPoint ?? project.timeline.inPoint);
-      const effectiveOutPoint = renderWholeProject ? null : (requestedRange?.outPoint ?? project.timeline.outPoint);
+      const effectiveRange = resolveProjectRenderRange(project, opts.range, renderWholeProject);
+      const effectiveInPoint = effectiveRange?.inFrame ?? null;
+      const effectiveOutPoint = effectiveRange?.outFrame ?? null;
       const composition = timelineConverter.convertTimelineToComposition(
         project.timeline.tracks as TimelineTrack[],
         project.timeline.items as TimelineItem[],
