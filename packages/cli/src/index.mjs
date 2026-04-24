@@ -17,6 +17,7 @@ import { runTransitionAdd } from './commands/transition.mjs';
 import { runMarkerAdd } from './commands/marker.mjs';
 import { runLint } from './commands/lint.mjs';
 import { runDoctor } from './commands/doctor.mjs';
+import { runRender } from './commands/render.mjs';
 
 const HELP = `freecut — programmatic FreeCut project authoring
 
@@ -25,6 +26,8 @@ usage:
   freecut new <file> [--name X --fps 30 --width 1920 --height 1080]
   freecut inspect <file> [--json]
   freecut lint <file> [--json] [--strict]
+  freecut render <file> [--output out.mp4 --format mp4|webm|mov|mkv --quality high]
+  freecut render --project ABC [--start 0 --duration 5 --output out.mp4]
   freecut track add <file> [--kind video|audio --name X]
   freecut clip add <file> --type video|audio|image|text|shape|adjustment \\
                           --track <id> --from <sec> --duration <sec> [options]
@@ -56,6 +59,9 @@ export async function main(argv, io = { stdout: process.stdout, stderr: process.
       return;
     case 'lint':
       await runLint(argv.slice(1), io);
+      return;
+    case 'render':
+      await runRender(argv.slice(1), io);
       return;
     case 'track':
       if (second !== 'add') throw usage(`unknown track subcommand: ${second ?? '(none)'}`);

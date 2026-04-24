@@ -87,7 +87,7 @@ const unsubscribe = window.__FREECUT__.subscribe(() => {
 | `version` | Static string — API semver |
 | `ready()` | Waits for lazy store imports |
 | `getPlayback()` | `{ currentFrame, isPlaying, previewZoom }` — `previewZoom` is `'auto'` or a number |
-| `getTimeline()` | Tracks, items, transitions, markers |
+| `getTimeline()` | Tracks, items, transitions, markers, `inPoint`, `outPoint` |
 | `getSelection()` | Item / transition / marker ids |
 | `getProjectMeta()` | `{ id, name, width, height, fps }` — ids are `null` when no project loaded |
 | `getWorkspaceStatus()` | `{ granted, name? }` |
@@ -101,10 +101,20 @@ const unsubscribe = window.__FREECUT__.subscribe(() => {
 | `openProject(id)` | Load an existing project and navigate to it |
 | `loadSnapshot(json)` | Import an SDK/CLI-authored snapshot |
 | `exportSnapshot()` | Dump the current project as a snapshot object |
+| `renderExport(opts)` | Render the loaded project via the browser export engine and return base64 chunks |
+
+`renderExport` accepts `{ mode, quality, codec, videoContainer, audioContainer,
+resolution, renderWholeProject, range, maxBytes, chunkSize }`. `range` can use
+frame fields (`inFrame`, `outFrame`, `startFrame`, `endFrame`,
+`durationInFrames`) or seconds fields (`startSeconds`, `endSeconds`,
+`durationSeconds`) and overrides timeline IO markers for that render only. It
+is intended for local bridges such as `freecut render`; large exports should
+use the browser UI unless the caller raises `maxBytes`.
 
 ### Playback / selection
 
-`play()`, `pause()`, `seek(frame)`, `selectItems(ids)`.
+`play()`, `pause()`, `seek(frame)`, `setInOutPoints({inPoint, outPoint})`,
+`clearInOutPoints()`, `selectItems(ids)`.
 
 ### Timeline mutations (require a loaded project)
 

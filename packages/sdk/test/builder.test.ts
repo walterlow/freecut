@@ -136,6 +136,28 @@ describe('ProjectBuilder', () => {
     expect(p.project.timeline?.transitions).toHaveLength(1);
   });
 
+  it('sets and clears render ranges', () => {
+    const p = createProject({ name: 'demo', fps: 30, ids: deterministicIds() });
+    p.setRenderRange({ startFrame: 30, durationInFrames: 150 });
+    expect(p.project.timeline?.inPoint).toBe(30);
+    expect(p.project.timeline?.outPoint).toBe(180);
+
+    p.setInOutPoints(0, 150);
+    expect(p.project.timeline?.inPoint).toBe(0);
+    expect(p.project.timeline?.outPoint).toBe(150);
+
+    p.clearInOutPoints();
+    expect(p.project.timeline?.inPoint).toBeUndefined();
+    expect(p.project.timeline?.outPoint).toBeUndefined();
+  });
+
+  it('rejects invalid render ranges', () => {
+    const p = createProject({ name: 'demo', ids: deterministicIds() });
+    expect(() => p.setInOutPoints(10, 10)).toThrow(RangeError);
+    expect(() => p.setInOutPoints(-1, 10)).toThrow(RangeError);
+    expect(() => p.setRenderRange({ startFrame: 0 })).toThrow(/durationInFrames/);
+  });
+
   it('deterministic ids produce stable snapshots', () => {
     const a = buildGolden();
     const b = buildGolden();

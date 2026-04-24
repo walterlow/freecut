@@ -5,7 +5,8 @@
 
 import { z } from 'zod';
 import { readdirSync, statSync } from 'node:fs';
-import { resolve as resolvePath, join, extname } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve as resolvePath, join, extname, dirname } from 'node:path';
 import { serveFiles } from './file-server.mjs';
 
 const MEDIA_EXTS = new Set(['.mp4', '.m4v', '.mov', '.webm', '.mkv', '.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.jpg', '.jpeg', '.png', '.gif', '.webp']);
@@ -72,6 +73,65 @@ const gpuEffectSchema = {
   gpuEffectType: z.string().describe('Id from src/lib/gpu-effects/effects/* (e.g. gaussian-blur)'),
   params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
 };
+
+const renderRangeSchema = z.object({
+  inFrame: z.number().int().min(0).optional(),
+  outFrame: z.number().int().positive().optional(),
+  startFrame: z.number().int().min(0).optional(),
+  endFrame: z.number().int().positive().optional(),
+  durationInFrames: z.number().int().positive().optional(),
+  startSeconds: z.number().min(0).optional(),
+  endSeconds: z.number().positive().optional(),
+  durationSeconds: z.number().positive().optional(),
+}).optional();
+
+const renderOptionsSchema = {
+  mode: z.enum(['video', 'audio']).default('video'),
+  quality: z.enum(['low', 'medium', 'high', 'ultra']).default('high'),
+  codec: z.enum(['h264', 'h265', 'vp8', 'vp9', 'av1', 'prores']).optional(),
+  videoContainer: z.enum(['mp4', 'mov', 'webm', 'mkv']).optional(),
+  audioContainer: z.enum(['mp3', 'aac', 'wav']).optional(),
+  resolution: z.object({
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  }).optional(),
+  renderWholeProject: z.boolean().default(false),
+  range: renderRangeSchema,
+  maxBytes: z.number().int().positive().optional(),
+  chunkSize: z.number().int().positive().optional(),
+};
+
+async function openProjectBySelector(bridge, { projectId, projectName }) {
+  if (projectId) return bridge.callApi('openProject', [projectId]);
+  if (!projectName) throw new Error('projectId or projectName is required');
+  const projects = await bridge.callApi('listProjects');
+  const match = projects.find((p) => p.name === projectName || p.id === projectName)
+    ?? projects.find((p) => p.name.toLowerCase() === projectName.toLowerCase());
+  if (!match) {
+    throw new Error(`no project matched ${JSON.stringify(projectName)}`);
+  }
+  return bridge.callApi('openProject', [match.id]);
+}
+
+async function renderAndMaybeWrite(bridge, args) {
+  const { outputPath, projectId, projectName, ...renderOptions } = args;
+  const result = await bridge.callApi('renderExport', [renderOptions]);
+  if (!outputPath) return result;
+
+  const abs = resolvePath(outputPath);
+  await mkdir(dirname(abs), { recursive: true });
+  const bytes = Buffer.concat(result.chunks.map((chunk) => Buffer.from(chunk, 'base64')));
+  await writeFile(abs, bytes);
+  return {
+    outputPath: abs,
+    mimeType: result.mimeType,
+    duration: result.duration,
+    fileSize: result.fileSize,
+    extension: result.extension,
+    chunkEncoding: result.chunkEncoding,
+    chunkCount: result.chunks.length,
+  };
+}
 
 /**
  * Build the tool list. Each entry provides MCP config plus a handler that
@@ -145,6 +205,28 @@ export function buildTools(bridge) {
         inputSchema: { frame: z.number().int().min(0) },
       },
       handler: async ({ frame }) => wrap(await callPositional('seek', [frame])),
+    },
+    {
+      name: 'freecut_set_in_out',
+      config: {
+        title: 'Set in/out points',
+        description: 'Set the current timeline IO markers in project frames. outPoint is exclusive.',
+        inputSchema: {
+          inPoint: z.number().int().min(0),
+          outPoint: z.number().int().positive(),
+        },
+      },
+      handler: async ({ inPoint, outPoint }) =>
+        wrap(await callPositional('setInOutPoints', [{ inPoint, outPoint }])),
+    },
+    {
+      name: 'freecut_clear_in_out',
+      config: {
+        title: 'Clear in/out points',
+        description: 'Clear the current timeline IO markers.',
+        inputSchema: {},
+      },
+      handler: async () => wrap(await bridge.callApi('clearInOutPoints')),
     },
 
     // Selection
@@ -440,6 +522,35 @@ export function buildTools(bridge) {
         inputSchema: {},
       },
       handler: async () => wrap(await bridge.callApi('exportSnapshot')),
+    },
+    {
+      name: 'freecut_render_export',
+      config: {
+        title: 'Render export',
+        description:
+          'Render the loaded project in the browser and return base64 chunks. ' +
+          'Intended for local bridges; use maxBytes to guard large payloads.',
+        inputSchema: renderOptionsSchema,
+      },
+      handler: async (args) => wrap(await call('renderExport', args)),
+    },
+    {
+      name: 'freecut_render_project',
+      config: {
+        title: 'Render project',
+        description:
+          'Open a workspace project by id or name, render it in-browser, and optionally write the output file from MCP.',
+        inputSchema: {
+          projectId: z.string().optional(),
+          projectName: z.string().optional(),
+          outputPath: z.string().optional(),
+          ...renderOptionsSchema,
+        },
+      },
+      handler: async (args) => {
+        await openProjectBySelector(bridge, args);
+        return wrap(await renderAndMaybeWrite(bridge, args));
+      },
     },
   ];
 }

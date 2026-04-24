@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from '../src/index.mjs';
 import { parse } from '../src/sdk.mjs';
+import { runRender } from '../src/commands/render.mjs';
 
 class BufferStream {
   constructor() {
@@ -217,6 +218,132 @@ describe('freecut CLI', () => {
     const result = JSON.parse(streams.stdout.text);
     expect(result.fail).toBe(0);
     expect(result.checks.map((check) => check.name)).toContain('snapshot');
+  });
+
+  it('render loads a snapshot into a browser bridge and writes decoded output', async () => {
+    const file = join(tmp, 'render.fcproject');
+    const output = join(tmp, 'rendered.mp4');
+    await run(['new', file, '--fps', '30']);
+
+    const calls = [];
+    const bridge = {
+      waitForApi: async () => calls.push({ method: 'waitForApi' }),
+      callApi: async (method, args = []) => {
+        calls.push({ method, args });
+        if (method === 'renderExport') {
+          return {
+            mimeType: 'video/mp4',
+            duration: 1,
+            fileSize: 8,
+            extension: 'mp4',
+            chunks: [Buffer.from('rendered').toString('base64')],
+          };
+        }
+        return { projectId: 'project-1' };
+      },
+      close: async () => calls.push({ method: 'close' }),
+    };
+
+    const streams = io();
+    await runRender(
+      ['render.fcproject', '--output', output, '--json', '--url', 'localhost:5173'],
+      streams,
+      {
+        readFile: (path, encoding) => readFile(path === 'render.fcproject' ? file : path, encoding),
+        writeFile,
+        connectBridge: async (opts) => {
+          calls.push({ method: 'connect', opts });
+          return bridge;
+        },
+      },
+    );
+
+    expect(await readFile(output, 'utf8')).toBe('rendered');
+    const result = JSON.parse(streams.stdout.text);
+    expect(result.output).toBe(output);
+    expect(calls.map((call) => call.method)).toEqual([
+      'connect',
+      'waitForApi',
+      'loadSnapshot',
+      'renderExport',
+      'close',
+    ]);
+    expect(calls[3].args[0]).toMatchObject({ mode: 'video', quality: 'high', videoContainer: 'mp4' });
+  });
+
+  it('render can open an existing project by name and pass a range', async () => {
+    const output = join(tmp, 'abc-5s.mp4');
+    const calls = [];
+    const bridge = {
+      waitForApi: async () => calls.push({ method: 'waitForApi' }),
+      callApi: async (method, args = []) => {
+        calls.push({ method, args });
+        if (method === 'listProjects') {
+          return [{ id: 'project-abc', name: 'ABC', width: 1920, height: 1080, fps: 30, updatedAt: 1 }];
+        }
+        if (method === 'openProject') return { id: args[0], name: 'ABC' };
+        if (method === 'getProjectMeta') return { id: 'project-abc', name: 'ABC', width: 1920, height: 1080, fps: 30 };
+        if (method === 'renderExport') {
+          return {
+            mimeType: 'video/mp4',
+            duration: 5,
+            fileSize: 8,
+            extension: 'mp4',
+            chunks: [Buffer.from('rendered').toString('base64')],
+          };
+        }
+        return null;
+      },
+      close: async () => calls.push({ method: 'close' }),
+    };
+
+    await runRender(
+      ['--project', 'ABC', '--duration', '5', '--output', output, '--json'],
+      io(),
+      {
+        writeFile,
+        connectBridge: async (opts) => {
+          calls.push({ method: 'connect', opts });
+          return bridge;
+        },
+      },
+    );
+
+    expect(await readFile(output, 'utf8')).toBe('rendered');
+    expect(calls.map((call) => call.method)).toEqual([
+      'connect',
+      'waitForApi',
+      'listProjects',
+      'openProject',
+      'getProjectMeta',
+      'renderExport',
+      'close',
+    ]);
+    expect(calls[5].args[0]).toMatchObject({
+      videoContainer: 'mp4',
+      range: { startSeconds: 0, durationSeconds: 5 },
+    });
+  });
+
+  it('render refuses snapshots with lint errors before connecting to Chrome', async () => {
+    const file = join(tmp, 'render-invalid.fcproject');
+    await run(['new', file]);
+    const snap = JSON.parse(await readFile(file, 'utf8'));
+    snap.project.timeline.items.push({
+      id: 'bad-item',
+      type: 'text',
+      trackId: 'missing-track',
+      from: 0,
+      durationInFrames: 30,
+      label: 'bad',
+      text: 'bad',
+      color: '#fff',
+    });
+    await writeFile(file, JSON.stringify(snap, null, 2), 'utf8');
+    const connectBridge = vi.fn();
+
+    await expect(runRender([file], io(), { connectBridge })).rejects.toThrow(/lint error/);
+    expect(connectBridge).not.toHaveBeenCalled();
   });
 
   it('rejects cross-track transitions', async () => {

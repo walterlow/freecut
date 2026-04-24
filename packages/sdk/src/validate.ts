@@ -202,6 +202,52 @@ function validateTimeline(
       ctx.error('marker_frame_invalid', `marker "${marker.id}" frame must be a non-negative integer`, `${path}.frame`, marker.id);
     }
   });
+
+  validateInOutPoints(timeline, ctx);
+}
+
+function validateInOutPoints(
+  timeline: Timeline,
+  ctx: {
+    error: (code: string, message: string, path?: string, entityId?: string) => void;
+    warning: (code: string, message: string, path?: string, entityId?: string) => void;
+  },
+) {
+  const hasIn = timeline.inPoint !== undefined && timeline.inPoint !== null;
+  const hasOut = timeline.outPoint !== undefined && timeline.outPoint !== null;
+  if (!hasIn && !hasOut) return;
+  if (hasIn !== hasOut) {
+    ctx.error(
+      'in_out_incomplete',
+      'timeline inPoint and outPoint must be set together',
+      'project.timeline',
+    );
+    return;
+  }
+  if (!Number.isInteger(timeline.inPoint) || Number(timeline.inPoint) < 0) {
+    ctx.error('in_point_invalid', 'timeline inPoint must be a non-negative integer', 'project.timeline.inPoint');
+  }
+  if (!Number.isInteger(timeline.outPoint) || Number(timeline.outPoint) <= 0) {
+    ctx.error('out_point_invalid', 'timeline outPoint must be a positive integer', 'project.timeline.outPoint');
+  }
+  if (
+    Number.isInteger(timeline.inPoint)
+    && Number.isInteger(timeline.outPoint)
+    && Number(timeline.inPoint) >= Number(timeline.outPoint)
+  ) {
+    ctx.error('in_out_range_invalid', 'timeline inPoint must be before outPoint', 'project.timeline');
+  }
+  const lastFrame = (timeline.items ?? []).reduce(
+    (max, item) => Math.max(max, item.from + item.durationInFrames),
+    0,
+  );
+  if (lastFrame > 0 && Number.isInteger(timeline.outPoint) && Number(timeline.outPoint) > lastFrame) {
+    ctx.warning(
+      'out_point_after_timeline',
+      `timeline outPoint ${timeline.outPoint} is after the last item frame ${lastFrame}`,
+      'project.timeline.outPoint',
+    );
+  }
 }
 
 function validateItem(

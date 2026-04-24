@@ -329,6 +329,30 @@ export class ProjectBuilder {
 
   // ---- markers ----------------------------------------------------------
 
+  setInOutPoints(inPoint: number | null, outPoint: number | null): this {
+    const sanitized = sanitizeInOutPoints(inPoint, outPoint);
+    this.project.timeline!.inPoint = sanitized.inPoint;
+    this.project.timeline!.outPoint = sanitized.outPoint;
+    return this;
+  }
+
+  setRenderRange(opts: { startFrame?: number; durationInFrames?: number; endFrame?: number }): this {
+    const start = opts.startFrame ?? 0;
+    const end = opts.endFrame ?? (
+      opts.durationInFrames === undefined ? undefined : start + opts.durationInFrames
+    );
+    if (end === undefined) {
+      throw new Error('setRenderRange requires durationInFrames or endFrame');
+    }
+    return this.setInOutPoints(start, end);
+  }
+
+  clearInOutPoints(): this {
+    this.project.timeline!.inPoint = undefined;
+    this.project.timeline!.outPoint = undefined;
+    return this;
+  }
+
   addMarker(opts: { frame: number; label?: string; color?: string }): Marker {
     const m: Marker = {
       id: this.ids('marker'),
@@ -401,4 +425,18 @@ function pick<T extends object, K extends keyof T>(obj: T, keys: readonly K[]): 
     if (obj[k] !== undefined) out[k] = obj[k];
   }
   return out;
+}
+
+function sanitizeInOutPoints(inPoint: number | null, outPoint: number | null): { inPoint?: number; outPoint?: number } {
+  if (inPoint === null && outPoint === null) return {};
+  if (!Number.isInteger(inPoint) || inPoint < 0) {
+    throw new RangeError(`inPoint must be a non-negative integer or null, got ${inPoint}`);
+  }
+  if (!Number.isInteger(outPoint) || outPoint <= 0) {
+    throw new RangeError(`outPoint must be a positive integer or null, got ${outPoint}`);
+  }
+  if (inPoint >= outPoint) {
+    throw new RangeError(`inPoint must be before outPoint, got ${inPoint} >= ${outPoint}`);
+  }
+  return { inPoint, outPoint };
 }

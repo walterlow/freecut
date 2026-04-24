@@ -69,6 +69,8 @@ writeFileSync('out.fcproject', serialize(p));
   `addTextClip()`, `addShapeClip()`, `addAdjustmentLayer()`
 - `builder.applyGpuEffect()`, `setTransform()`, `split()`, `addTransition()`,
   `addMarker()`
+- `builder.setInOutPoints()`, `setRenderRange()`, `clearInOutPoints()` for
+  render IO markers
 - `builder.secondsToFrames()`, `endOfTrack()`, `touch()`
 - `serialize(p)` / `parse(json)` — JSON round-trip
 - `validateSnapshot(snapshot)` / `lintSnapshot(snapshot)` — structural checks

@@ -66,11 +66,12 @@ node bin/freecut-mcp.mjs --port 9222
 
 | Tool | Purpose |
 | --- | --- |
-| `freecut_get_timeline` | Tracks, items, transitions, markers |
+| `freecut_get_timeline` | Tracks, items, transitions, markers, IO points |
 | `freecut_get_playback` | Current frame, isPlaying, zoom |
 | `freecut_get_project` | Project id/name/resolution/fps |
 | `freecut_get_selection` | Currently selected ids |
 | `freecut_play` / `freecut_pause` / `freecut_seek` | Playback |
+| `freecut_set_in_out` / `freecut_clear_in_out` | Timeline IO marker controls |
 | `freecut_select_items` | Replace selection |
 | `freecut_add_track` / `freecut_remove_track` | Tracks |
 | `freecut_add_item` / `freecut_update_item` / `freecut_move_item` / `freecut_remove_item` / `freecut_set_transform` | Items |
@@ -78,6 +79,8 @@ node bin/freecut-mcp.mjs --port 9222
 | `freecut_add_transition` / `freecut_remove_transition` | Transitions |
 | `freecut_add_marker` | Markers |
 | `freecut_load_snapshot` / `freecut_export_snapshot` | Round-trip SDK/CLI snapshots through the live editor |
+| `freecut_render_export` | Render the loaded project in-browser and return base64 chunks |
+| `freecut_render_project` | Open a project by id/name, render a range, optionally write `outputPath` |
 
 All tools return both a `text` content block (pretty-printed JSON) and a
 `structuredContent` payload for clients that consume structured output.

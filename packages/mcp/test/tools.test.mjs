@@ -15,6 +15,11 @@ function mockBridge() {
       if (method === 'addItem') return { id: 'item-1', type: args?.[0]?.type, trackId: args?.[0]?.trackId, from: args?.[0]?.from, durationInFrames: args?.[0]?.durationInFrames };
       if (method === 'getPlayback') return { currentFrame: 0, isPlaying: false, zoom: 1 };
       if (method === 'getTimeline') return { tracks: [], items: [], transitions: [], markers: [] };
+      if (method === 'listProjects') return [{ id: 'project-abc', name: 'ABC' }];
+      if (method === 'openProject') return { id: args[0], name: 'ABC' };
+      if (method === 'setInOutPoints') return args[0];
+      if (method === 'clearInOutPoints') return { inPoint: null, outPoint: null };
+      if (method === 'renderExport') return { mimeType: 'video/mp4', fileSize: 4, duration: 1, extension: 'mp4', chunks: ['AAAA'] };
       return null;
     }),
   };
@@ -30,6 +35,7 @@ describe('tool definitions', () => {
       'freecut_add_marker',
       'freecut_add_track',
       'freecut_add_transition',
+      'freecut_clear_in_out',
       'freecut_create_project',
       'freecut_export_snapshot',
       'freecut_get_playback',
@@ -48,8 +54,11 @@ describe('tool definitions', () => {
       'freecut_remove_item',
       'freecut_remove_track',
       'freecut_remove_transition',
+      'freecut_render_export',
+      'freecut_render_project',
       'freecut_seek',
       'freecut_select_items',
+      'freecut_set_in_out',
       'freecut_set_transform',
       'freecut_update_item',
       'freecut_workspace_status',
@@ -82,6 +91,15 @@ describe('tool definitions', () => {
     expect(bridge.calls).toEqual([{ method: 'seek', args: [42] }]);
   });
 
+  it('set_in_out forwards a range object', async () => {
+    const bridge = mockBridge();
+    const setInOut = buildTools(bridge).find((t) => t.name === 'freecut_set_in_out');
+    await setInOut.handler({ inPoint: 0, outPoint: 150 });
+    expect(bridge.calls).toEqual([
+      { method: 'setInOutPoints', args: [{ inPoint: 0, outPoint: 150 }] },
+    ]);
+  });
+
   it('add_effect reshapes args into (itemId, effectObject, enabled)', async () => {
     const bridge = mockBridge();
     const addEffect = buildTools(bridge).find((t) => t.name === 'freecut_add_effect');
@@ -110,6 +128,36 @@ describe('tool definitions', () => {
     expect(bridge.calls).toEqual([
       { method: 'moveItem', args: ['item-1', { from: 60, trackId: 'track-2' }] },
     ]);
+  });
+
+  it('render_export forwards a single options object', async () => {
+    const bridge = mockBridge();
+    const render = buildTools(bridge).find((t) => t.name === 'freecut_render_export');
+    const out = await render.handler({ quality: 'medium', videoContainer: 'webm', maxBytes: 1024 });
+    expect(bridge.calls).toEqual([
+      { method: 'renderExport', args: [{ quality: 'medium', videoContainer: 'webm', maxBytes: 1024 }] },
+    ]);
+    expect(out.structuredContent.mimeType).toBe('video/mp4');
+  });
+
+  it('render_project opens a named project and renders with a range', async () => {
+    const bridge = mockBridge();
+    const render = buildTools(bridge).find((t) => t.name === 'freecut_render_project');
+    const out = await render.handler({
+      projectName: 'ABC',
+      quality: 'low',
+      videoContainer: 'mp4',
+      range: { startSeconds: 0, durationSeconds: 5 },
+    });
+    expect(bridge.calls).toEqual([
+      { method: 'listProjects', args: [] },
+      { method: 'openProject', args: ['project-abc'] },
+      {
+        method: 'renderExport',
+        args: [{ quality: 'low', videoContainer: 'mp4', range: { startSeconds: 0, durationSeconds: 5 } }],
+      },
+    ]);
+    expect(out.structuredContent.duration).toBe(1);
   });
 });
 

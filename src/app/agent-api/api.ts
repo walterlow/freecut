@@ -13,6 +13,9 @@ import type {
   AgentGpuEffect,
   AgentMarker,
   AgentPlaybackState,
+  AgentRenderRange,
+  AgentRenderExportOptions,
+  AgentRenderExportResult,
   AgentSubscriber,
   AgentTimelineItem,
   AgentTimelineSnapshot,
@@ -20,6 +23,7 @@ import type {
   AgentTransition,
   AgentTransform,
 } from './types';
+import type { ExportMode, ExportSettings } from '@/types/export';
 
 export interface FreecutAgentAPI {
   readonly version: string;
@@ -35,6 +39,8 @@ export interface FreecutAgentAPI {
   play(): Promise<void>;
   pause(): Promise<void>;
   seek(frame: number): Promise<void>;
+  setInOutPoints(range: { inPoint: number | null; outPoint: number | null }): Promise<{ inPoint: number | null; outPoint: number | null }>;
+  clearInOutPoints(): Promise<{ inPoint: null; outPoint: null }>;
 
   // Selection
   selectItems(ids: string[]): Promise<void>;
@@ -77,6 +83,7 @@ export interface FreecutAgentAPI {
   getWorkspaceStatus(): Promise<{ granted: boolean; name?: string }>;
   loadSnapshot(snapshotJson: string): Promise<{ projectId: string }>;
   exportSnapshot(): Promise<unknown>;
+  renderExport(opts?: AgentRenderExportOptions): Promise<AgentRenderExportResult>;
 
   // Events
   subscribe(callback: AgentSubscriber): () => void;
@@ -237,6 +244,79 @@ function pick<T extends object>(obj: T, keys: readonly (keyof T)[]): Partial<T> 
   return out;
 }
 
+async function blobToBase64Chunks(blob: Blob, chunkSize: number): Promise<string[]> {
+  const chunks: string[] = [];
+  for (let start = 0; start < blob.size; start += chunkSize) {
+    const bytes = new Uint8Array(await blob.slice(start, start + chunkSize).arrayBuffer());
+    chunks.push(uint8ToBase64(bytes));
+  }
+  return chunks;
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const batchSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += batchSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + batchSize));
+  }
+  return btoa(binary);
+}
+
+function extensionFromMime(mimeType: string, mode: 'video' | 'audio'): string {
+  const mime = mimeType.toLowerCase();
+  if (mime.includes('webm')) return 'webm';
+  if (mime.includes('matroska')) return 'mkv';
+  if (mime.includes('quicktime') || mime.includes('mov')) return 'mov';
+  if (mime.includes('mpeg') || mime.includes('mp3')) return 'mp3';
+  if (mime.includes('wav') || mime.includes('wave')) return 'wav';
+  if (mime.includes('aac') || mime.includes('adts')) return 'aac';
+  return mode === 'audio' ? 'aac' : 'mp4';
+}
+
+function resolveRenderRange(
+  range: AgentRenderRange | undefined,
+  fps: number,
+): { inPoint: number; outPoint: number } | null {
+  if (!range) return null;
+  const startFrame = firstDefined(
+    range.inFrame,
+    range.startFrame,
+    range.startSeconds === undefined ? undefined : Math.round(range.startSeconds * fps),
+  ) ?? 0;
+  const outFrame = firstDefined(
+    range.outFrame,
+    range.endFrame,
+    range.endSeconds === undefined ? undefined : Math.round(range.endSeconds * fps),
+    range.durationInFrames === undefined ? undefined : startFrame + range.durationInFrames,
+    range.durationSeconds === undefined ? undefined : startFrame + Math.round(range.durationSeconds * fps),
+  );
+  if (outFrame === undefined) {
+    throw new Error('render range requires outFrame, endFrame, endSeconds, durationInFrames, or durationSeconds');
+  }
+  return validateInOutPoints(startFrame, outFrame);
+}
+
+function validateInOutPoints(inPoint: number | null, outPoint: number | null): { inPoint: number; outPoint: number } | null {
+  if (inPoint === null && outPoint === null) return null;
+  if (inPoint === null || outPoint === null) {
+    throw new Error('inPoint and outPoint must be set together, or both null');
+  }
+  if (!Number.isInteger(inPoint) || inPoint < 0) {
+    throw new RangeError(`inPoint must be a non-negative integer, got ${inPoint}`);
+  }
+  if (!Number.isInteger(outPoint) || outPoint <= 0) {
+    throw new RangeError(`outPoint must be a positive integer, got ${outPoint}`);
+  }
+  if (inPoint >= outPoint) {
+    throw new RangeError(`inPoint must be before outPoint, got ${inPoint} >= ${outPoint}`);
+  }
+  return { inPoint, outPoint };
+}
+
+function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
+  return values.find((value) => value !== undefined);
+}
+
 // ---------------------------------------------------------------------------
 // Subscription
 // ---------------------------------------------------------------------------
@@ -339,7 +419,8 @@ export function createAgentAPI(): FreecutAgentAPI {
 
     async getTimeline() {
       const { useTimelineStore, useItemsStore, useTransitionsStore, useMarkersStore } = await loadStores();
-      const tracks = useTimelineStore.getState().tracks ?? [];
+      const timelineState = useTimelineStore.getState();
+      const tracks = timelineState.tracks ?? [];
       const items = useItemsStore.getState().items ?? [];
       const transitions = useTransitionsStore.getState().transitions ?? [];
       const markers = useMarkersStore.getState().markers ?? [];
@@ -364,6 +445,8 @@ export function createAgentAPI(): FreecutAgentAPI {
           label: m.label,
           color: String(m.color),
         })),
+        inPoint: timelineState.inPoint ?? null,
+        outPoint: timelineState.outPoint ?? null,
       };
     },
 
@@ -406,6 +489,28 @@ export function createAgentAPI(): FreecutAgentAPI {
       }
       const { usePlaybackStore } = await loadStores();
       usePlaybackStore.getState().setCurrentFrame(Math.round(frame));
+    },
+
+    async setInOutPoints(range: { inPoint: number | null; outPoint: number | null }) {
+      const validated = validateInOutPoints(range.inPoint, range.outPoint);
+      const { useTimelineStore } = await loadStores();
+      if (!validated) {
+        useTimelineStore.getState().clearInOutPoints();
+        return { inPoint: null, outPoint: null };
+      }
+      useTimelineStore.getState().setInPoint(validated.inPoint);
+      useTimelineStore.getState().setOutPoint(validated.outPoint);
+      const state = useTimelineStore.getState();
+      return {
+        inPoint: state.inPoint ?? null,
+        outPoint: state.outPoint ?? null,
+      };
+    },
+
+    async clearInOutPoints() {
+      const { useTimelineStore } = await loadStores();
+      useTimelineStore.getState().clearInOutPoints();
+      return { inPoint: null, outPoint: null };
     },
 
     async selectItems(ids: string[]) {
@@ -773,6 +878,119 @@ export function createAgentAPI(): FreecutAgentAPI {
       const project = useProjectStore.getState().currentProject;
       if (!project) throw new Error('no project is currently loaded');
       return createSnapshotFromProject(project);
+    },
+
+    async renderExport(opts: AgentRenderExportOptions = {}) {
+      const [
+        { useTimelineStore, useProjectStore },
+        { usePlaybackStore },
+        clientRenderer,
+        renderEngine,
+        timelineConverter,
+        mediaLibrary,
+      ] = await Promise.all([
+        loadStores(),
+        import('@/shared/state/playback'),
+        import('@/features/export/utils/client-renderer'),
+        import('@/features/export/utils/client-render-engine'),
+        import('@/features/export/utils/timeline-to-composition'),
+        import('@/features/export/deps/media-library'),
+      ]);
+
+      const currentProject = useProjectStore.getState().currentProject;
+      if (!currentProject) throw new Error('no project is currently loaded');
+
+      const timeline = useTimelineStore.getState();
+      const fps = timeline.fps;
+      const projectWidth = currentProject.metadata.width;
+      const projectHeight = currentProject.metadata.height;
+      const mode: ExportMode = opts.mode ?? 'video';
+      const quality: ExportSettings['quality'] = opts.quality ?? 'high';
+      const baseSettings: ExportSettings = {
+        codec: opts.codec ?? (opts.videoContainer === 'webm' ? 'vp9' : 'h264'),
+        quality,
+        resolution: {
+          width: opts.resolution?.width ?? projectWidth,
+          height: opts.resolution?.height ?? projectHeight,
+        },
+      };
+
+      const clientSettings = clientRenderer.mapToClientSettings(baseSettings, fps);
+      if (mode === 'video' && opts.videoContainer) {
+        clientSettings.container = opts.videoContainer;
+      } else if (mode === 'audio') {
+        const audioContainer = opts.audioContainer ?? 'mp3';
+        clientSettings.container = audioContainer;
+        clientSettings.audioCodec = clientRenderer.getDefaultAudioCodec(audioContainer);
+        clientSettings.audioBitrate = clientRenderer.getAudioBitrateForQuality(quality);
+      }
+      clientSettings.mode = mode;
+
+      if (mode === 'video') {
+        const validation = clientRenderer.validateSettings(clientSettings);
+        if (!validation.valid) throw new Error(validation.error ?? 'invalid export settings');
+
+        const supportedCodecs = await clientRenderer.getSupportedCodecs({
+          width: clientSettings.resolution.width,
+          height: clientSettings.resolution.height,
+          bitrate: clientSettings.videoBitrate,
+        });
+        if (!supportedCodecs.includes(clientSettings.codec)) {
+          const fallback = clientRenderer.selectFallbackVideoCodec(
+            supportedCodecs,
+            clientSettings.container as Parameters<typeof clientRenderer.selectFallbackVideoCodec>[1],
+          );
+          if (!fallback) {
+            throw new Error('no supported video codecs available in this browser for the requested export');
+          }
+          clientSettings.codec = fallback;
+        }
+      }
+
+      const renderWholeProject = opts.renderWholeProject ?? false;
+      const requestedRange = renderWholeProject ? null : resolveRenderRange(opts.range, fps);
+      const effectiveInPoint = renderWholeProject ? null : (requestedRange?.inPoint ?? timeline.inPoint);
+      const effectiveOutPoint = renderWholeProject ? null : (requestedRange?.outPoint ?? timeline.outPoint);
+      const playback = usePlaybackStore.getState();
+      const composition = timelineConverter.convertTimelineToComposition(
+        timeline.tracks,
+        timeline.items,
+        timeline.transitions,
+        fps,
+        projectWidth,
+        projectHeight,
+        effectiveInPoint,
+        effectiveOutPoint,
+        timeline.keyframes,
+        currentProject.metadata.backgroundColor,
+        playback.busAudioEq,
+        playback.masterBusDb,
+      );
+
+      composition.tracks = await mediaLibrary.resolveMediaUrls(composition.tracks, { useProxy: false });
+
+      const onProgress = () => {};
+      const result = mode === 'audio'
+        ? await renderEngine.renderAudioOnly({ settings: clientSettings, composition, onProgress })
+        : await renderEngine.renderComposition({ settings: clientSettings, composition, onProgress });
+
+      const maxBytes = opts.maxBytes ?? 128 * 1024 * 1024;
+      if (result.fileSize > maxBytes) {
+        throw new Error(
+          `render result is ${result.fileSize} bytes, which exceeds maxBytes=${maxBytes}; ` +
+          'raise maxBytes or render from the browser UI for large exports',
+        );
+      }
+
+      const chunkSize = opts.chunkSize ?? 512 * 1024;
+      return {
+        mimeType: result.mimeType,
+        duration: result.duration,
+        fileSize: result.fileSize,
+        extension: extensionFromMime(result.mimeType, mode),
+        chunks: await blobToBase64Chunks(result.blob, chunkSize),
+        chunkEncoding: 'base64' as const,
+      };
     },
 
     subscribe(callback: AgentSubscriber): () => void {

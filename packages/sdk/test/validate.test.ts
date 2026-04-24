@@ -64,4 +64,15 @@ describe('snapshot validation', () => {
     expect(result.ok).toBe(false);
     expect(result.findings.some((finding) => finding.code === 'duplicate_id')).toBe(true);
   });
+
+  it('validates timeline in/out points', () => {
+    const p = createProject({ name: 'range', ids: deterministicIds() });
+    p.project.timeline!.inPoint = 30;
+    p.project.timeline!.outPoint = 15;
+
+    const result = validateSnapshot(toSnapshot(p));
+
+    expect(result.ok).toBe(false);
+    expect(result.findings.map((finding) => finding.code)).toContain('in_out_range_invalid');
+  });
 });

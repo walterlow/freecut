@@ -101,6 +101,52 @@ export interface AgentTimelineSnapshot {
   items: AgentTimelineItem[];
   transitions: AgentTransition[];
   markers: AgentMarker[];
+  inPoint: number | null;
+  outPoint: number | null;
+}
+
+export interface AgentRenderRange {
+  /** Inclusive render start frame in project fps. */
+  inFrame?: number;
+  /** Exclusive render end frame in project fps. */
+  outFrame?: number;
+  /** Alias for inFrame. */
+  startFrame?: number;
+  /** Alias for outFrame. */
+  endFrame?: number;
+  /** Duration from the resolved start frame. */
+  durationInFrames?: number;
+  /** Start time in seconds; converted with project fps. */
+  startSeconds?: number;
+  /** End time in seconds; converted with project fps. */
+  endSeconds?: number;
+  /** Duration in seconds from the resolved start. */
+  durationSeconds?: number;
+}
+
+export interface AgentRenderExportOptions {
+  mode?: 'video' | 'audio';
+  quality?: 'low' | 'medium' | 'high' | 'ultra';
+  codec?: 'h264' | 'h265' | 'vp8' | 'vp9' | 'av1' | 'prores';
+  videoContainer?: 'mp4' | 'mov' | 'webm' | 'mkv';
+  audioContainer?: 'mp3' | 'aac' | 'wav';
+  resolution?: { width: number; height: number };
+  renderWholeProject?: boolean;
+  /** Overrides timeline IO markers for this render without mutating the project. */
+  range?: AgentRenderRange;
+  /** Maximum binary payload returned over the agent bridge. Defaults to 128 MiB. */
+  maxBytes?: number;
+  /** Binary chunk size before base64 encoding. Defaults to 512 KiB. */
+  chunkSize?: number;
+}
+
+export interface AgentRenderExportResult {
+  mimeType: string;
+  duration: number;
+  fileSize: number;
+  extension: string;
+  chunks: string[];
+  chunkEncoding: 'base64';
 }
 
 export type AgentSubscriber = (event: { type: 'change' }) => void;

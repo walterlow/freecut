@@ -8,14 +8,14 @@ describe('createAgentAPI', () => {
     const expected: Array<keyof ReturnType<typeof createAgentAPI>> = [
       'version', 'ready',
       'getPlayback', 'getTimeline', 'getSelection', 'getProjectMeta',
-      'play', 'pause', 'seek',
+      'play', 'pause', 'seek', 'setInOutPoints', 'clearInOutPoints',
       'selectItems',
       'addTrack', 'removeTrack',
       'addItem', 'updateItem', 'moveItem', 'removeItem', 'setTransform',
       'addEffect', 'removeEffect',
       'addTransition', 'removeTransition',
       'addMarker',
-      'loadSnapshot', 'exportSnapshot',
+      'loadSnapshot', 'exportSnapshot', 'renderExport',
       'subscribe',
     ];
     for (const name of expected) {
