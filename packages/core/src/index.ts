@@ -1,5 +1,24 @@
 export { deterministicIds, randomIds } from './ids.js';
 export type { IdGenerator } from './ids.js';
+export {
+  DEFAULT_BEZIER_POINTS,
+  DEFAULT_SPRING_PARAMS,
+  applyEasing,
+  applyEasingConfig,
+  cubicBezier,
+  easeIn,
+  easeInOut,
+  easeOut,
+  springEasing,
+} from './easing.js';
+export type {
+  AdvancedEasingType,
+  BasicEasingType,
+  BezierControlPoints,
+  EasingConfig,
+  EasingType,
+  SpringParameters,
+} from './easing.js';
 export type {
   AdjustmentItem,
   AudioItem,

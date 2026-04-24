@@ -6,4 +6,4 @@ export {
   springEasing,
   applyEasing,
   applyEasingConfig,
-} from '@/core/animation/easing';
+} from '@freecut/core/easing';

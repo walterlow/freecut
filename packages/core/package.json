@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./easing": {
+      "types": "./dist/easing.d.ts",
+      "default": "./dist/easing.js"
+    },
     "./range": {
       "types": "./dist/range.d.ts",
       "default": "./dist/range.js"

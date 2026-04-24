@@ -1,7 +1,7 @@
 import type { TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 import type { ResolvedTransitionWindow } from '@freecut/core/transition-plan';
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing';
+import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@freecut/core/easing';
 
 export interface ActiveTransition<TItem extends TimelineItem = TimelineItem> {
   transition: ResolvedTransitionWindow<TItem, Transition>['transition'];

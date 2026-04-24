@@ -1,15 +1,38 @@
-/**
- * Shared easing functions for animation and interpolation.
- * Each function takes a progress value (0-1) and returns an eased value.
- */
+export type BasicEasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+export type AdvancedEasingType = 'cubic-bezier' | 'spring';
+export type EasingType = BasicEasingType | AdvancedEasingType;
 
-import type {
-  EasingType,
-  EasingConfig,
-  BezierControlPoints,
-  SpringParameters,
-} from '@/types/keyframe';
-import { DEFAULT_BEZIER_POINTS, DEFAULT_SPRING_PARAMS } from '@/types/keyframe';
+export interface BezierControlPoints {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface SpringParameters {
+  tension: number;
+  friction: number;
+  mass: number;
+}
+
+export interface EasingConfig {
+  type: EasingType;
+  bezier?: BezierControlPoints;
+  spring?: SpringParameters;
+}
+
+export const DEFAULT_SPRING_PARAMS: SpringParameters = {
+  tension: 170,
+  friction: 26,
+  mass: 1,
+};
+
+export const DEFAULT_BEZIER_POINTS: BezierControlPoints = {
+  x1: 0.42,
+  y1: 0,
+  x2: 0.58,
+  y2: 1,
+};
 
 function linear(t: number): number {
   return t;

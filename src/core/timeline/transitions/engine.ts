@@ -14,7 +14,7 @@
  */
 
 import type { Transition, TransitionTiming, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing';
+import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@freecut/core/easing';
 import type { TransitionRenderer } from './registry';
 
 // Lazy registry reference to avoid circular dependency at import time.
