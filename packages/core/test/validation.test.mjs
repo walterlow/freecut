@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lintSnapshot, validateSnapshot } from '../src/index.mjs';
+import { lintSnapshot, validateSnapshot } from '../src/index.ts';
 
 describe('snapshot validation', () => {
   it('validates snapshots and reports timeline findings', () => {

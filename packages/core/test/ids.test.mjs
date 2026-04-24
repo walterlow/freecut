@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deterministicIds, randomIds } from '../src/index.mjs';
+import { deterministicIds, randomIds } from '../src/index.ts';
 
 describe('id helpers', () => {
   it('generates deterministic ids per kind', () => {

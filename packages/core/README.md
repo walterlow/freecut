@@ -35,9 +35,9 @@ into this package instead of duplicating project/range/media rules.
 
 ## Source layout
 
-- `index.mjs`: public export barrel only.
-- `snapshot.mjs`: snapshot parse/serialize helpers.
-- `validation.mjs`: snapshot validation and linting.
-- `workspace.mjs`: workspace inspection, render range, and media planning.
-- `time.mjs`: frame/second conversion.
-- `ids.mjs`: deterministic and random id generation.
+- `index.ts`: public export barrel only.
+- `snapshot.ts`: snapshot parse/serialize helpers.
+- `validation.ts`: snapshot validation and linting.
+- `workspace.ts`: workspace inspection, render range, and media planning.
+- `time.ts`: frame/second conversion.
+- `ids.ts`: deterministic and random id generation.

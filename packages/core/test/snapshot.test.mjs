@@ -4,7 +4,7 @@ import {
   parseSnapshot,
   serializeSnapshot,
   toSnapshot,
-} from '../src/index.mjs';
+} from '../src/index.ts';
 
 describe('snapshot serialization', () => {
   it('serializes and parses snapshots', () => {

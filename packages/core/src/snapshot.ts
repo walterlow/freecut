@@ -1,3 +1,4 @@
+// @ts-nocheck
 export const SNAPSHOT_VERSION = '1.0';
 export const CORE_VERSION = '0.0.1';
 

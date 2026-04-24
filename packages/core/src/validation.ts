@@ -1,3 +1,4 @@
+// @ts-nocheck
 const SOURCE_TIMED_TYPES = new Set(['video', 'audio', 'composition']);
 const MEDIA_TYPES = new Set(['video', 'audio', 'image']);
 

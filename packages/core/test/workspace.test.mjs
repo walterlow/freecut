@@ -8,7 +8,7 @@ import {
   collectProjectMediaUsage,
   loadWorkspaceRenderSource,
   resolveProjectRenderRange,
-} from '../src/index.mjs';
+} from '../src/index.ts';
 
 let tmp;
 beforeAll(() => {

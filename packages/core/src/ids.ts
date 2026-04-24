@@ -1,3 +1,5 @@
+export type IdGenerator = (kind: string) => string;
+
 function randomHex(bytes) {
   const bits = [];
   for (let i = 0; i < bytes; i++) {
@@ -6,9 +8,9 @@ function randomHex(bytes) {
   return bits.join('');
 }
 
-export const randomIds = (kind) => `${kind}-${randomHex(8)}`;
+export const randomIds: IdGenerator = (kind) => `${kind}-${randomHex(8)}`;
 
-export function deterministicIds(seed = 0) {
+export function deterministicIds(seed = 0): IdGenerator {
   const counters = new Map();
   return (kind) => {
     const next = (counters.get(kind) ?? seed) + 1;

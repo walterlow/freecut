@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { framesToSeconds, secondsToFrames } from '../src/index.mjs';
+import { framesToSeconds, secondsToFrames } from '../src/index.ts';
 
 describe('time helpers', () => {
   it('converts between seconds and project frames', () => {

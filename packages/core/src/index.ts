@@ -1,4 +1,5 @@
-export { deterministicIds, randomIds } from './ids.mjs';
+export { deterministicIds, randomIds } from './ids.js';
+export type { IdGenerator } from './ids.js';
 export {
   CORE_VERSION,
   SNAPSHOT_VERSION,
@@ -6,9 +7,9 @@ export {
   parseSnapshot,
   serializeSnapshot,
   toSnapshot,
-} from './snapshot.mjs';
-export { framesToSeconds, secondsToFrames } from './time.mjs';
-export { lintSnapshot, validateSnapshot } from './validation.mjs';
+} from './snapshot.js';
+export { framesToSeconds, secondsToFrames } from './time.js';
+export { lintSnapshot, validateSnapshot } from './validation.js';
 export {
   buildRange,
   collectProjectMediaUsage,
@@ -20,4 +21,4 @@ export {
   mimeTypeFromFileName,
   readWorkspaceProject,
   resolveProjectRenderRange,
-} from './workspace.mjs';
+} from './workspace.js';
