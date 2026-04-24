@@ -1,4 +1,4 @@
-export function secondsToFrames(seconds, fps) {
+export function secondsToFrames(seconds: number, fps: number): number {
   if (!Number.isFinite(seconds) || seconds < 0) {
     throw new RangeError(`seconds must be a non-negative finite number, got ${seconds}`);
   }
@@ -8,7 +8,7 @@ export function secondsToFrames(seconds, fps) {
   return Math.round(seconds * fps);
 }
 
-export function framesToSeconds(frames, fps) {
+export function framesToSeconds(frames: number, fps: number): number {
   if (!Number.isFinite(fps) || fps <= 0) {
     throw new RangeError(`fps must be a positive finite number, got ${fps}`);
   }

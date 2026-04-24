@@ -25,12 +25,18 @@ export interface SnapshotValidationResult {
 
 type PushFinding = (finding: SnapshotFinding) => void;
 type ReportFinding = (code: string, message: string, path?: string, entityId?: string) => void;
+interface ValidationContext {
+  mediaIds: Set<string>;
+  warnOnMissingMedia: boolean;
+  error: ReportFinding;
+  warning: ReportFinding;
+}
 
 export function validateSnapshot(snapshot: any, opts: SnapshotValidationOptions = {}): SnapshotValidationResult {
   const findings: SnapshotFinding[] = [];
   const warnOnMissingMedia = opts.warnOnMissingMedia ?? true;
 
-  const push = (finding) => findings.push(finding);
+  const push: PushFinding = (finding) => findings.push(finding);
   const error: ReportFinding = (code, message, path, entityId) =>
     push({ severity: 'error', code, message, path, entityId });
   const warning: ReportFinding = (code, message, path, entityId) =>
@@ -74,7 +80,7 @@ export function validateSnapshot(snapshot: any, opts: SnapshotValidationOptions 
   validateTimeline(timeline, { mediaIds, warnOnMissingMedia, error, warning });
   return summarize(findings);
 
-  function positiveInt(value, path, code, message) {
+  function positiveInt(value: unknown, path: string, code: string, message: string): void {
     if (!Number.isInteger(value) || Number(value) <= 0) {
       error(code, `${message}, got ${String(value)}`, path);
     }
@@ -85,11 +91,11 @@ export function lintSnapshot(snapshot: any, opts: SnapshotValidationOptions = {}
   return validateSnapshot(snapshot, opts);
 }
 
-function validateMediaReferences(mediaReferences, push: PushFinding) {
-  const ids = new Set();
-  const seen = new Set();
+function validateMediaReferences(mediaReferences: any[], push: PushFinding): Set<string> {
+  const ids = new Set<string>();
+  const seen = new Set<string>();
 
-  mediaReferences.forEach((media, index) => {
+  mediaReferences.forEach((media: any, index: number) => {
     const path = `mediaReferences[${index}]`;
     if (!media.id) {
       push({ severity: 'error', code: 'media_id_missing', message: 'media reference id is required', path });
@@ -130,7 +136,7 @@ function validateMediaReferences(mediaReferences, push: PushFinding) {
   return ids;
 }
 
-function validateTimeline(timeline, ctx) {
+function validateTimeline(timeline: any, ctx: ValidationContext): void {
   const tracks = Array.isArray(timeline.tracks) ? timeline.tracks : [];
   const items = Array.isArray(timeline.items) ? timeline.items : [];
   const transitions = Array.isArray(timeline.transitions) ? timeline.transitions : [];
@@ -145,34 +151,34 @@ function validateTimeline(timeline, ctx) {
     ctx.error('markers_invalid', 'timeline.markers must be an array', 'project.timeline.markers');
   }
 
-  const allIds = new Set();
-  const trackIds = new Set();
-  const itemIds = new Set();
+  const allIds = new Set<string>();
+  const trackIds = new Set<string>();
+  const itemIds = new Set<string>();
 
-  tracks.forEach((track, index) => {
+  tracks.forEach((track: any, index: number) => {
     const path = `project.timeline.tracks[${index}]`;
     checkId(track.id, path, allIds, ctx.error);
-    if (track.id) trackIds.add(track.id);
+    if (track.id) trackIds.add(String(track.id));
     if (!track.name) ctx.warning('track_name_missing', `track "${track.id}" has no name`, `${path}.name`, track.id);
     if (!Number.isFinite(track.order)) {
       ctx.error('track_order_invalid', `track "${track.id}" order must be a number`, `${path}.order`, track.id);
     }
   });
 
-  items.forEach((item, index) => {
+  items.forEach((item: any, index: number) => {
     const path = `project.timeline.items[${index}]`;
     checkId(item.id, path, allIds, ctx.error);
-    if (item.id) itemIds.add(item.id);
+    if (item.id) itemIds.add(String(item.id));
     validateItem(item, path, trackIds, ctx);
   });
 
-  transitions.forEach((transition, index) => {
+  transitions.forEach((transition: any, index: number) => {
     const path = `project.timeline.transitions[${index}]`;
     checkId(transition.id, path, allIds, ctx.error);
     validateTransition(transition, path, itemIds, items, ctx);
   });
 
-  markers.forEach((marker, index) => {
+  markers.forEach((marker: any, index: number) => {
     const path = `project.timeline.markers[${index}]`;
     checkId(marker.id, path, allIds, ctx.error);
     if (!Number.isInteger(marker.frame) || marker.frame < 0) {
@@ -183,7 +189,7 @@ function validateTimeline(timeline, ctx) {
   validateInOutPoints(timeline, ctx);
 }
 
-function validateInOutPoints(timeline, ctx) {
+function validateInOutPoints(timeline: any, ctx: ValidationContext): void {
   const hasIn = timeline.inPoint !== undefined && timeline.inPoint !== null;
   const hasOut = timeline.outPoint !== undefined && timeline.outPoint !== null;
   if (!hasIn && !hasOut) return;
@@ -209,7 +215,7 @@ function validateInOutPoints(timeline, ctx) {
     ctx.error('in_out_range_invalid', 'timeline inPoint must be before outPoint', 'project.timeline');
   }
   const lastFrame = (timeline.items ?? []).reduce(
-    (max, item) => Math.max(max, item.from + item.durationInFrames),
+    (max: number, item: any) => Math.max(max, item.from + item.durationInFrames),
     0,
   );
   if (lastFrame > 0 && Number.isInteger(timeline.outPoint) && Number(timeline.outPoint) > lastFrame) {
@@ -221,7 +227,7 @@ function validateInOutPoints(timeline, ctx) {
   }
 }
 
-function validateItem(item, path, trackIds, ctx) {
+function validateItem(item: any, path: string, trackIds: Set<string>, ctx: ValidationContext): void {
   if (!trackIds.has(item.trackId)) {
     ctx.error('item_track_missing', `item "${item.id}" references missing track "${item.trackId}"`, `${path}.trackId`, item.id);
   }
@@ -248,7 +254,7 @@ function validateItem(item, path, trackIds, ctx) {
   }
 }
 
-function validateSourceTiming(item, path, ctx) {
+function validateSourceTiming(item: any, path: string, ctx: ValidationContext): void {
   if (item.sourceStart !== undefined && (!Number.isInteger(item.sourceStart) || item.sourceStart < 0)) {
     ctx.error('source_start_invalid', `item "${item.id}" sourceStart must be a non-negative integer`, `${path}.sourceStart`, item.id);
   }
@@ -263,7 +269,13 @@ function validateSourceTiming(item, path, ctx) {
   }
 }
 
-function validateTransition(transition, path, itemIds, items, ctx) {
+function validateTransition(
+  transition: any,
+  path: string,
+  itemIds: Set<string>,
+  items: any[],
+  ctx: ValidationContext,
+): void {
   if (!itemIds.has(transition.leftClipId)) {
     ctx.error('transition_left_missing', `transition "${transition.id}" references missing left clip`, `${path}.leftClipId`, transition.id);
   }
@@ -274,8 +286,8 @@ function validateTransition(transition, path, itemIds, items, ctx) {
     ctx.error('transition_duration_invalid', `transition "${transition.id}" durationInFrames must be positive`, `${path}.durationInFrames`, transition.id);
   }
 
-  const left = items.find((item) => item.id === transition.leftClipId);
-  const right = items.find((item) => item.id === transition.rightClipId);
+  const left = items.find((item: any) => item.id === transition.leftClipId);
+  const right = items.find((item: any) => item.id === transition.rightClipId);
   if (!left || !right) return;
   if (left.trackId !== right.trackId) {
     ctx.error('transition_track_mismatch', `transition "${transition.id}" clips must be on the same track`, path, transition.id);
@@ -294,21 +306,22 @@ function validateTransition(transition, path, itemIds, items, ctx) {
   }
 }
 
-function checkId(id, path, allIds, error) {
+function checkId(id: unknown, path: string, allIds: Set<string>, error: ReportFinding): void {
   if (!id) {
     error('id_missing', 'id is required', `${path}.id`);
     return;
   }
-  if (allIds.has(id)) {
-    error('duplicate_id', `duplicate id "${id}"`, `${path}.id`, id);
+  const normalizedId = String(id);
+  if (allIds.has(normalizedId)) {
+    error('duplicate_id', `duplicate id "${normalizedId}"`, `${path}.id`, normalizedId);
   }
-  allIds.add(id);
+  allIds.add(normalizedId);
 }
 
-function summarize(findings) {
-  const errorCount = findings.filter((finding) => finding.severity === 'error').length;
-  const warningCount = findings.filter((finding) => finding.severity === 'warning').length;
-  const infoCount = findings.filter((finding) => finding.severity === 'info').length;
+function summarize(findings: SnapshotFinding[]): SnapshotValidationResult {
+  const errorCount = findings.filter((finding: SnapshotFinding) => finding.severity === 'error').length;
+  const warningCount = findings.filter((finding: SnapshotFinding) => finding.severity === 'warning').length;
+  const infoCount = findings.filter((finding: SnapshotFinding) => finding.severity === 'info').length;
   return {
     ok: errorCount === 0,
     errorCount,

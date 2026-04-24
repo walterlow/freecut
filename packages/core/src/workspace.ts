@@ -8,6 +8,7 @@ import type { RenderRangeInput } from './range.js';
 type ReadFileFn = (file: string, encoding: 'utf8') => Promise<string>;
 type ReaddirFn = (path: string, opts: { withFileTypes: true }) => Promise<Dirent[]>;
 type StatFn = (file: string) => Promise<{ isFile?: () => boolean; size: number }>;
+type JsonRecord = Record<string, any>;
 
 interface WorkspaceFsDeps {
   readFile?: ReadFileFn;
@@ -29,6 +30,22 @@ interface WorkspaceRenderOptions extends WorkspaceFsDeps {
   renderWholeProject?: boolean;
 }
 
+interface WorkspaceRequiredMedia {
+  mediaId: string;
+  fileName: string | null;
+  mimeType: string | null;
+  fileSize: number | null;
+  sourceFile: string | null;
+  sourceExists: boolean;
+  itemCount: number;
+}
+
+interface WorkspaceMediaSource {
+  filePath: string;
+  mimeType?: string;
+  keyframeTimestamps?: number[];
+}
+
 const NON_SOURCE_NAMES = new Set([
   'metadata.json',
   'thumbnail.jpg',
@@ -41,7 +58,7 @@ export async function listWorkspaceProjects(workspace: string, opts: ListWorkspa
   const read = opts.readFile ?? readFile;
   const list = opts.readdir ?? readdir;
   const ids = await listProjectIds(workspace, read, list);
-  const projects = [];
+  const projects: any[] = [];
 
   for (const id of ids) {
     const projectDir = join(workspace, 'projects', id);
@@ -87,7 +104,7 @@ export async function inspectWorkspaceProject(workspace: string, selector: Works
   const keyframes = timeline.keyframes ?? [];
   const compositions = timeline.compositions ?? [];
   const mediaIds = collectAllProjectMediaIds(project);
-  const linkedMediaIds = links?.mediaIds?.map((entry) => entry.id).filter(Boolean) ?? [];
+  const linkedMediaIds = links?.mediaIds?.map((entry: any) => entry.id).filter(Boolean) ?? [];
 
   return {
     workspace,
@@ -117,7 +134,7 @@ export async function inspectWorkspaceProject(workspace: string, selector: Works
       linkedMedia: linkedMediaIds.length,
       referencedMedia: mediaIds.length,
     },
-    tracks: tracks.map((track) => ({
+    tracks: tracks.map((track: any) => ({
       id: track.id,
       name: track.name,
       kind: track.kind ?? null,
@@ -125,9 +142,9 @@ export async function inspectWorkspaceProject(workspace: string, selector: Works
       visible: track.visible ?? true,
       muted: track.muted ?? false,
       locked: track.locked ?? false,
-      itemCount: items.filter((item) => item.trackId === track.id).length,
+      itemCount: items.filter((item: any) => item.trackId === track.id).length,
     })),
-    items: items.map((item) => ({
+    items: items.map((item: any) => ({
       id: item.id,
       type: item.type,
       trackId: item.trackId,
@@ -138,7 +155,7 @@ export async function inspectWorkspaceProject(workspace: string, selector: Works
     })),
     transitions,
     markers,
-    compositions: compositions.map((composition) => ({
+    compositions: compositions.map((composition: any) => ({
       id: composition.id,
       name: composition.name,
       width: composition.width,
@@ -151,8 +168,8 @@ export async function inspectWorkspaceProject(workspace: string, selector: Works
     media: {
       linkedIds: linkedMediaIds,
       referencedIds: mediaIds,
-      missingLinks: mediaIds.filter((id) => !linkedMediaIds.includes(id)),
-      orphanLinks: linkedMediaIds.filter((id) => !mediaIds.includes(id)),
+      missingLinks: mediaIds.filter((id: string) => !linkedMediaIds.includes(id)),
+      orphanLinks: linkedMediaIds.filter((id: string) => !mediaIds.includes(id)),
     },
   };
 }
@@ -168,7 +185,7 @@ export async function inspectWorkspaceMedia(workspace: string, selector: Workspa
   });
   const range = renderPlan.effectiveRange;
   const usages = renderPlan.mediaUsage;
-  const media = [];
+  const media: any[] = [];
 
   for (const usage of usages.values()) {
     const mediaDir = join(workspace, 'media', usage.mediaId);
@@ -231,9 +248,9 @@ export async function loadWorkspaceRenderSource(
   const effectiveRange = renderPlan.effectiveRange;
   const mediaUsage = renderPlan.mediaUsage;
   const mediaIds = [...mediaUsage.keys()];
-  const mediaSources = {};
-  const missingSources = [];
-  const requiredMedia = [];
+  const mediaSources: Record<string, WorkspaceMediaSource> = {};
+  const missingSources: WorkspaceRequiredMedia[] = [];
+  const requiredMedia: WorkspaceRequiredMedia[] = [];
 
   for (const mediaId of mediaIds) {
     const mediaDir = join(workspace, 'media', mediaId);
@@ -241,7 +258,7 @@ export async function loadWorkspaceRenderSource(
     const filePath = await findWorkspaceMediaSource(mediaDir, { readdir: list });
     const usage = mediaUsage.get(mediaId);
     if (!filePath) {
-      const missing = {
+      const missing: WorkspaceRequiredMedia = {
         mediaId,
         fileName: metadata?.fileName ?? null,
         mimeType: metadata?.mimeType ?? null,
@@ -285,7 +302,7 @@ export async function readWorkspaceProject(workspace: string, selector: Workspac
   }
 
   const index = await readJsonIfExists(join(workspace, 'index.json'), read);
-  const indexed = index?.projects?.find((entry) =>
+  const indexed = index?.projects?.find((entry: any) =>
     entry.name === selector.project ||
     entry.id === selector.project ||
     entry.name?.toLowerCase?.() === selector.project.toLowerCase()
@@ -295,7 +312,7 @@ export async function readWorkspaceProject(workspace: string, selector: Workspac
   }
 
   const ids = await listProjectIds(workspace, read, list);
-  const available = [];
+  const available: string[] = [];
   for (const id of ids) {
     const project = await readJsonIfExists(join(workspace, 'projects', id, 'project.json'), read);
     if (!project) continue;
@@ -309,7 +326,7 @@ export async function readWorkspaceProject(workspace: string, selector: Workspac
   );
 }
 
-export function buildRange(values) {
+export function buildRange(values: Record<string, any>) {
   const hasSeconds = values.start !== undefined || values.end !== undefined || values.duration !== undefined;
   const hasFrames = values['in-frame'] !== undefined || values['out-frame'] !== undefined;
   if (!hasSeconds && !hasFrames) return null;
@@ -360,7 +377,7 @@ export async function findWorkspaceMediaSource(mediaDir: string, opts: Workspace
   return null;
 }
 
-export function mimeTypeFromFileName(file) {
+export function mimeTypeFromFileName(file: string): string {
   const lower = basename(file).toLowerCase();
   if (lower.endsWith('.mp4') || lower.endsWith('.m4v')) return 'video/mp4';
   if (lower.endsWith('.webm')) return 'video/webm';
@@ -376,7 +393,7 @@ export function mimeTypeFromFileName(file) {
   return 'application/octet-stream';
 }
 
-function rangeToSeconds(project, range) {
+function rangeToSeconds(project: any, range: { inFrame: number; outFrame: number } | null) {
   return range
     ? {
         inFrame: range.inFrame,
@@ -387,33 +404,33 @@ function rangeToSeconds(project, range) {
     : null;
 }
 
-async function listProjectIds(workspace, read, list) {
+async function listProjectIds(workspace: string, read: ReadFileFn, list: ReaddirFn): Promise<string[]> {
   const index = await readJsonIfExists(join(workspace, 'index.json'), read);
   const indexedIds = index?.projects
-    ?.map((entry) => entry?.id)
-    .filter((id) => typeof id === 'string' && id.length > 0);
-  if (indexedIds?.length) return [...new Set(indexedIds)];
+    ?.map((entry: any) => entry?.id)
+    .filter((id: unknown) => typeof id === 'string' && id.length > 0);
+  if (indexedIds?.length) return [...new Set(indexedIds)] as string[];
 
   const entries = await list(join(workspace, 'projects'), { withFileTypes: true });
   return entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+    .filter((entry: Dirent) => entry.isDirectory())
+    .map((entry: Dirent) => entry.name);
 }
 
-function collectAllProjectMediaIds(project) {
+function collectAllProjectMediaIds(project: unknown): string[] {
   return [...collectProjectMediaUsage(project, null).keys()].sort();
 }
 
-function countKeyframes(keyframes) {
-  return keyframes.reduce((sum, item) => (
-    sum + (item.properties ?? []).reduce((propertySum, property) => (
+function countKeyframes(keyframes: any[]): number {
+  return keyframes.reduce((sum: number, item: any) => (
+    sum + (item.properties ?? []).reduce((propertySum: number, property: any) => (
       propertySum + (property.keyframes?.length ?? 0)
     ), 0)
   ), 0);
 }
 
-function frameOpt(raw, label, allowZero = true) {
-  const n = Number.parseInt(raw, 10);
+function frameOpt(raw: unknown, label: string, allowZero = true): number {
+  const n = Number.parseInt(String(raw), 10);
   const min = allowZero ? 0 : 1;
   if (!Number.isInteger(n) || n < min) {
     throw new RangeError(`${label} must be an integer >= ${min}, got ${raw}`);
@@ -421,7 +438,7 @@ function frameOpt(raw, label, allowZero = true) {
   return n;
 }
 
-function nonNegativeNumberOpt(raw, label) {
+function nonNegativeNumberOpt(raw: unknown, label: string): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) {
     throw new RangeError(`${label} must be a non-negative number, got ${raw}`);
@@ -429,7 +446,7 @@ function nonNegativeNumberOpt(raw, label) {
   return n;
 }
 
-function positiveNumberOpt(raw, label) {
+function positiveNumberOpt(raw: unknown, label: string): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) {
     throw new RangeError(`${label} must be a positive number, got ${raw}`);
@@ -437,7 +454,7 @@ function positiveNumberOpt(raw, label) {
   return n;
 }
 
-async function statIfExists(file, statFile) {
+async function statIfExists(file: string, statFile: StatFn): Promise<{ isFile?: () => boolean; size: number } | null> {
   try {
     return await statFile(file);
   } catch {
@@ -445,7 +462,7 @@ async function statIfExists(file, statFile) {
   }
 }
 
-async function readJsonIfExists(file, read) {
+async function readJsonIfExists(file: string, read: ReadFileFn): Promise<JsonRecord | null> {
   try {
     return await readJson(file, read);
   } catch {
@@ -453,6 +470,6 @@ async function readJsonIfExists(file, read) {
   }
 }
 
-async function readJson(file, read) {
+async function readJson(file: string, read: ReadFileFn): Promise<JsonRecord> {
   return JSON.parse(await read(file, 'utf8'));
 }
