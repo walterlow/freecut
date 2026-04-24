@@ -155,6 +155,8 @@ describe('ProjectBuilder', () => {
     const p = createProject({ name: 'demo', ids: deterministicIds() });
     expect(() => p.setInOutPoints(10, 10)).toThrow(RangeError);
     expect(() => p.setInOutPoints(-1, 10)).toThrow(RangeError);
+    expect(() => p.setInOutPoints(null, 10)).toThrow(RangeError);
+    expect(() => p.setInOutPoints(0, null)).toThrow(RangeError);
     expect(() => p.setRenderRange({ startFrame: 0 })).toThrow(/durationInFrames/);
   });
 

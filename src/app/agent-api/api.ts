@@ -16,6 +16,8 @@ import type {
   AgentRenderRange,
   AgentRenderExportOptions,
   AgentRenderExportResult,
+  AgentRenderMediaSource,
+  AgentRenderProjectExportOptions,
   AgentSubscriber,
   AgentTimelineItem,
   AgentTimelineSnapshot,
@@ -24,6 +26,8 @@ import type {
   AgentTransform,
 } from './types';
 import type { ExportMode, ExportSettings } from '@/types/export';
+import type { Project } from '@/types/project';
+import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 
 export interface FreecutAgentAPI {
   readonly version: string;
@@ -84,6 +88,7 @@ export interface FreecutAgentAPI {
   loadSnapshot(snapshotJson: string): Promise<{ projectId: string }>;
   exportSnapshot(): Promise<unknown>;
   renderExport(opts?: AgentRenderExportOptions): Promise<AgentRenderExportResult>;
+  renderProjectExport(opts: AgentRenderProjectExportOptions): Promise<AgentRenderExportResult>;
 
   // Events
   subscribe(callback: AgentSubscriber): () => void;
@@ -271,6 +276,58 @@ function extensionFromMime(mimeType: string, mode: 'video' | 'audio'): string {
   if (mime.includes('wav') || mime.includes('wave')) return 'wav';
   if (mime.includes('aac') || mime.includes('adts')) return 'aac';
   return mode === 'audio' ? 'aac' : 'mp4';
+}
+
+function applyRenderMediaSources(
+  tracks: TimelineTrack[],
+  sources: AgentRenderProjectExportOptions['mediaSources'],
+  registerKeyframeIndex: (src: string, timestamps: number[]) => void,
+): TimelineTrack[] {
+  const normalizedSources = normalizeRenderMediaSources(sources);
+  const resolvedTracks = JSON.parse(JSON.stringify(tracks)) as TimelineTrack[];
+  for (const track of resolvedTracks) {
+    for (const item of track.items) {
+      if (
+        !item.mediaId ||
+        (item.type !== 'video' && item.type !== 'audio' && item.type !== 'image')
+      ) {
+        continue;
+      }
+
+      const source = normalizedSources.get(item.mediaId);
+      if (!source) {
+        if (item.src) continue;
+        throw new Error(`missing media source URL for ${item.mediaId}`);
+      }
+
+      item.src = source.url;
+      if (item.type === 'video') {
+        item.audioSrc = source.audioUrl ?? source.url;
+      }
+      if (source.keyframeTimestamps && source.keyframeTimestamps.length > 0) {
+        registerKeyframeIndex(source.url, source.keyframeTimestamps);
+      }
+    }
+  }
+  return resolvedTracks;
+}
+
+function normalizeRenderMediaSources(
+  sources: AgentRenderProjectExportOptions['mediaSources'],
+): Map<string, AgentRenderMediaSource> {
+  const out = new Map<string, AgentRenderMediaSource>();
+  if (!sources) return out;
+  for (const [mediaId, source] of Object.entries(sources)) {
+    if (typeof source === 'string') {
+      out.set(mediaId, { url: source });
+      continue;
+    }
+    if (!source || typeof source.url !== 'string') {
+      throw new Error(`invalid media source for ${mediaId}`);
+    }
+    out.set(mediaId, source);
+  }
+  return out;
 }
 
 function resolveRenderRange(
@@ -968,6 +1025,124 @@ export function createAgentAPI(): FreecutAgentAPI {
       );
 
       composition.tracks = await mediaLibrary.resolveMediaUrls(composition.tracks, { useProxy: false });
+
+      const onProgress = () => {};
+      const result = mode === 'audio'
+        ? await renderEngine.renderAudioOnly({ settings: clientSettings, composition, onProgress })
+        : await renderEngine.renderComposition({ settings: clientSettings, composition, onProgress });
+
+      const maxBytes = opts.maxBytes ?? 128 * 1024 * 1024;
+      if (result.fileSize > maxBytes) {
+        throw new Error(
+          `render result is ${result.fileSize} bytes, which exceeds maxBytes=${maxBytes}; ` +
+          'raise maxBytes or render from the browser UI for large exports',
+        );
+      }
+
+      const chunkSize = opts.chunkSize ?? 512 * 1024;
+      return {
+        mimeType: result.mimeType,
+        duration: result.duration,
+        fileSize: result.fileSize,
+        extension: extensionFromMime(result.mimeType, mode),
+        chunks: await blobToBase64Chunks(result.blob, chunkSize),
+        chunkEncoding: 'base64' as const,
+      };
+    },
+
+    async renderProjectExport(opts: AgentRenderProjectExportOptions) {
+      if (!opts.project || typeof opts.project !== 'object') {
+        throw new Error('renderProjectExport requires a project object');
+      }
+
+      const [
+        clientRenderer,
+        renderEngine,
+        timelineConverter,
+        migrations,
+        keyframeRegistry,
+      ] = await Promise.all([
+        import('@/features/export/utils/client-renderer'),
+        import('@/features/export/utils/client-render-engine'),
+        import('@/features/export/utils/timeline-to-composition'),
+        import('@/core/projects/migrations'),
+        import('@/shared/utils/keyframe-index-registry'),
+      ]);
+
+      const migrationResult = migrations.migrateProject(opts.project as Project);
+      const project = migrationResult.project;
+      if (!project.timeline) throw new Error('project has no timeline');
+
+      const fps = project.metadata.fps;
+      const projectWidth = project.metadata.width;
+      const projectHeight = project.metadata.height;
+      const mode: ExportMode = opts.mode ?? 'video';
+      const quality: ExportSettings['quality'] = opts.quality ?? 'high';
+      const baseSettings: ExportSettings = {
+        codec: opts.codec ?? (opts.videoContainer === 'webm' ? 'vp9' : 'h264'),
+        quality,
+        resolution: {
+          width: opts.resolution?.width ?? projectWidth,
+          height: opts.resolution?.height ?? projectHeight,
+        },
+      };
+
+      const clientSettings = clientRenderer.mapToClientSettings(baseSettings, fps);
+      if (mode === 'video' && opts.videoContainer) {
+        clientSettings.container = opts.videoContainer;
+      } else if (mode === 'audio') {
+        const audioContainer = opts.audioContainer ?? 'mp3';
+        clientSettings.container = audioContainer;
+        clientSettings.audioCodec = clientRenderer.getDefaultAudioCodec(audioContainer);
+        clientSettings.audioBitrate = clientRenderer.getAudioBitrateForQuality(quality);
+      }
+      clientSettings.mode = mode;
+
+      if (mode === 'video') {
+        const validation = clientRenderer.validateSettings(clientSettings);
+        if (!validation.valid) throw new Error(validation.error ?? 'invalid export settings');
+
+        const supportedCodecs = await clientRenderer.getSupportedCodecs({
+          width: clientSettings.resolution.width,
+          height: clientSettings.resolution.height,
+          bitrate: clientSettings.videoBitrate,
+        });
+        if (!supportedCodecs.includes(clientSettings.codec)) {
+          const fallback = clientRenderer.selectFallbackVideoCodec(
+            supportedCodecs,
+            clientSettings.container as Parameters<typeof clientRenderer.selectFallbackVideoCodec>[1],
+          );
+          if (!fallback) {
+            throw new Error('no supported video codecs available in this browser for the requested export');
+          }
+          clientSettings.codec = fallback;
+        }
+      }
+
+      const renderWholeProject = opts.renderWholeProject ?? false;
+      const requestedRange = renderWholeProject ? null : resolveRenderRange(opts.range, fps);
+      const effectiveInPoint = renderWholeProject ? null : (requestedRange?.inPoint ?? project.timeline.inPoint);
+      const effectiveOutPoint = renderWholeProject ? null : (requestedRange?.outPoint ?? project.timeline.outPoint);
+      const composition = timelineConverter.convertTimelineToComposition(
+        project.timeline.tracks as TimelineTrack[],
+        project.timeline.items as TimelineItem[],
+        project.timeline.transitions ?? [],
+        fps,
+        projectWidth,
+        projectHeight,
+        effectiveInPoint,
+        effectiveOutPoint,
+        project.timeline.keyframes,
+        project.metadata.backgroundColor,
+        project.timeline.busAudioEq,
+        project.timeline.masterBusDb,
+      );
+
+      composition.tracks = applyRenderMediaSources(
+        composition.tracks,
+        opts.mediaSources,
+        keyframeRegistry.registerKeyframeIndex,
+      );
 
       const onProgress = () => {};
       const result = mode === 'audio'

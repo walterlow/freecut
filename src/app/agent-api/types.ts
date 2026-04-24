@@ -140,6 +140,19 @@ export interface AgentRenderExportOptions {
   chunkSize?: number;
 }
 
+export interface AgentRenderMediaSource {
+  url: string;
+  audioUrl?: string;
+  keyframeTimestamps?: number[];
+}
+
+export interface AgentRenderProjectExportOptions extends AgentRenderExportOptions {
+  /** Project JSON loaded by an external caller. Does not touch workspace storage. */
+  project: unknown;
+  /** Media id to browser-readable URL. Used instead of workspace/IndexedDB media resolution. */
+  mediaSources?: Record<string, string | AgentRenderMediaSource>;
+}
+
 export interface AgentRenderExportResult {
   mimeType: string;
   duration: number;

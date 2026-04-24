@@ -429,6 +429,9 @@ function pick<T extends object, K extends keyof T>(obj: T, keys: readonly K[]): 
 
 function sanitizeInOutPoints(inPoint: number | null, outPoint: number | null): { inPoint?: number; outPoint?: number } {
   if (inPoint === null && outPoint === null) return {};
+  if (inPoint === null || outPoint === null) {
+    throw new RangeError('inPoint and outPoint must both be numbers or both be null');
+  }
   if (!Number.isInteger(inPoint) || inPoint < 0) {
     throw new RangeError(`inPoint must be a non-negative integer or null, got ${inPoint}`);
   }

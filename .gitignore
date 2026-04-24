@@ -31,6 +31,7 @@ dist-ssr
 # Build outputs
 build
 out
+/output/renders/
 
 # Testing
 coverage

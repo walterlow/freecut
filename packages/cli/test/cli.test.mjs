@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from '../src/index.mjs';
@@ -323,6 +323,464 @@ describe('freecut CLI', () => {
       videoContainer: 'mp4',
       range: { startSeconds: 0, durationSeconds: 5 },
     });
+  });
+
+  it('render can load a workspace project from disk without opening browser workspace storage', async () => {
+    const workspace = join(tmp, 'workspace-render');
+    const projectId = 'project-disk';
+    const mediaId = 'media-disk';
+    const output = join(tmp, 'workspace-render.webm');
+    await mkdir(join(workspace, 'projects', projectId), { recursive: true });
+    await mkdir(join(workspace, 'media', mediaId), { recursive: true });
+    const project = {
+      id: projectId,
+      name: 'Disk Project',
+      description: '',
+      createdAt: 1,
+      updatedAt: 1,
+      duration: 5,
+      metadata: { width: 1280, height: 720, fps: 30 },
+      timeline: {
+        tracks: [{
+          id: 'track-1',
+          name: 'V1',
+          kind: 'video',
+          height: 80,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: 0,
+        }],
+        items: [{
+          id: 'clip-1',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 150,
+          label: 'clip.mp4',
+          mediaId,
+        }],
+        transitions: [],
+      },
+    };
+    await writeFile(join(workspace, 'projects', projectId, 'project.json'), JSON.stringify(project), 'utf8');
+    await writeFile(join(workspace, 'index.json'), JSON.stringify({
+      version: '1.0',
+      projects: [{ id: projectId, name: project.name, updatedAt: 1 }],
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', mediaId, 'metadata.json'), JSON.stringify({
+      id: mediaId,
+      mimeType: 'video/mp4',
+      keyframeTimestamps: [0, 1, 2],
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', mediaId, 'clip.mp4'), 'fake-media', 'utf8');
+
+    const calls = [];
+    const bridge = {
+      waitForApi: async () => calls.push({ method: 'waitForApi' }),
+      callApi: async (method, args = []) => {
+        calls.push({ method, args });
+        if (method === 'renderProjectExport') {
+          return {
+            mimeType: 'video/webm',
+            duration: 5,
+            fileSize: 8,
+            extension: 'webm',
+            chunks: [Buffer.from('rendered').toString('base64')],
+          };
+        }
+        return null;
+      },
+      close: async () => calls.push({ method: 'close' }),
+    };
+
+    await runRender(
+      [
+        '--workspace', workspace,
+        '--project-id', projectId,
+        '--duration', '5',
+        '--format', 'webm',
+        '--quality', 'low',
+        '--output', output,
+        '--json',
+      ],
+      io(),
+      {
+        writeFile,
+        connectBridge: async (opts) => {
+          calls.push({ method: 'connect', opts });
+          return bridge;
+        },
+      },
+    );
+
+    expect(await readFile(output, 'utf8')).toBe('rendered');
+    expect(calls.map((call) => call.method)).toEqual([
+      'connect',
+      'waitForApi',
+      'renderProjectExport',
+      'close',
+    ]);
+    expect(calls[2].args[0]).toMatchObject({
+      project,
+      videoContainer: 'webm',
+      quality: 'low',
+      range: { startSeconds: 0, durationSeconds: 5 },
+    });
+    expect(calls[2].args[0].mediaSources[mediaId].url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/media\/media-disk$/);
+    expect(calls[2].args[0].mediaSources[mediaId].keyframeTimestamps).toEqual([0, 1, 2]);
+  });
+
+  it('workspace render validates only media overlapping the requested range', async () => {
+    const workspace = join(tmp, 'workspace-render-range');
+    const projectId = 'project-range';
+    const earlyMediaId = 'media-early';
+    const lateMediaId = 'media-late';
+    const output = join(tmp, 'workspace-render-range.webm');
+    await mkdir(join(workspace, 'projects', projectId), { recursive: true });
+    await mkdir(join(workspace, 'media', earlyMediaId), { recursive: true });
+    await mkdir(join(workspace, 'media', lateMediaId), { recursive: true });
+    const project = {
+      id: projectId,
+      name: 'Range Project',
+      description: '',
+      createdAt: 1,
+      updatedAt: 1,
+      duration: 20,
+      metadata: { width: 1280, height: 720, fps: 30 },
+      timeline: {
+        tracks: [{
+          id: 'track-1',
+          name: 'V1',
+          kind: 'video',
+          height: 80,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: 0,
+        }],
+        items: [
+          {
+            id: 'clip-early',
+            type: 'video',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 150,
+            label: 'early.mp4',
+            mediaId: earlyMediaId,
+          },
+          {
+            id: 'clip-late',
+            type: 'video',
+            trackId: 'track-1',
+            from: 300,
+            durationInFrames: 150,
+            label: 'late.mp4',
+            mediaId: lateMediaId,
+          },
+        ],
+        transitions: [],
+      },
+    };
+    await writeFile(join(workspace, 'projects', projectId, 'project.json'), JSON.stringify(project), 'utf8');
+    await writeFile(join(workspace, 'media', earlyMediaId, 'metadata.json'), JSON.stringify({
+      id: earlyMediaId,
+      fileName: 'early.mp4',
+      mimeType: 'video/mp4',
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', earlyMediaId, 'early.mp4'), 'fake-media', 'utf8');
+    await writeFile(join(workspace, 'media', lateMediaId, 'metadata.json'), JSON.stringify({
+      id: lateMediaId,
+      fileName: 'late.mp4',
+      mimeType: 'video/mp4',
+    }), 'utf8');
+
+    const calls = [];
+    const bridge = {
+      waitForApi: async () => calls.push({ method: 'waitForApi' }),
+      callApi: async (method, args = []) => {
+        calls.push({ method, args });
+        if (method === 'renderProjectExport') {
+          return {
+            mimeType: 'video/webm',
+            duration: 5,
+            fileSize: 8,
+            extension: 'webm',
+            chunks: [Buffer.from('rendered').toString('base64')],
+          };
+        }
+        return null;
+      },
+      close: async () => calls.push({ method: 'close' }),
+    };
+
+    await runRender(
+      [
+        '--workspace', workspace,
+        '--project-id', projectId,
+        '--start', '0',
+        '--duration', '5',
+        '--format', 'webm',
+        '--output', output,
+      ],
+      io(),
+      {
+        writeFile,
+        connectBridge: async () => bridge,
+      },
+    );
+
+    expect(await readFile(output, 'utf8')).toBe('rendered');
+    const renderCall = calls.find((call) => call.method === 'renderProjectExport');
+    expect(Object.keys(renderCall.args[0].mediaSources)).toEqual([earlyMediaId]);
+  });
+
+  it('workspace render check reports range media readiness without connecting', async () => {
+    const workspace = join(tmp, 'workspace-render-check');
+    const projectId = 'project-check';
+    const mediaId = 'media-missing';
+    await mkdir(join(workspace, 'projects', projectId), { recursive: true });
+    await mkdir(join(workspace, 'media', mediaId), { recursive: true });
+    await writeFile(join(workspace, 'projects', projectId, 'project.json'), JSON.stringify({
+      id: projectId,
+      name: 'Check Project',
+      description: '',
+      createdAt: 1,
+      updatedAt: 1,
+      duration: 5,
+      metadata: { width: 1920, height: 1080, fps: 30 },
+      timeline: {
+        tracks: [],
+        items: [{
+          id: 'clip-1',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 150,
+          label: 'missing.mp4',
+          mediaId,
+        }],
+      },
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', mediaId, 'metadata.json'), JSON.stringify({
+      id: mediaId,
+      fileName: 'missing.mp4',
+      mimeType: 'video/mp4',
+    }), 'utf8');
+    const connectBridge = vi.fn();
+
+    const streams = io();
+    await runRender(
+      [
+        '--workspace', workspace,
+        '--project-id', projectId,
+        '--duration', '5',
+        '--check',
+        '--json',
+      ],
+      streams,
+      { connectBridge },
+    );
+
+    const result = JSON.parse(streams.stdout.text);
+    expect(result.ok).toBe(false);
+    expect(result.render.range).toMatchObject({ inFrame: 0, outFrame: 150, durationSeconds: 5 });
+    expect(result.missingMedia).toHaveLength(1);
+    expect(result.missingMedia[0]).toMatchObject({ mediaId, fileName: 'missing.mp4', sourceExists: false });
+    expect(connectBridge).not.toHaveBeenCalled();
+  });
+
+  it('render can launch a temporary browser for workspace rendering', async () => {
+    const workspace = join(tmp, 'workspace-render-launch');
+    const projectId = 'project-launch';
+    const mediaId = 'media-launch';
+    const output = join(tmp, 'workspace-render-launch.webm');
+    await mkdir(join(workspace, 'projects', projectId), { recursive: true });
+    await mkdir(join(workspace, 'media', mediaId), { recursive: true });
+    await writeFile(join(workspace, 'projects', projectId, 'project.json'), JSON.stringify({
+      id: projectId,
+      name: 'Launch Project',
+      description: '',
+      createdAt: 1,
+      updatedAt: 1,
+      duration: 5,
+      metadata: { width: 1280, height: 720, fps: 30 },
+      timeline: {
+        tracks: [],
+        items: [{
+          id: 'clip-1',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 150,
+          label: 'clip.mp4',
+          mediaId,
+        }],
+      },
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', mediaId, 'metadata.json'), JSON.stringify({
+      id: mediaId,
+      fileName: 'clip.mp4',
+      mimeType: 'video/mp4',
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', mediaId, 'clip.mp4'), 'fake-media', 'utf8');
+
+    const calls = [];
+    const bridge = {
+      waitForApi: async () => calls.push({ method: 'waitForApi' }),
+      callApi: async (method, args = []) => {
+        calls.push({ method, args });
+        if (method === 'renderProjectExport') {
+          return {
+            mimeType: 'video/webm',
+            duration: 5,
+            fileSize: 8,
+            extension: 'webm',
+            chunks: [Buffer.from('rendered').toString('base64')],
+          };
+        }
+        return null;
+      },
+      close: async () => calls.push({ method: 'bridge.close' }),
+    };
+
+    await runRender(
+      [
+        '--workspace', workspace,
+        '--project-id', projectId,
+        '--duration', '5',
+        '--format', 'webm',
+        '--output', output,
+        '--launch-browser',
+      ],
+      io(),
+      {
+        writeFile,
+        findAvailablePort: async () => 9333,
+        launchBrowser: async (opts) => {
+          calls.push({ method: 'launchBrowser', opts });
+          return {
+            port: opts.port,
+            url: opts.url,
+            close: async () => calls.push({ method: 'browser.close' }),
+          };
+        },
+        connectBridge: async (opts) => {
+          calls.push({ method: 'connect', opts });
+          return bridge;
+        },
+      },
+    );
+
+    expect(await readFile(output, 'utf8')).toBe('rendered');
+    expect(calls[0]).toMatchObject({
+      method: 'launchBrowser',
+      opts: { port: 9333, url: 'http://localhost:5173/?agent=1' },
+    });
+    expect(calls[1]).toMatchObject({
+      method: 'connect',
+      opts: { port: 9333, url: 'http://localhost:5173/?agent=1' },
+    });
+    expect(calls.map((call) => call.method)).toContain('browser.close');
+  });
+
+  it('lists projects from a workspace folder', async () => {
+    const workspace = join(tmp, 'workspace-list');
+    const projectA = {
+      id: 'project-a',
+      name: 'Alpha',
+      description: 'first',
+      createdAt: 1,
+      updatedAt: 20,
+      duration: 12.5,
+      schemaVersion: 10,
+      metadata: { width: 1920, height: 1080, fps: 30 },
+      timeline: {
+        tracks: [{ id: 'track-1' }],
+        items: [{ id: 'item-1' }, { id: 'item-2' }],
+      },
+    };
+    const projectB = {
+      id: 'project-b',
+      name: 'Beta',
+      description: '',
+      createdAt: 2,
+      updatedAt: 10,
+      duration: 4,
+      metadata: { width: 1280, height: 720, fps: 24 },
+      timeline: { tracks: [], items: [] },
+    };
+
+    await mkdir(join(workspace, 'projects', projectA.id), { recursive: true });
+    await mkdir(join(workspace, 'projects', projectB.id), { recursive: true });
+    await writeFile(join(workspace, 'index.json'), JSON.stringify({
+      version: '1.0',
+      projects: [
+        { id: projectB.id, name: projectB.name, updatedAt: projectB.updatedAt },
+        { id: projectA.id, name: projectA.name, updatedAt: projectA.updatedAt },
+      ],
+    }), 'utf8');
+    await writeFile(join(workspace, 'projects', projectA.id, 'project.json'), JSON.stringify(projectA), 'utf8');
+    await writeFile(join(workspace, 'projects', projectA.id, 'media-links.json'), JSON.stringify({
+      version: '1.0',
+      mediaIds: [{ id: 'media-1', addedAt: 1 }],
+    }), 'utf8');
+    await writeFile(join(workspace, 'projects', projectB.id, 'project.json'), JSON.stringify(projectB), 'utf8');
+
+    const streams = await run(['workspace', 'projects', workspace, '--json']);
+    const result = JSON.parse(streams.stdout.text);
+    expect(result.workspace).toBe(workspace);
+    expect(result.projects.map((project) => project.id)).toEqual(['project-a', 'project-b']);
+    expect(result.projects[0]).toMatchObject({
+      id: 'project-a',
+      name: 'Alpha',
+      width: 1920,
+      height: 1080,
+      fps: 30,
+      itemCount: 2,
+      mediaCount: 1,
+      trashed: false,
+    });
+
+    const text = (await run(['workspace', 'list', workspace])).stdout.text;
+    expect(text).toContain('project-a');
+    expect(text).toContain('Alpha');
+  });
+
+  it('workspace projects falls back to scanning project directories and hides trash', async () => {
+    const workspace = join(tmp, 'workspace-scan');
+    await mkdir(join(workspace, 'projects', 'visible'), { recursive: true });
+    await mkdir(join(workspace, 'projects', 'trashed'), { recursive: true });
+    await writeFile(join(workspace, 'projects', 'visible', 'project.json'), JSON.stringify({
+      id: 'visible',
+      name: 'Visible',
+      createdAt: 1,
+      updatedAt: 1,
+      duration: 1,
+      metadata: { width: 1, height: 1, fps: 30 },
+      timeline: { tracks: [], items: [] },
+    }), 'utf8');
+    await writeFile(join(workspace, 'projects', 'trashed', 'project.json'), JSON.stringify({
+      id: 'trashed',
+      name: 'Trashed',
+      createdAt: 1,
+      updatedAt: 2,
+      duration: 1,
+      metadata: { width: 1, height: 1, fps: 30 },
+      timeline: { tracks: [], items: [] },
+    }), 'utf8');
+    await writeFile(join(workspace, 'projects', 'trashed', '.freecut-trashed.json'), '{}', 'utf8');
+
+    const hidden = JSON.parse((await run(['workspace', 'projects', workspace, '--json'])).stdout.text);
+    expect(hidden.projects.map((project) => project.id)).toEqual(['visible']);
+
+    const included = JSON.parse(
+      (await run(['workspace', 'projects', workspace, '--include-trashed', '--json'])).stdout.text,
+    );
+    expect(included.projects.map((project) => project.id)).toEqual(['trashed', 'visible']);
+    expect(included.projects[0].trashed).toBe(true);
   });
 
   it('render refuses snapshots with lint errors before connecting to Chrome', async () => {

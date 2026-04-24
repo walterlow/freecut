@@ -53,6 +53,13 @@ freecut lint "$F" --json
 # a FreeCut tab with the agent API enabled.
 freecut render "$F" --output demo.mp4 --format mp4 --quality high
 freecut render --project ABC --start 0 --duration 5 --output ABC-first-5s.mp4
+freecut render --workspace ~/FreeCut --project-id ABC \
+  --start 0 --duration 5 --output ABC-first-5s.webm --format webm
+freecut render --workspace ~/FreeCut --project-id ABC \
+  --start 0 --duration 5 --launch-browser --output ABC-first-5s.webm
+freecut render --workspace ~/FreeCut --project-id ABC \
+  --start 0 --duration 5 --check --json
+freecut workspace projects ~/FreeCut --json
 ```
 
 ## Commands
@@ -65,6 +72,8 @@ freecut render --project ABC --start 0 --duration 5 --output ABC-first-5s.mp4
 | `lint <file>` | Validate snapshot structure and timeline references |
 | `render <file>` | Load a snapshot into a running FreeCut tab and render via the browser export engine |
 | `render --project <name>` | Open an existing workspace project by id/name and render it |
+| `render --workspace <dir> --project-id <id>` | Read a disk workspace directly and render without a browser workspace grant |
+| `workspace projects <dir>` | List projects stored in a disk workspace folder |
 | `track add <file>` | Add a video or audio track |
 | `clip add <file> --type ...` | Add video / audio / image / text / shape / adjustment |
 | `media add <file>` | Register a media reference (editor resolves on import) |
@@ -84,6 +93,19 @@ freecut render --project ABC --start 0 --duration 5 --output ABC-first-5s.mp4
   `--remote-debugging-port=9222`, open FreeCut, grant the workspace, and
   enable `?agent=1` in production. The command renders with the same
   WebCodecs/WebGPU path as the app and returns encoded chunks to the CLI.
+- `render --workspace <dir>` is the preferred automation path for projects
+  already stored in a FreeCut workspace folder. The CLI reads
+  `projects/{id}/project.json`, serves mirrored `media/{id}/...` source
+  files over a temporary localhost server, and calls the browser renderer
+  without relying on File System Access permission state in that browser
+  profile. Media must already have a mirrored source file in the workspace;
+  opening or reading the project in FreeCut populates that mirror lazily.
+- `render --workspace <dir> --check` validates the effective render range and
+  required media source files without connecting to Chrome or rendering.
+- `render --launch-browser` starts a temporary Chrome/Edge profile on a free
+  Chrome DevTools port, opens FreeCut with the agent API enabled, renders, and
+  closes the browser when done. Use `--browser-path` or `CHROME_PATH` if Chrome
+  is not in a standard location.
 - `render` range flags are `--start`, `--end`, `--duration` in seconds, or
   `--in-frame` / `--out-frame` in project frames. Ranges override timeline
   IO markers for that render only.

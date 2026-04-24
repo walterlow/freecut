@@ -18,6 +18,7 @@ import { runMarkerAdd } from './commands/marker.mjs';
 import { runLint } from './commands/lint.mjs';
 import { runDoctor } from './commands/doctor.mjs';
 import { runRender } from './commands/render.mjs';
+import { runWorkspace } from './commands/workspace.mjs';
 
 const HELP = `freecut — programmatic FreeCut project authoring
 
@@ -28,6 +29,10 @@ usage:
   freecut lint <file> [--json] [--strict]
   freecut render <file> [--output out.mp4 --format mp4|webm|mov|mkv --quality high]
   freecut render --project ABC [--start 0 --duration 5 --output out.mp4]
+  freecut render --workspace <dir> --project-id ABC [--start 0 --duration 5 --output out.mp4]
+  freecut render --workspace <dir> --project-id ABC --launch-browser [--output out.mp4]
+  freecut render --workspace <dir> --project-id ABC --check [--json]
+  freecut workspace projects <dir> [--json]
   freecut track add <file> [--kind video|audio --name X]
   freecut clip add <file> --type video|audio|image|text|shape|adjustment \\
                           --track <id> --from <sec> --duration <sec> [options]
@@ -62,6 +67,9 @@ export async function main(argv, io = { stdout: process.stdout, stderr: process.
       return;
     case 'render':
       await runRender(argv.slice(1), io);
+      return;
+    case 'workspace':
+      await runWorkspace(argv.slice(1), io);
       return;
     case 'track':
       if (second !== 'add') throw usage(`unknown track subcommand: ${second ?? '(none)'}`);
