@@ -3,14 +3,13 @@ import type { AudioEqSettings } from './audio';
 import type { Transition } from './transition';
 import type { CropSettings } from './transform';
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids';
+import type {
+  Project as CoreProject,
+  ProjectResolution as CoreProjectResolution,
+  Timeline as CoreTimeline,
+} from '@freecut/core/project';
 
-export interface Project {
-  id: string;
-  name: string;
-  description: string;
-  createdAt: number;
-  updatedAt: number;
-  duration: number;
+export interface Project extends Omit<CoreProject, 'metadata' | 'timeline'> {
   /**
    * Schema version for migrations. Projects without this field are version 1.
    * Increment CURRENT_SCHEMA_VERSION in lib/migrations when adding migrations.
@@ -33,7 +32,7 @@ export interface Project {
   rootFolderName?: string;
 }
 
-export interface ProjectTimeline {
+export interface ProjectTimeline extends Pick<CoreTimeline, 'currentFrame' | 'inPoint' | 'outPoint'> {
   /**
    * Master bus gain in dB applied after all track-level volume/fade math but
    * before the per-device monitor gain. Stored with the project so exports
@@ -286,9 +285,6 @@ export interface ProjectTimeline {
   }>;
 }
 
-export interface ProjectResolution {
-  width: number;
-  height: number;
-  fps: number;
+export interface ProjectResolution extends CoreProjectResolution {
   backgroundColor?: string; // Hex color, defaults to #000000
 }

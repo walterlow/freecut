@@ -3,6 +3,12 @@ import type { ItemEffect } from './effects';
 import type { BlendMode } from './blend-modes';
 import type { AudioEqSettings } from './audio';
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids';
+import type {
+  Marker as CoreMarker,
+  ShapeType as CoreShapeType,
+  TimelineItemBase as CoreTimelineItemBase,
+  Track as CoreTrack,
+} from '@freecut/core/project';
 
 export interface TimelineItemCornerPin {
   topLeft: [number, number];
@@ -14,13 +20,7 @@ export interface TimelineItemCornerPin {
 }
 
 // Base type for all timeline items (following Composition pattern)
-type BaseTimelineItem = {
-  id: string;
-  trackId: string;
-  from: number; // Start frame (Composition convention)
-  durationInFrames: number; // Duration in frames (Composition convention)
-  label: string;
-  mediaId?: string;
+type BaseTimelineItem = CoreTimelineItemBase & {
   compositionId?: string; // Reference to a sub-composition for compound wrappers
   originId?: string; // Tracks lineage - items from same split share this for stable React keys
   linkedGroupId?: string; // Links paired timeline items like synced video/audio companions
@@ -205,7 +205,7 @@ export type ImageItem = BaseTimelineItem & {
   sourceHeight?: number;
 };
 
-export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon' | 'heart' | 'path';
+export type ShapeType = CoreShapeType | 'path';
 
 export type ShapeItem = BaseTimelineItem & {
   type: 'shape';
@@ -251,31 +251,11 @@ export type CompositionItem = BaseTimelineItem & {
 // Union type for all timeline items
 export type TimelineItem = VideoItem | AudioItem | TextItem | ImageItem | ShapeItem | AdjustmentItem | CompositionItem;
 
-export interface TimelineTrack {
-  id: string;
-  name: string;
-  kind?: 'video' | 'audio';
-  height: number;
-  locked: boolean;
+export interface TimelineTrack extends CoreTrack {
   syncLock?: boolean; // Defaults to true - controls whether ripple edits propagate to this track
-  visible: boolean; // Visual visibility (Eye icon)
-  muted: boolean; // Audio muting (Volume icon)
-  solo: boolean;
-  volume?: number; // Track gain in dB (default: 0)
   audioEq?: AudioEqSettings; // Per-track EQ (separate from per-clip EQ)
-  color?: string; // Optional - tracks are generic containers, items have colors
-  order: number;
   items: TimelineItem[];
-  // Track grouping (subsequences)
-  parentTrackId?: string; // ID of the group track this track belongs to
-  isGroup?: boolean; // true = container track (no items, only children)
-  isCollapsed?: boolean; // Whether the group's children are collapsed
 }
 
 // Project markers (user-created timeline markers)
-export interface ProjectMarker {
-  id: string;
-  frame: number;
-  label?: string;
-  color: string;
-}
+export type ProjectMarker = CoreMarker;

@@ -68,7 +68,7 @@ export interface ItemEffect {
   effect: GpuEffect;
 }
 
-interface BaseItem {
+export interface TimelineItemBase {
   id: string;
   trackId: string;
   from: number;
@@ -91,7 +91,7 @@ interface BaseItem {
   fadeOut?: number;
 }
 
-export interface VideoItem extends BaseItem {
+export interface VideoItem extends TimelineItemBase {
   type: 'video';
   src?: string;
   thumbnailUrl?: string;
@@ -99,12 +99,12 @@ export interface VideoItem extends BaseItem {
   sourceHeight?: number;
 }
 
-export interface AudioItem extends BaseItem {
+export interface AudioItem extends TimelineItemBase {
   type: 'audio';
   src?: string;
 }
 
-export interface ImageItem extends BaseItem {
+export interface ImageItem extends TimelineItemBase {
   type: 'image';
   src?: string;
   thumbnailUrl?: string;
@@ -112,7 +112,7 @@ export interface ImageItem extends BaseItem {
   sourceHeight?: number;
 }
 
-export interface TextItem extends BaseItem {
+export interface TextItem extends TimelineItemBase {
   type: 'text';
   text: string;
   color: string;
@@ -132,7 +132,7 @@ export interface TextItem extends BaseItem {
   stroke?: TextStroke;
 }
 
-export interface ShapeItem extends BaseItem {
+export interface ShapeItem extends TimelineItemBase {
   type: 'shape';
   shapeType: ShapeType;
   fillColor: string;
@@ -144,7 +144,7 @@ export interface ShapeItem extends BaseItem {
   innerRadius?: number;
 }
 
-export interface AdjustmentItem extends BaseItem {
+export interface AdjustmentItem extends TimelineItemBase {
   type: 'adjustment';
   effectOpacity?: number;
 }

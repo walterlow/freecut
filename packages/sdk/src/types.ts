@@ -28,6 +28,7 @@ export type {
   TextShadow,
   TextStroke,
   Timeline,
+  TimelineItemBase,
   TimelineItem,
   Track,
   Transform,
