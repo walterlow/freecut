@@ -25,10 +25,9 @@ import type {
 } from './types';
 import {
   assertRenderMediaSources,
-  collectMediaUsageFromTracks,
-  planRenderMediaSources,
+  type RenderMediaSourcePlan,
 } from '@freecut/core/media-plan';
-import { resolveProjectRenderRange } from '@freecut/core/render-plan';
+import { planProjectRender, resolveProjectRenderRange } from '@freecut/core/render-plan';
 import type { ExportMode, ExportSettings } from '@/types/export';
 import type { Project } from '@/types/project';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
@@ -284,14 +283,10 @@ function extensionFromMime(mimeType: string, mode: 'video' | 'audio'): string {
 
 function applyRenderMediaSources(
   tracks: TimelineTrack[],
-  sources: AgentRenderProjectExportOptions['mediaSources'],
+  mediaPlan: RenderMediaSourcePlan,
   registerKeyframeIndex: (src: string, timestamps: number[]) => void,
 ): TimelineTrack[] {
   const resolvedTracks = JSON.parse(JSON.stringify(tracks)) as TimelineTrack[];
-  const mediaPlan = planRenderMediaSources(
-    collectMediaUsageFromTracks(resolvedTracks, null, { requireExternalSource: true }).keys(),
-    sources,
-  );
   assertRenderMediaSources(mediaPlan);
 
   for (const track of resolvedTracks) {
@@ -1089,8 +1084,16 @@ export function createAgentAPI(): FreecutAgentAPI {
         }
       }
 
-      const renderWholeProject = opts.renderWholeProject ?? false;
-      const effectiveRange = resolveProjectRenderRange(project, opts.range, renderWholeProject);
+      const renderPlan = planProjectRender(project, {
+        range: opts.range,
+        renderWholeProject: opts.renderWholeProject ?? false,
+        mediaUsage: { requireExternalSource: true },
+        mediaSources: opts.mediaSources ?? {},
+      });
+      if (!renderPlan.mediaSourcePlan) {
+        throw new Error('renderProjectExport failed to plan media sources');
+      }
+      const effectiveRange = renderPlan.effectiveRange;
       const effectiveInPoint = effectiveRange?.inFrame ?? null;
       const effectiveOutPoint = effectiveRange?.outFrame ?? null;
       const composition = timelineConverter.convertTimelineToComposition(
@@ -1110,7 +1113,7 @@ export function createAgentAPI(): FreecutAgentAPI {
 
       composition.tracks = applyRenderMediaSources(
         composition.tracks,
-        opts.mediaSources,
+        renderPlan.mediaSourcePlan,
         keyframeRegistry.registerKeyframeIndex,
       );
 

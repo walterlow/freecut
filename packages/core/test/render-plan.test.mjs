@@ -62,4 +62,27 @@ describe('project render planning', () => {
       missingMediaIds: ['media-needed'],
     });
   });
+
+  it('can ignore project media items that already have browser-readable sources', () => {
+    const project = {
+      metadata: { fps: 30 },
+      timeline: {
+        items: [
+          { id: 'ready', type: 'video', mediaId: 'media-ready', src: 'blob:ready', from: 0, durationInFrames: 30 },
+          { id: 'missing', type: 'image', mediaId: 'media-missing', from: 0, durationInFrames: 30 },
+        ],
+      },
+    };
+
+    const plan = planProjectRender(project, {
+      mediaUsage: { requireExternalSource: true },
+      mediaSources: {},
+    });
+
+    expect([...plan.mediaUsage.keys()]).toEqual(['media-missing']);
+    expect(plan.mediaSourcePlan).toMatchObject({
+      ok: false,
+      missingMediaIds: ['media-missing'],
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import {
   collectProjectMediaUsage,
   planRenderMediaSources,
+  type MediaUsageOptions,
   type MediaUsage,
   type RenderMediaSourcePlan,
   type RenderMediaSourcesInput,
@@ -15,6 +16,7 @@ import {
 export interface ProjectRenderPlanOptions {
   range?: RenderRangeInput | null;
   renderWholeProject?: boolean;
+  mediaUsage?: MediaUsageOptions;
   mediaSources?: RenderMediaSourcesInput;
 }
 
@@ -26,7 +28,7 @@ export interface ProjectRenderPlan {
 
 export function planProjectRender(project: unknown, opts: ProjectRenderPlanOptions = {}): ProjectRenderPlan {
   const effectiveRange = resolveProjectRenderRange(project, opts.range ?? null, opts.renderWholeProject ?? false);
-  const mediaUsage = collectProjectMediaUsage(project, effectiveRange);
+  const mediaUsage = collectProjectMediaUsage(project, effectiveRange, opts.mediaUsage ?? {});
 
   return {
     effectiveRange,

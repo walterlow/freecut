@@ -55,7 +55,11 @@ export interface RenderMediaSourcePlan {
 
 const MEDIA_ITEM_TYPES = new Set(['video', 'audio', 'image']);
 
-export function collectProjectMediaUsage(project: unknown, range: FrameRange | null = null): Map<string, MediaUsage> {
+export function collectProjectMediaUsage(
+  project: unknown,
+  range: FrameRange | null = null,
+  opts: MediaUsageOptions = {},
+): Map<string, MediaUsage> {
   const usage = new Map<string, MediaUsage>();
   const timeline = asRecord(project)?.timeline;
   const timelineRecord = asRecord(timeline);
@@ -68,10 +72,10 @@ export function collectProjectMediaUsage(project: unknown, range: FrameRange | n
   for (const item of asArray(timelineRecord?.items)) {
     const mediaItem = asRecord(item) as MediaItemLike | null;
     if (!mediaItem || !itemOverlapsRange(mediaItem, range)) continue;
-    collectMediaFromItem(mediaItem, usage);
+    collectMediaFromItem(mediaItem, usage, opts);
     if (mediaItem.type === 'composition' && typeof mediaItem.compositionId === 'string') {
       const composition = asRecord(compositions.get(mediaItem.compositionId));
-      collectMediaUsageFromItems(asArray(composition?.items), null, {}, usage);
+      collectMediaUsageFromItems(asArray(composition?.items), null, opts, usage);
     }
   }
 
