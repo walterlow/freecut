@@ -32,3 +32,12 @@ into this package instead of duplicating project/range/media rules.
 - `readWorkspaceProject(workspace, selector, opts)`
 - `findWorkspaceMediaSource(mediaDir, opts)`
 - `mimeTypeFromFileName(file)`
+
+## Source layout
+
+- `index.mjs`: public export barrel only.
+- `snapshot.mjs`: snapshot parse/serialize helpers.
+- `validation.mjs`: snapshot validation and linting.
+- `workspace.mjs`: workspace inspection, render range, and media planning.
+- `time.mjs`: frame/second conversion.
+- `ids.mjs`: deterministic and random id generation.
