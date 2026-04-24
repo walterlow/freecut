@@ -39,6 +39,7 @@ import {
   type ClientAudioContainer,
 } from '../utils/client-renderer';
 import { ExportPreviewPlayer } from './export-preview-player';
+import { resolveProjectRenderRange } from '@freecut/core/render-plan';
 
 export interface ExportDialogProps {
   open: boolean;
@@ -150,13 +151,19 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
   // Calculate export range
   const exportRange = useMemo(() => {
-    if (renderWholeProject || !hasInOutPoints) {
+    const effectiveRange = hasInOutPoints
+      ? resolveProjectRenderRange({
+          metadata: { fps },
+          timeline: { inPoint, outPoint },
+        }, null, renderWholeProject)
+      : null;
+    if (!effectiveRange) {
       return { start: 0, end: timelineDurationFrames, duration: timelineDurationFrames };
     }
-    const start = inPoint ?? 0;
-    const end = outPoint ?? timelineDurationFrames;
+    const start = effectiveRange.inFrame;
+    const end = effectiveRange.outFrame;
     return { start, end, duration: end - start };
-  }, [renderWholeProject, hasInOutPoints, inPoint, outPoint, timelineDurationFrames]);
+  }, [fps, renderWholeProject, hasInOutPoints, inPoint, outPoint, timelineDurationFrames]);
 
   const resolutionOptions = useMemo(
     () => getResolutionOptions(projectWidth, projectHeight),
