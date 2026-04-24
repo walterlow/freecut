@@ -27,6 +27,7 @@ import {
   assertRenderMediaSources,
   type RenderMediaSourcePlan,
 } from '@freecut/core/media-plan';
+import { validateRangeFrames } from '@freecut/core/range';
 import { planProjectRender, resolveProjectRenderRange } from '@freecut/core/render-plan';
 import type { ExportMode, ExportSettings } from '@/types/export';
 import type { Project } from '@/types/project';
@@ -321,16 +322,8 @@ function validateInOutPoints(inPoint: number | null, outPoint: number | null): {
   if (inPoint === null || outPoint === null) {
     throw new Error('inPoint and outPoint must be set together, or both null');
   }
-  if (!Number.isInteger(inPoint) || inPoint < 0) {
-    throw new RangeError(`inPoint must be a non-negative integer, got ${inPoint}`);
-  }
-  if (!Number.isInteger(outPoint) || outPoint <= 0) {
-    throw new RangeError(`outPoint must be a positive integer, got ${outPoint}`);
-  }
-  if (inPoint >= outPoint) {
-    throw new RangeError(`inPoint must be before outPoint, got ${inPoint} >= ${outPoint}`);
-  }
-  return { inPoint, outPoint };
+  const range = validateRangeFrames(inPoint, outPoint);
+  return { inPoint: range.inFrame, outPoint: range.outFrame };
 }
 
 // ---------------------------------------------------------------------------
