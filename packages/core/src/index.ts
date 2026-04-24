@@ -1,5 +1,33 @@
 export { deterministicIds, randomIds } from './ids.js';
 export type { IdGenerator } from './ids.js';
+export type {
+  AdjustmentItem,
+  AudioItem,
+  Crop,
+  FontStyle,
+  FontWeight,
+  GpuEffect,
+  ImageItem,
+  ItemEffect,
+  ItemType,
+  Marker,
+  MediaReference,
+  Project,
+  ProjectResolution,
+  ShapeItem,
+  ShapeType,
+  TextAlign,
+  TextItem,
+  TextShadow,
+  TextStroke,
+  Timeline,
+  TimelineItem,
+  Track,
+  Transform,
+  Transition,
+  VerticalAlign,
+  VideoItem,
+} from './project.js';
 export {
   assertRenderMediaSources,
   collectMediaUsageFromItems,
