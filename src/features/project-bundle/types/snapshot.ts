@@ -7,45 +7,23 @@
 
 import type { Project } from '@/types/project';
 import type { MediaMetadata } from '@/types/storage';
+import type {
+  MediaReference as CoreMediaReference,
+  ProjectSnapshot as CoreProjectSnapshot,
+} from '@freecut/core';
 
 // Snapshot format version
-export const SNAPSHOT_VERSION = '1.0';
+export { SNAPSHOT_VERSION } from '@freecut/core';
 
 /**
  * Media reference in snapshot (metadata only, no file content)
  */
-export interface SnapshotMediaReference {
-  id: string;
-  fileName: string;
-  fileSize: number;
-  mimeType: string;
-  duration: number;
-  width: number;
-  height: number;
-  fps: number;
-  codec: string;
-  bitrate: number;
-  /** Content hash for deduplication matching on import */
-  contentHash?: string;
-}
+export type SnapshotMediaReference = CoreMediaReference;
 
 /**
  * Project snapshot for lightweight export/import
  */
-export interface ProjectSnapshot {
-  /** Snapshot format version */
-  version: string;
-  /** ISO timestamp when snapshot was created */
-  exportedAt: string;
-  /** Editor version that created this snapshot */
-  editorVersion: string;
-  /** Complete project data */
-  project: Project;
-  /** Media references (metadata only) */
-  mediaReferences: SnapshotMediaReference[];
-  /** Optional checksum for integrity verification */
-  checksum?: string;
-}
+export type ProjectSnapshot = CoreProjectSnapshot<Project, SnapshotMediaReference>;
 
 /**
  * Validation result from schema validation
