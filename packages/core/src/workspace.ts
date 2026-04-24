@@ -2,7 +2,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { collectProjectMediaUsage } from './media-plan.js';
-import { resolveProjectRenderRange } from './render-plan.js';
+import { planProjectRender } from './render-plan.js';
 
 const NON_SOURCE_NAMES = new Set([
   'metadata.json',
@@ -137,8 +137,12 @@ export async function inspectWorkspaceMedia(workspace, selector, opts = {}) {
   const list = opts.readdir ?? readdir;
   const statFile = opts.stat ?? stat;
   const project = await readWorkspaceProject(workspace, selector, { readFile: read, readdir: list });
-  const range = resolveProjectRenderRange(project, opts.range, opts.renderWholeProject);
-  const usages = collectProjectMediaUsage(project, range);
+  const renderPlan = planProjectRender(project, {
+    range: opts.range,
+    renderWholeProject: opts.renderWholeProject,
+  });
+  const range = renderPlan.effectiveRange;
+  const usages = renderPlan.mediaUsage;
   const media = [];
 
   for (const usage of usages.values()) {
@@ -190,12 +194,12 @@ export async function loadWorkspaceRenderSource(workspace, selector, renderConfi
   const read = deps.readFile ?? readFile;
   const list = deps.readdir ?? readdir;
   const project = await readWorkspaceProject(workspace, selector, { readFile: read, readdir: list });
-  const effectiveRange = resolveProjectRenderRange(
-    project,
-    renderConfig.range,
-    renderConfig.renderWholeProject,
-  );
-  const mediaUsage = collectProjectMediaUsage(project, effectiveRange);
+  const renderPlan = planProjectRender(project, {
+    range: renderConfig.range,
+    renderWholeProject: renderConfig.renderWholeProject,
+  });
+  const effectiveRange = renderPlan.effectiveRange;
+  const mediaUsage = renderPlan.mediaUsage;
   const mediaIds = [...mediaUsage.keys()];
   const mediaSources = {};
   const missingSources = [];
