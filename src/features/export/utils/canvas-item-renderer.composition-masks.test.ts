@@ -4,6 +4,13 @@ import type { ItemRenderContext, ItemTransform, SubCompRenderData } from './canv
 
 const mockFns = vi.hoisted(() => ({
   applyMasksMock: vi.fn(),
+  buildPreparedMaskMock: vi.fn((mask: ShapeItem) => ({
+    path: {} as Path2D,
+    inverted: mask.maskInvert ?? false,
+    feather: mask.maskType === 'alpha' ? (mask.maskFeather ?? 0) : 0,
+    maskType: mask.maskType ?? 'clip',
+    trackOrder: 0,
+  })),
   svgPathToPath2DMock: vi.fn(() => ({}) as unknown as Path2D),
   renderShapeMock: vi.fn(),
   getShapePathMock: vi.fn(() => 'M 0 0 L 10 0 L 10 10 Z'),
@@ -12,6 +19,7 @@ const mockFns = vi.hoisted(() => ({
 
 vi.mock('./canvas-masks', () => ({
   applyMasks: mockFns.applyMasksMock,
+  buildPreparedMask: mockFns.buildPreparedMaskMock,
   svgPathToPath2D: mockFns.svgPathToPath2DMock,
 }));
 
@@ -50,6 +58,7 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
 describe('canvas-item-renderer composition masks', () => {
   beforeEach(() => {
     mockFns.applyMasksMock.mockReset();
+    mockFns.buildPreparedMaskMock.mockClear();
     mockFns.svgPathToPath2DMock.mockClear();
     mockFns.renderShapeMock.mockReset();
     mockFns.getShapePathMock.mockClear();
