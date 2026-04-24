@@ -10,8 +10,10 @@ import {
   lintSnapshot,
   loadWorkspaceRenderSource,
   parseSnapshot,
+  framesToSeconds,
   resolveProjectRenderRange,
   serializeSnapshot,
+  secondsToFrames,
   toSnapshot,
   validateSnapshot,
 } from '../src/index.mjs';
@@ -25,6 +27,16 @@ afterAll(() => {
 });
 
 describe('core workspace planning', () => {
+  it('converts between seconds and project frames', () => {
+    expect(secondsToFrames(1, 30)).toBe(30);
+    expect(secondsToFrames(1 / 30, 30)).toBe(1);
+    expect(secondsToFrames(0.5, 60)).toBe(30);
+    expect(framesToSeconds(45, 30)).toBe(1.5);
+    expect(() => secondsToFrames(-1, 30)).toThrow(RangeError);
+    expect(() => secondsToFrames(1, 0)).toThrow(RangeError);
+    expect(() => secondsToFrames(Infinity, 30)).toThrow(RangeError);
+  });
+
   it('serializes and parses snapshots', () => {
     const project = {
       id: 'project-1',

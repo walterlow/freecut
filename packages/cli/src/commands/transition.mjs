@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
-import { secondsToFrames, toSnapshot } from '../sdk.mjs';
+import { secondsToFrames } from '@freecut/core';
+import { toSnapshot } from '../sdk.mjs';
 import { readSnapshot, writeSnapshot } from '../io.mjs';
 import { rehydrate } from '../rehydrate.mjs';
 

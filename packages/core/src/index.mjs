@@ -7,6 +7,7 @@ export {
   serializeSnapshot,
   toSnapshot,
 } from './snapshot.mjs';
+export { framesToSeconds, secondsToFrames } from './time.mjs';
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';

@@ -16,6 +16,8 @@ into this package instead of duplicating project/range/media rules.
 - `serializeSnapshot(source, opts)`
 - `toSnapshot(source, opts)`
 - `SnapshotParseError`
+- `secondsToFrames(seconds, fps)`
+- `framesToSeconds(frames, fps)`
 - `validateSnapshot(snapshot, opts)`
 - `lintSnapshot(snapshot, opts)`
 - `buildRange(values)`

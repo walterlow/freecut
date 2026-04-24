@@ -19,6 +19,8 @@ export class SnapshotParseError extends Error {
 export function toSnapshot(source: unknown, opts?: SerializeOptions): any;
 export function serializeSnapshot(source: unknown, opts?: SerializeOptions): string;
 export function parseSnapshot(json: string): any;
+export function secondsToFrames(seconds: number, fps: number): number;
+export function framesToSeconds(frames: number, fps: number): number;
 
 export interface ValidationFinding {
   severity: ValidationSeverity;
