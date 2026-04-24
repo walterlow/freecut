@@ -14,6 +14,18 @@
       "types": "./dist/range.d.ts",
       "default": "./dist/range.js"
     },
+    "./project": {
+      "types": "./dist/project.d.ts",
+      "default": "./dist/project.js"
+    },
+    "./snapshot": {
+      "types": "./dist/snapshot.d.ts",
+      "default": "./dist/snapshot.js"
+    },
+    "./validation": {
+      "types": "./dist/validation.d.ts",
+      "default": "./dist/validation.js"
+    },
     "./media-plan": {
       "types": "./dist/media-plan.d.ts",
       "default": "./dist/media-plan.js"
@@ -21,6 +33,10 @@
     "./render-plan": {
       "types": "./dist/render-plan.d.ts",
       "default": "./dist/render-plan.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace.d.ts",
+      "default": "./dist/workspace.js"
     }
   },
   "files": [
