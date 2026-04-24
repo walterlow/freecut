@@ -5,7 +5,7 @@ import {
   inspectWorkspaceMedia,
   inspectWorkspaceProject,
   listWorkspaceProjects,
-} from '../workspace-core.mjs';
+} from '@freecut/core';
 
 const options = {
   json: { type: 'boolean', default: false },

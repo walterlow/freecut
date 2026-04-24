@@ -8,17 +8,17 @@ import {
   collectProjectMediaUsage,
   loadWorkspaceRenderSource,
   resolveProjectRenderRange,
-} from '../src/workspace-core.mjs';
+} from '../src/index.mjs';
 
 let tmp;
 beforeAll(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'freecut-cli-workspace-core-'));
+  tmp = mkdtempSync(join(tmpdir(), 'freecut-core-'));
 });
 afterAll(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-describe('workspace core planning', () => {
+describe('core workspace planning', () => {
   it('builds seconds and frame render ranges from CLI values', () => {
     expect(buildRange({ start: '1.5', duration: '2' })).toEqual({
       startSeconds: 1.5,

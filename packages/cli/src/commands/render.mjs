@@ -11,7 +11,7 @@ import {
   buildRange,
   loadWorkspaceRenderSource,
   mimeTypeFromFileName,
-} from '../workspace-core.mjs';
+} from '@freecut/core';
 
 const options = {
   output: { type: 'string', short: 'o' },

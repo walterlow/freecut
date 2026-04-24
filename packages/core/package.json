@@ -1,0 +1,21 @@
+{
+  "name": "@freecut/core",
+  "version": "0.0.1",
+  "description": "Shared FreeCut domain planning helpers for projects, workspaces, render ranges, and media readiness.",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.17"
+  },
+  "license": "MIT"
+}

@@ -219,6 +219,8 @@ npm run preview:perf   # Serve the last production build on port 4173
 npm run perf           # Build + serve a local production-like perf target
 npm run test           # Vitest (watch mode)
 npm run test:run       # Vitest (single run)
+npm run test:core      # Core package tests
+npm run test:cli       # CLI package tests
 npm run test:coverage  # Vitest with coverage
 npm run routes         # Regenerate TanStack Router route tree
 ```

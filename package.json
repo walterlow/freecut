@@ -29,6 +29,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:sdk": "npm test --workspace @freecut/sdk",
+    "test:core": "npm test --workspace @freecut/core",
     "test:cli": "npm test --workspace @freecut/cli",
     "test:mcp": "npm test --workspace @freecut/mcp",
     "test:preview-sync": "vitest run src/features/preview/components/video-preview.sync.test.tsx",
