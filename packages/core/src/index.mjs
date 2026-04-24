@@ -7,6 +7,7 @@ export {
   serializeSnapshot,
   toSnapshot,
 } from './snapshot.mjs';
+export { deterministicIds, randomIds } from './ids.mjs';
 export { framesToSeconds, secondsToFrames } from './time.mjs';
 
 import { readFile, readdir, stat } from 'node:fs/promises';

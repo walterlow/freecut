@@ -1,26 +1,13 @@
-/**
- * ID generation. Defaults to random UUID-style strings, but can be swapped
- * for a deterministic counter to get reproducible snapshots (useful for
- * golden-file tests and agent replays).
- */
+import {
+  deterministicIds as coreDeterministicIds,
+  randomIds as coreRandomIds,
+  type IdGenerator,
+} from '@freecut/core';
 
-export type IdGenerator = (kind: string) => string;
+export type { IdGenerator };
 
-function randomHex(bytes: number): string {
-  const bits: string[] = [];
-  for (let i = 0; i < bytes; i++) {
-    bits.push(Math.floor(Math.random() * 256).toString(16).padStart(2, '0'));
-  }
-  return bits.join('');
-}
-
-export const randomIds: IdGenerator = (kind) => `${kind}-${randomHex(8)}`;
+export const randomIds: IdGenerator = coreRandomIds;
 
 export function deterministicIds(seed = 0): IdGenerator {
-  const counters = new Map<string, number>();
-  return (kind) => {
-    const next = (counters.get(kind) ?? seed) + 1;
-    counters.set(kind, next);
-    return `${kind}-${next}`;
-  };
+  return coreDeterministicIds(seed);
 }

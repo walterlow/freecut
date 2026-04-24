@@ -19,6 +19,9 @@ export class SnapshotParseError extends Error {
 export function toSnapshot(source: unknown, opts?: SerializeOptions): any;
 export function serializeSnapshot(source: unknown, opts?: SerializeOptions): string;
 export function parseSnapshot(json: string): any;
+export type IdGenerator = (kind: string) => string;
+export const randomIds: IdGenerator;
+export function deterministicIds(seed?: number): IdGenerator;
 export function secondsToFrames(seconds: number, fps: number): number;
 export function framesToSeconds(frames: number, fps: number): number;
 

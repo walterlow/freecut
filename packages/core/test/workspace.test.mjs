@@ -7,10 +7,12 @@ import {
   SnapshotParseError,
   buildRange,
   collectProjectMediaUsage,
+  deterministicIds,
   lintSnapshot,
   loadWorkspaceRenderSource,
   parseSnapshot,
   framesToSeconds,
+  randomIds,
   resolveProjectRenderRange,
   serializeSnapshot,
   secondsToFrames,
@@ -27,6 +29,17 @@ afterAll(() => {
 });
 
 describe('core workspace planning', () => {
+  it('generates deterministic and random ids', () => {
+    const ids = deterministicIds();
+    expect(ids('project')).toBe('project-1');
+    expect(ids('track')).toBe('track-1');
+    expect(ids('project')).toBe('project-2');
+
+    const seeded = deterministicIds(10);
+    expect(seeded('item')).toBe('item-11');
+    expect(randomIds('media')).toMatch(/^media-[a-f0-9]{16}$/);
+  });
+
   it('converts between seconds and project frames', () => {
     expect(secondsToFrames(1, 30)).toBe(30);
     expect(secondsToFrames(1 / 30, 30)).toBe(1);
