@@ -25,6 +25,8 @@ export interface SnapshotValidationResult {
 
 type PushFinding = (finding: SnapshotFinding) => void;
 type ReportFinding = (code: string, message: string, path?: string, entityId?: string) => void;
+type JsonRecord = Record<string, unknown>;
+
 interface ValidationContext {
   mediaIds: Set<string>;
   warnOnMissingMedia: boolean;
@@ -32,7 +34,7 @@ interface ValidationContext {
   warning: ReportFinding;
 }
 
-export function validateSnapshot(snapshot: any, opts: SnapshotValidationOptions = {}): SnapshotValidationResult {
+export function validateSnapshot(snapshot: unknown, opts: SnapshotValidationOptions = {}): SnapshotValidationResult {
   const findings: SnapshotFinding[] = [];
   const warnOnMissingMedia = opts.warnOnMissingMedia ?? true;
 
@@ -46,17 +48,19 @@ export function validateSnapshot(snapshot: any, opts: SnapshotValidationOptions 
     error('snapshot_invalid', 'snapshot must be an object');
     return summarize(findings);
   }
+  const snapshotRecord = snapshot as JsonRecord;
 
-  if (snapshot.version !== '1.0') {
-    warning('snapshot_version_unknown', `snapshot version is "${snapshot.version}", expected "1.0"`, 'version');
+  if (snapshotRecord.version !== '1.0') {
+    warning('snapshot_version_unknown', `snapshot version is "${String(snapshotRecord.version)}", expected "1.0"`, 'version');
   }
 
-  if (!snapshot.project) {
+  const project = asRecord(snapshotRecord.project);
+  if (!project) {
     error('project_missing', 'snapshot.project is required', 'project');
     return summarize(findings);
   }
 
-  const metadata = snapshot.project.metadata;
+  const metadata = asRecord(project.metadata);
   if (!metadata) {
     error('metadata_missing', 'project.metadata is required', 'project.metadata');
   } else {
@@ -65,13 +69,13 @@ export function validateSnapshot(snapshot: any, opts: SnapshotValidationOptions 
     positiveInt(metadata.fps, 'project.metadata.fps', 'metadata_fps_invalid', 'project fps must be a positive integer');
   }
 
-  if (!Array.isArray(snapshot.mediaReferences)) {
+  if (!Array.isArray(snapshotRecord.mediaReferences)) {
     error('media_references_invalid', 'snapshot.mediaReferences must be an array', 'mediaReferences');
     return summarize(findings);
   }
 
-  const mediaIds = validateMediaReferences(snapshot.mediaReferences, push);
-  const timeline = snapshot.project.timeline;
+  const mediaIds = validateMediaReferences(snapshotRecord.mediaReferences, push);
+  const timeline = asRecord(project.timeline);
   if (!timeline) {
     warning('timeline_missing', 'project.timeline is missing; editor will open an empty timeline', 'project.timeline');
     return summarize(findings);
@@ -87,48 +91,51 @@ export function validateSnapshot(snapshot: any, opts: SnapshotValidationOptions 
   }
 }
 
-export function lintSnapshot(snapshot: any, opts: SnapshotValidationOptions = {}): SnapshotValidationResult {
+export function lintSnapshot(snapshot: unknown, opts: SnapshotValidationOptions = {}): SnapshotValidationResult {
   return validateSnapshot(snapshot, opts);
 }
 
-function validateMediaReferences(mediaReferences: any[], push: PushFinding): Set<string> {
+function validateMediaReferences(mediaReferences: unknown[], push: PushFinding): Set<string> {
   const ids = new Set<string>();
   const seen = new Set<string>();
 
-  mediaReferences.forEach((media: any, index: number) => {
+  mediaReferences.forEach((entry: unknown, index: number) => {
     const path = `mediaReferences[${index}]`;
-    if (!media.id) {
+    const media = asRecord(entry);
+    const id = stringValue(media?.id);
+    if (!media || !id) {
       push({ severity: 'error', code: 'media_id_missing', message: 'media reference id is required', path });
       return;
     }
-    if (seen.has(media.id)) {
+    if (seen.has(id)) {
       push({
         severity: 'error',
         code: 'duplicate_id',
-        message: `duplicate media id "${media.id}"`,
+        message: `duplicate media id "${id}"`,
         path: `${path}.id`,
-        entityId: media.id,
+        entityId: id,
       });
     }
-    seen.add(media.id);
-    ids.add(media.id);
+    seen.add(id);
+    ids.add(id);
 
     if (!media.fileName) {
       push({
         severity: 'error',
         code: 'media_file_name_missing',
-        message: `media "${media.id}" is missing fileName`,
+        message: `media "${id}" is missing fileName`,
         path: `${path}.fileName`,
-        entityId: media.id,
+        entityId: id,
       });
     }
-    if (media.duration < 0) {
+    const duration = numberValue(media.duration);
+    if (duration !== null && duration < 0) {
       push({
         severity: 'error',
         code: 'media_duration_invalid',
-        message: `media "${media.id}" duration must be non-negative`,
+        message: `media "${id}" duration must be non-negative`,
         path: `${path}.duration`,
-        entityId: media.id,
+        entityId: id,
       });
     }
   });
@@ -136,11 +143,11 @@ function validateMediaReferences(mediaReferences: any[], push: PushFinding): Set
   return ids;
 }
 
-function validateTimeline(timeline: any, ctx: ValidationContext): void {
-  const tracks = Array.isArray(timeline.tracks) ? timeline.tracks : [];
-  const items = Array.isArray(timeline.items) ? timeline.items : [];
-  const transitions = Array.isArray(timeline.transitions) ? timeline.transitions : [];
-  const markers = Array.isArray(timeline.markers) ? timeline.markers : [];
+function validateTimeline(timeline: JsonRecord, ctx: ValidationContext): void {
+  const tracks = recordsFromArray(timeline.tracks);
+  const items = recordsFromArray(timeline.items);
+  const transitions = recordsFromArray(timeline.transitions);
+  const markers = recordsFromArray(timeline.markers);
 
   if (!Array.isArray(timeline.tracks)) ctx.error('tracks_invalid', 'timeline.tracks must be an array', 'project.timeline.tracks');
   if (!Array.isArray(timeline.items)) ctx.error('items_invalid', 'timeline.items must be an array', 'project.timeline.items');
@@ -155,41 +162,45 @@ function validateTimeline(timeline: any, ctx: ValidationContext): void {
   const trackIds = new Set<string>();
   const itemIds = new Set<string>();
 
-  tracks.forEach((track: any, index: number) => {
+  tracks.forEach((track: JsonRecord, index: number) => {
     const path = `project.timeline.tracks[${index}]`;
     checkId(track.id, path, allIds, ctx.error);
-    if (track.id) trackIds.add(String(track.id));
-    if (!track.name) ctx.warning('track_name_missing', `track "${track.id}" has no name`, `${path}.name`, track.id);
+    const id = stringValue(track.id);
+    if (id) trackIds.add(id);
+    if (!track.name) ctx.warning('track_name_missing', `track "${id}" has no name`, `${path}.name`, id);
     if (!Number.isFinite(track.order)) {
-      ctx.error('track_order_invalid', `track "${track.id}" order must be a number`, `${path}.order`, track.id);
+      ctx.error('track_order_invalid', `track "${id}" order must be a number`, `${path}.order`, id);
     }
   });
 
-  items.forEach((item: any, index: number) => {
+  items.forEach((item: JsonRecord, index: number) => {
     const path = `project.timeline.items[${index}]`;
     checkId(item.id, path, allIds, ctx.error);
-    if (item.id) itemIds.add(String(item.id));
+    const id = stringValue(item.id);
+    if (id) itemIds.add(id);
     validateItem(item, path, trackIds, ctx);
   });
 
-  transitions.forEach((transition: any, index: number) => {
+  transitions.forEach((transition: JsonRecord, index: number) => {
     const path = `project.timeline.transitions[${index}]`;
     checkId(transition.id, path, allIds, ctx.error);
     validateTransition(transition, path, itemIds, items, ctx);
   });
 
-  markers.forEach((marker: any, index: number) => {
+  markers.forEach((marker: JsonRecord, index: number) => {
     const path = `project.timeline.markers[${index}]`;
     checkId(marker.id, path, allIds, ctx.error);
-    if (!Number.isInteger(marker.frame) || marker.frame < 0) {
-      ctx.error('marker_frame_invalid', `marker "${marker.id}" frame must be a non-negative integer`, `${path}.frame`, marker.id);
+    const id = stringValue(marker.id);
+    const frame = numberValue(marker.frame);
+    if (frame === null || !Number.isInteger(frame) || frame < 0) {
+      ctx.error('marker_frame_invalid', `marker "${id}" frame must be a non-negative integer`, `${path}.frame`, id);
     }
   });
 
   validateInOutPoints(timeline, ctx);
 }
 
-function validateInOutPoints(timeline: any, ctx: ValidationContext): void {
+function validateInOutPoints(timeline: JsonRecord, ctx: ValidationContext): void {
   const hasIn = timeline.inPoint !== undefined && timeline.inPoint !== null;
   const hasOut = timeline.outPoint !== undefined && timeline.outPoint !== null;
   if (!hasIn && !hasOut) return;
@@ -214,8 +225,8 @@ function validateInOutPoints(timeline: any, ctx: ValidationContext): void {
   ) {
     ctx.error('in_out_range_invalid', 'timeline inPoint must be before outPoint', 'project.timeline');
   }
-  const lastFrame = (timeline.items ?? []).reduce(
-    (max: number, item: any) => Math.max(max, item.from + item.durationInFrames),
+  const lastFrame = recordsFromArray(timeline.items).reduce(
+    (max: number, item: JsonRecord) => Math.max(max, frameEnd(item)),
     0,
   );
   if (lastFrame > 0 && Number.isInteger(timeline.outPoint) && Number(timeline.outPoint) > lastFrame) {
@@ -227,81 +238,102 @@ function validateInOutPoints(timeline: any, ctx: ValidationContext): void {
   }
 }
 
-function validateItem(item: any, path: string, trackIds: Set<string>, ctx: ValidationContext): void {
-  if (!trackIds.has(item.trackId)) {
-    ctx.error('item_track_missing', `item "${item.id}" references missing track "${item.trackId}"`, `${path}.trackId`, item.id);
+function validateItem(item: JsonRecord, path: string, trackIds: Set<string>, ctx: ValidationContext): void {
+  const id = stringValue(item.id);
+  const type = stringValue(item.type);
+  const trackId = stringValue(item.trackId);
+  const mediaId = stringValue(item.mediaId);
+
+  if (!trackId || !trackIds.has(trackId)) {
+    ctx.error('item_track_missing', `item "${id}" references missing track "${trackId}"`, `${path}.trackId`, id);
   }
-  if (!Number.isInteger(item.from) || item.from < 0) {
-    ctx.error('item_from_invalid', `item "${item.id}" from must be a non-negative integer`, `${path}.from`, item.id);
+  const from = numberValue(item.from);
+  if (from === null || !Number.isInteger(from) || from < 0) {
+    ctx.error('item_from_invalid', `item "${id}" from must be a non-negative integer`, `${path}.from`, id);
   }
-  if (!Number.isInteger(item.durationInFrames) || item.durationInFrames <= 0) {
-    ctx.error('item_duration_invalid', `item "${item.id}" durationInFrames must be a positive integer`, `${path}.durationInFrames`, item.id);
+  const durationInFrames = numberValue(item.durationInFrames);
+  if (durationInFrames === null || !Number.isInteger(durationInFrames) || durationInFrames <= 0) {
+    ctx.error('item_duration_invalid', `item "${id}" durationInFrames must be a positive integer`, `${path}.durationInFrames`, id);
   }
-  if (MEDIA_TYPES.has(item.type) && item.mediaId && ctx.warnOnMissingMedia && !ctx.mediaIds.has(item.mediaId)) {
-    ctx.warning('item_media_missing', `item "${item.id}" references missing media "${item.mediaId}"`, `${path}.mediaId`, item.id);
+  if (type && MEDIA_TYPES.has(type) && mediaId && ctx.warnOnMissingMedia && !ctx.mediaIds.has(mediaId)) {
+    ctx.warning('item_media_missing', `item "${id}" references missing media "${mediaId}"`, `${path}.mediaId`, id);
   }
-  if (item.type === 'text' && !item.text) {
-    ctx.error('text_required', `text item "${item.id}" requires text`, `${path}.text`, item.id);
+  if (type === 'text' && !item.text) {
+    ctx.error('text_required', `text item "${id}" requires text`, `${path}.text`, id);
   }
-  if (item.type === 'shape' && !item.shapeType) {
-    ctx.error('shape_type_required', `shape item "${item.id}" requires shapeType`, `${path}.shapeType`, item.id);
+  if (type === 'shape' && !item.shapeType) {
+    ctx.error('shape_type_required', `shape item "${id}" requires shapeType`, `${path}.shapeType`, id);
   }
-  if (SOURCE_TIMED_TYPES.has(item.type)) {
+  if (type && SOURCE_TIMED_TYPES.has(type)) {
     validateSourceTiming(item, path, ctx);
   }
-  if (item.transform?.opacity !== undefined && (item.transform.opacity < 0 || item.transform.opacity > 1)) {
-    ctx.error('opacity_range', `item "${item.id}" opacity must be between 0 and 1`, `${path}.transform.opacity`, item.id);
+  const transform = asRecord(item.transform);
+  const opacity = numberValue(transform?.opacity);
+  if (opacity !== null && (opacity < 0 || opacity > 1)) {
+    ctx.error('opacity_range', `item "${id}" opacity must be between 0 and 1`, `${path}.transform.opacity`, id);
   }
 }
 
-function validateSourceTiming(item: any, path: string, ctx: ValidationContext): void {
-  if (item.sourceStart !== undefined && (!Number.isInteger(item.sourceStart) || item.sourceStart < 0)) {
-    ctx.error('source_start_invalid', `item "${item.id}" sourceStart must be a non-negative integer`, `${path}.sourceStart`, item.id);
+function validateSourceTiming(item: JsonRecord, path: string, ctx: ValidationContext): void {
+  const id = stringValue(item.id);
+  const sourceStart = numberValue(item.sourceStart);
+  const sourceEnd = numberValue(item.sourceEnd);
+  const speed = numberValue(item.speed);
+
+  if (item.sourceStart !== undefined && (sourceStart === null || !Number.isInteger(sourceStart) || sourceStart < 0)) {
+    ctx.error('source_start_invalid', `item "${id}" sourceStart must be a non-negative integer`, `${path}.sourceStart`, id);
   }
-  if (item.sourceEnd !== undefined && (!Number.isInteger(item.sourceEnd) || item.sourceEnd < 0)) {
-    ctx.error('source_end_invalid', `item "${item.id}" sourceEnd must be a non-negative integer`, `${path}.sourceEnd`, item.id);
+  if (item.sourceEnd !== undefined && (sourceEnd === null || !Number.isInteger(sourceEnd) || sourceEnd < 0)) {
+    ctx.error('source_end_invalid', `item "${id}" sourceEnd must be a non-negative integer`, `${path}.sourceEnd`, id);
   }
-  if (item.sourceStart !== undefined && item.sourceEnd !== undefined && item.sourceEnd < item.sourceStart) {
-    ctx.error('source_range_invalid', `item "${item.id}" sourceEnd must be >= sourceStart`, `${path}.sourceEnd`, item.id);
+  if (sourceStart !== null && sourceEnd !== null && sourceEnd < sourceStart) {
+    ctx.error('source_range_invalid', `item "${id}" sourceEnd must be >= sourceStart`, `${path}.sourceEnd`, id);
   }
-  if (item.speed !== undefined && (!Number.isFinite(item.speed) || item.speed <= 0)) {
-    ctx.error('speed_invalid', `item "${item.id}" speed must be positive`, `${path}.speed`, item.id);
+  if (item.speed !== undefined && (speed === null || speed <= 0)) {
+    ctx.error('speed_invalid', `item "${id}" speed must be positive`, `${path}.speed`, id);
   }
 }
 
 function validateTransition(
-  transition: any,
+  transition: JsonRecord,
   path: string,
   itemIds: Set<string>,
-  items: any[],
+  items: JsonRecord[],
   ctx: ValidationContext,
 ): void {
-  if (!itemIds.has(transition.leftClipId)) {
-    ctx.error('transition_left_missing', `transition "${transition.id}" references missing left clip`, `${path}.leftClipId`, transition.id);
+  const id = stringValue(transition.id);
+  const leftClipId = stringValue(transition.leftClipId);
+  const rightClipId = stringValue(transition.rightClipId);
+  const trackId = stringValue(transition.trackId);
+
+  if (!leftClipId || !itemIds.has(leftClipId)) {
+    ctx.error('transition_left_missing', `transition "${id}" references missing left clip`, `${path}.leftClipId`, id);
   }
-  if (!itemIds.has(transition.rightClipId)) {
-    ctx.error('transition_right_missing', `transition "${transition.id}" references missing right clip`, `${path}.rightClipId`, transition.id);
+  if (!rightClipId || !itemIds.has(rightClipId)) {
+    ctx.error('transition_right_missing', `transition "${id}" references missing right clip`, `${path}.rightClipId`, id);
   }
-  if (!Number.isInteger(transition.durationInFrames) || transition.durationInFrames <= 0) {
-    ctx.error('transition_duration_invalid', `transition "${transition.id}" durationInFrames must be positive`, `${path}.durationInFrames`, transition.id);
+  const durationInFrames = numberValue(transition.durationInFrames);
+  if (durationInFrames === null || !Number.isInteger(durationInFrames) || durationInFrames <= 0) {
+    ctx.error('transition_duration_invalid', `transition "${id}" durationInFrames must be positive`, `${path}.durationInFrames`, id);
   }
 
-  const left = items.find((item: any) => item.id === transition.leftClipId);
-  const right = items.find((item: any) => item.id === transition.rightClipId);
+  const left = items.find((item: JsonRecord) => item.id === leftClipId);
+  const right = items.find((item: JsonRecord) => item.id === rightClipId);
   if (!left || !right) return;
   if (left.trackId !== right.trackId) {
-    ctx.error('transition_track_mismatch', `transition "${transition.id}" clips must be on the same track`, path, transition.id);
+    ctx.error('transition_track_mismatch', `transition "${id}" clips must be on the same track`, path, id);
   }
-  if (transition.trackId !== left.trackId) {
-    ctx.error('transition_track_invalid', `transition "${transition.id}" trackId does not match its clips`, `${path}.trackId`, transition.id);
+  if (trackId !== left.trackId) {
+    ctx.error('transition_track_invalid', `transition "${id}" trackId does not match its clips`, `${path}.trackId`, id);
   }
-  const leftEnd = left.from + left.durationInFrames;
-  if (leftEnd !== right.from) {
+  const leftEnd = frameEnd(left);
+  const rightFrom = numberValue(right.from);
+  if (rightFrom !== null && leftEnd !== rightFrom) {
     ctx.warning(
       'transition_not_adjacent',
-      `transition "${transition.id}" clips are not adjacent (${leftEnd} -> ${right.from})`,
+      `transition "${id}" clips are not adjacent (${leftEnd} -> ${rightFrom})`,
       path,
-      transition.id,
+      id,
     );
   }
 }
@@ -329,4 +361,24 @@ function summarize(findings: SnapshotFinding[]): SnapshotValidationResult {
     infoCount,
     findings,
   };
+}
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === 'object' ? value as JsonRecord : null;
+}
+
+function recordsFromArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.map(asRecord).filter((entry): entry is JsonRecord => entry !== null) : [];
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function frameEnd(item: JsonRecord): number {
+  return Number(item.from ?? 0) + Number(item.durationInFrames ?? 0);
 }
