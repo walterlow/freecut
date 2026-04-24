@@ -783,6 +783,155 @@ describe('freecut CLI', () => {
     expect(included.projects[0].trashed).toBe(true);
   });
 
+  it('lists workspace media readiness for a render range', async () => {
+    const workspace = join(tmp, 'workspace-media');
+    const projectId = 'project-media';
+    await mkdir(join(workspace, 'projects', projectId), { recursive: true });
+    await mkdir(join(workspace, 'media', 'media-ready'), { recursive: true });
+    await mkdir(join(workspace, 'media', 'media-late'), { recursive: true });
+    await writeFile(join(workspace, 'projects', projectId, 'project.json'), JSON.stringify({
+      id: projectId,
+      name: 'Media Project',
+      description: '',
+      createdAt: 1,
+      updatedAt: 1,
+      duration: 10,
+      metadata: { width: 1920, height: 1080, fps: 30 },
+      timeline: {
+        tracks: [],
+        items: [
+          {
+            id: 'clip-ready',
+            type: 'video',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 150,
+            label: 'ready.mp4',
+            mediaId: 'media-ready',
+          },
+          {
+            id: 'clip-late',
+            type: 'video',
+            trackId: 'track-1',
+            from: 180,
+            durationInFrames: 120,
+            label: 'late.mp4',
+            mediaId: 'media-late',
+          },
+        ],
+      },
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', 'media-ready', 'metadata.json'), JSON.stringify({
+      id: 'media-ready',
+      fileName: 'ready.mp4',
+      mimeType: 'video/mp4',
+      fileSize: 10,
+      duration: 5,
+      width: 1920,
+      height: 1080,
+      fps: 30,
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', 'media-ready', 'ready.mp4'), 'ready', 'utf8');
+    await writeFile(join(workspace, 'media', 'media-late', 'metadata.json'), JSON.stringify({
+      id: 'media-late',
+      fileName: 'late.mp4',
+      mimeType: 'video/mp4',
+    }), 'utf8');
+
+    const result = JSON.parse(
+      (await run([
+        'workspace',
+        'media',
+        workspace,
+        '--project-id',
+        projectId,
+        '--start',
+        '0',
+        '--duration',
+        '5',
+        '--json',
+      ])).stdout.text,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.range).toMatchObject({ inFrame: 0, outFrame: 150, durationSeconds: 5 });
+    expect(result.media.map((entry) => entry.mediaId)).toEqual(['media-ready']);
+    expect(result.media[0]).toMatchObject({
+      fileName: 'ready.mp4',
+      metadataExists: true,
+      sourceExists: true,
+      ready: true,
+      itemCount: 1,
+    });
+
+    const text = (await run([
+      'workspace',
+      'media',
+      workspace,
+      '--project-id',
+      projectId,
+      '--start',
+      '0',
+      '--duration',
+      '5',
+    ])).stdout.text;
+    expect(text).toContain('ok: workspace media');
+    expect(text).toContain('media-ready');
+  });
+
+  it('workspace media reports missing source mirrors', async () => {
+    const workspace = join(tmp, 'workspace-media-missing');
+    const projectId = 'project-media-missing';
+    await mkdir(join(workspace, 'projects', projectId), { recursive: true });
+    await mkdir(join(workspace, 'media', 'media-missing'), { recursive: true });
+    await writeFile(join(workspace, 'projects', projectId, 'project.json'), JSON.stringify({
+      id: projectId,
+      name: 'Missing Media Project',
+      description: '',
+      createdAt: 1,
+      updatedAt: 1,
+      duration: 5,
+      metadata: { width: 1920, height: 1080, fps: 30 },
+      timeline: {
+        tracks: [],
+        items: [{
+          id: 'clip-missing',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 150,
+          label: 'missing.mp4',
+          mediaId: 'media-missing',
+        }],
+      },
+    }), 'utf8');
+    await writeFile(join(workspace, 'media', 'media-missing', 'metadata.json'), JSON.stringify({
+      id: 'media-missing',
+      fileName: 'missing.mp4',
+      mimeType: 'video/mp4',
+    }), 'utf8');
+
+    const result = JSON.parse(
+      (await run([
+        'workspace',
+        'media',
+        workspace,
+        '--project-id',
+        projectId,
+        '--json',
+      ])).stdout.text,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.missingMedia).toHaveLength(1);
+    expect(result.missingMedia[0]).toMatchObject({
+      mediaId: 'media-missing',
+      metadataExists: true,
+      sourceExists: false,
+      ready: false,
+    });
+  });
+
   it('render refuses snapshots with lint errors before connecting to Chrome', async () => {
     const file = join(tmp, 'render-invalid.fcproject');
     await run(['new', file]);

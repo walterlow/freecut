@@ -33,6 +33,7 @@ usage:
   freecut render --workspace <dir> --project-id ABC --launch-browser [--output out.mp4]
   freecut render --workspace <dir> --project-id ABC --check [--json]
   freecut workspace projects <dir> [--json]
+  freecut workspace media <dir> --project-id ABC [--start 0 --duration 5] [--json]
   freecut track add <file> [--kind video|audio --name X]
   freecut clip add <file> --type video|audio|image|text|shape|adjustment \\
                           --track <id> --from <sec> --duration <sec> [options]

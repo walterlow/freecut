@@ -60,6 +60,7 @@ freecut render --workspace ~/FreeCut --project-id ABC \
 freecut render --workspace ~/FreeCut --project-id ABC \
   --start 0 --duration 5 --check --json
 freecut workspace projects ~/FreeCut --json
+freecut workspace media ~/FreeCut --project-id ABC --start 0 --duration 5 --json
 ```
 
 ## Commands
@@ -74,6 +75,7 @@ freecut workspace projects ~/FreeCut --json
 | `render --project <name>` | Open an existing workspace project by id/name and render it |
 | `render --workspace <dir> --project-id <id>` | Read a disk workspace directly and render without a browser workspace grant |
 | `workspace projects <dir>` | List projects stored in a disk workspace folder |
+| `workspace media <dir> --project-id <id>` | Inspect media source readiness for a workspace project or render range |
 | `track add <file>` | Add a video or audio track |
 | `clip add <file> --type ...` | Add video / audio / image / text / shape / adjustment |
 | `media add <file>` | Register a media reference (editor resolves on import) |
