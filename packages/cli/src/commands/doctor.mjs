@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { lintSnapshot, validateSnapshot } from '../sdk.mjs';
+import { lintSnapshot, validateSnapshot } from '@freecut/core';
 import { readSnapshot } from '../io.mjs';
 
 const options = {
@@ -15,7 +15,7 @@ export async function runDoctor(argv, { stdout }) {
   const checks = [];
 
   checks.push(checkNode());
-  checks.push(checkSdkExports());
+  checks.push(checkCoreExports());
   checks.push(checkSdkDist());
   checks.push(checkProjectWorkspace());
 
@@ -43,11 +43,11 @@ function checkNode() {
   return fail('node', `Node ${process.versions.node}; @freecut/cli requires >=18`);
 }
 
-function checkSdkExports() {
+function checkCoreExports() {
   if (typeof validateSnapshot === 'function' && typeof lintSnapshot === 'function') {
-    return pass('sdk exports', 'validateSnapshot and lintSnapshot are available');
+    return pass('core exports', 'validateSnapshot and lintSnapshot are available');
   }
-  return fail('sdk exports', 'validation exports are missing from @freecut/sdk');
+  return fail('core exports', 'validation exports are missing from @freecut/core');
 }
 
 function checkSdkDist() {

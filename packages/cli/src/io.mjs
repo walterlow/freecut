@@ -6,11 +6,11 @@
 
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { parse } from './sdk.mjs';
+import { parseSnapshot } from '@freecut/core';
 
 export async function readSnapshot(filePath) {
   const raw = await readFile(filePath, 'utf8');
-  return parse(raw);
+  return parseSnapshot(raw);
 }
 
 export async function writeSnapshot(filePath, snapshot) {

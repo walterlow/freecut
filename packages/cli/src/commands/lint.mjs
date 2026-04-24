@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { lintSnapshot } from '../sdk.mjs';
+import { lintSnapshot } from '@freecut/core';
 import { readSnapshot } from '../io.mjs';
 
 const options = {

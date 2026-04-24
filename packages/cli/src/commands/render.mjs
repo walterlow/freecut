@@ -5,12 +5,13 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { lintSnapshot, parse } from '../sdk.mjs';
 import { connectBridge } from '../cdp-bridge.mjs';
 import {
   buildRange,
+  lintSnapshot,
   loadWorkspaceRenderSource,
   mimeTypeFromFileName,
+  parseSnapshot,
 } from '@freecut/core';
 
 const options = {
@@ -81,7 +82,7 @@ export async function runRender(argv, { stdout }, deps = {}) {
   let workspaceRender = null;
   if (file) {
     raw = await (deps.readFile ?? readFile)(file, 'utf8');
-    snapshot = parse(raw);
+    snapshot = parseSnapshot(raw);
     const lint = lintSnapshot(snapshot);
     if (lint.errorCount > 0) {
       throw new Error(`render aborted: project has ${lint.errorCount} lint error(s); run freecut lint ${file}`);
