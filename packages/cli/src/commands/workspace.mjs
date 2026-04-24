@@ -17,7 +17,7 @@ const options = {
 
 export async function runWorkspace(argv, { stdout }, deps = {}) {
   const [subcommand, ...rest] = argv;
-  if (subcommand !== 'projects' && subcommand !== 'list' && subcommand !== 'media') {
+  if (subcommand !== 'projects' && subcommand !== 'list' && subcommand !== 'media' && subcommand !== 'inspect') {
     throw workspaceUsage();
   }
 
@@ -51,6 +51,26 @@ export async function runWorkspace(argv, { stdout }, deps = {}) {
     return;
   }
 
+  if (subcommand === 'inspect') {
+    const selector = {
+      project: values.project,
+      projectId: values['project-id'],
+    };
+    if (!selector.project && !selector.projectId) {
+      throw new Error('usage: freecut workspace inspect <dir> --project-id <id> [--json]');
+    }
+    const report = await inspectWorkspaceProject(resolve(workspace), selector, {
+      readFile: deps.readFile,
+      readdir: deps.readdir,
+    });
+    if (values.json) {
+      stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+      return;
+    }
+    writeInspectReport(stdout, report);
+    return;
+  }
+
   const projects = await listWorkspaceProjects(resolve(workspace), {
     includeTrashed: values['include-trashed'],
     readFile: deps.readFile,
@@ -80,6 +100,7 @@ export async function runWorkspace(argv, { stdout }, deps = {}) {
 function workspaceUsage() {
   return new Error(
     'usage: freecut workspace projects <dir> [--json] [--include-trashed]\n' +
+    '   or: freecut workspace inspect <dir> --project-id <id> [--json]\n' +
     '   or: freecut workspace media <dir> --project-id <id> [--start S --duration S] [--json]',
   );
 }
@@ -118,6 +139,120 @@ async function listWorkspaceProjects(workspace, opts = {}) {
   }
 
   return projects.sort((a, b) => b.updatedAt - a.updatedAt || a.name.localeCompare(b.name));
+}
+
+async function inspectWorkspaceProject(workspace, selector, opts = {}) {
+  const read = opts.readFile ?? readFile;
+  const list = opts.readdir ?? readdir;
+  const project = await readWorkspaceProject(workspace, selector, read, list);
+  const projectDir = join(workspace, 'projects', project.id);
+  const links = await readJsonIfExists(join(projectDir, 'media-links.json'), read);
+  const timeline = project.timeline ?? {};
+  const tracks = timeline.tracks ?? [];
+  const items = timeline.items ?? [];
+  const transitions = timeline.transitions ?? [];
+  const markers = timeline.markers ?? [];
+  const keyframes = timeline.keyframes ?? [];
+  const compositions = timeline.compositions ?? [];
+  const mediaIds = collectAllProjectMediaIds(project);
+  const linkedMediaIds = links?.mediaIds?.map((entry) => entry.id).filter(Boolean) ?? [];
+
+  return {
+    workspace,
+    project: {
+      id: project.id,
+      name: project.name,
+      description: project.description ?? '',
+      duration: Number(project.duration ?? 0),
+      schemaVersion: project.schemaVersion ?? null,
+      createdAt: Number(project.createdAt ?? 0),
+      updatedAt: Number(project.updatedAt ?? 0),
+      resolution: {
+        width: project.metadata?.width ?? 0,
+        height: project.metadata?.height ?? 0,
+        fps: project.metadata?.fps ?? 0,
+        backgroundColor: project.metadata?.backgroundColor,
+      },
+    },
+    counts: {
+      tracks: tracks.length,
+      items: items.length,
+      transitions: transitions.length,
+      markers: markers.length,
+      keyframeItems: keyframes.length,
+      keyframes: countKeyframes(keyframes),
+      compositions: compositions.length,
+      linkedMedia: linkedMediaIds.length,
+      referencedMedia: mediaIds.length,
+    },
+    tracks: tracks.map((track) => ({
+      id: track.id,
+      name: track.name,
+      kind: track.kind ?? null,
+      order: track.order ?? 0,
+      visible: track.visible ?? true,
+      muted: track.muted ?? false,
+      locked: track.locked ?? false,
+      itemCount: items.filter((item) => item.trackId === track.id).length,
+    })),
+    items: items.map((item) => ({
+      id: item.id,
+      type: item.type,
+      trackId: item.trackId,
+      from: Number(item.from ?? 0),
+      durationInFrames: Number(item.durationInFrames ?? 0),
+      label: item.label ?? '',
+      mediaId: item.mediaId ?? null,
+    })),
+    transitions,
+    markers,
+    compositions: compositions.map((composition) => ({
+      id: composition.id,
+      name: composition.name,
+      width: composition.width,
+      height: composition.height,
+      fps: composition.fps,
+      durationInFrames: composition.durationInFrames,
+      itemCount: composition.items?.length ?? 0,
+      trackCount: composition.tracks?.length ?? 0,
+    })),
+    media: {
+      linkedIds: linkedMediaIds,
+      referencedIds: mediaIds,
+      missingLinks: mediaIds.filter((id) => !linkedMediaIds.includes(id)),
+      orphanLinks: linkedMediaIds.filter((id) => !mediaIds.includes(id)),
+    },
+  };
+}
+
+function writeInspectReport(stdout, report) {
+  const { project, counts } = report;
+  stdout.write(`${project.name} (${project.id})\n`);
+  stdout.write(
+    `  ${project.resolution.width}x${project.resolution.height} @ ${project.resolution.fps}fps · ` +
+    `${project.duration.toFixed(2)}s · schema ${project.schemaVersion ?? 'unknown'}\n`,
+  );
+  stdout.write(
+    `  tracks: ${counts.tracks}  items: ${counts.items}  transitions: ${counts.transitions}  ` +
+    `markers: ${counts.markers}  media: ${counts.referencedMedia}\n`,
+  );
+  for (const track of report.tracks) {
+    stdout.write(
+      `  - track ${track.id} "${track.name}" (${track.kind ?? 'video'}) ` +
+      `order=${track.order} items=${track.itemCount}\n`,
+    );
+  }
+  for (const item of report.items) {
+    const end = item.from + item.durationInFrames;
+    const media = item.mediaId ? ` media=${item.mediaId}` : '';
+    stdout.write(`  - item ${item.id} type=${item.type} track=${item.trackId} frames=[${item.from}, ${end})${media}\n`);
+  }
+  if (report.media.missingLinks.length > 0) {
+    stdout.write(`  missing media links: ${report.media.missingLinks.join(', ')}\n`);
+  }
+  if (report.media.orphanLinks.length > 0) {
+    stdout.write(`  orphan media links: ${report.media.orphanLinks.join(', ')}\n`);
+  }
 }
 
 async function inspectWorkspaceMedia(workspace, selector, opts = {}) {
@@ -257,6 +392,31 @@ function collectProjectMediaUsage(project, range) {
   }
 
   return usage;
+}
+
+function collectAllProjectMediaIds(project) {
+  const ids = new Set();
+  collectMediaIds(project.timeline?.items, ids);
+  for (const composition of project.timeline?.compositions ?? []) {
+    collectMediaIds(composition.items, ids);
+  }
+  return [...ids].sort();
+}
+
+function collectMediaIds(items, ids) {
+  for (const item of items ?? []) {
+    if (item?.mediaId && (item.type === 'video' || item.type === 'audio' || item.type === 'image')) {
+      ids.add(item.mediaId);
+    }
+  }
+}
+
+function countKeyframes(keyframes) {
+  return keyframes.reduce((sum, item) => (
+    sum + (item.properties ?? []).reduce((propertySum, property) => (
+      propertySum + (property.keyframes?.length ?? 0)
+    ), 0)
+  ), 0);
 }
 
 function collectMediaIdsFromItems(items, usage, range) {

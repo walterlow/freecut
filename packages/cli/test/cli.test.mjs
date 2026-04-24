@@ -783,6 +783,90 @@ describe('freecut CLI', () => {
     expect(included.projects[0].trashed).toBe(true);
   });
 
+  it('inspects a workspace project from disk', async () => {
+    const workspace = join(tmp, 'workspace-inspect');
+    const projectId = 'project-inspect';
+    await mkdir(join(workspace, 'projects', projectId), { recursive: true });
+    await writeFile(join(workspace, 'projects', projectId, 'project.json'), JSON.stringify({
+      id: projectId,
+      name: 'Inspect Project',
+      description: 'inspect me',
+      createdAt: 1,
+      updatedAt: 2,
+      duration: 4,
+      schemaVersion: 10,
+      metadata: { width: 1920, height: 1080, fps: 30, backgroundColor: '#111111' },
+      timeline: {
+        tracks: [{
+          id: 'track-1',
+          name: 'V1',
+          kind: 'video',
+          height: 80,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: 0,
+        }],
+        items: [{
+          id: 'clip-1',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 120,
+          label: 'clip.mp4',
+          mediaId: 'media-1',
+        }],
+        transitions: [{ id: 'transition-1', leftClipId: 'clip-1', rightClipId: 'clip-2' }],
+        markers: [{ id: 'marker-1', frame: 30, label: 'beat', color: '#fff' }],
+        keyframes: [{
+          itemId: 'clip-1',
+          properties: [{
+            property: 'opacity',
+            keyframes: [
+              { id: 'kf-1', frame: 0, value: 1, easing: 'linear' },
+              { id: 'kf-2', frame: 30, value: 0.5, easing: 'linear' },
+            ],
+          }],
+        }],
+      },
+    }), 'utf8');
+    await writeFile(join(workspace, 'projects', projectId, 'media-links.json'), JSON.stringify({
+      version: '1.0',
+      mediaIds: [
+        { id: 'media-1', addedAt: 1 },
+        { id: 'media-orphan', addedAt: 2 },
+      ],
+    }), 'utf8');
+
+    const json = JSON.parse(
+      (await run(['workspace', 'inspect', workspace, '--project-id', projectId, '--json'])).stdout.text,
+    );
+
+    expect(json.project).toMatchObject({
+      id: projectId,
+      name: 'Inspect Project',
+      schemaVersion: 10,
+      resolution: { width: 1920, height: 1080, fps: 30 },
+    });
+    expect(json.counts).toMatchObject({
+      tracks: 1,
+      items: 1,
+      transitions: 1,
+      markers: 1,
+      keyframeItems: 1,
+      keyframes: 2,
+      linkedMedia: 2,
+      referencedMedia: 1,
+    });
+    expect(json.media.orphanLinks).toEqual(['media-orphan']);
+    expect(json.items[0]).toMatchObject({ id: 'clip-1', mediaId: 'media-1' });
+
+    const text = (await run(['workspace', 'inspect', workspace, '--project-id', projectId])).stdout.text;
+    expect(text).toContain('Inspect Project');
+    expect(text).toContain('orphan media links: media-orphan');
+  });
+
   it('lists workspace media readiness for a render range', async () => {
     const workspace = join(tmp, 'workspace-media');
     const projectId = 'project-media';

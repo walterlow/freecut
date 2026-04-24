@@ -280,6 +280,8 @@ src/
 
 Architecture boundary policy and migration plan: `docs/architecture-boundaries.md`
 
+Core-first architecture roadmap: [`docs/core-first-architecture.md`](docs/core-first-architecture.md)
+
 ## Contributing
 
 FreeCut is open source but not open contribution — pull requests are not accepted at this time.
