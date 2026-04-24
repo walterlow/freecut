@@ -11,6 +11,7 @@ import { collectProjectMediaUsage } from '@freecut/core/media-plan';
 import { validateRangeFrames } from '@freecut/core/range';
 import { resolveProjectRenderRange } from '@freecut/core/render-plan';
 import { SNAPSHOT_VERSION } from '@freecut/core/snapshot';
+import { calculateTransitionPortions } from '@freecut/core/transition-plan';
 import { buildRange as buildRangeFromSubpath } from '@freecut/core/workspace';
 
 describe('package exports', () => {
@@ -25,6 +26,10 @@ describe('package exports', () => {
     expect(buildRangeFromSubpath({ start: '0', duration: '1' })).toEqual({
       startSeconds: 0,
       durationSeconds: 1,
+    });
+    expect(calculateTransitionPortions(10, 0.5)).toEqual({
+      leftPortion: 5,
+      rightPortion: 5,
     });
   });
 

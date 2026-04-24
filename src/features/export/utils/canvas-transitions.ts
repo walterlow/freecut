@@ -9,6 +9,7 @@ import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@
 import type { TimelineItem } from '@/types/timeline';
 import { transitionRegistry } from '@/core/timeline/transitions/registry';
 import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner';
+import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
 import {
   resolveTransitionFrameState,
 } from '@/features/export/deps/composition-runtime';
@@ -47,7 +48,7 @@ export interface ActiveTransition {
  * Build once per render, then reuse for every frame.
  */
 export interface TransitionFrameIndex {
-  windows: ReturnType<typeof import('@/core/timeline/transitions/transition-planner').resolveTransitionWindows>;
+  windows: ResolvedTransitionWindow<TimelineItem, Transition>[];
 }
 
 /**

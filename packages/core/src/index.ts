@@ -72,4 +72,11 @@ export type {
   SnapshotSource,
 } from './snapshot.js';
 export { framesToSeconds, secondsToFrames } from './time.js';
+export { calculateTransitionPortions, resolveTransitionWindows } from './transition-plan.js';
+export type {
+  ResolvedTransitionWindow,
+  TimelineClipLike,
+  TransitionLike,
+  TransitionPortions,
+} from './transition-plan.js';
 export { lintSnapshot, validateSnapshot } from './validation.js';

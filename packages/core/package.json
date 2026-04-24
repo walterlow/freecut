@@ -34,6 +34,10 @@
       "types": "./dist/render-plan.d.ts",
       "default": "./dist/render-plan.js"
     },
+    "./transition-plan": {
+      "types": "./dist/transition-plan.d.ts",
+      "default": "./dist/transition-plan.js"
+    },
     "./workspace": {
       "types": "./dist/workspace.d.ts",
       "default": "./dist/workspace.js"
