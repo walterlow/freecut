@@ -5,12 +5,13 @@
  */
 
 import type { Project } from '@/types/project';
+import { CURRENT_PROJECT_SCHEMA_VERSION } from '@freecut/core';
 
 /**
  * Current schema version.
  * Increment this when adding a new migration.
  */
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = CURRENT_PROJECT_SCHEMA_VERSION;
 
 /**
  * A migration function transforms a project from version N to N+1.

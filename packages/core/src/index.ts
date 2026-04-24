@@ -71,6 +71,7 @@ export type {
   SnapshotOptions,
   SnapshotSource,
 } from './snapshot.js';
+export { CURRENT_PROJECT_SCHEMA_VERSION } from './schema.js';
 export { framesToSeconds, secondsToFrames } from './time.js';
 export { calculateTransitionPortions, resolveTransitionWindows } from './transition-plan.js';
 export type {

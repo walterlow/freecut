@@ -27,6 +27,7 @@ import type {
 } from './types.js';
 import { randomIds, type IdGenerator } from './ids.js';
 import { secondsToFrames } from './time.js';
+import { CURRENT_PROJECT_SCHEMA_VERSION } from '@freecut/core';
 
 export interface CreateProjectOptions {
   name: string;
@@ -75,6 +76,7 @@ export class ProjectBuilder {
       createdAt: ts,
       updatedAt: ts,
       duration: 0,
+      schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
       metadata,
       timeline: {
         tracks: [],

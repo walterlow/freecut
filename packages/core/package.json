@@ -22,6 +22,10 @@
       "types": "./dist/snapshot.d.ts",
       "default": "./dist/snapshot.js"
     },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    },
     "./validation": {
       "types": "./dist/validation.d.ts",
       "default": "./dist/validation.js"
