@@ -10,11 +10,22 @@ import {
   serializeSnapshot,
   toSnapshot as coreToSnapshot,
 } from '@freecut/core';
+import type { SnapshotLike, SnapshotOptions, SnapshotSource } from '@freecut/core';
 import type { MediaReference, Project, ProjectSnapshot } from './types.js';
 import { SDK_VERSION } from './types.js';
 import { ProjectBuilder } from './builder.js';
 
-export interface SerializeOptions {
+type SdkSnapshotSource = SnapshotSource & {
+  project: Project;
+  mediaReferences: MediaReference[];
+};
+
+type SdkSnapshot = SnapshotLike & {
+  project: Project;
+  mediaReferences: MediaReference[];
+};
+
+export interface SerializeOptions extends Omit<SnapshotOptions, 'mediaReferences'> {
   /** Pretty-print JSON output (default: true). */
   pretty?: boolean;
   /** ISO timestamp to embed as `exportedAt` — defaults to now. */
@@ -34,7 +45,7 @@ export function toSnapshot(
   return coreToSnapshot(normalizeSnapshotSource(source), {
     ...opts,
     editorVersion: opts.editorVersion ?? `@freecut/sdk@${SDK_VERSION}`,
-  }) as ProjectSnapshot;
+  }) as SdkSnapshot;
 }
 
 export function serialize(
@@ -52,10 +63,10 @@ export function serialize(
  * light structural checks — full schema validation lives in validation.
  */
 export function parse(json: string): ProjectSnapshot {
-  return parseSnapshot(json) as ProjectSnapshot;
+  return parseSnapshot(json) as unknown as ProjectSnapshot;
 }
 
-function normalizeSnapshotSource(source: Project | ProjectBuilder) {
+function normalizeSnapshotSource(source: Project | ProjectBuilder): SdkSnapshotSource {
   if (source instanceof ProjectBuilder) {
     return {
       project: source.project,

@@ -184,6 +184,12 @@ describe('serialize/parse', () => {
     expect(snap.editorVersion).toMatch(/@freecut\/sdk@/);
   });
 
+  it('returns an sdk-shaped snapshot from the shared core serializer', () => {
+    const snap = toSnapshot(buildGolden());
+    expect(snap.project.metadata.fps).toBe(30);
+    expect(snap.mediaReferences[0]?.fileName).toBe('clip.mp4');
+  });
+
   it('throws SnapshotParseError on malformed JSON', () => {
     expect(() => parse('{')).toThrow(SnapshotParseError);
     expect(() => parse('null')).toThrow(SnapshotParseError);
