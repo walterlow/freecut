@@ -1,5 +1,25 @@
 export type ValidationSeverity = 'error' | 'warning' | 'info';
 
+export const SNAPSHOT_VERSION: '1.0';
+export const CORE_VERSION: string;
+
+export interface SerializeOptions {
+  pretty?: boolean;
+  exportedAt?: string;
+  editorVersion?: string;
+  version?: string;
+  mediaReferences?: unknown[];
+}
+
+export class SnapshotParseError extends Error {
+  constructor(message: string, cause?: unknown);
+  cause?: unknown;
+}
+
+export function toSnapshot(source: unknown, opts?: SerializeOptions): any;
+export function serializeSnapshot(source: unknown, opts?: SerializeOptions): string;
+export function parseSnapshot(json: string): any;
+
 export interface ValidationFinding {
   severity: ValidationSeverity;
   code: string;

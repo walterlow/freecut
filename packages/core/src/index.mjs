@@ -1,4 +1,12 @@
 export { lintSnapshot, validateSnapshot } from './validation.mjs';
+export {
+  CORE_VERSION,
+  SNAPSHOT_VERSION,
+  SnapshotParseError,
+  parseSnapshot,
+  serializeSnapshot,
+  toSnapshot,
+} from './snapshot.mjs';
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';

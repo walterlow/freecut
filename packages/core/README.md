@@ -12,6 +12,10 @@ into this package instead of duplicating project/range/media rules.
 
 ## Current surface
 
+- `parseSnapshot(json)`
+- `serializeSnapshot(source, opts)`
+- `toSnapshot(source, opts)`
+- `SnapshotParseError`
 - `validateSnapshot(snapshot, opts)`
 - `lintSnapshot(snapshot, opts)`
 - `buildRange(values)`

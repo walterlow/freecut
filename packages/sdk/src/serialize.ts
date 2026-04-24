@@ -4,8 +4,14 @@
  * written by `serialize()` can be opened directly in the app.
  */
 
+import {
+  SnapshotParseError,
+  parseSnapshot,
+  serializeSnapshot,
+  toSnapshot as coreToSnapshot,
+} from '@freecut/core';
 import type { MediaReference, Project, ProjectSnapshot } from './types.js';
-import { SDK_VERSION, SNAPSHOT_VERSION } from './types.js';
+import { SDK_VERSION } from './types.js';
 import { ProjectBuilder } from './builder.js';
 
 export interface SerializeOptions {
@@ -19,66 +25,45 @@ export interface SerializeOptions {
   mediaReferences?: MediaReference[];
 }
 
+export { SnapshotParseError };
+
 export function toSnapshot(
   source: Project | ProjectBuilder,
   opts: SerializeOptions = {},
 ): ProjectSnapshot {
-  const project = source instanceof ProjectBuilder ? source.project : source;
-  const builderRefs = source instanceof ProjectBuilder ? source.mediaReferences : [];
-  const mediaReferences = [...builderRefs, ...(opts.mediaReferences ?? [])];
-
-  return {
-    version: SNAPSHOT_VERSION,
-    exportedAt: opts.exportedAt ?? new Date().toISOString(),
+  return coreToSnapshot(normalizeSnapshotSource(source), {
+    ...opts,
     editorVersion: opts.editorVersion ?? `@freecut/sdk@${SDK_VERSION}`,
-    project,
-    mediaReferences,
-  };
+  }) as ProjectSnapshot;
 }
 
 export function serialize(
   source: Project | ProjectBuilder,
   opts: SerializeOptions = {},
 ): string {
-  const snapshot = toSnapshot(source, opts);
-  return opts.pretty === false
-    ? JSON.stringify(snapshot)
-    : JSON.stringify(snapshot, null, 2);
-}
-
-export class SnapshotParseError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
-    super(message);
-    this.name = 'SnapshotParseError';
-  }
+  return serializeSnapshot(normalizeSnapshotSource(source), {
+    ...opts,
+    editorVersion: opts.editorVersion ?? `@freecut/sdk@${SDK_VERSION}`,
+  });
 }
 
 /**
  * Parse a snapshot JSON string back into a `ProjectSnapshot`. Does
- * light structural checks — full zod validation lives in the app.
+ * light structural checks — full schema validation lives in validation.
  */
 export function parse(json: string): ProjectSnapshot {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(json);
-  } catch (err) {
-    throw new SnapshotParseError('invalid JSON', err);
-  }
+  return parseSnapshot(json) as ProjectSnapshot;
+}
 
-  if (!raw || typeof raw !== 'object') {
-    throw new SnapshotParseError('snapshot must be a JSON object');
+function normalizeSnapshotSource(source: Project | ProjectBuilder) {
+  if (source instanceof ProjectBuilder) {
+    return {
+      project: source.project,
+      mediaReferences: source.mediaReferences,
+    };
   }
-
-  const candidate = raw as Partial<ProjectSnapshot>;
-  if (typeof candidate.version !== 'string') {
-    throw new SnapshotParseError('snapshot.version is required');
-  }
-  if (!candidate.project || typeof candidate.project !== 'object') {
-    throw new SnapshotParseError('snapshot.project is required');
-  }
-  if (!Array.isArray(candidate.mediaReferences)) {
-    throw new SnapshotParseError('snapshot.mediaReferences must be an array');
-  }
-
-  return candidate as ProjectSnapshot;
+  return {
+    project: source,
+    mediaReferences: [],
+  };
 }
