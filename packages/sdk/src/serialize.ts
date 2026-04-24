@@ -10,22 +10,14 @@ import {
   serializeSnapshot,
   toSnapshot as coreToSnapshot,
 } from '@freecut/core';
-import type { SnapshotLike, SnapshotOptions, SnapshotSource } from '@freecut/core';
+import type { SnapshotOptions, SnapshotSource } from '@freecut/core';
 import type { MediaReference, Project, ProjectSnapshot } from './types.js';
 import { SDK_VERSION } from './types.js';
 import { ProjectBuilder } from './builder.js';
 
-type SdkSnapshotSource = SnapshotSource & {
-  project: Project;
-  mediaReferences: MediaReference[];
-};
+type SdkSnapshotSource = SnapshotSource<Project, MediaReference>;
 
-type SdkSnapshot = SnapshotLike & {
-  project: Project;
-  mediaReferences: MediaReference[];
-};
-
-export interface SerializeOptions extends Omit<SnapshotOptions, 'mediaReferences'> {
+export interface SerializeOptions extends Omit<SnapshotOptions<MediaReference>, 'mediaReferences'> {
   /** Pretty-print JSON output (default: true). */
   pretty?: boolean;
   /** ISO timestamp to embed as `exportedAt` — defaults to now. */
@@ -42,17 +34,17 @@ export function toSnapshot(
   source: Project | ProjectBuilder,
   opts: SerializeOptions = {},
 ): ProjectSnapshot {
-  return coreToSnapshot(normalizeSnapshotSource(source), {
+  return coreToSnapshot<Project, MediaReference>(normalizeSnapshotSource(source), {
     ...opts,
     editorVersion: opts.editorVersion ?? `@freecut/sdk@${SDK_VERSION}`,
-  }) as SdkSnapshot;
+  });
 }
 
 export function serialize(
   source: Project | ProjectBuilder,
   opts: SerializeOptions = {},
 ): string {
-  return serializeSnapshot(normalizeSnapshotSource(source), {
+  return serializeSnapshot<Project, MediaReference>(normalizeSnapshotSource(source), {
     ...opts,
     editorVersion: opts.editorVersion ?? `@freecut/sdk@${SDK_VERSION}`,
   });
@@ -63,7 +55,7 @@ export function serialize(
  * light structural checks — full schema validation lives in validation.
  */
 export function parse(json: string): ProjectSnapshot {
-  return parseSnapshot(json) as unknown as ProjectSnapshot;
+  return parseSnapshot<Project, MediaReference>(json);
 }
 
 function normalizeSnapshotSource(source: Project | ProjectBuilder): SdkSnapshotSource {

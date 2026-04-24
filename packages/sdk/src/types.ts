@@ -9,6 +9,8 @@
  * edge runtimes, and agent sandboxes.
  */
 
+import type { ProjectSnapshot as CoreProjectSnapshot } from '@freecut/core';
+
 export const SDK_VERSION = '0.0.1';
 export const SNAPSHOT_VERSION = '1.0';
 
@@ -297,11 +299,4 @@ export interface MediaReference {
  * On-disk format written by `serialize()`. Mirrors the editor's
  * `ProjectSnapshot` so the JSON import service accepts it unchanged.
  */
-export interface ProjectSnapshot {
-  version: string;
-  exportedAt: string;
-  editorVersion: string;
-  project: Project;
-  mediaReferences: MediaReference[];
-  checksum?: string;
-}
+export type ProjectSnapshot = CoreProjectSnapshot<Project, MediaReference>;

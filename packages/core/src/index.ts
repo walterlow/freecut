@@ -31,7 +31,17 @@ export {
   serializeSnapshot,
   toSnapshot,
 } from './snapshot.js';
-export type { SnapshotLike, SnapshotOptions, SnapshotSource } from './snapshot.js';
+export type {
+  MediaReferenceLike,
+  ProjectLike,
+  ProjectMetadataLike,
+  ProjectSnapshot,
+  ProjectTimelineLike,
+  SnapshotEnvelope,
+  SnapshotLike,
+  SnapshotOptions,
+  SnapshotSource,
+} from './snapshot.js';
 export { framesToSeconds, secondsToFrames } from './time.js';
 export { lintSnapshot, validateSnapshot } from './validation.js';
 export {

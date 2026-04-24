@@ -9,31 +9,94 @@ export class SnapshotParseError extends Error {
   }
 }
 
-export interface SnapshotLike {
+export interface ProjectMetadataLike {
+  width?: number;
+  height?: number;
+  fps?: number;
+  backgroundColor?: string;
+}
+
+export interface ProjectTimelineLike {
+  tracks?: unknown[];
+  items?: unknown[];
+  transitions?: unknown[];
+  markers?: unknown[];
+  currentFrame?: number;
+  inPoint?: number;
+  outPoint?: number;
+}
+
+export interface ProjectLike {
+  id?: string;
+  name?: string;
+  description?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  duration?: number;
+  schemaVersion?: number;
+  metadata?: ProjectMetadataLike;
+  timeline?: ProjectTimelineLike;
+}
+
+export interface MediaReferenceLike {
+  id?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  duration?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  codec?: string;
+  bitrate?: number;
+  contentHash?: string;
+}
+
+export interface ProjectSnapshot<
+  TProject extends object = ProjectLike,
+  TMediaReference = MediaReferenceLike,
+> {
   version: string;
   exportedAt: string;
   editorVersion: string;
-  project: object;
-  mediaReferences: unknown[];
+  project: TProject;
+  mediaReferences: TMediaReference[];
+  checksum?: string;
 }
 
-export interface SnapshotSource {
-  project?: object;
-  mediaReferences?: unknown[];
-  [key: string]: unknown;
+export type SnapshotLike = ProjectSnapshot<object, unknown>;
+
+export interface SnapshotEnvelope<
+  TProject extends object = object,
+  TMediaReference = unknown,
+> {
+  project: TProject;
+  mediaReferences?: TMediaReference[];
 }
 
-export interface SnapshotOptions {
+export type SnapshotSource<
+  TProject extends object = object,
+  TMediaReference = unknown,
+> = TProject | SnapshotEnvelope<TProject, TMediaReference>;
+
+export interface SnapshotOptions<TMediaReference = unknown> {
   version?: string;
   exportedAt?: string;
   editorVersion?: string;
-  mediaReferences?: unknown[];
+  mediaReferences?: TMediaReference[];
   pretty?: boolean;
 }
 
-export function toSnapshot(source: SnapshotSource, opts: SnapshotOptions = {}): SnapshotLike {
-  const project = extractProject(source);
-  const sourceRefs = Array.isArray(source?.mediaReferences) ? source.mediaReferences : [];
+export function toSnapshot<
+  TProject extends object = object,
+  TMediaReference = unknown,
+>(
+  source: SnapshotSource<TProject, TMediaReference>,
+  opts: SnapshotOptions<TMediaReference> = {},
+): ProjectSnapshot<TProject, TMediaReference> {
+  const envelope = asSnapshotEnvelope(source);
+  const project = extractProject(source, envelope);
+  const sourceRefs = envelope && Array.isArray(envelope.mediaReferences) ? envelope.mediaReferences : [];
   const mediaReferences = [...sourceRefs, ...(opts.mediaReferences ?? [])];
 
   return {
@@ -45,14 +108,23 @@ export function toSnapshot(source: SnapshotSource, opts: SnapshotOptions = {}): 
   };
 }
 
-export function serializeSnapshot(source: SnapshotSource, opts: SnapshotOptions = {}): string {
+export function serializeSnapshot<
+  TProject extends object = object,
+  TMediaReference = unknown,
+>(
+  source: SnapshotSource<TProject, TMediaReference>,
+  opts: SnapshotOptions<TMediaReference> = {},
+): string {
   const snapshot = toSnapshot(source, opts);
   return opts.pretty === false
     ? JSON.stringify(snapshot)
     : JSON.stringify(snapshot, null, 2);
 }
 
-export function parseSnapshot(json: string): SnapshotLike {
+export function parseSnapshot<
+  TProject extends object = object,
+  TMediaReference = unknown,
+>(json: string): ProjectSnapshot<TProject, TMediaReference> {
   let raw;
   try {
     raw = JSON.parse(json);
@@ -74,13 +146,26 @@ export function parseSnapshot(json: string): SnapshotLike {
     throw new SnapshotParseError('snapshot.mediaReferences must be an array');
   }
 
-  return raw;
+  return raw as ProjectSnapshot<TProject, TMediaReference>;
 }
 
-function extractProject(source: SnapshotSource): object {
+function extractProject<TProject extends object, TMediaReference>(
+  source: SnapshotSource<TProject, TMediaReference>,
+  envelope: SnapshotEnvelope<TProject, TMediaReference> | null,
+): TProject {
   if (!source || typeof source !== 'object') {
     throw new TypeError('snapshot source must be a project or object with a project property');
   }
-  if (source.project && typeof source.project === 'object') return source.project;
-  return source;
+  if (envelope) return envelope.project;
+  return source as TProject;
+}
+
+function asSnapshotEnvelope<TProject extends object, TMediaReference>(
+  source: SnapshotSource<TProject, TMediaReference>,
+): SnapshotEnvelope<TProject, TMediaReference> | null {
+  if (!source || typeof source !== 'object' || !('project' in source)) return null;
+  const project = (source as { project?: unknown }).project;
+  return project && typeof project === 'object'
+    ? source as SnapshotEnvelope<TProject, TMediaReference>
+    : null;
 }
