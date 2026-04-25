@@ -106,6 +106,10 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   const lastStartRateRef = useRef(playbackRate);
   const lastFrameRef = useRef(-1);
   const lastPostedPlayingRef = useRef<boolean | null>(null);
+  const mutedRef = useRef(muted);
+  const finalVolumeRef = useRef(finalVolume);
+  mutedRef.current = muted;
+  finalVolumeRef.current = finalVolume;
 
   const postMessage = (message: SoundTouchPreviewProcessorMessage): void => {
     nodeRef.current?.port.postMessage(message);
@@ -181,7 +185,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
         nodeRef.current = node;
 
         // Reapply current gain so the rebuilt graph doesn't start silent
-        const clampedVolume = muted ? 0 : Math.max(0, finalVolume);
+        const clampedVolume = mutedRef.current ? 0 : Math.max(0, finalVolumeRef.current);
         graph.outputGainNode.gain.value = clampedVolume;
 
         setFallbackRequested(false);

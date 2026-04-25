@@ -442,6 +442,7 @@ export function usePreviewRendererController({
     isResolving,
     renderSize.height,
     renderSize.width,
+    resumeScrubLoopRef,
     scrubInitPromiseRef,
     scrubOffscreenCanvasRef,
     scrubOffscreenCtxRef,
@@ -449,6 +450,7 @@ export function usePreviewRendererController({
     scrubPreloadPromiseRef,
     scrubRendererRef,
     scrubRendererStructureKeyRef,
+    scrubRequestedFrameRef,
   ]);
   ensureFastScrubRendererRef.current = ensureFastScrubRenderer;
 

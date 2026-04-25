@@ -242,7 +242,16 @@ export function useTimelineSlipSlide(
 
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
-  }, [item.id]);
+  }, [item]);
+  const clampSlideDeltaRef = useRef<(
+    delta: number,
+    leftNeighborId: string | null,
+    rightNeighborId: string | null,
+  ) => number>((
+    _delta: number,
+    _leftNeighborId: string | null,
+    _rightNeighborId: string | null,
+  ) => 0);
 
   /**
    * Find immediate edit neighbors (strict adjacency / transition-linked).
@@ -385,8 +394,8 @@ export function useTimelineSlipSlide(
       // the bounds used during dragging.
       const allItems = useTimelineStore.getState().items;
       const transitions = useTransitionsStore.getState().transitions;
-      const sourceMinDelta = clampSlideDelta(-1_000_000_000, leftNeighbor?.id ?? null, rightNeighbor?.id ?? null);
-      const sourceMaxDelta = clampSlideDelta(1_000_000_000, leftNeighbor?.id ?? null, rightNeighbor?.id ?? null);
+      const sourceMinDelta = clampSlideDeltaRef.current(-1_000_000_000, leftNeighbor?.id ?? null, rightNeighbor?.id ?? null);
+      const sourceMaxDelta = clampSlideDeltaRef.current(1_000_000_000, leftNeighbor?.id ?? null, rightNeighbor?.id ?? null);
       const slideMinDelta = clampSlideDeltaToPreserveTransitions(
         currentItem, sourceMinDelta, leftNeighbor ?? null, rightNeighbor ?? null,
         allItems, transitions, fps,
@@ -422,7 +431,7 @@ export function useTimelineSlipSlide(
     }
   // Note: clampSlideDelta intentionally omitted — it reads fps from store at
   // call time, and including it would cause a TDZ error (defined after this hook).
-  }, [buildSlideGestureContext, findNeighbors, getItemFromStore, item.id, setDragState]);
+  }, [buildSlideGestureContext, findNeighbors, fps, getItemFromStore, item.id, setDragState]);
 
   /**
    * Clamp slip delta to source boundaries.
@@ -545,6 +554,7 @@ export function useTimelineSlipSlide(
 
     return clamped;
   }, [getItemFromStore, fps, item.id]);
+  clampSlideDeltaRef.current = clampSlideDelta;
 
   const clampSlideDeltaWithContext = useCallback((delta: number, context: SlideGestureContext): number => {
     let clamped = delta;

@@ -80,7 +80,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
   // Get fresh item from store to ensure we have latest values after previous trims
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
-  }, [item.id]);
+  }, [item]);
 
   // Use snap calculator - pass item.id to exclude self from magnetic snaps
   // Only use magnetic snap targets (item edges), not grid lines
