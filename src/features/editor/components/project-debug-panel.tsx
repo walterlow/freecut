@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Project Debug Panel
  *
  * Project data operations UI rendered inside the toolbar popover.

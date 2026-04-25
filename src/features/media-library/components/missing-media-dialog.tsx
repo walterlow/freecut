@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MissingMediaDialog');

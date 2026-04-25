@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { createLogger } from '@/shared/logging/logger';
 import type { AudioItem, TextItem, TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
 import { getTextItemPlainText } from '@/shared/utils/text-item-spans';

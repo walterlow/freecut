@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Media Processor Service
  *
  * Manages the media processor worker for off-main-thread media processing.

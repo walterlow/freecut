@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Video frame extractor using mediabunny for precise frame access.
  *
  * This replaces HTML5 video element seeking which is slow and imprecise.

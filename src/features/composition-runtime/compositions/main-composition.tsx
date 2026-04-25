@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useCallback } from 'react';
+import React, { useEffect, useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence, useClock } from '@/features/composition-runtime/deps/player';
 import { timelineToSourceFrames } from '@/features/composition-runtime/deps/timeline';
 import { useCurrentFrame, useVideoConfig } from '../hooks/use-player-compat';

@@ -1,4 +1,4 @@
-﻿import { mediaLibraryService, FileAccessError } from '@/features/media-library/services/media-library-service';
+import { mediaLibraryService, FileAccessError } from '@/features/media-library/services/media-library-service';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { proxyService } from '@/features/media-library/services/proxy-service';
 import { getSharedProxyKey } from '@/features/media-library/utils/proxy-key';

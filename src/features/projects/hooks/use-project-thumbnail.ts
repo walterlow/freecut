@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { loadProjectThumbnail } from '@/infrastructure/storage';
 import type { Project } from '@/types/project';
 import { createLogger } from '@/shared/logging/logger';

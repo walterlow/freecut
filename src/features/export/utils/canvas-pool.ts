@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canvas Pool for reusing OffscreenCanvas objects
  *
  * Creating new OffscreenCanvas objects every frame is expensive.

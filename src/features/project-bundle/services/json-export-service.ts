@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Lightweight JSON Export Service
  *
  * Exports project data as JSON for debugging, testing, and sharing

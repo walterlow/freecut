@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Dopesheet Editor - timeline-style keyframe editor.
  * Shows keyframes across properties as draggable diamonds on a frame grid.
  */

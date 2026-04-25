@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
 import type { AudioItem, CompositionItem as CompositionItemType, TimelineItem, ShapeItem } from '@/types/timeline';
 import type { ResolvedAudioEqSettings } from '@/types/audio';
@@ -422,24 +422,6 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     return stableMaskInfos;
   }, [resolvedItems, trackRenderState?.visibleTracks, subComp?.width, subComp?.height, subComp?.fps, subComp?.keyframes, subCompFrame]);
 
-  if (!subComp) {
-    return (
-      <AbsoluteFill
-        style={{
-          backgroundColor: '#2a1a2a',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <p style={{ color: '#a855f7', fontSize: 14 }}>Composition not found</p>
-      </AbsoluteFill>
-    );
-  }
-
-  // CSS scale from sub-comp native resolution to parent container dimensions
-  const scaleX = subComp.width > 0 ? containerDims.width / subComp.width : 1;
-  const scaleY = subComp.height > 0 ? containerDims.height / subComp.height : 1;
   const renderVideoItem = useCallback((videoItem: StableVideoSequenceItem) => (
     <AbsoluteFill
       style={{
@@ -468,6 +450,25 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     effectiveAudioGainMultiplier,
     renderDepth,
   ]);
+
+  if (!subComp) {
+    return (
+      <AbsoluteFill
+        style={{
+          backgroundColor: '#2a1a2a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <p style={{ color: '#a855f7', fontSize: 14 }}>Composition not found</p>
+      </AbsoluteFill>
+    );
+  }
+
+  // CSS scale from sub-comp native resolution to parent container dimensions
+  const scaleX = subComp.width > 0 ? containerDims.width / subComp.width : 1;
+  const scaleY = subComp.height > 0 ? containerDims.height / subComp.height : 1;
 
   return (
     <div style={{

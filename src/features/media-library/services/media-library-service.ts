@@ -1,4 +1,4 @@
-﻿import type { MediaMetadata, ThumbnailData } from '@/types/storage';
+import type { MediaMetadata, ThumbnailData } from '@/types/storage';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibraryService');

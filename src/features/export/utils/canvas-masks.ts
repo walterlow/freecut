@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canvas Mask Rendering System
  *
  * Applies clip-path and alpha masks to canvas items for client-side export.

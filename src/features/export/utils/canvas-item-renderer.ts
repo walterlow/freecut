@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canvas Item Renderer
  *
  * Per-item render helpers that draw individual timeline items (video, image,

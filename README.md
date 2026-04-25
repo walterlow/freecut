@@ -205,7 +205,9 @@ npm run dev:quiet      # Dev server with perf-focused env (hides debug panel)
 npm run dev:compare    # Run dev and local perf preview together
 npm run build          # Production build
 npm run build:perf     # Production build using `.env.perf`
-npm run lint           # ESLint
+npm run lint           # Oxlint
+npm run format         # Oxfmt
+npm run format:check   # Check formatting with Oxfmt
 npm run check:boundaries # Feature boundary architecture check
 npm run check:deps-contracts # Enforce deps contract seam routing
 npm run check:legacy-lib-imports # Block any "@/lib/*" usage

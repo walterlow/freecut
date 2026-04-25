@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Project Bundle Export Service
  *
  * Exports a project with all its media as a .freecut.zip bundle

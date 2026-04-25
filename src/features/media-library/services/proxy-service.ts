@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Proxy Video Service
  *
  * Manages 960x540-bounded proxy video generation lifecycle:

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Preview Audio Decode Cache
  *
  * Caches decoded AudioBuffers for custom-decoded audio tracks so that

@@ -1,4 +1,4 @@
-﻿import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Link2, Link2Off } from 'lucide-react';
 import { NumberInput } from './number-input';

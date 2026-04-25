@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Shared helpers for timeline action modules.
  */
 

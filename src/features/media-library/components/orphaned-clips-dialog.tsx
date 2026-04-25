@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('OrphanedClipsDialog');

@@ -1,4 +1,4 @@
-﻿import { cn } from '@/shared/ui/cn';
+import { cn } from '@/shared/ui/cn';
 
 interface FreeCutLogoProps {
   variant?: 'full' | 'icon';

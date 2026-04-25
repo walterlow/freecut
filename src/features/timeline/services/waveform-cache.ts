@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Waveform Cache Service
  *
  * Manages waveform data caching with:

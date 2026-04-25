@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Project Bundle Import Service
  *
  * Imports a .freecut.zip bundle (ZIP archive) and creates a project with media.

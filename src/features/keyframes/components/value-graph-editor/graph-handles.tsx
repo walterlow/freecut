@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Graph bezier handles component.
  * Renders draggable bezier control point handles for cubic-bezier keyframes.
  */

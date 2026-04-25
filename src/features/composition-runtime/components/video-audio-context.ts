@@ -217,6 +217,12 @@ export function useVideoAudioState(
     [audioEqStages, preview],
   );
 
+  // Mixer fader live gain - updated during drag without re-rendering the composition.
+  // Clear when the composition re-renders with updated track volume (trackVolumeDb changes).
+  const mixerGain = useMixerLiveGain(item.id);
+  const trackVolumeDb = item.trackVolumeDb;
+  useEffect(() => { clearMixerLiveGain(item.id); }, [trackVolumeDb, item.id]);
+
   if (muted) {
     return {
       audioVolume: 0,
@@ -270,12 +276,6 @@ export function useVideoAudioState(
   // Apply master bus gain (project) then monitor volume (per-device).
   const masterBusGain = Math.pow(10, masterBusDb / 20);
   const effectiveMonitorVolume = previewMasterMuted ? 0 : previewMasterVolume;
-
-  // Mixer fader live gain — updated during drag without re-rendering the composition.
-  // Clear when the composition re-renders with updated track volume (trackVolumeDb changes).
-  const mixerGain = useMixerLiveGain(item.id);
-  const trackVolumeDb = item.trackVolumeDb;
-  useEffect(() => { clearMixerLiveGain(item.id); }, [trackVolumeDb, item.id]);
 
   return {
     audioVolume: itemVolume * masterBusGain * effectiveMonitorVolume * mixerGain,

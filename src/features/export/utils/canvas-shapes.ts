@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canvas Shape Rendering System
  *
  * Renders all shape types with full styling support for client-side export.

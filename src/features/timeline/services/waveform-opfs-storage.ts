@@ -1,4 +1,4 @@
-﻿/**
+/**
  * OPFS Waveform Storage
  *
  * Multi-resolution binary format for efficient waveform storage with random access:

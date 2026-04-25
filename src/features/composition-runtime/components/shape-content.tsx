@@ -1,4 +1,4 @@
-﻿import React, { useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { Rect, Circle, Triangle, Ellipse, Star, Polygon, Heart } from '@/shared/graphics/shapes';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import type { ShapeItem } from '@/types/timeline';

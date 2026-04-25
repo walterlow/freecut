@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';

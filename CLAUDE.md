@@ -5,7 +5,9 @@
 ```bash
 npm run dev          # Vite dev server on port 5173
 npm run build        # Production build
-npm run lint         # ESLint
+npm run lint         # Oxlint
+npm run format       # Oxfmt
+npm run format:check # Check formatting with Oxfmt
 npm run test         # Vitest (watch mode)
 npm run test:run     # Vitest (single run)
 npm run routes       # Regenerate TanStack Router tree (tsr generate)
@@ -74,7 +76,7 @@ src/
 - Strict TypeScript (`noUnusedLocals`, `noUnusedParameters`, `noUncheckedIndexedAccess`)
 - `no-console` rule — always use `createLogger` from `src/shared/logging/logger.ts`, never raw `console.*` calls
 - **Logging**: Use wide event pattern for multi-step operations (export, import, save): `log.startEvent(name, opId)` accumulates context, emits one structured event via `.success()` / `.failure()`. Use `createOperationId()` for correlation. Include business context (project ID, item counts, codec, resolution) in events
-- `@typescript-eslint/no-explicit-any` warned
+- `typescript/no-explicit-any` warned by Oxlint
 
 ## Testing
 

@@ -1,4 +1,4 @@
-﻿import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { cn } from '@/shared/ui/cn';
 
 type MixedValue = number | 'mixed';

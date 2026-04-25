@@ -1,4 +1,4 @@
-﻿import type { TimelineTrack, TimelineItem } from '@/types/timeline';
+import type { TimelineTrack, TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 import type { AudioEqSettings } from '@/types/audio';
 import type { CompositionInputProps } from '@/types/export';

@@ -1,4 +1,4 @@
-﻿import { createLogger } from '@/shared/logging/logger';
+import { createLogger } from '@/shared/logging/logger';
 import {
   VideoFrameExtractor,
   type DrawFrameCaptureResult,

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Keyframe toggle button component.
  * Diamond-shaped button that appears next to animatable properties.
  * - Hollow diamond: No keyframe at current frame (click to add)

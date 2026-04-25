@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,

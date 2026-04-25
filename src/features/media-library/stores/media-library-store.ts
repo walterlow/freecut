@@ -1,4 +1,4 @@
-﻿import { create, type StoreApi, type UseBoundStore } from 'zustand';
+import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type {
   MediaLibraryState,

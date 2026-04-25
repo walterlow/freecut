@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Value Graph Editor - Main container component.
  * Interactive graph for editing keyframe values and timing.
  */

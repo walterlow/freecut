@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Font loading utilities for compositions.
  * Uses native CSS Font Loading API and Canvas text measurement.
  *

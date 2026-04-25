@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { createLogger } from '@/shared/logging/logger';

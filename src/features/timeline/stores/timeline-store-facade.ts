@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Timeline Store Facade
  *
  * Provides backward-compatible access to the split timeline stores.

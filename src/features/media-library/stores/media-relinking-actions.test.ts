@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, beforeEach, vi, type Mock } from 'vitest';
+import { describe, expect, it, beforeEach, vi, type Mock } from 'vitest';
 import { createRelinkingActions } from './media-relinking-actions';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import type { MediaLibraryState, MediaLibraryActions, BrokenMediaInfo } from '../types';

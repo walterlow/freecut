@@ -1,4 +1,4 @@
-﻿/**
+/**
  * GIF Frame Cache Service
  *
  * Manages GIF frame caching with:

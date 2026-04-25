@@ -1,4 +1,4 @@
-﻿import { forwardRef, memo } from 'react';
+import { forwardRef, memo } from 'react';
 import { cn } from '@/shared/ui/cn';
 
 interface DragGhostsProps {

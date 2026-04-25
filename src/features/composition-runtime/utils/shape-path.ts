@@ -1,4 +1,4 @@
-﻿import type { ShapeItem } from '@/types/timeline';
+import type { ShapeItem } from '@/types/timeline';
 import type { MaskVertex } from '@/types/masks';
 import {
   makeRect,

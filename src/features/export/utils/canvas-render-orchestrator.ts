@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canvas Render Orchestrator
  *
  * Top-level entry points that drive the full render pipeline:

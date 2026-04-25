@@ -9,7 +9,10 @@
     "dev:compare": "node scripts/run-dev-and-perf.mjs",
     "build": "vite build",
     "build:perf": "vite build --mode perf",
-    "lint": "eslint .",
+    "lint": "oxlint src vite.config.ts vitest.config.ts",
+    "lint:fix": "oxlint src vite.config.ts vitest.config.ts --fix",
+    "format": "oxfmt --write src vite.config.ts vitest.config.ts package.json .oxlintrc.json .oxfmtrc.json",
+    "format:check": "oxfmt --check src vite.config.ts vitest.config.ts package.json .oxlintrc.json .oxfmtrc.json",
     "check:boundaries": "node scripts/check-feature-boundaries.mjs",
     "check:deps-contracts": "node scripts/check-deps-contract-boundaries.mjs",
     "check:legacy-lib-imports": "node scripts/check-legacy-lib-imports.mjs",
@@ -79,7 +82,6 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "@eslint/js": "^9.18.0",
     "@tailwindcss/vite": "^4.1.17",
     "@tanstack/router-cli": "^1.136.6",
     "@testing-library/dom": "^10.4.1",
@@ -91,15 +93,12 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.0.17",
     "@webgpu/types": "^0.1.69",
-    "eslint": "^9.18.0",
-    "eslint-plugin-react-hooks": "^6.0.0",
-    "eslint-plugin-react-refresh": "^0.4.16",
-    "globals": "^15.14.0",
     "husky": "^9.1.7",
     "jsdom": "^27.4.0",
+    "oxfmt": "^0.46.0",
+    "oxlint": "^1.61.0",
     "tailwindcss": "^4.1.17",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.19.1",
     "vite": "^8.0.8",
     "vitest": "^4.0.17"
   }
