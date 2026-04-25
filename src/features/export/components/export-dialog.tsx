@@ -313,8 +313,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
     exportMode,
     getSupportedCodecs,
     open,
-    settings.resolution.height,
-    settings.resolution.width,
+    settings.resolution,
     settings.quality,
     view,
   ]);

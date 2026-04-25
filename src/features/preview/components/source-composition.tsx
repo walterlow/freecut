@@ -191,13 +191,14 @@ function VideoSource({
   }, [clock.currentFrame, followSourcePlayerFrames]);
 
   useEffect(() => {
+    const frameCache = frameCacheRef.current;
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      for (const bitmap of frameCacheRef.current.values()) {
+      for (const bitmap of frameCache.values()) {
         bitmap.close();
       }
-      frameCacheRef.current.clear();
+      frameCache.clear();
       frameCacheOrderRef.current = [];
       prewarmInFlightRef.current = false;
       queuedPrewarmTimesRef.current = [];

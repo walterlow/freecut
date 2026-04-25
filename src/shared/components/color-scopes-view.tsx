@@ -484,10 +484,11 @@ export const ColorScopesView = memo(function ColorScopesView({
   }, [open]);
 
   useEffect(() => {
+    const gpuCtxCache = gpuCtxCacheRef.current;
     return () => {
       rendererRef.current?.destroy();
       rendererRef.current = null;
-      gpuCtxCacheRef.current.clear();
+      gpuCtxCache.clear();
     };
   }, []);
 

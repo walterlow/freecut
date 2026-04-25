@@ -283,7 +283,7 @@ export function WindowPortal({
         }
       }, 50);
     };
-  }, [autoHeight, height, providedExternalWindow, storageKey, width]);
+  }, [autoHeight, height, providedExternalWindow, storageKey, title, width]);
 
   if (!container) return null;
   return createPortal(children, container);

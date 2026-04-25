@@ -624,14 +624,17 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
 
   // Cleanup on unmount
   useEffect(() => {
+    const canvasPool = canvasPoolRef.current;
+    const tileCache = tileCacheRef.current;
+    const labelPool = labelPoolRef.current;
     return () => {
-      canvasPoolRef.current.forEach((canvas) => canvas.remove());
-      canvasPoolRef.current.clear();
+      canvasPool.forEach((canvas) => canvas.remove());
+      canvasPool.clear();
       // Clean up cached bitmaps
-      tileCacheRef.current.forEach((bitmap) => bitmap.close());
-      tileCacheRef.current.clear();
+      tileCache.forEach((bitmap) => bitmap.close());
+      tileCache.clear();
       // Clean up label pool
-      clearLabelPool(labelPoolRef.current);
+      clearLabelPool(labelPool);
     };
   }, []);
 

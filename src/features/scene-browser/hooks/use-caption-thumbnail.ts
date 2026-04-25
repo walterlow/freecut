@@ -137,7 +137,7 @@ export function useCaptionThumbnail(
         });
       });
     return () => { cancelled = true; };
-  }, [thumbRelPath, lazy?.mediaId, lazy?.captionIndex, lazy?.timeSec]);
+  }, [thumbRelPath, lazy]);
 
   return url;
 }

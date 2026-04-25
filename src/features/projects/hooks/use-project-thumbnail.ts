@@ -49,7 +49,7 @@ export function useProjectThumbnail(project: Project): string | undefined {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [project.thumbnailId, project.thumbnail, project.updatedAt]);
+  }, [project.id, project.thumbnailId, project.thumbnail, project.updatedAt]);
 
   return thumbnailUrl;
 }

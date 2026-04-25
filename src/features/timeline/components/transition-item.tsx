@@ -277,10 +277,11 @@ export const TransitionItem = memo(function TransitionItem({
    */
 
   useEffect(() => {
+    const container = containerRef.current;
     const updateDragOffset = () => {
-      if (!containerRef.current) return;
+      if (!container) return;
       const offset = dragOffsetRef.current;
-      containerRef.current.style.transform = `translate(${offset.x}px, ${offset.y}px)`;
+      container.style.transform = `translate(${offset.x}px, ${offset.y}px)`;
       rafIdRef.current = requestAnimationFrame(updateDragOffset);
     };
 
@@ -289,8 +290,8 @@ export const TransitionItem = memo(function TransitionItem({
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      if (containerRef.current) {
-        containerRef.current.style.transform = '';
+      if (container) {
+        container.style.transform = '';
       }
       return;
     }
@@ -302,8 +303,8 @@ export const TransitionItem = memo(function TransitionItem({
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      if (containerRef.current) {
-        containerRef.current.style.transform = '';
+      if (container) {
+        container.style.transform = '';
       }
     };
   }, [bothClipsDragged]);
