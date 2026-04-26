@@ -72,6 +72,22 @@ function readBlendMode(writeCall: unknown[]): number {
 }
 
 describe('CompositorPipeline', () => {
+  it('keeps mask coverage separate from dissolve opacity coverage in shader code', () => {
+    const { device } = createPipelineHarness()
+
+    const shaderSources = (
+      device.createShaderModule.mock.calls as unknown as Array<[GPUShaderModuleDescriptor]>
+    ).map(([descriptor]) => descriptor.code)
+    expect(
+      shaderSources.some(
+        (code) =>
+          code.includes('let postDissolveAlpha = maskValue * select') &&
+          code.includes('sourceAlpha,\n    postDissolveAlpha') &&
+          code.includes('input.uv * 8192.0,\n    u.opacity'),
+      ),
+    ).toBe(true)
+  })
+
   it('binds independent uniforms for masked and unmasked layers encoded in one command buffer', () => {
     const { commandEncoder, device, pipeline, queue } = createPipelineHarness()
     const maskedLayerUniform = {

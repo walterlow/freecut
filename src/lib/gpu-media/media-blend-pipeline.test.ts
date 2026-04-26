@@ -49,6 +49,16 @@ function createPipelineHarness() {
 }
 
 describe('MediaBlendPipeline', () => {
+  it('uses layer opacity as dissolve coverage instead of source alpha', () => {
+    const { device } = createPipelineHarness()
+
+    expect(device.createShaderModule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: expect.stringContaining('input.uv * 8192.0,\n    u.x'),
+      }),
+    )
+  })
+
   it('blends a full layer texture over a base texture', () => {
     const {
       baseTexture,

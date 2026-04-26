@@ -2187,6 +2187,266 @@ describe('renderTransitionToGpuTexture', () => {
     expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
   })
 
+  it('applies masks before shader blending non-normal sub-composition layers', async () => {
+    vi.stubGlobal('GPUTextureUsage', {
+      COPY_DST: 2,
+      COPY_SRC: 1,
+      RENDER_ATTACHMENT: 8,
+      TEXTURE_BINDING: 4,
+    })
+    vi.stubGlobal('Path2D', class {})
+
+    const leftClip: ImageItem = {
+      id: 'left-image',
+      type: 'image',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      src: 'left.png',
+      label: 'Left image',
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as ImageItem
+    const bottomImage: ImageItem = {
+      id: 'bottom-image',
+      type: 'image',
+      trackId: 'sub-track-2',
+      from: 0,
+      durationInFrames: 120,
+      src: 'bottom.png',
+      label: 'Bottom image',
+      transform: { x: -120, y: 0, width: 360, height: 300, rotation: 0, opacity: 1 },
+    } as ImageItem
+    const blendedTopImage: ImageItem = {
+      id: 'top-image',
+      type: 'image',
+      trackId: 'sub-track-1',
+      from: 0,
+      durationInFrames: 120,
+      src: 'top.png',
+      label: 'Masked multiply image',
+      blendMode: 'multiply',
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as ImageItem
+    const topMask: ShapeItem = {
+      id: 'top-mask',
+      type: 'shape',
+      trackId: 'sub-track-0',
+      from: 0,
+      durationInFrames: 120,
+      label: 'Top mask',
+      shapeType: 'rectangle',
+      isMask: true,
+      maskType: 'clip',
+      fillColor: '#ffffff',
+      transform: { x: 0, y: 0, width: 320, height: 360, rotation: 0, opacity: 1 },
+    } as ShapeItem
+    const rightClip: CompositionItem = {
+      id: 'right-comp',
+      type: 'composition',
+      trackId: 'track-1',
+      from: 60,
+      durationInFrames: 60,
+      label: 'Masked blend subcomp',
+      compositionId: 'sub-comp-masked-blend',
+      compositionWidth: 640,
+      compositionHeight: 360,
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as CompositionItem
+    const activeTransition = createActiveTransition({ leftClip, rightClip, progress: 0.5 })
+
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const subCompTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const topBaseTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const topEffectTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const blendOutputTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const blendLayerTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const maskTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const commandEncoder = {
+      copyTextureToTexture: vi.fn(),
+      finish: vi.fn(() => 'finished-command-buffer'),
+    }
+    const device = {
+      createTexture: vi
+        .fn()
+        .mockReturnValueOnce(subCompTexture)
+        .mockReturnValueOnce(topBaseTexture)
+        .mockReturnValueOnce(topEffectTexture)
+        .mockReturnValueOnce(blendOutputTexture)
+        .mockReturnValueOnce(blendLayerTexture)
+        .mockReturnValueOnce(maskTexture),
+      createCommandEncoder: vi.fn(() => commandEncoder),
+      queue: { submit: vi.fn() },
+    }
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
+      release: vi.fn(),
+    }
+    const canvasPool = { acquire: vi.fn(), release: vi.fn() }
+    const gpuPipeline = {
+      getDevice: vi.fn(() => device),
+      applyEffectsToTexture: vi.fn().mockReturnValue(true),
+      applyTextureEffectsToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuMediaPipeline = {
+      renderSourceToTexture: vi.fn().mockReturnValue(true),
+      renderTextureToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuMediaBlendPipeline = {
+      blend: vi.fn().mockReturnValue(true),
+    }
+    const gpuShapePipeline = {
+      renderShapeToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map([
+        [
+          leftClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+        [
+          bottomImage.id,
+          { source: { width: 640, height: 360 } as ImageBitmap, width: 640, height: 360 },
+        ],
+        [
+          blendedTopImage.id,
+          { source: { width: 640, height: 360 } as ImageBitmap, width: 640, height: 360 },
+        ],
+      ]),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map([
+        [
+          'sub-comp-masked-blend',
+          {
+            fps: 30,
+            durationInFrames: 120,
+            sortedTracks: [
+              { order: 0, visible: true, items: [bottomImage] },
+              { order: 2, visible: true, items: [blendedTopImage] },
+              { order: 1, visible: true, items: [topMask] },
+            ],
+            keyframesMap: new Map(),
+            adjustmentLayers: [],
+          },
+        ],
+      ]),
+      gpuPipeline: gpuPipeline as unknown as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+      gpuMediaBlendPipeline:
+        gpuMediaBlendPipeline as unknown as ItemRenderContext['gpuMediaBlendPipeline'],
+      gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
+      gpuScratchTexturePool: undefined,
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ width: 640, height: 360 }),
+      subCompTexture,
+      expect.objectContaining({ clear: true, blend: true }),
+    )
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ width: 640, height: 360 }),
+      topBaseTexture,
+      expect.objectContaining({ clear: true, blend: false }),
+    )
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledWith(
+      maskTexture,
+      expect.objectContaining({
+        outputWidth: 640,
+        outputHeight: 360,
+        transformRect: { x: 160, y: 0, width: 320, height: 360 },
+      }),
+    )
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
+      1,
+      topBaseTexture,
+      blendLayerTexture,
+      expect.objectContaining({
+        clear: true,
+        blend: false,
+        maskTexture,
+      }),
+    )
+    expect(gpuMediaBlendPipeline.blend).toHaveBeenCalledWith(
+      subCompTexture,
+      blendLayerTexture,
+      blendOutputTexture,
+      'multiply',
+    )
+    expect(commandEncoder.copyTextureToTexture).toHaveBeenCalledWith(
+      { texture: blendOutputTexture },
+      { texture: subCompTexture },
+      { width: 640, height: 360 },
+    )
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
+      2,
+      subCompTexture,
+      rightTexture,
+      expect.objectContaining({ sourceWidth: 640, sourceHeight: 360 }),
+    )
+  })
+
   it('applies sub-composition occlusion cutoff when active masks cannot affect the covering layer', async () => {
     vi.stubGlobal('GPUTextureUsage', {
       COPY_DST: 2,
