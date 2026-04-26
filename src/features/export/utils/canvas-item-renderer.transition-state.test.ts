@@ -929,7 +929,7 @@ describe('renderTransitionToGpuTexture', () => {
       ...leftClip,
       id: 'right-shape',
       label: 'Right shape',
-      shapeType: 'polygon',
+      shapeType: 'heart',
       effects: [effect],
     } as ShapeItem
     const activeTransition = createActiveTransition({ leftClip, rightClip })
@@ -1037,5 +1037,10 @@ describe('renderTransitionToGpuTexture', () => {
     )
     expect(gpuTexturePool.release).toHaveBeenCalledWith(leftShapeTexture)
     expect(gpuTexturePool.release).toHaveBeenCalledWith(rightShapeTexture)
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenNthCalledWith(
+      2,
+      rightShapeTexture,
+      expect.objectContaining({ shapeType: 'heart' }),
+    )
   })
 })

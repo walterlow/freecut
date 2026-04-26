@@ -106,6 +106,13 @@ fn polarShapeDistance(p: vec2f, points: f32, innerRatio: f32, star: bool) -> f32
   return length(p) - edgeRadius;
 }
 
+fn heartDistance(p: vec2f) -> f32 {
+  let q = vec2f(p.x, -p.y * 1.12 + 0.18);
+  let a = q.x * q.x + q.y * q.y - 1.0;
+  let implicit = a * a * a - q.x * q.x * q.y * q.y * q.y;
+  return implicit * 18.0;
+}
+
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let pixel = input.uv * u.outputSize;
@@ -133,6 +140,10 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
       a = vec2f(halfSize.x, 0.0); b = vec2f(-halfSize.x, halfSize.y); c = vec2f(-halfSize.x, -halfSize.y);
     }
     d = triangleSigned(localPx, a, b, c);
+  } else if (u.shapeKind > 5.5 && u.shapeKind < 6.5) {
+    let heartBase = min(halfSize.x, halfSize.y);
+    let heartHalf = vec2f(heartBase, heartBase / 1.1);
+    d = heartDistance(localPx / max(heartHalf, vec2f(0.001))) * heartBase;
   } else {
     let normalized = localPx / max(halfSize, vec2f(0.001));
     d = polarShapeDistance(normalized, u.shapeParams.z, u.shapeParams.w, u.shapeKind > 4.5) * min(halfSize.x, halfSize.y);
@@ -259,6 +270,8 @@ function shapeKind(shapeType: ShapeItem['shapeType']): number | null {
       return 4
     case 'star':
       return 5
+    case 'heart':
+      return 6
     default:
       return null
   }

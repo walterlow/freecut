@@ -95,4 +95,20 @@ describe('ShapeRenderPipeline', () => {
 
     expect(device.createBindGroup).toHaveBeenCalledTimes(1)
   })
+
+  it('accepts heart shapes as analytic GPU shapes', () => {
+    const { outputTexture, pipeline, queue } = createPipelineHarness()
+
+    const rendered = pipeline.renderShapeToTexture(outputTexture, {
+      outputWidth: 1920,
+      outputHeight: 1080,
+      transformRect: { x: 100, y: 100, width: 300, height: 240 },
+      shapeType: 'heart',
+      fillColor: [1, 0, 0, 1],
+    })
+
+    expect(rendered).toBe(true)
+    const uniformData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
+    expect(uniformData[2]).toBe(6)
+  })
 })
