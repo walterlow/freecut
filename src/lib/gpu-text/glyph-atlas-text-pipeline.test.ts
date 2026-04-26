@@ -136,7 +136,13 @@ describe('GlyphAtlasTextPipeline', () => {
 
     expect(rendered).toBe(true)
     expect(queue.writeTexture).toHaveBeenCalledTimes(2)
-    expect(queue.writeBuffer).toHaveBeenCalledWith(vertexBuffer, 0, expect.any(Float32Array), 0, 96)
+    expect(queue.writeBuffer).toHaveBeenCalledWith(
+      vertexBuffer,
+      0,
+      expect.any(Float32Array),
+      0,
+      168,
+    )
     const vertexData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
     expect(vertexData[4]).toBeCloseTo(0.2)
     expect(vertexData[5]).toBeCloseTo(0.4)
@@ -206,9 +212,62 @@ describe('GlyphAtlasTextPipeline', () => {
     expect(vertexData[4]).toBeCloseTo(1)
     expect(vertexData[5]).toBeCloseTo(0)
     expect(vertexData[6]).toBeCloseTo(0)
-    expect(vertexData[52]).toBeCloseTo(0)
-    expect(vertexData[53]).toBeCloseTo(1)
-    expect(vertexData[54]).toBeCloseTo(0)
+    expect(vertexData[88]).toBeCloseTo(0)
+    expect(vertexData[89]).toBeCloseTo(1)
+    expect(vertexData[90]).toBeCloseTo(0)
+  })
+
+  it('renders flat backgrounds and underlines as solid GPU quads', () => {
+    const { outputTexture, pass, pipeline, queue, vertexBuffer } = createPipelineHarness()
+
+    const rendered = pipeline.renderTextToTexture(outputTexture, {
+      outputWidth: 640,
+      outputHeight: 180,
+      width: 640,
+      height: 180,
+      item: {
+        id: 'text',
+        type: 'text',
+        trackId: 'track',
+        from: 0,
+        durationInFrames: 30,
+        text: 'A',
+        color: '#ffffff',
+        backgroundColor: '#112233',
+        backgroundRadius: 8,
+        fontSize: 48,
+        fontFamily: 'Inter',
+        textPadding: 0,
+        underline: true,
+      } as TextItem,
+    })
+
+    expect(rendered).toBe(true)
+    expect(queue.writeTexture).toHaveBeenCalledTimes(2)
+    expect(queue.writeBuffer).toHaveBeenCalledWith(
+      vertexBuffer,
+      0,
+      expect.any(Float32Array),
+      0,
+      252,
+    )
+    const vertexData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
+    expect(vertexData[0]).toBeCloseTo(0)
+    expect(vertexData[1]).toBeCloseTo(0)
+    expect(vertexData[4]).toBeCloseTo(0x11 / 255)
+    expect(vertexData[5]).toBeCloseTo(0x22 / 255)
+    expect(vertexData[6]).toBeCloseTo(0x33 / 255)
+    expect(vertexData[8]).toBeCloseTo(1)
+    expect(vertexData[13]).toBeCloseTo(8)
+    expect(vertexData[88]).toBeCloseTo(1)
+    expect(vertexData[89]).toBeCloseTo(1)
+    expect(vertexData[90]).toBeCloseTo(1)
+    expect(vertexData[172]).toBeCloseTo(1)
+    expect(vertexData[173]).toBeCloseTo(1)
+    expect(vertexData[174]).toBeCloseTo(1)
+    expect(vertexData[176]).toBeCloseTo(1)
+    expect(vertexData[181]).toBeCloseTo(0)
+    expect(pass.draw).toHaveBeenCalledWith(18)
   })
 
   it('rejects text that would overflow the fixed vertex buffer', () => {

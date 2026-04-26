@@ -34,6 +34,7 @@ interface PackedGlyph {
   width: number
   height: number
   color: [number, number, number, number]
+  solidRadius?: number
 }
 
 interface TextLayoutLine {
@@ -44,26 +45,35 @@ interface TextLayoutLine {
   baselineOffset: number
   letterSpacing: number
   color: [number, number, number, number]
+  underline: boolean
 }
 
 const ATLAS_SIZE = 2048
 const GLYPH_PADDING = 12
 const GLYPH_SDF_RADIUS = 8
-const FLOATS_PER_VERTEX = 8
+const FLOATS_PER_VERTEX = 14
 const VERTICES_PER_GLYPH = 6
 const MAX_GLYPHS_PER_RENDER = 4096
+const SOLID_GLYPH_KEY = '__solid__'
 
 const TEXT_SHADER = /* wgsl */ `
 struct VertexInput {
   @location(0) position: vec2f,
   @location(1) atlasUv: vec2f,
   @location(2) color: vec4f,
+  @location(3) solidMode: f32,
+  @location(4) solidRect: vec4f,
+  @location(5) solidRadius: f32,
 };
 
 struct VertexOutput {
   @builtin(position) position: vec4f,
   @location(0) atlasUv: vec2f,
   @location(1) color: vec4f,
+  @location(2) pixel: vec2f,
+  @location(3) solidMode: f32,
+  @location(4) solidRect: vec4f,
+  @location(5) solidRadius: f32,
 };
 
 struct TextUniforms {
@@ -85,13 +95,28 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
   output.position = vec4f(clip, 0.0, 1.0);
   output.atlasUv = input.atlasUv;
   output.color = input.color;
+  output.pixel = input.position;
+  output.solidMode = input.solidMode;
+  output.solidRect = input.solidRect;
+  output.solidRadius = input.solidRadius;
   return output;
+}
+
+fn sdRoundedBox(p: vec2f, b: vec2f, r: f32) -> f32 {
+  let radius = min(r, min(b.x, b.y));
+  let q = abs(p) - max(b - vec2f(radius), vec2f(0.0));
+  return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 }
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let distanceAlpha = textureSample(atlasTex, atlasSampler, input.atlasUv).a;
-  let alpha = smoothstep(0.48, 0.54, distanceAlpha) * input.color.a;
+  let halfSize = input.solidRect.zw * 0.5;
+  let center = input.solidRect.xy + halfSize;
+  let rectDistance = sdRoundedBox(input.pixel - center, halfSize, input.solidRadius);
+  let solidAlpha = 1.0 - smoothstep(-0.75, 0.75, rectDistance);
+  let glyphAlpha = smoothstep(0.48, 0.54, distanceAlpha);
+  let alpha = mix(glyphAlpha, solidAlpha, input.solidMode) * input.color.a;
   return vec4f(input.color.rgb, alpha);
 }
 `
@@ -171,6 +196,9 @@ export class GlyphAtlasTextPipeline {
               { shaderLocation: 0, offset: 0, format: 'float32x2' },
               { shaderLocation: 1, offset: 8, format: 'float32x2' },
               { shaderLocation: 2, offset: 16, format: 'float32x4' },
+              { shaderLocation: 3, offset: 32, format: 'float32' },
+              { shaderLocation: 4, offset: 36, format: 'float32x4' },
+              { shaderLocation: 5, offset: 52, format: 'float32' },
             ],
           },
         ],
@@ -275,6 +303,21 @@ export class GlyphAtlasTextPipeline {
           : padding + (availableHeight - totalHeight) / 2
 
     const glyphs: PackedGlyph[] = []
+    if (item.backgroundColor) {
+      const backgroundColor = parseGpuTextColor(item.backgroundColor)
+      const backgroundGlyph = this.ensureSolidGlyph()
+      if (!backgroundColor || !backgroundGlyph) return null
+      glyphs.push({
+        metrics: backgroundGlyph,
+        x: 0,
+        y: 0,
+        width,
+        height,
+        color: backgroundColor,
+        solidRadius: Math.max(0, Math.min(item.backgroundRadius ?? 0, width / 2, height / 2)),
+      })
+    }
+
     for (const line of lines) {
       const lineWidth = this.measureText(line.text, line.font, line.letterSpacing)
       const textAlign = item.textAlign ?? 'center'
@@ -284,6 +327,7 @@ export class GlyphAtlasTextPipeline {
           : textAlign === 'right'
             ? width - padding - lineWidth
             : (width - lineWidth) / 2
+      const lineStartX = currentX
       const baselineY = currentTop + line.baselineOffset
       for (const char of line.text) {
         const metrics = this.ensureGlyph(char, line.font, line.fontSize)
@@ -299,6 +343,19 @@ export class GlyphAtlasTextPipeline {
           })
         }
         currentX += metrics.advance + line.letterSpacing
+      }
+      if (line.underline && lineWidth > 0) {
+        const underlineGlyph = this.ensureSolidGlyph()
+        if (!underlineGlyph) return null
+        glyphs.push({
+          metrics: underlineGlyph,
+          x: lineStartX,
+          y: baselineY + Math.max(1, line.fontSize * 0.08),
+          width: lineWidth,
+          height: Math.max(1, line.fontSize * 0.05),
+          color: line.color,
+          solidRadius: 0,
+        })
       }
       currentTop += line.lineHeightPx
     }
@@ -325,6 +382,7 @@ export class GlyphAtlasTextPipeline {
       const letterSpacing = span.letterSpacing ?? item.letterSpacing ?? 0
       const color = parseGpuTextColor(span.color ?? item.color ?? '#ffffff')
       if (!color) return null
+      const underline = span.underline ?? item.underline ?? false
       const metrics = this.measureFont(font, fontSize)
       const halfLeading = (lineHeightPx - metrics.height) / 2
       const baselineOffset = halfLeading + metrics.ascent
@@ -337,6 +395,7 @@ export class GlyphAtlasTextPipeline {
           baselineOffset,
           letterSpacing,
           color,
+          underline,
         })
       }
     }
@@ -455,6 +514,30 @@ export class GlyphAtlasTextPipeline {
     return metrics
   }
 
+  private ensureSolidGlyph(): GlyphMetrics | null {
+    const cached = this.glyphs.get(SOLID_GLYPH_KEY)
+    if (cached) return cached
+    const atlasPos = this.allocateGlyph(1, 1)
+    if (!atlasPos) return null
+    this.uploadGlyph(atlasPos.x, atlasPos.y, 1, 1, new Uint8Array([255, 255, 255, 255]))
+    const metrics: GlyphMetrics = {
+      key: SOLID_GLYPH_KEY,
+      char: '',
+      font: '',
+      atlasX: atlasPos.x,
+      atlasY: atlasPos.y,
+      atlasWidth: 1,
+      atlasHeight: 1,
+      contentWidth: 1,
+      contentHeight: 1,
+      offsetX: 0,
+      offsetY: 0,
+      advance: 0,
+    }
+    this.glyphs.set(SOLID_GLYPH_KEY, metrics)
+    return metrics
+  }
+
   private allocateGlyph(width: number, height: number): { x: number; y: number } | null {
     if (width > ATLAS_SIZE || height > ATLAS_SIZE) return null
     if (this.nextX + width > ATLAS_SIZE) {
@@ -503,6 +586,8 @@ function writeGlyphVertices(data: Float32Array, offset: number, glyph: PackedGly
     [x1, y0, u1, v0],
     [x1, y1, u1, v1],
   ]
+  const solidMode = glyph.solidRadius === undefined ? 0 : 1
+  const solidRadius = glyph.solidRadius ?? 0
   for (const vertex of vertices) {
     data[offset++] = vertex[0] ?? 0
     data[offset++] = vertex[1] ?? 0
@@ -512,6 +597,12 @@ function writeGlyphVertices(data: Float32Array, offset: number, glyph: PackedGly
     data[offset++] = color[1]
     data[offset++] = color[2]
     data[offset++] = color[3]
+    data[offset++] = solidMode
+    data[offset++] = x0
+    data[offset++] = y0
+    data[offset++] = glyph.width
+    data[offset++] = glyph.height
+    data[offset++] = solidRadius
   }
   return offset
 }

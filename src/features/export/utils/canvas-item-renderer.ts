@@ -2719,11 +2719,8 @@ function resolveGpuTextParticipantSource(
 }
 
 function isGpuGlyphAtlasTextEligible(item: TextItem): boolean {
-  const spans = getTextItemSpans(item)
-  if (item.backgroundColor) return false
   if (item.textShadow) return false
   if (item.stroke && item.stroke.width > 0) return false
-  if (item.underline || spans.some((span) => span.underline)) return false
   return true
 }
 
