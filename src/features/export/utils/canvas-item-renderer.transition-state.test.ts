@@ -2169,7 +2169,7 @@ describe('renderTransitionToGpuTexture', () => {
     expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
   })
 
-  it('does not apply sub-composition occlusion cutoff while masks are active', async () => {
+  it('applies sub-composition occlusion cutoff when active masks cannot affect the covering layer', async () => {
     vi.stubGlobal('GPUTextureUsage', {
       COPY_DST: 2,
       COPY_SRC: 1,
@@ -2358,39 +2358,18 @@ describe('renderTransitionToGpuTexture', () => {
 
     expect(rendered).toBe(true)
     expect(canvasPool.acquire).not.toHaveBeenCalled()
-    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({ width: 640, height: 360 }),
-      bottomBaseTexture,
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenCalledTimes(2)
+    expect(gpuShapePipeline.renderShapeToTexture).not.toHaveBeenCalled()
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenCalledTimes(1)
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenCalledWith(
+      subCompTexture,
+      rightTexture,
       expect.objectContaining({
         sourceWidth: 640,
         sourceHeight: 360,
-        clear: true,
-        blend: false,
       }),
     )
-    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledWith(
-      bottomMaskTexture,
-      expect.objectContaining({
-        outputWidth: 640,
-        outputHeight: 360,
-        transformRect: { x: 160, y: 0, width: 320, height: 360 },
-      }),
-    )
-    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
-      1,
-      bottomBaseTexture,
-      subCompTexture,
-      expect.objectContaining({
-        maskTexture: bottomMaskTexture,
-        clear: false,
-        blend: true,
-      }),
-    )
-    expect(gpuScratchTexturePool.acquire).toHaveBeenCalledTimes(3)
-    expect(gpuScratchTexturePool.release).toHaveBeenCalledWith(bottomBaseTexture)
-    expect(gpuScratchTexturePool.release).toHaveBeenCalledWith(bottomEffectTexture)
-    expect(gpuScratchTexturePool.release).toHaveBeenCalledWith(bottomMaskTexture)
+    expect(gpuScratchTexturePool.acquire).not.toHaveBeenCalled()
     expect(bottomBaseTexture.destroy).not.toHaveBeenCalled()
     expect(bottomEffectTexture.destroy).not.toHaveBeenCalled()
     expect(bottomMaskTexture.destroy).not.toHaveBeenCalled()

@@ -1749,16 +1749,14 @@ async function renderCompositionItem(
     }
 
     const subAdjustmentLayers = subData.adjustmentLayers ?? []
-    const occlusionCutoffOrder =
-      activeSubMasks.length === 0
-        ? findSubCompOcclusionCutoffOrder(
-            subData,
-            localFrame,
-            subCanvasSettings,
-            subAdjustmentLayers,
-            rctx,
-          )
-        : null
+    const occlusionCutoffOrder = findSubCompOcclusionCutoffOrder(
+      subData,
+      localFrame,
+      subCanvasSettings,
+      subAdjustmentLayers,
+      rctx,
+      activeSubMasks,
+    )
 
     let renderedSubItems = 0
     for (const track of subData.sortedTracks) {
@@ -1919,9 +1917,13 @@ function findSubCompOcclusionCutoffOrder(
   canvasSettings: CanvasSettings,
   adjustmentLayers: AdjustmentLayerWithTrackOrder[],
   rctx: ItemRenderContext,
+  activeMasks: Array<{ trackOrder: number }> = [],
 ): number | null {
   for (const track of [...subData.sortedTracks].sort((a, b) => a.order - b.order)) {
     if (!track.visible) continue
+    if (activeMasks.some((mask) => doesMaskAffectTrack(mask.trackOrder, track.order))) {
+      continue
+    }
     for (const item of track.items) {
       if (
         isSubCompFullyOccludingItem(
@@ -2956,16 +2958,14 @@ async function renderGpuSubCompChildrenToTexture(
   )
 
   const subCanvasSettings = { width, height, fps: subData.fps }
-  const occlusionCutoffOrder =
-    activeMasks.length === 0
-      ? findSubCompOcclusionCutoffOrder(
-          subData,
-          localFrame,
-          subCanvasSettings,
-          subAdjustmentLayers,
-          rctx,
-        )
-      : null
+  const occlusionCutoffOrder = findSubCompOcclusionCutoffOrder(
+    subData,
+    localFrame,
+    subCanvasSettings,
+    subAdjustmentLayers,
+    rctx,
+    activeMasks,
+  )
   const visibleChildren: Array<{
     participant: TransitionParticipantRenderState
     masks: typeof activeMasks
