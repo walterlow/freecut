@@ -14,7 +14,7 @@
 import type { BlendMode } from '@/types/blend-modes'
 import { BLEND_MODE_INDEX } from '@/types/blend-modes'
 import { createLogger } from '@/shared/logging/logger'
-import { BLEND_MODES_WGSL } from '../gpu-shared/blend-modes'
+import { BLEND_MODES_WGSL } from '@/lib/gpu-shared/blend-modes'
 
 const logger = createLogger('CompositorPipeline')
 
