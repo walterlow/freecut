@@ -46,7 +46,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     1.0,
     bitcast<u32>(u.y),
     input.uv * 8192.0,
-    layerAlpha
+    u.x
   );
 }
 `

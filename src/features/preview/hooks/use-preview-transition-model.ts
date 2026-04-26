@@ -170,8 +170,7 @@ export function buildPreviewTransitionData({
     item.effects?.some((effect) => effect.enabled) ||
     (!(item.type === 'shape' && item.isMask) &&
       item.blendMode !== undefined &&
-      item.blendMode !== 'normal' &&
-      item.blendMode !== 'dissolve')
+      item.blendMode !== 'normal')
 
   const playbackTransitionComplexStartFrames = new Set<number>()
   const playbackTransitionOverlayWindows = playbackTransitionWindows.map((window) => {

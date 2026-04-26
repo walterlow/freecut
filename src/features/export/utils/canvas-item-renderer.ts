@@ -3079,10 +3079,7 @@ async function renderPreparedGpuSubCompLayerToTexture(
   options: { clear: boolean; blend: boolean },
 ): Promise<boolean> {
   const enabledEffects = prepared.participant.effects.filter((effect) => effect.enabled)
-  const blendMode =
-    prepared.participant.item.blendMode === 'dissolve'
-      ? 'normal'
-      : (prepared.participant.item.blendMode ?? 'normal')
+  const blendMode = prepared.participant.item.blendMode ?? 'normal'
   const needsLayerComposite = options.blend && !options.clear
   const gpuPipeline = rctx.gpuPipeline
   const gpuMediaPipeline = rctx.gpuMediaPipeline

@@ -1399,6 +1399,7 @@ export async function createCompositionRenderer(
         trackOrder: number,
         deferred: boolean,
         targetCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+        bakeMasks = true,
       ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null> => {
         const item = getCurrentItem(baseItem)
         // Get animated transform
@@ -1445,6 +1446,7 @@ export async function createCompositionRenderer(
         const applicableMasks = activeMasks.filter((mask) =>
           doesMaskAffectTrack(mask.trackOrder, trackOrder),
         )
+        const renderMasks = bakeMasks ? applicableMasks : []
 
         // NOTE: The importExternalTexture zero-copy path is disabled because
         // textureSampleBaseClampToEdge produces subtly different edge pixel values
@@ -1465,7 +1467,7 @@ export async function createCompositionRenderer(
           itemRenderContext,
           0,
           undefined,
-          applicableMasks,
+          renderMasks,
         )
 
         // Apply effects (per-item — GPU effects applied here for both preview and export)
@@ -1481,7 +1483,7 @@ export async function createCompositionRenderer(
             canvasPool,
             itemCanvas,
             combinedEffects,
-            hasCornerPin(effectiveItem.cornerPin) ? [] : applicableMasks,
+            hasCornerPin(effectiveItem.cornerPin) ? [] : renderMasks,
             frame,
             maskSettings,
             itemRenderContext.gpuPipeline,
@@ -1510,9 +1512,7 @@ export async function createCompositionRenderer(
       ): TimelineItem['blendMode'] => {
         const blendMode = item.blendMode
         if (!blendMode || blendMode === 'normal') return blendMode
-        void activeMasks
         void trackOrder
-        if (blendMode === 'dissolve') return 'normal'
         return blendMode
       }
 
@@ -1728,6 +1728,32 @@ export async function createCompositionRenderer(
           poolCanvases: OffscreenCanvas[]
         }
 
+        const renderMasksToGpuTexture = (
+          masks: typeof activeMasks,
+        ): { texture: GPUTexture; view: GPUTextureView } | null => {
+          if (!gpuTexturePool || masks.length === 0) return null
+          const maskSource = new OffscreenCanvas(canvasSettings.width, canvasSettings.height)
+          const maskSourceCtx = maskSource.getContext('2d')
+          if (!maskSourceCtx) return null
+          maskSourceCtx.fillStyle = 'white'
+          maskSourceCtx.fillRect(0, 0, maskSource.width, maskSource.height)
+
+          const maskedCanvas = new OffscreenCanvas(canvasSettings.width, canvasSettings.height)
+          const maskedCtx = maskedCanvas.getContext('2d')
+          if (!maskedCtx) return null
+          applyMasks(maskedCtx, maskSource, masks, maskSettings)
+
+          const texture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
+          gpuPipeline!
+            .getDevice()
+            .queue.copyExternalImageToTexture(
+              { source: maskedCanvas, flipY: false },
+              { texture },
+              { width: canvasSettings.width, height: canvasSettings.height },
+            )
+          return { texture, view: texture.createView() }
+        }
+
         const renderTransitionFallbackCanvas = async (
           task: Extract<(typeof renderTasks)[number], { type: 'transition' }>,
         ): Promise<RenderedTaskResult> => {
@@ -1777,7 +1803,16 @@ export async function createCompositionRenderer(
         const results = await Promise.all(
           renderTasks.map(async (task) => {
             if (task.type === 'item') {
-              return renderItemWithEffects(task.item, task.trackOrder, true, contentCtx)
+              const item = getCurrentItem(task.item)
+              const canSeparateMasks =
+                useGpuCompositor && gpuTexturePool && !hasCornerPin(item.cornerPin)
+              return renderItemWithEffects(
+                task.item,
+                task.trackOrder,
+                true,
+                contentCtx,
+                !canSeparateMasks,
+              )
             }
             const transitionMasks = activeMasks.filter((mask) =>
               doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
@@ -1826,23 +1861,40 @@ export async function createCompositionRenderer(
           const h = canvasSettings.height
           const layers: CompositeLayer[] = []
           const layerTextures: GPUTexture[] = []
+          const layerMaskTextures: GPUTexture[] = []
           const compositedResults: Array<{
             task: (typeof renderTasks)[number]
             result: RenderedTaskResult
+            fallbackMasks: typeof activeMasks
           }> = []
 
           for (let i = 0; i < results.length; i++) {
             const task = renderTasks[i]!
-            const result = applyTrackScopedMasks(
-              results[i] ?? null,
-              task.trackOrder,
+            const taskHasCornerPin =
               task.type === 'item'
                 ? hasCornerPin(getCurrentItem(task.item).cornerPin)
                 : hasCornerPin(getCurrentItem(task.transition.leftClip).cornerPin) ||
-                    hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin),
+                  hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin)
+            const applicableMasks = activeMasks.filter((mask) =>
+              doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
             )
+            const shouldUseSeparateMask = task.type === 'item' && !taskHasCornerPin
+            let result: RenderedTaskResult | null = shouldUseSeparateMask
+              ? (results[i] ?? null)
+              : applyTrackScopedMasks(results[i] ?? null, task.trackOrder, taskHasCornerPin)
             if (!result) continue
-            compositedResults.push({ task, result })
+
+            let maskInfo =
+              shouldUseSeparateMask && applicableMasks.length > 0
+                ? renderMasksToGpuTexture(applicableMasks)
+                : null
+            let fallbackMasks = shouldUseSeparateMask ? applicableMasks : []
+            if (shouldUseSeparateMask && applicableMasks.length > 0 && !maskInfo) {
+              const maskedResult = applyTrackScopedMasks(result, task.trackOrder, false)
+              if (!maskedResult) continue
+              result = maskedResult
+              fallbackMasks = []
+            }
 
             const blendMode =
               task.type === 'item'
@@ -1862,15 +1914,26 @@ export async function createCompositionRenderer(
             }
             layerTextures.push(tex)
 
+            if (maskInfo) {
+              layerMaskTextures.push(maskInfo.texture)
+            }
+
+            compositedResults.push({
+              task,
+              result,
+              fallbackMasks,
+            })
+
             layers.push({
               params: {
                 ...DEFAULT_LAYER_PARAMS,
                 blendMode,
                 sourceAspect: w / h,
                 outputAspect: w / h,
+                hasMask: Boolean(maskInfo),
               },
               textureView: tex.createView(),
-              maskView: gpuMaskManager.getFallbackView(),
+              maskView: maskInfo?.view ?? gpuMaskManager.getFallbackView(),
             })
           }
 
@@ -1896,12 +1959,23 @@ export async function createCompositionRenderer(
             // Fall back to the established Canvas2D compositor if the GPU target
             // isn't available for this frame. This preserves feature parity and
             // avoids dropping content when WebGPU canvas presentation fails.
-            for (const { task, result } of compositedResults) {
+            for (const { task, result, fallbackMasks } of compositedResults) {
               let fallbackResult = result
               if (!fallbackResult.source && task.type === 'transition') {
                 fallbackResult = await renderTransitionFallbackCanvas(task)
               }
-              if (!fallbackResult.source) continue
+              let fallbackSource = fallbackResult.source
+              if (!fallbackSource) continue
+              if (fallbackMasks.length > 0) {
+                const { canvas: fallbackMaskedCanvas, ctx: fallbackMaskedCtx } =
+                  canvasPool.acquire()
+                applyMasks(fallbackMaskedCtx, fallbackSource, fallbackMasks, maskSettings)
+                fallbackResult = {
+                  source: fallbackMaskedCanvas,
+                  poolCanvases: [...fallbackResult.poolCanvases, fallbackMaskedCanvas],
+                }
+                fallbackSource = fallbackMaskedCanvas
+              }
               const blendMode =
                 task.type === 'item'
                   ? getEffectiveBlendMode(getCurrentItem(task.item), task.trackOrder)
@@ -1910,7 +1984,7 @@ export async function createCompositionRenderer(
                 contentCtx.globalCompositeOperation = getCompositeOperation(blendMode)
               }
 
-              contentCtx.drawImage(fallbackResult.source, 0, 0)
+              contentCtx.drawImage(fallbackSource, 0, 0)
 
               if (blendMode && blendMode !== 'normal') {
                 contentCtx.globalCompositeOperation = 'source-over'
@@ -1927,6 +2001,7 @@ export async function createCompositionRenderer(
 
           // Release pooled textures (no GPU destroy — recycled next frame)
           for (const tex of layerTextures) gpuTexturePool!.release(tex)
+          for (const tex of layerMaskTextures) gpuTexturePool!.release(tex)
         } else {
           // Canvas2D compositing fallback
           for (let i = 0; i < results.length; i++) {
