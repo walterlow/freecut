@@ -69,7 +69,7 @@ import {
   type RenderTimelineSpan,
 } from './render-span'
 import type { GpuTexturePool } from '@/infrastructure/gpu/compositor'
-import type { MediaRenderPipeline } from '@/infrastructure/gpu/media'
+import type { GpuMediaRect, MediaRenderPipeline } from '@/infrastructure/gpu/media'
 
 const log = createLogger('CanvasItemRenderer')
 
@@ -1906,6 +1906,16 @@ type ResolvedGpuMediaParticipantSource = {
   close?: () => void
 }
 
+type PreparedGpuMediaParticipant = {
+  participant: TransitionParticipantRenderState
+  media: ResolvedGpuMediaParticipantSource
+  sourceRect: GpuMediaRect
+  destRect: GpuMediaRect
+  rotationRad: number
+  flipX: boolean
+  flipY: boolean
+}
+
 type RenderedTransitionBaseParticipants = {
   leftCanvas: OffscreenCanvas
   rightCanvas: OffscreenCanvas
@@ -2126,69 +2136,60 @@ async function renderTransitionGpuMediaTextureParticipants(
     trackOrder,
     rctx,
   )
-  const leftTexture = gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
-  const rightTexture = gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
-  const poolTextures = [leftTexture, rightTexture]
-
-  const leftRendered = await renderGpuMediaParticipantToTexture(
-    pipeline,
-    leftParticipant,
-    leftParticipant.transform,
-    frame,
-    rctx,
-    gpuTexturePool,
-    leftTexture,
-  )
-  const rightRendered = await renderGpuMediaParticipantToTexture(
-    pipeline,
-    rightParticipant,
-    rightParticipant.transform,
-    frame,
-    rctx,
-    gpuTexturePool,
-    rightTexture,
-  )
-  if (!leftRendered || !rightRendered) {
-    for (const texture of poolTextures) gpuTexturePool.release(texture)
+  const leftPrepared = await prepareGpuMediaParticipant(leftParticipant, frame, rctx)
+  const rightPrepared = await prepareGpuMediaParticipant(rightParticipant, frame, rctx)
+  if (!leftPrepared || !rightPrepared) {
+    leftPrepared?.media.close?.()
+    rightPrepared?.media.close?.()
     return null
   }
 
-  return {
-    leftTexture,
-    rightTexture,
-    poolCanvases: [],
-    poolTextures,
+  const leftTexture = gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
+  const rightTexture = gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
+  const poolTextures = [leftTexture, rightTexture]
+  let ownsPoolTextures = true
+
+  try {
+    const leftRendered = await renderGpuMediaParticipantToTexture(
+      pipeline,
+      leftPrepared,
+      rctx,
+      gpuTexturePool,
+      leftTexture,
+    )
+    const rightRendered = await renderGpuMediaParticipantToTexture(
+      pipeline,
+      rightPrepared,
+      rctx,
+      gpuTexturePool,
+      rightTexture,
+    )
+    if (!leftRendered || !rightRendered) return null
+
+    ownsPoolTextures = false
+    return {
+      leftTexture,
+      rightTexture,
+      poolCanvases: [],
+      poolTextures,
+    }
+  } finally {
+    leftPrepared.media.close?.()
+    rightPrepared.media.close?.()
+    if (ownsPoolTextures) {
+      for (const texture of poolTextures) gpuTexturePool.release(texture)
+    }
   }
 }
 
 async function renderGpuMediaParticipantToTexture(
   pipeline: MediaRenderPipeline,
-  participant: TransitionParticipantRenderState,
-  transform: ItemTransform,
-  frame: number,
+  prepared: PreparedGpuMediaParticipant,
   rctx: ItemRenderContext,
   gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
   outputTexture: GPUTexture,
 ): Promise<boolean> {
-  const media = await resolveGpuMediaParticipantSource(participant, transform, frame, rctx)
-  if (!media) return false
-  const layout = calculateContainedMediaDrawLayout(
-    media.sourceWidth,
-    media.sourceHeight,
-    transform,
-    rctx.canvasSettings,
-    media.item.crop,
-  )
-  if (layout.viewportRect.width <= 0 || layout.viewportRect.height <= 0) return false
-  if (hasCropFeather(layout.featherPixels)) return false
-
-  const sourceRect = {
-    x: ((layout.viewportRect.x - layout.mediaRect.x) / layout.mediaRect.width) * media.sourceWidth,
-    y:
-      ((layout.viewportRect.y - layout.mediaRect.y) / layout.mediaRect.height) * media.sourceHeight,
-    width: (layout.viewportRect.width / layout.mediaRect.width) * media.sourceWidth,
-    height: (layout.viewportRect.height / layout.mediaRect.height) * media.sourceHeight,
-  }
+  const { participant, media } = prepared
 
   const mediaOutputTexture =
     participant.effects.length > 0
@@ -2201,9 +2202,12 @@ async function renderGpuMediaParticipantToTexture(
       sourceHeight: media.sourceHeight,
       outputWidth: rctx.canvasSettings.width,
       outputHeight: rctx.canvasSettings.height,
-      sourceRect,
-      destRect: layout.viewportRect,
-      opacity: transform.opacity,
+      sourceRect: prepared.sourceRect,
+      destRect: prepared.destRect,
+      opacity: participant.transform.opacity,
+      rotationRad: prepared.rotationRad,
+      flipX: prepared.flipX,
+      flipY: prepared.flipY,
     })
     if (!renderedMedia) return false
     if (mediaOutputTexture === outputTexture) return true
@@ -2217,7 +2221,54 @@ async function renderGpuMediaParticipantToTexture(
     )
   } finally {
     if (mediaOutputTexture !== outputTexture) gpuTexturePool.release(mediaOutputTexture)
+  }
+}
+
+async function prepareGpuMediaParticipant(
+  participant: TransitionParticipantRenderState,
+  frame: number,
+  rctx: ItemRenderContext,
+): Promise<PreparedGpuMediaParticipant | null> {
+  const media = await resolveGpuMediaParticipantSource(
+    participant,
+    participant.transform,
+    frame,
+    rctx,
+  )
+  if (!media) return null
+
+  const layout = calculateContainedMediaDrawLayout(
+    media.sourceWidth,
+    media.sourceHeight,
+    participant.transform,
+    rctx.canvasSettings,
+    media.item.crop,
+  )
+  if (layout.viewportRect.width <= 0 || layout.viewportRect.height <= 0) {
     media.close?.()
+    return null
+  }
+  if (hasCropFeather(layout.featherPixels)) {
+    media.close?.()
+    return null
+  }
+
+  return {
+    participant,
+    media,
+    sourceRect: {
+      x:
+        ((layout.viewportRect.x - layout.mediaRect.x) / layout.mediaRect.width) * media.sourceWidth,
+      y:
+        ((layout.viewportRect.y - layout.mediaRect.y) / layout.mediaRect.height) *
+        media.sourceHeight,
+      width: (layout.viewportRect.width / layout.mediaRect.width) * media.sourceWidth,
+      height: (layout.viewportRect.height / layout.mediaRect.height) * media.sourceHeight,
+    },
+    destRect: layout.viewportRect,
+    rotationRad: (participant.transform.rotation * Math.PI) / 180,
+    flipX: participant.item.transform?.flipHorizontal ?? false,
+    flipY: participant.item.transform?.flipVertical ?? false,
   }
 }
 
@@ -2228,12 +2279,8 @@ async function resolveGpuMediaParticipantSource(
   rctx: ItemRenderContext,
 ): Promise<ResolvedGpuMediaParticipantSource | null> {
   if (hasCornerPin(participant.item.cornerPin)) return null
-  if (transform.rotation !== 0) return null
   if (transform.cornerRadius > 0) return null
   if (transform.opacity < 0 || transform.opacity > 1) return null
-  if (participant.item.transform?.flipHorizontal || participant.item.transform?.flipVertical) {
-    return null
-  }
 
   if (participant.item.type === 'image') {
     const loadedImage = rctx.imageElements.get(participant.item.id)

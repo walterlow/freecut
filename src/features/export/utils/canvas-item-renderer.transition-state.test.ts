@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vite-plus/test'
+import { describe, expect, it, vi } from 'vite-plus/test'
+import '@/core/timeline/transitions'
 import type { ItemEffect } from '@/types/effects'
 import type { ItemKeyframes } from '@/types/keyframe'
-import type { TimelineItem, VideoItem } from '@/types/timeline'
+import type { ImageItem, TimelineItem, VideoItem } from '@/types/timeline'
 import type { ActiveTransition } from './canvas-transitions'
 import type { ItemRenderContext } from './canvas-item-renderer'
-import { resolveTransitionParticipantRenderState } from './canvas-item-renderer'
+import {
+  renderTransitionToGpuTexture,
+  resolveTransitionParticipantRenderState,
+} from './canvas-item-renderer'
 
 function createActiveTransition(overrides?: Partial<ActiveTransition>): ActiveTransition {
   return {
@@ -372,5 +376,247 @@ describe('resolveTransitionParticipantRenderState', () => {
       durationInFrames: 50,
       sourceStart: 0,
     })
+  })
+})
+
+describe('renderTransitionToGpuTexture', () => {
+  it('routes eligible image participants through GPU media textures without canvas rendering', async () => {
+    const leftClip: ImageItem = {
+      id: 'left-image',
+      type: 'image',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      src: 'left.png',
+      label: 'Left image',
+      transform: {
+        x: 10,
+        y: 20,
+        width: 640,
+        height: 360,
+        rotation: 15,
+        opacity: 0.8,
+        flipHorizontal: true,
+      },
+    } as ImageItem
+    const rightClip: ImageItem = {
+      ...leftClip,
+      id: 'right-image',
+      src: 'right.png',
+      label: 'Right image',
+      transform: {
+        ...leftClip.transform,
+        x: -10,
+        flipHorizontal: false,
+        flipVertical: true,
+      },
+    } as ImageItem
+    const activeTransition = createActiveTransition({
+      leftClip,
+      rightClip,
+      progress: 0.35,
+    })
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(),
+      release: vi.fn(),
+    }
+    const gpuMediaPipeline = {
+      renderSourceToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map([
+        [
+          leftClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+        [
+          rightClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+      ]),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: {} as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenCalledTimes(2)
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      1,
+      { width: 1280, height: 720 },
+      leftTexture,
+      expect.objectContaining({
+        opacity: 0.8,
+        rotationRad: (15 * Math.PI) / 180,
+        flipX: true,
+        flipY: false,
+      }),
+    )
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      2,
+      { width: 1280, height: 720 },
+      rightTexture,
+      expect.objectContaining({
+        flipX: false,
+        flipY: true,
+      }),
+    )
+    expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalledWith(
+      'iris',
+      leftTexture,
+      rightTexture,
+      outputTexture,
+      0.35,
+      1920,
+      1080,
+      undefined,
+      undefined,
+    )
+    expect(gpuTexturePool.release).toHaveBeenCalledWith(leftTexture)
+    expect(gpuTexturePool.release).toHaveBeenCalledWith(rightTexture)
+  })
+
+  it('falls back to canvas participant rendering for GPU media features that are not shader-backed yet', async () => {
+    const leftClip: ImageItem = {
+      id: 'left-image',
+      type: 'image',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      src: 'left.png',
+      label: 'Left image',
+      crop: { left: 0.1, right: 0, top: 0, bottom: 0, softness: 0.2 },
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ImageItem
+    const rightClip: ImageItem = {
+      ...leftClip,
+      id: 'right-image',
+      src: 'right.png',
+      label: 'Right image',
+    } as ImageItem
+    const activeTransition = createActiveTransition({ leftClip, rightClip })
+    const transitionTexture = { width: 1920, height: 1080 } as GPUTexture
+    const participantTexture = { width: 1920, height: 1080 } as GPUTexture
+    const participantCanvas = { width: 1920, height: 1080 } as OffscreenCanvas
+    const canvasPool = {
+      acquire: vi.fn(() => ({
+        canvas: participantCanvas,
+        ctx: {
+          beginPath: vi.fn(),
+          canvas: participantCanvas,
+          clip: vi.fn(),
+          createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+          drawImage: vi.fn(),
+          fillRect: vi.fn(),
+          rect: vi.fn(),
+          restore: vi.fn(),
+          roundRect: vi.fn(),
+          save: vi.fn(),
+        },
+      })),
+      release: vi.fn(),
+    }
+    const gpuTexturePool = {
+      acquire: vi.fn(() => participantTexture),
+      release: vi.fn(),
+    }
+    const gpuMediaPipeline = {
+      renderSourceToTexture: vi.fn(),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderToTexture: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map([
+        [
+          leftClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+        [
+          rightClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+      ]),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: {
+        applyEffectsToTexture: vi.fn().mockReturnValue(true),
+      } as unknown as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      transitionTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(gpuMediaPipeline.renderSourceToTexture).not.toHaveBeenCalled()
+    expect(canvasPool.acquire).toHaveBeenCalled()
+    expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalled()
+    expect(gpuTransitionPipeline.renderToTexture).not.toHaveBeenCalled()
   })
 })

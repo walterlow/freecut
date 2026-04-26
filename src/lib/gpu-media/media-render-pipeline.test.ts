@@ -64,6 +64,9 @@ describe('MediaRenderPipeline', () => {
       sourceRect: { x: 100, y: 50, width: 500, height: 400 },
       destRect: { x: 200, y: 100, width: 700, height: 500 },
       opacity: 0.75,
+      rotationRad: Math.PI / 2,
+      flipX: true,
+      flipY: false,
     })
 
     expect(rendered).toBe(true)
@@ -78,6 +81,14 @@ describe('MediaRenderPipeline', () => {
       { width: 1920, height: 1080 },
     )
     expect(queue.writeBuffer).toHaveBeenCalled()
+    const uniformData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
+    expect(uniformData.length).toBe(16)
+    expect(Array.from(uniformData.slice(0, 13))).toEqual([
+      1920, 1080, 1920, 1080, 100, 50, 500, 400, 200, 100, 700, 500, 0.75,
+    ])
+    expect(uniformData[13]).toBeCloseTo(Math.PI / 2)
+    expect(uniformData[14]).toBe(-1)
+    expect(uniformData[15]).toBe(1)
     expect(commandEncoder.beginRenderPass).toHaveBeenCalledWith({
       colorAttachments: [
         {

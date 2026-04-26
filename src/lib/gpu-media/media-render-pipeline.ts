@@ -21,6 +21,9 @@ export interface GpuMediaRenderParams {
   sourceRect?: GpuMediaRect
   destRect: GpuMediaRect
   opacity?: number
+  rotationRad?: number
+  flipX?: boolean
+  flipY?: boolean
 }
 
 const MEDIA_RENDER_SHADER = /* wgsl */ `
@@ -51,6 +54,8 @@ struct MediaUniforms {
   sourceRect: vec4f,
   destRect: vec4f,
   opacity: f32,
+  rotation: f32,
+  flip: vec2f,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -60,13 +65,26 @@ struct MediaUniforms {
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let pixel = input.uv * u.outputSize;
-  let destMin = u.destRect.xy;
-  let destMax = u.destRect.xy + u.destRect.zw;
-  if (pixel.x < destMin.x || pixel.y < destMin.y || pixel.x > destMax.x || pixel.y > destMax.y) {
+  let halfSize = u.destRect.zw * 0.5;
+  let center = u.destRect.xy + halfSize;
+  let relative = pixel - center;
+  let cosR = cos(-u.rotation);
+  let sinR = sin(-u.rotation);
+  let local = vec2f(
+    relative.x * cosR - relative.y * sinR,
+    relative.x * sinR + relative.y * cosR
+  );
+  if (abs(local.x) > halfSize.x || abs(local.y) > halfSize.y) {
     return vec4f(0.0);
   }
 
-  let localUv = (pixel - destMin) / max(u.destRect.zw, vec2f(0.001));
+  var localUv = (local + halfSize) / max(u.destRect.zw, vec2f(0.001));
+  if (u.flip.x < 0.0) {
+    localUv.x = 1.0 - localUv.x;
+  }
+  if (u.flip.y < 0.0) {
+    localUv.y = 1.0 - localUv.y;
+  }
   let sourcePixel = u.sourceRect.xy + localUv * u.sourceRect.zw;
   let sourceUv = sourcePixel / max(u.sourceSize, vec2f(0.001));
   let color = textureSample(texSampler, sourceTex, sourceUv);
@@ -174,9 +192,9 @@ export class MediaRenderPipeline {
       params.destRect.width,
       params.destRect.height,
       params.opacity ?? 1,
-      0,
-      0,
-      0,
+      params.rotationRad ?? 0,
+      params.flipX ? -1 : 1,
+      params.flipY ? -1 : 1,
     ])
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformData)
 
