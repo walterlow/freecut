@@ -166,15 +166,16 @@ fn compositeFragment(input: VertexOutput) -> @location(0) vec4f {
   }
 
   let sourceAlpha = layerColor.a * u.opacity;
-  let layerAlpha = sourceAlpha * maskValue * select(0.0, 1.0, inBounds);
-  if (layerAlpha <= 0.0) {
+  let postDissolveAlpha = maskValue * select(0.0, 1.0, inBounds);
+  if (sourceAlpha * postDissolveAlpha <= 0.0) {
     return baseColor;
   }
 
   return compositeBlendSourceOver(
     baseColor,
     layerColor,
-    layerAlpha,
+    sourceAlpha,
+    postDissolveAlpha,
     u.blendMode,
     input.uv * 8192.0,
     sourceAlpha
@@ -229,12 +230,13 @@ fn compositeExternalFragment(input: VertexOutput) -> @location(0) vec4f {
     if (u.maskInvert != 0u) { maskValue = 1.0 - maskValue; }
   }
   let sourceAlpha = layerColor.a * u.opacity;
-  let layerAlpha = sourceAlpha * maskValue * select(0.0, 1.0, inBounds);
-  if (layerAlpha <= 0.0) { return baseColor; }
+  let postDissolveAlpha = maskValue * select(0.0, 1.0, inBounds);
+  if (sourceAlpha * postDissolveAlpha <= 0.0) { return baseColor; }
   return compositeBlendSourceOver(
     baseColor,
     layerColor,
-    layerAlpha,
+    sourceAlpha,
+    postDissolveAlpha,
     u.blendMode,
     input.uv * 8192.0,
     sourceAlpha

@@ -1504,6 +1504,18 @@ export async function createCompositionRenderer(
         return null
       }
 
+      const getEffectiveBlendMode = (
+        item: TimelineItem,
+        trackOrder: number,
+      ): TimelineItem['blendMode'] => {
+        const blendMode = item.blendMode
+        if (!blendMode || blendMode === 'normal') return blendMode
+        void activeMasks
+        void trackOrder
+        if (blendMode === 'dissolve') return 'normal'
+        return blendMode
+      }
+
       // Helper to check if item should be rendered
       const shouldRenderItem = (baseItem: TimelineItem): boolean => {
         const item = getCurrentItem(baseItem)
@@ -1648,7 +1660,8 @@ export async function createCompositionRenderer(
           t.type === 'item' &&
           (() => {
             const item = getCurrentItem(t.item)
-            return Boolean(item.blendMode && item.blendMode !== 'normal')
+            const blendMode = getEffectiveBlendMode(item, t.trackOrder)
+            return Boolean(blendMode && blendMode !== 'normal')
           })(),
       )
       if (hasNonNormalBlend && !itemRenderContext.gpuPipeline) {
@@ -1670,7 +1683,10 @@ export async function createCompositionRenderer(
       if (shouldDirectRenderSingleTask) {
         const directTask = renderTasks[0]
         if (directTask?.type === 'item') {
-          const blendMode = getCurrentItem(directTask.item).blendMode
+          const blendMode = getEffectiveBlendMode(
+            getCurrentItem(directTask.item),
+            directTask.trackOrder,
+          )
           try {
             if (blendMode && blendMode !== 'normal') {
               ctx.globalCompositeOperation = getCompositeOperation(blendMode)
@@ -1829,7 +1845,9 @@ export async function createCompositionRenderer(
             compositedResults.push({ task, result })
 
             const blendMode =
-              task.type === 'item' ? (getCurrentItem(task.item).blendMode ?? 'normal') : 'normal'
+              task.type === 'item'
+                ? (getEffectiveBlendMode(getCurrentItem(task.item), task.trackOrder) ?? 'normal')
+                : 'normal'
 
             // Upload item canvas to GPU texture (pooled — no per-frame alloc)
             let tex = result.gpuTexture
@@ -1885,7 +1903,9 @@ export async function createCompositionRenderer(
               }
               if (!fallbackResult.source) continue
               const blendMode =
-                task.type === 'item' ? getCurrentItem(task.item).blendMode : undefined
+                task.type === 'item'
+                  ? getEffectiveBlendMode(getCurrentItem(task.item), task.trackOrder)
+                  : undefined
               if (blendMode && blendMode !== 'normal') {
                 contentCtx.globalCompositeOperation = getCompositeOperation(blendMode)
               }
@@ -1925,7 +1945,10 @@ export async function createCompositionRenderer(
               continue
             }
 
-            const blendMode = task.type === 'item' ? getCurrentItem(task.item).blendMode : undefined
+            const blendMode =
+              task.type === 'item'
+                ? getEffectiveBlendMode(getCurrentItem(task.item), task.trackOrder)
+                : undefined
             if (blendMode && blendMode !== 'normal') {
               contentCtx.globalCompositeOperation = getCompositeOperation(blendMode)
             }

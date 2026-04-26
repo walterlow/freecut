@@ -18,7 +18,9 @@ function hasEnabledGpuEffect(effects: ItemEffect[] | undefined): boolean {
 
 function hasRenderableBlendMode(item: TimelineItem): boolean {
   if (item.type === 'shape' && item.isMask) return false
-  return item.blendMode !== undefined && item.blendMode !== 'normal'
+  return (
+    item.blendMode !== undefined && item.blendMode !== 'normal' && item.blendMode !== 'dissolve'
+  )
 }
 
 function subCompositionHasGpuEffectsOrBlend(

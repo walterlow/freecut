@@ -297,6 +297,10 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
     }
   }
 
+  if (normalized.type === 'shape' && normalized.isMask) {
+    normalized.blendMode = 'normal'
+  }
+
   // Legacy split clips can have sourceEnd without sourceStart.
   // Treat them as explicitly bounded from 0 to sourceEnd so rate stretch
   // operates on the split segment rather than the full media duration.

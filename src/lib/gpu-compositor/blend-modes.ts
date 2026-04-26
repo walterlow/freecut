@@ -203,6 +203,7 @@ fn compositeBlendSourceOver(
   baseColor: vec4f,
   layerColor: vec4f,
   sourceAlpha: f32,
+  postDissolveAlpha: f32,
   mode: u32,
   seed: vec2f,
   dissolveAlpha: f32
@@ -213,6 +214,7 @@ fn compositeBlendSourceOver(
     let coverage = compositeDissolveAlpha(ditherAlpha, seed);
     srcAlpha = coverage * clamp(srcAlpha / max(ditherAlpha, 0.00001), 0.0, 1.0);
   }
+  srcAlpha *= clamp(postDissolveAlpha, 0.0, 1.0);
   if (srcAlpha <= 0.0) {
     return baseColor;
   }

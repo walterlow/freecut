@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vite-plus/test'
-import type { AudioItem, TextItem, VideoItem } from '@/types/timeline'
+import type { AudioItem, ShapeItem, TextItem, VideoItem } from '@/types/timeline'
 import { useItemsStore } from './items-store'
 import { useTimelineSettingsStore } from './timeline-settings-store'
 import { timelineToSourceFrames } from '../utils/source-calculations'
@@ -43,6 +43,20 @@ function makeTextItem(overrides: Partial<TextItem> = {}): TextItem {
     label: 'Caption',
     text: 'Caption',
     color: '#ffffff',
+    ...overrides,
+  }
+}
+
+function makeShapeItem(overrides: Partial<ShapeItem> = {}): ShapeItem {
+  return {
+    id: 'shape-1',
+    type: 'shape',
+    trackId: 'track-shape',
+    from: 0,
+    durationInFrames: 30,
+    label: 'Shape',
+    shapeType: 'path',
+    fillColor: '#3b82f6',
     ...overrides,
   }
 }
@@ -309,6 +323,39 @@ describe('items-store indexes', () => {
 
     expect(linkedVideoItems?.map((item) => item.id)).toEqual(['video-legacy', 'audio-legacy'])
     expect(linkedAudioItems?.map((item) => item.id)).toEqual(['video-legacy', 'audio-legacy'])
+  })
+})
+
+describe('items-store shape mask normalization', () => {
+  beforeEach(() => {
+    useItemsStore.getState().setItems([])
+    useItemsStore.getState().setTracks([])
+  })
+
+  it('forces shape masks to normal blend mode when loading old item data', () => {
+    useItemsStore.getState().setItems([
+      makeShapeItem({
+        isMask: true,
+        blendMode: 'dissolve',
+      }),
+    ])
+
+    const mask = useItemsStore.getState().items[0] as ShapeItem
+    expect(mask.blendMode).toBe('normal')
+  })
+
+  it('forces shape masks to normal blend mode when an update enables mask mode', () => {
+    useItemsStore.getState().setItems([
+      makeShapeItem({
+        blendMode: 'dissolve',
+      }),
+    ])
+
+    useItemsStore.getState()._updateItem('shape-1', { isMask: true })
+
+    const mask = useItemsStore.getState().items[0] as ShapeItem
+    expect(mask.isMask).toBe(true)
+    expect(mask.blendMode).toBe('normal')
   })
 })
 
