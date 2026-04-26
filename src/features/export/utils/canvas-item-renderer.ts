@@ -2466,19 +2466,10 @@ function getTransitionParticipantCanvasReason(
   if (item.type === 'text') return 'text-rasterization'
   if (item.type === 'composition') return 'sub-composition-rasterization'
   if (item.type === 'shape') {
-    if (!rctx.gpuShapePipeline) return 'shape-pipeline-unavailable'
-    if (item.isMask) return 'shape-mask'
-    if (item.shapeType === 'path') return 'unsupported-path-complexity'
-    if (!parseGpuColor(item.fillColor)) return 'unsupported-shape-fill'
-    if (
-      item.strokeWidth &&
-      item.strokeWidth > 0 &&
-      item.strokeColor &&
-      !parseGpuColor(item.strokeColor)
-    ) {
-      return 'unsupported-shape-stroke'
-    }
-    return 'shape-source-unavailable'
+    return (
+      getGpuShapeUnsupportedReason(item, participant.transform, participant.effects, rctx) ??
+      'shape-direct-unavailable'
+    )
   }
   if (item.type === 'image') {
     if (!rctx.gpuMediaPipeline) return 'media-pipeline-unavailable'
@@ -2715,23 +2706,17 @@ async function resolveGpuMediaParticipantSource(
   if (transform.opacity < 0 || transform.opacity > 1) return null
 
   if (participant.item.type === 'shape') {
-    if (!rctx.gpuShapePipeline) return null
     const shape = participant.item
-    if (shape.isMask) return null
+    if (getGpuShapeUnsupportedReason(shape, transform, participant.effects, rctx)) return null
     const resolvedPathVertices =
       shape.shapeType === 'path' ? resolveGpuShapePathVertices(shape, transform) : undefined
-    if (shape.shapeType === 'path' && !resolvedPathVertices) return null
     const pathVertices = resolvedPathVertices ?? undefined
-    if (participant.effects.length > 0 && !rctx.gpuPipeline) return null
     const fillColor = parseGpuColor(shape.fillColor)
-    if (!fillColor) return null
     const parsedStrokeColor =
       shape.strokeWidth && shape.strokeWidth > 0 && shape.strokeColor
         ? parseGpuColor(shape.strokeColor)
         : undefined
-    if (shape.strokeWidth && shape.strokeWidth > 0 && shape.strokeColor && !parsedStrokeColor) {
-      return null
-    }
+    if (!fillColor) return null
     const strokeColor = parsedStrokeColor ?? undefined
     return {
       kind: 'shape',
@@ -3275,6 +3260,30 @@ function releaseGpuScratchTexture(rctx: ItemRenderContext, texture: GPUTexture):
     return
   }
   texture.destroy()
+}
+
+function getGpuShapeUnsupportedReason(
+  shape: ShapeItem,
+  transform: ItemTransform,
+  effects: TimelineItem['effects'] = [],
+  rctx: ItemRenderContext,
+): string | null {
+  if (!rctx.gpuShapePipeline) return 'shape-pipeline-unavailable'
+  if (shape.isMask) return 'shape-mask'
+  if (shape.shapeType === 'path' && !resolveGpuShapePathVertices(shape, transform)) {
+    return 'unsupported-path-complexity'
+  }
+  if (!parseGpuColor(shape.fillColor)) return 'unsupported-shape-fill'
+  if (
+    shape.strokeWidth &&
+    shape.strokeWidth > 0 &&
+    shape.strokeColor &&
+    !parseGpuColor(shape.strokeColor)
+  ) {
+    return 'unsupported-shape-stroke'
+  }
+  if (effects.length > 0 && !rctx.gpuPipeline) return 'gpu-effects-pipeline-unavailable'
+  return null
 }
 
 function areGpuSubCompMasksSupported(masks: ReturnType<typeof getActiveSubCompMasks>): boolean {

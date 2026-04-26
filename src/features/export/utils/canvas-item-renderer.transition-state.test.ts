@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vite-plus/test'
+import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import '@/core/timeline/transitions'
 import type { ItemEffect } from '@/types/effects'
 import type { ItemKeyframes } from '@/types/keyframe'
@@ -14,6 +14,19 @@ import type { ActiveTransition } from './canvas-transitions'
 import type { GpuTextTextureCacheEntry, ItemRenderContext } from './canvas-item-renderer'
 import type { VideoFrameSource } from './shared-video-extractor'
 import { MAX_GPU_SHAPE_PATH_VERTICES } from '@/infrastructure/gpu/shapes'
+const testSpies = vi.hoisted(() => ({
+  loggerDebugSpy: vi.fn(),
+}))
+
+vi.mock('@/shared/logging/logger', () => ({
+  createLogger: () => ({
+    debug: testSpies.loggerDebugSpy,
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}))
+
 import {
   renderTransitionToGpuTexture,
   resolveTransitionParticipantRenderState,
@@ -433,6 +446,11 @@ describe('resolveTransitionParticipantRenderState', () => {
 })
 
 describe('renderTransitionToGpuTexture', () => {
+  beforeEach(() => {
+    testSpies.loggerDebugSpy.mockClear()
+    localStorage.removeItem('freecut.debugGpuTransitions')
+  })
+
   it('routes eligible image participants through GPU media textures without canvas rendering', async () => {
     const leftClip: ImageItem = {
       id: 'left-image',
@@ -2377,6 +2395,7 @@ describe('renderTransitionToGpuTexture', () => {
   })
 
   it('routes eligible shape participants through GPU shape textures without canvas rendering', async () => {
+    localStorage.setItem('freecut.debugGpuTransitions', '1')
     const leftClip: ShapeItem = {
       id: 'left-shape',
       type: 'shape',
@@ -2498,6 +2517,116 @@ describe('renderTransitionToGpuTexture', () => {
       1080,
       undefined,
       undefined,
+    )
+    expect(testSpies.loggerDebugSpy).toHaveBeenCalledWith(
+      'GPU transition participant path',
+      expect.objectContaining({
+        itemId: rightClip.id,
+        itemType: 'shape',
+        mediaKind: 'shape',
+        path: 'gpu-direct',
+      }),
+    )
+  })
+
+  it('reports genuinely unsupported path shapes when they fall back to canvas rasterization', async () => {
+    localStorage.setItem('freecut.debugGpuTransitions', '1')
+    vi.stubGlobal('Path2D', class {})
+    const leftClip: ShapeItem = {
+      id: 'left-shape',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Left shape',
+      shapeType: 'rectangle',
+      fillColor: '#ff0000',
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as ShapeItem
+    const rightClip: ShapeItem = {
+      id: 'right-path',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 60,
+      durationInFrames: 60,
+      label: 'Degenerate path',
+      shapeType: 'path',
+      fillColor: '#0000ff',
+      pathVertices: [
+        { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
+        { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
+      ],
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as ShapeItem
+    const activeTransition = createActiveTransition({ leftClip, rightClip, progress: 0.4 })
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const fallbackCanvas = { width: 1920, height: 1080 } as OffscreenCanvas
+    const fallbackCtx = createMockCtx()
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(() => ({ canvas: fallbackCanvas, ctx: fallbackCtx })),
+      release: vi.fn(),
+    }
+    const gpuShapePipeline = {
+      renderShapeToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuPipeline = {
+      applyEffectsToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: gpuPipeline as unknown as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: null,
+      gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledTimes(1)
+    expect(canvasPool.acquire).toHaveBeenCalledTimes(1)
+    expect(gpuPipeline.applyEffectsToTexture).toHaveBeenCalledWith(fallbackCanvas, [], rightTexture)
+    expect(testSpies.loggerDebugSpy).toHaveBeenCalledWith(
+      'GPU transition participant path',
+      expect.objectContaining({
+        itemId: rightClip.id,
+        itemType: 'shape',
+        mediaKind: null,
+        path: 'canvas-rasterize',
+        reason: 'unsupported-path-complexity',
+      }),
     )
   })
 
