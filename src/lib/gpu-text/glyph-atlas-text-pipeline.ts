@@ -37,6 +37,7 @@ interface PackedGlyph {
   strokeColor?: [number, number, number, number]
   strokeWidth?: number
   solidRadius?: number
+  shadowBlur?: number
 }
 
 interface TextLayoutLine {
@@ -55,7 +56,7 @@ interface TextLayoutLine {
 const ATLAS_SIZE = 2048
 const GLYPH_PADDING = 12
 const GLYPH_SDF_RADIUS = 8
-const FLOATS_PER_VERTEX = 19
+const FLOATS_PER_VERTEX = 20
 const VERTICES_PER_GLYPH = 6
 const MAX_GLYPHS_PER_RENDER = 4096
 const SOLID_GLYPH_KEY = '__solid__'
@@ -70,6 +71,7 @@ struct VertexInput {
   @location(5) solidRadius: f32,
   @location(6) strokeColor: vec4f,
   @location(7) strokeWidth: f32,
+  @location(8) shadowBlur: f32,
 };
 
 struct VertexOutput {
@@ -82,6 +84,7 @@ struct VertexOutput {
   @location(5) solidRadius: f32,
   @location(6) strokeColor: vec4f,
   @location(7) strokeWidth: f32,
+  @location(8) shadowBlur: f32,
 };
 
 struct TextUniforms {
@@ -109,6 +112,7 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
   output.solidRadius = input.solidRadius;
   output.strokeColor = input.strokeColor;
   output.strokeWidth = input.strokeWidth;
+  output.shadowBlur = input.shadowBlur;
   return output;
 }
 
@@ -125,7 +129,10 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let center = input.solidRect.xy + halfSize;
   let rectDistance = sdRoundedBox(input.pixel - center, halfSize, input.solidRadius);
   let solidAlpha = 1.0 - smoothstep(-0.75, 0.75, rectDistance);
-  let fillAlpha = smoothstep(0.48, 0.54, distanceAlpha) * input.color.a;
+  let blurBand = input.shadowBlur / 32.0;
+  let glyphEdgeMin = 0.48 - blurBand;
+  let glyphEdgeMax = 0.54 + blurBand;
+  let fillAlpha = smoothstep(glyphEdgeMin, glyphEdgeMax, distanceAlpha) * input.color.a;
   let strokeBand = clamp(input.strokeWidth / 16.0, 0.0, 0.49);
   let strokeAlpha = smoothstep(0.5 - strokeBand - 0.04, 0.5 - strokeBand + 0.04, distanceAlpha) * input.strokeColor.a;
   let glyphAlpha = fillAlpha + strokeAlpha * (1.0 - fillAlpha);
@@ -216,6 +223,7 @@ export class GlyphAtlasTextPipeline {
               { shaderLocation: 5, offset: 52, format: 'float32' },
               { shaderLocation: 6, offset: 56, format: 'float32x4' },
               { shaderLocation: 7, offset: 72, format: 'float32' },
+              { shaderLocation: 8, offset: 76, format: 'float32' },
             ],
           },
         ],
@@ -346,10 +354,23 @@ export class GlyphAtlasTextPipeline {
             : (width - lineWidth) / 2
       const lineStartX = currentX
       const baselineY = currentTop + line.baselineOffset
+      const shadowColor = item.textShadow ? parseGpuTextColor(item.textShadow.color) : undefined
+      if (item.textShadow && !shadowColor) return null
       for (const char of line.text) {
         const metrics = this.ensureGlyph(char, line.font, line.fontSize)
         if (!metrics) return null
         if (char !== ' ') {
+          if (item.textShadow && shadowColor) {
+            glyphs.push({
+              metrics,
+              x: currentX + metrics.offsetX + item.textShadow.offsetX,
+              y: baselineY + metrics.offsetY + item.textShadow.offsetY,
+              width: metrics.contentWidth,
+              height: metrics.contentHeight,
+              color: shadowColor,
+              shadowBlur: Math.max(0, item.textShadow.blur),
+            })
+          }
           glyphs.push({
             metrics,
             x: currentX + metrics.offsetX,
@@ -366,6 +387,17 @@ export class GlyphAtlasTextPipeline {
       if (line.underline && lineWidth > 0) {
         const underlineGlyph = this.ensureSolidGlyph()
         if (!underlineGlyph) return null
+        if (item.textShadow && shadowColor) {
+          glyphs.push({
+            metrics: underlineGlyph,
+            x: lineStartX + item.textShadow.offsetX,
+            y: baselineY + Math.max(1, line.fontSize * 0.08) + item.textShadow.offsetY,
+            width: lineWidth,
+            height: Math.max(1, line.fontSize * 0.05),
+            color: shadowColor,
+            solidRadius: 0,
+          })
+        }
         glyphs.push({
           metrics: underlineGlyph,
           x: lineStartX,
@@ -618,6 +650,7 @@ function writeGlyphVertices(data: Float32Array, offset: number, glyph: PackedGly
   const solidRadius = glyph.solidRadius ?? 0
   const strokeColor = glyph.strokeColor ?? [0, 0, 0, 0]
   const strokeWidth = glyph.strokeWidth ?? 0
+  const shadowBlur = glyph.shadowBlur ?? 0
   for (const vertex of vertices) {
     data[offset++] = vertex[0] ?? 0
     data[offset++] = vertex[1] ?? 0
@@ -638,6 +671,7 @@ function writeGlyphVertices(data: Float32Array, offset: number, glyph: PackedGly
     data[offset++] = strokeColor[2]
     data[offset++] = strokeColor[3]
     data[offset++] = strokeWidth
+    data[offset++] = shadowBlur
   }
   return offset
 }

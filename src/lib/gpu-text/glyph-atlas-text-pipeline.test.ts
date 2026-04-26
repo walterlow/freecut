@@ -141,7 +141,7 @@ describe('GlyphAtlasTextPipeline', () => {
       0,
       expect.any(Float32Array),
       0,
-      228,
+      240,
     )
     const vertexData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
     expect(vertexData[4]).toBeCloseTo(0.2)
@@ -212,9 +212,9 @@ describe('GlyphAtlasTextPipeline', () => {
     expect(vertexData[4]).toBeCloseTo(1)
     expect(vertexData[5]).toBeCloseTo(0)
     expect(vertexData[6]).toBeCloseTo(0)
-    expect(vertexData[118]).toBeCloseTo(0)
-    expect(vertexData[119]).toBeCloseTo(1)
-    expect(vertexData[120]).toBeCloseTo(0)
+    expect(vertexData[124]).toBeCloseTo(0)
+    expect(vertexData[125]).toBeCloseTo(1)
+    expect(vertexData[126]).toBeCloseTo(0)
   })
 
   it('renders flat backgrounds and underlines as solid GPU quads', () => {
@@ -249,7 +249,7 @@ describe('GlyphAtlasTextPipeline', () => {
       0,
       expect.any(Float32Array),
       0,
-      342,
+      360,
     )
     const vertexData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
     expect(vertexData[0]).toBeCloseTo(0)
@@ -259,14 +259,14 @@ describe('GlyphAtlasTextPipeline', () => {
     expect(vertexData[6]).toBeCloseTo(0x33 / 255)
     expect(vertexData[8]).toBeCloseTo(1)
     expect(vertexData[13]).toBeCloseTo(8)
-    expect(vertexData[118]).toBeCloseTo(1)
-    expect(vertexData[119]).toBeCloseTo(1)
-    expect(vertexData[120]).toBeCloseTo(1)
-    expect(vertexData[232]).toBeCloseTo(1)
-    expect(vertexData[233]).toBeCloseTo(1)
-    expect(vertexData[234]).toBeCloseTo(1)
-    expect(vertexData[236]).toBeCloseTo(1)
-    expect(vertexData[241]).toBeCloseTo(0)
+    expect(vertexData[124]).toBeCloseTo(1)
+    expect(vertexData[125]).toBeCloseTo(1)
+    expect(vertexData[126]).toBeCloseTo(1)
+    expect(vertexData[244]).toBeCloseTo(1)
+    expect(vertexData[245]).toBeCloseTo(1)
+    expect(vertexData[246]).toBeCloseTo(1)
+    expect(vertexData[248]).toBeCloseTo(1)
+    expect(vertexData[253]).toBeCloseTo(0)
     expect(pass.draw).toHaveBeenCalledWith(18)
   })
 
@@ -299,6 +299,49 @@ describe('GlyphAtlasTextPipeline', () => {
     expect(vertexData[16]).toBeCloseTo(1)
     expect(vertexData[17]).toBeCloseTo(1)
     expect(vertexData[18]).toBeCloseTo(3)
+  })
+
+  it('emits shadow glyphs before foreground text glyphs', () => {
+    const { outputTexture, pass, pipeline, queue, vertexBuffer } = createPipelineHarness()
+
+    const rendered = pipeline.renderTextToTexture(outputTexture, {
+      outputWidth: 640,
+      outputHeight: 180,
+      width: 640,
+      height: 180,
+      item: {
+        id: 'text',
+        type: 'text',
+        trackId: 'track',
+        from: 0,
+        durationInFrames: 30,
+        text: 'A',
+        color: '#ffffff',
+        fontSize: 48,
+        fontFamily: 'Inter',
+        textShadow: { offsetX: 4, offsetY: 5, blur: 6, color: '#00000080' },
+      } as TextItem,
+    })
+
+    expect(rendered).toBe(true)
+    expect(queue.writeBuffer).toHaveBeenCalledWith(
+      vertexBuffer,
+      0,
+      expect.any(Float32Array),
+      0,
+      240,
+    )
+    const vertexData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
+    expect(vertexData[4]).toBeCloseTo(0)
+    expect(vertexData[5]).toBeCloseTo(0)
+    expect(vertexData[6]).toBeCloseTo(0)
+    expect(vertexData[7]).toBeCloseTo(0x80 / 255)
+    expect(vertexData[19]).toBeCloseTo(6)
+    expect(vertexData[124]).toBeCloseTo(1)
+    expect(vertexData[125]).toBeCloseTo(1)
+    expect(vertexData[126]).toBeCloseTo(1)
+    expect(vertexData[139]).toBeCloseTo(0)
+    expect(pass.draw).toHaveBeenCalledWith(12)
   })
 
   it('rejects text that would overflow the fixed vertex buffer', () => {

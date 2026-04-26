@@ -2604,7 +2604,7 @@ function resolveGpuTextParticipantSource(
   )
   const sourceWidth = Math.max(2, Math.ceil(resolvedTransform.width))
   const sourceHeight = Math.max(2, Math.ceil(resolvedTransform.height))
-  if (rctx.gpuTextPipeline && isGpuGlyphAtlasTextEligible(resolvedTextItem)) {
+  if (rctx.gpuTextPipeline && isGpuGlyphAtlasTextEligible()) {
     const texture = rctx.gpuPipeline.getDevice().createTexture({
       size: { width: sourceWidth, height: sourceHeight },
       format: 'rgba8unorm',
@@ -2718,8 +2718,7 @@ function resolveGpuTextParticipantSource(
   }
 }
 
-function isGpuGlyphAtlasTextEligible(item: TextItem): boolean {
-  if (item.textShadow) return false
+function isGpuGlyphAtlasTextEligible(): boolean {
   return true
 }
 
