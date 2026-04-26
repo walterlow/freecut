@@ -78,6 +78,7 @@ import type {
 } from '@/infrastructure/gpu/media'
 import type { ShapeRenderPipeline } from '@/infrastructure/gpu/shapes'
 import type { GlyphAtlasTextPipeline } from '@/infrastructure/gpu/text'
+import type { MaskCombinePipeline } from '@/infrastructure/gpu/masks'
 
 const log = createLogger('CanvasItemRenderer')
 
@@ -224,6 +225,9 @@ export interface ItemRenderContext {
 
   // GPU glyph-atlas/SDF text renderer (lazily initialized, shares device with gpuPipeline)
   gpuTextPipeline?: GlyphAtlasTextPipeline | null
+
+  // GPU mask combiner for intersecting layer masks.
+  gpuMaskCombinePipeline?: MaskCombinePipeline | null
 
   // Cached text glyph/layout textures for GPU transition participants.
   gpuTextTextureCache?: Map<string, GpuTextTextureCacheEntry>
@@ -3127,7 +3131,15 @@ async function renderPreparedGpuSubCompLayerToTexture(
   const gpuPipeline = rctx.gpuPipeline
   const gpuMediaPipeline = rctx.gpuMediaPipeline
   const gpuShapePipeline = rctx.gpuShapePipeline
-  if (!gpuPipeline || !gpuMediaPipeline || (masks.length > 0 && !gpuShapePipeline)) return false
+  const gpuMaskCombinePipeline = rctx.gpuMaskCombinePipeline
+  if (
+    !gpuPipeline ||
+    !gpuMediaPipeline ||
+    (masks.length > 0 && !gpuShapePipeline) ||
+    (masks.length > 1 && !gpuMaskCombinePipeline)
+  ) {
+    return false
+  }
 
   const device = gpuPipeline.getDevice()
   const baseTexture = device.createTexture({
@@ -3146,14 +3158,20 @@ async function renderPreparedGpuSubCompLayerToTexture(
       GPUTextureUsage.COPY_DST |
       GPUTextureUsage.RENDER_ATTACHMENT,
   })
-  const maskTexture =
-    masks.length > 0
-      ? device.createTexture({
-          size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
-          format: 'rgba8unorm',
-          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
-        })
-      : null
+  const maskTextures = masks.map(() =>
+    device.createTexture({
+      size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+    }),
+  )
+  const combinedMaskTextures = Array.from({ length: Math.max(0, masks.length - 1) }, () =>
+    device.createTexture({
+      size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+    }),
+  )
 
   try {
     const preparedWithoutEffects: PreparedGpuMediaParticipant = {
@@ -3185,9 +3203,27 @@ async function renderPreparedGpuSubCompLayerToTexture(
       compositeSourceTexture = effectedTexture
     }
 
-    if (masks.length > 0 && maskTexture) {
-      const renderedMask = renderGpuSubCompMaskToTexture(masks[0]!, rctx, maskTexture)
-      if (!renderedMask) return false
+    let layerMaskTexture: GPUTexture | null = null
+    if (masks.length > 0) {
+      for (let i = 0; i < masks.length; i++) {
+        const renderedMask = renderGpuSubCompMaskToTexture(masks[i]!, rctx, maskTextures[i]!)
+        if (!renderedMask) return false
+      }
+      if (masks.length === 1) {
+        layerMaskTexture = maskTextures[0]!
+      } else {
+        let currentMaskTexture = maskTextures[0]!
+        for (let i = 1; i < maskTextures.length; i++) {
+          const targetTexture = combinedMaskTextures[i - 1]!
+          if (
+            !gpuMaskCombinePipeline?.combine(currentMaskTexture, maskTextures[i]!, targetTexture)
+          ) {
+            return false
+          }
+          currentMaskTexture = targetTexture
+        }
+        layerMaskTexture = currentMaskTexture
+      }
     }
 
     return gpuMediaPipeline.renderTextureToTexture(compositeSourceTexture, outputTexture, {
@@ -3217,25 +3253,29 @@ async function renderPreparedGpuSubCompLayerToTexture(
       rotationRad: 0,
       clear: options.clear,
       blend: options.blend,
-      maskTexture: maskTexture ?? undefined,
-      maskInvert: masks[0]?.inverted,
+      maskTexture: layerMaskTexture ?? undefined,
     })
   } finally {
     baseTexture.destroy()
     effectedTexture.destroy()
-    maskTexture?.destroy()
+    for (const maskTexture of maskTextures) maskTexture.destroy()
+    for (const maskTexture of combinedMaskTextures) maskTexture.destroy()
   }
 }
 
 function areGpuSubCompMasksSupported(masks: ReturnType<typeof getActiveSubCompMasks>): boolean {
   if (masks.length === 0) return true
-  if (masks.length > 1) return false
-  const mask = masks[0]!
-  if (mask.bitmapMask || mask.maskType !== 'clip' || mask.feather > 0) return false
-  if (hasCornerPin(mask.shape.cornerPin)) return false
-  if ((mask.shape.strokeWidth ?? 0) > 0) return false
-  if (mask.shape.shapeType === 'path' && !resolveGpuShapePathVertices(mask.shape, mask.transform)) {
-    return false
+  for (const mask of masks) {
+    if (mask.bitmapMask || mask.maskType !== 'clip' || mask.feather > 0 || mask.inverted)
+      return false
+    if (hasCornerPin(mask.shape.cornerPin)) return false
+    if ((mask.shape.strokeWidth ?? 0) > 0) return false
+    if (
+      mask.shape.shapeType === 'path' &&
+      !resolveGpuShapePathVertices(mask.shape, mask.transform)
+    ) {
+      return false
+    }
   }
   return true
 }

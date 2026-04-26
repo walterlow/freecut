@@ -50,7 +50,7 @@ import {
   GpuTexturePool,
 } from '@/infrastructure/gpu/compositor'
 import type { CompositeLayer } from '@/infrastructure/gpu/compositor'
-import { MaskTextureManager } from '@/infrastructure/gpu/masks'
+import { MaskCombinePipeline, MaskTextureManager } from '@/infrastructure/gpu/masks'
 import {
   applyMasks,
   buildMaskFrameIndex,
@@ -238,6 +238,7 @@ export async function createCompositionRenderer(
   let gpuMediaPipeline: MediaRenderPipeline | null = null
   let gpuShapePipeline: ShapeRenderPipeline | null = null
   let gpuTextPipeline: GlyphAtlasTextPipeline | null = null
+  let gpuMaskCombinePipeline: MaskCombinePipeline | null = null
   const gpuTextTextureCache = new Map<string, GpuTextTextureCacheEntry>()
 
   function ensureGpuTransitionPipeline(): boolean {
@@ -265,6 +266,13 @@ export async function createCompositionRenderer(
     if (gpuTextPipeline) return true
     if (!gpuPipeline) return false
     gpuTextPipeline = new GlyphAtlasTextPipeline(gpuPipeline.getDevice())
+    return true
+  }
+
+  function ensureGpuMaskCombinePipeline(): boolean {
+    if (gpuMaskCombinePipeline) return true
+    if (!gpuPipeline) return false
+    gpuMaskCombinePipeline = new MaskCombinePipeline(gpuPipeline.getDevice())
     return true
   }
 
@@ -586,6 +594,7 @@ export async function createCompositionRenderer(
     gpuMediaPipeline: null,
     gpuShapePipeline: null,
     gpuTextPipeline: null,
+    gpuMaskCombinePipeline: null,
     gpuTextTextureCache,
     domVideoElementProvider,
   }
@@ -1339,10 +1348,12 @@ export async function createCompositionRenderer(
             if (!itemRenderContext.gpuMediaPipeline) ensureGpuMediaPipeline()
             if (!itemRenderContext.gpuShapePipeline) ensureGpuShapePipeline()
             if (!itemRenderContext.gpuTextPipeline) ensureGpuTextPipeline()
+            if (!itemRenderContext.gpuMaskCombinePipeline) ensureGpuMaskCombinePipeline()
             itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline
             itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
             itemRenderContext.gpuShapePipeline = gpuShapePipeline
             itemRenderContext.gpuTextPipeline = gpuTextPipeline
+            itemRenderContext.gpuMaskCombinePipeline = gpuMaskCombinePipeline
           }
         }
       }
@@ -2166,11 +2177,13 @@ export async function createCompositionRenderer(
         ensureGpuMediaPipeline()
         ensureGpuShapePipeline()
         ensureGpuTextPipeline()
+        ensureGpuMaskCombinePipeline()
         itemRenderContext.gpuPipeline = pipeline
         itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline
         itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
         itemRenderContext.gpuShapePipeline = gpuShapePipeline
         itemRenderContext.gpuTextPipeline = gpuTextPipeline
+        itemRenderContext.gpuMaskCombinePipeline = gpuMaskCombinePipeline
       }
     },
 
@@ -2239,6 +2252,8 @@ export async function createCompositionRenderer(
       gpuShapePipeline = null
       gpuTextPipeline?.destroy()
       gpuTextPipeline = null
+      gpuMaskCombinePipeline?.destroy()
+      gpuMaskCombinePipeline = null
       for (const entry of gpuTextTextureCache.values()) entry.texture.destroy()
       gpuTextTextureCache.clear()
       gpuPipeline?.destroy()

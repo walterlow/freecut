@@ -1667,6 +1667,26 @@ describe('renderTransitionToGpuTexture', () => {
         opacity: 1,
       },
     } as ShapeItem
+    const nestedMask2: ShapeItem = {
+      id: 'nested-mask-2',
+      type: 'shape',
+      trackId: 'sub-track-1',
+      from: 0,
+      durationInFrames: 120,
+      label: 'Nested clip mask 2',
+      shapeType: 'ellipse',
+      isMask: true,
+      maskType: 'clip',
+      fillColor: '#ffffff',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 480,
+        height: 240,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ShapeItem
     const rightClip: CompositionItem = {
       id: 'right-comp',
       type: 'composition',
@@ -1713,6 +1733,18 @@ describe('renderTransitionToGpuTexture', () => {
       createView: vi.fn(),
       destroy: vi.fn(),
     } as unknown as GPUTexture
+    const imageMaskTexture2 = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const combinedImageMaskTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
     const atlasTextTexture = {
       width: 640,
       height: 180,
@@ -1739,6 +1771,8 @@ describe('renderTransitionToGpuTexture', () => {
         .mockReturnValueOnce(imageBaseTexture)
         .mockReturnValueOnce(imageEffectTexture)
         .mockReturnValueOnce(imageMaskTexture)
+        .mockReturnValueOnce(imageMaskTexture2)
+        .mockReturnValueOnce(combinedImageMaskTexture)
         .mockReturnValueOnce(atlasTextTexture)
         .mockReturnValueOnce(textBaseTexture)
         .mockReturnValueOnce(textEffectTexture),
@@ -1766,6 +1800,9 @@ describe('renderTransitionToGpuTexture', () => {
     }
     const gpuShapePipeline = {
       renderShapeToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuMaskCombinePipeline = {
+      combine: vi.fn().mockReturnValue(true),
     }
     const gpuTransitionPipeline = {
       has: vi.fn().mockReturnValue(true),
@@ -1808,7 +1845,7 @@ describe('renderTransitionToGpuTexture', () => {
             durationInFrames: 120,
             sortedTracks: [
               { order: 1, visible: true, items: [nestedImage] },
-              { order: 0, visible: true, items: [nestedText, nestedMask] },
+              { order: 0, visible: true, items: [nestedText, nestedMask, nestedMask2] },
             ],
             keyframesMap: new Map(),
             adjustmentLayers: [],
@@ -1820,6 +1857,8 @@ describe('renderTransitionToGpuTexture', () => {
         gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
       gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
       gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
+      gpuMaskCombinePipeline:
+        gpuMaskCombinePipeline as unknown as ItemRenderContext['gpuMaskCombinePipeline'],
       gpuTextPipeline: gpuTextPipeline as unknown as ItemRenderContext['gpuTextPipeline'],
       gpuTextTextureCache: new Map(),
     }
@@ -1858,6 +1897,21 @@ describe('renderTransitionToGpuTexture', () => {
         fillColor: [1, 1, 1, 1],
       }),
     )
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledWith(
+      imageMaskTexture2,
+      expect.objectContaining({
+        outputWidth: 640,
+        outputHeight: 360,
+        transformRect: { x: 80, y: 60, width: 480, height: 240 },
+        shapeType: 'ellipse',
+        fillColor: [1, 1, 1, 1],
+      }),
+    )
+    expect(gpuMaskCombinePipeline.combine).toHaveBeenCalledWith(
+      imageMaskTexture,
+      imageMaskTexture2,
+      combinedImageMaskTexture,
+    )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
       1,
       imageBaseTexture,
@@ -1868,7 +1922,7 @@ describe('renderTransitionToGpuTexture', () => {
         destRect: { x: 0, y: 0, width: 640, height: 360 },
         clear: true,
         blend: true,
-        maskTexture: imageMaskTexture,
+        maskTexture: combinedImageMaskTexture,
       }),
     )
     expect(gpuTextPipeline.renderTextToTexture).toHaveBeenCalledWith(
@@ -1930,6 +1984,8 @@ describe('renderTransitionToGpuTexture', () => {
     expect(imageBaseTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageEffectTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageMaskTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(imageMaskTexture2.destroy).toHaveBeenCalledTimes(1)
+    expect(combinedImageMaskTexture.destroy).toHaveBeenCalledTimes(1)
     expect(textBaseTexture.destroy).toHaveBeenCalledTimes(1)
     expect(textEffectTexture.destroy).toHaveBeenCalledTimes(1)
     expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
