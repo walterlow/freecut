@@ -55,4 +55,16 @@ describe('transition-ui-config', () => {
       (getTransitionConfigsByCategory().light ?? []).some((config) => config.id === 'sparkles'),
     ).toBe(false)
   })
+
+  it('shows liquid distort as a directional custom transition', () => {
+    const customConfigs = getTransitionConfigsByCategory().custom ?? []
+    const liquidConfigs = customConfigs.filter((config) => config.id === 'liquidDistort')
+
+    expect(liquidConfigs.map((config) => config.direction)).toEqual([
+      'from-left',
+      'from-right',
+      'from-top',
+      'from-bottom',
+    ])
+  })
 })

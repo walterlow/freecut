@@ -607,6 +607,68 @@ const radialBlurDef: TransitionDefinition = {
 }
 
 // ============================================================================
+// Liquid Distort
+// ============================================================================
+
+const liquidDistortRenderer: TransitionRenderer = {
+  gpuTransitionId: 'liquidDistort',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    const offset = Math.sin(p * Math.PI * 2.4) * envelope * 3
+    const scale = isOutgoing ? 1 + envelope * 0.012 : 1 + envelope * 0.018
+    return {
+      opacity: fadeOpacity(p, isOutgoing),
+      transform:
+        envelope > 0.08 ? `translate(${offset}px, ${-offset * 0.45}px) scale(${scale})` : undefined,
+    }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    const p = clamp01(progress)
+    const w = canvas?.width ?? leftCanvas.width
+    const h = canvas?.height ?? leftCanvas.height
+    const envelope = Math.sin(p * Math.PI)
+    const offset = Math.sin(p * Math.PI * 2.4) * envelope * 5
+
+    ctx.save()
+    ctx.globalAlpha = fadeOpacity(p, false)
+    ctx.drawImage(rightCanvas, offset, -offset * 0.35, w, h)
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalAlpha = fadeOpacity(p, true)
+    ctx.drawImage(leftCanvas, -offset * 0.65, offset * 0.25, w, h)
+    ctx.restore()
+
+    if (envelope <= 0.08) return
+
+    const gradient = ctx.createLinearGradient(0, 0, w, h)
+    gradient.addColorStop(0, `rgba(180, 225, 255, ${0.12 * envelope})`)
+    gradient.addColorStop(0.5, `rgba(255, 255, 255, ${0.08 * envelope})`)
+    gradient.addColorStop(1, 'rgba(180, 225, 255, 0)')
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, w, h)
+    ctx.restore()
+  },
+}
+
+const liquidDistortDef: TransitionDefinition = {
+  id: 'liquidDistort',
+  label: 'Liquid Distort',
+  description: 'Fluid glass distortion with a turbulent reveal edge',
+  category: 'custom',
+  icon: 'Waves',
+  hasDirection: true,
+  directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 28,
+  minDuration: 10,
+  maxDuration: 90,
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -618,4 +680,5 @@ export function registerGpuTransitions(registry: TransitionRegistry): void {
   registry.register('pixelate', pixelateDef, pixelateRenderer)
   registry.register('chromatic', chromaticDef, chromaticRenderer)
   registry.register('radialBlur', radialBlurDef, radialBlurRenderer)
+  registry.register('liquidDistort', liquidDistortDef, liquidDistortRenderer)
 }

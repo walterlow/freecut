@@ -15,6 +15,7 @@ import { slide } from './transitions/slide'
 import { flip } from './transitions/flip'
 import { clockWipe } from './transitions/clock-wipe'
 import { iris } from './transitions/iris'
+import { liquidDistort } from './transitions/liquid-distort'
 
 export const GPU_TRANSITION_REGISTRY = new Map<string, GpuTransitionDefinition>()
 
@@ -35,6 +36,7 @@ register(slide)
 register(flip)
 register(clockWipe)
 register(iris)
+register(liquidDistort)
 
 export function getGpuTransition(id: string): GpuTransitionDefinition | undefined {
   return GPU_TRANSITION_REGISTRY.get(id)
