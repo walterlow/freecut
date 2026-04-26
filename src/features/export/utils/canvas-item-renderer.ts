@@ -2907,43 +2907,7 @@ async function resolveGpuCompositionParticipantSource(
       close: () => directTexture.destroy(),
     }
   }
-
-  const { canvas, ctx } = rctx.canvasPool.acquire()
-  try {
-    canvas.width = width
-    canvas.height = height
-    ctx.clearRect(0, 0, width, height)
-    await renderCompositionItem(
-      ctx,
-      participant.item,
-      { x: 0, y: 0, width, height, rotation: 0, opacity: 1, cornerRadius: 0 },
-      frame,
-      rctx,
-      participant.renderSpan,
-    )
-    const texture = rctx.gpuPipeline.getDevice().createTexture({
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    })
-    rctx.gpuPipeline
-      .getDevice()
-      .queue.copyExternalImageToTexture(
-        { source: canvas, flipY: false },
-        { texture },
-        { width, height },
-      )
-    return {
-      kind: 'composition',
-      item: participant.item,
-      sourceWidth: width,
-      sourceHeight: height,
-      texture,
-      close: () => texture.destroy(),
-    }
-  } finally {
-    rctx.canvasPool.release(canvas)
-  }
+  return null
 }
 
 async function renderGpuSubCompChildrenToTexture(
