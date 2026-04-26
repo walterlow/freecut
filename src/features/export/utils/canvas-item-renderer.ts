@@ -2191,10 +2191,20 @@ async function renderTransitionParticipantToTexture(
         gpuTexturePool,
         outputTexture,
       )
-      if (rendered) return true
+      if (rendered) {
+        logTransitionGpuParticipantPath(participant, prepared.media.kind, 'gpu-direct')
+        return true
+      }
+      logTransitionGpuParticipantPath(participant, prepared.media.kind, 'canvas-rasterize', {
+        reason: 'direct-render-failed',
+      })
     } finally {
       prepared.media.close?.()
     }
+  } else {
+    logTransitionGpuParticipantPath(participant, null, 'canvas-rasterize', {
+      reason: getTransitionParticipantCanvasReason(participant, rctx),
+    })
   }
 
   const { canvas, ctx } = rctx.canvasPool.acquire()
@@ -2220,6 +2230,68 @@ async function renderTransitionParticipantToTexture(
       outputTexture,
     ) ?? false
   )
+}
+
+function logTransitionGpuParticipantPath(
+  participant: TransitionParticipantRenderState,
+  mediaKind: ResolvedGpuMediaParticipantSource['kind'] | null,
+  path: 'gpu-direct' | 'canvas-rasterize',
+  extra: Record<string, unknown> = {},
+): void {
+  if (!shouldLogTransitionGpuDiagnostics()) return
+  log.debug('GPU transition participant path', {
+    itemId: participant.item.id,
+    itemType: participant.item.type,
+    mediaKind,
+    path,
+    effects: participant.effects.length,
+    ...extra,
+  })
+}
+
+function shouldLogTransitionGpuDiagnostics(): boolean {
+  if (typeof location !== 'undefined' && location.search.includes('debugGpuTransitions=1')) {
+    return true
+  }
+  if (typeof localStorage === 'undefined') return false
+  return localStorage.getItem('freecut.debugGpuTransitions') === '1'
+}
+
+function getTransitionParticipantCanvasReason(
+  participant: TransitionParticipantRenderState,
+  rctx: ItemRenderContext,
+): string {
+  const item = participant.item
+  if (item.type === 'text') return 'text-rasterization'
+  if (item.type === 'composition') return 'sub-composition-rasterization'
+  if (item.type === 'shape') {
+    if (!rctx.gpuShapePipeline) return 'shape-pipeline-unavailable'
+    if (item.isMask) return 'shape-mask'
+    if (item.shapeType === 'path') return 'unsupported-path-complexity'
+    if (!parseGpuColor(item.fillColor)) return 'unsupported-shape-fill'
+    if (
+      item.strokeWidth &&
+      item.strokeWidth > 0 &&
+      item.strokeColor &&
+      !parseGpuColor(item.strokeColor)
+    ) {
+      return 'unsupported-shape-stroke'
+    }
+    return 'shape-source-unavailable'
+  }
+  if (item.type === 'image') {
+    if (!rctx.gpuMediaPipeline) return 'media-pipeline-unavailable'
+    if (!rctx.imageElements.has(item.id)) return 'image-source-unavailable'
+    return 'image-direct-unavailable'
+  }
+  if (item.type === 'video') {
+    if (!rctx.gpuMediaPipeline) return 'media-pipeline-unavailable'
+    if (!rctx.useMediabunny.has(item.id)) return 'video-frame-capture-unavailable'
+    if (rctx.mediabunnyDisabledItems.has(item.id)) return 'video-frame-capture-disabled'
+    if (!rctx.videoExtractors.has(item.id)) return 'video-extractor-unavailable'
+    return 'video-frame-capture-failed'
+  }
+  return 'unsupported-item-type'
 }
 
 async function renderGpuMediaParticipantToTexture(
@@ -2528,7 +2600,8 @@ function resolveGpuShapePathVertices(
       flattened.push(toLocal(sampleCubicBezier(p0, p1, p2, p3, step / steps)))
     }
   }
-  return flattened.length >= 3 && flattened.length <= 16 ? flattened : null
+  if (flattened.length < 3) return null
+  return flattened.length <= 16 ? flattened : downsampleClosedPathVertices(flattened, 16)
 }
 
 function sampleCubicBezier(
@@ -2560,6 +2633,20 @@ function estimateBezierLength(
 
 function distance2d(a: [number, number], b: [number, number]): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1])
+}
+
+function downsampleClosedPathVertices(
+  vertices: Array<[number, number]>,
+  maxVertices: number,
+): Array<[number, number]> | null {
+  if (vertices.length <= maxVertices) return vertices
+  if (maxVertices < 3) return null
+  const result: Array<[number, number]> = [vertices[0]!]
+  for (let i = 1; i < maxVertices; i++) {
+    const sourceIndex = Math.round((i * vertices.length) / maxVertices)
+    result.push(vertices[Math.min(sourceIndex, vertices.length - 1)]!)
+  }
+  return result.length >= 3 ? result : null
 }
 
 function resolveVideoParticipantSourceTime(

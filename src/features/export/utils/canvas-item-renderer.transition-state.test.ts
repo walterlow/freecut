@@ -1223,6 +1223,104 @@ describe('renderTransitionToGpuTexture', () => {
     )
   })
 
+  it('downsamples complex custom paths so they can stay on the GPU shape path', async () => {
+    const pathVertices = Array.from({ length: 24 }, (_, index) => {
+      const angle = (index / 24) * Math.PI * 2
+      const radius = index % 2 === 0 ? 0.48 : 0.28
+      return {
+        position: [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius] as [
+          number,
+          number,
+        ],
+        inHandle: [0, 0] as [number, number],
+        outHandle: [0, 0] as [number, number],
+      }
+    })
+    const leftClip: ShapeItem = {
+      id: 'left-shape',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Left shape',
+      shapeType: 'path',
+      fillColor: '#ff0000',
+      strokeWidth: 0,
+      pathVertices,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ShapeItem
+    const rightClip: ShapeItem = {
+      ...leftClip,
+      id: 'right-shape',
+      label: 'Right shape',
+      fillColor: '#0000ff',
+    } as ShapeItem
+    const activeTransition = createActiveTransition({ leftClip, rightClip, progress: 0.3 })
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(),
+      release: vi.fn(),
+    }
+    const gpuShapePipeline = {
+      renderShapeToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: {} as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: null,
+      gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledTimes(2)
+    const leftPathParams = gpuShapePipeline.renderShapeToTexture.mock.calls[0]?.[1]
+    expect(leftPathParams).toEqual(expect.objectContaining({ shapeType: 'path' }))
+    expect(leftPathParams?.pathVertices).toHaveLength(16)
+  })
+
   it('keeps GPU shape participants with effects on the texture path', async () => {
     const effect: ItemEffect = {
       id: 'brightness',
