@@ -102,18 +102,4 @@ describe('transition-ui-config', () => {
       ),
     ).toBe(true)
   })
-
-  it('shows text, ink, and radial shatter reveals in the mask category', () => {
-    const maskConfigs = getTransitionConfigsByCategory().mask ?? []
-
-    expect(maskConfigs.some((config) => config.id === 'textReveal' && config.icon === 'Type')).toBe(
-      true,
-    )
-    expect(
-      maskConfigs.some((config) => config.id === 'inkSpread' && config.icon === 'Droplets'),
-    ).toBe(true)
-    expect(
-      maskConfigs.some((config) => config.id === 'radialShatter' && config.icon === 'Triangle'),
-    ).toBe(true)
-  })
 })
