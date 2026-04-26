@@ -13,6 +13,7 @@ import type {
 import type { ActiveTransition } from './canvas-transitions'
 import type { GpuTextTextureCacheEntry, ItemRenderContext } from './canvas-item-renderer'
 import type { VideoFrameSource } from './shared-video-extractor'
+import { MAX_GPU_SHAPE_PATH_VERTICES } from '@/infrastructure/gpu/shapes'
 import {
   renderTransitionToGpuTexture,
   resolveTransitionParticipantRenderState,
@@ -2157,6 +2158,225 @@ describe('renderTransitionToGpuTexture', () => {
     expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
   })
 
+  it('does not apply sub-composition occlusion cutoff while masks are active', async () => {
+    vi.stubGlobal('GPUTextureUsage', {
+      COPY_DST: 2,
+      COPY_SRC: 1,
+      RENDER_ATTACHMENT: 8,
+      TEXTURE_BINDING: 4,
+    })
+    vi.stubGlobal('Path2D', class {})
+
+    const leftClip: ImageItem = {
+      id: 'left-image',
+      type: 'image',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      src: 'left.png',
+      label: 'Left image',
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as ImageItem
+    const topImage: ImageItem = {
+      id: 'top-image',
+      type: 'image',
+      trackId: 'sub-track-0',
+      from: 0,
+      durationInFrames: 120,
+      src: 'top.png',
+      label: 'Full cover image',
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as ImageItem
+    const mask: ShapeItem = {
+      id: 'sub-mask',
+      type: 'shape',
+      trackId: 'sub-track-0',
+      from: 0,
+      durationInFrames: 120,
+      label: 'Sub mask',
+      shapeType: 'rectangle',
+      isMask: true,
+      maskType: 'clip',
+      fillColor: '#ffffff',
+      transform: { x: 0, y: 0, width: 320, height: 360, rotation: 0, opacity: 1 },
+    } as ShapeItem
+    const bottomImage: ImageItem = {
+      id: 'bottom-image',
+      type: 'image',
+      trackId: 'sub-track-1',
+      from: 0,
+      durationInFrames: 120,
+      src: 'bottom.png',
+      label: 'Masked lower image',
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as ImageItem
+    const rightClip: CompositionItem = {
+      id: 'right-comp',
+      type: 'composition',
+      trackId: 'track-1',
+      from: 60,
+      durationInFrames: 60,
+      label: 'Masked subcomp',
+      compositionId: 'sub-comp-with-mask',
+      compositionWidth: 640,
+      compositionHeight: 360,
+      transform: { x: 0, y: 0, width: 640, height: 360, rotation: 0, opacity: 1 },
+    } as CompositionItem
+    const activeTransition = createActiveTransition({ leftClip, rightClip, progress: 0.5 })
+
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const subCompTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const bottomBaseTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const bottomEffectTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const bottomMaskTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const device = {
+      createTexture: vi
+        .fn()
+        .mockReturnValueOnce(subCompTexture)
+        .mockReturnValueOnce(bottomBaseTexture)
+        .mockReturnValueOnce(bottomEffectTexture)
+        .mockReturnValueOnce(bottomMaskTexture),
+      queue: { copyExternalImageToTexture: vi.fn(), submit: vi.fn() },
+    }
+    const gpuPipeline = {
+      getDevice: vi.fn(() => device),
+      applyEffectsToTexture: vi.fn().mockReturnValue(true),
+      applyTextureEffectsToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuMediaPipeline = {
+      renderSourceToTexture: vi.fn().mockReturnValue(true),
+      renderTextureToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuShapePipeline = {
+      renderShapeToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const canvasPool = { acquire: vi.fn(), release: vi.fn() }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map([
+        [
+          leftClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+        [
+          topImage.id,
+          { source: { width: 640, height: 360 } as ImageBitmap, width: 640, height: 360 },
+        ],
+        [
+          bottomImage.id,
+          { source: { width: 640, height: 360 } as ImageBitmap, width: 640, height: 360 },
+        ],
+      ]),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map([
+        [
+          'sub-comp-with-mask',
+          {
+            fps: 30,
+            durationInFrames: 120,
+            sortedTracks: [
+              { order: 0, visible: true, items: [topImage, mask] },
+              { order: 1, visible: true, items: [bottomImage] },
+            ],
+            keyframesMap: new Map(),
+            adjustmentLayers: [],
+          },
+        ],
+      ]),
+      gpuPipeline: gpuPipeline as unknown as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+      gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
+    }
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
+      release: vi.fn(),
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ width: 640, height: 360 }),
+      bottomBaseTexture,
+      expect.objectContaining({
+        sourceWidth: 640,
+        sourceHeight: 360,
+        clear: true,
+        blend: false,
+      }),
+    )
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledWith(
+      bottomMaskTexture,
+      expect.objectContaining({
+        outputWidth: 640,
+        outputHeight: 360,
+        transformRect: { x: 160, y: 0, width: 320, height: 360 },
+      }),
+    )
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
+      1,
+      bottomBaseTexture,
+      subCompTexture,
+      expect.objectContaining({
+        maskTexture: bottomMaskTexture,
+        clear: false,
+        blend: true,
+      }),
+    )
+    expect(bottomBaseTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(bottomEffectTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(bottomMaskTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
+  })
+
   it('routes eligible shape participants through GPU shape textures without canvas rendering', async () => {
     const leftClip: ShapeItem = {
       id: 'left-shape',
@@ -2266,7 +2486,7 @@ describe('renderTransitionToGpuTexture', () => {
     expect(pathParams).toEqual(expect.objectContaining({ shapeType: 'path' }))
     expect(pathParams?.pathVertices).toEqual(expect.any(Array))
     expect(pathParams?.pathVertices?.length).toBeGreaterThan(3)
-    expect(pathParams?.pathVertices?.length).toBeLessThanOrEqual(16)
+    expect(pathParams?.pathVertices?.length).toBeLessThanOrEqual(MAX_GPU_SHAPE_PATH_VERTICES)
     expect(pathParams?.pathVertices?.[0]).toEqual([-320, -180])
     expect(pathParams?.pathVertices?.at(-1)).toEqual([0, 180])
     expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalledWith(
@@ -2283,8 +2503,9 @@ describe('renderTransitionToGpuTexture', () => {
   })
 
   it('downsamples complex custom paths so they can stay on the GPU shape path', async () => {
-    const pathVertices = Array.from({ length: 24 }, (_, index) => {
-      const angle = (index / 24) * Math.PI * 2
+    const pathVertexCount = MAX_GPU_SHAPE_PATH_VERTICES + 16
+    const pathVertices = Array.from({ length: pathVertexCount }, (_, index) => {
+      const angle = (index / pathVertexCount) * Math.PI * 2
       const radius = index % 2 === 0 ? 0.48 : 0.28
       return {
         position: [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius] as [
@@ -2377,7 +2598,7 @@ describe('renderTransitionToGpuTexture', () => {
     expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledTimes(2)
     const leftPathParams = gpuShapePipeline.renderShapeToTexture.mock.calls[0]?.[1]
     expect(leftPathParams).toEqual(expect.objectContaining({ shapeType: 'path' }))
-    expect(leftPathParams?.pathVertices).toHaveLength(16)
+    expect(leftPathParams?.pathVertices).toHaveLength(MAX_GPU_SHAPE_PATH_VERTICES)
     const originalLocalVertices: Array<[number, number]> = pathVertices.map((vertex) => [
       (vertex.position[0] - 0.5) * 640,
       (vertex.position[1] - 0.5) * 360,

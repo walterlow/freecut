@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
-import { ShapeRenderPipeline } from './shape-render-pipeline'
+import { MAX_GPU_SHAPE_PATH_VERTICES, ShapeRenderPipeline } from './shape-render-pipeline'
 
 function createPipelineHarness() {
   vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 })
@@ -59,11 +59,11 @@ describe('ShapeRenderPipeline', () => {
 
     expect(rendered).toBe(true)
     expect(device.createBuffer).toHaveBeenCalledWith({
-      size: 352,
+      size: (24 + MAX_GPU_SHAPE_PATH_VERTICES * 4) * Float32Array.BYTES_PER_ELEMENT,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
     const uniformData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
-    expect(uniformData.length).toBe(88)
+    expect(uniformData.length).toBe(24 + MAX_GPU_SHAPE_PATH_VERTICES * 4)
     expect(Array.from(uniformData.slice(0, 3))).toEqual([1920, 1080, 5])
     expect(uniformData[3]).toBeCloseTo(0.8)
     expect(Array.from(uniformData.slice(4, 19))).toEqual([
@@ -143,6 +143,33 @@ describe('ShapeRenderPipeline', () => {
     expect(uniformData[18]).toBe(3)
     expect(Array.from(uniformData.slice(24, 36))).toEqual([
       -150, -120, 0, 0, 150, -120, 0, 0, 0, 120, 0, 0,
+    ])
+  })
+
+  it('packs up to the full GPU custom path vertex capacity', () => {
+    const { outputTexture, pipeline, queue } = createPipelineHarness()
+    const pathVertices = Array.from({ length: MAX_GPU_SHAPE_PATH_VERTICES }, (_, index) => [
+      index,
+      index + 0.5,
+    ]) as Array<[number, number]>
+
+    const rendered = pipeline.renderShapeToTexture(outputTexture, {
+      outputWidth: 1920,
+      outputHeight: 1080,
+      transformRect: { x: 100, y: 100, width: 300, height: 240 },
+      shapeType: 'path',
+      fillColor: [1, 0, 0, 1],
+      pathVertices,
+    })
+
+    expect(rendered).toBe(true)
+    const uniformData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
+    expect(uniformData[18]).toBe(MAX_GPU_SHAPE_PATH_VERTICES)
+    expect(Array.from(uniformData.slice(-4))).toEqual([
+      MAX_GPU_SHAPE_PATH_VERTICES - 1,
+      MAX_GPU_SHAPE_PATH_VERTICES - 0.5,
+      0,
+      0,
     ])
   })
 })

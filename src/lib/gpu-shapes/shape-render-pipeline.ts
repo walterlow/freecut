@@ -28,6 +28,9 @@ export interface GpuShapeRenderParams {
   maskFeatherPixels?: number
 }
 
+export const MAX_GPU_SHAPE_PATH_VERTICES = 32
+const SHAPE_UNIFORM_FLOAT_COUNT = 24 + MAX_GPU_SHAPE_PATH_VERTICES * 4
+
 const SHAPE_RENDER_SHADER = /* wgsl */ `
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -59,7 +62,7 @@ struct ShapeUniforms {
   strokeColor: vec4f,
   shapeParams: vec4f,
   flags: vec4f,
-  pathVertices: array<vec4f, 16>,
+  pathVertices: array<vec4f, 32>,
 };
 
 @group(0) @binding(0) var<uniform> u: ShapeUniforms;
@@ -122,7 +125,7 @@ fn pathPolygonDistance(p: vec2f, count: u32) -> f32 {
   var minDistance = 1.0e6;
   var inside = false;
   var previous = u.pathVertices[count - 1u].xy;
-  for (var i = 0u; i < 16u; i = i + 1u) {
+  for (var i = 0u; i < 32u; i = i + 1u) {
     if (i >= count) {
       break;
     }
@@ -207,7 +210,7 @@ export class ShapeRenderPipeline {
     this.replacePipeline = this.createRenderPipeline(shaderModule, false)
     this.blendPipeline = this.createRenderPipeline(shaderModule, true)
     this.uniformBuffer = device.createBuffer({
-      size: 352,
+      size: SHAPE_UNIFORM_FLOAT_COUNT * Float32Array.BYTES_PER_ELEMENT,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
   }
@@ -342,7 +345,7 @@ function shapeKind(shapeType: ShapeItem['shapeType']): number | null {
 
 function packPathVertices(vertices: Array<[number, number]>): number[] {
   const packed: number[] = []
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < MAX_GPU_SHAPE_PATH_VERTICES; i++) {
     const vertex = vertices[i] ?? [0, 0]
     packed.push(vertex[0], vertex[1], 0, 0)
   }

@@ -77,7 +77,7 @@ import type {
   GpuMediaRenderParams,
   MediaRenderPipeline,
 } from '@/infrastructure/gpu/media'
-import type { ShapeRenderPipeline } from '@/infrastructure/gpu/shapes'
+import { MAX_GPU_SHAPE_PATH_VERTICES, type ShapeRenderPipeline } from '@/infrastructure/gpu/shapes'
 import type { GlyphAtlasTextPipeline } from '@/infrastructure/gpu/text'
 import type { MaskCombinePipeline } from '@/infrastructure/gpu/masks'
 
@@ -3013,13 +3013,16 @@ async function renderGpuSubCompChildrenToTexture(
   )
 
   const subCanvasSettings = { width, height, fps: subData.fps }
-  const occlusionCutoffOrder = findSubCompOcclusionCutoffOrder(
-    subData,
-    localFrame,
-    subCanvasSettings,
-    subAdjustmentLayers,
-    rctx,
-  )
+  const occlusionCutoffOrder =
+    activeMasks.length === 0
+      ? findSubCompOcclusionCutoffOrder(
+          subData,
+          localFrame,
+          subCanvasSettings,
+          subAdjustmentLayers,
+          rctx,
+        )
+      : null
   const visibleChildren: Array<{
     participant: TransitionParticipantRenderState
     masks: typeof activeMasks
@@ -3556,7 +3559,9 @@ function resolveGpuShapePathVertices(
     }
   }
   if (flattened.length < 3) return null
-  return flattened.length <= 16 ? flattened : downsampleClosedPathVertices(flattened, 16)
+  return flattened.length <= MAX_GPU_SHAPE_PATH_VERTICES
+    ? flattened
+    : downsampleClosedPathVertices(flattened, MAX_GPU_SHAPE_PATH_VERTICES)
 }
 
 function sampleCubicBezier(
