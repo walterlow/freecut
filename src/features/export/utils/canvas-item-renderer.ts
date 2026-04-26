@@ -239,6 +239,9 @@ export interface ItemRenderContext {
   // Cached CPU-rasterized bitmap masks uploaded for GPU sub-composition layers.
   gpuBitmapMaskTextureCache?: Map<string, GpuBitmapMaskTextureCacheEntry>
 
+  // Scratch GPU textures for per-layer sub-composition intermediates.
+  gpuScratchTexturePool?: Pick<GpuTexturePool, 'acquire' | 'release'>
+
   // DOM video element provider for zero-copy playback rendering.
   // During playback, the Player's <video> elements are already at
   // the correct frame — use them directly instead of mediabunny decode.
@@ -3069,7 +3072,15 @@ async function renderPreparedGpuSubCompLayerToTexture(
   options: { clear: boolean; blend: boolean },
 ): Promise<boolean> {
   const enabledEffects = prepared.participant.effects.filter((effect) => effect.enabled)
-  if (enabledEffects.length === 0 && masks.length === 0) {
+  const blendMode = prepared.participant.item.blendMode ?? 'normal'
+  const needsLayerComposite = options.blend && !options.clear
+  const gpuPipeline = rctx.gpuPipeline
+  const gpuMediaPipeline = rctx.gpuMediaPipeline
+  const gpuMediaBlendPipeline = rctx.gpuMediaBlendPipeline
+  const gpuShapePipeline = rctx.gpuShapePipeline
+  const gpuMaskCombinePipeline = rctx.gpuMaskCombinePipeline
+  const usesShaderComposite = needsLayerComposite && Boolean(gpuMediaBlendPipeline)
+  if (enabledEffects.length === 0 && masks.length === 0 && !usesShaderComposite) {
     return renderGpuMediaParticipantToTexture(
       prepared,
       rctx,
@@ -3082,17 +3093,9 @@ async function renderPreparedGpuSubCompLayerToTexture(
     )
   }
 
-  const gpuPipeline = rctx.gpuPipeline
-  const gpuMediaPipeline = rctx.gpuMediaPipeline
-  const gpuMediaBlendPipeline = rctx.gpuMediaBlendPipeline
-  const gpuShapePipeline = rctx.gpuShapePipeline
-  const gpuMaskCombinePipeline = rctx.gpuMaskCombinePipeline
-  const blendMode = prepared.participant.item.blendMode ?? 'normal'
-  const needsBlendMode = blendMode !== 'normal' && !options.clear
   if (
     !gpuPipeline ||
     !gpuMediaPipeline ||
-    (needsBlendMode && !gpuMediaBlendPipeline) ||
     (masks.length > 0 && !gpuShapePipeline) ||
     (masks.length > 1 && !gpuMaskCombinePipeline)
   ) {
@@ -3100,56 +3103,26 @@ async function renderPreparedGpuSubCompLayerToTexture(
   }
 
   const device = gpuPipeline.getDevice()
-  const baseTexture = device.createTexture({
-    size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
-    format: 'rgba8unorm',
-    usage:
-      GPUTextureUsage.TEXTURE_BINDING |
-      GPUTextureUsage.RENDER_ATTACHMENT |
-      GPUTextureUsage.COPY_SRC,
-  })
-  const effectedTexture = device.createTexture({
-    size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
-    format: 'rgba8unorm',
-    usage:
-      GPUTextureUsage.TEXTURE_BINDING |
-      GPUTextureUsage.COPY_DST |
-      GPUTextureUsage.RENDER_ATTACHMENT,
-  })
+  const scratchTextures: GPUTexture[] = []
+  const acquireScratchTexture = () => {
+    const texture = acquireGpuScratchTexture(
+      rctx,
+      device,
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
+    )
+    scratchTextures.push(texture)
+    return texture
+  }
+
+  const baseTexture = acquireScratchTexture()
+  const effectedTexture = acquireScratchTexture()
   const blendOutputTexture =
-    needsBlendMode && gpuMediaBlendPipeline
-      ? device.createTexture({
-          size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
-          format: 'rgba8unorm',
-          usage:
-            GPUTextureUsage.TEXTURE_BINDING |
-            GPUTextureUsage.RENDER_ATTACHMENT |
-            GPUTextureUsage.COPY_SRC,
-        })
-      : null
-  const blendLayerTexture = needsBlendMode
-    ? device.createTexture({
-        size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
-      })
-    : null
-  const maskTextures = masks.map(() =>
-    device.createTexture({
-      size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
-      format: 'rgba8unorm',
-      usage:
-        GPUTextureUsage.TEXTURE_BINDING |
-        GPUTextureUsage.RENDER_ATTACHMENT |
-        GPUTextureUsage.COPY_DST,
-    }),
-  )
+    usesShaderComposite && gpuMediaBlendPipeline ? acquireScratchTexture() : null
+  const blendLayerTexture = usesShaderComposite ? acquireScratchTexture() : null
+  const maskTextures = masks.map(() => acquireScratchTexture())
   const combinedMaskTextures = Array.from({ length: Math.max(0, masks.length - 1) }, () =>
-    device.createTexture({
-      size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
-    }),
+    acquireScratchTexture(),
   )
 
   try {
@@ -3211,7 +3184,7 @@ async function renderPreparedGpuSubCompLayerToTexture(
     }
 
     const layerOutputTexture =
-      needsBlendMode && blendLayerTexture ? blendLayerTexture : outputTexture
+      usesShaderComposite && blendLayerTexture ? blendLayerTexture : outputTexture
     const renderedLayer = gpuMediaPipeline.renderTextureToTexture(
       compositeSourceTexture,
       layerOutputTexture,
@@ -3240,14 +3213,14 @@ async function renderPreparedGpuSubCompLayerToTexture(
         },
         opacity: 1,
         rotationRad: 0,
-        clear: needsBlendMode ? true : options.clear,
-        blend: needsBlendMode ? false : options.blend,
+        clear: usesShaderComposite ? true : options.clear,
+        blend: usesShaderComposite ? false : options.blend,
         maskTexture: layerMaskTexture ?? undefined,
         maskInvert: masks.length === 1 ? masks[0]?.inverted : false,
       },
     )
     if (!renderedLayer) return false
-    if (!needsBlendMode || !gpuMediaBlendPipeline || !blendOutputTexture) return true
+    if (!usesShaderComposite || !gpuMediaBlendPipeline || !blendOutputTexture) return true
 
     const blended = gpuMediaBlendPipeline.blend(
       outputTexture,
@@ -3265,13 +3238,36 @@ async function renderPreparedGpuSubCompLayerToTexture(
     device.queue.submit([commandEncoder.finish()])
     return true
   } finally {
-    baseTexture.destroy()
-    effectedTexture.destroy()
-    blendOutputTexture?.destroy()
-    blendLayerTexture?.destroy()
-    for (const maskTexture of maskTextures) maskTexture.destroy()
-    for (const maskTexture of combinedMaskTextures) maskTexture.destroy()
+    for (const texture of scratchTextures) releaseGpuScratchTexture(rctx, texture)
   }
+}
+
+function acquireGpuScratchTexture(
+  rctx: ItemRenderContext,
+  device: GPUDevice,
+  width: number,
+  height: number,
+): GPUTexture {
+  return (
+    rctx.gpuScratchTexturePool?.acquire(width, height) ??
+    device.createTexture({
+      size: { width, height },
+      format: 'rgba8unorm',
+      usage:
+        GPUTextureUsage.TEXTURE_BINDING |
+        GPUTextureUsage.RENDER_ATTACHMENT |
+        GPUTextureUsage.COPY_DST |
+        GPUTextureUsage.COPY_SRC,
+    })
+  )
+}
+
+function releaseGpuScratchTexture(rctx: ItemRenderContext, texture: GPUTexture): void {
+  if (rctx.gpuScratchTexturePool) {
+    rctx.gpuScratchTexturePool.release(texture)
+    return
+  }
+  texture.destroy()
 }
 
 function areGpuSubCompMasksSupported(masks: ReturnType<typeof getActiveSubCompMasks>): boolean {
@@ -3318,7 +3314,10 @@ function renderGpuSubCompMaskToTexture(
         size: { width: mask.bitmapMask.width, height: mask.bitmapMask.height },
         format: 'rgba8unorm',
         usage:
-          GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC,
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.COPY_SRC |
+          GPUTextureUsage.RENDER_ATTACHMENT,
       })
       device.queue.copyExternalImageToTexture(
         { source: mask.bitmapMask, flipY: false },

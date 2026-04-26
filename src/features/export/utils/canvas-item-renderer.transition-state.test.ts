@@ -2263,13 +2263,16 @@ describe('renderTransitionToGpuTexture', () => {
     } as unknown as GPUTexture
     const outputTexture = { width: 1920, height: 1080 } as GPUTexture
     const device = {
-      createTexture: vi
+      createTexture: vi.fn().mockReturnValueOnce(subCompTexture),
+      queue: { copyExternalImageToTexture: vi.fn(), submit: vi.fn() },
+    }
+    const gpuScratchTexturePool = {
+      acquire: vi
         .fn()
-        .mockReturnValueOnce(subCompTexture)
         .mockReturnValueOnce(bottomBaseTexture)
         .mockReturnValueOnce(bottomEffectTexture)
         .mockReturnValueOnce(bottomMaskTexture),
-      queue: { copyExternalImageToTexture: vi.fn(), submit: vi.fn() },
+      release: vi.fn(),
     }
     const gpuPipeline = {
       getDevice: vi.fn(() => device),
@@ -2336,6 +2339,8 @@ describe('renderTransitionToGpuTexture', () => {
         gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
       gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
       gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
+      gpuScratchTexturePool:
+        gpuScratchTexturePool as unknown as ItemRenderContext['gpuScratchTexturePool'],
     }
     const gpuTexturePool = {
       acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
@@ -2382,9 +2387,13 @@ describe('renderTransitionToGpuTexture', () => {
         blend: true,
       }),
     )
-    expect(bottomBaseTexture.destroy).toHaveBeenCalledTimes(1)
-    expect(bottomEffectTexture.destroy).toHaveBeenCalledTimes(1)
-    expect(bottomMaskTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(gpuScratchTexturePool.acquire).toHaveBeenCalledTimes(3)
+    expect(gpuScratchTexturePool.release).toHaveBeenCalledWith(bottomBaseTexture)
+    expect(gpuScratchTexturePool.release).toHaveBeenCalledWith(bottomEffectTexture)
+    expect(gpuScratchTexturePool.release).toHaveBeenCalledWith(bottomMaskTexture)
+    expect(bottomBaseTexture.destroy).not.toHaveBeenCalled()
+    expect(bottomEffectTexture.destroy).not.toHaveBeenCalled()
+    expect(bottomMaskTexture.destroy).not.toHaveBeenCalled()
     expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
   })
 

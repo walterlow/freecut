@@ -40,7 +40,7 @@ export class TransitionPipeline {
 
   private constructor(device: GPUDevice) {
     this.device = device
-    this.format = navigator.gpu.getPreferredCanvasFormat()
+    this.format = 'rgba8unorm'
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
   }
 

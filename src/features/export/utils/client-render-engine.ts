@@ -302,9 +302,18 @@ export async function createCompositionRenderer(
     if (!gpuPipeline) return false
     const device = gpuPipeline.getDevice()
     gpuCompositor = new CompositorPipeline(device)
-    gpuTexturePool = new GpuTexturePool(device)
+    gpuTexturePool ??= new GpuTexturePool(device)
     gpuMaskManager = new MaskTextureManager(device)
     return true
+  }
+
+  function ensureGpuTexturePool(): GpuTexturePool {
+    if (gpuTexturePool) return gpuTexturePool
+    if (!gpuPipeline) {
+      throw new Error('GPU texture pool requested before GPU pipeline initialization')
+    }
+    gpuTexturePool = new GpuTexturePool(gpuPipeline.getDevice())
+    return gpuTexturePool
   }
 
   function ensureGpuCompositeOutput(
@@ -608,6 +617,14 @@ export async function createCompositionRenderer(
     gpuMaskCombinePipeline: null,
     gpuTextTextureCache,
     gpuBitmapMaskTextureCache,
+    gpuScratchTexturePool: {
+      acquire: (width, height, format) =>
+        gpuTexturePool?.acquire(width, height, format) ??
+        ensureGpuTexturePool().acquire(width, height, format),
+      release: (texture) => {
+        gpuTexturePool?.release(texture)
+      },
+    },
     domVideoElementProvider,
   }
 
@@ -1634,7 +1651,15 @@ export async function createCompositionRenderer(
             return Boolean(item.blendMode && item.blendMode !== 'normal')
           })(),
       )
-      const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor()
+      if (hasNonNormalBlend && !itemRenderContext.gpuPipeline) {
+        itemRenderContext.gpuPipeline = await ensureGpuPipeline()
+        if (!itemRenderContext.gpuPipeline) {
+          getLog().warn('GPU pipeline init failed - blend modes will use Canvas2D fallback')
+        }
+      }
+      const useGpuCompositor = Boolean(
+        hasNonNormalBlend && itemRenderContext.gpuPipeline && gpuPipeline && ensureGpuCompositor(),
+      )
       const gpuCompositeOutput = useGpuCompositor
         ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
         : null
@@ -1831,9 +1856,21 @@ export async function createCompositionRenderer(
             })
           }
 
-          const compositedToGpuCanvas =
-            layers.length > 0 &&
-            gpuCompositor.compositeToCanvas(layers, w, h, gpuCompositeOutput.ctx)
+          let compositedToGpuCanvas = false
+          if (layers.length > 0) {
+            try {
+              compositedToGpuCanvas = gpuCompositor.compositeToCanvas(
+                layers,
+                w,
+                h,
+                gpuCompositeOutput.ctx,
+              )
+            } catch (error) {
+              getLog().warn('GPU compositor failed - using Canvas2D blend fallback', {
+                error,
+              })
+            }
+          }
 
           if (compositedToGpuCanvas) {
             finalCompositeSource = gpuCompositeOutput.canvas

@@ -16,6 +16,11 @@ function hasEnabledGpuEffect(effects: ItemEffect[] | undefined): boolean {
   return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
 }
 
+function hasRenderableBlendMode(item: TimelineItem): boolean {
+  if (item.type === 'shape' && item.isMask) return false
+  return item.blendMode !== undefined && item.blendMode !== 'normal'
+}
+
 function subCompositionHasGpuEffectsOrBlend(
   subComp: SubComposition,
   compositionById?: Record<string, SubComposition>,
@@ -25,7 +30,7 @@ function subCompositionHasGpuEffectsOrBlend(
   visited.add(subComp.id)
   return subComp.items.some((subItem) => {
     if (hasEnabledGpuEffect(subItem.effects)) return true
-    if (subItem.blendMode !== undefined && subItem.blendMode !== 'normal') return true
+    if (hasRenderableBlendMode(subItem)) return true
     if (subItem.type === 'composition' && compositionById) {
       const nested = compositionById[subItem.compositionId]
       if (nested && subCompositionHasGpuEffectsOrBlend(nested, compositionById, visited)) {
@@ -81,7 +86,7 @@ export function shouldForceContinuousPreviewOverlay(
     }
     const effectiveEffects = previewEffectsByItemId?.get(item.id) ?? item.effects
     if (hasEnabledGpuEffect(effectiveEffects)) return true
-    if (item.blendMode && item.blendMode !== 'normal') return true
+    if (hasRenderableBlendMode(item)) return true
     if (item.type === 'composition' && compositionById) {
       const subComp = compositionById[item.compositionId]
       if (subComp && subCompositionHasGpuEffectsOrBlend(subComp, compositionById)) return true

@@ -481,7 +481,11 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
   ])
 
   const blendModeCss =
-    item.blendMode && item.blendMode !== 'normal' ? BLEND_MODE_CSS[item.blendMode] : undefined
+    item.type === 'shape' && item.isMask
+      ? undefined
+      : item.blendMode && item.blendMode !== 'normal'
+        ? BLEND_MODE_CSS[item.blendMode]
+        : undefined
 
   const maskContainerStyle = useMemo((): React.CSSProperties => {
     return {

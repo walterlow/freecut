@@ -39,10 +39,14 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   if (layerAlpha <= 0.0) {
     return baseColor;
   }
-  let blended = applyBlendMode(baseColor.rgb, layerColor.rgb, bitcast<u32>(u.y));
-  let outRgb = mix(baseColor.rgb, blended, layerAlpha);
-  let outAlpha = baseColor.a + layerAlpha * (1.0 - baseColor.a);
-  return vec4f(outRgb, outAlpha);
+  return compositeBlendSourceOver(
+    baseColor,
+    layerColor,
+    layerAlpha,
+    bitcast<u32>(u.y),
+    input.uv * 8192.0,
+    layerAlpha
+  );
 }
 `
 

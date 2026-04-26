@@ -148,40 +148,37 @@ fn transformUV(uv: vec2f) -> vec2f {
 
 @fragment
 fn compositeFragment(input: VertexOutput) -> @location(0) vec4f {
-  let baseColor = textureSample(baseTex, texSampler, input.uv);
+  let baseColor = textureSampleLevel(baseTex, texSampler, input.uv, 0.0);
 
   // Transform UV to sample layer texture
   let layerUV = transformUV(input.uv);
-
-  // Out-of-bounds check
-  if (layerUV.x < 0.0 || layerUV.x > 1.0 || layerUV.y < 0.0 || layerUV.y > 1.0) {
-    return baseColor;
-  }
-
-  var layerColor = textureSample(layerTex, texSampler, layerUV);
+  let inBounds = layerUV.x >= 0.0 && layerUV.x <= 1.0 && layerUV.y >= 0.0 && layerUV.y <= 1.0;
+  let sampleUV = clamp(layerUV, vec2f(0.0), vec2f(1.0));
+  var layerColor = textureSampleLevel(layerTex, texSampler, sampleUV, 0.0);
 
   // Apply mask
   var maskValue = 1.0;
   if (u.hasMask != 0u) {
-    maskValue = textureSample(maskTex, texSampler, layerUV).r;
+    maskValue = textureSampleLevel(maskTex, texSampler, sampleUV, 0.0).r;
     if (u.maskInvert != 0u) {
       maskValue = 1.0 - maskValue;
     }
   }
 
-  let layerAlpha = layerColor.a * u.opacity * maskValue;
+  let sourceAlpha = layerColor.a * u.opacity;
+  let layerAlpha = sourceAlpha * maskValue * select(0.0, 1.0, inBounds);
   if (layerAlpha <= 0.0) {
     return baseColor;
   }
 
-  // Apply blend mode
-  let blended = applyBlendMode(baseColor.rgb, layerColor.rgb, u.blendMode);
-
-  // Standard over blend (straight alpha)
-  let outRgb = mix(baseColor.rgb, blended, layerAlpha);
-  let outAlpha = baseColor.a + layerAlpha * (1.0 - baseColor.a);
-
-  return vec4f(outRgb, outAlpha);
+  return compositeBlendSourceOver(
+    baseColor,
+    layerColor,
+    layerAlpha,
+    u.blendMode,
+    input.uv * 8192.0,
+    sourceAlpha
+  );
 }
 `
 
@@ -221,23 +218,27 @@ fn transformUV_ext(uv: vec2f) -> vec2f {
 
 @fragment
 fn compositeExternalFragment(input: VertexOutput) -> @location(0) vec4f {
-  let baseColor = textureSample(baseTex, texSampler, input.uv);
+  let baseColor = textureSampleLevel(baseTex, texSampler, input.uv, 0.0);
   let layerUV = transformUV_ext(input.uv);
-  if (layerUV.x < 0.0 || layerUV.x > 1.0 || layerUV.y < 0.0 || layerUV.y > 1.0) {
-    return baseColor;
-  }
-  var layerColor = textureSampleBaseClampToEdge(layerTex, texSampler, layerUV);
+  let inBounds = layerUV.x >= 0.0 && layerUV.x <= 1.0 && layerUV.y >= 0.0 && layerUV.y <= 1.0;
+  let sampleUV = clamp(layerUV, vec2f(0.0), vec2f(1.0));
+  var layerColor = textureSampleBaseClampToEdge(layerTex, texSampler, sampleUV);
   var maskValue = 1.0;
   if (u.hasMask != 0u) {
-    maskValue = textureSample(maskTex, texSampler, layerUV).r;
+    maskValue = textureSampleLevel(maskTex, texSampler, sampleUV, 0.0).r;
     if (u.maskInvert != 0u) { maskValue = 1.0 - maskValue; }
   }
-  let layerAlpha = layerColor.a * u.opacity * maskValue;
+  let sourceAlpha = layerColor.a * u.opacity;
+  let layerAlpha = sourceAlpha * maskValue * select(0.0, 1.0, inBounds);
   if (layerAlpha <= 0.0) { return baseColor; }
-  let blended = applyBlendMode(baseColor.rgb, layerColor.rgb, u.blendMode);
-  let outRgb = mix(baseColor.rgb, blended, layerAlpha);
-  let outAlpha = baseColor.a + layerAlpha * (1.0 - baseColor.a);
-  return vec4f(outRgb, outAlpha);
+  return compositeBlendSourceOver(
+    baseColor,
+    layerColor,
+    layerAlpha,
+    u.blendMode,
+    input.uv * 8192.0,
+    sourceAlpha
+  );
 }
 `
 

@@ -129,6 +129,22 @@ describe('shouldForceContinuousPreviewOverlay', () => {
     expect(shouldForceContinuousPreviewOverlay([blendedItem], 0, 0)).toBe(true)
   })
 
+  it('ignores stale blend modes on active shape masks', () => {
+    const maskItem: TimelineItem = {
+      id: 'mask-1',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 90,
+      label: 'Mask',
+      shapeType: 'path',
+      isMask: true,
+      blendMode: 'multiply',
+    } as TimelineItem
+
+    expect(shouldForceContinuousPreviewOverlay([maskItem], 0, 0)).toBe(false)
+  })
+
   it('does not force continuous overlay for non-normal blend modes on inactive clips', () => {
     const blendedItem = createVideoItem({
       blendMode: 'screen',
@@ -183,6 +199,49 @@ describe('shouldForceContinuousPreviewOverlay', () => {
     expect(
       shouldForceContinuousPreviewOverlay([compItem], 0, 0, undefined, { 'sub-1': subComp }),
     ).toBe(true)
+  })
+
+  it('ignores stale blend modes on sub-composition shape masks', () => {
+    const compItem: TimelineItem = {
+      id: 'comp-1',
+      type: 'composition',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 120,
+      label: 'Comp',
+      compositionId: 'sub-1',
+      compositionWidth: 1920,
+      compositionHeight: 1080,
+    } as TimelineItem
+
+    const subComp: SubComposition = {
+      id: 'sub-1',
+      name: 'Sub',
+      fps: 30,
+      width: 1920,
+      height: 1080,
+      durationInFrames: 120,
+      tracks: [],
+      transitions: [],
+      keyframes: [],
+      items: [
+        {
+          id: 'mask-1',
+          type: 'shape',
+          trackId: 't',
+          from: 0,
+          durationInFrames: 120,
+          label: 'Mask',
+          shapeType: 'path',
+          isMask: true,
+          blendMode: 'screen',
+        } as TimelineItem,
+      ],
+    }
+
+    expect(
+      shouldForceContinuousPreviewOverlay([compItem], 0, 0, undefined, { 'sub-1': subComp }),
+    ).toBe(false)
   })
 
   it('forces continuous overlay when an active compound clip has adjustment-layer gpu effects', () => {
