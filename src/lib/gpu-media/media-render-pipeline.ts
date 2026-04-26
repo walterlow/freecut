@@ -138,6 +138,7 @@ function getGpuMediaSourceDimensions(source: GpuMediaSource): { width: number; h
 export class MediaRenderPipeline {
   private inputTexture: GPUTexture | null = null
   private inputView: GPUTextureView | null = null
+  private bindGroup: GPUBindGroup | null = null
   private inputW = 0
   private inputH = 0
   private readonly pipeline: GPURenderPipeline
@@ -241,14 +242,8 @@ export class MediaRenderPipeline {
     ])
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformData)
 
-    const bindGroup = this.device.createBindGroup({
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: this.inputView },
-        { binding: 2, resource: { buffer: this.uniformBuffer } },
-      ],
-    })
+    const bindGroup = this.ensureBindGroup()
+    if (!bindGroup) return false
     const commandEncoder = this.device.createCommandEncoder()
     const pass = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -281,7 +276,22 @@ export class MediaRenderPipeline {
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     })
     this.inputView = this.inputTexture.createView()
+    this.bindGroup = null
     this.inputW = width
     this.inputH = height
+  }
+
+  private ensureBindGroup(): GPUBindGroup | null {
+    if (this.bindGroup) return this.bindGroup
+    if (!this.inputView) return null
+    this.bindGroup = this.device.createBindGroup({
+      layout: this.bindGroupLayout,
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: this.inputView },
+        { binding: 2, resource: { buffer: this.uniformBuffer } },
+      ],
+    })
+    return this.bindGroup
   }
 }

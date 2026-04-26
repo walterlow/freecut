@@ -5,6 +5,7 @@ import type { ItemKeyframes } from '@/types/keyframe'
 import type { ImageItem, TimelineItem, VideoItem } from '@/types/timeline'
 import type { ActiveTransition } from './canvas-transitions'
 import type { ItemRenderContext } from './canvas-item-renderer'
+import type { VideoFrameSource } from './shared-video-extractor'
 import {
   renderTransitionToGpuTexture,
   resolveTransitionParticipantRenderState,
@@ -629,5 +630,143 @@ describe('renderTransitionToGpuTexture', () => {
     expect(canvasPool.acquire).not.toHaveBeenCalled()
     expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalled()
     expect(gpuTransitionPipeline.renderToTexture).not.toHaveBeenCalled()
+  })
+
+  it('routes mediabunny video participants through captured VideoFrames', async () => {
+    const leftClip: VideoItem = {
+      id: 'left-video',
+      type: 'video',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      src: 'left.mp4',
+      label: 'Left video',
+      sourceFps: 30,
+      sourceDuration: 10,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as VideoItem
+    const rightClip: VideoItem = {
+      ...leftClip,
+      id: 'right-video',
+      from: 60,
+      src: 'right.mp4',
+      label: 'Right video',
+    } as VideoItem
+    const activeTransition = createActiveTransition({
+      leftClip,
+      rightClip,
+      progress: 0.6,
+    })
+    const leftFrame = {
+      displayWidth: 1920,
+      displayHeight: 1080,
+      close: vi.fn(),
+    } as unknown as VideoFrame
+    const rightFrame = {
+      displayWidth: 1280,
+      displayHeight: 720,
+      close: vi.fn(),
+    } as unknown as VideoFrame
+    const leftExtractor = {
+      captureFrame: vi.fn().mockResolvedValue({ success: true, frame: leftFrame, sourceTime: 0 }),
+    }
+    const rightExtractor = {
+      captureFrame: vi.fn().mockResolvedValue({ success: true, frame: rightFrame, sourceTime: 0 }),
+    }
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(),
+      release: vi.fn(),
+    }
+    const gpuMediaPipeline = {
+      renderSourceToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderToTexture: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'preview',
+      videoExtractors: new Map([
+        [leftClip.id, leftExtractor as unknown as VideoFrameSource],
+        [rightClip.id, rightExtractor as unknown as VideoFrameSource],
+      ]),
+      videoElements: new Map(),
+      useMediabunny: new Set([leftClip.id, rightClip.id]),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: {} as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(leftExtractor.captureFrame).toHaveBeenCalledWith((9 + 1e-4) / 30)
+    expect(rightExtractor.captureFrame).toHaveBeenCalledWith((5 + 1e-4) / 30)
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      1,
+      leftFrame,
+      leftTexture,
+      expect.objectContaining({
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      }),
+    )
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      2,
+      rightFrame,
+      rightTexture,
+      expect.objectContaining({
+        sourceWidth: 1280,
+        sourceHeight: 720,
+      }),
+    )
+    expect(leftFrame.close).toHaveBeenCalled()
+    expect(rightFrame.close).toHaveBeenCalled()
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalledWith(
+      'iris',
+      leftTexture,
+      rightTexture,
+      outputTexture,
+      0.6,
+      1920,
+      1080,
+      undefined,
+      undefined,
+    )
   })
 })

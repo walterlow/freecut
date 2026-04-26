@@ -114,4 +114,21 @@ describe('MediaRenderPipeline', () => {
     expect(queue.submit).toHaveBeenCalledWith(['finished-command-buffer'])
     expect(outputTexture.createView).toHaveBeenCalled()
   })
+
+  it('reuses the media bind group while the input texture dimensions are unchanged', () => {
+    const { device, outputTexture, pipeline } = createPipelineHarness()
+    const source = { width: 1920, height: 1080 } as OffscreenCanvas
+    const params = {
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      outputWidth: 1920,
+      outputHeight: 1080,
+      destRect: { x: 0, y: 0, width: 1920, height: 1080 },
+    }
+
+    expect(pipeline.renderSourceToTexture(source, outputTexture, params)).toBe(true)
+    expect(pipeline.renderSourceToTexture(source, outputTexture, params)).toBe(true)
+
+    expect(device.createBindGroup).toHaveBeenCalledTimes(1)
+  })
 })
