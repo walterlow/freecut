@@ -58,6 +58,12 @@ export interface DrawFrameCaptureResult {
   capturedSourceTime: number | null
 }
 
+export interface CaptureFrameResult {
+  success: boolean
+  frame: VideoFrame | null
+  sourceTime: number | null
+}
+
 export class VideoFrameExtractor {
   private static readonly TIMESTAMP_EPSILON = 1e-4
   private static readonly LOOKAHEAD_TOLERANCE_SECONDS = 0.05
@@ -219,6 +225,35 @@ export class VideoFrameExtractor {
       success: true,
       capturedFrame: this.cloneCurrentVideoFrame(),
       capturedSourceTime: this.currentSample?.timestamp ?? null,
+    }
+  }
+
+  async captureFrame(timestamp: number): Promise<CaptureFrameResult> {
+    const duration = this.duration
+    const clampedTime =
+      duration > 0
+        ? Math.max(0, Math.min(timestamp, duration - VideoFrameExtractor.TIMESTAMP_EPSILON))
+        : Math.max(0, timestamp)
+
+    this.sampleLoopError = null
+    this.lastFailureKind = 'none'
+
+    try {
+      await this.ensureSampleForTimestamp(clampedTime)
+      if (!this.currentSample || !this.currentSampleCoversTimestamp(clampedTime)) {
+        this.lastFailureKind = 'no-sample'
+        return { success: false, frame: null, sourceTime: null }
+      }
+
+      return {
+        success: true,
+        frame: this.cloneCurrentVideoFrame(),
+        sourceTime: this.currentSample.timestamp,
+      }
+    } catch (error) {
+      this.sampleLoopError = error
+      this.lastFailureKind = 'decode-error'
+      return { success: false, frame: null, sourceTime: null }
     }
   }
 

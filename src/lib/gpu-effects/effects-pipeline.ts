@@ -64,6 +64,31 @@ fn importFragment(input: VertexOutput) -> @location(0) vec4f {
 }
 `
 
+type GpuExternalImageSource =
+  | OffscreenCanvas
+  | HTMLCanvasElement
+  | HTMLVideoElement
+  | HTMLImageElement
+  | ImageBitmap
+  | VideoFrame
+
+function getExternalImageSourceDimensions(source: GpuExternalImageSource): {
+  width: number
+  height: number
+} {
+  if (source instanceof HTMLVideoElement) {
+    return { width: source.videoWidth, height: source.videoHeight }
+  }
+  if (typeof VideoFrame !== 'undefined' && source instanceof VideoFrame) {
+    return { width: source.displayWidth, height: source.displayHeight }
+  }
+  if (source instanceof HTMLImageElement) {
+    return { width: source.naturalWidth, height: source.naturalHeight }
+  }
+  const sizedSource = source as HTMLCanvasElement | OffscreenCanvas | ImageBitmap
+  return { width: sizedSource.width, height: sizedSource.height }
+}
+
 export class EffectsPipeline {
   private device: GPUDevice
   private format: GPUTextureFormat
@@ -700,14 +725,13 @@ export class EffectsPipeline {
    * uploaded again by the next GPU stage.
    */
   applyEffectsToTexture(
-    source: OffscreenCanvas | HTMLCanvasElement | HTMLVideoElement,
+    source: GpuExternalImageSource,
     effects: GpuEffectInstance[],
     outputTexture: GPUTexture,
   ): boolean {
     const enabled = effects.filter((e) => e.enabled)
 
-    const w = source instanceof HTMLVideoElement ? source.videoWidth : source.width
-    const h = source instanceof HTMLVideoElement ? source.videoHeight : source.height
+    const { width: w, height: h } = getExternalImageSourceDimensions(source)
     if (w < 2 || h < 2) return false
     if (outputTexture.width !== w || outputTexture.height !== h) return false
 
@@ -741,6 +765,60 @@ export class EffectsPipeline {
       { texture: finalTex },
       { texture: outputTexture },
       { width: w, height: h },
+    )
+    this.device.queue.submit([commandEncoder.finish()])
+    this.trackSubmittedWork()
+    return true
+  }
+
+  applyTextureEffectsToTexture(
+    sourceTexture: GPUTexture,
+    effects: GpuEffectInstance[],
+    outputTexture: GPUTexture,
+    width: number,
+    height: number,
+  ): boolean {
+    const enabled = effects.filter((e) => e.enabled)
+    if (width < 2 || height < 2) return false
+    if (
+      sourceTexture.width !== width ||
+      sourceTexture.height !== height ||
+      outputTexture.width !== width ||
+      outputTexture.height !== height
+    ) {
+      return false
+    }
+
+    const commandEncoder = this.device.createCommandEncoder()
+    if (enabled.length === 0) {
+      commandEncoder.copyTextureToTexture(
+        { texture: sourceTexture },
+        { texture: outputTexture },
+        { width, height },
+      )
+      this.device.queue.submit([commandEncoder.finish()])
+      return true
+    }
+
+    this.ensurePingPong(width, height)
+    if (!this.pingTexture || !this.pongTexture) return false
+    commandEncoder.copyTextureToTexture(
+      { texture: sourceTexture },
+      { texture: this.pingTexture },
+      { width, height },
+    )
+    const finalTex = this.runEffectChain(
+      commandEncoder,
+      enabled,
+      this.pingTexture,
+      this.pongTexture,
+      width,
+      height,
+    )
+    commandEncoder.copyTextureToTexture(
+      { texture: finalTex },
+      { texture: outputTexture },
+      { width, height },
     )
     this.device.queue.submit([commandEncoder.finish()])
     this.trackSubmittedWork()

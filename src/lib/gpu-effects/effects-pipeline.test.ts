@@ -95,3 +95,80 @@ describe('EffectsPipeline.applyEffectsToTexture', () => {
     expect(device.createCommandEncoder).toHaveBeenCalled()
   })
 })
+
+describe('EffectsPipeline.applyTextureEffectsToTexture', () => {
+  it('copies texture input directly when no effects are enabled', () => {
+    const { commandEncoder, pipeline, queue } = createPipelineHarness()
+    const sourceTexture = { width: 1920, height: 1080 } as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+
+    const result = pipeline.applyTextureEffectsToTexture(
+      sourceTexture,
+      [],
+      outputTexture,
+      1920,
+      1080,
+    )
+
+    expect(result).toBe(true)
+    expect(commandEncoder.copyTextureToTexture).toHaveBeenCalledWith(
+      { texture: sourceTexture },
+      { texture: outputTexture },
+      { width: 1920, height: 1080 },
+    )
+    expect(queue.submit).toHaveBeenCalledWith(['finished-command-buffer'])
+  })
+
+  it('runs effects from texture input and writes to the output texture', async () => {
+    const { commandEncoder, pipeline, queue } = createPipelineHarness()
+    const sourceTexture = { width: 1920, height: 1080 } as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const effects: GpuEffectInstance[] = [
+      {
+        id: 'fx-1',
+        type: 'gpu-blur',
+        name: 'gpu-blur',
+        enabled: true,
+        params: { amount: 0.5 },
+      },
+    ]
+
+    const result = pipeline.applyTextureEffectsToTexture(
+      sourceTexture,
+      effects,
+      outputTexture,
+      1920,
+      1080,
+    )
+
+    expect(result).toBe(true)
+    expect(pipeline.ensurePingPong).toHaveBeenCalledWith(1920, 1080)
+    expect(commandEncoder.copyTextureToTexture).toHaveBeenNthCalledWith(
+      1,
+      { texture: sourceTexture },
+      { texture: pipeline.pingTexture },
+      { width: 1920, height: 1080 },
+    )
+    expect(pipeline.runEffectChain).toHaveBeenCalledWith(
+      commandEncoder,
+      effects,
+      pipeline.pingTexture,
+      pipeline.pongTexture,
+      1920,
+      1080,
+    )
+    expect(commandEncoder.copyTextureToTexture).toHaveBeenNthCalledWith(
+      2,
+      { texture: pipeline.pongTexture },
+      { texture: outputTexture },
+      { width: 1920, height: 1080 },
+    )
+    expect(queue.submit).toHaveBeenCalledWith(['finished-command-buffer'])
+    expect(queue.onSubmittedWorkDone).toHaveBeenCalled()
+    expect(pipeline.gpuFramesInFlight).toBe(1)
+
+    await Promise.resolve()
+
+    expect(pipeline.gpuFramesInFlight).toBe(0)
+  })
+})

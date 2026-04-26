@@ -1,0 +1,96 @@
+import { describe, expect, it, vi } from 'vite-plus/test'
+import { MediaRenderPipeline } from './media-render-pipeline'
+
+function createPipelineHarness() {
+  vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 })
+  vi.stubGlobal('GPUBufferUsage', { COPY_DST: 8, UNIFORM: 64 })
+  vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, TEXTURE_BINDING: 4 })
+  const queue = {
+    copyExternalImageToTexture: vi.fn(),
+    submit: vi.fn(),
+    writeBuffer: vi.fn(),
+  }
+  const inputView = {}
+  const outputView = {}
+  const inputTexture = {
+    createView: vi.fn(() => inputView),
+    destroy: vi.fn(),
+    width: 1920,
+    height: 1080,
+  }
+  const outputTexture = {
+    createView: vi.fn(() => outputView),
+    width: 1920,
+    height: 1080,
+  } as unknown as GPUTexture
+  const pass = {
+    draw: vi.fn(),
+    end: vi.fn(),
+    setBindGroup: vi.fn(),
+    setPipeline: vi.fn(),
+  }
+  const commandEncoder = {
+    beginRenderPass: vi.fn(() => pass),
+    finish: vi.fn(() => 'finished-command-buffer'),
+  }
+  const device = {
+    createBindGroup: vi.fn(() => 'bind-group'),
+    createBindGroupLayout: vi.fn(() => 'bind-group-layout'),
+    createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
+    createCommandEncoder: vi.fn(() => commandEncoder),
+    createPipelineLayout: vi.fn(() => 'pipeline-layout'),
+    createRenderPipeline: vi.fn(() => 'render-pipeline'),
+    createSampler: vi.fn(() => 'sampler'),
+    createShaderModule: vi.fn(() => 'shader-module'),
+    createTexture: vi.fn(() => inputTexture),
+    queue,
+  }
+  const pipeline = new MediaRenderPipeline(device as unknown as GPUDevice)
+
+  return { commandEncoder, device, inputTexture, outputTexture, pass, pipeline, queue }
+}
+
+describe('MediaRenderPipeline', () => {
+  it('uploads a media source and renders it into the output texture', () => {
+    const { commandEncoder, device, inputTexture, outputTexture, pass, pipeline, queue } =
+      createPipelineHarness()
+    const source = { width: 1920, height: 1080 } as OffscreenCanvas
+
+    const rendered = pipeline.renderSourceToTexture(source, outputTexture, {
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      outputWidth: 1920,
+      outputHeight: 1080,
+      sourceRect: { x: 100, y: 50, width: 500, height: 400 },
+      destRect: { x: 200, y: 100, width: 700, height: 500 },
+      opacity: 0.75,
+    })
+
+    expect(rendered).toBe(true)
+    expect(device.createTexture).toHaveBeenCalledWith({
+      size: { width: 1920, height: 1080 },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    })
+    expect(queue.copyExternalImageToTexture).toHaveBeenCalledWith(
+      { source, flipY: false },
+      { texture: inputTexture },
+      { width: 1920, height: 1080 },
+    )
+    expect(queue.writeBuffer).toHaveBeenCalled()
+    expect(commandEncoder.beginRenderPass).toHaveBeenCalledWith({
+      colorAttachments: [
+        {
+          view: {},
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+    })
+    expect(pass.setPipeline).toHaveBeenCalledWith('render-pipeline')
+    expect(pass.setBindGroup).toHaveBeenCalledWith(0, 'bind-group')
+    expect(pass.draw).toHaveBeenCalledWith(6)
+    expect(queue.submit).toHaveBeenCalledWith(['finished-command-buffer'])
+    expect(outputTexture.createView).toHaveBeenCalled()
+  })
+})

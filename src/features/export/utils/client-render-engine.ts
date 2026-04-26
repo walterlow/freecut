@@ -41,6 +41,7 @@ import {
 } from './canvas-effects'
 import { EffectsPipeline } from '@/infrastructure/gpu/effects'
 import { TransitionPipeline } from '@/infrastructure/gpu/transitions'
+import { MediaRenderPipeline } from '@/infrastructure/gpu/media'
 import {
   CompositorPipeline,
   DEFAULT_LAYER_PARAMS,
@@ -231,12 +232,20 @@ export async function createCompositionRenderer(
   // === GPU Transition Pipeline ===
   // Shares the GPU device with the effects pipeline
   let gpuTransitionPipeline: TransitionPipeline | null = null
+  let gpuMediaPipeline: MediaRenderPipeline | null = null
 
   function ensureGpuTransitionPipeline(): boolean {
     if (gpuTransitionPipeline) return true
     if (!gpuPipeline) return false
     gpuTransitionPipeline = TransitionPipeline.create(gpuPipeline.getDevice())
     return gpuTransitionPipeline !== null
+  }
+
+  function ensureGpuMediaPipeline(): boolean {
+    if (gpuMediaPipeline) return true
+    if (!gpuPipeline) return false
+    gpuMediaPipeline = new MediaRenderPipeline(gpuPipeline.getDevice())
+    return true
   }
 
   // === GPU Compositor (for pixel-perfect blend modes) ===
@@ -554,6 +563,7 @@ export async function createCompositionRenderer(
     subCompRenderData,
     gpuPipeline: null,
     gpuTransitionPipeline: null,
+    gpuMediaPipeline: null,
     domVideoElementProvider,
   }
 
@@ -1301,9 +1311,11 @@ export async function createCompositionRenderer(
         }
         if (itemRenderContext.gpuPipeline) {
           // Initialize GPU transition pipeline (shares device with effects pipeline)
-          if (activeTransitions.length > 0 && !itemRenderContext.gpuTransitionPipeline) {
-            ensureGpuTransitionPipeline()
+          if (activeTransitions.length > 0) {
+            if (!itemRenderContext.gpuTransitionPipeline) ensureGpuTransitionPipeline()
+            if (!itemRenderContext.gpuMediaPipeline) ensureGpuMediaPipeline()
             itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline
+            itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
           }
         }
       }
@@ -2124,8 +2136,10 @@ export async function createCompositionRenderer(
       const pipeline = await ensureGpuPipeline()
       if (pipeline) {
         ensureGpuTransitionPipeline()
+        ensureGpuMediaPipeline()
         itemRenderContext.gpuPipeline = pipeline
         itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline
+        itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
       }
     },
 
@@ -2188,6 +2202,8 @@ export async function createCompositionRenderer(
       gpuCompositeConfigureFailed = false
       gpuTransitionPipeline?.destroy()
       gpuTransitionPipeline = null
+      gpuMediaPipeline?.destroy()
+      gpuMediaPipeline = null
       gpuPipeline?.destroy()
       gpuPipeline = null
       frameSceneCache.invalidate()

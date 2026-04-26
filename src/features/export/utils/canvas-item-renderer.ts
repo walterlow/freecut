@@ -69,6 +69,7 @@ import {
   type RenderTimelineSpan,
 } from './render-span'
 import type { GpuTexturePool } from '@/infrastructure/gpu/compositor'
+import type { MediaRenderPipeline } from '@/infrastructure/gpu/media'
 
 const log = createLogger('CanvasItemRenderer')
 
@@ -206,6 +207,9 @@ export interface ItemRenderContext {
 
   // GPU transition pipeline (lazily initialized, shares device with gpuPipeline)
   gpuTransitionPipeline?: import('@/infrastructure/gpu/transitions').TransitionPipeline | null
+
+  // GPU media renderer (lazily initialized, shares device with gpuPipeline)
+  gpuMediaPipeline?: MediaRenderPipeline | null
 
   // DOM video element provider for zero-copy playback rendering.
   // During playback, the Player's <video> elements are already at
@@ -1894,6 +1898,14 @@ type RenderedTransitionTextureParticipants = {
   poolTextures: GPUTexture[]
 }
 
+type ResolvedGpuMediaParticipantSource = {
+  item: ImageItem | VideoItem
+  source: RenderImageSource | VideoFrame
+  sourceWidth: number
+  sourceHeight: number
+  close?: () => void
+}
+
 type RenderedTransitionBaseParticipants = {
   leftCanvas: OffscreenCanvas
   rightCanvas: OffscreenCanvas
@@ -2040,6 +2052,15 @@ async function renderTransitionTextureParticipants(
 ): Promise<RenderedTransitionTextureParticipants | null> {
   if (!rctx.gpuPipeline) return null
 
+  const directMediaParticipants = await renderTransitionGpuMediaTextureParticipants(
+    activeTransition,
+    frame,
+    rctx,
+    trackOrder,
+    gpuTexturePool,
+  )
+  if (directMediaParticipants) return directMediaParticipants
+
   const { canvasPool, canvasSettings } = rctx
   const baseParticipants = await renderTransitionBaseParticipants(
     activeTransition,
@@ -2079,6 +2100,197 @@ async function renderTransitionTextureParticipants(
     for (const canvas of poolCanvases) canvasPool.release(canvas)
     throw error
   }
+}
+
+async function renderTransitionGpuMediaTextureParticipants(
+  activeTransition: ActiveTransition,
+  frame: number,
+  rctx: ItemRenderContext,
+  trackOrder: number,
+  gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
+): Promise<RenderedTransitionTextureParticipants | null> {
+  const pipeline = rctx.gpuMediaPipeline
+  if (!pipeline) return null
+
+  const leftParticipant = resolveTransitionParticipantRenderState(
+    activeTransition.leftClip,
+    activeTransition,
+    frame,
+    trackOrder,
+    rctx,
+  )
+  const rightParticipant = resolveTransitionParticipantRenderState(
+    activeTransition.rightClip,
+    activeTransition,
+    frame,
+    trackOrder,
+    rctx,
+  )
+  const leftTexture = gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
+  const rightTexture = gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
+  const poolTextures = [leftTexture, rightTexture]
+
+  const leftRendered = await renderGpuMediaParticipantToTexture(
+    pipeline,
+    leftParticipant,
+    leftParticipant.transform,
+    frame,
+    rctx,
+    gpuTexturePool,
+    leftTexture,
+  )
+  const rightRendered = await renderGpuMediaParticipantToTexture(
+    pipeline,
+    rightParticipant,
+    rightParticipant.transform,
+    frame,
+    rctx,
+    gpuTexturePool,
+    rightTexture,
+  )
+  if (!leftRendered || !rightRendered) {
+    for (const texture of poolTextures) gpuTexturePool.release(texture)
+    return null
+  }
+
+  return {
+    leftTexture,
+    rightTexture,
+    poolCanvases: [],
+    poolTextures,
+  }
+}
+
+async function renderGpuMediaParticipantToTexture(
+  pipeline: MediaRenderPipeline,
+  participant: TransitionParticipantRenderState,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+  gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
+  outputTexture: GPUTexture,
+): Promise<boolean> {
+  const media = await resolveGpuMediaParticipantSource(participant, transform, frame, rctx)
+  if (!media) return false
+  const layout = calculateContainedMediaDrawLayout(
+    media.sourceWidth,
+    media.sourceHeight,
+    transform,
+    rctx.canvasSettings,
+    media.item.crop,
+  )
+  if (layout.viewportRect.width <= 0 || layout.viewportRect.height <= 0) return false
+  if (hasCropFeather(layout.featherPixels)) return false
+
+  const sourceRect = {
+    x: ((layout.viewportRect.x - layout.mediaRect.x) / layout.mediaRect.width) * media.sourceWidth,
+    y:
+      ((layout.viewportRect.y - layout.mediaRect.y) / layout.mediaRect.height) * media.sourceHeight,
+    width: (layout.viewportRect.width / layout.mediaRect.width) * media.sourceWidth,
+    height: (layout.viewportRect.height / layout.mediaRect.height) * media.sourceHeight,
+  }
+
+  const mediaOutputTexture =
+    participant.effects.length > 0
+      ? gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
+      : outputTexture
+
+  try {
+    const renderedMedia = pipeline.renderSourceToTexture(media.source, mediaOutputTexture, {
+      sourceWidth: media.sourceWidth,
+      sourceHeight: media.sourceHeight,
+      outputWidth: rctx.canvasSettings.width,
+      outputHeight: rctx.canvasSettings.height,
+      sourceRect,
+      destRect: layout.viewportRect,
+      opacity: transform.opacity,
+    })
+    if (!renderedMedia) return false
+    if (mediaOutputTexture === outputTexture) return true
+    if (!rctx.gpuPipeline) return false
+    return rctx.gpuPipeline.applyTextureEffectsToTexture(
+      mediaOutputTexture,
+      getGpuEffectInstances(participant.effects),
+      outputTexture,
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
+    )
+  } finally {
+    if (mediaOutputTexture !== outputTexture) gpuTexturePool.release(mediaOutputTexture)
+    media.close?.()
+  }
+}
+
+async function resolveGpuMediaParticipantSource(
+  participant: TransitionParticipantRenderState,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+): Promise<ResolvedGpuMediaParticipantSource | null> {
+  if (hasCornerPin(participant.item.cornerPin)) return null
+  if (transform.rotation !== 0) return null
+  if (transform.cornerRadius > 0) return null
+  if (transform.opacity < 0 || transform.opacity > 1) return null
+  if (participant.item.transform?.flipHorizontal || participant.item.transform?.flipVertical) {
+    return null
+  }
+
+  if (participant.item.type === 'image') {
+    const loadedImage = rctx.imageElements.get(participant.item.id)
+    if (!loadedImage) return null
+    return {
+      item: participant.item,
+      source: loadedImage.source,
+      sourceWidth: loadedImage.width,
+      sourceHeight: loadedImage.height,
+    }
+  }
+
+  if (participant.item.type !== 'video') return null
+  if (!rctx.useMediabunny.has(participant.item.id)) return null
+  if (rctx.mediabunnyDisabledItems.has(participant.item.id)) return null
+
+  const extractor = rctx.videoExtractors.get(participant.item.id)
+  if (!extractor) return null
+
+  const sourceTime = resolveVideoParticipantSourceTime(
+    participant.item,
+    participant.renderSpan,
+    frame,
+    rctx,
+  )
+  const captured = await extractor.captureFrame(sourceTime)
+  if (!captured.success || !captured.frame) return null
+
+  return {
+    item: participant.item,
+    source: captured.frame,
+    sourceWidth: captured.frame.displayWidth,
+    sourceHeight: captured.frame.displayHeight,
+    close: () => captured.frame?.close(),
+  }
+}
+
+function resolveVideoParticipantSourceTime(
+  item: VideoItem,
+  renderSpan: RenderTimelineSpan,
+  frame: number,
+  rctx: ItemRenderContext,
+): number {
+  const localFrame = frame - renderSpan.from
+  const localTime = localFrame / rctx.fps
+  const sourceStart = getRenderTimelineSourceStart(item, renderSpan)
+  const sourceFps = item.sourceFps ?? rctx.fps
+  const speed = item.speed ?? 1
+  const rawSourceTime = clampVideoSourceTime(
+    sourceStart / sourceFps + localTime * speed,
+    sourceFps,
+    item.sourceDuration,
+  )
+  const snappedSourceFrame = Math.round(rawSourceTime * sourceFps)
+  return Math.abs(rawSourceTime * sourceFps - snappedSourceFrame) < 1e-6
+    ? (snappedSourceFrame + 1e-4) / sourceFps
+    : rawSourceTime
 }
 
 /**
