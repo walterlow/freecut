@@ -258,7 +258,10 @@ export interface GpuTextTextureCacheEntry {
   texture: GPUTexture
   width: number
   height: number
+  bytes: number
 }
+
+const GPU_TEXT_TEXTURE_CACHE_MAX_BYTES = 64 * 1024 * 1024
 
 export interface TransitionParticipantRenderState<TItem extends TimelineItem = TimelineItem> {
   item: TItem
@@ -2602,6 +2605,14 @@ function resolveGpuTextParticipantSource(
   if (cached) {
     rctx.gpuTextTextureCache.delete(cacheKey)
     rctx.gpuTextTextureCache.set(cacheKey, cached)
+    logGpuTextTextureCacheEvent('hit', {
+      itemId: participant.item.id,
+      width: cached.width,
+      height: cached.height,
+      bytes: cached.bytes,
+      cacheBytes: getGpuTextTextureCacheBytes(rctx.gpuTextTextureCache),
+      entries: rctx.gpuTextTextureCache.size,
+    })
     return {
       kind: 'text',
       item: resolvedTextItem,
@@ -2613,6 +2624,7 @@ function resolveGpuTextParticipantSource(
 
   const { canvas, ctx } = rctx.canvasPool.acquire()
   try {
+    const bytes = getGpuTextureByteSize(sourceWidth, sourceHeight)
     canvas.width = sourceWidth
     canvas.height = sourceHeight
     ctx.clearRect(0, 0, sourceWidth, sourceHeight)
@@ -2644,7 +2656,20 @@ function resolveGpuTextParticipantSource(
         { texture },
         { width: sourceWidth, height: sourceHeight },
       )
-    rctx.gpuTextTextureCache.set(cacheKey, { texture, width: sourceWidth, height: sourceHeight })
+    rctx.gpuTextTextureCache.set(cacheKey, {
+      texture,
+      width: sourceWidth,
+      height: sourceHeight,
+      bytes,
+    })
+    logGpuTextTextureCacheEvent('miss', {
+      itemId: participant.item.id,
+      width: sourceWidth,
+      height: sourceHeight,
+      bytes,
+      cacheBytes: getGpuTextTextureCacheBytes(rctx.gpuTextTextureCache),
+      entries: rctx.gpuTextTextureCache.size,
+    })
     pruneGpuTextTextureCache(rctx.gpuTextTextureCache)
     return {
       kind: 'text',
@@ -2683,13 +2708,38 @@ function getGpuTextTextureCacheKey(item: TextItem, width: number, height: number
 }
 
 function pruneGpuTextTextureCache(cache: Map<string, GpuTextTextureCacheEntry>): void {
-  const maxEntries = 64
-  while (cache.size > maxEntries) {
+  while (getGpuTextTextureCacheBytes(cache) > GPU_TEXT_TEXTURE_CACHE_MAX_BYTES) {
     const oldestKey = cache.keys().next().value
     if (oldestKey === undefined) return
-    cache.get(oldestKey)?.texture.destroy()
+    const oldestEntry = cache.get(oldestKey)
+    oldestEntry?.texture.destroy()
     cache.delete(oldestKey)
+    logGpuTextTextureCacheEvent('evict', {
+      width: oldestEntry?.width,
+      height: oldestEntry?.height,
+      bytes: oldestEntry?.bytes,
+      cacheBytes: getGpuTextTextureCacheBytes(cache),
+      entries: cache.size,
+    })
   }
+}
+
+function getGpuTextureByteSize(width: number, height: number): number {
+  return width * height * 4
+}
+
+function getGpuTextTextureCacheBytes(cache: Map<string, GpuTextTextureCacheEntry>): number {
+  let bytes = 0
+  for (const entry of cache.values()) bytes += entry.bytes
+  return bytes
+}
+
+function logGpuTextTextureCacheEvent(
+  event: 'hit' | 'miss' | 'evict',
+  details: Record<string, unknown>,
+): void {
+  if (!shouldLogTransitionGpuDiagnostics()) return
+  log.debug('GPU text texture cache', { event, ...details })
 }
 
 function resolveGpuMediaCornerPin(

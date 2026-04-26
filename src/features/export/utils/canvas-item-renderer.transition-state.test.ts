@@ -11,7 +11,7 @@ import type {
   VideoItem,
 } from '@/types/timeline'
 import type { ActiveTransition } from './canvas-transitions'
-import type { ItemRenderContext } from './canvas-item-renderer'
+import type { GpuTextTextureCacheEntry, ItemRenderContext } from './canvas-item-renderer'
 import type { VideoFrameSource } from './shared-video-extractor'
 import {
   renderTransitionToGpuTexture,
@@ -1101,6 +1101,155 @@ describe('renderTransitionToGpuTexture', () => {
       }),
     )
     expect(gpuPipeline.applyEffectsToTexture).not.toHaveBeenCalled()
+  })
+
+  it('evicts least-recent GPU text textures by byte budget', async () => {
+    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, TEXTURE_BINDING: 4 })
+    const leftClip: ImageItem = {
+      id: 'left-image',
+      type: 'image',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      src: 'left.png',
+      label: 'Left image',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ImageItem
+    const createTextClip = (id: string, text: string): TextItem =>
+      ({
+        id,
+        type: 'text',
+        trackId: 'track-1',
+        from: 60,
+        durationInFrames: 60,
+        label: text,
+        text,
+        color: '#ffffff',
+        fontSize: 48,
+        fontFamily: 'Inter',
+        transform: {
+          x: 0,
+          y: 0,
+          width: 4096,
+          height: 2200,
+          rotation: 0,
+          opacity: 1,
+        },
+      }) as TextItem
+    const firstTextTexture = {
+      width: 4096,
+      height: 2200,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const secondTextTexture = {
+      width: 4096,
+      height: 2200,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const textCanvas = { width: 4096, height: 2200 } as OffscreenCanvas
+    const textCtx = createMockCtx()
+    const device = {
+      createTexture: vi
+        .fn()
+        .mockReturnValueOnce(firstTextTexture)
+        .mockReturnValueOnce(secondTextTexture),
+      queue: {
+        copyExternalImageToTexture: vi.fn(),
+      },
+    }
+    const gpuTexturePool = {
+      acquire: vi.fn(
+        () =>
+          ({
+            width: 1920,
+            height: 1080,
+            createView: vi.fn(),
+          }) as unknown as GPUTexture,
+      ),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(() => ({ canvas: textCanvas, ctx: textCtx })),
+      release: vi.fn(),
+    }
+    const gpuPipeline = {
+      getDevice: vi.fn(() => device),
+      applyEffectsToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuMediaPipeline = {
+      renderSourceToTexture: vi.fn().mockReturnValue(true),
+      renderTextureToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTextTextureCache = new Map<string, GpuTextTextureCacheEntry>()
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {
+        measure: vi.fn(
+          (_ctx: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) =>
+            text.length * 10 + Math.max(0, text.length - 1) * letterSpacing,
+        ),
+      } as unknown as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map([
+        [
+          leftClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+      ]),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: gpuPipeline as unknown as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+      gpuShapePipeline: null,
+      gpuTextTextureCache,
+    }
+
+    await renderTransitionToGpuTexture(
+      outputTexture,
+      createActiveTransition({ leftClip, rightClip: createTextClip('right-text-1', 'First') }),
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+    await renderTransitionToGpuTexture(
+      outputTexture,
+      createActiveTransition({ leftClip, rightClip: createTextClip('right-text-2', 'Second') }),
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(firstTextTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(secondTextTexture.destroy).not.toHaveBeenCalled()
+    expect(gpuTextTextureCache.size).toBe(1)
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(2)
   })
 
   it('keeps GPU-eligible participants direct when the opposite side is a sub-composition', async () => {
