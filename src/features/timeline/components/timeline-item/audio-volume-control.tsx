@@ -1,4 +1,5 @@
-import { memo, useEffect, useState, type RefObject } from 'react'
+import { memo, useEffect, useRef, useState, type RefObject } from 'react'
+import { FloatingReadout } from './floating-readout'
 
 const AUDIO_VOLUME_HOVER_ARM_DELAY_MS = 180
 
@@ -8,7 +9,7 @@ interface AudioVolumeControlProps {
   lineYPercent: number
   isEditing: boolean
   editLabel?: string | null
-  editLabelRef?: RefObject<HTMLDivElement | null>
+  editLabelRef?: RefObject<HTMLElement | null>
   onVolumeMouseDown: (e: React.MouseEvent) => void
   onVolumeDoubleClick: () => void
 }
@@ -25,6 +26,7 @@ export const AudioVolumeControl = memo(function AudioVolumeControl({
 }: AudioVolumeControlProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [isHoverArmed, setIsHoverArmed] = useState(false)
+  const volumeHandleRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (isEditing) {
@@ -55,6 +57,7 @@ export const AudioVolumeControl = memo(function AudioVolumeControl({
   return (
     <div className="absolute inset-x-0 inset-y-0 pointer-events-none z-30">
       <button
+        ref={volumeHandleRef}
         type="button"
         className={`absolute left-0 right-0 h-2 -translate-y-1/2 pointer-events-auto touch-none ${isDragEnabled ? 'cursor-ns-resize' : 'cursor-default'}`}
         style={{ top: `var(--timeline-audio-volume-line-y, ${lineYPercent}%)` }}
@@ -89,13 +92,13 @@ export const AudioVolumeControl = memo(function AudioVolumeControl({
       />
 
       {isEditing && editLabel && (
-        <div
-          ref={editLabelRef}
-          className="absolute left-1/2 -translate-x-1/2 -translate-y-full rounded bg-slate-950/95 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-lg whitespace-nowrap"
-          style={{ top: `calc(var(--timeline-audio-volume-line-y, ${lineYPercent}%) - 10px)` }}
+        <FloatingReadout
+          anchorRef={volumeHandleRef}
+          measureKey={`${lineYPercent}:${editLabel}`}
+          offsetY={6}
         >
-          {editLabel}
-        </div>
+          <span ref={editLabelRef}>{editLabel}</span>
+        </FloatingReadout>
       )}
     </div>
   )
