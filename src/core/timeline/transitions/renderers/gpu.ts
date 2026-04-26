@@ -669,6 +669,67 @@ const liquidDistortDef: TransitionDefinition = {
 }
 
 // ============================================================================
+// Lens Warp Zoom
+// ============================================================================
+
+const lensWarpZoomRenderer: TransitionRenderer = {
+  gpuTransitionId: 'lensWarpZoom',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    const zoom = isOutgoing ? 1 + p * 0.18 + envelope * 0.04 : 1.18 - p * 0.18 + envelope * 0.03
+    return {
+      opacity: fadeOpacity(p, isOutgoing),
+      transform: `scale(${zoom})`,
+    }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    const p = clamp01(progress)
+    const w = canvas?.width ?? leftCanvas.width
+    const h = canvas?.height ?? leftCanvas.height
+    const envelope = Math.sin(p * Math.PI)
+
+    const drawScaled = (source: OffscreenCanvas, scale: number, alpha: number) => {
+      const dw = w * scale
+      const dh = h * scale
+      ctx.save()
+      ctx.globalAlpha = alpha
+      ctx.drawImage(source, (w - dw) / 2, (h - dh) / 2, dw, dh)
+      ctx.restore()
+    }
+
+    drawScaled(rightCanvas, 1.18 - p * 0.18 + envelope * 0.02, fadeOpacity(p, false))
+    drawScaled(leftCanvas, 1 + p * 0.18 + envelope * 0.03, fadeOpacity(p, true))
+
+    if (envelope <= 0.08) return
+
+    const radius = Math.min(w, h) * (0.22 + p * 0.18)
+    const glow = ctx.createRadialGradient(w / 2, h / 2, radius * 0.35, w / 2, h / 2, radius)
+    glow.addColorStop(0, `rgba(255, 255, 255, ${0.12 * envelope})`)
+    glow.addColorStop(0.55, `rgba(190, 225, 255, ${0.08 * envelope})`)
+    glow.addColorStop(1, 'rgba(190, 225, 255, 0)')
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.fillStyle = glow
+    ctx.fillRect(0, 0, w, h)
+    ctx.restore()
+  },
+}
+
+const lensWarpZoomDef: TransitionDefinition = {
+  id: 'lensWarpZoom',
+  label: 'Lens Warp Zoom',
+  description: 'Punchy zoom with barrel warp, blur, and chromatic edge shimmer',
+  category: 'custom',
+  icon: 'ScanSearch',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 24,
+  minDuration: 8,
+  maxDuration: 72,
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -681,4 +742,5 @@ export function registerGpuTransitions(registry: TransitionRegistry): void {
   registry.register('chromatic', chromaticDef, chromaticRenderer)
   registry.register('radialBlur', radialBlurDef, radialBlurRenderer)
   registry.register('liquidDistort', liquidDistortDef, liquidDistortRenderer)
+  registry.register('lensWarpZoom', lensWarpZoomDef, lensWarpZoomRenderer)
 }

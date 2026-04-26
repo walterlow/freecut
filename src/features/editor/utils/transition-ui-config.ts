@@ -22,6 +22,7 @@ import {
   Zap,
   Sun,
   Waves,
+  ScanSearch,
   type LucideIcon,
 } from 'lucide-react'
 import { transitionRegistry } from '@/core/timeline/transitions'
@@ -48,6 +49,7 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
   Zap,
   Sun,
   Waves,
+  ScanSearch,
 }
 
 /** Display labels for transition categories */

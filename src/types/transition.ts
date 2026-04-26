@@ -40,6 +40,7 @@ export type BuiltinTransitionPresentation =
   | 'chromatic'
   | 'radialBlur'
   | 'liquidDistort'
+  | 'lensWarpZoom'
 
 /**
  * Visual presentation styles for transitions.

@@ -67,4 +67,15 @@ describe('transition-ui-config', () => {
       'from-bottom',
     ])
   })
+
+  it('shows lens warp zoom in the custom category', () => {
+    const customConfigs = getTransitionConfigsByCategory().custom ?? []
+
+    expect(customConfigs.some((config) => config.id === 'lensWarpZoom')).toBe(true)
+    expect(
+      getTransitionPresentationConfigs().some(
+        (config) => config.id === 'lensWarpZoom' && config.icon === 'ScanSearch',
+      ),
+    ).toBe(true)
+  })
 })
