@@ -71,7 +71,14 @@ describe('ShapeRenderPipeline', () => {
     expect(uniformData[19]).toBeCloseTo(0.4)
     expect(uniformData[20]).toBeCloseTo(Math.PI / 4)
     expect(commandEncoder.beginRenderPass).toHaveBeenCalledWith({
-      colorAttachments: [{ view: {}, loadOp: 'clear', storeOp: 'store' }],
+      colorAttachments: [
+        {
+          view: {},
+          loadOp: 'clear',
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          storeOp: 'store',
+        },
+      ],
     })
     expect(pass.setPipeline).toHaveBeenCalledWith('render-pipeline')
     expect(pass.setBindGroup).toHaveBeenCalledWith(0, 'bind-group')

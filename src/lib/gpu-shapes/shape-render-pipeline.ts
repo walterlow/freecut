@@ -23,6 +23,8 @@ export interface GpuShapeRenderParams {
   innerRadius?: number
   aspectRatioLocked?: boolean
   pathVertices?: Array<[number, number]>
+  clear?: boolean
+  blend?: boolean
 }
 
 const SHAPE_RENDER_SHADER = /* wgsl */ `
@@ -185,7 +187,8 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 `
 
 export class ShapeRenderPipeline {
-  private readonly pipeline: GPURenderPipeline
+  private readonly replacePipeline: GPURenderPipeline
+  private readonly blendPipeline: GPURenderPipeline
   private readonly bindGroupLayout: GPUBindGroupLayout
   private readonly uniformBuffer: GPUBuffer
   private bindGroup: GPUBindGroup | null = null
@@ -199,20 +202,39 @@ export class ShapeRenderPipeline {
       label: 'shape-render-layout',
       entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
     })
-    this.pipeline = device.createRenderPipeline({
+    this.replacePipeline = this.createRenderPipeline(shaderModule, false)
+    this.blendPipeline = this.createRenderPipeline(shaderModule, true)
+    this.uniformBuffer = device.createBuffer({
+      size: 352,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
+  }
+
+  private createRenderPipeline(shaderModule: GPUShaderModule, blend: boolean): GPURenderPipeline {
+    return this.device.createRenderPipeline({
       label: 'shape-render-pipeline',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
       vertex: { module: shaderModule, entryPoint: 'vertexMain' },
       fragment: {
         module: shaderModule,
         entryPoint: 'fragmentMain',
-        targets: [{ format: 'rgba8unorm' }],
+        targets: [
+          {
+            format: 'rgba8unorm',
+            blend: blend
+              ? {
+                  color: {
+                    srcFactor: 'src-alpha',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                  },
+                  alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+                }
+              : undefined,
+          },
+        ],
       },
       primitive: { topology: 'triangle-list' },
-    })
-    this.uniformBuffer = device.createBuffer({
-      size: 352,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
   }
 
@@ -262,9 +284,16 @@ export class ShapeRenderPipeline {
     const bindGroup = this.ensureBindGroup()
     const commandEncoder = this.device.createCommandEncoder()
     const pass = commandEncoder.beginRenderPass({
-      colorAttachments: [{ view: outputTexture.createView(), loadOp: 'clear', storeOp: 'store' }],
+      colorAttachments: [
+        {
+          view: outputTexture.createView(),
+          loadOp: params.clear === false ? 'load' : 'clear',
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          storeOp: 'store',
+        },
+      ],
     })
-    pass.setPipeline(this.pipeline)
+    pass.setPipeline(params.blend ? this.blendPipeline : this.replacePipeline)
     pass.setBindGroup(0, bindGroup)
     pass.draw(6)
     pass.end()

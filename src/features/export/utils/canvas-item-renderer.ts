@@ -2467,6 +2467,7 @@ async function renderGpuMediaParticipantToTexture(
   rctx: ItemRenderContext,
   gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
   outputTexture: GPUTexture,
+  options?: { clear?: boolean; blend?: boolean },
 ): Promise<boolean> {
   const { participant, media } = prepared
 
@@ -2494,6 +2495,8 @@ async function renderGpuMediaParticipantToTexture(
             innerRadius: media.item.innerRadius,
             aspectRatioLocked: participant.item.transform?.aspectRatioLocked,
             pathVertices: media.pathVertices,
+            clear: options?.clear,
+            blend: options?.blend,
           }) ?? false)
         : media.kind === 'text' || media.kind === 'composition'
           ? (rctx.gpuMediaPipeline?.renderTextureToTexture(media.texture, mediaOutputTexture, {
@@ -2508,6 +2511,8 @@ async function renderGpuMediaParticipantToTexture(
               cornerPin: prepared.cornerPin,
               opacity: participant.transform.opacity,
               rotationRad: prepared.rotationRad,
+              clear: options?.clear,
+              blend: options?.blend,
             }) ?? false)
           : (rctx.gpuMediaPipeline?.renderSourceToTexture(media.source, mediaOutputTexture, {
               sourceWidth: media.sourceWidth,
@@ -2524,6 +2529,8 @@ async function renderGpuMediaParticipantToTexture(
               rotationRad: prepared.rotationRad,
               flipX: prepared.flipX,
               flipY: prepared.flipY,
+              clear: options?.clear,
+              blend: options?.blend,
             }) ?? false)
     if (!renderedMedia) return false
     if (mediaOutputTexture === outputTexture) return true
@@ -2905,7 +2912,7 @@ async function resolveGpuCompositionParticipantSource(
   if (!rctx.gpuPipeline || !rctx.gpuMediaPipeline) return null
   const width = Math.max(2, Math.ceil(participant.item.compositionWidth))
   const height = Math.max(2, Math.ceil(participant.item.compositionHeight))
-  const directTexture = await renderSingleGpuSubCompChildToTexture(
+  const directTexture = await renderGpuSubCompChildrenToTexture(
     participant,
     frame,
     rctx,
@@ -2961,7 +2968,7 @@ async function resolveGpuCompositionParticipantSource(
   }
 }
 
-async function renderSingleGpuSubCompChildToTexture(
+async function renderGpuSubCompChildrenToTexture(
   participant: TransitionParticipantRenderState<CompositionItem>,
   frame: number,
   rctx: ItemRenderContext,
@@ -2971,7 +2978,8 @@ async function renderSingleGpuSubCompChildToTexture(
   const gpuPipeline = rctx.gpuPipeline
   if (!gpuPipeline) return null
   const subData = rctx.subCompRenderData.get(participant.item.compositionId)
-  if (!subData || (subData.adjustmentLayers ?? []).length > 0) return null
+  const subAdjustmentLayers = subData?.adjustmentLayers ?? []
+  if (!subData || subAdjustmentLayers.length > 0) return null
   const effectiveRenderSpan = participant.renderSpan ?? getItemRenderTimelineSpan(participant.item)
   const sourceOffset = getRenderTimelineSourceStart(participant.item, effectiveRenderSpan)
   const localFrame = frame - effectiveRenderSpan.from + sourceOffset
@@ -2985,10 +2993,18 @@ async function renderSingleGpuSubCompChildToTexture(
   )
   if (activeMasks.length > 0) return null
 
-  const visibleChildren: TransitionParticipantRenderState[] = []
   const subCanvasSettings = { width, height, fps: subData.fps }
+  const occlusionCutoffOrder = findSubCompOcclusionCutoffOrder(
+    subData,
+    localFrame,
+    subCanvasSettings,
+    subAdjustmentLayers,
+    rctx,
+  )
+  const visibleChildren: TransitionParticipantRenderState[] = []
   for (const track of subData.sortedTracks) {
     if (!track.visible) continue
+    if (occlusionCutoffOrder !== null && track.order > occlusionCutoffOrder) continue
     for (const item of track.items) {
       if (localFrame < item.from || localFrame >= item.from + item.durationInFrames) continue
       if (item.type === 'adjustment' || (item.type === 'shape' && item.isMask)) continue
@@ -3011,7 +3027,7 @@ async function renderSingleGpuSubCompChildToTexture(
       })
     }
   }
-  if (visibleChildren.length !== 1) return null
+  if (visibleChildren.length === 0) return null
 
   const texture = gpuPipeline.getDevice().createTexture({
     size: { width, height },
@@ -3023,28 +3039,38 @@ async function renderSingleGpuSubCompChildToTexture(
     fps: subData.fps,
     canvasSettings: subCanvasSettings,
   }
-  const prepared = await prepareGpuMediaParticipant(visibleChildren[0]!, localFrame, subRctx)
-  if (!prepared) {
-    texture.destroy()
-    return null
-  }
   try {
-    const rendered = await renderGpuMediaParticipantToTexture(
-      prepared,
-      subRctx,
-      {
-        acquire: () => texture,
-        release: () => undefined,
-      },
-      texture,
-    )
-    if (!rendered) {
-      texture.destroy()
-      return null
+    let layerIndex = 0
+    for (const visibleChild of visibleChildren) {
+      const prepared = await prepareGpuMediaParticipant(visibleChild, localFrame, subRctx)
+      if (!prepared) {
+        texture.destroy()
+        return null
+      }
+      try {
+        const rendered = await renderGpuMediaParticipantToTexture(
+          prepared,
+          subRctx,
+          {
+            acquire: () => texture,
+            release: () => undefined,
+          },
+          texture,
+          { clear: layerIndex === 0, blend: true },
+        )
+        if (!rendered) {
+          texture.destroy()
+          return null
+        }
+      } finally {
+        prepared.media.close?.()
+      }
+      layerIndex++
     }
     return texture
-  } finally {
-    prepared.media.close?.()
+  } catch (error) {
+    texture.destroy()
+    throw error
   }
 }
 

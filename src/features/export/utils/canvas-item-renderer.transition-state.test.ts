@@ -1573,7 +1573,7 @@ describe('renderTransitionToGpuTexture', () => {
     )
   })
 
-  it('renders a single GPU-eligible sub-composition child directly to a GPU texture', async () => {
+  it('renders GPU-eligible sub-composition children directly to one layered GPU texture', async () => {
     vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, RENDER_ATTACHMENT: 8, TEXTURE_BINDING: 4 })
     const leftClip: ImageItem = {
       id: 'left-image',
@@ -1612,6 +1612,23 @@ describe('renderTransitionToGpuTexture', () => {
         opacity: 1,
       },
     } as TextItem
+    const nestedImage: ImageItem = {
+      id: 'nested-image',
+      type: 'image',
+      trackId: 'sub-track-2',
+      from: 0,
+      durationInFrames: 120,
+      src: 'nested.png',
+      label: 'Nested image',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ImageItem
     const rightClip: CompositionItem = {
       id: 'right-comp',
       type: 'composition',
@@ -1698,6 +1715,10 @@ describe('renderTransitionToGpuTexture', () => {
           leftClip.id,
           { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
         ],
+        [
+          nestedImage.id,
+          { source: { width: 640, height: 360 } as ImageBitmap, width: 640, height: 360 },
+        ],
       ]),
       gifFramesMap: new Map(),
       keyframesMap: new Map(),
@@ -1708,7 +1729,10 @@ describe('renderTransitionToGpuTexture', () => {
           {
             fps: 30,
             durationInFrames: 120,
-            sortedTracks: [{ order: 0, visible: true, items: [nestedText] }],
+            sortedTracks: [
+              { order: 1, visible: true, items: [nestedImage] },
+              { order: 0, visible: true, items: [nestedText] },
+            ],
             keyframesMap: new Map(),
             adjustmentLayers: [],
           },
@@ -1735,6 +1759,18 @@ describe('renderTransitionToGpuTexture', () => {
     expect(rendered).toBe(true)
     expect(canvasPool.acquire).not.toHaveBeenCalled()
     expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ width: 640, height: 360 }),
+      subCompTexture,
+      expect.objectContaining({
+        sourceWidth: 640,
+        sourceHeight: 360,
+        destRect: { x: 0, y: 0, width: 640, height: 360 },
+        clear: true,
+        blend: true,
+      }),
+    )
     expect(gpuTextPipeline.renderTextToTexture).toHaveBeenCalledWith(
       atlasTextTexture,
       expect.objectContaining({
@@ -1751,6 +1787,8 @@ describe('renderTransitionToGpuTexture', () => {
         sourceWidth: 640,
         sourceHeight: 180,
         destRect: { x: 0, y: 90, width: 640, height: 180 },
+        clear: false,
+        blend: true,
       }),
     )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(

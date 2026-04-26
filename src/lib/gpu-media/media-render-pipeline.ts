@@ -39,6 +39,8 @@ export interface GpuMediaRenderParams {
   rotationRad?: number
   flipX?: boolean
   flipY?: boolean
+  clear?: boolean
+  blend?: boolean
 }
 
 const MEDIA_RENDER_SHADER = /* wgsl */ `
@@ -170,7 +172,8 @@ export class MediaRenderPipeline {
   private bindGroup: GPUBindGroup | null = null
   private inputW = 0
   private inputH = 0
-  private readonly pipeline: GPURenderPipeline
+  private readonly replacePipeline: GPURenderPipeline
+  private readonly blendPipeline: GPURenderPipeline
   private readonly sampler: GPUSampler
   private readonly bindGroupLayout: GPUBindGroupLayout
   private readonly uniformBuffer: GPUBuffer
@@ -189,20 +192,39 @@ export class MediaRenderPipeline {
         { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
       ],
     })
-    this.pipeline = device.createRenderPipeline({
+    this.replacePipeline = this.createRenderPipeline(shaderModule, false)
+    this.blendPipeline = this.createRenderPipeline(shaderModule, true)
+    this.uniformBuffer = device.createBuffer({
+      size: 176,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
+  }
+
+  private createRenderPipeline(shaderModule: GPUShaderModule, blend: boolean): GPURenderPipeline {
+    return this.device.createRenderPipeline({
       label: 'media-render-pipeline',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
       vertex: { module: shaderModule, entryPoint: 'vertexMain' },
       fragment: {
         module: shaderModule,
         entryPoint: 'fragmentMain',
-        targets: [{ format: 'rgba8unorm' }],
+        targets: [
+          {
+            format: 'rgba8unorm',
+            blend: blend
+              ? {
+                  color: {
+                    srcFactor: 'src-alpha',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                  },
+                  alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+                }
+              : undefined,
+          },
+        ],
       },
       primitive: { topology: 'triangle-list' },
-    })
-    this.uniformBuffer = device.createBuffer({
-      size: 176,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
   }
 
@@ -364,12 +386,13 @@ export class MediaRenderPipeline {
       colorAttachments: [
         {
           view: outputTexture.createView(),
-          loadOp: 'clear',
+          loadOp: params.clear === false ? 'load' : 'clear',
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
           storeOp: 'store',
         },
       ],
     })
-    pass.setPipeline(this.pipeline)
+    pass.setPipeline(params.blend ? this.blendPipeline : this.replacePipeline)
     pass.setBindGroup(0, bindGroup)
     pass.draw(6)
     pass.end()
