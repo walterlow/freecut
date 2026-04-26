@@ -813,8 +813,8 @@ describe('renderTransitionToGpuTexture', () => {
       strokeColor: undefined,
       strokeWidth: 0,
       pathVertices: [
-        { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
-        { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
+        { position: [0, 0], inHandle: [0, 0], outHandle: [0.25, -0.15] },
+        { position: [1, 0], inHandle: [-0.2, 0.2], outHandle: [0, 0] },
         { position: [0.5, 1], inHandle: [0, 0], outHandle: [0, 0] },
       ],
     } as ShapeItem
@@ -888,18 +888,13 @@ describe('renderTransitionToGpuTexture', () => {
         rotationRad: (10 * Math.PI) / 180,
       }),
     )
-    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenNthCalledWith(
-      2,
-      rightTexture,
-      expect.objectContaining({
-        shapeType: 'path',
-        pathVertices: [
-          [-320, -180],
-          [320, -180],
-          [0, 180],
-        ],
-      }),
-    )
+    const pathParams = gpuShapePipeline.renderShapeToTexture.mock.calls[1]?.[1]
+    expect(pathParams).toEqual(expect.objectContaining({ shapeType: 'path' }))
+    expect(pathParams?.pathVertices).toEqual(expect.any(Array))
+    expect(pathParams?.pathVertices?.length).toBeGreaterThan(3)
+    expect(pathParams?.pathVertices?.length).toBeLessThanOrEqual(16)
+    expect(pathParams?.pathVertices?.[0]).toEqual([-320, -180])
+    expect(pathParams?.pathVertices?.at(-1)).toEqual([0, 180])
     expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalledWith(
       'iris',
       leftTexture,

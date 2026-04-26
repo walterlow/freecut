@@ -2476,19 +2476,73 @@ function resolveGpuShapePathVertices(
   transform: ItemTransform,
 ): Array<[number, number]> | null {
   const vertices = shape.pathVertices
-  if (!vertices || vertices.length < 3 || vertices.length > 16) return null
-  const hasCurves = vertices.some(
-    (vertex, index) =>
-      vertex.outHandle[0] !== 0 ||
-      vertex.outHandle[1] !== 0 ||
-      vertices[(index + 1) % vertices.length]?.inHandle[0] !== 0 ||
-      vertices[(index + 1) % vertices.length]?.inHandle[1] !== 0,
-  )
-  if (hasCurves) return null
-  return vertices.map((vertex) => [
-    (vertex.position[0] - 0.5) * transform.width,
-    (vertex.position[1] - 0.5) * transform.height,
-  ])
+  if (!vertices || vertices.length < 3) return null
+  const flattened: Array<[number, number]> = []
+  const toLocal = (position: [number, number]): [number, number] => [
+    (position[0] - 0.5) * transform.width,
+    (position[1] - 0.5) * transform.height,
+  ]
+  flattened.push(toLocal(vertices[0]!.position))
+  for (let i = 0; i < vertices.length; i++) {
+    const curr = vertices[i]!
+    const next = vertices[(i + 1) % vertices.length]!
+    const hasCurve =
+      curr.outHandle[0] !== 0 ||
+      curr.outHandle[1] !== 0 ||
+      next.inHandle[0] !== 0 ||
+      next.inHandle[1] !== 0
+    if (!hasCurve) {
+      if (i < vertices.length - 1) flattened.push(toLocal(next.position))
+      continue
+    }
+    const p0 = curr.position
+    const p1: [number, number] = [
+      curr.position[0] + curr.outHandle[0],
+      curr.position[1] + curr.outHandle[1],
+    ]
+    const p2: [number, number] = [
+      next.position[0] + next.inHandle[0],
+      next.position[1] + next.inHandle[1],
+    ]
+    const p3 = next.position
+    const steps = Math.max(2, Math.min(6, Math.ceil(estimateBezierLength(p0, p1, p2, p3) * 8)))
+    for (let step = 1; step <= steps; step++) {
+      if (i === vertices.length - 1 && step === steps) continue
+      flattened.push(toLocal(sampleCubicBezier(p0, p1, p2, p3, step / steps)))
+    }
+  }
+  return flattened.length >= 3 && flattened.length <= 16 ? flattened : null
+}
+
+function sampleCubicBezier(
+  p0: [number, number],
+  p1: [number, number],
+  p2: [number, number],
+  p3: [number, number],
+  t: number,
+): [number, number] {
+  const mt = 1 - t
+  const a = mt * mt * mt
+  const b = 3 * mt * mt * t
+  const c = 3 * mt * t * t
+  const d = t * t * t
+  return [
+    a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+    a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
+  ]
+}
+
+function estimateBezierLength(
+  p0: [number, number],
+  p1: [number, number],
+  p2: [number, number],
+  p3: [number, number],
+): number {
+  return distance2d(p0, p1) + distance2d(p1, p2) + distance2d(p2, p3)
+}
+
+function distance2d(a: [number, number], b: [number, number]): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1])
 }
 
 function resolveVideoParticipantSourceTime(
