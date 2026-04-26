@@ -212,18 +212,27 @@ export class TransitionPipeline {
     if (!this.leftView || !this.rightView) return null
     if (def.uniformSize > 0 && !uniformBuffer) return null
 
+    bindGroup = this.createBindGroup(layout, this.leftView, this.rightView, uniformBuffer)
+    this.cachedBindGroups.set(transitionId, bindGroup)
+    return bindGroup
+  }
+
+  private createBindGroup(
+    layout: GPUBindGroupLayout,
+    leftView: GPUTextureView,
+    rightView: GPUTextureView,
+    uniformBuffer: GPUBuffer | null,
+  ): GPUBindGroup {
     const entries: GPUBindGroupEntry[] = [
       { binding: 0, resource: this.sampler },
-      { binding: 1, resource: this.leftView },
-      { binding: 2, resource: this.rightView },
+      { binding: 1, resource: leftView },
+      { binding: 2, resource: rightView },
     ]
     if (uniformBuffer) {
       entries.push({ binding: 3, resource: { buffer: uniformBuffer } })
     }
 
-    bindGroup = this.device.createBindGroup({ layout, entries })
-    this.cachedBindGroups.set(transitionId, bindGroup)
-    return bindGroup
+    return this.device.createBindGroup({ layout, entries })
   }
 
   private uploadInputs(
@@ -333,7 +342,6 @@ export class TransitionPipeline {
     }
     if (!this.outputCtx) return null
 
-    // Canvas 2D stores premultiplied alpha — tell the GPU to keep it as-is
     const ok = this.renderUploadedInputsToView(
       transitionId,
       progress,
@@ -380,6 +388,74 @@ export class TransitionPipeline {
       direction,
       properties,
     )
+  }
+
+  /**
+   * Render a transition from existing GPU textures into a caller-owned GPU
+   * texture. This is the zero-upload transition path for render graph nodes that
+   * already keep clip/effect output on the GPU.
+   */
+  renderTexturesToTexture(
+    transitionId: string,
+    leftTexture: GPUTexture,
+    rightTexture: GPUTexture,
+    outputTexture: GPUTexture,
+    progress: number,
+    width: number,
+    height: number,
+    direction?: string,
+    properties?: Record<string, unknown>,
+  ): boolean {
+    const record = this.pipelines.get(transitionId)
+    const def = getGpuTransition(transitionId)
+    if (!record || !def) return false
+    if (width < 2 || height < 2) return false
+    if (
+      leftTexture.width !== width ||
+      leftTexture.height !== height ||
+      rightTexture.width !== width ||
+      rightTexture.height !== height ||
+      outputTexture.width !== width ||
+      outputTexture.height !== height
+    ) {
+      return false
+    }
+
+    const uniformBuffer = this.writeUniforms(
+      transitionId,
+      def,
+      progress,
+      width,
+      height,
+      direction,
+      properties,
+    )
+    if (def.uniformSize > 0 && !uniformBuffer) return false
+
+    const bindGroup = this.createBindGroup(
+      record.bindGroupLayout,
+      leftTexture.createView(),
+      rightTexture.createView(),
+      uniformBuffer,
+    )
+
+    const commandEncoder = this.device.createCommandEncoder()
+    const pass = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: outputTexture.createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+    })
+    pass.setPipeline(record.pipeline)
+    pass.setBindGroup(0, bindGroup)
+    pass.draw(6)
+    pass.end()
+
+    this.device.queue.submit([commandEncoder.finish()])
+    return true
   }
 
   has(transitionId: string): boolean {

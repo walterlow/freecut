@@ -1623,6 +1623,24 @@ export async function createCompositionRenderer(
           poolCanvases: OffscreenCanvas[]
         }
 
+        const renderTransitionFallbackCanvas = async (
+          task: Extract<(typeof renderTasks)[number], { type: 'transition' }>,
+        ): Promise<RenderedTaskResult> => {
+          const transitionMasks = activeMasks.filter((mask) =>
+            doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
+          )
+          const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire()
+          await renderTransitionToCanvas(
+            trCtx,
+            task.transition,
+            frame,
+            itemRenderContext,
+            task.trackOrder,
+            transitionMasks,
+          )
+          return { source: trCanvas, poolCanvases: [trCanvas] }
+        }
+
         const applyTrackScopedMasks = (
           result: RenderedTaskResult | null,
           trackOrder: number,
@@ -1685,16 +1703,7 @@ export async function createCompositionRenderer(
               gpuTexturePool.release(transitionTexture)
             }
             // Transitions: render to a dedicated canvas
-            const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire()
-            await renderTransitionToCanvas(
-              trCtx,
-              task.transition,
-              frame,
-              itemRenderContext,
-              task.trackOrder,
-              transitionMasks,
-            )
-            return { source: trCanvas, poolCanvases: [trCanvas] } satisfies RenderedTaskResult
+            return renderTransitionFallbackCanvas(task)
           }),
         )
 
@@ -1768,17 +1777,24 @@ export async function createCompositionRenderer(
             // isn't available for this frame. This preserves feature parity and
             // avoids dropping content when WebGPU canvas presentation fails.
             for (const { task, result } of compositedResults) {
-              if (!result.source) continue
+              let fallbackResult = result
+              if (!fallbackResult.source && task.type === 'transition') {
+                fallbackResult = await renderTransitionFallbackCanvas(task)
+              }
+              if (!fallbackResult.source) continue
               const blendMode =
                 task.type === 'item' ? getCurrentItem(task.item).blendMode : undefined
               if (blendMode && blendMode !== 'normal') {
                 contentCtx.globalCompositeOperation = getCompositeOperation(blendMode)
               }
 
-              contentCtx.drawImage(result.source, 0, 0)
+              contentCtx.drawImage(fallbackResult.source, 0, 0)
 
               if (blendMode && blendMode !== 'normal') {
                 contentCtx.globalCompositeOperation = 'source-over'
+              }
+              if (fallbackResult !== result) {
+                for (const c of fallbackResult.poolCanvases) canvasPool.release(c)
               }
             }
           }

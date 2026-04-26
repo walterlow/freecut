@@ -33,11 +33,7 @@ import {
   type EffectSourceMask,
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects'
-import {
-  renderTransition,
-  type ActiveTransition,
-  type TransitionCanvasSettings,
-} from './canvas-transitions'
+import { renderTransition, type ActiveTransition } from './canvas-transitions'
 import { transitionRegistry } from '@/core/timeline/transitions/registry'
 import type { ResolvedTransform } from '@/types/transform'
 import { applyMasks, buildPreparedMask, type MaskCanvasSettings } from './canvas-masks'
@@ -1862,151 +1858,40 @@ export async function renderTransitionToCanvas(
   trackOrder: number,
   trackMasks: EffectSourceMask[] = [],
 ): Promise<void> {
-  const { canvasPool, canvasSettings } = rctx
-  const { leftClip, rightClip } = activeTransition
-  const leftParticipant = resolveTransitionParticipantRenderState(
-    leftClip,
+  const participants = await renderTransitionParticipants(
     activeTransition,
     frame,
-    trackOrder,
     rctx,
-  )
-  const rightParticipant = resolveTransitionParticipantRenderState(
-    rightClip,
-    activeTransition,
-    frame,
     trackOrder,
-    rctx,
+    trackMasks,
   )
-
-  // === PERFORMANCE: Render both clips in parallel ===
-  // Video decode (mediabunny or DOM zero-copy) is the bottleneck.
-  // Running both clips concurrently halves the decode wait time.
-  const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire()
-  const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire()
-
-  // Flag the render context so renderVideoItem uses a wider DOM video
-  // drift threshold — prefer stale zero-copy frames over mediabunny stalls.
-  const prevTransitionFlag = rctx.isRenderingTransition
-  rctx.isRenderingTransition = true
-  await Promise.all([
-    renderItem(
-      leftCtx,
-      leftParticipant.item,
-      leftParticipant.transform,
-      frame,
-      rctx,
-      0,
-      leftParticipant.renderSpan,
-      trackMasks,
-    ),
-    renderItem(
-      rightCtx,
-      rightParticipant.item,
-      rightParticipant.transform,
-      frame,
-      rctx,
-      0,
-      rightParticipant.renderSpan,
-      trackMasks,
-    ),
-  ])
-  rctx.isRenderingTransition = prevTransitionFlag
-
-  // Apply effects to both clips (parallel when both have effects)
-  const leftCombinedEffects = leftParticipant.effects
-  const rightCombinedEffects = rightParticipant.effects
-
-  let leftFinalCanvas: OffscreenCanvas = leftCanvas
-  let rightFinalCanvas: OffscreenCanvas = rightCanvas
-
-  const hasLeftEffects = leftCombinedEffects.length > 0
-  const hasRightEffects = rightCombinedEffects.length > 0
-
-  const leftEffectPoolCanvases: OffscreenCanvas[] = []
-  const rightEffectPoolCanvases: OffscreenCanvas[] = []
-
-  if (hasLeftEffects || hasRightEffects) {
-    let leftEffectsPromise:
-      | Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] }>
-      | undefined
-    let rightEffectsPromise:
-      | Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] }>
-      | undefined
-
-    if (hasLeftEffects) {
-      leftEffectsPromise = renderEffectsFromMaskedSource(
-        canvasPool,
-        leftCanvas,
-        leftCombinedEffects,
-        hasCornerPin(leftParticipant.item.cornerPin) ? [] : trackMasks,
-        frame,
-        canvasSettings,
-        rctx.gpuPipeline,
-      )
-    }
-    if (hasRightEffects) {
-      rightEffectsPromise = renderEffectsFromMaskedSource(
-        canvasPool,
-        rightCanvas,
-        rightCombinedEffects,
-        hasCornerPin(rightParticipant.item.cornerPin) ? [] : trackMasks,
-        frame,
-        canvasSettings,
-        rctx.gpuPipeline,
-      )
-    }
-
-    const [leftEffects, rightEffects] = await Promise.all([
-      leftEffectsPromise ?? Promise.resolve(null),
-      rightEffectsPromise ?? Promise.resolve(null),
-    ])
-
-    if (leftEffects) {
-      leftFinalCanvas = leftEffects.source
-      leftEffectPoolCanvases.push(...leftEffects.poolCanvases)
-    }
-    if (rightEffects) {
-      rightFinalCanvas = rightEffects.source
-      rightEffectPoolCanvases.push(...rightEffects.poolCanvases)
-    }
+  try {
+    renderTransition(
+      ctx,
+      activeTransition,
+      participants.leftFinalCanvas,
+      participants.rightFinalCanvas,
+      rctx.canvasSettings,
+      rctx.gpuTransitionPipeline,
+    )
+  } finally {
+    for (const canvas of participants.poolCanvases) rctx.canvasPool.release(canvas)
   }
-
-  // Render transition with effect-applied canvases
-  const transitionSettings: TransitionCanvasSettings = canvasSettings
-  renderTransition(
-    ctx,
-    activeTransition,
-    leftFinalCanvas,
-    rightFinalCanvas,
-    transitionSettings,
-    rctx.gpuTransitionPipeline,
-  )
-
-  // Release all pool canvases (GPU output canvases are managed by the pipeline)
-  for (const effectCanvas of leftEffectPoolCanvases) canvasPool.release(effectCanvas)
-  canvasPool.release(leftCanvas)
-  for (const effectCanvas of rightEffectPoolCanvases) canvasPool.release(effectCanvas)
-  canvasPool.release(rightCanvas)
 }
 
-/**
- * Render a transition into a caller-owned GPU texture for downstream GPU
- * compositing. Falls back by returning false when the transition does not have
- * a WebGPU renderer or when the GPU transition pipeline is unavailable.
- */
-export async function renderTransitionToGpuTexture(
-  outputTexture: GPUTexture,
+type RenderedTransitionParticipants = {
+  leftFinalCanvas: OffscreenCanvas
+  rightFinalCanvas: OffscreenCanvas
+  poolCanvases: OffscreenCanvas[]
+}
+
+async function renderTransitionParticipants(
   activeTransition: ActiveTransition,
   frame: number,
   rctx: ItemRenderContext,
   trackOrder: number,
-): Promise<boolean> {
-  const renderer = transitionRegistry.getRenderer(activeTransition.transition.presentation)
-  const gpuTransitionId = renderer?.gpuTransitionId
-  const pipeline = rctx.gpuTransitionPipeline
-  if (!gpuTransitionId || !pipeline?.has(gpuTransitionId)) return false
-
+  trackMasks: EffectSourceMask[] = [],
+): Promise<RenderedTransitionParticipants> {
   const { canvasPool, canvasSettings } = rctx
   const { leftClip, rightClip } = activeTransition
   const leftParticipant = resolveTransitionParticipantRenderState(
@@ -2028,84 +1913,112 @@ export async function renderTransitionToGpuTexture(
   const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire()
   const poolCanvases = [leftCanvas, rightCanvas]
 
-  const prevTransitionFlag = rctx.isRenderingTransition
-  rctx.isRenderingTransition = true
   try {
-    await Promise.all([
-      renderItem(
-        leftCtx,
-        leftParticipant.item,
-        leftParticipant.transform,
-        frame,
-        rctx,
-        0,
-        leftParticipant.renderSpan,
-      ),
-      renderItem(
-        rightCtx,
-        rightParticipant.item,
-        rightParticipant.transform,
-        frame,
-        rctx,
-        0,
-        rightParticipant.renderSpan,
-      ),
+    const prevTransitionFlag = rctx.isRenderingTransition
+    rctx.isRenderingTransition = true
+    try {
+      await Promise.all([
+        renderItem(
+          leftCtx,
+          leftParticipant.item,
+          leftParticipant.transform,
+          frame,
+          rctx,
+          0,
+          leftParticipant.renderSpan,
+          trackMasks,
+        ),
+        renderItem(
+          rightCtx,
+          rightParticipant.item,
+          rightParticipant.transform,
+          frame,
+          rctx,
+          0,
+          rightParticipant.renderSpan,
+          trackMasks,
+        ),
+      ])
+    } finally {
+      rctx.isRenderingTransition = prevTransitionFlag
+    }
+
+    let leftFinalCanvas: OffscreenCanvas = leftCanvas
+    let rightFinalCanvas: OffscreenCanvas = rightCanvas
+
+    const [leftEffects, rightEffects] = await Promise.all([
+      leftParticipant.effects.length > 0
+        ? renderEffectsFromMaskedSource(
+            canvasPool,
+            leftCanvas,
+            leftParticipant.effects,
+            hasCornerPin(leftParticipant.item.cornerPin) ? [] : trackMasks,
+            frame,
+            canvasSettings,
+            rctx.gpuPipeline,
+          )
+        : Promise.resolve(null),
+      rightParticipant.effects.length > 0
+        ? renderEffectsFromMaskedSource(
+            canvasPool,
+            rightCanvas,
+            rightParticipant.effects,
+            hasCornerPin(rightParticipant.item.cornerPin) ? [] : trackMasks,
+            frame,
+            canvasSettings,
+            rctx.gpuPipeline,
+          )
+        : Promise.resolve(null),
     ])
-  } finally {
-    rctx.isRenderingTransition = prevTransitionFlag
+
+    if (leftEffects) {
+      leftFinalCanvas = leftEffects.source
+      poolCanvases.push(...leftEffects.poolCanvases)
+    }
+    if (rightEffects) {
+      rightFinalCanvas = rightEffects.source
+      poolCanvases.push(...rightEffects.poolCanvases)
+    }
+
+    return { leftFinalCanvas, rightFinalCanvas, poolCanvases }
+  } catch (error) {
+    for (const canvas of poolCanvases) canvasPool.release(canvas)
+    throw error
   }
+}
 
-  let leftFinalCanvas: OffscreenCanvas = leftCanvas
-  let rightFinalCanvas: OffscreenCanvas = rightCanvas
+/**
+ * Render a transition into a caller-owned GPU texture for downstream GPU
+ * compositing. Falls back by returning false when the transition does not have
+ * a WebGPU renderer or when the GPU transition pipeline is unavailable.
+ */
+export async function renderTransitionToGpuTexture(
+  outputTexture: GPUTexture,
+  activeTransition: ActiveTransition,
+  frame: number,
+  rctx: ItemRenderContext,
+  trackOrder: number,
+): Promise<boolean> {
+  const renderer = transitionRegistry.getRenderer(activeTransition.transition.presentation)
+  const gpuTransitionId = renderer?.gpuTransitionId
+  const pipeline = rctx.gpuTransitionPipeline
+  if (!gpuTransitionId || !pipeline?.has(gpuTransitionId)) return false
 
-  const [leftEffects, rightEffects] = await Promise.all([
-    leftParticipant.effects.length > 0
-      ? renderEffectsFromMaskedSource(
-          canvasPool,
-          leftCanvas,
-          leftParticipant.effects,
-          hasCornerPin(leftParticipant.item.cornerPin) ? [] : [],
-          frame,
-          canvasSettings,
-          rctx.gpuPipeline,
-        )
-      : Promise.resolve(null),
-    rightParticipant.effects.length > 0
-      ? renderEffectsFromMaskedSource(
-          canvasPool,
-          rightCanvas,
-          rightParticipant.effects,
-          hasCornerPin(rightParticipant.item.cornerPin) ? [] : [],
-          frame,
-          canvasSettings,
-          rctx.gpuPipeline,
-        )
-      : Promise.resolve(null),
-  ])
-
-  if (leftEffects) {
-    leftFinalCanvas = leftEffects.source
-    poolCanvases.push(...leftEffects.poolCanvases)
-  }
-  if (rightEffects) {
-    rightFinalCanvas = rightEffects.source
-    poolCanvases.push(...rightEffects.poolCanvases)
-  }
-
+  const participants = await renderTransitionParticipants(activeTransition, frame, rctx, trackOrder)
   try {
     return pipeline.renderToTexture(
       gpuTransitionId,
-      leftFinalCanvas,
-      rightFinalCanvas,
+      participants.leftFinalCanvas,
+      participants.rightFinalCanvas,
       outputTexture,
       activeTransition.progress,
-      canvasSettings.width,
-      canvasSettings.height,
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
       activeTransition.transition.direction as string | undefined,
       activeTransition.transition.properties,
     )
   } finally {
-    for (const canvas of poolCanvases) canvasPool.release(canvas)
+    for (const canvas of participants.poolCanvases) rctx.canvasPool.release(canvas)
   }
 }
 
