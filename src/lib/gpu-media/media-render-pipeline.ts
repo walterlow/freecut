@@ -28,6 +28,13 @@ export interface GpuMediaRenderParams {
     bottom: number
   }
   cornerRadius?: number
+  cornerPin?: {
+    originX: number
+    originY: number
+    width: number
+    height: number
+    inverseMatrix: [number, number, number, number, number, number, number, number, number]
+  }
   opacity?: number
   rotationRad?: number
   flipX?: boolean
@@ -67,6 +74,10 @@ struct MediaUniforms {
   transformRect: vec4f,
   feather: vec4f,
   mask: vec4f,
+  cornerPinOriginSize: vec4f,
+  cornerPinMatrix0: vec4f,
+  cornerPinMatrix1: vec4f,
+  cornerPinMatrix2: vec4f,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -86,13 +97,31 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     relative.x * sinR + relative.y * cosR
   );
   let unrotatedPixel = transformCenter + transformLocal;
+
+  var samplePixel = unrotatedPixel;
+  if (u.mask.y > 0.5) {
+    let pinPixel = unrotatedPixel - u.cornerPinOriginSize.xy;
+    let pinDenom = u.cornerPinMatrix2.x * pinPixel.x + u.cornerPinMatrix2.y * pinPixel.y + u.cornerPinMatrix2.z;
+    if (abs(pinDenom) < 0.00001) {
+      return vec4f(0.0);
+    }
+    let pinLocal = vec2f(
+      (u.cornerPinMatrix0.x * pinPixel.x + u.cornerPinMatrix0.y * pinPixel.y + u.cornerPinMatrix0.z) / pinDenom,
+      (u.cornerPinMatrix1.x * pinPixel.x + u.cornerPinMatrix1.y * pinPixel.y + u.cornerPinMatrix1.z) / pinDenom
+    );
+    if (pinLocal.x < 0.0 || pinLocal.y < 0.0 || pinLocal.x > u.cornerPinOriginSize.z || pinLocal.y > u.cornerPinOriginSize.w) {
+      return vec4f(0.0);
+    }
+    samplePixel = u.cornerPinOriginSize.xy + pinLocal;
+  }
+
   let destMin = u.destRect.xy;
   let destMax = u.destRect.xy + u.destRect.zw;
-  if (unrotatedPixel.x < destMin.x || unrotatedPixel.y < destMin.y || unrotatedPixel.x > destMax.x || unrotatedPixel.y > destMax.y) {
+  if (samplePixel.x < destMin.x || samplePixel.y < destMin.y || samplePixel.x > destMax.x || samplePixel.y > destMax.y) {
     return vec4f(0.0);
   }
 
-  var localUv = (unrotatedPixel - destMin) / max(u.destRect.zw, vec2f(0.001));
+  var localUv = (samplePixel - destMin) / max(u.destRect.zw, vec2f(0.001));
   if (u.flip.x < 0.0) {
     localUv.x = 1.0 - localUv.x;
   }
@@ -102,7 +131,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let sourcePixel = u.sourceRect.xy + localUv * u.sourceRect.zw;
   let sourceUv = sourcePixel / max(u.sourceSize, vec2f(0.001));
   let color = textureSample(texSampler, sourceTex, sourceUv);
-  let viewportLocal = unrotatedPixel - u.destRect.xy;
+  let viewportLocal = samplePixel - u.destRect.xy;
   let leftAlpha = select(1.0, clamp(viewportLocal.x / max(u.feather.x, 0.001), 0.0, 1.0), u.feather.x > 0.0);
   let rightAlpha = select(1.0, clamp((u.destRect.z - viewportLocal.x) / max(u.feather.y, 0.001), 0.0, 1.0), u.feather.y > 0.0);
   let topAlpha = select(1.0, clamp(viewportLocal.y / max(u.feather.z, 0.001), 0.0, 1.0), u.feather.z > 0.0);
@@ -112,7 +141,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let radius = min(u.mask.x, min(u.transformRect.z, u.transformRect.w) * 0.5);
   var cornerAlpha = 1.0;
   if (radius > 0.0) {
-    let itemLocal = unrotatedPixel - u.transformRect.xy;
+    let itemLocal = samplePixel - u.transformRect.xy;
     let roundedDistance = length(max(abs(itemLocal - transformHalfSize) - (transformHalfSize - vec2f(radius)), vec2f(0.0))) - radius;
     cornerAlpha = 1.0 - smoothstep(-0.75, 0.75, roundedDistance);
   }
@@ -172,7 +201,7 @@ export class MediaRenderPipeline {
       primitive: { topology: 'triangle-list' },
     })
     this.uniformBuffer = device.createBuffer({
-      size: 112,
+      size: 176,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
   }
@@ -210,6 +239,7 @@ export class MediaRenderPipeline {
     }
     const transformRect = params.transformRect ?? params.destRect
     const featherPixels = params.featherPixels ?? { left: 0, right: 0, top: 0, bottom: 0 }
+    const cornerPin = params.cornerPin
     const uniformData = new Float32Array([
       params.outputWidth,
       params.outputHeight,
@@ -236,8 +266,24 @@ export class MediaRenderPipeline {
       featherPixels.top,
       featherPixels.bottom,
       params.cornerRadius ?? 0,
+      cornerPin ? 1 : 0,
       0,
       0,
+      cornerPin?.originX ?? 0,
+      cornerPin?.originY ?? 0,
+      cornerPin?.width ?? 0,
+      cornerPin?.height ?? 0,
+      cornerPin?.inverseMatrix[0] ?? 1,
+      cornerPin?.inverseMatrix[1] ?? 0,
+      cornerPin?.inverseMatrix[2] ?? 0,
+      0,
+      cornerPin?.inverseMatrix[3] ?? 0,
+      cornerPin?.inverseMatrix[4] ?? 1,
+      cornerPin?.inverseMatrix[5] ?? 0,
+      0,
+      cornerPin?.inverseMatrix[6] ?? 0,
+      cornerPin?.inverseMatrix[7] ?? 0,
+      cornerPin?.inverseMatrix[8] ?? 1,
       0,
     ])
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformData)

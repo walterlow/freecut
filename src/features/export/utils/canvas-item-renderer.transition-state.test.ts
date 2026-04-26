@@ -390,6 +390,12 @@ describe('renderTransitionToGpuTexture', () => {
       durationInFrames: 60,
       src: 'left.png',
       label: 'Left image',
+      cornerPin: {
+        topLeft: [12, 8],
+        topRight: [-10, 4],
+        bottomRight: [-18, -14],
+        bottomLeft: [6, -12],
+      },
       transform: {
         x: 10,
         y: 20,
@@ -487,6 +493,13 @@ describe('renderTransitionToGpuTexture', () => {
         rotationRad: (15 * Math.PI) / 180,
         flipX: true,
         flipY: false,
+        cornerPin: expect.objectContaining({
+          originX: expect.any(Number),
+          originY: expect.any(Number),
+          width: expect.any(Number),
+          height: expect.any(Number),
+          inverseMatrix: expect.any(Array),
+        }),
       }),
     )
     expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
