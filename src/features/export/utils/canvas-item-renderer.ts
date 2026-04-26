@@ -63,7 +63,7 @@ import {
   type PreviewPathVerticesOverride,
 } from '@/features/export/deps/composition-runtime'
 import { resolveAnimatedTextItem } from '@/features/export/deps/keyframes'
-import { calculateMediaCropLayout } from '@/shared/utils/media-crop'
+import { calculateMediaCropLayout, hasMediaCrop } from '@/shared/utils/media-crop'
 import {
   getItemRenderTimelineSpan,
   getRenderTimelineSourceStart,
@@ -1721,10 +1721,21 @@ async function renderCompositionItem(
     }
 
     const subAdjustmentLayers = subData.adjustmentLayers ?? []
+    const occlusionCutoffOrder =
+      activeSubMasks.length === 0
+        ? findSubCompOcclusionCutoffOrder(
+            subData,
+            localFrame,
+            subCanvasSettings,
+            subAdjustmentLayers,
+            rctx,
+          )
+        : null
 
     let renderedSubItems = 0
     for (const track of subData.sortedTracks) {
       if (!track.visible) continue
+      if (occlusionCutoffOrder !== null && track.order > occlusionCutoffOrder) continue
 
       const applicableMasks = activeSubMasks.filter((mask) =>
         doesMaskAffectTrack(mask.trackOrder, track.order),
@@ -1872,6 +1883,76 @@ async function renderCompositionItem(
     rctx.canvasPool.release(subContentCanvas)
     rctx.canvasPool.release(subCanvas)
   }
+}
+
+function findSubCompOcclusionCutoffOrder(
+  subData: SubCompRenderData,
+  localFrame: number,
+  canvasSettings: CanvasSettings,
+  adjustmentLayers: AdjustmentLayerWithTrackOrder[],
+  rctx: ItemRenderContext,
+): number | null {
+  for (const track of [...subData.sortedTracks].sort((a, b) => a.order - b.order)) {
+    if (!track.visible) continue
+    for (const item of track.items) {
+      if (
+        isSubCompFullyOccludingItem(
+          item,
+          track.order,
+          localFrame,
+          canvasSettings,
+          subData.keyframesMap,
+          adjustmentLayers,
+          rctx,
+        )
+      ) {
+        return track.order
+      }
+    }
+  }
+  return null
+}
+
+function isSubCompFullyOccludingItem(
+  item: TimelineItem,
+  trackOrder: number,
+  localFrame: number,
+  canvasSettings: CanvasSettings,
+  keyframesMap: Map<string, ItemKeyframes>,
+  adjustmentLayers: AdjustmentLayerWithTrackOrder[],
+  rctx: ItemRenderContext,
+): boolean {
+  if (localFrame < item.from || localFrame >= item.from + item.durationInFrames) return false
+  if (item.type !== 'video' && item.type !== 'image') return false
+  if (item.blendMode && item.blendMode !== 'normal') return false
+  if (hasCornerPin(item.cornerPin)) return false
+  if ((item.effects ?? []).some((effect) => effect.enabled !== false)) return false
+  const adjustmentEffects = getAdjustmentLayerEffects(
+    trackOrder,
+    adjustmentLayers,
+    localFrame,
+    rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride : undefined,
+    rctx.renderMode === 'preview' ? rctx.getLiveItemSnapshotById : undefined,
+  )
+  if (adjustmentEffects.some((effect) => effect.enabled !== false)) return false
+  const keyframes = keyframesMap.get(item.id)
+  if (hasMediaCrop(getAnimatedCrop(item, keyframes, localFrame, canvasSettings))) return false
+  const transform = getAnimatedTransform(item, keyframes, localFrame, canvasSettings)
+  if (transform.opacity < 1) return false
+  const rotation = transform.rotation % 360
+  if (rotation !== 0 && rotation !== 180 && rotation !== -180) return false
+  if (transform.cornerRadius > 0) return false
+  const left = canvasSettings.width / 2 + transform.x - transform.width / 2
+  const top = canvasSettings.height / 2 + transform.y - transform.height / 2
+  const right = left + transform.width
+  const bottom = top + transform.height
+  const tolerance = 1
+  return (
+    left <= tolerance &&
+    top <= tolerance &&
+    right >= canvasSettings.width - tolerance &&
+    bottom >= canvasSettings.height - tolerance
+  )
 }
 
 // ---------------------------------------------------------------------------
