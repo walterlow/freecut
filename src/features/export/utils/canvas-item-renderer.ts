@@ -3213,14 +3213,19 @@ async function renderPreparedGpuSubCompLayerToTexture(
         layerMaskTexture = maskTextures[0]!
       } else {
         let currentMaskTexture = maskTextures[0]!
+        let currentMaskInverted = masks[0]?.inverted ?? false
         for (let i = 1; i < maskTextures.length; i++) {
           const targetTexture = combinedMaskTextures[i - 1]!
           if (
-            !gpuMaskCombinePipeline?.combine(currentMaskTexture, maskTextures[i]!, targetTexture)
+            !gpuMaskCombinePipeline?.combine(currentMaskTexture, maskTextures[i]!, targetTexture, {
+              invertBase: currentMaskInverted,
+              invertNext: masks[i]?.inverted ?? false,
+            })
           ) {
             return false
           }
           currentMaskTexture = targetTexture
+          currentMaskInverted = false
         }
         layerMaskTexture = currentMaskTexture
       }
@@ -3254,6 +3259,7 @@ async function renderPreparedGpuSubCompLayerToTexture(
       clear: options.clear,
       blend: options.blend,
       maskTexture: layerMaskTexture ?? undefined,
+      maskInvert: masks.length === 1 ? masks[0]?.inverted : false,
     })
   } finally {
     baseTexture.destroy()
@@ -3266,8 +3272,7 @@ async function renderPreparedGpuSubCompLayerToTexture(
 function areGpuSubCompMasksSupported(masks: ReturnType<typeof getActiveSubCompMasks>): boolean {
   if (masks.length === 0) return true
   for (const mask of masks) {
-    if (mask.bitmapMask || mask.maskType !== 'clip' || mask.feather > 0 || mask.inverted)
-      return false
+    if (mask.bitmapMask || mask.maskType !== 'clip' || mask.feather > 0) return false
     if (hasCornerPin(mask.shape.cornerPin)) return false
     if ((mask.shape.strokeWidth ?? 0) > 0) return false
     if (

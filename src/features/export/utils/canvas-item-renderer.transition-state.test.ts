@@ -1677,6 +1677,7 @@ describe('renderTransitionToGpuTexture', () => {
       shapeType: 'ellipse',
       isMask: true,
       maskType: 'clip',
+      maskInvert: true,
       fillColor: '#ffffff',
       transform: {
         x: 0,
@@ -1911,6 +1912,7 @@ describe('renderTransitionToGpuTexture', () => {
       imageMaskTexture,
       imageMaskTexture2,
       combinedImageMaskTexture,
+      { invertBase: false, invertNext: true },
     )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
       1,
