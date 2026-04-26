@@ -1951,6 +1951,14 @@ type ResolvedGpuMediaParticipantSource =
       texture: GPUTexture
       close?: () => void
     }
+  | {
+      kind: 'composition'
+      item: CompositionItem
+      sourceWidth: number
+      sourceHeight: number
+      texture: GPUTexture
+      close?: () => void
+    }
 
 type PreparedGpuMediaParticipant = {
   participant: TransitionParticipantRenderState
@@ -2351,7 +2359,7 @@ async function renderGpuMediaParticipantToTexture(
             aspectRatioLocked: participant.item.transform?.aspectRatioLocked,
             pathVertices: media.pathVertices,
           }) ?? false)
-        : media.kind === 'text'
+        : media.kind === 'text' || media.kind === 'composition'
           ? (rctx.gpuMediaPipeline?.renderTextureToTexture(media.texture, mediaOutputTexture, {
               sourceWidth: media.sourceWidth,
               sourceHeight: media.sourceHeight,
@@ -2459,6 +2467,28 @@ async function prepareGpuMediaParticipant(
     }
   }
 
+  if (media.kind === 'composition') {
+    const transformRect = calculateMediaDrawDimensions(
+      media.sourceWidth,
+      media.sourceHeight,
+      participant.transform,
+      rctx.canvasSettings,
+    )
+    if (transformRect.width <= 0 || transformRect.height <= 0) return null
+    return {
+      participant,
+      media,
+      sourceRect: { x: 0, y: 0, width: media.sourceWidth, height: media.sourceHeight },
+      destRect: transformRect,
+      transformRect,
+      featherPixels: { left: 0, right: 0, top: 0, bottom: 0 },
+      cornerRadius: participant.transform.cornerRadius,
+      rotationRad: (participant.transform.rotation * Math.PI) / 180,
+      flipX: false,
+      flipY: false,
+    }
+  }
+
   const layout = calculateContainedMediaDrawLayout(
     media.sourceWidth,
     media.sourceHeight,
@@ -2553,6 +2583,14 @@ async function resolveGpuMediaParticipantSource(
   if (participant.item.type === 'text') {
     return resolveGpuTextParticipantSource(
       participant as TransitionParticipantRenderState<TextItem>,
+      frame,
+      rctx,
+    )
+  }
+
+  if (participant.item.type === 'composition') {
+    return resolveGpuCompositionParticipantSource(
+      participant as TransitionParticipantRenderState<CompositionItem>,
       frame,
       rctx,
     )
@@ -2721,6 +2759,52 @@ function resolveGpuTextParticipantSource(
 
 function isGpuGlyphAtlasTextEligible(): boolean {
   return true
+}
+
+async function resolveGpuCompositionParticipantSource(
+  participant: TransitionParticipantRenderState<CompositionItem>,
+  frame: number,
+  rctx: ItemRenderContext,
+): Promise<ResolvedGpuMediaParticipantSource | null> {
+  if (!rctx.gpuPipeline || !rctx.gpuMediaPipeline) return null
+  const width = Math.max(2, Math.ceil(participant.item.compositionWidth))
+  const height = Math.max(2, Math.ceil(participant.item.compositionHeight))
+  const { canvas, ctx } = rctx.canvasPool.acquire()
+  try {
+    canvas.width = width
+    canvas.height = height
+    ctx.clearRect(0, 0, width, height)
+    await renderCompositionItem(
+      ctx,
+      participant.item,
+      { x: 0, y: 0, width, height, rotation: 0, opacity: 1, cornerRadius: 0 },
+      frame,
+      rctx,
+      participant.renderSpan,
+    )
+    const texture = rctx.gpuPipeline.getDevice().createTexture({
+      size: { width, height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    })
+    rctx.gpuPipeline
+      .getDevice()
+      .queue.copyExternalImageToTexture(
+        { source: canvas, flipY: false },
+        { texture },
+        { width, height },
+      )
+    return {
+      kind: 'composition',
+      item: participant.item,
+      sourceWidth: width,
+      sourceHeight: height,
+      texture,
+      close: () => texture.destroy(),
+    }
+  } finally {
+    rctx.canvasPool.release(canvas)
+  }
 }
 
 function getGpuTextTextureCacheKey(item: TextItem, width: number, height: number): string {

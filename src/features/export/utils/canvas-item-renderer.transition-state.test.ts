@@ -1413,6 +1413,7 @@ describe('renderTransitionToGpuTexture', () => {
   })
 
   it('keeps GPU-eligible participants direct when the opposite side is a sub-composition', async () => {
+    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, TEXTURE_BINDING: 4 })
     const leftClip: ImageItem = {
       id: 'left-image',
       type: 'image',
@@ -1456,11 +1457,18 @@ describe('renderTransitionToGpuTexture', () => {
     })
     const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
     const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const subCompTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
     const outputTexture = { width: 1920, height: 1080 } as GPUTexture
     const canvases = Array.from({ length: 3 }, () => ({
       canvas: { width: 1920, height: 1080 } as OffscreenCanvas,
       ctx: createMockCtx(),
     }))
+    const subSourceCanvas = canvases[0]!.canvas
     const gpuTexturePool = {
       acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
       release: vi.fn(),
@@ -1469,11 +1477,17 @@ describe('renderTransitionToGpuTexture', () => {
       acquire: vi.fn(() => canvases.shift()!),
       release: vi.fn(),
     }
+    const device = {
+      createTexture: vi.fn(() => subCompTexture),
+      queue: { copyExternalImageToTexture: vi.fn() },
+    }
     const gpuPipeline = {
+      getDevice: vi.fn(() => device),
       applyEffectsToTexture: vi.fn().mockReturnValue(true),
     }
     const gpuMediaPipeline = {
       renderSourceToTexture: vi.fn().mockReturnValue(true),
+      renderTextureToTexture: vi.fn().mockReturnValue(true),
     }
     const gpuTransitionPipeline = {
       has: vi.fn().mockReturnValue(true),
@@ -1530,7 +1544,22 @@ describe('renderTransitionToGpuTexture', () => {
     expect(rendered).toBe(true)
     expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenCalledTimes(1)
     expect(canvasPool.acquire).toHaveBeenCalledTimes(3)
-    expect(gpuPipeline.applyEffectsToTexture).toHaveBeenCalledTimes(1)
+    expect(gpuPipeline.applyEffectsToTexture).not.toHaveBeenCalled()
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledWith(
+      { source: subSourceCanvas, flipY: false },
+      { texture: subCompTexture },
+      { width: 640, height: 360 },
+    )
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenCalledWith(
+      subCompTexture,
+      rightTexture,
+      expect.objectContaining({
+        sourceWidth: 640,
+        sourceHeight: 360,
+        destRect: { x: 640, y: 360, width: 640, height: 360 },
+      }),
+    )
+    expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
     expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalledWith(
       'iris',
       leftTexture,
