@@ -64,6 +64,7 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
     save: vi.fn(),
     restore: vi.fn(),
     beginPath: vi.fn(),
+    closePath: vi.fn(),
     roundRect: vi.fn(),
     rect: vi.fn(),
     clip: vi.fn(),
@@ -80,6 +81,8 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
     translate: vi.fn(),
     rotate: vi.fn(),
     scale: vi.fn(),
+    transform: vi.fn(),
+    setTransform: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     stroke: vi.fn(),
@@ -1586,6 +1589,22 @@ describe('renderTransitionToGpuTexture', () => {
       TEXTURE_BINDING: 4,
     })
     vi.stubGlobal('Path2D', class {})
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        width: number
+        height: number
+
+        constructor(width: number, height: number) {
+          this.width = width
+          this.height = height
+        }
+
+        getContext() {
+          return createMockCtx()
+        }
+      },
+    )
     const leftClip: ImageItem = {
       id: 'left-image',
       type: 'image',
@@ -1689,6 +1708,32 @@ describe('renderTransitionToGpuTexture', () => {
         opacity: 1,
       },
     } as ShapeItem
+    const nestedMask3: ShapeItem = {
+      id: 'nested-mask-3',
+      type: 'shape',
+      trackId: 'sub-track-1',
+      from: 0,
+      durationInFrames: 120,
+      label: 'Nested corner mask',
+      shapeType: 'rectangle',
+      isMask: true,
+      maskType: 'clip',
+      fillColor: '#ffffff',
+      cornerPin: {
+        topLeft: [12, 0],
+        topRight: [-18, 20],
+        bottomRight: [-8, -16],
+        bottomLeft: [18, -10],
+      },
+      transform: {
+        x: 0,
+        y: 0,
+        width: 420,
+        height: 300,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ShapeItem
     const rightClip: CompositionItem = {
       id: 'right-comp',
       type: 'composition',
@@ -1747,6 +1792,18 @@ describe('renderTransitionToGpuTexture', () => {
       createView: vi.fn(),
       destroy: vi.fn(),
     } as unknown as GPUTexture
+    const imageMaskTexture3 = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const combinedImageMaskTexture2 = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
     const atlasTextTexture = {
       width: 640,
       height: 180,
@@ -1774,7 +1831,9 @@ describe('renderTransitionToGpuTexture', () => {
         .mockReturnValueOnce(imageEffectTexture)
         .mockReturnValueOnce(imageMaskTexture)
         .mockReturnValueOnce(imageMaskTexture2)
+        .mockReturnValueOnce(imageMaskTexture3)
         .mockReturnValueOnce(combinedImageMaskTexture)
+        .mockReturnValueOnce(combinedImageMaskTexture2)
         .mockReturnValueOnce(atlasTextTexture)
         .mockReturnValueOnce(textBaseTexture)
         .mockReturnValueOnce(textEffectTexture),
@@ -1847,7 +1906,11 @@ describe('renderTransitionToGpuTexture', () => {
             durationInFrames: 120,
             sortedTracks: [
               { order: 1, visible: true, items: [nestedImage] },
-              { order: 0, visible: true, items: [nestedText, nestedMask, nestedMask2] },
+              {
+                order: 0,
+                visible: true,
+                items: [nestedText, nestedMask, nestedMask2, nestedMask3],
+              },
             ],
             keyframesMap: new Map(),
             adjustmentLayers: [],
@@ -1876,7 +1939,11 @@ describe('renderTransitionToGpuTexture', () => {
 
     expect(rendered).toBe(true)
     expect(canvasPool.acquire).not.toHaveBeenCalled()
-    expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledWith(
+      { source: expect.objectContaining({ width: 640, height: 360 }), flipY: false },
+      { texture: imageMaskTexture3 },
+      { width: 640, height: 360 },
+    )
     expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ width: 640, height: 360 }),
@@ -1916,6 +1983,12 @@ describe('renderTransitionToGpuTexture', () => {
       combinedImageMaskTexture,
       { invertBase: false, invertNext: true },
     )
+    expect(gpuMaskCombinePipeline.combine).toHaveBeenCalledWith(
+      combinedImageMaskTexture,
+      imageMaskTexture3,
+      combinedImageMaskTexture2,
+      { invertBase: false, invertNext: false },
+    )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
       1,
       imageBaseTexture,
@@ -1926,7 +1999,7 @@ describe('renderTransitionToGpuTexture', () => {
         destRect: { x: 0, y: 0, width: 640, height: 360 },
         clear: true,
         blend: true,
-        maskTexture: combinedImageMaskTexture,
+        maskTexture: combinedImageMaskTexture2,
       }),
     )
     expect(gpuTextPipeline.renderTextToTexture).toHaveBeenCalledWith(
@@ -1989,7 +2062,9 @@ describe('renderTransitionToGpuTexture', () => {
     expect(imageEffectTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageMaskTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageMaskTexture2.destroy).toHaveBeenCalledTimes(1)
+    expect(imageMaskTexture3.destroy).toHaveBeenCalledTimes(1)
     expect(combinedImageMaskTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(combinedImageMaskTexture2.destroy).toHaveBeenCalledTimes(1)
     expect(textBaseTexture.destroy).toHaveBeenCalledTimes(1)
     expect(textEffectTexture.destroy).toHaveBeenCalledTimes(1)
     expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)

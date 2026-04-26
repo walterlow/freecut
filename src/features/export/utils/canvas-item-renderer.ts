@@ -3272,7 +3272,7 @@ async function renderPreparedGpuSubCompLayerToTexture(
 function areGpuSubCompMasksSupported(masks: ReturnType<typeof getActiveSubCompMasks>): boolean {
   if (masks.length === 0) return true
   for (const mask of masks) {
-    if (mask.bitmapMask) return false
+    if (mask.bitmapMask) continue
     if (hasCornerPin(mask.shape.cornerPin)) return false
     if ((mask.shape.strokeWidth ?? 0) > 0) return false
     if (
@@ -3290,6 +3290,22 @@ function renderGpuSubCompMaskToTexture(
   rctx: ItemRenderContext,
   outputTexture: GPUTexture,
 ): boolean {
+  if (mask.bitmapMask) {
+    const device = rctx.gpuPipeline?.getDevice()
+    if (!device) return false
+    if (
+      outputTexture.width !== mask.bitmapMask.width ||
+      outputTexture.height !== mask.bitmapMask.height
+    ) {
+      return false
+    }
+    device.queue.copyExternalImageToTexture(
+      { source: mask.bitmapMask, flipY: false },
+      { texture: outputTexture },
+      { width: mask.bitmapMask.width, height: mask.bitmapMask.height },
+    )
+    return true
+  }
   const gpuShapePipeline = rctx.gpuShapePipeline
   if (!gpuShapePipeline) return false
   const pathVertices =
