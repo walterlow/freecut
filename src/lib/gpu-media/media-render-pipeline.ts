@@ -20,6 +20,14 @@ export interface GpuMediaRenderParams {
   outputHeight: number
   sourceRect?: GpuMediaRect
   destRect: GpuMediaRect
+  transformRect?: GpuMediaRect
+  featherPixels?: {
+    left: number
+    right: number
+    top: number
+    bottom: number
+  }
+  cornerRadius?: number
   opacity?: number
   rotationRad?: number
   flipX?: boolean
@@ -56,6 +64,9 @@ struct MediaUniforms {
   opacity: f32,
   rotation: f32,
   flip: vec2f,
+  transformRect: vec4f,
+  feather: vec4f,
+  mask: vec4f,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -65,20 +76,23 @@ struct MediaUniforms {
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let pixel = input.uv * u.outputSize;
-  let halfSize = u.destRect.zw * 0.5;
-  let center = u.destRect.xy + halfSize;
-  let relative = pixel - center;
+  let transformHalfSize = u.transformRect.zw * 0.5;
+  let transformCenter = u.transformRect.xy + transformHalfSize;
+  let relative = pixel - transformCenter;
   let cosR = cos(-u.rotation);
   let sinR = sin(-u.rotation);
-  let local = vec2f(
+  let transformLocal = vec2f(
     relative.x * cosR - relative.y * sinR,
     relative.x * sinR + relative.y * cosR
   );
-  if (abs(local.x) > halfSize.x || abs(local.y) > halfSize.y) {
+  let unrotatedPixel = transformCenter + transformLocal;
+  let destMin = u.destRect.xy;
+  let destMax = u.destRect.xy + u.destRect.zw;
+  if (unrotatedPixel.x < destMin.x || unrotatedPixel.y < destMin.y || unrotatedPixel.x > destMax.x || unrotatedPixel.y > destMax.y) {
     return vec4f(0.0);
   }
 
-  var localUv = (local + halfSize) / max(u.destRect.zw, vec2f(0.001));
+  var localUv = (unrotatedPixel - destMin) / max(u.destRect.zw, vec2f(0.001));
   if (u.flip.x < 0.0) {
     localUv.x = 1.0 - localUv.x;
   }
@@ -88,7 +102,22 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let sourcePixel = u.sourceRect.xy + localUv * u.sourceRect.zw;
   let sourceUv = sourcePixel / max(u.sourceSize, vec2f(0.001));
   let color = textureSample(texSampler, sourceTex, sourceUv);
-  return vec4f(color.rgb, color.a * u.opacity);
+  let viewportLocal = unrotatedPixel - u.destRect.xy;
+  let leftAlpha = select(1.0, clamp(viewportLocal.x / max(u.feather.x, 0.001), 0.0, 1.0), u.feather.x > 0.0);
+  let rightAlpha = select(1.0, clamp((u.destRect.z - viewportLocal.x) / max(u.feather.y, 0.001), 0.0, 1.0), u.feather.y > 0.0);
+  let topAlpha = select(1.0, clamp(viewportLocal.y / max(u.feather.z, 0.001), 0.0, 1.0), u.feather.z > 0.0);
+  let bottomAlpha = select(1.0, clamp((u.destRect.w - viewportLocal.y) / max(u.feather.w, 0.001), 0.0, 1.0), u.feather.w > 0.0);
+  let featherAlpha = leftAlpha * rightAlpha * topAlpha * bottomAlpha;
+
+  let radius = min(u.mask.x, min(u.transformRect.z, u.transformRect.w) * 0.5);
+  var cornerAlpha = 1.0;
+  if (radius > 0.0) {
+    let itemLocal = unrotatedPixel - u.transformRect.xy;
+    let roundedDistance = length(max(abs(itemLocal - transformHalfSize) - (transformHalfSize - vec2f(radius)), vec2f(0.0))) - radius;
+    cornerAlpha = 1.0 - smoothstep(-0.75, 0.75, roundedDistance);
+  }
+
+  return vec4f(color.rgb, color.a * u.opacity * featherAlpha * cornerAlpha);
 }
 `
 
@@ -142,7 +171,7 @@ export class MediaRenderPipeline {
       primitive: { topology: 'triangle-list' },
     })
     this.uniformBuffer = device.createBuffer({
-      size: 64,
+      size: 112,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
   }
@@ -178,6 +207,8 @@ export class MediaRenderPipeline {
       width: sourceWidth,
       height: sourceHeight,
     }
+    const transformRect = params.transformRect ?? params.destRect
+    const featherPixels = params.featherPixels ?? { left: 0, right: 0, top: 0, bottom: 0 }
     const uniformData = new Float32Array([
       params.outputWidth,
       params.outputHeight,
@@ -195,6 +226,18 @@ export class MediaRenderPipeline {
       params.rotationRad ?? 0,
       params.flipX ? -1 : 1,
       params.flipY ? -1 : 1,
+      transformRect.x,
+      transformRect.y,
+      transformRect.width,
+      transformRect.height,
+      featherPixels.left,
+      featherPixels.right,
+      featherPixels.top,
+      featherPixels.bottom,
+      params.cornerRadius ?? 0,
+      0,
+      0,
+      0,
     ])
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformData)
 

@@ -1911,6 +1911,9 @@ type PreparedGpuMediaParticipant = {
   media: ResolvedGpuMediaParticipantSource
   sourceRect: GpuMediaRect
   destRect: GpuMediaRect
+  transformRect: GpuMediaRect
+  featherPixels: ReturnType<typeof calculateMediaCropLayout>['featherPixels']
+  cornerRadius: number
   rotationRad: number
   flipX: boolean
   flipY: boolean
@@ -2204,6 +2207,9 @@ async function renderGpuMediaParticipantToTexture(
       outputHeight: rctx.canvasSettings.height,
       sourceRect: prepared.sourceRect,
       destRect: prepared.destRect,
+      transformRect: prepared.transformRect,
+      featherPixels: prepared.featherPixels,
+      cornerRadius: prepared.cornerRadius,
       opacity: participant.transform.opacity,
       rotationRad: prepared.rotationRad,
       flipX: prepared.flipX,
@@ -2248,9 +2254,11 @@ async function prepareGpuMediaParticipant(
     media.close?.()
     return null
   }
-  if (hasCropFeather(layout.featherPixels)) {
-    media.close?.()
-    return null
+  const transformRect = {
+    x: rctx.canvasSettings.width / 2 + participant.transform.x - participant.transform.width / 2,
+    y: rctx.canvasSettings.height / 2 + participant.transform.y - participant.transform.height / 2,
+    width: participant.transform.width,
+    height: participant.transform.height,
   }
 
   return {
@@ -2266,6 +2274,9 @@ async function prepareGpuMediaParticipant(
       height: (layout.viewportRect.height / layout.mediaRect.height) * media.sourceHeight,
     },
     destRect: layout.viewportRect,
+    transformRect,
+    featherPixels: layout.featherPixels,
+    cornerRadius: participant.transform.cornerRadius,
     rotationRad: (participant.transform.rotation * Math.PI) / 180,
     flipX: participant.item.transform?.flipHorizontal ?? false,
     flipY: participant.item.transform?.flipVertical ?? false,
@@ -2279,7 +2290,6 @@ async function resolveGpuMediaParticipantSource(
   rctx: ItemRenderContext,
 ): Promise<ResolvedGpuMediaParticipantSource | null> {
   if (hasCornerPin(participant.item.cornerPin)) return null
-  if (transform.cornerRadius > 0) return null
   if (transform.opacity < 0 || transform.opacity > 1) return null
 
   if (participant.item.type === 'image') {

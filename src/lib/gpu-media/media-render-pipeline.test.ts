@@ -63,6 +63,9 @@ describe('MediaRenderPipeline', () => {
       outputHeight: 1080,
       sourceRect: { x: 100, y: 50, width: 500, height: 400 },
       destRect: { x: 200, y: 100, width: 700, height: 500 },
+      transformRect: { x: 160, y: 80, width: 800, height: 600 },
+      featherPixels: { left: 20, right: 30, top: 10, bottom: 40 },
+      cornerRadius: 24,
       opacity: 0.75,
       rotationRad: Math.PI / 2,
       flipX: true,
@@ -75,6 +78,10 @@ describe('MediaRenderPipeline', () => {
       format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     })
+    expect(device.createBuffer).toHaveBeenCalledWith({
+      size: 112,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
     expect(queue.copyExternalImageToTexture).toHaveBeenCalledWith(
       { source, flipY: false },
       { texture: inputTexture },
@@ -82,13 +89,16 @@ describe('MediaRenderPipeline', () => {
     )
     expect(queue.writeBuffer).toHaveBeenCalled()
     const uniformData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
-    expect(uniformData.length).toBe(16)
+    expect(uniformData.length).toBe(28)
     expect(Array.from(uniformData.slice(0, 13))).toEqual([
       1920, 1080, 1920, 1080, 100, 50, 500, 400, 200, 100, 700, 500, 0.75,
     ])
     expect(uniformData[13]).toBeCloseTo(Math.PI / 2)
     expect(uniformData[14]).toBe(-1)
     expect(uniformData[15]).toBe(1)
+    expect(Array.from(uniformData.slice(16, 28))).toEqual([
+      160, 80, 800, 600, 20, 30, 10, 40, 24, 0, 0, 0,
+    ])
     expect(commandEncoder.beginRenderPass).toHaveBeenCalledWith({
       colorAttachments: [
         {

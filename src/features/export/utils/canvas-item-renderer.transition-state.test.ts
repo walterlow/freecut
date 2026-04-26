@@ -512,7 +512,7 @@ describe('renderTransitionToGpuTexture', () => {
     expect(gpuTexturePool.release).toHaveBeenCalledWith(rightTexture)
   })
 
-  it('falls back to canvas participant rendering for GPU media features that are not shader-backed yet', async () => {
+  it('routes feathered crop and rounded corners through GPU media masks', async () => {
     const leftClip: ImageItem = {
       id: 'left-image',
       type: 'image',
@@ -529,6 +529,7 @@ describe('renderTransitionToGpuTexture', () => {
         height: 360,
         rotation: 0,
         opacity: 1,
+        cornerRadius: 24,
       },
     } as ImageItem
     const rightClip: ImageItem = {
@@ -564,7 +565,7 @@ describe('renderTransitionToGpuTexture', () => {
       release: vi.fn(),
     }
     const gpuMediaPipeline = {
-      renderSourceToTexture: vi.fn(),
+      renderSourceToTexture: vi.fn().mockReturnValue(true),
     }
     const gpuTransitionPipeline = {
       has: vi.fn().mockReturnValue(true),
@@ -614,8 +615,18 @@ describe('renderTransitionToGpuTexture', () => {
     )
 
     expect(rendered).toBe(true)
-    expect(gpuMediaPipeline.renderSourceToTexture).not.toHaveBeenCalled()
-    expect(canvasPool.acquire).toHaveBeenCalled()
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenCalledTimes(2)
+    expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
+      1,
+      { width: 1280, height: 720 },
+      participantTexture,
+      expect.objectContaining({
+        cornerRadius: 24,
+        featherPixels: expect.objectContaining({ left: expect.any(Number) }),
+        transformRect: { x: 640, y: 360, width: 640, height: 360 },
+      }),
+    )
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
     expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalled()
     expect(gpuTransitionPipeline.renderToTexture).not.toHaveBeenCalled()
   })
