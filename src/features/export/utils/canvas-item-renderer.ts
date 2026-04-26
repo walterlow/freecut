@@ -1894,14 +1894,22 @@ type RenderedTransitionTextureParticipants = {
   poolTextures: GPUTexture[]
 }
 
-async function renderTransitionParticipants(
+type RenderedTransitionBaseParticipants = {
+  leftCanvas: OffscreenCanvas
+  rightCanvas: OffscreenCanvas
+  leftParticipant: TransitionParticipantRenderState
+  rightParticipant: TransitionParticipantRenderState
+  poolCanvases: OffscreenCanvas[]
+}
+
+async function renderTransitionBaseParticipants(
   activeTransition: ActiveTransition,
   frame: number,
   rctx: ItemRenderContext,
   trackOrder: number,
   trackMasks: EffectSourceMask[] = [],
-): Promise<RenderedTransitionParticipants> {
-  const { canvasPool, canvasSettings } = rctx
+): Promise<RenderedTransitionBaseParticipants> {
+  const { canvasPool } = rctx
   const { leftClip, rightClip } = activeTransition
   const leftParticipant = resolveTransitionParticipantRenderState(
     leftClip,
@@ -1952,6 +1960,32 @@ async function renderTransitionParticipants(
       rctx.isRenderingTransition = prevTransitionFlag
     }
 
+    return { leftCanvas, rightCanvas, leftParticipant, rightParticipant, poolCanvases }
+  } catch (error) {
+    for (const canvas of poolCanvases) canvasPool.release(canvas)
+    throw error
+  }
+}
+
+async function renderTransitionParticipants(
+  activeTransition: ActiveTransition,
+  frame: number,
+  rctx: ItemRenderContext,
+  trackOrder: number,
+  trackMasks: EffectSourceMask[] = [],
+): Promise<RenderedTransitionParticipants> {
+  const { canvasPool, canvasSettings } = rctx
+  const baseParticipants = await renderTransitionBaseParticipants(
+    activeTransition,
+    frame,
+    rctx,
+    trackOrder,
+    trackMasks,
+  )
+  const { leftCanvas, rightCanvas, leftParticipant, rightParticipant, poolCanvases } =
+    baseParticipants
+
+  try {
     let leftFinalCanvas: OffscreenCanvas = leftCanvas
     let rightFinalCanvas: OffscreenCanvas = rightCanvas
 
@@ -2007,57 +2041,18 @@ async function renderTransitionTextureParticipants(
   if (!rctx.gpuPipeline) return null
 
   const { canvasPool, canvasSettings } = rctx
-  const { leftClip, rightClip } = activeTransition
-  const leftParticipant = resolveTransitionParticipantRenderState(
-    leftClip,
+  const baseParticipants = await renderTransitionBaseParticipants(
     activeTransition,
     frame,
-    trackOrder,
     rctx,
-  )
-  const rightParticipant = resolveTransitionParticipantRenderState(
-    rightClip,
-    activeTransition,
-    frame,
     trackOrder,
-    rctx,
+    trackMasks,
   )
-
-  const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire()
-  const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire()
-  const poolCanvases = [leftCanvas, rightCanvas]
+  const { leftCanvas, rightCanvas, leftParticipant, rightParticipant, poolCanvases } =
+    baseParticipants
   const poolTextures: GPUTexture[] = []
 
   try {
-    const prevTransitionFlag = rctx.isRenderingTransition
-    rctx.isRenderingTransition = true
-    try {
-      await Promise.all([
-        renderItem(
-          leftCtx,
-          leftParticipant.item,
-          leftParticipant.transform,
-          frame,
-          rctx,
-          0,
-          leftParticipant.renderSpan,
-          trackMasks,
-        ),
-        renderItem(
-          rightCtx,
-          rightParticipant.item,
-          rightParticipant.transform,
-          frame,
-          rctx,
-          0,
-          rightParticipant.renderSpan,
-          trackMasks,
-        ),
-      ])
-    } finally {
-      rctx.isRenderingTransition = prevTransitionFlag
-    }
-
     const leftTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
     const rightTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
     poolTextures.push(leftTexture, rightTexture)

@@ -383,6 +383,18 @@ export class EffectsPipeline {
     }
   }
 
+  private trackSubmittedWork(): void {
+    this.gpuFramesInFlight++
+    this.device.queue.onSubmittedWorkDone().then(
+      () => {
+        this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1)
+      },
+      () => {
+        this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1)
+      },
+    )
+  }
+
   /**
    * Process a source through an effect chain and render to output canvas context.
    * Accepts HTMLVideoElement for zero-copy GPU capture
@@ -461,16 +473,7 @@ export class EffectsPipeline {
 
     this.device.queue.submit([commandEncoder.finish()])
 
-    // Track GPU completion — allow up to MAX_FRAMES_IN_FLIGHT concurrent frames
-    this.gpuFramesInFlight++
-    this.device.queue.onSubmittedWorkDone().then(
-      () => {
-        this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1)
-      },
-      () => {
-        this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1)
-      },
-    )
+    this.trackSubmittedWork()
 
     return true
   }
@@ -716,7 +719,6 @@ export class EffectsPipeline {
       )
       return true
     }
-
     this.ensurePingPong(w, h)
     if (!this.pingTexture || !this.pongTexture) return false
 
@@ -741,6 +743,7 @@ export class EffectsPipeline {
       { width: w, height: h },
     )
     this.device.queue.submit([commandEncoder.finish()])
+    this.trackSubmittedWork()
     return true
   }
 
