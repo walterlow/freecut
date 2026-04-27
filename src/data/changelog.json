@@ -1,7 +1,7 @@
 {
   "current": {
     "version": "current",
-    "date": "2026-04-23",
+    "date": "2026-04-27",
     "highlights": [
       "Projects now live on disk in a workspace folder you choose",
       "Per-clip pitch shift in semitones and cents",
@@ -105,6 +105,12 @@
         {
           "title": "add AI caption generation with timeline insertion",
           "scope": "captions"
+        },
+        {
+          "title": "expand glyph atlas text rendering"
+        },
+        {
+          "title": "enable GPU transition compositing"
         }
       ],
       "fixed": [
@@ -276,6 +282,49 @@
         },
         {
           "title": "prefer Player path for generated caption scrubs"
+        },
+        {
+          "title": "harden text atlas, transition cache, and compositor buffer pool",
+          "scope": "gpu"
+        },
+        {
+          "title": "update commit message generation"
+        },
+        {
+          "title": "preserve mask coverage in GPU blend transitions"
+        },
+        {
+          "title": "preserve GPU layer uniforms per pass"
+        },
+        {
+          "title": "skip occluded sub-comp tracks in export rendering"
+        },
+        {
+          "title": "handle commit message generation request"
+        },
+        {
+          "title": "flatten curved GPU shape paths"
+        },
+        {
+          "title": "generate single-line commit message"
+        },
+        {
+          "title": "keep GPU shape effects on texture path"
+        },
+        {
+          "title": "share transition participant rendering"
+        },
+        {
+          "title": "route audio time stretch through infrastructure"
+        },
+        {
+          "title": "keep generated reports parseable in checks"
+        },
+        {
+          "title": "keep runtime hooks in sync with latest refs"
+        },
+        {
+          "title": "tighten memo deps in preview and timeline hooks"
         }
       ],
       "improved": [
@@ -720,7 +769,9 @@
     {
       "version": "2026.03.09",
       "date": "2026-03-09",
-      "highlights": ["New distort and stylize effects with color parameters"],
+      "highlights": [
+        "New distort and stylize effects with color parameters"
+      ],
       "groups": {
         "added": [
           {
@@ -737,7 +788,10 @@
     {
       "version": "2026.02.23",
       "date": "2026-02-23",
-      "highlights": ["Timeline and preview performance overhaul", "Export packet remux fast path"],
+      "highlights": [
+        "Timeline and preview performance overhaul",
+        "Export packet remux fast path"
+      ],
       "groups": {
         "fixed": [
           {
