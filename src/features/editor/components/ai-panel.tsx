@@ -37,9 +37,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { getMusicgenModelDefinition } from '@/shared/utils/musicgen-models'
 import {
   getStoredTtsEngine,
-  getStoredTtsQuality,
   setStoredTtsEngine,
-  setStoredTtsQuality,
   type StoredTtsEngine,
 } from '@/shared/utils/tts-settings'
 import { SliderInput } from '@/shared/ui/property-controls'
@@ -58,7 +56,7 @@ import { useSelectionStore } from '@/shared/state/selection'
 import type { AudioItem } from '@/types/timeline'
 import type { MediaMetadata } from '@/types/storage'
 import {
-  KOKORO_TTS_MODEL_OPTIONS,
+  KOKORO_TTS_BEST_MODEL,
   KOKORO_TTS_VOICE_OPTIONS,
   getKokoroTtsModelOption,
   getKokoroTtsVoiceOption,
@@ -286,7 +284,7 @@ export const AiPanel = memo(function AiPanel() {
   const [ttsEngine, setTtsEngine] = useState<StoredTtsEngine>(() => getStoredTtsEngine())
   const [ttsKokoroVoice, setTtsKokoroVoice] = useState<KokoroTtsVoice>('af_heart')
   const [ttsMossVoice, setTtsMossVoice] = useState<MossTtsVoice>('Xiaoyu')
-  const [ttsModel, setTtsModel] = useState<KokoroTtsModel>(() => getStoredTtsQuality())
+  const ttsModel: KokoroTtsModel = KOKORO_TTS_BEST_MODEL
   const [ttsSpeed, setTtsSpeed] = useState(1)
   const [isTtsGenerating, setIsTtsGenerating] = useState(false)
   const [ttsProgress, setTtsProgress] = useState<string | null>(null)
@@ -332,10 +330,6 @@ export const AiPanel = memo(function AiPanel() {
   }, [])
 
   useEffect(() => {
-    setStoredTtsQuality(ttsModel)
-  }, [ttsModel])
-
-  useEffect(() => {
     setStoredTtsEngine(ttsEngine)
   }, [ttsEngine])
 
@@ -362,8 +356,6 @@ export const AiPanel = memo(function AiPanel() {
   const anyMusicSaving = musicGenerations.some((generation) => generation.saving)
   const text = ttsText
   const setText = setTtsText
-  const model = ttsModel
-  const setModel = setTtsModel
   const voice = ttsEngine === 'kokoro' ? ttsKokoroVoice : ttsMossVoice
   const speed = ttsSpeed
   const setSpeed = setTtsSpeed
@@ -375,7 +367,7 @@ export const AiPanel = memo(function AiPanel() {
   const anySaving = anyTtsSaving
   const trimmedText = trimmedTtsText
   const currentTtsBackendLabel = ttsEngine === 'kokoro' ? 'WebGPU' : 'CPU'
-  const currentTtsRuntimeLabel = ttsEngine === 'kokoro' ? 'Kokoro TTS' : 'MOSS Nano'
+  const currentTtsRuntimeLabel = ttsEngine === 'kokoro' ? 'Kokoro TTS Best' : 'MOSS Nano'
 
   // --- actions ---
 
@@ -759,31 +751,7 @@ export const AiPanel = memo(function AiPanel() {
                 </Select>
               </div>
 
-              <div
-                className={`grid grid-cols-1 gap-3 ${ttsEngine === 'kokoro' ? 'md:grid-cols-2' : ''}`}
-              >
-                {ttsEngine === 'kokoro' && (
-                  <div className="space-y-1.5">
-                    <Label>Quality</Label>
-                    <Select
-                      value={model}
-                      onValueChange={(value) => setModel(value as typeof model)}
-                      disabled={isGenerating}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {KOKORO_TTS_MODEL_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value} className="text-xs">
-                            {option.label} ({option.downloadLabel})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1.5">
                   <Label>Voice</Label>
                   <Select
