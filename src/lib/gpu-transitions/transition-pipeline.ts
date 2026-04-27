@@ -207,10 +207,13 @@ export class TransitionPipeline {
     def: GpuTransitionDefinition,
     uniformBuffer: GPUBuffer | null,
   ): GPUBindGroup | null {
+    if (def.uniformSize > 0 && !uniformBuffer) {
+      this.cachedBindGroups.delete(transitionId)
+      return null
+    }
     let bindGroup = this.cachedBindGroups.get(transitionId)
     if (bindGroup) return bindGroup
     if (!this.leftView || !this.rightView) return null
-    if (def.uniformSize > 0 && !uniformBuffer) return null
 
     bindGroup = this.createBindGroup(layout, this.leftView, this.rightView, uniformBuffer)
     this.cachedBindGroups.set(transitionId, bindGroup)

@@ -156,6 +156,7 @@ export class GlyphAtlasTextPipeline {
   private nextX = 0
   private nextY = 0
   private rowHeight = 0
+  private atlasExhausted = false
 
   constructor(private readonly device: GPUDevice) {
     const scratchCanvas = new OffscreenCanvas(1, 1)
@@ -260,7 +261,11 @@ export class GlyphAtlasTextPipeline {
     ) {
       return false
     }
-    const layout = this.layoutText(params.item, params.width, params.height)
+    let layout = this.layoutText(params.item, params.width, params.height)
+    if (!layout && this.atlasExhausted) {
+      this.resetAtlas()
+      layout = this.layoutText(params.item, params.width, params.height)
+    }
     if (!layout) return false
     if (layout.glyphs.length === 0) return this.clearTexture(outputTexture)
     if (layout.glyphs.length > MAX_GLYPHS_PER_RENDER) return false
@@ -517,9 +522,11 @@ export class GlyphAtlasTextPipeline {
   }
 
   private measureText(text: string, font: string, letterSpacing: number): number {
+    const sizeMatch = /(\d+(?:\.\d+)?)px/.exec(font)
+    const fontSize = sizeMatch ? parseFloat(sizeMatch[1]!) : 16
     let width = 0
     for (const char of text) {
-      width += this.ensureGlyph(char, font, 16)?.advance ?? 0
+      width += this.ensureGlyph(char, font, fontSize)?.advance ?? 0
     }
     return width + Math.max(0, text.length - 1) * letterSpacing
   }
@@ -605,11 +612,22 @@ export class GlyphAtlasTextPipeline {
       this.nextY += this.rowHeight
       this.rowHeight = 0
     }
-    if (this.nextY + height > ATLAS_SIZE) return null
+    if (this.nextY + height > ATLAS_SIZE) {
+      this.atlasExhausted = true
+      return null
+    }
     const position = { x: this.nextX, y: this.nextY }
     this.nextX += width
     this.rowHeight = Math.max(this.rowHeight, height)
     return position
+  }
+
+  private resetAtlas(): void {
+    this.glyphs.clear()
+    this.nextX = 0
+    this.nextY = 0
+    this.rowHeight = 0
+    this.atlasExhausted = false
   }
 
   private uploadGlyph(x: number, y: number, width: number, height: number, rgba: Uint8Array): void {

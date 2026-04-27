@@ -484,6 +484,13 @@ export class CompositorPipeline {
     this.ensurePingPong(width, height)
     if (!this.pingTexture || !this.pongTexture) return null
 
+    for (let i = layers.length; i < this.layerUniformBuffers.length; i++) {
+      this.layerUniformBuffers[i]?.destroy()
+    }
+    if (this.layerUniformBuffers.length > layers.length) {
+      this.layerUniformBuffers.length = layers.length
+    }
+
     // Clear ping to transparent black
     const clearPass = commandEncoder.beginRenderPass({
       colorAttachments: [
