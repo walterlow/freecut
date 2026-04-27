@@ -136,14 +136,20 @@ export interface TimelineActions {
   updateTransition: (
     id: string,
     updates: Partial<
-      Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>
+      Pick<
+        Transition,
+        'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'properties'
+      >
     >,
   ) => void
   updateTransitions: (
     updates: Array<{
       id: string
       updates: Partial<
-        Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>
+        Pick<
+          Transition,
+          'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'properties'
+        >
       >
     }>,
   ) => void

@@ -11,6 +11,7 @@ import type { TimelineItem } from '@/types/timeline'
 import type { ResolvedTransform, CanvasSettings, CropSettings } from '@/types/transform'
 import { toTransformStyle, getSourceDimensions } from '../../utils/transform-resolver'
 import { getShapePath, rotatePath } from '../../utils/shape-path'
+import { hasCornerPin } from '../../utils/corner-pin'
 import { useItemKeyframesFromContext } from '../../contexts/keyframes-context'
 import { useCompositionSpace } from '../../contexts/composition-space-context'
 import type { MaskInfo } from '../item'
@@ -178,7 +179,7 @@ export function useItemVisualState(
       resolved = applyTransformOverride(animatedResolved, previewTransform)
     }
 
-    if (item.type === 'text') {
+    if (item.type === 'text' && !hasCornerPin(item.cornerPin)) {
       resolved = expandTextTransformToFitContent(
         resolveAnimatedTextItem(item, itemKeyframes ?? undefined, relativeFrame, logicalCanvas),
         resolved,

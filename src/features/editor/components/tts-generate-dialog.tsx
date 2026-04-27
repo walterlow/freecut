@@ -22,9 +22,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SliderInput } from '@/shared/ui/property-controls'
 import {
   getStoredTtsEngine,
-  getStoredTtsQuality,
   setStoredTtsEngine,
-  setStoredTtsQuality,
   type StoredTtsEngine,
 } from '@/shared/utils/tts-settings'
 import {
@@ -41,7 +39,7 @@ import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog'
 import type { AudioItem } from '@/types/timeline'
 import type { MediaMetadata } from '@/types/storage'
 import {
-  KOKORO_TTS_MODEL_OPTIONS,
+  KOKORO_TTS_BEST_MODEL,
   KOKORO_TTS_VOICE_OPTIONS,
   kokoroTtsService,
   type KokoroTtsModel,
@@ -245,7 +243,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
   const [engine, setEngine] = useState<StoredTtsEngine>(() => getStoredTtsEngine())
   const [kokoroVoice, setKokoroVoice] = useState<KokoroTtsVoice>('af_heart')
   const [mossVoice, setMossVoice] = useState<MossTtsVoice>('Xiaoyu')
-  const [model, setModel] = useState<KokoroTtsModel>(() => getStoredTtsQuality())
+  const model: KokoroTtsModel = KOKORO_TTS_BEST_MODEL
   const [speed, setSpeed] = useState(1)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isInserting, setIsInserting] = useState(false)
@@ -270,17 +268,12 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       }
       setText(initialText)
       setEngine(getStoredTtsEngine())
-      setModel(getStoredTtsQuality())
       setError(null)
       setProgress(null)
       setResult(null)
       setInserted(false)
     }
   }, [isOpen, initialText])
-
-  useEffect(() => {
-    setStoredTtsQuality(model)
-  }, [model])
 
   useEffect(() => {
     setStoredTtsEngine(engine)
@@ -374,10 +367,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
           ? (KOKORO_TTS_VOICE_OPTIONS.find((option) => option.value === kokoroVoice)?.label ??
             kokoroVoice)
           : getMossTtsVoiceOption(mossVoice).label
-      const modelLabel =
-        engine === 'kokoro'
-          ? (KOKORO_TTS_MODEL_OPTIONS.find((option) => option.value === model)?.label ?? model)
-          : 'Multilingual Nano'
+      const modelLabel = engine === 'kokoro' ? 'Best' : 'Multilingual Nano'
       const tags =
         engine === 'kokoro'
           ? [
@@ -534,31 +524,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
               </Select>
             </div>
 
-            <div
-              className={`grid grid-cols-1 gap-3 ${engine === 'kokoro' ? 'md:grid-cols-2' : ''}`}
-            >
-              {engine === 'kokoro' && (
-                <div className="space-y-1.5">
-                  <Label>Quality</Label>
-                  <Select
-                    value={model}
-                    onValueChange={(value) => setModel(value as typeof model)}
-                    disabled={isGenerating || isInserting}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {KOKORO_TTS_MODEL_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value} className="text-xs">
-                          {option.label} ({option.downloadLabel})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
+            <div className="grid grid-cols-1 gap-3">
               <div className="space-y-1.5">
                 <Label>Voice</Label>
                 <Select

@@ -32,6 +32,18 @@ export interface CornerPinTargetRectOptions {
   crop?: CropSettings
 }
 
+export type CornerPinHomography = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+]
+
 /** Check if corner pin has any non-zero offset */
 export function hasCornerPin(pin: CornerPinOffsets | undefined): boolean {
   if (!pin) return false
@@ -114,7 +126,11 @@ export function resolveCornerPinTargetRect(
  * Compute 3x3 homography matrix (flattened as 9-element array)
  * that maps from source rect (0,0)-(w,h) to corner-pinned quad.
  */
-function computeHomography(w: number, h: number, pin: CornerPinOffsets): number[] {
+export function computeCornerPinHomography(
+  w: number,
+  h: number,
+  pin: CornerPinOffsets,
+): CornerPinHomography {
   // Destination corners
   const x0 = pin.topLeft[0]
   const y0 = pin.topLeft[1]
@@ -152,13 +168,40 @@ function computeHomography(w: number, h: number, pin: CornerPinOffsets): number[
   return [a, b, c, d, e, f, g / w, hCoeff / h, 1]
 }
 
+export function invertCornerPinHomography(m: CornerPinHomography): CornerPinHomography | null {
+  const [a, b, c, d, e, f, g, h, i] = m
+  const A = e * i - f * h
+  const B = c * h - b * i
+  const C = b * f - c * e
+  const D = f * g - d * i
+  const E = a * i - c * g
+  const F = c * d - a * f
+  const G = d * h - e * g
+  const H = b * g - a * h
+  const I = a * e - b * d
+  const det = a * A + b * D + c * G
+  if (Math.abs(det) < 1e-10) return null
+  const invDet = 1 / det
+  return [
+    A * invDet,
+    B * invDet,
+    C * invDet,
+    D * invDet,
+    E * invDet,
+    F * invDet,
+    G * invDet,
+    H * invDet,
+    I * invDet,
+  ]
+}
+
 /**
  * Compute CSS matrix3d string for a corner pin distortion.
  *
  * The returned matrix3d should be used with transformOrigin: '0 0'.
  */
 export function computeCornerPinMatrix3d(w: number, h: number, pin: CornerPinOffsets): string {
-  const H = computeHomography(w, h, pin)
+  const H = computeCornerPinHomography(w, h, pin)
   // CSS matrix3d (column-major):
   // matrix3d(m00, m10, 0, m20, m01, m11, 0, m21, 0, 0, 1, 0, m02, m12, 0, m22)
   return `matrix3d(${H[0]},${H[3]},0,${H[6]},${H[1]},${H[4]},0,${H[7]},0,0,1,0,${H[2]},${H[5]},0,${H[8]})`
@@ -269,7 +312,7 @@ export function drawCornerPinImage(
   pin: CornerPinOffsets,
   subdivisions: number = 16,
 ): void {
-  const H = computeHomography(srcW, srcH, pin)
+  const H = computeCornerPinHomography(srcW, srcH, pin)
 
   for (let row = 0; row < subdivisions; row++) {
     for (let col = 0; col < subdivisions; col++) {

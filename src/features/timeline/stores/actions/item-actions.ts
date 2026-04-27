@@ -3,6 +3,7 @@
  */
 
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
+import type { Transition } from '@/types/transition'
 import { useItemsStore } from '../items-store'
 import { useTransitionsStore } from '../transitions-store'
 import { useKeyframesStore } from '../keyframes-store'
@@ -22,6 +23,44 @@ import { placeItemsWithoutTimelineOverlap } from './item-placement'
 
 function isLinkedSelectionEnabled(): boolean {
   return useEditorStore.getState().linkedSelectionEnabled
+}
+
+function copyInternalTransitionsForDuplicatedItems(
+  itemIds: string[],
+  newItems: TimelineItem[],
+): void {
+  if (newItems.length === 0) return
+
+  const duplicatedItemByOriginalId = new Map<string, TimelineItem>()
+  for (let index = 0; index < itemIds.length; index += 1) {
+    const newItem = newItems[index]
+    if (newItem) {
+      duplicatedItemByOriginalId.set(itemIds[index]!, newItem)
+    }
+  }
+
+  const copiedTransitions: Transition[] = []
+  for (const transition of useTransitionsStore.getState().transitions) {
+    const leftClip = duplicatedItemByOriginalId.get(transition.leftClipId)
+    const rightClip = duplicatedItemByOriginalId.get(transition.rightClipId)
+    if (!leftClip || !rightClip || leftClip.trackId !== rightClip.trackId) {
+      continue
+    }
+
+    copiedTransitions.push({
+      ...transition,
+      id: crypto.randomUUID(),
+      leftClipId: leftClip.id,
+      rightClipId: rightClip.id,
+      trackId: leftClip.trackId,
+    })
+  }
+
+  if (copiedTransitions.length > 0) {
+    useTransitionsStore
+      .getState()
+      .setTransitions([...useTransitionsStore.getState().transitions, ...copiedTransitions])
+  }
 }
 
 export function addItem(item: TimelineItem): void {
@@ -528,6 +567,7 @@ export function duplicateItems(
     'DUPLICATE_ITEMS',
     () => {
       const newItems = useItemsStore.getState()._duplicateItems(itemIds, positions)
+      copyInternalTransitionsForDuplicatedItems(itemIds, newItems)
       useTimelineSettingsStore.getState().markDirty()
       return newItems
     },
@@ -545,6 +585,7 @@ export function duplicateItemsWithTrackChanges(
     () => {
       useItemsStore.getState().setTracks(tracks)
       const newItems = useItemsStore.getState()._duplicateItems(itemIds, positions)
+      copyInternalTransitionsForDuplicatedItems(itemIds, newItems)
       useTimelineSettingsStore.getState().markDirty()
       return newItems
     },

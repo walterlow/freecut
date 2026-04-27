@@ -52,6 +52,7 @@ interface TransitionsActions {
         | 'alignment'
         | 'bezierPoints'
         | 'presetId'
+        | 'properties'
       >
     >,
   ) => void

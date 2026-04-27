@@ -9,9 +9,16 @@ import { usePlaybackStore } from '@/shared/state/playback'
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store'
 import type { ItemEffect } from '@/types/effects'
 import type { TimelineItem } from '@/types/timeline'
+import type { Transition } from '@/types/transition'
+import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner'
 
 function hasEnabledGpuEffect(effects: ItemEffect[] | undefined): boolean {
   return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
+}
+
+function hasRenderableBlendMode(item: TimelineItem): boolean {
+  if (item.type === 'shape' && item.isMask) return false
+  return item.blendMode !== undefined && item.blendMode !== 'normal'
 }
 
 function subCompositionHasGpuEffectsOrBlend(
@@ -23,7 +30,7 @@ function subCompositionHasGpuEffectsOrBlend(
   visited.add(subComp.id)
   return subComp.items.some((subItem) => {
     if (hasEnabledGpuEffect(subItem.effects)) return true
-    if (subItem.blendMode !== undefined && subItem.blendMode !== 'normal') return true
+    if (hasRenderableBlendMode(subItem)) return true
     if (subItem.type === 'composition' && compositionById) {
       const nested = compositionById[subItem.compositionId]
       if (nested && subCompositionHasGpuEffectsOrBlend(nested, compositionById, visited)) {
@@ -46,14 +53,31 @@ function subCompositionHasGpuEffectsOrBlend(
  */
 export function shouldForceContinuousPreviewOverlay(
   items: TimelineItem[],
-  transitionCount: number,
+  transitionsOrCount: Transition[] | number,
   frame: number,
   previewEffectsByItemId?: ReadonlyMap<string, ItemEffect[]>,
   compositionById?: Record<string, SubComposition>,
+  options: { forceTransitionFrames?: boolean } = {},
 ): boolean {
-  void transitionCount
   if (!Number.isFinite(frame)) {
     return false
+  }
+
+  if (
+    options.forceTransitionFrames &&
+    Array.isArray(transitionsOrCount) &&
+    transitionsOrCount.length > 0
+  ) {
+    const clipMap = new Map<string, TimelineItem>()
+    for (const item of items) {
+      clipMap.set(item.id, item)
+    }
+
+    for (const window of resolveTransitionWindows(transitionsOrCount, clipMap)) {
+      if (frame >= window.startFrame && frame < window.endFrame) {
+        return true
+      }
+    }
   }
 
   return items.some((item) => {
@@ -62,7 +86,7 @@ export function shouldForceContinuousPreviewOverlay(
     }
     const effectiveEffects = previewEffectsByItemId?.get(item.id) ?? item.effects
     if (hasEnabledGpuEffect(effectiveEffects)) return true
-    if (item.blendMode && item.blendMode !== 'normal') return true
+    if (hasRenderableBlendMode(item)) return true
     if (item.type === 'composition' && compositionById) {
       const subComp = compositionById[item.compositionId]
       if (subComp && subCompositionHasGpuEffectsOrBlend(subComp, compositionById)) return true
@@ -94,10 +118,11 @@ export function useGpuEffectsOverlay(..._args: unknown[]) {
       setNeedsOverlay((prev) => {
         const next = shouldForceContinuousPreviewOverlay(
           items,
-          transitions.length,
+          transitions,
           frame,
           previewEffectsByItemId,
           compositionById,
+          { forceTransitionFrames: playback.previewFrame !== null },
         )
         return prev === next ? prev : next
       })

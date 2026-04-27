@@ -41,13 +41,16 @@ import {
 } from './canvas-effects'
 import { EffectsPipeline } from '@/infrastructure/gpu/effects'
 import { TransitionPipeline } from '@/infrastructure/gpu/transitions'
+import { MediaBlendPipeline, MediaRenderPipeline } from '@/infrastructure/gpu/media'
+import { ShapeRenderPipeline } from '@/infrastructure/gpu/shapes'
+import { GlyphAtlasTextPipeline } from '@/infrastructure/gpu/text'
 import {
   CompositorPipeline,
   DEFAULT_LAYER_PARAMS,
   GpuTexturePool,
 } from '@/infrastructure/gpu/compositor'
 import type { CompositeLayer } from '@/infrastructure/gpu/compositor'
-import { MaskTextureManager } from '@/infrastructure/gpu/masks'
+import { MaskCombinePipeline, MaskTextureManager } from '@/infrastructure/gpu/masks'
 import {
   applyMasks,
   buildMaskFrameIndex,
@@ -82,10 +85,13 @@ import {
 import {
   renderItem,
   renderTransitionToCanvas,
+  renderTransitionToGpuTexture,
   type CanvasSettings,
   type WorkerLoadedImage,
   type ItemRenderContext,
   type SubCompRenderData,
+  type GpuBitmapMaskTextureCacheEntry,
+  type GpuTextTextureCacheEntry,
 } from './canvas-item-renderer'
 import { ScrubbingCache } from '@/features/export/deps/preview'
 import { resolveFrameRenderOptimization } from './render-path-optimizer'
@@ -230,12 +236,54 @@ export async function createCompositionRenderer(
   // === GPU Transition Pipeline ===
   // Shares the GPU device with the effects pipeline
   let gpuTransitionPipeline: TransitionPipeline | null = null
+  let gpuMediaPipeline: MediaRenderPipeline | null = null
+  let gpuMediaBlendPipeline: MediaBlendPipeline | null = null
+  let gpuShapePipeline: ShapeRenderPipeline | null = null
+  let gpuTextPipeline: GlyphAtlasTextPipeline | null = null
+  let gpuMaskCombinePipeline: MaskCombinePipeline | null = null
+  const gpuTextTextureCache = new Map<string, GpuTextTextureCacheEntry>()
+  const gpuBitmapMaskTextureCache = new Map<string, GpuBitmapMaskTextureCacheEntry>()
 
   function ensureGpuTransitionPipeline(): boolean {
     if (gpuTransitionPipeline) return true
     if (!gpuPipeline) return false
     gpuTransitionPipeline = TransitionPipeline.create(gpuPipeline.getDevice())
     return gpuTransitionPipeline !== null
+  }
+
+  function ensureGpuMediaPipeline(): boolean {
+    if (gpuMediaPipeline) return true
+    if (!gpuPipeline) return false
+    gpuMediaPipeline = new MediaRenderPipeline(gpuPipeline.getDevice())
+    return true
+  }
+
+  function ensureGpuMediaBlendPipeline(): boolean {
+    if (gpuMediaBlendPipeline) return true
+    if (!gpuPipeline) return false
+    gpuMediaBlendPipeline = new MediaBlendPipeline(gpuPipeline.getDevice())
+    return true
+  }
+
+  function ensureGpuShapePipeline(): boolean {
+    if (gpuShapePipeline) return true
+    if (!gpuPipeline) return false
+    gpuShapePipeline = new ShapeRenderPipeline(gpuPipeline.getDevice())
+    return true
+  }
+
+  function ensureGpuTextPipeline(): boolean {
+    if (gpuTextPipeline) return true
+    if (!gpuPipeline) return false
+    gpuTextPipeline = new GlyphAtlasTextPipeline(gpuPipeline.getDevice())
+    return true
+  }
+
+  function ensureGpuMaskCombinePipeline(): boolean {
+    if (gpuMaskCombinePipeline) return true
+    if (!gpuPipeline) return false
+    gpuMaskCombinePipeline = new MaskCombinePipeline(gpuPipeline.getDevice())
+    return true
   }
 
   // === GPU Compositor (for pixel-perfect blend modes) ===
@@ -254,9 +302,18 @@ export async function createCompositionRenderer(
     if (!gpuPipeline) return false
     const device = gpuPipeline.getDevice()
     gpuCompositor = new CompositorPipeline(device)
-    gpuTexturePool = new GpuTexturePool(device)
+    gpuTexturePool ??= new GpuTexturePool(device)
     gpuMaskManager = new MaskTextureManager(device)
     return true
+  }
+
+  function ensureGpuTexturePool(): GpuTexturePool {
+    if (gpuTexturePool) return gpuTexturePool
+    if (!gpuPipeline) {
+      throw new Error('GPU texture pool requested before GPU pipeline initialization')
+    }
+    gpuTexturePool = new GpuTexturePool(gpuPipeline.getDevice())
+    return gpuTexturePool
   }
 
   function ensureGpuCompositeOutput(
@@ -553,6 +610,21 @@ export async function createCompositionRenderer(
     subCompRenderData,
     gpuPipeline: null,
     gpuTransitionPipeline: null,
+    gpuMediaPipeline: null,
+    gpuMediaBlendPipeline: null,
+    gpuShapePipeline: null,
+    gpuTextPipeline: null,
+    gpuMaskCombinePipeline: null,
+    gpuTextTextureCache,
+    gpuBitmapMaskTextureCache,
+    gpuScratchTexturePool: {
+      acquire: (width, height, format) =>
+        gpuTexturePool?.acquire(width, height, format) ??
+        ensureGpuTexturePool().acquire(width, height, format),
+      release: (texture) => {
+        gpuTexturePool?.release(texture)
+      },
+    },
     domVideoElementProvider,
   }
 
@@ -1300,9 +1372,19 @@ export async function createCompositionRenderer(
         }
         if (itemRenderContext.gpuPipeline) {
           // Initialize GPU transition pipeline (shares device with effects pipeline)
-          if (activeTransitions.length > 0 && !itemRenderContext.gpuTransitionPipeline) {
-            ensureGpuTransitionPipeline()
+          if (activeTransitions.length > 0) {
+            if (!itemRenderContext.gpuTransitionPipeline) ensureGpuTransitionPipeline()
+            if (!itemRenderContext.gpuMediaPipeline) ensureGpuMediaPipeline()
+            if (!itemRenderContext.gpuMediaBlendPipeline) ensureGpuMediaBlendPipeline()
+            if (!itemRenderContext.gpuShapePipeline) ensureGpuShapePipeline()
+            if (!itemRenderContext.gpuTextPipeline) ensureGpuTextPipeline()
+            if (!itemRenderContext.gpuMaskCombinePipeline) ensureGpuMaskCombinePipeline()
             itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline
+            itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
+            itemRenderContext.gpuMediaBlendPipeline = gpuMediaBlendPipeline
+            itemRenderContext.gpuShapePipeline = gpuShapePipeline
+            itemRenderContext.gpuTextPipeline = gpuTextPipeline
+            itemRenderContext.gpuMaskCombinePipeline = gpuMaskCombinePipeline
           }
         }
       }
@@ -1317,6 +1399,7 @@ export async function createCompositionRenderer(
         trackOrder: number,
         deferred: boolean,
         targetCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+        bakeMasks = true,
       ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null> => {
         const item = getCurrentItem(baseItem)
         // Get animated transform
@@ -1363,6 +1446,7 @@ export async function createCompositionRenderer(
         const applicableMasks = activeMasks.filter((mask) =>
           doesMaskAffectTrack(mask.trackOrder, trackOrder),
         )
+        const renderMasks = bakeMasks ? applicableMasks : []
 
         // NOTE: The importExternalTexture zero-copy path is disabled because
         // textureSampleBaseClampToEdge produces subtly different edge pixel values
@@ -1383,7 +1467,7 @@ export async function createCompositionRenderer(
           itemRenderContext,
           0,
           undefined,
-          applicableMasks,
+          renderMasks,
         )
 
         // Apply effects (per-item — GPU effects applied here for both preview and export)
@@ -1399,7 +1483,7 @@ export async function createCompositionRenderer(
             canvasPool,
             itemCanvas,
             combinedEffects,
-            hasCornerPin(effectiveItem.cornerPin) ? [] : applicableMasks,
+            hasCornerPin(effectiveItem.cornerPin) ? [] : renderMasks,
             frame,
             maskSettings,
             itemRenderContext.gpuPipeline,
@@ -1420,6 +1504,12 @@ export async function createCompositionRenderer(
         targetCtx.drawImage(itemCanvas, 0, 0)
         canvasPool.release(itemCanvas)
         return null
+      }
+
+      const getEffectiveBlendMode = (item: TimelineItem): TimelineItem['blendMode'] => {
+        const blendMode = item.blendMode
+        if (!blendMode || blendMode === 'normal') return blendMode
+        return blendMode
       }
 
       // Helper to check if item should be rendered
@@ -1561,6 +1651,27 @@ export async function createCompositionRenderer(
           hasGpuEffects: hasAnyGpuEffects,
           renderTaskCount: renderTasks.length,
         })
+      const hasNonNormalBlend = renderTasks.some(
+        (t) =>
+          t.type === 'item' &&
+          (() => {
+            const item = getCurrentItem(t.item)
+            const blendMode = getEffectiveBlendMode(item)
+            return Boolean(blendMode && blendMode !== 'normal')
+          })(),
+      )
+      if (hasNonNormalBlend && !itemRenderContext.gpuPipeline) {
+        itemRenderContext.gpuPipeline = await ensureGpuPipeline()
+        if (!itemRenderContext.gpuPipeline) {
+          getLog().warn('GPU pipeline init failed - blend modes will use Canvas2D fallback')
+        }
+      }
+      const useGpuCompositor = Boolean(
+        hasNonNormalBlend && itemRenderContext.gpuPipeline && gpuPipeline && ensureGpuCompositor(),
+      )
+      const gpuCompositeOutput = useGpuCompositor
+        ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
+        : null
       if (shouldUseDeferredGpuBatch && itemRenderContext.gpuPipeline) {
         itemRenderContext.gpuPipeline.beginBatch()
       }
@@ -1568,7 +1679,7 @@ export async function createCompositionRenderer(
       if (shouldDirectRenderSingleTask) {
         const directTask = renderTasks[0]
         if (directTask?.type === 'item') {
-          const blendMode = getCurrentItem(directTask.item).blendMode
+          const blendMode = getEffectiveBlendMode(getCurrentItem(directTask.item))
           try {
             if (blendMode && blendMode !== 'normal') {
               ctx.globalCompositeOperation = getCompositeOperation(blendMode)
@@ -1604,12 +1715,64 @@ export async function createCompositionRenderer(
           ).length
         }
 
+        type RenderedTaskResult = {
+          source?: OffscreenCanvas
+          gpuTexture?: GPUTexture
+          poolCanvases: OffscreenCanvas[]
+        }
+
+        const renderMasksToGpuTexture = (
+          masks: typeof activeMasks,
+        ): { texture: GPUTexture; view: GPUTextureView } | null => {
+          if (!gpuTexturePool || masks.length === 0) return null
+          const maskSource = new OffscreenCanvas(canvasSettings.width, canvasSettings.height)
+          const maskSourceCtx = maskSource.getContext('2d')
+          if (!maskSourceCtx) return null
+          maskSourceCtx.fillStyle = 'white'
+          maskSourceCtx.fillRect(0, 0, maskSource.width, maskSource.height)
+
+          const maskedCanvas = new OffscreenCanvas(canvasSettings.width, canvasSettings.height)
+          const maskedCtx = maskedCanvas.getContext('2d')
+          if (!maskedCtx) return null
+          applyMasks(maskedCtx, maskSource, masks, maskSettings)
+
+          const texture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
+          gpuPipeline!
+            .getDevice()
+            .queue.copyExternalImageToTexture(
+              { source: maskedCanvas, flipY: false },
+              { texture },
+              { width: canvasSettings.width, height: canvasSettings.height },
+            )
+          return { texture, view: texture.createView() }
+        }
+
+        const renderTransitionFallbackCanvas = async (
+          task: Extract<(typeof renderTasks)[number], { type: 'transition' }>,
+        ): Promise<RenderedTaskResult> => {
+          const transitionMasks = activeMasks.filter((mask) =>
+            doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
+          )
+          const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire()
+          await renderTransitionToCanvas(
+            trCtx,
+            task.transition,
+            frame,
+            itemRenderContext,
+            task.trackOrder,
+            transitionMasks,
+          )
+          return { source: trCanvas, poolCanvases: [trCanvas] }
+        }
+
         const applyTrackScopedMasks = (
-          result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null,
+          result: RenderedTaskResult | null,
           trackOrder: number,
           skipMasks: boolean,
-        ): { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null => {
+        ): RenderedTaskResult | null => {
           if (!result) return null
+          if (result.gpuTexture) return result
+          if (!result.source) return null
           if (skipMasks) {
             return result
           }
@@ -1633,22 +1796,48 @@ export async function createCompositionRenderer(
         const results = await Promise.all(
           renderTasks.map(async (task) => {
             if (task.type === 'item') {
-              return renderItemWithEffects(task.item, task.trackOrder, true, contentCtx)
+              const item = getCurrentItem(task.item)
+              const canSeparateMasks =
+                useGpuCompositor && gpuTexturePool && !hasCornerPin(item.cornerPin)
+              return renderItemWithEffects(
+                task.item,
+                task.trackOrder,
+                true,
+                contentCtx,
+                !canSeparateMasks,
+              )
+            }
+            const transitionMasks = activeMasks.filter((mask) =>
+              doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
+            )
+            if (
+              useGpuCompositor &&
+              gpuTexturePool &&
+              transitionMasks.length === 0 &&
+              itemRenderContext.gpuTransitionPipeline
+            ) {
+              const transitionTexture = gpuTexturePool.acquire(
+                canvasSettings.width,
+                canvasSettings.height,
+              )
+              const renderedToTexture = await renderTransitionToGpuTexture(
+                transitionTexture,
+                task.transition,
+                frame,
+                itemRenderContext,
+                task.trackOrder,
+                gpuTexturePool,
+              )
+              if (renderedToTexture) {
+                return {
+                  gpuTexture: transitionTexture,
+                  poolCanvases: [],
+                } satisfies RenderedTaskResult
+              }
+              gpuTexturePool.release(transitionTexture)
             }
             // Transitions: render to a dedicated canvas
-            const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire()
-            await renderTransitionToCanvas(
-              trCtx,
-              task.transition,
-              frame,
-              itemRenderContext,
-              task.trackOrder,
-              activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, task.trackOrder)),
-            )
-            return { source: trCanvas, poolCanvases: [trCanvas] } as {
-              source: OffscreenCanvas
-              poolCanvases: OffscreenCanvas[]
-            }
+            return renderTransitionFallbackCanvas(task)
           }),
         )
 
@@ -1658,20 +1847,6 @@ export async function createCompositionRenderer(
         }
 
         // Composite all results in z-order (preserved by renderTasks ordering)
-        // Use GPU compositor for pixel-perfect blend modes when available
-        const hasNonNormalBlend = renderTasks.some(
-          (t) =>
-            t.type === 'item' &&
-            (() => {
-              const item = getCurrentItem(t.item)
-              return Boolean(item.blendMode && item.blendMode !== 'normal')
-            })(),
-        )
-        const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor()
-        const gpuCompositeOutput = useGpuCompositor
-          ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
-          : null
-
         if (useGpuCompositor && gpuCompositor && gpuMaskManager && gpuCompositeOutput) {
           // GPU compositing path — pixel-perfect blend modes via WebGPU
           const device = gpuPipeline!.getDevice()
@@ -1679,35 +1854,68 @@ export async function createCompositionRenderer(
           const h = canvasSettings.height
           const layers: CompositeLayer[] = []
           const layerTextures: GPUTexture[] = []
+          const layerMaskTextures: GPUTexture[] = []
           const compositedResults: Array<{
             task: (typeof renderTasks)[number]
-            result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] }
+            result: RenderedTaskResult
+            fallbackMasks: typeof activeMasks
           }> = []
 
           for (let i = 0; i < results.length; i++) {
             const task = renderTasks[i]!
-            const result = applyTrackScopedMasks(
-              results[i] ?? null,
-              task.trackOrder,
+            const taskHasCornerPin =
               task.type === 'item'
                 ? hasCornerPin(getCurrentItem(task.item).cornerPin)
                 : hasCornerPin(getCurrentItem(task.transition.leftClip).cornerPin) ||
-                    hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin),
+                  hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin)
+            const applicableMasks = activeMasks.filter((mask) =>
+              doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
             )
+            const shouldUseSeparateMask = task.type === 'item' && !taskHasCornerPin
+            let result: RenderedTaskResult | null = shouldUseSeparateMask
+              ? (results[i] ?? null)
+              : applyTrackScopedMasks(results[i] ?? null, task.trackOrder, taskHasCornerPin)
             if (!result) continue
-            compositedResults.push({ task, result })
+
+            let maskInfo =
+              shouldUseSeparateMask && applicableMasks.length > 0
+                ? renderMasksToGpuTexture(applicableMasks)
+                : null
+            let fallbackMasks = shouldUseSeparateMask ? applicableMasks : []
+            if (shouldUseSeparateMask && applicableMasks.length > 0 && !maskInfo) {
+              const maskedResult = applyTrackScopedMasks(result, task.trackOrder, false)
+              if (!maskedResult) continue
+              result = maskedResult
+              fallbackMasks = []
+            }
 
             const blendMode =
-              task.type === 'item' ? (getCurrentItem(task.item).blendMode ?? 'normal') : 'normal'
+              task.type === 'item'
+                ? (getEffectiveBlendMode(getCurrentItem(task.item)) ?? 'normal')
+                : 'normal'
 
             // Upload item canvas to GPU texture (pooled — no per-frame alloc)
-            const tex = gpuTexturePool!.acquire(w, h)
-            device.queue.copyExternalImageToTexture(
-              { source: result.source, flipY: false },
-              { texture: tex },
-              { width: w, height: h },
-            )
+            let tex = result.gpuTexture
+            if (!tex) {
+              if (!result.source) continue
+              tex = gpuTexturePool!.acquire(w, h)
+              device.queue.copyExternalImageToTexture(
+                { source: result.source, flipY: false },
+                { texture: tex },
+                { width: w, height: h },
+              )
+            }
             layerTextures.push(tex)
+
+            if (maskInfo) {
+              layerMaskTextures.push(maskInfo.texture)
+            }
+
+            compositedResults.push({
+              task,
+              result,
+              fallbackMasks,
+            })
 
             layers.push({
               params: {
@@ -1715,15 +1923,28 @@ export async function createCompositionRenderer(
                 blendMode,
                 sourceAspect: w / h,
                 outputAspect: w / h,
+                hasMask: Boolean(maskInfo),
               },
               textureView: tex.createView(),
-              maskView: gpuMaskManager.getFallbackView(),
+              maskView: maskInfo?.view ?? gpuMaskManager.getFallbackView(),
             })
           }
 
-          const compositedToGpuCanvas =
-            layers.length > 0 &&
-            gpuCompositor.compositeToCanvas(layers, w, h, gpuCompositeOutput.ctx)
+          let compositedToGpuCanvas = false
+          if (layers.length > 0) {
+            try {
+              compositedToGpuCanvas = gpuCompositor.compositeToCanvas(
+                layers,
+                w,
+                h,
+                gpuCompositeOutput.ctx,
+              )
+            } catch (error) {
+              getLog().warn('GPU compositor failed - using Canvas2D blend fallback', {
+                error,
+              })
+            }
+          }
 
           if (compositedToGpuCanvas) {
             finalCompositeSource = gpuCompositeOutput.canvas
@@ -1731,17 +1952,36 @@ export async function createCompositionRenderer(
             // Fall back to the established Canvas2D compositor if the GPU target
             // isn't available for this frame. This preserves feature parity and
             // avoids dropping content when WebGPU canvas presentation fails.
-            for (const { task, result } of compositedResults) {
+            for (const { task, result, fallbackMasks } of compositedResults) {
+              let fallbackResult = result
+              if (!fallbackResult.source && task.type === 'transition') {
+                fallbackResult = await renderTransitionFallbackCanvas(task)
+              }
+              let fallbackSource = fallbackResult.source
+              if (!fallbackSource) continue
+              if (fallbackMasks.length > 0) {
+                const { canvas: fallbackMaskedCanvas, ctx: fallbackMaskedCtx } =
+                  canvasPool.acquire()
+                applyMasks(fallbackMaskedCtx, fallbackSource, fallbackMasks, maskSettings)
+                fallbackResult = {
+                  source: fallbackMaskedCanvas,
+                  poolCanvases: [...fallbackResult.poolCanvases, fallbackMaskedCanvas],
+                }
+                fallbackSource = fallbackMaskedCanvas
+              }
               const blendMode =
-                task.type === 'item' ? getCurrentItem(task.item).blendMode : undefined
+                task.type === 'item' ? getEffectiveBlendMode(getCurrentItem(task.item)) : undefined
               if (blendMode && blendMode !== 'normal') {
                 contentCtx.globalCompositeOperation = getCompositeOperation(blendMode)
               }
 
-              contentCtx.drawImage(result.source, 0, 0)
+              contentCtx.drawImage(fallbackSource, 0, 0)
 
               if (blendMode && blendMode !== 'normal') {
                 contentCtx.globalCompositeOperation = 'source-over'
+              }
+              if (fallbackResult !== result) {
+                for (const c of fallbackResult.poolCanvases) canvasPool.release(c)
               }
             }
           }
@@ -1752,6 +1992,7 @@ export async function createCompositionRenderer(
 
           // Release pooled textures (no GPU destroy — recycled next frame)
           for (const tex of layerTextures) gpuTexturePool!.release(tex)
+          for (const tex of layerMaskTextures) gpuTexturePool!.release(tex)
         } else {
           // Canvas2D compositing fallback
           for (let i = 0; i < results.length; i++) {
@@ -1765,8 +2006,13 @@ export async function createCompositionRenderer(
                     hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin),
             )
             if (!result) continue
+            if (!result.source) {
+              if (result.gpuTexture) gpuTexturePool?.release(result.gpuTexture)
+              continue
+            }
 
-            const blendMode = task.type === 'item' ? getCurrentItem(task.item).blendMode : undefined
+            const blendMode =
+              task.type === 'item' ? getEffectiveBlendMode(getCurrentItem(task.item)) : undefined
             if (blendMode && blendMode !== 'normal') {
               contentCtx.globalCompositeOperation = getCompositeOperation(blendMode)
             }
@@ -2066,8 +2312,18 @@ export async function createCompositionRenderer(
       const pipeline = await ensureGpuPipeline()
       if (pipeline) {
         ensureGpuTransitionPipeline()
+        ensureGpuMediaPipeline()
+        ensureGpuMediaBlendPipeline()
+        ensureGpuShapePipeline()
+        ensureGpuTextPipeline()
+        ensureGpuMaskCombinePipeline()
         itemRenderContext.gpuPipeline = pipeline
         itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline
+        itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
+        itemRenderContext.gpuMediaBlendPipeline = gpuMediaBlendPipeline
+        itemRenderContext.gpuShapePipeline = gpuShapePipeline
+        itemRenderContext.gpuTextPipeline = gpuTextPipeline
+        itemRenderContext.gpuMaskCombinePipeline = gpuMaskCombinePipeline
       }
     },
 
@@ -2130,6 +2386,20 @@ export async function createCompositionRenderer(
       gpuCompositeConfigureFailed = false
       gpuTransitionPipeline?.destroy()
       gpuTransitionPipeline = null
+      gpuMediaPipeline?.destroy()
+      gpuMediaPipeline = null
+      gpuMediaBlendPipeline?.destroy()
+      gpuMediaBlendPipeline = null
+      gpuShapePipeline?.destroy()
+      gpuShapePipeline = null
+      gpuTextPipeline?.destroy()
+      gpuTextPipeline = null
+      gpuMaskCombinePipeline?.destroy()
+      gpuMaskCombinePipeline = null
+      for (const entry of gpuTextTextureCache.values()) entry.texture.destroy()
+      gpuTextTextureCache.clear()
+      for (const entry of gpuBitmapMaskTextureCache.values()) entry.texture.destroy()
+      gpuBitmapMaskTextureCache.clear()
       gpuPipeline?.destroy()
       gpuPipeline = null
       frameSceneCache.invalidate()

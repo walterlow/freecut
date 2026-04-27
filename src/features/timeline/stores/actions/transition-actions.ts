@@ -120,6 +120,7 @@ export function updateTransition(
       | 'alignment'
       | 'bezierPoints'
       | 'presetId'
+      | 'properties'
     >
   >,
 ): void {
@@ -168,6 +169,7 @@ export function updateTransitions(
         | 'alignment'
         | 'bezierPoints'
         | 'presetId'
+        | 'properties'
       >
     >
   }>,

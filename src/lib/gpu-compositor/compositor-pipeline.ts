@@ -14,7 +14,7 @@
 import type { BlendMode } from '@/types/blend-modes'
 import { BLEND_MODE_INDEX } from '@/types/blend-modes'
 import { createLogger } from '@/shared/logging/logger'
-import { BLEND_MODES_WGSL } from './blend-modes'
+import { BLEND_MODES_WGSL } from '@/lib/gpu-shared/blend-modes'
 
 const logger = createLogger('CompositorPipeline')
 
@@ -148,40 +148,38 @@ fn transformUV(uv: vec2f) -> vec2f {
 
 @fragment
 fn compositeFragment(input: VertexOutput) -> @location(0) vec4f {
-  let baseColor = textureSample(baseTex, texSampler, input.uv);
+  let baseColor = textureSampleLevel(baseTex, texSampler, input.uv, 0.0);
 
   // Transform UV to sample layer texture
   let layerUV = transformUV(input.uv);
-
-  // Out-of-bounds check
-  if (layerUV.x < 0.0 || layerUV.x > 1.0 || layerUV.y < 0.0 || layerUV.y > 1.0) {
-    return baseColor;
-  }
-
-  var layerColor = textureSample(layerTex, texSampler, layerUV);
+  let inBounds = layerUV.x >= 0.0 && layerUV.x <= 1.0 && layerUV.y >= 0.0 && layerUV.y <= 1.0;
+  let sampleUV = clamp(layerUV, vec2f(0.0), vec2f(1.0));
+  var layerColor = textureSampleLevel(layerTex, texSampler, sampleUV, 0.0);
 
   // Apply mask
   var maskValue = 1.0;
   if (u.hasMask != 0u) {
-    maskValue = textureSample(maskTex, texSampler, layerUV).r;
+    maskValue = textureSampleLevel(maskTex, texSampler, input.uv, 0.0).a;
     if (u.maskInvert != 0u) {
       maskValue = 1.0 - maskValue;
     }
   }
 
-  let layerAlpha = layerColor.a * u.opacity * maskValue;
-  if (layerAlpha <= 0.0) {
+  let sourceAlpha = layerColor.a * u.opacity;
+  let postDissolveAlpha = maskValue * select(0.0, 1.0, inBounds);
+  if (sourceAlpha * postDissolveAlpha <= 0.0) {
     return baseColor;
   }
 
-  // Apply blend mode
-  let blended = applyBlendMode(baseColor.rgb, layerColor.rgb, u.blendMode);
-
-  // Standard over blend (straight alpha)
-  let outRgb = mix(baseColor.rgb, blended, layerAlpha);
-  let outAlpha = baseColor.a + layerAlpha * (1.0 - baseColor.a);
-
-  return vec4f(outRgb, outAlpha);
+  return compositeBlendSourceOver(
+    baseColor,
+    layerColor,
+    sourceAlpha,
+    postDissolveAlpha,
+    u.blendMode,
+    input.uv * 8192.0,
+    u.opacity
+  );
 }
 `
 
@@ -221,23 +219,28 @@ fn transformUV_ext(uv: vec2f) -> vec2f {
 
 @fragment
 fn compositeExternalFragment(input: VertexOutput) -> @location(0) vec4f {
-  let baseColor = textureSample(baseTex, texSampler, input.uv);
+  let baseColor = textureSampleLevel(baseTex, texSampler, input.uv, 0.0);
   let layerUV = transformUV_ext(input.uv);
-  if (layerUV.x < 0.0 || layerUV.x > 1.0 || layerUV.y < 0.0 || layerUV.y > 1.0) {
-    return baseColor;
-  }
-  var layerColor = textureSampleBaseClampToEdge(layerTex, texSampler, layerUV);
+  let inBounds = layerUV.x >= 0.0 && layerUV.x <= 1.0 && layerUV.y >= 0.0 && layerUV.y <= 1.0;
+  let sampleUV = clamp(layerUV, vec2f(0.0), vec2f(1.0));
+  var layerColor = textureSampleBaseClampToEdge(layerTex, texSampler, sampleUV);
   var maskValue = 1.0;
   if (u.hasMask != 0u) {
-    maskValue = textureSample(maskTex, texSampler, layerUV).r;
+    maskValue = textureSampleLevel(maskTex, texSampler, input.uv, 0.0).a;
     if (u.maskInvert != 0u) { maskValue = 1.0 - maskValue; }
   }
-  let layerAlpha = layerColor.a * u.opacity * maskValue;
-  if (layerAlpha <= 0.0) { return baseColor; }
-  let blended = applyBlendMode(baseColor.rgb, layerColor.rgb, u.blendMode);
-  let outRgb = mix(baseColor.rgb, blended, layerAlpha);
-  let outAlpha = baseColor.a + layerAlpha * (1.0 - baseColor.a);
-  return vec4f(outRgb, outAlpha);
+  let sourceAlpha = layerColor.a * u.opacity;
+  let postDissolveAlpha = maskValue * select(0.0, 1.0, inBounds);
+  if (sourceAlpha * postDissolveAlpha <= 0.0) { return baseColor; }
+  return compositeBlendSourceOver(
+    baseColor,
+    layerColor,
+    sourceAlpha,
+    postDissolveAlpha,
+    u.blendMode,
+    input.uv * 8192.0,
+    u.opacity
+  );
 }
 `
 
@@ -311,7 +314,7 @@ export class CompositorPipeline {
   private device: GPUDevice
   private canvasFormat: GPUTextureFormat
   private sampler: GPUSampler
-  private uniformBuffer: GPUBuffer
+  private layerUniformBuffers: GPUBuffer[] = []
 
   private regularPipeline: GPURenderPipeline | null = null
   private regularLayout: GPUBindGroupLayout | null = null
@@ -330,17 +333,10 @@ export class CompositorPipeline {
   private blitBindGroupPing: GPUBindGroup | null = null
   private blitBindGroupPong: GPUBindGroup | null = null
 
-  // Last packed uniforms for change detection
-  private lastUniforms: Float32Array | null = null
-
   constructor(device: GPUDevice) {
     this.device = device
     this.canvasFormat = navigator.gpu.getPreferredCanvasFormat()
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
-    this.uniformBuffer = device.createBuffer({
-      size: UNIFORM_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    })
     this.createPipelines()
   }
 
@@ -452,14 +448,21 @@ export class CompositorPipeline {
     this.blitBindGroupPong = null
   }
 
-  private writeUniforms(params: CompositeLayerParams): void {
-    const data = packUniforms(params)
-    // Change detection: skip GPU write if unchanged
-    if (this.lastUniforms && data.every((v, i) => v === this.lastUniforms![i])) {
-      return
+  private getLayerUniformBuffer(index: number): GPUBuffer {
+    let buffer = this.layerUniformBuffers[index]
+    if (!buffer) {
+      buffer = this.device.createBuffer({
+        size: UNIFORM_SIZE,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      })
+      this.layerUniformBuffers[index] = buffer
     }
-    this.device.queue.writeBuffer(this.uniformBuffer, 0, data.buffer)
-    this.lastUniforms = data
+    return buffer
+  }
+
+  private writeUniforms(buffer: GPUBuffer, params: CompositeLayerParams): void {
+    const data = packUniforms(params)
+    this.device.queue.writeBuffer(buffer, 0, data.buffer)
   }
 
   /**
@@ -481,6 +484,13 @@ export class CompositorPipeline {
     this.ensurePingPong(width, height)
     if (!this.pingTexture || !this.pongTexture) return null
 
+    for (let i = layers.length; i < this.layerUniformBuffers.length; i++) {
+      this.layerUniformBuffers[i]?.destroy()
+    }
+    if (this.layerUniformBuffers.length > layers.length) {
+      this.layerUniformBuffers.length = layers.length
+    }
+
     // Clear ping to transparent black
     const clearPass = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -499,8 +509,10 @@ export class CompositorPipeline {
     let inputView = this.pingView!
     let outputView = this.pongView!
 
-    for (const layer of layers) {
-      this.writeUniforms(layer.params)
+    for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+      const layer = layers[layerIndex]!
+      const layerUniformBuffer = this.getLayerUniformBuffer(layerIndex)
+      this.writeUniforms(layerUniformBuffer, layer.params)
 
       let bindGroup: GPUBindGroup
       let pipeline: GPURenderPipeline
@@ -514,7 +526,7 @@ export class CompositorPipeline {
             { binding: 0, resource: this.sampler },
             { binding: 1, resource: inputView },
             { binding: 2, resource: layer.externalTexture },
-            { binding: 3, resource: { buffer: this.uniformBuffer } },
+            { binding: 3, resource: { buffer: layerUniformBuffer } },
             { binding: 4, resource: layer.maskView },
           ],
         })
@@ -527,7 +539,7 @@ export class CompositorPipeline {
             { binding: 0, resource: this.sampler },
             { binding: 1, resource: inputView },
             { binding: 2, resource: layer.textureView },
-            { binding: 3, resource: { buffer: this.uniformBuffer } },
+            { binding: 3, resource: { buffer: layerUniformBuffer } },
             { binding: 4, resource: layer.maskView },
           ],
         })
@@ -617,7 +629,7 @@ export class CompositorPipeline {
   destroy(): void {
     this.pingTexture?.destroy()
     this.pongTexture?.destroy()
-    this.uniformBuffer.destroy()
+    for (const buffer of this.layerUniformBuffers) buffer.destroy()
     this.pingTexture = null
     this.pongTexture = null
     this.pingView = null
@@ -626,6 +638,7 @@ export class CompositorPipeline {
     this.blitLayout = null
     this.blitBindGroupPing = null
     this.blitBindGroupPong = null
+    this.layerUniformBuffers = []
   }
 }
 

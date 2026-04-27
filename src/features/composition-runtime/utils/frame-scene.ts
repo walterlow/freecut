@@ -20,6 +20,7 @@ import {
   isFrameInRanges,
   type FrameInvalidationRequest,
 } from '@/shared/utils/frame-invalidation'
+import { hasCornerPin } from './corner-pin'
 
 export type TransformOverride = Partial<ResolvedTransform> | undefined
 
@@ -81,7 +82,7 @@ export function resolveItemTransformAtRelativeFrame(
 
   const resolved = applyTransformOverride(animatedResolved, previewTransform)
 
-  return item.type === 'text'
+  return item.type === 'text' && !hasCornerPin(item.cornerPin)
     ? expandTextTransformToFitContent(
         resolveAnimatedTextItem(item, keyframes, relativeFrame, canvas),
         resolved,

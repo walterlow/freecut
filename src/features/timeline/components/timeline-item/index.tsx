@@ -1,4 +1,5 @@
 import { useRef, useEffect, useLayoutEffect, useMemo, memo, useCallback, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { TimelineItem as TimelineItemType } from '@/types/timeline'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -67,6 +68,7 @@ import { AudioVolumeControl } from './audio-volume-control'
 import { JoinIndicators } from './join-indicators'
 import { SegmentStatusOverlays } from './segment-status-overlays'
 import { ToolOperationOverlay } from './tool-operation-overlay'
+import { FloatingReadout } from './floating-readout'
 import { supportsVisualFadeControls } from './visual-fade-items'
 import { getTimelineItemGestureMode } from './drag-visual-mode'
 import { getTimelineClipLabelRowHeightPx } from './hover-layout'
@@ -127,6 +129,7 @@ import {
   getAudioVolumeLineY,
 } from '../../utils/audio-volume'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
+import { formatSignedFrameDelta, formatTimecodeCompact } from '@/shared/utils/time-utils'
 import {
   findHandleNeighborWithTransitions,
   findNearestNeighbors,
@@ -189,6 +192,64 @@ const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100
 const FADE_VIEWBOX_WIDTH = 1000
 const AUDIO_VOLUME_DRAG_ACTIVATION_DELAY_MS = 120
 const AUDIO_VOLUME_DRAG_ACTIVATION_DISTANCE_PX = 4
+
+function TrimInfoOverlay({
+  anchorRef,
+  side,
+  delta,
+  duration,
+  measureKey,
+}: {
+  anchorRef: React.RefObject<HTMLDivElement | null>
+  side: 'start' | 'end'
+  delta: string
+  duration: string
+  measureKey: string
+}) {
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
+
+  const updatePosition = useCallback(() => {
+    const anchor = anchorRef.current
+    if (!anchor) return
+
+    const rect = anchor.getBoundingClientRect()
+    const x = side === 'start' ? rect.left : rect.right
+    setPosition({
+      x,
+      y: Math.max(4, rect.top - 6),
+    })
+  }, [anchorRef, side])
+
+  useLayoutEffect(() => {
+    updatePosition()
+    const rafId = window.requestAnimationFrame(updatePosition)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [measureKey, updatePosition])
+
+  if (!position) return null
+
+  return createPortal(
+    <div
+      className="pointer-events-none fixed z-[10000] min-w-[58px] rounded-sm bg-neutral-950/90 px-1.5 py-0.5 text-center font-mono text-[11px] font-semibold leading-tight text-white shadow-[0_2px_8px_rgba(0,0,0,0.45)] ring-1 ring-white/15 tabular-nums"
+      style={{
+        left: position.x,
+        top: position.y,
+        transform:
+          side === 'start' ? 'translate(-2px, -100%)' : 'translate(calc(-100% + 2px), -100%)',
+      }}
+    >
+      <div>{delta}</div>
+      <div className="text-white/80">{duration}</div>
+    </div>,
+    document.body,
+  )
+}
 
 interface TimelineItemProps {
   item: TimelineItemType
@@ -1776,7 +1837,7 @@ export const TimelineItem = memo(
     } | null>(null)
     const audioVolumeCleanupRef = useRef<(() => void) | null>(null)
     const audioVolumePreviewRef = useRef(item.type === 'audio' ? (item.volume ?? 0) : 0)
-    const audioVolumeEditLabelRef = useRef<HTMLDivElement | null>(null)
+    const audioVolumeEditLabelRef = useRef<HTMLElement | null>(null)
     useEffect(
       () => () => {
         videoFadeCleanupRef.current?.()
@@ -2811,6 +2872,24 @@ export const TimelineItem = memo(
       visualWidth <= COMPACT_CLIP_MAX_WIDTH_PX &&
       !hasDetailBadges &&
       !hasActiveClipInteraction
+    const trimInfoLabel = useMemo(() => {
+      if (!isTrimming || !trimHandle) return null
+
+      const durationDelta = trimHandle === 'start' ? -trimDelta : trimDelta
+      return {
+        delta: formatSignedFrameDelta(durationDelta, fps),
+        duration: formatTimecodeCompact(Math.round(visualWidthFrames), fps),
+        side: trimHandle,
+      }
+    }, [fps, isTrimming, trimDelta, trimHandle, visualWidthFrames])
+    const moveInfoLabel = useMemo(() => {
+      if (!isDragging) return null
+
+      const frameDelta = pixelsToFrameNow(dragOffset.x)
+      if (frameDelta === 0) return null
+
+      return formatSignedFrameDelta(frameDelta, fps)
+    }, [dragOffset.x, fps, isDragging])
 
     const handleMouseDown = useCallback(
       (e: React.MouseEvent) => {
@@ -3217,6 +3296,7 @@ export const TimelineItem = memo(
                   fadeOutPercent={videoFadeOutRatio * 100}
                   isSelected={isSelected}
                   isEditing={videoFadeEdit !== null}
+                  editingHandle={videoFadeEdit?.handle ?? null}
                   fadeInLabel={videoFadeInHoverLabel}
                   fadeOutLabel={videoFadeOutHoverLabel}
                   onFadeHandleMouseDown={handleVideoFadeHandleMouseDown}
@@ -3239,6 +3319,7 @@ export const TimelineItem = memo(
                   fadeOutPercent={audioFadeOutRatio * 100}
                   isSelected={isSelected}
                   isEditing={audioFadeEdit !== null}
+                  editingHandle={audioFadeEdit?.handle ?? null}
                   curveEditingHandle={audioFadeCurveEdit?.handle ?? null}
                   fadeInLabel={audioFadeInHoverLabel}
                   fadeOutLabel={audioFadeOutHoverLabel}
@@ -3370,6 +3451,26 @@ export const TimelineItem = memo(
               )}
           </div>
         </ItemContextMenu>
+
+        {trimInfoLabel && (
+          <TrimInfoOverlay
+            anchorRef={transformRef}
+            side={trimInfoLabel.side}
+            delta={trimInfoLabel.delta}
+            duration={trimInfoLabel.duration}
+            measureKey={`${visualLeftFrame}:${visualWidthFrames}:${trimInfoLabel.side}:${trimInfoLabel.delta}:${trimInfoLabel.duration}`}
+          />
+        )}
+
+        {moveInfoLabel && (
+          <FloatingReadout
+            anchorRef={transformRef}
+            measureKey={`move:${dragOffset.x}:${dragOffset.y}:${moveInfoLabel}`}
+            offsetY={6}
+          >
+            {moveInfoLabel}
+          </FloatingReadout>
+        )}
 
         {/* Track push handle - sits in the gap to the LEFT of the clip, outside contain:paint */}
         <TrackPushHandle

@@ -181,16 +181,17 @@ describe('waveform prefetch filtering', () => {
 
   it('waits for active drag interactions before prefetching', () => {
     vi.useFakeTimers()
+    let idleId = 0
     vi.stubGlobal('requestIdleCallback', (callback: IdleRequestCallback) => {
-      return window.setTimeout(() => {
-        callback({
-          didTimeout: false,
-          timeRemaining: () => 50,
-        } as IdleDeadline)
-      }, 0)
+      callback({
+        didTimeout: false,
+        timeRemaining: () => 50,
+      } as IdleDeadline)
+      idleId += 1
+      return idleId
     })
     vi.stubGlobal('cancelIdleCallback', (id: number) => {
-      window.clearTimeout(id)
+      void id
     })
 
     try {
@@ -221,7 +222,8 @@ describe('waveform prefetch filtering', () => {
           viewportWidth: 1000,
           viewportHeight: 120,
         })
-        vi.runAllTimers()
+        vi.advanceTimersByTime(120)
+        vi.runOnlyPendingTimers()
       })
 
       expect(prefetchSpy).toHaveBeenCalledWith(item.mediaId, 'blob:prefetch')

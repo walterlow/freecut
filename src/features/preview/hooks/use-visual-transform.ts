@@ -10,6 +10,7 @@ import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resoluti
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store'
 import {
   applyTransformOverride,
+  hasCornerPin,
   resolveItemTransformAtFrame,
 } from '@/features/preview/deps/composition-runtime'
 import { expandTextTransformForPreview } from '../utils/text-layout'
@@ -23,8 +24,10 @@ function applyTextExpansion(
   item: TimelineItem,
   transform: ResolvedTransform,
   previewProperties?: Parameters<typeof expandTextTransformForPreview>[2],
+  skipExpansion = false,
 ): ResolvedTransform {
   if (item.type !== 'text') return transform
+  if (skipExpansion) return transform
   return expandTextTransformForPreview(item, transform, previewProperties)
 }
 
@@ -84,7 +87,12 @@ export function useVisualTransforms(
 
       if (activeGizmo?.itemId === item.id && gizmoPreviewTransform) {
         let gizmoTransform = applyTransformOverride(animatedTransform, gizmoPreviewTransform)
-        gizmoTransform = applyTextExpansion(animatedTextItem, gizmoTransform, previewProperties)
+        gizmoTransform = applyTextExpansion(
+          animatedTextItem,
+          gizmoTransform,
+          previewProperties,
+          hasCornerPin(item.cornerPin),
+        )
         transforms.set(item.id, gizmoTransform)
         continue
       }
@@ -92,14 +100,24 @@ export function useVisualTransforms(
       const previewTransform = preview?.[item.id]?.transform
       if (previewTransform) {
         let resolvedPreview = applyTransformOverride(animatedTransform, previewTransform)
-        resolvedPreview = applyTextExpansion(animatedTextItem, resolvedPreview, previewProperties)
+        resolvedPreview = applyTextExpansion(
+          animatedTextItem,
+          resolvedPreview,
+          previewProperties,
+          hasCornerPin(item.cornerPin),
+        )
         transforms.set(item.id, resolvedPreview)
         continue
       }
 
       transforms.set(
         item.id,
-        applyTextExpansion(animatedTextItem, animatedTransform, previewProperties),
+        applyTextExpansion(
+          animatedTextItem,
+          animatedTransform,
+          previewProperties,
+          hasCornerPin(item.cornerPin),
+        ),
       )
     }
 

@@ -128,4 +128,62 @@ describe('buildPreviewTransitionData', () => {
       { startFrame: 35, endFrame: 45, cooldownFrames: 15 },
     ])
   })
+
+  it('does not mark transitions with stale mask blend modes as complex', () => {
+    const track: TimelineTrack = {
+      id: 'track-1',
+      name: 'Shapes',
+      height: 80,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 1,
+      items: [
+        {
+          id: 'left',
+          trackId: 'track-1',
+          type: 'shape',
+          label: 'Left Mask',
+          from: 0,
+          durationInFrames: 40,
+          shapeType: 'path',
+          fillColor: '#ffffff',
+          isMask: true,
+          blendMode: 'multiply',
+        },
+        {
+          id: 'right',
+          trackId: 'track-1',
+          type: 'shape',
+          label: 'Right Mask',
+          from: 40,
+          durationInFrames: 40,
+          shapeType: 'path',
+          fillColor: '#ffffff',
+          isMask: true,
+          blendMode: 'screen',
+        },
+      ],
+    }
+
+    const transition: Transition = {
+      id: 'transition-3',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'left',
+      rightClipId: 'right',
+      trackId: 'track-1',
+      durationInFrames: 10,
+    }
+
+    const result = buildPreviewTransitionData({
+      fps: 30,
+      transitions: [transition],
+      fastScrubScaledTracks: [track],
+    })
+
+    expect(result.playbackTransitionComplexStartFrames.size).toBe(0)
+  })
 })

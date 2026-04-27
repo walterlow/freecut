@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
 import {
+  computeCornerPinHomography,
+  invertCornerPinHomography,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
   withCornerPinReferenceSize,
@@ -55,5 +57,27 @@ describe('corner pin reference sizing', () => {
       referenceWidth: 300,
       referenceHeight: 150,
     })
+  })
+
+  it('computes an invertible homography for GPU and canvas corner-pin rendering', () => {
+    const pin = resolveCornerPinForSize(baseCornerPin, 400, 200)
+    expect(pin).toBeDefined()
+
+    const homography = computeCornerPinHomography(400, 200, pin!)
+    const inverse = invertCornerPinHomography(homography)
+
+    expect(inverse).not.toBeNull()
+    expect(homography).toHaveLength(9)
+    expect(inverse).toHaveLength(9)
+
+    const project = (m: number[], x: number, y: number) => {
+      const w = m[6]! * x + m[7]! * y + m[8]!
+      return [(m[0]! * x + m[1]! * y + m[2]!) / w, (m[3]! * x + m[4]! * y + m[5]!) / w]
+    }
+    const warped = project(homography, 123, 87)
+    const unwarped = project(inverse!, warped[0]!, warped[1]!)
+
+    expect(unwarped[0]).toBeCloseTo(123)
+    expect(unwarped[1]).toBeCloseTo(87)
   })
 })

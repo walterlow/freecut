@@ -42,6 +42,8 @@ export {
 export { getShapePath, rotatePath } from '@/features/composition-runtime/utils/shape-path'
 export {
   hasCornerPin,
+  computeCornerPinHomography,
+  invertCornerPinHomography,
   drawCornerPinImage,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,

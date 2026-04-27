@@ -1,15 +1,7 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Trash2, Zap, RotateCcw } from 'lucide-react'
+import { Trash2, Zap, RotateCcw, ChevronDown } from 'lucide-react'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
 import { PropertySection, PropertyRow, SliderInput } from '../components'
@@ -109,6 +101,9 @@ export function TransitionPanel() {
       ),
     [presentationConfigs, selectedTransition?.presentation, selectedTransition?.direction],
   )
+  const currentPresentationLabel = currentPresentationConfig
+    ? getPresentationOptionLabel(currentPresentationConfig)
+    : 'Select preset'
   const transitionDefinition = useMemo(
     () =>
       selectedTransition
@@ -186,6 +181,62 @@ export function TransitionPanel() {
     },
     [handlePresentationChange, presentationConfigs],
   )
+
+  const [presetPickerOpen, setPresetPickerOpen] = useState(false)
+  const presetTriggerRef = useRef<HTMLButtonElement>(null)
+  const presetPanelRef = useRef<HTMLDivElement>(null)
+  const [presetPanelStyle, setPresetPanelStyle] = useState<CSSProperties>({})
+
+  const openPresetPicker = useCallback(() => {
+    if (presetTriggerRef.current) {
+      const rect = presetTriggerRef.current.getBoundingClientRect()
+      setPresetPanelStyle({
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+      })
+    }
+    setPresetPickerOpen(true)
+  }, [])
+
+  const closePresetPicker = useCallback(() => {
+    setPresetPickerOpen(false)
+    presetTriggerRef.current?.blur()
+  }, [])
+
+  const selectPresentationPreset = useCallback(
+    (value: string) => {
+      handlePresentationPresetChange(value)
+      closePresetPicker()
+    },
+    [closePresetPicker, handlePresentationPresetChange],
+  )
+
+  useEffect(() => {
+    if (!presetPickerOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        presetPanelRef.current?.contains(event.target as Node) ||
+        presetTriggerRef.current?.contains(event.target as Node)
+      ) {
+        return
+      }
+      closePresetPicker()
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closePresetPicker()
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [closePresetPicker, presetPickerOpen])
 
   // Handle duration change (in frames)
   const handleDurationChange = useCallback(
@@ -271,36 +322,65 @@ export function TransitionPanel() {
       <PropertySection title="Transition" icon={Zap} defaultOpen={true}>
         <PropertyRow label="Preset" tooltip="Transition style preset">
           <div className="w-full">
-            <Select
-              value={
-                currentPresentationConfig
-                  ? getPresentationOptionValue(currentPresentationConfig)
-                  : undefined
-              }
-              onValueChange={handlePresentationPresetChange}
+            <Button
+              ref={presetTriggerRef}
+              variant="outline"
+              size="sm"
+              role="combobox"
+              aria-expanded={presetPickerOpen}
+              className="h-7 w-full justify-between px-2 text-xs font-normal"
+              onClick={() => (presetPickerOpen ? closePresetPicker() : openPresetPicker())}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  openPresetPicker()
+                }
+              }}
             >
-              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                <SelectValue placeholder="Select preset" />
-              </SelectTrigger>
-              <SelectContent>
-                {presentationConfigGroups.map(([category, configs]) => (
-                  <SelectGroup key={category}>
-                    <SelectLabel className="text-[10px] text-muted-foreground">
-                      {TRANSITION_CATEGORY_INFO[category]?.title ?? category}
-                    </SelectLabel>
-                    {configs.map((config) => (
-                      <SelectItem
-                        key={getPresentationOptionValue(config)}
-                        value={getPresentationOptionValue(config)}
-                        className="text-xs"
-                      >
-                        {getPresentationOptionLabel(config)}
-                      </SelectItem>
+              <span className="truncate">{currentPresentationLabel}</span>
+              <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+            </Button>
+            {presetPickerOpen &&
+              createPortal(
+                <div
+                  ref={presetPanelRef}
+                  style={presetPanelStyle}
+                  className="z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 slide-in-from-top-2"
+                >
+                  <div className="max-h-[280px] overflow-y-auto overflow-x-hidden p-1">
+                    {presentationConfigGroups.map(([category, configs], index) => (
+                      <div key={category}>
+                        {index > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
+                        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                          {TRANSITION_CATEGORY_INFO[category]?.title ?? category}
+                        </div>
+                        {configs.map((config) => {
+                          const value = getPresentationOptionValue(config)
+                          const selected =
+                            currentPresentationConfig &&
+                            getPresentationOptionValue(currentPresentationConfig) === value
+
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              aria-selected={selected}
+                              className={cn(
+                                'relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground',
+                                selected && 'bg-accent text-accent-foreground',
+                              )}
+                              onClick={() => selectPresentationPreset(value)}
+                            >
+                              <span className="truncate">{getPresentationOptionLabel(config)}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
                     ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
+                  </div>
+                </div>,
+                document.body,
+              )}
           </div>
         </PropertyRow>
 

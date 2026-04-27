@@ -1,5 +1,9 @@
 import { createLogger } from '@/shared/logging/logger'
-import { VideoFrameExtractor, type DrawFrameCaptureResult } from './canvas-video-extractor'
+import {
+  VideoFrameExtractor,
+  type CaptureFrameResult,
+  type DrawFrameCaptureResult,
+} from './canvas-video-extractor'
 
 const log = createLogger('SharedVideoExtractorPool')
 
@@ -23,6 +27,7 @@ export interface VideoFrameSource {
     width: number,
     height: number,
   ): Promise<DrawFrameCaptureResult>
+  captureFrame(timestamp: number): Promise<CaptureFrameResult>
   getLastFailureKind(): VideoFrameFailureKind
   getDimensions(): { width: number; height: number }
   getDuration(): number
@@ -98,6 +103,10 @@ class SharedItemVideoSource implements VideoFrameSource {
       width,
       height,
     )
+  }
+
+  captureFrame(timestamp: number): Promise<CaptureFrameResult> {
+    return this.pool.captureItemFrame(this.itemId, this.src, timestamp)
   }
 
   getLastFailureKind(): VideoFrameFailureKind {
@@ -259,6 +268,38 @@ export class SharedVideoExtractorPool {
     const result = prev.then(() =>
       lane.extractor.drawFrameWithCapture(ctx, timestamp, x, y, width, height),
     )
+    lane.drawLock = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+
+  async captureItemFrame(
+    itemId: string,
+    src: string,
+    timestamp: number,
+  ): Promise<CaptureFrameResult> {
+    const state = this.ensureSourceState(src)
+    const sourceReady = await this.initSource(src)
+    if (!sourceReady) {
+      return { success: false, frame: null, sourceTime: null }
+    }
+
+    let laneIndex = this.getAssignedLaneIndex(state, itemId)
+    let laneReady = await this.ensureLaneInitialized(state, laneIndex)
+
+    if (!laneReady && laneIndex !== 0) {
+      laneIndex = 0
+      laneReady = await this.ensureLaneInitialized(state, laneIndex)
+    }
+    if (!laneReady) {
+      return { success: false, frame: null, sourceTime: null }
+    }
+
+    const lane = state.lanes[laneIndex]!
+    const prev = lane.drawLock ?? Promise.resolve()
+    const result = prev.then(() => lane.extractor.captureFrame(timestamp))
     lane.drawLock = result.then(
       () => undefined,
       () => undefined,

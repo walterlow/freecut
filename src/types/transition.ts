@@ -39,6 +39,10 @@ export type BuiltinTransitionPresentation =
   | 'pixelate'
   | 'chromatic'
   | 'radialBlur'
+  | 'liquidDistort'
+  | 'lensWarpZoom'
+  | 'lightLeakBurn'
+  | 'filmGateSlip'
 
 /**
  * Visual presentation styles for transitions.

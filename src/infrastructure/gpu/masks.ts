@@ -4,3 +4,4 @@
  */
 
 export { MaskTextureManager } from '@/lib/masks/mask-texture-manager'
+export { MaskCombinePipeline } from '@/lib/gpu-masks'

@@ -64,6 +64,31 @@ fn importFragment(input: VertexOutput) -> @location(0) vec4f {
 }
 `
 
+type GpuExternalImageSource =
+  | OffscreenCanvas
+  | HTMLCanvasElement
+  | HTMLVideoElement
+  | HTMLImageElement
+  | ImageBitmap
+  | VideoFrame
+
+function getExternalImageSourceDimensions(source: GpuExternalImageSource): {
+  width: number
+  height: number
+} {
+  if (source instanceof HTMLVideoElement) {
+    return { width: source.videoWidth, height: source.videoHeight }
+  }
+  if (typeof VideoFrame !== 'undefined' && source instanceof VideoFrame) {
+    return { width: source.displayWidth, height: source.displayHeight }
+  }
+  if (source instanceof HTMLImageElement) {
+    return { width: source.naturalWidth, height: source.naturalHeight }
+  }
+  const sizedSource = source as HTMLCanvasElement | OffscreenCanvas | ImageBitmap
+  return { width: sizedSource.width, height: sizedSource.height }
+}
+
 export class EffectsPipeline {
   private device: GPUDevice
   private format: GPUTextureFormat
@@ -82,8 +107,9 @@ export class EffectsPipeline {
   private texH = 0
   private initialized = false
 
-  // Reusable uniform buffers per effect type (avoids per-frame allocation)
-  private uniformBuffers = new Map<string, GPUBuffer>()
+  // Reusable uniform buffers per effect-chain pass. A pass must own its buffer
+  // because multiple passes are encoded before the command buffer is submitted.
+  private uniformBuffers: GPUBuffer[] = []
   // Cached texture views for ping/pong (recreated when textures change)
   private pingView: GPUTextureView | null = null
   private pongView: GPUTextureView | null = null
@@ -289,15 +315,16 @@ export class EffectsPipeline {
     this.texH = h
   }
 
-  private getOrCreateUniformBuffer(effectId: string, size: number): GPUBuffer {
-    let buf = this.uniformBuffers.get(effectId)
+  private getOrCreateUniformBuffer(passIndex: number, size: number): GPUBuffer {
+    let buf = this.uniformBuffers[passIndex]
     if (buf && buf.size >= size) return buf
     buf?.destroy()
     buf = this.device.createBuffer({
       size,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
-    this.uniformBuffers.set(effectId, buf)
+    this.uniformBuffers[passIndex] = buf
+    this.effectBindGroupCache.clear()
     return buf
   }
 
@@ -314,7 +341,8 @@ export class EffectsPipeline {
     let inputView = inputTex === this.pingTexture ? this.pingView! : this.pongView!
     let outputView = outputTex === this.pingTexture ? this.pingView! : this.pongView!
 
-    for (const effect of effects) {
+    for (let effectIndex = 0; effectIndex < effects.length; effectIndex++) {
+      const effect = effects[effectIndex]!
       const pipeline = this.pipelines.get(effect.type)
       const layout = this.bindGroupLayouts.get(effect.type)
       if (!pipeline || !layout) continue
@@ -325,15 +353,14 @@ export class EffectsPipeline {
       const uniformData = definition.packUniforms(effect.params, w, h)
       let uniformBuffer: GPUBuffer | undefined
       if (uniformData) {
-        uniformBuffer = this.getOrCreateUniformBuffer(effect.type, uniformData.byteLength)
+        uniformBuffer = this.getOrCreateUniformBuffer(effectIndex, uniformData.byteLength)
         this.device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer)
       }
 
-      // Cache bind groups keyed by effect type + input view identity.
-      // Uniform buffer data changes via writeBuffer but the buffer object stays the same,
-      // so the bind group remains valid across frames.
+      // Cache bind groups by pass, effect type, and input view identity. Uniform data changes
+      // via writeBuffer, but each encoded pass gets a stable buffer object of its own.
       const viewKey = inputView === this.pingView ? 'ping' : 'pong'
-      const cacheKey = `${effect.type}:${viewKey}`
+      const cacheKey = `${effectIndex}:${effect.type}:${viewKey}`
       let bindGroup = this.effectBindGroupCache.get(cacheKey)
       if (!bindGroup) {
         const bindEntries: GPUBindGroupEntry[] = [
@@ -381,6 +408,18 @@ export class EffectsPipeline {
     } catch {
       return null
     }
+  }
+
+  private trackSubmittedWork(): void {
+    this.gpuFramesInFlight++
+    this.device.queue.onSubmittedWorkDone().then(
+      () => {
+        this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1)
+      },
+      () => {
+        this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1)
+      },
+    )
   }
 
   /**
@@ -461,16 +500,7 @@ export class EffectsPipeline {
 
     this.device.queue.submit([commandEncoder.finish()])
 
-    // Track GPU completion — allow up to MAX_FRAMES_IN_FLIGHT concurrent frames
-    this.gpuFramesInFlight++
-    this.device.queue.onSubmittedWorkDone().then(
-      () => {
-        this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1)
-      },
-      () => {
-        this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1)
-      },
-    )
+    this.trackSubmittedWork()
 
     return true
   }
@@ -689,6 +719,115 @@ export class EffectsPipeline {
   }
 
   /**
+   * Apply effects into a caller-owned GPU texture.
+   *
+   * This keeps the effect output GPU-native for downstream passes such as
+   * transitions or compositing. The source is still uploaded when it is a canvas,
+   * but the effect result no longer bounces through a WebGPU canvas just to be
+   * uploaded again by the next GPU stage.
+   */
+  applyEffectsToTexture(
+    source: GpuExternalImageSource,
+    effects: GpuEffectInstance[],
+    outputTexture: GPUTexture,
+  ): boolean {
+    const enabled = effects.filter((e) => e.enabled)
+
+    const { width: w, height: h } = getExternalImageSourceDimensions(source)
+    if (w < 2 || h < 2) return false
+    if (outputTexture.width !== w || outputTexture.height !== h) return false
+
+    if (enabled.length === 0) {
+      this.device.queue.copyExternalImageToTexture(
+        { source, flipY: false },
+        { texture: outputTexture },
+        { width: w, height: h },
+      )
+      return true
+    }
+    this.ensurePingPong(w, h)
+    if (!this.pingTexture || !this.pongTexture) return false
+
+    this.device.queue.copyExternalImageToTexture(
+      { source, flipY: false },
+      { texture: this.pingTexture },
+      { width: w, height: h },
+    )
+
+    const commandEncoder = this.device.createCommandEncoder()
+    const finalTex = this.runEffectChain(
+      commandEncoder,
+      enabled,
+      this.pingTexture,
+      this.pongTexture,
+      w,
+      h,
+    )
+    commandEncoder.copyTextureToTexture(
+      { texture: finalTex },
+      { texture: outputTexture },
+      { width: w, height: h },
+    )
+    this.device.queue.submit([commandEncoder.finish()])
+    this.trackSubmittedWork()
+    return true
+  }
+
+  applyTextureEffectsToTexture(
+    sourceTexture: GPUTexture,
+    effects: GpuEffectInstance[],
+    outputTexture: GPUTexture,
+    width: number,
+    height: number,
+  ): boolean {
+    const enabled = effects.filter((e) => e.enabled)
+    if (width < 2 || height < 2) return false
+    if (
+      sourceTexture.width !== width ||
+      sourceTexture.height !== height ||
+      outputTexture.width !== width ||
+      outputTexture.height !== height
+    ) {
+      return false
+    }
+
+    const commandEncoder = this.device.createCommandEncoder()
+    if (enabled.length === 0) {
+      commandEncoder.copyTextureToTexture(
+        { texture: sourceTexture },
+        { texture: outputTexture },
+        { width, height },
+      )
+      this.device.queue.submit([commandEncoder.finish()])
+      return true
+    }
+
+    this.ensurePingPong(width, height)
+    if (!this.pingTexture || !this.pongTexture) return false
+    commandEncoder.copyTextureToTexture(
+      { texture: sourceTexture },
+      { texture: this.pingTexture },
+      { width, height },
+    )
+    const finalTex = this.runEffectChain(
+      commandEncoder,
+      enabled,
+      this.pingTexture,
+      this.pongTexture,
+      width,
+      height,
+    )
+    commandEncoder.copyTextureToTexture(
+      { texture: finalTex },
+      { texture: outputTexture },
+      { width, height },
+    )
+    this.device.queue.submit([commandEncoder.finish()])
+    this.trackSubmittedWork()
+    return true
+  }
+
+  /**
    * Apply effects directly from an HTMLVideoElement via importExternalTexture.
    * Zero-copy: the GPU reads directly from the video decoder's output buffer.
    * Positions the video at `destRect` on a canvas of `canvasWidth × canvasHeight`.
@@ -849,10 +988,10 @@ export class EffectsPipeline {
     this.poolMode = false
     this.outputPool = []
     this.batchIndex = 0
-    for (const buf of this.uniformBuffers.values()) {
+    for (const buf of this.uniformBuffers) {
       buf.destroy()
     }
-    this.uniformBuffers.clear()
+    this.uniformBuffers = []
     this.effectBindGroupCache.clear()
     this.blitBindGroupPing = null
     this.blitBindGroupPong = null

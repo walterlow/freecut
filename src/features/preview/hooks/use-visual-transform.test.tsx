@@ -76,6 +76,17 @@ const WRAPPED_TEXT_ITEM = {
   },
 } as unknown as TimelineItem
 
+const CORNER_PINNED_WRAPPED_TEXT_ITEM = {
+  ...WRAPPED_TEXT_ITEM,
+  id: 'item-3',
+  cornerPin: {
+    topLeft: [0, 0],
+    topRight: [12, -8],
+    bottomRight: [10, 14],
+    bottomLeft: [-10, 6],
+  },
+} as unknown as TimelineItem
+
 function VisualTransformsProbe({ item = ITEM }: { item?: TimelineItem }) {
   const transforms = useVisualTransforms([item], PROJECT_SIZE)
   const resolved = transforms.get(item.id)
@@ -204,6 +215,14 @@ describe('useVisualTransforms skimming frame resolution', () => {
       expect(
         Number(screen.getByTestId('visual-probe').getAttribute('data-height')),
       ).toBeGreaterThan(80)
+    })
+  })
+
+  it('keeps corner-pinned text bounds anchored to the gizmo box', async () => {
+    render(<VisualTransformsProbe item={CORNER_PINNED_WRAPPED_TEXT_ITEM} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-height', '80')
     })
   })
 })

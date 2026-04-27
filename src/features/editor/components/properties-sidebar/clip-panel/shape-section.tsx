@@ -289,6 +289,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
     (checked: boolean) => {
       updateShapeItems({
         isMask: checked,
+        blendMode: checked ? 'normal' : undefined,
         // Set defaults when enabling mask
         maskType: checked ? 'clip' : undefined,
         maskFeather: checked ? 0 : undefined,

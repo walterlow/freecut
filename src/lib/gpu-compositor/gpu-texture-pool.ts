@@ -33,6 +33,7 @@ export class GpuTexturePool {
     device: GPUDevice,
     usage: GPUTextureUsageFlags = GPUTextureUsage.TEXTURE_BINDING |
       GPUTextureUsage.COPY_DST |
+      GPUTextureUsage.COPY_SRC |
       GPUTextureUsage.RENDER_ATTACHMENT,
   ) {
     this.device = device

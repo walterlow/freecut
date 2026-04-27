@@ -218,15 +218,20 @@ export const FillSection = memo(function FillSection({
     const allSame = items.every((item) => (item.blendMode ?? 'normal') === first)
     return allSame ? first : ('mixed' as string)
   }, [items])
+  const hasShapeMask = useMemo(
+    () => items.some((item) => item.type === 'shape' && item.isMask),
+    [items],
+  )
 
   // Handle blend mode change
   const handleBlendModeChange = useCallback(
     (value: string) => {
-      for (const id of itemIds) {
-        updateItem(id, { blendMode: value as BlendMode })
+      for (const item of items) {
+        if (item.type === 'shape' && item.isMask) continue
+        updateItem(item.id, { blendMode: value as BlendMode })
       }
     },
-    [itemIds, updateItem],
+    [items, updateItem],
   )
 
   // Reset opacity to 100%
@@ -290,11 +295,12 @@ export const FillSection = memo(function FillSection({
       {/* Blend Mode */}
       <PropertyRow label="Blend">
         <Select
-          value={blendMode === 'mixed' ? undefined : blendMode}
+          value={hasShapeMask ? 'normal' : blendMode === 'mixed' ? undefined : blendMode}
           onValueChange={handleBlendModeChange}
+          disabled={hasShapeMask}
         >
           <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-            <SelectValue placeholder={blendMode === 'mixed' ? 'Mixed' : 'Normal'} />
+            <SelectValue placeholder={hasShapeMask || blendMode !== 'mixed' ? 'Normal' : 'Mixed'} />
           </SelectTrigger>
           <SelectContent>
             {BLEND_MODE_GROUPS.map((group) => (

@@ -117,7 +117,7 @@ describe('local-model-cache', () => {
             new Response(new Uint8Array(9), {
               headers: { 'content-length': '9' },
             }),
-          'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model_quantized.onnx':
+          'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx':
             new Response(new Uint8Array(21), {
               headers: { 'content-length': '21' },
             }),

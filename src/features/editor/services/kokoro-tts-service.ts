@@ -36,31 +36,13 @@ interface KokoroTtsModelOption {
   downloadLabel: string
   qualityLabel: string
   estimatedBytes: number
-  dtype: 'q8' | 'fp16' | 'fp32'
+  dtype: 'fp32'
   cacheMatchFragments: string[]
 }
 
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX'
 
 const MODEL_CONFIGS = {
-  q8: {
-    value: 'q8',
-    label: 'Fast',
-    downloadLabel: '88 MB',
-    qualityLabel: 'Fastest',
-    estimatedBytes: 92_361_116,
-    dtype: 'q8',
-    cacheMatchFragments: ['/onnx-community/kokoro-82m-v1.0-onnx/', '/onnx/model_quantized.onnx'],
-  },
-  fp16: {
-    value: 'fp16',
-    label: 'Balanced',
-    downloadLabel: '156 MB',
-    qualityLabel: 'Higher quality',
-    estimatedBytes: 163_234_740,
-    dtype: 'fp16',
-    cacheMatchFragments: ['/onnx-community/kokoro-82m-v1.0-onnx/', '/onnx/model_fp16.onnx'],
-  },
   fp32: {
     value: 'fp32',
     label: 'Best',
@@ -74,12 +56,9 @@ const MODEL_CONFIGS = {
 
 export type KokoroTtsModel = keyof typeof MODEL_CONFIGS
 type KokoroTtsModelConfig = (typeof MODEL_CONFIGS)[KokoroTtsModel]
+export const KOKORO_TTS_BEST_MODEL: KokoroTtsModel = 'fp32'
 
-export const KOKORO_TTS_MODEL_OPTIONS: KokoroTtsModelOption[] = [
-  MODEL_CONFIGS.q8,
-  MODEL_CONFIGS.fp16,
-  MODEL_CONFIGS.fp32,
-]
+export const KOKORO_TTS_MODEL_OPTIONS: KokoroTtsModelOption[] = [MODEL_CONFIGS.fp32]
 
 export const KOKORO_TTS_VOICE_OPTIONS = [
   { value: 'af_heart', label: 'Heart (US, F)' },

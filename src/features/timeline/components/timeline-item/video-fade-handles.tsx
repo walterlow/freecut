@@ -1,6 +1,7 @@
-import { memo, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { cn } from '@/shared/ui/cn'
 import type { AudioFadeHandle } from '../../utils/audio-fade'
+import { FloatingReadout } from './floating-readout'
 
 interface VideoFadeHandlesProps {
   trackLocked: boolean
@@ -10,6 +11,7 @@ interface VideoFadeHandlesProps {
   fadeOutPercent: number
   isSelected: boolean
   isEditing: boolean
+  editingHandle?: AudioFadeHandle | null
   fadeInLabel?: string
   fadeOutLabel?: string
   onFadeHandleMouseDown: (e: React.MouseEvent, handle: AudioFadeHandle) => void
@@ -24,12 +26,21 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
   fadeOutPercent,
   isSelected,
   isEditing,
+  editingHandle = null,
   fadeInLabel,
   fadeOutLabel,
   onFadeHandleMouseDown,
   onFadeHandleDoubleClick,
 }: VideoFadeHandlesProps) {
   const [hoveredHandle, setHoveredHandle] = useState<AudioFadeHandle | null>(null)
+  const fadeInHandleRef = useRef<HTMLButtonElement | null>(null)
+  const fadeOutHandleRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!isEditing) {
+      setHoveredHandle(null)
+    }
+  }, [isEditing])
 
   if (trackLocked || activeTool !== 'select') {
     return null
@@ -39,9 +50,10 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
     isEditing || isSelected ? 'opacity-100' : 'opacity-0 group-hover/timeline-item:opacity-100'
   const fadeInLeft = Math.max(0, Math.min(100, fadeInPercent))
   const fadeOutLeft = Math.max(0, Math.min(100, 100 - fadeOutPercent))
-  const activeLeft = hoveredHandle === 'in' ? fadeInLeft : fadeOutLeft
+  const visibleLabelHandle = editingHandle ?? hoveredHandle
   const visibleLabel =
-    hoveredHandle === 'in' ? fadeInLabel : hoveredHandle === 'out' ? fadeOutLabel : null
+    visibleLabelHandle === 'in' ? fadeInLabel : visibleLabelHandle === 'out' ? fadeOutLabel : null
+  const visibleLabelAnchorRef = visibleLabelHandle === 'in' ? fadeInHandleRef : fadeOutHandleRef
   const handleTop = '-2px'
 
   const getHandleClassName = () =>
@@ -54,6 +66,7 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
   return (
     <div className="absolute inset-0 pointer-events-none z-30">
       <button
+        ref={fadeInHandleRef}
         type="button"
         className={getHandleClassName()}
         style={{ left: `${fadeInLeft}%`, top: handleTop }}
@@ -61,17 +74,23 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
           e.preventDefault()
           e.stopPropagation()
         }}
-        onMouseDown={(e) => onFadeHandleMouseDown(e, 'in')}
+        onMouseDown={(e) => {
+          setHoveredHandle('in')
+          onFadeHandleMouseDown(e, 'in')
+        }}
         onDoubleClick={(e) => {
           e.preventDefault()
           e.stopPropagation()
           onFadeHandleDoubleClick('in')
         }}
         onMouseEnter={() => setHoveredHandle('in')}
-        onMouseLeave={() => setHoveredHandle((current) => (current === 'in' ? null : current))}
+        onMouseLeave={() => {
+          if (!isEditing) setHoveredHandle((current) => (current === 'in' ? null : current))
+        }}
         aria-label="Adjust video fade in"
       />
       <button
+        ref={fadeOutHandleRef}
         type="button"
         className={getHandleClassName()}
         style={{ left: `${fadeOutLeft}%`, top: handleTop }}
@@ -79,24 +98,30 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
           e.preventDefault()
           e.stopPropagation()
         }}
-        onMouseDown={(e) => onFadeHandleMouseDown(e, 'out')}
+        onMouseDown={(e) => {
+          setHoveredHandle('out')
+          onFadeHandleMouseDown(e, 'out')
+        }}
         onDoubleClick={(e) => {
           e.preventDefault()
           e.stopPropagation()
           onFadeHandleDoubleClick('out')
         }}
         onMouseEnter={() => setHoveredHandle('out')}
-        onMouseLeave={() => setHoveredHandle((current) => (current === 'out' ? null : current))}
+        onMouseLeave={() => {
+          if (!isEditing) setHoveredHandle((current) => (current === 'out' ? null : current))
+        }}
         aria-label="Adjust video fade out"
       />
 
-      {hoveredHandle && visibleLabel && (
-        <div
-          className="absolute -translate-x-1/2 -translate-y-full rounded bg-slate-950/95 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-lg whitespace-nowrap"
-          style={{ left: `${activeLeft}%`, top: `calc(${lineYPercent}% + 10px)` }}
+      {visibleLabelHandle && visibleLabel && (
+        <FloatingReadout
+          anchorRef={visibleLabelAnchorRef}
+          measureKey={`${visibleLabelHandle}:${visibleLabel}:${lineYPercent}:${fadeInLeft}:${fadeOutLeft}`}
+          offsetY={6}
         >
           {visibleLabel}
-        </div>
+        </FloatingReadout>
       )}
     </div>
   )

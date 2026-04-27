@@ -168,7 +168,9 @@ export function buildPreviewTransitionData({
 
   const hasExpensiveVisuals = (item: TimelineItem) =>
     item.effects?.some((effect) => effect.enabled) ||
-    (item.blendMode !== undefined && item.blendMode !== 'normal')
+    (!(item.type === 'shape' && item.isMask) &&
+      item.blendMode !== undefined &&
+      item.blendMode !== 'normal')
 
   const playbackTransitionComplexStartFrames = new Set<number>()
   const playbackTransitionOverlayWindows = playbackTransitionWindows.map((window) => {
