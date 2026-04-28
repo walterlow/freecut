@@ -62,6 +62,13 @@ export type BuiltinTransitionPresentation =
   | 'starShape'
   | 'triangleLeftShape'
   | 'triangleRightShape'
+  | 'bandWipe'
+  | 'centerWipe'
+  | 'edgeWipe'
+  | 'radialWipe'
+  | 'spiralWipe'
+  | 'venetianBlindWipe'
+  | 'xWipe'
 
 /**
  * Visual presentation styles for transitions.

@@ -4,6 +4,7 @@ import { registerIrisTransitions } from './iris'
 import { getClockWipeMaskState, getIrisMaskState, registerMaskTransitions } from './mask'
 import { registerMotionTransitions } from './motion'
 import { registerShapeTransitions } from './shape'
+import { registerWipeTransitions } from './wipe'
 
 function getRenderer(id: 'clockWipe' | 'iris') {
   const registry = new TransitionRegistry()
@@ -145,6 +146,37 @@ describe('shape transitions', () => {
     const registry = new TransitionRegistry()
     registerShapeTransitions(registry)
     const renderer = registry.getRenderer('heartShape')
+
+    expect(renderer?.calculateStyles(0, true, 1920, 1080)).toEqual({ opacity: 1 })
+    expect(renderer?.calculateStyles(1, true, 1920, 1080)).toEqual({ opacity: 0 })
+
+    const midpoint = renderer?.calculateStyles(0.5, true, 1920, 1080)
+    expect(midpoint?.maskImage).toContain('data:image/svg+xml')
+  })
+})
+
+describe('wipe transitions', () => {
+  it('registers the DaVinci-style wipe variants', () => {
+    const registry = new TransitionRegistry()
+    registerWipeTransitions(registry)
+    registerMaskTransitions(registry)
+
+    expect(registry.getByCategory('wipe').map((entry) => entry.definition.label)).toEqual([
+      'Band Wipe',
+      'Center Wipe',
+      'Clock Wipe',
+      'Edge Wipe',
+      'Radial Wipe',
+      'Spiral Wipe',
+      'Venetian Blind Wipe',
+      'X Wipe',
+    ])
+  })
+
+  it('builds outgoing SVG masks for wipe reveals', () => {
+    const registry = new TransitionRegistry()
+    registerWipeTransitions(registry)
+    const renderer = registry.getRenderer('bandWipe')
 
     expect(renderer?.calculateStyles(0, true, 1920, 1080)).toEqual({ opacity: 1 })
     expect(renderer?.calculateStyles(1, true, 1920, 1080)).toEqual({ opacity: 0 })
