@@ -92,9 +92,9 @@ const slideRenderer: TransitionRenderer = {
 
 const slideDef: TransitionDefinition = {
   id: 'slide',
-  label: 'Slide',
-  description: 'Slide in from a direction',
-  category: 'slide',
+  label: 'Push',
+  description: 'Push between clips from a direction',
+  category: 'motion',
   icon: 'MoveRight',
   hasDirection: true,
   directions: ALL_DIRECTIONS,

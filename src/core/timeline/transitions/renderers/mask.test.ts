@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vite-plus/test'
 import { TransitionRegistry } from '../registry'
 import { registerIrisTransitions } from './iris'
 import { getClockWipeMaskState, getIrisMaskState, registerMaskTransitions } from './mask'
+import { registerMotionTransitions } from './motion'
 
 function getRenderer(id: 'clockWipe' | 'iris') {
   const registry = new TransitionRegistry()
@@ -98,5 +99,29 @@ describe('iris transitions', () => {
     const midpoint = renderer?.calculateStyles(0.5, true, 1920, 1080)
     expect(midpoint?.maskImage).toContain('data:image/svg+xml')
     expect(midpoint?.webkitMaskImage).toBe(midpoint?.maskImage)
+  })
+})
+
+describe('motion transitions', () => {
+  it('registers barn door and split in the Motion category', () => {
+    const registry = new TransitionRegistry()
+    registerMotionTransitions(registry)
+
+    expect(registry.getByCategory('motion').map((entry) => entry.definition.label)).toEqual([
+      'Barn Door',
+      'Split',
+    ])
+  })
+
+  it('builds outgoing SVG masks for motion split reveals', () => {
+    const registry = new TransitionRegistry()
+    registerMotionTransitions(registry)
+    const renderer = registry.getRenderer('barnDoor')
+
+    expect(renderer?.calculateStyles(0, true, 1920, 1080)).toEqual({ opacity: 1 })
+    expect(renderer?.calculateStyles(1, true, 1920, 1080)).toEqual({ opacity: 0 })
+
+    const midpoint = renderer?.calculateStyles(0.5, true, 1920, 1080)
+    expect(midpoint?.maskImage).toContain('data:image/svg+xml')
   })
 })

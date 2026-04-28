@@ -107,9 +107,9 @@ const wipeRenderer: TransitionRenderer = {
 
 const wipeDef: TransitionDefinition = {
   id: 'wipe',
-  label: 'Wipe',
-  description: 'Wipe reveal from one direction',
-  category: 'wipe',
+  label: 'Slide',
+  description: 'Slide reveal from one direction',
+  category: 'motion',
   icon: 'ArrowRight',
   hasDirection: true,
   directions: ALL_DIRECTIONS,

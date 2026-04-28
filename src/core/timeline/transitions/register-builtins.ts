@@ -8,6 +8,7 @@
 import { transitionRegistry } from './registry'
 import {
   registerBasicTransitions,
+  registerMotionTransitions,
   registerWipeTransitions,
   registerSlideTransitions,
   registerFlipTransitions,
@@ -23,6 +24,7 @@ export function registerBuiltinTransitions(): void {
   registered = true
 
   registerBasicTransitions(transitionRegistry)
+  registerMotionTransitions(transitionRegistry)
   registerWipeTransitions(transitionRegistry)
   registerSlideTransitions(transitionRegistry)
   registerFlipTransitions(transitionRegistry)

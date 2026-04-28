@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   ArrowUp,
   ArrowDown,
+  Columns2,
   MoveRight,
   MoveLeft,
   MoveUp,
@@ -30,6 +31,7 @@ import {
   Sun,
   Waves,
   ScanSearch,
+  SplitSquareVertical,
   Flame,
   Film,
   type LucideIcon,
@@ -44,6 +46,7 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
+  Columns2,
   MoveRight,
   MoveLeft,
   MoveDown,
@@ -66,6 +69,7 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
   Sun,
   Waves,
   ScanSearch,
+  SplitSquareVertical,
   Flame,
   Film,
 }
@@ -73,6 +77,7 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
 /** Display labels for transition categories */
 export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
   basic: { title: 'Basic' },
+  motion: { title: 'Motion' },
   wipe: { title: 'Wipe' },
   slide: { title: 'Slide' },
   flip: { title: 'Flip' },
@@ -86,8 +91,7 @@ export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
 /** Ordered list of categories for UI rendering */
 export const TRANSITION_CATEGORY_ORDER: TransitionCategory[] = [
   'basic',
-  'wipe',
-  'slide',
+  'motion',
   'flip',
   'mask',
   'iris',

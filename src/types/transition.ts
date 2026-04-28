@@ -13,6 +13,7 @@ export type TransitionType = 'crossfade'
  */
 export type TransitionCategory =
   | 'basic'
+  | 'motion'
   | 'wipe'
   | 'slide'
   | 'flip'
@@ -28,8 +29,10 @@ export type TransitionCategory =
  */
 export type BuiltinTransitionPresentation =
   | 'fade'
+  | 'barnDoor'
   | 'wipe'
   | 'slide'
+  | 'split'
   | 'flip'
   | 'clockWipe'
   | 'iris'

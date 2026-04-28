@@ -3,6 +3,7 @@
  */
 
 export { registerBasicTransitions } from './basic'
+export { registerMotionTransitions } from './motion'
 export { registerWipeTransitions } from './wipe'
 export { registerSlideTransitions } from './slide'
 export { registerFlipTransitions } from './flip'
