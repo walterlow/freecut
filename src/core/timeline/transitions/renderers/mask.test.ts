@@ -3,6 +3,7 @@ import { TransitionRegistry } from '../registry'
 import { registerIrisTransitions } from './iris'
 import { getClockWipeMaskState, getIrisMaskState, registerMaskTransitions } from './mask'
 import { registerMotionTransitions } from './motion'
+import { registerShapeTransitions } from './shape'
 
 function getRenderer(id: 'clockWipe' | 'iris') {
   const registry = new TransitionRegistry()
@@ -117,6 +118,33 @@ describe('motion transitions', () => {
     const registry = new TransitionRegistry()
     registerMotionTransitions(registry)
     const renderer = registry.getRenderer('barnDoor')
+
+    expect(renderer?.calculateStyles(0, true, 1920, 1080)).toEqual({ opacity: 1 })
+    expect(renderer?.calculateStyles(1, true, 1920, 1080)).toEqual({ opacity: 0 })
+
+    const midpoint = renderer?.calculateStyles(0.5, true, 1920, 1080)
+    expect(midpoint?.maskImage).toContain('data:image/svg+xml')
+  })
+})
+
+describe('shape transitions', () => {
+  it('registers the DaVinci-style shape variants', () => {
+    const registry = new TransitionRegistry()
+    registerShapeTransitions(registry)
+
+    expect(registry.getByCategory('shape').map((entry) => entry.definition.label)).toEqual([
+      'Box',
+      'Heart',
+      'Star',
+      'Triangle Left',
+      'Triangle Right',
+    ])
+  })
+
+  it('builds outgoing SVG masks for shape reveals', () => {
+    const registry = new TransitionRegistry()
+    registerShapeTransitions(registry)
+    const renderer = registry.getRenderer('heartShape')
 
     expect(renderer?.calculateStyles(0, true, 1920, 1080)).toEqual({ opacity: 1 })
     expect(renderer?.calculateStyles(1, true, 1920, 1080)).toEqual({ opacity: 0 })

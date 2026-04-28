@@ -19,6 +19,7 @@ export type TransitionCategory =
   | 'flip'
   | 'mask'
   | 'iris'
+  | 'shape'
   | 'light'
   | 'chromatic'
   | 'custom'
@@ -56,6 +57,11 @@ export type BuiltinTransitionPresentation =
   | 'pentagonIris'
   | 'squareIris'
   | 'triangleIris'
+  | 'boxShape'
+  | 'heartShape'
+  | 'starShape'
+  | 'triangleLeftShape'
+  | 'triangleRightShape'
 
 /**
  * Visual presentation styles for transitions.
