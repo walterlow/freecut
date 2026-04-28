@@ -17,6 +17,7 @@ export type TransitionCategory =
   | 'slide'
   | 'flip'
   | 'mask'
+  | 'iris'
   | 'light'
   | 'chromatic'
   | 'custom'
@@ -43,6 +44,15 @@ export type BuiltinTransitionPresentation =
   | 'lensWarpZoom'
   | 'lightLeakBurn'
   | 'filmGateSlip'
+  | 'arrowIris'
+  | 'crossIris'
+  | 'diamondIris'
+  | 'eyeIris'
+  | 'hexagonIris'
+  | 'ovalIris'
+  | 'pentagonIris'
+  | 'squareIris'
+  | 'triangleIris'
 
 /**
  * Visual presentation styles for transitions.

@@ -12,6 +12,7 @@ import {
   registerSlideTransitions,
   registerFlipTransitions,
   registerMaskTransitions,
+  registerIrisTransitions,
   registerGpuTransitions,
 } from './renderers'
 
@@ -26,5 +27,6 @@ export function registerBuiltinTransitions(): void {
   registerSlideTransitions(transitionRegistry)
   registerFlipTransitions(transitionRegistry)
   registerMaskTransitions(transitionRegistry)
+  registerIrisTransitions(transitionRegistry)
   registerGpuTransitions(transitionRegistry)
 }

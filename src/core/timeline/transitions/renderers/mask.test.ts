@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test'
 import { TransitionRegistry } from '../registry'
+import { registerIrisTransitions } from './iris'
 import { getClockWipeMaskState, getIrisMaskState, registerMaskTransitions } from './mask'
 
 function getRenderer(id: 'clockWipe' | 'iris') {
@@ -65,5 +66,37 @@ describe('mask transitions', () => {
     expect(renderer.calculateStyles(1, true, 1920, 1080, undefined, { edgeSoftness: 32 })).toEqual({
       opacity: 0,
     })
+  })
+})
+
+describe('iris transitions', () => {
+  it('registers the DaVinci-style iris behavior variants', () => {
+    const registry = new TransitionRegistry()
+    registerIrisTransitions(registry)
+
+    expect(registry.getByCategory('iris').map((entry) => entry.definition.label)).toEqual([
+      'Arrow Iris',
+      'Cross Iris',
+      'Diamond Iris',
+      'Eye Iris',
+      'Hexagon Iris',
+      'Oval Iris',
+      'Pentagon Iris',
+      'Square Iris',
+      'Triangle Iris',
+    ])
+  })
+
+  it('builds an outgoing SVG aperture mask for polygon iris variants', () => {
+    const registry = new TransitionRegistry()
+    registerIrisTransitions(registry)
+    const renderer = registry.getRenderer('diamondIris')
+
+    expect(renderer?.calculateStyles(0, true, 1920, 1080)).toEqual({ opacity: 1 })
+    expect(renderer?.calculateStyles(1, true, 1920, 1080)).toEqual({ opacity: 0 })
+
+    const midpoint = renderer?.calculateStyles(0.5, true, 1920, 1080)
+    expect(midpoint?.maskImage).toContain('data:image/svg+xml')
+    expect(midpoint?.webkitMaskImage).toBe(midpoint?.maskImage)
   })
 })
