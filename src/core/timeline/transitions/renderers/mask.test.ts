@@ -3,7 +3,7 @@ import { TransitionRegistry } from '../registry'
 import { registerIrisTransitions } from './iris'
 import { getClockWipeMaskState, getIrisMaskState, registerMaskTransitions } from './mask'
 import { registerMotionTransitions } from './motion'
-import { registerShapeTransitions } from './shape'
+import { getAperturePath, registerShapeTransitions } from './shape'
 import { registerWipeTransitions } from './wipe'
 
 function getRenderer(id: 'clockWipe' | 'iris') {
@@ -129,6 +129,18 @@ describe('motion transitions', () => {
 })
 
 describe('shape transitions', () => {
+  function getPathBounds(path: string): { minX: number; maxX: number; minY: number; maxY: number } {
+    const numbers = [...path.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]))
+    const xs = numbers.filter((_, index) => index % 2 === 0)
+    const ys = numbers.filter((_, index) => index % 2 === 1)
+    return {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys),
+    }
+  }
+
   it('registers the DaVinci-style shape variants', () => {
     const registry = new TransitionRegistry()
     registerShapeTransitions(registry)
@@ -152,6 +164,28 @@ describe('shape transitions', () => {
 
     const midpoint = renderer?.calculateStyles(0.5, true, 1920, 1080)
     expect(midpoint?.maskImage).toContain('data:image/svg+xml')
+  })
+
+  it('keeps box aperture from covering the whole frame by the midpoint', () => {
+    const width = 1920
+    const height = 1080
+
+    const midpoint = getPathBounds(getAperturePath('box', width, height, 0.5))
+    const coversAllEdges =
+      midpoint.minX < 0 && midpoint.maxX > width && midpoint.minY < 0 && midpoint.maxY > height
+    expect(coversAllEdges).toBe(false)
+  })
+
+  it('overscans box aperture at the exit frame to prevent a pop', () => {
+    const width = 1920
+    const height = 1080
+
+    const bounds = getPathBounds(getAperturePath('box', width, height, 1))
+
+    expect(bounds.minX).toBeLessThan(0)
+    expect(bounds.maxX).toBeGreaterThan(width)
+    expect(bounds.minY).toBeLessThan(0)
+    expect(bounds.maxY).toBeGreaterThan(height)
   })
 })
 

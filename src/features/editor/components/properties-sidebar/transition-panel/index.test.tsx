@@ -119,11 +119,13 @@ describe('TransitionPanel', () => {
     } as Partial<ReturnType<typeof useTimelineStore.getState>>)
   })
 
-  it('shows transition presets in a dropdown with full directional labels', () => {
+  it('shows transition presets and exposes direction as a property', () => {
     render(<TransitionPanel />)
 
-    expect(screen.getByRole('combobox')).toHaveTextContent('Wipe left')
+    expect(screen.getByRole('combobox')).toHaveTextContent('Slide')
     expect(screen.getByText('Preset')).toBeInTheDocument()
+    expect(screen.getByText('Direction')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Left' })).toHaveClass('bg-background')
   })
 
   it('shows ease options and updates the selected ease curve', async () => {
@@ -176,14 +178,12 @@ describe('TransitionPanel', () => {
     expect(screen.queryByRole('button', { name: 'In & Out' })).not.toBeInTheDocument()
   })
 
-  it('applies the chosen preset from the dropdown list', async () => {
+  it('updates direction from the direction property controls', async () => {
     render(<TransitionPanel />)
 
-    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' })
-    fireEvent.click(await screen.findByText('Wipe right'))
+    fireEvent.click(screen.getByRole('button', { name: 'Right' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toHaveTextContent('Wipe right')
       expect(
         useTimelineStore.getState().transitions.find((transition) => transition.id === 'tr-1')
           ?.direction,

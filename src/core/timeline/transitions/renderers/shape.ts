@@ -36,7 +36,15 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
 
-function getShapeScale(progress: number, width: number, height: number): number {
+function getShapeScale(
+  shape: ShapeAperture,
+  progress: number,
+  width: number,
+  height: number,
+): number {
+  if (shape === 'box') {
+    return clamp01(progress) * Math.max(width / 2, height / (2 * 0.62)) * 1.12
+  }
   return clamp01(progress) * Math.max(width, height) * 1.45
 }
 
@@ -104,7 +112,7 @@ function getHeartPath(centerX: number, centerY: number, scale: number): string {
   ].join(' ')
 }
 
-function getAperturePath(
+export function getAperturePath(
   shape: ShapeAperture,
   width: number,
   height: number,
@@ -125,7 +133,7 @@ function getAperturePath(
 
   const centerX = width / 2
   const centerY = height / 2
-  const scale = getShapeScale(p, width, height)
+  const scale = getShapeScale(shape, p, width, height)
 
   if (shape === 'heart') {
     return getHeartPath(centerX, centerY, scale)
@@ -209,7 +217,7 @@ function addAperturePath(
 
   const centerX = width / 2
   const centerY = height / 2
-  const scale = getShapeScale(p, width, height)
+  const scale = getShapeScale(shape, p, width, height)
 
   if (shape === 'heart') {
     addHeartPath(path, centerX, centerY, scale)

@@ -35,6 +35,16 @@ function getPresentationOptionLabel(
   return config.direction ? config.description : config.label
 }
 
+const DIRECTION_OPTIONS = [
+  { value: 'from-left', label: 'Left' },
+  { value: 'from-right', label: 'Right' },
+  { value: 'from-top', label: 'Top' },
+  { value: 'from-bottom', label: 'Bottom' },
+] as const satisfies ReadonlyArray<{
+  value: WipeDirection | SlideDirection | FlipDirection
+  label: string
+}>
+
 const EASE_OPTIONS = [
   { value: 'linear', label: 'Linear' },
   { value: 'ease-in', label: 'In' },
@@ -93,13 +103,8 @@ export function TransitionPanel() {
     [presentationConfigGroups],
   )
   const currentPresentationConfig = useMemo(
-    () =>
-      presentationConfigs.find(
-        (config) =>
-          config.id === selectedTransition?.presentation &&
-          (config.direction ?? undefined) === (selectedTransition?.direction ?? undefined),
-      ),
-    [presentationConfigs, selectedTransition?.presentation, selectedTransition?.direction],
+    () => presentationConfigs.find((config) => config.id === selectedTransition?.presentation),
+    [presentationConfigs, selectedTransition?.presentation],
   )
   const currentPresentationLabel = currentPresentationConfig
     ? getPresentationOptionLabel(currentPresentationConfig)
@@ -152,8 +157,19 @@ export function TransitionPanel() {
       direction?: WipeDirection | SlideDirection | FlipDirection,
     ) => {
       if (selectedTransitionId) {
-        const updates: Partial<Transition> = { presentation, direction }
         const nextDefinition = transitionRegistry.getDefinition(presentation)
+        const currentDirection = selectedTransition?.direction
+        const nextDirections = nextDefinition?.directions ?? []
+        const nextDirection =
+          direction ??
+          (currentDirection && nextDirections.includes(currentDirection)
+            ? currentDirection
+            : undefined) ??
+          nextDirections[0]
+        const updates: Partial<Transition> = {
+          presentation,
+          direction: nextDefinition?.hasDirection ? nextDirection : undefined,
+        }
         const nextEaseOptions = getSupportedEaseOptions(nextDefinition?.supportedTimings ?? [])
         const fallbackEase = nextEaseOptions[0]
         const currentTiming = selectedTransition?.timing
@@ -168,7 +184,12 @@ export function TransitionPanel() {
         updateTransition(selectedTransitionId, updates)
       }
     },
-    [selectedTransitionId, selectedTransition?.timing, updateTransition],
+    [
+      selectedTransitionId,
+      selectedTransition?.direction,
+      selectedTransition?.timing,
+      updateTransition,
+    ],
   )
 
   const handlePresentationPresetChange = useCallback(
@@ -272,6 +293,22 @@ export function TransitionPanel() {
     (timing: TransitionTiming) => {
       if (selectedTransitionId) {
         updateTransition(selectedTransitionId, { timing })
+      }
+    },
+    [selectedTransitionId, updateTransition],
+  )
+
+  const directionOptions = useMemo(() => {
+    const directions = transitionDefinition?.directions ?? []
+    return DIRECTION_OPTIONS.filter((option) => directions.includes(option.value))
+  }, [transitionDefinition])
+
+  const selectedDirection = selectedTransition?.direction ?? transitionDefinition?.directions?.[0]
+
+  const handleDirectionChange = useCallback(
+    (direction: WipeDirection | SlideDirection | FlipDirection) => {
+      if (selectedTransitionId) {
+        updateTransition(selectedTransitionId, { direction })
       }
     },
     [selectedTransitionId, updateTransition],
@@ -421,6 +458,29 @@ export function TransitionPanel() {
                   className={cn(
                     'px-3 py-1 text-xs rounded transition-colors',
                     selectedTransition.timing === option.value
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </PropertyRow>
+        )}
+
+        {transitionDefinition?.hasDirection && directionOptions.length > 0 && (
+          <PropertyRow label="Direction" tooltip="Direction for the transition motion">
+            <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
+              {directionOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-label={option.label}
+                  onClick={() => handleDirectionChange(option.value)}
+                  className={cn(
+                    'px-3 py-1 text-xs rounded transition-colors',
+                    selectedDirection === option.value
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground',
                   )}

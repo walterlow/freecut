@@ -276,6 +276,8 @@ export interface PresentationConfig {
   icon: string // Icon name from lucide-react
   category: TransitionCategory
   direction?: WipeDirection | SlideDirection | FlipDirection
+  directions?: Array<WipeDirection | SlideDirection | FlipDirection>
+  defaultDirection?: WipeDirection | SlideDirection | FlipDirection
 }
 
 /**

@@ -151,7 +151,11 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
 
       const dragDescriptor = {
         presentation: config.id,
-        direction: config.direction as WipeDirection | SlideDirection | FlipDirection | undefined,
+        direction: (config.direction ?? config.defaultDirection) as
+          | WipeDirection
+          | SlideDirection
+          | FlipDirection
+          | undefined,
       }
 
       event.dataTransfer.effectAllowed = 'copy'
@@ -185,7 +189,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
 
       const { leftClipId, rightClipId, hasExisting, existingTransitionId } = info
       const presentation = config.id
-      const direction = config.direction as
+      const direction = (config.direction ?? config.defaultDirection) as
         | WipeDirection
         | SlideDirection
         | FlipDirection

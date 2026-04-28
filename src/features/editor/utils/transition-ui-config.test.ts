@@ -56,16 +56,11 @@ describe('transition-ui-config', () => {
     ).toBe(false)
   })
 
-  it('shows liquid distort as a directional custom transition', () => {
+  it('shows liquid distort as one custom transition with direction options', () => {
     const customConfigs = getTransitionConfigsByCategory().custom ?? []
-    const liquidConfigs = customConfigs.filter((config) => config.id === 'liquidDistort')
+    const liquidConfig = customConfigs.find((config) => config.id === 'liquidDistort')
 
-    expect(liquidConfigs.map((config) => config.direction)).toEqual([
-      'from-left',
-      'from-right',
-      'from-top',
-      'from-bottom',
-    ])
+    expect(liquidConfig?.directions).toEqual(['from-left', 'from-right', 'from-top', 'from-bottom'])
   })
 
   it('shows lens warp zoom in the custom category', () => {
@@ -79,17 +74,12 @@ describe('transition-ui-config', () => {
     ).toBe(true)
   })
 
-  it('shows light leak burn as a directional light transition', () => {
+  it('shows light leak burn as one light transition with direction options', () => {
     const lightConfigs = getTransitionConfigsByCategory().light ?? []
-    const burnConfigs = lightConfigs.filter((config) => config.id === 'lightLeakBurn')
+    const burnConfig = lightConfigs.find((config) => config.id === 'lightLeakBurn')
 
-    expect(burnConfigs.map((config) => config.direction)).toEqual([
-      'from-left',
-      'from-right',
-      'from-top',
-      'from-bottom',
-    ])
-    expect(burnConfigs.every((config) => config.icon !== undefined)).toBe(true)
+    expect(burnConfig?.directions).toEqual(['from-left', 'from-right', 'from-top', 'from-bottom'])
+    expect(burnConfig?.icon).toBeDefined()
   })
 
   it('shows film gate slip in the custom category', () => {

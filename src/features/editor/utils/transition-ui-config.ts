@@ -122,30 +122,9 @@ export const TRANSITION_CATEGORY_ORDER: TransitionCategory[] = [
 ]
 
 /** Direction string â†’ display label + icon name */
-const DIRECTION_LABELS: Record<string, { label: string; icon: string }> = {
-  'from-left': { label: 'Left', icon: 'ArrowRight' },
-  'from-right': { label: 'Right', icon: 'ArrowLeft' },
-  'from-top': { label: 'Top', icon: 'ArrowDown' },
-  'from-bottom': { label: 'Bottom', icon: 'ArrowUp' },
-}
-
 function createConfigsForDefinition(
   def: ReturnType<typeof transitionRegistry.getDefinitions>[number],
 ): PresentationConfig[] {
-  if (def.hasDirection && def.directions && def.directions.length > 0) {
-    return def.directions.map((dir) => {
-      const dirInfo = DIRECTION_LABELS[dir] || { label: dir, icon: def.icon }
-      return {
-        id: def.id,
-        label: dirInfo.label,
-        description: `${def.label} ${dirInfo.label.toLowerCase()}`,
-        icon: dirInfo.icon,
-        category: def.category,
-        direction: dir,
-      }
-    })
-  }
-
   return [
     {
       id: def.id,
@@ -153,13 +132,15 @@ function createConfigsForDefinition(
       description: def.description,
       icon: def.icon,
       category: def.category,
+      directions: def.hasDirection ? def.directions : undefined,
+      defaultDirection: def.hasDirection ? def.directions?.[0] : undefined,
     },
   ]
 }
 
 /**
  * Generate PresentationConfig array from the transition registry.
- * Directional transitions produce one config per direction.
+ * Directional transitions produce one config and expose direction as a property.
  * The flat list is grouped in the same category order used by picker UIs so
  * category-based index math stays stable.
  */
