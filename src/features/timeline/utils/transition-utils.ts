@@ -58,14 +58,26 @@ export function getMaxTransitionDurationForHandles(
   const outgoingTailHandle = getAvailableHandle(leftClip, 'end')
   const incomingHeadHandle = getAvailableHandle(rightClip, 'start')
 
-  for (let duration = maxByClipDuration; duration >= 1; duration -= 1) {
+  const canFitDuration = (duration: number): boolean => {
     const portions = calculateTransitionPortions(duration, alignment)
-    if (portions.rightPortion <= outgoingTailHandle && portions.leftPortion <= incomingHeadHandle) {
-      return duration
+    return portions.rightPortion <= outgoingTailHandle && portions.leftPortion <= incomingHeadHandle
+  }
+
+  let low = 1
+  let high = maxByClipDuration
+  let best = 0
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    if (canFitDuration(mid)) {
+      best = mid
+      low = mid + 1
+    } else {
+      high = mid - 1
     }
   }
 
-  return 0
+  return best
 }
 
 /**

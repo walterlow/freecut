@@ -139,6 +139,13 @@ describe('transition-utils', () => {
     expect(getMaxTransitionDurationForHandles(left, right, 0)).toBe(32)
   })
 
+  it('allows transition duration beyond the old 3 second cap when handles support it', () => {
+    const left = createVideoClip('A', 0, 300, 0, 300, 1000)
+    const right = createVideoClip('B', 300, 300, 300, 600, 1000)
+
+    expect(getMaxTransitionDurationForHandles(left, right, 0.5)).toBe(299)
+  })
+
   it('rejects transition when clips are on different tracks', () => {
     const left = createVideoClip('A', 0, 100, 60)
     const right = { ...createVideoClip('B', 100, 100, 60), trackId: 'track-2' }

@@ -1,15 +1,7 @@
 import { useMemo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
-import {
-  AlignHorizontalJustifyCenter,
-  AlignHorizontalJustifyEnd,
-  AlignHorizontalJustifyStart,
-  Trash2,
-  Zap,
-  RotateCcw,
-  ChevronDown,
-} from 'lucide-react'
+import { Trash2, Zap, RotateCcw, ChevronDown } from 'lucide-react'
 import { HexColorPicker } from 'react-colorful'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
@@ -185,19 +177,16 @@ const PLACEMENT_OPTIONS = [
     value: 1,
     label: 'Left',
     title: 'Place transition before the cut',
-    Icon: AlignHorizontalJustifyStart,
   },
   {
     value: 0.5,
     label: 'Center',
     title: 'Center transition on the cut',
-    Icon: AlignHorizontalJustifyCenter,
   },
   {
     value: 0,
     label: 'Right',
     title: 'Place transition after the cut',
-    Icon: AlignHorizontalJustifyEnd,
   },
 ] as const
 
@@ -273,7 +262,7 @@ export function TransitionPanel() {
   const minDuration = 1
   const maxDuration = useMemo(() => {
     if (!transitionConfig || !selectedTransition || !leftClip || !rightClip) {
-      return fps * 3
+      return selectedTransition?.durationInFrames ?? transitionConfig?.defaultDuration ?? fps
     }
 
     const leftEnd = leftClip.from + leftClip.durationInFrames
@@ -282,10 +271,7 @@ export function TransitionPanel() {
       const legacyMax = Math.floor(
         Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1,
       )
-      return Math.max(
-        minDuration,
-        Math.max(selectedTransition.durationInFrames, Math.min(fps * 3, legacyMax)),
-      )
+      return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, legacyMax))
     }
 
     const handleMax = getMaxTransitionDurationForHandles(
@@ -293,10 +279,7 @@ export function TransitionPanel() {
       rightClip,
       selectedTransition.alignment,
     )
-    return Math.max(
-      minDuration,
-      Math.max(selectedTransition.durationInFrames, Math.min(fps * 3, handleMax)),
-    )
+    return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, handleMax))
   }, [transitionConfig, selectedTransition, leftClip, rightClip, fps])
 
   // Handle presentation change
@@ -668,7 +651,7 @@ export function TransitionPanel() {
           tooltip="Position the transition before, across, or after the cut"
         >
           <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
-            {PLACEMENT_OPTIONS.map(({ value, label, title, Icon }) => {
+            {PLACEMENT_OPTIONS.map(({ value, label, title }) => {
               const maxForPlacement =
                 leftClip && rightClip
                   ? getMaxTransitionDurationForHandles(leftClip, rightClip, value)
@@ -685,15 +668,14 @@ export function TransitionPanel() {
                   disabled={disabled}
                   onClick={() => handlePlacementChange(value)}
                   className={cn(
-                    'inline-flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded px-2 text-xs transition-colors',
+                    'inline-flex h-7 min-w-[3.75rem] flex-1 items-center justify-center rounded px-2 text-xs transition-colors',
                     selected
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground',
                     disabled && 'cursor-not-allowed opacity-40 hover:text-muted-foreground',
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{label}</span>
+                  <span>{label}</span>
                 </button>
               )
             })}
