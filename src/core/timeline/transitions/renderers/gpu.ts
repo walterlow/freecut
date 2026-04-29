@@ -394,19 +394,28 @@ const additiveDissolveDef: TransitionDefinition = {
 
 const blurDissolveRenderer: TransitionRenderer = {
   gpuTransitionId: 'blurDissolve',
-  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+  calculateStyles(
+    progress,
+    isOutgoing,
+    _canvasWidth,
+    _canvasHeight,
+    _direction,
+    properties,
+  ): TransitionStyleCalculation {
     const p = clamp01(progress)
     const envelope = Math.sin(p * Math.PI)
+    const strength = getNumericProperty(properties, 'strength', 9) / 9
     return {
       opacity: isOutgoing ? 1 - p : p,
-      transform: envelope > 0.05 ? `scale(${1 + envelope * 0.006})` : undefined,
+      transform: envelope > 0.05 ? `scale(${1 + envelope * 0.006 * strength})` : undefined,
     }
   },
-  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas, properties) {
     const p = clamp01(progress)
     const envelope = Math.sin(p * Math.PI)
+    const strength = getNumericProperty(properties, 'strength', 9)
     ctx.save()
-    ctx.filter = `blur(${(envelope * 8).toFixed(2)}px)`
+    ctx.filter = `blur(${(envelope * strength).toFixed(2)}px)`
     renderCrossDissolveCanvas(ctx, leftCanvas, rightCanvas, p, canvas)
     ctx.restore()
   },
@@ -423,6 +432,19 @@ const blurDissolveDef: TransitionDefinition = {
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'strength',
+      label: 'Blur',
+      type: 'number',
+      defaultValue: 9,
+      min: 0,
+      max: 24,
+      step: 0.5,
+      unit: 'px',
+      description: 'Maximum midpoint blur',
+    },
+  ],
 }
 
 const dipToColorDissolveRenderer: TransitionRenderer = {
@@ -448,6 +470,16 @@ const dipToColorDissolveDef: TransitionDefinition = {
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'color',
+      label: 'Color',
+      type: 'color',
+      defaultValue: [0, 0, 0],
+      description: 'Color used at the midpoint of the dissolve',
+      valueFormat: 'rgb-array',
+    },
+  ],
 }
 
 const nonAdditiveDissolveRenderer: TransitionRenderer = {
@@ -476,34 +508,44 @@ const nonAdditiveDissolveDef: TransitionDefinition = {
 
 const smoothCutRenderer: TransitionRenderer = {
   gpuTransitionId: 'smoothCut',
-  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+  calculateStyles(
+    progress,
+    isOutgoing,
+    _canvasWidth,
+    _canvasHeight,
+    _direction,
+    properties,
+  ): TransitionStyleCalculation {
     const p = clamp01(progress)
     const t = smoothStep(0.22, 0.78, p)
     const envelope = Math.sin(p * Math.PI)
+    const strength = getNumericProperty(properties, 'strength', 0.9)
     return {
       opacity: isOutgoing ? 1 - t : t,
       transform:
         envelope > 0.05
-          ? `translateX(${((isOutgoing ? -1 : 1) * envelope * 4).toFixed(2)}px) skewX(${((isOutgoing ? -1 : 1) * envelope * 0.7).toFixed(2)}deg)`
+          ? `translateX(${((isOutgoing ? -1 : 1) * envelope * 4 * strength).toFixed(2)}px) skewX(${((isOutgoing ? -1 : 1) * envelope * 0.7 * strength).toFixed(2)}deg)`
           : undefined,
     }
   },
-  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas, properties) {
     const p = clamp01(progress)
     const envelope = Math.sin(p * Math.PI)
     const t = smoothStep(0.22, 0.78, p)
     const w = canvas?.width ?? leftCanvas.width
     const h = canvas?.height ?? leftCanvas.height
-    const drift = envelope * 4
+    const strength = getNumericProperty(properties, 'strength', 0.9)
+    const drift = envelope * 4 * strength
+    const skew = 0.012 * envelope * strength
 
     ctx.save()
     ctx.globalCompositeOperation = 'copy'
     ctx.globalAlpha = 1
-    ctx.setTransform(1, 0, -0.012 * envelope, 1, -drift, 0)
+    ctx.setTransform(1, 0, -skew, 1, -drift, 0)
     ctx.drawImage(leftCanvas, 0, 0, w, h)
     ctx.globalCompositeOperation = 'source-over'
     ctx.globalAlpha = t
-    ctx.setTransform(1, 0, 0.012 * envelope, 1, drift, 0)
+    ctx.setTransform(1, 0, skew, 1, drift, 0)
     ctx.drawImage(rightCanvas, 0, 0, w, h)
     ctx.restore()
   },
@@ -520,6 +562,18 @@ const smoothCutDef: TransitionDefinition = {
   defaultDuration: 18,
   minDuration: 6,
   maxDuration: 45,
+  parameters: [
+    {
+      key: 'strength',
+      label: 'Warp',
+      type: 'number',
+      defaultValue: 0.9,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Horizontal liquid warp strength',
+    },
+  ],
 }
 
 // ============================================================================
@@ -563,6 +617,48 @@ const sparklesDef: TransitionDefinition = {
   defaultDuration: 24,
   minDuration: 8,
   maxDuration: 72,
+  parameters: [
+    {
+      key: 'sparkleScale',
+      label: 'Size',
+      type: 'number',
+      defaultValue: 1,
+      min: 0.25,
+      max: 3,
+      step: 0.05,
+      description: 'Sparkle particle size',
+    },
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Overall sparkle brightness',
+    },
+    {
+      key: 'density',
+      label: 'Density',
+      type: 'number',
+      defaultValue: 1,
+      min: 0.2,
+      max: 3,
+      step: 0.05,
+      description: 'Amount of sparkle particles',
+    },
+    {
+      key: 'glow',
+      label: 'Glow',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Soft sparkle bloom',
+    },
+  ],
 }
 
 // ============================================================================
@@ -611,6 +707,39 @@ const glitchDef: TransitionDefinition = {
   defaultDuration: 20,
   minDuration: 5,
   maxDuration: 60,
+  parameters: [
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Overall glitch displacement',
+    },
+    {
+      key: 'blockSize',
+      label: 'Blocks',
+      type: 'number',
+      defaultValue: 30,
+      min: 6,
+      max: 96,
+      step: 1,
+      unit: 'px',
+      description: 'Digital block size',
+    },
+    {
+      key: 'rgbSplit',
+      label: 'RGB Split',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Color channel offset',
+    },
+  ],
 }
 
 // ============================================================================
@@ -645,6 +774,19 @@ const pixelateDef: TransitionDefinition = {
   defaultDuration: 20,
   minDuration: 8,
   maxDuration: 60,
+  parameters: [
+    {
+      key: 'maxBlockSize',
+      label: 'Block Size',
+      type: 'number',
+      defaultValue: 48,
+      min: 4,
+      max: 160,
+      step: 1,
+      unit: 'px',
+      description: 'Largest mosaic block size',
+    },
+  ],
 }
 
 // ============================================================================
@@ -687,6 +829,28 @@ const chromaticDef: TransitionDefinition = {
   defaultDuration: 25,
   minDuration: 10,
   maxDuration: 60,
+  parameters: [
+    {
+      key: 'spread',
+      label: 'Spread',
+      type: 'number',
+      defaultValue: 1.5,
+      min: 0,
+      max: 5,
+      step: 0.05,
+      description: 'Channel separation distance',
+    },
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Chromatic sweep strength',
+    },
+  ],
 }
 
 // ============================================================================
@@ -731,6 +895,28 @@ const radialBlurDef: TransitionDefinition = {
   defaultDuration: 25,
   minDuration: 10,
   maxDuration: 60,
+  parameters: [
+    {
+      key: 'blurStrength',
+      label: 'Blur',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Radial blur amount',
+    },
+    {
+      key: 'spin',
+      label: 'Spin',
+      type: 'number',
+      defaultValue: 0.3,
+      min: -1.5,
+      max: 1.5,
+      step: 0.05,
+      description: 'Rotational blur twist',
+    },
+  ],
 }
 
 // ============================================================================
@@ -793,6 +979,68 @@ const liquidDistortDef: TransitionDefinition = {
   defaultDuration: 28,
   minDuration: 10,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Overall distortion strength',
+    },
+    {
+      key: 'scale',
+      label: 'Scale',
+      type: 'number',
+      defaultValue: 4.5,
+      min: 1,
+      max: 12,
+      step: 0.1,
+      description: 'Noise pattern scale',
+    },
+    {
+      key: 'turbulence',
+      label: 'Turbulence',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Fluid noise turbulence',
+    },
+    {
+      key: 'chroma',
+      label: 'Chroma',
+      type: 'number',
+      defaultValue: 0.75,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Color separation around distortion',
+    },
+    {
+      key: 'swirl',
+      label: 'Swirl',
+      type: 'number',
+      defaultValue: 0.8,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Curling warp motion',
+    },
+    {
+      key: 'shine',
+      label: 'Shine',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Specular highlight strength',
+    },
+  ],
 }
 
 // ============================================================================
@@ -854,6 +1102,68 @@ const lensWarpZoomDef: TransitionDefinition = {
   defaultDuration: 24,
   minDuration: 8,
   maxDuration: 72,
+  parameters: [
+    {
+      key: 'zoomStrength',
+      label: 'Zoom',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Zoom punch amount',
+    },
+    {
+      key: 'warpStrength',
+      label: 'Warp',
+      type: 'number',
+      defaultValue: 0.75,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Barrel warp strength',
+    },
+    {
+      key: 'blurStrength',
+      label: 'Blur',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Lens blur amount',
+    },
+    {
+      key: 'chroma',
+      label: 'Chroma',
+      type: 'number',
+      defaultValue: 0.65,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Chromatic lens edge',
+    },
+    {
+      key: 'vignette',
+      label: 'Vignette',
+      type: 'number',
+      defaultValue: 0.7,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Edge darkening',
+    },
+    {
+      key: 'glow',
+      label: 'Glow',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Center glow intensity',
+    },
+  ],
 }
 
 // ============================================================================
@@ -921,6 +1231,58 @@ const lightLeakBurnDef: TransitionDefinition = {
   defaultDuration: 26,
   minDuration: 8,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1.25,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Overall burn strength',
+    },
+    {
+      key: 'spread',
+      label: 'Spread',
+      type: 'number',
+      defaultValue: 1,
+      min: 0.2,
+      max: 3,
+      step: 0.05,
+      description: 'Leak bloom width',
+    },
+    {
+      key: 'warmth',
+      label: 'Warmth',
+      type: 'number',
+      defaultValue: 0.75,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Orange heat tint',
+    },
+    {
+      key: 'burn',
+      label: 'Burn',
+      type: 'number',
+      defaultValue: 1.1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Overexposed hotspot',
+    },
+    {
+      key: 'grain',
+      label: 'Grain',
+      type: 'number',
+      defaultValue: 0.5,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Analog grain amount',
+    },
+  ],
 }
 
 // ============================================================================
@@ -983,6 +1345,78 @@ const filmGateSlipDef: TransitionDefinition = {
   defaultDuration: 22,
   minDuration: 8,
   maxDuration: 72,
+  parameters: [
+    {
+      key: 'slip',
+      label: 'Slip',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Vertical frame slip',
+    },
+    {
+      key: 'shake',
+      label: 'Shake',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Gate jitter amount',
+    },
+    {
+      key: 'exposure',
+      label: 'Exposure',
+      type: 'number',
+      defaultValue: 0.85,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Exposure flicker',
+    },
+    {
+      key: 'gateWidth',
+      label: 'Gate Width',
+      type: 'number',
+      defaultValue: 0.075,
+      min: 0,
+      max: 0.2,
+      step: 0.005,
+      description: 'Film gate edge width',
+    },
+    {
+      key: 'grain',
+      label: 'Grain',
+      type: 'number',
+      defaultValue: 0.6,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Film grain amount',
+    },
+    {
+      key: 'chroma',
+      label: 'Chroma',
+      type: 'number',
+      defaultValue: 0.55,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Analog color offset',
+    },
+    {
+      key: 'roll',
+      label: 'Roll',
+      type: 'number',
+      defaultValue: 0.75,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Rolling frame drift',
+    },
+  ],
 }
 
 // ============================================================================

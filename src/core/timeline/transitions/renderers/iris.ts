@@ -375,6 +375,18 @@ function createIrisDefinition(variant: IrisVariant): TransitionDefinition {
     defaultDuration: 30,
     minDuration: 10,
     maxDuration: 90,
+    parameters: [
+      {
+        key: 'outgoingDim',
+        label: 'Dim',
+        type: 'number',
+        defaultValue: 0.06,
+        min: 0,
+        max: 0.12,
+        step: 0.005,
+        description: 'Outgoing clip dim amount during the reveal',
+      },
+    ],
   }
 }
 

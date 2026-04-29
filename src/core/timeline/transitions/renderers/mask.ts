@@ -154,6 +154,19 @@ export const clockWipeDef: TransitionDefinition = {
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'edgeSoftness',
+      label: 'Softness',
+      type: 'number',
+      defaultValue: 8,
+      min: 0,
+      max: 32,
+      step: 0.5,
+      unit: 'px',
+      description: 'Clock hand edge feather',
+    },
+  ],
 }
 
 // ============================================================================
@@ -239,6 +252,19 @@ const irisDef: TransitionDefinition = {
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'edgeSoftness',
+      label: 'Softness',
+      type: 'number',
+      defaultValue: 6,
+      min: 0,
+      max: 32,
+      step: 0.5,
+      unit: 'px',
+      description: 'Iris edge feather',
+    },
+  ],
 }
 
 // ============================================================================

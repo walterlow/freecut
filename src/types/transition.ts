@@ -268,6 +268,31 @@ export interface TransitionDefinition {
   maxDuration: number
   /** Whether this transition benefits from WebGL acceleration */
   requiresWebGL?: boolean
+  /** User-editable parameters supported by the renderer */
+  parameters?: TransitionParameterDefinition[]
+}
+
+export type TransitionParameterType = 'number' | 'color'
+
+export interface TransitionParameterDefinition {
+  /** Property key stored on Transition.properties */
+  key: string
+  /** Display label */
+  label: string
+  /** Control type */
+  type: TransitionParameterType
+  /** Default value written when the property is unset */
+  defaultValue: number | [number, number, number]
+  /** Numeric slider bounds */
+  min?: number
+  max?: number
+  step?: number
+  /** Optional display suffix */
+  unit?: string
+  /** Short tooltip for the property row */
+  description?: string
+  /** Color values are stored as normalized RGB arrays */
+  valueFormat?: 'rgb-array'
 }
 
 /**

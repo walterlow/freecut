@@ -17,6 +17,8 @@ import {
   type SlideDirection,
   type FlipDirection,
   type PresentationConfig,
+  type TransitionDefinition,
+  type TransitionParameterDefinition,
 } from '@/types/transition'
 import { cn } from '@/shared/ui/cn'
 import { transitionRegistry } from '@/core/timeline/transitions'
@@ -48,9 +50,11 @@ function hexToRgbArray(hex: string): [number, number, number] {
 }
 
 function TransitionColorPicker({
+  label,
   initialColor,
   onColorChange,
 }: {
+  label: string
   initialColor: string
   onColorChange: (color: string) => void
 }) {
@@ -87,7 +91,7 @@ function TransitionColorPicker({
     <div ref={containerRef} className="relative flex-1">
       <button
         type="button"
-        aria-label="Dip color"
+        aria-label={`${label} color`}
         onClick={() => setIsOpen((open) => !open)}
         className="flex w-full items-center gap-2"
       >
@@ -105,6 +109,40 @@ function TransitionColorPicker({
       )}
     </div>
   )
+}
+
+function getDefaultTransitionProperties(
+  definition: TransitionDefinition | undefined,
+): Record<string, unknown> | undefined {
+  if (!definition?.parameters?.length) return undefined
+  return Object.fromEntries(
+    definition.parameters.map((parameter) => [parameter.key, parameter.defaultValue]),
+  )
+}
+
+function getNumberParameterValue(
+  properties: Record<string, unknown> | undefined,
+  parameter: TransitionParameterDefinition,
+): number {
+  const value = properties?.[parameter.key]
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : Number(parameter.defaultValue)
+}
+
+function getColorParameterValue(
+  properties: Record<string, unknown> | undefined,
+  parameter: TransitionParameterDefinition,
+): string {
+  return rgbArrayToHex(properties?.[parameter.key] ?? parameter.defaultValue)
+}
+
+function formatParameterValue(parameter: TransitionParameterDefinition, value: number): string {
+  const step = parameter.step ?? 1
+  const [, decimalPart = ''] = step.toString().split('.')
+  const decimals = decimalPart.length
+  const fixed = value.toFixed(Math.min(3, decimals))
+  return parameter.unit ? `${fixed}${parameter.unit}` : fixed
 }
 
 function getPresentationOptionValue(config: Pick<PresentationConfig, 'id' | 'direction'>): string {
@@ -252,6 +290,9 @@ export function TransitionPanel() {
           presentation,
           direction: nextDefinition?.hasDirection ? nextDirection : undefined,
         }
+        if (selectedTransition?.presentation !== presentation) {
+          updates.properties = getDefaultTransitionProperties(nextDefinition)
+        }
         const nextEaseOptions = getSupportedEaseOptions(nextDefinition?.supportedTimings ?? [])
         const fallbackEase = nextEaseOptions[0]
         const currentTiming = selectedTransition?.timing
@@ -269,6 +310,7 @@ export function TransitionPanel() {
     [
       selectedTransitionId,
       selectedTransition?.direction,
+      selectedTransition?.presentation,
       selectedTransition?.timing,
       updateTransition,
     ],
@@ -414,18 +456,16 @@ export function TransitionPanel() {
     [selectedTransitionId, updateTransition],
   )
 
-  const dipToColorHex = useMemo(
-    () => rgbArrayToHex(selectedTransition?.properties?.color),
-    [selectedTransition?.properties],
-  )
-
-  const handleDipToColorChange = useCallback(
-    (color: string) => {
+  const handleParameterChange = useCallback(
+    (parameter: TransitionParameterDefinition, value: unknown) => {
       if (!selectedTransitionId || !selectedTransition) return
       updateTransition(selectedTransitionId, {
         properties: {
           ...(selectedTransition.properties ?? {}),
-          color: hexToRgbArray(color),
+          [parameter.key]:
+            parameter.type === 'color' && parameter.valueFormat === 'rgb-array'
+              ? hexToRgbArray(String(value))
+              : value,
         },
       })
     },
@@ -626,14 +666,29 @@ export function TransitionPanel() {
           </PropertyRow>
         )}
 
-        {selectedTransition.presentation === 'dipToColorDissolve' && (
-          <PropertyRow label="Color" tooltip="Color used at the midpoint of the dissolve">
-            <TransitionColorPicker
-              initialColor={dipToColorHex}
-              onColorChange={handleDipToColorChange}
-            />
+        {transitionDefinition?.parameters?.map((parameter) => (
+          <PropertyRow key={parameter.key} label={parameter.label} tooltip={parameter.description}>
+            {parameter.type === 'number' ? (
+              <SliderInput
+                value={getNumberParameterValue(selectedTransition.properties, parameter)}
+                onChange={(value) => handleParameterChange(parameter, value)}
+                onLiveChange={(value) => handleParameterChange(parameter, value)}
+                min={parameter.min ?? 0}
+                max={parameter.max ?? 1}
+                step={parameter.step ?? 1}
+                unit={parameter.unit}
+                formatValue={(value) => formatParameterValue(parameter, value)}
+                className="flex-1 min-w-0"
+              />
+            ) : (
+              <TransitionColorPicker
+                label={parameter.label}
+                initialColor={getColorParameterValue(selectedTransition.properties, parameter)}
+                onColorChange={(color) => handleParameterChange(parameter, color)}
+              />
+            )}
           </PropertyRow>
-        )}
+        ))}
 
         {/* Action buttons */}
         <div className="pt-2">

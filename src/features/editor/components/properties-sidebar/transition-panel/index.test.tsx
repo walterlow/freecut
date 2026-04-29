@@ -17,7 +17,9 @@ vi.mock('../components', () => ({
       {children}
     </label>
   ),
-  SliderInput: () => <div data-testid="slider-input" />,
+  SliderInput: ({ value }: { value: number | 'mixed' }) => (
+    <div data-testid="slider-input">{String(value)}</div>
+  ),
 }))
 
 const LEFT_CLIP: VideoItem = {
@@ -232,7 +234,26 @@ describe('TransitionPanel', () => {
     render(<TransitionPanel />)
 
     expect(screen.getByText('Color')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Dip color' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Color color' })).toBeInTheDocument()
     expect(screen.getByText('#ff0000')).toBeInTheDocument()
+  })
+
+  it('exposes numeric parameters declared by transition definitions', () => {
+    useTimelineStore.setState({
+      fps: 30,
+      items: [LEFT_CLIP, RIGHT_CLIP],
+      transitions: [
+        {
+          ...TRANSITION,
+          presentation: 'smoothCut',
+          properties: { strength: 1.4 },
+        },
+      ],
+    } as Partial<ReturnType<typeof useTimelineStore.getState>>)
+
+    render(<TransitionPanel />)
+
+    expect(screen.getByText('Warp')).toBeInTheDocument()
+    expect(screen.getByText('1.4')).toBeInTheDocument()
   })
 })
