@@ -812,7 +812,8 @@ async function renderVideoItem(
     isPreviewMode &&
     domVideoElementProvider &&
     sourceFrameOffset === 0 &&
-    (!rctx.isRenderingTransition || isFrameInsideItemTimelineSpan(item, frame))
+    !rctx.isRenderingTransition &&
+    isFrameInsideItemTimelineSpan(item, frame)
   const domVideo = canUseDomVideoElement ? domVideoElementProvider(item.id) : null
   const domVideoDecision = resolvePreviewDomVideoDrawDecision({
     domVideo,

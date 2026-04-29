@@ -209,7 +209,7 @@ describe('transition actions with linked audio companions', () => {
 
     expect(added).toBe(true)
     expect(useTransitionsStore.getState().transitions).toEqual([
-      expect.objectContaining({ durationInFrames: 12 }),
+      expect.objectContaining({ durationInFrames: 13 }),
     ])
   })
 
@@ -219,8 +219,8 @@ describe('transition actions with linked audio companions', () => {
       makeVideoItem({
         id: 'video-2',
         from: 60,
-        sourceStart: 0,
-        sourceEnd: 60,
+        sourceStart: 30,
+        sourceEnd: 90,
         sourceDuration: 180,
         linkedGroupId: 'group-2',
         mediaId: 'media-2',

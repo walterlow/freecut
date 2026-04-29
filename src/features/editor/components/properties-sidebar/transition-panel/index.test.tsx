@@ -234,16 +234,15 @@ describe('TransitionPanel', () => {
     })
   })
 
-  it('clamps duration when changing placement to a side with less handle', async () => {
+  it('keeps duration unchanged and disables placements that lack enough handle', () => {
     useTimelineStore.setState({
       fps: 30,
       items: [
+        LEFT_CLIP,
         {
-          ...LEFT_CLIP,
-          sourceEnd: 105,
-          sourceDuration: 120,
+          ...RIGHT_CLIP,
+          sourceStart: 15,
         },
-        RIGHT_CLIP,
       ],
       transitions: [
         {
@@ -255,13 +254,10 @@ describe('TransitionPanel', () => {
 
     render(<TransitionPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Left placement' }))
-
-    await waitFor(() => {
-      expect(
-        useTimelineStore.getState().transitions.find((transition) => transition.id === 'tr-1'),
-      ).toEqual(expect.objectContaining({ alignment: 1, durationInFrames: 15 }))
-    })
+    expect(screen.getByRole('button', { name: 'Left placement' })).toBeDisabled()
+    expect(
+      useTimelineStore.getState().transitions.find((transition) => transition.id === 'tr-1'),
+    ).toEqual(expect.objectContaining({ durationInFrames: 30, alignment: 0.5 }))
   })
 
   it('exposes a color property for dip to color dissolve', async () => {

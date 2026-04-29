@@ -465,12 +465,9 @@ export function TransitionPanel() {
       if (!selectedTransitionId || !selectedTransition || !leftClip || !rightClip) return
 
       const maxForPlacement = getMaxTransitionDurationForHandles(leftClip, rightClip, alignment)
-      if (maxForPlacement < minDuration) return
+      if (maxForPlacement < selectedTransition.durationInFrames) return
 
-      updateTransition(selectedTransitionId, {
-        alignment,
-        durationInFrames: Math.min(selectedTransition.durationInFrames, maxForPlacement),
-      })
+      updateTransition(selectedTransitionId, { alignment })
     },
     [leftClip, rightClip, selectedTransition, selectedTransitionId, updateTransition],
   )
@@ -676,7 +673,7 @@ export function TransitionPanel() {
                 leftClip && rightClip
                   ? getMaxTransitionDurationForHandles(leftClip, rightClip, value)
                   : 0
-              const disabled = maxForPlacement < minDuration
+              const disabled = maxForPlacement < selectedTransition.durationInFrames
               const selected = selectedAlignment === value
 
               return (

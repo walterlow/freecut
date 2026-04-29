@@ -9,6 +9,7 @@ import {
   clampRollingTrimDeltaToPreserveTransition,
   clampSlideDeltaToPreserveTransitions,
   clampSlipDeltaToPreserveTransitions,
+  getMaxTransitionDurationForHandles,
 } from './transition-utils'
 
 function createVideoClip(
@@ -111,12 +112,29 @@ describe('transition-utils', () => {
     expect(result.canAdd).toBe(true)
   })
 
-  it('allows left-only transitions when alignment keeps the incoming side at the cut', () => {
-    const left = createVideoClip('A', 0, 100, 0, 140, 200)
-    const right = createVideoClip('B', 100, 100, 0, 100, 100)
+  it('allows left-aligned transitions when the incoming clip has enough head handle', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 200)
+    const right = createVideoClip('B', 100, 100, 30, 130, 200)
 
     const result = canAddTransition(left, right, 30, 1)
     expect(result.canAdd).toBe(true)
+  })
+
+  it('rejects left-aligned transitions when the incoming clip lacks head handle', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 200)
+    const right = createVideoClip('B', 100, 100, 0, 100, 200)
+
+    const result = canAddTransition(left, right, 30, 1)
+    expect(result.canAdd).toBe(false)
+    expect(result.reason).toContain('right clip needs 30 head-handle frames')
+  })
+
+  it('limits side-aligned transition duration by the handle on the opposite clip', () => {
+    const left = createVideoClip('A', 0, 100, 0, 108, 140)
+    const right = createVideoClip('B', 100, 100, 12, 112, 200)
+
+    expect(getMaxTransitionDurationForHandles(left, right, 1)).toBe(12)
+    expect(getMaxTransitionDurationForHandles(left, right, 0)).toBe(32)
   })
 
   it('rejects transition when clips are on different tracks', () => {

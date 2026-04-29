@@ -86,8 +86,8 @@ describe('transition-targets', () => {
       rightClipId: 'right',
       canApply: true,
       hasExisting: false,
-      maxDurationInFrames: 16,
-      suggestedDurationInFrames: 16,
+      maxDurationInFrames: 17,
+      suggestedDurationInFrames: 17,
     })
   })
 
@@ -111,6 +111,61 @@ describe('transition-targets', () => {
       hasExisting: false,
     })
     expect(target?.reason).toContain('Not enough source handle')
+  })
+
+  it('rejects drop targets when the chosen alignment cannot keep the requested duration', () => {
+    const items = [
+      createVideoClip('left', 0, 60, 0, 72, 84),
+      createVideoClip('right', 60, 60, 30, 90, 120),
+    ]
+
+    const target = resolveTransitionTargetForEdge({
+      itemId: 'left',
+      edge: 'right',
+      items,
+      transitions: [],
+      preferredDurationInFrames: 30,
+      alignment: 0,
+      allowDurationClamp: false,
+    })
+
+    expect(target).toMatchObject({
+      leftClipId: 'left',
+      rightClipId: 'right',
+      canApply: false,
+      hasExisting: false,
+      maxDurationInFrames: 12,
+      suggestedDurationInFrames: 30,
+      alignment: 0,
+    })
+    expect(target?.reason).toContain('placement and duration')
+  })
+
+  it('allows the same cut to accept a side-aligned drop when that placement has enough handle', () => {
+    const items = [
+      createVideoClip('left', 0, 60, 0, 72, 84),
+      createVideoClip('right', 60, 60, 30, 90, 120),
+    ]
+
+    const target = resolveTransitionTargetForEdge({
+      itemId: 'left',
+      edge: 'right',
+      items,
+      transitions: [],
+      preferredDurationInFrames: 30,
+      alignment: 1,
+      allowDurationClamp: false,
+    })
+
+    expect(target).toMatchObject({
+      leftClipId: 'left',
+      rightClipId: 'right',
+      canApply: true,
+      hasExisting: false,
+      maxDurationInFrames: 30,
+      suggestedDurationInFrames: 30,
+      alignment: 1,
+    })
   })
 
   it('resolves an existing transition from single-clip selection', () => {
@@ -154,8 +209,8 @@ describe('transition-targets', () => {
       rightClipId: 'regular',
       canApply: true,
       hasExisting: false,
-      maxDurationInFrames: 16,
-      suggestedDurationInFrames: 16,
+      maxDurationInFrames: 17,
+      suggestedDurationInFrames: 17,
     })
   })
 
@@ -178,8 +233,8 @@ describe('transition-targets', () => {
       rightClipId: 'compound',
       canApply: true,
       hasExisting: false,
-      maxDurationInFrames: 16,
-      suggestedDurationInFrames: 16,
+      maxDurationInFrames: 17,
+      suggestedDurationInFrames: 17,
     })
   })
 })

@@ -22,6 +22,8 @@ import { isDragPointInsideElement, resolveEffectDropTargetIds } from '../../util
 import { getTemplateEffectsForDirectApplication } from '../../utils/generated-layer-items'
 
 type AddEffects = ReturnType<typeof useTimelineStore.getState>['addEffects']
+const CUT_DROP_LEFT_PLACEMENT_THRESHOLD = 1 / 3
+const CUT_DROP_RIGHT_PLACEMENT_THRESHOLD = 2 / 3
 
 interface UseTimelineItemDropHandlersParams {
   item: TimelineItemType
@@ -57,6 +59,16 @@ function readDraggedTransitionDescriptor(
   }
 }
 
+function resolveTransitionDropAlignment(event: React.DragEvent<HTMLDivElement>): number {
+  const rect = event.currentTarget.getBoundingClientRect()
+  if (rect.width <= 0) return 0.5
+
+  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+  if (ratio < CUT_DROP_LEFT_PLACEMENT_THRESHOLD) return 1
+  if (ratio > CUT_DROP_RIGHT_PLACEMENT_THRESHOLD) return 0
+  return 0.5
+}
+
 export function useTimelineItemDropHandlers({
   item,
   trackLocked,
@@ -70,11 +82,14 @@ export function useTimelineItemDropHandlers({
       }
 
       const dragState = useTransitionDragStore.getState()
+      const alignment = resolveTransitionDropAlignment(e)
       const target = resolveTransitionTargetForEdge({
         itemId: item.id,
         edge,
         items: useItemsStore.getState().items,
         transitions: useTransitionsStore.getState().transitions,
+        alignment,
+        allowDurationClamp: false,
       })
 
       if (!target) {
@@ -146,6 +161,8 @@ export function useTimelineItemDropHandlers({
         edge,
         items: useItemsStore.getState().items,
         transitions: useTransitionsStore.getState().transitions,
+        alignment: resolveTransitionDropAlignment(e),
+        allowDurationClamp: false,
       })
 
       if (!target || target.hasExisting || !target.canApply) {
@@ -165,6 +182,7 @@ export function useTimelineItemDropHandlers({
           target.suggestedDurationInFrames,
           dragDescriptor.presentation,
           dragDescriptor.direction,
+          target.alignment,
         )
       useTransitionDragStore.getState().clearDrag()
     },
