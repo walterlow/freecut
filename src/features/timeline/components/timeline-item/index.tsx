@@ -23,6 +23,7 @@ import { useEditorStore } from '@/app/state/editor'
 import { useSourcePlayerStore } from '@/shared/state/source-player'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useTransitionDragStore } from '@/shared/state/transition-drag'
+import { TRANSITION_CONFIGS } from '@/types/transition'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service'
 import {
@@ -158,6 +159,8 @@ const TRACK_PUSH_ZOOM_THRESHOLD = 120
 const COMPACT_CLIP_MAX_WIDTH_PX = 36
 const JOIN_INDICATOR_MIN_ZOOM_PPS = 30
 const SPEED_BADGE_EPSILON = 0.005
+const TRANSITION_DROP_HIT_MIN_WIDTH_PX = 72
+const TRANSITION_DROP_HIT_MAX_WIDTH_PX = 240
 
 function getPixelsPerSecondNow(): number {
   return useZoomStore.getState().pixelsPerSecond
@@ -1135,6 +1138,14 @@ export const TimelineItem = memo(
     ])
     const visualLeft = Math.round(frameToPixelsNow(visualLeftFrame))
     const visualWidth = Math.round(frameToPixelsNow(visualWidthFrames))
+    const transitionDropHitWidth = Math.min(
+      TRANSITION_DROP_HIT_MAX_WIDTH_PX,
+      Math.max(
+        TRANSITION_DROP_HIT_MIN_WIDTH_PX,
+        Math.round(frameToPixelsNow(TRANSITION_CONFIGS.crossfade.defaultDuration) * 2),
+      ),
+    )
+    const transitionDropHalfHitWidth = transitionDropHitWidth / 2
     // Early width check ââ‚¬” used to short-circuit expensive computations below.
     // The full useCompactClipShell (which also checks interaction/badge state) is computed later for JSX gating.
     const isCompactWidth = visualWidth > 0 && visualWidth <= COMPACT_CLIP_MAX_WIDTH_PX
@@ -3436,13 +3447,21 @@ export const TimelineItem = memo(
               (item.type === 'video' || item.type === 'image') && (
                 <>
                   <div
-                    className="absolute inset-y-0 -left-2 z-40 w-4"
+                    className="absolute inset-y-0 z-40"
+                    style={{
+                      left: `${-transitionDropHalfHitWidth}px`,
+                      width: `${transitionDropHitWidth}px`,
+                    }}
                     onDragOver={handleTransitionCutDragOver('left')}
                     onDragLeave={handleTransitionCutDragLeave}
                     onDrop={handleTransitionCutDrop('left')}
                   />
                   <div
-                    className="absolute inset-y-0 -right-2 z-40 w-4"
+                    className="absolute inset-y-0 z-40"
+                    style={{
+                      left: `calc(100% - ${transitionDropHalfHitWidth}px)`,
+                      width: `${transitionDropHitWidth}px`,
+                    }}
                     onDragOver={handleTransitionCutDragOver('right')}
                     onDragLeave={handleTransitionCutDragLeave}
                     onDrop={handleTransitionCutDrop('right')}
