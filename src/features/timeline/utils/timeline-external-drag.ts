@@ -24,10 +24,6 @@ export function shouldIgnoreNewTrackZonePreviewForDrag(
   return isDirectEffectTemplateDragData(data) && zone !== 'video'
 }
 
-export function shouldSuppressEmptyTrackDropOverlay(data: TimelineDragData): boolean {
-  return isDirectEffectTemplateDragData(data)
-}
-
 export function isExternalTimelineDragEvent(event: DragEvent): boolean {
   return !!getMediaDragData() || !!event.dataTransfer?.types.includes('Files')
 }

@@ -73,7 +73,6 @@ import {
 } from '@/components/ui/context-menu'
 import {
   type ExternalDragPreviewEntry,
-  getGhostHighlightClasses,
   getGhostPreviewItemClasses,
   isDroppableMediaType,
   isValidDragMediaItem,
@@ -92,10 +91,7 @@ import {
   getTrackKind,
   isTrackDisabled as getIsTrackDisabled,
 } from '@/features/timeline/utils/classic-tracks'
-import {
-  shouldIgnoreTrackDropPreviewForDrag,
-  shouldSuppressEmptyTrackDropOverlay,
-} from '../utils/timeline-external-drag'
+import { shouldIgnoreTrackDropPreviewForDrag } from '../utils/timeline-external-drag'
 
 /**
  * Lightweight on-demand context menu for track gaps.
@@ -157,99 +153,54 @@ function TrackGapContextMenu({
 
 const TrackDropGhostOverlay = memo(function TrackDropGhostOverlay({
   trackId,
-  showEmptyOverlay,
 }: {
   trackId: string
-  showEmptyOverlay: boolean
 }) {
-  const emptyOverlayRef = useRef<HTMLDivElement>(null)
-  const highlightOverlayRef = useRef<HTMLDivElement>(null)
   const previewLayerRef = useRef<HTMLDivElement>(null)
   const previewNodesRef = useRef<Array<{ root: HTMLDivElement; label: HTMLSpanElement }>>([])
-  const previewCountRef = useRef(0)
-  const showEmptyOverlayRef = useRef(showEmptyOverlay)
-
-  const syncEmptyOverlayVisibility = useCallback(() => {
-    if (!emptyOverlayRef.current) {
-      return
-    }
-
-    emptyOverlayRef.current.style.display =
-      showEmptyOverlayRef.current && previewCountRef.current === 0 ? '' : 'none'
-  }, [])
 
   const clearGhostPreviews = useCallback(() => {
-    previewCountRef.current = 0
-    showEmptyOverlayRef.current = false
-
-    if (highlightOverlayRef.current) {
-      highlightOverlayRef.current.style.display = 'none'
-    }
-
     if (previewLayerRef.current) {
       previewLayerRef.current.replaceChildren()
     }
 
     previewNodesRef.current = []
-    syncEmptyOverlayVisibility()
-  }, [syncEmptyOverlayVisibility])
+  }, [])
 
-  const syncGhostPreviews = useCallback(
-    (ghostPreviews: TrackDropGhostPreview[]) => {
-      previewCountRef.current = ghostPreviews.length
+  const syncGhostPreviews = useCallback((ghostPreviews: TrackDropGhostPreview[]) => {
+    const previewLayer = previewLayerRef.current
+    if (!previewLayer) {
+      return
+    }
 
-      if (highlightOverlayRef.current) {
-        if (ghostPreviews.length === 0) {
-          highlightOverlayRef.current.style.display = 'none'
-        } else {
-          highlightOverlayRef.current.className = `absolute inset-0 pointer-events-none z-10 rounded border border-dashed ${getGhostHighlightClasses(ghostPreviews)}`
-          highlightOverlayRef.current.style.display = ''
-        }
+    const previewNodes = previewNodesRef.current
+    while (previewNodes.length > ghostPreviews.length) {
+      const removedNode = previewNodes.pop()
+      removedNode?.root.remove()
+    }
+
+    for (let index = 0; index < ghostPreviews.length; index += 1) {
+      const ghostPreview = ghostPreviews[index]!
+      let previewNode = previewNodes[index]
+
+      if (!previewNode) {
+        const root = document.createElement('div')
+        root.className =
+          'absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 inset-y-0'
+        const label = document.createElement('span')
+        label.className = 'text-xs text-foreground/70 truncate'
+        root.appendChild(label)
+        previewLayer.appendChild(root)
+        previewNode = { root, label }
+        previewNodes[index] = previewNode
       }
 
-      const previewLayer = previewLayerRef.current
-      if (!previewLayer) {
-        syncEmptyOverlayVisibility()
-        return
-      }
-
-      const previewNodes = previewNodesRef.current
-      while (previewNodes.length > ghostPreviews.length) {
-        const removedNode = previewNodes.pop()
-        removedNode?.root.remove()
-      }
-
-      for (let index = 0; index < ghostPreviews.length; index += 1) {
-        const ghostPreview = ghostPreviews[index]!
-        let previewNode = previewNodes[index]
-
-        if (!previewNode) {
-          const root = document.createElement('div')
-          root.className =
-            'absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 inset-y-0'
-          const label = document.createElement('span')
-          label.className = 'text-xs text-foreground/70 truncate'
-          root.appendChild(label)
-          previewLayer.appendChild(root)
-          previewNode = { root, label }
-          previewNodes[index] = previewNode
-        }
-
-        previewNode.root.className = `absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 inset-y-0 ${getGhostPreviewItemClasses(ghostPreview.type)}`
-        previewNode.root.style.left = `${ghostPreview.left}px`
-        previewNode.root.style.width = `${ghostPreview.width}px`
-        previewNode.label.textContent = ghostPreview.label
-      }
-
-      syncEmptyOverlayVisibility()
-    },
-    [syncEmptyOverlayVisibility],
-  )
-
-  useLayoutEffect(() => {
-    showEmptyOverlayRef.current = showEmptyOverlay
-    syncEmptyOverlayVisibility()
-  }, [showEmptyOverlay, syncEmptyOverlayVisibility])
+      previewNode.root.className = `absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 inset-y-0 ${getGhostPreviewItemClasses(ghostPreview.type)}`
+      previewNode.root.style.left = `${ghostPreview.left}px`
+      previewNode.root.style.width = `${ghostPreview.width}px`
+      previewNode.label.textContent = ghostPreview.label
+    }
+  }, [])
 
   useEffect(() => {
     const unregister = registerTrackDropGhostOverlay(trackId, {
@@ -263,17 +214,7 @@ const TrackDropGhostOverlay = memo(function TrackDropGhostOverlay({
     }
   }, [clearGhostPreviews, syncGhostPreviews, trackId])
 
-  return (
-    <>
-      <div
-        ref={emptyOverlayRef}
-        className="absolute inset-0 pointer-events-none z-10 rounded border border-dashed border-primary/50 bg-primary/10"
-        style={{ display: 'none' }}
-      />
-      <div ref={highlightOverlayRef} style={{ display: 'none' }} />
-      <div ref={previewLayerRef} />
-    </>
-  )
+  return <div ref={previewLayerRef} />
 })
 
 interface TimelineTrackProps {
@@ -347,9 +288,6 @@ const TimelineTrackItems = memo(function TimelineTrackItems({
 
 export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrackProps) {
   const previewOwnerId = `track:${track.id}`
-  const [isDragOver, setIsDragOver] = useState(false)
-  const [isExternalDragOver, setIsExternalDragOver] = useState(false)
-  const [suppressEmptyDropOverlay, setSuppressEmptyDropOverlay] = useState(false)
   const [gapContextMenuRequest, setGapContextMenuRequest] =
     useState<TrackGapContextMenuRequest | null>(null)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -384,7 +322,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const dragPreviewRafRef = useRef<number | null>(null)
   const pendingDragPreviewRef = useRef<PendingDragPreview | null>(null)
   const dragOverFlagsRef = useRef({ isDragOver: false, isExternalDragOver: false })
-  const suppressEmptyDropOverlayRef = useRef(false)
 
   // Resolve whether this track is effectively disabled for rendering or drops.
   // Uses the shared resolveEffectiveTrackStates helper so group-inherited
@@ -461,26 +398,13 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
   const updateDragOverFlags = useCallback(
     (nextIsDragOver: boolean, nextIsExternalDragOver: boolean) => {
-      if (dragOverFlagsRef.current.isDragOver !== nextIsDragOver) {
-        dragOverFlagsRef.current.isDragOver = nextIsDragOver
-        setIsDragOver(nextIsDragOver)
-      }
-      if (dragOverFlagsRef.current.isExternalDragOver !== nextIsExternalDragOver) {
-        dragOverFlagsRef.current.isExternalDragOver = nextIsExternalDragOver
-        setIsExternalDragOver(nextIsExternalDragOver)
+      dragOverFlagsRef.current = {
+        isDragOver: nextIsDragOver,
+        isExternalDragOver: nextIsExternalDragOver,
       }
     },
     [],
   )
-
-  const updateSuppressEmptyDropOverlay = useCallback((nextSuppress: boolean) => {
-    if (suppressEmptyDropOverlayRef.current === nextSuppress) {
-      return
-    }
-
-    suppressEmptyDropOverlayRef.current = nextSuppress
-    setSuppressEmptyDropOverlay(nextSuppress)
-  }, [])
 
   const resolveTimelineItemsForEntries = useCallback(
     async (
@@ -1080,16 +1004,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const clearOwnedPreview = useCallback(() => {
     clearPendingDragPreview()
     updateDragOverFlags(false, false)
-    updateSuppressEmptyDropOverlay(false)
     clearTrackGhostPreviews()
     resetDragPreviewCache()
-  }, [
-    clearPendingDragPreview,
-    clearTrackGhostPreviews,
-    resetDragPreviewCache,
-    updateDragOverFlags,
-    updateSuppressEmptyDropOverlay,
-  ])
+  }, [clearPendingDragPreview, clearTrackGhostPreviews, resetDragPreviewCache, updateDragOverFlags])
 
   const claimPreviewOwnership = useCallback(
     (event: React.DragEvent) => {
@@ -1110,16 +1027,8 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         useNewTrackZonePreviewStore.getState().clearGhostPreviews()
       }
       updateDragOverFlags(true, hasExternalFiles)
-      updateSuppressEmptyDropOverlay(shouldSuppressEmptyTrackDropOverlay(data))
     },
-    [
-      clearOwnedPreview,
-      clearTrackGhostPreviews,
-      previewOwnerId,
-      trackKind,
-      updateDragOverFlags,
-      updateSuppressEmptyDropOverlay,
-    ],
+    [clearOwnedPreview, clearTrackGhostPreviews, previewOwnerId, trackKind, updateDragOverFlags],
   )
 
   const handleDragEnterCapture = useCallback(
@@ -1149,7 +1058,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       updateDragOverFlags(false, false)
       clearTrackGhostPreviews()
       resetDragPreviewCache()
-      updateSuppressEmptyDropOverlay(false)
       return
     }
 
@@ -1162,14 +1070,12 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     e.dataTransfer.dropEffect = 'copy'
     claimPreviewOwnership(e)
     updateDragOverFlags(true, hasExternalFiles)
-    updateSuppressEmptyDropOverlay(shouldSuppressEmptyTrackDropOverlay(data))
 
     const dropFrame = getDropFrame(e)
     if (dropFrame === null) {
       clearPendingDragPreview()
       clearTrackGhostPreviews()
       resetDragPreviewCache()
-      updateSuppressEmptyDropOverlay(false)
       return
     }
     lastDragFrameRef.current = dropFrame
@@ -1200,7 +1106,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     releaseTimelineDropPreviewOwner(previewOwnerId)
     clearPendingDragPreview()
     updateDragOverFlags(false, false)
-    updateSuppressEmptyDropOverlay(false)
     clearTrackGhostPreviews()
     resetDragPreviewCache()
     clearExternalPreviewSession()
@@ -1219,7 +1124,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     releaseTimelineDropPreviewOwner(previewOwnerId)
     clearPendingDragPreview()
     updateDragOverFlags(false, false)
-    updateSuppressEmptyDropOverlay(false)
     clearTrackGhostPreviews()
     resetDragPreviewCache()
     clearExternalPreviewSession()
@@ -1384,12 +1288,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         onDrop={handleDrop}
         onContextMenu={handleContextMenu}
       >
-        {!isDropDisabled && (
-          <TrackDropGhostOverlay
-            trackId={track.id}
-            showEmptyOverlay={isDragOver && !isExternalDragOver && !suppressEmptyDropOverlay}
-          />
-        )}
+        {!isDropDisabled && <TrackDropGhostOverlay trackId={track.id} />}
 
         {/* Render all items for this track - dimmed when the track is disabled */}
         <TimelineTrackItems

@@ -3,7 +3,6 @@ import {
   isDirectEffectTemplateDragData,
   shouldIgnoreNewTrackZonePreviewForDrag,
   shouldIgnoreTrackDropPreviewForDrag,
-  shouldSuppressEmptyTrackDropOverlay,
 } from './timeline-external-drag'
 
 const effectTemplate = {
@@ -35,10 +34,5 @@ describe('timeline external drag policy', () => {
   it('allows effect templates in video new-track zones only', () => {
     expect(shouldIgnoreNewTrackZonePreviewForDrag(effectTemplate, 'video')).toBe(false)
     expect(shouldIgnoreNewTrackZonePreviewForDrag(effectTemplate, 'audio')).toBe(true)
-  })
-
-  it('suppresses the empty brown lane overlay for effect-template drags only', () => {
-    expect(shouldSuppressEmptyTrackDropOverlay(effectTemplate)).toBe(true)
-    expect(shouldSuppressEmptyTrackDropOverlay(blankAdjustmentTemplate)).toBe(false)
   })
 })
