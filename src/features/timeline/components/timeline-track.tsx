@@ -350,6 +350,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const previewOwnerId = `track:${track.id}`
   const [isDragOver, setIsDragOver] = useState(false)
   const [isExternalDragOver, setIsExternalDragOver] = useState(false)
+  const [suppressEmptyDropOverlay, setSuppressEmptyDropOverlay] = useState(false)
   const [gapContextMenuRequest, setGapContextMenuRequest] =
     useState<TrackGapContextMenuRequest | null>(null)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -384,6 +385,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const dragPreviewRafRef = useRef<number | null>(null)
   const pendingDragPreviewRef = useRef<PendingDragPreview | null>(null)
   const dragOverFlagsRef = useRef({ isDragOver: false, isExternalDragOver: false })
+  const suppressEmptyDropOverlayRef = useRef(false)
 
   // Resolve whether this track is effectively disabled for rendering or drops.
   // Uses the shared resolveEffectiveTrackStates helper so group-inherited
@@ -471,6 +473,15 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     },
     [],
   )
+
+  const updateSuppressEmptyDropOverlay = useCallback((nextSuppress: boolean) => {
+    if (suppressEmptyDropOverlayRef.current === nextSuppress) {
+      return
+    }
+
+    suppressEmptyDropOverlayRef.current = nextSuppress
+    setSuppressEmptyDropOverlay(nextSuppress)
+  }, [])
 
   const resolveTimelineItemsForEntries = useCallback(
     async (
@@ -1070,9 +1081,16 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const clearOwnedPreview = useCallback(() => {
     clearPendingDragPreview()
     updateDragOverFlags(false, false)
+    updateSuppressEmptyDropOverlay(false)
     clearTrackGhostPreviews()
     resetDragPreviewCache()
-  }, [clearPendingDragPreview, clearTrackGhostPreviews, resetDragPreviewCache, updateDragOverFlags])
+  }, [
+    clearPendingDragPreview,
+    clearTrackGhostPreviews,
+    resetDragPreviewCache,
+    updateDragOverFlags,
+    updateSuppressEmptyDropOverlay,
+  ])
 
   const claimPreviewOwnership = useCallback(
     (event: React.DragEvent) => {
@@ -1093,8 +1111,16 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         useNewTrackZonePreviewStore.getState().clearGhostPreviews()
       }
       updateDragOverFlags(true, hasExternalFiles)
+      updateSuppressEmptyDropOverlay(isDirectEffectTemplateDragData(data))
     },
-    [clearOwnedPreview, clearTrackGhostPreviews, previewOwnerId, trackKind, updateDragOverFlags],
+    [
+      clearOwnedPreview,
+      clearTrackGhostPreviews,
+      previewOwnerId,
+      trackKind,
+      updateDragOverFlags,
+      updateSuppressEmptyDropOverlay,
+    ],
   )
 
   const handleDragEnterCapture = useCallback(
@@ -1124,6 +1150,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       updateDragOverFlags(false, false)
       clearTrackGhostPreviews()
       resetDragPreviewCache()
+      updateSuppressEmptyDropOverlay(false)
       return
     }
 
@@ -1136,12 +1163,14 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     e.dataTransfer.dropEffect = 'copy'
     claimPreviewOwnership(e)
     updateDragOverFlags(true, hasExternalFiles)
+    updateSuppressEmptyDropOverlay(isDirectEffectTemplateDragData(data))
 
     const dropFrame = getDropFrame(e)
     if (dropFrame === null) {
       clearPendingDragPreview()
       clearTrackGhostPreviews()
       resetDragPreviewCache()
+      updateSuppressEmptyDropOverlay(false)
       return
     }
     lastDragFrameRef.current = dropFrame
@@ -1172,6 +1201,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     releaseTimelineDropPreviewOwner(previewOwnerId)
     clearPendingDragPreview()
     updateDragOverFlags(false, false)
+    updateSuppressEmptyDropOverlay(false)
     clearTrackGhostPreviews()
     resetDragPreviewCache()
     clearExternalPreviewSession()
@@ -1190,6 +1220,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     releaseTimelineDropPreviewOwner(previewOwnerId)
     clearPendingDragPreview()
     updateDragOverFlags(false, false)
+    updateSuppressEmptyDropOverlay(false)
     clearTrackGhostPreviews()
     resetDragPreviewCache()
     clearExternalPreviewSession()
@@ -1357,7 +1388,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         {!isDropDisabled && (
           <TrackDropGhostOverlay
             trackId={track.id}
-            showEmptyOverlay={isDragOver && !isExternalDragOver}
+            showEmptyOverlay={isDragOver && !isExternalDragOver && !suppressEmptyDropOverlay}
           />
         )}
 
