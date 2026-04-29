@@ -32,7 +32,6 @@ import { wouldCreateCompositionCycle } from '../utils/composition-graph'
 import {
   createTimelineTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
-  getTemplateEffectsForDirectApplication,
   isTimelineTemplateDragData,
 } from '../utils/generated-layer-items'
 import {
@@ -69,6 +68,7 @@ import {
   releaseTimelineDropPreviewOwner,
 } from '../utils/drop-preview-owner'
 import { isDragPointInsideElement } from '../utils/effect-drop'
+import { shouldIgnoreNewTrackZonePreviewForDrag } from '../utils/timeline-external-drag'
 
 const logger = createLogger('TimelineMediaDropZone')
 
@@ -93,10 +93,6 @@ type PendingDragPreview = {
 }
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3
-
-function isDirectEffectTemplateDragData(data: ReturnType<typeof getMediaDragData>): boolean {
-  return !!getTemplateEffectsForDirectApplication(data)
-}
 
 const NewTrackZoneGhostOverlay = memo(function NewTrackZoneGhostOverlay({
   zone,
@@ -896,7 +892,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         return
       }
 
-      if (isDirectEffectTemplateDragData(data) && zone !== 'video') {
+      if (shouldIgnoreNewTrackZonePreviewForDrag(data, zone)) {
         clearOwnedPreview()
         return
       }
@@ -933,7 +929,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         return
       }
 
-      if (isDirectEffectTemplateDragData(data) && zone !== 'video') {
+      if (shouldIgnoreNewTrackZonePreviewForDrag(data, zone)) {
         clearOwnedPreview()
         return
       }

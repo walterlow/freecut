@@ -12,7 +12,10 @@ import { useTimelineStore } from '../../stores/timeline-store'
 import { useItemsStore } from '../../stores/items-store'
 import { useTransitionsStore } from '../../stores/transitions-store'
 import { useEffectDropPreviewStore } from '../../stores/effect-drop-preview-store'
-import { useTrackDropPreviewStore } from '../../stores/track-drop-preview-store'
+import {
+  hasTrackDropGhostPreviews,
+  useTrackDropPreviewStore,
+} from '../../stores/track-drop-preview-store'
 import { resolveTransitionTargetForEdge } from '@/features/timeline/utils/transition-targets'
 import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils'
 import { isDragPointInsideElement, resolveEffectDropTargetIds } from '../../utils/effect-drop'
@@ -52,10 +55,6 @@ function readDraggedTransitionDescriptor(
   } catch {
     return null
   }
-}
-
-function hasActiveTrackDropPreview(): boolean {
-  return Object.keys(useTrackDropPreviewStore.getState().ghostPreviewsByTrackId).length > 0
 }
 
 export function useTimelineItemDropHandlers({
@@ -285,7 +284,7 @@ export function useTimelineItemDropHandlers({
       const targetItemIds = resolveEffectDropTargets(parsedPayload)
       useEffectDropPreviewStore.getState().clearPreview()
 
-      if (effects && hasActiveTrackDropPreview()) {
+      if (effects && hasTrackDropGhostPreviews()) {
         return
       }
 

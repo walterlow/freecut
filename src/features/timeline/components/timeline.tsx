@@ -34,16 +34,16 @@ import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
 import { useZoomStore } from '../stores/zoom-store'
 import { computeWheelZoomStep } from '../constants'
 import { clampSectionDividerPosition, getTrackSectionLayout } from '../utils/track-resize'
-import {
-  clearMediaDragData,
-  getMediaDragData,
-} from '@/features/timeline/deps/media-library-resolver'
+import { clearMediaDragData } from '@/features/timeline/deps/media-library-resolver'
 import { useNewTrackZonePreviewStore } from '../stores/new-track-zone-preview-store'
 import { useTrackDropPreviewStore } from '../stores/track-drop-preview-store'
 import { clearAllTimelineDropPreviewOwners } from '../utils/drop-preview-owner'
+import {
+  isDragEventOverTimelineDropTarget,
+  isExternalTimelineDragEvent,
+} from '../utils/timeline-external-drag'
 
 const logger = createLogger('Timeline')
-const TIMELINE_DROP_TARGET_SELECTOR = '[data-timeline-drop-target="true"]'
 
 interface TimelineProps {
   duration: number // Total timeline duration in seconds
@@ -148,26 +148,13 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
       useTrackDropPreviewStore.getState().clearGhostPreviews()
       useNewTrackZonePreviewStore.getState().clearGhostPreviews()
     }
-    const isExternalTimelineDrag = (event: DragEvent) =>
-      !!getMediaDragData() || !!event.dataTransfer?.types.includes('Files')
-    const isOverTimelineDropTarget = (event: DragEvent) => {
-      if (event.clientX === 0 && event.clientY === 0) {
-        return (
-          event.target instanceof Element && !!event.target.closest(TIMELINE_DROP_TARGET_SELECTOR)
-        )
-      }
-
-      return document
-        .elementsFromPoint(event.clientX, event.clientY)
-        .some((element) => !!element.closest(TIMELINE_DROP_TARGET_SELECTOR))
-    }
 
     const handleDragEnd = () => {
       clearExternalDropPreviews()
       clearMediaDragData()
     }
     const handleDragOver = (event: DragEvent) => {
-      if (!isExternalTimelineDrag(event) || isOverTimelineDropTarget(event)) {
+      if (!isExternalTimelineDragEvent(event) || isDragEventOverTimelineDropTarget(event)) {
         return
       }
 

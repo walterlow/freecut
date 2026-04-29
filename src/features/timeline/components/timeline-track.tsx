@@ -41,7 +41,6 @@ import { wouldCreateCompositionCycle } from '../utils/composition-graph'
 import {
   createTimelineTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
-  getTemplateEffectsForDirectApplication,
   isTimelineTemplateDragData,
 } from '../utils/generated-layer-items'
 import { findCompatibleTrackForItemType } from '../utils/track-item-compatibility'
@@ -93,6 +92,10 @@ import {
   getTrackKind,
   isTrackDisabled as getIsTrackDisabled,
 } from '@/features/timeline/utils/classic-tracks'
+import {
+  shouldIgnoreTrackDropPreviewForDrag,
+  shouldSuppressEmptyTrackDropOverlay,
+} from '../utils/timeline-external-drag'
 
 /**
  * Lightweight on-demand context menu for track gaps.
@@ -292,10 +295,6 @@ type PendingDragPreview = {
 }
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3
-
-function isDirectEffectTemplateDragData(data: ReturnType<typeof getMediaDragData>): boolean {
-  return !!getTemplateEffectsForDirectApplication(data)
-}
 
 /**
  * Custom equality for TimelineTrack memo - only track identity matters.
@@ -1101,7 +1100,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         return
       }
 
-      if (isDirectEffectTemplateDragData(data) && trackKind === 'audio') {
+      if (shouldIgnoreTrackDropPreviewForDrag(data, trackKind)) {
         clearOwnedPreview()
         return
       }
@@ -1111,7 +1110,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         useNewTrackZonePreviewStore.getState().clearGhostPreviews()
       }
       updateDragOverFlags(true, hasExternalFiles)
-      updateSuppressEmptyDropOverlay(isDirectEffectTemplateDragData(data))
+      updateSuppressEmptyDropOverlay(shouldSuppressEmptyTrackDropOverlay(data))
     },
     [
       clearOwnedPreview,
@@ -1154,7 +1153,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       return
     }
 
-    if (isDirectEffectTemplateDragData(data) && trackKind === 'audio') {
+    if (shouldIgnoreTrackDropPreviewForDrag(data, trackKind)) {
       clearOwnedPreview()
       return
     }
@@ -1163,7 +1162,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     e.dataTransfer.dropEffect = 'copy'
     claimPreviewOwnership(e)
     updateDragOverFlags(true, hasExternalFiles)
-    updateSuppressEmptyDropOverlay(isDirectEffectTemplateDragData(data))
+    updateSuppressEmptyDropOverlay(shouldSuppressEmptyTrackDropOverlay(data))
 
     const dropFrame = getDropFrame(e)
     if (dropFrame === null) {
