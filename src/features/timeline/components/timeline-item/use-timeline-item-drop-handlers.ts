@@ -54,6 +54,10 @@ function readDraggedTransitionDescriptor(
   }
 }
 
+function hasActiveTrackDropPreview(): boolean {
+  return Object.keys(useTrackDropPreviewStore.getState().ghostPreviewsByTrackId).length > 0
+}
+
 export function useTimelineItemDropHandlers({
   item,
   trackLocked,
@@ -280,6 +284,10 @@ export function useTimelineItemDropHandlers({
       const effects = resolveDirectEffectDropTemplate(parsedPayload)
       const targetItemIds = resolveEffectDropTargets(parsedPayload)
       useEffectDropPreviewStore.getState().clearPreview()
+
+      if (effects && hasActiveTrackDropPreview()) {
+        return
+      }
 
       if (!effects || targetItemIds.length === 0) {
         return

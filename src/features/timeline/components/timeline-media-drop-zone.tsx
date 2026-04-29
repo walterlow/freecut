@@ -32,6 +32,7 @@ import { wouldCreateCompositionCycle } from '../utils/composition-graph'
 import {
   createTimelineTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
+  getTemplateEffectsForDirectApplication,
   isTimelineTemplateDragData,
 } from '../utils/generated-layer-items'
 import {
@@ -92,6 +93,10 @@ type PendingDragPreview = {
 }
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3
+
+function isDirectEffectTemplateDragData(data: ReturnType<typeof getMediaDragData>): boolean {
+  return !!getTemplateEffectsForDirectApplication(data)
+}
 
 const NewTrackZoneGhostOverlay = memo(function NewTrackZoneGhostOverlay({
   zone,
@@ -876,11 +881,23 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     zone,
   ])
 
+  const clearOwnedPreview = useCallback(() => {
+    clearPendingDragPreview()
+    updateDragOverFlags(false, false)
+    clearZoneGhostPreviews()
+    resetDragPreviewCache()
+  }, [clearPendingDragPreview, clearZoneGhostPreviews, resetDragPreviewCache, updateDragOverFlags])
+
   const claimPreviewOwnership = useCallback(
     (dataTransfer: DataTransfer | null) => {
       const data = getMediaDragData()
       const hasExternalFiles = !!dataTransfer && !data && dataTransfer.types.includes('Files')
       if (!data && !hasExternalFiles) {
+        return
+      }
+
+      if (isDirectEffectTemplateDragData(data) && zone !== 'video') {
+        clearOwnedPreview()
         return
       }
 
@@ -890,15 +907,8 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       }
       updateDragOverFlags(true, hasExternalFiles)
     },
-    [clearZoneGhostPreviews, previewOwnerId, updateDragOverFlags],
+    [clearOwnedPreview, clearZoneGhostPreviews, previewOwnerId, updateDragOverFlags],
   )
-
-  const clearOwnedPreview = useCallback(() => {
-    clearPendingDragPreview()
-    updateDragOverFlags(false, false)
-    clearZoneGhostPreviews()
-    resetDragPreviewCache()
-  }, [clearPendingDragPreview, clearZoneGhostPreviews, resetDragPreviewCache, updateDragOverFlags])
 
   const handleDragEnterCapture = useCallback(
     (e: React.DragEvent) => {
@@ -920,6 +930,11 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         updateDragOverFlags(false, false)
         clearZoneGhostPreviews()
         resetDragPreviewCache()
+        return
+      }
+
+      if (isDirectEffectTemplateDragData(data) && zone !== 'video') {
+        clearOwnedPreview()
         return
       }
 

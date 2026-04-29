@@ -292,24 +292,9 @@ type PendingDragPreview = {
 }
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3
-const TIMELINE_ITEM_SELECTOR = '[data-item-id]'
 
 function isDirectEffectTemplateDragData(data: ReturnType<typeof getMediaDragData>): boolean {
   return !!getTemplateEffectsForDirectApplication(data)
-}
-
-function isDragOverTimelineItem(event: React.DragEvent): boolean {
-  if (event.target instanceof Element && event.target.closest(TIMELINE_ITEM_SELECTOR)) {
-    return true
-  }
-
-  if (event.clientX === 0 && event.clientY === 0) {
-    return false
-  }
-
-  return document
-    .elementsFromPoint(event.clientX, event.clientY)
-    .some((element) => !!element.closest(TIMELINE_ITEM_SELECTOR))
 }
 
 /**
@@ -1098,7 +1083,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         return
       }
 
-      if (isDirectEffectTemplateDragData(data) && isDragOverTimelineItem(event)) {
+      if (isDirectEffectTemplateDragData(data) && trackKind === 'audio') {
         clearOwnedPreview()
         return
       }
@@ -1109,7 +1094,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       }
       updateDragOverFlags(true, hasExternalFiles)
     },
-    [clearOwnedPreview, clearTrackGhostPreviews, previewOwnerId, updateDragOverFlags],
+    [clearOwnedPreview, clearTrackGhostPreviews, previewOwnerId, trackKind, updateDragOverFlags],
   )
 
   const handleDragEnterCapture = useCallback(
@@ -1142,7 +1127,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       return
     }
 
-    if (isDirectEffectTemplateDragData(data) && isDragOverTimelineItem(e)) {
+    if (isDirectEffectTemplateDragData(data) && trackKind === 'audio') {
       clearOwnedPreview()
       return
     }
