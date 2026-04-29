@@ -218,6 +218,52 @@ describe('TransitionPanel', () => {
     })
   })
 
+  it('updates transition placement from the placement controls', async () => {
+    render(<TransitionPanel />)
+
+    expect(screen.getByText('Placement')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Center placement' })).toHaveClass('bg-background')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Left placement' }))
+
+    await waitFor(() => {
+      expect(
+        useTimelineStore.getState().transitions.find((transition) => transition.id === 'tr-1')
+          ?.alignment,
+      ).toBe(1)
+    })
+  })
+
+  it('clamps duration when changing placement to a side with less handle', async () => {
+    useTimelineStore.setState({
+      fps: 30,
+      items: [
+        {
+          ...LEFT_CLIP,
+          sourceEnd: 105,
+          sourceDuration: 120,
+        },
+        RIGHT_CLIP,
+      ],
+      transitions: [
+        {
+          ...TRANSITION,
+          durationInFrames: 30,
+        },
+      ],
+    } as Partial<ReturnType<typeof useTimelineStore.getState>>)
+
+    render(<TransitionPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Left placement' }))
+
+    await waitFor(() => {
+      expect(
+        useTimelineStore.getState().transitions.find((transition) => transition.id === 'tr-1'),
+      ).toEqual(expect.objectContaining({ alignment: 1, durationInFrames: 15 }))
+    })
+  })
+
   it('exposes a color property for dip to color dissolve', async () => {
     useTimelineStore.setState({
       fps: 30,

@@ -213,6 +213,28 @@ describe('transition actions with linked audio companions', () => {
     ])
   })
 
+  it('stores an explicit side placement when adding a transition', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem({ id: 'video-1', sourceEnd: 90, sourceDuration: 180 }),
+      makeVideoItem({
+        id: 'video-2',
+        from: 60,
+        sourceStart: 0,
+        sourceEnd: 60,
+        sourceDuration: 180,
+        linkedGroupId: 'group-2',
+        mediaId: 'media-2',
+      }),
+    ])
+
+    const added = addTransition('video-1', 'video-2', 'crossfade', 30, 'fade', undefined, 1)
+
+    expect(added).toBe(true)
+    expect(useTransitionsStore.getState().transitions).toEqual([
+      expect.objectContaining({ alignment: 1, durationInFrames: 30 }),
+    ])
+  })
+
   it('does not move synchronized linked audio when transition duration changes', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ id: 'video-1', linkedGroupId: 'group-1' }),

@@ -1,7 +1,15 @@
 import { useMemo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
-import { Trash2, Zap, RotateCcw, ChevronDown } from 'lucide-react'
+import {
+  AlignHorizontalJustifyCenter,
+  AlignHorizontalJustifyEnd,
+  AlignHorizontalJustifyStart,
+  Trash2,
+  Zap,
+  RotateCcw,
+  ChevronDown,
+} from 'lucide-react'
 import { HexColorPicker } from 'react-colorful'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
@@ -171,6 +179,27 @@ const EASE_OPTIONS = [
   { value: 'ease-out', label: 'Out' },
   { value: 'ease-in-out', label: 'In & Out' },
 ] as const satisfies ReadonlyArray<{ value: TransitionTiming; label: string }>
+
+const PLACEMENT_OPTIONS = [
+  {
+    value: 1,
+    label: 'Left',
+    title: 'Place transition before the cut',
+    Icon: AlignHorizontalJustifyStart,
+  },
+  {
+    value: 0.5,
+    label: 'Center',
+    title: 'Center transition on the cut',
+    Icon: AlignHorizontalJustifyCenter,
+  },
+  {
+    value: 0,
+    label: 'Right',
+    title: 'Place transition after the cut',
+    Icon: AlignHorizontalJustifyEnd,
+  },
+] as const
 
 function getSupportedEaseOptions(
   supportedTimings: readonly TransitionTiming[],
@@ -430,6 +459,22 @@ export function TransitionPanel() {
     maxDuration,
   ])
 
+  const selectedAlignment = selectedTransition?.alignment ?? 0.5
+  const handlePlacementChange = useCallback(
+    (alignment: number) => {
+      if (!selectedTransitionId || !selectedTransition || !leftClip || !rightClip) return
+
+      const maxForPlacement = getMaxTransitionDurationForHandles(leftClip, rightClip, alignment)
+      if (maxForPlacement < minDuration) return
+
+      updateTransition(selectedTransitionId, {
+        alignment,
+        durationInFrames: Math.min(selectedTransition.durationInFrames, maxForPlacement),
+      })
+    },
+    [leftClip, rightClip, selectedTransition, selectedTransitionId, updateTransition],
+  )
+
   // Handle timing change
   const handleTimingChange = useCallback(
     (timing: TransitionTiming) => {
@@ -618,6 +663,43 @@ export function TransitionPanel() {
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
+          </div>
+        </PropertyRow>
+
+        <PropertyRow
+          label="Placement"
+          tooltip="Position the transition before, across, or after the cut"
+        >
+          <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
+            {PLACEMENT_OPTIONS.map(({ value, label, title, Icon }) => {
+              const maxForPlacement =
+                leftClip && rightClip
+                  ? getMaxTransitionDurationForHandles(leftClip, rightClip, value)
+                  : 0
+              const disabled = maxForPlacement < minDuration
+              const selected = selectedAlignment === value
+
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  aria-label={`${label} placement`}
+                  title={disabled ? `${title} (not enough source handle)` : title}
+                  disabled={disabled}
+                  onClick={() => handlePlacementChange(value)}
+                  className={cn(
+                    'inline-flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded px-2 text-xs transition-colors',
+                    selected
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                    disabled && 'cursor-not-allowed opacity-40 hover:text-muted-foreground',
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{label}</span>
+                </button>
+              )
+            })}
           </div>
         </PropertyRow>
 
