@@ -1321,6 +1321,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       <div
         ref={trackRef}
         data-track-id={track.id}
+        data-timeline-drop-target="true"
         className="relative"
         style={{
           height: `${track.height}px`,

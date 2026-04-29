@@ -1181,6 +1181,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
   return (
     <div
       ref={zoneRef}
+      data-timeline-drop-target="true"
       className="relative"
       style={{ height: `${height}px` }}
       onDragEnterCapture={handleDragEnterCapture}
