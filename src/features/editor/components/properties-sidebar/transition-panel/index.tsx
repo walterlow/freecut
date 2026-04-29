@@ -286,9 +286,26 @@ export function TransitionPanel() {
   )
 
   const [presetPickerOpen, setPresetPickerOpen] = useState(false)
+  const [presetSearchQuery, setPresetSearchQuery] = useState('')
   const presetTriggerRef = useRef<HTMLButtonElement>(null)
   const presetPanelRef = useRef<HTMLDivElement>(null)
   const [presetPanelStyle, setPresetPanelStyle] = useState<CSSProperties>({})
+  const filteredPresentationConfigGroups = useMemo(() => {
+    const query = presetSearchQuery.trim().toLowerCase()
+    if (!query) return presentationConfigGroups
+
+    return presentationConfigGroups
+      .map(([category, configs]) => {
+        const categoryTitle = TRANSITION_CATEGORY_INFO[category]?.title ?? category
+        const filtered = configs.filter((config) =>
+          [config.id, config.label, config.description, config.direction, category, categoryTitle]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(query)),
+        )
+        return [category, filtered] as const
+      })
+      .filter(([, configs]) => configs.length > 0)
+  }, [presentationConfigGroups, presetSearchQuery])
 
   const openPresetPicker = useCallback(() => {
     if (presetTriggerRef.current) {
@@ -305,6 +322,7 @@ export function TransitionPanel() {
 
   const closePresetPicker = useCallback(() => {
     setPresetPickerOpen(false)
+    setPresetSearchQuery('')
     presetTriggerRef.current?.blur()
   }, [])
 
@@ -484,8 +502,19 @@ export function TransitionPanel() {
                   style={presetPanelStyle}
                   className="z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 slide-in-from-top-2"
                 >
-                  <div className="max-h-[280px] overflow-y-auto overflow-x-hidden p-1">
-                    {presentationConfigGroups.map(([category, configs], index) => (
+                  <div className="border-b border-border p-1.5">
+                    <input
+                      type="search"
+                      aria-label="Search transitions"
+                      value={presetSearchQuery}
+                      onChange={(event) => setPresetSearchQuery(event.currentTarget.value)}
+                      placeholder="Search transitions"
+                      className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="max-h-[460px] overflow-y-auto overflow-x-hidden p-1">
+                    {filteredPresentationConfigGroups.map(([category, configs], index) => (
                       <div key={category}>
                         {index > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
                         <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
@@ -514,6 +543,11 @@ export function TransitionPanel() {
                         })}
                       </div>
                     ))}
+                    {filteredPresentationConfigGroups.length === 0 && (
+                      <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                        No transitions found
+                      </div>
+                    )}
                   </div>
                 </div>,
                 document.body,

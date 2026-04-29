@@ -128,6 +128,31 @@ describe('TransitionPanel', () => {
     expect(screen.getByRole('button', { name: 'Left' })).toHaveClass('bg-background')
   })
 
+  it('filters transition presets from the dropdown search box', () => {
+    render(<TransitionPanel />)
+
+    fireEvent.click(screen.getByRole('combobox'))
+    expect(screen.getByRole('searchbox', { name: 'Search transitions' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search transitions' }), {
+      target: { value: 'jump-cut' },
+    })
+
+    expect(screen.getByText('Smooth Cut')).toBeInTheDocument()
+    expect(screen.queryByText('Cross Dissolve')).not.toBeInTheDocument()
+  })
+
+  it('shows an empty state when transition preset search has no matches', () => {
+    render(<TransitionPanel />)
+
+    fireEvent.click(screen.getByRole('combobox'))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search transitions' }), {
+      target: { value: 'nope-nope-nope' },
+    })
+
+    expect(screen.getByText('No transitions found')).toBeInTheDocument()
+  })
+
   it('shows ease options and updates the selected ease curve', async () => {
     render(<TransitionPanel />)
 
