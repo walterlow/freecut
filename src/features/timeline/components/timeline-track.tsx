@@ -41,6 +41,7 @@ import { wouldCreateCompositionCycle } from '../utils/composition-graph'
 import {
   createTimelineTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
+  getTemplateEffectsForDirectApplication,
   isTimelineTemplateDragData,
 } from '../utils/generated-layer-items'
 import { findCompatibleTrackForItemType } from '../utils/track-item-compatibility'
@@ -291,6 +292,25 @@ type PendingDragPreview = {
 }
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3
+const TIMELINE_ITEM_SELECTOR = '[data-item-id]'
+
+function isDirectEffectTemplateDragData(data: ReturnType<typeof getMediaDragData>): boolean {
+  return !!getTemplateEffectsForDirectApplication(data)
+}
+
+function isDragOverTimelineItem(event: React.DragEvent): boolean {
+  if (event.target instanceof Element && event.target.closest(TIMELINE_ITEM_SELECTOR)) {
+    return true
+  }
+
+  if (event.clientX === 0 && event.clientY === 0) {
+    return false
+  }
+
+  return document
+    .elementsFromPoint(event.clientX, event.clientY)
+    .some((element) => !!element.closest(TIMELINE_ITEM_SELECTOR))
+}
 
 /**
  * Custom equality for TimelineTrack memo - only track identity matters.
@@ -1062,11 +1082,24 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     }
   }, [closeGapAtPosition, gapContextMenuRequest, track.id])
 
+  const clearOwnedPreview = useCallback(() => {
+    clearPendingDragPreview()
+    updateDragOverFlags(false, false)
+    clearTrackGhostPreviews()
+    resetDragPreviewCache()
+  }, [clearPendingDragPreview, clearTrackGhostPreviews, resetDragPreviewCache, updateDragOverFlags])
+
   const claimPreviewOwnership = useCallback(
-    (dataTransfer: DataTransfer | null) => {
+    (event: React.DragEvent) => {
+      const dataTransfer = event.dataTransfer
       const data = getMediaDragData()
       const hasExternalFiles = !!dataTransfer && !data && dataTransfer.types.includes('Files')
       if (!data && !hasExternalFiles) {
+        return
+      }
+
+      if (isDirectEffectTemplateDragData(data) && isDragOverTimelineItem(event)) {
+        clearOwnedPreview()
         return
       }
 
@@ -1076,19 +1109,12 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       }
       updateDragOverFlags(true, hasExternalFiles)
     },
-    [clearTrackGhostPreviews, previewOwnerId, updateDragOverFlags],
+    [clearOwnedPreview, clearTrackGhostPreviews, previewOwnerId, updateDragOverFlags],
   )
-
-  const clearOwnedPreview = useCallback(() => {
-    clearPendingDragPreview()
-    updateDragOverFlags(false, false)
-    clearTrackGhostPreviews()
-    resetDragPreviewCache()
-  }, [clearPendingDragPreview, clearTrackGhostPreviews, resetDragPreviewCache, updateDragOverFlags])
 
   const handleDragEnterCapture = useCallback(
     (e: React.DragEvent) => {
-      claimPreviewOwnership(e.dataTransfer)
+      claimPreviewOwnership(e)
     },
     [claimPreviewOwnership],
   )
@@ -1116,9 +1142,14 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       return
     }
 
+    if (isDirectEffectTemplateDragData(data) && isDragOverTimelineItem(e)) {
+      clearOwnedPreview()
+      return
+    }
+
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
-    claimPreviewOwnership(e.dataTransfer)
+    claimPreviewOwnership(e)
     updateDragOverFlags(true, hasExternalFiles)
 
     const dropFrame = getDropFrame(e)
