@@ -19,7 +19,7 @@ export interface ResolvedTransitionTarget {
 type TransitionEdge = 'left' | 'right'
 
 function isTransitionableItem(item: TimelineItem): boolean {
-  return item.type === 'video' || item.type === 'image'
+  return item.type === 'video' || item.type === 'image' || item.type === 'composition'
 }
 
 function buildExistingTransitionByPair(transitions: Transition[]): Map<string, Transition> {

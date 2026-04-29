@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test'
 import type { Transition } from '@/types/transition'
-import type { VideoItem } from '@/types/timeline'
+import type { CompositionItem, VideoItem } from '@/types/timeline'
 import {
   resolveTransitionTargetForEdge,
   resolveTransitionTargetFromSelection,
@@ -39,6 +39,30 @@ function createTransition(leftClipId: string, rightClipId: string): Transition {
     presentation: 'fade',
     timing: 'linear',
     alignment: 0.5,
+  }
+}
+
+function createCompoundClip(
+  id: string,
+  from: number,
+  durationInFrames: number,
+  sourceStart = 0,
+  sourceEnd = sourceStart + durationInFrames,
+  sourceDuration = Math.max(120, sourceEnd + 60),
+): CompositionItem {
+  return {
+    id,
+    type: 'composition',
+    trackId: 'track-1',
+    from,
+    durationInFrames,
+    label: id,
+    compositionId: `${id}-composition`,
+    compositionWidth: 1920,
+    compositionHeight: 1080,
+    sourceStart,
+    sourceEnd,
+    sourceDuration,
   }
 }
 
@@ -108,6 +132,54 @@ describe('transition-targets', () => {
       existingTransitionId: 'transition-1',
       canApply: true,
       suggestedDurationInFrames: 18,
+    })
+  })
+
+  it('resolves a compound clip followed by a regular clip', () => {
+    const items = [
+      createCompoundClip('compound', 0, 60, 0, 72, 120),
+      createVideoClip('regular', 60, 60, 8, 68, 120),
+    ]
+
+    const target = resolveTransitionTargetForEdge({
+      itemId: 'compound',
+      edge: 'right',
+      items,
+      transitions: [],
+      preferredDurationInFrames: 30,
+    })
+
+    expect(target).toMatchObject({
+      leftClipId: 'compound',
+      rightClipId: 'regular',
+      canApply: true,
+      hasExisting: false,
+      maxDurationInFrames: 16,
+      suggestedDurationInFrames: 16,
+    })
+  })
+
+  it('resolves a regular clip followed by a compound clip', () => {
+    const items = [
+      createVideoClip('regular', 0, 60, 0, 72, 120),
+      createCompoundClip('compound', 60, 60, 8, 68, 120),
+    ]
+
+    const target = resolveTransitionTargetForEdge({
+      itemId: 'compound',
+      edge: 'left',
+      items,
+      transitions: [],
+      preferredDurationInFrames: 30,
+    })
+
+    expect(target).toMatchObject({
+      leftClipId: 'regular',
+      rightClipId: 'compound',
+      canApply: true,
+      hasExisting: false,
+      maxDurationInFrames: 16,
+      suggestedDurationInFrames: 16,
     })
   })
 })
