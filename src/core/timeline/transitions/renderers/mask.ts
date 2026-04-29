@@ -232,7 +232,7 @@ const irisDef: TransitionDefinition = {
   id: 'iris',
   label: 'Iris',
   description: 'Circular iris expanding/contracting',
-  category: 'mask',
+  category: 'iris',
   icon: 'Circle',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],

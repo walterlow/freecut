@@ -190,4 +190,24 @@ describe('TransitionPanel', () => {
       ).toBe('from-right')
     })
   })
+
+  it('exposes a color property for dip to color dissolve', async () => {
+    useTimelineStore.setState({
+      fps: 30,
+      items: [LEFT_CLIP, RIGHT_CLIP],
+      transitions: [
+        {
+          ...TRANSITION,
+          presentation: 'dipToColorDissolve',
+          properties: { color: [1, 0, 0] },
+        },
+      ],
+    } as Partial<ReturnType<typeof useTimelineStore.getState>>)
+
+    render(<TransitionPanel />)
+
+    expect(screen.getByText('Color')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dip color' })).toBeInTheDocument()
+    expect(screen.getByText('#ff0000')).toBeInTheDocument()
+  })
 })

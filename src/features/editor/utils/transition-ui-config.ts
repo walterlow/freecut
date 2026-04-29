@@ -43,6 +43,8 @@ import {
   X,
   Flame,
   Film,
+  Droplet,
+  Layers,
   type LucideIcon,
 } from 'lucide-react'
 import { transitionRegistry } from '@/core/timeline/transitions'
@@ -90,11 +92,14 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
   X,
   Flame,
   Film,
+  Droplet,
+  Layers,
 }
 
 /** Display labels for transition categories */
 export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
   basic: { title: 'Basic' },
+  dissolve: { title: 'Dissolve' },
   motion: { title: 'Motion' },
   wipe: { title: 'Wipe' },
   slide: { title: 'Slide' },
@@ -110,14 +115,12 @@ export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
 /** Ordered list of categories for UI rendering */
 export const TRANSITION_CATEGORY_ORDER: TransitionCategory[] = [
   'basic',
+  'dissolve',
   'motion',
   'wipe',
-  'flip',
   'mask',
   'iris',
   'shape',
-  'light',
-  'chromatic',
   'custom',
 ]
 

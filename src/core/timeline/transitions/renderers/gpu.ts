@@ -52,6 +52,60 @@ function fadeOpacity(progress: number, isOutgoing: boolean): number {
   return isOutgoing ? Math.cos((progress * Math.PI) / 2) : Math.sin((progress * Math.PI) / 2)
 }
 
+function crossDissolveT(progress: number): number {
+  return 0.5 - 0.5 * Math.cos(clamp01(progress) * Math.PI)
+}
+
+function renderCrossDissolveCanvas(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  canvas?: { width: number; height: number },
+): void {
+  const t = crossDissolveT(progress)
+  const w = canvas?.width ?? leftCanvas.width
+  const h = canvas?.height ?? leftCanvas.height
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'copy'
+  ctx.globalAlpha = 1
+  ctx.drawImage(leftCanvas, 0, 0, w, h)
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.globalAlpha = t
+  ctx.drawImage(rightCanvas, 0, 0, w, h)
+  ctx.restore()
+}
+
+function renderDipToColorCanvas(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  canvas?: { width: number; height: number },
+  properties?: Record<string, unknown>,
+): void {
+  const p = clamp01(progress)
+  const w = canvas?.width ?? leftCanvas.width
+  const h = canvas?.height ?? leftCanvas.height
+  const colorWeight = p < 0.5 ? smoothStep(0, 0.5, p) : 1 - smoothStep(0.5, 1, p)
+  const color = properties?.color
+  const rgb = Array.isArray(color) ? color : [0, 0, 0]
+  const r = Math.round(clamp01(typeof rgb[0] === 'number' ? rgb[0] : 0) * 255)
+  const g = Math.round(clamp01(typeof rgb[1] === 'number' ? rgb[1] : 0) * 255)
+  const b = Math.round(clamp01(typeof rgb[2] === 'number' ? rgb[2] : 0) * 255)
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'copy'
+  ctx.globalAlpha = 1
+  ctx.drawImage(p < 0.5 ? leftCanvas : rightCanvas, 0, 0, w, h)
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.globalAlpha = colorWeight
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+  ctx.fillRect(0, 0, w, h)
+  ctx.restore()
+}
+
 function traceSparklePath(
   ctx: OffscreenCanvasRenderingContext2D,
   x: number,
@@ -283,35 +337,189 @@ function renderSparklesCanvas(
 const dissolveRenderer: TransitionRenderer = {
   gpuTransitionId: 'dissolve',
   calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
-    // CSS approximation: equal-power crossfade (GPU version uses noise pattern)
-    return { opacity: fadeOpacity(clamp01(progress), isOutgoing) }
+    const t = crossDissolveT(progress)
+    return { opacity: isOutgoing ? 1 - t : t }
   },
-  renderCanvas(ctx, leftCanvas, rightCanvas, progress) {
-    // Canvas 2D fallback: simple crossfade
-    const p = clamp01(progress)
-    ctx.save()
-    ctx.globalAlpha = fadeOpacity(p, false)
-    ctx.drawImage(rightCanvas, 0, 0)
-    ctx.restore()
-
-    ctx.save()
-    ctx.globalAlpha = fadeOpacity(p, true)
-    ctx.drawImage(leftCanvas, 0, 0)
-    ctx.restore()
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    renderCrossDissolveCanvas(ctx, leftCanvas, rightCanvas, progress, canvas)
   },
 }
 
 const dissolveDef: TransitionDefinition = {
   id: 'dissolve',
-  label: 'Dissolve',
-  description: 'Noise-based organic dissolve between clips',
-  category: 'basic',
-  icon: 'Sparkles',
+  label: 'Cross Dissolve',
+  description: 'Smooth opacity blend between clips',
+  category: 'dissolve',
+  icon: 'Blend',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+}
+
+const additiveDissolveRenderer: TransitionRenderer = {
+  gpuTransitionId: 'additiveDissolve',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    return { opacity: isOutgoing ? 1 - p : p }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    const p = clamp01(progress)
+    const w = canvas?.width ?? leftCanvas.width
+    const h = canvas?.height ?? leftCanvas.height
+    ctx.save()
+    ctx.globalCompositeOperation = 'copy'
+    ctx.globalAlpha = 1 - p
+    ctx.drawImage(leftCanvas, 0, 0, w, h)
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = p
+    ctx.drawImage(rightCanvas, 0, 0, w, h)
+    ctx.restore()
+  },
+}
+
+const additiveDissolveDef: TransitionDefinition = {
+  id: 'additiveDissolve',
+  label: 'Additive Dissolve',
+  description: 'Bright additive blend that flashes through overlapping highlights',
+  category: 'dissolve',
+  icon: 'Layers',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 30,
+  minDuration: 10,
+  maxDuration: 90,
+}
+
+const blurDissolveRenderer: TransitionRenderer = {
+  gpuTransitionId: 'blurDissolve',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    return {
+      opacity: isOutgoing ? 1 - p : p,
+      transform: envelope > 0.05 ? `scale(${1 + envelope * 0.006})` : undefined,
+    }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    ctx.save()
+    ctx.filter = `blur(${(envelope * 8).toFixed(2)}px)`
+    renderCrossDissolveCanvas(ctx, leftCanvas, rightCanvas, p, canvas)
+    ctx.restore()
+  },
+}
+
+const blurDissolveDef: TransitionDefinition = {
+  id: 'blurDissolve',
+  label: 'Blur Dissolve',
+  description: 'Cross dissolve with a soft midpoint blur',
+  category: 'dissolve',
+  icon: 'Droplet',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 30,
+  minDuration: 10,
+  maxDuration: 90,
+}
+
+const dipToColorDissolveRenderer: TransitionRenderer = {
+  gpuTransitionId: 'dipToColorDissolve',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    if (p < 0.5) return { opacity: isOutgoing ? 1 - smoothStep(0, 0.5, p) : 0 }
+    return { opacity: isOutgoing ? 0 : smoothStep(0.5, 1, p) }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas, properties) {
+    renderDipToColorCanvas(ctx, leftCanvas, rightCanvas, progress, canvas, properties)
+  },
+}
+
+const dipToColorDissolveDef: TransitionDefinition = {
+  id: 'dipToColorDissolve',
+  label: 'Dip To Color Dissolve',
+  description: 'Dissolve through a solid color, defaulting to black',
+  category: 'dissolve',
+  icon: 'Circle',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 30,
+  minDuration: 10,
+  maxDuration: 90,
+}
+
+const nonAdditiveDissolveRenderer: TransitionRenderer = {
+  gpuTransitionId: 'nonAdditiveDissolve',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    return { opacity: isOutgoing ? 1 - p : p }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    renderCrossDissolveCanvas(ctx, leftCanvas, rightCanvas, progress, canvas)
+  },
+}
+
+const nonAdditiveDissolveDef: TransitionDefinition = {
+  id: 'nonAdditiveDissolve',
+  label: 'Non-Additive Dissolve',
+  description: 'Neutral dissolve that avoids the bright overlap of additive blends',
+  category: 'dissolve',
+  icon: 'Columns2',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 30,
+  minDuration: 10,
+  maxDuration: 90,
+}
+
+const smoothCutRenderer: TransitionRenderer = {
+  gpuTransitionId: 'smoothCut',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    const t = smoothStep(0.22, 0.78, p)
+    const envelope = Math.sin(p * Math.PI)
+    return {
+      opacity: isOutgoing ? 1 - t : t,
+      transform:
+        envelope > 0.05
+          ? `translateX(${((isOutgoing ? -1 : 1) * envelope * 4).toFixed(2)}px) skewX(${((isOutgoing ? -1 : 1) * envelope * 0.7).toFixed(2)}deg)`
+          : undefined,
+    }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    const t = smoothStep(0.22, 0.78, p)
+    const w = canvas?.width ?? leftCanvas.width
+    const h = canvas?.height ?? leftCanvas.height
+    const drift = envelope * 4
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'copy'
+    ctx.globalAlpha = 1
+    ctx.setTransform(1, 0, -0.012 * envelope, 1, -drift, 0)
+    ctx.drawImage(leftCanvas, 0, 0, w, h)
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = t
+    ctx.setTransform(1, 0, 0.012 * envelope, 1, drift, 0)
+    ctx.drawImage(rightCanvas, 0, 0, w, h)
+    ctx.restore()
+  },
+}
+
+const smoothCutDef: TransitionDefinition = {
+  id: 'smoothCut',
+  label: 'Smooth Cut',
+  description: 'Subtle liquid-warp blend for jump-cut style edits',
+  category: 'dissolve',
+  icon: 'Waves',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 18,
+  minDuration: 6,
+  maxDuration: 45,
 }
 
 // ============================================================================
@@ -406,87 +614,6 @@ const glitchDef: TransitionDefinition = {
 }
 
 // ============================================================================
-// Light Leak
-// ============================================================================
-
-const lightLeakRenderer: TransitionRenderer = {
-  gpuTransitionId: 'lightLeak',
-  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
-    // CSS approximation: crossfade (GPU version adds warm light sweep)
-    return { opacity: fadeOpacity(clamp01(progress), isOutgoing) }
-  },
-  renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas) {
-    // Canvas 2D fallback: directional crossfade
-    const p = clamp01(progress)
-    const w = canvas?.width ?? leftCanvas.width
-    const h = canvas?.height ?? leftCanvas.height
-    const dir = (direction as WipeDirection) || 'from-left'
-
-    // Draw incoming
-    ctx.save()
-    ctx.globalAlpha = fadeOpacity(p, false)
-    ctx.drawImage(rightCanvas, 0, 0, w, h)
-    ctx.restore()
-
-    // Draw outgoing
-    ctx.save()
-    ctx.globalAlpha = fadeOpacity(p, true)
-    ctx.drawImage(leftCanvas, 0, 0, w, h)
-    ctx.restore()
-
-    // Add warm glow overlay
-    const envelope = Math.sin(p * Math.PI)
-    if (envelope > 0.1) {
-      ctx.save()
-      let gx: number, gy: number
-      switch (dir) {
-        case 'from-left':
-          gx = p * w
-          gy = h / 2
-          break
-        case 'from-right':
-          gx = (1 - p) * w
-          gy = h / 2
-          break
-        case 'from-top':
-          gx = w / 2
-          gy = p * h
-          break
-        case 'from-bottom':
-          gx = w / 2
-          gy = (1 - p) * h
-          break
-        default:
-          gx = p * w
-          gy = h / 2
-      }
-      const radius = Math.max(w, h) * 0.4
-      const gradient = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius)
-      gradient.addColorStop(0, `rgba(255, 230, 180, ${0.3 * envelope})`)
-      gradient.addColorStop(1, 'rgba(255, 230, 180, 0)')
-      ctx.globalCompositeOperation = 'lighter'
-      ctx.fillStyle = gradient
-      ctx.fillRect(0, 0, w, h)
-      ctx.restore()
-    }
-  },
-}
-
-const lightLeakDef: TransitionDefinition = {
-  id: 'lightLeak',
-  label: 'Light Leak',
-  description: 'Warm light sweep revealing the next clip',
-  category: 'light',
-  icon: 'Sun',
-  hasDirection: true,
-  directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
-  supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 30,
-  minDuration: 10,
-  maxDuration: 90,
-}
-
-// ============================================================================
 // Pixelate
 // ============================================================================
 
@@ -552,7 +679,7 @@ const chromaticDef: TransitionDefinition = {
   id: 'chromatic',
   label: 'Chromatic',
   description: 'RGB channel split with directional sweep',
-  category: 'chromatic',
+  category: 'custom',
   icon: 'Aperture',
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
@@ -786,7 +913,7 @@ const lightLeakBurnDef: TransitionDefinition = {
   id: 'lightLeakBurn',
   label: 'Light Leak Burn',
   description: 'Hot overexposed burn sweep with organic warm bloom',
-  category: 'light',
+  category: 'custom',
   icon: 'Flame',
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
@@ -864,9 +991,13 @@ const filmGateSlipDef: TransitionDefinition = {
 
 export function registerGpuTransitions(registry: TransitionRegistry): void {
   registry.register('dissolve', dissolveDef, dissolveRenderer)
+  registry.register('additiveDissolve', additiveDissolveDef, additiveDissolveRenderer)
+  registry.register('blurDissolve', blurDissolveDef, blurDissolveRenderer)
+  registry.register('dipToColorDissolve', dipToColorDissolveDef, dipToColorDissolveRenderer)
+  registry.register('nonAdditiveDissolve', nonAdditiveDissolveDef, nonAdditiveDissolveRenderer)
+  registry.register('smoothCut', smoothCutDef, smoothCutRenderer)
   registry.register('sparkles', sparklesDef, sparklesRenderer)
   registry.register('glitch', glitchDef, glitchRenderer)
-  registry.register('lightLeak', lightLeakDef, lightLeakRenderer)
   registry.register('pixelate', pixelateDef, pixelateRenderer)
   registry.register('chromatic', chromaticDef, chromaticRenderer)
   registry.register('radialBlur', radialBlurDef, radialBlurRenderer)

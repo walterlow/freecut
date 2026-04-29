@@ -19,6 +19,8 @@ const ALL_TIMINGS = [
 
 type ShapeAperture = 'box' | 'heart' | 'star' | 'triangleLeft' | 'triangleRight'
 
+const TRIANGLE_CORNER_OVERSCAN = 2.24
+
 interface Point {
   x: number
   y: number
@@ -120,14 +122,14 @@ export function getAperturePath(
 ): string {
   const p = clamp01(progress)
   if (shape === 'triangleLeft') {
-    const x = width * p * 2
-    const y = height * p * 2
+    const x = width * p * TRIANGLE_CORNER_OVERSCAN
+    const y = height * p * TRIANGLE_CORNER_OVERSCAN
     return `M 0 0 L ${x.toFixed(2)} 0 L 0 ${y.toFixed(2)} Z`
   }
 
   if (shape === 'triangleRight') {
-    const x = width - width * p * 2
-    const y = height * p * 2
+    const x = width - width * p * TRIANGLE_CORNER_OVERSCAN
+    const y = height * p * TRIANGLE_CORNER_OVERSCAN
     return `M ${width} 0 L ${x.toFixed(2)} 0 L ${width} ${y.toFixed(2)} Z`
   }
 
@@ -201,16 +203,16 @@ function addAperturePath(
   const p = clamp01(progress)
   if (shape === 'triangleLeft') {
     path.moveTo(0, 0)
-    path.lineTo(width * p * 2, 0)
-    path.lineTo(0, height * p * 2)
+    path.lineTo(width * p * TRIANGLE_CORNER_OVERSCAN, 0)
+    path.lineTo(0, height * p * TRIANGLE_CORNER_OVERSCAN)
     path.closePath()
     return
   }
 
   if (shape === 'triangleRight') {
     path.moveTo(width, 0)
-    path.lineTo(width - width * p * 2, 0)
-    path.lineTo(width, height * p * 2)
+    path.lineTo(width - width * p * TRIANGLE_CORNER_OVERSCAN, 0)
+    path.lineTo(width, height * p * TRIANGLE_CORNER_OVERSCAN)
     path.closePath()
     return
   }

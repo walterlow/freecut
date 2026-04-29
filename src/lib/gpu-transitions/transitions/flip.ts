@@ -3,7 +3,7 @@ import type { GpuTransitionDefinition } from '../types'
 export const flip: GpuTransitionDefinition = {
   id: 'flip',
   name: 'Flip',
-  category: 'flip',
+  category: 'custom',
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
   entryPoint: 'flipFragment',

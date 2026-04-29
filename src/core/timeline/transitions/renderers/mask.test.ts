@@ -187,6 +187,32 @@ describe('shape transitions', () => {
     expect(bounds.minY).toBeLessThan(0)
     expect(bounds.maxY).toBeGreaterThan(height)
   })
+
+  it('keeps corner triangle apertures from covering the whole frame by the midpoint', () => {
+    const width = 1920
+    const height = 1080
+
+    const leftMidpoint = getPathBounds(getAperturePath('triangleLeft', width, height, 0.5))
+    const rightMidpoint = getPathBounds(getAperturePath('triangleRight', width, height, 0.5))
+
+    expect(leftMidpoint.maxX).toBeLessThan(width * 1.2)
+    expect(leftMidpoint.maxY).toBeLessThan(height * 1.2)
+    expect(rightMidpoint.minX).toBeGreaterThan(width * -0.2)
+    expect(rightMidpoint.maxY).toBeLessThan(height * 1.2)
+  })
+
+  it('overscans corner triangle apertures at the exit frame to prevent a pop', () => {
+    const width = 1920
+    const height = 1080
+
+    const leftBounds = getPathBounds(getAperturePath('triangleLeft', width, height, 1))
+    const rightBounds = getPathBounds(getAperturePath('triangleRight', width, height, 1))
+
+    expect(leftBounds.maxX).toBeGreaterThan(width * 2)
+    expect(leftBounds.maxY).toBeGreaterThan(height * 2)
+    expect(rightBounds.minX).toBeLessThan(-width)
+    expect(rightBounds.maxY).toBeGreaterThan(height * 2)
+  })
 })
 
 describe('wipe transitions', () => {

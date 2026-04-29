@@ -11,6 +11,7 @@ import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store'
 import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store'
 import { useTransitionBreakPreviewStore } from '../stores/transition-break-preview-store'
 import { useLinkedEditPreviewStore } from '../stores/linked-edit-preview-store'
+import { useTransitionDragStore } from '@/shared/state/transition-drag'
 import { TransitionItem } from './transition-item'
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
@@ -50,6 +51,7 @@ describe('TransitionItem preview bridge motion', () => {
     useRippleEditPreviewStore.getState().clearPreview()
     useTransitionBreakPreviewStore.getState().clearPreview()
     useLinkedEditPreviewStore.getState().clear()
+    useTransitionDragStore.getState().clearDrag()
   })
 
   it('updates bridge position in realtime while slide preview delta changes', () => {
@@ -181,6 +183,44 @@ describe('TransitionItem preview bridge motion', () => {
     fireEvent.mouseUp(document, { clientX: 10 })
 
     expect(useSelectionStore.getState().selectedTransitionId).toBe('tr-1')
+  })
+
+  it('keeps the existing bridge droppable when zoomed out to its compact minimum width', () => {
+    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
+    const right = makeVideoItem({
+      id: 'right',
+      from: 160,
+      durationInFrames: 80,
+      mediaId: 'media-2',
+    })
+    useItemsStore.getState().setItems([left, right])
+    useZoomStore.getState().setZoomLevelImmediate(0.1)
+    useTransitionDragStore
+      .getState()
+      .setDraggedTransition({ presentation: 'wipe', direction: 'from-left' })
+
+    const { container } = render(
+      <TransitionItem transition={{ ...transition, durationInFrames: 4 }} />,
+    )
+
+    const overlay = screen.getByTitle('Fade (0.1s)')
+    expect(overlay.style.width).toBe('10px')
+
+    const dropZone = container.querySelector('[data-transition-hit-zone="bridge-drop"]')
+    expect(dropZone).not.toBeNull()
+
+    fireEvent.dragOver(dropZone!, {
+      dataTransfer: {
+        dropEffect: 'none',
+        getData: () => '',
+      },
+    })
+
+    expect(useTransitionDragStore.getState().preview).toMatchObject({
+      existingTransitionId: 'tr-1',
+      leftClipId: 'left',
+      rightClipId: 'right',
+    })
   })
 
   it('hides the bridge while previewing a trim that breaks the transition', () => {

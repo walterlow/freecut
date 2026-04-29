@@ -2,6 +2,7 @@ import { useMemo, useCallback, useEffect, useRef, useState, type CSSProperties }
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { Trash2, Zap, RotateCcw, ChevronDown } from 'lucide-react'
+import { HexColorPicker } from 'react-colorful'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
 import { PropertySection, PropertyRow, SliderInput } from '../components'
@@ -24,6 +25,87 @@ import {
   getTransitionConfigsByCategory,
 } from '@/features/editor/utils/transition-ui-config'
 import { getMaxTransitionDurationForHandles } from '@/features/editor/deps/timeline-utils'
+
+function rgbArrayToHex(value: unknown): string {
+  if (!Array.isArray(value)) return '#000000'
+  const [r = 0, g = 0, b = 0] = value
+  const toHex = (channel: unknown) => {
+    const numeric = typeof channel === 'number' && Number.isFinite(channel) ? channel : 0
+    return Math.round(Math.max(0, Math.min(1, numeric)) * 255)
+      .toString(16)
+      .padStart(2, '0')
+  }
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+}
+
+function hexToRgbArray(hex: string): [number, number, number] {
+  const normalized = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex.slice(1) : '000000'
+  return [
+    parseInt(normalized.slice(0, 2), 16) / 255,
+    parseInt(normalized.slice(2, 4), 16) / 255,
+    parseInt(normalized.slice(4, 6), 16) / 255,
+  ]
+}
+
+function TransitionColorPicker({
+  initialColor,
+  onColorChange,
+}: {
+  initialColor: string
+  onColorChange: (color: string) => void
+}) {
+  const [color, setColor] = useState(initialColor)
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setColor(initialColor)
+  }, [initialColor])
+
+  const handleColorChange = useCallback(
+    (newColor: string) => {
+      setColor(newColor)
+      onColorChange(newColor)
+    },
+    [onColorChange],
+  )
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
+
+  return (
+    <div ref={containerRef} className="relative flex-1">
+      <button
+        type="button"
+        aria-label="Dip color"
+        onClick={() => setIsOpen((open) => !open)}
+        className="flex w-full items-center gap-2"
+      >
+        <div
+          className="h-6 w-6 flex-shrink-0 rounded border border-border"
+          style={{ backgroundColor: color }}
+        />
+        <span className="text-xs font-mono uppercase text-muted-foreground">{color}</span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-8 z-50 rounded-lg border border-border bg-popover p-2 shadow-lg">
+          <HexColorPicker color={color} onChange={handleColorChange} />
+        </div>
+      )}
+    </div>
+  )
+}
 
 function getPresentationOptionValue(config: Pick<PresentationConfig, 'id' | 'direction'>): string {
   return config.direction ? `${config.id}:${config.direction}` : config.id
@@ -314,6 +396,24 @@ export function TransitionPanel() {
     [selectedTransitionId, updateTransition],
   )
 
+  const dipToColorHex = useMemo(
+    () => rgbArrayToHex(selectedTransition?.properties?.color),
+    [selectedTransition?.properties],
+  )
+
+  const handleDipToColorChange = useCallback(
+    (color: string) => {
+      if (!selectedTransitionId || !selectedTransition) return
+      updateTransition(selectedTransitionId, {
+        properties: {
+          ...(selectedTransition.properties ?? {}),
+          color: hexToRgbArray(color),
+        },
+      })
+    },
+    [selectedTransition, selectedTransitionId, updateTransition],
+  )
+
   // Handle delete
   const handleDelete = useCallback(() => {
     if (selectedTransitionId) {
@@ -489,6 +589,15 @@ export function TransitionPanel() {
                 </button>
               ))}
             </div>
+          </PropertyRow>
+        )}
+
+        {selectedTransition.presentation === 'dipToColorDissolve' && (
+          <PropertyRow label="Color" tooltip="Color used at the midpoint of the dissolve">
+            <TransitionColorPicker
+              initialColor={dipToColorHex}
+              onColorChange={handleDipToColorChange}
+            />
           </PropertyRow>
         )}
 

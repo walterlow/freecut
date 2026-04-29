@@ -16,13 +16,11 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
 
-function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
-  // cos²/sin² weights — always sum to 1, preserving alpha for soft crop & masks.
-  const c = Math.cos((progress * Math.PI) / 2)
-  if (isOutgoing) {
-    return c * c
+function calculateFadeDipOpacity(progress: number, isOutgoing: boolean): number {
+  if (progress < 0.5) {
+    return isOutgoing ? Math.max(0, Math.cos(progress * Math.PI)) : 0
   }
-  return 1 - c * c
+  return isOutgoing ? 0 : Math.max(0, -Math.cos(progress * Math.PI))
 }
 
 const fadeRenderer: TransitionRenderer = {
@@ -30,23 +28,32 @@ const fadeRenderer: TransitionRenderer = {
   calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
     const p = clamp01(progress)
     return {
-      opacity: calculateFadeOpacity(p, isOutgoing),
+      opacity: calculateFadeDipOpacity(p, isOutgoing),
     }
   },
   renderCanvas(ctx, leftCanvas, rightCanvas, progress) {
     const p = clamp01(progress)
-    const outgoingWeight = calculateFadeOpacity(p, true)
-    const incomingWeight = calculateFadeOpacity(p, false)
+    const outgoingWeight = calculateFadeDipOpacity(p, true)
+    const incomingWeight = calculateFadeDipOpacity(p, false)
+    const w = Math.max(leftCanvas.width, rightCanvas.width)
+    const h = Math.max(leftCanvas.height, rightCanvas.height)
 
-    // Soft crop/masks introduce real alpha, so fade needs to weight both
-    // participants instead of treating the incoming clip as a fully opaque bed.
     ctx.save()
     ctx.globalCompositeOperation = 'copy'
-    ctx.globalAlpha = incomingWeight
-    ctx.drawImage(rightCanvas, 0, 0)
-    ctx.globalCompositeOperation = 'lighter'
-    ctx.globalAlpha = outgoingWeight
-    ctx.drawImage(leftCanvas, 0, 0)
+    ctx.fillStyle = 'black'
+    ctx.fillRect(0, 0, w, h)
+
+    if (outgoingWeight > 0) {
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.globalAlpha = outgoingWeight
+      ctx.drawImage(leftCanvas, 0, 0)
+    }
+
+    if (incomingWeight > 0) {
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.globalAlpha = incomingWeight
+      ctx.drawImage(rightCanvas, 0, 0)
+    }
     ctx.restore()
   },
 }
@@ -54,7 +61,7 @@ const fadeRenderer: TransitionRenderer = {
 const fadeDef: TransitionDefinition = {
   id: 'fade',
   label: 'Fade',
-  description: 'Simple crossfade between clips',
+  description: 'Dip through black between clips',
   category: 'basic',
   icon: 'Blend',
   hasDirection: false,

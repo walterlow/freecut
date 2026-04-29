@@ -128,14 +128,13 @@ export function calculateEasingCurve(config: TransitionTimingConfig): number[] {
 // ============================================================================
 
 /**
- * Calculate fade opacity using equal-power crossfade.
+ * Calculate fade opacity as a dip through black.
  */
 function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
-  if (isOutgoing) {
-    return Math.cos((progress * Math.PI) / 2)
-  } else {
-    return Math.sin((progress * Math.PI) / 2)
+  if (progress < 0.5) {
+    return isOutgoing ? Math.max(0, Math.cos(progress * Math.PI)) : 0
   }
+  return isOutgoing ? 0 : Math.max(0, -Math.cos(progress * Math.PI))
 }
 
 /**

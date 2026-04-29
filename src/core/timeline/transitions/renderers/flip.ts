@@ -85,7 +85,7 @@ const flipDef: TransitionDefinition = {
   id: 'flip',
   label: 'Flip',
   description: '3D flip transition',
-  category: 'flip',
+  category: 'custom',
   icon: 'FlipHorizontal',
   hasDirection: true,
   directions: ALL_DIRECTIONS,

@@ -394,7 +394,7 @@ export const TransitionItem = memo(function TransitionItem({
     const cutPx = Math.round(frameToPixels(cutFrame))
 
     // Minimum width for visibility
-    const minWidth = 32
+    const minWidth = 10
     const maxVisualWidth = Math.max(naturalWidth, rightClipEnd - leftClipStart)
     const effectiveWidth = Math.min(Math.max(naturalWidth, minWidth), maxVisualWidth)
     // Center the minimum-width bridge on the overlap midpoint, but keep all
@@ -583,6 +583,17 @@ export const TransitionItem = memo(function TransitionItem({
               }}
               onMouseDown={handleMouseDown}
               onClick={handleClick}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            />
+          )}
+
+          {draggedTransition && (
+            <div
+              className="absolute inset-0 pointer-events-auto"
+              data-transition-hit-zone="bridge-drop"
+              style={{ cursor: 'copy' }}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
