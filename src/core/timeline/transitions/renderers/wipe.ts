@@ -112,6 +112,7 @@ function createOutgoingMaskSvg(
   width: number,
   height: number,
   progress: number,
+  direction: WipeDirection = 'from-top',
 ): string {
   const p = clamp01(progress)
   const paths: string[] = []
@@ -148,7 +149,21 @@ function createOutgoingMaskSvg(
       `M${(width - sideWidth).toFixed(2)} 0H${width}V${height}H${(width - sideWidth).toFixed(2)}Z`,
     )
   } else if (kind === 'edge') {
-    paths.push(`M0 ${(height * p).toFixed(2)}H${width}V${height}H0Z`)
+    switch (direction) {
+      case 'from-left':
+        paths.push(`M${(width * p).toFixed(2)} 0H${width}V${height}H${(width * p).toFixed(2)}Z`)
+        break
+      case 'from-right':
+        paths.push(`M0 0H${(width * (1 - p)).toFixed(2)}V${height}H0Z`)
+        break
+      case 'from-bottom':
+        paths.push(`M0 0H${width}V${(height * (1 - p)).toFixed(2)}H0Z`)
+        break
+      case 'from-top':
+      default:
+        paths.push(`M0 ${(height * p).toFixed(2)}H${width}V${height}H0Z`)
+        break
+    }
   } else if (kind === 'radial') {
     paths.push(createRadialFanPath(width, height, p))
   } else if (kind === 'spiral') {
@@ -252,6 +267,7 @@ function addOutgoingMaskPath(
   width: number,
   height: number,
   progress: number,
+  direction: WipeDirection = 'from-top',
 ): CanvasFillRule | undefined {
   const p = clamp01(progress)
 
@@ -289,7 +305,21 @@ function addOutgoingMaskPath(
   }
 
   if (kind === 'edge') {
-    path.rect(0, height * p, width, height * (1 - p))
+    switch (direction) {
+      case 'from-left':
+        path.rect(width * p, 0, width * (1 - p), height)
+        break
+      case 'from-right':
+        path.rect(0, 0, width * (1 - p), height)
+        break
+      case 'from-bottom':
+        path.rect(0, 0, width, height * (1 - p))
+        break
+      case 'from-top':
+      default:
+        path.rect(0, height * p, width, height * (1 - p))
+        break
+    }
     return undefined
   }
 
@@ -323,8 +353,15 @@ function addOutgoingMaskPath(
 
 function createWipeMaskRenderer(kind: WipeMask): TransitionRenderer {
   return {
-    calculateStyles(progress, isOutgoing, canvasWidth, canvasHeight): TransitionStyleCalculation {
+    calculateStyles(
+      progress,
+      isOutgoing,
+      canvasWidth,
+      canvasHeight,
+      direction,
+    ): TransitionStyleCalculation {
       const p = clamp01(progress)
+      const dir = (direction as WipeDirection) || 'from-top'
 
       if (isOutgoing) {
         if (p <= 0) {
@@ -334,7 +371,7 @@ function createWipeMaskRenderer(kind: WipeMask): TransitionRenderer {
           return { opacity: 0 }
         }
 
-        const maskImage = createOutgoingMaskSvg(kind, canvasWidth, canvasHeight, p)
+        const maskImage = createOutgoingMaskSvg(kind, canvasWidth, canvasHeight, p, dir)
         return {
           maskImage,
           webkitMaskImage: maskImage,
@@ -346,8 +383,9 @@ function createWipeMaskRenderer(kind: WipeMask): TransitionRenderer {
 
       return { opacity: 1 }
     },
-    renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas) {
       const p = clamp01(progress)
+      const dir = (direction as WipeDirection) || 'from-top'
       const w = canvas?.width ?? leftCanvas.width
       const h = canvas?.height ?? leftCanvas.height
 
@@ -381,7 +419,7 @@ function createWipeMaskRenderer(kind: WipeMask): TransitionRenderer {
 
       ctx.save()
       const clipPath = new Path2D()
-      const fillRule = addOutgoingMaskPath(clipPath, kind, w, h, p)
+      const fillRule = addOutgoingMaskPath(clipPath, kind, w, h, p, dir)
       if (fillRule) {
         ctx.clip(clipPath, fillRule)
       } else {
@@ -539,13 +577,15 @@ const WIPE_VARIANTS: WipeVariant[] = [
 ]
 
 function createWipeDefinition(variant: WipeVariant): TransitionDefinition {
+  const hasDirection = variant.id === 'edgeWipe'
   return {
     id: variant.id,
     label: variant.label,
     description: variant.description,
     category: 'wipe',
     icon: variant.icon,
-    hasDirection: false,
+    hasDirection,
+    directions: hasDirection ? ALL_DIRECTIONS : undefined,
     supportedTimings: [...ALL_TIMINGS],
     defaultDuration: 30,
     minDuration: 5,

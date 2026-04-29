@@ -244,4 +244,29 @@ describe('wipe transitions', () => {
     const midpoint = renderer?.calculateStyles(0.5, true, 1920, 1080)
     expect(midpoint?.maskImage).toContain('data:image/svg+xml')
   })
+
+  it('registers edge wipe with all four directions', () => {
+    const registry = new TransitionRegistry()
+    registerWipeTransitions(registry)
+
+    const definition = registry.getDefinition('edgeWipe')
+
+    expect(definition).toMatchObject({
+      hasDirection: true,
+      directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
+    })
+  })
+
+  it('builds directional edge wipe masks', () => {
+    const registry = new TransitionRegistry()
+    registerWipeTransitions(registry)
+    const renderer = registry.getRenderer('edgeWipe')
+
+    const fromLeft = renderer?.calculateStyles(0.5, true, 100, 80, 'from-left').maskImage
+    const fromRight = renderer?.calculateStyles(0.5, true, 100, 80, 'from-right').maskImage
+    const fromTop = renderer?.calculateStyles(0.5, true, 100, 80, 'from-top').maskImage
+    const fromBottom = renderer?.calculateStyles(0.5, true, 100, 80, 'from-bottom').maskImage
+
+    expect(new Set([fromLeft, fromRight, fromTop, fromBottom]).size).toBe(4)
+  })
 })
