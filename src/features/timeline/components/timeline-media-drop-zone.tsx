@@ -56,7 +56,6 @@ import {
 import { prewarmDroppedTimelineAudio } from '../utils/drop-audio-prewarm'
 import {
   type ExternalDragPreviewEntry,
-  getGhostPreviewItemClasses,
   isDroppableMediaType,
   isValidDragMediaItem,
 } from '../utils/drag-drop-preview'
@@ -68,6 +67,10 @@ import {
 } from '../utils/drop-preview-owner'
 import { isDragPointInsideElement } from '../utils/effect-drop'
 import { shouldIgnoreNewTrackZonePreviewForDrag } from '../utils/timeline-external-drag'
+import {
+  TimelineDropGhostPreviews,
+  type TimelineDropGhostPreviewsHandle,
+} from './timeline-drop-ghost-previews'
 
 const logger = createLogger('TimelineMediaDropZone')
 
@@ -98,67 +101,21 @@ const NewTrackZoneGhostOverlay = memo(function NewTrackZoneGhostOverlay({
 }: {
   zone: 'video' | 'audio'
 }) {
-  const previewLayerRef = useRef<HTMLDivElement>(null)
-  const previewNodesRef = useRef<Array<{ root: HTMLDivElement; label: HTMLSpanElement }>>([])
-
-  const clearGhostPreviews = useCallback(() => {
-    if (previewLayerRef.current) {
-      previewLayerRef.current.replaceChildren()
-    }
-
-    previewNodesRef.current = []
-  }, [])
-
-  const syncGhostPreviews = useCallback((ghostPreviews: NewTrackZoneGhostPreview[]) => {
-    const previewLayer = previewLayerRef.current
-    if (!previewLayer) {
-      return
-    }
-
-    const previewNodes = previewNodesRef.current
-    while (previewNodes.length > ghostPreviews.length) {
-      const removedNode = previewNodes.pop()
-      removedNode?.root.remove()
-    }
-
-    for (let index = 0; index < ghostPreviews.length; index += 1) {
-      const ghostPreview = ghostPreviews[index]!
-      let previewNode = previewNodes[index]
-
-      if (!previewNode) {
-        const root = document.createElement('div')
-        root.className =
-          'absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2'
-        const label = document.createElement('span')
-        label.className = 'truncate text-[10px] font-medium text-foreground/80'
-        root.appendChild(label)
-        previewLayer.appendChild(root)
-        previewNode = { root, label }
-        previewNodes[index] = previewNode
-      }
-
-      previewNode.root.className = `absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 ${getGhostPreviewItemClasses(ghostPreview.type)}`
-      previewNode.root.style.left = `${ghostPreview.left}px`
-      previewNode.root.style.width = `${ghostPreview.width}px`
-      previewNode.root.style.top = '0'
-      previewNode.root.style.height = '100%'
-      previewNode.label.textContent = ghostPreview.label
-    }
-  }, [])
+  const previewsRef = useRef<TimelineDropGhostPreviewsHandle>(null)
 
   useEffect(() => {
     const unregister = registerNewTrackZoneGhostOverlay(zone, {
-      sync: syncGhostPreviews,
-      clear: clearGhostPreviews,
+      sync: (ghostPreviews) => previewsRef.current?.sync(ghostPreviews),
+      clear: () => previewsRef.current?.clear(),
     })
 
     return () => {
       unregister()
-      clearGhostPreviews()
+      previewsRef.current?.clear()
     }
-  }, [clearGhostPreviews, syncGhostPreviews, zone])
+  }, [zone])
 
-  return <div ref={previewLayerRef} />
+  return <TimelineDropGhostPreviews ref={previewsRef} variant="zone" />
 })
 
 export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({

@@ -73,7 +73,6 @@ import {
 } from '@/components/ui/context-menu'
 import {
   type ExternalDragPreviewEntry,
-  getGhostPreviewItemClasses,
   isDroppableMediaType,
   isValidDragMediaItem,
 } from '../utils/drag-drop-preview'
@@ -92,6 +91,10 @@ import {
   isTrackDisabled as getIsTrackDisabled,
 } from '@/features/timeline/utils/classic-tracks'
 import { shouldIgnoreTrackDropPreviewForDrag } from '../utils/timeline-external-drag'
+import {
+  TimelineDropGhostPreviews,
+  type TimelineDropGhostPreviewsHandle,
+} from './timeline-drop-ghost-previews'
 
 /**
  * Lightweight on-demand context menu for track gaps.
@@ -156,65 +159,21 @@ const TrackDropGhostOverlay = memo(function TrackDropGhostOverlay({
 }: {
   trackId: string
 }) {
-  const previewLayerRef = useRef<HTMLDivElement>(null)
-  const previewNodesRef = useRef<Array<{ root: HTMLDivElement; label: HTMLSpanElement }>>([])
-
-  const clearGhostPreviews = useCallback(() => {
-    if (previewLayerRef.current) {
-      previewLayerRef.current.replaceChildren()
-    }
-
-    previewNodesRef.current = []
-  }, [])
-
-  const syncGhostPreviews = useCallback((ghostPreviews: TrackDropGhostPreview[]) => {
-    const previewLayer = previewLayerRef.current
-    if (!previewLayer) {
-      return
-    }
-
-    const previewNodes = previewNodesRef.current
-    while (previewNodes.length > ghostPreviews.length) {
-      const removedNode = previewNodes.pop()
-      removedNode?.root.remove()
-    }
-
-    for (let index = 0; index < ghostPreviews.length; index += 1) {
-      const ghostPreview = ghostPreviews[index]!
-      let previewNode = previewNodes[index]
-
-      if (!previewNode) {
-        const root = document.createElement('div')
-        root.className =
-          'absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 inset-y-0'
-        const label = document.createElement('span')
-        label.className = 'text-xs text-foreground/70 truncate'
-        root.appendChild(label)
-        previewLayer.appendChild(root)
-        previewNode = { root, label }
-        previewNodes[index] = previewNode
-      }
-
-      previewNode.root.className = `absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 inset-y-0 ${getGhostPreviewItemClasses(ghostPreview.type)}`
-      previewNode.root.style.left = `${ghostPreview.left}px`
-      previewNode.root.style.width = `${ghostPreview.width}px`
-      previewNode.label.textContent = ghostPreview.label
-    }
-  }, [])
+  const previewsRef = useRef<TimelineDropGhostPreviewsHandle>(null)
 
   useEffect(() => {
     const unregister = registerTrackDropGhostOverlay(trackId, {
-      sync: syncGhostPreviews,
-      clear: clearGhostPreviews,
+      sync: (ghostPreviews) => previewsRef.current?.sync(ghostPreviews),
+      clear: () => previewsRef.current?.clear(),
     })
 
     return () => {
       unregister()
-      clearGhostPreviews()
+      previewsRef.current?.clear()
     }
-  }, [clearGhostPreviews, syncGhostPreviews, trackId])
+  }, [trackId])
 
-  return <div ref={previewLayerRef} />
+  return <TimelineDropGhostPreviews ref={previewsRef} variant="track" />
 })
 
 interface TimelineTrackProps {
