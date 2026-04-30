@@ -28,6 +28,8 @@ const mediaTranscriptionServiceMocks = vi.hoisted(() => ({
 const subtitleSidecarServiceMocks = vi.hoisted(() => ({
   extractEmbeddedSubtitlesAsCaptions: vi.fn(),
   extractEmbeddedSubtitlesFromBlobAsCaptions: vi.fn(),
+  scanEmbeddedSubtitleTracks: vi.fn(),
+  insertEmbeddedSubtitleTrack: vi.fn(),
 }))
 
 const mediaStoreState = vi.hoisted(() => ({
@@ -163,6 +165,11 @@ vi.mock('../services/media-transcription-service', () => ({
 
 vi.mock('../services/subtitle-sidecar-service', () => ({
   subtitleSidecarService: subtitleSidecarServiceMocks,
+  chooseEmbeddedSubtitleTrackForMedia: (
+    tracks: ReadonlyArray<{ trackNumber: number; default?: boolean; forced?: boolean }>,
+  ) => tracks.find((t) => t.forced) ?? tracks.find((t) => t.default) ?? tracks[0] ?? null,
+  getEmbeddedSubtitleTrackLabel: (track: { language?: string; name?: string }) =>
+    track.name ?? track.language ?? 'Track',
 }))
 
 vi.mock('../stores/media-library-store', () => {
@@ -302,6 +309,29 @@ describe('MediaCard', () => {
       cueCount: 2,
       trackLabel: 'eng',
     })
+    subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks.mockResolvedValue({
+      tracks: [
+        {
+          trackNumber: 1,
+          codecId: 'S_TEXT/UTF8',
+          language: 'eng',
+          name: 'English',
+          default: true,
+          forced: false,
+          cues: [
+            { id: 'cue-1', startSeconds: 1, endSeconds: 2, text: 'Hello' },
+            { id: 'cue-2', startSeconds: 3, endSeconds: 4, text: 'World' },
+          ],
+        },
+      ],
+      scannedAt: 1,
+      fromCache: false,
+    })
+    subtitleSidecarServiceMocks.insertEmbeddedSubtitleTrack.mockReturnValue({
+      insertedItemCount: 2,
+      cueCount: 2,
+      trackLabel: 'English',
+    })
   })
 
   it('uses the shared action menu to generate a proxy', async () => {
@@ -389,7 +419,7 @@ describe('MediaCard', () => {
     })
   })
 
-  it('extracts embedded subtitles from the media action menu', async () => {
+  it('opens the track picker for a single media and inserts the chosen track', async () => {
     const media = makeMedia({
       fileName: 'movie.mkv',
       mimeType: 'video/x-matroska',
@@ -399,18 +429,35 @@ describe('MediaCard', () => {
 
     fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
 
+    // Permission + blob resolution happens up-front, then the picker dialog
+    // calls `scanEmbeddedSubtitleTracks`. The auto-pick batch path should NOT
+    // be used for single targets.
     await waitFor(() => {
-      expect(
-        subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
-      ).toHaveBeenCalledWith(media, expect.any(Blob))
+      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
+        media,
+        expect.any(Blob),
+      )
+    })
+    expect(
+      subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
+    ).not.toHaveBeenCalled()
+
+    const insertButton = await screen.findByRole('button', { name: /insert/i })
+    fireEvent.click(insertButton)
+
+    await waitFor(() => {
+      expect(subtitleSidecarServiceMocks.insertEmbeddedSubtitleTrack).toHaveBeenCalledWith(
+        media,
+        expect.objectContaining({ trackNumber: 1, language: 'eng' }),
+      )
     })
     expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
       type: 'success',
-      message: 'Extracted 2 captions from "movie.mkv"',
+      message: 'Inserted 2 captions from "English".',
     })
   })
 
-  it('uses the live file handle from the clicked media when extracting embedded subtitles', async () => {
+  it('uses the live file handle from the clicked media when scanning embedded subtitles', async () => {
     const file = new File(['video-data'], 'movie.mkv', { type: 'video/x-matroska' })
     const requestPermission = vi.fn(async () => 'granted' as PermissionState)
     const getFile = vi.fn(async () => file)
@@ -429,9 +476,10 @@ describe('MediaCard', () => {
     fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
 
     await waitFor(() => {
-      expect(
-        subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
-      ).toHaveBeenCalledWith(media, file)
+      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
+        media,
+        file,
+      )
     })
     expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
     expect(getFile).toHaveBeenCalledTimes(1)
@@ -472,15 +520,20 @@ describe('MediaCard', () => {
     })
   })
 
-  it('does not mark media missing when embedded subtitle extraction hits NotReadableError', async () => {
+  it('surfaces NotReadableError from blob open without marking the media missing', async () => {
+    const requestPermission = vi.fn(async () => 'granted' as PermissionState)
+    const notReadable = Object.assign(new Error('blob unreadable'), { name: 'NotReadableError' })
+    const getFile = vi.fn(async () => {
+      throw notReadable
+    })
     const media = makeMedia({
       fileName: 'movie.mkv',
       mimeType: 'video/x-matroska',
-    })
-    subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions.mockRejectedValue({
-      name: 'NotReadableError',
-      message:
-        'The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired.',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+        getFile,
+      } as unknown as FileSystemFileHandle,
     })
 
     render(<MediaCard media={media} viewMode="list" />)
@@ -494,6 +547,7 @@ describe('MediaCard', () => {
           'FreeCut could not read "movie.mkv" right now. Close any app using it and try again.',
       })
     })
+    expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).not.toHaveBeenCalled()
     expect(mediaStoreState.markMediaBroken).not.toHaveBeenCalled()
     expect(mediaStoreState.openMissingMediaDialog).not.toHaveBeenCalled()
   })

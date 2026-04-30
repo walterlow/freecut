@@ -47,6 +47,8 @@ import {
   TRANSCRIPTION_OOM_HINT,
 } from '@/shared/utils/transcription-cancellation'
 import { TranscribeDialog, type TranscribeDialogValues } from './transcribe-dialog'
+import { EmbeddedSubtitleTrackPicker } from './embedded-subtitle-track-picker'
+import type { EmbeddedSubtitleTrack } from '@/shared/utils/matroska-subtitles'
 
 interface MediaCardProps {
   media: MediaMetadata
@@ -369,6 +371,11 @@ export const MediaCard = memo(function MediaCard({
   const [transcribeDialogOpen, setTranscribeDialogOpen] = useState(false)
   const [transcribeErrorMessage, setTranscribeErrorMessage] = useState<string | null>(null)
   const [isExtractingEmbeddedSubtitles, setIsExtractingEmbeddedSubtitles] = useState(false)
+  const [embeddedPicker, setEmbeddedPicker] = useState<{
+    media: MediaMetadata
+    blob: Blob
+  } | null>(null)
+  const [embeddedPickerError, setEmbeddedPickerError] = useState<string | null>(null)
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -642,6 +649,38 @@ export const MediaCard = memo(function MediaCard({
       return
     }
 
+    // Single-target: open the track picker so the user can choose language /
+    // SDH / forced. Multi-target: skip the picker and auto-pick per file
+    // (forced > default > English > first), since the right choice may
+    // differ per file.
+    if (targets.length === 1) {
+      const [target] = targets
+      if (!target) return
+      setIsExtractingEmbeddedSubtitles(true)
+      setEmbeddedPickerError(null)
+      try {
+        const hasPermission = await requestSubtitleSourcePermission(target)
+        if (!hasPermission) {
+          markSubtitleSourceUnreadable(target, 'permission_denied')
+          store.showNotification({
+            type: 'error',
+            message: `FreeCut needs permission to read "${target.fileName}" before extracting subtitles.`,
+          })
+          return
+        }
+        const sourceBlob = await getSubtitleSourceBlob(target)
+        setEmbeddedPicker({ media: target, blob: sourceBlob })
+      } catch (error) {
+        store.showNotification({
+          type: 'error',
+          message: getSubtitleExtractionErrorMessage(error, target),
+        })
+      } finally {
+        setIsExtractingEmbeddedSubtitles(false)
+      }
+      return
+    }
+
     setIsExtractingEmbeddedSubtitles(true)
     let succeeded = 0
     let insertedItems = 0
@@ -675,10 +714,7 @@ export const MediaCard = memo(function MediaCard({
     if (succeeded > 0) {
       store.showNotification({
         type: 'success',
-        message:
-          targets.length === 1
-            ? `Extracted ${insertedItems} captions from "${targets[0]!.fileName}"`
-            : `Extracted embedded subtitles from ${succeeded} media files`,
+        message: `Extracted embedded subtitles from ${succeeded} of ${targets.length} media files (${insertedItems} captions).`,
       })
       return
     }
@@ -687,6 +723,26 @@ export const MediaCard = memo(function MediaCard({
       type: 'error',
       message: lastErrorMessage ?? 'Failed to extract embedded subtitles',
     })
+  }
+
+  const handlePickedEmbeddedTrack = (track: EmbeddedSubtitleTrack) => {
+    if (!embeddedPicker) return
+    const { media: pickedMedia } = embeddedPicker
+    const store = useMediaLibraryStore.getState()
+    try {
+      const result = subtitleSidecarService.insertEmbeddedSubtitleTrack(pickedMedia, track)
+      setEmbeddedPicker(null)
+      setEmbeddedPickerError(null)
+      store.showNotification({
+        type: 'success',
+        message:
+          result.insertedItemCount > 0
+            ? `Inserted ${result.insertedItemCount} captions from "${result.trackLabel}".`
+            : `No cues fell inside the clip's range for "${result.trackLabel}".`,
+      })
+    } catch (error) {
+      setEmbeddedPickerError(error instanceof Error ? error.message : 'Failed to insert subtitles.')
+    }
   }
 
   const handleAnalyzeWithAI = useCallback(
@@ -1040,6 +1096,19 @@ export const MediaCard = memo(function MediaCard({
     />
   )
 
+  const embeddedSubtitlePicker = (
+    <EmbeddedSubtitleTrackPicker
+      media={embeddedPicker?.media ?? null}
+      blob={embeddedPicker?.blob ?? null}
+      errorMessage={embeddedPickerError}
+      onClose={() => {
+        setEmbeddedPicker(null)
+        setEmbeddedPickerError(null)
+      }}
+      onTrackPicked={handlePickedEmbeddedTrack}
+    />
+  )
+
   const actionMenuItems = (
     <MediaCardActionMenuItems
       isBroken={isBroken}
@@ -1082,6 +1151,7 @@ export const MediaCard = memo(function MediaCard({
     return (
       <>
         {transcribeDialog}
+        {embeddedSubtitlePicker}
         <ContextMenu onOpenChange={handleContextMenuOpenChange}>
           <ContextMenuTrigger asChild disabled={isImporting}>
             <div
@@ -1251,6 +1321,7 @@ export const MediaCard = memo(function MediaCard({
   return (
     <>
       {transcribeDialog}
+      {embeddedSubtitlePicker}
       <ContextMenu onOpenChange={handleContextMenuOpenChange}>
         <ContextMenuTrigger asChild disabled={isImporting}>
           <div

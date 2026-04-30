@@ -12,6 +12,7 @@ import {
   extractMatroskaTextSubtitleTracksFromBlob,
   type EmbeddedSubtitleTrack,
 } from '@/shared/utils/matroska-subtitles'
+import { getEmbeddedSubtitleSidecar, saveEmbeddedSubtitleSidecar } from '@/infrastructure/storage'
 import type { MediaMetadata } from '@/types/storage'
 import type {
   GeneratedCaptionSource,
@@ -43,6 +44,12 @@ export interface ExtractEmbeddedSubtitlesResult {
   insertedItemCount: number
   cueCount: number
   trackLabel: string
+}
+
+export interface EmbeddedSubtitleScanResult {
+  tracks: readonly EmbeddedSubtitleTrack[]
+  scannedAt: number
+  fromCache: boolean
 }
 
 interface InsertSubtitleCuesOptions {
@@ -103,27 +110,64 @@ class SubtitleSidecarService {
     media: MediaMetadata,
     file: Blob,
   ): Promise<ExtractEmbeddedSubtitlesResult> {
-    const tracks = await extractMatroskaTextSubtitleTracksFromBlob(file)
+    const { tracks } = await this.scanEmbeddedSubtitleTracks(media, file)
     const selectedTrack = chooseEmbeddedSubtitleTrack(tracks)
     if (!selectedTrack) {
-      throw new Error(
-        'No supported embedded text subtitles found. FreeCut currently supports MKV/WebM text subtitle tracks: S_TEXT/UTF8, S_TEXT/WEBVTT, S_TEXT/ASS, and S_TEXT/SSA.',
-      )
+      throw new Error(NO_EMBEDDED_SUBTITLES_MESSAGE)
+    }
+    return this.insertEmbeddedSubtitleTrack(media, selectedTrack)
+  }
+
+  /**
+   * Walk the source bytes for `media` and return its embedded text-subtitle
+   * tracks. Cached in workspace-fs after the first scan so re-opening the
+   * picker is instant. Cache is invalidated when the source's `fileSize`
+   * (or `lastModified`, when available) changes.
+   */
+  async scanEmbeddedSubtitleTracks(
+    media: MediaMetadata,
+    file: Blob,
+  ): Promise<EmbeddedSubtitleScanResult> {
+    const fingerprint = {
+      fileSize: file.size,
+      fileLastModified: file instanceof File ? file.lastModified : undefined,
+    }
+    const cached = await getEmbeddedSubtitleSidecar(media.id, fingerprint)
+    if (cached) {
+      return { tracks: cached.tracks, scannedAt: cached.scannedAt, fromCache: true }
     }
 
-    const format = selectedTrack.codecId === 'S_TEXT/WEBVTT' ? 'vtt' : 'srt'
-    const trackLabel = formatEmbeddedSubtitleTrackLabel(selectedTrack)
+    const tracks = await extractMatroskaTextSubtitleTracksFromBlob(file)
+    let scannedAt = Date.now()
+    if (tracks.length > 0) {
+      const saved = await saveEmbeddedSubtitleSidecar(media.id, fingerprint, tracks).catch(
+        () => null,
+      )
+      if (saved) scannedAt = saved.scannedAt
+    }
+    return { tracks, scannedAt, fromCache: false }
+  }
+
+  /**
+   * Insert a specific embedded subtitle track's cues as captions on the
+   * timeline, anchored to `media`'s clips.
+   */
+  insertEmbeddedSubtitleTrack(
+    media: MediaMetadata,
+    track: EmbeddedSubtitleTrack,
+  ): ExtractEmbeddedSubtitlesResult {
+    const format: SubtitleFormat = track.codecId === 'S_TEXT/WEBVTT' ? 'vtt' : 'srt'
+    const trackLabel = formatEmbeddedSubtitleTrackLabel(track)
     const items = this.insertSubtitleCuesAsCaptions({
-      cues: selectedTrack.cues,
+      cues: track.cues,
       fileName: `${media.fileName} - ${trackLabel}`,
       format,
       sourceType: 'embedded-subtitles',
       mediaId: media.id,
     })
-
     return {
       insertedItemCount: items.length,
-      cueCount: selectedTrack.cues.length,
+      cueCount: track.cues.length,
       trackLabel,
     }
   }
@@ -327,6 +371,19 @@ function ensureCaptionTrack(
 }
 
 export const subtitleSidecarService = new SubtitleSidecarService()
+
+export const NO_EMBEDDED_SUBTITLES_MESSAGE =
+  'No supported embedded text subtitles found. FreeCut currently supports MKV/WebM text subtitle tracks: S_TEXT/UTF8, S_TEXT/WEBVTT, S_TEXT/ASS, and S_TEXT/SSA.'
+
+export function chooseEmbeddedSubtitleTrackForMedia(
+  tracks: readonly EmbeddedSubtitleTrack[],
+): EmbeddedSubtitleTrack | null {
+  return chooseEmbeddedSubtitleTrack(tracks)
+}
+
+export function getEmbeddedSubtitleTrackLabel(track: EmbeddedSubtitleTrack): string {
+  return formatEmbeddedSubtitleTrackLabel(track)
+}
 
 function chooseEmbeddedSubtitleTrack(
   tracks: readonly EmbeddedSubtitleTrack[],
