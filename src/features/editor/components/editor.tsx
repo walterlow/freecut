@@ -38,6 +38,7 @@ import { ProjectUpgradeDialog } from './project-upgrade-dialog'
 import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog'
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog'
 import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog'
+import { useEmbeddedSubtitlePickerStore } from '@/features/editor/deps/media-library'
 const logger = createLogger('Editor')
 const EDITOR_PROJECT_ROUTE_ID = '/editor/$projectId'
 const LazyExportDialog = lazy(() =>
@@ -64,6 +65,11 @@ const LazyProjectMediaMatchDialog = lazy(() =>
   import('@/features/editor/components/project-media-match-dialog').then((module) => ({
     default: module.ProjectMediaMatchDialog,
   })),
+)
+const LazyEmbeddedSubtitleTrackPickerHost = lazy(() =>
+  import('@/features/media-library/components/embedded-subtitle-track-picker-host').then(
+    (module) => ({ default: module.EmbeddedSubtitleTrackPickerHost }),
+  ),
 )
 
 function preloadExportDialog() {
@@ -164,6 +170,7 @@ const EditorDialogHost = memo(function EditorDialogHost({ projectId }: { project
   const projectMediaMatchDialogOpen = useProjectMediaMatchDialogStore(
     (s) => s.isOpen && s.projectId === projectId,
   )
+  const embeddedSubtitlePickerOpen = useEmbeddedSubtitlePickerStore((s) => s.media !== null)
 
   return (
     <>
@@ -180,6 +187,11 @@ const EditorDialogHost = memo(function EditorDialogHost({ projectId }: { project
       {ttsGenerateDialogOpen && (
         <Suspense fallback={null}>
           <LazyTtsGenerateDialog />
+        </Suspense>
+      )}
+      {embeddedSubtitlePickerOpen && (
+        <Suspense fallback={null}>
+          <LazyEmbeddedSubtitleTrackPickerHost />
         </Suspense>
       )}
     </>

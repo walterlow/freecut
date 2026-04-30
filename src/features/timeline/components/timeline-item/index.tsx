@@ -27,6 +27,21 @@ import { TRANSITION_CONFIGS } from '@/types/transition'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service'
 import {
+  mediaLibraryService as mediaLibraryServiceForSubtitles,
+  useEmbeddedSubtitlePickerStore,
+} from '@/features/timeline/deps/media-library-service'
+
+function isEmbeddedSubtitleContainer(fileName: string, mimeType: string): boolean {
+  const name = fileName.toLowerCase()
+  return (
+    mimeType === 'video/x-matroska' ||
+    mimeType === 'video/matroska' ||
+    mimeType === 'video/webm' ||
+    name.endsWith('.mkv') ||
+    name.endsWith('.webm')
+  )
+}
+import {
   TranscribeDialog,
   type TranscribeDialogValues,
 } from '@/features/timeline/deps/transcribe-dialog'
@@ -380,6 +395,58 @@ export const TimelineItem = memo(
       !!item.mediaId &&
       !isBroken &&
       (item.type === 'video' || (item.type === 'audio' && linkedVideoCaptionOwner === null))
+
+    const mediaForItem = useMediaLibraryStore(
+      useCallback(
+        (s) => (item.mediaId ? (s.mediaItems.find((m) => m.id === item.mediaId) ?? null) : null),
+        [item.mediaId],
+      ),
+    )
+    const canExtractEmbeddedSubtitles = !!(
+      mediaForItem &&
+      !isBroken &&
+      isEmbeddedSubtitleContainer(mediaForItem.fileName, mediaForItem.mimeType)
+    )
+    const handleExtractEmbeddedSubtitles = useCallback(async () => {
+      if (!mediaForItem) return
+      const mediaStore = useMediaLibraryStore.getState()
+      try {
+        const handle = mediaForItem.fileHandle
+        if (mediaForItem.storageType === 'handle' && handle) {
+          const granted =
+            (await handle.requestPermission({ mode: 'read' }).catch(() => 'denied' as const)) ===
+            'granted'
+          if (!granted) {
+            mediaStore.showNotification?.({
+              type: 'error',
+              message: `FreeCut needs permission to read "${mediaForItem.fileName}" before extracting subtitles.`,
+            })
+            return
+          }
+          const blob = await handle.getFile()
+          useEmbeddedSubtitlePickerStore.getState().open(mediaForItem, blob)
+          return
+        }
+        // Non-handle storage: fall back to the workspace blob lookup.
+        const blob = await mediaLibraryServiceForSubtitles.getMediaFile(mediaForItem.id)
+        if (!blob) {
+          mediaStore.showNotification?.({
+            type: 'error',
+            message: `FreeCut could not load "${mediaForItem.fileName}".`,
+          })
+          return
+        }
+        useEmbeddedSubtitlePickerStore.getState().open(mediaForItem, blob)
+      } catch (error) {
+        mediaStore.showNotification?.({
+          type: 'error',
+          message:
+            error instanceof Error
+              ? error.message
+              : `Failed to open "${mediaForItem.fileName}" for subtitle extraction.`,
+        })
+      }
+    }, [mediaForItem])
 
     // Use refs for actions to avoid selector re-renders - read from store in callbacks
     const activeTool = useSelectionStore((s) => s.activeTool)
@@ -3130,6 +3197,10 @@ export const TimelineItem = memo(
             setCaptionDialogOpen(true)
           }}
           onApplyCaptionsFromTranscript={handleApplyCaptionsFromTranscript}
+          canExtractEmbeddedSubtitles={canExtractEmbeddedSubtitles}
+          onExtractEmbeddedSubtitles={
+            canExtractEmbeddedSubtitles ? handleExtractEmbeddedSubtitles : undefined
+          }
           isCompositionItem={isCompositionItem}
           onEnterComposition={handleEnterComposition}
           onDissolveComposition={handleDissolveComposition}

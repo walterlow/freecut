@@ -32,6 +32,12 @@ const subtitleSidecarServiceMocks = vi.hoisted(() => ({
   insertEmbeddedSubtitleTrack: vi.fn(),
 }))
 
+const embeddedSubtitlePickerStoreMocks = vi.hoisted(() => ({
+  open: vi.fn(),
+  close: vi.fn(),
+  setError: vi.fn(),
+}))
+
 const mediaStoreState = vi.hoisted(() => ({
   selectedMediaIds: [] as string[],
   mediaItems: [] as MediaMetadata[],
@@ -172,6 +178,15 @@ vi.mock('../services/subtitle-sidecar-service', () => ({
     track.name ?? track.language ?? 'Track',
 }))
 
+vi.mock('../stores/embedded-subtitle-picker-store', () => {
+  const useEmbeddedSubtitlePickerStore = Object.assign(
+    (selector: (state: typeof embeddedSubtitlePickerStoreMocks) => unknown) =>
+      selector(embeddedSubtitlePickerStoreMocks),
+    { getState: () => embeddedSubtitlePickerStoreMocks },
+  )
+  return { useEmbeddedSubtitlePickerStore }
+})
+
 vi.mock('../stores/media-library-store', () => {
   const useMediaLibraryStore = Object.assign(
     (selector: (state: typeof mediaStoreState) => unknown) => selector(mediaStoreState),
@@ -290,6 +305,9 @@ describe('MediaCard', () => {
     mediaStoreState.taggingMediaIds = new Set()
     mediaStoreState.markMediaBroken.mockReset()
     mediaStoreState.openMissingMediaDialog.mockReset()
+    embeddedSubtitlePickerStoreMocks.open.mockReset()
+    embeddedSubtitlePickerStoreMocks.close.mockReset()
+    embeddedSubtitlePickerStoreMocks.setError.mockReset()
     editorStoreState.mediaSkimPreviewMediaId = null
     playbackStoreState.pause.mockReset()
 
@@ -419,7 +437,7 @@ describe('MediaCard', () => {
     })
   })
 
-  it('opens the track picker for a single media and inserts the chosen track', async () => {
+  it('opens the track picker via the shared store for a single media', async () => {
     const media = makeMedia({
       fileName: 'movie.mkv',
       mimeType: 'video/x-matroska',
@@ -429,35 +447,16 @@ describe('MediaCard', () => {
 
     fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
 
-    // Permission + blob resolution happens up-front, then the picker dialog
-    // calls `scanEmbeddedSubtitleTracks`. The auto-pick batch path should NOT
-    // be used for single targets.
     await waitFor(() => {
-      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
-        media,
-        expect.any(Blob),
-      )
+      expect(embeddedSubtitlePickerStoreMocks.open).toHaveBeenCalledWith(media, expect.any(Blob))
     })
+    // Single-target shouldn't go through the batch auto-pick path.
     expect(
       subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
     ).not.toHaveBeenCalled()
-
-    const insertButton = await screen.findByRole('button', { name: /insert/i })
-    fireEvent.click(insertButton)
-
-    await waitFor(() => {
-      expect(subtitleSidecarServiceMocks.insertEmbeddedSubtitleTrack).toHaveBeenCalledWith(
-        media,
-        expect.objectContaining({ trackNumber: 1, language: 'eng' }),
-      )
-    })
-    expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
-      type: 'success',
-      message: 'Inserted 2 captions from "English".',
-    })
   })
 
-  it('uses the live file handle from the clicked media when scanning embedded subtitles', async () => {
+  it('opens the picker with the live file handle from the clicked media', async () => {
     const file = new File(['video-data'], 'movie.mkv', { type: 'video/x-matroska' })
     const requestPermission = vi.fn(async () => 'granted' as PermissionState)
     const getFile = vi.fn(async () => file)
@@ -476,10 +475,7 @@ describe('MediaCard', () => {
     fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
 
     await waitFor(() => {
-      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
-        media,
-        file,
-      )
+      expect(embeddedSubtitlePickerStoreMocks.open).toHaveBeenCalledWith(media, file)
     })
     expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
     expect(getFile).toHaveBeenCalledTimes(1)
@@ -547,7 +543,7 @@ describe('MediaCard', () => {
           'FreeCut could not read "movie.mkv" right now. Close any app using it and try again.',
       })
     })
-    expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).not.toHaveBeenCalled()
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
     expect(mediaStoreState.markMediaBroken).not.toHaveBeenCalled()
     expect(mediaStoreState.openMissingMediaDialog).not.toHaveBeenCalled()
   })

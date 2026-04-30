@@ -56,6 +56,9 @@ interface ItemContextMenuProps {
   isGeneratingCaptions?: boolean
   onOpenCaptionDialog?: () => void
   onApplyCaptionsFromTranscript?: () => void
+  /** Whether this clip's media has extractable embedded text subtitles (MKV/WebM). */
+  canExtractEmbeddedSubtitles?: boolean
+  onExtractEmbeddedSubtitles?: () => void
   /** Whether this item is a composition item (enables enter/dissolve options) */
   isCompositionItem?: boolean
   onEnterComposition?: () => void
@@ -114,6 +117,8 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   isGeneratingCaptions,
   onOpenCaptionDialog,
   onApplyCaptionsFromTranscript,
+  canExtractEmbeddedSubtitles,
+  onExtractEmbeddedSubtitles,
   isCompositionItem,
   onEnterComposition,
   onDissolveComposition,
@@ -176,6 +181,8 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       isGeneratingCaptions={isGeneratingCaptions}
       onOpenCaptionDialog={onOpenCaptionDialog}
       onApplyCaptionsFromTranscript={onApplyCaptionsFromTranscript}
+      canExtractEmbeddedSubtitles={canExtractEmbeddedSubtitles}
+      onExtractEmbeddedSubtitles={onExtractEmbeddedSubtitles}
       isCompositionItem={isCompositionItem}
       onEnterComposition={onEnterComposition}
       onDissolveComposition={onDissolveComposition}
@@ -256,6 +263,8 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   isGeneratingCaptions,
   onOpenCaptionDialog,
   onApplyCaptionsFromTranscript,
+  canExtractEmbeddedSubtitles,
+  onExtractEmbeddedSubtitles,
   isCompositionItem,
   onEnterComposition,
   onDissolveComposition,
@@ -460,6 +469,15 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
             ) : (
               <ContextMenuItem onClick={onOpenCaptionDialog}>{captionActionLabel}</ContextMenuItem>
             )}
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        {canExtractEmbeddedSubtitles && onExtractEmbeddedSubtitles && (
+          <>
+            <ContextMenuItem onClick={onExtractEmbeddedSubtitles}>
+              Extract Embedded Subtitles…
+            </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
