@@ -98,6 +98,85 @@ export function extractMatroskaTextSubtitleTracks(buffer: ArrayBuffer): Embedded
     }
   })
 
+  return finalizeTracks(tracks)
+}
+
+export interface ExtractFromBlobOptions {
+  /** Optional progress callback — fired roughly every 100 clusters. */
+  onProgress?: (info: { bytesRead: number; totalBytes: number; clusters: number }) => void
+  /** Optional abort signal; honored between cluster reads. */
+  signal?: AbortSignal
+}
+
+/**
+ * Streaming variant that walks a Matroska/WebM blob without ever materializing
+ * the full file into memory. Required for >2 GB sources because Chromium's
+ * `Blob.arrayBuffer()` throws `NotReadableError` past that limit.
+ *
+ * Walks the segment element-by-element, slicing only the bytes each top-level
+ * element needs (Info/Tracks: small; Cluster: typically a few MB). Subtitle
+ * cues are still well under the per-cluster slice budget, so the only real
+ * memory footprint is the active cluster's payload.
+ */
+export async function extractMatroskaTextSubtitleTracksFromBlob(
+  blob: Blob,
+  options: ExtractFromBlobOptions = {},
+): Promise<EmbeddedSubtitleTrack[]> {
+  const { onProgress, signal } = options
+  if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+  const totalBytes = blob.size
+
+  const segment = await findElementInBlob(blob, 0, totalBytes, IDS.SEGMENT)
+  if (!segment) return []
+
+  let timestampScale = 1_000_000
+  const tracks = new Map<number, EmbeddedSubtitleTrack>()
+  let clustersProcessed = 0
+  let cursor = segment.dataStart
+  const segmentEnd = Math.min(segment.dataEnd, totalBytes)
+
+  while (cursor < segmentEnd) {
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+    const element = await readElementHeaderFromBlob(blob, cursor, segmentEnd)
+    if (!element) break
+
+    if (element.id === IDS.INFO) {
+      const data = await readBlobSlice(blob, element.dataStart, element.dataEnd)
+      timestampScale = parseTimestampScale(data, makeWholeBufferHeader(data)) ?? timestampScale
+    } else if (element.id === IDS.TRACKS) {
+      const data = await readBlobSlice(blob, element.dataStart, element.dataEnd)
+      for (const info of parseSubtitleTrackInfos(data, makeWholeBufferHeader(data))) {
+        tracks.set(info.trackNumber, {
+          trackNumber: info.trackNumber,
+          codecId: info.codecId,
+          language: info.language,
+          name: info.name,
+          default: info.default,
+          forced: info.forced,
+          defaultDurationSeconds: info.defaultDurationSeconds,
+          cues: [],
+        })
+      }
+    } else if (element.id === IDS.CLUSTER && tracks.size > 0) {
+      const data = await readBlobSlice(blob, element.dataStart, element.dataEnd)
+      extractClusterCues(data, makeWholeBufferHeader(data), tracks, timestampScale)
+      clustersProcessed++
+      if (onProgress && clustersProcessed % 100 === 0) {
+        onProgress({ bytesRead: element.dataEnd, totalBytes, clusters: clustersProcessed })
+      }
+    }
+
+    cursor = element.dataEnd
+  }
+
+  if (onProgress) {
+    onProgress({ bytesRead: Math.min(cursor, totalBytes), totalBytes, clusters: clustersProcessed })
+  }
+
+  return finalizeTracks(tracks)
+}
+
+function finalizeTracks(tracks: Map<number, EmbeddedSubtitleTrack>): EmbeddedSubtitleTrack[] {
   return [...tracks.values()]
     .map((track) => ({
       ...track,
@@ -106,6 +185,60 @@ export function extractMatroskaTextSubtitleTracks(buffer: ArrayBuffer): Embedded
         .sort((a, b) => a.startSeconds - b.startSeconds),
     }))
     .filter((track) => track.cues.length > 0)
+}
+
+/**
+ * The inner parsers expect (bytes, ElementHeader) and read inside
+ * [dataStart, dataEnd). When we slice an element's payload into its own
+ * Uint8Array the relative bounds are simply [0, length) — this builds the
+ * matching header so the existing parsers can be reused unchanged.
+ */
+function makeWholeBufferHeader(bytes: Uint8Array): ElementHeader {
+  return { id: 0, dataStart: 0, dataEnd: bytes.length, next: bytes.length }
+}
+
+async function readBlobSlice(blob: Blob, start: number, end: number): Promise<Uint8Array> {
+  const buffer = await blob.slice(start, end).arrayBuffer()
+  return new Uint8Array(buffer)
+}
+
+/** Maximum bytes needed to parse one EBML element header (id vint + size vint). */
+const MAX_ELEMENT_HEADER_BYTES = 16
+
+async function readElementHeaderFromBlob(
+  blob: Blob,
+  offset: number,
+  endLimit: number,
+): Promise<ElementHeader | null> {
+  if (offset >= endLimit) return null
+  const peekEnd = Math.min(offset + MAX_ELEMENT_HEADER_BYTES, endLimit)
+  const peek = await readBlobSlice(blob, offset, peekEnd)
+  const id = readVint(peek, 0, peek.length, true)
+  if (!id) return null
+  const size = readVint(peek, id.next, peek.length, false)
+  if (!size) return null
+
+  const headerLength = size.next
+  const dataStart = offset + headerLength
+  const dataEnd = Math.min(endLimit, dataStart + size.value)
+  if (dataEnd < dataStart) return null
+  return { id: id.value, dataStart, dataEnd, next: dataEnd }
+}
+
+async function findElementInBlob(
+  blob: Blob,
+  start: number,
+  end: number,
+  targetId: number,
+): Promise<ElementHeader | null> {
+  let offset = start
+  while (offset < end) {
+    const element = await readElementHeaderFromBlob(blob, offset, end)
+    if (!element) return null
+    if (element.id === targetId) return element
+    offset = element.dataEnd
+  }
+  return null
 }
 
 function parseTimestampScale(bytes: Uint8Array, info: ElementHeader): number | null {

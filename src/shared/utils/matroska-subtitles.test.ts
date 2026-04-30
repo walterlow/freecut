@@ -1,5 +1,24 @@
-import { describe, expect, it } from 'vite-plus/test'
-import { extractMatroskaTextSubtitleTracks } from './matroska-subtitles'
+import { Blob as NodeBlob } from 'node:buffer'
+import { beforeAll, describe, expect, it } from 'vite-plus/test'
+import {
+  extractMatroskaTextSubtitleTracks,
+  extractMatroskaTextSubtitleTracksFromBlob,
+} from './matroska-subtitles'
+
+// jsdom's Blob lacks `.arrayBuffer()` (and `.slice()` returns a Blob without
+// it either), which the streaming parser needs. Real browsers always provide
+// it, so we swap in Node's native Blob just for these tests rather than
+// patching the global setup file (which would unmask latent test-mock gaps
+// in unrelated suites).
+beforeAll(() => {
+  if (typeof Blob === 'undefined' || typeof Blob.prototype.arrayBuffer !== 'function') {
+    Object.defineProperty(globalThis, 'Blob', {
+      configurable: true,
+      writable: true,
+      value: NodeBlob,
+    })
+  }
+})
 
 const textEncoder = new TextEncoder()
 
@@ -96,6 +115,60 @@ describe('extractMatroskaTextSubtitleTracks', () => {
       endSeconds: 3.005,
       text: 'Line one\nLine two',
     })
+  })
+
+  it('extractFromBlob matches the in-memory variant for the same fixture', async () => {
+    const buffer = element(
+      [0x18, 0x53, 0x80, 0x67],
+      [
+        element([0x15, 0x49, 0xa9, 0x66], [element([0x2a, 0xd7, 0xb1], uint(1_000_000))]),
+        element(
+          [0x16, 0x54, 0xae, 0x6b],
+          [
+            element(
+              [0xae],
+              [
+                element([0xd7], uint(1)),
+                element([0x83], uint(17)),
+                element([0x86], ascii('S_TEXT/UTF8')),
+                element([0x22, 0xb5, 0x9c], ascii('eng')),
+                element([0x88], uint(1)),
+              ],
+            ),
+          ],
+        ),
+        element(
+          [0x1f, 0x43, 0xb6, 0x75],
+          [
+            element([0xe7], uint(0)),
+            element(
+              [0xa0],
+              [
+                element([0xa1], block(1, 1000, 'Hello from inside the file')),
+                element([0x9b], uint(2000)),
+              ],
+            ),
+          ],
+        ),
+      ],
+    )
+
+    const inMemory = extractMatroskaTextSubtitleTracks(toArrayBuffer(buffer))
+    const blob = new Blob([toArrayBuffer(buffer)])
+    const streamed = await extractMatroskaTextSubtitleTracksFromBlob(blob)
+
+    expect(streamed).toEqual(inMemory)
+    expect(streamed[0]?.cues[0]?.text).toBe('Hello from inside the file')
+  })
+
+  it('extractFromBlob honors abort signals before walking the segment', async () => {
+    const buffer = element([0x18, 0x53, 0x80, 0x67], [])
+    const blob = new Blob([toArrayBuffer(buffer)])
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      extractMatroskaTextSubtitleTracksFromBlob(blob, { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
   })
 })
 

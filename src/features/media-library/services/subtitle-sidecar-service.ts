@@ -9,7 +9,7 @@ import {
   type SubtitleFormat,
 } from '@/shared/utils/subtitles'
 import {
-  extractMatroskaTextSubtitleTracks,
+  extractMatroskaTextSubtitleTracksFromBlob,
   type EmbeddedSubtitleTrack,
 } from '@/shared/utils/matroska-subtitles'
 import type { MediaMetadata } from '@/types/storage'
@@ -94,7 +94,7 @@ class SubtitleSidecarService {
     media: MediaMetadata,
     file: Blob,
   ): Promise<ExtractEmbeddedSubtitlesResult> {
-    const tracks = extractMatroskaTextSubtitleTracks(await file.arrayBuffer())
+    const tracks = await extractMatroskaTextSubtitleTracksFromBlob(file)
     const selectedTrack = chooseEmbeddedSubtitleTrack(tracks)
     if (!selectedTrack) {
       throw new Error(
