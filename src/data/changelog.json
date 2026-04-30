@@ -1,14 +1,42 @@
 {
   "current": {
     "version": "current",
-    "date": "2026-04-27",
+    "date": "2026-04-30",
     "highlights": [
       "Projects now live on disk in a workspace folder you choose",
-      "Per-clip pitch shift in semitones and cents",
-      "Floating six-band clip EQ panels"
+      "Six new transitions plus alignment-aware placement controls",
+      "Per-clip pitch shift in semitones and cents"
     ],
     "groups": {
       "added": [
+        {
+          "title": "Motion, iris, shape, and DaVinci-style wipe transition packs",
+          "scope": "transitions"
+        },
+        {
+          "title": "Lens warp zoom transition",
+          "scope": "transitions"
+        },
+        {
+          "title": "Liquid distort transition",
+          "scope": "transitions"
+        },
+        {
+          "title": "Transition placement controls with alignment-aware drops",
+          "scope": "transitions"
+        },
+        {
+          "title": "Searchable transition preset picker",
+          "scope": "transitions"
+        },
+        {
+          "title": "Tunable transition parameters in the properties panel",
+          "scope": "transitions"
+        },
+        {
+          "title": "Compound clips can now host transitions",
+          "scope": "transitions"
+        },
         {
           "title": "Projects now live on disk in a workspace folder you choose",
           "scope": "storage"
@@ -114,6 +142,22 @@
         }
       ],
       "fixed": [
+        {
+          "title": "Effect drag overlays no longer stick or hijack adjacent lanes",
+          "scope": "timeline"
+        },
+        {
+          "title": "Transition preset selection syncs with the chosen direction",
+          "scope": "transitions"
+        },
+        {
+          "title": "Removed the transition duration cap",
+          "scope": "transitions"
+        },
+        {
+          "title": "Removed Kokoro voice quality options",
+          "scope": "audio"
+        },
         {
           "title": "Preview no longer fails when media blobs expire",
           "scope": "preview"
@@ -769,9 +813,7 @@
     {
       "version": "2026.03.09",
       "date": "2026-03-09",
-      "highlights": [
-        "New distort and stylize effects with color parameters"
-      ],
+      "highlights": ["New distort and stylize effects with color parameters"],
       "groups": {
         "added": [
           {
@@ -788,10 +830,7 @@
     {
       "version": "2026.02.23",
       "date": "2026-02-23",
-      "highlights": [
-        "Timeline and preview performance overhaul",
-        "Export packet remux fast path"
-      ],
+      "highlights": ["Timeline and preview performance overhaul", "Export packet remux fast path"],
       "groups": {
         "fixed": [
           {

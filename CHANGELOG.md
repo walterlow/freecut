@@ -8,10 +8,17 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 **Highlights**
 - Projects now live on disk in a workspace folder you choose
+- Six new transitions plus alignment-aware placement controls
 - Per-clip pitch shift in semitones and cents
-- Floating six-band clip EQ panels
 
 ### Added
+- Motion, iris, shape, and DaVinci-style wipe transition packs
+- Lens warp zoom transition
+- Liquid distort transition
+- Transition placement controls with alignment-aware drops
+- Searchable transition preset picker
+- Tunable transition parameters in the properties panel
+- Compound clips can now host transitions
 - Projects now live on disk in a workspace folder you choose
 - Multi-workspace support with waveform mirroring
 - Multi-select projects with marquee and bulk delete
@@ -23,6 +30,10 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Separate project master bus from per-device monitor volume
 
 ### Fixed
+- Effect drag overlays no longer stick or hijack adjacent lanes
+- Transition preset selection syncs with the chosen direction
+- Removed the transition duration cap
+- Removed Kokoro voice quality options
 - Preview no longer fails when media blobs expire
 - Disabled tracks remain editable and styled after reload
 - Pen mask tracks are now visible in classic timelines

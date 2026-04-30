@@ -80,6 +80,24 @@ Given a git range, produce historical weekly entries. Used when seeding from scr
 
 Pre-PR era (if any): collapse the foundation into one initial release entry, dated the Monday before first-PR week.
 
+## The user-facing test
+
+Before keeping any bullet, ask: **would a user notice this if they used the app today vs. yesterday, without diffing screenshots?** If no, drop it. This is the single most important filter — apply it to every candidate bullet, not just borderline ones.
+
+Concretely, a bullet survives only if it changes something the user can see, do, or feel:
+- A new control, panel, shortcut, format, or capability
+- A bug they hit (or could hit) is gone
+- A workflow that visibly stalled, jittered, or felt sluggish is now smooth in a way they'd remark on
+
+A bullet fails if it only describes:
+- Internal mechanics (allocation, caching, dirty-marking, dispatch, refs, props)
+- Sub-pixel or single-pixel visual tweaks (centering, alignment, hover color shifts, tiny margins)
+- Hit-target widening, drop-zone expansion, ghost-position adjustments — fold into the parent feature instead
+- Same-week regression fixes for code shipped in the same week
+- Anything the operator only knows happened because they read the diff
+
+When in doubt, drop it. The changelog is read by users browsing "what's new" — they will not appreciate a bullet they cannot perceive.
+
 ## Curation rules
 
 ### Drop
@@ -91,15 +109,20 @@ Pre-PR era (if any): collapse the foundation into one initial release entry, dat
 - `refactor(...)` when the scope is internal (stores, types, utils, deps adapters, chunk splits)
 - `deps` / `deps-dev` bumps unless major-version bumps with user-visible impact
 - **Follow-up fixes** — commits whose message matches `/address.*(review|PR|findings|feedback)|code review|follow-?up|fix.*(lint|typecheck|build|pre-existing)/i` AND land in the same week as a parent feature. Roll into the parent bullet silently.
+- **Same-week regression fixes** — fixes for bugs introduced by other commits in the same week. The user never saw the regression; only the final state matters. Fold into the parent feature bullet, do not add a separate "Fixed" entry.
+- **Visual polish micro-tweaks** — recentering, hover-color changes, padding/margin nudges, alignment fixes that no user would notice as a discrete improvement. If a feature has 3+ such tweaks, the parent feature bullet absorbs them.
+- **Hit-zone / drop-zone / ghost-position adjustments** — fold into the parent drag/drop feature. Never their own bullet.
+- **Internal perf on this week's new work** — perf commits that optimize code shipped earlier in the same week. The user experiences the feature once, smoothly. No separate "Improved" bullet.
 - Reverts paired with a subsequent re-fix in the same week — skip both, keep only the final correct implementation.
 - "Update src/..." auto-subject merges (GitHub web-edit artifacts)
 - Revisits: if the same feature is improved multiple times in one week, dedupe to one bullet describing the final state.
+- Duplicates worded differently — drag overlays sticking, drag overlays hijacking lanes, stale drop overlays are all "dragging works better now." One bullet, not three.
 
 ### Keep and rewrite
 
-- `feat(...)` — always, one bullet per distinct user-visible feature
-- `fix(...)` — if the bug was user-observable (rendering, playback, data loss, crash). Skip fixes for code never shipped, or shipped and reverted in the same week.
-- `perf(...)` — if the impact is noticeable (measurable time saved, dropped frames recovered)
+- `feat(...)` — when the feature is user-perceivable (a new control, mode, format, shortcut, panel). Skip internal `feat(...)` that only changes plumbing.
+- `fix(...)` — only if the bug was user-observable (rendering glitch, playback hitch, data loss, crash, wrong output) AND shipped to users before the fix. Skip fixes for code never released, or shipped and corrected in the same week.
+- `perf(...)` — only if the user would describe the change in their own words ("playback is smoother", "scrolling doesn't lag anymore"). Skip perf the user can't perceive without instruments.
 
 ### Rewrite style
 
@@ -122,11 +145,11 @@ Rules of thumb:
 ### Grouping
 
 Within each weekly entry, group into:
-- **Added** — new features
-- **Fixed** — user-visible bug fixes
-- **Improved** — performance, polish, noticeable refactors
+- **Added** — new user-facing features
+- **Fixed** — bugs the user actually hit (in shipped builds)
+- **Improved** — performance or polish wins the user would describe in their own words
 
-Skip any group with zero entries.
+Skip any group with zero entries. **It is normal and good for "Improved" to be empty.** If you cannot phrase an Improved bullet in a way the user would say it out loud ("playback is smoother", "exporting is faster"), it does not belong here. Do not pad the section with internal perf to make the week look productive.
 
 ### Highlights
 
