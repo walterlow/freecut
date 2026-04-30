@@ -184,13 +184,17 @@ export function updateTransitions(
       // Duration changes require individual processing via updateTransition
       const store = useTransitionsStore.getState()
       for (const { id, updates: u } of updates) {
-        if (u.durationInFrames !== undefined) {
-          // Delegate to single update for proper clip adjustment
+        if (u.durationInFrames !== undefined || u.alignment !== undefined) {
+          // Delegate to single update for proper clip adjustment / handle validation.
+          // Alignment changes affect handle feasibility just like duration changes.
           const transitions = store.transitions
           const transition = transitions.find((t) => t.id === id)
-          if (transition && u.durationInFrames !== transition.durationInFrames) {
-            // This will be handled in its own execute, but since we're already
-            // in an execute block, call the logic directly
+          if (
+            transition &&
+            ((u.durationInFrames !== undefined &&
+              u.durationInFrames !== transition.durationInFrames) ||
+              (u.alignment !== undefined && u.alignment !== transition.alignment))
+          ) {
             updateTransition(id, u)
             continue
           }

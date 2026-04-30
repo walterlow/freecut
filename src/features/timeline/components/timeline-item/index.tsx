@@ -3444,7 +3444,7 @@ export const TimelineItem = memo(
             {!useCompactClipShell &&
               draggedTransition &&
               !trackLocked &&
-              (item.type === 'video' || item.type === 'image') && (
+              (item.type === 'video' || item.type === 'image' || item.type === 'composition') && (
                 <>
                   <div
                     className="absolute inset-y-0 z-40"

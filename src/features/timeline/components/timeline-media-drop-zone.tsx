@@ -632,6 +632,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         if (previews.length === 0) {
           setDropEffectNone()
           updateDragOverFlags(false, false)
+          clearZoneGhostPreviews()
           resetDragPreviewCache()
           return
         }

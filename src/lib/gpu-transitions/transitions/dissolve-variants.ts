@@ -198,7 +198,7 @@ fn smoothCutWarp(uv: vec2f, p: f32, envelope: f32, strength: f32) -> vec2f {
 @fragment
 fn smoothCutFragment(input: VertexOutput) -> @location(0) vec4f {
   let p = clamp(params.progress, 0.0, 1.0);
-  let strength = clamp(params.strength, 0.0, 1.0);
+  let strength = clamp(params.strength, 0.0, 2.0);
   let envelope = sin(p * PI);
   let warp = smoothCutWarp(input.uv, p, envelope, strength);
   let drift = vec2f((p - 0.5) * 0.018 * envelope * strength, 0.0);

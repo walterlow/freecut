@@ -48,6 +48,7 @@ function polarPoint(
 
 function getSpiralStrokeWidth(width: number, height: number, progress: number): number {
   const p = clamp01(progress)
+  if (p === 0) return 0
   const spacing = (Math.sqrt(width * width + height * height) * 0.58) / 3.8
   return Math.max(0, spacing * (0.04 + p * 1.25))
 }

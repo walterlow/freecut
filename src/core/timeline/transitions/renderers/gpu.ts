@@ -537,15 +537,16 @@ const smoothCutRenderer: TransitionRenderer = {
     const strength = getNumericProperty(properties, 'strength', 0.9)
     const drift = envelope * 4 * strength
     const skew = 0.012 * envelope * strength
+    const driftPx = Math.round(drift)
 
     ctx.save()
     ctx.globalCompositeOperation = 'copy'
     ctx.globalAlpha = 1
-    ctx.setTransform(1, 0, -skew, 1, -drift, 0)
+    ctx.setTransform(1, 0, -skew, 1, -driftPx, 0)
     ctx.drawImage(leftCanvas, 0, 0, w, h)
     ctx.globalCompositeOperation = 'source-over'
     ctx.globalAlpha = t
-    ctx.setTransform(1, 0, skew, 1, drift, 0)
+    ctx.setTransform(1, 0, skew, 1, driftPx, 0)
     ctx.drawImage(rightCanvas, 0, 0, w, h)
     ctx.restore()
   },

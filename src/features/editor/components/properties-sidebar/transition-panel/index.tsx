@@ -259,28 +259,34 @@ export function TransitionPanel() {
     [transitionDefinition],
   )
 
-  const minDuration = 1
+  const definitionMinDuration = transitionDefinition?.minDuration ?? 1
+  const definitionMaxDuration = transitionDefinition?.maxDuration ?? Number.POSITIVE_INFINITY
+  const definitionDefaultDuration = transitionDefinition?.defaultDuration ?? fps
+
+  const minDuration = Math.max(1, definitionMinDuration)
   const maxDuration = useMemo(() => {
     if (!transitionConfig || !selectedTransition || !leftClip || !rightClip) {
-      return selectedTransition?.durationInFrames ?? transitionConfig?.defaultDuration ?? fps
+      const fallback =
+        selectedTransition?.durationInFrames ?? transitionConfig?.defaultDuration ?? fps
+      return Math.max(minDuration, Math.min(fallback, definitionMaxDuration))
     }
 
     const leftEnd = leftClip.from + leftClip.durationInFrames
     const isAdjacent = Math.abs(leftEnd - rightClip.from) <= 1
-    if (!isAdjacent) {
-      const legacyMax = Math.floor(
-        Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1,
-      )
-      return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, legacyMax))
-    }
-
-    const handleMax = getMaxTransitionDurationForHandles(
-      leftClip,
-      rightClip,
-      selectedTransition.alignment,
-    )
-    return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, handleMax))
-  }, [transitionConfig, selectedTransition, leftClip, rightClip, fps])
+    const handleLimit = isAdjacent
+      ? getMaxTransitionDurationForHandles(leftClip, rightClip, selectedTransition.alignment)
+      : Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1)
+    const combinedLimit = Math.min(handleLimit, definitionMaxDuration)
+    return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, combinedLimit))
+  }, [
+    transitionConfig,
+    selectedTransition,
+    leftClip,
+    rightClip,
+    fps,
+    minDuration,
+    definitionMaxDuration,
+  ])
 
   // Handle presentation change
   const handlePresentationChange = useCallback(
@@ -424,8 +430,8 @@ export function TransitionPanel() {
     [selectedTransitionId, transitionConfig, updateTransition, minDuration, maxDuration],
   )
 
-  // Default duration is 1 second (fps frames)
-  const defaultDuration = Math.min(fps, maxDuration)
+  // Prefer the registry-declared default; clamp into the allowable range.
+  const defaultDuration = Math.max(minDuration, Math.min(maxDuration, definitionDefaultDuration))
 
   // Handle reset duration to default (1 second)
   const handleResetDuration = useCallback(() => {

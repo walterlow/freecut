@@ -45,6 +45,8 @@ import {
   Film,
   Droplet,
   Layers,
+  Aperture,
+  CircleDot,
   type LucideIcon,
 } from 'lucide-react'
 import { transitionRegistry } from '@/core/timeline/transitions'
@@ -94,6 +96,8 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
   Film,
   Droplet,
   Layers,
+  Aperture,
+  CircleDot,
 }
 
 /** Display labels for transition categories */
