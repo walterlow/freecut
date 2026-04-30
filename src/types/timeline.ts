@@ -261,6 +261,83 @@ export type CompositionItem = BaseTimelineItem & {
   compositionHeight: number
 }
 
+/**
+ * A single cue inside a {@link SubtitleSegmentItem}. Times are seconds
+ * relative to the segment's `from` (after speed scaling) — i.e. the same
+ * model as imported SRT/VTT, so a cue payload survives `from` changes,
+ * trims, and splits without rewriting timestamps.
+ */
+export interface SubtitleSegmentCue {
+  id: string
+  startSeconds: number
+  endSeconds: number
+  text: string
+}
+
+/**
+ * One timeline item that owns an entire subtitle track's cues.
+ *
+ * Replaces the historical "one TextItem per cue" approach for
+ * embedded-subtitle / SRT-import flows: instead of stamping out N
+ * caption items, we get one segment that renders the active cue per
+ * frame from `cues`, applying the segment's style block uniformly.
+ *
+ * Style fields mirror the subset of {@link TextItem}'s typography that
+ * makes sense applied to all cues at once. Per-cue styling can be
+ * layered on later via `cue.style?` if needed.
+ */
+export type SubtitleSegmentItem = BaseTimelineItem & {
+  type: 'subtitle'
+  /** Source-track origin (e.g. "Squid.Game.S02E01.mkv - en (Track 6)"). */
+  sourceLabel?: string
+  /** How the cues were obtained — drives replace/refresh affordances. */
+  source: SubtitleSegmentSource
+  /** Cue list, sorted by `startSeconds`. Times are segment-relative. */
+  cues: SubtitleSegmentCue[]
+  // Typography (same defaults as TextItem)
+  fontSize?: number
+  fontFamily?: string
+  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
+  fontStyle?: 'normal' | 'italic'
+  underline?: boolean
+  color: string
+  backgroundColor?: string
+  backgroundRadius?: number
+  textAlign?: 'left' | 'center' | 'right'
+  verticalAlign?: 'top' | 'middle' | 'bottom'
+  lineHeight?: number
+  letterSpacing?: number
+  textPadding?: number
+  textShadow?: {
+    offsetX: number
+    offsetY: number
+    blur: number
+    color: string
+  }
+  stroke?: {
+    width: number
+    color: string
+  }
+}
+
+export type SubtitleSegmentSource =
+  | {
+      type: 'embedded-subtitles'
+      mediaId: string
+      clipId: string
+      trackNumber: number
+      language?: string
+      trackName?: string
+      codecId?: string
+      importedAt: number
+    }
+  | {
+      type: 'subtitle-import'
+      fileName: string
+      format: 'srt' | 'vtt'
+      importedAt: number
+    }
+
 // Union type for all timeline items
 export type TimelineItem =
   | VideoItem
@@ -270,6 +347,7 @@ export type TimelineItem =
   | ShapeItem
   | AdjustmentItem
   | CompositionItem
+  | SubtitleSegmentItem
 
 export interface TimelineTrack {
   id: string

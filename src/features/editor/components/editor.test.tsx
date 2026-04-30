@@ -155,8 +155,14 @@ vi.mock('@/features/editor/deps/media-library', () => {
       loadMediaItems: mocks.loadMediaItems,
     }),
   })
+  // Lazily-mounted picker host reads `media !== null` to decide whether to
+  // render — return null so the host stays unmounted in editor tests.
+  const useEmbeddedSubtitlePickerStore = Object.assign(
+    (selector: (state: { media: null }) => unknown) => selector({ media: null }),
+    { getState: () => ({ media: null, blob: null }) },
+  )
 
-  return { useMediaLibraryStore }
+  return { useMediaLibraryStore, useEmbeddedSubtitlePickerStore }
 })
 
 vi.mock('@/features/editor/deps/settings', () => ({

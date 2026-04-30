@@ -559,6 +559,12 @@ export const Item = React.memo<ItemProps>(
       return null
     }
 
+    // Subtitle segments will get their own renderer in PR 2B; until then a
+    // segment item is harmless on the timeline but invisible in the preview.
+    if (item.type === 'subtitle') {
+      return null
+    }
+
     throw new Error(`Unknown item type: ${JSON.stringify(item)}`)
   },
 )
