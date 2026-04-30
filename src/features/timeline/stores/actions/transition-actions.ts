@@ -124,10 +124,10 @@ type TransitionUpdates = Partial<
   >
 >
 
-function _validateAndUpdateTransition(id: string, updates: TransitionUpdates): void {
+function _validateAndUpdateTransition(id: string, updates: TransitionUpdates): boolean {
   const transitions = useTransitionsStore.getState().transitions
   const transition = transitions.find((t) => t.id === id)
-  if (!transition) return
+  if (!transition) return false
   const items = useItemsStore.getState().items
   const leftClip = items.find((i) => i.id === transition.leftClipId)
   const rightClip = items.find((i) => i.id === transition.rightClipId)
@@ -142,19 +142,21 @@ function _validateAndUpdateTransition(id: string, updates: TransitionUpdates): v
     )
     if (!validation.canAdd) {
       getLogger().warn('[updateTransition] Cannot update transition:', validation.reason)
-      return
+      return false
     }
   }
 
   useTransitionsStore.getState()._updateTransition(id, updates)
+  return true
 }
 
 export function updateTransition(id: string, updates: TransitionUpdates): void {
   execute(
     'UPDATE_TRANSITION',
     () => {
-      _validateAndUpdateTransition(id, updates)
-      useTimelineSettingsStore.getState().markDirty()
+      if (_validateAndUpdateTransition(id, updates)) {
+        useTimelineSettingsStore.getState().markDirty()
+      }
     },
     { id, updates },
   )
@@ -170,11 +172,11 @@ export function updateTransitions(
   execute(
     'UPDATE_TRANSITIONS',
     () => {
-      const store = useTransitionsStore.getState()
       for (const { id, updates: u } of updates) {
         if (u.durationInFrames !== undefined || u.alignment !== undefined) {
           // Alignment / duration changes need handle validation just like single updates.
-          const transition = store.transitions.find((t) => t.id === id)
+          // Re-read the store on each iteration so duplicate ids see fresh state.
+          const transition = useTransitionsStore.getState().transitions.find((t) => t.id === id)
           if (
             transition &&
             ((u.durationInFrames !== undefined &&
@@ -185,7 +187,7 @@ export function updateTransitions(
             continue
           }
         }
-        store._updateTransition(id, u)
+        useTransitionsStore.getState()._updateTransition(id, u)
       }
       useTimelineSettingsStore.getState().markDirty()
     },
