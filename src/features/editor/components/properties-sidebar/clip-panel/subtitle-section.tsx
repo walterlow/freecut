@@ -229,7 +229,7 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
             const value = Number(event.target.value)
             if (Number.isFinite(value)) onChange(cueId, { startSeconds: Math.max(0, value) })
           }}
-          className="h-6 w-20 text-xs tabular-nums"
+          className="h-6 w-28 text-right text-xs tabular-nums"
         />
         <span className="text-[10px] text-muted-foreground">→</span>
         <Label className="sr-only" htmlFor={`cue-${cueId}-end`}>
@@ -245,7 +245,7 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
             const value = Number(event.target.value)
             if (Number.isFinite(value)) onChange(cueId, { endSeconds: Math.max(0, value) })
           }}
-          className="h-6 w-20 text-xs tabular-nums"
+          className="h-6 w-28 text-right text-xs tabular-nums"
         />
       </div>
       <textarea
