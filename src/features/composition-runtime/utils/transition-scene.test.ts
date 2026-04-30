@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vite-plus/test'
 import {
+  calculateTransitionProgress,
   collectTransitionParticipantClipIds,
   resolveTransitionFrameState,
 } from './transition-scene'
 
 describe('transition scene', () => {
+  it('treats legacy spring transition timing as linear progress', () => {
+    expect(calculateTransitionProgress(5, 10, 'spring')).toBeCloseTo(5 / 9)
+  })
+
   it('resolves active transitions and participating clip ids for a frame', () => {
     const state = resolveTransitionFrameState({
       transitionWindows: [

@@ -8,14 +8,7 @@ import type { TransitionRegistry, TransitionRenderer } from '../registry'
 import type { TransitionStyleCalculation } from '../engine'
 import type { TransitionDefinition } from '@/types/transition'
 
-const ALL_TIMINGS = [
-  'linear',
-  'spring',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'cubic-bezier',
-] as const
+const ALL_TIMINGS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))

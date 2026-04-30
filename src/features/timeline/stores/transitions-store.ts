@@ -73,11 +73,14 @@ function normalizeTransitionAlignment(alignment: number | undefined): number {
 }
 
 function normalizeTransition(transition: Transition): Transition {
+  const timing =
+    (transition.timing as string | undefined) === 'spring' ? 'linear' : transition.timing
+
   return {
     ...transition,
     durationInFrames: normalizeTransitionDuration(transition.durationInFrames),
     alignment: normalizeTransitionAlignment(transition.alignment),
-    timing: transition.timing ?? 'linear',
+    timing: timing ?? 'linear',
   }
 }
 

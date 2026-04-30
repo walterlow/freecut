@@ -11,14 +11,7 @@ import type { TransitionDefinition, WipeDirection } from '@/types/transition'
 import { clockWipeDef, clockWipeRenderer } from './mask'
 
 const ALL_DIRECTIONS: WipeDirection[] = ['from-left', 'from-right', 'from-top', 'from-bottom']
-const ALL_TIMINGS = [
-  'linear',
-  'spring',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'cubic-bezier',
-] as const
+const ALL_TIMINGS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const
 
 type WipeMask = 'band' | 'center' | 'edge' | 'radial' | 'spiral' | 'venetianBlind' | 'x'
 

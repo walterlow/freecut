@@ -65,7 +65,7 @@ const fadeDef: TransitionDefinition = {
   category: 'basic',
   icon: 'Blend',
   hasDirection: false,
-  supportedTimings: ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'],
+  supportedTimings: ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'],
   defaultDuration: 30,
   minDuration: 5,
   maxDuration: 90,

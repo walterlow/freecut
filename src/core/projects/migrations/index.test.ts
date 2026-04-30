@@ -278,6 +278,59 @@ describe('migrateProject transition normalization', () => {
     ])
   })
 
+  it('normalizes legacy spring transition timing to linear', () => {
+    const project = createBaseProject({
+      tracks: [createTrack('video-track', 0, 'video')],
+      items: [
+        {
+          id: 'video-1',
+          type: 'video',
+          trackId: 'video-track',
+          from: 0,
+          durationInFrames: 40,
+          label: 'Video 1',
+          src: 'video-1.mp4',
+          mediaId: 'media-1',
+          sourceStart: 0,
+          sourceEnd: 60,
+          sourceDuration: 80,
+        },
+        {
+          id: 'video-2',
+          type: 'video',
+          trackId: 'video-track',
+          from: 40,
+          durationInFrames: 40,
+          label: 'Video 2',
+          src: 'video-2.mp4',
+          mediaId: 'media-2',
+          sourceStart: 20,
+          sourceEnd: 60,
+          sourceDuration: 80,
+        },
+      ],
+      transitions: [
+        {
+          id: 'transition-1',
+          type: 'crossfade',
+          leftClipId: 'video-1',
+          rightClipId: 'video-2',
+          trackId: 'video-track',
+          durationInFrames: 12,
+          presentation: 'fade',
+          timing: 'spring' as unknown as NonNullable<
+            ProjectTimeline['transitions']
+          >[number]['timing'],
+          alignment: 0.5,
+        },
+      ],
+    })
+
+    const result = migrateProject(project)
+
+    expect(result.project.timeline?.transitions?.[0]?.timing).toBe('linear')
+  })
+
   it('renumbers legacy track orders and backfills missing origin ids', () => {
     const project = createBaseProject({
       tracks: [
