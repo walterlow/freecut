@@ -7,6 +7,8 @@
  * notification channel.
  */
 
+import { useState } from 'react'
+
 import { useEmbeddedSubtitlePickerStore } from '../stores/embedded-subtitle-picker-store'
 import { useMediaLibraryStore } from '../stores/media-library-store'
 import {
@@ -23,23 +25,27 @@ export function EmbeddedSubtitleTrackPickerHost() {
   const errorMessage = useEmbeddedSubtitlePickerStore((s) => s.errorMessage)
   const setError = useEmbeddedSubtitlePickerStore((s) => s.setError)
   const close = useEmbeddedSubtitlePickerStore((s) => s.close)
+  const [insertMode, setInsertMode] = useState<'segment' | 'per-cue'>('segment')
 
   const handlePicked = (track: EmbeddedSubtitleTrack) => {
     if (!media) return
     const store = useMediaLibraryStore.getState()
     let result: ExtractEmbeddedSubtitlesResult
     try {
-      result = subtitleSidecarService.insertEmbeddedSubtitleTrack(media, track)
+      result = subtitleSidecarService.insertEmbeddedSubtitleTrack(media, track, {
+        mode: insertMode,
+      })
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to insert subtitles.')
       return
     }
     close()
+    const noun = insertMode === 'segment' ? 'subtitle segment' : 'caption'
     store.showNotification({
       type: 'success',
       message:
         result.insertedItemCount > 0
-          ? `Inserted ${result.insertedItemCount} captions from "${result.trackLabel}".`
+          ? `Inserted ${result.insertedItemCount} ${noun}${result.insertedItemCount === 1 ? '' : 's'} from "${result.trackLabel}".`
           : `No cues fell inside the clip's range for "${result.trackLabel}".`,
     })
   }
@@ -49,6 +55,8 @@ export function EmbeddedSubtitleTrackPickerHost() {
       media={media}
       blob={blob}
       errorMessage={errorMessage}
+      insertMode={insertMode}
+      onInsertModeChange={setInsertMode}
       onClose={close}
       onTrackPicked={handlePicked}
     />

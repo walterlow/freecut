@@ -22,6 +22,7 @@ import type {
 } from '@/types/timeline'
 import {
   buildCaptionTrack,
+  buildSubtitleSegmentForClip,
   buildSubtitleTextItems,
   buildSubtitleTextItemsForClip,
   findCaptionTargetClipsForMedia,
@@ -151,13 +152,30 @@ class SubtitleSidecarService {
   /**
    * Insert a specific embedded subtitle track's cues as captions on the
    * timeline, anchored to `media`'s clips.
+   *
+   * `mode` controls the timeline shape:
+   *  - `'segment'` (default): one {@link SubtitleSegmentItem} per clip
+   *    that owns the entire cue list — drag/trim/style as one unit.
+   *  - `'per-cue'`: legacy fallback that stamps out one TextItem per cue.
    */
   insertEmbeddedSubtitleTrack(
     media: MediaMetadata,
     track: EmbeddedSubtitleTrack,
+    options: { mode?: 'segment' | 'per-cue' } = {},
   ): ExtractEmbeddedSubtitlesResult {
-    const format: SubtitleFormat = track.codecId === 'S_TEXT/WEBVTT' ? 'vtt' : 'srt'
     const trackLabel = formatEmbeddedSubtitleTrackLabel(track)
+    const mode = options.mode ?? 'segment'
+
+    if (mode === 'segment') {
+      const inserted = this.insertSubtitleCuesAsSegmentForMedia(media, track, trackLabel)
+      return {
+        insertedItemCount: inserted,
+        cueCount: track.cues.length,
+        trackLabel,
+      }
+    }
+
+    const format: SubtitleFormat = track.codecId === 'S_TEXT/WEBVTT' ? 'vtt' : 'srt'
     const items = this.insertSubtitleCuesAsCaptions({
       cues: track.cues,
       fileName: `${media.fileName} - ${trackLabel}`,
@@ -170,6 +188,63 @@ class SubtitleSidecarService {
       cueCount: track.cues.length,
       trackLabel,
     }
+  }
+
+  private insertSubtitleCuesAsSegmentForMedia(
+    media: MediaMetadata,
+    track: EmbeddedSubtitleTrack,
+    trackLabel: string,
+  ): number {
+    const timeline = useTimelineStore.getState()
+    const project = useProjectStore.getState().currentProject
+    const canvasWidth = project?.metadata.width ?? 1920
+    const canvasHeight = project?.metadata.height ?? 1080
+    const clips = findCaptionTargetClipsForMedia(timeline.items, media.id)
+    if (clips.length === 0) return 0
+
+    const segments: import('@/types/timeline').SubtitleSegmentItem[] = []
+    for (const clip of clips) {
+      const segment = buildSubtitleSegmentForClip({
+        trackId: clip.trackId,
+        cues: track.cues,
+        clip,
+        timelineFps: timeline.fps,
+        canvasWidth,
+        canvasHeight,
+        label: `${media.fileName} — ${trackLabel}`,
+        source: {
+          type: 'embedded-subtitles',
+          mediaId: media.id,
+          clipId: clip.id,
+          trackNumber: track.trackNumber,
+          language: track.language,
+          trackName: track.name,
+          codecId: track.codecId,
+          importedAt: Date.now(),
+        },
+      })
+      if (segment) segments.push(segment)
+    }
+    if (segments.length === 0) return 0
+
+    // Pick a single track that can host every segment's range, mirroring the
+    // per-cue path — keeps captions on one row rather than scattering them.
+    const ranges = segments.map((s) => ({
+      startFrame: s.from,
+      endFrame: s.from + s.durationInFrames,
+    }))
+    let nextTracks: TimelineTrack[] = [...timeline.tracks]
+    let target = findCompatibleCaptionTrackForRanges(nextTracks, timeline.items, ranges)
+    if (!target) {
+      target = buildCaptionTrack(nextTracks)
+      nextTracks = [...nextTracks, target].sort((a, b) => a.order - b.order)
+      timeline.setTracks(nextTracks)
+    }
+    const placedSegments = segments.map((segment) => ({ ...segment, trackId: target.id }))
+
+    timeline.addItems(placedSegments)
+    useSelectionStore.getState().selectItems(placedSegments.map((s) => s.id))
+    return placedSegments.length
   }
 
   exportSubtitleText(options: ExportSubtitleOptions): { text: string; cueCount: number } {

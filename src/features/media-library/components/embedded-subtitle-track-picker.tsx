@@ -30,6 +30,9 @@ interface EmbeddedSubtitleTrackPickerProps {
   onTrackPicked: (track: EmbeddedSubtitleTrack) => void
   /** Optional notice rendered in the body (used to surface scan errors). */
   errorMessage?: string | null
+  /** Insertion mode toggle: 'segment' (one item) vs 'per-cue' (one item per cue). */
+  insertMode?: 'segment' | 'per-cue'
+  onInsertModeChange?: (mode: 'segment' | 'per-cue') => void
 }
 
 type ScanState =
@@ -50,6 +53,8 @@ export function EmbeddedSubtitleTrackPicker({
   onClose,
   onTrackPicked,
   errorMessage,
+  insertMode = 'segment',
+  onInsertModeChange,
 }: EmbeddedSubtitleTrackPickerProps) {
   const [state, setState] = useState<ScanState>({ status: 'idle' })
   const [selectedTrackNumber, setSelectedTrackNumber] = useState<number | null>(null)
@@ -160,6 +165,28 @@ export function EmbeddedSubtitleTrackPicker({
           {errorMessage && <p className="pt-2 text-sm text-destructive">{errorMessage}</p>}
         </div>
 
+        {onInsertModeChange && (
+          <div className="pt-3 border-t border-border">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pb-1.5">
+              Insert as
+            </p>
+            <div className="flex gap-1.5">
+              <ModeToggleButton
+                active={insertMode === 'segment'}
+                onClick={() => onInsertModeChange('segment')}
+                label="One subtitle segment"
+                hint="Single timeline item that owns all cues — drag, trim, restyle as one."
+              />
+              <ModeToggleButton
+                active={insertMode === 'per-cue'}
+                onClick={() => onInsertModeChange('per-cue')}
+                label="One text item per cue"
+                hint="Legacy behavior: stamps every cue as its own caption text item."
+              />
+            </div>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
@@ -214,6 +241,34 @@ function TrackRow({ track, selected, isDefault, onSelect }: TrackRowProps) {
         </div>
       </button>
     </li>
+  )
+}
+
+function ModeToggleButton({
+  active,
+  onClick,
+  label,
+  hint,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  hint: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex-1 rounded border px-2.5 py-1.5 text-left text-xs transition-colors',
+        active
+          ? 'border-primary bg-primary/10'
+          : 'border-border hover:bg-secondary/40 text-muted-foreground',
+      )}
+    >
+      <div className="font-medium text-foreground">{label}</div>
+      <div className="pt-0.5 text-[11px] leading-snug text-muted-foreground">{hint}</div>
+    </button>
   )
 }
 

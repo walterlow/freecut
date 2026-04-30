@@ -764,3 +764,136 @@ export function findCaptionTargetClipsForMedia(
 
   return selected.sort((a, b) => a.from - b.from)
 }
+
+interface BuildSubtitleSegmentForClipOptions {
+  trackId: string
+  cues: readonly SubtitleCue[]
+  clip: AudioItem | VideoItem
+  timelineFps: number
+  canvasWidth: number
+  canvasHeight: number
+  source: import('@/types/timeline').SubtitleSegmentSource
+  styleTemplate?: CaptionTextItemTemplate
+  /** Label shown in the timeline-item UI; defaults to the source-track label. */
+  label?: string
+}
+
+/**
+ * Build ONE {@link SubtitleSegmentItem} that owns all cues overlapping
+ * `clip`'s source window. Replaces the per-cue {@link buildSubtitleTextItemsForClip}
+ * for callers that want a single, coherent timeline item — matches the way
+ * caption tracks work in dedicated NLEs.
+ *
+ * Cue times are stored segment-relative (start = 0) so the segment can be
+ * dragged, trimmed, or split without rewriting timestamps.
+ */
+export function buildSubtitleSegmentForClip(
+  options: BuildSubtitleSegmentForClipOptions,
+): import('@/types/timeline').SubtitleSegmentItem | null {
+  const {
+    clip,
+    cues,
+    timelineFps,
+    canvasWidth,
+    canvasHeight,
+    trackId,
+    source,
+    styleTemplate,
+    label,
+  } = options
+  const { sourceStart, sourceEnd, sourceFps, speed } = getClipSourceBounds(clip, timelineFps)
+  const sourceStartSeconds = sourceStart / sourceFps
+  const sourceEndSeconds = sourceEnd / sourceFps
+
+  const overlappingCues: import('@/types/timeline').SubtitleSegmentCue[] = []
+  let firstFromOffset = Number.POSITIVE_INFINITY
+  let lastEndOffset = 0
+
+  for (const cue of cues) {
+    const overlapStartSec = Math.max(cue.startSeconds, sourceStartSeconds)
+    const overlapEndSec = Math.min(cue.endSeconds, sourceEndSeconds)
+    if (overlapEndSec <= overlapStartSec) continue
+
+    // Convert source seconds → timeline seconds relative to clip.from / speed,
+    // then keep cue times relative to the segment's eventual `from`.
+    const cueStartTimeline = (overlapStartSec - sourceStartSeconds) / speed
+    const cueEndTimeline = (overlapEndSec - sourceStartSeconds) / speed
+    const cueStartFrames = Math.floor(cueStartTimeline * timelineFps)
+    const cueEndFrames = Math.ceil(cueEndTimeline * timelineFps)
+    if (cueEndFrames <= cueStartFrames) continue
+
+    overlappingCues.push({
+      id: cue.id,
+      startSeconds: cueStartTimeline,
+      endSeconds: cueEndTimeline,
+      text: cue.text,
+    })
+    if (cueStartFrames < firstFromOffset) firstFromOffset = cueStartFrames
+    if (cueEndFrames > lastEndOffset) lastEndOffset = cueEndFrames
+  }
+
+  if (overlappingCues.length === 0) return null
+
+  const segmentFromOffset = Math.max(0, Math.min(firstFromOffset, clip.durationInFrames - 1))
+  const segmentEndOffset = Math.min(
+    clip.durationInFrames,
+    Math.max(lastEndOffset, segmentFromOffset + 1),
+  )
+  const from = clip.from + segmentFromOffset
+  const durationInFrames = Math.max(1, segmentEndOffset - segmentFromOffset)
+
+  // Cue times are now stored segment-relative (start = 0 at the segment's `from`).
+  const segmentRelativeCues = overlappingCues.map((cue) => ({
+    id: cue.id,
+    startSeconds: cue.startSeconds - segmentFromOffset / timelineFps,
+    endSeconds: cue.endSeconds - segmentFromOffset / timelineFps,
+    text: cue.text,
+  }))
+
+  const defaultStyle = {
+    fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
+    fontFamily: 'Inter',
+    fontWeight: 'semibold' as const,
+    fontStyle: 'normal' as const,
+    underline: false,
+    color: '#ffffff',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    textAlign: 'center' as const,
+    verticalAlign: 'middle' as const,
+    lineHeight: 1.15,
+    letterSpacing: 0,
+    textShadow: {
+      offsetX: 0,
+      offsetY: 3,
+      blur: 10,
+      color: 'rgba(0, 0, 0, 0.75)',
+    },
+    transform: {
+      x: 0,
+      y: Math.round(canvasHeight * 0.32),
+      width: canvasWidth * 0.82,
+      height: canvasHeight * 0.16,
+      rotation: 0,
+      opacity: 1,
+    },
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    type: 'subtitle',
+    trackId,
+    from,
+    durationInFrames,
+    label:
+      label ??
+      (source.type === 'embedded-subtitles'
+        ? (source.trackName ?? source.language ?? 'Subtitles')
+        : source.fileName),
+    mediaId: clip.mediaId,
+    sourceLabel: label,
+    source,
+    cues: segmentRelativeCues,
+    ...defaultStyle,
+    ...styleTemplate,
+  }
+}

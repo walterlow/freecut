@@ -10,6 +10,7 @@ import { PitchCorrectedAudio } from './pitch-corrected-audio'
 import { GifPlayer } from './gif-player'
 import { ItemVisualWrapper } from './item-visual-wrapper'
 import { TextContent } from './text-content'
+import { SubtitleSegmentContent } from './subtitle-segment-content'
 import { ShapeContent } from './shape-content'
 import { VideoContent } from './video-content'
 import { CompositionContent } from './composition-content'
@@ -559,10 +560,12 @@ export const Item = React.memo<ItemProps>(
       return null
     }
 
-    // Subtitle segments will get their own renderer in PR 2B; until then a
-    // segment item is harmless on the timeline but invisible in the preview.
     if (item.type === 'subtitle') {
-      return null
+      return (
+        <ItemVisualWrapper item={item} masks={masks}>
+          <SubtitleSegmentContent item={item} />
+        </ItemVisualWrapper>
+      )
     }
 
     throw new Error(`Unknown item type: ${JSON.stringify(item)}`)
