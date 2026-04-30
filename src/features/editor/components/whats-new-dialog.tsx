@@ -22,6 +22,10 @@ const GROUP_CONFIG: Record<
 
 const GROUP_ORDER: ChangelogGroup[] = ['added', 'fixed', 'improved']
 
+function capitalize(s: string): string {
+  return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s
+}
+
 function formatEntryLabel(entry: ChangelogEntry): string {
   return entry.version === 'current' ? 'This Week' : entry.version
 }
@@ -141,47 +145,20 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
 function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
   return (
     <div className="px-6 py-5 space-y-6">
-      <header className="space-y-1">
-        <h2 className="text-lg font-semibold">{formatEntryLabel(entry)}</h2>
-        <p className="text-sm text-muted-foreground">{formatEntrySubtitle(entry)}</p>
-      </header>
-
-      {entry.highlights && entry.highlights.length > 0 && (
-        <section className="rounded-lg border bg-primary/5 p-4 space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-primary">Highlights</h3>
-          <ul className="space-y-1.5">
-            {entry.highlights.map((highlight, i) => (
-              <li key={i} className="flex gap-2 text-sm">
-                <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                <span>{highlight}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {GROUP_ORDER.map((groupKey) => {
         const items = entry.groups[groupKey]
         if (!items || items.length === 0) return null
         const { label, icon: Icon } = GROUP_CONFIG[groupKey]
         return (
-          <section key={groupKey} className="space-y-2">
-            <h3 className="flex items-center gap-2 text-sm font-semibold">
-              <Icon className="h-4 w-4 text-muted-foreground" />
+          <section key={groupKey} className="space-y-2.5">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Icon className="h-3.5 w-3.5" />
               {label}
             </h3>
-            <ul className="space-y-1.5 pl-6">
+            <ul className="space-y-1.5 list-disc pl-5 marker:text-muted-foreground/60">
               {items.map((item, i) => (
-                <li key={i} className="text-sm flex gap-2">
-                  <span className="text-muted-foreground shrink-0">•</span>
-                  <span>
-                    {item.scope && (
-                      <span className="text-xs text-muted-foreground font-mono mr-1.5">
-                        {item.scope}
-                      </span>
-                    )}
-                    {item.title}
-                  </span>
+                <li key={i} className="text-xs leading-relaxed">
+                  {capitalize(item.title)}
                 </li>
               ))}
             </ul>

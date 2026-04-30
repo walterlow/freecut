@@ -141,6 +141,7 @@ Rules of thumb:
 - If a bullet is only meaningful to developers, drop it.
 - Aim for ≤12 words per bullet.
 - For weekly entries, prefer thematic phrasing over commit-level phrasing ("Trim tools with smart zone detection" rather than listing each tool variant).
+- **Sentence case**: write every bullet starting with a capital letter. The dialog has a render-time safety net that capitalizes the first character, but `CHANGELOG.md` ships the raw string to GitHub — fix the source, don't rely on the UI fallback.
 
 ### Grouping
 
@@ -150,10 +151,6 @@ Within each weekly entry, group into:
 - **Improved** — performance or polish wins the user would describe in their own words
 
 Skip any group with zero entries. **It is normal and good for "Improved" to be empty.** If you cannot phrase an Improved bullet in a way the user would say it out loud ("playback is smoother", "exporting is faster"), it does not belong here. Do not pad the section with internal perf to make the week look productive.
-
-### Highlights
-
-Each weekly entry picks 1–3 highlights — the bullets a user would brag about. These appear at the top of the UI card. Skip highlights for weeks that are purely fixes.
 
 ## File formats
 
@@ -165,14 +162,13 @@ Matches types in `src/data/changelog-types.ts`:
 export type ChangelogGroup = 'added' | 'fixed' | 'improved';
 
 export type ChangelogItem = {
-  title: string;           // ≤12 words, user-facing
-  scope?: string;          // optional, e.g. "timeline"
+  title: string;           // ≤12 words, user-facing — must stand alone, no scope tag
 };
 
 export type ChangelogEntry = {
   version: string;         // "2026.04.13" for releases, "current" for rolling
   date: string;            // ISO date — Monday for releases, today for current
-  highlights?: string[];   // 1-3 bullets
+  subtitle?: string;       // rare, only for the initial release entry
   groups: Partial<Record<ChangelogGroup, ChangelogItem[]>>;
 };
 
@@ -182,6 +178,8 @@ export type ChangelogFile = {
 };
 ```
 
+The What's New dialog renders one entry per group with title-only bullets — no scope tags, no highlights section. Make every title carry its own context (a user reading it cold should know what changed).
+
 ### `CHANGELOG.md`
 
 ```markdown
@@ -190,10 +188,18 @@ export type ChangelogFile = {
 All notable changes to FreeCut. Versioning follows weekly CalVer: `YYYY.MM.DD` = the Monday of the release week.
 
 ## [Current] — week of 2026-04-13
-...
+
+### Added
+- ...
+
+### Fixed
+- ...
+
 ## [2026.04.06] — week of 2026-04-06 to 2026-04-12
 ...
 ```
+
+No `**Highlights**` block. No scope prefixes on bullets.
 
 Do **not** include PR links in weekly entries. Weekly entries aggregate many PRs; PR links add noise.
 

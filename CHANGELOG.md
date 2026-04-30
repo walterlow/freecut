@@ -6,11 +6,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 ## [Current] — week of 2026-04-13
 
-**Highlights**
-- Projects now live on disk in a workspace folder you choose
-- Six new transitions plus alignment-aware placement controls
-- Per-clip pitch shift in semitones and cents
-
 ### Added
 - Motion, iris, shape, and DaVinci-style wipe transition packs
 - Lens warp zoom transition
@@ -48,11 +43,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 ## [2026.04.06] — week of 2026-04-06 to 2026-04-12
 
-**Highlights**
-- Unified clip EQ across preview, export, and editor
-- AI-powered captioning, text-to-speech music, and scene detection
-- Alt+C as alternate split-at-playhead shortcut
-
 ### Added
 - Clip EQ with five-band presets across preview and export
 - SoundTouch-based preview audio replaces WAV path
@@ -80,11 +70,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Frame-accurate source time snapping prevents skipped frames
 
 ## [2026.03.30] — week of 2026-03-30 to 2026-04-05
-
-**Highlights**
-- Nested compound clips with cycle detection
-- Local AI Text-to-Speech panel
-- AV1 codec export support
 
 ### Added
 - Nested compound clips with cycle detection and deep-nested rename/delete
@@ -118,11 +103,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Overlapping items on the same track now detected and prevented
 
 ## [2026.03.23] — week of 2026-03-23 to 2026-03-29
-
-**Highlights**
-- Full editing toolset: trim, ripple, rolling, slip, slide
-- Linked audio-video compound clips replace track groups
-- Floating mixer with stereo LED meters and real-time fader metering
 
 ### Added
 - Trim, ripple, rolling, slip, and slide tools with live previews
@@ -161,11 +141,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 ## [2026.03.16] — week of 2026-03-16 to 2026-03-22
 
-**Highlights**
-- Pen mode with canvas drop and mask editing
-- Audio transcription
-- GPU transitions migrated to WebGPU shaders
-
 ### Added
 - Pen mode with canvas drop, scopes, and interaction lock
 - Mask editing with in-panel keyframe editor
@@ -185,18 +160,11 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 ## [2026.03.09] — week of 2026-03-09 to 2026-03-15
 
-**Highlights**
-- New distort and stylize effects with color parameters
-
 ### Added
 - Distort and stylize effect family with color parameters
 - Structured wide-event logging across core features
 
 ## [2026.02.23] — week of 2026-02-23 to 2026-03-01
-
-**Highlights**
-- Timeline and preview performance overhaul
-- Export packet remux fast path
 
 ### Fixed
 - No more infinite retry storms on failed video source init
@@ -214,11 +182,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Chunked window optimizations for export, timeline, and waveforms
 
 ## [2026.02.16] — week of 2026-02-16 to 2026-02-22
-
-**Highlights**
-- Ripple, rolling, slip, and slide editing tools with 2-up previews
-- Font picker with searchable catalog and live preview
-- NLE-style waveforms and FCP-style transition bridge
 
 ### Added
 - Ripple edit tool with downstream clip shifting
@@ -257,11 +220,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 ## [2026.02.09] — week of 2026-02-09 to 2026-02-15
 
-**Highlights**
-- Pre-compositions with 1-level nesting
-- Track groups with gate behavior
-- Animatable volume and gain keyframes
-
 ### Added
 - Track groups with collapse, drag, and gate behavior
 - Source monitor with In/Out points and Insert/Overwrite editing
@@ -290,11 +248,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Filmstrip extraction throttled for lower CPU load
 
 ## [2026.02.02] — initial release
-
-**Highlights**
-- First public beta — multi-track video editor in the browser
-- Custom playback engine with WebGPU acceleration
-- Export via WebCodecs with client and server render modes
 
 ### Added
 - Multi-track timeline: drag, drop, trim, razor, zoom, snap

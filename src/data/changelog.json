@@ -2,395 +2,323 @@
   "current": {
     "version": "current",
     "date": "2026-04-30",
-    "highlights": [
-      "Projects now live on disk in a workspace folder you choose",
-      "Six new transitions plus alignment-aware placement controls",
-      "Per-clip pitch shift in semitones and cents"
-    ],
     "groups": {
       "added": [
         {
-          "title": "Motion, iris, shape, and DaVinci-style wipe transition packs",
-          "scope": "transitions"
+          "title": "Motion, iris, shape, and DaVinci-style wipe transition packs"
         },
         {
-          "title": "Lens warp zoom transition",
-          "scope": "transitions"
+          "title": "Lens warp zoom transition"
         },
         {
-          "title": "Liquid distort transition",
-          "scope": "transitions"
+          "title": "Liquid distort transition"
         },
         {
-          "title": "Transition placement controls with alignment-aware drops",
-          "scope": "transitions"
+          "title": "Transition placement controls with alignment-aware drops"
         },
         {
-          "title": "Searchable transition preset picker",
-          "scope": "transitions"
+          "title": "Searchable transition preset picker"
         },
         {
-          "title": "Tunable transition parameters in the properties panel",
-          "scope": "transitions"
+          "title": "Tunable transition parameters in the properties panel"
         },
         {
-          "title": "Compound clips can now host transitions",
-          "scope": "transitions"
+          "title": "Compound clips can now host transitions"
         },
         {
-          "title": "Projects now live on disk in a workspace folder you choose",
-          "scope": "storage"
+          "title": "Projects now live on disk in a workspace folder you choose"
         },
         {
-          "title": "Multi-workspace support with waveform mirroring",
-          "scope": "storage"
+          "title": "Multi-workspace support with waveform mirroring"
         },
         {
-          "title": "Multi-select projects with marquee and bulk delete",
-          "scope": "projects"
+          "title": "Multi-select projects with marquee and bulk delete"
         },
         {
-          "title": "Trash section with soft-delete, undo, and permanent delete",
-          "scope": "projects"
+          "title": "Trash section with soft-delete, undo, and permanent delete"
         },
         {
-          "title": "Legacy browser-storage migration progress banner",
-          "scope": "storage"
+          "title": "Legacy browser-storage migration progress banner"
         },
         {
-          "title": "Per-clip pitch shift in semitones and cents",
-          "scope": "audio"
+          "title": "Per-clip pitch shift in semitones and cents"
         },
         {
-          "title": "Compact DaVinci-style six-band clip EQ with floating panel",
-          "scope": "audio"
+          "title": "Compact DaVinci-style six-band clip EQ with floating panel"
         },
         {
-          "title": "Mixer tuck handle to slide channel strips behind the bus",
-          "scope": "mixer"
+          "title": "Mixer tuck handle to slide channel strips behind the bus"
         },
         {
-          "title": "Separate project master bus from per-device monitor volume",
-          "scope": "audio"
+          "title": "Separate project master bus from per-device monitor volume"
         },
         {
-          "title": "What's New dialog shows weekly changelog",
-          "scope": "editor"
+          "title": "What's New dialog shows weekly changelog"
         },
         {
-          "title": "overhaul canvas snap system",
-          "scope": "preview"
+          "title": "Overhaul canvas snap system"
         },
         {
-          "title": "promote span text controls and move preset selector"
+          "title": "Promote span text controls and move preset selector"
         },
         {
-          "title": "add keyframeable color effect params"
+          "title": "Add keyframeable color effect params"
         },
         {
-          "title": "import media from a direct URL",
-          "scope": "media-library"
+          "title": "Import media from a direct URL"
         },
         {
-          "title": "move scenes toggle next to search as segmented control",
-          "scope": "media-library"
+          "title": "Move scenes toggle next to search as segmented control"
         },
         {
-          "title": "dedup media imports and captions by content",
-          "scope": "media-library"
+          "title": "Dedup media imports and captions by content"
         },
         {
-          "title": "multi-segment filmstrip for compound clips",
-          "scope": "timeline"
+          "title": "Multi-segment filmstrip for compound clips"
         },
         {
-          "title": "replace card dropdown with right-click context menu",
-          "scope": "media-library"
+          "title": "Replace card dropdown with right-click context menu"
         },
         {
-          "title": "wheel zoom/scroll/resize in track headers",
-          "scope": "timeline"
+          "title": "Wheel zoom/scroll/resize in track headers"
         },
         {
-          "title": "migrate to v2 layout with per-media caches",
-          "scope": "workspace-fs"
+          "title": "Migrate to v2 layout with per-media caches"
         },
         {
-          "title": "grid view, responsive header, analyze service",
-          "scope": "scene-browser"
+          "title": "Grid view, responsive header, analyze service"
         },
         {
-          "title": "add color mode with library palette grid",
-          "scope": "scene-browser"
+          "title": "Add color mode with library palette grid"
         },
         {
-          "title": "find scenes with a similar palette",
-          "scope": "scene-browser"
+          "title": "Find scenes with a similar palette"
         },
         {
-          "title": "add AI analysis indicators and align proxy colors"
+          "title": "Add AI analysis indicators and align proxy colors"
         },
         {
-          "title": "add AI caption generation with timeline insertion",
-          "scope": "captions"
+          "title": "Add AI caption generation with timeline insertion"
         },
         {
-          "title": "expand glyph atlas text rendering"
+          "title": "Expand glyph atlas text rendering"
         },
         {
-          "title": "enable GPU transition compositing"
+          "title": "Enable GPU transition compositing"
         }
       ],
       "fixed": [
         {
-          "title": "Effect drag overlays no longer stick or hijack adjacent lanes",
-          "scope": "timeline"
+          "title": "Effect drag overlays no longer stick or hijack adjacent lanes"
         },
         {
-          "title": "Transition preset selection syncs with the chosen direction",
-          "scope": "transitions"
+          "title": "Transition preset selection syncs with the chosen direction"
         },
         {
-          "title": "Removed the transition duration cap",
-          "scope": "transitions"
+          "title": "Removed the transition duration cap"
         },
         {
-          "title": "Removed Kokoro voice quality options",
-          "scope": "audio"
+          "title": "Removed Kokoro voice quality options"
         },
         {
-          "title": "Preview no longer fails when media blobs expire",
-          "scope": "preview"
+          "title": "Preview no longer fails when media blobs expire"
         },
         {
-          "title": "Disabled tracks remain editable and styled after reload",
-          "scope": "timeline"
+          "title": "Disabled tracks remain editable and styled after reload"
         },
         {
-          "title": "Pen mask tracks are now visible in classic timelines",
-          "scope": "timeline"
+          "title": "Pen mask tracks are now visible in classic timelines"
         },
         {
-          "title": "Transitions stay aligned to source time across splits",
-          "scope": "transitions"
+          "title": "Transitions stay aligned to source time across splits"
         },
         {
-          "title": "Pen paths default to shapes with 5-second duration",
-          "scope": "timeline"
+          "title": "Pen paths default to shapes with 5-second duration"
         },
         {
-          "title": "UI accessibility, transition alpha, and viewport clamp fixes",
-          "scope": "editor"
+          "title": "UI accessibility, transition alpha, and viewport clamp fixes"
         },
         {
-          "title": "resolve develop type errors"
+          "title": "Resolve develop type errors"
         },
         {
-          "title": "respect visible params and safer effect mapping"
+          "title": "Respect visible params and safer effect mapping"
         },
         {
-          "title": "allow animating non-color GPU effect params"
+          "title": "Allow animating non-color GPU effect params"
         },
         {
-          "title": "route effects keyframe deps through adapters"
+          "title": "Route effects keyframe deps through adapters"
         },
         {
-          "title": "remove unused crop helpers"
+          "title": "Remove unused crop helpers"
         },
         {
-          "title": "smooth live pitch preview on Semi Tones / Cents sliders",
-          "scope": "audio"
+          "title": "Smooth live pitch preview on Semi Tones / Cents sliders"
         },
         {
-          "title": "pixel-snap audio volume line to avoid subpixel blur",
-          "scope": "timeline"
+          "title": "Pixel-snap audio volume line to avoid subpixel blur"
         },
         {
-          "title": "render compound clip hover preview via canvas engine",
-          "scope": "preview"
+          "title": "Render compound clip hover preview via canvas engine"
         },
         {
-          "title": "scale compound clip hover preview to fit wrapper",
-          "scope": "preview"
+          "title": "Scale compound clip hover preview to fit wrapper"
         },
         {
-          "title": "stop nested video black flashes from stale sequenceFromRef",
-          "scope": "preview"
+          "title": "Stop nested video black flashes from stale sequenceFromRef"
         },
         {
-          "title": "restore MMB drag to resize A/V divider from anywhere",
-          "scope": "timeline"
+          "title": "Restore MMB drag to resize A/V divider from anywhere"
         },
         {
-          "title": "version shared caption cache by sample interval",
-          "scope": "media-library"
+          "title": "Version shared caption cache by sample interval"
         },
         {
-          "title": "stop blanking project list with spinner during mutations",
-          "scope": "projects"
+          "title": "Stop blanking project list with spinner during mutations"
         },
         {
-          "title": "eliminate Add Effect picker flash on first open",
-          "scope": "effects"
+          "title": "Eliminate Add Effect picker flash on first open"
         },
         {
-          "title": "constrain new project page width to 7xl",
-          "scope": "projects"
+          "title": "Constrain new project page width to 7xl"
         },
         {
-          "title": "refresh nested compound clip effects during playback",
-          "scope": "preview"
+          "title": "Refresh nested compound clip effects during playback"
         },
         {
-          "title": "route SubComposition type through deps adapter",
-          "scope": "preview"
+          "title": "Route SubComposition type through deps adapter"
         },
         {
-          "title": "use live sub-comp duration for compound clip trim and display",
-          "scope": "timeline"
+          "title": "Use live sub-comp duration for compound clip trim and display"
         },
         {
-          "title": "correct available pane height when no track sections",
-          "scope": "timeline"
+          "title": "Correct available pane height when no track sections"
         },
         {
-          "title": "reliably repaint compound clips on sub-comp edits and nav",
-          "scope": "preview"
+          "title": "Reliably repaint compound clips on sub-comp edits and nav"
         },
         {
-          "title": "invalidate frame cache when sub-compositions change",
-          "scope": "preview"
+          "title": "Invalidate frame cache when sub-compositions change"
         },
         {
-          "title": "apply gpu effects and adjustment layers inside compound clips",
-          "scope": "compositions"
+          "title": "Apply gpu effects and adjustment layers inside compound clips"
         },
         {
-          "title": "input handling edge cases",
-          "scope": "preview,timeline"
+          "title": "Input handling edge cases"
         },
         {
-          "title": "prevent header toolbar from wrapping on narrow widths",
-          "scope": "media-library"
+          "title": "Prevent header toolbar from wrapping on narrow widths"
         },
         {
-          "title": "add grid-cols-1 to DialogContent",
-          "scope": "dialog"
+          "title": "Add grid-cols-1 to DialogContent"
         },
         {
-          "title": "hydrate proxies from workspace on fresh origins",
-          "scope": "media-library"
+          "title": "Hydrate proxies from workspace on fresh origins"
         },
         {
-          "title": "remove motion semantic search, tighten color queries",
-          "scope": "scene-browser"
+          "title": "Remove motion semantic search, tighten color queries"
         },
         {
-          "title": "use palette-only ranking for color queries"
+          "title": "Use palette-only ranking for color queries"
         },
         {
-          "title": "route timeline transcribe dialog through media contract"
+          "title": "Route timeline transcribe dialog through media contract"
         },
         {
-          "title": "move preview and filmstrip caches into workspace fs"
+          "title": "Move preview and filmstrip caches into workspace fs"
         },
         {
-          "title": "queue and unify transcription progress flows"
+          "title": "Queue and unify transcription progress flows"
         },
         {
-          "title": "transcribe custom-decoded audio from conformed wav"
+          "title": "Transcribe custom-decoded audio from conformed wav"
         },
         {
-          "title": "anchor timeline slider zoom at the playhead"
+          "title": "Anchor timeline slider zoom at the playhead"
         },
         {
-          "title": "route analysis imports through infrastructure facade"
+          "title": "Route analysis imports through infrastructure facade"
         },
         {
-          "title": "route preview scrub throttle through contract"
+          "title": "Route preview scrub throttle through contract"
         },
         {
-          "title": "keep AI analysis off timeline caption tracks"
+          "title": "Keep AI analysis off timeline caption tracks"
         },
         {
-          "title": "lower skim overlay below popovers"
+          "title": "Lower skim overlay below popovers"
         },
         {
-          "title": "unify ruler scrub handoff to avoid preview flashes"
+          "title": "Unify ruler scrub handoff to avoid preview flashes"
         },
         {
-          "title": "speed up media skimming and preserve program preview"
+          "title": "Speed up media skimming and preserve program preview"
         },
         {
-          "title": "sync preview timecode and playhead during scrubbing"
+          "title": "Sync preview timecode and playhead during scrubbing"
         },
         {
-          "title": "prefer Player path for generated caption scrubs"
+          "title": "Prefer Player path for generated caption scrubs"
         },
         {
-          "title": "harden text atlas, transition cache, and compositor buffer pool",
-          "scope": "gpu"
+          "title": "Harden text atlas, transition cache, and compositor buffer pool"
         },
         {
-          "title": "update commit message generation"
+          "title": "Update commit message generation"
         },
         {
-          "title": "preserve mask coverage in GPU blend transitions"
+          "title": "Preserve mask coverage in GPU blend transitions"
         },
         {
-          "title": "preserve GPU layer uniforms per pass"
+          "title": "Preserve GPU layer uniforms per pass"
         },
         {
-          "title": "skip occluded sub-comp tracks in export rendering"
+          "title": "Skip occluded sub-comp tracks in export rendering"
         },
         {
-          "title": "handle commit message generation request"
+          "title": "Handle commit message generation request"
         },
         {
-          "title": "flatten curved GPU shape paths"
+          "title": "Flatten curved GPU shape paths"
         },
         {
-          "title": "generate single-line commit message"
+          "title": "Generate single-line commit message"
         },
         {
-          "title": "keep GPU shape effects on texture path"
+          "title": "Keep GPU shape effects on texture path"
         },
         {
-          "title": "share transition participant rendering"
+          "title": "Share transition participant rendering"
         },
         {
-          "title": "route audio time stretch through infrastructure"
+          "title": "Route audio time stretch through infrastructure"
         },
         {
-          "title": "keep generated reports parseable in checks"
+          "title": "Keep generated reports parseable in checks"
         },
         {
-          "title": "keep runtime hooks in sync with latest refs"
+          "title": "Keep runtime hooks in sync with latest refs"
         },
         {
-          "title": "tighten memo deps in preview and timeline hooks"
+          "title": "Tighten memo deps in preview and timeline hooks"
         }
       ],
       "improved": [
         {
-          "title": "Compact clip shell for narrow clips with short-circuited fades",
-          "scope": "timeline"
+          "title": "Compact clip shell for narrow clips with short-circuited fades"
         },
         {
-          "title": "Smoother filmstrip rendering when zooming the timeline",
-          "scope": "timeline"
+          "title": "Smoother filmstrip rendering when zooming the timeline"
         },
         {
-          "title": "Smaller 960×540 proxy resolution with worker-side loading",
-          "scope": "preview"
+          "title": "Smaller 960×540 proxy resolution with worker-side loading"
         },
         {
-          "title": "kick re-render as soon as priority media is ready",
-          "scope": "preview"
+          "title": "Kick re-render as soon as priority media is ready"
         },
         {
-          "title": "subscription-based controller isolates overlay re-renders",
-          "scope": "marquee"
+          "title": "Subscription-based controller isolates overlay re-renders"
         }
       ]
     }
@@ -399,96 +327,71 @@
     {
       "version": "2026.04.06",
       "date": "2026-04-06",
-      "highlights": [
-        "Unified clip EQ across preview, export, and editor",
-        "AI-powered captioning, text-to-speech music, and scene detection",
-        "Alt+C as alternate split-at-playhead shortcut"
-      ],
       "groups": {
         "added": [
           {
-            "title": "Clip EQ with five-band presets across preview and export",
-            "scope": "audio"
+            "title": "Clip EQ with five-band presets across preview and export"
           },
           {
-            "title": "SoundTouch-based preview audio replaces WAV path",
-            "scope": "audio"
+            "title": "SoundTouch-based preview audio replaces WAV path"
           },
           {
-            "title": "Alt+C as alternate split-at-playhead shortcut",
-            "scope": "timeline"
+            "title": "Alt+C as alternate split-at-playhead shortcut"
           },
           {
-            "title": "AI-powered media captioning with LFM vision model",
-            "scope": "media-library"
+            "title": "AI-powered media captioning with LFM vision model"
           },
           {
-            "title": "Local MusicGen music generation with presets and cancellation",
-            "scope": "editor"
+            "title": "Local MusicGen music generation with presets and cancellation"
           },
           {
-            "title": "Gemma-4 scene cut verification and LFM 2.5 VL alternative",
-            "scope": "analysis"
+            "title": "Gemma-4 scene cut verification and LFM 2.5 VL alternative"
           },
           {
-            "title": "Fast histogram-based scene detection",
-            "scope": "analysis"
+            "title": "Fast histogram-based scene detection"
           },
           {
-            "title": "Local model cache management in settings",
-            "scope": "settings"
+            "title": "Local model cache management in settings"
           },
           {
-            "title": "Source monitor patch destination pickers",
-            "scope": "preview"
+            "title": "Source monitor patch destination pickers"
           },
           {
-            "title": "Delete shortcut routes to keyframe editor when active",
-            "scope": "keyframes"
+            "title": "Delete shortcut routes to keyframe editor when active"
           }
         ],
         "fixed": [
           {
-            "title": "Split linked items together without sync drift",
-            "scope": "timeline"
+            "title": "Split linked items together without sync drift"
           },
           {
-            "title": "Glitch transition shader no longer paints black regions",
-            "scope": "transitions"
+            "title": "Glitch transition shader no longer paints black regions"
           },
           {
-            "title": "Context menu submenu clicks no longer deselect items",
-            "scope": "timeline"
+            "title": "Context menu submenu clicks no longer deselect items"
           },
           {
-            "title": "Same-origin transition exit no longer pops a frame",
-            "scope": "preview"
+            "title": "Same-origin transition exit no longer pops a frame"
           },
           {
-            "title": "Vorbis audio and nested media play through proxies",
-            "scope": "preview"
+            "title": "Vorbis audio and nested media play through proxies"
           },
           {
-            "title": "Stale timeline in/out points are clamped",
-            "scope": "timeline"
+            "title": "Stale timeline in/out points are clamped"
           }
         ],
         "improved": [
           {
-            "title": "Filmstrip rewritten: no edge gap, pop, or zoom-driven re-renders",
-            "scope": "timeline"
+            "title": "Filmstrip rewritten: no edge gap, pop, or zoom-driven re-renders"
           },
           {
-            "title": "Reduced drag, marquee, and scroll-driven re-renders",
-            "scope": "timeline"
+            "title": "Reduced drag, marquee, and scroll-driven re-renders"
           },
           {
-            "title": "Editor dialogs now lazy-load",
-            "scope": "editor"
+            "title": "Editor dialogs now lazy-load"
           },
           {
-            "title": "Frame-accurate source time snapping prevents skipped frames",
-            "scope": "preview"
+            "title": "Frame-accurate source time snapping prevents skipped frames"
           }
         ]
       }
@@ -496,122 +399,90 @@
     {
       "version": "2026.03.30",
       "date": "2026-03-30",
-      "highlights": [
-        "Nested compound clips with cycle detection",
-        "Local AI Text-to-Speech panel",
-        "AV1 codec export support"
-      ],
       "groups": {
         "added": [
           {
-            "title": "Nested compound clips with cycle detection and deep-nested rename/delete",
-            "scope": "compositions"
+            "title": "Nested compound clips with cycle detection and deep-nested rename/delete"
           },
           {
-            "title": "Crop-aware media layout with soft-edge feathering",
-            "scope": "editor"
+            "title": "Crop-aware media layout with soft-edge feathering"
           },
           {
-            "title": "SVG import, image filmstrips, and draggable text/shape templates",
-            "scope": "editor"
+            "title": "SVG import, image filmstrips, and draggable text/shape templates"
           },
           {
-            "title": "Renamed Composition to Compound Clip across UI",
-            "scope": "editor"
+            "title": "Renamed Composition to Compound Clip across UI"
           },
           {
-            "title": "AI Text-to-Speech panel with local WebGPU inference",
-            "scope": "editor"
+            "title": "AI Text-to-Speech panel with local WebGPU inference"
           },
           {
-            "title": "AV1 codec support in export with runtime capability checks",
-            "scope": "export"
+            "title": "AV1 codec support in export with runtime capability checks"
           },
           {
-            "title": "Media library hover-skim preview in program monitor",
-            "scope": "preview"
+            "title": "Media library hover-skim preview in program monitor"
           },
           {
-            "title": "Audio preview play button on media cards",
-            "scope": "media-library"
+            "title": "Audio preview play button on media cards"
           },
           {
-            "title": "Mixer fader and mute on the bus master channel",
-            "scope": "mixer"
+            "title": "Mixer fader and mute on the bus master channel"
           },
           {
-            "title": "Edge halo system for trim handles with constraint feedback",
-            "scope": "timeline"
+            "title": "Edge halo system for trim handles with constraint feedback"
           },
           {
-            "title": "Track push/pull handle for multi-track gap adjustment",
-            "scope": "timeline"
+            "title": "Track push/pull handle for multi-track gap adjustment"
           },
           {
-            "title": "Full-column toggle for properties and media sidebars",
-            "scope": "editor"
+            "title": "Full-column toggle for properties and media sidebars"
           },
           {
-            "title": "Per-card info popover replaces bottom info panel",
-            "scope": "media-library"
+            "title": "Per-card info popover replaces bottom info panel"
           },
           {
-            "title": "Video fade in/out handles applied in preview and export",
-            "scope": "timeline"
+            "title": "Video fade in/out handles applied in preview and export"
           },
           {
-            "title": "Single disable toggle unifies track visibility and mute",
-            "scope": "timeline"
+            "title": "Single disable toggle unifies track visibility and mute"
           },
           {
-            "title": "Default FPS, snap, preview quality, and export defaults in settings",
-            "scope": "settings"
+            "title": "Default FPS, snap, preview quality, and export defaults in settings"
           },
           {
-            "title": "Smart ripple behavior on rate-stretch tool",
-            "scope": "timeline"
+            "title": "Smart ripple behavior on rate-stretch tool"
           },
           {
-            "title": "Auto-match project canvas and FPS to first dropped video",
-            "scope": "editor"
+            "title": "Auto-match project canvas and FPS to first dropped video"
           },
           {
-            "title": "Alt+scroll to resize tracks from headers",
-            "scope": "timeline"
+            "title": "Alt+scroll to resize tracks from headers"
           }
         ],
         "fixed": [
           {
-            "title": "GPU transition effect renders when paused on a transition frame",
-            "scope": "transitions"
+            "title": "GPU transition effect renders when paused on a transition frame"
           },
           {
-            "title": "Sub-pixel seam gone from uncropped edges",
-            "scope": "editor"
+            "title": "Sub-pixel seam gone from uncropped edges"
           },
           {
-            "title": "Masks apply in composition space with stable refs",
-            "scope": "preview"
+            "title": "Masks apply in composition space with stable refs"
           },
           {
-            "title": "Clip volume edits persist with stereo waveform channels",
-            "scope": "audio"
+            "title": "Clip volume edits persist with stereo waveform channels"
           },
           {
-            "title": "Per-track meter preview during fader drag",
-            "scope": "mixer"
+            "title": "Per-track meter preview during fader drag"
           },
           {
-            "title": "Slide and linked-clip clamping respects transitions and limits",
-            "scope": "timeline"
+            "title": "Slide and linked-clip clamping respects transitions and limits"
           },
           {
-            "title": "Duplicate slide limit boxes on neighbor counterparts removed",
-            "scope": "timeline"
+            "title": "Duplicate slide limit boxes on neighbor counterparts removed"
           },
           {
-            "title": "Overlapping items on the same track now detected and prevented",
-            "scope": "timeline"
+            "title": "Overlapping items on the same track now detected and prevented"
           }
         ]
       }
@@ -619,132 +490,98 @@
     {
       "version": "2026.03.23",
       "date": "2026-03-23",
-      "highlights": [
-        "Full editing toolset: trim, ripple, rolling, slip, slide",
-        "Linked audio-video compound clips replace track groups",
-        "Floating mixer with stereo LED meters and real-time fader metering"
-      ],
       "groups": {
         "added": [
           {
-            "title": "Trim, ripple, rolling, slip, and slide tools with live previews",
-            "scope": "timeline"
+            "title": "Trim, ripple, rolling, slip, and slide tools with live previews"
           },
           {
-            "title": "Smart zone detection and constraint feedback while editing",
-            "scope": "timeline"
+            "title": "Smart zone detection and constraint feedback while editing"
           },
           {
-            "title": "Tool operation overlay with compact limit edges",
-            "scope": "timeline"
+            "title": "Tool operation overlay with compact limit edges"
           },
           {
-            "title": "Linked audio-video items replace track groups",
-            "scope": "timeline"
+            "title": "Linked audio-video items replace track groups"
           },
           {
-            "title": "Compound wrappers: speed, transitions, trim, slip/slide, linked audio",
-            "scope": "timeline"
+            "title": "Compound wrappers: speed, transitions, trim, slip/slide, linked audio"
           },
           {
-            "title": "Split and join compound wrappers with crossfade playback",
-            "scope": "timeline"
+            "title": "Split and join compound wrappers with crossfade playback"
           },
           {
-            "title": "Cut-centered handle-based transitions replace overlap model",
-            "scope": "transitions"
+            "title": "Cut-centered handle-based transitions replace overlap model"
           },
           {
-            "title": "Transition drag tooltip and drop ghost polish",
-            "scope": "transitions"
+            "title": "Transition drag tooltip and drop ghost polish"
           },
           {
-            "title": "Audio fade curves with power-curve model and edge snapping",
-            "scope": "audio"
+            "title": "Audio fade curves with power-curve model and edge snapping"
           },
           {
-            "title": "Media drop zones and track drop preview",
-            "scope": "timeline"
+            "title": "Media drop zones and track drop preview"
           },
           {
-            "title": "Content-based track drag lane moves",
-            "scope": "timeline"
+            "title": "Content-based track drag lane moves"
           },
           {
-            "title": "Track-kind-aware item placement",
-            "scope": "timeline"
+            "title": "Track-kind-aware item placement"
           },
           {
-            "title": "Drag-and-drop effects onto clips and draggable adjustment layers",
-            "scope": "editor"
+            "title": "Drag-and-drop effects onto clips and draggable adjustment layers"
           },
           {
-            "title": "Floating dockable mixer with stereo LED meters and track colors",
-            "scope": "mixer"
+            "title": "Floating dockable mixer with stereo LED meters and track colors"
           },
           {
-            "title": "Real-time volume and meter levels during fader drag",
-            "scope": "mixer"
+            "title": "Real-time volume and meter levels during fader drag"
           },
           {
-            "title": "Dopesheet with property accordion groups and marquee selection",
-            "scope": "keyframes"
+            "title": "Dopesheet with property accordion groups and marquee selection"
           },
           {
-            "title": "Bezier tangent mirroring, multi-curve overlay, and compact navigator",
-            "scope": "keyframes"
+            "title": "Bezier tangent mirroring, multi-curve overlay, and compact navigator"
           },
           {
-            "title": "Full-height media sidebar with in-panel keyframe editor",
-            "scope": "editor"
+            "title": "Full-height media sidebar with in-panel keyframe editor"
           },
           {
-            "title": "Transition selector dropdown replaces large grid",
-            "scope": "editor"
+            "title": "Transition selector dropdown replaces large grid"
           },
           {
-            "title": "Compact source and program monitor toolbars",
-            "scope": "preview"
+            "title": "Compact source and program monitor toolbars"
           },
           {
-            "title": "Source patch controls moved into the source monitor",
-            "scope": "preview"
+            "title": "Source patch controls moved into the source monitor"
           }
         ],
         "fixed": [
           {
-            "title": "Track resize now feels anchored, Resolve-style",
-            "scope": "timeline"
+            "title": "Track resize now feels anchored, Resolve-style"
           },
           {
-            "title": "Transition audio doubling eliminated",
-            "scope": "audio"
+            "title": "Transition audio doubling eliminated"
           },
           {
-            "title": "Prewarm worker initialization and transition cold decode stalls",
-            "scope": "preview"
+            "title": "Prewarm worker initialization and transition cold decode stalls"
           }
         ],
         "improved": [
           {
-            "title": "Mixer fader decoupled from store writes for smooth dragging",
-            "scope": "mixer"
+            "title": "Mixer fader decoupled from store writes for smooth dragging"
           },
           {
-            "title": "Adaptive seek backtracking via keyframe index",
-            "scope": "preview"
+            "title": "Adaptive seek backtracking via keyframe index"
           },
           {
-            "title": "Batch preseek and faster keyframe extraction",
-            "scope": "preview"
+            "title": "Batch preseek and faster keyframe extraction"
           },
           {
-            "title": "Eager WASM warmup and batch prearm for transitions",
-            "scope": "preview"
+            "title": "Eager WASM warmup and batch prearm for transitions"
           },
           {
-            "title": "Narrow render-critical store subscriptions",
-            "scope": "timeline"
+            "title": "Narrow render-critical store subscriptions"
           }
         ]
       }
@@ -752,60 +589,44 @@
     {
       "version": "2026.03.16",
       "date": "2026-03-16",
-      "highlights": [
-        "Pen mode with canvas drop and mask editing",
-        "Audio transcription",
-        "GPU transitions migrated to WebGPU shaders"
-      ],
       "groups": {
         "added": [
           {
-            "title": "Pen mode with canvas drop, scopes, and interaction lock",
-            "scope": "editor"
+            "title": "Pen mode with canvas drop, scopes, and interaction lock"
           },
           {
-            "title": "Mask editing with in-panel keyframe editor",
-            "scope": "editor"
+            "title": "Mask editing with in-panel keyframe editor"
           },
           {
-            "title": "Audio transcription",
-            "scope": "editor"
+            "title": "Audio transcription"
           },
           {
-            "title": "Explicit auto-keyframe arming via dopesheet toggle",
-            "scope": "keyframes"
+            "title": "Explicit auto-keyframe arming via dopesheet toggle"
           },
           {
-            "title": "GPU shader migration for all transitions with export parity",
-            "scope": "transitions"
+            "title": "GPU shader migration for all transitions with export parity"
           }
         ],
         "fixed": [
           {
-            "title": "Transition playback jitter and scrub stability",
-            "scope": "preview"
+            "title": "Transition playback jitter and scrub stability"
           },
           {
-            "title": "Waveform now renders on initial media drop",
-            "scope": "timeline"
+            "title": "Waveform now renders on initial media drop"
           },
           {
-            "title": "Properties sidebar scrollbar",
-            "scope": "editor"
+            "title": "Properties sidebar scrollbar"
           }
         ],
         "improved": [
           {
-            "title": "Export blits GPU composite directly to canvas (no readback)",
-            "scope": "export"
+            "title": "Export blits GPU composite directly to canvas (no readback)"
           },
           {
-            "title": "Cold-start playback stalls eliminated",
-            "scope": "preview"
+            "title": "Cold-start playback stalls eliminated"
           },
           {
-            "title": "Timeline scroll and zoom rendering optimizations",
-            "scope": "timeline"
+            "title": "Timeline scroll and zoom rendering optimizations"
           }
         ]
       }
@@ -813,16 +634,13 @@
     {
       "version": "2026.03.09",
       "date": "2026-03-09",
-      "highlights": ["New distort and stylize effects with color parameters"],
       "groups": {
         "added": [
           {
-            "title": "Distort and stylize effect family with color parameters",
-            "scope": "effects"
+            "title": "Distort and stylize effect family with color parameters"
           },
           {
-            "title": "Structured wide-event logging across core features",
-            "scope": "editor"
+            "title": "Structured wide-event logging across core features"
           }
         ]
       }
@@ -830,54 +648,42 @@
     {
       "version": "2026.02.23",
       "date": "2026-02-23",
-      "highlights": ["Timeline and preview performance overhaul", "Export packet remux fast path"],
       "groups": {
         "fixed": [
           {
-            "title": "No more infinite retry storms on failed video source init",
-            "scope": "preview"
+            "title": "No more infinite retry storms on failed video source init"
           },
           {
-            "title": "Audio clicks and spurious video warnings eliminated during playback",
-            "scope": "preview"
+            "title": "Audio clicks and spurious video warnings eliminated during playback"
           },
           {
-            "title": "Keyframed transforms apply on ruler frame seeks",
-            "scope": "preview"
+            "title": "Keyframed transforms apply on ruler frame seeks"
           },
           {
-            "title": "Stale fast-scrub renders no longer flash after scrub exit",
-            "scope": "preview"
+            "title": "Stale fast-scrub renders no longer flash after scrub exit"
           },
           {
-            "title": "Gizmo and keyframe scrub stay in sync with the preview frame",
-            "scope": "preview"
+            "title": "Gizmo and keyframe scrub stay in sync with the preview frame"
           },
           {
-            "title": "Hidden adjustment tracks now respected in canvas renderer",
-            "scope": "preview"
+            "title": "Hidden adjustment tracks now respected in canvas renderer"
           }
         ],
         "improved": [
           {
-            "title": "Indexed stores, streaming proxies, and cost-aware resolution",
-            "scope": "timeline"
+            "title": "Indexed stores, streaming proxies, and cost-aware resolution"
           },
           {
-            "title": "Memory-aware filmstrip cache with batch optimizations",
-            "scope": "timeline"
+            "title": "Memory-aware filmstrip cache with batch optimizations"
           },
           {
-            "title": "Export: packet remux fast path and streaming source",
-            "scope": "export"
+            "title": "Export: packet remux fast path and streaming source"
           },
           {
-            "title": "Strict-decode video frames in edit 2-up overlay with legacy fallback",
-            "scope": "preview"
+            "title": "Strict-decode video frames in edit 2-up overlay with legacy fallback"
           },
           {
-            "title": "Chunked window optimizations for export, timeline, and waveforms",
-            "scope": "editor"
+            "title": "Chunked window optimizations for export, timeline, and waveforms"
           }
         ]
       }
@@ -885,132 +691,98 @@
     {
       "version": "2026.02.16",
       "date": "2026-02-16",
-      "highlights": [
-        "Ripple, rolling, slip, and slide editing tools with 2-up previews",
-        "Font picker with searchable catalog and live preview",
-        "NLE-style waveforms and FCP-style transition bridge"
-      ],
       "groups": {
         "added": [
           {
-            "title": "Ripple edit tool with downstream clip shifting",
-            "scope": "timeline"
+            "title": "Ripple edit tool with downstream clip shifting"
           },
           {
-            "title": "Rolling edit with 2-up frame comparison overlay",
-            "scope": "timeline"
+            "title": "Rolling edit with 2-up frame comparison overlay"
           },
           {
-            "title": "Slip and slide editing with live filmstrip preview",
-            "scope": "timeline"
+            "title": "Slip and slide editing with live filmstrip preview"
           },
           {
-            "title": "Font picker with searchable catalog and live preview",
-            "scope": "editor"
+            "title": "Font picker with searchable catalog and live preview"
           },
           {
-            "title": "Proxy playback toggle and proxy management UI",
-            "scope": "preview"
+            "title": "Proxy playback toggle and proxy management UI"
           },
           {
-            "title": "Option to delete local files when deleting a project",
-            "scope": "projects"
+            "title": "Option to delete local files when deleting a project"
           },
           {
-            "title": "Single-page new project with inline template picker",
-            "scope": "projects"
+            "title": "Single-page new project with inline template picker"
           },
           {
-            "title": "Undo history depth setting",
-            "scope": "settings"
+            "title": "Undo history depth setting"
           },
           {
-            "title": "AC-3/E-AC-3 codec support",
-            "scope": "audio"
+            "title": "AC-3/E-AC-3 codec support"
           },
           {
-            "title": "Streaming partial audio decode with wavesurfer-style rendering",
-            "scope": "audio"
+            "title": "Streaming partial audio decode with wavesurfer-style rendering"
           },
           {
-            "title": "Sub-composition audio extraction in export",
-            "scope": "export"
+            "title": "Sub-composition audio extraction in export"
           },
           {
-            "title": "Animated WebP support and transparent GIF rendering",
-            "scope": "timeline"
+            "title": "Animated WebP support and transparent GIF rendering"
           },
           {
-            "title": "Per-track Close Gaps button replaces magnetic mode",
-            "scope": "timeline"
+            "title": "Per-track Close Gaps button replaces magnetic mode"
           },
           {
-            "title": "3-row clip layout with dedicated label row",
-            "scope": "timeline"
+            "title": "3-row clip layout with dedicated label row"
           },
           {
-            "title": "Project-scoped cache, thumbnail, and proxy controls",
-            "scope": "settings"
+            "title": "Project-scoped cache, thumbnail, and proxy controls"
           },
           {
-            "title": "NLE-style continuous filled-path waveform rendering",
-            "scope": "timeline"
+            "title": "NLE-style continuous filled-path waveform rendering"
           },
           {
-            "title": "FCP-style transition bridge with live ripple preview",
-            "scope": "transitions"
+            "title": "FCP-style transition bridge with live ripple preview"
           },
           {
-            "title": "Shift+Z to zoom to 100% at cursor or playhead",
-            "scope": "timeline"
+            "title": "Shift+Z to zoom to 100% at cursor or playhead"
           },
           {
-            "title": "Interactive razor mode with tool-aware playhead colors",
-            "scope": "timeline"
+            "title": "Interactive razor mode with tool-aware playhead colors"
           },
           {
-            "title": "Brave browser support guidance in media library",
-            "scope": "media-library"
+            "title": "Brave browser support guidance in media library"
           }
         ],
         "fixed": [
           {
-            "title": "Stale properties panel on clip selection",
-            "scope": "editor"
+            "title": "Stale properties panel on clip selection"
           },
           {
-            "title": "Audio stable across split boundaries during playback",
-            "scope": "player"
+            "title": "Audio stable across split boundaries during playback"
           },
           {
-            "title": "Playback and proxy seek no longer hang",
-            "scope": "player"
+            "title": "Playback and proxy seek no longer hang"
           },
           {
-            "title": "Clock frozen while tab is hidden prevents reseek stutter",
-            "scope": "player"
+            "title": "Clock frozen while tab is hidden prevents reseek stutter"
           },
           {
-            "title": "Recovery from stale blob URLs after tab inactivity",
-            "scope": "preview"
+            "title": "Recovery from stale blob URLs after tab inactivity"
           },
           {
-            "title": "1px gaps from clip edge rounding eliminated",
-            "scope": "timeline"
+            "title": "1px gaps from clip edge rounding eliminated"
           },
           {
-            "title": "Block split and razor cuts inside transition overlap zones",
-            "scope": "timeline"
+            "title": "Block split and razor cuts inside transition overlap zones"
           },
           {
-            "title": "Stale asset errors now show a save prompt",
-            "scope": "editor"
+            "title": "Stale asset errors now show a save prompt"
           }
         ],
         "improved": [
           {
-            "title": "Video source pooling reduces transition flicker",
-            "scope": "preview"
+            "title": "Video source pooling reduces transition flicker"
           }
         ]
       }
@@ -1018,100 +790,74 @@
     {
       "version": "2026.02.09",
       "date": "2026-02-09",
-      "highlights": [
-        "Pre-compositions with 1-level nesting",
-        "Track groups with gate behavior",
-        "Animatable volume and gain keyframes"
-      ],
       "groups": {
         "added": [
           {
-            "title": "Track groups with collapse, drag, and gate behavior",
-            "scope": "timeline"
+            "title": "Track groups with collapse, drag, and gate behavior"
           },
           {
-            "title": "Source monitor with In/Out points and Insert/Overwrite editing",
-            "scope": "preview"
+            "title": "Source monitor with In/Out points and Insert/Overwrite editing"
           },
           {
-            "title": "Animatable volume and gain via keyframes",
-            "scope": "keyframes"
+            "title": "Animatable volume and gain via keyframes"
           },
           {
-            "title": "Pre-compositions: group clips into nested sequences",
-            "scope": "timeline"
+            "title": "Pre-compositions: group clips into nested sequences"
           },
           {
-            "title": "Reverse clip, freeze frame, and magnetic timeline mode",
-            "scope": "timeline"
+            "title": "Reverse clip, freeze frame, and magnetic timeline mode"
           },
           {
-            "title": "Bento layout presets with interactive drag-to-swap canvas",
-            "scope": "timeline"
+            "title": "Bento layout presets with interactive drag-to-swap canvas"
           },
           {
-            "title": "Inline preview player in the export complete view",
-            "scope": "export"
+            "title": "Inline preview player in the export complete view"
           },
           {
-            "title": "On-demand 720p proxy video generation",
-            "scope": "preview"
+            "title": "On-demand 720p proxy video generation"
           },
           {
-            "title": "Drag-to-resize sidebars with persisted widths",
-            "scope": "editor"
+            "title": "Drag-to-resize sidebars with persisted widths"
           },
           {
-            "title": "Source monitor with split layout and slide-up media info",
-            "scope": "preview"
+            "title": "Source monitor with split layout and slide-up media info"
           },
           {
-            "title": "Hover-based keyboard shortcuts for source monitor",
-            "scope": "preview"
+            "title": "Hover-based keyboard shortcuts for source monitor"
           }
         ],
         "fixed": [
           {
-            "title": "Transition system overhaul: split-clip stutter and flip flash gone",
-            "scope": "transitions"
+            "title": "Transition system overhaul: split-clip stutter and flip flash gone"
           },
           {
-            "title": "Export corner radius and audio quality now match preview",
-            "scope": "export"
+            "title": "Export corner radius and audio quality now match preview"
           },
           {
-            "title": "Correct source-FPS conversion for clip trim points",
-            "scope": "timeline"
+            "title": "Correct source-FPS conversion for clip trim points"
           },
           {
-            "title": "Toggling track visibility no longer leaves stale opacity",
-            "scope": "timeline"
+            "title": "Toggling track visibility no longer leaves stale opacity"
           },
           {
-            "title": "Segments and transitions can move on hidden tracks",
-            "scope": "timeline"
+            "title": "Segments and transitions can move on hidden tracks"
           },
           {
-            "title": "Prevent dropping items onto group tracks",
-            "scope": "timeline"
+            "title": "Prevent dropping items onto group tracks"
           },
           {
-            "title": "Export shortcut (Ctrl+E) overrides Chrome default",
-            "scope": "export"
+            "title": "Export shortcut (Ctrl+E) overrides Chrome default"
           }
         ],
         "improved": [
           {
-            "title": "App-wide error boundaries and toast notifications",
-            "scope": "editor"
+            "title": "App-wide error boundaries and toast notifications"
           },
           {
-            "title": "Frame callback drift correction and smoother resume playback",
-            "scope": "player"
+            "title": "Frame callback drift correction and smoother resume playback"
           },
           {
-            "title": "Filmstrip extraction throttled for lower CPU load",
-            "scope": "timeline"
+            "title": "Filmstrip extraction throttled for lower CPU load"
           }
         ]
       }
@@ -1120,11 +866,6 @@
       "version": "2026.02.02",
       "date": "2026-02-02",
       "subtitle": "Initial release",
-      "highlights": [
-        "First public beta — multi-track video editor in the browser",
-        "Custom playback engine with WebGPU acceleration",
-        "Export via WebCodecs with client and server render modes"
-      ],
       "groups": {
         "added": [
           {
