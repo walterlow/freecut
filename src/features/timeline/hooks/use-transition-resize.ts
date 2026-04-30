@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import type { Transition } from '@/types/transition'
 import { commitPreviewFrameToCurrentFrame } from '@/shared/state/playback'
-import { TRANSITION_CONFIGS } from '@/types/transition'
 import { useTimelineStore } from '../stores/timeline-store'
 import { useItemsStore } from '../stores/items-store'
 import { pixelsToTimeNow } from '@/features/timeline/utils/zoom-conversions'
@@ -38,9 +37,8 @@ export function useTransitionResize(transition: Transition) {
     useCallback((s) => s.itemById[transition.rightClipId] ?? null, [transition.rightClipId]),
   )
 
-  const config = TRANSITION_CONFIGS[transition.type]
   const maxDuration = useMemo(() => {
-    if (!leftClip || !rightClip) return config.maxDuration
+    if (!leftClip || !rightClip) return Math.max(1, transition.durationInFrames)
 
     const leftEnd = leftClip.from + leftClip.durationInFrames
     const isAdjacent = Math.abs(leftEnd - rightClip.from) <= 1
@@ -48,18 +46,12 @@ export function useTransitionResize(transition: Transition) {
       const legacyMax = Math.floor(
         Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1,
       )
-      return Math.max(
-        1,
-        Math.max(transition.durationInFrames, Math.min(config.maxDuration, legacyMax)),
-      )
+      return Math.max(1, Math.max(transition.durationInFrames, legacyMax))
     }
 
     const handleMax = getMaxTransitionDurationForHandles(leftClip, rightClip, transition.alignment)
-    return Math.max(
-      1,
-      Math.max(transition.durationInFrames, Math.min(config.maxDuration, handleMax)),
-    )
-  }, [config.maxDuration, leftClip, rightClip, transition.alignment, transition.durationInFrames])
+    return Math.max(1, Math.max(transition.durationInFrames, handleMax))
+  }, [leftClip, rightClip, transition.alignment, transition.durationInFrames])
 
   const [resizeState, setResizeState] = useState<ResizeState>({
     isResizing: false,

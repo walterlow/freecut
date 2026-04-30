@@ -39,12 +39,31 @@ describe('transition-ui-config', () => {
     expect(toConfigKey(flatConfig!)).toBe(toConfigKey(groupedConfig!))
   })
 
-  it('shows chromatic in its own category instead of custom', () => {
-    const chromaticConfigs = getTransitionConfigsByCategory().chromatic ?? []
+  it('shows dissolve variants in the Resolve-style dissolve category', () => {
+    const dissolveConfigs = getTransitionConfigsByCategory().dissolve ?? []
+
+    expect(dissolveConfigs.map((config) => config.id)).toEqual([
+      'dissolve',
+      'additiveDissolve',
+      'blurDissolve',
+      'dipToColorDissolve',
+      'nonAdditiveDissolve',
+      'smoothCut',
+    ])
+    expect(dissolveConfigs.map((config) => config.label)).toEqual([
+      'Cross Dissolve',
+      'Additive Dissolve',
+      'Blur Dissolve',
+      'Dip To Color Dissolve',
+      'Non-Additive Dissolve',
+      'Smooth Cut',
+    ])
+  })
+
+  it('shows chromatic in the custom category', () => {
     const customConfigs = getTransitionConfigsByCategory().custom ?? []
 
-    expect(chromaticConfigs.some((config) => config.id === 'chromatic')).toBe(true)
-    expect(customConfigs.some((config) => config.id === 'chromatic')).toBe(false)
+    expect(customConfigs.some((config) => config.id === 'chromatic')).toBe(true)
   })
 
   it('shows sparkles in the custom category', () => {
@@ -56,16 +75,11 @@ describe('transition-ui-config', () => {
     ).toBe(false)
   })
 
-  it('shows liquid distort as a directional custom transition', () => {
+  it('shows liquid distort as one custom transition with direction options', () => {
     const customConfigs = getTransitionConfigsByCategory().custom ?? []
-    const liquidConfigs = customConfigs.filter((config) => config.id === 'liquidDistort')
+    const liquidConfig = customConfigs.find((config) => config.id === 'liquidDistort')
 
-    expect(liquidConfigs.map((config) => config.direction)).toEqual([
-      'from-left',
-      'from-right',
-      'from-top',
-      'from-bottom',
-    ])
+    expect(liquidConfig?.directions).toEqual(['from-left', 'from-right', 'from-top', 'from-bottom'])
   })
 
   it('shows lens warp zoom in the custom category', () => {
@@ -79,17 +93,24 @@ describe('transition-ui-config', () => {
     ).toBe(true)
   })
 
-  it('shows light leak burn as a directional light transition', () => {
-    const lightConfigs = getTransitionConfigsByCategory().light ?? []
-    const burnConfigs = lightConfigs.filter((config) => config.id === 'lightLeakBurn')
+  it('shows light leak burn as one custom transition with direction options', () => {
+    const customConfigs = getTransitionConfigsByCategory().custom ?? []
+    const burnConfig = customConfigs.find((config) => config.id === 'lightLeakBurn')
 
-    expect(burnConfigs.map((config) => config.direction)).toEqual([
-      'from-left',
-      'from-right',
-      'from-top',
-      'from-bottom',
-    ])
-    expect(burnConfigs.every((config) => config.icon !== undefined)).toBe(true)
+    expect(burnConfig?.directions).toEqual(['from-left', 'from-right', 'from-top', 'from-bottom'])
+    expect(burnConfig?.icon).toBeDefined()
+  })
+
+  it('shows flip in the custom category', () => {
+    const customConfigs = getTransitionConfigsByCategory().custom ?? []
+
+    expect(customConfigs.some((config) => config.id === 'flip')).toBe(true)
+  })
+
+  it('shows classic iris in the iris category', () => {
+    const irisConfigs = getTransitionConfigsByCategory().iris ?? []
+
+    expect(irisConfigs.some((config) => config.id === 'iris')).toBe(true)
   })
 
   it('shows film gate slip in the custom category', () => {

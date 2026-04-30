@@ -1,24 +1,25 @@
-import { render, screen } from '@testing-library/react'
+import { createRef } from 'react'
+import { act, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vite-plus/test'
-import { TimelineDropGhostPreviews } from './timeline-drop-ghost-previews'
+import {
+  TimelineDropGhostPreviews,
+  type TimelineDropGhostPreviewsHandle,
+} from './timeline-drop-ghost-previews'
 
 describe('TimelineDropGhostPreviews', () => {
-  it('renders the empty overlay when requested', () => {
-    const { container } = render(
-      <TimelineDropGhostPreviews ghostPreviews={[]} showEmptyOverlay variant="track" />,
-    )
+  it('does not render a lane-wide overlay', () => {
+    const { container } = render(<TimelineDropGhostPreviews variant="track" />)
 
-    expect(container.querySelector('.border-primary\\/50')).not.toBeNull()
+    expect(container.querySelector('.border-primary\\/50')).toBeNull()
   })
 
   it('renders track ghost previews with track-specific classes', () => {
-    render(
-      <TimelineDropGhostPreviews
-        ghostPreviews={[{ left: 12, width: 48, label: 'Drop media', type: 'external-file' }]}
-        showEmptyOverlay={false}
-        variant="track"
-      />,
-    )
+    const ref = createRef<TimelineDropGhostPreviewsHandle>()
+    render(<TimelineDropGhostPreviews ref={ref} variant="track" />)
+
+    act(() => {
+      ref.current?.sync([{ left: 12, width: 48, label: 'Drop media', type: 'external-file' }])
+    })
 
     const ghost = screen.getByText('Drop media').parentElement
     expect(ghost?.className).toContain('inset-y-0')
@@ -27,13 +28,12 @@ describe('TimelineDropGhostPreviews', () => {
   })
 
   it('renders zone ghost previews with full-height styling', () => {
-    render(
-      <TimelineDropGhostPreviews
-        ghostPreviews={[{ left: 20, width: 80, label: 'Clip', type: 'video' }]}
-        showEmptyOverlay={false}
-        variant="zone"
-      />,
-    )
+    const ref = createRef<TimelineDropGhostPreviewsHandle>()
+    render(<TimelineDropGhostPreviews ref={ref} variant="zone" />)
+
+    act(() => {
+      ref.current?.sync([{ left: 20, width: 80, label: 'Clip', type: 'video' }])
+    })
 
     const ghost = screen.getByText('Clip').parentElement
     expect(ghost?.className).not.toContain('inset-y-0')

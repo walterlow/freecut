@@ -1,5 +1,3 @@
-import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner'
-
 export interface RollingPreviewLike {
   trimmedItemId: string | null
   neighborItemId: string | null
@@ -123,10 +121,11 @@ export function getTransitionBridgeBounds(
   const leftEnd = leftClipFrom + leftClipDurationInFrames
 
   if (Math.abs(leftEnd - rightClipFrom) <= 1) {
-    const portions = calculateTransitionPortions(transitionDurationInFrames, alignment)
+    const clampedAlignment = Math.max(0, Math.min(1, alignment ?? 0.5))
+    const safeDuration = Math.max(1, transitionDurationInFrames)
     return {
-      leftFrame: leftEnd - portions.leftPortion,
-      rightFrame: rightClipFrom + portions.rightPortion,
+      leftFrame: leftEnd - safeDuration * clampedAlignment,
+      rightFrame: rightClipFrom + safeDuration * (1 - clampedAlignment),
     }
   }
 

@@ -55,17 +55,29 @@ export function getMaxTransitionDurationForHandles(
   )
   if (maxByClipDuration < 1) return 0
 
-  const leftHandle = getAvailableHandle(leftClip, 'end')
-  const rightHandle = getAvailableHandle(rightClip, 'start')
+  const outgoingTailHandle = getAvailableHandle(leftClip, 'end')
+  const incomingHeadHandle = getAvailableHandle(rightClip, 'start')
 
-  for (let duration = maxByClipDuration; duration >= 1; duration -= 1) {
+  const canFitDuration = (duration: number): boolean => {
     const portions = calculateTransitionPortions(duration, alignment)
-    if (portions.leftPortion <= leftHandle && portions.rightPortion <= rightHandle) {
-      return duration
+    return portions.rightPortion <= outgoingTailHandle && portions.leftPortion <= incomingHeadHandle
+  }
+
+  let low = 1
+  let high = maxByClipDuration
+  let best = 0
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    if (canFitDuration(mid)) {
+      best = mid
+      low = mid + 1
+    } else {
+      high = mid - 1
     }
   }
 
-  return 0
+  return best
 }
 
 /**
@@ -116,13 +128,15 @@ export function canAddTransition(
 
   if (isAdjacent) {
     const portions = calculateTransitionPortions(durationInFrames, alignment)
-    if (portions.leftPortion > leftHandle || portions.rightPortion > rightHandle) {
+    const outgoingTailFrames = portions.rightPortion
+    const incomingHeadFrames = portions.leftPortion
+    if (outgoingTailFrames > leftHandle || incomingHeadFrames > rightHandle) {
       const handleReason = [
-        portions.leftPortion > leftHandle
-          ? `left clip needs ${portions.leftPortion} tail-handle frames but only has ${leftHandle}`
+        outgoingTailFrames > leftHandle
+          ? `left clip needs ${outgoingTailFrames} tail-handle frames but only has ${leftHandle}`
           : null,
-        portions.rightPortion > rightHandle
-          ? `right clip needs ${portions.rightPortion} head-handle frames but only has ${rightHandle}`
+        incomingHeadFrames > rightHandle
+          ? `right clip needs ${incomingHeadFrames} head-handle frames but only has ${rightHandle}`
           : null,
       ]
         .filter(Boolean)
