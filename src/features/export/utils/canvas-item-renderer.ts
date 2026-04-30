@@ -24,6 +24,7 @@ import { createLogger } from '@/shared/logging/logger'
 import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts'
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope'
 import { getTextItemSpans } from '@/shared/utils/text-item-spans'
+import { parseSubtitleCueText } from '@/shared/utils/subtitle-cue-format'
 
 // Subsystem imports
 import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes'
@@ -1490,8 +1491,8 @@ function renderSubtitleSegmentItem(
   const secondsIntoSegment = (frame - item.from) / fps
   const activeCue = findActiveSubtitleCue(item.cues, secondsIntoSegment)
   if (!activeCue) return
-  const cleanedText = stripSubtitleMarkup(activeCue.text)
-  if (cleanedText.length === 0) return
+  const parsed = parseSubtitleCueText(activeCue.text)
+  if (parsed.isEmpty) return
 
   const ephemeralText: TextItem = {
     id: item.id,
@@ -1501,7 +1502,8 @@ function renderSubtitleSegmentItem(
     durationInFrames: item.durationInFrames,
     label: item.label,
     mediaId: item.mediaId,
-    text: cleanedText,
+    text: parsed.plainText,
+    textSpans: parsed.spans,
     fontSize: item.fontSize,
     fontFamily: item.fontFamily,
     fontWeight: item.fontWeight,
@@ -1510,8 +1512,8 @@ function renderSubtitleSegmentItem(
     color: item.color,
     backgroundColor: item.backgroundColor,
     backgroundRadius: item.backgroundRadius,
-    textAlign: item.textAlign,
-    verticalAlign: item.verticalAlign,
+    textAlign: parsed.alignment?.textAlign ?? item.textAlign,
+    verticalAlign: parsed.alignment?.verticalAlign ?? item.verticalAlign,
     lineHeight: item.lineHeight,
     letterSpacing: item.letterSpacing,
     textPadding: item.textPadding,
@@ -1520,11 +1522,6 @@ function renderSubtitleSegmentItem(
     transform: item.transform,
   }
   renderTextItem(ctx, ephemeralText, transform, rctx)
-}
-
-/** Strip simple SRT/HTML markup tags so the canvas renders plain text. */
-function stripSubtitleMarkup(text: string): string {
-  return text.replace(/<\/?(?:i|b|u|font|c|v|ruby|rt|lang)\b[^>]*>/gi, '').trim()
 }
 
 function findActiveSubtitleCue<T extends { startSeconds: number; endSeconds: number }>(

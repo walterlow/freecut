@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
 
 import { useSequenceContext } from '@/features/composition-runtime/deps/player'
+import { parseSubtitleCueText } from '@/shared/utils/subtitle-cue-format'
 import type { SubtitleSegmentItem, TextItem } from '@/types/timeline'
 
 import { useVideoConfig } from '../hooks/use-player-compat'
@@ -27,16 +28,18 @@ export const SubtitleSegmentContent: React.FC<{
     [item.cues, secondsIntoSegment],
   )
 
-  // SRT/embedded cues commonly carry inline markup (<i>, <b>, sometimes
-  // <font color>). Strip simple tags so they don't render as literal angle
-  // brackets. Italic-aware rendering is a follow-up — would need to map
-  // `<i>` runs onto TextItem.textSpans with fontStyle:'italic'.
-  const cleanedText = useMemo(() => (activeCue ? stripCueMarkup(activeCue.text) : ''), [activeCue])
+  // Parse inline markup (<i>, <b>, <u>, <font color>) into formatted spans
+  // and pull off any ASS `{\anN}` positioning override so the cue can land
+  // top-of-screen (used for sign translations / on-screen labels).
+  const parsed = useMemo(
+    () => (activeCue ? parseSubtitleCueText(activeCue.text) : null),
+    [activeCue],
+  )
 
   // Synthesize an ephemeral TextItem that carries the active cue's text and
   // the segment's typography. Keyframe/gizmo lookups by id will miss (the
-  // segment isn't a TextItem) — that's fine for now; PR 2D layers on
-  // segment-level keyframable styling.
+  // segment isn't a TextItem) — that's fine for now; segment-level keyframes
+  // are a planned follow-up.
   const syntheticTextItem = useMemo<TextItem & { _sequenceFrameOffset?: number }>(
     () => ({
       id: item.id,
@@ -47,7 +50,11 @@ export const SubtitleSegmentContent: React.FC<{
       label: item.label,
       mediaId: item.mediaId,
       transform: item.transform,
-      text: cleanedText,
+      text: parsed?.plainText ?? '',
+      // textSpans drives styled per-run rendering — italic / bold / colored
+      // fragments inside one cue. TextContent prefers spans over `text`
+      // when both are present.
+      textSpans: parsed?.spans,
       fontSize: item.fontSize,
       fontFamily: item.fontFamily,
       fontWeight: item.fontWeight,
@@ -56,8 +63,8 @@ export const SubtitleSegmentContent: React.FC<{
       color: item.color,
       backgroundColor: item.backgroundColor,
       backgroundRadius: item.backgroundRadius,
-      textAlign: item.textAlign,
-      verticalAlign: item.verticalAlign,
+      textAlign: parsed?.alignment?.textAlign ?? item.textAlign,
+      verticalAlign: parsed?.alignment?.verticalAlign ?? item.verticalAlign,
       lineHeight: item.lineHeight,
       letterSpacing: item.letterSpacing,
       textPadding: item.textPadding,
@@ -65,20 +72,11 @@ export const SubtitleSegmentContent: React.FC<{
       stroke: item.stroke,
       _sequenceFrameOffset: item._sequenceFrameOffset,
     }),
-    [cleanedText, item],
+    [parsed, item],
   )
 
-  if (!activeCue || cleanedText.length === 0) return null
+  if (!activeCue || !parsed || parsed.isEmpty) return null
   return <TextContent item={syntheticTextItem} />
-}
-
-/**
- * Strip simple HTML/SRT/Matroska markup tags from cue text. Handles `<i>`,
- * `<b>`, `<u>`, `<font ...>`, plus their closing variants. Leaves `<` /
- * `>` characters that aren't part of a recognizable tag alone.
- */
-function stripCueMarkup(text: string): string {
-  return text.replace(/<\/?(?:i|b|u|font|c|v|ruby|rt|lang)\b[^>]*>/gi, '').trim()
 }
 
 /**
