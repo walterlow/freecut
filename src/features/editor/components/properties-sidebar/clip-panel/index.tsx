@@ -19,6 +19,7 @@ import { VideoSection } from './video-section'
 import { GifSection } from './gif-section'
 import { AudioSection } from './audio-section'
 import { TextSection } from './text-section'
+import { SubtitleSection } from './subtitle-section'
 import { ShapeSection } from './shape-section'
 import { CornerPinSection } from './corner-pin-section'
 import { EffectsSection } from '@/features/editor/deps/effects-contract'
@@ -45,13 +46,15 @@ function computeItemTypeInfo(items: TimelineItem[]) {
       types.has('text') ||
       types.has('shape') ||
       types.has('adjustment') ||
-      types.has('composition'),
+      types.has('composition') ||
+      types.has('subtitle'),
     hasVideoItems: types.has('video'),
     hasGifItems,
     hasAudioItems: types.has('video') || types.has('audio'),
     hasTextItems: types.has('text'),
     hasShapeItems: types.has('shape'),
     hasAdjustmentItems: types.has('adjustment'),
+    hasSubtitleItems: types.has('subtitle'),
     isOnlyTextOrShape:
       items.length > 0 && items.every((item) => item.type === 'text' || item.type === 'shape'),
   }
@@ -117,6 +120,7 @@ export const ClipPanel = memo(function ClipPanel() {
     hasTextItems,
     hasShapeItems,
     hasAdjustmentItems,
+    hasSubtitleItems,
     isOnlyTextOrShape,
   } = itemTypeInfo
 
@@ -260,6 +264,7 @@ export const ClipPanel = memo(function ClipPanel() {
                 />
               )}
               {hasShapeItems && <ShapeSection items={selectedItems} />}
+              {hasSubtitleItems && <SubtitleSection items={selectedItems} />}
               {hasGifItems && <GifSection items={selectedItems} />}
             </div>
           )}
