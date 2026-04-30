@@ -104,10 +104,15 @@ export interface GeneratedCaptionSource {
    * `ai-captions` — generated from vision-language-model frame descriptions
    *   (e.g. LFM captioning). Distinguished so replace/remove flows can target
    *   one kind without disturbing the other on the same clip.
+   * `subtitle-import` — imported from a sidecar subtitle file such as SRT/VTT.
+   * `embedded-subtitles` — extracted from an embedded media subtitle track.
    */
-  type: 'transcript' | 'ai-captions'
+  type: 'transcript' | 'ai-captions' | 'subtitle-import' | 'embedded-subtitles'
   clipId: string
   mediaId: string
+  fileName?: string
+  format?: 'srt' | 'vtt'
+  importedAt?: number
 }
 
 // Discriminated union types for different item types

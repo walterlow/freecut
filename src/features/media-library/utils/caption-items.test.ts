@@ -70,6 +70,7 @@ vi.mock('../deps/timeline-contract', () => ({
 import {
   aiCaptionsToSegments,
   buildCaptionTextItems,
+  buildSubtitleTextItems,
   buildCaptionTrack,
   buildCaptionTrackAbove,
   findGeneratedCaptionItemsForClip,
@@ -149,6 +150,34 @@ describe('caption-items', () => {
       text: 'Second line',
     })
     expect(items[0]?.transform?.y).toBeGreaterThan(0)
+  })
+
+  it('maps imported subtitle cues to standalone caption text items', () => {
+    const items = buildSubtitleTextItems({
+      trackId: 'track-captions',
+      cues: [{ id: 'cue-1', startSeconds: 1, endSeconds: 2.5, text: 'Imported\ncaption' }],
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      fileName: 'captions.srt',
+      format: 'srt',
+      startFrame: 90,
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      type: 'text',
+      textRole: 'caption',
+      trackId: 'track-captions',
+      from: 120,
+      durationInFrames: 45,
+      text: 'Imported\ncaption',
+      captionSource: {
+        type: 'subtitle-import',
+        fileName: 'captions.srt',
+        format: 'srt',
+      },
+    })
   })
 
   it('derives caption range using clip speed and converted fps', () => {

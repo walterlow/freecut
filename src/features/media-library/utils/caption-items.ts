@@ -6,6 +6,7 @@ import {
 } from '../deps/timeline-contract'
 import type { MediaTranscriptSegment } from '@/types/storage'
 import type { MediaCaption } from '@/infrastructure/analysis'
+import type { SubtitleCue, SubtitleFormat } from '@/shared/utils/subtitles'
 import type {
   AudioItem,
   GeneratedCaptionSource,
@@ -39,6 +40,19 @@ interface BuildCaptionTextItemsOptions {
    * the two kinds apart on the same clip.
    */
   sourceType?: GeneratedCaptionSource['type']
+}
+
+interface BuildSubtitleTextItemsOptions {
+  trackId: string
+  cues: readonly SubtitleCue[]
+  timelineFps: number
+  canvasWidth: number
+  canvasHeight: number
+  fileName: string
+  format: SubtitleFormat
+  startFrame?: number
+  styleTemplate?: CaptionTextItemTemplate
+  sourceType?: Extract<GeneratedCaptionSource['type'], 'subtitle-import' | 'embedded-subtitles'>
 }
 
 export type CaptionTextItemTemplate = Pick<
@@ -336,11 +350,13 @@ function buildCaptionSource(
   mediaId: string,
   clipId: string,
   type: GeneratedCaptionSource['type'] = 'transcript',
+  metadata?: Omit<GeneratedCaptionSource, 'type' | 'clipId' | 'mediaId'>,
 ): GeneratedCaptionSource {
   return {
     type,
     mediaId,
     clipId,
+    ...metadata,
   }
 }
 
@@ -380,7 +396,10 @@ export function isGeneratedCaptionTextItem(
 ): item is TextItem & { captionSource: GeneratedCaptionSource } {
   return (
     item.type === 'text' &&
-    (item.captionSource?.type === 'transcript' || item.captionSource?.type === 'ai-captions') &&
+    (item.captionSource?.type === 'transcript' ||
+      item.captionSource?.type === 'ai-captions' ||
+      item.captionSource?.type === 'subtitle-import' ||
+      item.captionSource?.type === 'embedded-subtitles') &&
     item.captionSource.clipId.length > 0 &&
     item.captionSource.mediaId.length > 0
   )
@@ -505,6 +524,73 @@ export function buildCaptionTextItems({
       captionSource: buildCaptionSource(mediaId, clip.id, sourceType),
       label: segment.text.slice(0, 48),
       text: segment.text,
+      fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
+      fontFamily: 'Inter',
+      fontWeight: 'semibold',
+      fontStyle: 'normal',
+      underline: false,
+      color: '#ffffff',
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.15,
+      letterSpacing: 0,
+      textShadow: {
+        offsetX: 0,
+        offsetY: 3,
+        blur: 10,
+        color: 'rgba(0, 0, 0, 0.75)',
+      },
+      transform: {
+        x: 0,
+        y: Math.round(canvasHeight * 0.32),
+        width: canvasWidth * 0.82,
+        height: canvasHeight * 0.16,
+        rotation: 0,
+        opacity: 1,
+      },
+    }
+
+    return [
+      {
+        ...defaultCaptionItem,
+        ...styleTemplate,
+      },
+    ]
+  })
+}
+
+export function buildSubtitleTextItems({
+  trackId,
+  cues,
+  timelineFps,
+  canvasWidth,
+  canvasHeight,
+  fileName,
+  format,
+  startFrame = 0,
+  styleTemplate,
+  sourceType = 'subtitle-import',
+}: BuildSubtitleTextItemsOptions): TextItem[] {
+  return cues.flatMap((cue) => {
+    const from = startFrame + Math.max(0, Math.round(cue.startSeconds * timelineFps))
+    const endFrame = Math.max(from + 1, startFrame + Math.round(cue.endSeconds * timelineFps))
+    const durationInFrames = Math.max(1, endFrame - from)
+    const defaultCaptionItem: TextItem = {
+      id: crypto.randomUUID(),
+      type: 'text',
+      textRole: 'caption',
+      trackId,
+      from,
+      durationInFrames,
+      mediaId: '',
+      captionSource: buildCaptionSource('', '', sourceType, {
+        fileName,
+        format,
+        importedAt: Date.now(),
+      }),
+      label: cue.text.slice(0, 48),
+      text: cue.text,
       fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
       fontFamily: 'Inter',
       fontWeight: 'semibold',

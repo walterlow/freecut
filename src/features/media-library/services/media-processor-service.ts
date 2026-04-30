@@ -16,6 +16,7 @@ import type {
 } from '../workers/media-processor.worker'
 
 const logger = createLogger('MediaProcessorService')
+const PROCESS_MEDIA_TIMEOUT_MS = 120_000
 
 type MediaMetadataResult = VideoMetadata | AudioMetadata | ImageMetadata
 
@@ -114,11 +115,13 @@ class MediaProcessorService {
     const requestId = `media-${++this.requestId}`
 
     return new Promise<ProcessMediaResult>((resolve, reject) => {
-      // Set timeout for processing (30 seconds max)
+      // Large MKV/MOV files can take a while to probe in-browser. If a worker
+      // does hang, terminate it so the next import gets a fresh worker.
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId)
+        this.workerManager.terminate()
         reject(new Error('Media processing timeout'))
-      }, 30000)
+      }, PROCESS_MEDIA_TIMEOUT_MS)
 
       this.pendingRequests.set(requestId, {
         resolve: (result) => {

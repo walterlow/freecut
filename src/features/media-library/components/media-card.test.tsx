@@ -25,6 +25,11 @@ const mediaTranscriptionServiceMocks = vi.hoisted(() => ({
   cancelTranscription: vi.fn(),
 }))
 
+const subtitleSidecarServiceMocks = vi.hoisted(() => ({
+  extractEmbeddedSubtitlesAsCaptions: vi.fn(),
+  extractEmbeddedSubtitlesFromBlobAsCaptions: vi.fn(),
+}))
+
 const mediaStoreState = vi.hoisted(() => ({
   selectedMediaIds: [] as string[],
   mediaItems: [] as MediaMetadata[],
@@ -42,6 +47,8 @@ const mediaStoreState = vi.hoisted(() => ({
   setTaggingMedia: vi.fn(),
   updateMediaCaptions: vi.fn(),
   showNotification: vi.fn(),
+  markMediaBroken: vi.fn(),
+  openMissingMediaDialog: vi.fn(),
   analysisProgress: null as null | { total: number; completed: number; cancelRequested: boolean },
   beginAnalysisRun: vi.fn(),
   incrementAnalysisCompleted: vi.fn(),
@@ -135,6 +142,15 @@ vi.mock('./media-info-popover', () => ({
 
 vi.mock('../services/media-library-service', () => ({
   mediaLibraryService: mediaLibraryServiceMocks,
+  FileAccessError: class FileAccessError extends Error {
+    constructor(
+      message: string,
+      public readonly type: 'permission_denied' | 'file_missing' | 'unknown',
+    ) {
+      super(message)
+      this.name = 'FileAccessError'
+    }
+  },
 }))
 
 vi.mock('../services/proxy-service', () => ({
@@ -143,6 +159,10 @@ vi.mock('../services/proxy-service', () => ({
 
 vi.mock('../services/media-transcription-service', () => ({
   mediaTranscriptionService: mediaTranscriptionServiceMocks,
+}))
+
+vi.mock('../services/subtitle-sidecar-service', () => ({
+  subtitleSidecarService: subtitleSidecarServiceMocks,
 }))
 
 vi.mock('../stores/media-library-store', () => {
@@ -261,6 +281,8 @@ describe('MediaCard', () => {
     mediaStoreState.transcriptStatus = new Map()
     mediaStoreState.transcriptProgress = new Map()
     mediaStoreState.taggingMediaIds = new Set()
+    mediaStoreState.markMediaBroken.mockReset()
+    mediaStoreState.openMissingMediaDialog.mockReset()
     editorStoreState.mediaSkimPreviewMediaId = null
     playbackStoreState.pause.mockReset()
 
@@ -270,6 +292,16 @@ describe('MediaCard', () => {
     proxyServiceMocks.canGenerateProxy.mockReturnValue(true)
     proxyServiceMocks.deleteProxy.mockResolvedValue(undefined)
     mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined)
+    subtitleSidecarServiceMocks.extractEmbeddedSubtitlesAsCaptions.mockResolvedValue({
+      insertedItemCount: 2,
+      cueCount: 2,
+      trackLabel: 'eng',
+    })
+    subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions.mockResolvedValue({
+      insertedItemCount: 2,
+      cueCount: 2,
+      trackLabel: 'eng',
+    })
   })
 
   it('uses the shared action menu to generate a proxy', async () => {
@@ -355,6 +387,115 @@ describe('MediaCard', () => {
       type: 'success',
       message: 'Transcript deleted for "clip.mp4"',
     })
+  })
+
+  it('extracts embedded subtitles from the media action menu', async () => {
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(
+        subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
+      ).toHaveBeenCalledWith(media, expect.any(Blob))
+    })
+    expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+      type: 'success',
+      message: 'Extracted 2 captions from "movie.mkv"',
+    })
+  })
+
+  it('uses the live file handle from the clicked media when extracting embedded subtitles', async () => {
+    const file = new File(['video-data'], 'movie.mkv', { type: 'video/x-matroska' })
+    const requestPermission = vi.fn(async () => 'granted' as PermissionState)
+    const getFile = vi.fn(async () => file)
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+        getFile,
+      } as unknown as FileSystemFileHandle,
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(
+        subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
+      ).toHaveBeenCalledWith(media, file)
+    })
+    expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
+    expect(getFile).toHaveBeenCalledTimes(1)
+    expect(mediaLibraryServiceMocks.getMediaFile).not.toHaveBeenCalled()
+  })
+
+  it('requests file permission before extracting embedded subtitles', async () => {
+    const requestPermission = vi.fn(async () => 'denied' as PermissionState)
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+      } as unknown as FileSystemFileHandle,
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
+    })
+    expect(subtitleSidecarServiceMocks.extractEmbeddedSubtitlesAsCaptions).not.toHaveBeenCalled()
+    expect(
+      subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
+    ).not.toHaveBeenCalled()
+    expect(mediaStoreState.markMediaBroken).toHaveBeenCalledWith('media-1', {
+      mediaId: 'media-1',
+      fileName: 'movie.mkv',
+      errorType: 'permission_denied',
+    })
+    expect(mediaStoreState.openMissingMediaDialog).toHaveBeenCalledTimes(1)
+    expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+      type: 'error',
+      message: 'FreeCut needs permission to read "movie.mkv" before extracting subtitles.',
+    })
+  })
+
+  it('does not mark media missing when embedded subtitle extraction hits NotReadableError', async () => {
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+    })
+    subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions.mockRejectedValue({
+      name: 'NotReadableError',
+      message:
+        'The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired.',
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+        type: 'error',
+        message:
+          'FreeCut could not read "movie.mkv" right now. Close any app using it and try again.',
+      })
+    })
+    expect(mediaStoreState.markMediaBroken).not.toHaveBeenCalled()
+    expect(mediaStoreState.openMissingMediaDialog).not.toHaveBeenCalled()
   })
 
   it('uses the shared action menu to relink broken media in grid view', () => {

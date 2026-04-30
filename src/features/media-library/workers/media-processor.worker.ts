@@ -12,6 +12,9 @@
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaProcessorWorker')
+const KEYFRAME_EXTRACTION_TIMEOUT_MS = 8_000
+const KEYFRAME_EXTRACTION_MAX_PACKETS = 5_000
+const THUMBNAIL_TIMEOUT_MS = 12_000
 
 // Type definitions for mediabunny module
 interface MediabunnyVideoTrack {
@@ -162,6 +165,21 @@ async function getMediabunny(): Promise<MediabunnyModule> {
   return mediabunnyModule
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out`))
+    }, timeoutMs)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId)
+    }
+  })
+}
+
 /**
  * Extract keyframe timestamps using mediabunny's EncodedPacketSink.
  *
@@ -183,11 +201,32 @@ async function extractKeyframeTimestamps(
     const timestamps: number[] = []
     const metadataOnly = { metadataOnly: true } as const
 
-    // Jump keyframe-to-keyframe — skips all delta packets entirely
-    let packet = await sink.getFirstKeyPacket(metadataOnly)
-    while (packet) {
+    const startedAt = performance.now()
+
+    // Jump keyframe-to-keyframe — skips all delta packets entirely. This is
+    // useful for preview seeks but must stay best-effort so long GOP indexes
+    // or unusual containers never block import.
+    let packet = await withTimeout(
+      sink.getFirstKeyPacket(metadataOnly),
+      KEYFRAME_EXTRACTION_TIMEOUT_MS,
+      'Keyframe extraction',
+    )
+    while (packet && timestamps.length < KEYFRAME_EXTRACTION_MAX_PACKETS) {
       timestamps.push(packet.timestamp)
-      packet = await sink.getNextKeyPacket(packet, metadataOnly)
+      if (performance.now() - startedAt > KEYFRAME_EXTRACTION_TIMEOUT_MS) {
+        logger.warn('Keyframe extraction reached time budget; using partial index')
+        break
+      }
+
+      packet = await withTimeout(
+        sink.getNextKeyPacket(packet, metadataOnly),
+        KEYFRAME_EXTRACTION_TIMEOUT_MS,
+        'Keyframe extraction',
+      )
+    }
+
+    if (timestamps.length >= KEYFRAME_EXTRACTION_MAX_PACKETS) {
+      logger.warn('Keyframe extraction reached packet budget; using partial index')
     }
 
     if (timestamps.length === 0) {
@@ -500,11 +539,10 @@ async function processMedia(
     metadata = await extractVideoMetadata(file)
     if (generateThumbnail) {
       try {
-        thumbnail = await generateVideoThumbnail(
-          file,
-          thumbnailMaxSize,
-          thumbnailQuality,
-          thumbnailTimestamp,
+        thumbnail = await withTimeout(
+          generateVideoThumbnail(file, thumbnailMaxSize, thumbnailQuality, thumbnailTimestamp),
+          THUMBNAIL_TIMEOUT_MS,
+          'Video thumbnail generation',
         )
       } catch (err) {
         logger.warn('Failed to generate video thumbnail:', err)

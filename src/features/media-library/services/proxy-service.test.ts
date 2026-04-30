@@ -198,6 +198,60 @@ describe('proxyService.loadExistingProxies', () => {
     expect(removeEntry).toHaveBeenCalledWith('proxy-video-1', { recursive: true })
   })
 
+  it('does not surface read-only OPFS cleanup failures as proxy errors', async () => {
+    const cleanupError = new DOMException(
+      'An attempt was made to modify an object where modifications are not allowed.',
+      'NoModificationAllowedError',
+    )
+    const removeEntry = vi.fn(async () => {
+      throw cleanupError
+    })
+    const proxyDirectory = createDirectoryHandle({
+      files: {
+        'meta.json': createJsonFile({
+          version: 4,
+          width: 960,
+          height: 540,
+          sourceWidth: 3840,
+          sourceHeight: 2160,
+          status: 'generating',
+          createdAt: 1,
+        }),
+      },
+    })
+    const proxyRoot = createDirectoryHandle({
+      directories: {
+        'proxy-video-readonly': proxyDirectory,
+      },
+      onRemoveEntry: removeEntry,
+    })
+    const root = createDirectoryHandle({
+      directories: {
+        proxies: proxyRoot,
+      },
+    })
+
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        getDirectory: vi.fn().mockResolvedValue(root),
+      },
+    })
+
+    const { proxyService } = await import('./proxy-service')
+    proxyService.setProxyKey('video-readonly', 'proxy-video-readonly')
+
+    await expect(proxyService.loadExistingProxies(['video-readonly'])).resolves.toEqual([
+      'video-readonly',
+    ])
+    expect(removeEntry).toHaveBeenCalledWith('proxy-video-readonly', { recursive: true })
+    expect(loggerMocks.error).not.toHaveBeenCalled()
+    expect(loggerMocks.warn).toHaveBeenCalledWith(
+      'Could not remove interrupted proxy for proxy-video-readonly; cleanup will be retried later.',
+      cleanupError,
+    )
+  })
+
   it('cleans failed proxies without auto-retrying them on startup', async () => {
     const removeEntry = vi.fn(async () => undefined)
     const proxyDirectory = createDirectoryHandle({

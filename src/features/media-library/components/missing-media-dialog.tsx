@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Link2Off, RefreshCw, FolderOpen, X, AlertTriangle, Search, Folder } from 'lucide-react'
 import { useMediaLibraryStore } from '../stores/media-library-store'
+import { mediaLibraryService } from '../services/media-library-service'
 import { useProjectStore } from '@/features/media-library/deps/projects'
 import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker'
 import { getProjectBrokenMediaInfo } from '@/features/media-library/utils/broken-media'
@@ -133,21 +134,30 @@ export function MissingMediaDialog() {
     }
   }, [showDialog])
 
-  const handleRelinkSingle = async (mediaId: string) => {
-    setRelinking(mediaId)
+  const handleRestoreSingle = async (item: (typeof brokenItems)[number]) => {
+    setRelinking(item.mediaId)
     try {
+      if (item.errorType === 'permission_denied') {
+        const granted = await mediaLibraryService.requestPermission(item.mediaId)
+        if (granted) {
+          markMediaHealthy(item.mediaId)
+          setRelinkedIds((prev) => new Set([...prev, item.mediaId]))
+        }
+        return
+      }
+
       const handles = await showMediaFilePicker({ multiple: false })
 
       const handle = handles[0]
       if (!handle) return
 
-      const success = await relinkMedia(mediaId, handle)
+      const success = await relinkMedia(item.mediaId, handle)
       if (success) {
-        setRelinkedIds((prev) => new Set([...prev, mediaId]))
+        setRelinkedIds((prev) => new Set([...prev, item.mediaId]))
       }
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
-        logger.error('Relink failed:', error)
+        logger.error('Media restore failed:', error)
       }
     } finally {
       setRelinking(null)
@@ -183,14 +193,20 @@ export function MissingMediaDialog() {
     closeDialog()
   }
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setRelinkedIds(new Set())
     closeDialog()
-  }
+  }, [closeDialog])
 
-  // Auto-close if no more broken items
+  // Auto-close if no more broken items. Keep this out of render so React
+  // doesn't see a store update while MissingMediaDialog is rendering.
+  useEffect(() => {
+    if (showDialog && brokenItems.length === 0) {
+      handleClose()
+    }
+  }, [showDialog, brokenItems.length, handleClose])
+
   if (showDialog && brokenItems.length === 0) {
-    handleClose()
     return null
   }
 
@@ -284,7 +300,7 @@ export function MissingMediaDialog() {
                   <p className="text-sm font-medium truncate">{item.fileName}</p>
                   <p className="text-xs text-muted-foreground">
                     {item.errorType === 'permission_denied'
-                      ? 'Permission expired - relink to restore'
+                      ? 'Permission expired - grant access to restore'
                       : 'File moved or deleted'}
                   </p>
                 </div>
@@ -292,7 +308,7 @@ export function MissingMediaDialog() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => handleRelinkSingle(item.mediaId)}
+                  onClick={() => handleRestoreSingle(item)}
                   disabled={relinking === item.mediaId}
                 >
                   {relinking === item.mediaId ? (
@@ -300,7 +316,7 @@ export function MissingMediaDialog() {
                   ) : (
                     <>
                       <Search className="w-3 h-3 mr-1" />
-                      Locate
+                      {item.errorType === 'permission_denied' ? 'Grant Access' : 'Locate'}
                     </>
                   )}
                 </Button>

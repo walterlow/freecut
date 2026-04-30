@@ -45,6 +45,13 @@ function getProxyOpfsPath(proxyKey: string): string {
   return `${PROXY_DIR}/${proxyKey}/proxy.mp4`
 }
 
+function isBestEffortProxyCleanupError(error: unknown): boolean {
+  if (!(error instanceof DOMException)) {
+    return false
+  }
+  return error.name === 'NoModificationAllowedError' || error.name === 'NotAllowedError'
+}
+
 interface ProxyMetadata {
   version?: number
   width: number
@@ -386,7 +393,14 @@ class ProxyService {
           await proxyRoot.removeEntry(proxyKey, { recursive: true })
           logger.debug(`Removed ${reason} proxy for ${proxyKey}`)
         } catch (error) {
-          logger.error(`Failed to remove ${reason} proxy for ${proxyKey}:`, error)
+          if (isBestEffortProxyCleanupError(error)) {
+            logger.warn(
+              `Could not remove ${reason} proxy for ${proxyKey}; cleanup will be retried later.`,
+              error,
+            )
+            return
+          }
+          logger.warn(`Failed to remove ${reason} proxy for ${proxyKey}:`, error)
         }
       }
 

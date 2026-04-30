@@ -22,7 +22,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 import type { MediaMetadata } from '@/types/storage'
-import { mediaLibraryService } from '../services/media-library-service'
+import { FileAccessError, mediaLibraryService } from '../services/media-library-service'
 import { mediaAnalysisService } from '../services/media-analysis-service'
 import { getMediaType, formatDuration } from '../utils/validation'
 import { MediaInfoPopover } from './media-info-popover'
@@ -32,6 +32,7 @@ import { CARD_GRID_BASE, CARD_LIST_BASE, CARD_PERF_STYLE } from './card-styles'
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache'
 import { proxyService } from '../services/proxy-service'
 import { mediaTranscriptionService } from '../services/media-transcription-service'
+import { subtitleSidecarService } from '../services/subtitle-sidecar-service'
 import { useEditorStore } from '@/app/state/editor'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useSourcePlayerStore } from '@/shared/state/source-player'
@@ -67,17 +68,111 @@ interface MediaCardActionMenuProps {
   isTranscribable: boolean
   isTranscribing: boolean
   hasTranscript: boolean
+  canExtractEmbeddedSubtitles: boolean
+  isExtractingEmbeddedSubtitles: boolean
   isTaggable: boolean
   isTagging: boolean
   onGenerateProxy: (event: React.MouseEvent) => void | Promise<void>
   onDeleteProxy: (event: React.MouseEvent) => Promise<void>
   onGenerateTranscript: (event: React.MouseEvent) => void | Promise<void>
   onDeleteTranscript: (event: React.MouseEvent) => Promise<void>
+  onExtractEmbeddedSubtitles: (event: React.MouseEvent) => void | Promise<void>
   onAnalyzeWithAI: (event: React.MouseEvent) => void
   onDelete: (event: React.MouseEvent) => void
 }
 
 const DEFAULT_CAPTION_SELECTION_DURATION_SEC = 3
+
+function canExtractEmbeddedSubtitlesFromMedia(media: MediaMetadata): boolean {
+  const fileName = media.fileName.toLowerCase()
+  const isSupportedContainer =
+    media.mimeType === 'video/x-matroska' ||
+    media.mimeType === 'video/matroska' ||
+    media.mimeType === 'video/webm' ||
+    fileName.endsWith('.mkv') ||
+    fileName.endsWith('.webm')
+
+  return (
+    isSupportedContainer &&
+    (getMediaType(media.mimeType) === 'video' ||
+      fileName.endsWith('.mkv') ||
+      fileName.endsWith('.webm'))
+  )
+}
+
+async function requestSubtitleSourcePermission(media: MediaMetadata): Promise<boolean> {
+  if (media.storageType !== 'handle' || !media.fileHandle) {
+    return true
+  }
+
+  try {
+    return (await media.fileHandle.requestPermission({ mode: 'read' })) === 'granted'
+  } catch {
+    return false
+  }
+}
+
+async function getSubtitleSourceBlob(media: MediaMetadata): Promise<Blob> {
+  if (media.storageType === 'handle' && media.fileHandle) {
+    return media.fileHandle.getFile()
+  }
+
+  const blob = await mediaLibraryService.getMediaFile(media.id)
+  if (!blob) {
+    throw new FileAccessError(`Media file "${media.fileName}" is unavailable.`, 'file_missing')
+  }
+  return blob
+}
+
+function markSubtitleSourceUnreadable(
+  media: MediaMetadata,
+  errorType: 'permission_denied' | 'file_missing',
+) {
+  const store = useMediaLibraryStore.getState()
+  store.markMediaBroken(media.id, {
+    mediaId: media.id,
+    fileName: media.fileName,
+    errorType,
+  })
+  store.openMissingMediaDialog()
+}
+
+function getErrorName(error: unknown): string | null {
+  return typeof error === 'object' && error !== null && 'name' in error
+    ? String((error as { name?: unknown }).name)
+    : null
+}
+
+function getSubtitleExtractionErrorMessage(error: unknown, media: MediaMetadata): string {
+  if (error instanceof FileAccessError) {
+    if (error.type === 'permission_denied') {
+      markSubtitleSourceUnreadable(media, 'permission_denied')
+      return `FreeCut needs permission to read "${media.fileName}" before extracting subtitles.`
+    }
+    if (error.type === 'file_missing') {
+      markSubtitleSourceUnreadable(media, 'file_missing')
+      return `FreeCut could not find "${media.fileName}". Relink the file and try again.`
+    }
+    return `FreeCut could not read "${media.fileName}" right now. Close any app using it and try again.`
+  }
+
+  const errorName = getErrorName(error)
+  if (errorName) {
+    if (errorName === 'NotAllowedError' || errorName === 'SecurityError') {
+      markSubtitleSourceUnreadable(media, 'permission_denied')
+      return `FreeCut needs permission to read "${media.fileName}" before extracting subtitles.`
+    }
+    if (errorName === 'NotFoundError') {
+      markSubtitleSourceUnreadable(media, 'file_missing')
+      return `FreeCut could not find "${media.fileName}". Relink the file and try again.`
+    }
+    if (errorName === 'NotReadableError') {
+      return `FreeCut could not read "${media.fileName}" right now. Close any app using it and try again.`
+    }
+  }
+
+  return error instanceof Error ? error.message : 'Failed to extract embedded subtitles'
+}
 
 function MediaCardActionMenuItems({
   isBroken,
@@ -88,12 +183,15 @@ function MediaCardActionMenuItems({
   isTranscribable,
   isTranscribing,
   hasTranscript,
+  canExtractEmbeddedSubtitles,
+  isExtractingEmbeddedSubtitles,
   isTaggable,
   isTagging,
   onGenerateProxy,
   onDeleteProxy,
   onGenerateTranscript,
   onDeleteTranscript,
+  onExtractEmbeddedSubtitles,
   onAnalyzeWithAI,
   onDelete,
 }: MediaCardActionMenuProps) {
@@ -103,6 +201,7 @@ function MediaCardActionMenuItems({
   const canShowGenerateTranscript = isTranscribable && !isBroken && !isTranscribing
   const canShowDeleteTranscript = isTranscribable && !isBroken && hasTranscript && !isTranscribing
   const showTranscriptGroup = canShowGenerateTranscript || canShowDeleteTranscript
+  const showEmbeddedSubtitleGroup = canExtractEmbeddedSubtitles && !isBroken
   const showAiGroup = isTaggable && !isBroken && !isTagging
 
   const groups: ReactNode[] = []
@@ -167,6 +266,25 @@ function MediaCardActionMenuItems({
             Delete Transcript
           </ContextMenuItem>
         )}
+      </Fragment>,
+    )
+  }
+
+  if (showEmbeddedSubtitleGroup) {
+    groups.push(
+      <Fragment key="embedded-subtitles">
+        <ContextMenuLabel>Captions</ContextMenuLabel>
+        <ContextMenuItem
+          onClick={onExtractEmbeddedSubtitles}
+          disabled={isExtractingEmbeddedSubtitles}
+        >
+          {isExtractingEmbeddedSubtitles ? (
+            <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+          ) : (
+            <FileText className="w-3 h-3 mr-2" />
+          )}
+          Extract Embedded Subtitles
+        </ContextMenuItem>
       </Fragment>,
     )
   }
@@ -250,6 +368,7 @@ export const MediaCard = memo(function MediaCard({
   const isAudio = mediaType === 'audio' && !isBroken && !isImporting
   const [transcribeDialogOpen, setTranscribeDialogOpen] = useState(false)
   const [transcribeErrorMessage, setTranscribeErrorMessage] = useState<string | null>(null)
+  const [isExtractingEmbeddedSubtitles, setIsExtractingEmbeddedSubtitles] = useState(false)
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -509,6 +628,65 @@ export const MediaCard = memo(function MediaCard({
             : `Failed to delete ${failures} of ${targets.length} transcripts`,
       })
     }
+  }
+
+  const handleExtractEmbeddedSubtitles = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const targets = getTargetMediaItems().filter(canExtractEmbeddedSubtitlesFromMedia)
+    const store = useMediaLibraryStore.getState()
+    if (targets.length === 0) {
+      store.showNotification({
+        type: 'error',
+        message: 'Choose an MKV or WebM video with embedded text subtitles.',
+      })
+      return
+    }
+
+    setIsExtractingEmbeddedSubtitles(true)
+    let succeeded = 0
+    let insertedItems = 0
+    let lastErrorMessage: string | null = null
+
+    try {
+      for (const target of targets) {
+        try {
+          const hasPermission = await requestSubtitleSourcePermission(target)
+          if (!hasPermission) {
+            markSubtitleSourceUnreadable(target, 'permission_denied')
+            lastErrorMessage = `FreeCut needs permission to read "${target.fileName}" before extracting subtitles.`
+            continue
+          }
+
+          const sourceBlob = await getSubtitleSourceBlob(target)
+          const result = await subtitleSidecarService.extractEmbeddedSubtitlesFromBlobAsCaptions(
+            target,
+            sourceBlob,
+          )
+          insertedItems += result.insertedItemCount
+          succeeded += 1
+        } catch (error) {
+          lastErrorMessage = getSubtitleExtractionErrorMessage(error, target)
+        }
+      }
+    } finally {
+      setIsExtractingEmbeddedSubtitles(false)
+    }
+
+    if (succeeded > 0) {
+      store.showNotification({
+        type: 'success',
+        message:
+          targets.length === 1
+            ? `Extracted ${insertedItems} captions from "${targets[0]!.fileName}"`
+            : `Extracted embedded subtitles from ${succeeded} media files`,
+      })
+      return
+    }
+
+    store.showNotification({
+      type: 'error',
+      message: lastErrorMessage ?? 'Failed to extract embedded subtitles',
+    })
   }
 
   const handleAnalyzeWithAI = useCallback(
@@ -872,12 +1050,15 @@ export const MediaCard = memo(function MediaCard({
       isTranscribable={isTranscribable}
       isTranscribing={isTranscribing}
       hasTranscript={hasTranscript}
+      canExtractEmbeddedSubtitles={getTargetMediaItems().some(canExtractEmbeddedSubtitlesFromMedia)}
+      isExtractingEmbeddedSubtitles={isExtractingEmbeddedSubtitles}
       isTaggable={isTaggable}
       isTagging={isTagging}
       onGenerateProxy={handleGenerateProxy}
       onDeleteProxy={handleDeleteProxy}
       onGenerateTranscript={handleOpenTranscribeDialog}
       onDeleteTranscript={handleDeleteTranscript}
+      onExtractEmbeddedSubtitles={handleExtractEmbeddedSubtitles}
       onAnalyzeWithAI={handleAnalyzeWithAI}
       onDelete={handleDelete}
     />
