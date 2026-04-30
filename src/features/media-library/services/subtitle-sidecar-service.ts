@@ -25,6 +25,7 @@ import {
   buildSubtitleSegmentForClip,
   buildSubtitleTextItems,
   buildSubtitleTextItemsForClip,
+  consolidateCaptionTextItemsToSegments,
   findCaptionTargetClipsForMedia,
   findCompatibleCaptionTrackForRanges,
 } from '../utils/caption-items'
@@ -323,6 +324,36 @@ class SubtitleSidecarService {
     timeline.addItems(placedSegments)
     useSelectionStore.getState().selectItems(placedSegments.map((s) => s.id))
     return placedSegments.length
+  }
+
+  /**
+   * One-shot migration: collapse all per-cue caption text items for the
+   * given clip (or every clip, if no clipId is provided) into a single
+   * {@link SubtitleSegmentItem} per clip group.
+   *
+   * Returns the number of segments created and the total cue count packed
+   * into them. Caller-side undo/redo is handled by the timeline command
+   * boundary that wraps the addItems/removeItems pair.
+   */
+  consolidatePerCueCaptionsToSegments(options: { clipId?: string } = {}): {
+    segmentsCreated: number
+    cuesConsolidated: number
+  } {
+    const timeline = useTimelineStore.getState()
+    const { segments, consumedItemIds } = consolidateCaptionTextItemsToSegments(
+      timeline.items,
+      timeline.fps,
+      { onlyClipId: options.clipId },
+    )
+    if (segments.length === 0) return { segmentsCreated: 0, cuesConsolidated: 0 }
+
+    timeline.removeItems(consumedItemIds)
+    timeline.addItems(segments)
+    useSelectionStore.getState().selectItems(segments.map((s) => s.id))
+    return {
+      segmentsCreated: segments.length,
+      cuesConsolidated: segments.reduce((sum, s) => sum + s.cues.length, 0),
+    }
   }
 
   exportSubtitleText(options: ExportSubtitleOptions): { text: string; cueCount: number } {

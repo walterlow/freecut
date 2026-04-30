@@ -897,3 +897,119 @@ export function buildSubtitleSegmentForClip(
     ...styleTemplate,
   }
 }
+
+/**
+ * Group caption text items by their `captionSource.clipId` and produce one
+ * {@link SubtitleSegmentItem} per clip — used for the "consolidate per-cue
+ * captions into a segment" migration.
+ *
+ * Reads each text item's `from`/`durationInFrames` (in timeline frames),
+ * derives the segment's `from` from the earliest caption, and stores cue
+ * times segment-relative (in seconds) so subsequent splits/trims work.
+ *
+ * Returns:
+ *   - `segments`: one {@link SubtitleSegmentItem} per matched clip group
+ *   - `consumedItemIds`: text-item ids that should be removed by the caller
+ */
+export function consolidateCaptionTextItemsToSegments(
+  items: readonly TimelineItem[],
+  timelineFps: number,
+  options: { onlyClipId?: string } = {},
+): {
+  segments: import('@/types/timeline').SubtitleSegmentItem[]
+  consumedItemIds: string[]
+} {
+  const captionItems = items.filter(
+    (item): item is TextItem & { captionSource: GeneratedCaptionSource } =>
+      item.type === 'text' &&
+      (item.captionSource?.type === 'embedded-subtitles' ||
+        item.captionSource?.type === 'subtitle-import') &&
+      (options.onlyClipId === undefined || item.captionSource.clipId === options.onlyClipId),
+  )
+  if (captionItems.length === 0) return { segments: [], consumedItemIds: [] }
+
+  const byClip = new Map<string, Array<TextItem & { captionSource: GeneratedCaptionSource }>>()
+  for (const item of captionItems) {
+    const clipId = item.captionSource.clipId
+    if (clipId.length === 0) continue
+    const list = byClip.get(clipId) ?? []
+    list.push(item)
+    byClip.set(clipId, list)
+  }
+  if (byClip.size === 0) return { segments: [], consumedItemIds: [] }
+
+  const segments: import('@/types/timeline').SubtitleSegmentItem[] = []
+  const consumedItemIds: string[] = []
+
+  for (const [clipId, group] of byClip) {
+    const sorted = [...group].sort((a, b) => a.from - b.from)
+    const first = sorted[0]!
+    const last = sorted[sorted.length - 1]!
+    const segmentFrom = first.from
+    const segmentEnd = last.from + last.durationInFrames
+
+    const sampleSource = first.captionSource
+    const segmentSource: import('@/types/timeline').SubtitleSegmentSource =
+      sampleSource.type === 'embedded-subtitles'
+        ? {
+            type: 'embedded-subtitles',
+            mediaId: sampleSource.mediaId,
+            clipId,
+            // Original text-item captionSource doesn't carry the source track
+            // metadata. Mark trackNumber: 0 so consumers can tell this came
+            // from a consolidation (vs a fresh extraction).
+            trackNumber: 0,
+            language: undefined,
+            trackName: undefined,
+            codecId: undefined,
+            importedAt: sampleSource.importedAt ?? Date.now(),
+          }
+        : {
+            type: 'subtitle-import',
+            fileName: sampleSource.fileName ?? 'consolidated.srt',
+            format: sampleSource.format ?? 'srt',
+            importedAt: sampleSource.importedAt ?? Date.now(),
+          }
+
+    const cues = sorted.map((item) => ({
+      id: item.id,
+      startSeconds: (item.from - segmentFrom) / timelineFps,
+      endSeconds: (item.from + item.durationInFrames - segmentFrom) / timelineFps,
+      text: item.text,
+    }))
+
+    // Style: pick up the first item's typography so consolidation is visually
+    // continuous with the per-cue version it's replacing.
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: crypto.randomUUID(),
+      type: 'subtitle',
+      trackId: first.trackId,
+      from: segmentFrom,
+      durationInFrames: Math.max(1, segmentEnd - segmentFrom),
+      label: first.label,
+      mediaId: first.mediaId,
+      source: segmentSource,
+      cues,
+      fontSize: first.fontSize,
+      fontFamily: first.fontFamily,
+      fontWeight: first.fontWeight,
+      fontStyle: first.fontStyle,
+      underline: first.underline,
+      color: first.color,
+      backgroundColor: first.backgroundColor,
+      backgroundRadius: first.backgroundRadius,
+      textAlign: first.textAlign,
+      verticalAlign: first.verticalAlign,
+      lineHeight: first.lineHeight,
+      letterSpacing: first.letterSpacing,
+      textPadding: first.textPadding,
+      textShadow: first.textShadow,
+      stroke: first.stroke,
+      transform: first.transform,
+    }
+    segments.push(segment)
+    for (const item of sorted) consumedItemIds.push(item.id)
+  }
+
+  return { segments, consumedItemIds }
+}

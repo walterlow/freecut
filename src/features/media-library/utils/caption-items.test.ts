@@ -74,6 +74,7 @@ import {
   buildSubtitleTextItemsForClip,
   buildCaptionTrack,
   buildCaptionTrackAbove,
+  consolidateCaptionTextItemsToSegments,
   findCaptionTargetClipsForMedia,
   findGeneratedCaptionItemsForClip,
   findReplaceableCaptionItemsForClip,
@@ -563,6 +564,88 @@ describe('caption-items', () => {
     // Linked pair contributes only one entry (the video); free clips kept;
     // sorted by `from`.
     expect(targets.map((t) => t.id)).toEqual(['video-clip', 'video-clip-2'])
+  })
+
+  it('consolidates per-cue caption text items into one subtitle segment per clip', () => {
+    const items: TimelineItem[] = [
+      {
+        id: 'cap-1',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 100,
+        durationInFrames: 30,
+        label: 'Hello',
+        text: 'Hello',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: {
+          type: 'embedded-subtitles',
+          mediaId: 'media-1',
+          clipId: 'clip-A',
+          importedAt: 1,
+        },
+      },
+      {
+        id: 'cap-2',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 160,
+        durationInFrames: 30,
+        label: 'World',
+        text: 'World',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: {
+          type: 'embedded-subtitles',
+          mediaId: 'media-1',
+          clipId: 'clip-A',
+          importedAt: 1,
+        },
+      },
+      // Different clip — should produce its own segment.
+      {
+        id: 'cap-3',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 500,
+        durationInFrames: 30,
+        label: 'Solo',
+        text: 'Solo',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: {
+          type: 'embedded-subtitles',
+          mediaId: 'media-1',
+          clipId: 'clip-B',
+          importedAt: 1,
+        },
+      },
+      // Non-caption text — must be left alone.
+      {
+        id: 'manual',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 0,
+        durationInFrames: 30,
+        label: 'Manual title',
+        text: 'Manual title',
+        color: '#fff',
+      },
+    ]
+
+    const { segments, consumedItemIds } = consolidateCaptionTextItemsToSegments(items, 30)
+
+    expect(segments).toHaveLength(2)
+    expect(consumedItemIds.sort()).toEqual(['cap-1', 'cap-2', 'cap-3'])
+    const clipASegment = segments.find(
+      (s) => s.source.type === 'embedded-subtitles' && s.source.clipId === 'clip-A',
+    )!
+    expect(clipASegment.from).toBe(100)
+    expect(clipASegment.durationInFrames).toBe(160 + 30 - 100)
+    expect(clipASegment.cues.map((c) => c.text)).toEqual(['Hello', 'World'])
+    // Cue times are segment-relative.
+    expect(clipASegment.cues[0]).toMatchObject({ startSeconds: 0 })
+    expect(clipASegment.cues[1]?.startSeconds).toBeCloseTo((160 - 100) / 30)
   })
 
   it('falls back to legacy generated caption detection when source metadata is missing', () => {

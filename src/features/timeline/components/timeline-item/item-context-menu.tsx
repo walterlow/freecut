@@ -59,6 +59,9 @@ interface ItemContextMenuProps {
   /** Whether this clip's media has extractable embedded text subtitles (MKV/WebM). */
   canExtractEmbeddedSubtitles?: boolean
   onExtractEmbeddedSubtitles?: () => void
+  /** True when there are per-cue caption text items linked to this clip. */
+  canConsolidateCaptionsToSegment?: boolean
+  onConsolidateCaptionsToSegment?: () => void
   /** Whether this item is a composition item (enables enter/dissolve options) */
   isCompositionItem?: boolean
   onEnterComposition?: () => void
@@ -119,6 +122,8 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   onApplyCaptionsFromTranscript,
   canExtractEmbeddedSubtitles,
   onExtractEmbeddedSubtitles,
+  canConsolidateCaptionsToSegment,
+  onConsolidateCaptionsToSegment,
   isCompositionItem,
   onEnterComposition,
   onDissolveComposition,
@@ -183,6 +188,8 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       onApplyCaptionsFromTranscript={onApplyCaptionsFromTranscript}
       canExtractEmbeddedSubtitles={canExtractEmbeddedSubtitles}
       onExtractEmbeddedSubtitles={onExtractEmbeddedSubtitles}
+      canConsolidateCaptionsToSegment={canConsolidateCaptionsToSegment}
+      onConsolidateCaptionsToSegment={onConsolidateCaptionsToSegment}
       isCompositionItem={isCompositionItem}
       onEnterComposition={onEnterComposition}
       onDissolveComposition={onDissolveComposition}
@@ -265,6 +272,8 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   onApplyCaptionsFromTranscript,
   canExtractEmbeddedSubtitles,
   onExtractEmbeddedSubtitles,
+  canConsolidateCaptionsToSegment,
+  onConsolidateCaptionsToSegment,
   isCompositionItem,
   onEnterComposition,
   onDissolveComposition,
@@ -477,6 +486,15 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           <>
             <ContextMenuItem onClick={onExtractEmbeddedSubtitles}>
               Extract Embedded Subtitles…
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        {canConsolidateCaptionsToSegment && onConsolidateCaptionsToSegment && (
+          <>
+            <ContextMenuItem onClick={onConsolidateCaptionsToSegment}>
+              Consolidate Captions to Segment
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>

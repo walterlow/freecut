@@ -448,6 +448,45 @@ export const TimelineItem = memo(
       }
     }, [mediaForItem])
 
+    // Per-cue caption consolidation — only meaningful when this clip has at
+    // least one generated caption text item linked to it.
+    const hasConsolidatablePerCueCaptions = useTimelineStore(
+      useCallback(
+        (s) =>
+          s.items.some(
+            (other) =>
+              other.type === 'text' &&
+              (other.captionSource?.type === 'embedded-subtitles' ||
+                other.captionSource?.type === 'subtitle-import') &&
+              other.captionSource.clipId === item.id,
+          ),
+        [item.id],
+      ),
+    )
+    const handleConsolidateCaptionsToSegment = useCallback(async () => {
+      const mediaStore = useMediaLibraryStore.getState()
+      try {
+        const { subtitleSidecarService } =
+          await import('@/features/timeline/deps/subtitle-sidecar-service')
+        const result = subtitleSidecarService.consolidatePerCueCaptionsToSegments({
+          clipId: item.id,
+        })
+        mediaStore.showNotification?.({
+          type: 'success',
+          message:
+            result.segmentsCreated > 0
+              ? `Consolidated ${result.cuesConsolidated} caption${result.cuesConsolidated === 1 ? '' : 's'} into ${result.segmentsCreated} segment${result.segmentsCreated === 1 ? '' : 's'}.`
+              : 'No per-cue captions found for this clip.',
+        })
+      } catch (error) {
+        mediaStore.showNotification?.({
+          type: 'error',
+          message:
+            error instanceof Error ? error.message : 'Failed to consolidate captions to segment.',
+        })
+      }
+    }, [item.id])
+
     // Use refs for actions to avoid selector re-renders - read from store in callbacks
     const activeTool = useSelectionStore((s) => s.activeTool)
     const isAnyGestureActive = useSelectionStore((s) => !!s.dragState?.isDragging)
@@ -3200,6 +3239,10 @@ export const TimelineItem = memo(
           canExtractEmbeddedSubtitles={canExtractEmbeddedSubtitles}
           onExtractEmbeddedSubtitles={
             canExtractEmbeddedSubtitles ? handleExtractEmbeddedSubtitles : undefined
+          }
+          canConsolidateCaptionsToSegment={hasConsolidatablePerCueCaptions}
+          onConsolidateCaptionsToSegment={
+            hasConsolidatablePerCueCaptions ? handleConsolidateCaptionsToSegment : undefined
           }
           isCompositionItem={isCompositionItem}
           onEnterComposition={handleEnterComposition}
