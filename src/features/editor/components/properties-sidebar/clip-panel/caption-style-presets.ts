@@ -3,15 +3,21 @@
  *
  * Each preset is a *patch* of style fields shared between {@link TextItem}
  * and {@link SubtitleSegmentItem}. Applying a preset overlays these onto
- * the target item(s) without disturbing fields not present in the patch
- * (so a user's custom `transform` size keeps working unless the preset
- * explicitly opts to override it).
+ * the target item(s).
+ *
+ * `layout` carries canvas-relative tweaks (font size, vertical position,
+ * box width). They're stored as ratios of the canvas so the same preset
+ * looks right on a 720p edit, a 1080p edit, and a vertical 9:16 edit
+ * without per-resolution tuning. Resolved into absolute pixels at apply
+ * time by `resolveCaptionStylePatch`.
  */
 
+import type { TransformProperties } from '@/types/transform'
 import type { SubtitleSegmentItem, TextItem } from '@/types/timeline'
 
 export type CaptionStylePatch = Pick<
   TextItem,
+  | 'fontSize'
   | 'fontFamily'
   | 'fontWeight'
   | 'fontStyle'
@@ -26,21 +32,32 @@ export type CaptionStylePatch = Pick<
   | 'textPadding'
   | 'textShadow'
   | 'stroke'
->
+> & { transform?: TransformProperties }
 
 export interface CaptionStylePreset {
   id: string
   label: string
   /** One-line description shown as button tooltip / muted helper text. */
   hint: string
-  patch: CaptionStylePatch
+  patch: Omit<CaptionStylePatch, 'transform' | 'fontSize'>
+  /** Canvas-relative layout overrides — see top-of-file comment. */
+  layout?: {
+    /** fontSize = round(canvasHeight * fontSizeRatio). */
+    fontSizeRatio?: number
+    /** transform.y = round(canvasHeight * yRatio). 0 = vertical center, +ve = below. */
+    yRatio?: number
+    /** transform.width = round(canvasWidth * widthRatio). */
+    widthRatio?: number
+    /** transform.height = round(canvasHeight * heightRatio). */
+    heightRatio?: number
+  }
 }
 
 export const CAPTION_STYLE_PRESETS: readonly CaptionStylePreset[] = [
   {
     id: 'netflix',
     label: 'Netflix',
-    hint: 'White type on a soft black box — high readability, neutral.',
+    hint: 'Inter on a rounded dark box, lower-third — broadcast-grade neutral.',
     patch: {
       fontFamily: 'Inter',
       fontWeight: 'semibold',
@@ -54,17 +71,18 @@ export const CAPTION_STYLE_PRESETS: readonly CaptionStylePreset[] = [
       lineHeight: 1.15,
       letterSpacing: 0,
       textPadding: 12,
-      textShadow: { offsetX: 0, offsetY: 3, blur: 10, color: 'rgba(0, 0, 0, 0.75)' },
+      textShadow: { offsetX: 0, offsetY: 2, blur: 6, color: 'rgba(0, 0, 0, 0.6)' },
       stroke: undefined,
     },
+    layout: { fontSizeRatio: 0.04, yRatio: 0.36, widthRatio: 0.7, heightRatio: 0.16 },
   },
   {
     id: 'youtube',
     label: 'YouTube',
-    hint: 'White type with a heavy soft shadow — no box, works over any footage.',
+    hint: 'Roboto with a soft drop shadow, no box — the auto-captions vibe.',
     patch: {
-      fontFamily: 'Inter',
-      fontWeight: 'semibold',
+      fontFamily: 'Roboto',
+      fontWeight: 'medium',
       fontStyle: 'normal',
       underline: false,
       color: '#ffffff',
@@ -78,13 +96,14 @@ export const CAPTION_STYLE_PRESETS: readonly CaptionStylePreset[] = [
       textShadow: { offsetX: 0, offsetY: 4, blur: 14, color: 'rgba(0, 0, 0, 0.85)' },
       stroke: undefined,
     },
+    layout: { fontSizeRatio: 0.045, yRatio: 0.34, widthRatio: 0.85, heightRatio: 0.18 },
   },
   {
     id: 'bold-yellow',
     label: 'Bold Yellow',
-    hint: 'Yellow type with a black drop shadow — classic theatrical-subtitle look.',
+    hint: 'Roboto Slab in cinema yellow with a black drop shadow — DVD-era classic.',
     patch: {
-      fontFamily: 'Inter',
+      fontFamily: 'Roboto Slab',
       fontWeight: 'bold',
       fontStyle: 'normal',
       underline: false,
@@ -93,20 +112,21 @@ export const CAPTION_STYLE_PRESETS: readonly CaptionStylePreset[] = [
       backgroundRadius: 0,
       textAlign: 'center',
       verticalAlign: 'middle',
-      lineHeight: 1.15,
+      lineHeight: 1.1,
       letterSpacing: 0,
       textPadding: 0,
-      textShadow: { offsetX: 0, offsetY: 3, blur: 6, color: 'rgba(0, 0, 0, 0.95)' },
+      textShadow: { offsetX: 0, offsetY: 3, blur: 5, color: 'rgba(0, 0, 0, 1)' },
       stroke: { width: 1.5, color: '#000000' },
     },
+    layout: { fontSizeRatio: 0.05, yRatio: 0.38, widthRatio: 0.85, heightRatio: 0.18 },
   },
   {
     id: 'minimal-stroke',
     label: 'Outlined',
-    hint: 'White type with a thin black stroke — minimal, no shadow or box.',
+    hint: 'Manrope with a hairline outline — clean, modern, no shadow.',
     patch: {
-      fontFamily: 'Inter',
-      fontWeight: 'semibold',
+      fontFamily: 'Manrope',
+      fontWeight: 'medium',
       fontStyle: 'normal',
       underline: false,
       color: '#ffffff',
@@ -118,16 +138,17 @@ export const CAPTION_STYLE_PRESETS: readonly CaptionStylePreset[] = [
       letterSpacing: 0,
       textPadding: 0,
       textShadow: undefined,
-      stroke: { width: 1.5, color: '#000000' },
+      stroke: { width: 1, color: '#000000' },
     },
+    layout: { fontSizeRatio: 0.04, yRatio: 0.34, widthRatio: 0.85, heightRatio: 0.16 },
   },
   {
     id: 'tiktok',
     label: 'TikTok',
-    hint: 'Big bold white with stroke and shadow — punchy, social-friendly.',
+    hint: 'Anton display, oversized and centered — vertical-video viral look.',
     patch: {
-      fontFamily: 'Inter',
-      fontWeight: 'bold',
+      fontFamily: 'Anton',
+      fontWeight: 'normal',
       fontStyle: 'normal',
       underline: false,
       color: '#ffffff',
@@ -135,12 +156,13 @@ export const CAPTION_STYLE_PRESETS: readonly CaptionStylePreset[] = [
       backgroundRadius: 0,
       textAlign: 'center',
       verticalAlign: 'middle',
-      lineHeight: 1.15,
-      letterSpacing: 0.5,
+      lineHeight: 1.05,
+      letterSpacing: 1,
       textPadding: 0,
-      textShadow: { offsetX: 0, offsetY: 4, blur: 10, color: 'rgba(0, 0, 0, 0.85)' },
-      stroke: { width: 2.5, color: '#000000' },
+      textShadow: { offsetX: 0, offsetY: 4, blur: 8, color: 'rgba(0, 0, 0, 0.9)' },
+      stroke: { width: 2, color: '#000000' },
     },
+    layout: { fontSizeRatio: 0.075, yRatio: 0, widthRatio: 0.9, heightRatio: 0.22 },
   },
 ] as const
 
@@ -156,6 +178,53 @@ export function detectActiveCaptionPreset(
     if (matchesPreset(item, preset.patch)) return preset
   }
   return null
+}
+
+/**
+ * Resolve a preset into a fully concrete patch for the given canvas. Layout
+ * ratios become absolute fontSize / transform values; the user's existing
+ * transform.x / rotation / opacity is preserved so applying a preset
+ * doesn't reset position tweaks the user made by hand.
+ */
+export function resolveCaptionStylePatch(
+  preset: CaptionStylePreset,
+  canvasWidth: number,
+  canvasHeight: number,
+  baseTransform?: TransformProperties,
+): CaptionStylePatch {
+  const layout = preset.layout
+  const patch: CaptionStylePatch = { ...preset.patch }
+
+  if (layout?.fontSizeRatio !== undefined) {
+    patch.fontSize = Math.max(8, Math.round(canvasHeight * layout.fontSizeRatio))
+  }
+
+  if (
+    layout &&
+    (layout.yRatio !== undefined ||
+      layout.widthRatio !== undefined ||
+      layout.heightRatio !== undefined)
+  ) {
+    patch.transform = {
+      x: baseTransform?.x ?? 0,
+      y:
+        layout.yRatio !== undefined
+          ? Math.round(canvasHeight * layout.yRatio)
+          : (baseTransform?.y ?? 0),
+      width:
+        layout.widthRatio !== undefined
+          ? Math.round(canvasWidth * layout.widthRatio)
+          : (baseTransform?.width ?? canvasWidth * 0.82),
+      height:
+        layout.heightRatio !== undefined
+          ? Math.round(canvasHeight * layout.heightRatio)
+          : (baseTransform?.height ?? canvasHeight * 0.16),
+      rotation: baseTransform?.rotation ?? 0,
+      opacity: baseTransform?.opacity ?? 1,
+    }
+  }
+
+  return patch
 }
 
 function matchesPreset(item: SubtitleSegmentItem | TextItem, patch: CaptionStylePatch): boolean {

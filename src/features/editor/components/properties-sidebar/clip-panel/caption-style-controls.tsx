@@ -9,9 +9,9 @@ import type { SubtitleSegmentItem, TextItem } from '@/types/timeline'
 
 import {
   CAPTION_STYLE_PRESETS,
-  type CaptionStylePatch,
   type CaptionStylePreset,
   detectActiveCaptionPreset,
+  resolveCaptionStylePatch,
 } from './caption-style-presets'
 
 type CaptionStylableItem = SubtitleSegmentItem | TextItem
@@ -22,6 +22,7 @@ interface CaptionStyleControlsProps {
    * but the panel handles multi-select by writing the same patch to each.
    */
   items: CaptionStylableItem[]
+  canvasWidth: number
   canvasHeight: number
 }
 
@@ -35,6 +36,7 @@ interface CaptionStyleControlsProps {
  */
 export const CaptionStyleControls = memo(function CaptionStyleControls({
   items,
+  canvasWidth,
   canvasHeight,
 }: CaptionStyleControlsProps) {
   const updateItem = useTimelineStore((s) => s.updateItem)
@@ -47,8 +49,15 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
   )
 
   const applyPreset = useCallback(
-    (preset: CaptionStylePreset) => applyPatch(preset.patch as CaptionStylePatch),
-    [applyPatch],
+    (preset: CaptionStylePreset) => {
+      // Resolve the preset's canvas-relative layout (font size, transform.y,
+      // etc.) into absolute values for THIS canvas, anchored to the
+      // first-selected item's existing transform so we preserve x/rotation.
+      const baseTransform = items[0]?.transform
+      const resolved = resolveCaptionStylePatch(preset, canvasWidth, canvasHeight, baseTransform)
+      applyPatch(resolved as Partial<CaptionStylableItem>)
+    },
+    [applyPatch, canvasHeight, canvasWidth, items],
   )
 
   // Prefer the first item as the canonical sample for displaying current

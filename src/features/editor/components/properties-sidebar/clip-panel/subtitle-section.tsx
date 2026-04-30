@@ -54,6 +54,7 @@ export const SubtitleSection = memo(function SubtitleSection({
 
   if (segments.length === 0) return null
 
+  const canvasWidth = canvas?.width ?? 1920
   const canvasHeight = canvas?.height ?? 1080
 
   if (segments.length > 1) {
@@ -63,7 +64,11 @@ export const SubtitleSection = memo(function SubtitleSection({
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Subtitles
         </h3>
-        <CaptionStyleControls items={segments} canvasHeight={canvasHeight} />
+        <CaptionStyleControls
+          items={segments}
+          canvasWidth={canvasWidth}
+          canvasHeight={canvasHeight}
+        />
         <Separator />
         <p className="text-xs text-muted-foreground">
           {segments.length} segments selected · {totalCues} cues total. Style applies to all. Select
@@ -73,16 +78,24 @@ export const SubtitleSection = memo(function SubtitleSection({
     )
   }
 
-  return <SingleSubtitleSegmentEditor segment={segments[0]!} canvasHeight={canvasHeight} />
+  return (
+    <SingleSubtitleSegmentEditor
+      segment={segments[0]!}
+      canvasWidth={canvasWidth}
+      canvasHeight={canvasHeight}
+    />
+  )
 })
 
 interface SingleSubtitleSegmentEditorProps {
   segment: SubtitleSegmentItem
+  canvasWidth: number
   canvasHeight: number
 }
 
 const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
   segment,
+  canvasWidth,
   canvasHeight,
 }: SingleSubtitleSegmentEditorProps) {
   const updateItem = useTimelineStore((s) => s.updateItem)
@@ -127,7 +140,11 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
         </p>
       </header>
 
-      <CaptionStyleControls items={styleItems} canvasHeight={canvasHeight} />
+      <CaptionStyleControls
+        items={styleItems}
+        canvasWidth={canvasWidth}
+        canvasHeight={canvasHeight}
+      />
 
       <Separator />
 
