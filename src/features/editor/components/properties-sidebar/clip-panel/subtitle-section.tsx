@@ -7,6 +7,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import type { SubtitleSegmentItem, TimelineItem } from '@/types/timeline'
 
+import { CaptionStyleControls } from './caption-style-controls'
+
 interface SubtitleSectionProps {
   items: TimelineItem[]
 }
@@ -14,13 +16,28 @@ interface SubtitleSectionProps {
 /**
  * Properties panel for selected subtitle segments.
  *
- * Per-segment style is layered on top of TextSection (which already renders
- * for text-like items via the synthetic-TextItem render path) — this panel
- * focuses on the things that are *unique* to a segment: the cue list. It
- * lets the user inspect cues, retime them, and edit text without leaving
- * the editor.
+ * Renders three stacked blocks:
+ *  1. Style presets + quick controls (font/color/position/background)
+ *  2. Source label + cue count
+ *  3. Cue list editor
+ *
+ * Multi-select hides the cue list (cue identities differ across segments)
+ * but keeps style controls active so a "make all my subtitle tracks
+ * Netflix-style" workflow takes one click.
  */
-export const SubtitleSection = memo(function SubtitleSection({ items }: SubtitleSectionProps) {
+interface CanvasContext {
+  width: number
+  height: number
+}
+
+export interface SubtitleSectionPropsWithCanvas extends SubtitleSectionProps {
+  canvas?: CanvasContext
+}
+
+export const SubtitleSection = memo(function SubtitleSection({
+  items,
+  canvas,
+}: SubtitleSectionPropsWithCanvas) {
   const segments = useMemo(
     () => items.filter((item): item is SubtitleSegmentItem => item.type === 'subtitle'),
     [items],
@@ -28,31 +45,36 @@ export const SubtitleSection = memo(function SubtitleSection({ items }: Subtitle
 
   if (segments.length === 0) return null
 
-  // Multi-select shows aggregate stats; single-select gets the cue editor.
+  const canvasHeight = canvas?.height ?? 1080
+
   if (segments.length > 1) {
     const totalCues = segments.reduce((sum, segment) => sum + segment.cues.length, 0)
     return (
-      <section className="space-y-2 px-1">
+      <section className="space-y-3 px-1">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Subtitles
         </h3>
-        <p className="text-sm text-muted-foreground">
-          {segments.length} segments selected · {totalCues} cues total. Select a single segment to
-          edit individual cues.
+        <CaptionStyleControls items={segments} canvasHeight={canvasHeight} />
+        <Separator />
+        <p className="text-xs text-muted-foreground">
+          {segments.length} segments selected · {totalCues} cues total. Style applies to all. Select
+          a single segment to edit individual cues.
         </p>
       </section>
     )
   }
 
-  return <SingleSubtitleSegmentEditor segment={segments[0]!} />
+  return <SingleSubtitleSegmentEditor segment={segments[0]!} canvasHeight={canvasHeight} />
 })
 
 interface SingleSubtitleSegmentEditorProps {
   segment: SubtitleSegmentItem
+  canvasHeight: number
 }
 
 const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
   segment,
+  canvasHeight,
 }: SingleSubtitleSegmentEditorProps) {
   const updateItem = useTimelineStore((s) => s.updateItem)
 
@@ -71,8 +93,12 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
         `Track ${segment.source.trackNumber}`)
       : segment.source.fileName
 
+  // Memoize the items array passed to CaptionStyleControls so identity is
+  // stable across re-renders that don't actually change the segment object.
+  const styleItems = useMemo(() => [segment], [segment])
+
   return (
-    <section className="space-y-2 px-1">
+    <section className="space-y-3 px-1">
       <header className="space-y-0.5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Subtitles
@@ -82,8 +108,13 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
         </p>
       </header>
 
+      <CaptionStyleControls items={styleItems} canvasHeight={canvasHeight} />
+
       <Separator />
 
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Cues
+      </p>
       <ScrollArea className="h-[40vh] pr-2">
         <ul className="flex flex-col gap-2 py-1">
           {segment.cues.map((cue, index) => (

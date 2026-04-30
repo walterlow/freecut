@@ -264,7 +264,7 @@ export const ClipPanel = memo(function ClipPanel() {
                 />
               )}
               {hasShapeItems && <ShapeSection items={selectedItems} />}
-              {hasSubtitleItems && <SubtitleSection items={selectedItems} />}
+              {hasSubtitleItems && <SubtitleSection items={selectedItems} canvas={canvas} />}
               {hasGifItems && <GifSection items={selectedItems} />}
             </div>
           )}
