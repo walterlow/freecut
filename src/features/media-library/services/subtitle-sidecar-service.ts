@@ -22,6 +22,8 @@ import type {
 import {
   buildCaptionTrack,
   buildSubtitleTextItems,
+  buildSubtitleTextItemsForClip,
+  findCaptionTargetClipsForMedia,
   findCompatibleCaptionTrackForRanges,
 } from '../utils/caption-items'
 import { mediaLibraryService } from './media-library-service'
@@ -48,6 +50,13 @@ interface InsertSubtitleCuesOptions {
   fileName: string
   format: SubtitleFormat
   sourceType: Extract<GeneratedCaptionSource['type'], 'subtitle-import' | 'embedded-subtitles'>
+  /**
+   * When provided, cues are anchored to the clips of this media on the
+   * timeline (each clip's `from` + `sourceStart` window, honoring `speed`).
+   * If the media has no clips on the timeline, falls back to inPoint-anchored
+   * insertion so subtitle-import for unimported sources still works.
+   */
+  mediaId?: string
 }
 
 class SubtitleSidecarService {
@@ -109,6 +118,7 @@ class SubtitleSidecarService {
       fileName: `${media.fileName} - ${trackLabel}`,
       format,
       sourceType: 'embedded-subtitles',
+      mediaId: media.id,
     })
 
     return {
@@ -162,37 +172,158 @@ class SubtitleSidecarService {
     const project = useProjectStore.getState().currentProject
     const canvasWidth = project?.metadata.width ?? 1920
     const canvasHeight = project?.metadata.height ?? 1080
+
+    const targetClips = options.mediaId
+      ? findCaptionTargetClipsForMedia(timeline.items, options.mediaId)
+      : []
+
+    if (targetClips.length === 0) {
+      return this.insertCuesAtInPoint({
+        ...options,
+        timeline,
+        canvasWidth,
+        canvasHeight,
+      })
+    }
+
+    return this.insertCuesAnchoredToClips({
+      ...options,
+      timeline,
+      clips: targetClips,
+      canvasWidth,
+      canvasHeight,
+    })
+  }
+
+  private insertCuesAtInPoint({
+    cues,
+    fileName,
+    format,
+    sourceType,
+    timeline,
+    canvasWidth,
+    canvasHeight,
+  }: InsertSubtitleCuesOptions & {
+    timeline: ReturnType<typeof useTimelineStore.getState>
+    canvasWidth: number
+    canvasHeight: number
+  }): TextItem[] {
     const startFrame = timeline.inPoint ?? 0
-    const ranges = options.cues.map((cue) => ({
+    const ranges = cues.map((cue) => ({
       startFrame: startFrame + Math.round(cue.startSeconds * timeline.fps),
       endFrame: startFrame + Math.max(1, Math.round(cue.endSeconds * timeline.fps)),
     }))
 
-    let nextTracks: TimelineTrack[] = [...timeline.tracks]
-    let targetTrack = findCompatibleCaptionTrackForRanges(nextTracks, timeline.items, ranges)
-    if (!targetTrack) {
-      targetTrack = buildCaptionTrack(nextTracks)
-      nextTracks = [...nextTracks, targetTrack].sort((a, b) => a.order - b.order)
-      timeline.setTracks(nextTracks)
-    }
-
+    const targetTrack = ensureCaptionTrack(timeline, ranges)
     const items = buildSubtitleTextItems({
       trackId: targetTrack.id,
-      cues: options.cues,
+      cues,
       timelineFps: timeline.fps,
       canvasWidth,
       canvasHeight,
-      fileName: options.fileName,
-      format: options.format,
+      fileName,
+      format,
       startFrame,
-      sourceType: options.sourceType,
+      sourceType,
     })
 
     timeline.addItems(items)
     useSelectionStore.getState().selectItems(items.map((item) => item.id))
-
     return items
   }
+
+  private insertCuesAnchoredToClips({
+    cues,
+    fileName,
+    format,
+    sourceType,
+    timeline,
+    clips,
+    canvasWidth,
+    canvasHeight,
+  }: InsertSubtitleCuesOptions & {
+    timeline: ReturnType<typeof useTimelineStore.getState>
+    clips: ReadonlyArray<
+      import('@/types/timeline').AudioItem | import('@/types/timeline').VideoItem
+    >
+    canvasWidth: number
+    canvasHeight: number
+  }): TextItem[] {
+    // Pick a single track that can host every clip's caption range, so the
+    // user sees one row of captions even if the media has multiple cuts.
+    const allRanges: Array<{ startFrame: number; endFrame: number }> = []
+    for (const clip of clips) {
+      const sourceFps = clip.sourceFps ?? timeline.fps
+      const speed = clip.speed ?? 1
+      const sourceStartSec = (clip.sourceStart ?? 0) / sourceFps
+      const sourceEndSec = clip.sourceEnd
+        ? clip.sourceEnd / sourceFps
+        : sourceStartSec + (clip.durationInFrames * speed) / timeline.fps
+      for (const cue of cues) {
+        const overlapStartSec = Math.max(cue.startSeconds, sourceStartSec)
+        const overlapEndSec = Math.min(cue.endSeconds, sourceEndSec)
+        if (overlapEndSec <= overlapStartSec) continue
+        const fromOffset = Math.floor(((overlapStartSec - sourceStartSec) * timeline.fps) / speed)
+        const endOffset = Math.ceil(((overlapEndSec - sourceStartSec) * timeline.fps) / speed)
+        allRanges.push({
+          startFrame: clip.from + Math.max(0, fromOffset),
+          endFrame: clip.from + Math.max(fromOffset + 1, endOffset),
+        })
+      }
+    }
+
+    if (allRanges.length === 0) {
+      // Cues exist but none overlap any clip's source window — fall back to
+      // playhead-anchored so the user still sees something rather than a
+      // silent no-op.
+      return this.insertCuesAtInPoint({
+        cues,
+        fileName,
+        format,
+        sourceType,
+        mediaId: undefined,
+        timeline,
+        canvasWidth,
+        canvasHeight,
+      })
+    }
+
+    const targetTrack = ensureCaptionTrack(timeline, allRanges)
+    const items: TextItem[] = []
+    for (const clip of clips) {
+      const clipItems = buildSubtitleTextItemsForClip({
+        trackId: targetTrack.id,
+        cues,
+        clip,
+        timelineFps: timeline.fps,
+        canvasWidth,
+        canvasHeight,
+        fileName,
+        format,
+        sourceType,
+      })
+      items.push(...clipItems)
+    }
+
+    if (items.length === 0) return []
+    timeline.addItems(items)
+    useSelectionStore.getState().selectItems(items.map((item) => item.id))
+    return items
+  }
+}
+
+function ensureCaptionTrack(
+  timeline: ReturnType<typeof useTimelineStore.getState>,
+  ranges: ReadonlyArray<{ startFrame: number; endFrame: number }>,
+): TimelineTrack {
+  let nextTracks: TimelineTrack[] = [...timeline.tracks]
+  let targetTrack = findCompatibleCaptionTrackForRanges(nextTracks, timeline.items, ranges)
+  if (!targetTrack) {
+    targetTrack = buildCaptionTrack(nextTracks)
+    nextTracks = [...nextTracks, targetTrack].sort((a, b) => a.order - b.order)
+    timeline.setTracks(nextTracks)
+  }
+  return targetTrack
 }
 
 export const subtitleSidecarService = new SubtitleSidecarService()

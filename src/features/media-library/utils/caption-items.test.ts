@@ -71,8 +71,10 @@ import {
   aiCaptionsToSegments,
   buildCaptionTextItems,
   buildSubtitleTextItems,
+  buildSubtitleTextItemsForClip,
   buildCaptionTrack,
   buildCaptionTrackAbove,
+  findCaptionTargetClipsForMedia,
   findGeneratedCaptionItemsForClip,
   findReplaceableCaptionItemsForClip,
   getCaptionTextItemTemplate,
@@ -436,6 +438,131 @@ describe('caption-items', () => {
         y: 420,
       },
     })
+  })
+
+  it('anchors subtitle cues to a clip honoring sourceStart and speed', () => {
+    const clip: VideoItem = {
+      id: 'clip-anchor',
+      type: 'video',
+      trackId: 'track-1',
+      from: 33540,
+      durationInFrames: 117673,
+      label: 'Squid clip',
+      mediaId: 'media-squid',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 94037,
+      sourceFps: 23.974,
+      speed: 1,
+    }
+
+    const items = buildSubtitleTextItemsForClip({
+      trackId: 'track-captions',
+      cues: [
+        { id: 'cue-1', startSeconds: 25.734, endSeconds: 27.527, text: 'Where do you think?' },
+        // Outside clip's source window — must be dropped.
+        { id: 'cue-out', startSeconds: 99999, endSeconds: 100000, text: 'Past end' },
+      ],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      fileName: 'episode.mkv - en',
+      format: 'srt',
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      from: 33540 + Math.floor(25.734 * 30),
+      mediaId: 'media-squid',
+      captionSource: { type: 'embedded-subtitles', clipId: 'clip-anchor', mediaId: 'media-squid' },
+      text: 'Where do you think?',
+    })
+  })
+
+  it('compresses subtitle timing on a sped-up clip', () => {
+    // 2x speed: a cue at source second 30 should land 15 timeline-seconds
+    // after the clip's `from`.
+    const clip: VideoItem = {
+      id: 'clip-fast',
+      type: 'video',
+      trackId: 'track-1',
+      from: 60,
+      durationInFrames: 600,
+      label: 'Fast Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 1200,
+      sourceFps: 30,
+      speed: 2,
+    }
+
+    const items = buildSubtitleTextItemsForClip({
+      trackId: 'track-captions',
+      cues: [{ id: 'cue-1', startSeconds: 30, endSeconds: 31, text: 'Halftime' }],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      fileName: 'fast.mkv',
+      format: 'srt',
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]?.from).toBe(60 + Math.floor((30 * 30) / 2))
+  })
+
+  it('finds caption targets and dedupes linked video/audio companion pairs', () => {
+    const items: TimelineItem[] = [
+      {
+        id: 'video-clip',
+        type: 'video',
+        trackId: 'track-v',
+        from: 100,
+        durationInFrames: 300,
+        label: 'V',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        linkedGroupId: 'pair-1',
+      },
+      {
+        id: 'audio-clip',
+        type: 'audio',
+        trackId: 'track-a',
+        from: 100,
+        durationInFrames: 300,
+        label: 'A',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        linkedGroupId: 'pair-1',
+      },
+      {
+        id: 'video-clip-2',
+        type: 'video',
+        trackId: 'track-v',
+        from: 1000,
+        durationInFrames: 200,
+        label: 'V2',
+        mediaId: 'media-1',
+        src: 'blob:test',
+      },
+      {
+        id: 'unrelated',
+        type: 'video',
+        trackId: 'track-v',
+        from: 2000,
+        durationInFrames: 100,
+        label: 'U',
+        mediaId: 'media-2',
+        src: 'blob:test',
+      },
+    ]
+
+    const targets = findCaptionTargetClipsForMedia(items, 'media-1')
+    // Linked pair contributes only one entry (the video); free clips kept;
+    // sorted by `from`.
+    expect(targets.map((t) => t.id)).toEqual(['video-clip', 'video-clip-2'])
   })
 
   it('falls back to legacy generated caption detection when source metadata is missing', () => {

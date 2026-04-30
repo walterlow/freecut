@@ -55,6 +55,19 @@ interface BuildSubtitleTextItemsOptions {
   sourceType?: Extract<GeneratedCaptionSource['type'], 'subtitle-import' | 'embedded-subtitles'>
 }
 
+interface BuildSubtitleTextItemsForClipOptions {
+  trackId: string
+  cues: readonly SubtitleCue[]
+  clip: AudioItem | VideoItem
+  timelineFps: number
+  canvasWidth: number
+  canvasHeight: number
+  fileName: string
+  format: SubtitleFormat
+  styleTemplate?: CaptionTextItemTemplate
+  sourceType?: Extract<GeneratedCaptionSource['type'], 'subtitle-import' | 'embedded-subtitles'>
+}
+
 export type CaptionTextItemTemplate = Pick<
   TextItem,
   | 'fontSize'
@@ -625,4 +638,129 @@ export function buildSubtitleTextItems({
       },
     ]
   })
+}
+
+/**
+ * Same as {@link buildSubtitleTextItems} but anchors each cue to a specific
+ * clip on the timeline. Cues whose source-time range falls entirely outside
+ * the clip's `[sourceStart, sourceEnd]` window are dropped; cues that
+ * straddle a boundary are clipped to fit. Honors `clip.speed` so a cue at
+ * source second 30 of a 2x clip lands 15 timeline-seconds after `clip.from`.
+ */
+export function buildSubtitleTextItemsForClip({
+  trackId,
+  cues,
+  clip,
+  timelineFps,
+  canvasWidth,
+  canvasHeight,
+  fileName,
+  format,
+  styleTemplate,
+  sourceType = 'embedded-subtitles',
+}: BuildSubtitleTextItemsForClipOptions): TextItem[] {
+  const { sourceStart, sourceEnd, sourceFps, speed } = getClipSourceBounds(clip, timelineFps)
+  const sourceStartSeconds = sourceStart / sourceFps
+  const sourceEndSeconds = sourceEnd / sourceFps
+  const clipEndFrame = clip.from + clip.durationInFrames
+
+  return cues.flatMap((cue) => {
+    const overlapStartSec = Math.max(cue.startSeconds, sourceStartSeconds)
+    const overlapEndSec = Math.min(cue.endSeconds, sourceEndSeconds)
+    if (overlapEndSec <= overlapStartSec) return []
+
+    const fromOffsetFrames = Math.floor(
+      ((overlapStartSec - sourceStartSeconds) * timelineFps) / speed,
+    )
+    const endOffsetFrames = Math.ceil(((overlapEndSec - sourceStartSeconds) * timelineFps) / speed)
+    const from = clip.from + Math.max(0, Math.min(fromOffsetFrames, clip.durationInFrames - 1))
+    const endFrame = Math.min(
+      clipEndFrame,
+      clip.from + Math.max(fromOffsetFrames + 1, endOffsetFrames),
+    )
+    const durationInFrames = Math.max(1, endFrame - from)
+
+    const defaultCaptionItem: TextItem = {
+      id: crypto.randomUUID(),
+      type: 'text',
+      textRole: 'caption',
+      trackId,
+      from,
+      durationInFrames,
+      mediaId: clip.mediaId ?? '',
+      captionSource: buildCaptionSource(clip.mediaId ?? '', clip.id, sourceType, {
+        fileName,
+        format,
+        importedAt: Date.now(),
+      }),
+      label: cue.text.slice(0, 48),
+      text: cue.text,
+      fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
+      fontFamily: 'Inter',
+      fontWeight: 'semibold',
+      fontStyle: 'normal',
+      underline: false,
+      color: '#ffffff',
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.15,
+      letterSpacing: 0,
+      textShadow: {
+        offsetX: 0,
+        offsetY: 3,
+        blur: 10,
+        color: 'rgba(0, 0, 0, 0.75)',
+      },
+      transform: {
+        x: 0,
+        y: Math.round(canvasHeight * 0.32),
+        width: canvasWidth * 0.82,
+        height: canvasHeight * 0.16,
+        rotation: 0,
+        opacity: 1,
+      },
+    }
+
+    return [
+      {
+        ...defaultCaptionItem,
+        ...styleTemplate,
+      },
+    ]
+  })
+}
+
+/**
+ * Find the timeline clips that should receive subtitles for `mediaId`. Each
+ * `linkedGroupId` (synced video/audio companion pair) only contributes one
+ * clip — preferring the video so captions don't render twice.
+ */
+export function findCaptionTargetClipsForMedia(
+  items: readonly TimelineItem[],
+  mediaId: string,
+): Array<AudioItem | VideoItem> {
+  const matching = items.filter(
+    (item): item is AudioItem | VideoItem =>
+      (item.type === 'video' || item.type === 'audio') && item.mediaId === mediaId,
+  )
+
+  const seenLinkedGroups = new Set<string>()
+  const selected: Array<AudioItem | VideoItem> = []
+  const ordered = [...matching].sort((a, b) => {
+    if (a.linkedGroupId === b.linkedGroupId && a.type !== b.type) {
+      return a.type === 'video' ? -1 : 1
+    }
+    return a.from - b.from
+  })
+
+  for (const clip of ordered) {
+    if (clip.linkedGroupId !== undefined) {
+      if (seenLinkedGroups.has(clip.linkedGroupId)) continue
+      seenLinkedGroups.add(clip.linkedGroupId)
+    }
+    selected.push(clip)
+  }
+
+  return selected.sort((a, b) => a.from - b.from)
 }
