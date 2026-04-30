@@ -1237,6 +1237,43 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
       durationInFrames: rightDuration,
     } as TimelineItem
 
+    // Subtitle segments own their full cue list — partition it at the split
+    // point so neither half references cues outside its window. Cues are
+    // segment-relative seconds (start = 0 at item.from), so we partition
+    // against `leftDuration / fps`.
+    if (item.type === 'subtitle') {
+      const timelineFps = useTimelineSettingsStore.getState().fps
+      const splitSeconds = leftDuration / timelineFps
+      const leftCues: typeof item.cues = []
+      const rightCues: typeof item.cues = []
+      for (const cue of item.cues) {
+        const startsBeforeSplit = cue.startSeconds < splitSeconds
+        const endsAfterSplit = cue.endSeconds > splitSeconds
+        if (startsBeforeSplit && !endsAfterSplit) {
+          // Wholly in the left half.
+          leftCues.push(cue)
+        } else if (!startsBeforeSplit) {
+          // Wholly in the right half — rebase to the new segment's `from`.
+          rightCues.push({
+            ...cue,
+            startSeconds: cue.startSeconds - splitSeconds,
+            endSeconds: cue.endSeconds - splitSeconds,
+          })
+        } else {
+          // Straddles the cut. Truncate left to splitSeconds, rebase right.
+          leftCues.push({ ...cue, endSeconds: splitSeconds })
+          rightCues.push({
+            ...cue,
+            id: `${cue.id}-r`,
+            startSeconds: 0,
+            endSeconds: cue.endSeconds - splitSeconds,
+          })
+        }
+      }
+      ;(leftItem as typeof item).cues = leftCues
+      ;(rightItem as typeof item).cues = rightCues
+    }
+
     // Handle sourceStart/sourceEnd for media items (accounting for speed)
     if (isMediaItem(item)) {
       const timelineFps = useTimelineSettingsStore.getState().fps

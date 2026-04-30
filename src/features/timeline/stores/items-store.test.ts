@@ -148,6 +148,46 @@ describe('items-store rate stretch', () => {
     expect(right.sourceEnd).toBe(300)
   })
 
+  it('splitItem partitions a SubtitleSegmentItem cue list at the cut frame', () => {
+    useTimelineSettingsStore.getState().setFps(30)
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: 'subs',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 300, // 10s at 30fps
+      label: 'Subs',
+      color: '#fff',
+      source: { type: 'subtitle-import', fileName: 'a.srt', format: 'srt', importedAt: 0 },
+      cues: [
+        { id: 'a', startSeconds: 0, endSeconds: 2, text: 'wholly left' },
+        { id: 'b', startSeconds: 4, endSeconds: 6, text: 'straddles cut' },
+        { id: 'c', startSeconds: 7, endSeconds: 9, text: 'wholly right' },
+      ],
+    }
+
+    useItemsStore.getState().setItems([segment])
+    // Cut at frame 150 = 5s.
+    const result = useItemsStore.getState()._splitItem('subs', 150)
+    expect(result).not.toBeNull()
+    const left = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'subs') as import('@/types/timeline').SubtitleSegmentItem
+    const right = useItemsStore
+      .getState()
+      .items.find(
+        (i) => i.id !== 'subs' && i.type === 'subtitle',
+      ) as import('@/types/timeline').SubtitleSegmentItem
+
+    expect(left.cues.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(left.cues[1]).toMatchObject({ id: 'b', endSeconds: 5 })
+
+    // Right cues are rebased so their times start from 0 at the new segment.
+    expect(right.cues.map((c) => c.id)).toEqual(['b-r', 'c'])
+    expect(right.cues[0]).toMatchObject({ startSeconds: 0, endSeconds: 1 })
+    expect(right.cues[1]).toMatchObject({ startSeconds: 2, endSeconds: 4 })
+  })
+
   it('rate stretch on left split clip preserves source boundaries', () => {
     // Simulate a left split clip with explicit bounds (as fixed by splitItem)
     const leftClip = makeVideoItem({
