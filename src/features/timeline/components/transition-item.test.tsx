@@ -223,6 +223,38 @@ describe('TransitionItem preview bridge motion', () => {
     })
   })
 
+  it('leaves the cut-side edge non-draggable for an incoming-aligned transition', () => {
+    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
+    const right = makeVideoItem({
+      id: 'right',
+      from: 160,
+      durationInFrames: 80,
+      mediaId: 'media-2',
+    })
+    useItemsStore.getState().setItems([left, right])
+
+    const { container } = render(<TransitionItem transition={{ ...transition, alignment: 0 }} />)
+
+    expect(container.querySelector('[data-transition-hit-zone="left-edge"]')).toBeNull()
+    expect(container.querySelector('[data-transition-hit-zone="right-edge"]')).not.toBeNull()
+  })
+
+  it('leaves the cut-side edge non-draggable for an outgoing-aligned transition', () => {
+    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
+    const right = makeVideoItem({
+      id: 'right',
+      from: 160,
+      durationInFrames: 80,
+      mediaId: 'media-2',
+    })
+    useItemsStore.getState().setItems([left, right])
+
+    const { container } = render(<TransitionItem transition={{ ...transition, alignment: 1 }} />)
+
+    expect(container.querySelector('[data-transition-hit-zone="left-edge"]')).not.toBeNull()
+    expect(container.querySelector('[data-transition-hit-zone="right-edge"]')).toBeNull()
+  })
+
   it('hides the bridge while previewing a trim that breaks the transition', () => {
     const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
     const right = makeVideoItem({
