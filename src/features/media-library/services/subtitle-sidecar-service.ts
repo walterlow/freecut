@@ -68,7 +68,10 @@ interface InsertSubtitleCuesOptions {
 }
 
 class SubtitleSidecarService {
-  async importSubtitleFile(file: File): Promise<ImportSubtitleResult> {
+  async importSubtitleFile(
+    file: File,
+    options: { mode?: 'segment' | 'per-cue' } = {},
+  ): Promise<ImportSubtitleResult> {
     const format = inferSubtitleFormat(file.name)
     if (!format) {
       throw new Error('Choose an SRT or WebVTT subtitle file.')
@@ -82,18 +85,93 @@ class SubtitleSidecarService {
       )
     }
 
-    const items = this.insertSubtitleCuesAsCaptions({
-      cues: result.cues,
-      fileName: file.name,
-      format,
-      sourceType: 'subtitle-import',
-    })
+    const mode = options.mode ?? 'segment'
+    const insertedItemCount =
+      mode === 'segment'
+        ? this.insertImportedCuesAsSegment(result.cues, file.name, format)
+        : this.insertSubtitleCuesAsCaptions({
+            cues: result.cues,
+            fileName: file.name,
+            format,
+            sourceType: 'subtitle-import',
+          }).length
 
     return {
-      insertedItemCount: items.length,
+      insertedItemCount,
       warningCount: result.warnings.length,
       warnings: result.warnings,
     }
+  }
+
+  private insertImportedCuesAsSegment(
+    cues: readonly SubtitleCue[],
+    fileName: string,
+    format: SubtitleFormat,
+  ): number {
+    const timeline = useTimelineStore.getState()
+    const project = useProjectStore.getState().currentProject
+    const canvasWidth = project?.metadata.width ?? 1920
+    const canvasHeight = project?.metadata.height ?? 1080
+    const startFrame = timeline.inPoint ?? 0
+
+    // Imported subtitles have no clip to anchor to — synthesize a segment
+    // anchored to the playhead/in-point covering the full cue range.
+    const minStart = Math.min(...cues.map((c) => c.startSeconds), 0)
+    const lastEnd = Math.max(...cues.map((c) => c.endSeconds), 1)
+    const durationInFrames = Math.max(1, Math.ceil((lastEnd - minStart) * timeline.fps))
+
+    const segmentRelativeCues = cues.map((cue) => ({
+      id: cue.id,
+      startSeconds: cue.startSeconds - minStart,
+      endSeconds: cue.endSeconds - minStart,
+      text: cue.text,
+    }))
+
+    const segmentItem: import('@/types/timeline').SubtitleSegmentItem = {
+      id: crypto.randomUUID(),
+      type: 'subtitle',
+      trackId: '', // filled in below
+      from: startFrame + Math.floor(minStart * timeline.fps),
+      durationInFrames,
+      label: fileName,
+      source: { type: 'subtitle-import', fileName, format, importedAt: Date.now() },
+      cues: segmentRelativeCues,
+      // Defaults mirror the per-cue path so the strip looks consistent.
+      fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
+      fontFamily: 'Inter',
+      fontWeight: 'semibold',
+      fontStyle: 'normal',
+      underline: false,
+      color: '#ffffff',
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.15,
+      letterSpacing: 0,
+      textShadow: { offsetX: 0, offsetY: 3, blur: 10, color: 'rgba(0, 0, 0, 0.75)' },
+      transform: {
+        x: 0,
+        y: Math.round(canvasHeight * 0.32),
+        width: canvasWidth * 0.82,
+        height: canvasHeight * 0.16,
+        rotation: 0,
+        opacity: 1,
+      },
+    }
+
+    const ranges = [{ startFrame: segmentItem.from, endFrame: segmentItem.from + durationInFrames }]
+    let nextTracks: TimelineTrack[] = [...timeline.tracks]
+    let target = findCompatibleCaptionTrackForRanges(nextTracks, timeline.items, ranges)
+    if (!target) {
+      target = buildCaptionTrack(nextTracks)
+      nextTracks = [...nextTracks, target].sort((a, b) => a.order - b.order)
+      timeline.setTracks(nextTracks)
+    }
+    segmentItem.trackId = target.id
+
+    timeline.addItems([segmentItem])
+    useSelectionStore.getState().selectItems([segmentItem.id])
+    return 1
   }
 
   async extractEmbeddedSubtitlesAsCaptions(
