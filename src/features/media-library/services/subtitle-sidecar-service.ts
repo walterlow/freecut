@@ -14,17 +14,10 @@ import {
 } from '@/shared/utils/matroska-subtitles'
 import { getEmbeddedSubtitleSidecar, saveEmbeddedSubtitleSidecar } from '@/infrastructure/storage'
 import type { MediaMetadata } from '@/types/storage'
-import type {
-  GeneratedCaptionSource,
-  TextItem,
-  TimelineItem,
-  TimelineTrack,
-} from '@/types/timeline'
+import type { TextItem, TimelineItem, TimelineTrack } from '@/types/timeline'
 import {
   buildCaptionTrack,
   buildSubtitleSegmentForClip,
-  buildSubtitleTextItems,
-  buildSubtitleTextItemsForClip,
   consolidateCaptionTextItemsToSegments,
   findCaptionTargetClipsForMedia,
   findCompatibleCaptionTrackForRanges,
@@ -54,25 +47,8 @@ export interface EmbeddedSubtitleScanResult {
   fromCache: boolean
 }
 
-interface InsertSubtitleCuesOptions {
-  cues: readonly SubtitleCue[]
-  fileName: string
-  format: SubtitleFormat
-  sourceType: Extract<GeneratedCaptionSource['type'], 'subtitle-import' | 'embedded-subtitles'>
-  /**
-   * When provided, cues are anchored to the clips of this media on the
-   * timeline (each clip's `from` + `sourceStart` window, honoring `speed`).
-   * If the media has no clips on the timeline, falls back to inPoint-anchored
-   * insertion so subtitle-import for unimported sources still works.
-   */
-  mediaId?: string
-}
-
 class SubtitleSidecarService {
-  async importSubtitleFile(
-    file: File,
-    options: { mode?: 'segment' | 'per-cue' } = {},
-  ): Promise<ImportSubtitleResult> {
+  async importSubtitleFile(file: File): Promise<ImportSubtitleResult> {
     const format = inferSubtitleFormat(file.name)
     if (!format) {
       throw new Error('Choose an SRT or WebVTT subtitle file.')
@@ -86,16 +62,7 @@ class SubtitleSidecarService {
       )
     }
 
-    const mode = options.mode ?? 'segment'
-    const insertedItemCount =
-      mode === 'segment'
-        ? this.insertImportedCuesAsSegment(result.cues, file.name, format)
-        : this.insertSubtitleCuesAsCaptions({
-            cues: result.cues,
-            fileName: file.name,
-            format,
-            sourceType: 'subtitle-import',
-          }).length
+    const insertedItemCount = this.insertImportedCuesAsSegment(result.cues, file.name, format)
 
     return {
       insertedItemCount,
@@ -114,6 +81,15 @@ class SubtitleSidecarService {
     const canvasWidth = project?.metadata.width ?? 1920
     const canvasHeight = project?.metadata.height ?? 1080
     const startFrame = timeline.inPoint ?? 0
+
+    // Drop any prior SRT/VTT-imported subtitle segments so a re-import
+    // replaces rather than stacks. Embedded-subtitle segments are left
+    // alone — they belong to a clip and aren't conceptually the same
+    // as a free-standing imported subtitle file.
+    const obsoleteIds = timeline.items
+      .filter((item) => item.type === 'subtitle' && item.source.type === 'subtitle-import')
+      .map((item) => item.id)
+    if (obsoleteIds.length > 0) timeline.removeItems(obsoleteIds)
 
     // Imported subtitles have no clip to anchor to — synthesize a segment
     // anchored to the playhead/in-point covering the full cue range.
@@ -160,17 +136,20 @@ class SubtitleSidecarService {
       },
     }
 
+    // Read the post-removal timeline state so target-track selection sees
+    // freed-up rows that the now-deleted import segment was occupying.
+    const refreshed = useTimelineStore.getState()
     const ranges = [{ startFrame: segmentItem.from, endFrame: segmentItem.from + durationInFrames }]
-    let nextTracks: TimelineTrack[] = [...timeline.tracks]
-    let target = findCompatibleCaptionTrackForRanges(nextTracks, timeline.items, ranges)
+    let nextTracks: TimelineTrack[] = [...refreshed.tracks]
+    let target = findCompatibleCaptionTrackForRanges(nextTracks, refreshed.items, ranges)
     if (!target) {
       target = buildCaptionTrack(nextTracks)
       nextTracks = [...nextTracks, target].sort((a, b) => a.order - b.order)
-      timeline.setTracks(nextTracks)
+      refreshed.setTracks(nextTracks)
     }
     segmentItem.trackId = target.id
 
-    timeline.addItems([segmentItem])
+    refreshed.addItems([segmentItem])
     useSelectionStore.getState().selectItems([segmentItem.id])
     return 1
   }
@@ -229,41 +208,20 @@ class SubtitleSidecarService {
   }
 
   /**
-   * Insert a specific embedded subtitle track's cues as captions on the
-   * timeline, anchored to `media`'s clips.
-   *
-   * `mode` controls the timeline shape:
-   *  - `'segment'` (default): one {@link SubtitleSegmentItem} per clip
-   *    that owns the entire cue list — drag/trim/style as one unit.
-   *  - `'per-cue'`: legacy fallback that stamps out one TextItem per cue.
+   * Insert a specific embedded subtitle track's cues on the timeline as one
+   * {@link SubtitleSegmentItem} per clip. Any existing subtitle segment
+   * already attached to a target clip (via `captionSource.clipId`) is
+   * removed first so the user gets a single, current segment per clip
+   * instead of stacking duplicates each time they re-extract.
    */
   insertEmbeddedSubtitleTrack(
     media: MediaMetadata,
     track: EmbeddedSubtitleTrack,
-    options: { mode?: 'segment' | 'per-cue' } = {},
   ): ExtractEmbeddedSubtitlesResult {
     const trackLabel = formatEmbeddedSubtitleTrackLabel(track)
-    const mode = options.mode ?? 'segment'
-
-    if (mode === 'segment') {
-      const inserted = this.insertSubtitleCuesAsSegmentForMedia(media, track, trackLabel)
-      return {
-        insertedItemCount: inserted,
-        cueCount: track.cues.length,
-        trackLabel,
-      }
-    }
-
-    const format: SubtitleFormat = track.codecId === 'S_TEXT/WEBVTT' ? 'vtt' : 'srt'
-    const items = this.insertSubtitleCuesAsCaptions({
-      cues: track.cues,
-      fileName: `${media.fileName} - ${trackLabel}`,
-      format,
-      sourceType: 'embedded-subtitles',
-      mediaId: media.id,
-    })
+    const inserted = this.insertSubtitleCuesAsSegmentForMedia(media, track, trackLabel)
     return {
-      insertedItemCount: items.length,
+      insertedItemCount: inserted,
       cueCount: track.cues.length,
       trackLabel,
     }
@@ -280,6 +238,16 @@ class SubtitleSidecarService {
     const canvasHeight = project?.metadata.height ?? 1080
     const clips = findCaptionTargetClipsForMedia(timeline.items, media.id)
     if (clips.length === 0) return 0
+
+    // Drop any subtitle segments already attached to one of the target
+    // clips so the user ends up with one segment per clip instead of
+    // stacking a new layer on top with each re-extract. We also clean up
+    // legacy per-cue caption text items linked to those same clipIds —
+    // they'd otherwise sit underneath the new segment with stale text.
+    const clipIdSet = new Set(clips.map((c) => c.id))
+    const obsoleteIds = timeline.items
+      .filter((item) => isSubtitleForClip(item, clipIdSet))
+      .map((item) => item.id)
 
     const segments: import('@/types/timeline').SubtitleSegmentItem[] = []
     for (const clip of clips) {
@@ -304,24 +272,35 @@ class SubtitleSidecarService {
       })
       if (segment) segments.push(segment)
     }
-    if (segments.length === 0) return 0
+    if (segments.length === 0) {
+      // Nothing new to insert; still remove the obsolete entries so a
+      // re-extract that produced no usable cues at least clears the stale
+      // segment instead of leaving the user looking at outdated text.
+      if (obsoleteIds.length > 0) timeline.removeItems(obsoleteIds)
+      return 0
+    }
 
-    // Pick a single track that can host every segment's range, mirroring the
-    // per-cue path — keeps captions on one row rather than scattering them.
+    if (obsoleteIds.length > 0) timeline.removeItems(obsoleteIds)
+
+    // Pick a single track that can host every segment's range so captions
+    // stay on one row rather than scattering across several.
     const ranges = segments.map((s) => ({
       startFrame: s.from,
       endFrame: s.from + s.durationInFrames,
     }))
     let nextTracks: TimelineTrack[] = [...timeline.tracks]
-    let target = findCompatibleCaptionTrackForRanges(nextTracks, timeline.items, ranges)
+    // After removing the obsolete items, look up the timeline state again so
+    // findCompatibleCaptionTrackForRanges sees the post-removal items.
+    const refreshed = useTimelineStore.getState()
+    let target = findCompatibleCaptionTrackForRanges(nextTracks, refreshed.items, ranges)
     if (!target) {
       target = buildCaptionTrack(nextTracks)
       nextTracks = [...nextTracks, target].sort((a, b) => a.order - b.order)
-      timeline.setTracks(nextTracks)
+      refreshed.setTracks(nextTracks)
     }
     const placedSegments = segments.map((segment) => ({ ...segment, trackId: target.id }))
 
-    timeline.addItems(placedSegments)
+    refreshed.addItems(placedSegments)
     useSelectionStore.getState().selectItems(placedSegments.map((s) => s.id))
     return placedSegments.length
   }
@@ -394,164 +373,29 @@ class SubtitleSidecarService {
       .filter((cue) => cue.text.trim().length > 0 && cue.endSeconds > cue.startSeconds)
       .sort((a, b) => a.startSeconds - b.startSeconds)
   }
-
-  private insertSubtitleCuesAsCaptions(options: InsertSubtitleCuesOptions): TextItem[] {
-    const timeline = useTimelineStore.getState()
-    const project = useProjectStore.getState().currentProject
-    const canvasWidth = project?.metadata.width ?? 1920
-    const canvasHeight = project?.metadata.height ?? 1080
-
-    const targetClips = options.mediaId
-      ? findCaptionTargetClipsForMedia(timeline.items, options.mediaId)
-      : []
-
-    if (targetClips.length === 0) {
-      return this.insertCuesAtInPoint({
-        ...options,
-        timeline,
-        canvasWidth,
-        canvasHeight,
-      })
-    }
-
-    return this.insertCuesAnchoredToClips({
-      ...options,
-      timeline,
-      clips: targetClips,
-      canvasWidth,
-      canvasHeight,
-    })
-  }
-
-  private insertCuesAtInPoint({
-    cues,
-    fileName,
-    format,
-    sourceType,
-    timeline,
-    canvasWidth,
-    canvasHeight,
-  }: InsertSubtitleCuesOptions & {
-    timeline: ReturnType<typeof useTimelineStore.getState>
-    canvasWidth: number
-    canvasHeight: number
-  }): TextItem[] {
-    const startFrame = timeline.inPoint ?? 0
-    const ranges = cues.map((cue) => ({
-      startFrame: startFrame + Math.round(cue.startSeconds * timeline.fps),
-      endFrame: startFrame + Math.max(1, Math.round(cue.endSeconds * timeline.fps)),
-    }))
-
-    const targetTrack = ensureCaptionTrack(timeline, ranges)
-    const items = buildSubtitleTextItems({
-      trackId: targetTrack.id,
-      cues,
-      timelineFps: timeline.fps,
-      canvasWidth,
-      canvasHeight,
-      fileName,
-      format,
-      startFrame,
-      sourceType,
-    })
-
-    timeline.addItems(items)
-    useSelectionStore.getState().selectItems(items.map((item) => item.id))
-    return items
-  }
-
-  private insertCuesAnchoredToClips({
-    cues,
-    fileName,
-    format,
-    sourceType,
-    timeline,
-    clips,
-    canvasWidth,
-    canvasHeight,
-  }: InsertSubtitleCuesOptions & {
-    timeline: ReturnType<typeof useTimelineStore.getState>
-    clips: ReadonlyArray<
-      import('@/types/timeline').AudioItem | import('@/types/timeline').VideoItem
-    >
-    canvasWidth: number
-    canvasHeight: number
-  }): TextItem[] {
-    // Pick a single track that can host every clip's caption range, so the
-    // user sees one row of captions even if the media has multiple cuts.
-    const allRanges: Array<{ startFrame: number; endFrame: number }> = []
-    for (const clip of clips) {
-      const sourceFps = clip.sourceFps ?? timeline.fps
-      const speed = clip.speed ?? 1
-      const sourceStartSec = (clip.sourceStart ?? 0) / sourceFps
-      const sourceEndSec = clip.sourceEnd
-        ? clip.sourceEnd / sourceFps
-        : sourceStartSec + (clip.durationInFrames * speed) / timeline.fps
-      for (const cue of cues) {
-        const overlapStartSec = Math.max(cue.startSeconds, sourceStartSec)
-        const overlapEndSec = Math.min(cue.endSeconds, sourceEndSec)
-        if (overlapEndSec <= overlapStartSec) continue
-        const fromOffset = Math.floor(((overlapStartSec - sourceStartSec) * timeline.fps) / speed)
-        const endOffset = Math.ceil(((overlapEndSec - sourceStartSec) * timeline.fps) / speed)
-        allRanges.push({
-          startFrame: clip.from + Math.max(0, fromOffset),
-          endFrame: clip.from + Math.max(fromOffset + 1, endOffset),
-        })
-      }
-    }
-
-    if (allRanges.length === 0) {
-      // Cues exist but none overlap any clip's source window — fall back to
-      // playhead-anchored so the user still sees something rather than a
-      // silent no-op.
-      return this.insertCuesAtInPoint({
-        cues,
-        fileName,
-        format,
-        sourceType,
-        mediaId: undefined,
-        timeline,
-        canvasWidth,
-        canvasHeight,
-      })
-    }
-
-    const targetTrack = ensureCaptionTrack(timeline, allRanges)
-    const items: TextItem[] = []
-    for (const clip of clips) {
-      const clipItems = buildSubtitleTextItemsForClip({
-        trackId: targetTrack.id,
-        cues,
-        clip,
-        timelineFps: timeline.fps,
-        canvasWidth,
-        canvasHeight,
-        fileName,
-        format,
-        sourceType,
-      })
-      items.push(...clipItems)
-    }
-
-    if (items.length === 0) return []
-    timeline.addItems(items)
-    useSelectionStore.getState().selectItems(items.map((item) => item.id))
-    return items
-  }
 }
 
-function ensureCaptionTrack(
-  timeline: ReturnType<typeof useTimelineStore.getState>,
-  ranges: ReadonlyArray<{ startFrame: number; endFrame: number }>,
-): TimelineTrack {
-  let nextTracks: TimelineTrack[] = [...timeline.tracks]
-  let targetTrack = findCompatibleCaptionTrackForRanges(nextTracks, timeline.items, ranges)
-  if (!targetTrack) {
-    targetTrack = buildCaptionTrack(nextTracks)
-    nextTracks = [...nextTracks, targetTrack].sort((a, b) => a.order - b.order)
-    timeline.setTracks(nextTracks)
+/**
+ * Treat a timeline item as "the existing subtitle for one of `clipIds`"
+ * if it's either:
+ *  - a {@link SubtitleSegmentItem} whose source.clipId matches, or
+ *  - a legacy per-cue caption text item linked to that clipId via
+ *    `captionSource.clipId`.
+ *
+ * Both shapes get cleared on re-extract so the user always sees a single,
+ * fresh subtitle entity per clip.
+ */
+function isSubtitleForClip(item: TimelineItem, clipIds: ReadonlySet<string>): boolean {
+  if (item.type === 'subtitle') {
+    return item.source.type === 'embedded-subtitles' && clipIds.has(item.source.clipId)
   }
-  return targetTrack
+  if (item.type !== 'text') return false
+  const source = item.captionSource
+  return (
+    source !== undefined &&
+    (source.type === 'embedded-subtitles' || source.type === 'subtitle-import') &&
+    clipIds.has(source.clipId)
+  )
 }
 
 export const subtitleSidecarService = new SubtitleSidecarService()
