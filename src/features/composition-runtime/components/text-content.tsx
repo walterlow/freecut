@@ -119,6 +119,10 @@ export const TextContent: React.FC<{ item: TextItem & { _sequenceFrameOffset?: n
           textShadow: cssTextShadow,
           WebkitTextStrokeWidth: strokeWidth,
           WebkitTextStrokeColor: stroke?.color,
+          // Paint stroke first, then fill on top — without this, a thick
+          // stroke covers the fill entirely (text becomes solid stroke
+          // color, e.g. illegible black-on-black for the TikTok preset).
+          paintOrder: 'stroke fill',
           display: 'flex',
           flexDirection: 'column',
           gap: 0,

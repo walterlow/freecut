@@ -1489,7 +1489,9 @@ function renderSubtitleSegmentItem(
   const fps = rctx.canvasSettings.fps || 30
   const secondsIntoSegment = (frame - item.from) / fps
   const activeCue = findActiveSubtitleCue(item.cues, secondsIntoSegment)
-  if (!activeCue || activeCue.text.length === 0) return
+  if (!activeCue) return
+  const cleanedText = stripSubtitleMarkup(activeCue.text)
+  if (cleanedText.length === 0) return
 
   const ephemeralText: TextItem = {
     id: item.id,
@@ -1499,7 +1501,7 @@ function renderSubtitleSegmentItem(
     durationInFrames: item.durationInFrames,
     label: item.label,
     mediaId: item.mediaId,
-    text: activeCue.text,
+    text: cleanedText,
     fontSize: item.fontSize,
     fontFamily: item.fontFamily,
     fontWeight: item.fontWeight,
@@ -1518,6 +1520,11 @@ function renderSubtitleSegmentItem(
     transform: item.transform,
   }
   renderTextItem(ctx, ephemeralText, transform, rctx)
+}
+
+/** Strip simple SRT/HTML markup tags so the canvas renders plain text. */
+function stripSubtitleMarkup(text: string): string {
+  return text.replace(/<\/?(?:i|b|u|font|c|v|ruby|rt|lang)\b[^>]*>/gi, '').trim()
 }
 
 function findActiveSubtitleCue<T extends { startSeconds: number; endSeconds: number }>(

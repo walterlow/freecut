@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { usePlaybackStore } from '@/shared/state/playback'
 import type { SubtitleSegmentItem, TimelineItem } from '@/types/timeline'
 
 import { CaptionStyleControls } from './caption-style-controls'
@@ -77,6 +78,8 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
   canvasHeight,
 }: SingleSubtitleSegmentEditorProps) {
   const updateItem = useTimelineStore((s) => s.updateItem)
+  const fps = useTimelineStore((s) => s.fps)
+  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame)
 
   const updateCue = useCallback(
     (cueId: string, patch: Partial<{ text: string; startSeconds: number; endSeconds: number }>) => {
@@ -84,6 +87,14 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
       updateItem(segment.id, { cues: next })
     },
     [segment.cues, segment.id, updateItem],
+  )
+
+  const seekToCue = useCallback(
+    (startSeconds: number) => {
+      const targetFrame = segment.from + Math.round(startSeconds * fps)
+      setCurrentFrame(Math.max(0, targetFrame))
+    },
+    [fps, segment.from, setCurrentFrame],
   )
 
   const sourceLabel =
@@ -126,6 +137,7 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
               startSeconds={cue.startSeconds}
               endSeconds={cue.endSeconds}
               onChange={updateCue}
+              onSeek={seekToCue}
             />
           ))}
         </ul>
@@ -144,6 +156,7 @@ interface SubtitleCueRowProps {
     cueId: string,
     patch: Partial<{ text: string; startSeconds: number; endSeconds: number }>,
   ) => void
+  onSeek?: (startSeconds: number) => void
 }
 
 const SubtitleCueRow = memo(function SubtitleCueRow({
@@ -153,13 +166,19 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
   startSeconds,
   endSeconds,
   onChange,
+  onSeek,
 }: SubtitleCueRowProps) {
   return (
     <li className="rounded border border-border bg-card/40 p-2">
       <div className="flex items-center gap-2 pb-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground tabular-nums">
+        <button
+          type="button"
+          title="Seek playhead to this cue"
+          onClick={() => onSeek?.(startSeconds)}
+          className="rounded text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors"
+        >
           #{index + 1}
-        </span>
+        </button>
         <Label className="sr-only" htmlFor={`cue-${cueId}-start`}>
           Start
         </Label>
