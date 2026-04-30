@@ -172,6 +172,7 @@ export function updateTransitions(
   execute(
     'UPDATE_TRANSITIONS',
     () => {
+      let didChange = false
       for (const { id, updates: u } of updates) {
         if (u.durationInFrames !== undefined || u.alignment !== undefined) {
           // Alignment / duration changes need handle validation just like single updates.
@@ -183,13 +184,16 @@ export function updateTransitions(
               u.durationInFrames !== transition.durationInFrames) ||
               (u.alignment !== undefined && u.alignment !== transition.alignment))
           ) {
-            _validateAndUpdateTransition(id, u)
+            if (_validateAndUpdateTransition(id, u)) didChange = true
             continue
           }
         }
         useTransitionsStore.getState()._updateTransition(id, u)
+        didChange = true
       }
-      useTimelineSettingsStore.getState().markDirty()
+      if (didChange) {
+        useTimelineSettingsStore.getState().markDirty()
+      }
     },
     { updates },
   )
