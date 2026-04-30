@@ -196,3 +196,74 @@ function spanFormatMatches(span: TextSpan, format: SpanFormat): boolean {
     (span.color ?? undefined) === format.color
   )
 }
+
+export interface CueFormatFlags {
+  italic: boolean
+  bold: boolean
+  underline: boolean
+}
+
+/**
+ * Inspect a cue's parsed spans and return whether the *entire* cue is
+ * italic/bold/underlined. Mixed-formatting cues (some runs italic, some
+ * not) are reported as `false` for that flag — the inspector treats
+ * formatting as cue-wide because per-run editing isn't currently exposed.
+ */
+export function getCueFormatFlags(parsed: ParsedSubtitleCue): CueFormatFlags {
+  if (parsed.spans.length === 0) return { italic: false, bold: false, underline: false }
+  return {
+    italic: parsed.spans.every((s) => s.fontStyle === 'italic'),
+    bold: parsed.spans.every((s) => s.fontWeight === 'bold'),
+    underline: parsed.spans.every((s) => s.underline === true),
+  }
+}
+
+const ALIGNMENT_TO_AN: Record<string, string> = (() => {
+  const map: Record<string, string> = {}
+  for (const [n, value] of Object.entries(ASS_ALIGNMENT_MAP)) {
+    map[`${value.textAlign}|${value.verticalAlign}`] = n
+  }
+  return map
+})()
+
+function alignmentToAnNumber(
+  alignment: NonNullable<ParsedSubtitleCue['alignment']>,
+): string | null {
+  return ALIGNMENT_TO_AN[`${alignment.textAlign}|${alignment.verticalAlign}`] ?? null
+}
+
+/**
+ * Re-emit cue text from a plain-text body plus desired formatting flags.
+ * Preserves any ASS `{\anN}` alignment that was present in `previousText`
+ * so editing the textarea doesn't drop the cue's positioning.
+ *
+ * Output order: `{\anN}<b><i><u>text</u></i></b>` — fixed nesting keeps
+ * round-trips stable.
+ */
+export function buildCueText(
+  plainText: string,
+  flags: CueFormatFlags,
+  previousText: string,
+): string {
+  const previous = parseSubtitleCueText(previousText)
+  let result = plainText
+  if (flags.underline) result = `<u>${result}</u>`
+  if (flags.italic) result = `<i>${result}</i>`
+  if (flags.bold) result = `<b>${result}</b>`
+  if (previous.alignment) {
+    const an = alignmentToAnNumber(previous.alignment)
+    if (an !== null) result = `{\\an${an}}${result}`
+  }
+  return result
+}
+
+/**
+ * Toggle a single format flag for an existing cue. Reads current flags
+ * from the cue's parsed spans, flips the requested one, and rebuilds.
+ */
+export function toggleCueFormat(text: string, format: keyof CueFormatFlags): string {
+  const parsed = parseSubtitleCueText(text)
+  const current = getCueFormatFlags(parsed)
+  const next: CueFormatFlags = { ...current, [format]: !current[format] }
+  return buildCueText(parsed.plainText, next, text)
+}

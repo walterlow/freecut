@@ -6,6 +6,14 @@ import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { usePlaybackStore } from '@/shared/state/playback'
+import {
+  buildCueText,
+  getCueFormatFlags,
+  parseSubtitleCueText,
+  toggleCueFormat,
+  type CueFormatFlags,
+} from '@/shared/utils/subtitle-cue-format'
+import { cn } from '@/shared/ui/cn'
 import type { SubtitleSegmentItem, TimelineItem } from '@/types/timeline'
 
 import { CaptionStyleControls } from './caption-style-controls'
@@ -159,6 +167,18 @@ interface SubtitleCueRowProps {
   onSeek?: (startSeconds: number) => void
 }
 
+/**
+ * Editor row for a single cue.
+ *
+ * The textarea shows plain text — markup is hidden so users don't see
+ * literal `<i>` brackets. The Italic/Bold/Underline toggles below wrap
+ * (or unwrap) the entire cue with the corresponding tag, and any ASS
+ * `{\anN}` alignment in the original cue text is preserved across edits.
+ *
+ * Trade-off: cues with mixed-run formatting (e.g. half italic) collapse
+ * to whole-cue formatting on first text edit. That's rare in real subs
+ * and the alternative — rich-text editing — is a much bigger surface.
+ */
 const SubtitleCueRow = memo(function SubtitleCueRow({
   index,
   cueId,
@@ -168,6 +188,23 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
   onChange,
   onSeek,
 }: SubtitleCueRowProps) {
+  const parsed = useMemo(() => parseSubtitleCueText(text), [text])
+  const flags = useMemo(() => getCueFormatFlags(parsed), [parsed])
+
+  const handlePlainTextChange = useCallback(
+    (nextPlainText: string) => {
+      onChange(cueId, { text: buildCueText(nextPlainText, flags, text) })
+    },
+    [cueId, flags, onChange, text],
+  )
+
+  const handleToggle = useCallback(
+    (format: keyof CueFormatFlags) => {
+      onChange(cueId, { text: toggleCueFormat(text, format) })
+    },
+    [cueId, onChange, text],
+  )
+
   return (
     <li className="rounded border border-border bg-card/40 p-2">
       <div className="flex items-center gap-2 pb-1.5">
@@ -212,11 +249,82 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
         />
       </div>
       <textarea
-        value={text}
-        onChange={(event) => onChange(cueId, { text: event.target.value })}
+        value={parsed.plainText}
+        onChange={(event) => handlePlainTextChange(event.target.value)}
         rows={2}
         className="w-full resize-none rounded border border-input bg-transparent px-2 py-1 text-xs leading-snug focus:outline-none focus:ring-1 focus:ring-ring"
       />
+      <div className="flex items-center gap-1 pt-1">
+        <FormatToggleButton
+          active={flags.italic}
+          onClick={() => handleToggle('italic')}
+          label="Italic"
+          glyph="I"
+          glyphStyle={{ fontStyle: 'italic' }}
+        />
+        <FormatToggleButton
+          active={flags.bold}
+          onClick={() => handleToggle('bold')}
+          label="Bold"
+          glyph="B"
+          glyphStyle={{ fontWeight: 700 }}
+        />
+        <FormatToggleButton
+          active={flags.underline}
+          onClick={() => handleToggle('underline')}
+          label="Underline"
+          glyph="U"
+          glyphStyle={{ textDecoration: 'underline' }}
+        />
+        {parsed.alignment && (
+          <span
+            className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground"
+            title={`Cue position: ${parsed.alignment.verticalAlign} ${parsed.alignment.textAlign}`}
+          >
+            {parsed.alignment.verticalAlign === 'top'
+              ? '▲'
+              : parsed.alignment.verticalAlign === 'bottom'
+                ? '▼'
+                : '◆'}{' '}
+            {parsed.alignment.textAlign}
+          </span>
+        )}
+      </div>
     </li>
   )
 })
+
+interface FormatToggleButtonProps {
+  active: boolean
+  onClick: () => void
+  label: string
+  glyph: string
+  glyphStyle?: React.CSSProperties
+}
+
+function FormatToggleButton({
+  active,
+  onClick,
+  label,
+  glyph,
+  glyphStyle,
+}: FormatToggleButtonProps) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'h-5 w-5 rounded border text-[11px] leading-none transition-colors',
+        active
+          ? 'border-primary bg-primary/15 text-foreground'
+          : 'border-border text-muted-foreground hover:bg-secondary/40',
+      )}
+      style={glyphStyle}
+    >
+      {glyph}
+    </button>
+  )
+}

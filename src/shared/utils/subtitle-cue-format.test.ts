@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { parseSubtitleCueText } from './subtitle-cue-format'
+import {
+  buildCueText,
+  getCueFormatFlags,
+  parseSubtitleCueText,
+  toggleCueFormat,
+} from './subtitle-cue-format'
 
 describe('parseSubtitleCueText', () => {
   it('returns a single plain span for unmarked text', () => {
@@ -54,6 +59,43 @@ describe('parseSubtitleCueText', () => {
   it('treats stray < as literal when not a recognised tag', () => {
     const result = parseSubtitleCueText('a < b is true')
     expect(result.plainText).toBe('a < b is true')
+  })
+
+  it('detects whole-cue italic/bold/underline flags', () => {
+    expect(getCueFormatFlags(parseSubtitleCueText('<i>all italic</i>'))).toEqual({
+      italic: true,
+      bold: false,
+      underline: false,
+    })
+    expect(getCueFormatFlags(parseSubtitleCueText('<b><i>both</i></b>'))).toEqual({
+      italic: true,
+      bold: true,
+      underline: false,
+    })
+    // Mixed run formatting → not whole-cue italic.
+    expect(getCueFormatFlags(parseSubtitleCueText('plain <i>part</i>'))).toEqual({
+      italic: false,
+      bold: false,
+      underline: false,
+    })
+  })
+
+  it('toggleCueFormat wraps and unwraps the whole cue', () => {
+    expect(toggleCueFormat('plain', 'italic')).toBe('<i>plain</i>')
+    expect(toggleCueFormat('<i>plain</i>', 'italic')).toBe('plain')
+    expect(toggleCueFormat('<i>both</i>', 'bold')).toBe('<b><i>both</i></b>')
+  })
+
+  it('buildCueText preserves {\\anN} alignment from previous text', () => {
+    const previous = '{\\an8}Jun-ho.'
+    const next = buildCueText('Jun-ho.', { italic: true, bold: false, underline: false }, previous)
+    expect(next).toBe('{\\an8}<i>Jun-ho.</i>')
+  })
+
+  it('buildCueText collapses to plain when no flags set', () => {
+    expect(
+      buildCueText('hello', { italic: false, bold: false, underline: false }, '<i>hello</i>'),
+    ).toBe('hello')
   })
 
   it('reports empty for whitespace/markup-only cues', () => {
