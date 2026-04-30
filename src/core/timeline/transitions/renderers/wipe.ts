@@ -353,6 +353,22 @@ function addOutgoingMaskPath(
 }
 
 function createWipeMaskRenderer(kind: WipeMask): TransitionRenderer {
+  let scratchCanvas: OffscreenCanvas | null = null
+  let scratchCtx: OffscreenCanvasRenderingContext2D | null = null
+
+  function getScratchContext(
+    width: number,
+    height: number,
+  ): { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D } | null {
+    if (!scratchCanvas || scratchCanvas.width !== width || scratchCanvas.height !== height) {
+      scratchCanvas = new OffscreenCanvas(width, height)
+      scratchCtx = scratchCanvas.getContext('2d')
+    }
+    if (!scratchCtx) return null
+    scratchCtx.clearRect(0, 0, width, height)
+    return { canvas: scratchCanvas, ctx: scratchCtx }
+  }
+
   return {
     calculateStyles(
       progress,
@@ -393,28 +409,26 @@ function createWipeMaskRenderer(kind: WipeMask): TransitionRenderer {
       ctx.drawImage(rightCanvas, 0, 0, w, h)
 
       if (kind === 'spiral') {
-        const leftLayer = new OffscreenCanvas(w, h)
-        const leftCtx = leftLayer.getContext('2d')
-        if (!leftCtx) {
+        const scratch = getScratchContext(w, h)
+        if (!scratch) {
           return
         }
 
-        leftCtx.drawImage(leftCanvas, 0, 0, w, h)
-        drawSpiralCutout(leftCtx, w, h, p)
-        ctx.drawImage(leftLayer, 0, 0)
+        scratch.ctx.drawImage(leftCanvas, 0, 0, w, h)
+        drawSpiralCutout(scratch.ctx, w, h, p)
+        ctx.drawImage(scratch.canvas, 0, 0)
         return
       }
 
       if (kind === 'x') {
-        const leftLayer = new OffscreenCanvas(w, h)
-        const leftCtx = leftLayer.getContext('2d')
-        if (!leftCtx) {
+        const scratch = getScratchContext(w, h)
+        if (!scratch) {
           return
         }
 
-        leftCtx.drawImage(leftCanvas, 0, 0, w, h)
-        drawXCutout(leftCtx, w, h, p)
-        ctx.drawImage(leftLayer, 0, 0)
+        scratch.ctx.drawImage(leftCanvas, 0, 0, w, h)
+        drawXCutout(scratch.ctx, w, h, p)
+        ctx.drawImage(scratch.canvas, 0, 0)
         return
       }
 

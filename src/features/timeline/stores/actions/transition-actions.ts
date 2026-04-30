@@ -109,48 +109,51 @@ export function addTransition(
   )
 }
 
-export function updateTransition(
-  id: string,
-  updates: Partial<
-    Pick<
-      Transition,
-      | 'durationInFrames'
-      | 'type'
-      | 'presentation'
-      | 'direction'
-      | 'timing'
-      | 'alignment'
-      | 'bezierPoints'
-      | 'presetId'
-      | 'properties'
-    >
-  >,
-): void {
+type TransitionUpdates = Partial<
+  Pick<
+    Transition,
+    | 'durationInFrames'
+    | 'type'
+    | 'presentation'
+    | 'direction'
+    | 'timing'
+    | 'alignment'
+    | 'bezierPoints'
+    | 'presetId'
+    | 'properties'
+  >
+>
+
+function _validateAndUpdateTransition(id: string, updates: TransitionUpdates): void {
+  const transitions = useTransitionsStore.getState().transitions
+  const transition = transitions.find((t) => t.id === id)
+  if (!transition) return
+  const items = useItemsStore.getState().items
+  const leftClip = items.find((i) => i.id === transition.leftClipId)
+  const rightClip = items.find((i) => i.id === transition.rightClipId)
+  const nextTransition = { ...transition, ...updates }
+
+  if (leftClip && rightClip) {
+    const validation = canAddTransition(
+      leftClip,
+      rightClip,
+      nextTransition.durationInFrames,
+      nextTransition.alignment,
+    )
+    if (!validation.canAdd) {
+      getLogger().warn('[updateTransition] Cannot update transition:', validation.reason)
+      return
+    }
+  }
+
+  useTransitionsStore.getState()._updateTransition(id, updates)
+}
+
+export function updateTransition(id: string, updates: TransitionUpdates): void {
   execute(
     'UPDATE_TRANSITION',
     () => {
-      const transitions = useTransitionsStore.getState().transitions
-      const transition = transitions.find((t) => t.id === id)
-      if (!transition) return
-      const items = useItemsStore.getState().items
-      const leftClip = items.find((i) => i.id === transition.leftClipId)
-      const rightClip = items.find((i) => i.id === transition.rightClipId)
-      const nextTransition = { ...transition, ...updates }
-
-      if (leftClip && rightClip) {
-        const validation = canAddTransition(
-          leftClip,
-          rightClip,
-          nextTransition.durationInFrames,
-          nextTransition.alignment,
-        )
-        if (!validation.canAdd) {
-          getLogger().warn('[updateTransition] Cannot update transition:', validation.reason)
-          return
-        }
-      }
-
-      useTransitionsStore.getState()._updateTransition(id, updates)
+      _validateAndUpdateTransition(id, updates)
       useTimelineSettingsStore.getState().markDirty()
     },
     { id, updates },
@@ -160,42 +163,25 @@ export function updateTransition(
 export function updateTransitions(
   updates: Array<{
     id: string
-    updates: Partial<
-      Pick<
-        Transition,
-        | 'durationInFrames'
-        | 'type'
-        | 'presentation'
-        | 'direction'
-        | 'timing'
-        | 'alignment'
-        | 'bezierPoints'
-        | 'presetId'
-        | 'properties'
-      >
-    >
+    updates: TransitionUpdates
   }>,
 ): void {
   if (updates.length === 0) return
   execute(
     'UPDATE_TRANSITIONS',
     () => {
-      // For batch updates that don't change duration, apply directly
-      // Duration changes require individual processing via updateTransition
       const store = useTransitionsStore.getState()
       for (const { id, updates: u } of updates) {
         if (u.durationInFrames !== undefined || u.alignment !== undefined) {
-          // Delegate to single update for proper clip adjustment / handle validation.
-          // Alignment changes affect handle feasibility just like duration changes.
-          const transitions = store.transitions
-          const transition = transitions.find((t) => t.id === id)
+          // Alignment / duration changes need handle validation just like single updates.
+          const transition = store.transitions.find((t) => t.id === id)
           if (
             transition &&
             ((u.durationInFrames !== undefined &&
               u.durationInFrames !== transition.durationInFrames) ||
               (u.alignment !== undefined && u.alignment !== transition.alignment))
           ) {
-            updateTransition(id, u)
+            _validateAndUpdateTransition(id, u)
             continue
           }
         }

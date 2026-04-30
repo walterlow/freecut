@@ -241,13 +241,8 @@ export function TransitionPanel() {
     [presentationConfigGroups],
   )
   const currentPresentationConfig = useMemo(
-    () =>
-      presentationConfigs.find(
-        (config) =>
-          config.id === selectedTransition?.presentation &&
-          (config.direction ?? undefined) === (selectedTransition?.direction ?? undefined),
-      ),
-    [presentationConfigs, selectedTransition?.direction, selectedTransition?.presentation],
+    () => presentationConfigs.find((config) => config.id === selectedTransition?.presentation),
+    [presentationConfigs, selectedTransition?.presentation],
   )
   const currentPresentationLabel = currentPresentationConfig
     ? getPresentationOptionLabel(currentPresentationConfig)
