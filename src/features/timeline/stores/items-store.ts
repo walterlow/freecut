@@ -315,6 +315,51 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
   return normalized as T
 }
 
+/**
+ * Trim a subtitle segment from its start: re-anchor every cue's time so the
+ * new `from` becomes 0, dropping cues entirely before the new boundary and
+ * clamping cues that straddle it.
+ *
+ * `clampedAmount` is in timeline frames — positive means trimming inward.
+ */
+function trimSubtitleCuesAtStart(
+  item: import('@/types/timeline').SubtitleSegmentItem,
+  clampedAmount: number,
+  timelineFps: number,
+): { cues: import('@/types/timeline').SubtitleSegmentItem['cues'] } | null {
+  if (clampedAmount === 0) return null
+  const offsetSeconds = clampedAmount / timelineFps
+  const nextCues: import('@/types/timeline').SubtitleSegmentItem['cues'] = []
+  for (const cue of item.cues) {
+    if (cue.endSeconds <= offsetSeconds) continue // entirely outside new window
+    const startSeconds = Math.max(0, cue.startSeconds - offsetSeconds)
+    const endSeconds = cue.endSeconds - offsetSeconds
+    if (endSeconds <= startSeconds) continue
+    nextCues.push({ ...cue, startSeconds, endSeconds })
+  }
+  return { cues: nextCues }
+}
+
+/**
+ * Trim a subtitle segment from its end: drop cues past the new duration and
+ * clamp cues that straddle the boundary.
+ */
+function trimSubtitleCuesAtEnd(
+  item: import('@/types/timeline').SubtitleSegmentItem,
+  newDurationFrames: number,
+  timelineFps: number,
+): { cues: import('@/types/timeline').SubtitleSegmentItem['cues'] } | null {
+  const newEndSeconds = newDurationFrames / timelineFps
+  const nextCues: import('@/types/timeline').SubtitleSegmentItem['cues'] = []
+  for (const cue of item.cues) {
+    if (cue.startSeconds >= newEndSeconds) continue
+    const endSeconds = Math.min(cue.endSeconds, newEndSeconds)
+    if (endSeconds <= cue.startSeconds) continue
+    nextCues.push({ ...cue, endSeconds })
+  }
+  return { cues: nextCues }
+}
+
 function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineItem> {
   const normalized = { ...updates } as Partial<TimelineItem>
 
@@ -1148,11 +1193,19 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
           timelineFps,
         )
 
+        // Subtitle segments: re-anchor cues to the new `from` and drop cues
+        // that no longer fall inside the visible window.
+        const cueUpdate =
+          item.type === 'subtitle'
+            ? trimSubtitleCuesAtStart(item, clampedAmount, timelineFps)
+            : null
+
         return {
           ...item,
           from: roundFrame(newFrom),
           durationInFrames: roundDuration(newDuration),
           ...sourceUpdate,
+          ...(cueUpdate ?? {}),
         } as typeof item
       })
       return withItemIndexes(nextItems, state)
@@ -1191,10 +1244,15 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
           timelineFps,
         )
 
+        // Subtitle segments: drop or truncate cues past the new end.
+        const cueUpdate =
+          item.type === 'subtitle' ? trimSubtitleCuesAtEnd(item, newDuration, timelineFps) : null
+
         return {
           ...item,
           durationInFrames: roundDuration(newDuration),
           ...sourceUpdate,
+          ...(cueUpdate ?? {}),
         } as typeof item
       })
       return withItemIndexes(nextItems, state)
