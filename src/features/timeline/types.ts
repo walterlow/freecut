@@ -132,13 +132,20 @@ export interface TimelineActions {
     durationInFrames?: number,
     presentation?: TransitionPresentation,
     direction?: WipeDirection | SlideDirection | FlipDirection,
+    alignment?: number,
   ) => boolean
   updateTransition: (
     id: string,
     updates: Partial<
       Pick<
         Transition,
-        'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'properties'
+        | 'durationInFrames'
+        | 'type'
+        | 'presentation'
+        | 'direction'
+        | 'timing'
+        | 'alignment'
+        | 'properties'
       >
     >,
   ) => void
@@ -148,7 +155,13 @@ export interface TimelineActions {
       updates: Partial<
         Pick<
           Transition,
-          'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'properties'
+          | 'durationInFrames'
+          | 'type'
+          | 'presentation'
+          | 'direction'
+          | 'timing'
+          | 'alignment'
+          | 'properties'
         >
       >
     }>,

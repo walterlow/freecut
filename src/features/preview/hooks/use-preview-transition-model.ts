@@ -19,6 +19,23 @@ interface BuildPreviewTransitionDataParams {
   fastScrubScaledTracks: CompositionInputProps['tracks']
 }
 
+function formatTransitionFingerprint(
+  transition: NonNullable<CompositionInputProps['transitions']>[number],
+): string {
+  return [
+    transition.id,
+    transition.type,
+    transition.leftClipId,
+    transition.rightClipId,
+    transition.trackId ?? '',
+    transition.durationInFrames,
+    transition.alignment ?? 0.5,
+    transition.presentation ?? '',
+    transition.direction ?? '',
+    transition.timing ?? '',
+  ].join(':')
+}
+
 export function usePreviewTransitionModel({
   fps,
   transitions,
@@ -141,10 +158,7 @@ export function buildPreviewTransitionData({
 }: BuildPreviewTransitionDataParams) {
   const safeTransitions = transitions ?? []
   const playbackTransitionFingerprint = safeTransitions
-    .map(
-      (transition) =>
-        `${transition.id}:${transition.type}:${transition.leftClipId}:${transition.rightClipId}:${transition.trackId ?? ''}:${transition.durationInFrames}:${transition.presentation ?? ''}:${transition.timing ?? ''}`,
-    )
+    .map((transition) => formatTransitionFingerprint(transition))
     .join('|')
 
   const clipMap = new Map<string, TimelineItem>()

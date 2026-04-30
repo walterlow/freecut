@@ -158,6 +158,10 @@ export interface WorkerLoadedImage {
 const TIER2_VIDEO_FRAME_TOLERANCE_FACTOR = 0.9
 const WORKER_PRESEEK_WAIT_MS = 12
 
+function isFrameInsideItemTimelineSpan(item: TimelineItem, frame: number): boolean {
+  return frame >= item.from && frame < item.from + item.durationInFrames
+}
+
 // ---------------------------------------------------------------------------
 // ItemRenderContext – closure state passed explicitly
 // ---------------------------------------------------------------------------
@@ -803,10 +807,14 @@ async function renderVideoItem(
       ? (snappedSourceFrame + 1e-4) / sourceFps
       : rawSourceTime
   const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps)
-  const domVideo =
-    isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0
-      ? rctx.domVideoElementProvider(item.id)
-      : null
+  const domVideoElementProvider = rctx.domVideoElementProvider
+  const canUseDomVideoElement =
+    isPreviewMode &&
+    domVideoElementProvider &&
+    sourceFrameOffset === 0 &&
+    !rctx.isRenderingTransition &&
+    isFrameInsideItemTimelineSpan(item, frame)
+  const domVideo = canUseDomVideoElement ? domVideoElementProvider(item.id) : null
   const domVideoDecision = resolvePreviewDomVideoDrawDecision({
     domVideo,
     sourceTime,

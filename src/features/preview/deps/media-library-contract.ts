@@ -22,4 +22,7 @@ export {
   extractValidMediaFileEntriesFromDataTransfer,
   supportsFileSystemDragDrop,
 } from '@/features/media-library/utils/file-drop'
-export { getMediaDragData } from '@/features/media-library/utils/drag-data-cache'
+export {
+  getMediaDragData,
+  clearMediaDragData,
+} from '@/features/media-library/utils/drag-data-cache'

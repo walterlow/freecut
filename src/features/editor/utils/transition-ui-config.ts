@@ -10,6 +10,8 @@ import {
   ArrowLeft,
   ArrowUp,
   ArrowDown,
+  Asterisk,
+  Columns2,
   MoveRight,
   MoveLeft,
   MoveUp,
@@ -18,13 +20,33 @@ import {
   FlipVertical,
   Clock,
   Circle,
+  Diamond,
+  Eye,
+  Hexagon,
+  Heart,
+  Pentagon,
+  Plus,
+  RectangleHorizontal,
+  RotateCw,
+  Rows3,
+  Rows4,
+  Square,
   Sparkles,
+  Star,
+  Triangle,
   Zap,
   Sun,
   Waves,
   ScanSearch,
+  SplitSquareVertical,
+  PanelTopOpen,
+  X,
   Flame,
   Film,
+  Droplet,
+  Layers,
+  Aperture,
+  CircleDot,
   type LucideIcon,
 } from 'lucide-react'
 import { transitionRegistry } from '@/core/timeline/transitions'
@@ -37,6 +59,8 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
+  Asterisk,
+  Columns2,
   MoveRight,
   MoveLeft,
   MoveDown,
@@ -47,22 +71,46 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
   FlipVertical2: FlipVertical,
   Clock,
   Circle,
+  Diamond,
+  Eye,
+  Hexagon,
+  Heart,
+  Pentagon,
+  Plus,
+  RectangleHorizontal,
+  RotateCw,
+  Rows3,
+  Rows4,
+  Square,
   Sparkles,
+  Star,
+  Triangle,
   Zap,
   Sun,
   Waves,
   ScanSearch,
+  SplitSquareVertical,
+  PanelTopOpen,
+  X,
   Flame,
   Film,
+  Droplet,
+  Layers,
+  Aperture,
+  CircleDot,
 }
 
 /** Display labels for transition categories */
 export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
   basic: { title: 'Basic' },
+  dissolve: { title: 'Dissolve' },
+  motion: { title: 'Motion' },
   wipe: { title: 'Wipe' },
   slide: { title: 'Slide' },
   flip: { title: 'Flip' },
   mask: { title: 'Mask' },
+  iris: { title: 'Iris' },
+  shape: { title: 'Shape' },
   light: { title: 'Light' },
   chromatic: { title: 'Chromatic' },
   custom: { title: 'Custom' },
@@ -71,40 +119,19 @@ export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
 /** Ordered list of categories for UI rendering */
 export const TRANSITION_CATEGORY_ORDER: TransitionCategory[] = [
   'basic',
+  'dissolve',
+  'motion',
   'wipe',
-  'slide',
-  'flip',
   'mask',
-  'light',
-  'chromatic',
+  'iris',
+  'shape',
   'custom',
 ]
 
 /** Direction string â†’ display label + icon name */
-const DIRECTION_LABELS: Record<string, { label: string; icon: string }> = {
-  'from-left': { label: 'Left', icon: 'ArrowRight' },
-  'from-right': { label: 'Right', icon: 'ArrowLeft' },
-  'from-top': { label: 'Top', icon: 'ArrowDown' },
-  'from-bottom': { label: 'Bottom', icon: 'ArrowUp' },
-}
-
 function createConfigsForDefinition(
   def: ReturnType<typeof transitionRegistry.getDefinitions>[number],
 ): PresentationConfig[] {
-  if (def.hasDirection && def.directions && def.directions.length > 0) {
-    return def.directions.map((dir) => {
-      const dirInfo = DIRECTION_LABELS[dir] || { label: dir, icon: def.icon }
-      return {
-        id: def.id,
-        label: dirInfo.label,
-        description: `${def.label} ${dirInfo.label.toLowerCase()}`,
-        icon: dirInfo.icon,
-        category: def.category,
-        direction: dir,
-      }
-    })
-  }
-
   return [
     {
       id: def.id,
@@ -112,13 +139,15 @@ function createConfigsForDefinition(
       description: def.description,
       icon: def.icon,
       category: def.category,
+      directions: def.hasDirection ? def.directions : undefined,
+      defaultDirection: def.hasDirection ? def.directions?.[0] : undefined,
     },
   ]
 }
 
 /**
  * Generate PresentationConfig array from the transition registry.
- * Directional transitions produce one config per direction.
+ * Directional transitions produce one config and expose direction as a property.
  * The flat list is grouped in the same category order used by picker UIs so
  * category-based index math stays stable.
  */

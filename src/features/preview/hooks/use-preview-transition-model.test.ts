@@ -129,6 +129,74 @@ describe('buildPreviewTransitionData', () => {
     ])
   })
 
+  it('updates fingerprint and windows when transition alignment changes', () => {
+    const track: TimelineTrack = {
+      id: 'track-1',
+      name: 'Video',
+      height: 80,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 1,
+      items: [
+        {
+          id: 'left',
+          trackId: 'track-1',
+          type: 'video',
+          src: 'left.mp4',
+          label: 'Left',
+          from: 0,
+          durationInFrames: 40,
+        },
+        {
+          id: 'right',
+          trackId: 'track-1',
+          type: 'video',
+          src: 'right.mp4',
+          label: 'Right',
+          from: 40,
+          durationInFrames: 40,
+        },
+      ],
+    }
+
+    const transition: Transition = {
+      id: 'transition-alignment',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'left',
+      rightClipId: 'right',
+      trackId: 'track-1',
+      durationInFrames: 10,
+      alignment: 0.5,
+    }
+
+    const centered = buildPreviewTransitionData({
+      fps: 30,
+      transitions: [transition],
+      fastScrubScaledTracks: [track],
+    })
+    const leftAligned = buildPreviewTransitionData({
+      fps: 30,
+      transitions: [{ ...transition, alignment: 1 }],
+      fastScrubScaledTracks: [track],
+    })
+
+    expect(centered.playbackTransitionFingerprint).not.toBe(
+      leftAligned.playbackTransitionFingerprint,
+    )
+    expect(centered.playbackTransitionWindows[0]).toMatchObject({
+      startFrame: 35,
+      endFrame: 45,
+    })
+    expect(leftAligned.playbackTransitionWindows[0]).toMatchObject({
+      startFrame: 30,
+      endFrame: 40,
+    })
+  })
+
   it('does not mark transitions with stale mask blend modes as complex', () => {
     const track: TimelineTrack = {
       id: 'track-1',

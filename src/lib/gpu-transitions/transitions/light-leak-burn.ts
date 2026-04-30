@@ -3,7 +3,7 @@ import type { GpuTransitionDefinition } from '../types'
 export const lightLeakBurn: GpuTransitionDefinition = {
   id: 'lightLeakBurn',
   name: 'Light Leak Burn',
-  category: 'light',
+  category: 'custom',
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
   entryPoint: 'lightLeakBurnFragment',

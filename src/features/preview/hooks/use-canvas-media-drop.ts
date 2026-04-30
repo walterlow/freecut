@@ -11,6 +11,7 @@ import {
 } from '@/features/preview/deps/timeline-utils'
 import {
   extractValidMediaFileEntriesFromDataTransfer,
+  clearMediaDragData,
   getMediaDragData,
   getMediaType,
   getMimeType,
@@ -512,12 +513,18 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
         return
       }
 
-      if (currentDropState.source === 'library') {
-        await handleLibraryDrop(event, currentDropState)
-        return
-      }
+      try {
+        if (currentDropState.source === 'library') {
+          await handleLibraryDrop(event, currentDropState)
+          return
+        }
 
-      await handleExternalFileDrop(event, currentDropState)
+        await handleExternalFileDrop(event, currentDropState)
+      } finally {
+        if (currentDropState.source === 'library') {
+          clearMediaDragData()
+        }
+      }
     },
     [clearDropState, coordParams, handleExternalFileDrop, handleLibraryDrop],
   )

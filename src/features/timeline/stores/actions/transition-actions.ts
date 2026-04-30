@@ -31,6 +31,7 @@ export function addTransition(
   durationInFrames?: number,
   presentation?: TransitionPresentation,
   direction?: WipeDirection | SlideDirection | FlipDirection,
+  alignment: number = 0.5,
 ): boolean {
   return execute(
     'ADD_TRANSITION',
@@ -61,7 +62,7 @@ export function addTransition(
       const leftEnd = leftClip.from + leftClip.durationInFrames
       const isAdjacent = areFramesAligned(leftEnd, rightClip.from)
       if (isAdjacent) {
-        const maxHandleDuration = getMaxTransitionDurationForHandles(leftClip, rightClip, 0.5)
+        const maxHandleDuration = getMaxTransitionDurationForHandles(leftClip, rightClip, alignment)
         if (maxHandleDuration < 1) {
           getLogger().warn(
             '[addTransition] Cannot add transition: insufficient source handle at cut',
@@ -72,7 +73,7 @@ export function addTransition(
       }
 
       // Validate that transition can be added (includes handle check)
-      const validation = canAddTransition(leftClip, rightClip, duration, 0.5)
+      const validation = canAddTransition(leftClip, rightClip, duration, alignment)
       if (!validation.canAdd) {
         getLogger().warn('[addTransition] Cannot add transition:', validation.reason)
         return false
@@ -98,6 +99,7 @@ export function addTransition(
           duration,
           presentation,
           direction,
+          alignment,
         )
 
       useTimelineSettingsStore.getState().markDirty()
@@ -107,49 +109,54 @@ export function addTransition(
   )
 }
 
-export function updateTransition(
-  id: string,
-  updates: Partial<
-    Pick<
-      Transition,
-      | 'durationInFrames'
-      | 'type'
-      | 'presentation'
-      | 'direction'
-      | 'timing'
-      | 'alignment'
-      | 'bezierPoints'
-      | 'presetId'
-      | 'properties'
-    >
-  >,
-): void {
+type TransitionUpdates = Partial<
+  Pick<
+    Transition,
+    | 'durationInFrames'
+    | 'type'
+    | 'presentation'
+    | 'direction'
+    | 'timing'
+    | 'alignment'
+    | 'bezierPoints'
+    | 'presetId'
+    | 'properties'
+  >
+>
+
+function _validateAndUpdateTransition(id: string, updates: TransitionUpdates): boolean {
+  const transitions = useTransitionsStore.getState().transitions
+  const transition = transitions.find((t) => t.id === id)
+  if (!transition) return false
+  const items = useItemsStore.getState().items
+  const leftClip = items.find((i) => i.id === transition.leftClipId)
+  const rightClip = items.find((i) => i.id === transition.rightClipId)
+  const nextTransition = { ...transition, ...updates }
+
+  if (leftClip && rightClip) {
+    const validation = canAddTransition(
+      leftClip,
+      rightClip,
+      nextTransition.durationInFrames,
+      nextTransition.alignment,
+    )
+    if (!validation.canAdd) {
+      getLogger().warn('[updateTransition] Cannot update transition:', validation.reason)
+      return false
+    }
+  }
+
+  useTransitionsStore.getState()._updateTransition(id, updates)
+  return true
+}
+
+export function updateTransition(id: string, updates: TransitionUpdates): void {
   execute(
     'UPDATE_TRANSITION',
     () => {
-      const transitions = useTransitionsStore.getState().transitions
-      const transition = transitions.find((t) => t.id === id)
-      if (!transition) return
-      const items = useItemsStore.getState().items
-      const leftClip = items.find((i) => i.id === transition.leftClipId)
-      const rightClip = items.find((i) => i.id === transition.rightClipId)
-      const nextTransition = { ...transition, ...updates }
-
-      if (leftClip && rightClip) {
-        const validation = canAddTransition(
-          leftClip,
-          rightClip,
-          nextTransition.durationInFrames,
-          nextTransition.alignment,
-        )
-        if (!validation.canAdd) {
-          getLogger().warn('[updateTransition] Cannot update transition:', validation.reason)
-          return
-        }
+      if (_validateAndUpdateTransition(id, updates)) {
+        useTimelineSettingsStore.getState().markDirty()
       }
-
-      useTransitionsStore.getState()._updateTransition(id, updates)
-      useTimelineSettingsStore.getState().markDirty()
     },
     { id, updates },
   )
@@ -158,44 +165,35 @@ export function updateTransition(
 export function updateTransitions(
   updates: Array<{
     id: string
-    updates: Partial<
-      Pick<
-        Transition,
-        | 'durationInFrames'
-        | 'type'
-        | 'presentation'
-        | 'direction'
-        | 'timing'
-        | 'alignment'
-        | 'bezierPoints'
-        | 'presetId'
-        | 'properties'
-      >
-    >
+    updates: TransitionUpdates
   }>,
 ): void {
   if (updates.length === 0) return
   execute(
     'UPDATE_TRANSITIONS',
     () => {
-      // For batch updates that don't change duration, apply directly
-      // Duration changes require individual processing via updateTransition
-      const store = useTransitionsStore.getState()
+      let didChange = false
       for (const { id, updates: u } of updates) {
-        if (u.durationInFrames !== undefined) {
-          // Delegate to single update for proper clip adjustment
-          const transitions = store.transitions
-          const transition = transitions.find((t) => t.id === id)
-          if (transition && u.durationInFrames !== transition.durationInFrames) {
-            // This will be handled in its own execute, but since we're already
-            // in an execute block, call the logic directly
-            updateTransition(id, u)
+        if (u.durationInFrames !== undefined || u.alignment !== undefined) {
+          // Alignment / duration changes need handle validation just like single updates.
+          // Re-read the store on each iteration so duplicate ids see fresh state.
+          const transition = useTransitionsStore.getState().transitions.find((t) => t.id === id)
+          if (
+            transition &&
+            ((u.durationInFrames !== undefined &&
+              u.durationInFrames !== transition.durationInFrames) ||
+              (u.alignment !== undefined && u.alignment !== transition.alignment))
+          ) {
+            if (_validateAndUpdateTransition(id, u)) didChange = true
             continue
           }
         }
-        store._updateTransition(id, u)
+        useTransitionsStore.getState()._updateTransition(id, u)
+        didChange = true
       }
-      useTimelineSettingsStore.getState().markDirty()
+      if (didChange) {
+        useTimelineSettingsStore.getState().markDirty()
+      }
     },
     { updates },
   )

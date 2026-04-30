@@ -3,9 +3,15 @@ export type { GpuTransitionDefinition } from './types'
 export { TransitionPipeline } from './transition-pipeline'
 
 import { dissolve } from './transitions/dissolve'
+import {
+  additiveDissolve,
+  blurDissolve,
+  dipToColorDissolve,
+  nonAdditiveDissolve,
+  smoothCut,
+} from './transitions/dissolve-variants'
 import { sparkles } from './transitions/sparkles'
 import { glitch } from './transitions/glitch'
-import { lightLeak } from './transitions/light-leak'
 import { pixelate } from './transitions/pixelate'
 import { chromatic } from './transitions/chromatic'
 import { radialBlur } from './transitions/radial-blur'
@@ -27,9 +33,13 @@ function register(def: GpuTransitionDefinition) {
 }
 
 register(dissolve)
+register(additiveDissolve)
+register(blurDissolve)
+register(dipToColorDissolve)
+register(nonAdditiveDissolve)
+register(smoothCut)
 register(sparkles)
 register(glitch)
-register(lightLeak)
 register(pixelate)
 register(chromatic)
 register(radialBlur)

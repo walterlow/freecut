@@ -9,6 +9,7 @@ import {
   clampRollingTrimDeltaToPreserveTransition,
   clampSlideDeltaToPreserveTransitions,
   clampSlipDeltaToPreserveTransitions,
+  getMaxTransitionDurationForHandles,
 } from './transition-utils'
 
 function createVideoClip(
@@ -49,6 +50,7 @@ function createTransition(
   leftClipId: string,
   rightClipId: string,
   durationInFrames: number,
+  alignment = 0.5,
 ): Transition {
   return {
     id: 'tr-1',
@@ -59,6 +61,7 @@ function createTransition(
     durationInFrames,
     presentation: 'fade',
     timing: 'linear',
+    alignment,
   }
 }
 
@@ -111,12 +114,36 @@ describe('transition-utils', () => {
     expect(result.canAdd).toBe(true)
   })
 
-  it('allows left-only transitions when alignment keeps the incoming side at the cut', () => {
-    const left = createVideoClip('A', 0, 100, 0, 140, 200)
-    const right = createVideoClip('B', 100, 100, 0, 100, 100)
+  it('allows left-aligned transitions when the incoming clip has enough head handle', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 200)
+    const right = createVideoClip('B', 100, 100, 30, 130, 200)
 
     const result = canAddTransition(left, right, 30, 1)
     expect(result.canAdd).toBe(true)
+  })
+
+  it('rejects left-aligned transitions when the incoming clip lacks head handle', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 200)
+    const right = createVideoClip('B', 100, 100, 0, 100, 200)
+
+    const result = canAddTransition(left, right, 30, 1)
+    expect(result.canAdd).toBe(false)
+    expect(result.reason).toContain('right clip needs 30 head-handle frames')
+  })
+
+  it('limits side-aligned transition duration by the handle on the opposite clip', () => {
+    const left = createVideoClip('A', 0, 100, 0, 108, 140)
+    const right = createVideoClip('B', 100, 100, 12, 112, 200)
+
+    expect(getMaxTransitionDurationForHandles(left, right, 1)).toBe(12)
+    expect(getMaxTransitionDurationForHandles(left, right, 0)).toBe(32)
+  })
+
+  it('allows transition duration beyond the old 3 second cap when handles support it', () => {
+    const left = createVideoClip('A', 0, 300, 0, 300, 1000)
+    const right = createVideoClip('B', 300, 300, 300, 600, 1000)
+
+    expect(getMaxTransitionDurationForHandles(left, right, 0.5)).toBe(299)
   })
 
   it('rejects transition when clips are on different tracks', () => {
@@ -161,6 +188,22 @@ describe('transition-utils', () => {
     expect(clampRippleTrimDeltaToPreserveTransition(left, 'end', -20, right, transition)).toBe(-9)
   })
 
+  it('lets ripple trims use the outgoing tail freely when a transition is left-aligned', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 100)
+    const right = createVideoClip('B', 100, 100, 30, 130, 200)
+    const transition = createTransition('A', 'B', 30, 1)
+
+    expect(clampRippleTrimDeltaToPreserveTransition(left, 'end', 10, right, transition)).toBe(10)
+  })
+
+  it('clamps ripple trims against the outgoing tail when a transition is right-aligned', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 135)
+    const right = createVideoClip('B', 100, 100, 0, 100, 200)
+    const transition = createTransition('A', 'B', 30, 0)
+
+    expect(clampRippleTrimDeltaToPreserveTransition(left, 'end', 10, right, transition)).toBe(5)
+  })
+
   it('clamps rolling trims so the outgoing clip keeps enough tail handle for the transition', () => {
     const left = createVideoClip('A', 0, 100, 0, 80, 100)
     const right = createVideoClip('B', 100, 100, 40, 140, 200)
@@ -176,6 +219,26 @@ describe('transition-utils', () => {
 
     expect(clampRollingTrimDeltaToPreserveTransition(right, 'start', -10, left, transition)).toBe(
       -5,
+    )
+  })
+
+  it('clamps rolling trims against the incoming head when a transition is left-aligned', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 200)
+    const right = createVideoClip('B', 100, 100, 35, 135, 200)
+    const transition = createTransition('A', 'B', 30, 1)
+
+    expect(clampRollingTrimDeltaToPreserveTransition(right, 'start', -10, left, transition)).toBe(
+      -5,
+    )
+  })
+
+  it('lets rolling trims use the incoming head freely when a transition is right-aligned', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 200)
+    const right = createVideoClip('B', 100, 100, 20, 120, 200)
+    const transition = createTransition('A', 'B', 30, 0)
+
+    expect(clampRollingTrimDeltaToPreserveTransition(right, 'start', -10, left, transition)).toBe(
+      -10,
     )
   })
 
@@ -195,6 +258,16 @@ describe('transition-utils', () => {
     expect(clampSlipDeltaToPreserveTransitions(right, -20, [left, right], [transition])).toBe(-5)
   })
 
+  it('clamps slip edits against the aligned side handle requirements', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 135)
+    const right = createVideoClip('B', 100, 100, 35, 135, 200)
+    const rightAligned = createTransition('A', 'B', 30, 0)
+    const leftAligned = createTransition('A', 'B', 30, 1)
+
+    expect(clampSlipDeltaToPreserveTransitions(left, 10, [left, right], [rightAligned])).toBe(5)
+    expect(clampSlipDeltaToPreserveTransitions(right, -10, [left, right], [leftAligned])).toBe(-5)
+  })
+
   it('clamps slide edits so they do not invalidate transitions on the affected cut', () => {
     const left = createVideoClip('A', 0, 60, 0, 60, 66)
     const middle = createVideoClip('B', 60, 60, 60, 120, 240)
@@ -211,5 +284,23 @@ describe('transition-utils', () => {
         [transition],
       ),
     ).toBe(0)
+  })
+
+  it('clamps slide edits using the transition alignment-specific handle side', () => {
+    const left = createVideoClip('A', 0, 60, 0, 60, 77)
+    const middle = createVideoClip('B', 60, 60, 60, 120, 240)
+    const right = createVideoClip('C', 120, 60, 120, 180, 300)
+    const transition = createTransition('A', 'B', 12, 0)
+
+    expect(
+      clampSlideDeltaToPreserveTransitions(
+        middle,
+        10,
+        left,
+        right,
+        [left, middle, right],
+        [transition],
+      ),
+    ).toBe(5)
   })
 })

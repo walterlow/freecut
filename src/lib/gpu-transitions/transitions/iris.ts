@@ -4,7 +4,7 @@ import type { GpuTransitionDefinition } from '../types'
 export const iris: GpuTransitionDefinition = {
   id: 'iris',
   name: 'Iris',
-  category: 'mask',
+  category: 'iris',
   hasDirection: false,
   entryPoint: 'irisFragment',
   uniformSize: 16,

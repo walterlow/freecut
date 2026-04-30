@@ -24,11 +24,15 @@ struct FadeParams {
 fn fadeFragment(input: VertexOutput) -> @location(0) vec4f {
   let left = textureSample(leftTex, texSampler, input.uv);
   let right = textureSample(rightTex, texSampler, input.uv);
+  let p = clamp(params.progress, 0.0, 1.0);
 
-  // Smooth cosine interpolation: t = sin²(p·π/2) = ½ − ½·cos(p·π).
-  // Weights (1−t) and t always sum to 1, preserving alpha for soft crop & masks.
-  let t = 0.5 - 0.5 * cos(params.progress * PI);
-  return mix(left, right, t);
+  let outgoingWeight = select(0.0, max(0.0, cos(p * PI)), p < 0.5);
+  let incomingWeight = select(max(0.0, -cos(p * PI)), 0.0, p < 0.5);
+  let blackWeight = 1.0 - max(outgoingWeight, incomingWeight);
+  let color = left.rgb * outgoingWeight + right.rgb * incomingWeight;
+  let alpha = clamp(left.a * outgoingWeight + right.a * incomingWeight + blackWeight, 0.0, 1.0);
+
+  return vec4f(color, alpha);
 }`,
   packUniforms: (progress, width, height) => {
     return new Float32Array([progress, width, height, 0])

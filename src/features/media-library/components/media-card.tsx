@@ -536,8 +536,41 @@ export const MediaCard = memo(function MediaCard({
     [media, getTargetMediaItems],
   )
 
+  const removeNativeDragCleanupListenersRef = useRef<(() => void) | null>(null)
+
+  const cleanupDragArtifacts = useCallback(() => {
+    removeNativeDragCleanupListenersRef.current?.()
+    removeNativeDragCleanupListenersRef.current = null
+    clearMediaDragData()
+    if (dragImageRef.current) {
+      dragImageRef.current.remove()
+      dragImageRef.current = null
+    }
+  }, [])
+
+  const installNativeDragCleanupListeners = useCallback(() => {
+    cleanupDragArtifacts()
+
+    const handleNativeDragEnd = () => cleanupDragArtifacts()
+    const handleNativeDrop = () => {
+      window.setTimeout(cleanupDragArtifacts, 0)
+    }
+    const handleWindowBlur = () => cleanupDragArtifacts()
+
+    window.addEventListener('dragend', handleNativeDragEnd, true)
+    document.addEventListener('drop', handleNativeDrop, true)
+    window.addEventListener('blur', handleWindowBlur)
+
+    removeNativeDragCleanupListenersRef.current = () => {
+      window.removeEventListener('dragend', handleNativeDragEnd, true)
+      document.removeEventListener('drop', handleNativeDrop, true)
+      window.removeEventListener('blur', handleWindowBlur)
+    }
+  }, [cleanupDragArtifacts])
+
   const handleDragStart = useCallback(
     (e: React.DragEvent) => {
+      installNativeDragCleanupListeners()
       // Set drag data for timeline drop
       e.dataTransfer.effectAllowed = 'copy'
       const mediaStore = useMediaLibraryStore.getState()
@@ -606,16 +639,12 @@ export const MediaCard = memo(function MediaCard({
         e.dataTransfer.setDragImage(ghost, w / 2, h / 2)
       }
     },
-    [media.id, media.fileName, media.duration, mediaType],
+    [installNativeDragCleanupListeners, media.id, media.fileName, media.duration, mediaType],
   )
 
-  const handleDragEnd = useCallback(() => {
-    clearMediaDragData()
-    if (dragImageRef.current) {
-      document.body.removeChild(dragImageRef.current)
-      dragImageRef.current = null
-    }
-  }, [])
+  const handleDragEnd = cleanupDragArtifacts
+
+  useEffect(() => cleanupDragArtifacts, [cleanupDragArtifacts])
 
   const handleClick = (e: React.MouseEvent) => {
     onSelect?.(e)
