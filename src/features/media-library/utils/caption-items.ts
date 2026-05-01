@@ -78,6 +78,8 @@ export type CaptionTextItemTemplate = Pick<
   | 'underline'
   | 'color'
   | 'backgroundColor'
+  | 'backgroundRadius'
+  | 'textPadding'
   | 'textAlign'
   | 'verticalAlign'
   | 'lineHeight'
@@ -510,6 +512,8 @@ export function getCaptionTextItemTemplate(
     underline: item.underline,
     color: item.color,
     backgroundColor: item.backgroundColor,
+    backgroundRadius: item.backgroundRadius,
+    textPadding: item.textPadding,
     textAlign: item.textAlign,
     verticalAlign: item.verticalAlign,
     lineHeight: item.lineHeight,

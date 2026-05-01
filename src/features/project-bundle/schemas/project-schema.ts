@@ -139,7 +139,10 @@ const textLayoutDraftsSchema = z.object({
 })
 
 const captionSourceSchema = z.object({
-  type: z.enum(['transcript', 'ai-captions']),
+  // Mirrors GeneratedCaptionSource['type'] in src/types/timeline.ts. Keep
+  // both enums in sync — bundles produced from imports/embedded subtitle
+  // tracks otherwise fail validation on re-import.
+  type: z.enum(['transcript', 'ai-captions', 'subtitle-import', 'embedded-subtitles']),
   clipId: z.string().min(1),
   mediaId: z.string().min(1),
 })

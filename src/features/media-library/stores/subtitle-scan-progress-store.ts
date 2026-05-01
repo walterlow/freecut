@@ -84,7 +84,13 @@ export const useSubtitleScanProgressStore = create<SubtitleScanProgressState>((s
 
   close: () => {
     const { abort } = get()
-    if (abort) abort()
-    set({ open: false, entries: [], currentIndex: 0, summary: null, abort: null })
+    try {
+      if (abort) abort()
+    } finally {
+      // Always reset state — if the caller-supplied abort throws we still
+      // want the dialog closed and the stale abort reference cleared so
+      // the next scan starts from a clean slate.
+      set({ open: false, entries: [], currentIndex: 0, summary: null, abort: null })
+    }
   },
 }))

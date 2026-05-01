@@ -515,7 +515,14 @@ export const TransitionItem = memo(function TransitionItem({
   // Determine cursor based on hover state
   const cursor = hoveredEdge ? 'ew-resize' : 'pointer'
   const showOrangeBridge = isSelected || isBridgeHovered || hoveredEdge !== null
-  const alignment = transition.alignment ?? 0.5
+  // Persisted alignment can drift outside [0,1] — sanitize before deciding
+  // which resize handles to expose so a bad value never hides both handles
+  // or shows a handle that has no slack to drag.
+  const rawAlignment = transition.alignment
+  const alignment =
+    typeof rawAlignment === 'number' && Number.isFinite(rawAlignment)
+      ? Math.max(0, Math.min(1, rawAlignment))
+      : 0.5
   const showLeftResizeHandle = alignment > 0
   const showRightResizeHandle = alignment < 1
   const leftSelectWidth = Math.max(

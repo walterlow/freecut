@@ -117,10 +117,17 @@ class MediaProcessorService {
     return new Promise<ProcessMediaResult>((resolve, reject) => {
       // Large MKV/MOV files can take a while to probe in-browser. If a worker
       // does hang, terminate it so the next import gets a fresh worker.
+      // Terminating drops every in-flight request on the floor, so reject
+      // them all here before the worker dies — otherwise other importers
+      // would hang forever waiting on a worker that no longer exists.
       const timeout = setTimeout(() => {
-        this.pendingRequests.delete(requestId)
+        const timeoutError = new Error('Media processing timeout')
+        for (const [, pending] of this.pendingRequests) {
+          pending.reject(timeoutError)
+        }
+        this.pendingRequests.clear()
         this.workerManager.terminate()
-        reject(new Error('Media processing timeout'))
+        reject(timeoutError)
       }, PROCESS_MEDIA_TIMEOUT_MS)
 
       this.pendingRequests.set(requestId, {

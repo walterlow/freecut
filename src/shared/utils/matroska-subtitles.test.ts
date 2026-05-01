@@ -1,5 +1,5 @@
 import { Blob as NodeBlob } from 'node:buffer'
-import { beforeAll, describe, expect, it } from 'vite-plus/test'
+import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test'
 import {
   extractMatroskaTextSubtitleTracks,
   extractMatroskaTextSubtitleTracksFromBlob,
@@ -9,14 +9,32 @@ import {
 // it either), which the streaming parser needs. Real browsers always provide
 // it, so we swap in Node's native Blob just for these tests rather than
 // patching the global setup file (which would unmask latent test-mock gaps
-// in unrelated suites).
+// in unrelated suites). Restore on teardown so other suites in the same
+// run aren't accidentally affected by the swap.
+let originalBlob: typeof globalThis.Blob | undefined
+let didOverrideBlob = false
 beforeAll(() => {
   if (typeof Blob === 'undefined' || typeof Blob.prototype.arrayBuffer !== 'function') {
+    originalBlob = typeof Blob === 'undefined' ? undefined : (globalThis.Blob as typeof Blob)
     Object.defineProperty(globalThis, 'Blob', {
       configurable: true,
       writable: true,
       value: NodeBlob,
     })
+    didOverrideBlob = true
+  }
+})
+
+afterAll(() => {
+  if (!didOverrideBlob) return
+  if (originalBlob) {
+    Object.defineProperty(globalThis, 'Blob', {
+      configurable: true,
+      writable: true,
+      value: originalBlob,
+    })
+  } else {
+    delete (globalThis as { Blob?: unknown }).Blob
   }
 })
 

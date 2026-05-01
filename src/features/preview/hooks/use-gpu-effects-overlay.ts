@@ -88,7 +88,10 @@ export function shouldForceContinuousPreviewOverlay(
         if (hasCornerPin(window.leftClip.cornerPin) || hasCornerPin(window.rightClip.cornerPin)) {
           return true
         }
-        break
+        // Multiple transitions on different tracks can cover the same
+        // frame; keep checking later windows so a corner-pinned or
+        // composition participant on a sibling track still wins.
+        continue
       }
     }
   }

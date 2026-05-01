@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { Captions } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
@@ -165,6 +165,10 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
  *  self-measure for any variation (e.g. alignment badge present/absent). */
 const CUE_ROW_ESTIMATE_PX = 116
 
+/** Minimum cue duration (10ms) — prevents start/end inputs from collapsing
+ *  the cue to a zero or negative-length range. */
+const MIN_CUE_DURATION_SECONDS = 0.01
+
 interface VirtualCueListProps {
   cues: readonly { id: string; startSeconds: number; endSeconds: number; text: string }[]
   onChange: SubtitleCueRowProps['onChange']
@@ -298,7 +302,11 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
           value={Number(startSeconds.toFixed(3))}
           onChange={(event) => {
             const value = Number(event.target.value)
-            if (Number.isFinite(value)) onChange(cueId, { startSeconds: Math.max(0, value) })
+            if (!Number.isFinite(value)) return
+            // Clamp against the cue's end so dragging start past end can't
+            // produce a zero/negative-length cue.
+            const clamped = Math.max(0, Math.min(value, endSeconds - MIN_CUE_DURATION_SECONDS))
+            onChange(cueId, { startSeconds: clamped })
           }}
           className="h-6 w-28 text-right text-xs tabular-nums"
         />
@@ -314,7 +322,9 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
           value={Number(endSeconds.toFixed(3))}
           onChange={(event) => {
             const value = Number(event.target.value)
-            if (Number.isFinite(value)) onChange(cueId, { endSeconds: Math.max(0, value) })
+            if (!Number.isFinite(value)) return
+            const clamped = Math.max(startSeconds + MIN_CUE_DURATION_SECONDS, value)
+            onChange(cueId, { endSeconds: clamped })
           }}
           className="h-6 w-28 text-right text-xs tabular-nums"
         />
@@ -370,7 +380,7 @@ interface FormatToggleButtonProps {
   onClick: () => void
   label: string
   glyph: string
-  glyphStyle?: React.CSSProperties
+  glyphStyle?: CSSProperties
 }
 
 function FormatToggleButton({

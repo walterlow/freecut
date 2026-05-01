@@ -340,10 +340,14 @@ function extractClusterCues(
       if (!cue) return
       const track = tracks.get(cue.trackNumber)
       if (!track) return
+      // SimpleBlock has no BlockDuration; fall back to the track's
+      // DefaultDuration so MKVs that publish a track-wide cue length stay
+      // consistent with the BlockGroup path (which already prefers it).
+      const duration = track.defaultDurationSeconds ?? DEFAULT_CUE_DURATION_SECONDS
       track.cues.push({
         id: `embedded-${track.trackNumber}-${track.cues.length + 1}`,
         startSeconds: cue.startSeconds,
-        endSeconds: cue.startSeconds + DEFAULT_CUE_DURATION_SECONDS,
+        endSeconds: cue.startSeconds + duration,
         text: decodeSubtitlePayload(cue.payload, track.codecId),
       })
       return

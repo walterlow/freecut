@@ -43,6 +43,10 @@ export function buildTranscriptSubtitleWebVtt(composition: CompositionInputProps
   }
 
   if (cues.length === 0) return null
+  // Items can be processed track-by-track in any order, but VTT consumers
+  // expect cues sorted chronologically. Sort by start time, breaking ties
+  // by end time so deterministically-overlapping cues don't reorder.
+  cues.sort((a, b) => a.startSeconds - b.startSeconds || a.endSeconds - b.endSeconds)
   return serializeVtt(cues)
 }
 
