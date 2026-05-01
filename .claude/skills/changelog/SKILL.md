@@ -32,6 +32,22 @@ Two tiers:
 
 Separate packages (future CLI/API) get their own semver and their own changelog under their package directory. This file is for the web app only.
 
+## Preconditions (run before any mode)
+
+Two checks block all other work. Both must pass before drafting, appending, or rolling up.
+
+### 1. Current must not span past weeks
+
+`current` is the in-progress week — Mon–Sun, anchored to **this week's Monday**. If `current.date` falls in an earlier ISO week than today, you are rollup-overdue: the bullets in `current` belong to one or more closed weeks, not to the present.
+
+Compute this week's Monday from today (in repo-local time): `monday = today - ((today.getDay() + 6) % 7)`. If `current.date` is not in `[monday, monday+6]`, **stop and run rollup mode first**, even if the user asked for append. Do not append into a stale `current` — it merges this week's bullets with last week's and corrupts both.
+
+If `current` spans multiple closed weeks (the bullets were appended across several Mondays without rollup), do **partitioning rollup**: walk the git log per week and re-split the bullets into the correct `[YYYY.MM.DD]` releases, then start a fresh `current` for this week.
+
+### 2. CHANGELOG.md heading must match `current.date`
+
+The markdown header `## [Current] — week of YYYY-MM-DD` is a literal string and does not auto-derive from JSON. Any time you write `current` (append, rollup, partition), recompute the heading as `## [Current] — week of <Monday-of-current.date>` and update it. Never leave the heading frozen at an old Monday — that is the bug that caused the 2026-04-13→2026-05-02 drift.
+
 ## Modes
 
 The user invokes one of these explicitly. Default to asking which mode if unclear.
@@ -49,10 +65,16 @@ The user asks "draft changelog bullets for this week" or similar. Produce bullet
 
 After the user approves drafted bullets, write them into `current` in `changelog.json` and reflect in `CHANGELOG.md`.
 
+0. **Run preconditions first.** If `current.date` is older than this week's Monday → rollup before appending.
 1. Merge with existing `current.groups` — **dedupe by title**. If a new bullet refines or walks back something already there, edit the existing bullet rather than adding a duplicate.
 2. Update `current.date` to today.
-3. Update both `CHANGELOG.md` and `src/data/changelog.json`.
-4. Do not create tags. Do not update `package.json`.
+3. Update `CHANGELOG.md`:
+   - Bump `## [Current] — week of <date>` to `<this week's Monday>` if the heading is stale.
+   - Insert new bullets at the top of each group (Added / Fixed / Improved).
+4. Update `src/data/changelog.json` to mirror.
+5. Do not create tags. Do not update `package.json`.
+
+If `current` already has ~15+ bullets in any one group when you arrive, mention this to the user — it's a signal that a rollup is overdue, not a license to keep appending.
 
 `scripts/changelog-append.mjs` and `npm run changelog:append` exist as a convenience for scripted runs, but the manual path (skill curates, then writes) is preferred — it produces better user-facing copy.
 

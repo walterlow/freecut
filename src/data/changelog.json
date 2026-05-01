@@ -1,7 +1,7 @@
 {
   "current": {
     "version": "current",
-    "date": "2026-04-30",
+    "date": "2026-05-02",
     "groups": {
       "added": [
         {
@@ -14,97 +14,43 @@
           "title": "Liquid distort transition"
         },
         {
-          "title": "Transition placement controls with alignment-aware drops"
-        },
-        {
           "title": "Searchable transition preset picker"
         },
         {
           "title": "Tunable transition parameters in the properties panel"
         },
         {
+          "title": "Transition placement controls with alignment-aware drops"
+        },
+        {
           "title": "Compound clips can now host transitions"
         },
         {
-          "title": "Projects now live on disk in a workspace folder you choose"
+          "title": "Reset buttons on transition parameter sliders"
         },
         {
-          "title": "Multi-workspace support with waveform mirroring"
+          "title": "Extract embedded subtitles from video files (works for MKVs over 2GB)"
         },
         {
-          "title": "Multi-select projects with marquee and bulk delete"
+          "title": "Subtitle segments on the timeline with live cue overlay during playback"
         },
         {
-          "title": "Trash section with soft-delete, undo, and permanent delete"
+          "title": "Cue editor in the inspector with bold/italic/underline, positioning, and click-to-seek"
         },
         {
-          "title": "Legacy browser-storage migration progress banner"
+          "title": "Subtitle style presets, including a TikTok-style preset"
         },
         {
-          "title": "Per-clip pitch shift in semitones and cents"
+          "title": "Burn or embed subtitles in exports"
         },
         {
-          "title": "Compact DaVinci-style six-band clip EQ with floating panel"
+          "title": "Reverse playback for video, audio, and GPU effects"
         },
         {
-          "title": "Mixer tuck handle to slide channel strips behind the bus"
+          "title": "Reverse-aware exports preserve the reversed audio and video"
         },
         {
-          "title": "Separate project master bus from per-device monitor volume"
-        },
-        {
-          "title": "What's New dialog shows weekly changelog"
-        },
-        {
-          "title": "Overhaul canvas snap system"
-        },
-        {
-          "title": "Promote span text controls and move preset selector"
-        },
-        {
-          "title": "Add keyframeable color effect params"
-        },
-        {
-          "title": "Import media from a direct URL"
-        },
-        {
-          "title": "Move scenes toggle next to search as segmented control"
-        },
-        {
-          "title": "Dedup media imports and captions by content"
-        },
-        {
-          "title": "Multi-segment filmstrip for compound clips"
-        },
-        {
-          "title": "Replace card dropdown with right-click context menu"
-        },
-        {
-          "title": "Wheel zoom/scroll/resize in track headers"
-        },
-        {
-          "title": "Migrate to v2 layout with per-media caches"
-        },
-        {
-          "title": "Grid view, responsive header, analyze service"
-        },
-        {
-          "title": "Add color mode with library palette grid"
-        },
-        {
-          "title": "Find scenes with a similar palette"
-        },
-        {
-          "title": "Add AI analysis indicators and align proxy colors"
-        },
-        {
-          "title": "Add AI caption generation with timeline insertion"
-        },
-        {
-          "title": "Expand glyph atlas text rendering"
-        },
-        {
-          "title": "Enable GPU transition compositing"
+          "title": "Detect and remove silence across selected clips with preview overlay and ripple delete"
         }
       ],
       "fixed": [
@@ -118,212 +64,210 @@
           "title": "Removed the transition duration cap"
         },
         {
-          "title": "Removed Kokoro voice quality options"
+          "title": "Multi-channel audio downmixes to stereo with proper coefficients on export"
         },
         {
-          "title": "Preview no longer fails when media blobs expire"
+          "title": "Subtitle cues trim and split alongside their segment"
         },
         {
-          "title": "Disabled tracks remain editable and styled after reload"
+          "title": "Cue time inputs accept 4-digit seconds without truncating"
         },
         {
-          "title": "Pen mask tracks are now visible in classic timelines"
+          "title": "Preview no longer drifts from stale player frames while paused"
         },
         {
-          "title": "Transitions stay aligned to source time across splits"
-        },
-        {
-          "title": "Pen paths default to shapes with 5-second duration"
-        },
-        {
-          "title": "UI accessibility, transition alpha, and viewport clamp fixes"
-        },
-        {
-          "title": "Resolve develop type errors"
-        },
-        {
-          "title": "Respect visible params and safer effect mapping"
-        },
-        {
-          "title": "Allow animating non-color GPU effect params"
-        },
-        {
-          "title": "Route effects keyframe deps through adapters"
-        },
-        {
-          "title": "Remove unused crop helpers"
-        },
-        {
-          "title": "Smooth live pitch preview on Semi Tones / Cents sliders"
-        },
-        {
-          "title": "Pixel-snap audio volume line to avoid subpixel blur"
-        },
-        {
-          "title": "Render compound clip hover preview via canvas engine"
-        },
-        {
-          "title": "Scale compound clip hover preview to fit wrapper"
-        },
-        {
-          "title": "Stop nested video black flashes from stale sequenceFromRef"
-        },
-        {
-          "title": "Restore MMB drag to resize A/V divider from anywhere"
-        },
-        {
-          "title": "Version shared caption cache by sample interval"
-        },
-        {
-          "title": "Stop blanking project list with spinner during mutations"
-        },
-        {
-          "title": "Eliminate Add Effect picker flash on first open"
-        },
-        {
-          "title": "Constrain new project page width to 7xl"
-        },
-        {
-          "title": "Refresh nested compound clip effects during playback"
-        },
-        {
-          "title": "Route SubComposition type through deps adapter"
-        },
-        {
-          "title": "Use live sub-comp duration for compound clip trim and display"
-        },
-        {
-          "title": "Correct available pane height when no track sections"
-        },
-        {
-          "title": "Reliably repaint compound clips on sub-comp edits and nav"
-        },
-        {
-          "title": "Invalidate frame cache when sub-compositions change"
-        },
-        {
-          "title": "Apply gpu effects and adjustment layers inside compound clips"
-        },
-        {
-          "title": "Input handling edge cases"
-        },
-        {
-          "title": "Prevent header toolbar from wrapping on narrow widths"
-        },
-        {
-          "title": "Add grid-cols-1 to DialogContent"
-        },
-        {
-          "title": "Hydrate proxies from workspace on fresh origins"
-        },
-        {
-          "title": "Remove motion semantic search, tighten color queries"
-        },
-        {
-          "title": "Use palette-only ranking for color queries"
-        },
-        {
-          "title": "Route timeline transcribe dialog through media contract"
-        },
-        {
-          "title": "Move preview and filmstrip caches into workspace fs"
-        },
-        {
-          "title": "Queue and unify transcription progress flows"
-        },
-        {
-          "title": "Transcribe custom-decoded audio from conformed wav"
-        },
-        {
-          "title": "Anchor timeline slider zoom at the playhead"
-        },
-        {
-          "title": "Route analysis imports through infrastructure facade"
-        },
-        {
-          "title": "Route preview scrub throttle through contract"
-        },
-        {
-          "title": "Keep AI analysis off timeline caption tracks"
-        },
-        {
-          "title": "Lower skim overlay below popovers"
-        },
-        {
-          "title": "Unify ruler scrub handoff to avoid preview flashes"
-        },
-        {
-          "title": "Speed up media skimming and preserve program preview"
-        },
-        {
-          "title": "Sync preview timecode and playhead during scrubbing"
-        },
-        {
-          "title": "Prefer Player path for generated caption scrubs"
-        },
-        {
-          "title": "Harden text atlas, transition cache, and compositor buffer pool"
-        },
-        {
-          "title": "Update commit message generation"
-        },
-        {
-          "title": "Preserve mask coverage in GPU blend transitions"
-        },
-        {
-          "title": "Preserve GPU layer uniforms per pass"
-        },
-        {
-          "title": "Skip occluded sub-comp tracks in export rendering"
-        },
-        {
-          "title": "Handle commit message generation request"
-        },
-        {
-          "title": "Flatten curved GPU shape paths"
-        },
-        {
-          "title": "Generate single-line commit message"
-        },
-        {
-          "title": "Keep GPU shape effects on texture path"
-        },
-        {
-          "title": "Share transition participant rendering"
-        },
-        {
-          "title": "Route audio time stretch through infrastructure"
-        },
-        {
-          "title": "Keep generated reports parseable in checks"
-        },
-        {
-          "title": "Keep runtime hooks in sync with latest refs"
-        },
-        {
-          "title": "Tighten memo deps in preview and timeline hooks"
+          "title": "Paused scrub stays on the rendered path with sharp output"
         }
       ],
       "improved": [
         {
-          "title": "Compact clip shell for narrow clips with short-circuited fades"
+          "title": "Subtitle cue editor stays responsive with hundreds of cues"
         },
         {
-          "title": "Smoother filmstrip rendering when zooming the timeline"
-        },
-        {
-          "title": "Smaller 960×540 proxy resolution with worker-side loading"
-        },
-        {
-          "title": "Kick re-render as soon as priority media is ready"
-        },
-        {
-          "title": "Subscription-based controller isolates overlay re-renders"
+          "title": "Smoother playback start when entering a transition"
         }
       ]
     }
   },
   "releases": [
+    {
+      "version": "2026.04.20",
+      "date": "2026-04-20",
+      "groups": {
+        "added": [
+          {
+            "title": "Stacked text spans for mixed-style titles"
+          },
+          {
+            "title": "Text box backgrounds and scalable text presets"
+          },
+          {
+            "title": "Richer text animation presets grouped by layout"
+          },
+          {
+            "title": "Animated text previews in the runtime and editor"
+          },
+          {
+            "title": "Promote span text controls and move preset selector to the inspector"
+          },
+          {
+            "title": "Canvas snap system overhaul with visual guides"
+          },
+          {
+            "title": "Video flip transforms (horizontal and vertical)"
+          },
+          {
+            "title": "Transform anchors in preview and export"
+          },
+          {
+            "title": "Anchor and flip controls keyframeable inside compound clips"
+          },
+          {
+            "title": "Keyframeable color effect parameters"
+          },
+          {
+            "title": "MOSS multilingual TTS in the browser"
+          },
+          {
+            "title": "Replace Kitten TTS with Kokoro TTS"
+          },
+          {
+            "title": "Collapsible AI panel sections"
+          },
+          {
+            "title": "Import media from a direct URL"
+          },
+          {
+            "title": "Dedup media imports and captions by content"
+          },
+          {
+            "title": "Move scenes toggle next to search as a segmented control"
+          }
+        ],
+        "fixed": [
+          {
+            "title": "Animated crop renders correctly in exports"
+          },
+          {
+            "title": "Curves effect now uses point-based S-curves"
+          },
+          {
+            "title": "Compound clip hover preview renders through the canvas engine"
+          },
+          {
+            "title": "Restore middle-click drag to resize the A/V divider from anywhere"
+          },
+          {
+            "title": "Smooth live pitch preview on Semi Tones and Cents sliders"
+          },
+          {
+            "title": "Pixel-snap audio volume line to avoid sub-pixel blur"
+          },
+          {
+            "title": "Stop nested video black flashes from stale references"
+          },
+          {
+            "title": "Project list no longer blanks with a spinner during edits"
+          },
+          {
+            "title": "Add Effect picker no longer flashes on first open"
+          },
+          {
+            "title": "Live-trim attached captions during regular trims"
+          },
+          {
+            "title": "Batch playback speed undo as a single step"
+          }
+        ]
+      }
+    },
+    {
+      "version": "2026.04.13",
+      "date": "2026-04-13",
+      "groups": {
+        "added": [
+          {
+            "title": "Per-clip pitch shift in semitones and cents"
+          },
+          {
+            "title": "Compact DaVinci-style six-band clip EQ with floating panels"
+          },
+          {
+            "title": "Mixer tuck handle to slide channel strips behind the bus"
+          },
+          {
+            "title": "Separate project master bus from per-device monitor volume"
+          },
+          {
+            "title": "AI caption generation with timeline insertion"
+          },
+          {
+            "title": "AI analysis indicators in the media library"
+          },
+          {
+            "title": "Find scenes with a similar palette"
+          },
+          {
+            "title": "Color mode with library palette grid"
+          },
+          {
+            "title": "Scene browser hotkey"
+          },
+          {
+            "title": "Projects now live on disk in a workspace folder you choose"
+          },
+          {
+            "title": "Multi-workspace support with waveform mirroring"
+          },
+          {
+            "title": "Multi-select projects with marquee, bulk delete, and double-click to open"
+          },
+          {
+            "title": "Trash section with soft-delete, undo, and permanent delete"
+          },
+          {
+            "title": "Legacy browser-storage migration progress banner"
+          },
+          {
+            "title": "What's New dialog with weekly changelog viewer"
+          },
+          {
+            "title": "Source monitor scrubbing matches timeline playback"
+          }
+        ],
+        "fixed": [
+          {
+            "title": "Disabled tracks remain editable and styled after reload"
+          },
+          {
+            "title": "Pen mask tracks are now visible in classic timelines"
+          },
+          {
+            "title": "Pen paths default to shapes with 5-second duration"
+          },
+          {
+            "title": "Transitions stay aligned to source time across splits"
+          },
+          {
+            "title": "Preview no longer fails when media blobs expire"
+          },
+          {
+            "title": "UI accessibility, transition alpha, and viewport clamp fixes"
+          }
+        ],
+        "improved": [
+          {
+            "title": "Compact clip shell for narrow clips with short-circuited fades"
+          },
+          {
+            "title": "Smoother filmstrip rendering when zooming the timeline"
+          },
+          {
+            "title": "Smaller 960×540 proxy resolution with worker-side loading"
+          }
+        ]
+      }
+    },
     {
       "version": "2026.04.06",
       "date": "2026-04-06",
