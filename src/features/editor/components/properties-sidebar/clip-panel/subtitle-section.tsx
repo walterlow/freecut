@@ -1,9 +1,9 @@
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { usePlaybackStore } from '@/shared/state/playback'
 import {
@@ -161,23 +161,73 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         Cues
       </p>
-      <ScrollArea className="h-[40vh] pr-2">
-        <ul className="flex flex-col gap-2 py-1">
-          {segment.cues.map((cue, index) => (
-            <SubtitleCueRow
-              key={cue.id}
-              index={index}
-              cueId={cue.id}
-              text={cue.text}
-              startSeconds={cue.startSeconds}
-              endSeconds={cue.endSeconds}
-              onChange={updateCue}
-              onSeek={seekToCue}
-            />
-          ))}
-        </ul>
-      </ScrollArea>
+      <VirtualCueList cues={segment.cues} onChange={updateCue} onSeek={seekToCue} />
     </section>
+  )
+})
+
+/** Estimated rendered height of a {@link SubtitleCueRow} including the
+ *  `gap-2` between siblings. Used as the virtualizer's seed; rows then
+ *  self-measure for any variation (e.g. alignment badge present/absent). */
+const CUE_ROW_ESTIMATE_PX = 116
+
+interface VirtualCueListProps {
+  cues: readonly { id: string; startSeconds: number; endSeconds: number; text: string }[]
+  onChange: SubtitleCueRowProps['onChange']
+  onSeek: SubtitleCueRowProps['onSeek']
+}
+
+/**
+ * Windowed cue list for long subtitle segments. A 65-min episode can
+ * easily carry 600+ cues; rendering them all blows out the React tree
+ * even with memoed rows. The virtualizer keeps only the visible rows
+ * (plus a small overscan) mounted.
+ */
+const VirtualCueList = memo(function VirtualCueList({
+  cues,
+  onChange,
+  onSeek,
+}: VirtualCueListProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const virtualizer = useVirtualizer({
+    count: cues.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => CUE_ROW_ESTIMATE_PX,
+    overscan: 4,
+    getItemKey: (index) => cues[index]?.id ?? index,
+  })
+
+  const items = virtualizer.getVirtualItems()
+
+  return (
+    <div ref={scrollRef} className="h-[40vh] overflow-auto pr-2">
+      <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+        {items.map((virtualRow) => {
+          const cue = cues[virtualRow.index]
+          if (!cue) return null
+          return (
+            <div
+              key={virtualRow.key}
+              ref={virtualizer.measureElement}
+              data-index={virtualRow.index}
+              className="absolute left-0 right-0 pb-2"
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+            >
+              <SubtitleCueRow
+                index={virtualRow.index}
+                cueId={cue.id}
+                text={cue.text}
+                startSeconds={cue.startSeconds}
+                endSeconds={cue.endSeconds}
+                onChange={onChange}
+                onSeek={onSeek}
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 })
 
