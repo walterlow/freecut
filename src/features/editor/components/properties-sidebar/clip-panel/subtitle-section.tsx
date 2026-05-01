@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -102,12 +102,22 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
   const fps = useTimelineStore((s) => s.fps)
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame)
 
+  // Keep a ref to the latest cues so `updateCue`'s identity stays stable
+  // across edits. Without this the callback re-creates on every keystroke
+  // (segment.cues becomes a new array each edit), which busts every memoed
+  // SubtitleCueRow and re-renders the entire 600-row list when the user
+  // edits a single cue.
+  const cuesRef = useRef(segment.cues)
+  useEffect(() => {
+    cuesRef.current = segment.cues
+  }, [segment.cues])
+
   const updateCue = useCallback(
     (cueId: string, patch: Partial<{ text: string; startSeconds: number; endSeconds: number }>) => {
-      const next = segment.cues.map((cue) => (cue.id === cueId ? { ...cue, ...patch } : cue))
+      const next = cuesRef.current.map((cue) => (cue.id === cueId ? { ...cue, ...patch } : cue))
       updateItem(segment.id, { cues: next })
     },
-    [segment.cues, segment.id, updateItem],
+    [segment.id, updateItem],
   )
 
   const seekToCue = useCallback(
