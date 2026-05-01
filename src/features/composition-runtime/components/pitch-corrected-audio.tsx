@@ -3,6 +3,7 @@ import { createLogger } from '@/shared/logging/logger'
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores'
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores'
 import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache'
+import { audioBufferToWavBlob } from '../utils/audio-buffer-wav'
 import { getAudioTargetTimeSeconds } from '../utils/video-timing'
 import {
   acquirePreviewAudioElement,
@@ -45,6 +46,11 @@ interface DecodedPitchSource {
   isComplete: boolean
 }
 
+type DecodedPitchFallbackAudioProps = PitchCorrectedAudioProps & {
+  audioBuffer: AudioBuffer
+  sourceStartOffsetSec: number
+}
+
 function createReversedAudioBuffer(buffer: AudioBuffer): AudioBuffer {
   const ctx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
   const reversed = ctx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
@@ -82,6 +88,34 @@ function shouldReplaceDecodedPitchSource(
     return true
   }
   return false
+}
+
+const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
+  audioBuffer,
+  sourceStartOffsetSec,
+  ...props
+}) => {
+  const [decodedSrc, setDecodedSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    const url = URL.createObjectURL(audioBufferToWavBlob(audioBuffer))
+    setDecodedSrc(url)
+    return () => {
+      URL.revokeObjectURL(url)
+    }
+  }, [audioBuffer])
+
+  if (!decodedSrc) {
+    return null
+  }
+
+  return (
+    <NativePitchCorrectedAudio
+      {...props}
+      src={decodedSrc}
+      sourceStartOffsetSec={sourceStartOffsetSec}
+    />
+  )
 }
 
 export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.memo(
@@ -638,11 +672,22 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
     const playbackSourceStartOffsetSec = reversedPlayback
       ? 0
       : sourceStartOffsetSec + decodedSource.sourceStartOffsetSec
+    const decodedFallback = (
+      <DecodedPitchFallbackAudio
+        {...props}
+        src={src}
+        audioBuffer={playbackBuffer}
+        trimBefore={playbackTrimBefore}
+        sourceStartOffsetSec={playbackSourceStartOffsetSec}
+        isReversed={isReversed && !reversedPlayback}
+        reverseSourceEnd={reversedPlayback ? undefined : reverseSourceEnd}
+      />
+    )
 
     return (
       <SoundTouchWorkletAudio
         audioBuffer={playbackBuffer}
-        fallback={nativeFallback}
+        fallback={decodedFallback}
         itemId={itemId}
         trimBefore={playbackTrimBefore}
         sourceFps={sourceFps}

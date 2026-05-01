@@ -1,11 +1,8 @@
 import { createLogger } from '@/shared/logging/logger'
 import { SOUND_TOUCH_PREVIEW_PROCESSOR_NAME } from './soundtouch-preview-shared'
+import workletModuleUrl from '../worklets/soundtouch-preview-processor.worklet.ts?worker&url'
 
 const log = createLogger('SoundTouchPreviewWorklet')
-const workletModuleUrl = new URL(
-  '../worklets/soundtouch-preview-processor.worklet.ts',
-  import.meta.url,
-)
 const pendingWorkletLoads = new WeakMap<AudioContext, Promise<boolean>>()
 
 export interface SerializedSoundTouchPreviewSource {
@@ -76,7 +73,7 @@ export async function ensureSoundTouchPreviewWorkletLoaded(
   }
 
   const loadPromise = context.audioWorklet
-    .addModule(workletModuleUrl.href)
+    .addModule(workletModuleUrl)
     .then(() => true)
     .catch((error) => {
       log.warn('Failed to load SoundTouch preview worklet module', { error })
