@@ -58,6 +58,58 @@ describe('convertTimelineToComposition IO marker conversion', () => {
     expect(composition.durationInFrames).toBe(100)
   })
 
+  it('moves sourceEnd backward when IO range trims the start of a reversed video', () => {
+    const fps = 30
+    const inPoint = 30
+    const outPoint = 90
+
+    const track: TimelineTrack = {
+      id: 'track-1',
+      name: 'Track 1',
+      height: 72,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 0,
+      items: [],
+    }
+
+    const item: VideoItem = {
+      id: 'item-1',
+      type: 'video',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 120,
+      label: 'Video',
+      src: 'blob:test',
+      sourceStart: 100,
+      sourceEnd: 220,
+      sourceFps: 30,
+      speed: 1,
+      isReversed: true,
+    }
+
+    const composition = convertTimelineToComposition(
+      [track],
+      [item],
+      [],
+      fps,
+      1920,
+      1080,
+      inPoint,
+      outPoint,
+    )
+
+    const exportedItem = composition.tracks[0]!.items[0] as VideoItem
+
+    expect(exportedItem.from).toBe(0)
+    expect(exportedItem.durationInFrames).toBe(60)
+    expect(exportedItem.isReversed).toBe(true)
+    expect(exportedItem.sourceStart).toBe(130)
+    expect(exportedItem.sourceEnd).toBe(190)
+  })
+
   it('shifts and clips subtitle segment cues when IO range trims the segment', () => {
     const fps = 30
     const inPoint = 45

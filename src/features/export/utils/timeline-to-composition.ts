@@ -122,7 +122,25 @@ export function convertTimelineToComposition(
           const mediaItem = adjustedItem as typeof item
           mediaItem.trimStart = currentTrimStart + sourceTrimStart
           mediaItem.trimEnd = currentTrimEnd + sourceTrimEnd
-          mediaItem.sourceStart = currentSourceStart + sourceTrimStart
+          if (item.isReversed === true) {
+            const currentSourceEnd =
+              item.sourceEnd ??
+              currentSourceStart +
+                timelineToSourceFrames(item.durationInFrames, speed, fps, sourceFps)
+            mediaItem.sourceStart = currentSourceStart + sourceTrimEnd
+            mediaItem.sourceEnd = Math.max(
+              mediaItem.sourceStart + 1,
+              currentSourceEnd - sourceTrimStart,
+            )
+          } else {
+            mediaItem.sourceStart = currentSourceStart + sourceTrimStart
+            if (item.sourceEnd !== undefined && sourceTrimEnd > 0) {
+              mediaItem.sourceEnd = Math.max(
+                mediaItem.sourceStart + 1,
+                item.sourceEnd - sourceTrimEnd,
+              )
+            }
+          }
           mediaItem.offset = mediaItem.trimStart
         }
 

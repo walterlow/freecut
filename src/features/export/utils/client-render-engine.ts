@@ -79,8 +79,8 @@ import {
   type PreviewPathVerticesOverride,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
+  getVideoTargetTimeSeconds,
   resolveFrameRenderScene,
-  snapSourceTime,
 } from '@/features/export/deps/composition-runtime'
 import {
   renderItem,
@@ -2081,9 +2081,17 @@ export async function createCompositionRenderer(
         const sourceStart = item.sourceStart ?? item.trimStart ?? 0
         const sourceFps = item.sourceFps ?? fps
         const speed = item.speed ?? 1
-        const sourceTime = snapSourceTime(
-          sourceStart / sourceFps + (localFrame / fps) * speed,
+        const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+        const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+        const sourceTime = getVideoTargetTimeSeconds(
+          sourceStart,
           sourceFps,
+          localFrame,
+          speed,
+          fps,
+          0,
+          item.isReversed === true,
+          reverseSourceEnd,
         )
         const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
 
@@ -2164,9 +2172,17 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0
           const sourceFps = item.sourceFps ?? fps
           const speed = item.speed ?? 1
-          const sourceTime = snapSourceTime(
-            sourceStart / sourceFps + (localFrame / fps) * speed,
+          const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+          const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+          const sourceTime = getVideoTargetTimeSeconds(
+            sourceStart,
             sourceFps,
+            localFrame,
+            speed,
+            fps,
+            0,
+            item.isReversed === true,
+            reverseSourceEnd,
           )
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
 
@@ -2221,9 +2237,17 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0
           const sourceFps = item.sourceFps ?? fps
           const speed = item.speed ?? 1
-          const sourceTime = snapSourceTime(
-            sourceStart / sourceFps + (localFrame / fps) * speed,
+          const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+          const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+          const sourceTime = getVideoTargetTimeSeconds(
+            sourceStart,
             sourceFps,
+            localFrame,
+            speed,
+            fps,
+            0,
+            item.isReversed === true,
+            reverseSourceEnd,
           )
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
           try {
@@ -2281,9 +2305,17 @@ export async function createCompositionRenderer(
             const sourceStart = item.sourceStart ?? item.trimStart ?? 0
             const sourceFps = item.sourceFps ?? fps
             const speed = item.speed ?? 1
-            const baseSourceTime = snapSourceTime(
-              sourceStart / sourceFps + (localFrame / fps) * speed,
+            const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+            const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+            const baseSourceTime = getVideoTargetTimeSeconds(
+              sourceStart,
               sourceFps,
+              localFrame,
+              speed,
+              fps,
+              0,
+              item.isReversed === true,
+              reverseSourceEnd,
             )
             try {
               await extractor.drawFrame(ctx2d, Math.max(0, baseSourceTime), 0, 0, 1, 1)
