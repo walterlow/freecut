@@ -773,6 +773,16 @@ export function buildCompoundAudioTransitionSegments(
         : 0
     const before = Math.max(0, Math.min(extension.before, maxBeforeBySource))
     const after = Math.max(0, extension.after)
+    const beforeSource = timelineToSourceFrames(before, playbackRate, fps, itemSourceFps)
+    const afterSource = timelineToSourceFrames(after, playbackRate, fps, itemSourceFps)
+    const reverseSourceEndBase = getReverseSourceEnd(
+      item,
+      baseTrimBefore,
+      item.durationInFrames,
+      playbackRate,
+      itemSourceFps,
+      fps,
+    )
 
     return {
       key: `compound-audio-${item.id}`,
@@ -781,9 +791,14 @@ export function buildCompoundAudioTransitionSegments(
       durationInFrames: item.durationInFrames + before + after,
       trimBefore: Math.max(
         0,
-        baseTrimBefore - timelineToSourceFrames(before, playbackRate, fps, itemSourceFps),
+        baseTrimBefore - beforeSource - (item.isReversed === true ? afterSource : 0),
       ),
       playbackRate,
+      isReversed: item.isReversed === true ? true : undefined,
+      reverseSourceEnd:
+        item.isReversed === true && reverseSourceEndBase !== undefined
+          ? reverseSourceEndBase + beforeSource
+          : undefined,
       sourceFps: item.sourceFps,
       volumeDb: (item.volume ?? 0) + (item.trackVolumeDb ?? 0),
       muted: item.muted || !item.trackVisible,

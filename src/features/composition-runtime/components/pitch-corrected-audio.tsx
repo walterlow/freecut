@@ -486,7 +486,12 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
 
       let cancelled = false
       const effectiveSourceFps = sourceFps ?? fps
-      const clipStartTime = Math.max(0, trimBefore / effectiveSourceFps - sourceStartOffsetSec)
+      const seedSourceFrames =
+        isReversed && reverseSourceEnd !== undefined ? reverseSourceEnd : trimBefore
+      const clipStartTime = Math.max(
+        0,
+        seedSourceFrames / effectiveSourceFps - sourceStartOffsetSec,
+      )
       setDecodedSource(null)
       pendingExtensionKeyRef.current = null
 
@@ -541,7 +546,16 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
       return () => {
         cancelled = true
       }
-    }, [fps, mediaId, sourceFps, sourceStartOffsetSec, src, trimBefore])
+    }, [
+      fps,
+      isReversed,
+      mediaId,
+      reverseSourceEnd,
+      sourceFps,
+      sourceStartOffsetSec,
+      src,
+      trimBefore,
+    ])
 
     useEffect(() => {
       const currentSource = decodedSource

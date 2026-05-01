@@ -217,7 +217,9 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
     let scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY
     let fullDecodeTimer: ReturnType<typeof setTimeout> | null = null
     const effectiveSourceFps = sourceFps ?? 30
-    const clipStartTime = Math.max(0, trimBefore / effectiveSourceFps)
+    const seedSourceFrames =
+      isReversed && reverseSourceEnd !== undefined ? reverseSourceEnd : trimBefore
+    const clipStartTime = Math.max(0, seedSourceFrames / effectiveSourceFps)
     const clearScheduledFullDecode = () => {
       scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY
       if (fullDecodeTimer !== null) {
@@ -303,7 +305,7 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       cancelled = true
       clearScheduledFullDecode()
     }
-  }, [mediaId, src, trimBefore, sourceFps])
+  }, [isReversed, mediaId, reverseSourceEnd, sourceFps, src, trimBefore])
 
   useEffect(() => {
     const currentSource = decodedSource
