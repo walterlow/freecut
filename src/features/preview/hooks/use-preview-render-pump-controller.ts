@@ -710,19 +710,33 @@ export function usePreviewRenderPump({
             const isPausedOnTransitionFrame =
               frameToRender === playbackState.currentFrame &&
               isPausedTransitionOverlayActive(frameToRender, playbackState)
+            const fastScrubTargetFrame = isGizmoInteractingRef.current
+              ? playbackState.currentFrame
+              : playbackState.previewFrame
+            const shouldShowRenderedScrubOverlay = shouldShowFastScrubOverlay({
+              isGizmoInteracting: isGizmoInteractingRef.current,
+              isPlaying: playbackState.isPlaying,
+              currentFrame: playbackState.currentFrame,
+              previewFrame: playbackState.previewFrame,
+              renderedFrame: frameToRender,
+            })
+            const targetNeedsRenderedPath =
+              fastScrubTargetFrame !== null &&
+              !playbackState.isPlaying &&
+              (forceFastScrubOverlay ||
+                shouldPreserveHighFidelityBackwardPreview(fastScrubTargetFrame))
             if (
               !shouldShowPlaybackTransitionOverlay &&
               !forceFastScrubOverlay &&
               !isPausedOnTransitionFrame &&
-              !shouldShowFastScrubOverlay({
-                isGizmoInteracting: isGizmoInteractingRef.current,
-                isPlaying: playbackState.isPlaying,
-                currentFrame: playbackState.currentFrame,
-                previewFrame: playbackState.previewFrame,
-                renderedFrame: frameToRender,
-              })
+              !shouldShowRenderedScrubOverlay
             ) {
               previewPerfRef.current.staleScrubOverlayDrops += 1
+              if (targetNeedsRenderedPath) {
+                drawToDisplay(frameToRender)
+                showFastScrubOverlayForFrame()
+                continue
+              }
               hideAllOverlays()
               continue
             }
@@ -1325,6 +1339,17 @@ export function usePreviewRenderPump({
           const roundedFrame = Number.isFinite(playerFrame)
             ? Math.round(playerFrame as number)
             : null
+          const requiresRenderedPath =
+            forceFastScrubOverlay || shouldPreserveHighFidelityBackwardPreview(state.currentFrame)
+          if (requiresRenderedPath) {
+            scrubRequestedFrameRef.current = state.currentFrame
+            void pumpRenderLoop()
+            if (roundedFrame !== state.currentFrame) {
+              trackPlayerSeek(state.currentFrame)
+              playerRef.current?.seekTo(state.currentFrame)
+            }
+            return
+          }
           if (roundedFrame === state.currentFrame) {
             playerRef.current?.seekTo(state.currentFrame)
             hideAllOverlays()

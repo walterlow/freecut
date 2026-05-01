@@ -1792,58 +1792,67 @@ export async function createCompositionRenderer(
           }
         }
 
-        // Fire all item renders in parallel (video decodes run concurrently)
-        const results = await Promise.all(
-          renderTasks.map(async (task) => {
-            if (task.type === 'item') {
-              const item = getCurrentItem(task.item)
-              const canSeparateMasks =
-                useGpuCompositor && gpuTexturePool && !hasCornerPin(item.cornerPin)
-              return renderItemWithEffects(
-                task.item,
-                task.trackOrder,
-                true,
-                contentCtx,
-                !canSeparateMasks,
-              )
-            }
-            const transitionMasks = activeMasks.filter((mask) =>
-              doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
+        const renderTask = async (
+          task: (typeof renderTasks)[number],
+        ): Promise<RenderedTaskResult | null> => {
+          if (task.type === 'item') {
+            const item = getCurrentItem(task.item)
+            const canSeparateMasks =
+              useGpuCompositor && gpuTexturePool && !hasCornerPin(item.cornerPin)
+            return renderItemWithEffects(
+              task.item,
+              task.trackOrder,
+              true,
+              contentCtx,
+              !canSeparateMasks,
             )
-            if (
-              useGpuCompositor &&
-              gpuTexturePool &&
-              transitionMasks.length === 0 &&
-              itemRenderContext.gpuTransitionPipeline
-            ) {
-              const transitionTexture = gpuTexturePool.acquire(
-                canvasSettings.width,
-                canvasSettings.height,
-              )
-              const renderedToTexture = await renderTransitionToGpuTexture(
-                transitionTexture,
-                task.transition,
-                frame,
-                itemRenderContext,
-                task.trackOrder,
-                gpuTexturePool,
-              )
-              if (renderedToTexture) {
-                return {
-                  gpuTexture: transitionTexture,
-                  poolCanvases: [],
-                } satisfies RenderedTaskResult
-              }
-              gpuTexturePool.release(transitionTexture)
+          }
+          const transitionMasks = activeMasks.filter((mask) =>
+            doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
+          )
+          if (
+            useGpuCompositor &&
+            gpuTexturePool &&
+            transitionMasks.length === 0 &&
+            itemRenderContext.gpuTransitionPipeline
+          ) {
+            const transitionTexture = gpuTexturePool.acquire(
+              canvasSettings.width,
+              canvasSettings.height,
+            )
+            const renderedToTexture = await renderTransitionToGpuTexture(
+              transitionTexture,
+              task.transition,
+              frame,
+              itemRenderContext,
+              task.trackOrder,
+              gpuTexturePool,
+            )
+            if (renderedToTexture) {
+              return {
+                gpuTexture: transitionTexture,
+                poolCanvases: [],
+              } satisfies RenderedTaskResult
             }
-            // Transitions: render to a dedicated canvas
-            return renderTransitionFallbackCanvas(task)
-          }),
-        )
+            gpuTexturePool.release(transitionTexture)
+          }
+          // Transitions: render to a dedicated canvas
+          return renderTransitionFallbackCanvas(task)
+        }
 
-        // End GPU pool mode before compositing
+        let results: Array<RenderedTaskResult | null>
+        try {
+          // Fire all item renders in parallel (video decodes run concurrently).
+          results = await Promise.all(renderTasks.map((task) => renderTask(task)))
+        } finally {
+          // End GPU pool mode before compositing, even if one task fails.
+          if (shouldUseDeferredGpuBatch && itemRenderContext.gpuPipeline) {
+            itemRenderContext.gpuPipeline.endBatch()
+          }
+        }
+
         if (shouldUseDeferredGpuBatch && itemRenderContext.gpuPipeline) {
-          itemRenderContext.gpuPipeline.endBatch()
+          await itemRenderContext.gpuPipeline.waitForSubmittedWork()
         }
 
         // Composite all results in z-order (preserved by renderTasks ordering)

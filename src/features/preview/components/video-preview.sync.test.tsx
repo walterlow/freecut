@@ -374,6 +374,24 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>
   },
   getBestDomVideoElementForItem: vi.fn(() => null),
+  hasCornerPin: vi.fn(
+    (
+      pin:
+        | {
+            topLeft: [number, number]
+            topRight: [number, number]
+            bottomRight: [number, number]
+            bottomLeft: [number, number]
+          }
+        | undefined,
+    ) =>
+      Boolean(
+        pin &&
+        [...pin.topLeft, ...pin.topRight, ...pin.bottomRight, ...pin.bottomLeft].some(
+          (value) => value !== 0,
+        ),
+      ),
+  ),
 }))
 
 vi.mock('./gizmo-overlay', () => ({
@@ -1690,6 +1708,167 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(24)
       expect(getDisplayedFrame()).toBe(24)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
+  it('keeps corner-pinned text on the rendered overlay even when Player is already at the frame', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-title',
+        name: 'Titles',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ])
+    useItemsStore.getState().setItems([
+      {
+        id: 'title-corner-pin',
+        type: 'text',
+        trackId: 'track-title',
+        from: 20,
+        durationInFrames: 100,
+        text: 'Headline',
+        fontSize: 96,
+        color: '#ffffff',
+        cornerPin: {
+          topLeft: [0, 0],
+          topRight: [24, -8],
+          bottomRight: [0, 0],
+          bottomLeft: [-18, 12],
+        },
+      } as unknown as TimelineItem,
+    ])
+
+    mockedPlayerFrame = 24
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled()
+    })
+    seekToMock.mockClear()
+    expect(scrubCanvas.style.visibility).toBe('hidden')
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24)
+    })
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1)
+      expect(rendererMockState.instances.length).toBe(1)
+      return rendererMockState.instances[0]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24)
+      expect(getDisplayedFrame()).toBe(24)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
+  it('keeps the rendered overlay visible between stale corner-pin skim renders', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-title',
+        name: 'Titles',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ])
+    useItemsStore.getState().setItems([
+      {
+        id: 'title-corner-pin',
+        type: 'text',
+        trackId: 'track-title',
+        from: 20,
+        durationInFrames: 100,
+        text: 'Headline',
+        fontSize: 96,
+        color: '#ffffff',
+        cornerPin: {
+          topLeft: [0, 0],
+          topRight: [24, -8],
+          bottomRight: [0, 0],
+          bottomLeft: [-18, 12],
+        },
+      } as unknown as TimelineItem,
+    ])
+
+    let resolveFrame24: (() => void) | null = null
+    const createDeferredRenderer = async () => {
+      const renderFrame = vi.fn(
+        (frame: number) =>
+          new Promise<void>((resolve) => {
+            if (frame === 24) {
+              resolveFrame24 = resolve
+              return
+            }
+            resolve()
+          }),
+      )
+      const renderer = createRendererDouble({ renderFrame })
+      rendererMockState.instances.push(renderer)
+      return renderer
+    }
+    createCompositionRendererMock
+      .mockImplementationOnce(createDeferredRenderer)
+      .mockImplementationOnce(createDeferredRenderer)
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled()
+    })
+    seekToMock.mockClear()
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24)
+    })
+
+    await waitFor(() => {
+      const instance = rendererMockState.instances.find((candidate) =>
+        candidate.renderFrame.mock.calls.some(([frame]) => frame === 24),
+      )
+      expect(instance).toBeDefined()
+      expect(instance!.renderFrame).toHaveBeenCalledWith(24)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(25)
+    })
+
+    await act(async () => {
+      resolveFrame24?.()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).not.toBeNull()
       expect(scrubCanvas.style.visibility).toBe('visible')
     })
   })

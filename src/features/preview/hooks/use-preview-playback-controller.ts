@@ -87,7 +87,9 @@ export function usePreviewPlaybackController({
     (frame: number) => {
       const nextFrame = Math.round(frame)
       resolvePendingSeekLatency(nextFrame)
-      maybeCompleteFastScrubHandoff(nextFrame)
+      if (!forceFastScrubOverlay) {
+        maybeCompleteFastScrubHandoff(nextFrame)
+      }
       const pendingHandoffFrame = pendingFastScrubHandoffFrameRef.current
       if (pendingHandoffFrame !== null && nextFrame !== pendingHandoffFrame) {
         scheduleFastScrubHandoffCheck()
@@ -151,6 +153,7 @@ export function usePreviewPlaybackController({
       adaptiveFrameSampleRef,
       adaptiveQualityStateRef,
       fps,
+      forceFastScrubOverlay,
       ignorePlayerUpdatesRef,
       isGizmoInteractingRef,
       maybeCompleteFastScrubHandoff,

@@ -591,6 +591,10 @@ export class EffectsPipeline {
     return this.poolMode
   }
 
+  async waitForSubmittedWork(): Promise<void> {
+    await this.device.queue.onSubmittedWorkDone()
+  }
+
   private acquirePooledOutput(
     w: number,
     h: number,
