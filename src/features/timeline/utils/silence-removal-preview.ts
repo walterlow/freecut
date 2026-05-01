@@ -1,15 +1,18 @@
 import type { TimelineItem } from '@/types/timeline'
-import { getOrDecodeAudio } from '../deps/composition-runtime'
-import { resolveMediaUrl } from '../deps/media-library-resolver'
-import { useItemsStore } from '../stores/items-store'
-import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
-import { useTimelineItemOverlayStore } from '../stores/timeline-item-overlay-store'
-import { sourceToTimelineFrames } from './source-calculations'
+import { getOrDecodeAudio } from '@/features/timeline/deps/composition-runtime'
+import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver'
+import { useItemsStore } from '@/features/timeline/stores/items-store'
+import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
+import { useTimelineItemOverlayStore } from '@/features/timeline/stores/timeline-item-overlay-store'
+import { sourceSecondsToTimelineFrame } from '@/features/timeline/utils/media-item-frames'
+import { createLogger } from '@/shared/logging/logger'
 import {
   detectSilentRanges,
   type AudioSilenceDetectionOptions,
   type AudioSilenceRange,
 } from '@/shared/utils/audio-silence'
+
+const logger = createLogger('SilenceRemovalPreview')
 
 export const SILENCE_REMOVAL_PREVIEW_OVERLAY_ID = 'silence-removal-preview'
 
@@ -44,36 +47,6 @@ function isAudioVideoItem(item: TimelineItem | undefined): item is TimelineItem 
     typeof item.mediaId === 'string' &&
     item.mediaId.length > 0
   )
-}
-
-function getMediaSourceFps(item: TimelineItem, timelineFps: number): number {
-  return item.type === 'video' || item.type === 'audio' || item.type === 'composition'
-    ? (item.sourceFps ?? timelineFps)
-    : timelineFps
-}
-
-function getMediaSpeed(item: TimelineItem): number {
-  return item.type === 'video' || item.type === 'audio' || item.type === 'composition'
-    ? (item.speed ?? 1)
-    : 1
-}
-
-function sourceSecondsToTimelineFrame(
-  item: TimelineItem,
-  sourceSeconds: number,
-  timelineFps: number,
-): number {
-  const sourceFps = getMediaSourceFps(item, timelineFps)
-  const sourceFrame = Math.round(sourceSeconds * sourceFps)
-  const sourceStart = item.type === 'video' || item.type === 'audio' ? (item.sourceStart ?? 0) : 0
-  const deltaSourceFrames = sourceFrame - sourceStart
-  const timelineDelta = sourceToTimelineFrames(
-    deltaSourceFrames,
-    getMediaSpeed(item),
-    sourceFps,
-    timelineFps,
-  )
-  return Math.round(item.from + timelineDelta)
 }
 
 function getItemPreviewRanges(
@@ -112,7 +85,7 @@ export async function analyzeSilenceForItems(
   )
   const silenceRangesByMediaId: SilenceRangesByMediaId = {}
 
-  await Promise.all(
+  const results = await Promise.allSettled(
     mediaIds.map(async (mediaId) => {
       const url = await resolveMediaUrl(mediaId)
       if (!url) {
@@ -124,11 +97,25 @@ export async function analyzeSilenceForItems(
         audioBuffer,
         settings satisfies AudioSilenceDetectionOptions,
       )
-      if (ranges.length > 0) {
-        silenceRangesByMediaId[mediaId] = ranges
-      }
+      return { mediaId, ranges }
     }),
   )
+
+  let succeeded = 0
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      succeeded += 1
+      if (result.value.ranges.length > 0) {
+        silenceRangesByMediaId[result.value.mediaId] = result.value.ranges
+      }
+    } else {
+      logger.warn('Silence detection failed for media', { reason: result.reason })
+    }
+  }
+
+  if (succeeded === 0 && mediaIds.length > 0) {
+    throw new Error('Could not load media for silence detection')
+  }
 
   return silenceRangesByMediaId
 }

@@ -13,7 +13,17 @@ import {
   clearSilencePreviewOverlays,
   type SilenceRemovalSettings,
 } from '../utils/silence-removal-preview'
+import type { RemoveSilenceResult } from '../stores/actions/item-edit-actions'
 import { createLogger } from '@/shared/logging/logger'
+
+function areSettingsEqual(a: SilenceRemovalSettings, b: SilenceRemovalSettings): boolean {
+  return (
+    a.thresholdDb === b.thresholdDb &&
+    a.minSilenceMs === b.minSilenceMs &&
+    a.paddingMs === b.paddingMs &&
+    a.windowMs === b.windowMs
+  )
+}
 
 const logger = createLogger('SilenceRemovalDialog')
 const SILENCE_REMOVAL_PANEL_STORAGE_KEY = 'timeline:silenceRemovalPanelBounds'
@@ -121,13 +131,16 @@ export function SilenceRemovalDialog() {
     if (!isOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isAnalyzing) {
-        handleClose()
-      }
+      if (event.key !== 'Escape' || isAnalyzing) return
+      // Capture-phase + consume so the timeline's global keydown doesn't also
+      // react to Escape (e.g. clearing selection) while we're closing.
+      event.preventDefault()
+      event.stopPropagation()
+      handleClose()
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
   }, [handleClose, isAnalyzing, isOpen])
 
   const handleUpdatePreview = useCallback(() => {
@@ -156,11 +169,20 @@ export function SilenceRemovalDialog() {
   }, [draft, itemIds, updatePreview])
 
   const handleApply = useCallback(() => {
-    const result = useTimelineStore.getState().removeSilenceFromItems(itemIds, rangesByMediaId)
-    clearSilencePreviewOverlays(itemIds)
-    close()
+    if (!areSettingsEqual(draft, settings)) {
+      toast.info('Settings changed — click Update Preview before removing')
+      return
+    }
 
-    if (result.removedItemCount === 0) {
+    let result: RemoveSilenceResult | null = null
+    try {
+      result = useTimelineStore.getState().removeSilenceFromItems(itemIds, rangesByMediaId)
+    } finally {
+      clearSilencePreviewOverlays(itemIds)
+      close()
+    }
+
+    if (!result || result.removedItemCount === 0) {
       toast.info('No silence segments found inside the selected clips')
       return
     }
@@ -168,7 +190,7 @@ export function SilenceRemovalDialog() {
     toast.success(
       `Removed ${result.removedItemCount} silence segment${result.removedItemCount === 1 ? '' : 's'}`,
     )
-  }, [close, itemIds, rangesByMediaId])
+  }, [close, draft, itemIds, rangesByMediaId, settings])
 
   if (!isOpen) {
     return null

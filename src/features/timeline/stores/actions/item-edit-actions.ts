@@ -26,6 +26,10 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
 import { timelineToSourceFrames, sourceToTimelineFrames } from '../../utils/source-calculations'
+import {
+  sourceSecondsToTimelineFrame,
+  getItemSourceSpanSeconds,
+} from '../../utils/media-item-frames'
 import { computeClampedSlipDelta } from '../../utils/slip-utils'
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils'
 import { clampSlideDeltaToPreserveTransitions } from '../../utils/transition-utils'
@@ -119,54 +123,15 @@ function requestPostEditWarmForItems(
   usePreviewBridgeStore.getState().requestPostEditWarm(primaryFrame, uniqueItemIds, warmFrames)
 }
 
-function getMediaSourceFps(item: TimelineItem, timelineFps: number): number {
-  return item.type === 'video' || item.type === 'audio' || item.type === 'composition'
-    ? (item.sourceFps ?? timelineFps)
-    : timelineFps
-}
-
-function getMediaSpeed(item: TimelineItem): number {
-  return item.type === 'video' || item.type === 'audio' || item.type === 'composition'
-    ? (item.speed ?? 1)
-    : 1
-}
-
-function sourceSecondsToTimelineFrame(
-  item: TimelineItem,
-  sourceSeconds: number,
-  timelineFps: number,
-): number {
-  const sourceFps = getMediaSourceFps(item, timelineFps)
-  const sourceFrame = Math.round(sourceSeconds * sourceFps)
-  const sourceStart = item.type === 'video' || item.type === 'audio' ? (item.sourceStart ?? 0) : 0
-  const deltaSourceFrames = sourceFrame - sourceStart
-  const timelineDelta = sourceToTimelineFrames(
-    deltaSourceFrames,
-    getMediaSpeed(item),
-    sourceFps,
-    timelineFps,
-  )
-  return Math.round(item.from + timelineDelta)
-}
-
-function getItemSourceSpanSeconds(
-  item: TimelineItem,
-  timelineFps: number,
-): { start: number; end: number } | null {
-  if (item.type !== 'video' && item.type !== 'audio') return null
-  const sourceFps = getMediaSourceFps(item, timelineFps)
-  const sourceStart = item.sourceStart ?? 0
-  const sourceFrames = timelineToSourceFrames(
-    item.durationInFrames,
-    getMediaSpeed(item),
-    timelineFps,
-    sourceFps,
-  )
-  return {
-    start: sourceStart / sourceFps,
-    end: (sourceStart + sourceFrames) / sourceFps,
-  }
-}
+// A post-split segment is removed when at least this fraction of its source-time
+// span is covered by detected silence. The threshold guards two cases:
+//   1. Frames that couldn't be split cleanly (e.g. inside a transition overlap)
+//      leave a partial segment whose start/end still bracket loud audio — we
+//      keep those so users don't lose speech to the silence cutter.
+//   2. Floating-point rounding when converting source seconds → timeline frames
+//      can leave a few frames of audible content on either side of a "fully
+//      silent" segment — 0.75 is permissive enough to remove those anyway.
+const SILENCE_COVERAGE_REMOVAL_THRESHOLD = 0.75
 
 function isMostlyInsideRanges(
   span: { start: number; end: number },
@@ -181,7 +146,7 @@ function isMostlyInsideRanges(
     return sum + Math.max(0, overlapEnd - overlapStart)
   }, 0)
 
-  return covered / duration >= 0.75
+  return covered / duration >= SILENCE_COVERAGE_REMOVAL_THRESHOLD
 }
 
 function applyRippleRemoval(ids: string[]): { removedIds: string[]; affectedIds: string[] } {
@@ -247,7 +212,7 @@ function applyRippleRemoval(ids: string[]): { removedIds: string[]; affectedIds:
   const shiftedById = new Map(updates.map((update) => [update.id, update.from]))
   const coveredIds: string[] = []
   for (const item of remainingItems) {
-    if (shiftedById.has(item.id) || idsToDelete.has(item.id)) continue
+    if (shiftedById.has(item.id)) continue
     const itemEnd = item.from + item.durationInFrames
     for (const other of remainingItems) {
       const newFrom = shiftedById.get(other.id)
