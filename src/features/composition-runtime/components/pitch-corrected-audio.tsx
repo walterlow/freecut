@@ -4,6 +4,7 @@ import { useGizmoStore } from '@/features/composition-runtime/deps/stores'
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores'
 import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache'
 import { audioBufferToWavBlob } from '../utils/audio-buffer-wav'
+import { createReversedAudioBuffer } from '../utils/audio-buffer-utils'
 import { getAudioTargetTimeSeconds } from '../utils/video-timing'
 import {
   acquirePreviewAudioElement,
@@ -49,19 +50,6 @@ interface DecodedPitchSource {
 type DecodedPitchFallbackAudioProps = PitchCorrectedAudioProps & {
   audioBuffer: AudioBuffer
   sourceStartOffsetSec: number
-}
-
-function createReversedAudioBuffer(buffer: AudioBuffer): AudioBuffer {
-  const ctx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
-  const reversed = ctx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
-  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
-    const input = buffer.getChannelData(channel)
-    const output = reversed.getChannelData(channel)
-    for (let i = 0; i < input.length; i += 1) {
-      output[i] = input[input.length - 1 - i] ?? 0
-    }
-  }
-  return reversed
 }
 
 function shouldReplaceDecodedPitchSource(

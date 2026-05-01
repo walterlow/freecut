@@ -500,14 +500,16 @@ export function buildTransitionVideoAudioSegments(
         : 0
     const before = Math.max(0, Math.min(extension.before, maxBeforeBySource))
     const after = Math.max(0, extension.after)
+    const beforeSource = timelineToSourceFrames(before, playbackRate, fps, itemSourceFps)
+    const afterSource = timelineToSourceFrames(after, playbackRate, fps, itemSourceFps)
     const trimBefore = Math.max(
       0,
-      baseTrimBefore - timelineToSourceFrames(before, playbackRate, fps, itemSourceFps),
+      baseTrimBefore - beforeSource - (item.isReversed === true ? afterSource : 0),
     )
     const reverseSourceEnd = getReverseSourceEnd(
       item,
       baseTrimBefore,
-      item.durationInFrames + after,
+      item.durationInFrames,
       playbackRate,
       itemSourceFps,
       fps,
@@ -530,7 +532,7 @@ export function buildTransitionVideoAudioSegments(
       isReversed: item.isReversed === true ? true : undefined,
       reverseSourceEnd:
         item.isReversed === true && reverseSourceEnd !== undefined
-          ? reverseSourceEnd + timelineToSourceFrames(before, playbackRate, fps, itemSourceFps)
+          ? reverseSourceEnd + beforeSource
           : undefined,
       sourceFps: item.sourceFps,
       volumeDb: (item.volume ?? 0) + (item.trackVolumeDb ?? 0),

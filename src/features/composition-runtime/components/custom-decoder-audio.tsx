@@ -5,6 +5,7 @@ import { NativePitchCorrectedAudio } from './pitch-corrected-audio'
 import type { AudioPlaybackProps } from './audio-playback-props'
 import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache'
 import { audioBufferToWavBlob } from '../utils/audio-buffer-wav'
+import { createReversedAudioBuffer } from '../utils/audio-buffer-utils'
 import { createLogger } from '@/shared/logging/logger'
 import { getAudioTargetTimeSeconds } from '../utils/video-timing'
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state'
@@ -38,19 +39,6 @@ interface DecodedPitchSource {
 interface DecodedPitchFallbackAudioProps extends AudioPlaybackProps {
   audioBuffer: AudioBuffer
   sourceStartOffsetSec: number
-}
-
-function createReversedAudioBuffer(buffer: AudioBuffer): AudioBuffer {
-  const ctx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
-  const reversed = ctx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
-  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
-    const input = buffer.getChannelData(channel)
-    const output = reversed.getChannelData(channel)
-    for (let i = 0; i < input.length; i += 1) {
-      output[i] = input[input.length - 1 - i] ?? 0
-    }
-  }
-  return reversed
 }
 
 const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
