@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { TimelineItem as TimelineItemType } from '@/types/timeline'
 import type { AnimatableProperty } from '@/types/keyframe'
@@ -34,6 +34,7 @@ import {
   type TimelineItemOverlay,
   useTimelineItemOverlayStore,
 } from '../../stores/timeline-item-overlay-store'
+import { useSilenceRemovalDialogStore } from '../../stores/silence-removal-dialog-store'
 import { canJoinMultipleItems } from '../../utils/clip-utils'
 import { canLinkSelection, hasLinkedItems } from '../../utils/linked-items'
 import {
@@ -45,6 +46,11 @@ import { resolveMediaUrl } from '../../deps/media-library-resolver'
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store'
 import { createLogger } from '@/shared/logging/logger'
 import { saveScenes } from '@/infrastructure/storage/workspace-fs/scenes'
+import {
+  analyzeSilenceForItems,
+  applySilencePreviewOverlays,
+  DEFAULT_SILENCE_REMOVAL_SETTINGS,
+} from '../../utils/silence-removal-preview'
 
 const logger = createLogger('UseTimelineItemActions')
 
@@ -398,6 +404,7 @@ export function useTimelineItemActions({
   }, [isCompositionItem, item.id])
 
   const sceneDetectionAbortRef = useRef<AbortController | null>(null)
+  const [isRemovingSilence, setIsRemovingSilence] = useState(false)
 
   useEffect(() => {
     return () => {
@@ -550,12 +557,62 @@ export function useTimelineItemActions({
     [clipFrom, isBroken, item.durationInFrames, item.id, item.mediaId, item.type, sourceStart],
   )
 
+  const handleRemoveSilence = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds
+    const targetIds = selectedItemIds.length > 0 ? selectedItemIds : [item.id]
+    const targetItems = targetIds
+      .map((id) => useItemsStore.getState().itemById[id])
+      .filter(
+        (candidate): candidate is TimelineItemType =>
+          candidate !== undefined &&
+          (candidate.type === 'video' || candidate.type === 'audio') &&
+          !!candidate.mediaId,
+      )
+
+    if (targetItems.length === 0) {
+      toast.info('Select an audio or video clip first')
+      return
+    }
+
+    const run = async () => {
+      setIsRemovingSilence(true)
+      try {
+        const targetItemIds = targetItems.map((target) => target.id)
+        const silenceRangesByMediaId = await analyzeSilenceForItems(
+          targetItemIds,
+          DEFAULT_SILENCE_REMOVAL_SETTINGS,
+        )
+        const summary = applySilencePreviewOverlays(targetItemIds, silenceRangesByMediaId)
+
+        if (summary.rangeCount === 0) {
+          toast.info('No removable silence detected')
+          return
+        }
+
+        useSilenceRemovalDialogStore.getState().open({
+          itemIds: targetItemIds,
+          settings: DEFAULT_SILENCE_REMOVAL_SETTINGS,
+          rangesByMediaId: silenceRangesByMediaId,
+          summary,
+        })
+      } catch (error) {
+        logger.warn('Remove silence failed', error)
+        toast.error(error instanceof Error ? error.message : 'Failed to preview silence')
+      } finally {
+        setIsRemovingSilence(false)
+      }
+    }
+
+    void run()
+  }, [item.id])
+
   return {
     getCanJoinSelected,
     getCanLinkSelected,
     getCanUnlinkSelected,
     hasSpeakableText,
     isSceneDetectionActive,
+    isRemovingSilence,
     isCompositionItem,
     handleJoinSelected,
     handleJoinLeft,
@@ -576,5 +633,6 @@ export function useTimelineItemActions({
     handleEnterComposition,
     handleDissolveComposition,
     handleDetectScenes,
+    handleRemoveSilence,
   }
 }

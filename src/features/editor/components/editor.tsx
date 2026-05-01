@@ -13,6 +13,7 @@ import {
   Timeline,
   BentoLayoutDialog,
   ReverseConformDialog,
+  SilenceRemovalDialog,
 } from '@/features/editor/deps/timeline-ui'
 import { toast } from 'sonner'
 import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys'
@@ -587,6 +588,7 @@ export const LoadedEditor = memo(function LoadedEditor({
       {/* Bento Layout Preset Dialog */}
       <BentoLayoutDialog />
       <ReverseConformDialog />
+      <SilenceRemovalDialog />
     </div>
   )
 })

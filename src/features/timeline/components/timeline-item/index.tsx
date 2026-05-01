@@ -1903,6 +1903,8 @@ export const TimelineItem = memo(
       handleEnterComposition,
       handleDissolveComposition,
       handleDetectScenes,
+      handleRemoveSilence,
+      isRemovingSilence,
     } = useTimelineItemActions({
       item,
       isBroken,
@@ -3271,6 +3273,11 @@ export const TimelineItem = memo(
           canDetectScenes={item.type === 'video' && !!item.mediaId && !isBroken}
           isDetectingScenes={isSceneDetectionActive}
           onDetectScenes={handleDetectScenes}
+          canRemoveSilence={
+            (item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken
+          }
+          isRemovingSilence={isRemovingSilence}
+          onRemoveSilence={handleRemoveSilence}
         >
           <div
             ref={transformRef}
