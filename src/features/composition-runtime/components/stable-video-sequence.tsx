@@ -145,6 +145,9 @@ function areGroupPropsEqual(
       prevItem.blendMode !== nextItem.blendMode ||
       prevItem.src !== nextItem.src ||
       prevItem.audioSrc !== nextItem.audioSrc ||
+      prevItem.reverseConformSrc !== nextItem.reverseConformSrc ||
+      prevItem.reverseConformPreviewSrc !== nextItem.reverseConformPreviewSrc ||
+      prevItem.reverseConformStatus !== nextItem.reverseConformStatus ||
       (prevItem.audioPitchSemitones ?? 0) !== (nextItem.audioPitchSemitones ?? 0) ||
       (prevItem.audioPitchCents ?? 0) !== (nextItem.audioPitchCents ?? 0) ||
       !areAudioEqStagesEqual(

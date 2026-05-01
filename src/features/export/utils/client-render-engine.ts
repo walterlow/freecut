@@ -1582,19 +1582,25 @@ export async function createCompositionRenderer(
           (effectiveItem.type === 'video' || effectiveItem.type === 'image')
         if (canRenderDirectGpuEffects && gpuTexturePool) {
           const outputTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
-          const renderedDirect = await renderItemGpuEffectsToTexture(
-            effectiveItem,
-            transform,
-            combinedEffects,
-            frame,
-            itemRenderContext,
-            outputTexture,
-            gpuTexturePool,
-          )
-          if (renderedDirect) {
-            return { gpuTexture: outputTexture, poolCanvases: [] }
+          let renderedDirect = false
+          try {
+            renderedDirect = await renderItemGpuEffectsToTexture(
+              effectiveItem,
+              transform,
+              combinedEffects,
+              frame,
+              itemRenderContext,
+              outputTexture,
+              gpuTexturePool,
+            )
+            if (renderedDirect) {
+              return { gpuTexture: outputTexture, poolCanvases: [] }
+            }
+          } finally {
+            if (!renderedDirect) {
+              gpuTexturePool.release(outputTexture)
+            }
           }
-          gpuTexturePool.release(outputTexture)
         }
 
         if (renderMasks.length === 0 && combinedEffects.length > 0) {

@@ -3794,6 +3794,7 @@ export const TimelineItem = memo(
       prevItem.trimStart === nextItem.trimStart &&
       prevItem.speed === nextItem.speed &&
       prevItem.isReversed === nextItem.isReversed &&
+      prevItem.reverseConformStatus === nextItem.reverseConformStatus &&
       prevItem.volume === nextItem.volume &&
       prevItem.effects === nextItem.effects &&
       prevItem.audioFadeIn === nextItem.audioFadeIn &&

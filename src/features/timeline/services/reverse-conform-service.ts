@@ -31,7 +31,13 @@ interface ReverseConformPrepareOptions {
   onProgress?: (progress: number) => void
 }
 
-const inFlightByKey = new Map<string, Promise<ReverseConformResult>>()
+interface SharedReverseConformJob {
+  promise: Promise<{ blob: Blob; opfsPath: string }>
+  progressListeners: Set<(progress: number) => void>
+  lastProgress: number
+}
+
+const inFlightByKey = new Map<string, SharedReverseConformJob>()
 
 function toSafeKey(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180)
@@ -216,13 +222,19 @@ export const reverseConformService = {
         item.reverseConformPreviewPath.split('/').filter(Boolean),
         item.reverseConformPreviewPath,
       )
+      if (next.reverseConformPreviewSrc?.startsWith('blob:')) {
+        URL.revokeObjectURL(next.reverseConformPreviewSrc)
+      }
       if (blob) {
         next.reverseConformPreviewSrc = createObjectUrl(blob)
       } else {
         next.reverseConformPreviewSrc = undefined
+        next.reverseConformStatus = undefined
       }
     } else if (item.type === 'video' && item.reverseConformPreviewSrc?.startsWith('blob:')) {
+      URL.revokeObjectURL(item.reverseConformPreviewSrc)
       next.reverseConformPreviewSrc = undefined
+      next.reverseConformStatus = undefined
     }
 
     if (item.reverseConformPath) {
@@ -230,13 +242,19 @@ export const reverseConformService = {
         item.reverseConformPath.split('/').filter(Boolean),
         item.reverseConformPath,
       )
+      if (next.reverseConformSrc?.startsWith('blob:')) {
+        URL.revokeObjectURL(next.reverseConformSrc)
+      }
       if (blob) {
         next.reverseConformSrc = createObjectUrl(blob)
       } else {
         next.reverseConformSrc = undefined
+        next.reverseConformStatus = undefined
       }
     } else if (item.reverseConformSrc?.startsWith('blob:')) {
+      URL.revokeObjectURL(item.reverseConformSrc)
       next.reverseConformSrc = undefined
+      next.reverseConformStatus = undefined
     }
 
     return next
@@ -262,66 +280,101 @@ export const reverseConformService = {
     const pathSegments = reverseConformFilePath(mediaId, key)
     const opfsPath = pathSegments.join('/')
 
-    const existing = inFlightByKey.get(key)
-    if (existing) {
-      return existing
+    let shared = inFlightByKey.get(key)
+    if (!shared) {
+      const progressListeners = new Set<(progress: number) => void>()
+      const sharedJob: SharedReverseConformJob = {
+        progressListeners,
+        lastProgress: 0,
+        promise: (async () => {
+          const emitProgress = (value: number) => {
+            sharedJob.lastProgress = value
+            for (const listener of progressListeners) {
+              listener(value)
+            }
+          }
+          emitProgress(0)
+          const cached = await loadCachedBlob(pathSegments, opfsPath)
+          if (cached) {
+            emitProgress(1)
+            return { blob: cached, opfsPath }
+          }
+          const composition = buildConformComposition(item, timelineFps, quality)
+          composition.tracks = await resolveMediaUrls(composition.tracks, { useProxy })
+          const resolvedItem = composition.tracks[0]?.items[0]
+          if (!resolvedItem || resolvedItem.type !== 'video' || !resolvedItem.src) {
+            throw new Error('Could not resolve the source media for reverse.')
+          }
+          const result = await renderComposition({
+            composition,
+            settings: buildConformSettings(item, timelineFps, quality),
+            onProgress: (progress: RenderProgress) => {
+              emitProgress(Math.max(0, Math.min(0.99, scaleRenderProgress(progress))))
+            },
+          })
+          await saveBlobToOpfs(opfsPath, result.blob)
+          await mirrorBlobToWorkspace(pathSegments, result.blob)
+          emitProgress(1)
+          return { blob: result.blob, opfsPath }
+        })().finally(() => {
+          inFlightByKey.delete(key)
+        }),
+      }
+      inFlightByKey.set(key, sharedJob)
+      shared = sharedJob
     }
 
-    const job = (async () => {
-      options.onProgress?.(0)
-      const cached = await loadCachedBlob(pathSegments, opfsPath)
-      throwIfAborted(options.signal)
-      if (cached) {
-        options.onProgress?.(1)
-        return {
-          itemId: item.id,
-          src: createObjectUrl(cached),
-          path: opfsPath,
-          key,
-          quality,
-          usesProxy: useProxy,
+    const sharedJob = shared
+    const onProgress = options.onProgress
+    if (onProgress) {
+      sharedJob.progressListeners.add(onProgress)
+      onProgress(sharedJob.lastProgress)
+    }
+
+    return new Promise<ReverseConformResult>((resolve, reject) => {
+      let settled = false
+      const cleanup = () => {
+        if (onProgress) {
+          sharedJob.progressListeners.delete(onProgress)
+        }
+        if (options.signal) {
+          options.signal.removeEventListener('abort', onAbort)
         }
       }
-
-      const onProgress = (progress: RenderProgress) => {
-        options.onProgress?.(Math.max(0, Math.min(0.99, scaleRenderProgress(progress))))
+      const onAbort = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(new DOMException('Reverse conform cancelled', 'AbortError'))
       }
-      const composition = buildConformComposition(item, timelineFps, quality)
-      composition.tracks = await resolveMediaUrls(composition.tracks, {
-        useProxy,
-        signal: options.signal,
-      })
-      throwIfAborted(options.signal)
-      const resolvedItem = composition.tracks[0]?.items[0]
-      if (!resolvedItem || resolvedItem.type !== 'video' || !resolvedItem.src) {
-        throw new Error('Could not resolve the source media for reverse.')
+      if (options.signal) {
+        if (options.signal.aborted) {
+          onAbort()
+          return
+        }
+        options.signal.addEventListener('abort', onAbort, { once: true })
       }
-      const result = await renderComposition({
-        composition,
-        settings: buildConformSettings(item, timelineFps, quality),
-        onProgress,
-        signal: options.signal,
-      })
-      throwIfAborted(options.signal)
-      await saveBlobToOpfs(opfsPath, result.blob)
-      throwIfAborted(options.signal)
-      await mirrorBlobToWorkspace(pathSegments, result.blob)
-      throwIfAborted(options.signal)
-      options.onProgress?.(1)
-
-      return {
-        itemId: item.id,
-        src: createObjectUrl(result.blob),
-        path: opfsPath,
-        key,
-        quality,
-        usesProxy: useProxy,
-      }
-    })().finally(() => {
-      inFlightByKey.delete(key)
+      sharedJob.promise.then(
+        ({ blob, opfsPath: path }) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          resolve({
+            itemId: item.id,
+            src: createObjectUrl(blob),
+            path,
+            key,
+            quality,
+            usesProxy: useProxy,
+          })
+        },
+        (error) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          reject(error)
+        },
+      )
     })
-
-    inFlightByKey.set(key, job)
-    return job
   },
 }

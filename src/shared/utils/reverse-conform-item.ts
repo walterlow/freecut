@@ -34,7 +34,9 @@ export function resolveReverseConformedVideoItem<TItem extends VideoItem>(
   const canUsePreviewConform =
     options.mode !== 'export' &&
     hasReadyReversePreviewConform(item) &&
-    (options.useProxy === true || item.reverseConformPreviewUsesProxy !== true)
+    (options.useProxy === true ||
+      item.reverseConformPreviewUsesProxy !== true ||
+      !hasReadyReverseConform(item))
   const conformSrc = canUsePreviewConform
     ? item.reverseConformPreviewSrc
     : hasReadyReverseConform(item)
