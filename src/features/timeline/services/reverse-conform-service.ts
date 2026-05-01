@@ -37,6 +37,13 @@ interface SharedReverseConformJob {
   lastProgress: number
 }
 
+function emitSharedProgress(job: SharedReverseConformJob, value: number): void {
+  job.lastProgress = value
+  for (const listener of job.progressListeners) {
+    listener(value)
+  }
+}
+
 const inFlightByKey = new Map<string, SharedReverseConformJob>()
 
 function toSafeKey(value: string): string {
@@ -225,16 +232,10 @@ export const reverseConformService = {
       if (next.reverseConformPreviewSrc?.startsWith('blob:')) {
         URL.revokeObjectURL(next.reverseConformPreviewSrc)
       }
-      if (blob) {
-        next.reverseConformPreviewSrc = createObjectUrl(blob)
-      } else {
-        next.reverseConformPreviewSrc = undefined
-        next.reverseConformStatus = undefined
-      }
+      next.reverseConformPreviewSrc = blob ? createObjectUrl(blob) : undefined
     } else if (item.type === 'video' && item.reverseConformPreviewSrc?.startsWith('blob:')) {
       URL.revokeObjectURL(item.reverseConformPreviewSrc)
       next.reverseConformPreviewSrc = undefined
-      next.reverseConformStatus = undefined
     }
 
     if (item.reverseConformPath) {
@@ -245,15 +246,13 @@ export const reverseConformService = {
       if (next.reverseConformSrc?.startsWith('blob:')) {
         URL.revokeObjectURL(next.reverseConformSrc)
       }
-      if (blob) {
-        next.reverseConformSrc = createObjectUrl(blob)
-      } else {
-        next.reverseConformSrc = undefined
-        next.reverseConformStatus = undefined
-      }
+      next.reverseConformSrc = blob ? createObjectUrl(blob) : undefined
     } else if (item.reverseConformSrc?.startsWith('blob:')) {
       URL.revokeObjectURL(item.reverseConformSrc)
       next.reverseConformSrc = undefined
+    }
+
+    if (!next.reverseConformPreviewSrc && !next.reverseConformSrc) {
       next.reverseConformStatus = undefined
     }
 
@@ -280,51 +279,44 @@ export const reverseConformService = {
     const pathSegments = reverseConformFilePath(mediaId, key)
     const opfsPath = pathSegments.join('/')
 
-    let shared = inFlightByKey.get(key)
-    if (!shared) {
-      const progressListeners = new Set<(progress: number) => void>()
-      const sharedJob: SharedReverseConformJob = {
-        progressListeners,
+    let sharedJob = inFlightByKey.get(key)
+    if (!sharedJob) {
+      const job: SharedReverseConformJob = {
+        progressListeners: new Set<(progress: number) => void>(),
         lastProgress: 0,
-        promise: (async () => {
-          const emitProgress = (value: number) => {
-            sharedJob.lastProgress = value
-            for (const listener of progressListeners) {
-              listener(value)
-            }
-          }
-          emitProgress(0)
-          const cached = await loadCachedBlob(pathSegments, opfsPath)
-          if (cached) {
-            emitProgress(1)
-            return { blob: cached, opfsPath }
-          }
-          const composition = buildConformComposition(item, timelineFps, quality)
-          composition.tracks = await resolveMediaUrls(composition.tracks, { useProxy })
-          const resolvedItem = composition.tracks[0]?.items[0]
-          if (!resolvedItem || resolvedItem.type !== 'video' || !resolvedItem.src) {
-            throw new Error('Could not resolve the source media for reverse.')
-          }
-          const result = await renderComposition({
-            composition,
-            settings: buildConformSettings(item, timelineFps, quality),
-            onProgress: (progress: RenderProgress) => {
-              emitProgress(Math.max(0, Math.min(0.99, scaleRenderProgress(progress))))
-            },
-          })
-          await saveBlobToOpfs(opfsPath, result.blob)
-          await mirrorBlobToWorkspace(pathSegments, result.blob)
-          emitProgress(1)
-          return { blob: result.blob, opfsPath }
-        })().finally(() => {
-          inFlightByKey.delete(key)
-        }),
+        promise: undefined as unknown as Promise<{ blob: Blob; opfsPath: string }>,
       }
-      inFlightByKey.set(key, sharedJob)
-      shared = sharedJob
+      job.promise = (async () => {
+        emitSharedProgress(job, 0)
+        const cached = await loadCachedBlob(pathSegments, opfsPath)
+        if (cached) {
+          emitSharedProgress(job, 1)
+          return { blob: cached, opfsPath }
+        }
+        const composition = buildConformComposition(item, timelineFps, quality)
+        composition.tracks = await resolveMediaUrls(composition.tracks, { useProxy })
+        const resolvedItem = composition.tracks[0]?.items[0]
+        if (!resolvedItem || resolvedItem.type !== 'video' || !resolvedItem.src) {
+          throw new Error('Could not resolve the source media for reverse.')
+        }
+        const result = await renderComposition({
+          composition,
+          settings: buildConformSettings(item, timelineFps, quality),
+          onProgress: (progress: RenderProgress) => {
+            emitSharedProgress(job, Math.max(0, Math.min(0.99, scaleRenderProgress(progress))))
+          },
+        })
+        await saveBlobToOpfs(opfsPath, result.blob)
+        await mirrorBlobToWorkspace(pathSegments, result.blob)
+        emitSharedProgress(job, 1)
+        return { blob: result.blob, opfsPath }
+      })().finally(() => {
+        inFlightByKey.delete(key)
+      })
+      inFlightByKey.set(key, job)
+      sharedJob = job
     }
 
-    const sharedJob = shared
     const onProgress = options.onProgress
     if (onProgress) {
       sharedJob.progressListeners.add(onProgress)

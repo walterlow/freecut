@@ -52,6 +52,7 @@ export function resolveReverseConformedVideoItem<TItem extends VideoItem>(
     src: conformSrc,
     audioSrc: conformSrc,
     isReversed: undefined,
+    speed: 1,
     sourceStart: 0,
     trimStart: 0,
     offset: 0,
