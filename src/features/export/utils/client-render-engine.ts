@@ -84,6 +84,7 @@ import {
 } from '@/features/export/deps/composition-runtime'
 import {
   renderItem,
+  renderItemGpuEffectsToTexture,
   renderTransitionToCanvas,
   renderTransitionToGpuTexture,
   type CanvasSettings,
@@ -1413,6 +1414,10 @@ export async function createCompositionRenderer(
         }
         if (itemRenderContext.gpuPipeline) {
           // Initialize GPU transition pipeline (shares device with effects pipeline)
+          if (hasAnyGpuEffects) {
+            if (!itemRenderContext.gpuMediaPipeline) ensureGpuMediaPipeline()
+            itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
+          }
           if (activeTransitions.length > 0) {
             if (!itemRenderContext.gpuTransitionPipeline) ensureGpuTransitionPipeline()
             if (!itemRenderContext.gpuMediaPipeline) ensureGpuMediaPipeline()
@@ -1441,7 +1446,13 @@ export async function createCompositionRenderer(
         deferred: boolean,
         targetCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
         bakeMasks = true,
-      ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null> => {
+        preferGpuTextureOutput = false,
+        allowDirectGpu = true,
+      ): Promise<{
+        source?: OffscreenCanvas
+        gpuTexture?: GPUTexture
+        poolCanvases: OffscreenCanvas[]
+      } | null> => {
         const item = getCurrentItem(baseItem)
         // Get animated transform
         const itemKeyframes = getCurrentKeyframes(item.id)
@@ -1489,12 +1500,41 @@ export async function createCompositionRenderer(
         )
         const renderMasks = bakeMasks ? applicableMasks : []
 
-        // NOTE: The importExternalTexture zero-copy path is disabled because
+        // NOTE: The HTMLVideoElement importExternalTexture path stays disabled because
         // textureSampleBaseClampToEdge produces subtly different edge pixel values
         // compared to canvas 2D's drawImage (different YUV→RGB conversion at
         // chroma subsampling boundaries). Spatial effects like halftone amplify
         // this into a visible bright edge. The standard canvas 2D → GPU path
         // below handles video correctly with negligible extra cost (~1-2ms).
+
+        const canRenderDirectGpuEffects =
+          allowDirectGpu &&
+          preferGpuTextureOutput &&
+          gpuTexturePool &&
+          itemRenderContext.gpuPipeline &&
+          itemRenderContext.gpuMediaPipeline &&
+          renderMasks.length === 0 &&
+          combinedEffects.length > 0 &&
+          combinedEffects.every(
+            (effect) => effect.enabled && effect.effect.type === 'gpu-effect',
+          ) &&
+          (effectiveItem.type === 'video' || effectiveItem.type === 'image')
+        if (canRenderDirectGpuEffects && gpuTexturePool) {
+          const outputTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
+          const renderedDirect = await renderItemGpuEffectsToTexture(
+            effectiveItem,
+            transform,
+            combinedEffects,
+            frame,
+            itemRenderContext,
+            outputTexture,
+            gpuTexturePool,
+          )
+          if (renderedDirect) {
+            return { gpuTexture: outputTexture, poolCanvases: [] }
+          }
+          gpuTexturePool.release(outputTexture)
+        }
 
         // === PERFORMANCE: Use pooled canvas instead of creating new one ===
         const { canvas: itemCanvas, ctx: itemCtx } = canvasPool.acquire()
@@ -1846,6 +1886,7 @@ export async function createCompositionRenderer(
               true,
               contentCtx,
               !canSeparateMasks,
+              false,
             )
           }
           const transitionMasks = activeMasks.filter((mask) =>
@@ -1997,6 +2038,7 @@ export async function createCompositionRenderer(
           }
 
           if (compositedToGpuCanvas) {
+            await itemRenderContext.gpuPipeline?.waitForSubmittedWork()
             finalCompositeSource = gpuCompositeOutput.canvas
           } else {
             // Fall back to the established Canvas2D compositor if the GPU target
@@ -2006,6 +2048,19 @@ export async function createCompositionRenderer(
               let fallbackResult = result
               if (!fallbackResult.source && task.type === 'transition') {
                 fallbackResult = await renderTransitionFallbackCanvas(task)
+              }
+              if (!fallbackResult.source && task.type === 'item') {
+                const rerenderedFallback = await renderItemWithEffects(
+                  task.item,
+                  task.trackOrder,
+                  true,
+                  contentCtx,
+                  true,
+                  false,
+                  false,
+                )
+                if (!rerenderedFallback) continue
+                fallbackResult = rerenderedFallback
               }
               let fallbackSource = fallbackResult.source
               if (!fallbackSource) continue

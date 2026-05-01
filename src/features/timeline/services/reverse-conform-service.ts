@@ -1,5 +1,5 @@
 import type { CompositionInputProps } from '@/types/export'
-import type { TimelineTrack, VideoItem } from '@/types/timeline'
+import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
 import {
   renderComposition,
   type ClientExportSettings,
@@ -204,6 +204,48 @@ function scaleRenderProgress(progress: RenderProgress): number {
 }
 
 export const reverseConformService = {
+  async hydrateItem(item: TimelineItem): Promise<TimelineItem> {
+    if (item.isReversed !== true || item.reverseConformStatus !== 'ready') {
+      return item
+    }
+
+    const next = { ...item }
+
+    if (item.type === 'video' && item.reverseConformPreviewPath) {
+      const blob = await loadCachedBlob(
+        item.reverseConformPreviewPath.split('/').filter(Boolean),
+        item.reverseConformPreviewPath,
+      )
+      if (blob) {
+        next.reverseConformPreviewSrc = createObjectUrl(blob)
+      } else {
+        next.reverseConformPreviewSrc = undefined
+      }
+    } else if (item.type === 'video' && item.reverseConformPreviewSrc?.startsWith('blob:')) {
+      next.reverseConformPreviewSrc = undefined
+    }
+
+    if (item.reverseConformPath) {
+      const blob = await loadCachedBlob(
+        item.reverseConformPath.split('/').filter(Boolean),
+        item.reverseConformPath,
+      )
+      if (blob) {
+        next.reverseConformSrc = createObjectUrl(blob)
+      } else {
+        next.reverseConformSrc = undefined
+      }
+    } else if (item.reverseConformSrc?.startsWith('blob:')) {
+      next.reverseConformSrc = undefined
+    }
+
+    return next
+  },
+
+  async hydrateItems(items: TimelineItem[]): Promise<TimelineItem[]> {
+    return Promise.all(items.map((item) => reverseConformService.hydrateItem(item)))
+  },
+
   async prepareVideo(
     item: VideoItem,
     timelineFps: number,

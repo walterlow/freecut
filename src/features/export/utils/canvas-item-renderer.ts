@@ -2718,6 +2718,46 @@ async function renderGpuMediaParticipantToTexture(
   }
 }
 
+export async function renderItemGpuEffectsToTexture(
+  item: TimelineItem,
+  transform: ItemTransform,
+  effects: ItemEffect[],
+  frame: number,
+  rctx: ItemRenderContext,
+  outputTexture: GPUTexture,
+  gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
+  renderSpan?: RenderTimelineSpan,
+): Promise<boolean> {
+  if (!rctx.gpuPipeline || !rctx.gpuMediaPipeline) return false
+  if (item.type !== 'video' && item.type !== 'image') return false
+
+  const enabledEffects = effects.filter((effect) => effect.enabled)
+  if (enabledEffects.length === 0) return false
+  if (enabledEffects.some((effect) => effect.effect.type !== 'gpu-effect')) return false
+  if (
+    item.type === 'video' &&
+    !rctx.useMediabunny.has(item.id) &&
+    !(await rctx.ensureVideoItemReady?.(item.id))
+  ) {
+    return false
+  }
+
+  const participant: TransitionParticipantRenderState = {
+    item,
+    transform,
+    effects: enabledEffects,
+    renderSpan: renderSpan ?? getItemRenderTimelineSpan(item),
+  }
+  const prepared = await prepareGpuMediaParticipant(participant, frame, rctx)
+  if (!prepared) return false
+
+  try {
+    return renderGpuMediaParticipantToTexture(prepared, rctx, gpuTexturePool, outputTexture)
+  } finally {
+    prepared.media.close?.()
+  }
+}
+
 async function prepareGpuMediaParticipant(
   participant: TransitionParticipantRenderState,
   frame: number,
