@@ -47,6 +47,17 @@ export interface EmbeddedSubtitleScanResult {
   fromCache: boolean
 }
 
+export interface SubtitleScanProgressInfo {
+  bytesRead: number
+  totalBytes: number
+  clusters: number
+}
+
+export interface SubtitleScanOptions {
+  onProgress?: (info: SubtitleScanProgressInfo) => void
+  signal?: AbortSignal
+}
+
 class SubtitleSidecarService {
   async importSubtitleFile(file: File): Promise<ImportSubtitleResult> {
     const format = inferSubtitleFormat(file.name)
@@ -182,10 +193,14 @@ class SubtitleSidecarService {
    * tracks. Cached in workspace-fs after the first scan so re-opening the
    * picker is instant. Cache is invalidated when the source's `fileSize`
    * (or `lastModified`, when available) changes.
+   *
+   * `onProgress` fires periodically during the parse with read/total bytes;
+   * `signal` aborts mid-scan.
    */
   async scanEmbeddedSubtitleTracks(
     media: MediaMetadata,
     file: Blob,
+    options: SubtitleScanOptions = {},
   ): Promise<EmbeddedSubtitleScanResult> {
     const fingerprint = {
       fileSize: file.size,
@@ -193,10 +208,16 @@ class SubtitleSidecarService {
     }
     const cached = await getEmbeddedSubtitleSidecar(media.id, fingerprint)
     if (cached) {
+      // Surface a single 100% tick so callers showing a progress bar can
+      // settle their UI even when we short-circuit the parse.
+      options.onProgress?.({ bytesRead: file.size, totalBytes: file.size, clusters: 0 })
       return { tracks: cached.tracks, scannedAt: cached.scannedAt, fromCache: true }
     }
 
-    const tracks = await extractMatroskaTextSubtitleTracksFromBlob(file)
+    const tracks = await extractMatroskaTextSubtitleTracksFromBlob(file, {
+      onProgress: options.onProgress,
+      signal: options.signal,
+    })
     let scannedAt = Date.now()
     if (tracks.length > 0) {
       const saved = await saveEmbeddedSubtitleSidecar(media.id, fingerprint, tracks).catch(

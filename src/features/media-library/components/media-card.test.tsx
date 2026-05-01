@@ -38,6 +38,20 @@ const embeddedSubtitlePickerStoreMocks = vi.hoisted(() => ({
   setError: vi.fn(),
 }))
 
+const subtitleScanProgressStoreMocks = vi.hoisted(() => ({
+  start: vi.fn(),
+  setCurrentIndex: vi.fn(),
+  updateProgress: vi.fn(),
+  markEntryStatus: vi.fn(),
+  finish: vi.fn(),
+  close: vi.fn(),
+  open: false,
+  entries: [] as unknown[],
+  currentIndex: 0,
+  summary: null as string | null,
+  abort: null as null | (() => void),
+}))
+
 const mediaStoreState = vi.hoisted(() => ({
   selectedMediaIds: [] as string[],
   mediaItems: [] as MediaMetadata[],
@@ -187,6 +201,15 @@ vi.mock('../stores/embedded-subtitle-picker-store', () => {
   return { useEmbeddedSubtitlePickerStore }
 })
 
+vi.mock('../stores/subtitle-scan-progress-store', () => {
+  const useSubtitleScanProgressStore = Object.assign(
+    (selector: (state: typeof subtitleScanProgressStoreMocks) => unknown) =>
+      selector(subtitleScanProgressStoreMocks),
+    { getState: () => subtitleScanProgressStoreMocks },
+  )
+  return { useSubtitleScanProgressStore }
+})
+
 vi.mock('../stores/media-library-store', () => {
   const useMediaLibraryStore = Object.assign(
     (selector: (state: typeof mediaStoreState) => unknown) => selector(mediaStoreState),
@@ -308,6 +331,12 @@ describe('MediaCard', () => {
     embeddedSubtitlePickerStoreMocks.open.mockReset()
     embeddedSubtitlePickerStoreMocks.close.mockReset()
     embeddedSubtitlePickerStoreMocks.setError.mockReset()
+    subtitleScanProgressStoreMocks.start.mockReset()
+    subtitleScanProgressStoreMocks.setCurrentIndex.mockReset()
+    subtitleScanProgressStoreMocks.updateProgress.mockReset()
+    subtitleScanProgressStoreMocks.markEntryStatus.mockReset()
+    subtitleScanProgressStoreMocks.finish.mockReset()
+    subtitleScanProgressStoreMocks.close.mockReset()
     editorStoreState.mediaSkimPreviewMediaId = null
     playbackStoreState.pause.mockReset()
 
@@ -437,7 +466,7 @@ describe('MediaCard', () => {
     })
   })
 
-  it('opens the track picker via the shared store for a single media', async () => {
+  it('runs a scan-only cache extract from the media library and never opens the track picker', async () => {
     const media = makeMedia({
       fileName: 'movie.mkv',
       mimeType: 'video/x-matroska',
@@ -448,15 +477,22 @@ describe('MediaCard', () => {
     fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
 
     await waitFor(() => {
-      expect(embeddedSubtitlePickerStoreMocks.open).toHaveBeenCalledWith(media, expect.any(Blob))
+      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
+        media,
+        expect.any(Blob),
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      )
     })
-    // Single-target shouldn't go through the batch auto-pick path.
+    expect(subtitleScanProgressStoreMocks.start).toHaveBeenCalled()
+    // Picker stays closed — the media-library entry point is cache-only.
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
+    // Legacy "extract+insert" service call must not fire from this path.
     expect(
       subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
     ).not.toHaveBeenCalled()
   })
 
-  it('opens the picker with the live file handle from the clicked media', async () => {
+  it('passes the live file handle into the cache scan', async () => {
     const file = new File(['video-data'], 'movie.mkv', { type: 'video/x-matroska' })
     const requestPermission = vi.fn(async () => 'granted' as PermissionState)
     const getFile = vi.fn(async () => file)
@@ -475,11 +511,16 @@ describe('MediaCard', () => {
     fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
 
     await waitFor(() => {
-      expect(embeddedSubtitlePickerStoreMocks.open).toHaveBeenCalledWith(media, file)
+      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
+        media,
+        file,
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      )
     })
     expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
     expect(getFile).toHaveBeenCalledTimes(1)
     expect(mediaLibraryServiceMocks.getMediaFile).not.toHaveBeenCalled()
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
   })
 
   it('requests file permission before extracting embedded subtitles', async () => {

@@ -1,4 +1,3 @@
-import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -10,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/shared/ui/cn'
 import type { EmbeddedSubtitleTrack } from '@/shared/utils/matroska-subtitles'
@@ -34,7 +34,7 @@ interface EmbeddedSubtitleTrackPickerProps {
 
 type ScanState =
   | { status: 'idle' }
-  | { status: 'scanning' }
+  | { status: 'scanning'; bytesRead: number; totalBytes: number }
   | {
       status: 'ready'
       tracks: readonly EmbeddedSubtitleTrack[]
@@ -43,6 +43,13 @@ type ScanState =
     }
   | { status: 'empty' }
   | { status: 'error'; message: string }
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
 
 export function EmbeddedSubtitleTrackPicker({
   media,
@@ -64,11 +71,20 @@ export function EmbeddedSubtitleTrackPicker({
     }
 
     let cancelled = false
-    setState({ status: 'scanning' })
+    const abortController = new AbortController()
+    setState({ status: 'scanning', bytesRead: 0, totalBytes: blob.size })
     setSelectedTrackNumber(null)
 
     void subtitleSidecarService
-      .scanEmbeddedSubtitleTracks(media, blob)
+      .scanEmbeddedSubtitleTracks(media, blob, {
+        onProgress: ({ bytesRead, totalBytes }) => {
+          if (cancelled) return
+          setState((prev) =>
+            prev.status === 'scanning' ? { ...prev, bytesRead, totalBytes } : prev,
+          )
+        },
+        signal: abortController.signal,
+      })
       .then((result) => {
         if (cancelled) return
         if (result.tracks.length === 0) {
@@ -95,6 +111,7 @@ export function EmbeddedSubtitleTrackPicker({
 
     return () => {
       cancelled = true
+      abortController.abort()
     }
   }, [media, blob])
 
@@ -122,8 +139,28 @@ export function EmbeddedSubtitleTrackPicker({
 
         <div className="min-h-32 max-h-[55vh]">
           {state.status === 'scanning' && (
-            <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Scanning source for subtitle tracks…
+            <div className="flex flex-col gap-2 py-6">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Scanning for subtitle tracks…</span>
+                <span className="tabular-nums text-xs text-muted-foreground">
+                  {state.totalBytes > 0
+                    ? `${Math.round((state.bytesRead / state.totalBytes) * 100)}%`
+                    : ''}
+                </span>
+              </div>
+              <Progress
+                value={
+                  state.totalBytes > 0
+                    ? Math.min(100, (state.bytesRead / state.totalBytes) * 100)
+                    : 0
+                }
+                className="h-2"
+              />
+              {state.totalBytes > 0 && (
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {formatBytes(state.bytesRead)} / {formatBytes(state.totalBytes)}
+                </p>
+              )}
             </div>
           )}
 

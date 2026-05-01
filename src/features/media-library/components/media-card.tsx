@@ -47,7 +47,7 @@ import {
   TRANSCRIPTION_OOM_HINT,
 } from '@/shared/utils/transcription-cancellation'
 import { TranscribeDialog, type TranscribeDialogValues } from './transcribe-dialog'
-import { useEmbeddedSubtitlePickerStore } from '../stores/embedded-subtitle-picker-store'
+import { useSubtitleScanProgressStore } from '../stores/subtitle-scan-progress-store'
 
 interface MediaCardProps {
   media: MediaMetadata
@@ -370,7 +370,6 @@ export const MediaCard = memo(function MediaCard({
   const [transcribeDialogOpen, setTranscribeDialogOpen] = useState(false)
   const [transcribeErrorMessage, setTranscribeErrorMessage] = useState<string | null>(null)
   const [isExtractingEmbeddedSubtitles, setIsExtractingEmbeddedSubtitles] = useState(false)
-  const openEmbeddedSubtitlePicker = useEmbeddedSubtitlePickerStore((s) => s.open)
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -644,78 +643,88 @@ export const MediaCard = memo(function MediaCard({
       return
     }
 
-    // Single-target: open the track picker so the user can choose language /
-    // SDH / forced. Multi-target: skip the picker and auto-pick per file
-    // (forced > default > English > first), since the right choice may
-    // differ per file.
-    if (targets.length === 1) {
-      const [target] = targets
-      if (!target) return
-      setIsExtractingEmbeddedSubtitles(true)
-      try {
-        const hasPermission = await requestSubtitleSourcePermission(target)
-        if (!hasPermission) {
-          markSubtitleSourceUnreadable(target, 'permission_denied')
-          store.showNotification({
-            type: 'error',
-            message: `FreeCut needs permission to read "${target.fileName}" before extracting subtitles.`,
-          })
-          return
-        }
-        const sourceBlob = await getSubtitleSourceBlob(target)
-        openEmbeddedSubtitlePicker(target, sourceBlob)
-      } catch (error) {
-        store.showNotification({
-          type: 'error',
-          message: getSubtitleExtractionErrorMessage(error, target),
-        })
-      } finally {
-        setIsExtractingEmbeddedSubtitles(false)
-      }
-      return
-    }
-
+    // Media-library extraction is purely a cache operation — never inserts
+    // onto the timeline. The user reaches the insert flow from the clip
+    // context menu after the cache is warm. Show the scan progress dialog so
+    // long parses (multi-GB MKVs) have visible feedback.
     setIsExtractingEmbeddedSubtitles(true)
+    const progress = useSubtitleScanProgressStore.getState()
+    const abortController = new AbortController()
+    progress.start({
+      files: targets.map((t) => ({
+        fileName: t.fileName,
+        // Optimistic placeholder; replaced once the blob is opened and we
+        // know the actual byte size.
+        totalBytes: t.fileSize ?? 0,
+      })),
+      abort: () => abortController.abort(),
+    })
+
     let succeeded = 0
-    let insertedItems = 0
+    let totalTracksCached = 0
     let lastErrorMessage: string | null = null
 
     try {
-      for (const target of targets) {
+      for (let i = 0; i < targets.length; i++) {
+        if (abortController.signal.aborted) break
+        const target = targets[i]!
+        useSubtitleScanProgressStore.getState().setCurrentIndex(i)
         try {
           const hasPermission = await requestSubtitleSourcePermission(target)
           if (!hasPermission) {
             markSubtitleSourceUnreadable(target, 'permission_denied')
             lastErrorMessage = `FreeCut needs permission to read "${target.fileName}" before extracting subtitles.`
+            useSubtitleScanProgressStore.getState().markEntryStatus(i, 'error')
             continue
           }
 
           const sourceBlob = await getSubtitleSourceBlob(target)
-          const result = await subtitleSidecarService.extractEmbeddedSubtitlesFromBlobAsCaptions(
+          const result = await subtitleSidecarService.scanEmbeddedSubtitleTracks(
             target,
             sourceBlob,
+            {
+              onProgress: ({ bytesRead }) => {
+                useSubtitleScanProgressStore.getState().updateProgress(bytesRead)
+              },
+              signal: abortController.signal,
+            },
           )
-          insertedItems += result.insertedItemCount
+          // Surface 100% even when no clusters fired the periodic tick.
+          useSubtitleScanProgressStore.getState().updateProgress(sourceBlob.size)
+          useSubtitleScanProgressStore.getState().markEntryStatus(i, 'done')
+          totalTracksCached += result.tracks.length
           succeeded += 1
         } catch (error) {
+          if (abortController.signal.aborted) break
           lastErrorMessage = getSubtitleExtractionErrorMessage(error, target)
+          useSubtitleScanProgressStore.getState().markEntryStatus(i, 'error')
         }
       }
     } finally {
       setIsExtractingEmbeddedSubtitles(false)
     }
 
-    if (succeeded > 0) {
-      store.showNotification({
-        type: 'success',
-        message: `Extracted embedded subtitles from ${succeeded} of ${targets.length} media files (${insertedItems} captions).`,
-      })
+    if (abortController.signal.aborted) {
+      // User-cancelled mid-batch — dialog already cleared by close().
       return
     }
 
+    if (succeeded > 0) {
+      const fileWord = succeeded === 1 ? 'file' : 'files'
+      const trackWord = totalTracksCached === 1 ? 'track' : 'tracks'
+      const summary =
+        succeeded === targets.length
+          ? `Cached ${totalTracksCached} subtitle ${trackWord} across ${succeeded} ${fileWord}.`
+          : `Cached subtitles for ${succeeded} of ${targets.length} files (${totalTracksCached} ${trackWord}).`
+      useSubtitleScanProgressStore.getState().finish(summary)
+      return
+    }
+
+    // All failures — close progress dialog and surface a notification.
+    useSubtitleScanProgressStore.getState().close()
     store.showNotification({
       type: 'error',
-      message: lastErrorMessage ?? 'Failed to extract embedded subtitles',
+      message: lastErrorMessage ?? 'Failed to scan embedded subtitles.',
     })
   }
 
