@@ -79,8 +79,8 @@ import {
   type PreviewPathVerticesOverride,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
+  getVideoTargetTimeSeconds,
   resolveFrameRenderScene,
-  snapSourceTime,
 } from '@/features/export/deps/composition-runtime'
 import {
   renderItem,
@@ -95,6 +95,7 @@ import {
 } from './canvas-item-renderer'
 import { ScrubbingCache } from '@/features/export/deps/preview'
 import { resolveFrameRenderOptimization } from './render-path-optimizer'
+import { ReverseVideoFrameCache } from './reverse-video-frame-cache'
 
 // Re-export orchestration functions so existing import sites keep working
 export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator'
@@ -582,6 +583,7 @@ export async function createCompositionRenderer(
   let prewarmCanvas: OffscreenCanvas | HTMLCanvasElement | null = null
   let prewarmCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null
   let prewarmAttempted = false
+  const reverseVideoFrameCache = renderMode === 'export' ? new ReverseVideoFrameCache() : undefined
 
   // Build the shared ItemRenderContext used by canvas-item-renderer functions
   const itemRenderContext: ItemRenderContext = {
@@ -601,6 +603,7 @@ export async function createCompositionRenderer(
     useMediabunny,
     mediabunnyDisabledItems,
     mediabunnyFailureCountByItem,
+    reverseVideoFrameCache,
     imageElements,
     gifFramesMap,
     keyframesMap,
@@ -2081,9 +2084,17 @@ export async function createCompositionRenderer(
         const sourceStart = item.sourceStart ?? item.trimStart ?? 0
         const sourceFps = item.sourceFps ?? fps
         const speed = item.speed ?? 1
-        const sourceTime = snapSourceTime(
-          sourceStart / sourceFps + (localFrame / fps) * speed,
+        const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+        const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+        const sourceTime = getVideoTargetTimeSeconds(
+          sourceStart,
           sourceFps,
+          localFrame,
+          speed,
+          fps,
+          0,
+          item.isReversed === true,
+          reverseSourceEnd,
         )
         const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
 
@@ -2164,9 +2175,17 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0
           const sourceFps = item.sourceFps ?? fps
           const speed = item.speed ?? 1
-          const sourceTime = snapSourceTime(
-            sourceStart / sourceFps + (localFrame / fps) * speed,
+          const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+          const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+          const sourceTime = getVideoTargetTimeSeconds(
+            sourceStart,
             sourceFps,
+            localFrame,
+            speed,
+            fps,
+            0,
+            item.isReversed === true,
+            reverseSourceEnd,
           )
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
 
@@ -2221,9 +2240,17 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0
           const sourceFps = item.sourceFps ?? fps
           const speed = item.speed ?? 1
-          const sourceTime = snapSourceTime(
-            sourceStart / sourceFps + (localFrame / fps) * speed,
+          const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+          const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+          const sourceTime = getVideoTargetTimeSeconds(
+            sourceStart,
             sourceFps,
+            localFrame,
+            speed,
+            fps,
+            0,
+            item.isReversed === true,
+            reverseSourceEnd,
           )
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
           try {
@@ -2281,9 +2308,17 @@ export async function createCompositionRenderer(
             const sourceStart = item.sourceStart ?? item.trimStart ?? 0
             const sourceFps = item.sourceFps ?? fps
             const speed = item.speed ?? 1
-            const baseSourceTime = snapSourceTime(
-              sourceStart / sourceFps + (localFrame / fps) * speed,
+            const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+            const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+            const baseSourceTime = getVideoTargetTimeSeconds(
+              sourceStart,
               sourceFps,
+              localFrame,
+              speed,
+              fps,
+              0,
+              item.isReversed === true,
+              reverseSourceEnd,
             )
             try {
               await extractor.drawFrame(ctx2d, Math.max(0, baseSourceTime), 0, 0, 1, 1)
@@ -2381,6 +2416,7 @@ export async function createCompositionRenderer(
 
       // === PERFORMANCE: Clean up optimization resources ===
       scrubbingCache?.dispose()
+      reverseVideoFrameCache?.dispose()
 
       gpuCompositor?.destroy()
       gpuCompositor = null

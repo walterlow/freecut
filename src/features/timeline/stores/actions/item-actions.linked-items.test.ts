@@ -12,6 +12,7 @@ import {
   closeGapAtPosition,
   linkItems,
   removeItems,
+  reverseItems,
   rippleDeleteItems,
   splitItem,
   splitItemAtFrames,
@@ -114,6 +115,32 @@ describe('linked timeline items', () => {
     expect(rightVideo?.linkedGroupId).toBe(rightAudio?.linkedGroupId)
     expect(leftVideo?.linkedGroupId).not.toBe(rightVideo?.linkedGroupId)
     expect(useSelectionStore.getState().selectedItemIds).toEqual(['video-1', 'audio-1'])
+  })
+
+  it('reverses synchronized video/audio items together even when linked selection is disabled', () => {
+    useEditorStore.setState({ linkedSelectionEnabled: false })
+    useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()])
+
+    reverseItems(['video-1'])
+
+    expect(useItemsStore.getState().itemById['video-1']?.isReversed).toBe(true)
+    expect(useItemsStore.getState().itemById['audio-1']?.isReversed).toBe(true)
+
+    reverseItems(['video-1'])
+
+    expect(useItemsStore.getState().itemById['video-1']?.isReversed).toBeUndefined()
+    expect(useItemsStore.getState().itemById['audio-1']?.isReversed).toBeUndefined()
+  })
+
+  it('repairs mixed reverse state across synchronized video/audio items', () => {
+    useItemsStore
+      .getState()
+      .setItems([makeVideoItem({ isReversed: true }), makeAudioItem({ isReversed: undefined })])
+
+    reverseItems(['video-1'])
+
+    expect(useItemsStore.getState().itemById['video-1']?.isReversed).toBe(true)
+    expect(useItemsStore.getState().itemById['audio-1']?.isReversed).toBe(true)
   })
 
   it('multi-splits linked video/audio items together without creating sync drift badges', () => {

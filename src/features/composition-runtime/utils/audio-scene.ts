@@ -32,6 +32,7 @@ type ContinuousAudioItem = {
   sourceEnd?: number
   sourceFps?: number
   speed?: number
+  isReversed?: boolean
 }
 
 type StandaloneAudioItem = AudioItem & {
@@ -57,6 +58,8 @@ export interface AudioSegment {
   durationInFrames: number
   trimBefore: number
   playbackRate: number
+  isReversed?: boolean
+  reverseSourceEnd?: number
   sourceFps?: number
   volumeDb: number
   muted: boolean
@@ -88,6 +91,8 @@ export interface CompoundAudioSegment {
   durationInFrames: number
   trimBefore: number
   playbackRate: number
+  isReversed?: boolean
+  reverseSourceEnd?: number
   sourceFps?: number
   volumeDb: number
   muted: boolean
@@ -144,6 +149,31 @@ function hasExplicitTrimStart(item: ContinuousAudioItem): boolean {
   return item.sourceStart !== undefined || item.trimStart !== undefined || item.offset !== undefined
 }
 
+function getSourceEndForDuration(
+  trimBefore: number,
+  durationInFrames: number,
+  playbackRate: number,
+  sourceFps: number,
+  timelineFps: number,
+): number {
+  return trimBefore + timelineToSourceFrames(durationInFrames, playbackRate, timelineFps, sourceFps)
+}
+
+function getReverseSourceEnd(
+  item: ContinuousAudioItem,
+  trimBefore: number,
+  durationInFrames: number,
+  playbackRate: number,
+  sourceFps: number,
+  timelineFps: number,
+): number | undefined {
+  if (item.isReversed !== true) return undefined
+  return (
+    item.sourceEnd ??
+    getSourceEndForDuration(trimBefore, durationInFrames, playbackRate, sourceFps, timelineFps)
+  )
+}
+
 export function isContinuousAudioBoundary(
   left: ContinuousAudioItem,
   right: ContinuousAudioItem,
@@ -152,6 +182,7 @@ export function isContinuousAudioBoundary(
   const leftSpeed = left.speed ?? 1
   const rightSpeed = right.speed ?? 1
   if (Math.abs(leftSpeed - rightSpeed) > 0.0001) return false
+  if ((left.isReversed === true) !== (right.isReversed === true)) return false
 
   const sameMedia =
     (left.mediaId && right.mediaId && left.mediaId === right.mediaId) ||
@@ -245,6 +276,15 @@ export function buildStandaloneAudioSegments(
       durationInFrames: item.durationInFrames,
       trimBefore: resolvedTrimBeforeById.get(item.id) ?? getTrimBefore(item),
       playbackRate: item.speed ?? 1,
+      isReversed: item.isReversed === true ? true : undefined,
+      reverseSourceEnd: getReverseSourceEnd(
+        item,
+        resolvedTrimBeforeById.get(item.id) ?? getTrimBefore(item),
+        item.durationInFrames,
+        item.speed ?? 1,
+        item.sourceFps ?? fps,
+        fps,
+      ),
       sourceFps: item.sourceFps,
       volumeDb: (item.volume ?? 0) + (item.trackVolumeDb ?? 0),
       muted: item.muted || !item.trackVisible,
@@ -290,6 +330,8 @@ export function buildStandaloneAudioSegments(
       isContinuousAudioBoundary(active.clip, segment.clip, fps) &&
       active.src === segment.src &&
       Math.abs(active.playbackRate - segment.playbackRate) <= 0.0001 &&
+      active.isReversed !== true &&
+      segment.isReversed !== true &&
       Math.abs(active.volumeDb - segment.volumeDb) <= 0.0001 &&
       active.muted === segment.muted &&
       active.audioPitchSemitones === segment.audioPitchSemitones &&
@@ -322,6 +364,8 @@ export function buildStandaloneAudioSegments(
       durationInFrames: active.durationInFrames,
       trimBefore: active.trimBefore,
       playbackRate: active.playbackRate,
+      isReversed: active.isReversed,
+      reverseSourceEnd: active.reverseSourceEnd,
       sourceFps: active.sourceFps,
       volumeDb: active.volumeDb,
       muted: active.muted,
@@ -349,6 +393,8 @@ export function buildStandaloneAudioSegments(
       durationInFrames: active.durationInFrames,
       trimBefore: active.trimBefore,
       playbackRate: active.playbackRate,
+      isReversed: active.isReversed,
+      reverseSourceEnd: active.reverseSourceEnd,
       sourceFps: active.sourceFps,
       volumeDb: active.volumeDb,
       muted: active.muted,
@@ -454,6 +500,20 @@ export function buildTransitionVideoAudioSegments(
         : 0
     const before = Math.max(0, Math.min(extension.before, maxBeforeBySource))
     const after = Math.max(0, extension.after)
+    const beforeSource = timelineToSourceFrames(before, playbackRate, fps, itemSourceFps)
+    const afterSource = timelineToSourceFrames(after, playbackRate, fps, itemSourceFps)
+    const trimBefore = Math.max(
+      0,
+      baseTrimBefore - beforeSource - (item.isReversed === true ? afterSource : 0),
+    )
+    const reverseSourceEnd = getReverseSourceEnd(
+      item,
+      baseTrimBefore,
+      item.durationInFrames,
+      playbackRate,
+      itemSourceFps,
+      fps,
+    )
     const crossfadeFadeIn =
       extension.overlapFadeIn > 0 ? extension.overlapFadeIn : before > 0 ? before : undefined
     const crossfadeFadeOut =
@@ -467,11 +527,13 @@ export function buildTransitionVideoAudioSegments(
       src: audioSrc,
       from: item.from - before,
       durationInFrames: item.durationInFrames + before + after,
-      trimBefore: Math.max(
-        0,
-        baseTrimBefore - timelineToSourceFrames(before, playbackRate, fps, itemSourceFps),
-      ),
+      trimBefore,
       playbackRate,
+      isReversed: item.isReversed === true ? true : undefined,
+      reverseSourceEnd:
+        item.isReversed === true && reverseSourceEnd !== undefined
+          ? reverseSourceEnd + beforeSource
+          : undefined,
       sourceFps: item.sourceFps,
       volumeDb: (item.volume ?? 0) + (item.trackVolumeDb ?? 0),
       muted: item.muted || !item.trackVisible,
@@ -528,6 +590,8 @@ export function buildTransitionVideoAudioSegments(
       isContinuousAudioBoundary(active.clip, segment.clip, fps) &&
       active.src === segment.src &&
       Math.abs(active.playbackRate - segment.playbackRate) <= 0.0001 &&
+      active.isReversed !== true &&
+      segment.isReversed !== true &&
       Math.abs(active.volumeDb - segment.volumeDb) <= 0.0001 &&
       active.muted === segment.muted &&
       active.audioPitchSemitones === segment.audioPitchSemitones &&
@@ -566,6 +630,8 @@ export function buildTransitionVideoAudioSegments(
       durationInFrames: active.durationInFrames,
       trimBefore: active.trimBefore,
       playbackRate: active.playbackRate,
+      isReversed: active.isReversed,
+      reverseSourceEnd: active.reverseSourceEnd,
       sourceFps: active.sourceFps,
       volumeDb: active.volumeDb,
       muted: active.muted,
@@ -599,6 +665,8 @@ export function buildTransitionVideoAudioSegments(
       durationInFrames: active.durationInFrames,
       trimBefore: active.trimBefore,
       playbackRate: active.playbackRate,
+      isReversed: active.isReversed,
+      reverseSourceEnd: active.reverseSourceEnd,
       sourceFps: active.sourceFps,
       volumeDb: active.volumeDb,
       muted: active.muted,
@@ -705,6 +773,16 @@ export function buildCompoundAudioTransitionSegments(
         : 0
     const before = Math.max(0, Math.min(extension.before, maxBeforeBySource))
     const after = Math.max(0, extension.after)
+    const beforeSource = timelineToSourceFrames(before, playbackRate, fps, itemSourceFps)
+    const afterSource = timelineToSourceFrames(after, playbackRate, fps, itemSourceFps)
+    const reverseSourceEndBase = getReverseSourceEnd(
+      item,
+      baseTrimBefore,
+      item.durationInFrames,
+      playbackRate,
+      itemSourceFps,
+      fps,
+    )
 
     return {
       key: `compound-audio-${item.id}`,
@@ -713,9 +791,14 @@ export function buildCompoundAudioTransitionSegments(
       durationInFrames: item.durationInFrames + before + after,
       trimBefore: Math.max(
         0,
-        baseTrimBefore - timelineToSourceFrames(before, playbackRate, fps, itemSourceFps),
+        baseTrimBefore - beforeSource - (item.isReversed === true ? afterSource : 0),
       ),
       playbackRate,
+      isReversed: item.isReversed === true ? true : undefined,
+      reverseSourceEnd:
+        item.isReversed === true && reverseSourceEndBase !== undefined
+          ? reverseSourceEndBase + beforeSource
+          : undefined,
       sourceFps: item.sourceFps,
       volumeDb: (item.volume ?? 0) + (item.trackVolumeDb ?? 0),
       muted: item.muted || !item.trackVisible,

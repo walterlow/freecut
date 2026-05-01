@@ -13,7 +13,11 @@
 import React, { useEffect, useMemo } from 'react'
 import { Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player'
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player'
-import { DEFAULT_SPEED, getSafeTrimBefore } from '@/features/composition-runtime/deps/timeline'
+import {
+  DEFAULT_SPEED,
+  getSafeTrimBefore,
+  timelineToSourceFrames,
+} from '@/features/composition-runtime/deps/timeline'
 import { useVideoConfig } from '../hooks/use-player-compat'
 import { useTransitionParticipantSync } from '../hooks/use-transition-participant-sync'
 import type { TimelineItem, VideoItem } from '@/types/timeline'
@@ -189,6 +193,13 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
   const trimBefore = item.sourceStart ?? item.trimStart ?? item.offset ?? 0
   const sourceFps = item.sourceFps ?? mediaSourceFps ?? fps
   const playbackRate = item.speed ?? DEFAULT_SPEED
+  const sourceFramesNeeded = timelineToSourceFrames(
+    item.durationInFrames,
+    playbackRate,
+    fps,
+    sourceFps,
+  )
+  const reverseSourceEnd = item.sourceEnd ?? trimBefore + sourceFramesNeeded
   const safeTrimBefore = getSafeTrimBefore(
     trimBefore,
     item.durationInFrames,
@@ -206,6 +217,8 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
         safeTrimBefore={safeTrimBefore}
         playbackRate={playbackRate}
         sourceFps={sourceFps}
+        isReversed={item.isReversed === true}
+        reverseSourceEnd={reverseSourceEnd}
         audioEqStages={audioEqStages}
       />
     </div>

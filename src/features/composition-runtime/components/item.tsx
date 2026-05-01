@@ -155,6 +155,7 @@ export const Item = React.memo<ItemProps>(
         sourceFps,
       )
       const sourceEndPosition = trimBefore + sourceFramesNeeded
+      const reverseSourceEnd = item.sourceEnd ?? sourceEndPosition
       const sourceDuration = item.sourceDuration || 0
 
       // Calculate the effective source segment this clip represents
@@ -253,6 +254,7 @@ export const Item = React.memo<ItemProps>(
       const trackVolumeDb =
         'trackVolumeDb' in item && typeof item.trackVolumeDb === 'number' ? item.trackVolumeDb : 0
       const videoAudioSrc = item.audioSrc ?? item.src
+      const isReversed = item.isReversed === true
       const requiresPitchShiftedVideoAudio = isAudioPitchShiftActive(
         audioPitchShiftSemitones + itemLocalPitchShiftSemitones,
       )
@@ -261,7 +263,7 @@ export const Item = React.memo<ItemProps>(
       const shouldRenderExternalVideoAudio =
         !muted &&
         !!videoAudioSrc &&
-        (requiresPitchShiftedVideoAudio || shouldUseCustomDecodedVideoAudio)
+        (isReversed || requiresPitchShiftedVideoAudio || shouldUseCustomDecodedVideoAudio)
       const externalVideoAudio = shouldRenderExternalVideoAudio ? (
         shouldUseCustomDecodedVideoAudio ? (
           <CustomDecoderAudio
@@ -271,6 +273,8 @@ export const Item = React.memo<ItemProps>(
             trimBefore={safeTrimBefore}
             volume={(item.volume ?? 0) + trackVolumeDb}
             playbackRate={playbackRate}
+            isReversed={isReversed}
+            reverseSourceEnd={reverseSourceEnd}
             audioPitchSemitones={item.audioPitchSemitones}
             audioPitchCents={item.audioPitchCents}
             audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -295,6 +299,8 @@ export const Item = React.memo<ItemProps>(
             trimBefore={safeTrimBefore}
             volume={(item.volume ?? 0) + trackVolumeDb}
             playbackRate={playbackRate}
+            isReversed={isReversed}
+            reverseSourceEnd={reverseSourceEnd}
             audioPitchSemitones={item.audioPitchSemitones}
             audioPitchCents={item.audioPitchCents}
             audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -322,6 +328,8 @@ export const Item = React.memo<ItemProps>(
             safeTrimBefore={safeTrimBefore}
             playbackRate={playbackRate}
             sourceFps={sourceFps}
+            isReversed={isReversed}
+            reverseSourceEnd={reverseSourceEnd}
             audioEqStages={itemAudioEqStages}
             forceCssComposite={masks.length > 0}
           />
@@ -394,6 +402,13 @@ export const Item = React.memo<ItemProps>(
       const sourceFps = item.sourceFps ?? mediaSourceFps ?? timelineFps
       // Get playback rate from speed property
       const playbackRate = item.speed ?? DEFAULT_SPEED
+      const sourceFramesNeeded = timelineToSourceFrames(
+        item.durationInFrames,
+        playbackRate,
+        timelineFps,
+        sourceFps,
+      )
+      const reverseSourceEnd = item.sourceEnd ?? trimBefore + sourceFramesNeeded
 
       const trackVolumeDb =
         'trackVolumeDb' in item && typeof item.trackVolumeDb === 'number' ? item.trackVolumeDb : 0
@@ -408,6 +423,8 @@ export const Item = React.memo<ItemProps>(
           trimBefore={trimBefore}
           volume={(item.volume ?? 0) + trackVolumeDb}
           playbackRate={playbackRate}
+          isReversed={item.isReversed === true}
+          reverseSourceEnd={reverseSourceEnd}
           audioPitchSemitones={item.audioPitchSemitones}
           audioPitchCents={item.audioPitchCents}
           audioPitchShiftSemitones={audioPitchShiftSemitones}

@@ -45,6 +45,7 @@ import type { ScrubbingCache } from '@/features/export/deps/preview'
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline'
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool'
 import type { VideoFrameSource } from './shared-video-extractor'
+import type { ReverseVideoFrameCache } from './reverse-video-frame-cache'
 import {
   resolvePreviewDomVideoDrawDecision,
   resolvePreviewMediabunnyInitAction,
@@ -204,6 +205,7 @@ export interface ItemRenderContext {
     toleranceSeconds?: number,
     maxWaitMs?: number,
   ) => Promise<ImageBitmap | null>
+  reverseVideoFrameCache?: ReverseVideoFrameCache
 
   // Image / GIF state
   imageElements: Map<string, WorkerLoadedImage>
@@ -800,12 +802,13 @@ async function renderVideoItem(
   // sourceStart is in source-native FPS frames, so divide by sourceFps (not project fps)
   // Snap to nearest source frame boundary to avoid floating-point drift
   // that can cause Math.floor(sourceTime * sourceFps) to land on the wrong frame.
+  const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+  const reverseSourceEnd = (item.sourceEnd ?? sourceStart + sourceFramesNeeded) - sourceFrameOffset
   const adjustedSourceStart = sourceStart + sourceFrameOffset
-  const rawSourceTime = clampVideoSourceTime(
-    adjustedSourceStart / sourceFps + localTime * speed,
-    sourceFps,
-    item.sourceDuration,
-  )
+  const unclampedSourceTime = item.isReversed
+    ? (reverseSourceEnd - localFrame * speed * (sourceFps / fps) - 1) / sourceFps
+    : adjustedSourceStart / sourceFps + localTime * speed
+  const rawSourceTime = clampVideoSourceTime(unclampedSourceTime, sourceFps, item.sourceDuration)
   const snappedSourceFrame = Math.round(rawSourceTime * sourceFps)
   const sourceTime =
     Math.abs(rawSourceTime * sourceFps - snappedSourceFrame) < 1e-6
@@ -1015,6 +1018,39 @@ async function renderVideoItem(
 
     if (import.meta.env.DEV && (frame < 5 || frame % 60 === 0)) {
       log.debug(`VIDEO DRAW (mediabunny) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s`)
+    }
+
+    if (
+      rctx.renderMode === 'export' &&
+      item.isReversed &&
+      sourceFrameOffset === 0 &&
+      rctx.reverseVideoFrameCache
+    ) {
+      const cachedReverseFrame = await rctx.reverseVideoFrameCache.getFrame({
+        item,
+        extractor,
+        frame,
+        renderSpan: effectiveRenderSpan,
+        fps,
+        sourceFps,
+        speed,
+      })
+      if (
+        cachedReverseFrame &&
+        drawTier2VideoFrame(
+          ctx,
+          cachedReverseFrame,
+          dims.width,
+          dims.height,
+          transform,
+          canvasSettings,
+          item.crop,
+          rctx.canvasPool,
+        )
+      ) {
+        mediabunnyFailureCountByItem.set(item.id, 0)
+        return
+      }
     }
 
     let success = false
@@ -3802,11 +3838,12 @@ function resolveVideoParticipantSourceTime(
   const sourceStart = getRenderTimelineSourceStart(item, renderSpan)
   const sourceFps = item.sourceFps ?? rctx.fps
   const speed = item.speed ?? 1
-  const rawSourceTime = clampVideoSourceTime(
-    sourceStart / sourceFps + localTime * speed,
-    sourceFps,
-    item.sourceDuration,
-  )
+  const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / rctx.fps
+  const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+  const unclampedSourceTime = item.isReversed
+    ? (reverseSourceEnd - localFrame * speed * (sourceFps / rctx.fps) - 1) / sourceFps
+    : sourceStart / sourceFps + localTime * speed
+  const rawSourceTime = clampVideoSourceTime(unclampedSourceTime, sourceFps, item.sourceDuration)
   const snappedSourceFrame = Math.round(rawSourceTime * sourceFps)
   return Math.abs(rawSourceTime * sourceFps - snappedSourceFrame) < 1e-6
     ? (snappedSourceFrame + 1e-4) / sourceFps

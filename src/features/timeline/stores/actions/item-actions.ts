@@ -17,6 +17,7 @@ import {
   canLinkSelection,
   expandSelectionWithLinkedItems,
   getLinkedItemIds,
+  getSynchronizedLinkedItems,
 } from '../../utils/linked-items'
 import { isTrackSyncLockEnabled } from '../../utils/track-sync-lock'
 import { placeItemsWithoutTimelineOverlap } from './item-placement'
@@ -181,6 +182,45 @@ export function linkItems(ids: string[]): boolean {
   )
 
   return true
+}
+
+export function reverseItems(ids: string[]): void {
+  const items = useItemsStore.getState().items
+  const expandedIds = new Set<string>()
+  for (const id of ids) {
+    const synchronizedItems = getSynchronizedLinkedItems(items, id)
+    if (synchronizedItems.length === 0) {
+      expandedIds.add(id)
+      continue
+    }
+    for (const item of synchronizedItems) {
+      expandedIds.add(item.id)
+    }
+  }
+
+  const reversibleItems = Array.from(expandedIds)
+    .map((id) => items.find((item) => item.id === id))
+    .filter(
+      (item): item is TimelineItem =>
+        item !== undefined && (item.type === 'video' || item.type === 'audio'),
+    )
+
+  if (reversibleItems.length === 0) return
+  const shouldReverse = !reversibleItems.every((item) => item.isReversed === true)
+
+  execute(
+    'REVERSE_ITEMS',
+    () => {
+      const store = useItemsStore.getState()
+      for (const item of reversibleItems) {
+        store._updateItem(item.id, {
+          isReversed: shouldReverse ? true : undefined,
+        } as Partial<TimelineItem>)
+      }
+      useTimelineSettingsStore.getState().markDirty()
+    },
+    { ids: reversibleItems.map((item) => item.id), reversed: shouldReverse },
+  )
 }
 
 export function removeItems(ids: string[]): void {
