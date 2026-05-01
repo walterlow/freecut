@@ -74,6 +74,7 @@ import {
   buildSubtitleTextItemsForClip,
   buildCaptionTrack,
   buildCaptionTrackAbove,
+  buildSubtitleSegmentForClip,
   consolidateCaptionTextItemsToSegments,
   findCaptionTargetClipsForMedia,
   findGeneratedCaptionItemsForClip,
@@ -689,6 +690,118 @@ describe('caption-items', () => {
     )
 
     expect(replaceableCaptions.map((item) => item.id)).toEqual(['legacy-caption'])
+  })
+
+  it('inherits the clip linkedGroupId on the built subtitle segment', () => {
+    const clip: VideoItem = {
+      id: 'video-clip',
+      type: 'video',
+      trackId: 'track-v',
+      from: 60,
+      durationInFrames: 300,
+      label: 'V',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      linkedGroupId: 'pair-1',
+    }
+
+    const segment = buildSubtitleSegmentForClip({
+      trackId: 'track-captions',
+      cues: [{ id: 'c1', startSeconds: 0.5, endSeconds: 1.5, text: 'Hi' }],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      source: {
+        type: 'embedded-subtitles',
+        mediaId: 'media-1',
+        clipId: clip.id,
+        trackNumber: 6,
+        importedAt: 1,
+      },
+    })
+
+    expect(segment).not.toBeNull()
+    expect(segment?.linkedGroupId).toBe('pair-1')
+  })
+
+  it('omits linkedGroupId when the source clip is solo (not linked to A/V pair)', () => {
+    const clip: VideoItem = {
+      id: 'video-solo',
+      type: 'video',
+      trackId: 'track-v',
+      from: 0,
+      durationInFrames: 120,
+      label: 'V',
+      mediaId: 'media-1',
+      src: 'blob:test',
+    }
+
+    const segment = buildSubtitleSegmentForClip({
+      trackId: 'track-captions',
+      cues: [{ id: 'c1', startSeconds: 0.1, endSeconds: 0.6, text: 'Hi' }],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      source: {
+        type: 'embedded-subtitles',
+        mediaId: 'media-1',
+        clipId: clip.id,
+        trackNumber: 6,
+        importedAt: 1,
+      },
+    })
+
+    expect(segment?.linkedGroupId).toBeUndefined()
+  })
+
+  it('inherits linkedGroupId from the source clip when consolidating per-cue captions', () => {
+    const items: TimelineItem[] = [
+      {
+        id: 'video-clip',
+        type: 'video',
+        trackId: 'track-v',
+        from: 100,
+        durationInFrames: 300,
+        label: 'V',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        linkedGroupId: 'pair-9',
+      },
+      {
+        id: 'audio-clip',
+        type: 'audio',
+        trackId: 'track-a',
+        from: 100,
+        durationInFrames: 300,
+        label: 'A',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        linkedGroupId: 'pair-9',
+      },
+      {
+        id: 'cap-1',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 105,
+        durationInFrames: 30,
+        label: 'Hello',
+        text: 'Hello',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: {
+          type: 'embedded-subtitles',
+          mediaId: 'media-1',
+          clipId: 'video-clip',
+          importedAt: 1,
+        },
+      },
+    ]
+
+    const { segments } = consolidateCaptionTextItemsToSegments(items, 30)
+    expect(segments).toHaveLength(1)
+    expect(segments[0]?.linkedGroupId).toBe('pair-9')
   })
 })
 
