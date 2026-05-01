@@ -747,6 +747,17 @@ export function usePreviewRenderPump({
               !shouldShowRenderedScrubOverlay
             ) {
               previewPerfRef.current.staleScrubOverlayDrops += 1
+              if (
+                showFastScrubOverlayRef.current &&
+                !playbackState.isPlaying &&
+                playbackState.previewFrame === null
+              ) {
+                if (frameToRender === playbackState.currentFrame) {
+                  drawToDisplay(frameToRender)
+                  showFastScrubOverlayForFrame()
+                }
+                continue
+              }
               if (targetNeedsRenderedPath) {
                 drawToDisplay(frameToRender)
                 showFastScrubOverlayForFrame()
