@@ -83,7 +83,6 @@ import { proxyService } from '../services/proxy-service'
 import { mediaLibraryService } from '../services/media-library-service'
 import { mediaTranscriptionService } from '../services/media-transcription-service'
 import { mediaAnalysisService } from '../services/media-analysis-service'
-import { subtitleSidecarService } from '../services/subtitle-sidecar-service'
 import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop'
 import { getSharedProxyKey } from '../utils/proxy-key'
 import { getMediaType } from '../utils/validation'
@@ -213,8 +212,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const [showImportUrlDialog, setShowImportUrlDialog] = useState(false)
   const [importUrlValue, setImportUrlValue] = useState('')
   const [isImportUrlSubmitting, setIsImportUrlSubmitting] = useState(false)
-  const subtitleInputRef = useRef<HTMLInputElement>(null)
-
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId)
   const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject)
@@ -484,60 +481,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       logger.error('Import failed:', error)
     }
   }
-
-  const handleImportSubtitles = useCallback(
-    async (file: File) => {
-      try {
-        const result = await subtitleSidecarService.importSubtitleFile(file)
-        showNotification({
-          type: result.warningCount > 0 ? 'warning' : 'success',
-          message:
-            result.warningCount > 0
-              ? `Imported ${result.insertedItemCount} subtitle cue${result.insertedItemCount === 1 ? '' : 's'} with ${result.warningCount} warning${result.warningCount === 1 ? '' : 's'}.`
-              : `Imported ${result.insertedItemCount} subtitle cue${result.insertedItemCount === 1 ? '' : 's'}.`,
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to import subtitles.'
-        showNotification({ type: 'error', message })
-        logger.error('Subtitle import failed:', error)
-      } finally {
-        if (subtitleInputRef.current) {
-          subtitleInputRef.current.value = ''
-        }
-      }
-    },
-    [showNotification],
-  )
-
-  const handleExportSubtitles = useCallback(
-    (format: 'srt' | 'vtt', selectedOnly = false) => {
-      try {
-        const { text, cueCount } = subtitleSidecarService.exportSubtitleText({
-          format,
-          selectedOnly,
-        })
-        const projectName = useProjectStore.getState().currentProject?.name ?? 'freecut-subtitles'
-        const blob = new Blob([text], {
-          type: format === 'srt' ? 'application/x-subrip;charset=utf-8' : 'text/vtt;charset=utf-8',
-        })
-        const url = URL.createObjectURL(blob)
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = `${projectName.replace(/[\\/:*?"<>|]+/g, '-')}.${format}`
-        anchor.click()
-        URL.revokeObjectURL(url)
-        showNotification({
-          type: 'success',
-          message: `Exported ${cueCount} subtitle cue${cueCount === 1 ? '' : 's'} as ${format.toUpperCase()}.`,
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to export subtitles.'
-        showNotification({ type: 'error', message })
-        logger.error('Subtitle export failed:', error)
-      }
-    },
-    [showNotification],
-  )
 
   const handleImportUrl = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
@@ -892,71 +835,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 <span className="hidden @[360px]:inline">URL</span>
               </button>
             </HeaderActionTooltip>
-
-            <input
-              ref={subtitleInputRef}
-              type="file"
-              accept=".srt,.vtt,text/vtt,application/x-subrip"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0]
-                if (file) {
-                  void handleImportSubtitles(file)
-                }
-              }}
-            />
-
-            <DropdownMenu>
-              <HeaderActionTooltip label="Import or export subtitle sidecars">
-                <DropdownMenuTrigger asChild>
-                  <button
-                    disabled={!currentProjectId}
-                    className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
-                      bg-secondary border-border text-muted-foreground
-                      hover:text-primary hover:bg-primary/10 hover:border-primary/40
-                      disabled:opacity-40 disabled:cursor-not-allowed
-                      transition-colors duration-150"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span className="hidden @[440px]:inline">Subs</span>
-                  </button>
-                </DropdownMenuTrigger>
-              </HeaderActionTooltip>
-              <DropdownMenuContent align="start" className="bg-popover border border-border">
-                <DropdownMenuItem
-                  onClick={() => subtitleInputRef.current?.click()}
-                  className="text-xs hover:bg-accent hover:text-accent-foreground"
-                >
-                  Import SRT/VTT...
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-border" />
-                <DropdownMenuItem
-                  onClick={() => handleExportSubtitles('srt')}
-                  className="text-xs hover:bg-accent hover:text-accent-foreground"
-                >
-                  Export all as SRT
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleExportSubtitles('vtt')}
-                  className="text-xs hover:bg-accent hover:text-accent-foreground"
-                >
-                  Export all as WebVTT
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-border" />
-                <DropdownMenuItem
-                  onClick={() => handleExportSubtitles('srt', true)}
-                  className="text-xs hover:bg-accent hover:text-accent-foreground"
-                >
-                  Export selected as SRT
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleExportSubtitles('vtt', true)}
-                  className="text-xs hover:bg-accent hover:text-accent-foreground"
-                >
-                  Export selected as WebVTT
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
 
             {/* Missing media indicator */}
             {currentProjectBrokenMediaIds.length > 0 && (
