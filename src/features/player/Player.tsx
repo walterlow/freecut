@@ -350,7 +350,7 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
 
       contentScale.style.width = `${width}px`
       contentScale.style.height = `${height}px`
-      contentScale.style.transform = `scale(${layout.scale})`
+      contentScale.style.transform = `scale(${layout.scaleX}, ${layout.scaleY})`
     }, [height, width])
 
     useEffect(() => {

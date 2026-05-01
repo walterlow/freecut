@@ -2119,6 +2119,90 @@ describe('VideoPreview sync behavior', () => {
     })
   })
 
+  it('keeps active skim presentation when a stale in-flight render finishes', async () => {
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBe(1)
+      return rendererMockState.instances[0]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(0)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(47)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(47)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    renderer.renderFrame.mockClear()
+    let resolveFrame48: (() => void) | null = null
+    let resolveFrame49: (() => void) | null = null
+    renderer.renderFrame.mockImplementation(async (frame: number) => {
+      if (frame === 48) {
+        await new Promise<void>((resolve) => {
+          resolveFrame48 = resolve
+        })
+      }
+      if (frame === 49) {
+        await new Promise<void>((resolve) => {
+          resolveFrame49 = resolve
+        })
+      }
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(49)
+    })
+
+    expect(usePlaybackStore.getState().previewFrame).toBe(49)
+    expect(getDisplayedFrame()).toBe(47)
+    expect(scrubCanvas.style.visibility).toBe('visible')
+
+    await act(async () => {
+      resolveFrame48?.()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(49)
+    })
+    expect(usePlaybackStore.getState().previewFrame).toBe(49)
+    expect(getDisplayedFrame()).toBe(47)
+    expect(scrubCanvas.style.visibility).toBe('visible')
+
+    await act(async () => {
+      resolveFrame49?.()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(49)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
   it('keeps backward ruler drag on fast-scrub presentation', async () => {
     const { container } = render(
       <VideoPreview
