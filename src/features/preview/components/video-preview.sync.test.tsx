@@ -2907,8 +2907,8 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(40)
-      expect(renderer.prewarmFrame).toHaveBeenCalledWith(41)
-      expect(renderer.prewarmFrame).toHaveBeenCalledWith(42)
+      expect(renderer.renderFrame).toHaveBeenCalledWith(41)
+      expect(renderer.renderFrame).toHaveBeenCalledWith(42)
       expect(scrubCanvas.style.visibility).toBe('hidden')
       expect(getDisplayedFrame()).toBeNull()
     })
@@ -2928,6 +2928,99 @@ describe('VideoPreview sync behavior', () => {
 
     expect(renderer.renderFrame.mock.calls.filter(([frame]) => frame === 40).length).toBe(
       prerenderedStartFrameCalls,
+    )
+  })
+
+  it('reuses prerendered transition runway frames when playback enters after the start frame', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ])
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as unknown as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as unknown as TimelineItem,
+    ])
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ])
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled()
+    })
+    seekToMock.mockClear()
+
+    act(() => {
+      usePlaybackStore.getState().play()
+      usePlaybackStore.getState().setCurrentFrame(35)
+    })
+
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0)
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(43)
+    })
+
+    const prerenderedFrameCalls = renderer.renderFrame.mock.calls.filter(
+      ([frame]) => frame === 43,
+    ).length
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(43)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(43)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    expect(renderer.renderFrame.mock.calls.filter(([frame]) => frame === 43).length).toBe(
+      prerenderedFrameCalls,
     )
   })
 

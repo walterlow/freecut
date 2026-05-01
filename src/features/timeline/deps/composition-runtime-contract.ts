@@ -10,6 +10,7 @@ export {
 export { resolveCornerPinTargetRect } from '@/features/composition-runtime/utils/corner-pin'
 export { needsCustomAudioDecoder } from '@/features/composition-runtime/utils/audio-codec-detection'
 export {
+  getOrDecodeAudio,
   getOrDecodeAudioSliceForPlayback,
   startPreviewAudioConform,
   startPreviewAudioStartupWarm,

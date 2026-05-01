@@ -82,6 +82,9 @@ interface ItemContextMenuProps {
     method: 'histogram' | 'optical-flow',
     verificationModel?: VerificationModel,
   ) => void
+  canRemoveSilence?: boolean
+  isRemovingSilence?: boolean
+  onRemoveSilence?: () => void
 }
 
 /**
@@ -140,6 +143,9 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   canDetectScenes,
   isDetectingScenes,
   onDetectScenes,
+  canRemoveSilence,
+  isRemovingSilence,
+  onRemoveSilence,
 }: ItemContextMenuProps) {
   // Lazy mount: defer the full Radix ContextMenu tree until first right-click.
   // This eliminates ~10 Radix provider components per item from the render tree
@@ -209,6 +215,9 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       canDetectScenes={canDetectScenes}
       isDetectingScenes={isDetectingScenes}
       onDetectScenes={onDetectScenes}
+      canRemoveSilence={canRemoveSilence}
+      isRemovingSilence={isRemovingSilence}
+      onRemoveSilence={onRemoveSilence}
       pendingActivation={pendingActivation}
       onPendingActivationHandled={() => setPendingActivation(null)}
     >
@@ -296,6 +305,9 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   canDetectScenes,
   isDetectingScenes,
   onDetectScenes,
+  canRemoveSilence,
+  isRemovingSilence,
+  onRemoveSilence,
   pendingActivation,
   onPendingActivationHandled,
 }: Omit<ItemContextMenuProps, 'children'> & {
@@ -467,6 +479,15 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
                 </ContextMenuSubContent>
               </ContextMenuSub>
             )}
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        {canRemoveSilence && onRemoveSilence && (
+          <>
+            <ContextMenuItem onClick={onRemoveSilence} disabled={isRemovingSilence}>
+              {isRemovingSilence ? 'Detecting Silence...' : 'Remove Silence...'}
+            </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
