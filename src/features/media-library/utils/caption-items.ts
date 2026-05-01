@@ -421,15 +421,26 @@ export function isGeneratedCaptionTextItem(
   )
 }
 
-export function isGeneratedCaptionSegmentItem(item: TimelineItem): item is SubtitleSegmentItem & {
-  source: Extract<import('@/types/timeline').SubtitleSegmentSource, { type: 'transcript' }>
-} {
-  return (
-    item.type === 'subtitle' &&
-    item.source.type === 'transcript' &&
-    item.source.clipId.length > 0 &&
-    item.source.mediaId.length > 0
-  )
+/**
+ * Subtitle segments that preserve clip identity — the segment source carries
+ * a clipId/mediaId pair tying it back to a specific timeline media item.
+ *
+ * Currently `transcript` and `embedded-subtitles` sources qualify;
+ * `subtitle-import` is excluded because that source describes an external
+ * SRT/VTT file and has no clipId field.
+ */
+type ClipBoundSubtitleSegmentSource = Extract<
+  import('@/types/timeline').SubtitleSegmentSource,
+  { clipId: string }
+>
+
+export function isGeneratedCaptionSegmentItem(
+  item: TimelineItem,
+): item is SubtitleSegmentItem & { source: ClipBoundSubtitleSegmentSource } {
+  if (item.type !== 'subtitle') return false
+  const source = item.source
+  if (source.type !== 'transcript' && source.type !== 'embedded-subtitles') return false
+  return source.clipId.length > 0 && source.mediaId.length > 0
 }
 
 export function findGeneratedCaptionItemsForClip(
@@ -438,29 +449,25 @@ export function findGeneratedCaptionItemsForClip(
   sourceType?: GeneratedCaptionSource['type'],
 ): Array<
   | (TextItem & { captionSource: GeneratedCaptionSource })
-  | (SubtitleSegmentItem & {
-      source: Extract<import('@/types/timeline').SubtitleSegmentSource, { type: 'transcript' }>
-    })
+  | (SubtitleSegmentItem & { source: ClipBoundSubtitleSegmentSource })
 > {
   return items.filter(
     (
       item,
     ): item is
       | (TextItem & { captionSource: GeneratedCaptionSource })
-      | (SubtitleSegmentItem & {
-          source: Extract<import('@/types/timeline').SubtitleSegmentSource, { type: 'transcript' }>
-        }) => {
+      | (SubtitleSegmentItem & { source: ClipBoundSubtitleSegmentSource }) => {
       if (isGeneratedCaptionTextItem(item)) {
         return (
           item.captionSource.clipId === clipId &&
           (sourceType === undefined || item.captionSource.type === sourceType)
         )
       }
-      return (
-        isGeneratedCaptionSegmentItem(item) &&
-        item.source.clipId === clipId &&
-        (sourceType === undefined || sourceType === 'transcript')
-      )
+      if (!isGeneratedCaptionSegmentItem(item)) return false
+      if (item.source.clipId !== clipId) return false
+      // Segment sources carry their own discriminator, so apply the same
+      // filter that text items get.
+      return sourceType === undefined || item.source.type === sourceType
     },
   )
 }

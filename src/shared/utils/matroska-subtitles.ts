@@ -1,4 +1,4 @@
-import type { SubtitleCue } from './subtitles'
+import type { SubtitleCue } from '@/shared/utils/subtitles'
 
 export interface EmbeddedSubtitleTrack {
   trackNumber: number
@@ -420,10 +420,15 @@ function parseSubtitleBlock(
 function decodeSubtitlePayload(payload: Uint8Array, codecId: string): string {
   const text = utf8Decoder.decode(payload).trim()
   if (codecId === 'S_TEXT/ASS' || codecId === 'S_TEXT/SSA') {
-    return stripAssDialoguePrefix(text)
-      .replaceAll('\\N', '\n')
-      .replace(/\{[^}]*\}/g, '')
-      .trim()
+    return (
+      stripAssDialoguePrefix(text)
+        .replaceAll('\\N', '\n')
+        // Strip ASS override blocks except `{\anN}` alignment, which the cue
+        // parser in subtitle-cue-format.ts consumes to position the cue.
+        // Wholesale stripping silently drops alignment from real-world MKVs.
+        .replace(/\{(?!\\an[1-9]\})[^}]*\}/g, '')
+        .trim()
+    )
   }
   if (codecId === 'S_TEXT/WEBVTT') {
     return text.replace(/^WEBVTT[^\n]*(?:\n{2,})?/i, '').trim()
