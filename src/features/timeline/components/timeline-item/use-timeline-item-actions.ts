@@ -25,6 +25,7 @@ import { useCompositionNavigationStore } from '../../stores/composition-navigati
 import {
   insertFreezeFrame,
   linkItems,
+  reverseItems,
   splitItemAtFrames,
   unlinkItems,
 } from '../../stores/actions/item-actions'
@@ -145,6 +146,11 @@ export function useTimelineItemActions({
     const selectedItemIds = useSelectionStore.getState().selectedItemIds
     unlinkItems(selectedItemIds)
   }, [])
+
+  const handleReverseSelected = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds
+    reverseItems(selectedItemIds.length > 0 ? selectedItemIds : [item.id])
+  }, [item.id])
 
   const handleClearAllKeyframes = useCallback(() => {
     useClearKeyframesDialogStore.getState().openClearAll([item.id])
@@ -558,6 +564,7 @@ export function useTimelineItemActions({
     handleRippleDelete,
     handleLinkSelected,
     handleUnlinkSelected,
+    handleReverseSelected,
     handleClearAllKeyframes,
     handleClearPropertyKeyframes,
     handleBentoLayout,

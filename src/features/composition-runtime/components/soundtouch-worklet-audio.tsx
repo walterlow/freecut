@@ -37,6 +37,8 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
     itemId,
     volume = 0,
     playbackRate = 1,
+    isReversed = false,
+    reverseSourceEnd,
     trimBefore = 0,
     sourceFps,
     sourceStartOffsetSec = 0,
@@ -286,6 +288,8 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
         frame,
         playbackRate,
         fps,
+        isReversed,
+        reverseSourceEnd,
       )
       const clipStartTimeSeconds = Math.max(0, trimBefore / effectiveSourceFps)
       const isPremounted = frame < 0
@@ -309,6 +313,19 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
       }
 
       if (playing) {
+        if (isReversed) {
+          if (lastPostedPlayingRef.current !== false) {
+            postMessage({ type: 'set-playing', playing: false })
+            lastPostedPlayingRef.current = false
+          }
+          if (frameChanged || needsInitialSyncRef.current) {
+            postSeekSeconds(clampedTargetTime, graph.context.sampleRate)
+            lastStartOffsetRef.current = clampedTargetTime
+            needsInitialSyncRef.current = false
+          }
+          return
+        }
+
         if (graph.context.state === 'suspended') {
           void graph.context.resume().catch(() => undefined)
         }
@@ -356,7 +373,17 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
 
         needsInitialSyncRef.current = true
       }
-    }, [fps, frame, nodeReady, playbackRate, playing, sourceFps, trimBefore])
+    }, [
+      fps,
+      frame,
+      isReversed,
+      nodeReady,
+      playbackRate,
+      playing,
+      reverseSourceEnd,
+      sourceFps,
+      trimBefore,
+    ])
 
     if (fallbackRequested && fallback) {
       return <>{fallback}</>

@@ -32,6 +32,7 @@ type BaseTimelineItem = {
   sourceDuration?: number // Total duration of source media in frames (for boundary checks)
   sourceFps?: number // Source media frame rate used for source* frame conversions
   speed?: number // Playback speed multiplier (default 1.0, range 0.1-10.0)
+  isReversed?: boolean // Play media source range from end to start
   // Transform properties (optional - defaults computed at render time)
   transform?: TransformProperties
   // Source-relative media crop (normalized edge ratios)

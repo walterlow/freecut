@@ -109,6 +109,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       updateItem: timelineActions.updateItem,
       removeItems: timelineActions.removeItems,
       rippleDeleteItems: timelineActions.rippleDeleteItems,
+      reverseItems: timelineActions.reverseItems,
       closeGapAtPosition: timelineActions.closeGapAtPosition,
       closeAllGapsOnTrack: timelineActions.closeAllGapsOnTrack,
       toggleSnap: timelineActions.toggleSnap,

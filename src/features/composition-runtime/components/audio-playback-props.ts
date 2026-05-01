@@ -12,6 +12,8 @@ export interface AudioPlaybackProps {
   sourceFps?: number
   volume?: number
   playbackRate?: number
+  isReversed?: boolean
+  reverseSourceEnd?: number
   muted?: boolean
   durationInFrames: number
   audioFadeIn?: number

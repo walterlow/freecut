@@ -45,6 +45,9 @@ interface ItemContextMenuProps {
   onClearAllKeyframes?: () => void
   onClearPropertyKeyframes?: (property: AnimatableProperty) => void
   onBentoLayout?: () => void
+  canReverse?: boolean
+  isReversed?: boolean
+  onReverse?: () => void
   /** Whether this item is a video clip (enables freeze frame option) */
   isVideoItem?: boolean
   /** Whether the playhead is within this item's bounds */
@@ -111,6 +114,9 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   onClearAllKeyframes,
   onClearPropertyKeyframes,
   onBentoLayout,
+  canReverse,
+  isReversed,
+  onReverse,
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
@@ -177,6 +183,9 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       onClearAllKeyframes={onClearAllKeyframes}
       onClearPropertyKeyframes={onClearPropertyKeyframes}
       onBentoLayout={onBentoLayout}
+      canReverse={canReverse}
+      isReversed={isReversed}
+      onReverse={onReverse}
       isVideoItem={isVideoItem}
       playheadInBounds={playheadInBounds}
       onFreezeFrame={onFreezeFrame}
@@ -261,6 +270,9 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   onClearAllKeyframes,
   onClearPropertyKeyframes,
   onBentoLayout,
+  canReverse,
+  isReversed,
+  onReverse,
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
@@ -408,6 +420,16 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {selectedCount >= 2 && onBentoLayout && (
           <>
             <ContextMenuItem onClick={onBentoLayout}>Bento Layout...</ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        {/* Reverse - only show for source-backed media items */}
+        {canReverse && onReverse && (
+          <>
+            <ContextMenuItem onClick={onReverse}>
+              {isReversed ? 'Unreverse' : 'Reverse'}
+            </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}

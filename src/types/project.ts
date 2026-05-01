@@ -80,6 +80,7 @@ export interface ProjectTimeline {
     sourceEnd?: number // End position in source media (frames)
     sourceDuration?: number // Total duration of source media (frames)
     sourceFps?: number // Source media frame rate for source* frame fields
+    isReversed?: boolean // Play media source range from end to start
     text?: string
     textRole?: 'caption'
     captionSource?: {

@@ -391,6 +391,21 @@ export const TimelineItem = memo(
         ) ?? null
       )
     }, [item.id, item.mediaId, item.type, linkedItemsForCaptionOwnership])
+    const reverseMenuShowsUnreverse = useMemo(() => {
+      if (item.type !== 'video' && item.type !== 'audio') {
+        return false
+      }
+
+      const linkedItems =
+        linkedItemsForCaptionOwnership.length > 0 ? linkedItemsForCaptionOwnership : [item]
+      const reversibleItems = linkedItems.filter(
+        (candidate) => candidate.type === 'video' || candidate.type === 'audio',
+      )
+      return (
+        reversibleItems.length > 0 &&
+        reversibleItems.every((candidate) => candidate.isReversed === true)
+      )
+    }, [item, linkedItemsForCaptionOwnership])
     const canManageCaptions =
       !!item.mediaId &&
       !isBroken &&
@@ -1876,6 +1891,7 @@ export const TimelineItem = memo(
       handleRippleDelete,
       handleLinkSelected,
       handleUnlinkSelected,
+      handleReverseSelected,
       handleClearAllKeyframes,
       handleClearPropertyKeyframes,
       handleBentoLayout,
@@ -3216,6 +3232,9 @@ export const TimelineItem = memo(
           onClearAllKeyframes={handleClearAllKeyframes}
           onClearPropertyKeyframes={handleClearPropertyKeyframes}
           onBentoLayout={handleBentoLayout}
+          canReverse={item.type === 'video' || item.type === 'audio'}
+          isReversed={reverseMenuShowsUnreverse}
+          onReverse={handleReverseSelected}
           isVideoItem={item.type === 'video'}
           playheadInBounds={(() => {
             const frame = usePlaybackStore.getState().currentFrame
@@ -3398,6 +3417,7 @@ export const TimelineItem = memo(
                 <ClipIndicators
                   hasKeyframes={hasKeyframes}
                   currentSpeed={currentSpeed}
+                  isReversed={item.isReversed === true}
                   isStretching={isStretching}
                   stretchFeedback={stretchFeedback}
                   isBroken={isBroken}
@@ -3772,6 +3792,7 @@ export const TimelineItem = memo(
       prevItem.sourceFps === nextItem.sourceFps &&
       prevItem.trimStart === nextItem.trimStart &&
       prevItem.speed === nextItem.speed &&
+      prevItem.isReversed === nextItem.isReversed &&
       prevItem.volume === nextItem.volume &&
       prevItem.effects === nextItem.effects &&
       prevItem.audioFadeIn === nextItem.audioFadeIn &&

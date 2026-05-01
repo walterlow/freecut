@@ -100,6 +100,7 @@ interface AudioSegment {
   crossfadeFadeInFrames?: number
   crossfadeFadeOutFrames?: number
   speed: number // Playback rate
+  isReversed: boolean
   muted: boolean
   type: 'video' | 'audio'
   audioCodec?: string // Audio codec for lazy AC-3 decoder registration
@@ -453,6 +454,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
       crossfadeFadeInFrames,
       crossfadeFadeOutFrames,
       speed,
+      isReversed: item.isReversed === true,
       muted: entry.muted,
       type: entry.type,
       audioCodec: entry.audioCodec,
@@ -483,6 +485,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
     if (!isContinuousAudioTransition(left.clip, right.clip, fps)) return false
     if (left.src !== right.src) return false
     if (Math.abs(left.speed - right.speed) > 0.0001) return false
+    if (left.isReversed !== right.isReversed) return false
     if (Math.abs(left.volume - right.volume) > 0.0001) return false
     if (left.muted !== right.muted) return false
     if (!areAudioEqStagesEqual(left.audioEqStages, right.audioEqStages)) return false
@@ -517,6 +520,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
     crossfadeFadeInFrames: segment.crossfadeFadeInFrames,
     crossfadeFadeOutFrames: segment.crossfadeFadeOutFrames,
     speed: segment.speed,
+    isReversed: segment.isReversed,
     muted: segment.muted,
     type: segment.type,
     audioCodec: segment.audioCodec,
@@ -774,6 +778,7 @@ function appendCompositionAudioSegments(params: {
         }),
       ],
       speed,
+      isReversed: subItem.isReversed === true,
       muted: trackMuted || subTrackMuted,
       type: subItem.type as 'video' | 'audio',
       audioCodec: getMediaAudioCodecById(subItem.mediaId),
@@ -941,6 +946,7 @@ export function extractAudioSegments(
             }),
           ],
           speed: audioItem.speed ?? 1,
+          isReversed: audioItem.isReversed === true,
           muted: track.muted ?? false,
           type: 'audio',
           audioCodec: audioEntry.audioCodec,
@@ -1684,6 +1690,16 @@ function downmixToStereo(source: readonly Float32Array[]): Float32Array[] {
   return [left, right]
 }
 
+function reverseAudioChannels(channels: Float32Array[]): Float32Array[] {
+  return channels.map((samples) => {
+    const reversed = new Float32Array(samples.length)
+    for (let i = 0; i < samples.length; i++) {
+      reversed[i] = samples[samples.length - 1 - i] ?? 0
+    }
+    return reversed
+  })
+}
+
 /**
  * Mix multiple audio tracks together.
  *
@@ -1866,6 +1882,9 @@ export async function processAudio(
       // Apply speed across ALL channels at once to maintain phase coherence
       // between L/R (the WSOLA pipeline finds shared overlap windows).
       let processedChannels = decoded.samples
+      if (segment.isReversed) {
+        processedChannels = reverseAudioChannels(processedChannels)
+      }
       if (
         Math.abs(segment.speed - 1) > 0.0001 ||
         isAudioPitchShiftActive(segment.pitchShiftSemitones)

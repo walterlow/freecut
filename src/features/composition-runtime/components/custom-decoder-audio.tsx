@@ -40,6 +40,19 @@ interface DecodedPitchFallbackAudioProps extends AudioPlaybackProps {
   sourceStartOffsetSec: number
 }
 
+function createReversedAudioBuffer(buffer: AudioBuffer): AudioBuffer {
+  const ctx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
+  const reversed = ctx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const input = buffer.getChannelData(channel)
+    const output = reversed.getChannelData(channel)
+    for (let i = 0; i < input.length; i += 1) {
+      output[i] = input[input.length - 1 - i] ?? 0
+    }
+  }
+  return reversed
+}
+
 const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
   audioBuffer,
   sourceStartOffsetSec,
@@ -49,6 +62,8 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
   sourceFps,
   volume,
   playbackRate,
+  isReversed,
+  reverseSourceEnd,
   muted,
   durationInFrames,
   audioFadeIn,
@@ -94,6 +109,8 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
       sourceStartOffsetSec={sourceStartOffsetSec}
       volume={volume}
       playbackRate={playbackRate}
+      isReversed={isReversed}
+      reverseSourceEnd={reverseSourceEnd}
       audioPitchSemitones={audioPitchSemitones}
       audioPitchCents={audioPitchCents}
       audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -153,6 +170,8 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   sourceFps,
   volume = 0,
   playbackRate = 1,
+  isReversed,
+  reverseSourceEnd,
   muted = false,
   durationInFrames,
   audioFadeIn = 0,
@@ -312,6 +331,8 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       frame,
       playbackRate,
       fps,
+      isReversed,
+      reverseSourceEnd,
     )
     const remainingCoverage = currentSource.coverageEndSec - targetTime
     const targetOutsideSource =
@@ -369,20 +390,54 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
         pendingExtensionKeyRef.current = null
       }
     }
-  }, [decodedSource, fps, frame, mediaId, playbackRate, playing, sourceFps, src, trimBefore])
+  }, [
+    decodedSource,
+    fps,
+    frame,
+    isReversed,
+    mediaId,
+    playbackRate,
+    playing,
+    reverseSourceEnd,
+    sourceFps,
+    src,
+    trimBefore,
+  ])
+
+  const reversedPlayback = React.useMemo(() => {
+    if (!decodedSource || !isReversed || !decodedSource.isComplete) {
+      return null
+    }
+    const effectiveSourceFps = sourceFps ?? fps
+    const sourceEndSeconds = (reverseSourceEnd ?? trimBefore) / effectiveSourceFps
+    const reversedTrimBefore = Math.max(
+      0,
+      Math.round((decodedSource.buffer.duration - sourceEndSeconds) * effectiveSourceFps),
+    )
+    return {
+      buffer: createReversedAudioBuffer(decodedSource.buffer),
+      trimBefore: reversedTrimBefore,
+    }
+  }, [decodedSource, fps, isReversed, reverseSourceEnd, sourceFps, trimBefore])
 
   if (!decodedSource) return null
 
+  const playbackBuffer = reversedPlayback?.buffer ?? decodedSource.buffer
+  const playbackTrimBefore = reversedPlayback?.trimBefore ?? trimBefore
+  const playbackSourceStartOffsetSec = reversedPlayback ? 0 : decodedSource.sourceStartOffsetSec
+
   const fallback = (
     <DecodedPitchFallbackAudio
-      audioBuffer={decodedSource.buffer}
-      sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}
+      audioBuffer={playbackBuffer}
+      sourceStartOffsetSec={playbackSourceStartOffsetSec}
       itemId={itemId}
       liveGainItemIds={liveGainItemIds}
-      trimBefore={trimBefore}
+      trimBefore={playbackTrimBefore}
       sourceFps={sourceFps}
       volume={volume}
       playbackRate={playbackRate}
+      isReversed={isReversed && !reversedPlayback}
+      reverseSourceEnd={reversedPlayback ? undefined : reverseSourceEnd}
       audioPitchSemitones={audioPitchSemitones}
       audioPitchCents={audioPitchCents}
       audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -408,16 +463,18 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
 
   return (
     <SoundTouchWorkletAudio
-      audioBuffer={decodedSource.buffer}
+      audioBuffer={playbackBuffer}
       fallback={fallback}
       itemId={itemId}
       liveGainItemIds={liveGainItemIds}
-      trimBefore={trimBefore}
+      trimBefore={playbackTrimBefore}
       sourceFps={sourceFps}
-      sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}
+      sourceStartOffsetSec={playbackSourceStartOffsetSec}
       isComplete={decodedSource.isComplete}
       volume={volume}
       playbackRate={playbackRate}
+      isReversed={isReversed && !reversedPlayback}
+      reverseSourceEnd={reversedPlayback ? undefined : reverseSourceEnd}
       audioPitchSemitones={audioPitchSemitones}
       audioPitchCents={audioPitchCents}
       audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -468,6 +525,7 @@ export const CustomDecoderAudio: React.FC<CustomDecoderAudioProps> = React.memo(
   // zero boundary mid-drag doesn't remount between buffered and pitch-preserved.
   const hasActivePitchPreview = hasAudioPitchOverride(itemPreview?.properties)
   const shouldUseBufferedPlayback =
+    props.isReversed !== true &&
     Math.abs(playbackRate - 1) <= 0.0001 &&
     !hasActivePitchPreview &&
     !isAudioPitchShiftActive(resolvedPitchShiftSemitones)

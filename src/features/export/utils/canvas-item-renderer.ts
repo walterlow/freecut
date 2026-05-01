@@ -800,12 +800,13 @@ async function renderVideoItem(
   // sourceStart is in source-native FPS frames, so divide by sourceFps (not project fps)
   // Snap to nearest source frame boundary to avoid floating-point drift
   // that can cause Math.floor(sourceTime * sourceFps) to land on the wrong frame.
+  const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+  const reverseSourceEnd = (item.sourceEnd ?? sourceStart + sourceFramesNeeded) - sourceFrameOffset
   const adjustedSourceStart = sourceStart + sourceFrameOffset
-  const rawSourceTime = clampVideoSourceTime(
-    adjustedSourceStart / sourceFps + localTime * speed,
-    sourceFps,
-    item.sourceDuration,
-  )
+  const unclampedSourceTime = item.isReversed
+    ? (reverseSourceEnd - localFrame * speed * (sourceFps / fps) - 1) / sourceFps
+    : adjustedSourceStart / sourceFps + localTime * speed
+  const rawSourceTime = clampVideoSourceTime(unclampedSourceTime, sourceFps, item.sourceDuration)
   const snappedSourceFrame = Math.round(rawSourceTime * sourceFps)
   const sourceTime =
     Math.abs(rawSourceTime * sourceFps - snappedSourceFrame) < 1e-6
@@ -3802,11 +3803,12 @@ function resolveVideoParticipantSourceTime(
   const sourceStart = getRenderTimelineSourceStart(item, renderSpan)
   const sourceFps = item.sourceFps ?? rctx.fps
   const speed = item.speed ?? 1
-  const rawSourceTime = clampVideoSourceTime(
-    sourceStart / sourceFps + localTime * speed,
-    sourceFps,
-    item.sourceDuration,
-  )
+  const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / rctx.fps
+  const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+  const unclampedSourceTime = item.isReversed
+    ? (reverseSourceEnd - localFrame * speed * (sourceFps / rctx.fps) - 1) / sourceFps
+    : sourceStart / sourceFps + localTime * speed
+  const rawSourceTime = clampVideoSourceTime(unclampedSourceTime, sourceFps, item.sourceDuration)
   const snappedSourceFrame = Math.round(rawSourceTime * sourceFps)
   return Math.abs(rawSourceTime * sourceFps - snappedSourceFrame) < 1e-6
     ? (snappedSourceFrame + 1e-4) / sourceFps

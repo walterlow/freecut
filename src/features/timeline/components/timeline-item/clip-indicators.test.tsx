@@ -8,6 +8,7 @@ describe('ClipIndicators', () => {
       <ClipIndicators
         hasKeyframes={false}
         currentSpeed={1.25}
+        isReversed={false}
         isStretching={false}
         stretchFeedback={null}
         isBroken={false}

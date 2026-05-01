@@ -56,6 +56,7 @@ export interface TimelineActions {
   updateItem: (id: string, updates: Partial<TimelineItem>) => void
   removeItems: (ids: string[]) => void
   rippleDeleteItems: (ids: string[]) => void
+  reverseItems: (ids: string[]) => void
   closeGapAtPosition: (trackId: string, frame: number) => void
   closeAllGapsOnTrack: (trackId: string) => void
   toggleSnap: () => void
