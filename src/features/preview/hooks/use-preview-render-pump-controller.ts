@@ -3,6 +3,7 @@ import { getBestDomVideoElementForItem } from '@/features/preview/deps/compositi
 import type { PlayerRef } from '@/features/preview/deps/player-core'
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool'
 import { usePlaybackStore } from '@/shared/state/playback'
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner'
 import { useGizmoStore } from '../stores/gizmo-store'
@@ -1396,6 +1397,13 @@ export function usePreviewRenderPump({
         return
       }
 
+      const displayedFrame = usePreviewBridgeStore.getState().displayedFrame
+      if (showFastScrubOverlayRef.current && displayedFrame === targetFrame) {
+        scrubRequestedFrameRef.current = targetFrame
+        bypassPreviewSeekRef.current = true
+        return
+      }
+
       if (scrubRequestedFrameRef.current === targetFrame) {
         return
       }
@@ -1677,7 +1685,10 @@ export function usePreviewRenderPump({
     } else if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) {
       clearTransitionPlaybackSession()
       hideAllOverlays()
-    } else if (usePlaybackStore.getState().previewFrame === null) {
+    } else if (
+      usePlaybackStore.getState().previewFrame === null &&
+      !showFastScrubOverlayRef.current
+    ) {
       clearTransitionPlaybackSession()
       hideAllOverlays()
     }

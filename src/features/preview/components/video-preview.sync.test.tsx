@@ -2119,6 +2119,109 @@ describe('VideoPreview sync behavior', () => {
     })
   })
 
+  it('keeps settled skim presentation across preview effect refreshes', async () => {
+    const { container, rerender } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled()
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(null)
+    })
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().previewFrame).toBeNull()
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    rerender(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1281, height: 720 }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().previewFrame).toBeNull()
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
+  it('does not enter scrub mode or repaint when clicking the already displayed settled frame', async () => {
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBe(1)
+      return rendererMockState.instances[0]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(0)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(null)
+    })
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().previewFrame).toBeNull()
+      expect(usePlaybackStore.getState().currentFrame).toBe(48)
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    renderer.renderFrame.mockClear()
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(usePlaybackStore.getState().previewFrame).toBeNull()
+    expect(usePlaybackStore.getState().currentFrame).toBe(48)
+    expect(getDisplayedFrame()).toBe(48)
+    expect(scrubCanvas.style.visibility).toBe('visible')
+    expect(renderer.renderFrame).not.toHaveBeenCalled()
+  })
+
   it('keeps active skim presentation when a stale in-flight render finishes', async () => {
     const { container } = render(
       <VideoPreview

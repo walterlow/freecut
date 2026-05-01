@@ -26,6 +26,7 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
   ),
 }))
 
+import { getPreviewPixelSnapOffset, getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
 import { PreviewStage } from './preview-stage'
 
 function createInputProps(): CompositionInputProps {
@@ -44,6 +45,34 @@ function createInputProps(): CompositionInputProps {
 function createRef<T>(): RefObject<T | null> {
   return { current: null }
 }
+
+describe('getPreviewPixelSnapOffset', () => {
+  it('returns the subpixel correction needed to land the preview surface on device pixels', () => {
+    expect(getPreviewPixelSnapOffset({ left: 856.390625, top: 64.453125 }, 1)).toEqual({
+      x: -0.390625,
+      y: -0.453125,
+    })
+
+    expect(getPreviewPixelSnapOffset({ left: 10.25, top: 20.75 }, 2)).toEqual({
+      x: 0.25,
+      y: 0.25,
+    })
+  })
+})
+
+describe('getPreviewPixelSnapSize', () => {
+  it('snaps fitted preview dimensions to device pixels', () => {
+    expect(getPreviewPixelSnapSize({ width: 590.21875, height: 332 }, 1)).toEqual({
+      width: 590,
+      height: 332,
+    })
+
+    expect(getPreviewPixelSnapSize({ width: 590.25, height: 331.75 }, 2)).toEqual({
+      width: 590.5,
+      height: 332,
+    })
+  })
+})
 
 describe('PreviewStage', () => {
   it('passes proxy playback mode down to nested composition rendering', () => {
