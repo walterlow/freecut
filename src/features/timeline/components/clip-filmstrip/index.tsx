@@ -32,12 +32,16 @@ interface ClipFilmstripProps {
   renderWidth?: number
   /** Source start time in seconds (for trimmed clips) */
   sourceStart: number
+  /** Source end time in seconds (for trimmed clips) */
+  sourceEnd?: number
   /** Total source duration in seconds */
   sourceDuration: number
   /** Trim start in seconds (how much trimmed from beginning) */
   trimStart: number
   /** Playback speed multiplier */
   speed: number
+  /** Whether the clip plays source media in reverse */
+  isReversed?: boolean
   /** Frames per second */
   fps: number
   /** Whether the clip is visible (from IntersectionObserver) */
@@ -224,9 +228,11 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   clipWidth,
   renderWidth,
   sourceStart,
+  sourceEnd,
   sourceDuration,
   trimStart,
   speed,
+  isReversed = false,
   isVisible,
   visibleStartRatio = 0,
   visibleEndRatio = 1,
@@ -278,6 +284,22 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   const visibleClipWidth = clipWidth
   const renderClipWidth = Math.max(visibleClipWidth, renderWidth ?? visibleClipWidth)
   const effectiveStart = Math.max(0, sourceStart + trimStart)
+  const effectiveEnd = Math.min(
+    sourceDuration,
+    Math.max(
+      effectiveStart,
+      sourceEnd ?? effectiveStart + (visibleClipWidth / Math.max(1, renderPixelsPerSecond)) * speed,
+    ),
+  )
+  const getSourceTimeForX = useCallback(
+    (x: number) => {
+      const timelineSeconds = (x / Math.max(1, renderPixelsPerSecond)) * speed
+      return isReversed
+        ? Math.min(sourceDuration, Math.max(0, effectiveEnd - timelineSeconds))
+        : Math.min(sourceDuration, Math.max(0, effectiveStart + timelineSeconds))
+    },
+    [effectiveEnd, effectiveStart, isReversed, renderPixelsPerSecond, sourceDuration, speed],
+  )
   const isInteractionLod = !preferImmediateRendering && isZooming
   const viewportPadTiles = isInteractionLod ? VIEWPORT_PAD_TILES_INTERACTION : VIEWPORT_PAD_TILES
 
@@ -346,17 +368,15 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
       return null
     }
 
+    const windowStartTime = getSourceTimeForX(renderWindow.paddedStartX)
+    const windowEndTime = getSourceTimeForX(renderWindow.paddedEndX)
     const unclampedStartTime = Math.max(
       0,
-      effectiveStart +
-        (renderWindow.paddedStartX / renderPixelsPerSecond) * speed -
-        PRIORITY_PAD_SECONDS,
+      Math.min(windowStartTime, windowEndTime) - PRIORITY_PAD_SECONDS,
     )
     const unclampedEndTime = Math.min(
       sourceDuration,
-      effectiveStart +
-        (renderWindow.paddedEndX / renderPixelsPerSecond) * speed +
-        PRIORITY_PAD_SECONDS,
+      Math.max(windowStartTime, windowEndTime) + PRIORITY_PAD_SECONDS,
     )
     if (unclampedEndTime <= unclampedStartTime) {
       return null
@@ -377,8 +397,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     sourceDuration,
     renderPixelsPerSecond,
     renderClipWidth,
-    speed,
-    effectiveStart,
+    getSourceTimeForX,
     isInteractionLod,
     renderWindow,
   ])
@@ -411,10 +430,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
         Math.min(renderClipWidth, Math.min((tile + tileStep) * thumbnailWidth, paddedEndX)) - tileX,
       )
       const tileCenterX = tileX + tileWidth * 0.5
-      const tileTime = Math.min(
-        sourceDuration,
-        Math.max(0, effectiveStart + (tileCenterX / renderPixelsPerSecond) * speed),
-      )
+      const tileTime = getSourceTimeForX(tileCenterX)
 
       indices.add(Math.max(0, Math.round(tileTime)))
     }
@@ -427,9 +443,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     renderWindow,
     isInteractionLod,
     renderClipWidth,
-    sourceDuration,
-    effectiveStart,
-    speed,
+    getSourceTimeForX,
   ])
 
   const targetFrameCount = targetFrameIndices?.length
@@ -517,17 +531,15 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     const tileStep = getTileStep(visibleTileCount, MAX_TILES_IDLE)
     const tileDurationSeconds = (thumbnailWidth / renderPixelsPerSecond) * speed
     const candidateWindowPadSeconds = Math.max(1, tileDurationSeconds * Math.max(2, tileStep))
+    const windowStartTime = getSourceTimeForX(renderWindow.paddedStartX)
+    const windowEndTime = getSourceTimeForX(renderWindow.paddedEndX)
     const renderStartTime = Math.max(
       0,
-      effectiveStart +
-        (renderWindow.paddedStartX / renderPixelsPerSecond) * speed -
-        candidateWindowPadSeconds,
+      Math.min(windowStartTime, windowEndTime) - candidateWindowPadSeconds,
     )
     const renderEndTime = Math.min(
       sourceDuration,
-      effectiveStart +
-        (renderWindow.paddedEndX / renderPixelsPerSecond) * speed +
-        candidateWindowPadSeconds,
+      Math.max(windowStartTime, windowEndTime) + candidateWindowPadSeconds,
     )
     const candidateFrames = frames.filter(
       (frame) => frame.timestamp >= renderStartTime && frame.timestamp <= renderEndTime,
@@ -546,7 +558,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
         Math.min(renderClipWidth, Math.min((tile + tileStep) * thumbnailWidth, paddedEndX)) - tileX,
       )
       const tileCenterX = tileX + tileWidth * 0.5
-      const tileTime = effectiveStart + (tileCenterX / renderPixelsPerSecond) * speed
+      const tileTime = getSourceTimeForX(tileCenterX)
       const nearestFrameIndex = Math.max(0, Math.round(tileTime))
       const frame =
         candidateFrameByIndex?.get(nearestFrameIndex) ??
@@ -566,7 +578,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     renderPixelsPerSecond,
     renderClipWidth,
     sourceDuration,
-    effectiveStart,
+    getSourceTimeForX,
     speed,
     thumbnailWidth,
     renderWindow,
