@@ -4,6 +4,7 @@
 
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import type { Transition } from '@/types/transition'
+import type { ReverseConformResult } from '../../services/reverse-conform-service'
 import { useItemsStore } from '../items-store'
 import { useTransitionsStore } from '../transitions-store'
 import { useKeyframesStore } from '../keyframes-store'
@@ -21,6 +22,7 @@ import {
 } from '../../utils/linked-items'
 import { isTrackSyncLockEnabled } from '../../utils/track-sync-lock'
 import { placeItemsWithoutTimelineOverlap } from './item-placement'
+import { useReverseConformDialogStore } from '../reverse-conform-dialog-store'
 
 function isLinkedSelectionEnabled(): boolean {
   return useEditorStore.getState().linkedSelectionEnabled
@@ -186,6 +188,7 @@ export function linkItems(ids: string[]): boolean {
 
 export function reverseItems(ids: string[]): void {
   const items = useItemsStore.getState().items
+  const timelineFps = useTimelineSettingsStore.getState().fps
   const expandedIds = new Set<string>()
   for (const id of ids) {
     const synchronizedItems = getSynchronizedLinkedItems(items, id)
@@ -207,6 +210,17 @@ export function reverseItems(ids: string[]): void {
 
   if (reversibleItems.length === 0) return
   const shouldReverse = !reversibleItems.every((item) => item.isReversed === true)
+  if (shouldReverse) {
+    const videoItems = reversibleItems.filter((item) => item.type === 'video')
+    if (videoItems.length > 0) {
+      useReverseConformDialogStore.getState().open({
+        items: reversibleItems,
+        videoItems,
+        timelineFps,
+      })
+      return
+    }
+  }
 
   execute(
     'REVERSE_ITEMS',
@@ -215,11 +229,60 @@ export function reverseItems(ids: string[]): void {
       for (const item of reversibleItems) {
         store._updateItem(item.id, {
           isReversed: shouldReverse ? true : undefined,
+          ...(!shouldReverse && {
+            reverseConformSrc: undefined,
+            reverseConformPath: undefined,
+            reverseConformKey: undefined,
+            reverseConformPreviewSrc: undefined,
+            reverseConformPreviewPath: undefined,
+            reverseConformPreviewKey: undefined,
+            reverseConformPreviewUsesProxy: undefined,
+            reverseConformStatus: undefined,
+          }),
         } as Partial<TimelineItem>)
       }
       useTimelineSettingsStore.getState().markDirty()
     },
     { ids: reversibleItems.map((item) => item.id), reversed: shouldReverse },
+  )
+}
+
+export function commitPreparedReverseItems(
+  items: TimelineItem[],
+  results: ReverseConformResult[],
+): void {
+  if (items.length === 0) return
+  const resultByItemId = new Map(results.map((result) => [result.itemId, result]))
+
+  execute(
+    'REVERSE_ITEMS',
+    () => {
+      const store = useItemsStore.getState()
+      for (const item of items) {
+        const result = resultByItemId.get(item.id)
+        store._updateItem(item.id, {
+          isReversed: true,
+          ...(item.type === 'video' &&
+            result && {
+              ...(result.quality === 'full'
+                ? {
+                    reverseConformSrc: result.src,
+                    reverseConformPath: result.path,
+                    reverseConformKey: result.key,
+                  }
+                : {
+                    reverseConformPreviewSrc: result.src,
+                    reverseConformPreviewPath: result.path,
+                    reverseConformPreviewKey: result.key,
+                    reverseConformPreviewUsesProxy: result.usesProxy,
+                  }),
+              reverseConformStatus: 'ready',
+            }),
+        } as Partial<TimelineItem>)
+      }
+      useTimelineSettingsStore.getState().markDirty()
+    },
+    { ids: items.map((item) => item.id), reversed: true, conformed: results.length },
   )
 }
 

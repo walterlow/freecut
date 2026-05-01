@@ -96,6 +96,7 @@ import {
 import { ScrubbingCache } from '@/features/export/deps/preview'
 import { resolveFrameRenderOptimization } from './render-path-optimizer'
 import { ReverseVideoFrameCache } from './reverse-video-frame-cache'
+import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
 
 // Re-export orchestration functions so existing import sites keep working
 export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator'
@@ -152,16 +153,23 @@ export async function createCompositionRenderer(
     getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined
     getLiveKeyframes?: (itemId: string) => ItemKeyframes | undefined
     domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null
+    useProxyMedia?: boolean
   } = {},
 ) {
-  const {
-    fps,
-    tracks = [],
-    transitions = [],
-    backgroundColor = '#000000',
-    keyframes = [],
-  } = composition
+  const { fps, transitions = [], backgroundColor = '#000000', keyframes = [] } = composition
   const renderMode = options.mode ?? 'export'
+  const tracks =
+    composition.tracks?.map((track) => ({
+      ...track,
+      items: (track.items ?? []).map((item) =>
+        item.type === 'video'
+          ? resolveReverseConformedVideoItem(item, fps, {
+              mode: renderMode,
+              useProxy: options.useProxyMedia,
+            })
+          : item,
+      ),
+    })) ?? []
   const getPreviewTransformOverride = options.getPreviewTransformOverride
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride
   const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride
@@ -360,7 +368,17 @@ export async function createCompositionRenderer(
     getLiveKeyframes?.(itemId) ?? keyframesMap.get(itemId)
   const getCurrentItem = <TItem extends TimelineItem>(item: TItem): TItem => {
     const liveItem = getLiveItemSnapshot?.(item.id)
-    return liveItem && liveItem.type === item.type ? (liveItem as TItem) : item
+    const current = liveItem && liveItem.type === item.type ? (liveItem as TItem) : item
+    if (current.type !== 'video') {
+      return current
+    }
+
+    const resolvedVideoItem = resolveReverseConformedVideoItem(current, fps, {
+      mode: renderMode,
+      useProxy: options.useProxyMedia,
+    })
+    syncVideoItemRegistration(resolvedVideoItem)
+    return resolvedVideoItem as TItem
   }
   const getLiveMaskItem = getLiveItemSnapshot
     ? (itemId: string) => {
@@ -542,6 +560,25 @@ export async function createCompositionRenderer(
   const PREWARM_FAILURE_DISABLE_THRESHOLD = 3
   const inFlightInitByItem = new Map<string, Promise<boolean>>()
   let isDisposed = false
+
+  function syncVideoItemRegistration(videoItem: VideoItem): void {
+    if (!videoItem.src) return
+
+    const prevSrc = videoSourceByItemId.get(videoItem.id)
+    if (prevSrc !== videoItem.src) {
+      useMediabunny.delete(videoItem.id)
+      mediabunnyDisabledItems.delete(videoItem.id)
+      mediabunnyFailureCountByItem.delete(videoItem.id)
+      mediabunnyInitFailureCountByItem.delete(videoItem.id)
+      inFlightInitByItem.delete(videoItem.id)
+      registerVideoItem(videoItem.id, videoItem.src)
+      if (hasDom && !previewStrictDecode) {
+        bindFallbackVideoElement(videoItem.id, videoItem.src)
+      }
+    }
+
+    videoItemsById.set(videoItem.id, videoItem)
+  }
 
   // Pre-computed sub-composition render data. Populated synchronously at
   // renderer creation (so the first renderFrame sees compound-clip structure
@@ -733,8 +770,9 @@ export async function createCompositionRenderer(
         const start = item.from
         const end = item.from + item.durationInFrames
         if (end < minFrame || start > maxFrame) continue
-        if (videoExtractors.has(item.id)) {
-          ids.push(item.id)
+        const currentItem = getCurrentItem(item)
+        if (videoExtractors.has(currentItem.id)) {
+          ids.push(currentItem.id)
         }
       }
     }
@@ -2066,7 +2104,7 @@ export async function createCompositionRenderer(
         minFrame,
         maxFrame,
         maxItems: PREWARM_DECODE_MAX_ITEMS,
-      })
+      }).map((item) => getCurrentItem(item))
 
       const missingCandidateItemIds = candidates
         .map((item) => item.id)
@@ -2158,7 +2196,7 @@ export async function createCompositionRenderer(
           minFrame,
           maxFrame,
           maxItems: PREWARM_DECODE_MAX_ITEMS,
-        })
+        }).map((item) => getCurrentItem(item))
 
         for (const item of candidates) {
           if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue
@@ -2231,7 +2269,7 @@ export async function createCompositionRenderer(
           minFrame,
           maxFrame,
           maxItems: PREWARM_DECODE_MAX_ITEMS,
-        })
+        }).map((item) => getCurrentItem(item))
         for (const item of candidates) {
           if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue
           const extractor = videoExtractors.get(item.id)

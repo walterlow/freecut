@@ -265,6 +265,14 @@ export function previewAudioPath(mediaId: string): string[] {
   return [...mediaCacheDir(mediaId), CACHE_PREVIEW_AUDIO_FILENAME]
 }
 
+export function reverseConformDir(mediaId: string): string[] {
+  return [...mediaCacheDir(mediaId), 'reverse-conform']
+}
+
+export function reverseConformFilePath(mediaId: string, key: string): string[] {
+  return [...reverseConformDir(mediaId), `${sanitizeWorkspaceFileName(key)}.mp4`]
+}
+
 export function gifFramesDir(mediaId: string): string[] {
   return [...mediaCacheDir(mediaId), CACHE_GIF_FRAMES_DIR]
 }

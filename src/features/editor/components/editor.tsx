@@ -9,7 +9,11 @@ import { PropertiesSidebar } from './properties-sidebar'
 import { PreviewArea } from './preview-area'
 import { InteractionLockRegion } from './interaction-lock-region'
 import { AudioMeterPanel } from './audio-meter-panel'
-import { Timeline, BentoLayoutDialog } from '@/features/editor/deps/timeline-ui'
+import {
+  Timeline,
+  BentoLayoutDialog,
+  ReverseConformDialog,
+} from '@/features/editor/deps/timeline-ui'
 import { toast } from 'sonner'
 import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys'
 import { useAutoSave } from '../hooks/use-auto-save'
@@ -81,7 +85,6 @@ const LazySubtitleScanProgressDialog = lazy(() =>
     default: module.SubtitleScanProgressDialog,
   })),
 )
-
 function preloadExportDialog() {
   return importExportDialog()
 }
@@ -583,6 +586,7 @@ export const LoadedEditor = memo(function LoadedEditor({
 
       {/* Bento Layout Preset Dialog */}
       <BentoLayoutDialog />
+      <ReverseConformDialog />
     </div>
   )
 })

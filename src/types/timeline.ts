@@ -33,6 +33,14 @@ type BaseTimelineItem = {
   sourceFps?: number // Source media frame rate used for source* frame conversions
   speed?: number // Playback speed multiplier (default 1.0, range 0.1-10.0)
   isReversed?: boolean // Play media source range from end to start
+  reverseConformSrc?: string // Full-res prepared reversed media blob URL for export
+  reverseConformPath?: string // OPFS/workspace cache path for the full-res reversed media
+  reverseConformKey?: string // Cache key describing the full-res reversed source range
+  reverseConformPreviewSrc?: string // Proxy/preview prepared reversed media blob URL for smooth playback
+  reverseConformPreviewPath?: string // OPFS/workspace cache path for the preview reversed media
+  reverseConformPreviewKey?: string // Cache key describing the preview reversed source range
+  reverseConformPreviewUsesProxy?: boolean // Whether the preview reversed media was generated from a proxy
+  reverseConformStatus?: 'pending' | 'ready' | 'error'
   // Transform properties (optional - defaults computed at render time)
   transform?: TransformProperties
   // Source-relative media crop (normalized edge ratios)

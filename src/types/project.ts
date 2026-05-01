@@ -81,6 +81,14 @@ export interface ProjectTimeline {
     sourceDuration?: number // Total duration of source media (frames)
     sourceFps?: number // Source media frame rate for source* frame fields
     isReversed?: boolean // Play media source range from end to start
+    reverseConformSrc?: string
+    reverseConformPath?: string
+    reverseConformKey?: string
+    reverseConformPreviewSrc?: string
+    reverseConformPreviewPath?: string
+    reverseConformPreviewKey?: string
+    reverseConformPreviewUsesProxy?: boolean
+    reverseConformStatus?: 'pending' | 'ready' | 'error'
     text?: string
     textRole?: 'caption'
     captionSource?: {

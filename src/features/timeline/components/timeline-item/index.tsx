@@ -3418,6 +3418,7 @@ export const TimelineItem = memo(
                   hasKeyframes={hasKeyframes}
                   currentSpeed={currentSpeed}
                   isReversed={item.isReversed === true}
+                  reverseConformStatus={item.reverseConformStatus}
                   isStretching={isStretching}
                   stretchFeedback={stretchFeedback}
                   isBroken={isBroken}

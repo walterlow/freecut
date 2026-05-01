@@ -9,6 +9,7 @@ import {
   timelineToSourceFrames,
 } from '@/features/export/deps/timeline'
 import { createLogger } from '@/shared/logging/logger'
+import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
 
 const log = createLogger('TimelineToComposition')
 
@@ -40,6 +41,10 @@ export function convertTimelineToComposition(
   busAudioEq?: AudioEqSettings,
   masterBusDb?: number,
 ): CompositionInputProps {
+  items = items.map((item) =>
+    item.type === 'video' ? resolveReverseConformedVideoItem(item, fps, { mode: 'export' }) : item,
+  )
+
   // Resolve group gate behavior: parent group mute/hide propagates to children.
   // Also filters out group container tracks (which hold no items).
   tracks = resolveEffectiveTrackStates(tracks)

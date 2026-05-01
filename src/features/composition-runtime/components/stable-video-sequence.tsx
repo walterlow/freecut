@@ -38,6 +38,8 @@ import {
   areAudioEqStagesEqual,
   getAudioEqSettings,
 } from '@/shared/utils/audio-eq'
+import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
+import { useNestedMediaResolutionMode } from '../contexts/nested-media-resolution-context'
 
 const warmupLog = createLogger('StableVideoWarmup')
 const SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES = 8
@@ -177,6 +179,10 @@ const SHADOW_STYLE: React.CSSProperties = {
 
 const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenceItem }) => {
   const { fps } = useVideoConfig()
+  const nestedMediaResolutionMode = useNestedMediaResolutionMode()
+  item = resolveReverseConformedVideoItem(item, fps, {
+    useProxy: nestedMediaResolutionMode === 'proxy',
+  })
   const mediaSourceFps = useMediaLibraryStore((s) =>
     item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId)?.fps : undefined,
   )
