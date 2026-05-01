@@ -85,6 +85,7 @@ import {
 import {
   renderItem,
   renderItemGpuEffectsToTexture,
+  renderPreviewVideoGpuEffectsToCanvas,
   renderTransitionToCanvas,
   renderTransitionToGpuTexture,
   type CanvasSettings,
@@ -1534,6 +1535,23 @@ export async function createCompositionRenderer(
             return { gpuTexture: outputTexture, poolCanvases: [] }
           }
           gpuTexturePool.release(outputTexture)
+        }
+
+        if (renderMasks.length === 0 && combinedEffects.length > 0) {
+          const directGpuCanvas = renderPreviewVideoGpuEffectsToCanvas(
+            effectiveItem,
+            transform,
+            combinedEffects,
+            frame,
+            itemRenderContext,
+          )
+          if (directGpuCanvas) {
+            if (deferred) {
+              return { source: directGpuCanvas, poolCanvases: [] }
+            }
+            targetCtx.drawImage(directGpuCanvas, 0, 0)
+            return null
+          }
         }
 
         // === PERFORMANCE: Use pooled canvas instead of creating new one ===

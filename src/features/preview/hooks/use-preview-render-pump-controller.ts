@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
+import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime'
 import type { PlayerRef } from '@/features/preview/deps/player-core'
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool'
 import { usePlaybackStore } from '@/shared/state/playback'
@@ -63,6 +64,14 @@ type PreviewPerfState = {
   staleScrubOverlayDrops: number
   scrubDroppedFrames: number
   scrubUpdates: number
+}
+
+export function resolvePlaybackDomVideoElement(
+  itemId: string,
+  getPinnedTransitionElementForItem: (itemId: string) => HTMLVideoElement | null,
+  getRegisteredElementForItem: (itemId: string) => HTMLVideoElement | null,
+): HTMLVideoElement | null {
+  return getPinnedTransitionElementForItem(itemId) ?? getRegisteredElementForItem(itemId)
 }
 
 interface UsePreviewRenderPumpParams {
@@ -615,7 +624,13 @@ export function usePreviewRenderPump({
                   )
                 }
               }
-              renderer.setDomVideoElementProvider?.(getPinnedTransitionElementForItem)
+              renderer.setDomVideoElementProvider?.((itemId) =>
+                resolvePlaybackDomVideoElement(
+                  itemId,
+                  getPinnedTransitionElementForItem,
+                  getBestDomVideoElementForItem,
+                ),
+              )
             } else {
               renderer.setDomVideoElementProvider?.(undefined)
             }

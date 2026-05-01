@@ -2758,6 +2758,141 @@ export async function renderItemGpuEffectsToTexture(
   }
 }
 
+export function renderPreviewVideoGpuEffectsToCanvas(
+  item: TimelineItem,
+  transform: ItemTransform,
+  effects: ItemEffect[],
+  frame: number,
+  rctx: ItemRenderContext,
+): OffscreenCanvas | null {
+  const recordFastPath = (reason: string, details: Record<string, unknown> = {}) => {
+    if (!import.meta.env.DEV) return
+    if (typeof window === 'undefined') return
+    const debugWindow = window as Window & {
+      __FREECUT_GPU_EFFECT_FAST_PATH__?: {
+        hits: number
+        skips: Record<string, number>
+        last: Record<string, unknown> | null
+      }
+    }
+    const stats =
+      debugWindow.__FREECUT_GPU_EFFECT_FAST_PATH__ ??
+      (debugWindow.__FREECUT_GPU_EFFECT_FAST_PATH__ = {
+        hits: 0,
+        skips: {},
+        last: null,
+      })
+    if (reason === 'hit') {
+      stats.hits += 1
+    } else {
+      stats.skips[reason] = (stats.skips[reason] ?? 0) + 1
+    }
+    stats.last = { reason, itemId: item.id, frame, ...details }
+  }
+
+  if (rctx.renderMode !== 'preview') return null
+  if (item.type !== 'video') return null
+  if (!rctx.gpuPipeline) {
+    recordFastPath('no-gpu-pipeline')
+    return null
+  }
+  if (!rctx.domVideoElementProvider) {
+    recordFastPath('no-dom-provider')
+    return null
+  }
+  if (item.crop) {
+    recordFastPath('crop')
+    return null
+  }
+  if (hasCornerPin(item.cornerPin)) {
+    recordFastPath('corner-pin')
+    return null
+  }
+  if (Math.abs(transform.rotation) > 0.001) {
+    recordFastPath('rotation', { rotation: transform.rotation })
+    return null
+  }
+  if (Math.abs(transform.opacity - 1) > 0.001) {
+    recordFastPath('opacity', { opacity: transform.opacity })
+    return null
+  }
+  if (transform.cornerRadius > 0.001) {
+    recordFastPath('corner-radius', { cornerRadius: transform.cornerRadius })
+    return null
+  }
+  if (item.transform?.flipHorizontal || item.transform?.flipVertical) {
+    recordFastPath('flip')
+    return null
+  }
+
+  const enabledEffects = effects.filter((effect) => effect.enabled)
+  if (enabledEffects.length === 0) {
+    recordFastPath('no-enabled-effects')
+    return null
+  }
+  if (enabledEffects.some((effect) => effect.effect.type !== 'gpu-effect')) {
+    recordFastPath('non-gpu-effect')
+    return null
+  }
+
+  const video = rctx.domVideoElementProvider(item.id)
+  const renderSpan = getItemRenderTimelineSpan(item)
+  const sourceTime = resolveVideoParticipantSourceTime(item, renderSpan, frame, rctx)
+  const speed = item.speed ?? 1
+  const decision = resolvePreviewDomVideoDrawDecision({
+    domVideo: video,
+    sourceTime,
+    speed,
+    isRenderingTransition: rctx.isRenderingTransition === true,
+  })
+  if (!video) {
+    recordFastPath('no-dom-video')
+    return null
+  }
+  if (!decision.shouldDraw) {
+    recordFastPath(decision.hasReadyDomVideo ? 'dom-video-drift' : 'dom-video-not-ready', {
+      drift: decision.drift,
+      driftThreshold: decision.driftThreshold,
+      videoTime: video.currentTime,
+      sourceTime,
+      readyState: video.readyState,
+      videoWidth: video.videoWidth,
+    })
+    return null
+  }
+
+  const drawLayout = calculateContainedMediaDrawLayout(
+    video.videoWidth,
+    video.videoHeight,
+    transform,
+    rctx.canvasSettings,
+    undefined,
+  )
+  if (hasCropFeather(drawLayout.featherPixels)) {
+    recordFastPath('crop-feather')
+    return null
+  }
+
+  try {
+    const canvas = rctx.gpuPipeline.applyEffectsToVideo(
+      video,
+      getGpuEffectInstances(enabledEffects),
+      drawLayout.mediaRect,
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
+    )
+    recordFastPath('hit', {
+      effectCount: enabledEffects.length,
+      videoTime: video.currentTime,
+      sourceTime,
+    })
+    return canvas
+  } catch {
+    recordFastPath('apply-failed')
+    return null
+  }
+}
+
 async function prepareGpuMediaParticipant(
   participant: TransitionParticipantRenderState,
   frame: number,
