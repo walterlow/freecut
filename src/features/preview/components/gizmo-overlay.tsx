@@ -698,7 +698,7 @@ export function GizmoOverlay({
   return (
     <div
       ref={overlayRef}
-      className="absolute z-10"
+      className="absolute z-40"
       style={{
         top: -overlayPadding,
         left: -overlayPadding,
