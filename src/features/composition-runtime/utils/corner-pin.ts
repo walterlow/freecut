@@ -311,7 +311,13 @@ export function drawCornerPinImage(
   dstY: number,
   pin: CornerPinOffsets,
   subdivisions: number = 16,
+  renderer: 'mesh' | 'projective' = 'mesh',
 ): void {
+  if (renderer === 'projective') {
+    drawCornerPinImageProjective(ctx, source, srcW, srcH, dstX, dstY, pin)
+    return
+  }
+
   const H = computeCornerPinHomography(srcW, srcH, pin)
 
   for (let row = 0; row < subdivisions; row++) {
@@ -362,4 +368,116 @@ export function drawCornerPinImage(
       )
     }
   }
+}
+
+function createWarpCanvas(
+  width: number,
+  height: number,
+): { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: OffscreenCanvasRenderingContext2D } | null {
+  const w = Math.max(1, Math.ceil(width))
+  const h = Math.max(1, Math.ceil(height))
+
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const canvas = new OffscreenCanvas(w, h)
+    const ctx = canvas.getContext('2d')
+    return ctx ? { canvas, ctx } : null
+  }
+
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  return ctx ? { canvas, ctx: ctx as unknown as OffscreenCanvasRenderingContext2D } : null
+}
+
+function sampleBilinear(
+  sourceData: Uint8ClampedArray,
+  width: number,
+  x: number,
+  y: number,
+): number[] {
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const x1 = Math.min(width - 1, x0 + 1)
+  const y1 = Math.min(Math.floor(sourceData.length / (width * 4)) - 1, y0 + 1)
+  const tx = x - x0
+  const ty = y - y0
+
+  const i00 = (y0 * width + x0) * 4
+  const i10 = (y0 * width + x1) * 4
+  const i01 = (y1 * width + x0) * 4
+  const i11 = (y1 * width + x1) * 4
+
+  const out = [0, 0, 0, 0]
+  for (let i = 0; i < 4; i++) {
+    const top = sourceData[i00 + i]! * (1 - tx) + sourceData[i10 + i]! * tx
+    const bottom = sourceData[i01 + i]! * (1 - tx) + sourceData[i11 + i]! * tx
+    out[i] = top * (1 - ty) + bottom * ty
+  }
+  return out
+}
+
+function drawCornerPinImageProjective(
+  ctx: OffscreenCanvasRenderingContext2D,
+  source: CanvasImageSource,
+  srcW: number,
+  srcH: number,
+  dstX: number,
+  dstY: number,
+  pin: CornerPinOffsets,
+): void {
+  const sourceCanvas = createWarpCanvas(srcW, srcH)
+  if (!sourceCanvas) return
+
+  sourceCanvas.ctx.clearRect(0, 0, srcW, srcH)
+  sourceCanvas.ctx.drawImage(source, 0, 0, srcW, srcH)
+
+  let sourceImage: ImageData
+  try {
+    sourceImage = sourceCanvas.ctx.getImageData(0, 0, srcW, srcH)
+  } catch {
+    return
+  }
+
+  const corners: [number, number][] = [
+    [dstX + pin.topLeft[0], dstY + pin.topLeft[1]],
+    [dstX + srcW + pin.topRight[0], dstY + pin.topRight[1]],
+    [dstX + srcW + pin.bottomRight[0], dstY + srcH + pin.bottomRight[1]],
+    [dstX + pin.bottomLeft[0], dstY + srcH + pin.bottomLeft[1]],
+  ]
+  const minX = Math.floor(Math.min(...corners.map(([x]) => x))) - 1
+  const minY = Math.floor(Math.min(...corners.map(([, y]) => y))) - 1
+  const maxX = Math.ceil(Math.max(...corners.map(([x]) => x))) + 1
+  const maxY = Math.ceil(Math.max(...corners.map(([, y]) => y))) + 1
+  const outW = Math.max(1, maxX - minX)
+  const outH = Math.max(1, maxY - minY)
+  const outputCanvas = createWarpCanvas(outW, outH)
+  if (!outputCanvas) return
+
+  const outputImage = outputCanvas.ctx.createImageData(outW, outH)
+  const inverse = invertCornerPinHomography(computeCornerPinHomography(srcW, srcH, pin))
+  if (!inverse) return
+
+  for (let y = 0; y < outH; y++) {
+    const dy = minY + y - dstY + 0.5
+    for (let x = 0; x < outW; x++) {
+      const dx = minX + x - dstX + 0.5
+      const [sx, sy] = projectPoint(inverse, dx, dy)
+      if (sx < 0 || sy < 0 || sx > srcW - 1 || sy > srcH - 1) continue
+
+      const sample = sampleBilinear(sourceImage.data, srcW, sx, sy)
+      const outOffset = (y * outW + x) * 4
+      outputImage.data[outOffset] = sample[0]!
+      outputImage.data[outOffset + 1] = sample[1]!
+      outputImage.data[outOffset + 2] = sample[2]!
+      outputImage.data[outOffset + 3] = sample[3]!
+    }
+  }
+
+  outputCanvas.ctx.putImageData(outputImage, 0, 0)
+  ctx.drawImage(outputCanvas.canvas, minX, minY)
 }

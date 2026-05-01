@@ -606,6 +606,26 @@ async function renderItemWithCornerPin(
     )
   }
 
+  const cornerPinRenderer = item.type === 'text' ? 'projective' : 'mesh'
+  const drawPinnedImage = (targetCtx: OffscreenCanvasRenderingContext2D): void => {
+    const args = [
+      targetCtx,
+      pinCanvas,
+      pinSourceWidth,
+      pinSourceHeight,
+      left + cornerPinTargetRect.x,
+      top + cornerPinTargetRect.y,
+      resolvedCornerPin,
+    ] as const
+
+    if (cornerPinRenderer === 'projective') {
+      drawCornerPinImage(...args, undefined, cornerPinRenderer)
+      return
+    }
+
+    drawCornerPinImage(...args)
+  }
+
   ctx.save()
   if (needsFlattenedOpacity) {
     ctx.globalAlpha = transform.opacity
@@ -625,29 +645,13 @@ async function renderItemWithCornerPin(
           flatCanvas.height = rctx.canvasSettings.height
         }
         flatCtx.clearRect(0, 0, flatCanvas.width, flatCanvas.height)
-        drawCornerPinImage(
-          flatCtx,
-          pinCanvas,
-          pinSourceWidth,
-          pinSourceHeight,
-          left + cornerPinTargetRect.x,
-          top + cornerPinTargetRect.y,
-          resolvedCornerPin,
-        )
+        drawPinnedImage(flatCtx)
         ctx.drawImage(flatCanvas, 0, 0)
       } finally {
         rctx.canvasPool.release(flatCanvas)
       }
     } else {
-      drawCornerPinImage(
-        ctx,
-        pinCanvas,
-        pinSourceWidth,
-        pinSourceHeight,
-        left + cornerPinTargetRect.x,
-        top + cornerPinTargetRect.y,
-        resolvedCornerPin,
-      )
+      drawPinnedImage(ctx)
     }
   } finally {
     ctx.restore()
