@@ -1379,13 +1379,18 @@ export async function createCompositionRenderer(
 
       const hasGpuEffects = (effects: TimelineItem['effects']): boolean =>
         effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
+      const hasGpuEffectsForItem = (item: TimelineItem): boolean => {
+        const previewEffects =
+          renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined
+        return hasGpuEffects(previewEffects ?? item.effects)
+      }
       let hasAnyGpuEffects = false
       for (const track of sortedTracks) {
         if (!visibleTrackIds.has(track.id)) continue
         for (const baseItem of track.items ?? []) {
           const item = getCurrentItem(baseItem)
           if (frame < item.from || frame >= item.from + item.durationInFrames) continue
-          if (hasGpuEffects(item.effects)) {
+          if (hasGpuEffectsForItem(item)) {
             hasAnyGpuEffects = true
             break
           }
@@ -1396,10 +1401,10 @@ export async function createCompositionRenderer(
             const subData = subCompRenderData.get(item.compositionId)
             if (!subData) continue
             const trackItemWithGpu = subData.sortedTracks.some((t) =>
-              t.items.some((subItem) => hasGpuEffects(subItem.effects)),
+              t.items.some((subItem) => hasGpuEffectsForItem(getCurrentItem(subItem))),
             )
             const adjustmentWithGpu = (subData.adjustmentLayers ?? []).some((entry) =>
-              hasGpuEffects(entry.layer.effects),
+              hasGpuEffectsForItem(entry.layer),
             )
             if (trackItemWithGpu || adjustmentWithGpu) {
               hasAnyGpuEffects = true

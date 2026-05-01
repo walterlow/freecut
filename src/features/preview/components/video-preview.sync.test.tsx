@@ -1974,13 +1974,15 @@ describe('VideoPreview sync behavior', () => {
     })
   })
 
-  it('hands off scrub preview back to current frame when previewFrame is cleared', async () => {
-    render(
+  it('keeps scrub preview on the rendered path when previewFrame is cleared while paused', async () => {
+    const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
         containerSize={{ width: 1280, height: 720 }}
       />,
     )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
 
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled()
@@ -2004,11 +2006,12 @@ describe('VideoPreview sync behavior', () => {
     })
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48)
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
     })
   })
 
-  it('keeps ruler drag on fast-scrub presentation until previewFrame is cleared', async () => {
+  it('keeps paused ruler scrub on the fast-scrub presentation after previewFrame is cleared', async () => {
     const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -2043,9 +2046,8 @@ describe('VideoPreview sync behavior', () => {
     })
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48)
-      expect(getDisplayedFrame()).toBeNull()
-      expect(scrubCanvas.style.visibility).toBe('hidden')
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
     })
   })
 
@@ -2449,8 +2451,8 @@ describe('VideoPreview sync behavior', () => {
     })
 
     await waitFor(() => {
-      expect(getDisplayedFrame()).toBeNull()
-      expect(scrubCanvas.style.visibility).toBe('hidden')
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
     })
   })
 

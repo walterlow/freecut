@@ -1344,8 +1344,6 @@ export function usePreviewRenderPump({
           scrubRequestedFrameRef.current = state.currentFrame
           void pumpRenderLoop()
           playerRef.current?.seekTo(state.currentFrame)
-          beginFastScrubHandoff(state.currentFrame)
-          scheduleFastScrubHandoffCheck()
           return
         }
 
@@ -1356,6 +1354,13 @@ export function usePreviewRenderPump({
             : null
           const requiresRenderedPath =
             forceFastScrubOverlay || shouldPreserveHighFidelityBackwardPreview(state.currentFrame)
+          if (showFastScrubOverlayRef.current) {
+            if (roundedFrame !== state.currentFrame) {
+              trackPlayerSeek(state.currentFrame)
+              playerRef.current?.seekTo(state.currentFrame)
+            }
+            return
+          }
           if (requiresRenderedPath) {
             scrubRequestedFrameRef.current = state.currentFrame
             void pumpRenderLoop()
