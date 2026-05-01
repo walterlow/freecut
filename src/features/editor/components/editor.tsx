@@ -39,6 +39,8 @@ import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog'
 import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog'
 import {
+  importEmbeddedSubtitleTrackPickerHost,
+  importSubtitleScanProgressDialog,
   useEmbeddedSubtitlePickerStore,
   useSubtitleScanProgressStore,
 } from '@/features/editor/deps/media-library'
@@ -70,12 +72,12 @@ const LazyProjectMediaMatchDialog = lazy(() =>
   })),
 )
 const LazyEmbeddedSubtitleTrackPickerHost = lazy(() =>
-  import('@/features/media-library/components/embedded-subtitle-track-picker-host').then(
-    (module) => ({ default: module.EmbeddedSubtitleTrackPickerHost }),
-  ),
+  importEmbeddedSubtitleTrackPickerHost().then((module) => ({
+    default: module.EmbeddedSubtitleTrackPickerHost,
+  })),
 )
 const LazySubtitleScanProgressDialog = lazy(() =>
-  import('@/features/media-library/components/subtitle-scan-progress-dialog').then((module) => ({
+  importSubtitleScanProgressDialog().then((module) => ({
     default: module.SubtitleScanProgressDialog,
   })),
 )
