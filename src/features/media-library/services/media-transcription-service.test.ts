@@ -211,6 +211,16 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
     expect(insertedItems).toHaveLength(1)
     expect(insertedItems[0]?.trackId).toBe(captionTrack?.id)
+    expect(insertedItems[0]).toMatchObject({
+      type: 'subtitle',
+      label: 'Transcript',
+      source: {
+        type: 'transcript',
+        mediaId: 'media-1',
+        clipId: 'clip-1',
+      },
+      cues: [{ text: 'Hello there', startSeconds: 0, endSeconds: 2 }],
+    })
     expect(removeItems).not.toHaveBeenCalled()
   })
 
@@ -298,7 +308,97 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
     expect(insertedItems[0]?.trackId).toBe(captionTrack?.id)
     expect(insertedItems[0]?.trackId).not.toBe('track-audio')
+    expect(insertedItems[0]?.type).toBe('subtitle')
     expect(removeItems).toHaveBeenCalledWith(['caption-old'])
+  })
+
+  it('replaces an existing transcript subtitle segment with a single refreshed segment', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 150,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 150,
+      sourceDuration: 150,
+      sourceFps: 30,
+      speed: 1,
+    }
+    const captionTrack = { ...makeTrack('track-captions', 0), kind: 'video' as const }
+    const videoTrack = { ...makeTrack('track-video', 1), kind: 'video' as const }
+    const existingTranscript: TimelineItem = {
+      id: 'transcript-old',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Transcript',
+      mediaId: 'media-1',
+      source: {
+        type: 'transcript',
+        mediaId: 'media-1',
+        clipId: 'clip-1',
+      },
+      cues: [{ id: 'old-cue', startSeconds: 0, endSeconds: 2, text: 'Old text' }],
+      color: '#fff',
+    }
+    const setTracks = vi.fn()
+    const removeItems = vi.fn()
+    const addItems = vi.fn()
+
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [captionTrack, videoTrack],
+      items: [clip, existingTranscript],
+      setTracks,
+      removeItems,
+      addItems,
+    })
+
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: 'Fresh one Fresh two',
+      segments: [
+        { text: 'Fresh one', start: 0, end: 1 },
+        { text: 'Fresh two', start: 1, end: 3 },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsCaptions('media-1', {
+      clipIds: ['clip-1'],
+      replaceExisting: true,
+    })
+
+    expect(result).toEqual({
+      insertedItemCount: 1,
+      removedItemCount: 1,
+    })
+    expect(setTracks).not.toHaveBeenCalled()
+    expect(removeItems).toHaveBeenCalledWith(['transcript-old'])
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    expect(insertedItems).toHaveLength(1)
+    expect(insertedItems[0]).toMatchObject({
+      type: 'subtitle',
+      trackId: 'track-captions',
+      source: {
+        type: 'transcript',
+        mediaId: 'media-1',
+        clipId: 'clip-1',
+      },
+    })
+    if (insertedItems[0]?.type === 'subtitle') {
+      expect(insertedItems[0].cues.map((cue) => cue.text)).toEqual(['Fresh one', 'Fresh two'])
+    }
   })
 })
 

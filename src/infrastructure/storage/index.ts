@@ -109,6 +109,14 @@ export {
   getCaptionImageEmbeddings,
 } from '@/infrastructure/storage/workspace-fs/captions'
 
+// Embedded text-subtitle track cache (parsed once per source fingerprint)
+export {
+  getEmbeddedSubtitleSidecar,
+  saveEmbeddedSubtitleSidecar,
+  deleteEmbeddedSubtitleSidecar,
+  type EmbeddedSubtitleSidecar,
+} from '@/infrastructure/storage/workspace-fs/embedded-subtitles'
+
 // Scene-detection results
 export {
   getScenes,

@@ -133,6 +133,19 @@ export function convertTimelineToComposition(
           adjustedItem.sourceStart = (item.sourceStart || 0) + additionalTrimStart
         }
 
+        if (item.type === 'subtitle' && (additionalTrimStart > 0 || additionalTrimEnd > 0)) {
+          const trimStartSeconds = additionalTrimStart / fps
+          const trimmedDurationSeconds = newDuration / fps
+          const subtitleItem = adjustedItem as typeof item
+          subtitleItem.cues = item.cues
+            .map((cue) => ({
+              ...cue,
+              startSeconds: Math.max(0, cue.startSeconds - trimStartSeconds),
+              endSeconds: Math.min(trimmedDurationSeconds, cue.endSeconds - trimStartSeconds),
+            }))
+            .filter((cue) => cue.text.trim().length > 0 && cue.endSeconds > cue.startSeconds)
+        }
+
         return adjustedItem
       })
 

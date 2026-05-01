@@ -27,6 +27,8 @@ export interface ExtendedExportSettings extends ExportSettings {
   mode: ExportMode
   videoContainer?: VideoContainer
   audioContainer?: AudioContainer
+  /** Embed timeline subtitle segments as a soft subtitle track when the container supports it. */
+  embedSubtitles?: boolean
   /** When true, ignores in/out points and exports the full timeline */
   renderWholeProject?: boolean
 }

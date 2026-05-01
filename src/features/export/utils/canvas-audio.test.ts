@@ -56,7 +56,7 @@ vi.mock('mediabunny', () => {
   }
 })
 
-import { extractAudioSegments, processAudio } from './canvas-audio'
+import { downmixToOutputChannels, extractAudioSegments, processAudio } from './canvas-audio'
 
 function makeTrack(params: {
   id: string
@@ -813,5 +813,55 @@ describe('extractAudioSegments', () => {
       expect.objectContaining({ lowGainDb: 4 }),
       expect.objectContaining({ highGainDb: 3, outputGainDb: 2 }),
     ])
+  })
+})
+
+describe('downmixToOutputChannels', () => {
+  it('passes channel data through when source and target match', () => {
+    const left = new Float32Array([1, 2, 3])
+    const right = new Float32Array([4, 5, 6])
+    const out = downmixToOutputChannels([left, right], 2)
+    expect(out).toHaveLength(2)
+    expect(Array.from(out[0]!)).toEqual([1, 2, 3])
+    expect(Array.from(out[1]!)).toEqual([4, 5, 6])
+  })
+
+  it('duplicates a mono source when expanding to stereo', () => {
+    const mono = new Float32Array([0.5, -0.5])
+    const out = downmixToOutputChannels([mono], 2)
+    expect(out[0]).toBe(out[1])
+    expect(Array.from(out[0]!)).toEqual([0.5, -0.5])
+  })
+
+  it('downmixes 5.1 to stereo using ITU-R BS.775 coefficients with no LFE', () => {
+    // 5.1 channel order: L, R, C, LFE, Ls, Rs.
+    const channels = [
+      new Float32Array([1]), // L
+      new Float32Array([0]), // R
+      new Float32Array([1]), // C
+      new Float32Array([1]), // LFE — must be ignored
+      new Float32Array([1]), // Ls
+      new Float32Array([0]), // Rs
+    ]
+    const [Lo, Ro] = downmixToOutputChannels(channels, 2)
+    // Lo = L + sqrt(0.5)*C + sqrt(0.5)*Ls = 1 + .707 + .707 ≈ 2.414
+    expect(Lo![0]).toBeCloseTo(1 + Math.SQRT1_2 + Math.SQRT1_2, 5)
+    // Ro = R + sqrt(0.5)*C + sqrt(0.5)*Rs = 0 + .707 + 0
+    expect(Ro![0]).toBeCloseTo(Math.SQRT1_2, 5)
+  })
+
+  it('drops the center channel into both stereo halves equally', () => {
+    // Center-only signal — no L/R/Ls/Rs energy.
+    const channels = [
+      new Float32Array([0]), // L
+      new Float32Array([0]), // R
+      new Float32Array([1]), // C — dialogue
+      new Float32Array([0]), // LFE
+      new Float32Array([0]), // Ls
+      new Float32Array([0]), // Rs
+    ]
+    const [Lo, Ro] = downmixToOutputChannels(channels, 2)
+    expect(Lo![0]).toBeCloseTo(Math.SQRT1_2, 5)
+    expect(Ro![0]).toBeCloseTo(Math.SQRT1_2, 5)
   })
 })

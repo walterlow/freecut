@@ -252,13 +252,13 @@ describe('GlyphAtlasTextPipeline', () => {
       360,
     )
     const vertexData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
-    expect(vertexData[0]).toBeCloseTo(0)
-    expect(vertexData[1]).toBeCloseTo(0)
+    expect(vertexData[0]).toBeCloseTo(314)
+    expect(vertexData[1]).toBeCloseTo(61.2)
     expect(vertexData[4]).toBeCloseTo(0x11 / 255)
     expect(vertexData[5]).toBeCloseTo(0x22 / 255)
     expect(vertexData[6]).toBeCloseTo(0x33 / 255)
     expect(vertexData[8]).toBeCloseTo(1)
-    expect(vertexData[13]).toBeCloseTo(8)
+    expect(vertexData[13]).toBeCloseTo(6)
     expect(vertexData[124]).toBeCloseTo(1)
     expect(vertexData[125]).toBeCloseTo(1)
     expect(vertexData[126]).toBeCloseTo(1)

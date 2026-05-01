@@ -101,13 +101,7 @@ export type FlipDirection = 'from-left' | 'from-right' | 'from-top' | 'from-bott
  * Timing function for transitions.
  * Extended with standard CSS easing names.
  */
-export type TransitionTiming =
-  | 'linear'
-  | 'spring'
-  | 'ease-in'
-  | 'ease-out'
-  | 'ease-in-out'
-  | 'cubic-bezier'
+export type TransitionTiming = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'cubic-bezier'
 
 /**
  * Bezier control points for cubic-bezier timing

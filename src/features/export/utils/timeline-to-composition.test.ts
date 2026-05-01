@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import type { TimelineTrack, VideoItem } from '@/types/timeline'
+import type { SubtitleSegmentItem, TimelineTrack, VideoItem } from '@/types/timeline'
 import { convertTimelineToComposition } from './timeline-to-composition'
 
 describe('convertTimelineToComposition IO marker conversion', () => {
@@ -56,5 +56,66 @@ describe('convertTimelineToComposition IO marker conversion', () => {
     expect(exportedItem.offset).toBe(90)
     expect(exportedItem.durationInFrames).toBe(100)
     expect(composition.durationInFrames).toBe(100)
+  })
+
+  it('shifts and clips subtitle segment cues when IO range trims the segment', () => {
+    const fps = 30
+    const inPoint = 45
+    const outPoint = 120
+
+    const track: TimelineTrack = {
+      id: 'track-subtitles',
+      name: 'Subtitles',
+      height: 72,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 0,
+      items: [],
+    }
+
+    const item: SubtitleSegmentItem = {
+      id: 'subtitle-1',
+      type: 'subtitle',
+      trackId: 'track-subtitles',
+      from: 30,
+      durationInFrames: 120,
+      label: 'Transcript',
+      mediaId: 'media-1',
+      source: {
+        type: 'transcript',
+        mediaId: 'media-1',
+        clipId: 'clip-1',
+      },
+      cues: [
+        { id: 'cue-before', startSeconds: 0, endSeconds: 0.25, text: 'Before range' },
+        { id: 'cue-overlap-start', startSeconds: 0.25, endSeconds: 1, text: 'Starts before' },
+        { id: 'cue-inside', startSeconds: 1.5, endSeconds: 2, text: 'Inside' },
+        { id: 'cue-overlap-end', startSeconds: 2.75, endSeconds: 4, text: 'Ends after' },
+      ],
+      color: '#ffffff',
+    }
+
+    const composition = convertTimelineToComposition(
+      [track],
+      [item],
+      [],
+      fps,
+      1920,
+      1080,
+      inPoint,
+      outPoint,
+    )
+
+    const exportedItem = composition.tracks[0]!.items[0] as SubtitleSegmentItem
+
+    expect(exportedItem.from).toBe(0)
+    expect(exportedItem.durationInFrames).toBe(75)
+    expect(exportedItem.cues).toEqual([
+      { id: 'cue-overlap-start', startSeconds: 0, endSeconds: 0.5, text: 'Starts before' },
+      { id: 'cue-inside', startSeconds: 1, endSeconds: 1.5, text: 'Inside' },
+      { id: 'cue-overlap-end', startSeconds: 2.25, endSeconds: 2.5, text: 'Ends after' },
+    ])
   })
 })

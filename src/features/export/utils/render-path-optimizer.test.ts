@@ -2,7 +2,21 @@ import { describe, expect, it } from 'vite-plus/test'
 import { resolveFrameRenderOptimization } from './render-path-optimizer'
 
 describe('resolveFrameRenderOptimization', () => {
-  it('direct-renders a single unmasked, non-transition task', () => {
+  it('direct-renders a single unmasked, non-transition task without gpu effects', () => {
+    expect(
+      resolveFrameRenderOptimization({
+        activeMaskCount: 0,
+        activeTransitionCount: 0,
+        hasGpuEffects: false,
+        renderTaskCount: 1,
+      }),
+    ).toEqual({
+      shouldDirectRenderSingleTask: true,
+      shouldUseDeferredGpuBatch: false,
+    })
+  })
+
+  it('uses deferred GPU batching even for a single gpu-effect task', () => {
     expect(
       resolveFrameRenderOptimization({
         activeMaskCount: 0,
@@ -11,8 +25,8 @@ describe('resolveFrameRenderOptimization', () => {
         renderTaskCount: 1,
       }),
     ).toEqual({
-      shouldDirectRenderSingleTask: true,
-      shouldUseDeferredGpuBatch: false,
+      shouldDirectRenderSingleTask: false,
+      shouldUseDeferredGpuBatch: true,
     })
   })
 

@@ -8,7 +8,13 @@ import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
 import { createLogger } from '@/shared/logging/logger'
 import type { MediaTranscript, MediaTranscriptModel } from '@/types/storage'
-import type { AudioItem, TextItem, TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import type {
+  AudioItem,
+  SubtitleSegmentItem,
+  TimelineItem,
+  TimelineTrack,
+  VideoItem,
+} from '@/types/timeline'
 import type { TranscriptSegment, TranscribeOptions } from '../transcription/types'
 import {
   getDefaultMediaTranscriptionAdapter,
@@ -16,7 +22,7 @@ import {
 } from '../transcription/registry'
 import { mediaLibraryService } from './media-library-service'
 import {
-  buildCaptionTextItems,
+  buildSubtitleSegmentForClip,
   buildCaptionTrackAbove,
   findReplaceableCaptionItemsForClip,
   findCompatibleCaptionTrackForRanges,
@@ -400,7 +406,7 @@ class MediaTranscriptionService {
         )
       : new Set<string>()
     const plannedItems = timeline.items.filter((item) => !generatedCaptionIdsToRemove.has(item.id))
-    const insertedItems: TextItem[] = []
+    const insertedItems: SubtitleSegmentItem[] = []
 
     for (const clip of targetClips) {
       const clipRange = getCaptionRangeForClip(clip, transcript.segments, timeline.fps)
@@ -433,25 +439,35 @@ class MediaTranscriptionService {
         newTracks.sort((a, b) => a.order - b.order)
       }
 
-      const clipCaptionItems = buildCaptionTextItems({
-        mediaId,
+      const clipCaptionItem = buildSubtitleSegmentForClip({
         trackId: targetTrack.id,
-        segments: transcript.segments,
+        cues: transcript.segments.map((segment, index) => ({
+          id: `transcript-${clip.id}-${index}`,
+          startSeconds: segment.start,
+          endSeconds: segment.end,
+          text: segment.text,
+        })),
         clip,
         timelineFps: timeline.fps,
         canvasWidth,
         canvasHeight,
+        label: 'Transcript',
+        source: {
+          type: 'transcript',
+          mediaId,
+          clipId: clip.id,
+        },
         styleTemplate: existingGeneratedCaptions[0]
           ? getCaptionTextItemTemplate(existingGeneratedCaptions[0])
           : undefined,
       })
 
-      if (clipCaptionItems.length === 0) {
+      if (!clipCaptionItem) {
         continue
       }
 
-      insertedItems.push(...clipCaptionItems)
-      plannedItems.push(...clipCaptionItems)
+      insertedItems.push(clipCaptionItem)
+      plannedItems.push(clipCaptionItem)
     }
 
     if (insertedItems.length === 0 && generatedCaptionIdsToRemove.size === 0) {

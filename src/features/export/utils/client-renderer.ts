@@ -12,7 +12,7 @@
  * 5. Finalize and return the video blob
  */
 
-import type { ExportSettings } from '@/types/export'
+import type { ExportSettings, ExtendedExportSettings } from '@/types/export'
 
 // Codec mapping for mediabunny
 type ClientVideoCodec = 'avc' | 'hevc' | 'vp8' | 'vp9' | 'av1'
@@ -41,6 +41,7 @@ export interface ClientExportSettings {
   audioBitrate?: number
   videoBitrate?: number
   sampleRate?: number // For audio exports (default: 48000)
+  embedSubtitles?: boolean
 }
 
 export interface RenderProgress {
@@ -155,9 +156,17 @@ export function selectFallbackVideoCodec(
 /**
  * Maps export settings to client-compatible settings
  */
-export function mapToClientSettings(settings: ExportSettings, fps: number): ClientExportSettings {
+export function mapToClientSettings(
+  settings: ExportSettings | ExtendedExportSettings,
+  fps: number,
+): ClientExportSettings {
   const codec = mapExportCodecToClientCodec(settings.codec)
   const container = getPreferredContainerForCodec(codec)
+  // `embedSubtitles` only lives on the extended settings — a base
+  // ExportSettings caller leaves it undefined which downstream code reads
+  // as "do not embed".
+  const embedSubtitles =
+    'embedSubtitles' in settings ? (settings as ExtendedExportSettings).embedSubtitles : undefined
 
   return {
     mode: 'video',
@@ -168,6 +177,7 @@ export function mapToClientSettings(settings: ExportSettings, fps: number): Clie
     fps,
     videoBitrate: getVideoBitrateForQuality(settings.quality),
     audioBitrate: 192_000, // 192 kbps
+    embedSubtitles,
   }
 }
 

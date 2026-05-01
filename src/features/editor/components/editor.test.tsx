@@ -155,8 +155,20 @@ vi.mock('@/features/editor/deps/media-library', () => {
       loadMediaItems: mocks.loadMediaItems,
     }),
   })
+  // Lazily-mounted picker host reads `media !== null` to decide whether to
+  // render — return null so the host stays unmounted in editor tests.
+  const useEmbeddedSubtitlePickerStore = Object.assign(
+    (selector: (state: { media: null }) => unknown) => selector({ media: null }),
+    { getState: () => ({ media: null, blob: null }) },
+  )
+  // Same idea for the cache-only scan progress dialog used by the media
+  // library "Extract Embedded Subtitles" flow.
+  const useSubtitleScanProgressStore = Object.assign(
+    (selector: (state: { open: false }) => unknown) => selector({ open: false }),
+    { getState: () => ({ open: false }) },
+  )
 
-  return { useMediaLibraryStore }
+  return { useMediaLibraryStore, useEmbeddedSubtitlePickerStore, useSubtitleScanProgressStore }
 })
 
 vi.mock('@/features/editor/deps/settings', () => ({

@@ -16,6 +16,7 @@ import type {
   TextItem,
   ShapeItem,
   CompositionItem,
+  SubtitleSegmentItem,
 } from '@/types/timeline'
 import type { ItemKeyframes } from '@/types/keyframe'
 import type { ItemEffect } from '@/types/effects'
@@ -23,6 +24,7 @@ import { createLogger } from '@/shared/logging/logger'
 import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts'
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope'
 import { getTextItemSpans } from '@/shared/utils/text-item-spans'
+import { parseSubtitleCueText } from '@/shared/utils/subtitle-cue-format'
 
 // Subsystem imports
 import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes'
@@ -449,6 +451,9 @@ async function renderItemContent(
       break
     case 'text':
       renderTextItem(ctx, effectiveItem as TextItem, transform, rctx)
+      break
+    case 'subtitle':
+      renderSubtitleSegmentItem(ctx, effectiveItem as SubtitleSegmentItem, transform, frame, rctx)
       break
     case 'shape':
       renderShape(ctx, effectiveItem as ShapeItem, resolveItemTransform(transform), {
@@ -1321,17 +1326,6 @@ function renderTextItem(
     ctx.clip()
   }
 
-  if (item.backgroundColor) {
-    ctx.fillStyle = item.backgroundColor
-    if (backgroundRadius > 0) {
-      ctx.beginPath()
-      ctx.roundRect(itemLeft, itemTop, transform.width, transform.height, backgroundRadius)
-      ctx.fill()
-    } else {
-      ctx.fillRect(itemLeft, itemTop, transform.width, transform.height)
-    }
-  }
-
   const availableWidth = Math.max(1, transform.width - padding * 2)
   const spans = getTextItemSpans(item)
   const renderedLines = spans.flatMap((span) => {
@@ -1362,6 +1356,7 @@ function renderTextItem(
 
     return lines.map((line) => ({
       text: line,
+      width: textMeasureCache.measure(ctx, line, spanLetterSpacing),
       fontSize: spanFontSize,
       fontFamily: spanFontFamily,
       fontStyle: spanFontStyle,
@@ -1391,6 +1386,42 @@ function renderTextItem(
     default:
       textBlockTop = itemTop + padding + (availableHeight - totalTextHeight) / 2
       break
+  }
+
+  if (item.backgroundColor && renderedLines.length > 0) {
+    const maxLineWidth = Math.max(...renderedLines.map((line) => line.width))
+    let backgroundCenterX: number
+    switch (textAlign) {
+      case 'left':
+        backgroundCenterX = itemLeft + padding + maxLineWidth / 2
+        break
+      case 'right':
+        backgroundCenterX = itemLeft + transform.width - padding - maxLineWidth / 2
+        break
+      case 'center':
+      default:
+        backgroundCenterX = itemLeft + transform.width / 2
+        break
+    }
+    const backgroundWidth = Math.min(transform.width, maxLineWidth + padding * 2)
+    const backgroundHeight = totalTextHeight + padding * 2
+    const backgroundLeft = backgroundCenterX - backgroundWidth / 2
+    const backgroundTop = textBlockTop - padding
+
+    ctx.fillStyle = item.backgroundColor
+    if (backgroundRadius > 0) {
+      ctx.beginPath()
+      ctx.roundRect(
+        backgroundLeft,
+        backgroundTop,
+        backgroundWidth,
+        backgroundHeight,
+        backgroundRadius,
+      )
+      ctx.fill()
+    } else {
+      ctx.fillRect(backgroundLeft, backgroundTop, backgroundWidth, backgroundHeight)
+    }
   }
 
   if (item.textShadow) {
@@ -1466,6 +1497,78 @@ function renderTextItem(
   }
 
   ctx.restore()
+}
+
+/**
+ * Render a {@link SubtitleSegmentItem}: find the active cue at the current
+ * frame, then synthesize an ephemeral TextItem and reuse {@link renderTextItem}
+ * so the export pipeline picks up font/shadow/stroke/wrap behavior with no
+ * duplicated logic. Cues are stored segment-relative so we measure from
+ * `frame - item.from`, not absolute timeline frames.
+ */
+function renderSubtitleSegmentItem(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: SubtitleSegmentItem,
+  transform: { x: number; y: number; width: number; height: number },
+  frame: number,
+  rctx: ItemRenderContext,
+): void {
+  const fps = rctx.canvasSettings.fps || 30
+  const secondsIntoSegment = (frame - item.from) / fps
+  const activeCue = findActiveSubtitleCue(item.cues, secondsIntoSegment)
+  if (!activeCue) return
+  const parsed = parseSubtitleCueText(activeCue.text)
+  if (parsed.isEmpty) return
+
+  const ephemeralText: TextItem = {
+    id: item.id,
+    type: 'text',
+    trackId: item.trackId,
+    from: item.from,
+    durationInFrames: item.durationInFrames,
+    label: item.label,
+    mediaId: item.mediaId,
+    text: parsed.plainText,
+    textSpans: parsed.spans,
+    fontSize: item.fontSize,
+    fontFamily: item.fontFamily,
+    fontWeight: item.fontWeight,
+    fontStyle: item.fontStyle,
+    underline: item.underline,
+    color: item.color,
+    backgroundColor: item.backgroundColor,
+    backgroundRadius: item.backgroundRadius,
+    textAlign: parsed.alignment?.textAlign ?? item.textAlign,
+    verticalAlign: parsed.alignment?.verticalAlign ?? item.verticalAlign,
+    lineHeight: item.lineHeight,
+    letterSpacing: item.letterSpacing,
+    textPadding: item.textPadding,
+    textShadow: item.textShadow,
+    stroke: item.stroke,
+    transform: item.transform,
+  }
+  renderTextItem(ctx, ephemeralText, transform, rctx)
+}
+
+function findActiveSubtitleCue<T extends { startSeconds: number; endSeconds: number }>(
+  cues: readonly T[],
+  seconds: number,
+): T | null {
+  if (cues.length === 0) return null
+  let lo = 0
+  let hi = cues.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const cue = cues[mid]!
+    if (seconds < cue.startSeconds) {
+      hi = mid - 1
+    } else if (seconds >= cue.endSeconds) {
+      lo = mid + 1
+    } else {
+      return cue
+    }
+  }
+  return null
 }
 
 // ---------------------------------------------------------------------------

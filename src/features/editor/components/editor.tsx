@@ -38,6 +38,12 @@ import { ProjectUpgradeDialog } from './project-upgrade-dialog'
 import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog'
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog'
 import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog'
+import {
+  importEmbeddedSubtitleTrackPickerHost,
+  importSubtitleScanProgressDialog,
+  useEmbeddedSubtitlePickerStore,
+  useSubtitleScanProgressStore,
+} from '@/features/editor/deps/media-library'
 const logger = createLogger('Editor')
 const EDITOR_PROJECT_ROUTE_ID = '/editor/$projectId'
 const LazyExportDialog = lazy(() =>
@@ -63,6 +69,16 @@ const LazyTtsGenerateDialog = lazy(() =>
 const LazyProjectMediaMatchDialog = lazy(() =>
   import('@/features/editor/components/project-media-match-dialog').then((module) => ({
     default: module.ProjectMediaMatchDialog,
+  })),
+)
+const LazyEmbeddedSubtitleTrackPickerHost = lazy(() =>
+  importEmbeddedSubtitleTrackPickerHost().then((module) => ({
+    default: module.EmbeddedSubtitleTrackPickerHost,
+  })),
+)
+const LazySubtitleScanProgressDialog = lazy(() =>
+  importSubtitleScanProgressDialog().then((module) => ({
+    default: module.SubtitleScanProgressDialog,
   })),
 )
 
@@ -164,6 +180,8 @@ const EditorDialogHost = memo(function EditorDialogHost({ projectId }: { project
   const projectMediaMatchDialogOpen = useProjectMediaMatchDialogStore(
     (s) => s.isOpen && s.projectId === projectId,
   )
+  const embeddedSubtitlePickerOpen = useEmbeddedSubtitlePickerStore((s) => s.media !== null)
+  const subtitleScanProgressOpen = useSubtitleScanProgressStore((s) => s.open)
 
   return (
     <>
@@ -180,6 +198,16 @@ const EditorDialogHost = memo(function EditorDialogHost({ projectId }: { project
       {ttsGenerateDialogOpen && (
         <Suspense fallback={null}>
           <LazyTtsGenerateDialog />
+        </Suspense>
+      )}
+      {embeddedSubtitlePickerOpen && (
+        <Suspense fallback={null}>
+          <LazyEmbeddedSubtitleTrackPickerHost />
+        </Suspense>
+      )}
+      {subtitleScanProgressOpen && (
+        <Suspense fallback={null}>
+          <LazySubtitleScanProgressDialog />
         </Suspense>
       )}
     </>

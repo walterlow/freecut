@@ -298,4 +298,60 @@ describe('TransitionPanel', () => {
     expect(screen.getByText('Warp')).toBeInTheDocument()
     expect(screen.getByText('1.4')).toBeInTheDocument()
   })
+
+  it('resets numeric parameters to their transition defaults', async () => {
+    useTimelineStore.setState({
+      fps: 30,
+      items: [LEFT_CLIP, RIGHT_CLIP],
+      transitions: [
+        {
+          ...TRANSITION,
+          presentation: 'smoothCut',
+          properties: { strength: 1.4 },
+        },
+      ],
+    } as Partial<ReturnType<typeof useTimelineStore.getState>>)
+
+    render(<TransitionPanel />)
+
+    const resetButton = screen.getByRole('button', { name: 'Reset Warp' })
+    expect(resetButton).toBeEnabled()
+
+    fireEvent.click(resetButton)
+
+    await waitFor(() => {
+      expect(
+        useTimelineStore.getState().transitions.find((transition) => transition.id === 'tr-1')
+          ?.properties?.strength,
+      ).toBe(0.9)
+    })
+  })
+
+  it('resets color parameters to their transition defaults', async () => {
+    useTimelineStore.setState({
+      fps: 30,
+      items: [LEFT_CLIP, RIGHT_CLIP],
+      transitions: [
+        {
+          ...TRANSITION,
+          presentation: 'dipToColorDissolve',
+          properties: { color: [1, 0, 0] },
+        },
+      ],
+    } as Partial<ReturnType<typeof useTimelineStore.getState>>)
+
+    render(<TransitionPanel />)
+
+    const resetButton = screen.getByRole('button', { name: 'Reset Color' })
+    expect(resetButton).toBeEnabled()
+
+    fireEvent.click(resetButton)
+
+    await waitFor(() => {
+      expect(
+        useTimelineStore.getState().transitions.find((transition) => transition.id === 'tr-1')
+          ?.properties?.color,
+      ).toEqual([0, 0, 0])
+    })
+  })
 })

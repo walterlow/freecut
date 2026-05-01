@@ -10,6 +10,7 @@ import { PitchCorrectedAudio } from './pitch-corrected-audio'
 import { GifPlayer } from './gif-player'
 import { ItemVisualWrapper } from './item-visual-wrapper'
 import { TextContent } from './text-content'
+import { SubtitleSegmentContent } from './subtitle-segment-content'
 import { ShapeContent } from './shape-content'
 import { VideoContent } from './video-content'
 import { CompositionContent } from './composition-content'
@@ -557,6 +558,14 @@ export const Item = React.memo<ItemProps>(
     // adjustment items render nothing visually (they apply effects to other items)
     if (item.type === 'adjustment') {
       return null
+    }
+
+    if (item.type === 'subtitle') {
+      return (
+        <ItemVisualWrapper item={item} masks={masks}>
+          <SubtitleSegmentContent item={item} />
+        </ItemVisualWrapper>
+      )
     }
 
     throw new Error(`Unknown item type: ${JSON.stringify(item)}`)

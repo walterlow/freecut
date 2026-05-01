@@ -197,6 +197,124 @@ describe('buildPreviewTransitionData', () => {
     })
   })
 
+  it('marks compound clip transitions as complex because they cannot use DOM video pinning', () => {
+    const track: TimelineTrack = {
+      id: 'track-1',
+      name: 'Video',
+      height: 80,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 1,
+      items: [
+        {
+          id: 'compound-left',
+          trackId: 'track-1',
+          type: 'composition',
+          label: 'Compound',
+          from: 0,
+          durationInFrames: 40,
+          compositionId: 'comp-1',
+          compositionWidth: 1920,
+          compositionHeight: 1080,
+        },
+        {
+          id: 'right',
+          trackId: 'track-1',
+          type: 'video',
+          src: 'right.mp4',
+          label: 'Right',
+          from: 40,
+          durationInFrames: 40,
+        },
+      ],
+    }
+
+    const transition: Transition = {
+      id: 'transition-compound',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'compound-left',
+      rightClipId: 'right',
+      trackId: 'track-1',
+      durationInFrames: 10,
+    }
+
+    const result = buildPreviewTransitionData({
+      fps: 30,
+      transitions: [transition],
+      fastScrubScaledTracks: [track],
+    })
+
+    expect(result.playbackTransitionWindows[0]).toMatchObject({
+      startFrame: 35,
+      endFrame: 45,
+    })
+    expect(result.playbackTransitionComplexStartFrames.has(35)).toBe(true)
+  })
+
+  it('marks corner-pinned transitions as complex to keep playback on the rendered path', () => {
+    const track: TimelineTrack = {
+      id: 'track-1',
+      name: 'Titles',
+      height: 80,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 1,
+      items: [
+        {
+          id: 'left',
+          trackId: 'track-1',
+          type: 'text',
+          label: 'Pinned Title',
+          text: 'Headline',
+          from: 0,
+          durationInFrames: 40,
+          fontSize: 96,
+          color: '#ffffff',
+          cornerPin: {
+            topLeft: [0, 0],
+            topRight: [24, -8],
+            bottomRight: [0, 0],
+            bottomLeft: [-18, 12],
+          },
+        },
+        {
+          id: 'right',
+          trackId: 'track-1',
+          type: 'video',
+          src: 'right.mp4',
+          label: 'Right',
+          from: 40,
+          durationInFrames: 40,
+        },
+      ],
+    }
+
+    const transition: Transition = {
+      id: 'transition-corner-pin',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'left',
+      rightClipId: 'right',
+      trackId: 'track-1',
+      durationInFrames: 10,
+    }
+
+    const result = buildPreviewTransitionData({
+      fps: 30,
+      transitions: [transition],
+      fastScrubScaledTracks: [track],
+    })
+
+    expect(result.playbackTransitionComplexStartFrames.has(35)).toBe(true)
+  })
+
   it('does not mark transitions with stale mask blend modes as complex', () => {
     const track: TimelineTrack = {
       id: 'track-1',

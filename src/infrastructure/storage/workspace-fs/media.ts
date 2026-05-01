@@ -59,7 +59,7 @@ async function restoreFileHandle(serialized: SerializedMedia): Promise<MediaMeta
  *                    (user revoked access at the OS/picker level).
  * - `missing`      — handle can't resolve to a file (renamed, moved, or
  *                    deleted on disk).
- * - `changed`      — handle resolves but size or mtime differ from what
+ * - `changed`      — handle resolves but the byte size differs from what
  *                    we recorded. Callers should offer a relink flow
  *                    because downstream caches (thumbnails, waveforms)
  *                    may no longer match the current file bytes.
@@ -77,7 +77,10 @@ export type MediaHandleValidation =
  * Calls `handle.getFile()` which forces the browser to resolve the
  * underlying file on disk. If the user renamed/moved/deleted the file
  * externally, this throws NotFoundError. If the file exists but size or
- * mtime changed, we flag `changed` so callers can rebuild caches.
+ * size changed, we flag `changed` so callers can rebuild caches. We do
+ * not treat mtime-only drift as broken because network filesystems can
+ * normalize or wobble modification timestamps while returning the same
+ * underlying file bytes.
  *
  * Cheap enough to call on project open for every handle-backed media
  * (one stat per file). Do NOT call in hot paths.
@@ -90,12 +93,7 @@ export async function validateMediaHandle(mediaId: string): Promise<MediaHandleV
   try {
     const file = await handle.getFile()
     const expectedSize = record.lastSeenSize
-    const expectedMtime = record.lastSeenMtime
-    if (
-      typeof expectedSize === 'number' &&
-      typeof expectedMtime === 'number' &&
-      (file.size !== expectedSize || file.lastModified !== expectedMtime)
-    ) {
+    if (typeof expectedSize === 'number' && file.size !== expectedSize) {
       return {
         kind: 'changed',
         currentSize: file.size,

@@ -5,6 +5,7 @@ import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/trans
 import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner'
 import { shouldForceContinuousPreviewOverlay } from '../hooks/use-gpu-effects-overlay'
 import { useCompositionsStore } from '@/features/preview/deps/timeline-store'
+import { hasCornerPin } from '@/features/preview/deps/composition-runtime'
 
 interface UsePreviewTransitionModelParams {
   fps: number
@@ -185,17 +186,15 @@ export function buildPreviewTransitionData({
     (!(item.type === 'shape' && item.isMask) &&
       item.blendMode !== undefined &&
       item.blendMode !== 'normal')
+  const needsRenderedTransition = (item: TimelineItem) =>
+    item.type === 'composition' ||
+    hasExpensiveVisuals(item) ||
+    hasCornerPin(item.cornerPin) ||
+    Math.abs((item.speed ?? 1) - 1) > 0.001
 
   const playbackTransitionComplexStartFrames = new Set<number>()
   const playbackTransitionOverlayWindows = playbackTransitionWindows.map((window) => {
-    const leftSpeed = window.leftClip.speed ?? 1
-    const rightSpeed = window.rightClip.speed ?? 1
-    if (
-      hasExpensiveVisuals(window.leftClip) ||
-      hasExpensiveVisuals(window.rightClip) ||
-      Math.abs(leftSpeed - 1) > 0.001 ||
-      Math.abs(rightSpeed - 1) > 0.001
-    ) {
+    if (needsRenderedTransition(window.leftClip) || needsRenderedTransition(window.rightClip)) {
       playbackTransitionComplexStartFrames.add(window.startFrame)
     }
 

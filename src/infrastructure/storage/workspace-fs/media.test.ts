@@ -23,7 +23,14 @@ vi.mock('@/shared/logging/logger', () => ({
   createOperationId: () => 'op-test',
 }))
 
-import { createMedia, deleteMedia, getAllMedia, getMedia, updateMedia } from './media'
+import {
+  createMedia,
+  deleteMedia,
+  getAllMedia,
+  getMedia,
+  updateMedia,
+  validateMediaHandle,
+} from './media'
 import { setWorkspaceRoot } from './root'
 import { asHandle, createRoot, readFileText } from './__tests__/in-memory-handle'
 
@@ -137,5 +144,45 @@ describe('workspace-fs media', () => {
     )
     const loaded = await getMedia('m1')
     expect(loaded!.fileHandle).toBe(fakeHandle)
+  })
+
+  it('does not mark handle-backed media changed for mtime-only drift', async () => {
+    const fileHandle = {
+      getFile: vi.fn(async () => ({ size: 1000, lastModified: 2222 })),
+    } as unknown as FileSystemFileHandle
+    handlesMocks.getHandle.mockResolvedValue({
+      kind: 'media',
+      id: 'm1',
+      handle: fileHandle,
+      name: 'network-drive.mp4',
+      key: 'media:m1',
+      pickedAt: 0,
+      lastSeenSize: 1000,
+      lastSeenMtime: 1111,
+    })
+
+    await expect(validateMediaHandle('m1')).resolves.toEqual({ kind: 'ok' })
+  })
+
+  it('marks handle-backed media changed when byte size differs', async () => {
+    const fileHandle = {
+      getFile: vi.fn(async () => ({ size: 1200, lastModified: 2222 })),
+    } as unknown as FileSystemFileHandle
+    handlesMocks.getHandle.mockResolvedValue({
+      kind: 'media',
+      id: 'm1',
+      handle: fileHandle,
+      name: 'changed.mp4',
+      key: 'media:m1',
+      pickedAt: 0,
+      lastSeenSize: 1000,
+      lastSeenMtime: 1111,
+    })
+
+    await expect(validateMediaHandle('m1')).resolves.toEqual({
+      kind: 'changed',
+      currentSize: 1200,
+      currentMtime: 2222,
+    })
   })
 })

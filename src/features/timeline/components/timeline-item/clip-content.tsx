@@ -532,6 +532,23 @@ export const ClipContent = memo(function ClipContent({
     )
   }
 
+  // Subtitle segment - label + cue count + first-cue snippet so the strip is
+  // skimmable without expanding into a full-text preview that won't fit.
+  if (item.type === 'subtitle') {
+    const cueCount = item.cues.length
+    const firstCueText = item.cues[0]?.text ?? ''
+    return (
+      <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
+        <div className="text-[10px] text-muted-foreground truncate">
+          {`Subtitles · ${cueCount} cue${cueCount === 1 ? '' : 's'}`}
+        </div>
+        <div className="text-xs font-medium truncate flex-1">
+          {firstCueText || item.label || 'Subtitles'}
+        </div>
+      </div>
+    )
+  }
+
   // Adjustment layer - show effects summary
   if (item.type === 'adjustment') {
     const enabledEffectsCount = item.effects?.filter((e) => e.enabled).length ?? 0

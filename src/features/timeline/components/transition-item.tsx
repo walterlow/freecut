@@ -515,6 +515,16 @@ export const TransitionItem = memo(function TransitionItem({
   // Determine cursor based on hover state
   const cursor = hoveredEdge ? 'ew-resize' : 'pointer'
   const showOrangeBridge = isSelected || isBridgeHovered || hoveredEdge !== null
+  // Persisted alignment can drift outside [0,1] — sanitize before deciding
+  // which resize handles to expose so a bad value never hides both handles
+  // or shows a handle that has no slack to drag.
+  const rawAlignment = transition.alignment
+  const alignment =
+    typeof rawAlignment === 'number' && Number.isFinite(rawAlignment)
+      ? Math.max(0, Math.min(1, rawAlignment))
+      : 0.5
+  const showLeftResizeHandle = alignment > 0
+  const showRightResizeHandle = alignment < 1
   const leftSelectWidth = Math.max(
     0,
     position.cutOffset - CUT_PASS_THROUGH_ZONE / 2 - BRIDGE_SELECT_SIDE_INSET,
@@ -609,39 +619,41 @@ export const TransitionItem = memo(function TransitionItem({
             />
           )}
 
-          {/* Left resize handle (invisible hit zone, cursor-only feedback) */}
-          <div
-            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-l pointer-events-auto"
-            data-transition-hit-zone="left-edge"
-            onMouseEnter={() => {
-              setHoveredEdge('left')
-              setIsBridgeHovered(true)
-            }}
-            onMouseLeave={() => {
-              if (!isResizing) setHoveredEdge(null)
-              setIsBridgeHovered(false)
-            }}
-            onMouseDown={(e) => handleResizeMouseDown(e, 'left')}
-            onMouseUp={stopEvent}
-            onClick={stopEvent}
-          />
+          {showLeftResizeHandle && (
+            <div
+              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-l pointer-events-auto"
+              data-transition-hit-zone="left-edge"
+              onMouseEnter={() => {
+                setHoveredEdge('left')
+                setIsBridgeHovered(true)
+              }}
+              onMouseLeave={() => {
+                if (!isResizing) setHoveredEdge(null)
+                setIsBridgeHovered(false)
+              }}
+              onMouseDown={(e) => handleResizeMouseDown(e, 'left')}
+              onMouseUp={stopEvent}
+              onClick={stopEvent}
+            />
+          )}
 
-          {/* Right resize handle (invisible hit zone, cursor-only feedback) */}
-          <div
-            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-r pointer-events-auto"
-            data-transition-hit-zone="right-edge"
-            onMouseEnter={() => {
-              setHoveredEdge('right')
-              setIsBridgeHovered(true)
-            }}
-            onMouseLeave={() => {
-              if (!isResizing) setHoveredEdge(null)
-              setIsBridgeHovered(false)
-            }}
-            onMouseDown={(e) => handleResizeMouseDown(e, 'right')}
-            onMouseUp={stopEvent}
-            onClick={stopEvent}
-          />
+          {showRightResizeHandle && (
+            <div
+              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-r pointer-events-auto"
+              data-transition-hit-zone="right-edge"
+              onMouseEnter={() => {
+                setHoveredEdge('right')
+                setIsBridgeHovered(true)
+              }}
+              onMouseLeave={() => {
+                if (!isResizing) setHoveredEdge(null)
+                setIsBridgeHovered(false)
+              }}
+              onMouseDown={(e) => handleResizeMouseDown(e, 'right')}
+              onMouseUp={stopEvent}
+              onClick={stopEvent}
+            />
+          )}
         </div>
       </ContextMenuTrigger>
 

@@ -9,14 +9,7 @@ import type { TransitionStyleCalculation } from '../engine'
 import type { TransitionDefinition, FlipDirection } from '@/types/transition'
 
 const ALL_DIRECTIONS: FlipDirection[] = ['from-left', 'from-right', 'from-top', 'from-bottom']
-const ALL_TIMINGS = [
-  'linear',
-  'spring',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'cubic-bezier',
-] as const
+const ALL_TIMINGS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const
 
 // ============================================================================
 // Flip

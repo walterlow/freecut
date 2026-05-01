@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vite-plus/test'
-import type { AudioItem, ShapeItem, TextItem, VideoItem } from '@/types/timeline'
+import type {
+  AudioItem,
+  ShapeItem,
+  SubtitleSegmentItem,
+  TextItem,
+  VideoItem,
+} from '@/types/timeline'
 import { useItemsStore } from './items-store'
 import { useTimelineSettingsStore } from './timeline-settings-store'
 import { timelineToSourceFrames } from '../utils/source-calculations'
@@ -42,6 +48,26 @@ function makeTextItem(overrides: Partial<TextItem> = {}): TextItem {
     durationInFrames: 30,
     label: 'Caption',
     text: 'Caption',
+    color: '#ffffff',
+    ...overrides,
+  }
+}
+
+function makeSubtitleItem(overrides: Partial<SubtitleSegmentItem> = {}): SubtitleSegmentItem {
+  return {
+    id: 'subtitle-1',
+    type: 'subtitle',
+    trackId: 'track-subtitle',
+    from: 0,
+    durationInFrames: 30,
+    label: 'Transcript',
+    mediaId: 'media-1',
+    source: {
+      type: 'transcript',
+      mediaId: 'media-1',
+      clipId: 'clip-1',
+    },
+    cues: [{ id: 'cue-1', startSeconds: 0, endSeconds: 1, text: 'Caption' }],
     color: '#ffffff',
     ...overrides,
   }
@@ -146,6 +172,114 @@ describe('items-store rate stretch', () => {
     // Right item should have correct bounds
     expect(right.sourceStart).toBe(150)
     expect(right.sourceEnd).toBe(300)
+  })
+
+  it('trimItemStart re-anchors cues and drops those before the new boundary', () => {
+    useTimelineSettingsStore.getState().setFps(30)
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: 'subs-trim-start',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 300, // 10s
+      label: 'Subs',
+      color: '#fff',
+      source: { type: 'subtitle-import', fileName: 'a.srt', format: 'srt', importedAt: 0 },
+      cues: [
+        { id: 'a', startSeconds: 0, endSeconds: 1.5, text: 'before' },
+        { id: 'b', startSeconds: 1.5, endSeconds: 2.5, text: 'straddles' },
+        { id: 'c', startSeconds: 5, endSeconds: 6, text: 'after' },
+      ],
+    }
+
+    useItemsStore.getState().setItems([segment])
+    // Trim 60 frames = 2s off the start.
+    useItemsStore.getState()._trimItemStart('subs-trim-start', 60, { skipAdjacentClamp: true })
+    const updated = useItemsStore
+      .getState()
+      .items.find(
+        (i) => i.id === 'subs-trim-start',
+      ) as import('@/types/timeline').SubtitleSegmentItem
+
+    expect(updated.from).toBe(60)
+    expect(updated.durationInFrames).toBe(240)
+    // 'a' wholly inside the trimmed-away window — dropped.
+    // 'b' straddled — clamped to 0.
+    // 'c' kept, shifted by -2s.
+    expect(updated.cues.map((c) => c.id)).toEqual(['b', 'c'])
+    expect(updated.cues[0]).toMatchObject({ startSeconds: 0, endSeconds: 0.5 })
+    expect(updated.cues[1]).toMatchObject({ startSeconds: 3, endSeconds: 4 })
+  })
+
+  it('trimItemEnd drops or clamps cues past the new end', () => {
+    useTimelineSettingsStore.getState().setFps(30)
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: 'subs-trim-end',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Subs',
+      color: '#fff',
+      source: { type: 'subtitle-import', fileName: 'a.srt', format: 'srt', importedAt: 0 },
+      cues: [
+        { id: 'a', startSeconds: 1, endSeconds: 2, text: 'inside' },
+        { id: 'b', startSeconds: 4, endSeconds: 6, text: 'straddles' },
+        { id: 'c', startSeconds: 8, endSeconds: 9, text: 'past end' },
+      ],
+    }
+
+    useItemsStore.getState().setItems([segment])
+    // Trim end inward by 150 frames = 5s — new end at 5s.
+    useItemsStore.getState()._trimItemEnd('subs-trim-end', -150, { skipAdjacentClamp: true })
+    const updated = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'subs-trim-end') as import('@/types/timeline').SubtitleSegmentItem
+
+    expect(updated.durationInFrames).toBe(150)
+    // 'a' fully inside, 'b' clamped to end at 5, 'c' dropped.
+    expect(updated.cues.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(updated.cues[1]).toMatchObject({ startSeconds: 4, endSeconds: 5 })
+  })
+
+  it('splitItem partitions a SubtitleSegmentItem cue list at the cut frame', () => {
+    useTimelineSettingsStore.getState().setFps(30)
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: 'subs',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 300, // 10s at 30fps
+      label: 'Subs',
+      color: '#fff',
+      source: { type: 'subtitle-import', fileName: 'a.srt', format: 'srt', importedAt: 0 },
+      cues: [
+        { id: 'a', startSeconds: 0, endSeconds: 2, text: 'wholly left' },
+        { id: 'b', startSeconds: 4, endSeconds: 6, text: 'straddles cut' },
+        { id: 'c', startSeconds: 7, endSeconds: 9, text: 'wholly right' },
+      ],
+    }
+
+    useItemsStore.getState().setItems([segment])
+    // Cut at frame 150 = 5s.
+    const result = useItemsStore.getState()._splitItem('subs', 150)
+    expect(result).not.toBeNull()
+    const left = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'subs') as import('@/types/timeline').SubtitleSegmentItem
+    const right = useItemsStore
+      .getState()
+      .items.find(
+        (i) => i.id !== 'subs' && i.type === 'subtitle',
+      ) as import('@/types/timeline').SubtitleSegmentItem
+
+    expect(left.cues.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(left.cues[1]).toMatchObject({ id: 'b', endSeconds: 5 })
+
+    // Right cues are rebased so their times start from 0 at the new segment.
+    expect(right.cues.map((c) => c.id)).toEqual(['b-r', 'c'])
+    expect(right.cues[0]).toMatchObject({ startSeconds: 0, endSeconds: 1 })
+    expect(right.cues[1]).toMatchObject({ startSeconds: 2, endSeconds: 4 })
   })
 
   it('rate stretch on left split clip preserves source boundaries', () => {
@@ -298,6 +432,25 @@ describe('items-store indexes', () => {
     useItemsStore.getState().setItems([clip, legacyCaption])
 
     expect(useItemsStore.getState().replaceableCaptionClipIds.has('legacy-clip')).toBe(true)
+  })
+
+  it('indexes transcript subtitle segments as replaceable for their source clip', () => {
+    const clip = makeVideoItem({
+      id: 'transcript-clip',
+      mediaId: 'media-transcript',
+    })
+    const transcriptSegment = makeSubtitleItem({
+      source: {
+        type: 'transcript',
+        mediaId: 'media-transcript',
+        clipId: 'transcript-clip',
+      },
+      mediaId: 'media-transcript',
+    })
+
+    useItemsStore.getState().setItems([clip, transcriptSegment])
+
+    expect(useItemsStore.getState().replaceableCaptionClipIds.has('transcript-clip')).toBe(true)
   })
 
   it('indexes legacy linked audio/video pairs for O(1) lookups', () => {

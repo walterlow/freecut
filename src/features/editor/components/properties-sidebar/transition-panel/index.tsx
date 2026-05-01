@@ -137,6 +137,23 @@ function getColorParameterValue(
   return rgbArrayToHex(properties?.[parameter.key] ?? parameter.defaultValue)
 }
 
+function getParameterDefaultValue(parameter: TransitionParameterDefinition): unknown {
+  return Array.isArray(parameter.defaultValue)
+    ? [...parameter.defaultValue]
+    : parameter.defaultValue
+}
+
+function isParameterAtDefault(
+  properties: Record<string, unknown> | undefined,
+  parameter: TransitionParameterDefinition,
+): boolean {
+  if (parameter.type === 'number') {
+    return getNumberParameterValue(properties, parameter) === Number(parameter.defaultValue)
+  }
+
+  return getColorParameterValue(properties, parameter) === rgbArrayToHex(parameter.defaultValue)
+}
+
 function formatParameterValue(parameter: TransitionParameterDefinition, value: number): string {
   const step = parameter.step ?? 1
   const [, decimalPart = ''] = step.toString().split('.')
@@ -503,6 +520,19 @@ export function TransitionPanel() {
     [selectedTransition, selectedTransitionId, updateTransition],
   )
 
+  const handleParameterReset = useCallback(
+    (parameter: TransitionParameterDefinition) => {
+      if (!selectedTransitionId || !selectedTransition) return
+      updateTransition(selectedTransitionId, {
+        properties: {
+          ...(selectedTransition.properties ?? {}),
+          [parameter.key]: getParameterDefaultValue(parameter),
+        },
+      })
+    },
+    [selectedTransition, selectedTransitionId, updateTransition],
+  )
+
   // Handle delete
   const handleDelete = useCallback(() => {
     if (selectedTransitionId) {
@@ -735,25 +765,38 @@ export function TransitionPanel() {
 
         {transitionDefinition?.parameters?.map((parameter) => (
           <PropertyRow key={parameter.key} label={parameter.label} tooltip={parameter.description}>
-            {parameter.type === 'number' ? (
-              <SliderInput
-                value={getNumberParameterValue(selectedTransition.properties, parameter)}
-                onChange={(value) => handleParameterChange(parameter, value)}
-                onLiveChange={(value) => handleParameterChange(parameter, value)}
-                min={parameter.min ?? 0}
-                max={parameter.max ?? 1}
-                step={parameter.step ?? 1}
-                unit={parameter.unit}
-                formatValue={(value) => formatParameterValue(parameter, value)}
-                className="flex-1 min-w-0"
-              />
-            ) : (
-              <TransitionColorPicker
-                label={parameter.label}
-                initialColor={getColorParameterValue(selectedTransition.properties, parameter)}
-                onColorChange={(color) => handleParameterChange(parameter, color)}
-              />
-            )}
+            <div className="flex items-center gap-1 w-full">
+              {parameter.type === 'number' ? (
+                <SliderInput
+                  value={getNumberParameterValue(selectedTransition.properties, parameter)}
+                  onChange={(value) => handleParameterChange(parameter, value)}
+                  onLiveChange={(value) => handleParameterChange(parameter, value)}
+                  min={parameter.min ?? 0}
+                  max={parameter.max ?? 1}
+                  step={parameter.step ?? 1}
+                  unit={parameter.unit}
+                  formatValue={(value) => formatParameterValue(parameter, value)}
+                  className="flex-1 min-w-0"
+                />
+              ) : (
+                <TransitionColorPicker
+                  label={parameter.label}
+                  initialColor={getColorParameterValue(selectedTransition.properties, parameter)}
+                  onColorChange={(color) => handleParameterChange(parameter, color)}
+                />
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 flex-shrink-0"
+                onClick={() => handleParameterReset(parameter)}
+                disabled={isParameterAtDefault(selectedTransition.properties, parameter)}
+                title={`Reset ${parameter.label}`}
+                aria-label={`Reset ${parameter.label}`}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </Button>
+            </div>
           </PropertyRow>
         ))}
 

@@ -11,7 +11,7 @@ const REPORT_SCRIPT = path.join(ROOT_DIR, 'scripts', 'report-feature-edges.mjs')
 const EDGE_BUDGETS = [
   { edge: 'editor -> timeline', maxImports: 2, maxFiles: 2 },
   { edge: 'editor -> preview', maxImports: 15, maxFiles: 2 },
-  { edge: 'editor -> media-library', maxImports: 9, maxFiles: 2 },
+  { edge: 'editor -> media-library', maxImports: 13, maxFiles: 2 },
   { edge: 'preview -> timeline', maxImports: 2, maxFiles: 2 },
   { edge: 'preview -> player', maxImports: 2, maxFiles: 2 },
   { edge: 'timeline -> media-library', maxImports: 2, maxFiles: 2 },

@@ -83,9 +83,12 @@ export interface ProjectTimeline {
     text?: string
     textRole?: 'caption'
     captionSource?: {
-      type: 'transcript' | 'ai-captions'
+      type: 'transcript' | 'ai-captions' | 'subtitle-import' | 'embedded-subtitles'
       clipId: string
       mediaId: string
+      fileName?: string
+      format?: 'srt' | 'vtt'
+      importedAt?: number
     }
     fontSize?: number
     fontFamily?: string

@@ -70,8 +70,13 @@ vi.mock('../deps/timeline-contract', () => ({
 import {
   aiCaptionsToSegments,
   buildCaptionTextItems,
+  buildSubtitleTextItems,
+  buildSubtitleTextItemsForClip,
   buildCaptionTrack,
   buildCaptionTrackAbove,
+  buildSubtitleSegmentForClip,
+  consolidateCaptionTextItemsToSegments,
+  findCaptionTargetClipsForMedia,
   findGeneratedCaptionItemsForClip,
   findReplaceableCaptionItemsForClip,
   getCaptionTextItemTemplate,
@@ -149,6 +154,34 @@ describe('caption-items', () => {
       text: 'Second line',
     })
     expect(items[0]?.transform?.y).toBeGreaterThan(0)
+  })
+
+  it('maps imported subtitle cues to standalone caption text items', () => {
+    const items = buildSubtitleTextItems({
+      trackId: 'track-captions',
+      cues: [{ id: 'cue-1', startSeconds: 1, endSeconds: 2.5, text: 'Imported\ncaption' }],
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      fileName: 'captions.srt',
+      format: 'srt',
+      startFrame: 90,
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      type: 'text',
+      textRole: 'caption',
+      trackId: 'track-captions',
+      from: 120,
+      durationInFrames: 45,
+      text: 'Imported\ncaption',
+      captionSource: {
+        type: 'subtitle-import',
+        fileName: 'captions.srt',
+        format: 'srt',
+      },
+    })
   })
 
   it('derives caption range using clip speed and converted fps', () => {
@@ -409,6 +442,213 @@ describe('caption-items', () => {
     })
   })
 
+  it('anchors subtitle cues to a clip honoring sourceStart and speed', () => {
+    const clip: VideoItem = {
+      id: 'clip-anchor',
+      type: 'video',
+      trackId: 'track-1',
+      from: 33540,
+      durationInFrames: 117673,
+      label: 'Squid clip',
+      mediaId: 'media-squid',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 94037,
+      sourceFps: 23.974,
+      speed: 1,
+    }
+
+    const items = buildSubtitleTextItemsForClip({
+      trackId: 'track-captions',
+      cues: [
+        { id: 'cue-1', startSeconds: 25.734, endSeconds: 27.527, text: 'Where do you think?' },
+        // Outside clip's source window — must be dropped.
+        { id: 'cue-out', startSeconds: 99999, endSeconds: 100000, text: 'Past end' },
+      ],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      fileName: 'episode.mkv - en',
+      format: 'srt',
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      from: 33540 + Math.floor(25.734 * 30),
+      mediaId: 'media-squid',
+      captionSource: { type: 'embedded-subtitles', clipId: 'clip-anchor', mediaId: 'media-squid' },
+      text: 'Where do you think?',
+    })
+  })
+
+  it('compresses subtitle timing on a sped-up clip', () => {
+    // 2x speed: a cue at source second 30 should land 15 timeline-seconds
+    // after the clip's `from`.
+    const clip: VideoItem = {
+      id: 'clip-fast',
+      type: 'video',
+      trackId: 'track-1',
+      from: 60,
+      durationInFrames: 600,
+      label: 'Fast Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 1200,
+      sourceFps: 30,
+      speed: 2,
+    }
+
+    const items = buildSubtitleTextItemsForClip({
+      trackId: 'track-captions',
+      cues: [{ id: 'cue-1', startSeconds: 30, endSeconds: 31, text: 'Halftime' }],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      fileName: 'fast.mkv',
+      format: 'srt',
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]?.from).toBe(60 + Math.floor((30 * 30) / 2))
+  })
+
+  it('finds caption targets and dedupes linked video/audio companion pairs', () => {
+    const items: TimelineItem[] = [
+      {
+        id: 'video-clip',
+        type: 'video',
+        trackId: 'track-v',
+        from: 100,
+        durationInFrames: 300,
+        label: 'V',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        linkedGroupId: 'pair-1',
+      },
+      {
+        id: 'audio-clip',
+        type: 'audio',
+        trackId: 'track-a',
+        from: 100,
+        durationInFrames: 300,
+        label: 'A',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        linkedGroupId: 'pair-1',
+      },
+      {
+        id: 'video-clip-2',
+        type: 'video',
+        trackId: 'track-v',
+        from: 1000,
+        durationInFrames: 200,
+        label: 'V2',
+        mediaId: 'media-1',
+        src: 'blob:test',
+      },
+      {
+        id: 'unrelated',
+        type: 'video',
+        trackId: 'track-v',
+        from: 2000,
+        durationInFrames: 100,
+        label: 'U',
+        mediaId: 'media-2',
+        src: 'blob:test',
+      },
+    ]
+
+    const targets = findCaptionTargetClipsForMedia(items, 'media-1')
+    // Linked pair contributes only one entry (the video); free clips kept;
+    // sorted by `from`.
+    expect(targets.map((t) => t.id)).toEqual(['video-clip', 'video-clip-2'])
+  })
+
+  it('consolidates per-cue caption text items into one subtitle segment per clip', () => {
+    const items: TimelineItem[] = [
+      {
+        id: 'cap-1',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 100,
+        durationInFrames: 30,
+        label: 'Hello',
+        text: 'Hello',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: {
+          type: 'embedded-subtitles',
+          mediaId: 'media-1',
+          clipId: 'clip-A',
+          importedAt: 1,
+        },
+      },
+      {
+        id: 'cap-2',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 160,
+        durationInFrames: 30,
+        label: 'World',
+        text: 'World',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: {
+          type: 'embedded-subtitles',
+          mediaId: 'media-1',
+          clipId: 'clip-A',
+          importedAt: 1,
+        },
+      },
+      // Different clip — should produce its own segment.
+      {
+        id: 'cap-3',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 500,
+        durationInFrames: 30,
+        label: 'Solo',
+        text: 'Solo',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: {
+          type: 'embedded-subtitles',
+          mediaId: 'media-1',
+          clipId: 'clip-B',
+          importedAt: 1,
+        },
+      },
+      // Non-caption text — must be left alone.
+      {
+        id: 'manual',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 0,
+        durationInFrames: 30,
+        label: 'Manual title',
+        text: 'Manual title',
+        color: '#fff',
+      },
+    ]
+
+    const { segments, consumedItemIds } = consolidateCaptionTextItemsToSegments(items, 30)
+
+    expect(segments).toHaveLength(2)
+    expect(consumedItemIds.sort()).toEqual(['cap-1', 'cap-2', 'cap-3'])
+    const clipASegment = segments.find(
+      (s) => s.source.type === 'embedded-subtitles' && s.source.clipId === 'clip-A',
+    )!
+    expect(clipASegment.from).toBe(100)
+    expect(clipASegment.durationInFrames).toBe(160 + 30 - 100)
+    expect(clipASegment.cues.map((c) => c.text)).toEqual(['Hello', 'World'])
+    // Cue times are segment-relative.
+    expect(clipASegment.cues[0]).toMatchObject({ startSeconds: 0 })
+    expect(clipASegment.cues[1]?.startSeconds).toBeCloseTo((160 - 100) / 30)
+  })
+
   it('falls back to legacy generated caption detection when source metadata is missing', () => {
     const clip: VideoItem = {
       id: 'clip-legacy',
@@ -450,6 +690,118 @@ describe('caption-items', () => {
     )
 
     expect(replaceableCaptions.map((item) => item.id)).toEqual(['legacy-caption'])
+  })
+
+  it('inherits the clip linkedGroupId on the built subtitle segment', () => {
+    const clip: VideoItem = {
+      id: 'video-clip',
+      type: 'video',
+      trackId: 'track-v',
+      from: 60,
+      durationInFrames: 300,
+      label: 'V',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      linkedGroupId: 'pair-1',
+    }
+
+    const segment = buildSubtitleSegmentForClip({
+      trackId: 'track-captions',
+      cues: [{ id: 'c1', startSeconds: 0.5, endSeconds: 1.5, text: 'Hi' }],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      source: {
+        type: 'embedded-subtitles',
+        mediaId: 'media-1',
+        clipId: clip.id,
+        trackNumber: 6,
+        importedAt: 1,
+      },
+    })
+
+    expect(segment).not.toBeNull()
+    expect(segment?.linkedGroupId).toBe('pair-1')
+  })
+
+  it('omits linkedGroupId when the source clip is solo (not linked to A/V pair)', () => {
+    const clip: VideoItem = {
+      id: 'video-solo',
+      type: 'video',
+      trackId: 'track-v',
+      from: 0,
+      durationInFrames: 120,
+      label: 'V',
+      mediaId: 'media-1',
+      src: 'blob:test',
+    }
+
+    const segment = buildSubtitleSegmentForClip({
+      trackId: 'track-captions',
+      cues: [{ id: 'c1', startSeconds: 0.1, endSeconds: 0.6, text: 'Hi' }],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      source: {
+        type: 'embedded-subtitles',
+        mediaId: 'media-1',
+        clipId: clip.id,
+        trackNumber: 6,
+        importedAt: 1,
+      },
+    })
+
+    expect(segment?.linkedGroupId).toBeUndefined()
+  })
+
+  it('inherits linkedGroupId from the source clip when consolidating per-cue captions', () => {
+    const items: TimelineItem[] = [
+      {
+        id: 'video-clip',
+        type: 'video',
+        trackId: 'track-v',
+        from: 100,
+        durationInFrames: 300,
+        label: 'V',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        linkedGroupId: 'pair-9',
+      },
+      {
+        id: 'audio-clip',
+        type: 'audio',
+        trackId: 'track-a',
+        from: 100,
+        durationInFrames: 300,
+        label: 'A',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        linkedGroupId: 'pair-9',
+      },
+      {
+        id: 'cap-1',
+        type: 'text',
+        trackId: 'track-captions',
+        from: 105,
+        durationInFrames: 30,
+        label: 'Hello',
+        text: 'Hello',
+        color: '#fff',
+        textRole: 'caption',
+        captionSource: {
+          type: 'embedded-subtitles',
+          mediaId: 'media-1',
+          clipId: 'video-clip',
+          importedAt: 1,
+        },
+      },
+    ]
+
+    const { segments } = consolidateCaptionTextItemsToSegments(items, 30)
+    expect(segments).toHaveLength(1)
+    expect(segments[0]?.linkedGroupId).toBe('pair-9')
   })
 })
 

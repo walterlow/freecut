@@ -25,6 +25,31 @@ const mediaTranscriptionServiceMocks = vi.hoisted(() => ({
   cancelTranscription: vi.fn(),
 }))
 
+const subtitleSidecarServiceMocks = vi.hoisted(() => ({
+  scanEmbeddedSubtitleTracks: vi.fn(),
+  insertEmbeddedSubtitleTrack: vi.fn(),
+}))
+
+const embeddedSubtitlePickerStoreMocks = vi.hoisted(() => ({
+  open: vi.fn(),
+  close: vi.fn(),
+  setError: vi.fn(),
+}))
+
+const subtitleScanProgressStoreMocks = vi.hoisted(() => ({
+  start: vi.fn(),
+  setCurrentIndex: vi.fn(),
+  updateProgress: vi.fn(),
+  markEntryStatus: vi.fn(),
+  finish: vi.fn(),
+  close: vi.fn(),
+  open: false,
+  entries: [] as unknown[],
+  currentIndex: 0,
+  summary: null as string | null,
+  abort: null as null | (() => void),
+}))
+
 const mediaStoreState = vi.hoisted(() => ({
   selectedMediaIds: [] as string[],
   mediaItems: [] as MediaMetadata[],
@@ -42,6 +67,8 @@ const mediaStoreState = vi.hoisted(() => ({
   setTaggingMedia: vi.fn(),
   updateMediaCaptions: vi.fn(),
   showNotification: vi.fn(),
+  markMediaBroken: vi.fn(),
+  openMissingMediaDialog: vi.fn(),
   analysisProgress: null as null | { total: number; completed: number; cancelRequested: boolean },
   beginAnalysisRun: vi.fn(),
   incrementAnalysisCompleted: vi.fn(),
@@ -135,6 +162,15 @@ vi.mock('./media-info-popover', () => ({
 
 vi.mock('../services/media-library-service', () => ({
   mediaLibraryService: mediaLibraryServiceMocks,
+  FileAccessError: class FileAccessError extends Error {
+    constructor(
+      message: string,
+      public readonly type: 'permission_denied' | 'file_missing' | 'unknown',
+    ) {
+      super(message)
+      this.name = 'FileAccessError'
+    }
+  },
 }))
 
 vi.mock('../services/proxy-service', () => ({
@@ -144,6 +180,33 @@ vi.mock('../services/proxy-service', () => ({
 vi.mock('../services/media-transcription-service', () => ({
   mediaTranscriptionService: mediaTranscriptionServiceMocks,
 }))
+
+vi.mock('../services/subtitle-sidecar-service', () => ({
+  subtitleSidecarService: subtitleSidecarServiceMocks,
+  chooseEmbeddedSubtitleTrackForMedia: (
+    tracks: ReadonlyArray<{ trackNumber: number; default?: boolean; forced?: boolean }>,
+  ) => tracks.find((t) => t.forced) ?? tracks.find((t) => t.default) ?? tracks[0] ?? null,
+  getEmbeddedSubtitleTrackLabel: (track: { language?: string; name?: string }) =>
+    track.name ?? track.language ?? 'Track',
+}))
+
+vi.mock('../stores/embedded-subtitle-picker-store', () => {
+  const useEmbeddedSubtitlePickerStore = Object.assign(
+    (selector: (state: typeof embeddedSubtitlePickerStoreMocks) => unknown) =>
+      selector(embeddedSubtitlePickerStoreMocks),
+    { getState: () => embeddedSubtitlePickerStoreMocks },
+  )
+  return { useEmbeddedSubtitlePickerStore }
+})
+
+vi.mock('../stores/subtitle-scan-progress-store', () => {
+  const useSubtitleScanProgressStore = Object.assign(
+    (selector: (state: typeof subtitleScanProgressStoreMocks) => unknown) =>
+      selector(subtitleScanProgressStoreMocks),
+    { getState: () => subtitleScanProgressStoreMocks },
+  )
+  return { useSubtitleScanProgressStore }
+})
 
 vi.mock('../stores/media-library-store', () => {
   const useMediaLibraryStore = Object.assign(
@@ -261,6 +324,17 @@ describe('MediaCard', () => {
     mediaStoreState.transcriptStatus = new Map()
     mediaStoreState.transcriptProgress = new Map()
     mediaStoreState.taggingMediaIds = new Set()
+    mediaStoreState.markMediaBroken.mockReset()
+    mediaStoreState.openMissingMediaDialog.mockReset()
+    embeddedSubtitlePickerStoreMocks.open.mockReset()
+    embeddedSubtitlePickerStoreMocks.close.mockReset()
+    embeddedSubtitlePickerStoreMocks.setError.mockReset()
+    subtitleScanProgressStoreMocks.start.mockReset()
+    subtitleScanProgressStoreMocks.setCurrentIndex.mockReset()
+    subtitleScanProgressStoreMocks.updateProgress.mockReset()
+    subtitleScanProgressStoreMocks.markEntryStatus.mockReset()
+    subtitleScanProgressStoreMocks.finish.mockReset()
+    subtitleScanProgressStoreMocks.close.mockReset()
     editorStoreState.mediaSkimPreviewMediaId = null
     playbackStoreState.pause.mockReset()
 
@@ -270,6 +344,29 @@ describe('MediaCard', () => {
     proxyServiceMocks.canGenerateProxy.mockReturnValue(true)
     proxyServiceMocks.deleteProxy.mockResolvedValue(undefined)
     mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined)
+    subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks.mockResolvedValue({
+      tracks: [
+        {
+          trackNumber: 1,
+          codecId: 'S_TEXT/UTF8',
+          language: 'eng',
+          name: 'English',
+          default: true,
+          forced: false,
+          cues: [
+            { id: 'cue-1', startSeconds: 1, endSeconds: 2, text: 'Hello' },
+            { id: 'cue-2', startSeconds: 3, endSeconds: 4, text: 'World' },
+          ],
+        },
+      ],
+      scannedAt: 1,
+      fromCache: false,
+    })
+    subtitleSidecarServiceMocks.insertEmbeddedSubtitleTrack.mockReturnValue({
+      insertedItemCount: 2,
+      cueCount: 2,
+      trackLabel: 'English',
+    })
   })
 
   it('uses the shared action menu to generate a proxy', async () => {
@@ -355,6 +452,122 @@ describe('MediaCard', () => {
       type: 'success',
       message: 'Transcript deleted for "clip.mp4"',
     })
+  })
+
+  it('runs a scan-only cache extract from the media library and never opens the track picker', async () => {
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
+        media,
+        expect.any(Blob),
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      )
+    })
+    expect(subtitleScanProgressStoreMocks.start).toHaveBeenCalled()
+    // Picker stays closed — the media-library entry point is cache-only.
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
+  })
+
+  it('passes the live file handle into the cache scan', async () => {
+    const file = new File(['video-data'], 'movie.mkv', { type: 'video/x-matroska' })
+    const requestPermission = vi.fn(async () => 'granted' as PermissionState)
+    const getFile = vi.fn(async () => file)
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+        getFile,
+      } as unknown as FileSystemFileHandle,
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
+        media,
+        file,
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      )
+    })
+    expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
+    expect(getFile).toHaveBeenCalledTimes(1)
+    expect(mediaLibraryServiceMocks.getMediaFile).not.toHaveBeenCalled()
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
+  })
+
+  it('requests file permission before extracting embedded subtitles', async () => {
+    const requestPermission = vi.fn(async () => 'denied' as PermissionState)
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+      } as unknown as FileSystemFileHandle,
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
+    })
+    expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).not.toHaveBeenCalled()
+    expect(mediaStoreState.markMediaBroken).toHaveBeenCalledWith('media-1', {
+      mediaId: 'media-1',
+      fileName: 'movie.mkv',
+      errorType: 'permission_denied',
+    })
+    expect(mediaStoreState.openMissingMediaDialog).toHaveBeenCalledTimes(1)
+    expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+      type: 'error',
+      message: 'FreeCut needs permission to read "movie.mkv" before extracting subtitles.',
+    })
+  })
+
+  it('surfaces NotReadableError from blob open without marking the media missing', async () => {
+    const requestPermission = vi.fn(async () => 'granted' as PermissionState)
+    const notReadable = Object.assign(new Error('blob unreadable'), { name: 'NotReadableError' })
+    const getFile = vi.fn(async () => {
+      throw notReadable
+    })
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+        getFile,
+      } as unknown as FileSystemFileHandle,
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+        type: 'error',
+        message:
+          'FreeCut could not read "movie.mkv" right now. Close any app using it and try again.',
+      })
+    })
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
+    expect(mediaStoreState.markMediaBroken).not.toHaveBeenCalled()
+    expect(mediaStoreState.openMissingMediaDialog).not.toHaveBeenCalled()
   })
 
   it('uses the shared action menu to relink broken media in grid view', () => {

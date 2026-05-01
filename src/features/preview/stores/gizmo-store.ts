@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { BoundingBox, GizmoState, GizmoHandle, Transform, Point } from '../types/gizmo'
 import type { ItemEffect } from '@/types/effects'
+import type { TimelineItem } from '@/types/timeline'
 import type { CropSettings } from '@/types/transform'
 import { calculateTransform } from '../utils/transform-calculations'
 import { applySnapping, applyScaleSnapping, type SnapLine } from '../utils/canvas-snap-utils'
@@ -184,7 +185,7 @@ interface GizmoStoreActions {
     handle: GizmoHandle,
     startPoint: Point,
     transform: Transform,
-    itemType?: 'video' | 'audio' | 'image' | 'text' | 'shape' | 'adjustment' | 'composition',
+    itemType?: TimelineItem['type'],
     aspectRatioLocked?: boolean,
     strokeWidth?: number,
   ) => void

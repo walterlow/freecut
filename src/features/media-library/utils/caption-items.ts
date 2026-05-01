@@ -6,9 +6,11 @@ import {
 } from '../deps/timeline-contract'
 import type { MediaTranscriptSegment } from '@/types/storage'
 import type { MediaCaption } from '@/infrastructure/analysis'
+import type { SubtitleCue, SubtitleFormat } from '@/shared/utils/subtitles'
 import type {
   AudioItem,
   GeneratedCaptionSource,
+  SubtitleSegmentItem,
   TextItem,
   TimelineItem,
   TimelineTrack,
@@ -41,6 +43,32 @@ interface BuildCaptionTextItemsOptions {
   sourceType?: GeneratedCaptionSource['type']
 }
 
+interface BuildSubtitleTextItemsOptions {
+  trackId: string
+  cues: readonly SubtitleCue[]
+  timelineFps: number
+  canvasWidth: number
+  canvasHeight: number
+  fileName: string
+  format: SubtitleFormat
+  startFrame?: number
+  styleTemplate?: CaptionTextItemTemplate
+  sourceType?: Extract<GeneratedCaptionSource['type'], 'subtitle-import' | 'embedded-subtitles'>
+}
+
+interface BuildSubtitleTextItemsForClipOptions {
+  trackId: string
+  cues: readonly SubtitleCue[]
+  clip: AudioItem | VideoItem
+  timelineFps: number
+  canvasWidth: number
+  canvasHeight: number
+  fileName: string
+  format: SubtitleFormat
+  styleTemplate?: CaptionTextItemTemplate
+  sourceType?: Extract<GeneratedCaptionSource['type'], 'subtitle-import' | 'embedded-subtitles'>
+}
+
 export type CaptionTextItemTemplate = Pick<
   TextItem,
   | 'fontSize'
@@ -50,6 +78,8 @@ export type CaptionTextItemTemplate = Pick<
   | 'underline'
   | 'color'
   | 'backgroundColor'
+  | 'backgroundRadius'
+  | 'textPadding'
   | 'textAlign'
   | 'verticalAlign'
   | 'lineHeight'
@@ -336,11 +366,13 @@ function buildCaptionSource(
   mediaId: string,
   clipId: string,
   type: GeneratedCaptionSource['type'] = 'transcript',
+  metadata?: Omit<GeneratedCaptionSource, 'type' | 'clipId' | 'mediaId'>,
 ): GeneratedCaptionSource {
   return {
     type,
     mediaId,
     clipId,
+    ...metadata,
   }
 }
 
@@ -380,22 +412,63 @@ export function isGeneratedCaptionTextItem(
 ): item is TextItem & { captionSource: GeneratedCaptionSource } {
   return (
     item.type === 'text' &&
-    (item.captionSource?.type === 'transcript' || item.captionSource?.type === 'ai-captions') &&
+    (item.captionSource?.type === 'transcript' ||
+      item.captionSource?.type === 'ai-captions' ||
+      item.captionSource?.type === 'subtitle-import' ||
+      item.captionSource?.type === 'embedded-subtitles') &&
     item.captionSource.clipId.length > 0 &&
     item.captionSource.mediaId.length > 0
   )
+}
+
+/**
+ * Subtitle segments that preserve clip identity — the segment source carries
+ * a clipId/mediaId pair tying it back to a specific timeline media item.
+ *
+ * Currently `transcript` and `embedded-subtitles` sources qualify;
+ * `subtitle-import` is excluded because that source describes an external
+ * SRT/VTT file and has no clipId field.
+ */
+type ClipBoundSubtitleSegmentSource = Extract<
+  import('@/types/timeline').SubtitleSegmentSource,
+  { clipId: string }
+>
+
+export function isGeneratedCaptionSegmentItem(
+  item: TimelineItem,
+): item is SubtitleSegmentItem & { source: ClipBoundSubtitleSegmentSource } {
+  if (item.type !== 'subtitle') return false
+  const source = item.source
+  if (source.type !== 'transcript' && source.type !== 'embedded-subtitles') return false
+  return source.clipId.length > 0 && source.mediaId.length > 0
 }
 
 export function findGeneratedCaptionItemsForClip(
   items: readonly TimelineItem[],
   clipId: string,
   sourceType?: GeneratedCaptionSource['type'],
-): Array<TextItem & { captionSource: GeneratedCaptionSource }> {
+): Array<
+  | (TextItem & { captionSource: GeneratedCaptionSource })
+  | (SubtitleSegmentItem & { source: ClipBoundSubtitleSegmentSource })
+> {
   return items.filter(
-    (item): item is TextItem & { captionSource: GeneratedCaptionSource } =>
-      isGeneratedCaptionTextItem(item) &&
-      item.captionSource.clipId === clipId &&
-      (sourceType === undefined || item.captionSource.type === sourceType),
+    (
+      item,
+    ): item is
+      | (TextItem & { captionSource: GeneratedCaptionSource })
+      | (SubtitleSegmentItem & { source: ClipBoundSubtitleSegmentSource }) => {
+      if (isGeneratedCaptionTextItem(item)) {
+        return (
+          item.captionSource.clipId === clipId &&
+          (sourceType === undefined || item.captionSource.type === sourceType)
+        )
+      }
+      if (!isGeneratedCaptionSegmentItem(item)) return false
+      if (item.source.clipId !== clipId) return false
+      // Segment sources carry their own discriminator, so apply the same
+      // filter that text items get.
+      return sourceType === undefined || item.source.type === sourceType
+    },
   )
 }
 
@@ -421,7 +494,7 @@ export function findReplaceableCaptionItemsForClip(
   items: readonly TimelineItem[],
   clip: AudioItem | VideoItem,
   sourceType?: GeneratedCaptionSource['type'],
-): TextItem[] {
+): Array<TextItem | SubtitleSegmentItem> {
   const generatedCaptionItems = findGeneratedCaptionItemsForClip(items, clip.id, sourceType)
   if (generatedCaptionItems.length > 0) {
     return generatedCaptionItems
@@ -435,7 +508,9 @@ export function findReplaceableCaptionItemsForClip(
   return items.filter((item): item is TextItem => isLegacyGeneratedCaptionItemForClip(item, clip))
 }
 
-export function getCaptionTextItemTemplate(item: TextItem): CaptionTextItemTemplate {
+export function getCaptionTextItemTemplate(
+  item: TextItem | SubtitleSegmentItem,
+): CaptionTextItemTemplate {
   return {
     fontSize: item.fontSize,
     fontFamily: item.fontFamily,
@@ -444,6 +519,8 @@ export function getCaptionTextItemTemplate(item: TextItem): CaptionTextItemTempl
     underline: item.underline,
     color: item.color,
     backgroundColor: item.backgroundColor,
+    backgroundRadius: item.backgroundRadius,
+    textPadding: item.textPadding,
     textAlign: item.textAlign,
     verticalAlign: item.verticalAlign,
     lineHeight: item.lineHeight,
@@ -539,4 +616,459 @@ export function buildCaptionTextItems({
       },
     ]
   })
+}
+
+export function buildSubtitleTextItems({
+  trackId,
+  cues,
+  timelineFps,
+  canvasWidth,
+  canvasHeight,
+  fileName,
+  format,
+  startFrame = 0,
+  styleTemplate,
+  sourceType = 'subtitle-import',
+}: BuildSubtitleTextItemsOptions): TextItem[] {
+  return cues.flatMap((cue) => {
+    const from = startFrame + Math.max(0, Math.round(cue.startSeconds * timelineFps))
+    const endFrame = Math.max(from + 1, startFrame + Math.round(cue.endSeconds * timelineFps))
+    const durationInFrames = Math.max(1, endFrame - from)
+    const defaultCaptionItem: TextItem = {
+      id: crypto.randomUUID(),
+      type: 'text',
+      textRole: 'caption',
+      trackId,
+      from,
+      durationInFrames,
+      mediaId: '',
+      captionSource: buildCaptionSource('', '', sourceType, {
+        fileName,
+        format,
+        importedAt: Date.now(),
+      }),
+      label: cue.text.slice(0, 48),
+      text: cue.text,
+      fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
+      fontFamily: 'Inter',
+      fontWeight: 'semibold',
+      fontStyle: 'normal',
+      underline: false,
+      color: '#ffffff',
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.15,
+      letterSpacing: 0,
+      textShadow: {
+        offsetX: 0,
+        offsetY: 3,
+        blur: 10,
+        color: 'rgba(0, 0, 0, 0.75)',
+      },
+      transform: {
+        x: 0,
+        y: Math.round(canvasHeight * 0.32),
+        width: canvasWidth * 0.82,
+        height: canvasHeight * 0.16,
+        rotation: 0,
+        opacity: 1,
+      },
+    }
+
+    return [
+      {
+        ...defaultCaptionItem,
+        ...styleTemplate,
+      },
+    ]
+  })
+}
+
+/**
+ * Same as {@link buildSubtitleTextItems} but anchors each cue to a specific
+ * clip on the timeline. Cues whose source-time range falls entirely outside
+ * the clip's `[sourceStart, sourceEnd]` window are dropped; cues that
+ * straddle a boundary are clipped to fit. Honors `clip.speed` so a cue at
+ * source second 30 of a 2x clip lands 15 timeline-seconds after `clip.from`.
+ */
+export function buildSubtitleTextItemsForClip({
+  trackId,
+  cues,
+  clip,
+  timelineFps,
+  canvasWidth,
+  canvasHeight,
+  fileName,
+  format,
+  styleTemplate,
+  sourceType = 'embedded-subtitles',
+}: BuildSubtitleTextItemsForClipOptions): TextItem[] {
+  const { sourceStart, sourceEnd, sourceFps, speed } = getClipSourceBounds(clip, timelineFps)
+  const sourceStartSeconds = sourceStart / sourceFps
+  const sourceEndSeconds = sourceEnd / sourceFps
+  const clipEndFrame = clip.from + clip.durationInFrames
+
+  return cues.flatMap((cue) => {
+    const overlapStartSec = Math.max(cue.startSeconds, sourceStartSeconds)
+    const overlapEndSec = Math.min(cue.endSeconds, sourceEndSeconds)
+    if (overlapEndSec <= overlapStartSec) return []
+
+    const fromOffsetFrames = Math.floor(
+      ((overlapStartSec - sourceStartSeconds) * timelineFps) / speed,
+    )
+    const endOffsetFrames = Math.ceil(((overlapEndSec - sourceStartSeconds) * timelineFps) / speed)
+    const from = clip.from + Math.max(0, Math.min(fromOffsetFrames, clip.durationInFrames - 1))
+    const endFrame = Math.min(
+      clipEndFrame,
+      clip.from + Math.max(fromOffsetFrames + 1, endOffsetFrames),
+    )
+    const durationInFrames = Math.max(1, endFrame - from)
+
+    const defaultCaptionItem: TextItem = {
+      id: crypto.randomUUID(),
+      type: 'text',
+      textRole: 'caption',
+      trackId,
+      from,
+      durationInFrames,
+      mediaId: clip.mediaId ?? '',
+      captionSource: buildCaptionSource(clip.mediaId ?? '', clip.id, sourceType, {
+        fileName,
+        format,
+        importedAt: Date.now(),
+      }),
+      label: cue.text.slice(0, 48),
+      text: cue.text,
+      fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
+      fontFamily: 'Inter',
+      fontWeight: 'semibold',
+      fontStyle: 'normal',
+      underline: false,
+      color: '#ffffff',
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.15,
+      letterSpacing: 0,
+      textShadow: {
+        offsetX: 0,
+        offsetY: 3,
+        blur: 10,
+        color: 'rgba(0, 0, 0, 0.75)',
+      },
+      transform: {
+        x: 0,
+        y: Math.round(canvasHeight * 0.32),
+        width: canvasWidth * 0.82,
+        height: canvasHeight * 0.16,
+        rotation: 0,
+        opacity: 1,
+      },
+    }
+
+    return [
+      {
+        ...defaultCaptionItem,
+        ...styleTemplate,
+      },
+    ]
+  })
+}
+
+/**
+ * Find the timeline clips that should receive subtitles for `mediaId`. Each
+ * `linkedGroupId` (synced video/audio companion pair) only contributes one
+ * clip — preferring the video so captions don't render twice.
+ */
+export function findCaptionTargetClipsForMedia(
+  items: readonly TimelineItem[],
+  mediaId: string,
+): Array<AudioItem | VideoItem> {
+  const matching = items.filter(
+    (item): item is AudioItem | VideoItem =>
+      (item.type === 'video' || item.type === 'audio') && item.mediaId === mediaId,
+  )
+
+  const seenLinkedGroups = new Set<string>()
+  const selected: Array<AudioItem | VideoItem> = []
+  const ordered = [...matching].sort((a, b) => {
+    if (a.linkedGroupId === b.linkedGroupId && a.type !== b.type) {
+      return a.type === 'video' ? -1 : 1
+    }
+    return a.from - b.from
+  })
+
+  for (const clip of ordered) {
+    if (clip.linkedGroupId !== undefined) {
+      if (seenLinkedGroups.has(clip.linkedGroupId)) continue
+      seenLinkedGroups.add(clip.linkedGroupId)
+    }
+    selected.push(clip)
+  }
+
+  return selected.sort((a, b) => a.from - b.from)
+}
+
+interface BuildSubtitleSegmentForClipOptions {
+  trackId: string
+  cues: readonly SubtitleCue[]
+  clip: AudioItem | VideoItem
+  timelineFps: number
+  canvasWidth: number
+  canvasHeight: number
+  source: import('@/types/timeline').SubtitleSegmentSource
+  styleTemplate?: CaptionTextItemTemplate
+  /** Label shown in the timeline-item UI; defaults to the source-track label. */
+  label?: string
+}
+
+/**
+ * Build ONE {@link SubtitleSegmentItem} that owns all cues overlapping
+ * `clip`'s source window. Replaces the per-cue {@link buildSubtitleTextItemsForClip}
+ * for callers that want a single, coherent timeline item — matches the way
+ * caption tracks work in dedicated NLEs.
+ *
+ * Cue times are stored segment-relative (start = 0) so the segment can be
+ * dragged, trimmed, or split without rewriting timestamps.
+ */
+export function buildSubtitleSegmentForClip(
+  options: BuildSubtitleSegmentForClipOptions,
+): import('@/types/timeline').SubtitleSegmentItem | null {
+  const {
+    clip,
+    cues,
+    timelineFps,
+    canvasWidth,
+    canvasHeight,
+    trackId,
+    source,
+    styleTemplate,
+    label,
+  } = options
+  const { sourceStart, sourceEnd, sourceFps, speed } = getClipSourceBounds(clip, timelineFps)
+  const sourceStartSeconds = sourceStart / sourceFps
+  const sourceEndSeconds = sourceEnd / sourceFps
+
+  const overlappingCues: import('@/types/timeline').SubtitleSegmentCue[] = []
+  let firstFromOffset = Number.POSITIVE_INFINITY
+  let lastEndOffset = 0
+
+  for (const cue of cues) {
+    const overlapStartSec = Math.max(cue.startSeconds, sourceStartSeconds)
+    const overlapEndSec = Math.min(cue.endSeconds, sourceEndSeconds)
+    if (overlapEndSec <= overlapStartSec) continue
+
+    // Convert source seconds → timeline seconds relative to clip.from / speed,
+    // then keep cue times relative to the segment's eventual `from`.
+    const cueStartTimeline = (overlapStartSec - sourceStartSeconds) / speed
+    const cueEndTimeline = (overlapEndSec - sourceStartSeconds) / speed
+    const cueStartFrames = Math.floor(cueStartTimeline * timelineFps)
+    const cueEndFrames = Math.ceil(cueEndTimeline * timelineFps)
+    if (cueEndFrames <= cueStartFrames) continue
+
+    overlappingCues.push({
+      id: cue.id,
+      startSeconds: cueStartTimeline,
+      endSeconds: cueEndTimeline,
+      text: cue.text,
+    })
+    if (cueStartFrames < firstFromOffset) firstFromOffset = cueStartFrames
+    if (cueEndFrames > lastEndOffset) lastEndOffset = cueEndFrames
+  }
+
+  if (overlappingCues.length === 0) return null
+
+  const segmentFromOffset = Math.max(0, Math.min(firstFromOffset, clip.durationInFrames - 1))
+  const segmentEndOffset = Math.min(
+    clip.durationInFrames,
+    Math.max(lastEndOffset, segmentFromOffset + 1),
+  )
+  const from = clip.from + segmentFromOffset
+  const durationInFrames = Math.max(1, segmentEndOffset - segmentFromOffset)
+
+  // Cue times are now stored segment-relative (start = 0 at the segment's `from`).
+  const segmentRelativeCues = overlappingCues.map((cue) => ({
+    id: cue.id,
+    startSeconds: cue.startSeconds - segmentFromOffset / timelineFps,
+    endSeconds: cue.endSeconds - segmentFromOffset / timelineFps,
+    text: cue.text,
+  }))
+
+  const defaultStyle = {
+    fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
+    fontFamily: 'Inter',
+    fontWeight: 'semibold' as const,
+    fontStyle: 'normal' as const,
+    underline: false,
+    color: '#ffffff',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    textAlign: 'center' as const,
+    verticalAlign: 'middle' as const,
+    lineHeight: 1.15,
+    letterSpacing: 0,
+    textShadow: {
+      offsetX: 0,
+      offsetY: 3,
+      blur: 10,
+      color: 'rgba(0, 0, 0, 0.75)',
+    },
+    transform: {
+      x: 0,
+      y: Math.round(canvasHeight * 0.32),
+      width: canvasWidth * 0.82,
+      height: canvasHeight * 0.16,
+      rotation: 0,
+      opacity: 1,
+    },
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    type: 'subtitle',
+    trackId,
+    from,
+    durationInFrames,
+    label:
+      label ??
+      (source.type === 'embedded-subtitles'
+        ? (source.trackName ?? source.language ?? 'Subtitles')
+        : source.type === 'subtitle-import'
+          ? source.fileName
+          : 'Transcript'),
+    mediaId: clip.mediaId,
+    // Tie the segment to the clip's A/V link group so move/delete/copy on the
+    // pair pulls the subtitle along (and re-extracts inherit the group too).
+    linkedGroupId: clip.linkedGroupId,
+    sourceLabel: label,
+    source,
+    cues: segmentRelativeCues,
+    ...defaultStyle,
+    ...styleTemplate,
+  }
+}
+
+/**
+ * Group caption text items by their `captionSource.clipId` and produce one
+ * {@link SubtitleSegmentItem} per clip — used for the "consolidate per-cue
+ * captions into a segment" migration.
+ *
+ * Reads each text item's `from`/`durationInFrames` (in timeline frames),
+ * derives the segment's `from` from the earliest caption, and stores cue
+ * times segment-relative (in seconds) so subsequent splits/trims work.
+ *
+ * Returns:
+ *   - `segments`: one {@link SubtitleSegmentItem} per matched clip group
+ *   - `consumedItemIds`: text-item ids that should be removed by the caller
+ */
+export function consolidateCaptionTextItemsToSegments(
+  items: readonly TimelineItem[],
+  timelineFps: number,
+  options: { onlyClipId?: string } = {},
+): {
+  segments: import('@/types/timeline').SubtitleSegmentItem[]
+  consumedItemIds: string[]
+} {
+  const captionItems = items.filter(
+    (item): item is TextItem & { captionSource: GeneratedCaptionSource } =>
+      item.type === 'text' &&
+      (item.captionSource?.type === 'embedded-subtitles' ||
+        item.captionSource?.type === 'subtitle-import') &&
+      (options.onlyClipId === undefined || item.captionSource.clipId === options.onlyClipId),
+  )
+  if (captionItems.length === 0) return { segments: [], consumedItemIds: [] }
+
+  const byClip = new Map<string, Array<TextItem & { captionSource: GeneratedCaptionSource }>>()
+  for (const item of captionItems) {
+    const clipId = item.captionSource.clipId
+    if (clipId.length === 0) continue
+    const list = byClip.get(clipId) ?? []
+    list.push(item)
+    byClip.set(clipId, list)
+  }
+  if (byClip.size === 0) return { segments: [], consumedItemIds: [] }
+
+  const segments: import('@/types/timeline').SubtitleSegmentItem[] = []
+  const consumedItemIds: string[] = []
+
+  for (const [clipId, group] of byClip) {
+    const sorted = [...group].sort((a, b) => a.from - b.from)
+    const first = sorted[0]!
+    const last = sorted[sorted.length - 1]!
+    const segmentFrom = first.from
+    const segmentEnd = last.from + last.durationInFrames
+
+    // Inherit the source clip's linkedGroupId so the consolidated segment
+    // tracks with the A/V pair, matching the fresh-extract path.
+    const sourceClip = items.find(
+      (candidate) =>
+        (candidate.type === 'video' || candidate.type === 'audio') && candidate.id === clipId,
+    )
+    const linkedGroupId = sourceClip?.linkedGroupId
+
+    const sampleSource = first.captionSource
+    const segmentSource: import('@/types/timeline').SubtitleSegmentSource =
+      sampleSource.type === 'embedded-subtitles'
+        ? {
+            type: 'embedded-subtitles',
+            mediaId: sampleSource.mediaId,
+            clipId,
+            // Original text-item captionSource doesn't carry the source track
+            // metadata. Mark trackNumber: 0 so consumers can tell this came
+            // from a consolidation (vs a fresh extraction).
+            trackNumber: 0,
+            language: undefined,
+            trackName: undefined,
+            codecId: undefined,
+            importedAt: sampleSource.importedAt ?? Date.now(),
+          }
+        : {
+            type: 'subtitle-import',
+            fileName: sampleSource.fileName ?? 'consolidated.srt',
+            format: sampleSource.format ?? 'srt',
+            importedAt: sampleSource.importedAt ?? Date.now(),
+          }
+
+    const cues = sorted.map((item) => ({
+      id: item.id,
+      startSeconds: (item.from - segmentFrom) / timelineFps,
+      endSeconds: (item.from + item.durationInFrames - segmentFrom) / timelineFps,
+      text: item.text,
+    }))
+
+    // Style: pick up the first item's typography so consolidation is visually
+    // continuous with the per-cue version it's replacing.
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: crypto.randomUUID(),
+      type: 'subtitle',
+      trackId: first.trackId,
+      from: segmentFrom,
+      durationInFrames: Math.max(1, segmentEnd - segmentFrom),
+      label: first.label,
+      mediaId: first.mediaId,
+      linkedGroupId,
+      source: segmentSource,
+      cues,
+      fontSize: first.fontSize,
+      fontFamily: first.fontFamily,
+      fontWeight: first.fontWeight,
+      fontStyle: first.fontStyle,
+      underline: first.underline,
+      color: first.color,
+      backgroundColor: first.backgroundColor,
+      backgroundRadius: first.backgroundRadius,
+      textAlign: first.textAlign,
+      verticalAlign: first.verticalAlign,
+      lineHeight: first.lineHeight,
+      letterSpacing: first.letterSpacing,
+      textPadding: first.textPadding,
+      textShadow: first.textShadow,
+      stroke: first.stroke,
+      transform: first.transform,
+    }
+    segments.push(segment)
+    for (const item of sorted) consumedItemIds.push(item.id)
+  }
+
+  return { segments, consumedItemIds }
 }

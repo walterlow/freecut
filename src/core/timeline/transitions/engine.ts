@@ -20,7 +20,7 @@ import type {
   SlideDirection,
   FlipDirection,
 } from '@/types/transition'
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
+import { easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
 import type { TransitionRenderer } from './registry'
 
 // Lazy registry reference to avoid circular dependency at import time.
@@ -94,9 +94,6 @@ export function calculateEasingCurve(config: TransitionTimingConfig): number[] {
     const linearProgress = frame / Math.max(1, durationInFrames - 1)
 
     switch (timing) {
-      case 'spring':
-        curve.push(springEasing(linearProgress, { tension: 180, friction: 12, mass: 1 }))
-        break
       case 'ease-in':
         curve.push(easeIn(linearProgress))
         break
