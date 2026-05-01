@@ -133,6 +133,7 @@ export function usePreviewPlaybackController({
 
       const { currentFrame, setCurrentFrame } = playbackState
       if (currentFrame === nextFrame) return
+      if (interactionMode === 'paused') return
       setCurrentFrame(nextFrame)
     },
     [
