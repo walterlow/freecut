@@ -41,6 +41,7 @@ export interface ClientExportSettings {
   audioBitrate?: number
   videoBitrate?: number
   sampleRate?: number // For audio exports (default: 48000)
+  embedSubtitles?: boolean
 }
 
 export interface RenderProgress {

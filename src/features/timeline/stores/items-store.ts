@@ -648,6 +648,11 @@ function buildReplaceableCaptionClipIds(items: TimelineItem[]): Set<string> {
       continue
     }
 
+    if (item.type === 'subtitle' && item.source.type === 'transcript' && item.source.clipId) {
+      ids.add(item.source.clipId)
+      continue
+    }
+
     if (isCaptionableClip(item)) {
       const mediaId = item.mediaId
       if (!mediaId) continue

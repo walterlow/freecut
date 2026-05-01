@@ -1,9 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Captions } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { usePlaybackStore } from '@/shared/state/playback'
 import {
@@ -17,6 +17,7 @@ import { cn } from '@/shared/ui/cn'
 import type { SubtitleSegmentItem, TimelineItem } from '@/types/timeline'
 
 import { CaptionStyleControls } from './caption-style-controls'
+import { PropertySection } from '../components'
 
 interface SubtitleSectionProps {
   items: TimelineItem[]
@@ -60,21 +61,20 @@ export const SubtitleSection = memo(function SubtitleSection({
   if (segments.length > 1) {
     const totalCues = segments.reduce((sum, segment) => sum + segment.cues.length, 0)
     return (
-      <section className="space-y-3 px-1">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Subtitles
-        </h3>
-        <CaptionStyleControls
-          items={segments}
-          canvasWidth={canvasWidth}
-          canvasHeight={canvasHeight}
-        />
-        <Separator />
-        <p className="text-xs text-muted-foreground">
-          {segments.length} segments selected · {totalCues} cues total. Style applies to all. Select
-          a single segment to edit individual cues.
-        </p>
-      </section>
+      <PropertySection title="Subtitle" icon={Captions} defaultOpen={true}>
+        <div className="space-y-3 px-1">
+          <CaptionStyleControls
+            items={segments}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+          />
+
+          <p className="text-xs text-muted-foreground">
+            {segments.length} segments selected · {totalCues} cues total. Style applies to all.
+            Select a single segment to edit individual cues.
+          </p>
+        </div>
+      </PropertySection>
     )
   }
 
@@ -133,36 +133,30 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
       ? (segment.source.trackName ??
         segment.source.language ??
         `Track ${segment.source.trackNumber}`)
-      : segment.source.fileName
+      : segment.source.type === 'subtitle-import'
+        ? segment.source.fileName
+        : 'Transcript'
 
   // Memoize the items array passed to CaptionStyleControls so identity is
   // stable across re-renders that don't actually change the segment object.
   const styleItems = useMemo(() => [segment], [segment])
 
   return (
-    <section className="space-y-3 px-1">
-      <header className="space-y-0.5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Subtitles
-        </h3>
+    <PropertySection title="Subtitle" icon={Captions} defaultOpen={true}>
+      <div className="space-y-3 px-1">
         <p className="text-xs text-muted-foreground">
           {segment.cues.length} cues · {sourceLabel}
         </p>
-      </header>
 
-      <CaptionStyleControls
-        items={styleItems}
-        canvasWidth={canvasWidth}
-        canvasHeight={canvasHeight}
-      />
+        <CaptionStyleControls
+          items={styleItems}
+          canvasWidth={canvasWidth}
+          canvasHeight={canvasHeight}
+        />
 
-      <Separator />
-
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Cues
-      </p>
-      <VirtualCueList cues={segment.cues} onChange={updateCue} onSeek={seekToCue} />
-    </section>
+        <VirtualCueList cues={segment.cues} onChange={updateCue} onSeek={seekToCue} />
+      </div>
+    </PropertySection>
   )
 })
 

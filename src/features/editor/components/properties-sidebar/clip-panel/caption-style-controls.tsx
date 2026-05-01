@@ -1,12 +1,11 @@
 import { memo, useCallback, useMemo } from 'react'
 
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/shared/ui/cn'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import type { SubtitleSegmentItem, TextItem } from '@/types/timeline'
 
+import { ColorPicker, PropertyRow, SliderInput } from '../components'
 import {
   CAPTION_STYLE_PRESETS,
   type CaptionStylePreset,
@@ -70,11 +69,29 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
 
   const sampleColor = sample.color ?? '#ffffff'
   const sampleFontSize = sample.fontSize ?? Math.max(36, Math.round(canvasHeight * 0.045))
+  const sampleTextPadding = sample.textPadding ?? 16
   const verticalY = Math.round(sample.transform?.y ?? 0)
   const hasBackground = !!sample.backgroundColor
+  const verticalRange = Math.max(1, Math.round(canvasHeight / 2))
+
+  const updateVerticalPosition = (value: number) => {
+    applyPatch({
+      transform: {
+        ...(sample.transform ?? {
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
+          rotation: 0,
+          opacity: 1,
+        }),
+        y: value,
+      },
+    } as Partial<CaptionStylableItem>)
+  }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground pb-1.5">
           Style preset
@@ -99,81 +116,45 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
         </div>
       </div>
 
-      <Separator />
+      <Separator className="my-1" />
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <Label htmlFor="caption-color" className="text-[10px] text-muted-foreground">
-            Color
-          </Label>
-          <div className="flex items-center gap-1.5">
-            <input
-              id="caption-color"
-              type="color"
-              value={normalizeColor(sampleColor)}
-              onChange={(event) => applyPatch({ color: event.target.value })}
-              className="h-7 w-7 cursor-pointer rounded border border-border bg-transparent"
-            />
-            <Input
-              value={sampleColor}
-              onChange={(event) => applyPatch({ color: event.target.value })}
-              className="h-7 flex-1 text-xs tabular-nums"
-            />
-          </div>
-        </div>
+      <ColorPicker
+        label="Color"
+        color={sampleColor}
+        onChange={(color) => applyPatch({ color })}
+        onLiveChange={(color) => applyPatch({ color })}
+        onReset={() => applyPatch({ color: '#ffffff' })}
+        defaultColor="#ffffff"
+      />
 
-        <div className="space-y-1">
-          <Label htmlFor="caption-font-size" className="text-[10px] text-muted-foreground">
-            Size
-          </Label>
-          <Input
-            id="caption-font-size"
-            type="number"
-            min={8}
-            max={400}
-            step={1}
-            value={sampleFontSize}
-            onChange={(event) => {
-              const value = Number(event.target.value)
-              if (Number.isFinite(value) && value > 0) applyPatch({ fontSize: value })
-            }}
-            className="h-7 text-xs tabular-nums"
-          />
-        </div>
-      </div>
+      <PropertyRow label="Size">
+        <SliderInput
+          value={sampleFontSize}
+          onChange={(fontSize) => applyPatch({ fontSize })}
+          onLiveChange={(fontSize) => applyPatch({ fontSize })}
+          min={8}
+          max={400}
+          step={1}
+          unit="px"
+          className="flex-1 min-w-0"
+        />
+      </PropertyRow>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <Label htmlFor="caption-y" className="text-[10px] text-muted-foreground">
-            Vertical position (px from center)
-          </Label>
-          <Input
-            id="caption-y"
-            type="number"
-            step={1}
-            value={verticalY}
-            onChange={(event) => {
-              const value = Number(event.target.value)
-              if (!Number.isFinite(value)) return
-              applyPatch({
-                transform: {
-                  ...(sample.transform ?? {
-                    x: 0,
-                    y: 0,
-                    width: 0,
-                    height: 0,
-                    rotation: 0,
-                    opacity: 1,
-                  }),
-                  y: value,
-                },
-              } as Partial<CaptionStylableItem>)
-            }}
-            className="h-7 text-xs tabular-nums"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">Background box</Label>
+      <PropertyRow label="Vertical">
+        <SliderInput
+          value={verticalY}
+          onChange={updateVerticalPosition}
+          onLiveChange={updateVerticalPosition}
+          min={-verticalRange}
+          max={verticalRange}
+          step={1}
+          unit="px"
+          className="flex-1 min-w-0"
+        />
+      </PropertyRow>
+
+      <PropertyRow label="Background">
+        <div className="flex flex-1 min-w-0">
           <button
             type="button"
             onClick={() =>
@@ -191,18 +172,22 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
             {hasBackground ? 'On' : 'Off'}
           </button>
         </div>
-      </div>
+      </PropertyRow>
+
+      {hasBackground && (
+        <PropertyRow label="Padding">
+          <SliderInput
+            value={sampleTextPadding}
+            onChange={(textPadding) => applyPatch({ textPadding })}
+            onLiveChange={(textPadding) => applyPatch({ textPadding })}
+            min={0}
+            max={80}
+            step={1}
+            unit="px"
+            className="flex-1 min-w-0"
+          />
+        </PropertyRow>
+      )}
     </div>
   )
 })
-
-/**
- * Native `<input type="color">` only accepts 6-digit hex. If a user has set
- * a non-hex color (e.g. `oklch(...)` or `rgba(…)` from a preset), feed the
- * picker a sensible default while leaving the canonical value in the text
- * input next to it.
- */
-function normalizeColor(value: string): string {
-  if (/^#[0-9a-f]{6}$/i.test(value)) return value
-  return '#ffffff'
-}

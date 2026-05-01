@@ -1326,17 +1326,6 @@ function renderTextItem(
     ctx.clip()
   }
 
-  if (item.backgroundColor) {
-    ctx.fillStyle = item.backgroundColor
-    if (backgroundRadius > 0) {
-      ctx.beginPath()
-      ctx.roundRect(itemLeft, itemTop, transform.width, transform.height, backgroundRadius)
-      ctx.fill()
-    } else {
-      ctx.fillRect(itemLeft, itemTop, transform.width, transform.height)
-    }
-  }
-
   const availableWidth = Math.max(1, transform.width - padding * 2)
   const spans = getTextItemSpans(item)
   const renderedLines = spans.flatMap((span) => {
@@ -1367,6 +1356,7 @@ function renderTextItem(
 
     return lines.map((line) => ({
       text: line,
+      width: textMeasureCache.measure(ctx, line, spanLetterSpacing),
       fontSize: spanFontSize,
       fontFamily: spanFontFamily,
       fontStyle: spanFontStyle,
@@ -1396,6 +1386,42 @@ function renderTextItem(
     default:
       textBlockTop = itemTop + padding + (availableHeight - totalTextHeight) / 2
       break
+  }
+
+  if (item.backgroundColor && renderedLines.length > 0) {
+    const maxLineWidth = Math.max(...renderedLines.map((line) => line.width))
+    let backgroundCenterX: number
+    switch (textAlign) {
+      case 'left':
+        backgroundCenterX = itemLeft + padding + maxLineWidth / 2
+        break
+      case 'right':
+        backgroundCenterX = itemLeft + transform.width - padding - maxLineWidth / 2
+        break
+      case 'center':
+      default:
+        backgroundCenterX = itemLeft + transform.width / 2
+        break
+    }
+    const backgroundWidth = Math.min(transform.width, maxLineWidth + padding * 2)
+    const backgroundHeight = totalTextHeight + padding * 2
+    const backgroundLeft = backgroundCenterX - backgroundWidth / 2
+    const backgroundTop = textBlockTop - padding
+
+    ctx.fillStyle = item.backgroundColor
+    if (backgroundRadius > 0) {
+      ctx.beginPath()
+      ctx.roundRect(
+        backgroundLeft,
+        backgroundTop,
+        backgroundWidth,
+        backgroundHeight,
+        backgroundRadius,
+      )
+      ctx.fill()
+    } else {
+      ctx.fillRect(backgroundLeft, backgroundTop, backgroundWidth, backgroundHeight)
+    }
   }
 
   if (item.textShadow) {

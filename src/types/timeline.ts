@@ -322,6 +322,11 @@ export type SubtitleSegmentItem = BaseTimelineItem & {
 
 export type SubtitleSegmentSource =
   | {
+      type: 'transcript'
+      mediaId: string
+      clipId: string
+    }
+  | {
       type: 'embedded-subtitles'
       mediaId: string
       clipId: string

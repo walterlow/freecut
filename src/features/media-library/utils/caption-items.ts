@@ -10,6 +10,7 @@ import type { SubtitleCue, SubtitleFormat } from '@/shared/utils/subtitles'
 import type {
   AudioItem,
   GeneratedCaptionSource,
+  SubtitleSegmentItem,
   TextItem,
   TimelineItem,
   TimelineTrack,
@@ -418,16 +419,47 @@ export function isGeneratedCaptionTextItem(
   )
 }
 
+export function isGeneratedCaptionSegmentItem(item: TimelineItem): item is SubtitleSegmentItem & {
+  source: Extract<import('@/types/timeline').SubtitleSegmentSource, { type: 'transcript' }>
+} {
+  return (
+    item.type === 'subtitle' &&
+    item.source.type === 'transcript' &&
+    item.source.clipId.length > 0 &&
+    item.source.mediaId.length > 0
+  )
+}
+
 export function findGeneratedCaptionItemsForClip(
   items: readonly TimelineItem[],
   clipId: string,
   sourceType?: GeneratedCaptionSource['type'],
-): Array<TextItem & { captionSource: GeneratedCaptionSource }> {
+): Array<
+  | (TextItem & { captionSource: GeneratedCaptionSource })
+  | (SubtitleSegmentItem & {
+      source: Extract<import('@/types/timeline').SubtitleSegmentSource, { type: 'transcript' }>
+    })
+> {
   return items.filter(
-    (item): item is TextItem & { captionSource: GeneratedCaptionSource } =>
-      isGeneratedCaptionTextItem(item) &&
-      item.captionSource.clipId === clipId &&
-      (sourceType === undefined || item.captionSource.type === sourceType),
+    (
+      item,
+    ): item is
+      | (TextItem & { captionSource: GeneratedCaptionSource })
+      | (SubtitleSegmentItem & {
+          source: Extract<import('@/types/timeline').SubtitleSegmentSource, { type: 'transcript' }>
+        }) => {
+      if (isGeneratedCaptionTextItem(item)) {
+        return (
+          item.captionSource.clipId === clipId &&
+          (sourceType === undefined || item.captionSource.type === sourceType)
+        )
+      }
+      return (
+        isGeneratedCaptionSegmentItem(item) &&
+        item.source.clipId === clipId &&
+        (sourceType === undefined || sourceType === 'transcript')
+      )
+    },
   )
 }
 
@@ -453,7 +485,7 @@ export function findReplaceableCaptionItemsForClip(
   items: readonly TimelineItem[],
   clip: AudioItem | VideoItem,
   sourceType?: GeneratedCaptionSource['type'],
-): TextItem[] {
+): Array<TextItem | SubtitleSegmentItem> {
   const generatedCaptionItems = findGeneratedCaptionItemsForClip(items, clip.id, sourceType)
   if (generatedCaptionItems.length > 0) {
     return generatedCaptionItems
@@ -467,7 +499,9 @@ export function findReplaceableCaptionItemsForClip(
   return items.filter((item): item is TextItem => isLegacyGeneratedCaptionItemForClip(item, clip))
 }
 
-export function getCaptionTextItemTemplate(item: TextItem): CaptionTextItemTemplate {
+export function getCaptionTextItemTemplate(
+  item: TextItem | SubtitleSegmentItem,
+): CaptionTextItemTemplate {
   return {
     fontSize: item.fontSize,
     fontFamily: item.fontFamily,
@@ -888,7 +922,9 @@ export function buildSubtitleSegmentForClip(
       label ??
       (source.type === 'embedded-subtitles'
         ? (source.trackName ?? source.language ?? 'Subtitles')
-        : source.fileName),
+        : source.type === 'subtitle-import'
+          ? source.fileName
+          : 'Transcript'),
     mediaId: clip.mediaId,
     // Tie the segment to the clip's A/V link group so move/delete/copy on the
     // pair pulls the subtitle along (and re-extracts inherit the group too).

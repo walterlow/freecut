@@ -75,6 +75,7 @@ const itemTypeSchema = z.enum([
   'shape',
   'composition',
   'adjustment',
+  'subtitle',
 ])
 
 const shapeTypeSchema = z.enum([

@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vite-plus/test'
-import type { AudioItem, ShapeItem, TextItem, VideoItem } from '@/types/timeline'
+import type {
+  AudioItem,
+  ShapeItem,
+  SubtitleSegmentItem,
+  TextItem,
+  VideoItem,
+} from '@/types/timeline'
 import { useItemsStore } from './items-store'
 import { useTimelineSettingsStore } from './timeline-settings-store'
 import { timelineToSourceFrames } from '../utils/source-calculations'
@@ -42,6 +48,26 @@ function makeTextItem(overrides: Partial<TextItem> = {}): TextItem {
     durationInFrames: 30,
     label: 'Caption',
     text: 'Caption',
+    color: '#ffffff',
+    ...overrides,
+  }
+}
+
+function makeSubtitleItem(overrides: Partial<SubtitleSegmentItem> = {}): SubtitleSegmentItem {
+  return {
+    id: 'subtitle-1',
+    type: 'subtitle',
+    trackId: 'track-subtitle',
+    from: 0,
+    durationInFrames: 30,
+    label: 'Transcript',
+    mediaId: 'media-1',
+    source: {
+      type: 'transcript',
+      mediaId: 'media-1',
+      clipId: 'clip-1',
+    },
+    cues: [{ id: 'cue-1', startSeconds: 0, endSeconds: 1, text: 'Caption' }],
     color: '#ffffff',
     ...overrides,
   }
@@ -406,6 +432,25 @@ describe('items-store indexes', () => {
     useItemsStore.getState().setItems([clip, legacyCaption])
 
     expect(useItemsStore.getState().replaceableCaptionClipIds.has('legacy-clip')).toBe(true)
+  })
+
+  it('indexes transcript subtitle segments as replaceable for their source clip', () => {
+    const clip = makeVideoItem({
+      id: 'transcript-clip',
+      mediaId: 'media-transcript',
+    })
+    const transcriptSegment = makeSubtitleItem({
+      source: {
+        type: 'transcript',
+        mediaId: 'media-transcript',
+        clipId: 'transcript-clip',
+      },
+      mediaId: 'media-transcript',
+    })
+
+    useItemsStore.getState().setItems([clip, transcriptSegment])
+
+    expect(useItemsStore.getState().replaceableCaptionClipIds.has('transcript-clip')).toBe(true)
   })
 
   it('indexes legacy linked audio/video pairs for O(1) lookups', () => {
