@@ -227,6 +227,10 @@ describe('scene assembly', () => {
             text: 'Hello',
             color: '#fff',
             fontFamily: 'Sora',
+            textSpans: [
+              { text: 'Tag', fontFamily: 'Inter Tight' },
+              { text: 'Headline', fontFamily: 'Anton' },
+            ],
           },
           {
             id: 'shape-1',
@@ -298,7 +302,12 @@ describe('scene assembly', () => {
       { id: 'track-2', trackVisible: true, itemIds: ['text-2'] },
     ])
 
-    expect(collectVisibleTextFontFamilies(state.visibleTracks)).toEqual(['Sora', 'Inter'])
+    expect(collectVisibleTextFontFamilies(state.visibleTracks)).toEqual([
+      'Sora',
+      'Inter Tight',
+      'Anton',
+      'Inter',
+    ])
   })
 
   it('collects transition clips and resolves transition windows from shared items', () => {

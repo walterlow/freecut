@@ -46,9 +46,10 @@ import {
   materializeMaskInfos,
   reuseStableMaskInfos,
 } from '../utils/mask-info'
-import { resolveTrackRenderState } from '../utils/scene-assembly'
+import { collectVisibleTextFontFamilies, resolveTrackRenderState } from '../utils/scene-assembly'
 import { getLinkedVideoIdsWithAudio, hasLinkedAudioCompanion } from '@/shared/utils/linked-media'
 import { resolveProxyUrl } from '@/features/composition-runtime/deps/media-library'
+import { loadFonts } from '../utils/fonts'
 
 const EMPTY_AUDIO_EQ_STAGES: ResolvedAudioEqSettings[] = []
 type TrackRenderState = ReturnType<typeof resolveTrackRenderState>
@@ -359,6 +360,10 @@ export const CompositionContent = React.memo<CompositionContentProps>(
     const sortedTracks =
       trackRenderState?.visibleTracksByOrderDesc ?? EMPTY_VISIBLE_TRACKS_BY_ORDER_DESC
     const visibleTracks = trackRenderState?.visibleTracks ?? EMPTY_VISIBLE_TRACKS
+    const visibleTextFontFamilies = useMemo(
+      () => collectVisibleTextFontFamilies(visibleTracks),
+      [visibleTracks],
+    )
     const maxTrackOrder = useMemo(
       () => sortedTracks.reduce((max, track) => Math.max(max, track.order ?? 0), 0),
       [sortedTracks],
@@ -455,6 +460,11 @@ export const CompositionContent = React.memo<CompositionContentProps>(
       if (renderMode !== 'audio-only') return
       clearMixerLiveGain(item.id)
     }, [audioGainMultiplier, item.id, renderMode])
+
+    React.useEffect(() => {
+      if (renderMode === 'audio-only' || visibleTextFontFamilies.length === 0) return
+      loadFonts(visibleTextFontFamilies)
+    }, [renderMode, visibleTextFontFamilies])
 
     // Resolve active sub-comp masks for the current local frame.
     // This allows masks authored inside a pre-comp to clip items when viewed

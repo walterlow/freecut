@@ -11,6 +11,7 @@ import type { ItemEffect } from '@/types/effects'
 import type { TimelineItem } from '@/types/timeline'
 import type { Transition } from '@/types/transition'
 import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner'
+import { hasCornerPin } from '@/features/preview/deps/composition-runtime'
 
 function hasEnabledGpuEffect(effects: ItemEffect[] | undefined): boolean {
   return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
@@ -21,7 +22,15 @@ function hasRenderableBlendMode(item: TimelineItem): boolean {
   return item.blendMode !== undefined && item.blendMode !== 'normal'
 }
 
-function subCompositionHasGpuEffectsOrBlend(
+function needsRenderedOverlayPath(item: TimelineItem): boolean {
+  return (
+    hasEnabledGpuEffect(item.effects) ||
+    hasRenderableBlendMode(item) ||
+    hasCornerPin(item.cornerPin)
+  )
+}
+
+function subCompositionNeedsRenderedOverlayPath(
   subComp: SubComposition,
   compositionById?: Record<string, SubComposition>,
   visited: Set<string> = new Set(),
@@ -29,11 +38,10 @@ function subCompositionHasGpuEffectsOrBlend(
   if (visited.has(subComp.id)) return false
   visited.add(subComp.id)
   return subComp.items.some((subItem) => {
-    if (hasEnabledGpuEffect(subItem.effects)) return true
-    if (hasRenderableBlendMode(subItem)) return true
+    if (needsRenderedOverlayPath(subItem)) return true
     if (subItem.type === 'composition' && compositionById) {
       const nested = compositionById[subItem.compositionId]
-      if (nested && subCompositionHasGpuEffectsOrBlend(nested, compositionById, visited)) {
+      if (nested && subCompositionNeedsRenderedOverlayPath(nested, compositionById, visited)) {
         return true
       }
     }
@@ -63,11 +71,7 @@ export function shouldForceContinuousPreviewOverlay(
     return false
   }
 
-  if (
-    options.forceTransitionFrames &&
-    Array.isArray(transitionsOrCount) &&
-    transitionsOrCount.length > 0
-  ) {
+  if (Array.isArray(transitionsOrCount) && transitionsOrCount.length > 0) {
     const clipMap = new Map<string, TimelineItem>()
     for (const item of items) {
       clipMap.set(item.id, item)
@@ -75,7 +79,16 @@ export function shouldForceContinuousPreviewOverlay(
 
     for (const window of resolveTransitionWindows(transitionsOrCount, clipMap)) {
       if (frame >= window.startFrame && frame < window.endFrame) {
-        return true
+        if (options.forceTransitionFrames) {
+          return true
+        }
+        if (window.leftClip.type === 'composition' || window.rightClip.type === 'composition') {
+          return true
+        }
+        if (hasCornerPin(window.leftClip.cornerPin) || hasCornerPin(window.rightClip.cornerPin)) {
+          return true
+        }
+        break
       }
     }
   }
@@ -87,9 +100,10 @@ export function shouldForceContinuousPreviewOverlay(
     const effectiveEffects = previewEffectsByItemId?.get(item.id) ?? item.effects
     if (hasEnabledGpuEffect(effectiveEffects)) return true
     if (hasRenderableBlendMode(item)) return true
+    if (hasCornerPin(item.cornerPin)) return true
     if (item.type === 'composition' && compositionById) {
       const subComp = compositionById[item.compositionId]
-      if (subComp && subCompositionHasGpuEffectsOrBlend(subComp, compositionById)) return true
+      if (subComp && subCompositionNeedsRenderedOverlayPath(subComp, compositionById)) return true
     }
     return false
   })
