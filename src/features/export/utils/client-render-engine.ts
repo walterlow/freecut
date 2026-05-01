@@ -111,6 +111,64 @@ function getLog() {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function hasEnabledGpuEffect(effects: TimelineItem['effects']): boolean {
+  return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
+}
+
+function itemHasEnabledGpuEffect(
+  item: TimelineItem,
+  getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined,
+): boolean {
+  const previewEffects = getPreviewEffectsOverride?.(item.id)
+  return hasEnabledGpuEffect(previewEffects ?? item.effects)
+}
+
+export function subCompositionRenderDataHasGpuEffects(
+  compositionId: string,
+  subCompRenderData: ReadonlyMap<string, SubCompRenderData>,
+  options: {
+    getCurrentItem?: <TItem extends TimelineItem>(item: TItem) => TItem
+    getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined
+    visited?: Set<string>
+  } = {},
+): boolean {
+  const { getPreviewEffectsOverride } = options
+  const getCurrentItem =
+    options.getCurrentItem ?? (<TItem extends TimelineItem>(item: TItem) => item)
+  const visited = options.visited ?? new Set<string>()
+  if (visited.has(compositionId)) return false
+  visited.add(compositionId)
+
+  const subData = subCompRenderData.get(compositionId)
+  if (!subData) return false
+
+  for (const entry of subData.adjustmentLayers ?? []) {
+    if (itemHasEnabledGpuEffect(getCurrentItem(entry.layer), getPreviewEffectsOverride)) {
+      return true
+    }
+  }
+
+  for (const track of subData.sortedTracks) {
+    if (!track.visible) continue
+    for (const subItem of track.items) {
+      const currentSubItem = getCurrentItem(subItem)
+      if (itemHasEnabledGpuEffect(currentSubItem, getPreviewEffectsOverride)) return true
+      if (
+        currentSubItem.type === 'composition' &&
+        subCompositionRenderDataHasGpuEffects(currentSubItem.compositionId, subCompRenderData, {
+          getCurrentItem,
+          getPreviewEffectsOverride,
+          visited,
+        })
+      ) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
 /**
  * Check if an image item is a potentially animated image (GIF or WebP).
  * Static WebP files will be detected during frame extraction and fall back
@@ -1377,12 +1435,11 @@ export async function createCompositionRenderer(
         })
       }
 
-      const hasGpuEffects = (effects: TimelineItem['effects']): boolean =>
-        effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
       const hasGpuEffectsForItem = (item: TimelineItem): boolean => {
-        const previewEffects =
-          renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined
-        return hasGpuEffects(previewEffects ?? item.effects)
+        return itemHasEnabledGpuEffect(
+          item,
+          renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
+        )
       }
       let hasAnyGpuEffects = false
       for (const track of sortedTracks) {
@@ -1398,15 +1455,13 @@ export async function createCompositionRenderer(
           // adjustment layers so the pipeline is initialized before
           // renderCompositionItem needs it.
           if (item.type === 'composition') {
-            const subData = subCompRenderData.get(item.compositionId)
-            if (!subData) continue
-            const trackItemWithGpu = subData.sortedTracks.some((t) =>
-              t.items.some((subItem) => hasGpuEffectsForItem(getCurrentItem(subItem))),
-            )
-            const adjustmentWithGpu = (subData.adjustmentLayers ?? []).some((entry) =>
-              hasGpuEffectsForItem(entry.layer),
-            )
-            if (trackItemWithGpu || adjustmentWithGpu) {
+            if (
+              subCompositionRenderDataHasGpuEffects(item.compositionId, subCompRenderData, {
+                getCurrentItem,
+                getPreviewEffectsOverride:
+                  renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
+              })
+            ) {
               hasAnyGpuEffects = true
               break
             }

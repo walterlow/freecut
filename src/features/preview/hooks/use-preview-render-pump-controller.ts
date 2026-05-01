@@ -89,7 +89,6 @@ interface UsePreviewRenderPumpParams {
   isGizmoInteractingRef: MutableRefObject<boolean>
   bypassPreviewSeekRef: MutableRefObject<boolean>
   showFastScrubOverlayRef: MutableRefObject<boolean>
-  pendingFastScrubHandoffFrameRef: MutableRefObject<number | null>
   scrubCanvasRef: MutableRefObject<HTMLCanvasElement | null>
   scrubRendererRef: RefObject<FastScrubRenderer | null>
   scrubMountedRef: MutableRefObject<boolean>
@@ -124,12 +123,8 @@ interface UsePreviewRenderPumpParams {
   transitionPrewarmPromiseRef: MutableRefObject<Promise<void> | null>
   transitionSessionTraceRef: MutableRefObject<TransitionPreviewSessionTrace | null>
   setDisplayedFrame: (frame: number | null) => void
-  clearPendingFastScrubHandoff: () => void
   hideFastScrubOverlay: () => void
   hidePlaybackTransitionOverlay: () => void
-  maybeCompleteFastScrubHandoff: (resolvedFrame?: number | null) => boolean
-  scheduleFastScrubHandoffCheck: () => void
-  beginFastScrubHandoff: (targetFrame: number) => void
   showFastScrubOverlayForFrame: () => void
   showPlaybackTransitionOverlayForFrame: () => void
   shouldPreferPlayerForPreview: (previewFrame: number | null) => boolean
@@ -176,7 +171,6 @@ export function usePreviewRenderPump({
   isGizmoInteractingRef,
   bypassPreviewSeekRef,
   showFastScrubOverlayRef,
-  pendingFastScrubHandoffFrameRef,
   scrubCanvasRef,
   scrubRendererRef,
   scrubMountedRef,
@@ -211,12 +205,8 @@ export function usePreviewRenderPump({
   transitionPrewarmPromiseRef,
   transitionSessionTraceRef,
   setDisplayedFrame,
-  clearPendingFastScrubHandoff,
   hideFastScrubOverlay,
   hidePlaybackTransitionOverlay,
-  maybeCompleteFastScrubHandoff,
-  scheduleFastScrubHandoffCheck,
-  beginFastScrubHandoff,
   showFastScrubOverlayForFrame,
   showPlaybackTransitionOverlayForFrame,
   shouldPreferPlayerForPreview,
@@ -1253,7 +1243,6 @@ export function usePreviewRenderPump({
           hideAllOverlays()
           return
         }
-        clearPendingFastScrubHandoff()
         if (showFastScrubOverlayRef.current) {
           hideFastScrubOverlay()
         }
@@ -1343,7 +1332,6 @@ export function usePreviewRenderPump({
 
       if (targetFrame === null) {
         resetScrubLoopState()
-        clearPendingFastScrubHandoff()
         bypassPreviewSeekRef.current = false
 
         // When leaving a transition frame (e.g. 12714â†’12715), the
@@ -1386,27 +1374,17 @@ export function usePreviewRenderPump({
             hideAllOverlays()
             return
           }
-          if (showFastScrubOverlayRef.current && roundedFrame !== state.currentFrame) {
-            beginFastScrubHandoff(state.currentFrame)
-          }
           if (roundedFrame !== state.currentFrame) {
             trackPlayerSeek(state.currentFrame)
           }
           playerRef.current?.seekTo(state.currentFrame)
-          if (!maybeCompleteFastScrubHandoff()) {
-            if (pendingFastScrubHandoffFrameRef.current !== null) {
-              scheduleFastScrubHandoffCheck()
-            } else {
-              hideAllOverlays()
-            }
-          }
+          hideAllOverlays()
         } catch {
           hideAllOverlays()
         }
         return
       }
 
-      clearPendingFastScrubHandoff()
       if (scrubRequestedFrameRef.current === targetFrame) {
         return
       }
@@ -1696,7 +1674,6 @@ export function usePreviewRenderPump({
     return () => {
       scrubMountedRef.current = false
       resetScrubLoopState()
-      clearPendingFastScrubHandoff()
       clearScheduledTransitionPrepare()
       clearTransitionPlaybackSession()
       if (unmountingRef.current) {
@@ -1719,7 +1696,6 @@ export function usePreviewRenderPump({
     fastScrubBoundarySources,
     forceFastScrubOverlay,
     fps,
-    clearPendingFastScrubHandoff,
     clearTransitionPlaybackSession,
     getPausedTransitionPrewarmStartFrame,
     getPinnedTransitionElementForItem,
@@ -1731,12 +1707,9 @@ export function usePreviewRenderPump({
     pinTransitionPlaybackSession,
     preparePlaybackTransitionFrame,
     showPlaybackTransitionOverlayForFrame,
-    beginFastScrubHandoff,
     bgTransitionRenderInFlightRef,
     bypassPreviewSeekRef,
     cacheTransitionSessionFrame,
-    maybeCompleteFastScrubHandoff,
-    scheduleFastScrubHandoffCheck,
     combinedTracks,
     deferredPlaybackTransitionPrepareFrameRef,
     ensureBgTransitionRenderer,
@@ -1787,6 +1760,5 @@ export function usePreviewRenderPump({
     lastBackwardScrubRenderAtRef,
     lastPausedPrearmTargetRef,
     lastPlayingPrearmTargetRef,
-    pendingFastScrubHandoffFrameRef,
   ])
 }
