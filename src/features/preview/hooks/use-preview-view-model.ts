@@ -21,6 +21,7 @@ import { usePlaybackStore } from '@/shared/state/playback'
 import { useGizmoStore } from '../stores/gizmo-store'
 import { useMaskEditorStore } from '../stores/mask-editor-store'
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection'
+import { getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
 
 interface PreviewProjectDimensions {
   width: number
@@ -36,6 +37,10 @@ interface UsePreviewViewModelParams {
   project: PreviewProjectDimensions
   containerSize: PreviewContainerDimensions
   suspendOverlay: boolean
+}
+
+function getDevicePixelRatio(): number {
+  return typeof window === 'undefined' ? 1 : window.devicePixelRatio
 }
 
 export function usePreviewViewModel({
@@ -106,15 +111,18 @@ export function usePreviewViewModel({
           height = width / aspectRatio
         }
 
-        return { width, height }
+        return getPreviewPixelSnapSize({ width, height }, getDevicePixelRatio())
       }
       return { width: project.width, height: project.height }
     }
 
-    return {
-      width: project.width * zoom,
-      height: project.height * zoom,
-    }
+    return getPreviewPixelSnapSize(
+      {
+        width: project.width * zoom,
+        height: project.height * zoom,
+      },
+      getDevicePixelRatio(),
+    )
   }, [containerSize.height, containerSize.width, project.height, project.width, zoom])
 
   const needsOverflow = useMemo(() => {

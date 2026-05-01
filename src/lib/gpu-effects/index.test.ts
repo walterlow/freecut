@@ -1,7 +1,33 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { getGpuEffect, getGpuEffectDefaultParams } from './index'
+import { GPU_EFFECT_REGISTRY, getGpuEffect, getGpuEffectDefaultParams } from './index'
 
 describe('GPU effect registry', () => {
+  it('registers every effect with shader metadata and valid default uniforms', () => {
+    expect(GPU_EFFECT_REGISTRY.size).toBeGreaterThan(0)
+
+    for (const [id, effect] of GPU_EFFECT_REGISTRY) {
+      expect(effect.id).toBe(id)
+      expect(effect.shader.trim().length).toBeGreaterThan(0)
+      expect(effect.entryPoint.trim().length).toBeGreaterThan(0)
+      expect(effect.uniformSize % 4).toBe(0)
+
+      const defaults = getGpuEffectDefaultParams(id)
+      for (const [paramKey, param] of Object.entries(effect.params)) {
+        expect(defaults).toHaveProperty(paramKey)
+        expect(defaults[paramKey]).toBe(param.default)
+      }
+
+      const uniforms = effect.packUniforms(defaults, 1920, 1080)
+      if (effect.uniformSize === 0) {
+        expect(uniforms).toBeNull()
+      } else {
+        expect(uniforms).toBeInstanceOf(Float32Array)
+        expect(uniforms!.byteLength).toBe(effect.uniformSize)
+        expect(Array.from(uniforms!).every(Number.isFinite)).toBe(true)
+      }
+    }
+  })
+
   it('registers the dither effect with stable default uniforms', () => {
     const effect = getGpuEffect('gpu-dither')
     expect(effect).toBeDefined()

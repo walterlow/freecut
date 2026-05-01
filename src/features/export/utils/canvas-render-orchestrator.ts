@@ -123,6 +123,7 @@ function getPacketRemuxPlan(
 
   const videoItem = item as VideoItem
   if (!videoItem.src) return null
+  if (videoItem.isReversed === true) return null
   if (videoItem.from !== 0) return null
   if (videoItem.durationInFrames !== composition.durationInFrames) return null
   if ((videoItem.effects?.length ?? 0) > 0) return null

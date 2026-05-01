@@ -33,6 +33,8 @@ import {
   resolvePreviewAudioPitchShiftSemitones,
 } from '@/shared/utils/audio-pitch'
 import { needsCustomAudioDecoder } from '../utils/audio-codec-detection'
+import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
+import { useNestedMediaResolutionMode } from '../contexts/nested-media-resolution-context'
 
 function getLogger() {
   return createLogger('CompositionItem')
@@ -96,6 +98,7 @@ export const Item = React.memo<ItemProps>(
     // Debug overlay toggle (always false in production via store)
     const showDebugOverlay = useDebugStore((s) => s.showVideoDebugOverlay)
     const { fps: timelineFps } = useVideoConfig()
+    const nestedMediaResolutionMode = useNestedMediaResolutionMode()
     const mediaItem = useMediaLibraryStore((s) =>
       item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId) : undefined,
     )
@@ -124,6 +127,9 @@ export const Item = React.memo<ItemProps>(
     )
 
     if (item.type === 'video') {
+      item = resolveReverseConformedVideoItem(item, timelineFps, {
+        useProxy: nestedMediaResolutionMode === 'proxy',
+      })
       const mediaSource = getSourceDimensions(item)
       // Guard against missing src (media resolution failed)
       if (!item.src) {

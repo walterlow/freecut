@@ -208,5 +208,17 @@ describe('playback-store', () => {
       expect(state.previewItemId).toBe('item-1')
       expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch)
     })
+
+    it('avoids entering scrub mode when the paused ruler clicks the already-current frame', () => {
+      usePlaybackStore.getState().setCurrentFrame(42)
+      const stateA = usePlaybackStore.getState()
+
+      usePlaybackStore.getState().setScrubFrame(42)
+      const stateB = usePlaybackStore.getState()
+
+      expect(stateB).toBe(stateA)
+      expect(stateB.currentFrame).toBe(42)
+      expect(stateB.previewFrame).toBeNull()
+    })
   })
 })

@@ -103,7 +103,6 @@ interface UsePreviewRendererControllerParams {
   getPreviewPathVerticesOverride: PreviewPathVerticesOverride
   getLiveItemSnapshot: (itemId: string) => TimelineItem | undefined
   getLiveKeyframes: (itemId: string) => ItemKeyframes | undefined
-  clearPendingFastScrubHandoff: () => void
   clearTransitionPlaybackSession: () => void
   resetResolveRetryState: () => void
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void
@@ -172,7 +171,6 @@ export function usePreviewRendererController({
   getPreviewPathVerticesOverride,
   getLiveItemSnapshot,
   getLiveKeyframes,
-  clearPendingFastScrubHandoff,
   clearTransitionPlaybackSession,
   resetResolveRetryState,
   setCaptureFrame,
@@ -180,6 +178,7 @@ export function usePreviewRendererController({
   setCaptureCanvasSource,
   setDisplayedFrame,
 }: UsePreviewRendererControllerParams) {
+  const useProxy = usePlaybackStore((state) => state.useProxy)
   const previousVisualStateRef = useRef<{
     tracks: CompositionInputProps['tracks']
     keyframes: CompositionInputProps['keyframes']
@@ -200,7 +199,6 @@ export function usePreviewRendererController({
   }, [playerRenderSize.height, playerRenderSize.width, scrubCanvasRef])
 
   const disposeFastScrubRenderer = useCallback(() => {
-    clearPendingFastScrubHandoff()
     scrubInitPromiseRef.current = null
     scrubPreloadPromiseRef.current = null
     scrubRequestedFrameRef.current = null
@@ -257,7 +255,6 @@ export function usePreviewRendererController({
     bgTransitionRendererStructureKeyRef,
     bypassPreviewSeekRef,
     captureCanvasSourceInFlightRef,
-    clearPendingFastScrubHandoff,
     clearTransitionPlaybackSession,
     deferredPlaybackTransitionPrepareFrameRef,
     playbackTransitionPreparePromiseRef,
@@ -302,6 +299,7 @@ export function usePreviewRendererController({
           if (!ctx) return null
           const renderer = await createCompositionRenderer(fastScrubInputProps, canvas, ctx, {
             mode: 'preview',
+            useProxyMedia: useProxy,
             getPreviewTransformOverride,
             getPreviewEffectsOverride,
             getPreviewCornerPinOverride,
@@ -338,6 +336,7 @@ export function usePreviewRendererController({
       isResolving,
       renderSize.height,
       renderSize.width,
+      useProxy,
     ])
 
   const ensureFastScrubRenderer =
@@ -366,6 +365,7 @@ export function usePreviewRendererController({
             offscreenCtx,
             {
               mode: 'preview',
+              useProxyMedia: useProxy,
               getPreviewTransformOverride,
               getPreviewEffectsOverride,
               getPreviewCornerPinOverride,
@@ -473,6 +473,7 @@ export function usePreviewRendererController({
       scrubRendererRef,
       scrubRendererStructureKeyRef,
       scrubRequestedFrameRef,
+      useProxy,
     ])
   ensureFastScrubRendererRef.current = ensureFastScrubRenderer
 
