@@ -26,8 +26,6 @@ const mediaTranscriptionServiceMocks = vi.hoisted(() => ({
 }))
 
 const subtitleSidecarServiceMocks = vi.hoisted(() => ({
-  extractEmbeddedSubtitlesAsCaptions: vi.fn(),
-  extractEmbeddedSubtitlesFromBlobAsCaptions: vi.fn(),
   scanEmbeddedSubtitleTracks: vi.fn(),
   insertEmbeddedSubtitleTrack: vi.fn(),
 }))
@@ -346,16 +344,6 @@ describe('MediaCard', () => {
     proxyServiceMocks.canGenerateProxy.mockReturnValue(true)
     proxyServiceMocks.deleteProxy.mockResolvedValue(undefined)
     mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined)
-    subtitleSidecarServiceMocks.extractEmbeddedSubtitlesAsCaptions.mockResolvedValue({
-      insertedItemCount: 2,
-      cueCount: 2,
-      trackLabel: 'eng',
-    })
-    subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions.mockResolvedValue({
-      insertedItemCount: 2,
-      cueCount: 2,
-      trackLabel: 'eng',
-    })
     subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks.mockResolvedValue({
       tracks: [
         {
@@ -486,10 +474,6 @@ describe('MediaCard', () => {
     expect(subtitleScanProgressStoreMocks.start).toHaveBeenCalled()
     // Picker stays closed — the media-library entry point is cache-only.
     expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
-    // Legacy "extract+insert" service call must not fire from this path.
-    expect(
-      subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
-    ).not.toHaveBeenCalled()
   })
 
   it('passes the live file handle into the cache scan', async () => {
@@ -541,10 +525,7 @@ describe('MediaCard', () => {
     await waitFor(() => {
       expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
     })
-    expect(subtitleSidecarServiceMocks.extractEmbeddedSubtitlesAsCaptions).not.toHaveBeenCalled()
-    expect(
-      subtitleSidecarServiceMocks.extractEmbeddedSubtitlesFromBlobAsCaptions,
-    ).not.toHaveBeenCalled()
+    expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).not.toHaveBeenCalled()
     expect(mediaStoreState.markMediaBroken).toHaveBeenCalledWith('media-1', {
       mediaId: 'media-1',
       fileName: 'movie.mkv',

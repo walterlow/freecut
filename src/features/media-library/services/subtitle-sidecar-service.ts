@@ -2,19 +2,12 @@ import { useProjectStore } from '@/features/media-library/deps/projects'
 import { useTimelineStore } from '@/features/media-library/deps/timeline-stores'
 import { useSelectionStore } from '@/shared/state/selection'
 import {
-  inferSubtitleFormat,
-  parseSubtitleFile,
-  serializeSubtitleFile,
-  type SubtitleCue,
-  type SubtitleFormat,
-} from '@/shared/utils/subtitles'
-import {
   extractMatroskaTextSubtitleTracksFromBlob,
   type EmbeddedSubtitleTrack,
 } from '@/shared/utils/matroska-subtitles'
 import { getEmbeddedSubtitleSidecar, saveEmbeddedSubtitleSidecar } from '@/infrastructure/storage'
 import type { MediaMetadata } from '@/types/storage'
-import type { TextItem, TimelineItem, TimelineTrack } from '@/types/timeline'
+import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import {
   buildCaptionTrack,
   buildSubtitleSegmentForClip,
@@ -22,18 +15,6 @@ import {
   findCaptionTargetClipsForMedia,
   findCompatibleCaptionTrackForRanges,
 } from '../utils/caption-items'
-import { mediaLibraryService } from './media-library-service'
-
-export interface ImportSubtitleResult {
-  insertedItemCount: number
-  warningCount: number
-  warnings: string[]
-}
-
-export interface ExportSubtitleOptions {
-  format: SubtitleFormat
-  selectedOnly?: boolean
-}
 
 export interface ExtractEmbeddedSubtitlesResult {
   insertedItemCount: number
@@ -59,135 +40,6 @@ export interface SubtitleScanOptions {
 }
 
 class SubtitleSidecarService {
-  async importSubtitleFile(file: File): Promise<ImportSubtitleResult> {
-    const format = inferSubtitleFormat(file.name)
-    if (!format) {
-      throw new Error('Choose an SRT or WebVTT subtitle file.')
-    }
-
-    const text = await file.text()
-    const result = parseSubtitleFile(text, format)
-    if (result.cues.length === 0) {
-      throw new Error(
-        result.warnings[0] ?? 'No valid subtitle cues were found in the selected file.',
-      )
-    }
-
-    const insertedItemCount = this.insertImportedCuesAsSegment(result.cues, file.name, format)
-
-    return {
-      insertedItemCount,
-      warningCount: result.warnings.length,
-      warnings: result.warnings,
-    }
-  }
-
-  private insertImportedCuesAsSegment(
-    cues: readonly SubtitleCue[],
-    fileName: string,
-    format: SubtitleFormat,
-  ): number {
-    const timeline = useTimelineStore.getState()
-    const project = useProjectStore.getState().currentProject
-    const canvasWidth = project?.metadata.width ?? 1920
-    const canvasHeight = project?.metadata.height ?? 1080
-    const startFrame = timeline.inPoint ?? 0
-
-    // Drop any prior SRT/VTT-imported subtitle segments so a re-import
-    // replaces rather than stacks. Embedded-subtitle segments are left
-    // alone — they belong to a clip and aren't conceptually the same
-    // as a free-standing imported subtitle file.
-    const obsoleteIds = timeline.items
-      .filter((item) => item.type === 'subtitle' && item.source.type === 'subtitle-import')
-      .map((item) => item.id)
-    if (obsoleteIds.length > 0) timeline.removeItems(obsoleteIds)
-
-    // Imported subtitles have no clip to anchor to — synthesize a segment
-    // anchored to the playhead/in-point covering the full cue range.
-    const minStart = Math.min(...cues.map((c) => c.startSeconds), 0)
-    const lastEnd = Math.max(...cues.map((c) => c.endSeconds), 1)
-    const durationInFrames = Math.max(1, Math.ceil((lastEnd - minStart) * timeline.fps))
-
-    const segmentRelativeCues = cues.map((cue) => ({
-      id: cue.id,
-      startSeconds: cue.startSeconds - minStart,
-      endSeconds: cue.endSeconds - minStart,
-      text: cue.text,
-    }))
-
-    const segmentItem: import('@/types/timeline').SubtitleSegmentItem = {
-      id: crypto.randomUUID(),
-      type: 'subtitle',
-      trackId: '', // filled in below
-      from: startFrame + Math.floor(minStart * timeline.fps),
-      durationInFrames,
-      label: fileName,
-      source: { type: 'subtitle-import', fileName, format, importedAt: Date.now() },
-      cues: segmentRelativeCues,
-      // Defaults mirror the per-cue path so the strip looks consistent.
-      fontSize: Math.max(36, Math.round(canvasHeight * 0.045)),
-      fontFamily: 'Inter',
-      fontWeight: 'semibold',
-      fontStyle: 'normal',
-      underline: false,
-      color: '#ffffff',
-      backgroundColor: 'rgba(0, 0, 0, 0.55)',
-      textAlign: 'center',
-      verticalAlign: 'middle',
-      lineHeight: 1.15,
-      letterSpacing: 0,
-      textShadow: { offsetX: 0, offsetY: 3, blur: 10, color: 'rgba(0, 0, 0, 0.75)' },
-      transform: {
-        x: 0,
-        y: Math.round(canvasHeight * 0.32),
-        width: canvasWidth * 0.82,
-        height: canvasHeight * 0.16,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
-
-    // Read the post-removal timeline state so target-track selection sees
-    // freed-up rows that the now-deleted import segment was occupying.
-    const refreshed = useTimelineStore.getState()
-    const ranges = [{ startFrame: segmentItem.from, endFrame: segmentItem.from + durationInFrames }]
-    let nextTracks: TimelineTrack[] = [...refreshed.tracks]
-    let target = findCompatibleCaptionTrackForRanges(nextTracks, refreshed.items, ranges)
-    if (!target) {
-      target = buildCaptionTrack(nextTracks)
-      nextTracks = [...nextTracks, target].sort((a, b) => a.order - b.order)
-      refreshed.setTracks(nextTracks)
-    }
-    segmentItem.trackId = target.id
-
-    refreshed.addItems([segmentItem])
-    useSelectionStore.getState().selectItems([segmentItem.id])
-    return 1
-  }
-
-  async extractEmbeddedSubtitlesAsCaptions(
-    media: MediaMetadata,
-  ): Promise<ExtractEmbeddedSubtitlesResult> {
-    const file = await mediaLibraryService.getMediaFile(media.id)
-    if (!file) {
-      throw new Error(`Media file "${media.fileName}" is unavailable.`)
-    }
-
-    return this.extractEmbeddedSubtitlesFromBlobAsCaptions(media, file)
-  }
-
-  async extractEmbeddedSubtitlesFromBlobAsCaptions(
-    media: MediaMetadata,
-    file: Blob,
-  ): Promise<ExtractEmbeddedSubtitlesResult> {
-    const { tracks } = await this.scanEmbeddedSubtitleTracks(media, file)
-    const selectedTrack = chooseEmbeddedSubtitleTrack(tracks)
-    if (!selectedTrack) {
-      throw new Error(NO_EMBEDDED_SUBTITLES_MESSAGE)
-    }
-    return this.insertEmbeddedSubtitleTrack(media, selectedTrack)
-  }
-
   /**
    * Walk the source bytes for `media` and return its embedded text-subtitle
    * tracks. Cached in workspace-fs after the first scan so re-opening the
@@ -355,45 +207,6 @@ class SubtitleSidecarService {
       cuesConsolidated: segments.reduce((sum, s) => sum + s.cues.length, 0),
     }
   }
-
-  exportSubtitleText(options: ExportSubtitleOptions): { text: string; cueCount: number } {
-    const timeline = useTimelineStore.getState()
-    const cues = this.getExportableCues(timeline.items, timeline.fps, options.selectedOnly)
-    if (cues.length === 0) {
-      throw new Error(
-        options.selectedOnly
-          ? 'Select one or more caption text items before exporting selected subtitles.'
-          : 'No caption text items found on the timeline.',
-      )
-    }
-
-    return {
-      text: serializeSubtitleFile(cues, options.format),
-      cueCount: cues.length,
-    }
-  }
-
-  private getExportableCues(
-    items: readonly TimelineItem[],
-    fps: number,
-    selectedOnly = false,
-  ): SubtitleCue[] {
-    const selectedIds = new Set(useSelectionStore.getState().selectedItemIds)
-    return items
-      .filter((item): item is TextItem => {
-        if (item.type !== 'text') return false
-        if (selectedOnly && !selectedIds.has(item.id)) return false
-        return item.textRole === 'caption' || item.captionSource !== undefined
-      })
-      .map((item) => ({
-        id: item.id,
-        startSeconds: item.from / fps,
-        endSeconds: (item.from + item.durationInFrames) / fps,
-        text: item.text,
-      }))
-      .filter((cue) => cue.text.trim().length > 0 && cue.endSeconds > cue.startSeconds)
-      .sort((a, b) => a.startSeconds - b.startSeconds)
-  }
 }
 
 /**
@@ -420,9 +233,6 @@ function isSubtitleForClip(item: TimelineItem, clipIds: ReadonlySet<string>): bo
 }
 
 export const subtitleSidecarService = new SubtitleSidecarService()
-
-export const NO_EMBEDDED_SUBTITLES_MESSAGE =
-  'No supported embedded text subtitles found. FreeCut currently supports MKV/WebM text subtitle tracks: S_TEXT/UTF8, S_TEXT/WEBVTT, S_TEXT/ASS, and S_TEXT/SSA.'
 
 export function chooseEmbeddedSubtitleTrackForMedia(
   tracks: readonly EmbeddedSubtitleTrack[],
