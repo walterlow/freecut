@@ -45,6 +45,7 @@ import type { ScrubbingCache } from '@/features/export/deps/preview'
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline'
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool'
 import type { VideoFrameSource } from './shared-video-extractor'
+import type { ReverseVideoFrameCache } from './reverse-video-frame-cache'
 import {
   resolvePreviewDomVideoDrawDecision,
   resolvePreviewMediabunnyInitAction,
@@ -204,6 +205,7 @@ export interface ItemRenderContext {
     toleranceSeconds?: number,
     maxWaitMs?: number,
   ) => Promise<ImageBitmap | null>
+  reverseVideoFrameCache?: ReverseVideoFrameCache
 
   // Image / GIF state
   imageElements: Map<string, WorkerLoadedImage>
@@ -1016,6 +1018,39 @@ async function renderVideoItem(
 
     if (import.meta.env.DEV && (frame < 5 || frame % 60 === 0)) {
       log.debug(`VIDEO DRAW (mediabunny) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s`)
+    }
+
+    if (
+      rctx.renderMode === 'export' &&
+      item.isReversed &&
+      sourceFrameOffset === 0 &&
+      rctx.reverseVideoFrameCache
+    ) {
+      const cachedReverseFrame = await rctx.reverseVideoFrameCache.getFrame({
+        item,
+        extractor,
+        frame,
+        renderSpan: effectiveRenderSpan,
+        fps,
+        sourceFps,
+        speed,
+      })
+      if (
+        cachedReverseFrame &&
+        drawTier2VideoFrame(
+          ctx,
+          cachedReverseFrame,
+          dims.width,
+          dims.height,
+          transform,
+          canvasSettings,
+          item.crop,
+          rctx.canvasPool,
+        )
+      ) {
+        mediabunnyFailureCountByItem.set(item.id, 0)
+        return
+      }
     }
 
     let success = false

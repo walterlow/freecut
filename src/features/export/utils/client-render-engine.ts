@@ -95,6 +95,7 @@ import {
 } from './canvas-item-renderer'
 import { ScrubbingCache } from '@/features/export/deps/preview'
 import { resolveFrameRenderOptimization } from './render-path-optimizer'
+import { ReverseVideoFrameCache } from './reverse-video-frame-cache'
 
 // Re-export orchestration functions so existing import sites keep working
 export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator'
@@ -582,6 +583,7 @@ export async function createCompositionRenderer(
   let prewarmCanvas: OffscreenCanvas | HTMLCanvasElement | null = null
   let prewarmCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null
   let prewarmAttempted = false
+  const reverseVideoFrameCache = renderMode === 'export' ? new ReverseVideoFrameCache() : undefined
 
   // Build the shared ItemRenderContext used by canvas-item-renderer functions
   const itemRenderContext: ItemRenderContext = {
@@ -601,6 +603,7 @@ export async function createCompositionRenderer(
     useMediabunny,
     mediabunnyDisabledItems,
     mediabunnyFailureCountByItem,
+    reverseVideoFrameCache,
     imageElements,
     gifFramesMap,
     keyframesMap,
@@ -2413,6 +2416,7 @@ export async function createCompositionRenderer(
 
       // === PERFORMANCE: Clean up optimization resources ===
       scrubbingCache?.dispose()
+      reverseVideoFrameCache?.dispose()
 
       gpuCompositor?.destroy()
       gpuCompositor = null
