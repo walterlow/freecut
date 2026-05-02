@@ -1,4 +1,10 @@
-import type { MainThreadMessage, PCMChunk, QuantizationType, WhisperWorkerMessage } from '../types'
+import type {
+  MainThreadMessage,
+  PCMChunk,
+  QuantizationType,
+  TranscriptWord,
+  WhisperWorkerMessage,
+} from '../types'
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('TranscriptionWorker')
@@ -265,23 +271,45 @@ async function transcribeChunk(chunk: PCMChunk): Promise<void> {
 
   const result = await asrPipeline(chunk.samples, {
     sampling_rate: 16_000,
-    return_timestamps: true,
+    return_timestamps: 'word',
     chunk_length_s: 30,
     stride_length_s: 5,
     ...(language ? { language } : {}),
   })
 
   const output = result as {
-    chunks?: Array<{ text: string; timestamp: [number | null, number | null] }>
+    text?: string
+    chunks?: Array<{
+      text: string
+      timestamp: [number | null, number | null]
+      confidence?: number
+    }>
   }
 
-  for (const segment of output.chunks ?? []) {
+  const words = (output.chunks ?? []).flatMap((word): TranscriptWord[] => {
+    const start = word.timestamp[0]
+    const end = word.timestamp[1]
+    if (start === null || end === null || end <= start) {
+      return []
+    }
+    return [
+      {
+        text: word.text,
+        start: start + chunk.timestamp,
+        end: end + chunk.timestamp,
+        ...(typeof word.confidence === 'number' ? { confidence: word.confidence } : {}),
+      },
+    ]
+  })
+
+  if (words.length > 0) {
     postMain({
       type: 'segment',
       segment: {
-        text: segment.text,
-        start: (segment.timestamp[0] ?? 0) + chunk.timestamp,
-        end: (segment.timestamp[1] ?? 0) + chunk.timestamp,
+        text: output.text ?? words.map((word) => word.text).join(' '),
+        start: words[0]?.start ?? chunk.timestamp,
+        end: words.at(-1)?.end ?? chunk.timestamp,
+        words,
       },
     })
   }

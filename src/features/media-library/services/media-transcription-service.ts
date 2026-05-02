@@ -333,6 +333,16 @@ class MediaTranscriptionService {
         text: segment.text.trim(),
         start: segment.start,
         end: segment.end,
+        ...(segment.words && segment.words.length > 0
+          ? {
+              words: segment.words.map((word) => ({
+                text: word.text.trim(),
+                start: word.start,
+                end: word.end,
+                ...(typeof word.confidence === 'number' ? { confidence: word.confidence } : {}),
+              })),
+            }
+          : {}),
       })),
       createdAt: Date.now(),
       updatedAt: Date.now(),
