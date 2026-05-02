@@ -4,36 +4,99 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 <!-- Entries below are generated via the `changelog` skill. Newest first. -->
 
-## [Current] — week of 2026-04-13
+## [Current] — week of 2026-04-27
 
 ### Added
 - Motion, iris, shape, and DaVinci-style wipe transition packs
 - Lens warp zoom transition
 - Liquid distort transition
-- Transition placement controls with alignment-aware drops
 - Searchable transition preset picker
 - Tunable transition parameters in the properties panel
+- Transition placement controls with alignment-aware drops
 - Compound clips can now host transitions
-- Projects now live on disk in a workspace folder you choose
-- Multi-workspace support with waveform mirroring
-- Multi-select projects with marquee and bulk delete
-- Trash section with soft-delete, undo, and permanent delete
-- Legacy browser-storage migration progress banner
-- Per-clip pitch shift in semitones and cents
-- Compact DaVinci-style six-band clip EQ with floating panel
-- Mixer tuck handle to slide channel strips behind the bus
-- Separate project master bus from per-device monitor volume
+- Reset buttons on transition parameter sliders
+- Extract embedded subtitles from video files (works for MKVs over 2GB)
+- Subtitle segments on the timeline with live cue overlay during playback
+- Cue editor in the inspector with bold/italic/underline, positioning, and click-to-seek
+- Subtitle style presets, including a TikTok-style preset
+- Burn or embed subtitles in exports
+- Reverse playback for video, audio, and GPU effects
+- Reverse-aware exports preserve the reversed audio and video
+- Detect and remove silence across selected clips with preview overlay and ripple delete
 
 ### Fixed
 - Effect drag overlays no longer stick or hijack adjacent lanes
 - Transition preset selection syncs with the chosen direction
 - Removed the transition duration cap
-- Removed Kokoro voice quality options
-- Preview no longer fails when media blobs expire
+- Multi-channel audio downmixes to stereo with proper coefficients on export
+- Subtitle cues trim and split alongside their segment
+- Cue time inputs accept 4-digit seconds without truncating
+- Preview no longer drifts from stale player frames while paused
+- Paused scrub stays on the rendered path with sharp output
+
+### Improved
+- Subtitle cue editor stays responsive with hundreds of cues
+- Smoother playback start when entering a transition
+
+## [2026.04.20] — week of 2026-04-20 to 2026-04-26
+
+### Added
+- Stacked text spans for mixed-style titles
+- Text box backgrounds and scalable text presets
+- Richer text animation presets grouped by layout
+- Animated text previews in the runtime and editor
+- Promote span text controls and move preset selector to the inspector
+- Canvas snap system overhaul with visual guides
+- Video flip transforms (horizontal and vertical)
+- Transform anchors in preview and export
+- Anchor and flip controls keyframeable inside compound clips
+- Keyframeable color effect parameters
+- MOSS multilingual TTS in the browser
+- Replace Kitten TTS with Kokoro TTS
+- Collapsible AI panel sections
+- Import media from a direct URL
+- Dedup media imports and captions by content
+- Move scenes toggle next to search as a segmented control
+
+### Fixed
+- Animated crop renders correctly in exports
+- Curves effect now uses point-based S-curves
+- Compound clip hover preview renders through the canvas engine
+- Restore middle-click drag to resize the A/V divider from anywhere
+- Smooth live pitch preview on Semi Tones and Cents sliders
+- Pixel-snap audio volume line to avoid sub-pixel blur
+- Stop nested video black flashes from stale references
+- Project list no longer blanks with a spinner during edits
+- Add Effect picker no longer flashes on first open
+- Live-trim attached captions during regular trims
+- Batch playback speed undo as a single step
+
+## [2026.04.13] — week of 2026-04-13 to 2026-04-19
+
+### Added
+- Per-clip pitch shift in semitones and cents
+- Compact DaVinci-style six-band clip EQ with floating panels
+- Mixer tuck handle to slide channel strips behind the bus
+- Separate project master bus from per-device monitor volume
+- AI caption generation with timeline insertion
+- AI analysis indicators in the media library
+- Find scenes with a similar palette
+- Color mode with library palette grid
+- Scene browser hotkey
+- Projects now live on disk in a workspace folder you choose
+- Multi-workspace support with waveform mirroring
+- Multi-select projects with marquee, bulk delete, and double-click to open
+- Trash section with soft-delete, undo, and permanent delete
+- Legacy browser-storage migration progress banner
+- What's New dialog with weekly changelog viewer
+- Source monitor scrubbing matches timeline playback
+
+### Fixed
 - Disabled tracks remain editable and styled after reload
 - Pen mask tracks are now visible in classic timelines
-- Transitions stay aligned to source time across splits
 - Pen paths default to shapes with 5-second duration
+- Transitions stay aligned to source time across splits
+- Preview no longer fails when media blobs expire
 - UI accessibility, transition alpha, and viewport clamp fixes
 
 ### Improved

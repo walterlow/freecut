@@ -676,7 +676,21 @@ class MediaLibraryService {
         (m.fileLastModified === null || m.fileLastModified === undefined),
     )
     if (existingMedia) {
-      return { ...existingMedia, isDuplicate: true }
+      const updates: Partial<MediaMetadata> = {
+        fileName: file.name,
+        fileSize: file.size,
+        fileLastModified: file.lastModified,
+        updatedAt: Date.now(),
+      }
+
+      if (existingMedia.storageType === 'handle' || !existingMedia.opfsPath) {
+        updates.storageType = 'handle'
+        updates.fileHandle = handle
+      }
+
+      const refreshedMedia = await updateMediaDB(existingMedia.id, updates)
+      mirrorSourceToWorkspaceInBackground(refreshedMedia.id, file, file.name)
+      return { ...refreshedMedia, isDuplicate: true }
     }
 
     // Stage 4: Process media in worker (metadata + thumbnail in one pass, off main thread)
