@@ -9,7 +9,7 @@
  * This prevents UI blocking when importing media files.
  */
 
-import { createLogger } from '@/shared/logging/logger'
+import { createLogger, createOperationId } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaProcessorWorker')
 const KEYFRAME_EXTRACTION_TIMEOUT_MS = 8_000
@@ -229,7 +229,19 @@ async function estimateVideoFps(
   mb: MediabunnyModule,
   videoTrack: MediabunnyVideoTrack,
 ): Promise<number> {
+  const opId = createOperationId()
+  const event = logger.startEvent('video.fpsEstimation', opId)
+  event.merge({
+    codec: videoTrack.codec,
+    width: videoTrack.displayWidth,
+    height: videoTrack.displayHeight,
+    maxPackets: FPS_ESTIMATION_MAX_PACKETS,
+    hardPacketCap: FPS_ESTIMATION_HARD_PACKET_CAP,
+    timeoutMs: FPS_ESTIMATION_TIMEOUT_MS,
+  })
+
   let sink: MediabunnyEncodedPacketSink | null = null
+  let durationSamplingError: unknown = null
   try {
     sink = new mb.EncodedPacketSink(videoTrack)
     const durations: number[] = []
@@ -239,6 +251,7 @@ async function estimateVideoFps(
       .packets(undefined, undefined, { metadataOnly: true })
       [Symbol.asyncIterator]()
     let processedPackets = 0
+    let exitReason: 'iterator-done' | 'sample-cap' | 'hard-cap' | 'time-budget' = 'iterator-done'
 
     while (true) {
       const result = await withTimeout(iterator.next(), FPS_ESTIMATION_TIMEOUT_MS, 'FPS estimation')
@@ -257,21 +270,34 @@ async function estimateVideoFps(
         packet.close?.()
       }
 
-      if (timestamps.length >= FPS_ESTIMATION_MAX_PACKETS) break
+      if (timestamps.length >= FPS_ESTIMATION_MAX_PACKETS) {
+        exitReason = 'sample-cap'
+        break
+      }
       if (processedPackets >= FPS_ESTIMATION_HARD_PACKET_CAP) {
-        logger.warn('FPS estimation reached hard packet cap; using partial sample')
+        exitReason = 'hard-cap'
         break
       }
       if (performance.now() - startedAt > FPS_ESTIMATION_TIMEOUT_MS) {
-        logger.warn('FPS estimation reached time budget; using partial sample')
+        exitReason = 'time-budget'
         break
       }
     }
     await iterator.return?.()
 
+    event.merge({
+      processedPackets,
+      durationSamples: durations.length,
+      timestampSamples: timestamps.length,
+      exitReason,
+      sampleDurationMs: Math.round(performance.now() - startedAt),
+    })
+
     const medianDuration = median(durations)
     if (medianDuration && medianDuration > 0) {
-      return snapCommonFrameRate(1 / medianDuration)
+      const fps = snapCommonFrameRate(1 / medianDuration)
+      event.success({ source: 'packet-duration', fps })
+      return fps
     }
 
     const deltas = timestamps
@@ -280,19 +306,32 @@ async function estimateVideoFps(
       .filter((delta) => Number.isFinite(delta) && delta > 0)
     const medianDelta = median(deltas)
     if (medianDelta && medianDelta > 0) {
-      return snapCommonFrameRate(1 / medianDelta)
+      const fps = snapCommonFrameRate(1 / medianDelta)
+      event.success({ source: 'timestamp-delta', fps })
+      return fps
     }
   } catch (error) {
-    logger.warn('Duration-based FPS estimation failed; falling back to packet stats:', error)
+    durationSamplingError = error
+    event.set('durationSamplingError', error instanceof Error ? error.message : String(error))
   } finally {
     sink?.dispose?.()
   }
 
   try {
     const packetStats = await videoTrack.computePacketStats(FPS_ESTIMATION_MAX_PACKETS)
-    return snapCommonFrameRate(packetStats?.averagePacketRate || 30)
+    const fps = snapCommonFrameRate(packetStats?.averagePacketRate || 30)
+    event.success({
+      source: 'packet-stats-fallback',
+      fps,
+      averagePacketRate: packetStats?.averagePacketRate ?? null,
+    })
+    return fps
   } catch (error) {
-    logger.warn('Packet-stat FPS estimation failed; using default FPS:', error)
+    event.failure(durationSamplingError ?? error, {
+      source: 'default-fallback',
+      fps: 30,
+      packetStatsError: error instanceof Error ? error.message : String(error),
+    })
     return 30
   }
 }
