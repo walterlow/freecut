@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { useTimelineStore } from '../stores/timeline-store'
-import { useTimelineCommandStore } from '../stores/timeline-command-store'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useItemsStore } from '../stores/items-store'
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
@@ -30,6 +29,7 @@ import { createLogger } from '@/shared/logging/logger'
 
 const FILLER_REMOVAL_PANEL_STORAGE_KEY = 'timeline:fillerRemovalPanelBounds'
 const FILLER_REMOVAL_PANEL_DEFAULT_BOUNDS = { x: -1, y: -1, width: 460, height: 520 }
+const DRAFT_HISTORY_LIMIT = 50
 const logger = createLogger('FillerRemovalDialog')
 
 function formatSeconds(seconds: number): string {
@@ -77,6 +77,30 @@ function addEntry(entries: readonly string[], value: string): string[] {
 function clampNumber(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min
   return Math.max(min, Math.min(max, value))
+}
+
+function cloneSettings(settings: FillerRemovalSettings): FillerRemovalSettings {
+  return {
+    fillerWords: [...settings.fillerWords],
+    fillerPhrases: [...settings.fillerPhrases],
+    paddingMs: settings.paddingMs,
+    maxSimpleFillerMs: settings.maxSimpleFillerMs,
+    maxPhraseFillerMs: settings.maxPhraseFillerMs,
+  }
+}
+
+function areEntriesEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((entry, index) => entry === right[index])
+}
+
+function areSettingsEqual(left: FillerRemovalSettings, right: FillerRemovalSettings): boolean {
+  return (
+    left.paddingMs === right.paddingMs &&
+    left.maxSimpleFillerMs === right.maxSimpleFillerMs &&
+    left.maxPhraseFillerMs === right.maxPhraseFillerMs &&
+    areEntriesEqual(left.fillerWords, right.fillerWords) &&
+    areEntriesEqual(left.fillerPhrases, right.fillerPhrases)
+  )
 }
 
 function getRangeId(mediaId: string, range: FillerRange, index: number): string {
@@ -150,6 +174,21 @@ function NumberSetting({
   suffix: string
   onChange: (value: number) => void
 }) {
+  const [draftValue, setDraftValue] = useState(String(value))
+
+  useEffect(() => {
+    setDraftValue(String(value))
+  }, [value])
+
+  const commit = useCallback(() => {
+    const parsed = Number(draftValue)
+    const nextValue = clampNumber(parsed, min, max)
+    setDraftValue(String(nextValue))
+    if (nextValue !== value) {
+      onChange(nextValue)
+    }
+  }, [draftValue, max, min, onChange, value])
+
   return (
     <div className="flex items-center justify-between gap-3">
       <Label htmlFor={id} className="text-xs font-medium">
@@ -159,11 +198,22 @@ function NumberSetting({
         <Input
           id={id}
           type="number"
-          value={value}
+          value={draftValue}
           min={min}
           max={max}
           step={step}
-          onChange={(event) => onChange(clampNumber(Number(event.target.value), min, max))}
+          onChange={(event) => setDraftValue(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur()
+              return
+            }
+            if (event.key === 'Escape') {
+              setDraftValue(String(value))
+              event.currentTarget.blur()
+            }
+          }}
           className="h-7 w-20 px-2 text-right text-xs"
         />
         <span className="w-7 text-xs text-muted-foreground">{suffix}</span>
@@ -226,10 +276,13 @@ function FillerEntryEditor({
               key={entry}
               type="button"
               onClick={() => onChange(removeEntry(entries, entry))}
-              className="rounded border bg-background px-2 py-1 text-xs hover:bg-muted"
+              className="inline-flex overflow-hidden rounded border bg-background text-xs hover:bg-muted"
               title="Remove"
             >
-              {entry} x
+              <span className="px-2 py-1">{entry}</span>
+              <span className="border-l border-border px-1.5 py-1 font-medium text-destructive">
+                x
+              </span>
             </button>
           ))
         )}
@@ -238,12 +291,17 @@ function FillerEntryEditor({
   )
 }
 
-function UndoRedoControls() {
-  const canUndo = useTimelineCommandStore((state) => state.canUndo)
-  const canRedo = useTimelineCommandStore((state) => state.canRedo)
-  const undoLabel = useTimelineCommandStore((state) => state.getUndoLabel())
-  const redoLabel = useTimelineCommandStore((state) => state.getRedoLabel())
-
+function UndoRedoControls({
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+}: {
+  canUndo: boolean
+  canRedo: boolean
+  onUndo: () => void
+  onRedo: () => void
+}) {
   return (
     <div className="flex items-center gap-1">
       <Button
@@ -251,9 +309,9 @@ function UndoRedoControls() {
         variant="ghost"
         size="sm"
         disabled={!canUndo}
-        onClick={() => useTimelineCommandStore.getState().undo()}
+        onClick={onUndo}
         className="h-6 px-2 text-xs"
-        title={undoLabel ? `Undo ${undoLabel}` : 'Undo'}
+        title="Undo tag/settings edit"
       >
         Undo
       </Button>
@@ -262,9 +320,9 @@ function UndoRedoControls() {
         variant="ghost"
         size="sm"
         disabled={!canRedo}
-        onClick={() => useTimelineCommandStore.getState().redo()}
+        onClick={onRedo}
         className="h-6 px-2 text-xs"
-        title={redoLabel ? `Redo ${redoLabel}` : 'Redo'}
+        title="Redo tag/settings edit"
       >
         Redo
       </Button>
@@ -403,6 +461,8 @@ export function FillerRemovalDialog() {
   const updatePreview = useFillerRemovalDialogStore((state) => state.updatePreview)
   const close = useFillerRemovalDialogStore((state) => state.close)
   const [draft, setDraft] = useState<FillerRemovalSettings>(settings)
+  const [draftPast, setDraftPast] = useState<FillerRemovalSettings[]>([])
+  const [draftFuture, setDraftFuture] = useState<FillerRemovalSettings[]>([])
   const [reviewRangesByMediaId, setReviewRangesByMediaId] =
     useState<FillerRangesByMediaId>(rangesByMediaId)
   const [selectedRangeIds, setSelectedRangeIds] = useState<Set<string>>(() =>
@@ -412,6 +472,8 @@ export function FillerRemovalDialog() {
   const [isScoringAudio, setIsScoringAudio] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
   const wasOpenRef = useRef(false)
+  const draftPastRef = useRef(draftPast)
+  const draftFutureRef = useRef(draftFuture)
 
   const selectedRangesByMediaId = useMemo(
     () => filterRangesBySelectedIds(reviewRangesByMediaId, selectedRangeIds),
@@ -423,14 +485,74 @@ export function FillerRemovalDialog() {
   )
 
   useEffect(() => {
+    draftPastRef.current = draftPast
+  }, [draftPast])
+
+  useEffect(() => {
+    draftFutureRef.current = draftFuture
+  }, [draftFuture])
+
+  useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
-      setDraft(settings)
+      setDraft(cloneSettings(settings))
+      setDraftPast([])
+      setDraftFuture([])
       setReviewRangesByMediaId(rangesByMediaId)
       setSelectedRangeIds(createSelectedRangeIds(rangesByMediaId))
       setHasApplied(false)
     }
     wasOpenRef.current = isOpen
   }, [isOpen, rangesByMediaId, settings])
+
+  const updateDraft = useCallback(
+    (
+      updater: FillerRemovalSettings | ((current: FillerRemovalSettings) => FillerRemovalSettings),
+    ) => {
+      setDraft((current) => {
+        const next =
+          typeof updater === 'function'
+            ? (updater as (current: FillerRemovalSettings) => FillerRemovalSettings)(current)
+            : updater
+        if (areSettingsEqual(current, next)) {
+          return current
+        }
+
+        setDraftPast((past) => [...past, cloneSettings(current)].slice(-DRAFT_HISTORY_LIMIT))
+        setDraftFuture([])
+        setHasApplied(false)
+        return cloneSettings(next)
+      })
+    },
+    [],
+  )
+
+  const undoDraft = useCallback(() => {
+    setDraftPast((past) => {
+      const previous = past.at(-1)
+      if (!previous) return past
+      setDraft((current) => {
+        setDraftFuture((future) =>
+          [cloneSettings(current), ...future].slice(0, DRAFT_HISTORY_LIMIT),
+        )
+        return cloneSettings(previous)
+      })
+      setHasApplied(false)
+      return past.slice(0, -1)
+    })
+  }, [])
+
+  const redoDraft = useCallback(() => {
+    setDraftFuture((future) => {
+      const next = future[0]
+      if (!next) return future
+      setDraft((current) => {
+        setDraftPast((past) => [...past, cloneSettings(current)].slice(-DRAFT_HISTORY_LIMIT))
+        return cloneSettings(next)
+      })
+      setHasApplied(false)
+      return future.slice(1)
+    })
+  }, [])
 
   const handleClose = useCallback(() => {
     clearFillerPreviewOverlays(itemIds)
@@ -441,6 +563,21 @@ export function FillerRemovalDialog() {
     if (!isOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        const canRedo = event.shiftKey && draftFutureRef.current.length > 0
+        const canUndo = !event.shiftKey && draftPastRef.current.length > 0
+        if (!canUndo && !canRedo) return
+
+        event.preventDefault()
+        event.stopPropagation()
+        if (canRedo) {
+          redoDraft()
+        } else {
+          undoDraft()
+        }
+        return
+      }
+
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
@@ -449,7 +586,7 @@ export function FillerRemovalDialog() {
 
     window.addEventListener('keydown', handleKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
-  }, [handleClose, isOpen])
+  }, [handleClose, isOpen, redoDraft, undoDraft])
 
   const handleUpdatePreview = useCallback(() => {
     const run = async () => {
@@ -563,7 +700,14 @@ export function FillerRemovalDialog() {
       minHeight={220}
       storageKey={FILLER_REMOVAL_PANEL_STORAGE_KEY}
       onClose={handleClose}
-      headerExtra={<UndoRedoControls />}
+      headerExtra={
+        <UndoRedoControls
+          canUndo={draftPast.length > 0}
+          canRedo={draftFuture.length > 0}
+          onUndo={undoDraft}
+          onRedo={redoDraft}
+        />
+      }
       resizable={false}
       autoHeight
       className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90"
@@ -595,7 +739,7 @@ export function FillerRemovalDialog() {
                   size="sm"
                   className="h-7 flex-1 px-2 text-xs"
                   onClick={() =>
-                    setDraft({
+                    updateDraft({
                       fillerWords: [...preset.settings.fillerWords],
                       fillerPhrases: [...preset.settings.fillerPhrases],
                       paddingMs: preset.settings.paddingMs,
@@ -617,7 +761,7 @@ export function FillerRemovalDialog() {
                 max={500}
                 step={5}
                 suffix="ms"
-                onChange={(paddingMs) => setDraft((current) => ({ ...current, paddingMs }))}
+                onChange={(paddingMs) => updateDraft((current) => ({ ...current, paddingMs }))}
               />
               <NumberSetting
                 id="filler-word-duration"
@@ -628,7 +772,7 @@ export function FillerRemovalDialog() {
                 step={50}
                 suffix="ms"
                 onChange={(maxSimpleFillerMs) =>
-                  setDraft((current) => ({ ...current, maxSimpleFillerMs }))
+                  updateDraft((current) => ({ ...current, maxSimpleFillerMs }))
                 }
               />
               <NumberSetting
@@ -640,7 +784,7 @@ export function FillerRemovalDialog() {
                 step={50}
                 suffix="ms"
                 onChange={(maxPhraseFillerMs) =>
-                  setDraft((current) => ({ ...current, maxPhraseFillerMs }))
+                  updateDraft((current) => ({ ...current, maxPhraseFillerMs }))
                 }
               />
             </div>
@@ -654,34 +798,37 @@ export function FillerRemovalDialog() {
               id="filler-words"
               label="Words"
               entries={draft.fillerWords}
-              placeholder="um"
-              onChange={(fillerWords) => setDraft((current) => ({ ...current, fillerWords }))}
+              placeholder="Add word"
+              onChange={(fillerWords) => updateDraft((current) => ({ ...current, fillerWords }))}
             />
             <div className="flex flex-wrap gap-1.5">
               {SUGGESTED_EXTRA_FILLER_WORDS.map((word) => (
-                <Button
+                <button
                   key={word}
                   type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
+                  className="inline-flex overflow-hidden rounded border bg-background text-xs hover:bg-muted"
                   onClick={() =>
-                    setDraft((current) => ({
+                    updateDraft((current) => ({
                       ...current,
                       fillerWords: addEntry(current.fillerWords, word),
                     }))
                   }
                 >
-                  + {word}
-                </Button>
+                  <span className="px-2 py-1">{word}</span>
+                  <span className="border-l border-border px-1.5 py-1 font-medium text-foreground">
+                    +
+                  </span>
+                </button>
               ))}
             </div>
             <FillerEntryEditor
               id="filler-phrases"
               label="Phrases"
               entries={draft.fillerPhrases}
-              placeholder="you know"
-              onChange={(fillerPhrases) => setDraft((current) => ({ ...current, fillerPhrases }))}
+              placeholder="Add phrase"
+              onChange={(fillerPhrases) =>
+                updateDraft((current) => ({ ...current, fillerPhrases }))
+              }
             />
           </div>
         </div>
