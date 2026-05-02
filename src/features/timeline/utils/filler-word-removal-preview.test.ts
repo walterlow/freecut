@@ -1,5 +1,8 @@
 import type { MediaTranscript } from '@/types/storage'
-import { detectFillerRangesFromTranscript } from './filler-word-removal-preview'
+import {
+  detectFillerRangesFromTranscript,
+  FILLER_REMOVAL_PRESETS,
+} from './filler-word-removal-preview'
 
 function transcript(words: Array<{ text: string; start: number; end: number }>): MediaTranscript {
   return {
@@ -73,6 +76,29 @@ describe('detectFillerRangesFromTranscript', () => {
     expect(ranges).toEqual([
       { start: 0.1, end: 0.4, text: 'basically' },
       { start: 0.7, end: 1.05, text: 'right now' },
+    ])
+  })
+
+  it('aggressive preset catches discourse fillers and longer phrases', () => {
+    const aggressive = FILLER_REMOVAL_PRESETS.find((preset) => preset.id === 'aggressive')
+    expect(aggressive).toBeDefined()
+
+    const ranges = detectFillerRangesFromTranscript(
+      transcript([
+        { text: 'well', start: 0, end: 0.2 },
+        { text: 'you', start: 0.5, end: 0.65 },
+        { text: 'know', start: 0.66, end: 0.8 },
+        { text: 'what', start: 0.82, end: 0.94 },
+        { text: 'i', start: 0.95, end: 1 },
+        { text: 'mean', start: 1.01, end: 1.15 },
+        { text: 'go', start: 1.3, end: 1.5 },
+      ]),
+      aggressive!.settings,
+    )
+
+    expect(ranges).toEqual([
+      { start: 0, end: 0.27, text: 'well' },
+      { start: 0.43, end: 1.22, text: 'you know what i mean' },
     ])
   })
 })

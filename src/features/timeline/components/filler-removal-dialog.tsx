@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { FloatingPanel } from '@/components/ui/floating-panel'
 import { Input } from '@/components/ui/input'
@@ -15,9 +15,12 @@ import {
   analyzeFillerWordsForItems,
   applyFillerPreviewOverlays,
   clearFillerPreviewOverlays,
+  FILLER_REMOVAL_PRESETS,
   SUGGESTED_EXTRA_FILLER_WORDS,
   type FillerAudioConfidenceLevel,
+  type FillerPreviewSummary,
   type FillerRange,
+  type FillerRangesByMediaId,
   type FillerRemovalSettings,
 } from '../utils/filler-word-removal-preview'
 import { scoreFillerRangesWithClap } from '../utils/filler-audio-confidence'
@@ -74,6 +77,58 @@ function addEntry(entries: readonly string[], value: string): string[] {
 function clampNumber(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min
   return Math.max(min, Math.min(max, value))
+}
+
+function getRangeId(mediaId: string, range: FillerRange, index: number): string {
+  return `${mediaId}:${range.start.toFixed(3)}:${range.end.toFixed(3)}:${range.text}:${index}`
+}
+
+function createSelectedRangeIds(rangesByMediaId: FillerRangesByMediaId): Set<string> {
+  const selectedIds = new Set<string>()
+  for (const [mediaId, ranges] of Object.entries(rangesByMediaId)) {
+    ranges.forEach((range, index) => {
+      selectedIds.add(getRangeId(mediaId, range, index))
+    })
+  }
+  return selectedIds
+}
+
+function createHighConfidenceSelectedRangeIds(rangesByMediaId: FillerRangesByMediaId): Set<string> {
+  const selectedIds = new Set<string>()
+  for (const [mediaId, ranges] of Object.entries(rangesByMediaId)) {
+    ranges.forEach((range, index) => {
+      if (range.audioConfidence?.level === 'high') {
+        selectedIds.add(getRangeId(mediaId, range, index))
+      }
+    })
+  }
+  return selectedIds
+}
+
+function filterRangesBySelectedIds(
+  rangesByMediaId: FillerRangesByMediaId,
+  selectedRangeIds: ReadonlySet<string>,
+): FillerRangesByMediaId {
+  const selectedRangesByMediaId: FillerRangesByMediaId = {}
+  for (const [mediaId, ranges] of Object.entries(rangesByMediaId)) {
+    const selectedRanges = ranges.filter((range, index) =>
+      selectedRangeIds.has(getRangeId(mediaId, range, index)),
+    )
+    if (selectedRanges.length > 0) {
+      selectedRangesByMediaId[mediaId] = selectedRanges
+    }
+  }
+  return selectedRangesByMediaId
+}
+
+function summarizeRanges(rangesByMediaId: FillerRangesByMediaId): FillerPreviewSummary {
+  let rangeCount = 0
+  let totalSeconds = 0
+  for (const ranges of Object.values(rangesByMediaId)) {
+    rangeCount += ranges.length
+    totalSeconds += ranges.reduce((sum, range) => sum + Math.max(0, range.end - range.start), 0)
+  }
+  return { rangeCount, totalSeconds }
 }
 
 function NumberSetting({
@@ -220,9 +275,13 @@ function UndoRedoControls() {
 function FillerMatchList({
   itemIds,
   rangesByMediaId,
+  selectedRangeIds,
+  onToggleRange,
 }: {
   itemIds: readonly string[]
   rangesByMediaId: Record<string, FillerRange[]>
+  selectedRangeIds: ReadonlySet<string>
+  onToggleRange: (id: string) => void
 }) {
   const mediaById = useMediaLibraryStore((state) => state.mediaById)
   const itemsById = useItemsStore((state) => state.itemById)
@@ -230,7 +289,7 @@ function FillerMatchList({
   const matches = Object.entries(rangesByMediaId)
     .flatMap(([mediaId, ranges]) =>
       ranges.map((range, index) => ({
-        id: `${mediaId}:${range.start}:${range.end}:${index}`,
+        id: getRangeId(mediaId, range, index),
         mediaId,
         range,
         media: mediaById[mediaId],
@@ -289,34 +348,45 @@ function FillerMatchList({
           <div className="px-3 py-2 text-xs text-muted-foreground">No entries found</div>
         ) : (
           matches.map(({ id, mediaId, media, range }) => (
-            <button
+            <div
               key={id}
-              type="button"
-              onClick={() => handlePlayRange(mediaId, range)}
-              className="flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left text-xs last:border-b-0 hover:bg-muted"
-              title="Play this range"
+              className="flex items-center gap-3 border-b px-3 py-2 text-xs last:border-b-0 hover:bg-muted"
             >
-              <span className="min-w-0">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate font-medium">{range.text || 'Filler'}</span>
-                  {range.audioConfidence && (
-                    <span
-                      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] leading-none ${getConfidenceClass(
-                        range.audioConfidence.level,
-                      )}`}
-                    >
-                      {range.audioConfidence.level}
-                    </span>
-                  )}
+              <input
+                type="checkbox"
+                checked={selectedRangeIds.has(id)}
+                onChange={() => onToggleRange(id)}
+                className="h-4 w-4 shrink-0"
+                aria-label={`Include ${range.text || 'filler range'}`}
+              />
+              <button
+                type="button"
+                onClick={() => handlePlayRange(mediaId, range)}
+                className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                title="Play this range"
+              >
+                <span className="min-w-0">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{range.text || 'Filler'}</span>
+                    {range.audioConfidence && (
+                      <span
+                        className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] leading-none ${getConfidenceClass(
+                          range.audioConfidence.level,
+                        )}`}
+                      >
+                        {range.audioConfidence.level}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block truncate text-muted-foreground">
+                    {media?.fileName ?? mediaId}
+                  </span>
                 </span>
-                <span className="block truncate text-muted-foreground">
-                  {media?.fileName ?? mediaId}
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {formatTimestamp(range.start)}
                 </span>
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {formatTimestamp(range.start)}
-              </span>
-            </button>
+              </button>
+            </div>
           ))
         )}
       </div>
@@ -333,16 +403,34 @@ export function FillerRemovalDialog() {
   const updatePreview = useFillerRemovalDialogStore((state) => state.updatePreview)
   const close = useFillerRemovalDialogStore((state) => state.close)
   const [draft, setDraft] = useState<FillerRemovalSettings>(settings)
+  const [reviewRangesByMediaId, setReviewRangesByMediaId] =
+    useState<FillerRangesByMediaId>(rangesByMediaId)
+  const [selectedRangeIds, setSelectedRangeIds] = useState<Set<string>>(() =>
+    createSelectedRangeIds(rangesByMediaId),
+  )
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isScoringAudio, setIsScoringAudio] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
+  const wasOpenRef = useRef(false)
+
+  const selectedRangesByMediaId = useMemo(
+    () => filterRangesBySelectedIds(reviewRangesByMediaId, selectedRangeIds),
+    [reviewRangesByMediaId, selectedRangeIds],
+  )
+  const selectedSummary = useMemo(
+    () => summarizeRanges(selectedRangesByMediaId),
+    [selectedRangesByMediaId],
+  )
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       setDraft(settings)
+      setReviewRangesByMediaId(rangesByMediaId)
+      setSelectedRangeIds(createSelectedRangeIds(rangesByMediaId))
       setHasApplied(false)
     }
-  }, [isOpen, settings])
+    wasOpenRef.current = isOpen
+  }, [isOpen, rangesByMediaId, settings])
 
   const handleClose = useCallback(() => {
     clearFillerPreviewOverlays(itemIds)
@@ -368,10 +456,14 @@ export function FillerRemovalDialog() {
       setIsAnalyzing(true)
       try {
         const nextRangesByMediaId = await analyzeFillerWordsForItems(itemIds, draft)
-        const nextSummary = applyFillerPreviewOverlays(itemIds, nextRangesByMediaId)
+        const nextSelectedRangeIds = createSelectedRangeIds(nextRangesByMediaId)
+        const selectedRanges = filterRangesBySelectedIds(nextRangesByMediaId, nextSelectedRangeIds)
+        const nextSummary = applyFillerPreviewOverlays(itemIds, selectedRanges)
+        setReviewRangesByMediaId(nextRangesByMediaId)
+        setSelectedRangeIds(nextSelectedRangeIds)
         updatePreview({
           settings: draft,
-          rangesByMediaId: nextRangesByMediaId,
+          rangesByMediaId: selectedRanges,
           summary: nextSummary,
         })
         setHasApplied(false)
@@ -393,14 +485,21 @@ export function FillerRemovalDialog() {
     const run = async () => {
       setIsScoringAudio(true)
       try {
-        const scoredRangesByMediaId = await scoreFillerRangesWithClap(rangesByMediaId)
-        const nextSummary = applyFillerPreviewOverlays(itemIds, scoredRangesByMediaId)
+        const scoredRangesByMediaId = await scoreFillerRangesWithClap(reviewRangesByMediaId)
+        const nextSelectedRangeIds = createHighConfidenceSelectedRangeIds(scoredRangesByMediaId)
+        const selectedRanges = filterRangesBySelectedIds(
+          scoredRangesByMediaId,
+          nextSelectedRangeIds,
+        )
+        const nextSummary = applyFillerPreviewOverlays(itemIds, selectedRanges)
+        setReviewRangesByMediaId(scoredRangesByMediaId)
+        setSelectedRangeIds(nextSelectedRangeIds)
         updatePreview({
           settings,
-          rangesByMediaId: scoredRangesByMediaId,
+          rangesByMediaId: selectedRanges,
           summary: nextSummary,
         })
-        toast.success('Audio confidence scored')
+        toast.success('Audio confidence scored. High-confidence entries are selected.')
       } catch (error) {
         logger.warn('Audio confidence scoring failed', error)
         toast.error(error instanceof Error ? error.message : 'Failed to score audio confidence')
@@ -410,12 +509,14 @@ export function FillerRemovalDialog() {
     }
 
     void run()
-  }, [itemIds, rangesByMediaId, settings, updatePreview])
+  }, [itemIds, reviewRangesByMediaId, settings, updatePreview])
 
   const handleApply = useCallback(() => {
     let result: RemoveSilenceResult | null = null
     try {
-      result = useTimelineStore.getState().removeFillerWordsFromItems(itemIds, rangesByMediaId)
+      result = useTimelineStore
+        .getState()
+        .removeFillerWordsFromItems(itemIds, selectedRangesByMediaId)
     } finally {
       clearFillerPreviewOverlays(itemIds)
     }
@@ -429,7 +530,26 @@ export function FillerRemovalDialog() {
       `Removed ${result.removedItemCount} filler segment${result.removedItemCount === 1 ? '' : 's'}`,
     )
     setHasApplied(true)
-  }, [itemIds, rangesByMediaId])
+  }, [itemIds, selectedRangesByMediaId])
+
+  const handleToggleRange = useCallback(
+    (id: string) => {
+      setSelectedRangeIds((current) => {
+        const next = new Set(current)
+        if (next.has(id)) {
+          next.delete(id)
+        } else {
+          next.add(id)
+        }
+        const selectedRanges = filterRangesBySelectedIds(reviewRangesByMediaId, next)
+        const nextSummary = applyFillerPreviewOverlays(itemIds, selectedRanges)
+        updatePreview({ settings, rangesByMediaId: selectedRanges, summary: nextSummary })
+        setHasApplied(false)
+        return next
+      })
+    },
+    [itemIds, reviewRangesByMediaId, settings, updatePreview],
+  )
 
   if (!isOpen) {
     return null
@@ -457,14 +577,37 @@ export function FillerRemovalDialog() {
         <div className="p-3">
           <div className="rounded-md border bg-muted/35 px-3 py-2 text-sm leading-tight">
             <div className="font-medium">
-              {summary.rangeCount} filler range{summary.rangeCount === 1 ? '' : 's'} selected
+              {selectedSummary.rangeCount} filler range
+              {selectedSummary.rangeCount === 1 ? '' : 's'} selected
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              About {formatSeconds(summary.totalSeconds)} will be removed.
+              About {formatSeconds(selectedSummary.totalSeconds)} will be removed.
             </div>
           </div>
 
           <div className="mt-4 space-y-4">
+            <div className="flex rounded-md border bg-muted/20 p-1">
+              {FILLER_REMOVAL_PRESETS.map((preset) => (
+                <Button
+                  key={preset.id}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 flex-1 px-2 text-xs"
+                  onClick={() =>
+                    setDraft({
+                      fillerWords: [...preset.settings.fillerWords],
+                      fillerPhrases: [...preset.settings.fillerPhrases],
+                      paddingMs: preset.settings.paddingMs,
+                      maxSimpleFillerMs: preset.settings.maxSimpleFillerMs,
+                      maxPhraseFillerMs: preset.settings.maxPhraseFillerMs,
+                    })
+                  }
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
             <div className="space-y-2 rounded-md border bg-muted/20 p-2">
               <NumberSetting
                 id="filler-padding"
@@ -501,7 +644,12 @@ export function FillerRemovalDialog() {
                 }
               />
             </div>
-            <FillerMatchList itemIds={itemIds} rangesByMediaId={rangesByMediaId} />
+            <FillerMatchList
+              itemIds={itemIds}
+              rangesByMediaId={reviewRangesByMediaId}
+              selectedRangeIds={selectedRangeIds}
+              onToggleRange={handleToggleRange}
+            />
             <FillerEntryEditor
               id="filler-words"
               label="Words"
@@ -561,7 +709,9 @@ export function FillerRemovalDialog() {
           <Button
             size="sm"
             onClick={handleApply}
-            disabled={isAnalyzing || isScoringAudio || hasApplied || summary.rangeCount === 0}
+            disabled={
+              isAnalyzing || isScoringAudio || hasApplied || selectedSummary.rangeCount === 0
+            }
           >
             {hasApplied ? 'Removed' : 'Remove'}
           </Button>

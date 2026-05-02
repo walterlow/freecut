@@ -58,6 +58,14 @@ export interface FillerRemovalSettings {
   maxPhraseFillerMs: number
 }
 
+export type FillerRemovalPresetId = 'conservative' | 'balanced' | 'aggressive'
+
+export interface FillerRemovalPreset {
+  id: FillerRemovalPresetId
+  label: string
+  settings: FillerRemovalSettings
+}
+
 export const DEFAULT_FILLER_REMOVAL_SETTINGS: FillerRemovalSettings = {
   fillerWords: [...DEFAULT_SIMPLE_FILLER_WORDS],
   fillerPhrases: [...DEFAULT_FILLER_PHRASES],
@@ -65,6 +73,47 @@ export const DEFAULT_FILLER_REMOVAL_SETTINGS: FillerRemovalSettings = {
   maxSimpleFillerMs: 1400,
   maxPhraseFillerMs: 1800,
 }
+
+export const FILLER_REMOVAL_PRESETS: FillerRemovalPreset[] = [
+  {
+    id: 'conservative',
+    label: 'Conservative',
+    settings: {
+      fillerWords: [...DEFAULT_SIMPLE_FILLER_WORDS],
+      fillerPhrases: ['you know', 'i mean'],
+      paddingMs: 20,
+      maxSimpleFillerMs: 900,
+      maxPhraseFillerMs: 1300,
+    },
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    settings: DEFAULT_FILLER_REMOVAL_SETTINGS,
+  },
+  {
+    id: 'aggressive',
+    label: 'Aggressive',
+    settings: {
+      fillerWords: [
+        ...DEFAULT_SIMPLE_FILLER_WORDS,
+        'actually',
+        'basically',
+        'like',
+        'literally',
+        'ok',
+        'okay',
+        'right',
+        'so',
+        'well',
+      ],
+      fillerPhrases: [...DEFAULT_FILLER_PHRASES, 'you know what i mean', 'i guess', 'or whatever'],
+      paddingMs: 70,
+      maxSimpleFillerMs: 1600,
+      maxPhraseFillerMs: 2400,
+    },
+  },
+]
 
 export type FillerRange = AudioSilenceRange & {
   text: string
@@ -133,7 +182,8 @@ function normalizeFillerSettings(settings: FillerRemovalSettings): {
     fillerWords: new Set(settings.fillerWords.map(canonicalFillerWord).filter(Boolean)),
     fillerPhrases: settings.fillerPhrases
       .map(normalizePhrase)
-      .filter((phrase) => phrase.length > 0),
+      .filter((phrase) => phrase.length > 0)
+      .toSorted((left, right) => right.length - left.length),
     paddingSec: Math.max(0, settings.paddingMs) / 1000,
     maxSimpleFillerMs: Math.max(0, settings.maxSimpleFillerMs),
     maxPhraseFillerMs: Math.max(0, settings.maxPhraseFillerMs),
