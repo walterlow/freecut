@@ -59,6 +59,7 @@ import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout'
 import { createScrubThrottleState, shouldCommitScrubFrame } from '../deps/timeline-utils'
 import { cn } from '@/shared/ui/cn'
 import { formatTimecodeCompact } from '@/shared/utils/time-utils'
+import { getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
 import type { TimelineTrack } from '@/types/timeline'
 
 interface SourceMonitorProps {
@@ -70,6 +71,10 @@ interface SourceMonitorProps {
 }
 
 const SOURCE_MONITOR_RESIZE_MIN_UPDATE_MS = 33
+
+function getDevicePixelRatio(): number {
+  return typeof window === 'undefined' ? 1 : window.devicePixelRatio
+}
 
 function isPatchDestinationTrack(
   track: TimelineTrack | null,
@@ -321,15 +326,24 @@ function SourceMonitorInner({
     const ch = Math.max(0, container.clientHeight - editorLayout.previewPadding)
     const scale = cw > 0 && ch > 0 ? Math.min(cw / mediaWidth, ch / mediaHeight) : 1
 
-    const sw = mediaWidth * scale
-    const sh = mediaHeight * scale
+    const snappedSize = getPreviewPixelSnapSize(
+      {
+        width: mediaWidth * scale,
+        height: mediaHeight * scale,
+      },
+      getDevicePixelRatio(),
+    )
+    const sw = snappedSize.width
+    const sh = snappedSize.height
+    const scaleX = sw / mediaWidth
+    const scaleY = sh / mediaHeight
 
     const previousLayout = lastLayoutRef.current
     if (
       previousLayout &&
       previousLayout.scaledWidth === sw &&
       previousLayout.scaledHeight === sh &&
-      previousLayout.scale === scale
+      previousLayout.scale === scaleX
     ) {
       return
     }
@@ -337,7 +351,7 @@ function SourceMonitorInner({
     lastLayoutRef.current = {
       scaledWidth: sw,
       scaledHeight: sh,
-      scale,
+      scale: scaleX,
     }
 
     host.style.width = `${sw}px`
@@ -347,7 +361,7 @@ function SourceMonitorInner({
 
     scaleDiv.style.width = `${mediaWidth}px`
     scaleDiv.style.height = `${mediaHeight}px`
-    scaleDiv.style.transform = `scale(${scale})`
+    scaleDiv.style.transform = `scale(${scaleX}, ${scaleY})`
   }, [editorLayout.previewPadding, mediaWidth, mediaHeight])
 
   useEffect(() => {
