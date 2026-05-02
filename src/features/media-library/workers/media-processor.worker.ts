@@ -14,6 +14,7 @@ import { createLogger } from '@/shared/logging/logger'
 const logger = createLogger('MediaProcessorWorker')
 const KEYFRAME_EXTRACTION_TIMEOUT_MS = 8_000
 const KEYFRAME_EXTRACTION_MAX_PACKETS = 5_000
+const FPS_ESTIMATION_MAX_PACKETS = 180
 const THUMBNAIL_TIMEOUT_MS = 12_000
 
 // Type definitions for mediabunny module
@@ -69,7 +70,11 @@ interface MediabunnyEncodedPacketSink {
     packet: MediabunnyEncodedPacket,
     options?: MediabunnyPacketRetrievalOptions,
   ): Promise<MediabunnyEncodedPacket | null>
-  packets(startTimestamp?: number, endTimestamp?: number): AsyncIterable<MediabunnyEncodedPacket>
+  packets(
+    startTimestamp?: number,
+    endTimestamp?: number,
+    options?: MediabunnyPacketRetrievalOptions,
+  ): AsyncIterable<MediabunnyEncodedPacket>
   dispose?(): void
 }
 
@@ -180,6 +185,96 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   })
 }
 
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  if (sorted.length % 2 === 1) {
+    return sorted[middle] ?? null
+  }
+  const left = sorted[middle - 1]
+  const right = sorted[middle]
+  return left !== undefined && right !== undefined ? (left + right) / 2 : null
+}
+
+function snapCommonFrameRate(fps: number): number {
+  if (!Number.isFinite(fps) || fps <= 0) return 30
+
+  const commonRates = [
+    24000 / 1001,
+    24,
+    25,
+    30000 / 1001,
+    30,
+    48,
+    50,
+    60000 / 1001,
+    60,
+    120000 / 1001,
+    120,
+    240000 / 1001,
+    240,
+  ]
+
+  const closest = commonRates.reduce((best, candidate) =>
+    Math.abs(candidate - fps) < Math.abs(best - fps) ? candidate : best,
+  )
+  const tolerance = closest >= 100 ? 0.08 : closest >= 50 ? 0.04 : 0.02
+  return Math.abs(closest - fps) <= tolerance ? Number(closest.toPrecision(12)) : fps
+}
+
+async function estimateVideoFps(
+  mb: MediabunnyModule,
+  videoTrack: MediabunnyVideoTrack,
+): Promise<number> {
+  let sink: MediabunnyEncodedPacketSink | null = null
+  try {
+    sink = new mb.EncodedPacketSink(videoTrack)
+    const durations: number[] = []
+    const timestamps: number[] = []
+
+    for await (const packet of sink.packets(undefined, undefined, { metadataOnly: true })) {
+      if (Number.isFinite(packet.duration) && packet.duration > 0) {
+        durations.push(packet.duration)
+      }
+      if (Number.isFinite(packet.timestamp)) {
+        timestamps.push(packet.timestamp)
+      }
+      packet.close?.()
+
+      if (timestamps.length >= FPS_ESTIMATION_MAX_PACKETS) {
+        break
+      }
+    }
+
+    const medianDuration = median(durations)
+    if (medianDuration && medianDuration > 0) {
+      return snapCommonFrameRate(1 / medianDuration)
+    }
+
+    const deltas = timestamps
+      .slice(1)
+      .map((timestamp, index) => timestamp - timestamps[index]!)
+      .filter((delta) => Number.isFinite(delta) && delta > 0)
+    const medianDelta = median(deltas)
+    if (medianDelta && medianDelta > 0) {
+      return snapCommonFrameRate(1 / medianDelta)
+    }
+  } catch (error) {
+    logger.warn('Duration-based FPS estimation failed; falling back to packet stats:', error)
+  } finally {
+    sink?.dispose?.()
+  }
+
+  try {
+    const packetStats = await videoTrack.computePacketStats(FPS_ESTIMATION_MAX_PACKETS)
+    return snapCommonFrameRate(packetStats?.averagePacketRate || 30)
+  } catch (error) {
+    logger.warn('Packet-stat FPS estimation failed; using default FPS:', error)
+    return 30
+  }
+}
+
 /**
  * Extract keyframe timestamps using mediabunny's EncodedPacketSink.
  *
@@ -265,9 +360,11 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
       throw new Error('No video track found in file')
     }
 
-    // Get FPS and keyframe index in parallel with packet stats
-    const [packetStats, keyframeTimestamps] = await Promise.all([
-      videoTrack.computePacketStats(50),
+    // Prefer per-packet durations over short prefix average rate. Matroska
+    // DefaultDuration flows into packet.duration and is more stable for
+    // fractional CFR sources such as 24000/1001.
+    const [fps, keyframeTimestamps] = await Promise.all([
+      estimateVideoFps(mb, videoTrack),
       extractKeyframeTimestamps(mb, videoTrack),
     ])
 
@@ -286,7 +383,7 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
       duration: duration || 0,
       width: videoTrack.displayWidth || 1920,
       height: videoTrack.displayHeight || 1080,
-      fps: packetStats?.averagePacketRate || 30,
+      fps,
       codec: videoTrack.codec || 'unknown',
       bitrate: 0,
       audioCodec,
