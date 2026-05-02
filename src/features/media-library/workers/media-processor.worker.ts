@@ -14,7 +14,9 @@ import { createLogger } from '@/shared/logging/logger'
 const logger = createLogger('MediaProcessorWorker')
 const KEYFRAME_EXTRACTION_TIMEOUT_MS = 8_000
 const KEYFRAME_EXTRACTION_MAX_PACKETS = 5_000
+const FPS_ESTIMATION_TIMEOUT_MS = 5_000
 const FPS_ESTIMATION_MAX_PACKETS = 180
+const FPS_ESTIMATION_HARD_PACKET_CAP = 2_000
 const THUMBNAIL_TIMEOUT_MS = 12_000
 
 // Type definitions for mediabunny module
@@ -232,20 +234,40 @@ async function estimateVideoFps(
     sink = new mb.EncodedPacketSink(videoTrack)
     const durations: number[] = []
     const timestamps: number[] = []
+    const startedAt = performance.now()
+    const iterator = sink
+      .packets(undefined, undefined, { metadataOnly: true })
+      [Symbol.asyncIterator]()
+    let processedPackets = 0
 
-    for await (const packet of sink.packets(undefined, undefined, { metadataOnly: true })) {
-      if (Number.isFinite(packet.duration) && packet.duration > 0) {
-        durations.push(packet.duration)
-      }
-      if (Number.isFinite(packet.timestamp)) {
-        timestamps.push(packet.timestamp)
-      }
-      packet.close?.()
+    while (true) {
+      const result = await withTimeout(iterator.next(), FPS_ESTIMATION_TIMEOUT_MS, 'FPS estimation')
+      if (result.done) break
+      const packet = result.value
+      processedPackets++
 
-      if (timestamps.length >= FPS_ESTIMATION_MAX_PACKETS) {
+      try {
+        if (Number.isFinite(packet.duration) && packet.duration > 0) {
+          durations.push(packet.duration)
+        }
+        if (Number.isFinite(packet.timestamp)) {
+          timestamps.push(packet.timestamp)
+        }
+      } finally {
+        packet.close?.()
+      }
+
+      if (timestamps.length >= FPS_ESTIMATION_MAX_PACKETS) break
+      if (processedPackets >= FPS_ESTIMATION_HARD_PACKET_CAP) {
+        logger.warn('FPS estimation reached hard packet cap; using partial sample')
+        break
+      }
+      if (performance.now() - startedAt > FPS_ESTIMATION_TIMEOUT_MS) {
+        logger.warn('FPS estimation reached time budget; using partial sample')
         break
       }
     }
+    await iterator.return?.()
 
     const medianDuration = median(durations)
     if (medianDuration && medianDuration > 0) {
@@ -363,10 +385,12 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
     // Prefer per-packet durations over short prefix average rate. Matroska
     // DefaultDuration flows into packet.duration and is more stable for
     // fractional CFR sources such as 24000/1001.
-    const [fps, keyframeTimestamps] = await Promise.all([
-      estimateVideoFps(mb, videoTrack),
-      extractKeyframeTimestamps(mb, videoTrack),
-    ])
+    //
+    // Run sequentially: both helpers create an EncodedPacketSink on the same
+    // track, and concurrent iteration would share one packet-read cursor and
+    // interleave reads — yielding a wrong FPS or corrupted keyframe index.
+    const fps = await estimateVideoFps(mb, videoTrack)
+    const keyframeTimestamps = await extractKeyframeTimestamps(mb, videoTrack)
 
     const audioCodec = audioTrack?.codec
     const audioCodecSupported = isAudioCodecSupported(audioCodec)

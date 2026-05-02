@@ -412,13 +412,45 @@ function sampleBilinear(
   const i01 = (y1 * width + x0) * 4
   const i11 = (y1 * width + x1) * 4
 
-  const out = [0, 0, 0, 0]
-  for (let i = 0; i < 4; i++) {
-    const top = sourceData[i00 + i]! * (1 - tx) + sourceData[i10 + i]! * tx
-    const bottom = sourceData[i01 + i]! * (1 - tx) + sourceData[i11 + i]! * tx
-    out[i] = top * (1 - ty) + bottom * ty
+  // Premultiplied bilinear: interpolating straight RGBA across an alpha
+  // discontinuity bleeds opaque colors into transparent pixels (visible as
+  // dark halos on text/shape edges). Premultiply RGB by alpha first,
+  // interpolate, then unpremultiply.
+  const a00 = sourceData[i00 + 3]! / 255
+  const a10 = sourceData[i10 + 3]! / 255
+  const a01 = sourceData[i01 + 3]! / 255
+  const a11 = sourceData[i11 + 3]! / 255
+
+  const interp = (v00: number, v10: number, v01: number, v11: number): number => {
+    const top = v00 * (1 - tx) + v10 * tx
+    const bottom = v01 * (1 - tx) + v11 * tx
+    return top * (1 - ty) + bottom * ty
   }
-  return out
+
+  const r = interp(
+    sourceData[i00]! * a00,
+    sourceData[i10]! * a10,
+    sourceData[i01]! * a01,
+    sourceData[i11]! * a11,
+  )
+  const g = interp(
+    sourceData[i00 + 1]! * a00,
+    sourceData[i10 + 1]! * a10,
+    sourceData[i01 + 1]! * a01,
+    sourceData[i11 + 1]! * a11,
+  )
+  const b = interp(
+    sourceData[i00 + 2]! * a00,
+    sourceData[i10 + 2]! * a10,
+    sourceData[i01 + 2]! * a01,
+    sourceData[i11 + 2]! * a11,
+  )
+  const aOut = interp(a00, a10, a01, a11)
+
+  if (aOut <= 0) {
+    return [0, 0, 0, 0]
+  }
+  return [r / aOut, g / aOut, b / aOut, aOut * 255]
 }
 
 function drawCornerPinImageProjective(
