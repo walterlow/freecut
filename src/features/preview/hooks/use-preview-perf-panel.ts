@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useDebugStore } from '@/features/editor/stores/debug-store'
+import { useDebugStore } from '../deps/editor-debug'
 import {
   PREVIEW_PERF_PANEL_QUERY_KEY,
   PREVIEW_PERF_PANEL_STORAGE_KEY,
