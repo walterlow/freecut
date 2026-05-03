@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
 import { render, screen } from '@testing-library/react'
-import type { ReactNode, RefObject } from 'react'
+import type { CSSProperties, ReactNode, RefObject } from 'react'
 import type { CompositionInputProps } from '@/types/export'
 
 const playbackState = vi.hoisted(() => ({
@@ -17,7 +17,24 @@ vi.mock('@/shared/state/playback', () => {
 })
 
 vi.mock('@/features/preview/deps/player-core', () => ({
-  Player: ({ children }: { children: ReactNode }) => <div data-testid="player">{children}</div>,
+  Player: ({
+    children,
+    layoutSize,
+    style,
+  }: {
+    children: ReactNode
+    layoutSize?: { width: number; height: number }
+    style?: CSSProperties
+  }) => (
+    <div
+      data-testid="player"
+      data-layout-width={layoutSize?.width}
+      data-layout-height={layoutSize?.height}
+      style={style}
+    >
+      {children}
+    </div>
+  ),
 }))
 
 vi.mock('@/features/preview/deps/composition-runtime', () => ({
@@ -100,5 +117,43 @@ describe('PreviewStage', () => {
     )
 
     expect(screen.getByTestId('main-composition')).toHaveAttribute('data-use-proxy-media', 'true')
+  })
+
+  it('keeps render surfaces on one exact geometry and passes that geometry to Player layout', () => {
+    render(
+      <PreviewStage
+        backgroundRef={createRef<HTMLDivElement>()}
+        playerRef={createRef()}
+        scrubCanvasRef={createRef<HTMLCanvasElement>()}
+        gpuEffectsCanvasRef={createRef<HTMLCanvasElement>()}
+        needsOverflow={false}
+        playerSize={{ width: 1280, height: 720 }}
+        playerRenderSize={{ width: 1280, height: 720 }}
+        totalFrames={120}
+        fps={30}
+        isResolving={false}
+        isRenderedOverlayVisible={true}
+        inputProps={createInputProps()}
+        onBackgroundClick={() => {}}
+        onFrameChange={() => {}}
+        onPlayStateChange={() => {}}
+        setPlayerContainerRefCallback={() => {}}
+      />,
+    )
+
+    const player = screen.getByTestId('player')
+    const canvases = document.querySelectorAll('canvas')
+
+    expect(player).toHaveStyle({ width: '100%', height: '100%' })
+    expect(player).toHaveAttribute('data-layout-width', '1280')
+    expect(player).toHaveAttribute('data-layout-height', '720')
+    expect(player.style.marginLeft).toBe('')
+    expect(player.style.marginTop).toBe('')
+
+    canvases.forEach((canvas) => {
+      expect(canvas).toHaveStyle({ width: '100%', height: '100%' })
+      expect(canvas.style.left).toBe('')
+      expect(canvas.style.top).toBe('')
+    })
   })
 })
