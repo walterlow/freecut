@@ -28,3 +28,6 @@ Preview-local adapters for external feature dependencies.
   keyframe animation hooks or auto-keyframing utilities.
 - `composition-runtime.ts`: the only allowed entry point for preview modules
   that need composition runtime components or transform/time utilities.
+- `editor-debug.ts`: the only allowed entry point for preview modules that
+  need editor-owned debug controls.
+- `editor-debug-contract.ts`: internal preview->editor debug binding.

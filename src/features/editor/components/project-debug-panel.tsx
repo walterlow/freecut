@@ -31,6 +31,9 @@ import {
   FlaskConical,
   Play,
   Eye,
+  Activity,
+  Film,
+  Layers,
 } from 'lucide-react'
 import { useDebugStore } from '@/features/editor/stores/debug-store'
 import {
@@ -54,6 +57,15 @@ interface ProjectDebugPanelProps {
   projectId: string
 }
 
+type DebugApi = NonNullable<Window['__DEBUG__']>
+
+function getDebugApi(): DebugApi {
+  if (!window.__DEBUG__) {
+    throw new Error('Debug API is not initialized')
+  }
+  return window.__DEBUG__
+}
+
 export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [status, setStatus] = useState<{
@@ -68,6 +80,8 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   // Debug overlay toggle
   const showVideoDebugOverlay = useDebugStore((s) => s.showVideoDebugOverlay)
   const toggleVideoDebugOverlay = useDebugStore((s) => s.toggleVideoDebugOverlay)
+  const showPreviewPerfPanel = useDebugStore((s) => s.showPreviewPerfPanel)
+  const togglePreviewPerfPanel = useDebugStore((s) => s.togglePreviewPerfPanel)
 
   // Load available fixtures on mount
   useEffect(() => {
@@ -120,15 +134,28 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   }, [])
 
   const handleLogSnapshot = useCallback(async () => {
+    const api = getDebugApi()
     const { exportProjectJson, getSnapshotStats } = await importJsonExportService()
     const snapshot = await exportProjectJson(projectId)
     const stats = getSnapshotStats(snapshot)
-    logger.debug('Project snapshot stats:', stats)
+    const mediaIds = await api.getProjectMedia(projectId)
+    logger.debug('Project snapshot summary:', {
+      project: {
+        id: snapshot.project.id,
+        name: snapshot.project.name,
+        duration: snapshot.project.duration,
+        metadata: snapshot.project.metadata,
+        schemaVersion: snapshot.project.schemaVersion,
+      },
+      stats,
+      mediaReferenceCount: snapshot.mediaReferences.length,
+      associatedMediaCount: mediaIds.length,
+    })
   }, [projectId])
 
-  const handleLogDBStats = useCallback(async () => {
+  const handleLogStorageStats = useCallback(async () => {
     const stats = await getDBStats()
-    logger.debug('IndexedDB stats:', stats)
+    logger.debug('Workspace storage stats:', stats)
   }, [])
 
   const handleValidateProject = useCallback(async () => {
@@ -136,13 +163,60 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
     const { validateSnapshotData } = await importJsonImportService()
     const snapshot = await exportProjectJson(projectId)
     const result = await validateSnapshotData(snapshot)
+    logger.debug('Project snapshot validation:', {
+      valid: result.valid,
+      errorCount: result.errors.length,
+      warningCount: result.warnings.length,
+      errors: result.errors,
+      warnings: result.warnings,
+    })
     if (!result.valid) {
-      logger.debug('Project validation errors:', result.errors)
-    }
-    if (result.warnings.length > 0) {
-      logger.debug('Project validation warnings:', result.warnings)
+      throw new Error(`${result.errors.length} validation error(s)`)
     }
   }, [projectId])
+
+  const handleLogTimelineState = useCallback(async () => {
+    const api = getDebugApi()
+    const [tracks, transitions, overlaps] = await Promise.all([
+      api.getTracks(),
+      api.getTransitions(),
+      api.overlaps(),
+    ])
+    logger.debug('Live timeline state:', { tracks, transitions, overlaps })
+  }, [])
+
+  const handleLogPlaybackState = useCallback(async () => {
+    const api = getDebugApi()
+    logger.debug('Playback and preview state:', {
+      playback: await api.getPlaybackState(),
+      previewPerf: api.previewPerf(),
+      jitter: api.jitter(),
+    })
+  }, [])
+
+  const handleLogMediaLibrary = useCallback(async () => {
+    const api = getDebugApi()
+    logger.debug('Media library summary:', await api.getMediaLibrary())
+  }, [])
+
+  const handleLogTransitionWindows = useCallback(async () => {
+    const api = getDebugApi()
+    logger.debug('Transition windows:', await api.getTransitionWindows())
+  }, [])
+
+  const handleCheckOverlaps = useCallback(async () => {
+    const api = getDebugApi()
+    const overlaps = await api.overlaps()
+    logger.debug('Timeline overlap check:', overlaps)
+    if (!overlaps.clean) {
+      throw new Error(`${overlaps.count} non-transition overlap(s)`)
+    }
+  }, [])
+
+  const handleDryRunOrphanSweep = useCallback(async () => {
+    const api = getDebugApi()
+    logger.debug('Workspace orphan sweep dry run:', await api.cleanOrphans({ dryRun: true }))
+  }, [])
 
   const handleGenerateFixture = useCallback(async () => {
     const { generateFixture } = await importTestFixtures()
@@ -211,22 +285,61 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
 
   const inspectActions: DebugAction[] = [
     {
-      label: 'Log Snapshot',
+      label: 'Project Summary',
       icon: <FileJson className="h-3.5 w-3.5" />,
       action: () => runAction(handleLogSnapshot, 'Logged to console'),
-      description: 'Log project snapshot to console',
+      description: 'Log project metadata, snapshot stats, and media counts',
     },
     {
-      label: 'Log DB Stats',
-      icon: <Database className="h-3.5 w-3.5" />,
-      action: () => runAction(handleLogDBStats, 'Logged to console'),
-      description: 'Log IndexedDB statistics',
+      label: 'Live Timeline',
+      icon: <Layers className="h-3.5 w-3.5" />,
+      action: () => runAction(handleLogTimelineState, 'Logged to console'),
+      description: 'Log current tracks, transitions, and overlap state',
+    },
+    {
+      label: 'Playback State',
+      icon: <Activity className="h-3.5 w-3.5" />,
+      action: () => runAction(handleLogPlaybackState, 'Logged to console'),
+      description: 'Log current playback, preview performance, and jitter state',
+    },
+    {
+      label: 'Media Library',
+      icon: <Film className="h-3.5 w-3.5" />,
+      action: () => runAction(handleLogMediaLibrary, 'Logged to console'),
+      description: 'Log current media library entries used by the editor',
+    },
+    {
+      label: 'Transitions',
+      icon: <Layers className="h-3.5 w-3.5" />,
+      action: () => runAction(handleLogTransitionWindows, 'Logged to console'),
+      description: 'Log resolved transition windows',
     },
     {
       label: 'Validate Schema',
       icon: <CheckCircle className="h-3.5 w-3.5" />,
-      action: () => runAction(handleValidateProject, 'Validation complete'),
-      description: 'Validate project against schema',
+      action: () => runAction(handleValidateProject, 'Snapshot schema valid'),
+      description: 'Validate exported project snapshot against the current schema',
+    },
+    {
+      label: 'Check Overlaps',
+      icon: <CheckCircle className="h-3.5 w-3.5" />,
+      action: () => runAction(handleCheckOverlaps, 'No overlaps found'),
+      description: 'Detect non-transition timeline overlaps',
+    },
+  ]
+
+  const storageActions: DebugAction[] = [
+    {
+      label: 'Storage Stats',
+      icon: <Database className="h-3.5 w-3.5" />,
+      action: () => runAction(handleLogStorageStats, 'Logged to console'),
+      description: 'Log workspace project count and browser storage estimate',
+    },
+    {
+      label: 'Dry Run Orphans',
+      icon: <Database className="h-3.5 w-3.5" />,
+      action: () => runAction(handleDryRunOrphanSweep, 'Logged to console'),
+      description: 'Scan workspace mirror caches for orphaned media entries without deleting',
     },
   ]
 
@@ -308,6 +421,24 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                     </span>
                   )}
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    'w-full justify-start gap-2 h-8 text-xs',
+                    showPreviewPerfPanel && 'bg-amber-500/20 text-amber-300',
+                  )}
+                  onClick={togglePreviewPerfPanel}
+                  title="Show preview performance diagnostics"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Preview Perf Panel
+                  {showPreviewPerfPanel && (
+                    <span className="ml-auto text-[10px] bg-amber-500/30 px-1.5 py-0.5 rounded">
+                      ON
+                    </span>
+                  )}
+                </Button>
               </div>
             </div>
 
@@ -338,10 +469,22 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
             {/* Inspect Section */}
             <div>
               <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
-                Inspect
+                Inspect Live State
               </div>
               <div className="space-y-0.5">
                 {inspectActions.map((action) => (
+                  <ActionButton key={action.label} action={action} />
+                ))}
+              </div>
+            </div>
+
+            {/* Storage Section */}
+            <div>
+              <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
+                Storage
+              </div>
+              <div className="space-y-0.5">
+                {storageActions.map((action) => (
                   <ActionButton key={action.label} action={action} />
                 ))}
               </div>
@@ -351,7 +494,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
             <div>
               <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium flex items-center gap-1">
                 <FlaskConical className="h-3 w-3" />
-                Test Fixtures
+                Synthetic Fixtures
               </div>
               <div className="space-y-2 px-1">
                 <Select
