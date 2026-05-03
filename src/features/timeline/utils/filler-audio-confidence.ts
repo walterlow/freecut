@@ -48,10 +48,27 @@ type TransformersModule = {
 }
 
 let classifierPromise: Promise<ZeroShotAudioClassifier> | null = null
+const SCORE_CACHE_MAX_ENTRIES = 500
 const scoreCache = new Map<string, FillerAudioConfidence>()
 
 function getRangeCacheKey(mediaId: string, range: FillerRange): string {
   return `${mediaId}:${range.start.toFixed(3)}:${range.end.toFixed(3)}:${range.text}`
+}
+
+function getCachedScore(cacheKey: string): FillerAudioConfidence | undefined {
+  const cached = scoreCache.get(cacheKey)
+  if (cached === undefined) return undefined
+  scoreCache.delete(cacheKey)
+  scoreCache.set(cacheKey, cached)
+  return cached
+}
+
+function setCachedScore(cacheKey: string, confidence: FillerAudioConfidence): void {
+  if (scoreCache.size >= SCORE_CACHE_MAX_ENTRIES) {
+    const oldestKey = scoreCache.keys().next().value
+    if (oldestKey !== undefined) scoreCache.delete(oldestKey)
+  }
+  scoreCache.set(cacheKey, confidence)
 }
 
 async function getClassifier(): Promise<ZeroShotAudioClassifier> {
@@ -175,7 +192,7 @@ async function scoreOneRange(
   range: FillerRange,
 ): Promise<FillerRange> {
   const cacheKey = getRangeCacheKey(mediaId, range)
-  const cached = scoreCache.get(cacheKey)
+  const cached = getCachedScore(cacheKey)
   if (cached) {
     return { ...range, audioConfidence: cached }
   }
@@ -185,7 +202,7 @@ async function scoreOneRange(
     hypothesis_template: 'This audio contains {}.',
   })
   const confidence = classifyConfidence(scores)
-  scoreCache.set(cacheKey, confidence)
+  setCachedScore(cacheKey, confidence)
   return { ...range, audioConfidence: confidence }
 }
 

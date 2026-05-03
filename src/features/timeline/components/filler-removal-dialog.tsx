@@ -632,7 +632,7 @@ export function FillerRemovalDialog() {
         setReviewRangesByMediaId(scoredRangesByMediaId)
         setSelectedRangeIds(nextSelectedRangeIds)
         updatePreview({
-          settings,
+          settings: draft,
           rangesByMediaId: selectedRanges,
           summary: nextSummary,
         })
@@ -646,7 +646,7 @@ export function FillerRemovalDialog() {
     }
 
     void run()
-  }, [itemIds, reviewRangesByMediaId, settings, updatePreview])
+  }, [draft, itemIds, reviewRangesByMediaId, updatePreview])
 
   const handleApply = useCallback(() => {
     let result: RemoveSilenceResult | null = null

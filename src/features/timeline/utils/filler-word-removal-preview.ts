@@ -311,9 +311,8 @@ async function getTranscriptWithWords(mediaId: string): Promise<MediaTranscript>
   wordTranscriptCache.set(mediaId, promise)
   try {
     return await promise
-  } catch (error) {
+  } finally {
     wordTranscriptCache.delete(mediaId)
-    throw error
   }
 }
 

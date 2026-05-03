@@ -93,6 +93,7 @@ self.onmessage = async (event: MessageEvent) => {
 
   if (message.type === 'init') {
     language = message.language
+    recentWords.length = 0
     await initPipeline(message.modelId, message.quantization ?? 'hybrid')
     return
   }
