@@ -63,11 +63,14 @@ interface PlayerProps {
   /** Custom styles */
   style?: React.CSSProperties
 
-  /** Width of the player */
+  /** Width of the rendered composition */
   width?: number
 
-  /** Height of the player */
+  /** Height of the rendered composition */
   height?: number
+
+  /** Explicit CSS layout rectangle to scale the composition into. */
+  layoutSize?: { width: number; height: number }
 
   /** Callback when playback ends */
   onEnded?: () => void
@@ -313,6 +316,7 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
       style,
       width = 1280,
       height = 720,
+      layoutSize,
       onEnded,
       onFrameChange,
       onPlayStateChange,
@@ -339,8 +343,10 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
       if (!container || !contentHost || !contentScale) return
 
       const containerRect = container.getBoundingClientRect()
-      const containerWidth = containerRect.width || container.clientWidth
-      const containerHeight = containerRect.height || container.clientHeight
+      const measuredWidth = containerRect.width || container.clientWidth
+      const measuredHeight = containerRect.height || container.clientHeight
+      const containerWidth = layoutSize?.width ?? measuredWidth
+      const containerHeight = layoutSize?.height ?? measuredHeight
       const layout = calculatePlayerContentLayout(containerWidth, containerHeight, width, height)
 
       contentHost.style.width = `${layout.width}px`
@@ -351,7 +357,7 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
       contentScale.style.width = `${width}px`
       contentScale.style.height = `${height}px`
       contentScale.style.transform = `scale(${layout.scaleX}, ${layout.scaleY})`
-    }, [height, width])
+    }, [height, layoutSize?.height, layoutSize?.width, width])
 
     useEffect(() => {
       const container = containerRef.current
