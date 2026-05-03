@@ -432,6 +432,54 @@ describe('mediaTranscriptionService.transcribeMedia', () => {
     expect(saveTranscriptMock).toHaveBeenCalledTimes(1)
   })
 
+  it('splits word-timestamped Whisper chunks into readable caption segments', async () => {
+    const sourceFile = new File(['audio'], 'clip.mp3', { type: 'audio/mpeg' })
+    getMediaMock.mockResolvedValue({
+      id: 'media-1',
+      fileName: 'clip.mp3',
+      mimeType: 'audio/mpeg',
+      codec: 'mp3',
+      fileLastModified: 123,
+    })
+    getMediaFileMock.mockResolvedValue(sourceFile)
+    transcribeCollectMock.mockResolvedValue([
+      {
+        text: " my sentences. So once again, I'm going to talk about the Netherlands in this video.",
+        start: 0,
+        end: 5,
+        words: [
+          { text: 'my', start: 0, end: 0.2 },
+          { text: 'sentences.', start: 0.22, end: 0.7 },
+          { text: 'So', start: 1.4, end: 1.6 },
+          { text: 'once', start: 1.62, end: 1.9 },
+          { text: 'again,', start: 1.92, end: 2.2 },
+          { text: "I'm", start: 2.22, end: 2.4 },
+          { text: 'going', start: 2.42, end: 2.7 },
+          { text: 'to', start: 2.72, end: 2.84 },
+          { text: 'talk', start: 2.86, end: 3.1 },
+          { text: 'about', start: 3.12, end: 3.38 },
+          { text: 'the', start: 3.4, end: 3.52 },
+          { text: 'Netherlands', start: 3.54, end: 4.1 },
+          { text: 'in', start: 4.12, end: 4.25 },
+          { text: 'this', start: 4.27, end: 4.42 },
+          { text: 'video.', start: 4.44, end: 4.8 },
+        ],
+      },
+    ])
+
+    await mediaTranscriptionService.transcribeMedia('media-1')
+
+    const saved = saveTranscriptMock.mock.calls[0]?.[0] as MediaTranscript
+    expect(saved.segments.length).toBeGreaterThan(1)
+    expect(saved.segments.every((segment) => segment.text.length <= 72)).toBe(true)
+    expect(saved.segments.every((segment) => (segment.words?.length ?? 0) > 0)).toBe(true)
+    expect(saved.segments.map((segment) => segment.text)).toEqual([
+      'my sentences.',
+      "So once again, I'm going to talk about the Netherlands in this",
+      'video.',
+    ])
+  })
+
   it('transcribes a conformed wav for custom-decoded codecs like pcm-s16be', async () => {
     const sourceFile = new File(['pcm'], 'clip.aif', { type: 'audio/aiff' })
     const conformedBlob = new Blob(['wav'], { type: 'audio/wav' })

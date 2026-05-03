@@ -1904,7 +1904,9 @@ export const TimelineItem = memo(
       handleDissolveComposition,
       handleDetectScenes,
       handleRemoveSilence,
+      handleRemoveFillers,
       isRemovingSilence,
+      isRemovingFillers,
     } = useTimelineItemActions({
       item,
       isBroken,
@@ -3278,6 +3280,11 @@ export const TimelineItem = memo(
           }
           isRemovingSilence={isRemovingSilence}
           onRemoveSilence={handleRemoveSilence}
+          canRemoveFillers={
+            (item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken
+          }
+          isRemovingFillers={isRemovingFillers}
+          onRemoveFillers={handleRemoveFillers}
         >
           <div
             ref={transformRef}

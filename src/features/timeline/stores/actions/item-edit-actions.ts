@@ -668,12 +668,27 @@ export function removeSilenceFromItems(
   itemIds: string[],
   silenceRangesByMediaId: Record<string, RemoveSilenceRange[]>,
 ): RemoveSilenceResult {
+  return removeTimelineRangesFromItems('REMOVE_SILENCE', itemIds, silenceRangesByMediaId)
+}
+
+export function removeFillerWordsFromItems(
+  itemIds: string[],
+  fillerRangesByMediaId: Record<string, RemoveSilenceRange[]>,
+): RemoveSilenceResult {
+  return removeTimelineRangesFromItems('REMOVE_FILLER_WORDS', itemIds, fillerRangesByMediaId)
+}
+
+function removeTimelineRangesFromItems(
+  commandType: 'REMOVE_SILENCE' | 'REMOVE_FILLER_WORDS',
+  itemIds: string[],
+  rangesByMediaId: Record<string, RemoveSilenceRange[]>,
+): RemoveSilenceResult {
   if (itemIds.length === 0) {
     return { analyzedItemCount: 0, removedItemCount: 0, splitCount: 0 }
   }
 
   return execute(
-    'REMOVE_SILENCE',
+    commandType,
     () => {
       const timelineFps = useTimelineSettingsStore.getState().fps
       const initialItems = useItemsStore.getState().items
@@ -685,7 +700,7 @@ export function removeSilenceFromItems(
             item !== undefined &&
             (item.type === 'video' || item.type === 'audio') &&
             !!item.mediaId &&
-            (silenceRangesByMediaId[item.mediaId]?.length ?? 0) > 0,
+            (rangesByMediaId[item.mediaId]?.length ?? 0) > 0,
         )
 
       if (anchors.length === 0) {
@@ -700,7 +715,7 @@ export function removeSilenceFromItems(
 
       let splitCount = 0
       for (const anchor of anchors) {
-        const ranges = silenceRangesByMediaId[anchor.mediaId!]
+        const ranges = rangesByMediaId[anchor.mediaId!]
         if (!ranges || ranges.length === 0) continue
 
         const splitFrames = Array.from(
@@ -768,7 +783,7 @@ export function removeSilenceFromItems(
       const idsToRemove = new Set<string>()
 
       for (const descriptor of anchorDescriptors) {
-        const ranges = silenceRangesByMediaId[descriptor.mediaId]
+        const ranges = rangesByMediaId[descriptor.mediaId]
         if (!ranges || ranges.length === 0) continue
 
         for (const candidate of currentItems) {
@@ -798,7 +813,7 @@ export function removeSilenceFromItems(
         splitCount,
       }
     },
-    { itemIds, mediaCount: Object.keys(silenceRangesByMediaId).length },
+    { itemIds, mediaCount: Object.keys(rangesByMediaId).length },
   )
 }
 

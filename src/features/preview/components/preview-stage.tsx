@@ -16,6 +16,8 @@ import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
 import { FAST_SCRUB_RENDERER_ENABLED } from '../utils/preview-constants'
 import { getPreviewPixelSnapOffset, ZERO_PIXEL_SNAP_OFFSET } from '../utils/preview-pixel-snap'
 
+const PREVIEW_SURFACE_OVERSCAN_PX = 1
+
 interface PreviewStageProps {
   backgroundRef: RefObject<HTMLDivElement | null>
   playerRef: RefObject<PlayerRef | null>
@@ -150,6 +152,8 @@ export const PreviewStage = memo(function PreviewStage({
                 transition: 'none',
                 outline: '2px solid hsl(var(--border))',
                 outlineOffset: 0,
+                overflow: 'hidden',
+                contain: 'paint',
               }}
               onDoubleClick={(event) => event.preventDefault()}
             >
@@ -169,8 +173,10 @@ export const PreviewStage = memo(function PreviewStage({
                 loop={false}
                 controls={false}
                 style={{
-                  width: '100%',
-                  height: '100%',
+                  width: `calc(100% + ${PREVIEW_SURFACE_OVERSCAN_PX * 2}px)`,
+                  height: `calc(100% + ${PREVIEW_SURFACE_OVERSCAN_PX * 2}px)`,
+                  marginLeft: `${-PREVIEW_SURFACE_OVERSCAN_PX}px`,
+                  marginTop: `${-PREVIEW_SURFACE_OVERSCAN_PX}px`,
                 }}
                 onFrameChange={onFrameChange}
                 onPlayStateChange={onPlayStateChange}
@@ -183,8 +189,10 @@ export const PreviewStage = memo(function PreviewStage({
                   ref={scrubCanvasRef}
                   className="absolute inset-0 pointer-events-none"
                   style={{
-                    width: '100%',
-                    height: '100%',
+                    width: `calc(100% + ${PREVIEW_SURFACE_OVERSCAN_PX * 2}px)`,
+                    height: `calc(100% + ${PREVIEW_SURFACE_OVERSCAN_PX * 2}px)`,
+                    left: `${-PREVIEW_SURFACE_OVERSCAN_PX}px`,
+                    top: `${-PREVIEW_SURFACE_OVERSCAN_PX}px`,
                     zIndex: 4,
                     visibility: isRenderedOverlayVisible ? 'visible' : 'hidden',
                   }}
@@ -195,8 +203,10 @@ export const PreviewStage = memo(function PreviewStage({
                 ref={gpuEffectsCanvasRef}
                 className="absolute inset-0 pointer-events-none"
                 style={{
-                  width: '100%',
-                  height: '100%',
+                  width: `calc(100% + ${PREVIEW_SURFACE_OVERSCAN_PX * 2}px)`,
+                  height: `calc(100% + ${PREVIEW_SURFACE_OVERSCAN_PX * 2}px)`,
+                  left: `${-PREVIEW_SURFACE_OVERSCAN_PX}px`,
+                  top: `${-PREVIEW_SURFACE_OVERSCAN_PX}px`,
                   zIndex: 5,
                   visibility: 'hidden',
                 }}

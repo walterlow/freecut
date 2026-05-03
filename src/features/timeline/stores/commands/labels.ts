@@ -99,6 +99,7 @@ export function formatTimelineCommandLabel(command: TimelineCommand): string {
   if (command.type === 'CLEAR_IN_OUT_POINTS') return 'Clear In/Out points'
   if (command.type === 'CLEAR_MARKERS') return 'Clear markers'
   if (command.type === 'CLEAR_TIMELINE') return 'Clear timeline'
+  if (command.type === 'REMOVE_FILLER_WORDS') return 'Remove filler words'
 
   const count = readCount(command.payload)
   const base = toTitleCaseWords(command.type)

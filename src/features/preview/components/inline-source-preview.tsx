@@ -10,6 +10,7 @@ import { resolveMediaUrl } from '../utils/media-resolver'
 import { SourceComposition } from './source-composition'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
+import { getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
 
 interface InlineSourcePreviewProps {
   mediaId: string
@@ -18,6 +19,10 @@ interface InlineSourcePreviewProps {
     width: number
     height: number
   }
+}
+
+function getDevicePixelRatio(): number {
+  return typeof window === 'undefined' ? 1 : window.devicePixelRatio
 }
 
 function InlineSourcePreviewClockSync({ frame }: { frame: number | null }) {
@@ -84,20 +89,29 @@ const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
 
         if (containerAspectRatio > aspectRatio) {
           const height = containerSize.height
-          return { width: height * aspectRatio, height }
+          return getPreviewPixelSnapSize(
+            { width: height * aspectRatio, height },
+            getDevicePixelRatio(),
+          )
         }
 
         const width = containerSize.width
-        return { width, height: width / aspectRatio }
+        return getPreviewPixelSnapSize(
+          { width, height: width / aspectRatio },
+          getDevicePixelRatio(),
+        )
       }
 
       return { width: mediaWidth, height: mediaHeight }
     }
 
-    return {
-      width: mediaWidth * zoom,
-      height: mediaHeight * zoom,
-    }
+    return getPreviewPixelSnapSize(
+      {
+        width: mediaWidth * zoom,
+        height: mediaHeight * zoom,
+      },
+      getDevicePixelRatio(),
+    )
   }, [containerSize.height, containerSize.width, mediaHeight, mediaWidth, zoom])
 
   const needsOverflow = useMemo(() => {
