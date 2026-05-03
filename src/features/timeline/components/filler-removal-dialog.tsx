@@ -175,12 +175,17 @@ function NumberSetting({
   onChange: (value: number) => void
 }) {
   const [draftValue, setDraftValue] = useState(String(value))
+  const skipNextBlurRef = useRef(false)
 
   useEffect(() => {
     setDraftValue(String(value))
   }, [value])
 
   const commit = useCallback(() => {
+    if (skipNextBlurRef.current) {
+      skipNextBlurRef.current = false
+      return
+    }
     const parsed = Number(draftValue)
     const nextValue = clampNumber(parsed, min, max)
     setDraftValue(String(nextValue))
@@ -210,6 +215,7 @@ function NumberSetting({
               return
             }
             if (event.key === 'Escape') {
+              skipNextBlurRef.current = true
               setDraftValue(String(value))
               event.currentTarget.blur()
             }
@@ -472,8 +478,13 @@ export function FillerRemovalDialog() {
   const [isScoringAudio, setIsScoringAudio] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
   const wasOpenRef = useRef(false)
+  const isOpenRef = useRef(isOpen)
   const draftPastRef = useRef(draftPast)
   const draftFutureRef = useRef(draftFuture)
+
+  useEffect(() => {
+    isOpenRef.current = isOpen
+  }, [isOpen])
 
   const selectedRangesByMediaId = useMemo(
     () => filterRangesBySelectedIds(reviewRangesByMediaId, selectedRangeIds),
@@ -562,7 +573,17 @@ export function FillerRemovalDialog() {
   useEffect(() => {
     if (!isOpen) return
 
+    const isEditableTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+      if (target.getAttribute('role') === 'textbox') return true
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return
+
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         const canRedo = event.shiftKey && draftFutureRef.current.length > 0
         const canUndo = !event.shiftKey && draftPastRef.current.length > 0
@@ -593,6 +614,7 @@ export function FillerRemovalDialog() {
       setIsAnalyzing(true)
       try {
         const nextRangesByMediaId = await analyzeFillerWordsForItems(itemIds, draft)
+        if (!isOpenRef.current) return
         const nextSelectedRangeIds = createSelectedRangeIds(nextRangesByMediaId)
         const selectedRanges = filterRangesBySelectedIds(nextRangesByMediaId, nextSelectedRangeIds)
         const nextSummary = applyFillerPreviewOverlays(itemIds, selectedRanges)
@@ -608,10 +630,11 @@ export function FillerRemovalDialog() {
           toast.info('No removable filler words detected with these settings')
         }
       } catch (error) {
+        if (!isOpenRef.current) return
         logger.warn('Filler preview failed', error)
         toast.error(error instanceof Error ? error.message : 'Failed to preview filler words')
       } finally {
-        setIsAnalyzing(false)
+        if (isOpenRef.current) setIsAnalyzing(false)
       }
     }
 
@@ -623,6 +646,7 @@ export function FillerRemovalDialog() {
       setIsScoringAudio(true)
       try {
         const scoredRangesByMediaId = await scoreFillerRangesWithClap(reviewRangesByMediaId)
+        if (!isOpenRef.current) return
         const nextSelectedRangeIds = createHighConfidenceSelectedRangeIds(scoredRangesByMediaId)
         const selectedRanges = filterRangesBySelectedIds(
           scoredRangesByMediaId,
@@ -638,10 +662,11 @@ export function FillerRemovalDialog() {
         })
         toast.success('Audio confidence scored. High-confidence entries are selected.')
       } catch (error) {
+        if (!isOpenRef.current) return
         logger.warn('Audio confidence scoring failed', error)
         toast.error(error instanceof Error ? error.message : 'Failed to score audio confidence')
       } finally {
-        setIsScoringAudio(false)
+        if (isOpenRef.current) setIsScoringAudio(false)
       }
     }
 

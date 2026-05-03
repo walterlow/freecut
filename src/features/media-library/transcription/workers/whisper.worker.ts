@@ -332,7 +332,10 @@ async function transcribeChunk(chunk: PCMChunk): Promise<void> {
     postMain({
       type: 'segment',
       segment: {
-        text: output.text ?? words.map((word) => word.text).join(' '),
+        text: words
+          .map((word) => word.text)
+          .join(' ')
+          .trim(),
         start: words[0]?.start ?? chunk.timestamp,
         end: words.at(-1)?.end ?? chunk.timestamp,
         words,

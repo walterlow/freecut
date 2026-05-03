@@ -184,7 +184,14 @@ function segmentTranscriptForCaptions(segments: TranscriptSegment[]): MediaTrans
   const trailingSegment = buildTranscriptSegmentFromWords(currentWords)
   if (trailingSegment) captionSegments.push(trailingSegment)
 
-  return captionSegments
+  for (const segment of segments) {
+    if ((segment.words?.length ?? 0) > 0) continue
+    const text = segment.text.trim()
+    if (text.length === 0) continue
+    captionSegments.push({ text, start: segment.start, end: segment.end })
+  }
+
+  return captionSegments.toSorted((left, right) => left.start - right.start)
 }
 
 class MediaTranscriptionService {

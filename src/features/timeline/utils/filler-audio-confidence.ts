@@ -233,8 +233,30 @@ export async function scoreFillerRangesWithClap(
   const scored: FillerRangesByMediaId = {}
 
   for (const [mediaId, ranges] of Object.entries(rangesByMediaId)) {
-    const url = await resolveMediaUrl(mediaId)
-    if (!url) {
+    try {
+      const url = await resolveMediaUrl(mediaId)
+      if (!url) {
+        scored[mediaId] = ranges.map((range) => ({
+          ...range,
+          audioConfidence: {
+            level: 'unknown',
+            score: 0,
+            fillerScore: 0,
+            nonFillerScore: 0,
+            label: 'unavailable media',
+          },
+        }))
+        continue
+      }
+
+      const audioBuffer = await getOrDecodeAudio(mediaId, url)
+      scored[mediaId] = await runLimited(
+        ranges,
+        (range) => scoreOneRange(classifier, audioBuffer, mediaId, range),
+        MAX_CONCURRENT_SCORES,
+      )
+    } catch (error) {
+      logger.warn('Audio confidence scoring failed for media', { mediaId, error })
       scored[mediaId] = ranges.map((range) => ({
         ...range,
         audioConfidence: {
@@ -242,18 +264,10 @@ export async function scoreFillerRangesWithClap(
           score: 0,
           fillerScore: 0,
           nonFillerScore: 0,
-          label: 'unavailable media',
+          label: 'processing error',
         },
       }))
-      continue
     }
-
-    const audioBuffer = await getOrDecodeAudio(mediaId, url)
-    scored[mediaId] = await runLimited(
-      ranges,
-      (range) => scoreOneRange(classifier, audioBuffer, mediaId, range),
-      MAX_CONCURRENT_SCORES,
-    )
   }
 
   return scored
