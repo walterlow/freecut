@@ -463,7 +463,6 @@ export function FillerRemovalDialog() {
   const itemIds = useFillerRemovalDialogStore((state) => state.itemIds)
   const settings = useFillerRemovalDialogStore((state) => state.settings)
   const rangesByMediaId = useFillerRemovalDialogStore((state) => state.rangesByMediaId)
-  const summary = useFillerRemovalDialogStore((state) => state.summary)
   const updatePreview = useFillerRemovalDialogStore((state) => state.updatePreview)
   const close = useFillerRemovalDialogStore((state) => state.close)
   const [draft, setDraft] = useState<FillerRemovalSettings>(settings)
@@ -481,6 +480,7 @@ export function FillerRemovalDialog() {
   const isOpenRef = useRef(isOpen)
   const draftPastRef = useRef(draftPast)
   const draftFutureRef = useRef(draftFuture)
+  const draftVersionRef = useRef(0)
 
   useEffect(() => {
     isOpenRef.current = isOpen
@@ -489,6 +489,10 @@ export function FillerRemovalDialog() {
   const selectedRangesByMediaId = useMemo(
     () => filterRangesBySelectedIds(reviewRangesByMediaId, selectedRangeIds),
     [reviewRangesByMediaId, selectedRangeIds],
+  )
+  const totalReviewedRangeCount = useMemo(
+    () => Object.values(reviewRangesByMediaId).reduce((sum, ranges) => sum + ranges.length, 0),
+    [reviewRangesByMediaId],
   )
   const selectedSummary = useMemo(
     () => summarizeRanges(selectedRangesByMediaId),
@@ -505,6 +509,7 @@ export function FillerRemovalDialog() {
 
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
+      draftVersionRef.current += 1
       setDraft(cloneSettings(settings))
       setDraftPast([])
       setDraftFuture([])
@@ -528,6 +533,7 @@ export function FillerRemovalDialog() {
           return current
         }
 
+        draftVersionRef.current += 1
         setDraftPast((past) => [...past, cloneSettings(current)].slice(-DRAFT_HISTORY_LIMIT))
         setDraftFuture([])
         setHasApplied(false)
@@ -541,6 +547,7 @@ export function FillerRemovalDialog() {
     setDraftPast((past) => {
       const previous = past.at(-1)
       if (!previous) return past
+      draftVersionRef.current += 1
       setDraft((current) => {
         setDraftFuture((future) =>
           [cloneSettings(current), ...future].slice(0, DRAFT_HISTORY_LIMIT),
@@ -556,6 +563,7 @@ export function FillerRemovalDialog() {
     setDraftFuture((future) => {
       const next = future[0]
       if (!next) return future
+      draftVersionRef.current += 1
       setDraft((current) => {
         setDraftPast((past) => [...past, cloneSettings(current)].slice(-DRAFT_HISTORY_LIMIT))
         return cloneSettings(next)
@@ -566,7 +574,11 @@ export function FillerRemovalDialog() {
   }, [])
 
   const handleClose = useCallback(() => {
+    isOpenRef.current = false
+    draftVersionRef.current += 1
     clearFillerPreviewOverlays(itemIds)
+    setIsAnalyzing(false)
+    setIsScoringAudio(false)
     close()
   }, [close, itemIds])
 
@@ -610,11 +622,13 @@ export function FillerRemovalDialog() {
   }, [handleClose, isOpen, redoDraft, undoDraft])
 
   const handleUpdatePreview = useCallback(() => {
+    const startedVersion = draftVersionRef.current
+    const isStale = () => !isOpenRef.current || draftVersionRef.current !== startedVersion
     const run = async () => {
       setIsAnalyzing(true)
       try {
         const nextRangesByMediaId = await analyzeFillerWordsForItems(itemIds, draft)
-        if (!isOpenRef.current) return
+        if (isStale()) return
         const nextSelectedRangeIds = createSelectedRangeIds(nextRangesByMediaId)
         const selectedRanges = filterRangesBySelectedIds(nextRangesByMediaId, nextSelectedRangeIds)
         const nextSummary = applyFillerPreviewOverlays(itemIds, selectedRanges)
@@ -630,11 +644,11 @@ export function FillerRemovalDialog() {
           toast.info('No removable filler words detected with these settings')
         }
       } catch (error) {
-        if (!isOpenRef.current) return
+        if (isStale()) return
         logger.warn('Filler preview failed', error)
         toast.error(error instanceof Error ? error.message : 'Failed to preview filler words')
       } finally {
-        if (isOpenRef.current) setIsAnalyzing(false)
+        if (!isStale()) setIsAnalyzing(false)
       }
     }
 
@@ -642,11 +656,13 @@ export function FillerRemovalDialog() {
   }, [draft, itemIds, updatePreview])
 
   const handleScoreAudio = useCallback(() => {
+    const startedVersion = draftVersionRef.current
+    const isStale = () => !isOpenRef.current || draftVersionRef.current !== startedVersion
     const run = async () => {
       setIsScoringAudio(true)
       try {
         const scoredRangesByMediaId = await scoreFillerRangesWithClap(reviewRangesByMediaId)
-        if (!isOpenRef.current) return
+        if (isStale()) return
         const nextSelectedRangeIds = createHighConfidenceSelectedRangeIds(scoredRangesByMediaId)
         const selectedRanges = filterRangesBySelectedIds(
           scoredRangesByMediaId,
@@ -662,11 +678,11 @@ export function FillerRemovalDialog() {
         })
         toast.success('Audio confidence scored. High-confidence entries are selected.')
       } catch (error) {
-        if (!isOpenRef.current) return
+        if (isStale()) return
         logger.warn('Audio confidence scoring failed', error)
         toast.error(error instanceof Error ? error.message : 'Failed to score audio confidence')
       } finally {
-        if (isOpenRef.current) setIsScoringAudio(false)
+        if (!isStale()) setIsScoringAudio(false)
       }
     }
 
@@ -679,6 +695,10 @@ export function FillerRemovalDialog() {
       result = useTimelineStore
         .getState()
         .removeFillerWordsFromItems(itemIds, selectedRangesByMediaId)
+    } catch (error) {
+      logger.warn('Filler removal failed', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to remove filler words')
+      return
     } finally {
       clearFillerPreviewOverlays(itemIds)
     }
@@ -874,7 +894,7 @@ export function FillerRemovalDialog() {
             variant="secondary"
             size="sm"
             onClick={handleScoreAudio}
-            disabled={isAnalyzing || isScoringAudio || summary.rangeCount === 0}
+            disabled={isAnalyzing || isScoringAudio || totalReviewedRangeCount === 0}
           >
             {isScoringAudio ? 'Scoring...' : 'Score Audio'}
           </Button>

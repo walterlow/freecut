@@ -156,10 +156,12 @@ function shouldBreakTranscriptCaption(
 }
 
 function segmentTranscriptForCaptions(segments: TranscriptSegment[]): MediaTranscriptSegment[] {
-  const words = segments
-    .flatMap((segment) => segment.words?.map(sanitizeTranscriptWord) ?? [])
-    .filter((word) => word.text.length > 0 && word.end > word.start)
-    .toSorted((left, right) => left.start - right.start)
+  const sanitizedBySegment = segments.map((segment) =>
+    (segment.words?.map(sanitizeTranscriptWord) ?? []).filter(
+      (word) => word.text.length > 0 && word.end > word.start,
+    ),
+  )
+  const words = sanitizedBySegment.flat().toSorted((left, right) => left.start - right.start)
 
   if (words.length === 0) {
     return segments.map((segment) => ({
@@ -184,12 +186,12 @@ function segmentTranscriptForCaptions(segments: TranscriptSegment[]): MediaTrans
   const trailingSegment = buildTranscriptSegmentFromWords(currentWords)
   if (trailingSegment) captionSegments.push(trailingSegment)
 
-  for (const segment of segments) {
-    if ((segment.words?.length ?? 0) > 0) continue
+  segments.forEach((segment, index) => {
+    if ((sanitizedBySegment[index]?.length ?? 0) > 0) return
     const text = segment.text.trim()
-    if (text.length === 0) continue
+    if (text.length === 0) return
     captionSegments.push({ text, start: segment.start, end: segment.end })
-  }
+  })
 
   return captionSegments.toSorted((left, right) => left.start - right.start)
 }
