@@ -55,6 +55,13 @@ function getSourceStart(item: VideoItem): number {
   return item.sourceStart ?? item.trimStart ?? item.offset ?? 0
 }
 
+function resolveSourceFps(item: VideoItem, timelineFps: number): number {
+  if (item.sourceFps !== undefined && item.sourceFps > 0) return item.sourceFps
+  const media = item.mediaId ? useMediaLibraryStore.getState().mediaById[item.mediaId] : undefined
+  if (media?.fps && media.fps > 0) return media.fps
+  return timelineFps
+}
+
 function getSourceDuration(item: VideoItem, timelineFps: number): number | undefined {
   if (item.sourceDuration !== undefined && item.sourceDuration > 0) {
     return item.sourceDuration
@@ -72,10 +79,11 @@ function getConformDurationInFrames(item: VideoItem, timelineFps: number): numbe
     return Math.round(item.durationInFrames)
   }
 
+  const sourceFps = resolveSourceFps(item, timelineFps)
+  const speed = item.speed ?? 1
   const sourceStart = getSourceStart(item)
+
   if (item.sourceEnd !== undefined && item.sourceEnd > sourceStart) {
-    const sourceFps = item.sourceFps ?? timelineFps
-    const speed = item.speed ?? 1
     if (sourceFps > 0 && speed > 0) {
       return Math.max(
         1,
@@ -86,8 +94,6 @@ function getConformDurationInFrames(item: VideoItem, timelineFps: number): numbe
 
   const sourceDuration = getSourceDuration(item, timelineFps)
   if (sourceDuration !== undefined && sourceDuration > sourceStart) {
-    const sourceFps = item.sourceFps ?? timelineFps
-    const speed = item.speed ?? 1
     if (sourceFps > 0 && speed > 0) {
       return Math.max(
         1,
@@ -100,7 +106,7 @@ function getConformDurationInFrames(item: VideoItem, timelineFps: number): numbe
 }
 
 function getSourceEnd(item: VideoItem, timelineFps: number, durationInFrames: number): number {
-  const sourceFps = item.sourceFps ?? timelineFps
+  const sourceFps = resolveSourceFps(item, timelineFps)
   const speed = item.speed ?? 1
   const sourceFramesNeeded = (durationInFrames * speed * sourceFps) / timelineFps
   const sourceStart = getSourceStart(item)

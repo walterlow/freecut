@@ -14,6 +14,7 @@ export function usePreviewPerfPanel() {
   const setShowPerfPanel = useDebugStore((s) => s.setShowPreviewPerfPanel)
   const [perfPanelSnapshot, setPerfPanelSnapshot] = useState<PreviewPerfSnapshot | null>(null)
   const initializedRef = useRef(false)
+  const hasSyncedRef = useRef(false)
 
   useEffect(() => {
     if (!import.meta.env.DEV) return
@@ -66,6 +67,10 @@ export function usePreviewPerfPanel() {
 
   useEffect(() => {
     if (!import.meta.env.DEV || !initializedRef.current) return
+    if (!hasSyncedRef.current) {
+      hasSyncedRef.current = true
+      return
+    }
 
     window.__PREVIEW_PERF_PANEL__ = showPerfPanel
     try {

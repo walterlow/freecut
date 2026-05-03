@@ -3,7 +3,7 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci",
+  "installCommand": "ONNXRUNTIME_NODE_INSTALL=skip npm ci",
   "rewrites": [
     {
       "source": "/(.*)",
