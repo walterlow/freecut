@@ -12,6 +12,7 @@ import {
 import { reverseConformFilePath } from '@/infrastructure/storage/workspace-fs/paths'
 import { opfsService } from '../deps/media-library-service'
 import { resolveMediaUrls } from '../deps/media-library-resolver'
+import { useMediaLibraryStore } from '../deps/media-library-store'
 
 export interface ReverseConformResult {
   itemId: string
@@ -54,11 +55,63 @@ function getSourceStart(item: VideoItem): number {
   return item.sourceStart ?? item.trimStart ?? item.offset ?? 0
 }
 
-function getSourceEnd(item: VideoItem, timelineFps: number): number {
+function getSourceDuration(item: VideoItem, timelineFps: number): number | undefined {
+  if (item.sourceDuration !== undefined && item.sourceDuration > 0) {
+    return item.sourceDuration
+  }
+
+  const media = item.mediaId ? useMediaLibraryStore.getState().mediaById[item.mediaId] : undefined
+  if (!media || media.duration <= 0) return undefined
+
+  const sourceFps = item.sourceFps ?? (media.fps || timelineFps)
+  return Math.round(media.duration * sourceFps)
+}
+
+function getConformDurationInFrames(item: VideoItem, timelineFps: number): number {
+  if (Number.isFinite(item.durationInFrames) && item.durationInFrames > 0) {
+    return Math.round(item.durationInFrames)
+  }
+
+  const sourceStart = getSourceStart(item)
+  if (item.sourceEnd !== undefined && item.sourceEnd > sourceStart) {
+    const sourceFps = item.sourceFps ?? timelineFps
+    const speed = item.speed ?? 1
+    if (sourceFps > 0 && speed > 0) {
+      return Math.max(
+        1,
+        Math.round(((item.sourceEnd - sourceStart) * timelineFps) / (speed * sourceFps)),
+      )
+    }
+  }
+
+  const sourceDuration = getSourceDuration(item, timelineFps)
+  if (sourceDuration !== undefined && sourceDuration > sourceStart) {
+    const sourceFps = item.sourceFps ?? timelineFps
+    const speed = item.speed ?? 1
+    if (sourceFps > 0 && speed > 0) {
+      return Math.max(
+        1,
+        Math.round(((sourceDuration - sourceStart) * timelineFps) / (speed * sourceFps)),
+      )
+    }
+  }
+
+  return 0
+}
+
+function getSourceEnd(item: VideoItem, timelineFps: number, durationInFrames: number): number {
   const sourceFps = item.sourceFps ?? timelineFps
   const speed = item.speed ?? 1
-  const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / timelineFps
-  return item.sourceEnd ?? getSourceStart(item) + sourceFramesNeeded
+  const sourceFramesNeeded = (durationInFrames * speed * sourceFps) / timelineFps
+  const sourceStart = getSourceStart(item)
+  const derivedSourceEnd = sourceStart + sourceFramesNeeded
+  const sourceDuration = getSourceDuration(item, timelineFps)
+  if (item.sourceEnd !== undefined && item.sourceEnd > sourceStart) {
+    return item.sourceEnd
+  }
+  return sourceDuration !== undefined
+    ? Math.min(sourceDuration, derivedSourceEnd)
+    : derivedSourceEnd
 }
 
 function getReverseConformKey(
@@ -67,6 +120,7 @@ function getReverseConformKey(
   quality: ReverseConformQuality,
   useProxy: boolean,
 ): string {
+  const durationInFrames = getConformDurationInFrames(item, timelineFps)
   return toSafeKey(
     [
       'v2',
@@ -75,8 +129,8 @@ function getReverseConformKey(
       item.mediaId ?? 'legacy',
       item.mediaId ? `media:${item.mediaId}` : item.src,
       getSourceStart(item),
-      getSourceEnd(item, timelineFps),
-      item.durationInFrames,
+      getSourceEnd(item, timelineFps, durationInFrames),
+      durationInFrames,
       item.sourceFps ?? timelineFps,
       timelineFps,
       item.speed ?? 1,
@@ -128,6 +182,7 @@ function buildConformComposition(
   quality: ReverseConformQuality,
 ): CompositionInputProps {
   const { width, height } = getConformDimensions(item, quality)
+  const durationInFrames = getConformDurationInFrames(item, timelineFps)
   const track: TimelineTrack = {
     id: 'reverse-conform-track',
     name: 'Reverse conform',
@@ -144,7 +199,7 @@ function buildConformComposition(
     id: `${item.id}:reverse-conform`,
     trackId: track.id,
     from: 0,
-    durationInFrames: item.durationInFrames,
+    durationInFrames,
     isReversed: true,
     reverseConformSrc: undefined,
     reverseConformPath: undefined,
@@ -152,7 +207,7 @@ function buildConformComposition(
     reverseConformPreviewPath: undefined,
     reverseConformStatus: undefined,
     sourceStart: getSourceStart(item),
-    sourceEnd: getSourceEnd(item, timelineFps),
+    sourceEnd: getSourceEnd(item, timelineFps, durationInFrames),
     sourceFps: item.sourceFps ?? timelineFps,
     transform: {
       x: 0,
@@ -173,7 +228,7 @@ function buildConformComposition(
     fps: timelineFps,
     width,
     height,
-    durationInFrames: item.durationInFrames,
+    durationInFrames,
     tracks: [track],
     transitions: [],
     backgroundColor: '#000000',
@@ -271,7 +326,7 @@ export const reverseConformService = {
     const quality = options.quality ?? 'preview'
     const useProxy = quality === 'preview' && options.useProxy !== false
     throwIfAborted(options.signal)
-    if (!item.src || item.durationInFrames <= 0) {
+    if ((!item.src && !item.mediaId) || getConformDurationInFrames(item, timelineFps) <= 0) {
       throw new Error('Cannot reverse an empty video clip')
     }
     const key = getReverseConformKey(item, timelineFps, quality, useProxy)

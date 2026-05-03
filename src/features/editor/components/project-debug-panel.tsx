@@ -68,6 +68,8 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   // Debug overlay toggle
   const showVideoDebugOverlay = useDebugStore((s) => s.showVideoDebugOverlay)
   const toggleVideoDebugOverlay = useDebugStore((s) => s.toggleVideoDebugOverlay)
+  const showPreviewPerfPanel = useDebugStore((s) => s.showPreviewPerfPanel)
+  const togglePreviewPerfPanel = useDebugStore((s) => s.togglePreviewPerfPanel)
 
   // Load available fixtures on mount
   useEffect(() => {
@@ -303,6 +305,24 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                   <Eye className="h-3.5 w-3.5" />
                   Video Debug Overlay
                   {showVideoDebugOverlay && (
+                    <span className="ml-auto text-[10px] bg-amber-500/30 px-1.5 py-0.5 rounded">
+                      ON
+                    </span>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    'w-full justify-start gap-2 h-8 text-xs',
+                    showPreviewPerfPanel && 'bg-amber-500/20 text-amber-300',
+                  )}
+                  onClick={togglePreviewPerfPanel}
+                  title="Show preview performance diagnostics"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Preview Perf Panel
+                  {showPreviewPerfPanel && (
                     <span className="ml-auto text-[10px] bg-amber-500/30 px-1.5 py-0.5 rounded">
                       ON
                     </span>

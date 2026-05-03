@@ -5,6 +5,10 @@ interface DebugState {
   showVideoDebugOverlay: boolean
   setShowVideoDebugOverlay: (show: boolean) => void
   toggleVideoDebugOverlay: () => void
+  /** Show preview performance diagnostics panel */
+  showPreviewPerfPanel: boolean
+  setShowPreviewPerfPanel: (show: boolean) => void
+  togglePreviewPerfPanel: () => void
   /** Debug panel open state */
   debugPanelOpen: boolean
   setDebugPanelOpen: (open: boolean) => void
@@ -29,6 +33,9 @@ export const useDebugStore = isDev
       setShowVideoDebugOverlay: (show) => set({ showVideoDebugOverlay: show }),
       toggleVideoDebugOverlay: () =>
         set((s) => ({ showVideoDebugOverlay: !s.showVideoDebugOverlay })),
+      showPreviewPerfPanel: false,
+      setShowPreviewPerfPanel: (show) => set({ showPreviewPerfPanel: show }),
+      togglePreviewPerfPanel: () => set((s) => ({ showPreviewPerfPanel: !s.showPreviewPerfPanel })),
       debugPanelOpen: false,
       setDebugPanelOpen: (open) => set({ debugPanelOpen: open }),
       toggleDebugPanel: () => set((s) => ({ debugPanelOpen: !s.debugPanelOpen })),
@@ -37,6 +44,9 @@ export const useDebugStore = isDev
       showVideoDebugOverlay: false,
       setShowVideoDebugOverlay: () => {},
       toggleVideoDebugOverlay: () => {},
+      showPreviewPerfPanel: false,
+      setShowPreviewPerfPanel: () => {},
+      togglePreviewPerfPanel: () => {},
       debugPanelOpen: false,
       setDebugPanelOpen: () => {},
       toggleDebugPanel: () => {},
