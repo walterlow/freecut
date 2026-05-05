@@ -8,12 +8,7 @@ import type {
 import type { TimelineItem } from '@/types/timeline'
 import type { AudioEqPatch } from './audio-eq-curve-editor'
 
-export type AudioEqFilterType =
-  | AudioEqBand1Type
-  | AudioEqInnerBandType
-  | AudioEqBand6Type
-  | 'high-pass'
-  | 'low-pass'
+export type AudioEqFilterType = AudioEqBand1Type | AudioEqInnerBandType | AudioEqBand6Type
 
 export type AudioEqGainBandControlKey = 'low' | 'lowMid' | 'highMid' | 'high'
 export type AudioEqGainBandControlRanges = Record<AudioEqGainBandControlKey, AudioEqControlRangeId>
