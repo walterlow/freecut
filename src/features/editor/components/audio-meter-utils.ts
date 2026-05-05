@@ -162,6 +162,23 @@ function toLinearGain(volumeDb: number): number {
   return Math.pow(10, volumeDb / 20)
 }
 
+function getMeterSourcePlaceholder(mediaId: string): string {
+  return `audio-meter:${mediaId}`
+}
+
+function withMeterFallbackSource<T extends TimelineItem & { mediaId?: string; src?: string }>(
+  item: T,
+): T {
+  if (!item.mediaId || item.src) {
+    return item
+  }
+
+  return {
+    ...item,
+    src: getMeterSourcePlaceholder(item.mediaId),
+  }
+}
+
 function getTrackGainCorrection(trackId: string, committedTrackVolumeGain: number): number {
   const liveOverrideDb = liveTrackVolumeOverrides.get(trackId)
   if (liveOverrideDb === undefined) {
@@ -178,11 +195,32 @@ function getSegmentSourceTimeSeconds(params: {
   localFrame: number
   playbackRate: number
   timelineFps: number
+  durationInFrames: number
+  isReversed?: boolean
+  reverseSourceEnd?: number
 }): number {
-  return (
-    params.trimBefore / params.sourceFps +
-    (params.localFrame * params.playbackRate) / params.timelineFps
+  const localSourceFrames = timelineToSourceFrames(
+    params.localFrame,
+    params.playbackRate,
+    params.timelineFps,
+    params.sourceFps,
   )
+
+  if (!params.isReversed) {
+    return (params.trimBefore + localSourceFrames) / params.sourceFps
+  }
+
+  const sourceEnd =
+    params.reverseSourceEnd ??
+    params.trimBefore +
+      timelineToSourceFrames(
+        params.durationInFrames,
+        params.playbackRate,
+        params.timelineFps,
+        params.sourceFps,
+      )
+
+  return (sourceEnd - localSourceFrames) / params.sourceFps
 }
 
 function getDirectSegmentGain(
@@ -250,6 +288,9 @@ function appendDirectSegmentSources(params: {
         localFrame,
         playbackRate: segment.playbackRate,
         timelineFps: fps,
+        durationInFrames: segment.durationInFrames,
+        isReversed: segment.isReversed,
+        reverseSourceEnd: segment.reverseSourceEnd,
       }),
       windowSeconds: Math.max(DEFAULT_WINDOW_SECONDS, 1 / Math.max(1, fps)),
       trackId: params.trackId ?? '',
@@ -448,10 +489,14 @@ function appendAudioMeterSources(params: {
     ...managedLinkedAudioItems.map((item) => [item.id, item.trackId] as const),
   ])
   const directSegments = [
-    ...buildStandaloneAudioSegments(standaloneAudioItems, fps),
-    ...buildTransitionVideoAudioSegments(videoAudioItems, transitions, fps),
+    ...buildStandaloneAudioSegments(standaloneAudioItems.map(withMeterFallbackSource), fps),
     ...buildTransitionVideoAudioSegments(
-      managedLinkedAudioItems,
+      videoAudioItems.map(withMeterFallbackSource),
+      transitions,
+      fps,
+    ),
+    ...buildTransitionVideoAudioSegments(
+      managedLinkedAudioItems.map(withMeterFallbackSource),
       managedLinkedAudioTransitionDefs,
       fps,
     ),
@@ -664,10 +709,14 @@ function buildAudioMeterGraphNode(params: {
     tracks.map((track) => [track.id, toLinearGain(track.volume ?? 0)]),
   )
   const directSegments = [
-    ...buildStandaloneAudioSegments(standaloneAudioItems, fps),
-    ...buildTransitionVideoAudioSegments(videoAudioItems, transitions, fps),
+    ...buildStandaloneAudioSegments(standaloneAudioItems.map(withMeterFallbackSource), fps),
     ...buildTransitionVideoAudioSegments(
-      managedLinkedAudioItems,
+      videoAudioItems.map(withMeterFallbackSource),
+      transitions,
+      fps,
+    ),
+    ...buildTransitionVideoAudioSegments(
+      managedLinkedAudioItems.map(withMeterFallbackSource),
       managedLinkedAudioTransitionDefs,
       fps,
     ),

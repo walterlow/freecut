@@ -137,6 +137,66 @@ describe('audio meter utils', () => {
     expect(sources[0]?.sourceTimeSeconds).toBeCloseTo(1, 5)
   })
 
+  it('resolves persisted audio items with a media id but empty source', () => {
+    const audioItem = makeAudioItem({ src: '' })
+    const graph = compileAudioMeterGraph({
+      tracks: [makeTrack({ items: [audioItem] })],
+      transitions: [],
+      fps: 30,
+    })
+
+    const sources = resolveCompiledAudioMeterSources({
+      graph,
+      frame: 15,
+      masterGain: 1,
+    })
+
+    expect(sources).toHaveLength(1)
+    expect(sources[0]?.mediaId).toBe('media-audio')
+  })
+
+  it('resolves persisted video embedded audio with a media id but empty source', () => {
+    const videoItem = makeVideoItem({ src: '' })
+    const graph = compileAudioMeterGraph({
+      tracks: [makeTrack({ kind: 'video', items: [videoItem] })],
+      transitions: [],
+      fps: 30,
+    })
+
+    const sources = resolveCompiledAudioMeterSources({
+      graph,
+      frame: 15,
+      masterGain: 1,
+    })
+
+    expect(sources).toHaveLength(1)
+    expect(sources[0]?.mediaId).toBe('media-video')
+  })
+
+  it('maps reversed audio meter samples from the end of the source range', () => {
+    const audioItem = makeAudioItem({
+      src: '',
+      durationInFrames: 90,
+      isReversed: true,
+      sourceStart: 0,
+      sourceEnd: 90,
+    })
+    const graph = compileAudioMeterGraph({
+      tracks: [makeTrack({ items: [audioItem] })],
+      transitions: [],
+      fps: 30,
+    })
+
+    const sources = resolveCompiledAudioMeterSources({
+      graph,
+      frame: 30,
+      masterGain: 1,
+    })
+
+    expect(sources).toHaveLength(1)
+    expect(sources[0]?.sourceTimeSeconds).toBeCloseTo(2, 5)
+  })
+
   it('keeps compiled direct sources at unity correction until a live override is applied', () => {
     const audioItem = makeAudioItem()
     const graph = compileAudioMeterGraph({
