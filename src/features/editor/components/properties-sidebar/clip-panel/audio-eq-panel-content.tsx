@@ -25,7 +25,14 @@ import { getMixedValue } from '../utils/mixed-value'
 import { AudioEqCurveEditor, type AudioEqPatch } from './audio-eq-curve-editor'
 import { getAudioSectionItems } from './audio-section-utils'
 import {
+  AUDIO_EQ_BAND1_FILTER_OPTIONS,
+  AUDIO_EQ_BAND6_FILTER_OPTIONS,
   AUDIO_EQ_CONTROL_RANGES,
+  AUDIO_EQ_FILTER_TYPE_LABELS,
+  AUDIO_EQ_FILTER_TYPE_PATHS,
+  AUDIO_EQ_INNER_FILTER_OPTIONS,
+  AUDIO_EQ_SLOPE_OPTIONS,
+  DEFAULT_GAIN_BAND_CONTROL_RANGES,
   buildTimelineEqPatchFromResolvedSettings,
   clampFrequencyToAudioEqControlRange,
   getAudioEqControlRangeById,
@@ -33,6 +40,9 @@ import {
   normalizeUiEqPatch,
   toTimelineEqPatch,
   type AudioEqControlRangeId,
+  type AudioEqFilterType,
+  type AudioEqGainBandControlKey,
+  type AudioEqGainBandControlRanges,
 } from './audio-eq-ui'
 import {
   AUDIO_EQ_GAIN_DB_MAX,
@@ -58,17 +68,6 @@ import {
   resolveAudioEqSettings,
 } from '@/shared/utils/audio-eq'
 
-const AUDIO_EQ_SLOPE_OPTIONS = [6, 12, 18, 24] as const
-type GainBandControlKey = 'low' | 'lowMid' | 'highMid' | 'high'
-type GainBandControlRanges = Record<GainBandControlKey, AudioEqControlRangeId>
-
-const DEFAULT_GAIN_BAND_CONTROL_RANGES = {
-  low: 'L',
-  lowMid: 'ML',
-  highMid: 'MH',
-  high: 'H',
-} satisfies GainBandControlRanges
-
 interface AudioEqPanelContentProps {
   targetLabel: string
   items?: TimelineItem[]
@@ -80,50 +79,13 @@ interface AudioEqPanelContentProps {
   layoutMode?: 'floating' | 'detached' | 'compact'
 }
 
-type FilterType = 'low-shelf' | 'peaking' | 'high-shelf' | 'high-pass' | 'low-pass' | 'notch'
-
-const FILTER_TYPE_PATHS: Record<FilterType, string> = {
-  'high-pass': 'M2 10 C5 10 7 3 10 3 L18 3',
-  'low-shelf': 'M2 9 L5 9 C7 9 8 3 10 3 L18 3',
-  peaking: 'M2 8 C5 8 7 2 10 2 C13 2 15 8 18 8',
-  notch: 'M2 6 C7 6 8.4 10 10 10 C11.6 10 13 6 18 6',
-  'high-shelf': 'M2 3 L8 3 C10 3 11 9 13 9 L18 9',
-  'low-pass': 'M2 3 L8 3 C11 3 13 10 16 10 L18 10',
-}
-
-const FILTER_TYPE_LABELS: Record<FilterType, string> = {
-  'high-pass': 'High Pass',
-  'low-shelf': 'Low Shelf',
-  peaking: 'Peaking',
-  notch: 'Notch',
-  'high-shelf': 'High Shelf',
-  'low-pass': 'Low Pass',
-}
-
-const BAND1_FILTER_OPTIONS = [
-  'low-shelf',
-  'peaking',
-  'high-shelf',
-  'high-pass',
-] as const satisfies ReadonlyArray<FilterType>
-const INNER_FILTER_OPTIONS = [
-  'low-shelf',
-  'peaking',
-  'high-shelf',
-  'notch',
-] as const satisfies ReadonlyArray<FilterType>
-const BAND6_FILTER_OPTIONS = [
-  'low-pass',
-  'low-shelf',
-  'peaking',
-  'high-shelf',
-] as const satisfies ReadonlyArray<FilterType>
+type FilterType = AudioEqFilterType
 
 function FilterTypeGlyph({ type }: { type: FilterType }) {
   return (
     <svg viewBox="0 0 20 12" className="h-3 w-5 text-current">
       <path
-        d={FILTER_TYPE_PATHS[type]}
+        d={AUDIO_EQ_FILTER_TYPE_PATHS[type]}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
@@ -150,7 +112,7 @@ function FilterTypeSelect({
         <button
           type="button"
           className="inline-flex h-6 w-11 items-center justify-center gap-0.5 rounded-[4px] border border-border bg-background px-1 text-muted-foreground transition-colors hover:text-zinc-200"
-          title={FILTER_TYPE_LABELS[value]}
+          title={AUDIO_EQ_FILTER_TYPE_LABELS[value]}
         >
           <FilterTypeGlyph type={value} />
           <ChevronDown className="h-3 w-3 opacity-60" />
@@ -170,7 +132,7 @@ function FilterTypeSelect({
               'my-0.5 flex h-7 items-center justify-center rounded-[4px] px-2 text-zinc-300 focus:bg-white/10 focus:text-white',
               option === value && 'bg-white/10 text-white',
             )}
-            title={FILTER_TYPE_LABELS[option]}
+            title={AUDIO_EQ_FILTER_TYPE_LABELS[option]}
             onSelect={() => onChange(option)}
           >
             <FilterTypeGlyph type={option} />
@@ -625,15 +587,15 @@ function CompactBandRows(props: CompactBandRowsProps) {
       <div className="grid grid-cols-6 gap-1">
         <FilterTypeSelect
           value={b1Type}
-          options={BAND1_FILTER_OPTIONS}
+          options={AUDIO_EQ_BAND1_FILTER_OPTIONS}
           onChange={(v) =>
-            onFieldChange('audioEqBand1Type', v as (typeof BAND1_FILTER_OPTIONS)[number])
+            onFieldChange('audioEqBand1Type', v as (typeof AUDIO_EQ_BAND1_FILTER_OPTIONS)[number])
           }
           portalContainer={portalContainer}
         />
         <FilterTypeSelect
           value={b2Type}
-          options={INNER_FILTER_OPTIONS}
+          options={AUDIO_EQ_INNER_FILTER_OPTIONS}
           onChange={(v) =>
             onFieldChange('audioEqLowType', v === 'low-pass' || v === 'high-pass' ? 'low-shelf' : v)
           }
@@ -641,7 +603,7 @@ function CompactBandRows(props: CompactBandRowsProps) {
         />
         <FilterTypeSelect
           value={b3Type}
-          options={INNER_FILTER_OPTIONS}
+          options={AUDIO_EQ_INNER_FILTER_OPTIONS}
           onChange={(v) =>
             onFieldChange(
               'audioEqLowMidType',
@@ -652,7 +614,7 @@ function CompactBandRows(props: CompactBandRowsProps) {
         />
         <FilterTypeSelect
           value={b4Type}
-          options={INNER_FILTER_OPTIONS}
+          options={AUDIO_EQ_INNER_FILTER_OPTIONS}
           onChange={(v) =>
             onFieldChange(
               'audioEqHighMidType',
@@ -663,7 +625,7 @@ function CompactBandRows(props: CompactBandRowsProps) {
         />
         <FilterTypeSelect
           value={b5Type}
-          options={INNER_FILTER_OPTIONS}
+          options={AUDIO_EQ_INNER_FILTER_OPTIONS}
           onChange={(v) =>
             onFieldChange(
               'audioEqHighType',
@@ -674,7 +636,7 @@ function CompactBandRows(props: CompactBandRowsProps) {
         />
         <FilterTypeSelect
           value={b6Type}
-          options={BAND6_FILTER_OPTIONS}
+          options={AUDIO_EQ_BAND6_FILTER_OPTIONS}
           onChange={(v) =>
             onFieldChange('audioEqBand6Type', v === 'high-pass' || v === 'notch' ? 'low-pass' : v)
           }
@@ -954,7 +916,7 @@ export function AudioEqPanelContent({
   )
 
   const [livePatch, setLivePatch] = useState<AudioEqPatch | null>(null)
-  const [gainBandControlRanges, setGainBandControlRanges] = useState<GainBandControlRanges>(
+  const [gainBandControlRanges, setGainBandControlRanges] = useState<AudioEqGainBandControlRanges>(
     DEFAULT_GAIN_BAND_CONTROL_RANGES,
   )
 
@@ -1418,7 +1380,7 @@ export function AudioEqPanelContent({
 
   const handleGainBandControlRangeChange = useCallback(
     (
-      band: GainBandControlKey,
+      band: AudioEqGainBandControlKey,
       rangeId: AudioEqControlRangeId,
       field:
         | 'audioEqLowFrequencyHz'
@@ -1634,11 +1596,11 @@ export function AudioEqPanelContent({
                 <BandCard
                   title="Band 1"
                   filterType={eqBand1Type === 'mixed' ? 'high-pass' : eqBand1Type}
-                  filterOptions={BAND1_FILTER_OPTIONS}
+                  filterOptions={AUDIO_EQ_BAND1_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
                     handleEqFieldChange(
                       'audioEqBand1Type',
-                      value as (typeof BAND1_FILTER_OPTIONS)[number],
+                      value as (typeof AUDIO_EQ_BAND1_FILTER_OPTIONS)[number],
                     )
                   }
                   portalContainer={portalContainer}
@@ -1757,7 +1719,7 @@ export function AudioEqPanelContent({
                 <BandCard
                   title="Band 2"
                   filterType={eqLowType === 'mixed' ? 'low-shelf' : eqLowType}
-                  filterOptions={INNER_FILTER_OPTIONS}
+                  filterOptions={AUDIO_EQ_INNER_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
                     handleEqFieldChange(
                       'audioEqLowType',
@@ -1885,7 +1847,7 @@ export function AudioEqPanelContent({
                 <BandCard
                   title="Band 3"
                   filterType={eqLowMidType === 'mixed' ? 'peaking' : eqLowMidType}
-                  filterOptions={INNER_FILTER_OPTIONS}
+                  filterOptions={AUDIO_EQ_INNER_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
                     handleEqFieldChange(
                       'audioEqLowMidType',
@@ -2013,7 +1975,7 @@ export function AudioEqPanelContent({
                 <BandCard
                   title="Band 4"
                   filterType={eqHighMidType === 'mixed' ? 'peaking' : eqHighMidType}
-                  filterOptions={INNER_FILTER_OPTIONS}
+                  filterOptions={AUDIO_EQ_INNER_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
                     handleEqFieldChange(
                       'audioEqHighMidType',
@@ -2145,7 +2107,7 @@ export function AudioEqPanelContent({
                 <BandCard
                   title="Band 5"
                   filterType={eqHighType === 'mixed' ? 'high-shelf' : eqHighType}
-                  filterOptions={INNER_FILTER_OPTIONS}
+                  filterOptions={AUDIO_EQ_INNER_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
                     handleEqFieldChange(
                       'audioEqHighType',
@@ -2273,7 +2235,7 @@ export function AudioEqPanelContent({
                 <BandCard
                   title="Band 6"
                   filterType={eqBand6Type === 'mixed' ? 'low-pass' : eqBand6Type}
-                  filterOptions={BAND6_FILTER_OPTIONS}
+                  filterOptions={AUDIO_EQ_BAND6_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
                     handleEqFieldChange(
                       'audioEqBand6Type',

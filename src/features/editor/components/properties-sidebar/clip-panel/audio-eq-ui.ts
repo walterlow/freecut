@@ -1,6 +1,74 @@
-import type { ResolvedAudioEqSettings } from '@/types/audio'
+import type {
+  AudioEqBand1Type,
+  AudioEqBand6Type,
+  AudioEqCutSlopeDbPerOct,
+  AudioEqInnerBandType,
+  ResolvedAudioEqSettings,
+} from '@/types/audio'
 import type { TimelineItem } from '@/types/timeline'
 import type { AudioEqPatch } from './audio-eq-curve-editor'
+
+export type AudioEqFilterType =
+  | AudioEqBand1Type
+  | AudioEqInnerBandType
+  | AudioEqBand6Type
+  | 'high-pass'
+  | 'low-pass'
+
+export type AudioEqGainBandControlKey = 'low' | 'lowMid' | 'highMid' | 'high'
+export type AudioEqGainBandControlRanges = Record<AudioEqGainBandControlKey, AudioEqControlRangeId>
+
+export const AUDIO_EQ_SLOPE_OPTIONS = Object.freeze([
+  6, 12, 18, 24,
+] as const satisfies ReadonlyArray<AudioEqCutSlopeDbPerOct>)
+
+export const DEFAULT_GAIN_BAND_CONTROL_RANGES = Object.freeze({
+  low: 'L',
+  lowMid: 'ML',
+  highMid: 'MH',
+  high: 'H',
+} satisfies AudioEqGainBandControlRanges)
+
+export const AUDIO_EQ_FILTER_TYPE_PATHS: Readonly<Record<AudioEqFilterType, string>> =
+  Object.freeze({
+    'high-pass': 'M2 10 C5 10 7 3 10 3 L18 3',
+    'low-shelf': 'M2 9 L5 9 C7 9 8 3 10 3 L18 3',
+    peaking: 'M2 8 C5 8 7 2 10 2 C13 2 15 8 18 8',
+    notch: 'M2 6 C7 6 8.4 10 10 10 C11.6 10 13 6 18 6',
+    'high-shelf': 'M2 3 L8 3 C10 3 11 9 13 9 L18 9',
+    'low-pass': 'M2 3 L8 3 C11 3 13 10 16 10 L18 10',
+  })
+
+export const AUDIO_EQ_FILTER_TYPE_LABELS: Readonly<Record<AudioEqFilterType, string>> =
+  Object.freeze({
+    'high-pass': 'High Pass',
+    'low-shelf': 'Low Shelf',
+    peaking: 'Peaking',
+    notch: 'Notch',
+    'high-shelf': 'High Shelf',
+    'low-pass': 'Low Pass',
+  })
+
+export const AUDIO_EQ_BAND1_FILTER_OPTIONS = Object.freeze([
+  'low-shelf',
+  'peaking',
+  'high-shelf',
+  'high-pass',
+] as const satisfies ReadonlyArray<AudioEqBand1Type>)
+
+export const AUDIO_EQ_INNER_FILTER_OPTIONS = Object.freeze([
+  'low-shelf',
+  'peaking',
+  'high-shelf',
+  'notch',
+] as const satisfies ReadonlyArray<AudioEqInnerBandType>)
+
+export const AUDIO_EQ_BAND6_FILTER_OPTIONS = Object.freeze([
+  'low-pass',
+  'low-shelf',
+  'peaking',
+  'high-shelf',
+] as const satisfies ReadonlyArray<AudioEqBand6Type>)
 
 export type AudioEqControlRangeId = 'L' | 'ML' | 'MH' | 'H'
 
