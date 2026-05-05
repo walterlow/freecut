@@ -9,17 +9,33 @@ type EditPreviewStore<State, PreviewParams, ExtraActions> = State &
   EditPreviewActions<PreviewParams> &
   ExtraActions
 
-type EditPreviewStoreOptions<State, PreviewParams, ExtraActions> = {
+type NoExtraActions = Record<never, never>
+
+type EditPreviewExtraActionsFactory<State, PreviewParams, ExtraActions> = (
+  set: StoreApi<EditPreviewStore<State, PreviewParams, ExtraActions>>['setState'],
+) => ExtraActions
+
+type EditPreviewStoreBaseOptions<State, PreviewParams> = {
   initialState: () => State
   normalizePreview?: (params: PreviewParams) => Partial<State>
-  createActions?: (
-    set: StoreApi<EditPreviewStore<State, PreviewParams, ExtraActions>>['setState'],
-  ) => ExtraActions
 }
 
+type EditPreviewStoreOptions<State, PreviewParams, ExtraActions> = EditPreviewStoreBaseOptions<
+  State,
+  PreviewParams
+> &
+  ([keyof ExtraActions] extends [never]
+    ? { createActions?: never }
+    : { createActions: EditPreviewExtraActionsFactory<State, PreviewParams, ExtraActions> })
+
+type EditPreviewStoreImplementationOptions<State, PreviewParams, ExtraActions> =
+  EditPreviewStoreBaseOptions<State, PreviewParams> & {
+    createActions?: EditPreviewExtraActionsFactory<State, PreviewParams, ExtraActions>
+  }
+
 export function createEditPreviewStore<State extends object, PreviewParams extends object>(
-  options: EditPreviewStoreOptions<State, PreviewParams, Record<string, never>>,
-): UseBoundStore<StoreApi<EditPreviewStore<State, PreviewParams, Record<string, never>>>>
+  options: EditPreviewStoreOptions<State, PreviewParams, NoExtraActions>,
+): UseBoundStore<StoreApi<EditPreviewStore<State, PreviewParams, NoExtraActions>>>
 export function createEditPreviewStore<
   State extends object,
   PreviewParams extends object,
@@ -32,7 +48,7 @@ export function createEditPreviewStore<
   PreviewParams extends object,
   ExtraActions extends object,
 >(
-  options: EditPreviewStoreOptions<State, PreviewParams, ExtraActions>,
+  options: EditPreviewStoreImplementationOptions<State, PreviewParams, ExtraActions>,
 ): UseBoundStore<StoreApi<EditPreviewStore<State, PreviewParams, ExtraActions>>> {
   return create<EditPreviewStore<State, PreviewParams, ExtraActions>>()((set) => ({
     ...options.initialState(),
