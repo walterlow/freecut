@@ -2,6 +2,9 @@ import { useState, useRef, useEffect, useCallback, useSyncExternalStore } from '
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react'
+import { createLogger } from '@/shared/logging/logger'
+
+const log = createLogger('ExportPreviewPlayer')
 
 interface ExportPreviewPlayerProps {
   src: string
@@ -85,11 +88,15 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
   const handleFullscreen = useCallback(() => {
     if (!isVideo) return
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(console.error)
+      document.exitFullscreen().catch((error: unknown) => {
+        log.warn('Failed to exit fullscreen', { error })
+      })
     } else {
       const el = containerRef.current
       if (el?.requestFullscreen) {
-        el.requestFullscreen().catch(console.error)
+        el.requestFullscreen().catch((error: unknown) => {
+          log.warn('Failed to enter fullscreen', { error })
+        })
       }
     }
   }, [isVideo])

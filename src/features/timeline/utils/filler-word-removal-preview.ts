@@ -1,11 +1,12 @@
 import type { MediaTranscript, MediaTranscriptWord } from '@/types/storage'
-import type { TimelineItem } from '@/types/timeline'
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service'
 import { useItemsStore } from '@/features/timeline/stores/items-store'
-import { useTimelineItemOverlayStore } from '@/features/timeline/stores/timeline-item-overlay-store'
-import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
-import { sourceSecondsToTimelineFrame } from '@/features/timeline/utils/media-item-frames'
 import { createLogger } from '@/shared/logging/logger'
+import {
+  applyRemovalPreviewOverlays,
+  clearRemovalPreviewOverlays,
+  isAudioVideoItem,
+} from '@/features/timeline/utils/removal-preview-overlays'
 import type { AudioSilenceRange } from '@/shared/utils/audio-silence'
 
 const logger = createLogger('FillerWordRemovalPreview')
@@ -135,18 +136,6 @@ export interface FillerAudioConfidence {
 export interface FillerPreviewSummary {
   rangeCount: number
   totalSeconds: number
-}
-
-function isAudioVideoItem(item: TimelineItem | undefined): item is TimelineItem & {
-  type: 'video' | 'audio'
-  mediaId: string
-} {
-  return (
-    item !== undefined &&
-    (item.type === 'video' || item.type === 'audio') &&
-    typeof item.mediaId === 'string' &&
-    item.mediaId.length > 0
-  )
 }
 
 function normalizeWord(text: string): string {
@@ -357,70 +346,19 @@ export async function analyzeFillerWordsForItems(
   return rangesByMediaId
 }
 
-function getItemPreviewRanges(
-  item: TimelineItem,
-  ranges: readonly AudioSilenceRange[],
-  timelineFps: number,
-): Array<{ startRatio: number; endRatio: number; seconds: number }> {
-  return ranges.flatMap((range) => {
-    const startFrame = sourceSecondsToTimelineFrame(item, range.start, timelineFps)
-    const endFrame = sourceSecondsToTimelineFrame(item, range.end, timelineFps)
-    const startRatio = Math.max(0, Math.min(1, (startFrame - item.from) / item.durationInFrames))
-    const endRatio = Math.max(0, Math.min(1, (endFrame - item.from) / item.durationInFrames))
-    if (endRatio <= startRatio) return []
-    return [
-      {
-        startRatio,
-        endRatio,
-        seconds: ((endRatio - startRatio) * item.durationInFrames) / timelineFps,
-      },
-    ]
-  })
-}
-
 export function clearFillerPreviewOverlays(itemIds: readonly string[]): void {
-  const overlayStore = useTimelineItemOverlayStore.getState()
-  for (const itemId of itemIds) {
-    overlayStore.removeOverlay(itemId, FILLER_REMOVAL_PREVIEW_OVERLAY_ID)
-  }
+  clearRemovalPreviewOverlays(itemIds, FILLER_REMOVAL_PREVIEW_OVERLAY_ID)
 }
 
 export function applyFillerPreviewOverlays(
   itemIds: readonly string[],
   rangesByMediaId: FillerRangesByMediaId,
 ): FillerPreviewSummary {
-  const timelineFps = useTimelineSettingsStore.getState().fps
-  const itemsById = useItemsStore.getState().itemById
-  const overlayStore = useTimelineItemOverlayStore.getState()
-  let rangeCount = 0
-  let totalSeconds = 0
-
-  for (const itemId of itemIds) {
-    const item = itemsById[itemId]
-    if (!isAudioVideoItem(item)) {
-      overlayStore.removeOverlay(itemId, FILLER_REMOVAL_PREVIEW_OVERLAY_ID)
-      continue
-    }
-
-    const ranges = rangesByMediaId[item.mediaId] ?? []
-    const previewRanges = getItemPreviewRanges(item, ranges, timelineFps)
-    if (previewRanges.length === 0) {
-      overlayStore.removeOverlay(itemId, FILLER_REMOVAL_PREVIEW_OVERLAY_ID)
-      continue
-    }
-
-    rangeCount += previewRanges.length
-    totalSeconds += previewRanges.reduce((sum, range) => sum + range.seconds, 0)
-    overlayStore.upsertOverlay(itemId, {
-      id: FILLER_REMOVAL_PREVIEW_OVERLAY_ID,
-      label: `${previewRanges.length} filler range${previewRanges.length === 1 ? '' : 's'}`,
-      tone: 'warning',
-      ranges: previewRanges.map((range) => ({
-        startRatio: range.startRatio,
-        endRatio: range.endRatio,
-      })),
-    })
-  }
-
-  return { rangeCount, totalSeconds }
+  return applyRemovalPreviewOverlays({
+    itemIds,
+    rangesByMediaId,
+    overlayId: FILLER_REMOVAL_PREVIEW_OVERLAY_ID,
+    labelNoun: 'filler',
+    tone: 'warning',
+  })
 }

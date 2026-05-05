@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { createEditPreviewStore } from './edit-preview-store-factory'
 
 interface TrackPushPreviewState {
   /** The anchor item being pushed */
@@ -22,20 +22,20 @@ interface TrackPushPreviewActions {
   clearPreview: () => void
 }
 
-export const useTrackPushPreviewStore = create<TrackPushPreviewState & TrackPushPreviewActions>()(
-  (set) => ({
-    anchorItemId: null,
-    trackId: null,
-    shiftedItemIds: new Set<string>(),
-    delta: 0,
-    setPreview: (params) => set(params),
+const createInitialState = (): TrackPushPreviewState => ({
+  anchorItemId: null,
+  trackId: null,
+  shiftedItemIds: new Set<string>(),
+  delta: 0,
+})
+
+export const useTrackPushPreviewStore = createEditPreviewStore<
+  TrackPushPreviewState,
+  Parameters<TrackPushPreviewActions['setPreview']>[0],
+  Pick<TrackPushPreviewActions, 'setDelta'>
+>({
+  initialState: createInitialState,
+  createActions: (set) => ({
     setDelta: (delta) => set({ delta }),
-    clearPreview: () =>
-      set({
-        anchorItemId: null,
-        trackId: null,
-        shiftedItemIds: new Set<string>(),
-        delta: 0,
-      }),
   }),
-)
+})

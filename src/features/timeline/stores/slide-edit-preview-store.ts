@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { createEditPreviewStore } from './edit-preview-store-factory'
 
 interface SlideEditPreviewState {
   /** The item being slid */
@@ -32,32 +32,29 @@ interface SlideEditPreviewActions {
   clearPreview: () => void
 }
 
-export const useSlideEditPreviewStore = create<SlideEditPreviewState & SlideEditPreviewActions>()(
-  (set) => ({
-    itemId: null,
-    trackId: null,
-    leftNeighborId: null,
-    rightNeighborId: null,
-    slideDelta: 0,
-    minDelta: 0,
-    maxDelta: 0,
-    setPreview: (params) =>
-      set({
-        ...params,
-        minDelta: params.minDelta ?? 0,
-        maxDelta: params.maxDelta ?? 0,
-      }),
+const createInitialState = (): SlideEditPreviewState => ({
+  itemId: null,
+  trackId: null,
+  leftNeighborId: null,
+  rightNeighborId: null,
+  slideDelta: 0,
+  minDelta: 0,
+  maxDelta: 0,
+})
+
+export const useSlideEditPreviewStore = createEditPreviewStore<
+  SlideEditPreviewState,
+  Parameters<SlideEditPreviewActions['setPreview']>[0],
+  Pick<SlideEditPreviewActions, 'setSlideDelta' | 'setSlideRange'>
+>({
+  initialState: createInitialState,
+  normalizePreview: (params) => ({
+    ...params,
+    minDelta: params.minDelta ?? 0,
+    maxDelta: params.maxDelta ?? 0,
+  }),
+  createActions: (set) => ({
     setSlideDelta: (slideDelta) => set({ slideDelta }),
     setSlideRange: (minDelta, maxDelta) => set({ minDelta, maxDelta }),
-    clearPreview: () =>
-      set({
-        itemId: null,
-        trackId: null,
-        leftNeighborId: null,
-        rightNeighborId: null,
-        slideDelta: 0,
-        minDelta: 0,
-        maxDelta: 0,
-      }),
   }),
-)
+})

@@ -126,6 +126,7 @@ import { useCompositionNavigationStore } from '../../stores/composition-navigati
 import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-store'
 import { useRollHoverStore } from '../../stores/roll-hover-store'
 import { useZoomStore } from '../../stores/zoom-store'
+import { frameToPixelsNow, pixelsToFrameNow } from '../../utils/zoom-conversions'
 import { timelineToSourceFrames } from '../../utils/source-calculations'
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils'
 import { getTransitionBridgeBounds } from '../../utils/transition-preview-geometry'
@@ -176,21 +177,6 @@ const JOIN_INDICATOR_MIN_ZOOM_PPS = 30
 const SPEED_BADGE_EPSILON = 0.005
 const TRANSITION_DROP_HIT_MIN_WIDTH_PX = 72
 const TRANSITION_DROP_HIT_MAX_WIDTH_PX = 240
-
-function getPixelsPerSecondNow(): number {
-  return useZoomStore.getState().pixelsPerSecond
-}
-
-function frameToPixelsNow(frame: number): number {
-  const fps = useTimelineStore.getState().fps
-  return fps > 0 ? (frame / fps) * getPixelsPerSecondNow() : 0
-}
-
-function pixelsToFrameNow(pixels: number): number {
-  const fps = useTimelineStore.getState().fps
-  const pixelsPerSecond = getPixelsPerSecondNow()
-  return fps > 0 && pixelsPerSecond > 0 ? Math.round((pixels / pixelsPerSecond) * fps) : 0
-}
 
 function getFramePositionStyle(frame: number): string {
   return `calc(${frame} * var(--timeline-px-per-frame, 0px))`
