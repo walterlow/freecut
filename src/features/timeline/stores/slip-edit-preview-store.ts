@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { createEditPreviewStore } from './edit-preview-store-factory'
 
 interface SlipEditPreviewState {
   /** The item being slipped */
@@ -15,18 +15,19 @@ interface SlipEditPreviewActions {
   clearPreview: () => void
 }
 
-export const useSlipEditPreviewStore = create<SlipEditPreviewState & SlipEditPreviewActions>()(
-  (set) => ({
-    itemId: null,
-    trackId: null,
-    slipDelta: 0,
-    setPreview: (params) => set(params),
+const createInitialState = (): SlipEditPreviewState => ({
+  itemId: null,
+  trackId: null,
+  slipDelta: 0,
+})
+
+export const useSlipEditPreviewStore = createEditPreviewStore<
+  SlipEditPreviewState,
+  Parameters<SlipEditPreviewActions['setPreview']>[0],
+  Pick<SlipEditPreviewActions, 'setSlipDelta'>
+>({
+  initialState: createInitialState,
+  createActions: (set) => ({
     setSlipDelta: (slipDelta) => set({ slipDelta }),
-    clearPreview: () =>
-      set({
-        itemId: null,
-        trackId: null,
-        slipDelta: 0,
-      }),
   }),
-)
+})

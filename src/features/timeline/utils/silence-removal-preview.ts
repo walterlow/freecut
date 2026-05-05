@@ -1,11 +1,12 @@
-import type { TimelineItem } from '@/types/timeline'
 import { getOrDecodeAudio } from '@/features/timeline/deps/composition-runtime'
 import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver'
 import { useItemsStore } from '@/features/timeline/stores/items-store'
-import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
-import { useTimelineItemOverlayStore } from '@/features/timeline/stores/timeline-item-overlay-store'
-import { sourceSecondsToTimelineFrame } from '@/features/timeline/utils/media-item-frames'
 import { createLogger } from '@/shared/logging/logger'
+import {
+  applyRemovalPreviewOverlays,
+  clearRemovalPreviewOverlays,
+  isAudioVideoItem,
+} from '@/features/timeline/utils/removal-preview-overlays'
 import {
   detectSilentRanges,
   type AudioSilenceDetectionOptions,
@@ -35,39 +36,6 @@ export type SilenceRangesByMediaId = Record<string, AudioSilenceRange[]>
 export interface SilencePreviewSummary {
   rangeCount: number
   totalSeconds: number
-}
-
-function isAudioVideoItem(item: TimelineItem | undefined): item is TimelineItem & {
-  type: 'video' | 'audio'
-  mediaId: string
-} {
-  return (
-    item !== undefined &&
-    (item.type === 'video' || item.type === 'audio') &&
-    typeof item.mediaId === 'string' &&
-    item.mediaId.length > 0
-  )
-}
-
-function getItemPreviewRanges(
-  item: TimelineItem,
-  ranges: readonly AudioSilenceRange[],
-  timelineFps: number,
-): Array<{ startRatio: number; endRatio: number; seconds: number }> {
-  return ranges.flatMap((range) => {
-    const startFrame = sourceSecondsToTimelineFrame(item, range.start, timelineFps)
-    const endFrame = sourceSecondsToTimelineFrame(item, range.end, timelineFps)
-    const startRatio = Math.max(0, Math.min(1, (startFrame - item.from) / item.durationInFrames))
-    const endRatio = Math.max(0, Math.min(1, (endFrame - item.from) / item.durationInFrames))
-    if (endRatio <= startRatio) return []
-    return [
-      {
-        startRatio,
-        endRatio,
-        seconds: ((endRatio - startRatio) * item.durationInFrames) / timelineFps,
-      },
-    ]
-  })
 }
 
 export async function analyzeSilenceForItems(
@@ -121,48 +89,18 @@ export async function analyzeSilenceForItems(
 }
 
 export function clearSilencePreviewOverlays(itemIds: readonly string[]): void {
-  const overlayStore = useTimelineItemOverlayStore.getState()
-  for (const itemId of itemIds) {
-    overlayStore.removeOverlay(itemId, SILENCE_REMOVAL_PREVIEW_OVERLAY_ID)
-  }
+  clearRemovalPreviewOverlays(itemIds, SILENCE_REMOVAL_PREVIEW_OVERLAY_ID)
 }
 
 export function applySilencePreviewOverlays(
   itemIds: readonly string[],
   rangesByMediaId: SilenceRangesByMediaId,
 ): SilencePreviewSummary {
-  const timelineFps = useTimelineSettingsStore.getState().fps
-  const itemsById = useItemsStore.getState().itemById
-  const overlayStore = useTimelineItemOverlayStore.getState()
-  let rangeCount = 0
-  let totalSeconds = 0
-
-  for (const itemId of itemIds) {
-    const item = itemsById[itemId]
-    if (!isAudioVideoItem(item)) {
-      overlayStore.removeOverlay(itemId, SILENCE_REMOVAL_PREVIEW_OVERLAY_ID)
-      continue
-    }
-
-    const ranges = rangesByMediaId[item.mediaId] ?? []
-    const previewRanges = getItemPreviewRanges(item, ranges, timelineFps)
-    if (previewRanges.length === 0) {
-      overlayStore.removeOverlay(itemId, SILENCE_REMOVAL_PREVIEW_OVERLAY_ID)
-      continue
-    }
-
-    rangeCount += previewRanges.length
-    totalSeconds += previewRanges.reduce((sum, range) => sum + range.seconds, 0)
-    overlayStore.upsertOverlay(itemId, {
-      id: SILENCE_REMOVAL_PREVIEW_OVERLAY_ID,
-      label: `${previewRanges.length} silent range${previewRanges.length === 1 ? '' : 's'}`,
-      tone: 'error',
-      ranges: previewRanges.map((range) => ({
-        startRatio: range.startRatio,
-        endRatio: range.endRatio,
-      })),
-    })
-  }
-
-  return { rangeCount, totalSeconds }
+  return applyRemovalPreviewOverlays({
+    itemIds,
+    rangesByMediaId,
+    overlayId: SILENCE_REMOVAL_PREVIEW_OVERLAY_ID,
+    labelNoun: 'silent',
+    tone: 'error',
+  })
 }

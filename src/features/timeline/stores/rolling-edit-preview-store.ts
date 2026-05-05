@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { createEditPreviewStore } from './edit-preview-store-factory'
 
 interface RollingEditPreviewState {
   /** The item being directly trimmed (the one the user grabbed) */
@@ -25,23 +25,23 @@ interface RollingEditPreviewActions {
   clearPreview: () => void
 }
 
-export const useRollingEditPreviewStore = create<
-  RollingEditPreviewState & RollingEditPreviewActions
->()((set) => ({
+const createInitialState = (): RollingEditPreviewState => ({
   trimmedItemId: null,
   neighborItemId: null,
   handle: null,
   neighborDelta: 0,
   constrained: false,
-  setPreview: (params) => set({ ...params, constrained: params.constrained ?? false }),
-  setNeighborDelta: (neighborDelta, constrained) =>
-    set({ neighborDelta, constrained: constrained ?? false }),
-  clearPreview: () =>
-    set({
-      trimmedItemId: null,
-      neighborItemId: null,
-      handle: null,
-      neighborDelta: 0,
-      constrained: false,
-    }),
-}))
+})
+
+export const useRollingEditPreviewStore = createEditPreviewStore<
+  RollingEditPreviewState,
+  Parameters<RollingEditPreviewActions['setPreview']>[0],
+  Pick<RollingEditPreviewActions, 'setNeighborDelta'>
+>({
+  initialState: createInitialState,
+  normalizePreview: (params) => ({ ...params, constrained: params.constrained ?? false }),
+  createActions: (set) => ({
+    setNeighborDelta: (neighborDelta, constrained) =>
+      set({ neighborDelta, constrained: constrained ?? false }),
+  }),
+})
