@@ -1,71 +1,66 @@
-import type {
-  AudioItem,
-  ImageItem,
-  TimelineItem,
-  VideoItem,
-} from '@/types/timeline';
-import type { MediaMetadata } from '@/types/storage';
-import { computeInitialTransform } from './transform-init';
+import type { AudioItem, ImageItem, TimelineItem, VideoItem } from '@/types/timeline'
+import type { MediaMetadata } from '@/types/storage'
+import { computeInitialTransform } from './transform-init'
 
-export type DroppableMediaType = 'video' | 'audio' | 'image';
+export type DroppableMediaType = 'video' | 'audio' | 'image'
 
 export interface TimelineMediaPlacement {
-  trackId: string;
-  from: number;
-  durationInFrames: number;
+  trackId: string
+  from: number
+  durationInFrames: number
 }
 
 export interface TimelineLinkedMediaPlacement {
-  primary: TimelineMediaPlacement;
-  linkedAudio?: TimelineMediaPlacement;
+  primary: TimelineMediaPlacement
+  linkedAudio?: TimelineMediaPlacement
 }
 
 interface TimelineBaseItem {
-  id: string;
-  trackId: string;
-  from: number;
-  durationInFrames: number;
-  label: string;
-  mediaId: string;
-  originId: string;
-  linkedGroupId?: string;
-  sourceStart: number;
-  sourceEnd: number;
-  sourceDuration: number;
-  sourceFps: number;
-  trimStart: number;
-  trimEnd: number;
+  id: string
+  trackId: string
+  from: number
+  durationInFrames: number
+  label: string
+  mediaId: string
+  originId: string
+  linkedGroupId?: string
+  sourceStart: number
+  sourceEnd: number
+  sourceDuration: number
+  sourceFps: number
+  trimStart: number
+  trimEnd: number
 }
 
 export function getDroppedMediaDurationInFrames(
   media: Pick<MediaMetadata, 'duration'>,
   mediaType: DroppableMediaType,
-  timelineFps: number
+  timelineFps: number,
 ): number {
-  const durationInFrames = Math.round(media.duration * timelineFps);
+  const durationInFrames = Math.round(media.duration * timelineFps)
   if (durationInFrames > 0) {
-    return durationInFrames;
+    return durationInFrames
   }
 
-  return mediaType === 'image' ? timelineFps * 3 : timelineFps;
+  return mediaType === 'image' ? timelineFps * 3 : timelineFps
 }
 
 function buildTimelineBaseItem(params: {
-  media: MediaMetadata;
-  mediaId: string;
-  label: string;
-  timelineFps: number;
-  placement: TimelineMediaPlacement;
-  originId?: string;
-  linkedGroupId?: string;
+  media: MediaMetadata
+  mediaId: string
+  label: string
+  timelineFps: number
+  placement: TimelineMediaPlacement
+  originId?: string
+  linkedGroupId?: string
 }): TimelineBaseItem {
-  const { media, mediaId, label, timelineFps, placement, originId, linkedGroupId } = params;
-  const sourceFps = media.fps || timelineFps;
-  const actualSourceDurationFrames = Math.round(media.duration * sourceFps);
+  const { media, mediaId, label, timelineFps, placement, originId, linkedGroupId } = params
+  const sourceFps = media.fps || timelineFps
+  const actualSourceDurationFrames = Math.round(media.duration * sourceFps)
   const sourceFramesForItemDuration = Math.min(
     actualSourceDurationFrames,
-    Math.round(placement.durationInFrames * sourceFps / timelineFps)
-  );
+    Math.round((placement.durationInFrames * sourceFps) / timelineFps),
+  )
 
   return {
     id: crypto.randomUUID(),
@@ -82,22 +77,22 @@ function buildTimelineBaseItem(params: {
     sourceFps,
     trimStart: 0,
     trimEnd: 0,
-  };
+  }
 }
 
 export function buildDroppedMediaTimelineItem(params: {
-  media: MediaMetadata;
-  mediaId: string;
-  mediaType: DroppableMediaType;
-  label: string;
-  timelineFps: number;
-  blobUrl: string;
-  thumbnailUrl?: string | null;
-  canvasWidth: number;
-  canvasHeight: number;
-  placement: TimelineMediaPlacement;
-  originId?: string;
-  linkedGroupId?: string;
+  media: MediaMetadata
+  mediaId: string
+  mediaType: DroppableMediaType
+  label: string
+  timelineFps: number
+  blobUrl: string
+  thumbnailUrl?: string | null
+  canvasWidth: number
+  canvasHeight: number
+  placement: TimelineMediaPlacement
+  originId?: string
+  linkedGroupId?: string
 }): TimelineItem {
   const {
     media,
@@ -112,7 +107,7 @@ export function buildDroppedMediaTimelineItem(params: {
     placement,
     originId,
     linkedGroupId,
-  } = params;
+  } = params
   const baseItem = buildTimelineBaseItem({
     media,
     mediaId,
@@ -121,24 +116,19 @@ export function buildDroppedMediaTimelineItem(params: {
     placement,
     originId,
     linkedGroupId,
-  });
+  })
 
   if (mediaType === 'audio') {
     return {
       ...baseItem,
       type: 'audio',
       src: blobUrl,
-    } as AudioItem;
+    } as AudioItem
   }
 
-  const sourceWidth = media.width || canvasWidth;
-  const sourceHeight = media.height || canvasHeight;
-  const transform = computeInitialTransform(
-    sourceWidth,
-    sourceHeight,
-    canvasWidth,
-    canvasHeight
-  );
+  const sourceWidth = media.width || canvasWidth
+  const sourceHeight = media.height || canvasHeight
+  const transform = computeInitialTransform(sourceWidth, sourceHeight, canvasWidth, canvasHeight)
 
   if (mediaType === 'video') {
     return {
@@ -149,7 +139,7 @@ export function buildDroppedMediaTimelineItem(params: {
       sourceWidth: media.width || undefined,
       sourceHeight: media.height || undefined,
       transform,
-    } as VideoItem;
+    } as VideoItem
   }
 
   return {
@@ -160,21 +150,21 @@ export function buildDroppedMediaTimelineItem(params: {
     sourceWidth: media.width || undefined,
     sourceHeight: media.height || undefined,
     transform,
-  } as ImageItem;
+  } as ImageItem
 }
 
 export function buildDroppedMediaTimelineItems(params: {
-  media: MediaMetadata;
-  mediaId: string;
-  mediaType: DroppableMediaType;
-  label: string;
-  timelineFps: number;
-  blobUrl: string;
-  thumbnailUrl?: string | null;
-  canvasWidth: number;
-  canvasHeight: number;
-  placement: TimelineLinkedMediaPlacement;
-  linkVideoAudio?: boolean;
+  media: MediaMetadata
+  mediaId: string
+  mediaType: DroppableMediaType
+  label: string
+  timelineFps: number
+  blobUrl: string
+  thumbnailUrl?: string | null
+  canvasWidth: number
+  canvasHeight: number
+  placement: TimelineLinkedMediaPlacement
+  linkVideoAudio?: boolean
 }): TimelineItem[] {
   const {
     media,
@@ -188,10 +178,10 @@ export function buildDroppedMediaTimelineItems(params: {
     canvasHeight,
     placement,
     linkVideoAudio = false,
-  } = params;
+  } = params
 
-  const originId = crypto.randomUUID();
-  const linkedGroupId = mediaType === 'video' && linkVideoAudio ? crypto.randomUUID() : undefined;
+  const originId = crypto.randomUUID()
+  const linkedGroupId = mediaType === 'video' && linkVideoAudio ? crypto.randomUUID() : undefined
   const primaryItem = buildDroppedMediaTimelineItem({
     media,
     mediaId,
@@ -205,10 +195,10 @@ export function buildDroppedMediaTimelineItems(params: {
     placement: placement.primary,
     originId,
     linkedGroupId,
-  });
+  })
 
   if (mediaType !== 'video' || !linkVideoAudio || !placement.linkedAudio) {
-    return [primaryItem];
+    return [primaryItem]
   }
 
   const linkedAudio = buildDroppedMediaTimelineItem({
@@ -224,7 +214,7 @@ export function buildDroppedMediaTimelineItems(params: {
     placement: placement.linkedAudio,
     originId,
     linkedGroupId,
-  });
+  })
 
-  return [primaryItem, linkedAudio];
+  return [primaryItem, linkedAudio]
 }

@@ -5,28 +5,28 @@
  * project structure without media files.
  */
 
-import type { Project } from '@/types/project';
-import type { MediaMetadata } from '@/types/storage';
+import type { Project } from '@/types/project'
+import type { MediaMetadata } from '@/types/storage'
 
 // Snapshot format version
-export const SNAPSHOT_VERSION = '1.0';
+export const SNAPSHOT_VERSION = '1.0'
 
 /**
  * Media reference in snapshot (metadata only, no file content)
  */
 export interface SnapshotMediaReference {
-  id: string;
-  fileName: string;
-  fileSize: number;
-  mimeType: string;
-  duration: number;
-  width: number;
-  height: number;
-  fps: number;
-  codec: string;
-  bitrate: number;
+  id: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+  duration: number
+  width: number
+  height: number
+  fps: number
+  codec: string
+  bitrate: number
   /** Content hash for deduplication matching on import */
-  contentHash?: string;
+  contentHash?: string
 }
 
 /**
@@ -34,38 +34,38 @@ export interface SnapshotMediaReference {
  */
 export interface ProjectSnapshot {
   /** Snapshot format version */
-  version: string;
+  version: string
   /** ISO timestamp when snapshot was created */
-  exportedAt: string;
+  exportedAt: string
   /** Editor version that created this snapshot */
-  editorVersion: string;
+  editorVersion: string
   /** Complete project data */
-  project: Project;
+  project: Project
   /** Media references (metadata only) */
-  mediaReferences: SnapshotMediaReference[];
+  mediaReferences: SnapshotMediaReference[]
   /** Optional checksum for integrity verification */
-  checksum?: string;
+  checksum?: string
 }
 
 /**
  * Validation result from schema validation
  */
 export interface SnapshotValidationResult {
-  valid: boolean;
-  errors: SnapshotValidationError[];
-  warnings: SnapshotValidationWarning[];
+  valid: boolean
+  errors: SnapshotValidationError[]
+  warnings: SnapshotValidationWarning[]
 }
 
 export interface SnapshotValidationError {
-  path: string;
-  message: string;
-  code: 'invalid_type' | 'missing_field' | 'invalid_value' | 'schema_mismatch';
+  path: string
+  message: string
+  code: 'invalid_type' | 'missing_field' | 'invalid_value' | 'schema_mismatch'
 }
 
 export interface SnapshotValidationWarning {
-  path: string;
-  message: string;
-  code: 'deprecated_field' | 'unknown_field' | 'version_mismatch' | 'missing_media';
+  path: string
+  message: string
+  code: 'deprecated_field' | 'unknown_field' | 'version_mismatch' | 'missing_media'
 }
 
 /**
@@ -73,32 +73,32 @@ export interface SnapshotValidationWarning {
  */
 export interface SnapshotImportOptions {
   /** Generate new IDs for project and timeline items */
-  generateNewIds?: boolean;
+  generateNewIds?: boolean
   /** Override project name */
-  newProjectName?: string;
+  newProjectName?: string
   /** Skip validation (use with caution) */
-  skipValidation?: boolean;
+  skipValidation?: boolean
   /** Attempt to match media by content hash */
-  matchMediaByHash?: boolean;
+  matchMediaByHash?: boolean
   /** Attempt to match media by filename */
-  matchMediaByName?: boolean;
+  matchMediaByName?: boolean
 }
 
 /**
  * Import result with media matching info
  */
 export interface SnapshotImportResult {
-  project: Project;
+  project: Project
   /** Media IDs that were matched to existing media */
   matchedMedia: Array<{
-    snapshotMediaId: string;
-    localMediaId: string;
-    matchType: 'hash' | 'name' | 'exact';
-  }>;
+    snapshotMediaId: string
+    localMediaId: string
+    matchType: 'hash' | 'name' | 'exact'
+  }>
   /** Media IDs that could not be matched */
-  unmatchedMedia: string[];
+  unmatchedMedia: string[]
   /** Warnings during import */
-  warnings: string[];
+  warnings: string[]
 }
 
 /**
@@ -106,13 +106,13 @@ export interface SnapshotImportResult {
  */
 export interface SnapshotExportOptions {
   /** Include media references (default: true) */
-  includeMediaReferences?: boolean;
+  includeMediaReferences?: boolean
   /** Pretty print JSON (default: true for readability) */
-  prettyPrint?: boolean;
+  prettyPrint?: boolean
   /** Include checksum for integrity (default: true) */
-  includeChecksum?: boolean;
+  includeChecksum?: boolean
   /** Strip volatile fields like currentFrame, scrollPosition */
-  stripVolatileFields?: boolean;
+  stripVolatileFields?: boolean
 }
 
 /**
@@ -131,5 +131,5 @@ export function mediaToSnapshotReference(media: MediaMetadata): SnapshotMediaRef
     codec: media.codec,
     bitrate: media.bitrate,
     contentHash: media.contentHash,
-  };
+  }
 }

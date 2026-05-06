@@ -5,5 +5,5 @@ export function hasExceededDragThreshold(
   currentY: number,
   threshold: number,
 ): boolean {
-  return Math.abs(currentX - startX) > threshold || Math.abs(currentY - startY) > threshold;
+  return Math.abs(currentX - startX) > threshold || Math.abs(currentY - startY) > threshold
 }

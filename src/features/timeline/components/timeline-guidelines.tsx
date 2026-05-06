@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { useSelectionStore } from '@/shared/state/selection';
-import type { SnapTarget } from '../types/drag';
-import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
+import { useCallback, useEffect, useRef } from 'react'
+import { useSelectionStore } from '@/shared/state/selection'
+import type { SnapTarget } from '../types/drag'
+import { useTimelineZoomContext } from '../contexts/timeline-zoom-context'
 
 /**
  * Timeline Guidelines Component
@@ -13,50 +13,56 @@ import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
  * Only shows when actively snapping to magnetic or playhead targets
  */
 export function TimelineGuidelines() {
-  const { frameToPixels } = useTimelineZoomContext();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const lineRef = useRef<HTMLDivElement>(null);
-  const activeSnapTargetRef = useRef<SnapTarget | null>(useSelectionStore.getState().activeSnapTarget);
+  const { frameToPixels } = useTimelineZoomContext()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const lineRef = useRef<HTMLDivElement>(null)
+  const activeSnapTargetRef = useRef<SnapTarget | null>(
+    useSelectionStore.getState().activeSnapTarget,
+  )
 
-  const syncGuideline = useCallback((activeSnapTarget: SnapTarget | null) => {
-    const container = containerRef.current;
-    const line = lineRef.current;
-    if (!container || !line) {
-      return;
-    }
+  const syncGuideline = useCallback(
+    (activeSnapTarget: SnapTarget | null) => {
+      const container = containerRef.current
+      const line = lineRef.current
+      if (!container || !line) {
+        return
+      }
 
-    if (!activeSnapTarget) {
-      container.style.display = 'none';
-      return;
-    }
+      if (!activeSnapTarget) {
+        container.style.display = 'none'
+        return
+      }
 
-    const isMagnetic = activeSnapTarget.type === 'item-start' || activeSnapTarget.type === 'item-end';
-    const isPlayhead = activeSnapTarget.type === 'playhead';
-    if (!isMagnetic && !isPlayhead) {
-      container.style.display = 'none';
-      return;
-    }
+      const isMagnetic =
+        activeSnapTarget.type === 'item-start' || activeSnapTarget.type === 'item-end'
+      const isPlayhead = activeSnapTarget.type === 'playhead'
+      if (!isMagnetic && !isPlayhead) {
+        container.style.display = 'none'
+        return
+      }
 
-    container.style.display = '';
-    line.style.left = `${frameToPixels(activeSnapTarget.frame)}px`;
-  }, [frameToPixels]);
+      container.style.display = ''
+      line.style.left = `${frameToPixels(activeSnapTarget.frame)}px`
+    },
+    [frameToPixels],
+  )
 
   useEffect(() => {
-    syncGuideline(activeSnapTargetRef.current);
+    syncGuideline(activeSnapTargetRef.current)
 
     return useSelectionStore.subscribe((state, previous) => {
       if (state.activeSnapTarget === previous.activeSnapTarget) {
-        return;
+        return
       }
 
-      activeSnapTargetRef.current = state.activeSnapTarget;
-      syncGuideline(state.activeSnapTarget);
-    });
-  }, [syncGuideline]);
+      activeSnapTargetRef.current = state.activeSnapTarget
+      syncGuideline(state.activeSnapTarget)
+    })
+  }, [syncGuideline])
 
   useEffect(() => {
-    syncGuideline(activeSnapTargetRef.current);
-  }, [syncGuideline]);
+    syncGuideline(activeSnapTargetRef.current)
+  }, [syncGuideline])
 
   return (
     <div
@@ -74,5 +80,5 @@ export function TimelineGuidelines() {
         }}
       />
     </div>
-  );
+  )
 }

@@ -1,35 +1,31 @@
-import { useCallback, useMemo, useRef } from 'react';
-import { Image, RotateCcw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import type { TimelineItem, ImageItem } from '@/types/timeline';
+import { useCallback, useMemo, useRef } from 'react'
+import { Image, RotateCcw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import type { TimelineItem, ImageItem } from '@/types/timeline'
 import {
   captureSnapshot,
   rateStretchItemWithoutHistory,
   useTimelineCommandStore,
   useTimelineStore,
-} from '@/features/editor/deps/timeline-store';
-import {
-  PropertySection,
-  PropertyRow,
-  NumberInput,
-} from '../components';
-import { getMixedValue } from '../utils';
+} from '@/features/editor/deps/timeline-store'
+import { PropertySection, PropertyRow, NumberInput } from '../components'
+import { getMixedValue } from '../utils'
 
 // Speed limits (matching rate-stretch)
-const MIN_SPEED = 0.1;
-const MAX_SPEED = 10.0;
+const MIN_SPEED = 0.1
+const MAX_SPEED = 10.0
 
 interface GifSectionProps {
-  items: TimelineItem[];
+  items: TimelineItem[]
 }
 
 /**
  * Check if an image item is an animated image (GIF or WebP) based on its label
  */
 function isAnimatedImageItem(item: TimelineItem): item is ImageItem {
-  if (item.type !== 'image') return false;
-  const label = item.label?.toLowerCase() ?? '';
-  return label.endsWith('.gif') || label.endsWith('.webp');
+  if (item.type !== 'image') return false
+  const label = item.label?.toLowerCase() ?? ''
+  return label.endsWith('.gif') || label.endsWith('.webp')
 }
 
 /**
@@ -41,78 +37,80 @@ function isAnimatedImageItem(item: TimelineItem): item is ImageItem {
  * - Slower speed = animation plays slower within same duration
  */
 export function GifSection({ items }: GifSectionProps) {
-  const gifItems = useMemo(
-    () => items.filter(isAnimatedImageItem),
-    [items]
-  );
+  const gifItems = useMemo(() => items.filter(isAnimatedImageItem), [items])
 
   // Memoize item IDs for stable callback dependencies
-  const itemIds = useMemo(() => gifItems.map((item) => item.id), [gifItems]);
-  const speedDragSnapshotRef = useRef<ReturnType<typeof captureSnapshot> | null>(null);
+  const itemIds = useMemo(() => gifItems.map((item) => item.id), [gifItems])
+  const speedDragSnapshotRef = useRef<ReturnType<typeof captureSnapshot> | null>(null)
 
   // Get current speed (defaults to 1)
-  const speed = getMixedValue(gifItems, (item) => item.speed, 1);
+  const speed = getMixedValue(gifItems, (item) => item.speed, 1)
 
   const applySpeedChangeWithoutHistory = useCallback(
     (newSpeed: number) => {
       // Round to 2 decimal places to match clip label precision and avoid floating point drift
-      const roundedSpeed = Math.round(newSpeed * 100) / 100;
+      const roundedSpeed = Math.round(newSpeed * 100) / 100
       // Clamp speed to valid range
-      const clampedSpeed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, roundedSpeed));
+      const clampedSpeed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, roundedSpeed))
 
-      const currentItems = useTimelineStore.getState().items;
+      const currentItems = useTimelineStore.getState().items
       currentItems
-        .filter((item: TimelineItem): item is ImageItem => isAnimatedImageItem(item) && itemIds.includes(item.id))
+        .filter(
+          (item: TimelineItem): item is ImageItem =>
+            isAnimatedImageItem(item) && itemIds.includes(item.id),
+        )
         .forEach((item: ImageItem) => {
-          rateStretchItemWithoutHistory(item.id, item.from, item.durationInFrames, clampedSpeed);
-        });
+          rateStretchItemWithoutHistory(item.id, item.from, item.durationInFrames, clampedSpeed)
+        })
 
-      return clampedSpeed;
+      return clampedSpeed
     },
-    [itemIds]
-  );
+    [itemIds],
+  )
 
   const commitSpeedChange = useCallback(
     (newSpeed: number) => {
-      const beforeSnapshot = speedDragSnapshotRef.current ?? captureSnapshot();
-      const clampedSpeed = applySpeedChangeWithoutHistory(newSpeed);
+      const beforeSnapshot = speedDragSnapshotRef.current ?? captureSnapshot()
+      const clampedSpeed = applySpeedChangeWithoutHistory(newSpeed)
       useTimelineCommandStore.getState().addUndoEntry(
         {
           type: 'RATE_STRETCH_ITEM',
           payload: { ids: itemIds, newSpeed: clampedSpeed },
         },
-        beforeSnapshot
-      );
-      speedDragSnapshotRef.current = null;
+        beforeSnapshot,
+      )
+      speedDragSnapshotRef.current = null
     },
-    [applySpeedChangeWithoutHistory, itemIds]
-  );
+    [applySpeedChangeWithoutHistory, itemIds],
+  )
 
   const handleSpeedLiveChange = useCallback(
     (newSpeed: number) => {
       if (!speedDragSnapshotRef.current) {
-        speedDragSnapshotRef.current = captureSnapshot();
+        speedDragSnapshotRef.current = captureSnapshot()
       }
-      applySpeedChangeWithoutHistory(newSpeed);
+      applySpeedChangeWithoutHistory(newSpeed)
     },
-    [applySpeedChangeWithoutHistory]
-  );
+    [applySpeedChangeWithoutHistory],
+  )
 
   // Reset speed to 1x
   const handleResetSpeed = useCallback(() => {
-    const tolerance = 0.01;
-    const needsReset = useTimelineStore.getState().items.some(
-      (item: TimelineItem) =>
-        isAnimatedImageItem(item)
-        && itemIds.includes(item.id)
-        && Math.abs((item.speed || 1) - 1) > tolerance
-    );
-    if (!needsReset) return;
+    const tolerance = 0.01
+    const needsReset = useTimelineStore
+      .getState()
+      .items.some(
+        (item: TimelineItem) =>
+          isAnimatedImageItem(item) &&
+          itemIds.includes(item.id) &&
+          Math.abs((item.speed || 1) - 1) > tolerance,
+      )
+    if (!needsReset) return
 
-    commitSpeedChange(1);
-  }, [commitSpeedChange, itemIds]);
+    commitSpeedChange(1)
+  }, [commitSpeedChange, itemIds])
 
-  if (gifItems.length === 0) return null;
+  if (gifItems.length === 0) return null
 
   return (
     <PropertySection title="动画" icon={Image} defaultOpen={true}>
@@ -141,5 +139,5 @@ export function GifSection({ items }: GifSectionProps) {
         </div>
       </PropertyRow>
     </PropertySection>
-  );
+  )
 }

@@ -7,9 +7,9 @@
  * Analysis resolution: 160×90 (base), 3-level Gaussian pyramid.
  */
 
-export const ANALYSIS_WIDTH = 160;
-export const ANALYSIS_HEIGHT = 90;
-export const PYRAMID_LEVELS = 3;
+export const ANALYSIS_WIDTH = 160
+export const ANALYSIS_HEIGHT = 90
+export const PYRAMID_LEVELS = 3
 
 export const OPTICAL_FLOW_WGSL = /* wgsl */ `
 
@@ -275,4 +275,4 @@ fn clearStatsMain() {
   atomicStore(&clearStats.dirBin6, 0u);
   atomicStore(&clearStats.dirBin7, 0u);
 }
-`;
+`

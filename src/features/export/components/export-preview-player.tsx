@@ -1,131 +1,131 @@
-import { useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react'
+import { Button } from '@/components/ui/button'
+import { Slider } from '@/components/ui/slider'
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react'
 
 interface ExportPreviewPlayerProps {
-  src: string;
-  isVideo: boolean;
+  src: string
+  isVideo: boolean
 }
 
 function formatMediaTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 function useIsFullscreen(ref: React.RefObject<HTMLElement | null>) {
-  const subscribe = useCallback(
-    (cb: () => void) => {
-      document.addEventListener('fullscreenchange', cb);
-      return () => document.removeEventListener('fullscreenchange', cb);
-    },
-    [],
-  );
-  const getSnapshot = useCallback(
-    () => document.fullscreenElement === ref.current,
-    [ref],
-  );
-  return useSyncExternalStore(subscribe, getSnapshot);
+  const subscribe = useCallback((cb: () => void) => {
+    document.addEventListener('fullscreenchange', cb)
+    return () => document.removeEventListener('fullscreenchange', cb)
+  }, [])
+  const getSnapshot = useCallback(() => document.fullscreenElement === ref.current, [ref])
+  return useSyncExternalStore(subscribe, getSnapshot)
 }
 
 export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) {
-  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isFullscreen = useIsFullscreen(containerRef);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.75);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSeeking, setIsSeeking] = useState(false);
-  const isSeekingRef = useRef(false);
-  isSeekingRef.current = isSeeking;
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isFullscreen = useIsFullscreen(containerRef)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [volume, setVolume] = useState(0.75)
+  const [isMuted, setIsMuted] = useState(false)
+  const [isSeeking, setIsSeeking] = useState(false)
+  const isSeekingRef = useRef(false)
+  isSeekingRef.current = isSeeking
 
   const togglePlay = useCallback(() => {
-    const el = mediaRef.current;
-    if (!el) return;
+    const el = mediaRef.current
+    if (!el) return
     if (el.paused) {
-      void el.play();
+      void el.play()
     } else {
-      el.pause();
+      el.pause()
     }
-  }, []);
+  }, [])
 
-  const handleSeek = useCallback((values: number[]) => {
-    const el = mediaRef.current;
-    if (!el || !duration) return;
-    const time = ((values[0] ?? 0) / 100) * duration;
-    el.currentTime = time;
-    setCurrentTime(time);
-  }, [duration]);
+  const handleSeek = useCallback(
+    (values: number[]) => {
+      const el = mediaRef.current
+      if (!el || !duration) return
+      const time = ((values[0] ?? 0) / 100) * duration
+      el.currentTime = time
+      setCurrentTime(time)
+    },
+    [duration],
+  )
 
-  const handleVolumeChange = useCallback((values: number[]) => {
-    const el = mediaRef.current;
-    if (!el) return;
-    const v = (values[0] ?? 75) / 100;
-    el.volume = v;
-    setVolume(v);
-    if (v > 0 && isMuted) {
-      el.muted = false;
-      setIsMuted(false);
-    }
-  }, [isMuted]);
+  const handleVolumeChange = useCallback(
+    (values: number[]) => {
+      const el = mediaRef.current
+      if (!el) return
+      const v = (values[0] ?? 75) / 100
+      el.volume = v
+      setVolume(v)
+      if (v > 0 && isMuted) {
+        el.muted = false
+        setIsMuted(false)
+      }
+    },
+    [isMuted],
+  )
 
   const toggleMute = useCallback(() => {
-    const el = mediaRef.current;
-    if (!el) return;
-    const newMuted = !el.muted;
-    el.muted = newMuted;
-    setIsMuted(newMuted);
-  }, []);
+    const el = mediaRef.current
+    if (!el) return
+    const newMuted = !el.muted
+    el.muted = newMuted
+    setIsMuted(newMuted)
+  }, [])
 
   const handleFullscreen = useCallback(() => {
-    if (!isVideo) return;
+    if (!isVideo) return
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(console.error);
+      document.exitFullscreen().catch(console.error)
     } else {
-      const el = containerRef.current;
+      const el = containerRef.current
       if (el?.requestFullscreen) {
-        el.requestFullscreen().catch(console.error);
+        el.requestFullscreen().catch(console.error)
       }
     }
-  }, [isVideo]);
+  }, [isVideo])
 
   useEffect(() => {
-    const el = mediaRef.current;
-    if (!el) return;
-    el.volume = volume;
+    const el = mediaRef.current
+    if (!el) return
+    el.volume = volume
 
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    const onPlay = () => setIsPlaying(true)
+    const onPause = () => setIsPlaying(false)
     const onTimeUpdate = () => {
-      if (!isSeekingRef.current) setCurrentTime(el.currentTime);
-    };
-    const onLoadedMetadata = () => setDuration(el.duration);
+      if (!isSeekingRef.current) setCurrentTime(el.currentTime)
+    }
+    const onLoadedMetadata = () => setDuration(el.duration)
     const onEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(el.duration);
-    };
+      setIsPlaying(false)
+      setCurrentTime(el.duration)
+    }
 
-    el.addEventListener('play', onPlay);
-    el.addEventListener('pause', onPause);
-    el.addEventListener('timeupdate', onTimeUpdate);
-    el.addEventListener('loadedmetadata', onLoadedMetadata);
-    el.addEventListener('ended', onEnded);
+    el.addEventListener('play', onPlay)
+    el.addEventListener('pause', onPause)
+    el.addEventListener('timeupdate', onTimeUpdate)
+    el.addEventListener('loadedmetadata', onLoadedMetadata)
+    el.addEventListener('ended', onEnded)
 
     return () => {
-      el.removeEventListener('play', onPlay);
-      el.removeEventListener('pause', onPause);
-      el.removeEventListener('timeupdate', onTimeUpdate);
-      el.removeEventListener('loadedmetadata', onLoadedMetadata);
-      el.removeEventListener('ended', onEnded);
-    };
-  }, [volume]);
+      el.removeEventListener('play', onPlay)
+      el.removeEventListener('pause', onPause)
+      el.removeEventListener('timeupdate', onTimeUpdate)
+      el.removeEventListener('loadedmetadata', onLoadedMetadata)
+      el.removeEventListener('ended', onEnded)
+    }
+  }, [volume])
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
     <div
@@ -157,11 +157,13 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
       )}
 
       {/* Controls bar */}
-      <div className={`flex items-center gap-2 px-3 py-2 ${
-        isFullscreen
-          ? 'bg-black/80 border-t border-white/10'
-          : 'bg-secondary/50 border-t border-border'
-      }`}>
+      <div
+        className={`flex items-center gap-2 px-3 py-2 ${
+          isFullscreen
+            ? 'bg-black/80 border-t border-white/10'
+            : 'bg-secondary/50 border-t border-border'
+        }`}
+      >
         {/* Play/Pause */}
         <Button
           size="icon"
@@ -169,11 +171,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
           onClick={togglePlay}
           aria-label={isPlaying ? '暂停' : '播放'}
         >
-          {isPlaying ? (
-            <Pause className="w-4 h-4" />
-          ) : (
-            <Play className="w-4 h-4 ml-0.5" />
-          )}
+          {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
         </Button>
 
         {/* Timecode */}
@@ -187,8 +185,8 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
         <Slider
           value={[progressPercent]}
           onValueChange={(values) => {
-            setIsSeeking(true);
-            handleSeek(values);
+            setIsSeeking(true)
+            handleSeek(values)
           }}
           onValueCommit={() => setIsSeeking(false)}
           max={100}
@@ -231,10 +229,14 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
             onClick={handleFullscreen}
             aria-label={isFullscreen ? '退出全屏' : '全屏'}
           >
-            {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+            {isFullscreen ? (
+              <Minimize className="w-3.5 h-3.5" />
+            ) : (
+              <Maximize className="w-3.5 h-3.5" />
+            )}
           </Button>
         )}
       </div>
     </div>
-  );
+  )
 }

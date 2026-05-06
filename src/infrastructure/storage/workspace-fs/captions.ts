@@ -20,14 +20,10 @@
  * that want dedup at save time pass `contentHash` in the options.
  */
 
-import type { MediaCaption } from '@/infrastructure/analysis';
-import { createLogger } from '@/shared/logging/logger';
+import type { MediaCaption } from '@/infrastructure/analysis'
+import { createLogger } from '@/shared/logging/logger'
 
-import {
-  addAiContentRef,
-  deleteAiContent,
-  removeAiContentRef,
-} from './ai-content-refs';
+import { addAiContentRef, deleteAiContent, removeAiContentRef } from './ai-content-refs'
 import {
   readAiOutput,
   readAiOutputAt,
@@ -36,8 +32,8 @@ import {
   deleteAiOutput,
   deleteAiOutputAt,
   type AiOutput,
-} from './ai-outputs';
-import { readArrayBuffer, readBlob, removeEntry, writeBlob } from './fs-primitives';
+} from './ai-outputs'
+import { readArrayBuffer, readBlob, removeEntry, writeBlob } from './fs-primitives'
 import {
   aiOutputPath,
   captionEmbeddingsPath,
@@ -50,34 +46,34 @@ import {
   contentCaptionThumbPath,
   contentCaptionThumbRelPath,
   contentCaptionsJsonPath,
-} from './paths';
-import { requireWorkspaceRoot } from './root';
+} from './paths'
+import { requireWorkspaceRoot } from './root'
 
-const logger = createLogger('WorkspaceFS:Captions');
+const logger = createLogger('WorkspaceFS:Captions')
 
 interface SaveCaptionsInput {
-  mediaId: string;
-  captions: MediaCaption[];
+  mediaId: string
+  captions: MediaCaption[]
   /** Stable provider id, e.g. `"lfm-captioning"`. */
-  service: string;
+  service: string
   /** Model id/version reported by the provider, e.g. `"lfm-2.5-vl"`. */
-  model: string;
+  model: string
   /** Sample interval used at generation time — kept for invalidation. */
-  sampleIntervalSec?: number;
+  sampleIntervalSec?: number
   /** Text-embedding model id whose vectors are stored in the companion `.bin`. */
-  embeddingModel?: string;
+  embeddingModel?: string
   /** Dimension of each text embedding vector. */
-  embeddingDim?: number;
+  embeddingDim?: number
   /** CLIP image-embedding model id (separate bin). */
-  imageEmbeddingModel?: string;
+  imageEmbeddingModel?: string
   /** Dimension of each image embedding vector. */
-  imageEmbeddingDim?: number;
+  imageEmbeddingDim?: number
   /**
    * SHA-256 of the source media bytes. When provided, the envelope and heavy
    * assets are mirrored into the shared content cache and this mediaId is
    * registered as a ref-holder.
    */
-  contentHash?: string;
+  contentHash?: string
 }
 
 /** Options common to most read/write helpers. */
@@ -87,68 +83,67 @@ interface ContentKeyedOptions {
    * content-addressable location; when absent, falls back to the per-media
    * location for backwards compatibility with pre-cache saves.
    */
-  contentHash?: string;
+  contentHash?: string
   /**
    * Caption sampling interval that produced this cache entry. Shared caption
    * assets are versioned by this value so different analysis cadences do not
    * overwrite one another.
    */
-  sampleIntervalSec?: number;
+  sampleIntervalSec?: number
 }
 
 interface ResolvedSharedCaptionCache {
-  envelope: AiOutput<'captions'>;
-  sampleIntervalSec?: number;
+  envelope: AiOutput<'captions'>
+  sampleIntervalSec?: number
 }
 
 function resolveSampleIntervalSec(
   input: { sampleIntervalSec?: number } | undefined,
   fallback: Record<string, unknown> | undefined,
 ): number | undefined {
-  if (input?.sampleIntervalSec !== undefined) return input.sampleIntervalSec;
-  const fromParams = fallback?.sampleIntervalSec;
-  return typeof fromParams === 'number' ? fromParams : undefined;
+  if (input?.sampleIntervalSec !== undefined) return input.sampleIntervalSec
+  const fromParams = fallback?.sampleIntervalSec
+  return typeof fromParams === 'number' ? fromParams : undefined
 }
 
 async function resolveSharedCaptionCache(
   hash: string,
   sampleIntervalSec?: number,
 ): Promise<ResolvedSharedCaptionCache | undefined> {
-  const variantEnvelope = sampleIntervalSec === undefined
-    ? undefined
-    : await readAiOutputAt(contentCaptionsJsonPath(hash, sampleIntervalSec), 'captions');
+  const variantEnvelope =
+    sampleIntervalSec === undefined
+      ? undefined
+      : await readAiOutputAt(contentCaptionsJsonPath(hash, sampleIntervalSec), 'captions')
   if (variantEnvelope) {
-    return { envelope: variantEnvelope, sampleIntervalSec };
+    return { envelope: variantEnvelope, sampleIntervalSec }
   }
 
-  const legacyEnvelope = await readAiOutputAt(contentCaptionsJsonPath(hash), 'captions');
-  if (!legacyEnvelope) return undefined;
-  const legacyInterval = resolveSampleIntervalSec(legacyEnvelope.data, legacyEnvelope.params);
+  const legacyEnvelope = await readAiOutputAt(contentCaptionsJsonPath(hash), 'captions')
+  if (!legacyEnvelope) return undefined
+  const legacyInterval = resolveSampleIntervalSec(legacyEnvelope.data, legacyEnvelope.params)
   // When a specific interval was requested, a legacy envelope is only
   // acceptable if its resolved interval matches — otherwise callers would
   // silently reuse captions generated at a different density.
   if (
-    sampleIntervalSec !== undefined
-    && legacyInterval !== undefined
-    && Math.abs(legacyInterval - sampleIntervalSec) >= 0.01
+    sampleIntervalSec !== undefined &&
+    legacyInterval !== undefined &&
+    Math.abs(legacyInterval - sampleIntervalSec) >= 0.01
   ) {
-    return undefined;
+    return undefined
   }
   return {
     envelope: legacyEnvelope,
     sampleIntervalSec: legacyInterval,
-  };
+  }
 }
 
-export async function getCaptions(
-  mediaId: string,
-): Promise<MediaCaption[] | undefined> {
+export async function getCaptions(mediaId: string): Promise<MediaCaption[] | undefined> {
   try {
-    const envelope = await readAiOutput(mediaId, 'captions');
-    return envelope?.data.captions;
+    const envelope = await readAiOutput(mediaId, 'captions')
+    return envelope?.data.captions
   } catch (error) {
-    logger.error(`getCaptions(${mediaId}) failed`, error);
-    throw new Error(`Failed to load captions: ${mediaId}`);
+    logger.error(`getCaptions(${mediaId}) failed`, error)
+    throw new Error(`Failed to load captions: ${mediaId}`)
   }
 }
 
@@ -162,10 +157,10 @@ export async function getCaptionsByContentHash(
   sampleIntervalSec?: number,
 ): Promise<AiOutput<'captions'> | undefined> {
   try {
-    return (await resolveSharedCaptionCache(hash, sampleIntervalSec))?.envelope;
+    return (await resolveSharedCaptionCache(hash, sampleIntervalSec))?.envelope
   } catch (error) {
-    logger.warn(`getCaptionsByContentHash(${hash}) failed`, error);
-    return undefined;
+    logger.warn(`getCaptionsByContentHash(${hash}) failed`, error)
+    return undefined
   }
 }
 
@@ -178,21 +173,21 @@ export async function saveCaptions(input: SaveCaptionsInput): Promise<MediaCapti
     imageEmbeddingDim: input.imageEmbeddingDim,
     contentHash: input.contentHash,
     captions: input.captions,
-  };
+  }
 
   // Read any prior per-media envelope *before* overwriting — when the same
   // media is re-analyzed with different source bytes, we need to release the
   // old shared-cache ref so it doesn't leak a stale entry.
-  let priorContentHash: string | undefined;
-  let priorSampleIntervalSec: number | undefined;
+  let priorContentHash: string | undefined
+  let priorSampleIntervalSec: number | undefined
   if (input.contentHash) {
     try {
-      const prior = await readAiOutput(input.mediaId, 'captions');
-      priorContentHash = prior?.data.contentHash;
-      priorSampleIntervalSec = resolveSampleIntervalSec(prior?.data, prior?.params);
+      const prior = await readAiOutput(input.mediaId, 'captions')
+      priorContentHash = prior?.data.contentHash
+      priorSampleIntervalSec = resolveSampleIntervalSec(prior?.data, prior?.params)
     } catch {
-      priorContentHash = undefined;
-      priorSampleIntervalSec = undefined;
+      priorContentHash = undefined
+      priorSampleIntervalSec = undefined
     }
   }
 
@@ -202,43 +197,47 @@ export async function saveCaptions(input: SaveCaptionsInput): Promise<MediaCapti
       kind: 'captions',
       service: input.service,
       model: input.model,
-      params: input.sampleIntervalSec !== undefined ? { sampleIntervalSec: input.sampleIntervalSec } : {},
+      params:
+        input.sampleIntervalSec !== undefined ? { sampleIntervalSec: input.sampleIntervalSec } : {},
       data,
-    });
+    })
 
     if (input.contentHash) {
-      const mirrorPath = contentCaptionsJsonPath(input.contentHash, input.sampleIntervalSec);
-      let mirrorWritten = false;
+      const mirrorPath = contentCaptionsJsonPath(input.contentHash, input.sampleIntervalSec)
+      let mirrorWritten = false
       try {
         await writeAiOutputAt(mirrorPath, {
           mediaId: input.mediaId,
           kind: 'captions',
           service: input.service,
           model: input.model,
-          params: input.sampleIntervalSec !== undefined ? { sampleIntervalSec: input.sampleIntervalSec } : {},
+          params:
+            input.sampleIntervalSec !== undefined
+              ? { sampleIntervalSec: input.sampleIntervalSec }
+              : {},
           data,
-        });
-        mirrorWritten = true;
-        await addAiContentRef(input.contentHash, input.mediaId, input.sampleIntervalSec);
+        })
+        mirrorWritten = true
+        await addAiContentRef(input.contentHash, input.mediaId, input.sampleIntervalSec)
         // Release the prior ref once the new ref has landed. Same hash/interval
         // is idempotent so we skip; only call for genuine changes. Failures are
         // logged, not rethrown — the new ref is already in place.
         if (
-          priorContentHash
-          && (priorContentHash !== input.contentHash
-            || priorSampleIntervalSec !== input.sampleIntervalSec)
+          priorContentHash &&
+          (priorContentHash !== input.contentHash ||
+            priorSampleIntervalSec !== input.sampleIntervalSec)
         ) {
           try {
             await deleteSharedCaptionsIfUnreferenced(
               priorContentHash,
               input.mediaId,
               priorSampleIntervalSec,
-            );
+            )
           } catch (error) {
             logger.warn(
               `saveCaptions: failed to release prior ref ${priorContentHash} for ${input.mediaId}`,
               error,
-            );
+            )
           }
         }
       } catch (error) {
@@ -246,22 +245,22 @@ export async function saveCaptions(input: SaveCaptionsInput): Promise<MediaCapti
         // on so caption save doesn't fail the whole analyze pipeline. If the
         // mirror was written but ref registration failed, roll back the mirror
         // so it doesn't orphan — GC only runs when a ref is removed.
-        logger.warn(`saveCaptions: content-cache mirror failed for ${input.contentHash}`, error);
+        logger.warn(`saveCaptions: content-cache mirror failed for ${input.contentHash}`, error)
         if (mirrorWritten) {
           await deleteAiOutputAt(mirrorPath).catch((rollbackError) => {
             logger.warn(
               `saveCaptions: failed to roll back orphaned mirror at ${input.contentHash}`,
               rollbackError,
-            );
-          });
+            )
+          })
         }
       }
     }
 
-    return written.data.captions;
+    return written.data.captions
   } catch (error) {
-    logger.error(`saveCaptions(${input.mediaId}) failed`, error);
-    throw new Error(`Failed to save captions: ${input.mediaId}`);
+    logger.error(`saveCaptions(${input.mediaId}) failed`, error)
+    throw new Error(`Failed to save captions: ${input.mediaId}`)
   }
 }
 
@@ -270,18 +269,16 @@ export async function saveCaptions(input: SaveCaptionsInput): Promise<MediaCapti
  * and image model identifiers so ranking can decide whether each bin is
  * safe to load back in.
  */
-export async function getCaptionsEmbeddingsMeta(
-  mediaId: string,
-): Promise<{
-  sampleIntervalSec?: number;
-  embeddingModel?: string;
-  embeddingDim?: number;
-  imageEmbeddingModel?: string;
-  imageEmbeddingDim?: number;
-  contentHash?: string;
+export async function getCaptionsEmbeddingsMeta(mediaId: string): Promise<{
+  sampleIntervalSec?: number
+  embeddingModel?: string
+  embeddingDim?: number
+  imageEmbeddingModel?: string
+  imageEmbeddingDim?: number
+  contentHash?: string
 } | null> {
-  const envelope = await readAiOutput(mediaId, 'captions');
-  if (!envelope) return null;
+  const envelope = await readAiOutput(mediaId, 'captions')
+  if (!envelope) return null
   return {
     sampleIntervalSec: resolveSampleIntervalSec(envelope.data, envelope.params),
     embeddingModel: envelope.data.embeddingModel,
@@ -289,7 +286,7 @@ export async function getCaptionsEmbeddingsMeta(
     imageEmbeddingModel: envelope.data.imageEmbeddingModel,
     imageEmbeddingDim: envelope.data.imageEmbeddingDim,
     contentHash: envelope.data.contentHash,
-  };
+  }
 }
 
 /**
@@ -307,25 +304,25 @@ export async function saveCaptionEmbeddings(
   embeddingDim: number,
   opts: ContentKeyedOptions = {},
 ): Promise<void> {
-  if (vectors.length === 0) return;
-  const root = requireWorkspaceRoot();
-  const packed = new Float32Array(vectors.length * embeddingDim);
+  if (vectors.length === 0) return
+  const root = requireWorkspaceRoot()
+  const packed = new Float32Array(vectors.length * embeddingDim)
   vectors.forEach((vector, index) => {
     if (vector.length !== embeddingDim) {
       throw new Error(
         `Embedding dim mismatch at index ${index}: got ${vector.length}, expected ${embeddingDim}`,
-      );
+      )
     }
-    packed.set(vector, index * embeddingDim);
-  });
+    packed.set(vector, index * embeddingDim)
+  })
   const target = opts.contentHash
     ? contentCaptionEmbeddingsPath(opts.contentHash, opts.sampleIntervalSec)
-    : captionEmbeddingsPath(mediaId);
+    : captionEmbeddingsPath(mediaId)
   try {
-    await writeBlob(root, target, packed.buffer);
+    await writeBlob(root, target, packed.buffer)
   } catch (error) {
-    logger.error(`saveCaptionEmbeddings(${mediaId}) failed`, error);
-    throw new Error(`Failed to save caption embeddings: ${mediaId}`);
+    logger.error(`saveCaptionEmbeddings(${mediaId}) failed`, error)
+    throw new Error(`Failed to save caption embeddings: ${mediaId}`)
   }
 }
 
@@ -342,37 +339,37 @@ export async function getCaptionEmbeddings(
   expectedCount: number,
   opts: ContentKeyedOptions = {},
 ): Promise<Float32Array[] | null> {
-  if (expectedCount === 0) return [];
-  const root = requireWorkspaceRoot();
+  if (expectedCount === 0) return []
+  const root = requireWorkspaceRoot()
   const sharedTarget = opts.contentHash
     ? contentCaptionEmbeddingsPath(opts.contentHash, opts.sampleIntervalSec)
-    : null;
+    : null
   try {
-    let buffer = sharedTarget ? await readArrayBuffer(root, sharedTarget) : null;
+    let buffer = sharedTarget ? await readArrayBuffer(root, sharedTarget) : null
     if (!buffer && sharedTarget && opts.sampleIntervalSec !== undefined) {
-      buffer = await readArrayBuffer(root, contentCaptionEmbeddingsPath(opts.contentHash!));
+      buffer = await readArrayBuffer(root, contentCaptionEmbeddingsPath(opts.contentHash!))
     }
     if (!buffer) {
-      buffer = await readArrayBuffer(root, captionEmbeddingsPath(mediaId));
+      buffer = await readArrayBuffer(root, captionEmbeddingsPath(mediaId))
     }
-    if (!buffer) return null;
-    const expectedFloats = expectedCount * embeddingDim;
-    const got = buffer.byteLength / Float32Array.BYTES_PER_ELEMENT;
+    if (!buffer) return null
+    const expectedFloats = expectedCount * embeddingDim
+    const got = buffer.byteLength / Float32Array.BYTES_PER_ELEMENT
     if (got !== expectedFloats) {
       logger.warn(
         `getCaptionEmbeddings(${mediaId}): bin has ${got} floats, expected ${expectedFloats} — treating as stale`,
-      );
-      return null;
+      )
+      return null
     }
-    const packed = new Float32Array(buffer);
-    const vectors: Float32Array[] = [];
+    const packed = new Float32Array(buffer)
+    const vectors: Float32Array[] = []
     for (let i = 0; i < expectedCount; i += 1) {
-      vectors.push(packed.slice(i * embeddingDim, (i + 1) * embeddingDim));
+      vectors.push(packed.slice(i * embeddingDim, (i + 1) * embeddingDim))
     }
-    return vectors;
+    return vectors
   } catch (error) {
-    logger.warn(`getCaptionEmbeddings(${mediaId}) failed`, error);
-    return null;
+    logger.warn(`getCaptionEmbeddings(${mediaId}) failed`, error)
+    return null
   }
 }
 
@@ -380,21 +377,21 @@ export async function deleteCaptionEmbeddings(
   mediaId: string,
   opts: ContentKeyedOptions = {},
 ): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   // Always clear the per-media location — safe no-op when file is absent.
   try {
-    await removeEntry(root, captionEmbeddingsPath(mediaId));
+    await removeEntry(root, captionEmbeddingsPath(mediaId))
   } catch (error) {
-    logger.warn(`deleteCaptionEmbeddings(${mediaId}) failed`, error);
+    logger.warn(`deleteCaptionEmbeddings(${mediaId}) failed`, error)
   }
   try {
-    await removeEntry(root, captionImageEmbeddingsPath(mediaId));
+    await removeEntry(root, captionImageEmbeddingsPath(mediaId))
   } catch (error) {
-    logger.warn(`deleteCaptionImageEmbeddings(${mediaId}) failed`, error);
+    logger.warn(`deleteCaptionImageEmbeddings(${mediaId}) failed`, error)
   }
   // Shared content-tree bins are GC'd by deleteSharedCaptionsIfUnreferenced
   // when the last ref goes away; individual deletes don't touch them.
-  void opts.contentHash;
+  void opts.contentHash
 }
 
 /**
@@ -409,25 +406,25 @@ export async function saveCaptionImageEmbeddings(
   embeddingDim: number,
   opts: ContentKeyedOptions = {},
 ): Promise<void> {
-  if (vectors.length === 0) return;
-  const root = requireWorkspaceRoot();
-  const packed = new Float32Array(vectors.length * embeddingDim);
+  if (vectors.length === 0) return
+  const root = requireWorkspaceRoot()
+  const packed = new Float32Array(vectors.length * embeddingDim)
   vectors.forEach((vector, index) => {
     if (vector.length !== embeddingDim) {
       throw new Error(
         `Image embedding dim mismatch at index ${index}: got ${vector.length}, expected ${embeddingDim}`,
-      );
+      )
     }
-    packed.set(vector, index * embeddingDim);
-  });
+    packed.set(vector, index * embeddingDim)
+  })
   const target = opts.contentHash
     ? contentCaptionImageEmbeddingsPath(opts.contentHash, opts.sampleIntervalSec)
-    : captionImageEmbeddingsPath(mediaId);
+    : captionImageEmbeddingsPath(mediaId)
   try {
-    await writeBlob(root, target, packed.buffer);
+    await writeBlob(root, target, packed.buffer)
   } catch (error) {
-    logger.error(`saveCaptionImageEmbeddings(${mediaId}) failed`, error);
-    throw new Error(`Failed to save caption image embeddings: ${mediaId}`);
+    logger.error(`saveCaptionImageEmbeddings(${mediaId}) failed`, error)
+    throw new Error(`Failed to save caption image embeddings: ${mediaId}`)
   }
 }
 
@@ -437,37 +434,37 @@ export async function getCaptionImageEmbeddings(
   expectedCount: number,
   opts: ContentKeyedOptions = {},
 ): Promise<Float32Array[] | null> {
-  if (expectedCount === 0) return [];
-  const root = requireWorkspaceRoot();
+  if (expectedCount === 0) return []
+  const root = requireWorkspaceRoot()
   const sharedTarget = opts.contentHash
     ? contentCaptionImageEmbeddingsPath(opts.contentHash, opts.sampleIntervalSec)
-    : null;
+    : null
   try {
-    let buffer = sharedTarget ? await readArrayBuffer(root, sharedTarget) : null;
+    let buffer = sharedTarget ? await readArrayBuffer(root, sharedTarget) : null
     if (!buffer && sharedTarget && opts.sampleIntervalSec !== undefined) {
-      buffer = await readArrayBuffer(root, contentCaptionImageEmbeddingsPath(opts.contentHash!));
+      buffer = await readArrayBuffer(root, contentCaptionImageEmbeddingsPath(opts.contentHash!))
     }
     if (!buffer) {
-      buffer = await readArrayBuffer(root, captionImageEmbeddingsPath(mediaId));
+      buffer = await readArrayBuffer(root, captionImageEmbeddingsPath(mediaId))
     }
-    if (!buffer) return null;
-    const expectedFloats = expectedCount * embeddingDim;
-    const got = buffer.byteLength / Float32Array.BYTES_PER_ELEMENT;
+    if (!buffer) return null
+    const expectedFloats = expectedCount * embeddingDim
+    const got = buffer.byteLength / Float32Array.BYTES_PER_ELEMENT
     if (got !== expectedFloats) {
       logger.warn(
         `getCaptionImageEmbeddings(${mediaId}): bin has ${got} floats, expected ${expectedFloats} — treating as stale`,
-      );
-      return null;
+      )
+      return null
     }
-    const packed = new Float32Array(buffer);
-    const vectors: Float32Array[] = [];
+    const packed = new Float32Array(buffer)
+    const vectors: Float32Array[] = []
     for (let i = 0; i < expectedCount; i += 1) {
-      vectors.push(packed.slice(i * embeddingDim, (i + 1) * embeddingDim));
+      vectors.push(packed.slice(i * embeddingDim, (i + 1) * embeddingDim))
     }
-    return vectors;
+    return vectors
   } catch (error) {
-    logger.warn(`getCaptionImageEmbeddings(${mediaId}) failed`, error);
-    return null;
+    logger.warn(`getCaptionImageEmbeddings(${mediaId}) failed`, error)
+    return null
   }
 }
 
@@ -484,19 +481,19 @@ export async function saveCaptionThumbnail(
   blob: Blob,
   opts: ContentKeyedOptions = {},
 ): Promise<string> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   const segments = opts.contentHash
     ? contentCaptionThumbPath(opts.contentHash, index, opts.sampleIntervalSec)
-    : captionThumbPath(mediaId, index);
+    : captionThumbPath(mediaId, index)
   const relPath = opts.contentHash
     ? contentCaptionThumbRelPath(opts.contentHash, index, opts.sampleIntervalSec)
-    : captionThumbRelPath(mediaId, index);
+    : captionThumbRelPath(mediaId, index)
   try {
-    await writeBlob(root, segments, blob);
-    return relPath;
+    await writeBlob(root, segments, blob)
+    return relPath
   } catch (error) {
-    logger.error(`saveCaptionThumbnail(${mediaId}, ${index}) failed`, error);
-    throw new Error(`Failed to save caption thumbnail: ${mediaId}#${index}`);
+    logger.error(`saveCaptionThumbnail(${mediaId}, ${index}) failed`, error)
+    throw new Error(`Failed to save caption thumbnail: ${mediaId}#${index}`)
   }
 }
 
@@ -506,17 +503,15 @@ export async function saveCaptionThumbnail(
  * landed, or the directory was pruned). Works for both per-media and
  * content-tree paths since the relPath encodes the full location.
  */
-export async function getCaptionThumbnailBlob(
-  relPath: string,
-): Promise<Blob | null> {
-  const root = requireWorkspaceRoot();
-  const segments = relPath.split('/').filter(Boolean);
-  if (segments.length === 0) return null;
+export async function getCaptionThumbnailBlob(relPath: string): Promise<Blob | null> {
+  const root = requireWorkspaceRoot()
+  const segments = relPath.split('/').filter(Boolean)
+  if (segments.length === 0) return null
   try {
-    return await readBlob(root, segments);
+    return await readBlob(root, segments)
   } catch (error) {
-    logger.warn(`getCaptionThumbnailBlob(${relPath}) failed`, error);
-    return null;
+    logger.warn(`getCaptionThumbnailBlob(${relPath}) failed`, error)
+    return null
   }
 }
 
@@ -534,15 +529,19 @@ export async function probeCaptionThumbnail(
   opts: ContentKeyedOptions = {},
 ): Promise<string | null> {
   if (opts.contentHash) {
-    const shared = contentCaptionThumbRelPath(opts.contentHash, captionIndex, opts.sampleIntervalSec);
-    if (await getCaptionThumbnailBlob(shared)) return shared;
+    const shared = contentCaptionThumbRelPath(
+      opts.contentHash,
+      captionIndex,
+      opts.sampleIntervalSec,
+    )
+    if (await getCaptionThumbnailBlob(shared)) return shared
     if (opts.sampleIntervalSec !== undefined) {
-      const legacyShared = contentCaptionThumbRelPath(opts.contentHash, captionIndex);
-      if (await getCaptionThumbnailBlob(legacyShared)) return legacyShared;
+      const legacyShared = contentCaptionThumbRelPath(opts.contentHash, captionIndex)
+      if (await getCaptionThumbnailBlob(legacyShared)) return legacyShared
     }
   }
-  const local = captionThumbRelPath(mediaId, captionIndex);
-  return (await getCaptionThumbnailBlob(local)) ? local : null;
+  const local = captionThumbRelPath(mediaId, captionIndex)
+  return (await getCaptionThumbnailBlob(local)) ? local : null
 }
 
 /**
@@ -551,11 +550,11 @@ export async function probeCaptionThumbnail(
  * {@link deleteSharedCaptionsIfUnreferenced} when the last media ref drops.
  */
 export async function deleteCaptionThumbnails(mediaId: string): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    await removeEntry(root, captionThumbsDir(mediaId), { recursive: true });
+    await removeEntry(root, captionThumbsDir(mediaId), { recursive: true })
   } catch (error) {
-    logger.warn(`deleteCaptionThumbnails(${mediaId}) failed`, error);
+    logger.warn(`deleteCaptionThumbnails(${mediaId}) failed`, error)
   }
 }
 
@@ -571,41 +570,41 @@ export async function deleteSharedCaptionsIfUnreferenced(
   sampleIntervalSec?: number,
 ): Promise<void> {
   try {
-    const remaining = await removeAiContentRef(hash, mediaId, sampleIntervalSec);
+    const remaining = await removeAiContentRef(hash, mediaId, sampleIntervalSec)
     if (remaining === 0) {
       // deleteAiContent is a warn-and-continue no-op when the dir is absent.
-      await deleteAiContent(hash, sampleIntervalSec);
+      await deleteAiContent(hash, sampleIntervalSec)
     }
   } catch (error) {
-    logger.warn(`deleteSharedCaptionsIfUnreferenced(${hash}, ${mediaId}) failed`, error);
+    logger.warn(`deleteSharedCaptionsIfUnreferenced(${hash}, ${mediaId}) failed`, error)
   }
 }
 
 export async function deleteCaptions(mediaId: string): Promise<void> {
   // Read the envelope first so we know whether a shared cache ref needs to
   // be released. Missing envelope means there's nothing to deref.
-  let contentHash: string | undefined;
-  let sampleIntervalSec: number | undefined;
+  let contentHash: string | undefined
+  let sampleIntervalSec: number | undefined
   try {
-    const envelope = await readAiOutput(mediaId, 'captions');
-    contentHash = envelope?.data.contentHash;
-    sampleIntervalSec = resolveSampleIntervalSec(envelope?.data, envelope?.params);
+    const envelope = await readAiOutput(mediaId, 'captions')
+    contentHash = envelope?.data.contentHash
+    sampleIntervalSec = resolveSampleIntervalSec(envelope?.data, envelope?.params)
   } catch {
-    contentHash = undefined;
-    sampleIntervalSec = undefined;
+    contentHash = undefined
+    sampleIntervalSec = undefined
   }
 
   try {
-    await deleteAiOutput(mediaId, 'captions');
-    await deleteCaptionThumbnails(mediaId);
-    await deleteCaptionEmbeddings(mediaId);
+    await deleteAiOutput(mediaId, 'captions')
+    await deleteCaptionThumbnails(mediaId)
+    await deleteCaptionEmbeddings(mediaId)
   } catch (error) {
-    logger.error(`deleteCaptions(${mediaId}) failed`, error);
-    throw new Error(`Failed to delete captions: ${mediaId}`);
+    logger.error(`deleteCaptions(${mediaId}) failed`, error)
+    throw new Error(`Failed to delete captions: ${mediaId}`)
   }
 
   if (contentHash) {
-    await deleteSharedCaptionsIfUnreferenced(contentHash, mediaId, sampleIntervalSec);
+    await deleteSharedCaptionsIfUnreferenced(contentHash, mediaId, sampleIntervalSec)
   }
 }
 
@@ -625,9 +624,9 @@ export async function adoptCaptionsFromCache(
   hash: string,
   sampleIntervalSec?: number,
 ): Promise<AiOutput<'captions'> | undefined> {
-  const resolved = await resolveSharedCaptionCache(hash, sampleIntervalSec);
-  if (!resolved) return undefined;
-  const { envelope, sampleIntervalSec: resolvedInterval } = resolved;
+  const resolved = await resolveSharedCaptionCache(hash, sampleIntervalSec)
+  if (!resolved) return undefined
+  const { envelope, sampleIntervalSec: resolvedInterval } = resolved
 
   const adoptedEnvelope: AiOutput<'captions'> = {
     ...envelope,
@@ -636,7 +635,7 @@ export async function adoptCaptionsFromCache(
       contentHash: hash,
       sampleIntervalSec: resolvedInterval ?? envelope.data.sampleIntervalSec,
     },
-  };
+  }
 
   try {
     await writeAiOutputAt(aiOutputPath(mediaId, 'captions'), {
@@ -646,21 +645,21 @@ export async function adoptCaptionsFromCache(
       model: envelope.model,
       params: envelope.params,
       data: adoptedEnvelope.data,
-    });
-    await addAiContentRef(hash, mediaId, resolvedInterval);
-    return adoptedEnvelope;
+    })
+    await addAiContentRef(hash, mediaId, resolvedInterval)
+    return adoptedEnvelope
   } catch (error) {
-    logger.warn(`adoptCaptionsFromCache(${mediaId}, ${hash}) failed`, error);
+    logger.warn(`adoptCaptionsFromCache(${mediaId}, ${hash}) failed`, error)
     // On failure the mediaId has no local envelope — caller should fall
     // through to regenerating captions rather than trusting a partial state.
     try {
       await deleteAiOutputAt(
         aiOutputPath(mediaId, 'captions'),
         `adoptCaptionsFromCache: rollback ${mediaId}`,
-      );
+      )
     } catch {
       // ignore rollback failure; worst case is a stale envelope on disk
     }
-    return undefined;
+    return undefined
   }
 }

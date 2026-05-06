@@ -1,35 +1,31 @@
-export type TranscriptionProgressStage = 'queued' | 'loading' | 'decoding' | 'transcribing';
+export type TranscriptionProgressStage = 'queued' | 'loading' | 'decoding' | 'transcribing'
 
 export interface TranscriptionProgressSnapshot {
-  stage: TranscriptionProgressStage;
-  progress: number;
+  stage: TranscriptionProgressStage
+  progress: number
 }
 
 function clampProgress(progress: number): number {
-  return Math.max(0, Math.min(1, progress));
+  return Math.max(0, Math.min(1, progress))
 }
 
-export function getTranscriptionOverallProgress(
-  snapshot: TranscriptionProgressSnapshot,
-): number {
-  const normalizedProgress = clampProgress(snapshot.progress);
+export function getTranscriptionOverallProgress(snapshot: TranscriptionProgressSnapshot): number {
+  const normalizedProgress = clampProgress(snapshot.progress)
 
   switch (snapshot.stage) {
     case 'queued':
-      return 0;
+      return 0
     case 'loading':
-      return normalizedProgress * 0.35;
+      return normalizedProgress * 0.35
     case 'decoding':
-      return 0.35 + normalizedProgress * 0.35;
+      return 0.35 + normalizedProgress * 0.35
     case 'transcribing':
-      return 0.7 + normalizedProgress * 0.3;
+      return 0.7 + normalizedProgress * 0.3
   }
 }
 
-export function getTranscriptionOverallPercent(
-  snapshot: TranscriptionProgressSnapshot,
-): number {
-  return getTranscriptionOverallProgress(snapshot) * 100;
+export function getTranscriptionOverallPercent(snapshot: TranscriptionProgressSnapshot): number {
+  return getTranscriptionOverallProgress(snapshot) * 100
 }
 
 export function mergeTranscriptionProgress(
@@ -39,26 +35,27 @@ export function mergeTranscriptionProgress(
   const normalizedNext = {
     stage: next.stage,
     progress: clampProgress(next.progress),
-  } satisfies TranscriptionProgressSnapshot;
+  } satisfies TranscriptionProgressSnapshot
 
   if (!previous) {
-    return normalizedNext;
+    return normalizedNext
   }
 
-  return getTranscriptionOverallProgress(normalizedNext) >= getTranscriptionOverallProgress(previous)
+  return getTranscriptionOverallProgress(normalizedNext) >=
+    getTranscriptionOverallProgress(previous)
     ? normalizedNext
-    : previous;
+    : previous
 }
 
 export function getTranscriptionStageLabel(stage: TranscriptionProgressStage): string {
   switch (stage) {
     case 'queued':
-      return 'Queued';
+      return 'Queued'
     case 'loading':
-      return 'Loading model';
+      return 'Loading model'
     case 'decoding':
-      return 'Preparing audio';
+      return 'Preparing audio'
     case 'transcribing':
-      return 'Transcribing';
+      return 'Transcribing'
   }
 }

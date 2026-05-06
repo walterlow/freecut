@@ -1,1 +1,1 @@
-export { useSelectionStore } from '@/shared/state/selection';
+export { useSelectionStore } from '@/shared/state/selection'

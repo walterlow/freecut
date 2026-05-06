@@ -1,4 +1,4 @@
-﻿/**
+/**
  * OPFS Waveform Storage
  *
  * Multi-resolution binary format for efficient waveform storage with random access:
@@ -27,51 +27,49 @@
  *   - Level 3: 10 samples/sec (overview)
  */
 
-import { createLogger } from '@/shared/logging/logger';
-import { getCacheMigration } from '@/infrastructure/storage/cache-version';
+import { createLogger } from '@/shared/logging/logger'
+import { getCacheMigration } from '@/infrastructure/storage/cache-version'
 import {
   mirrorBytesToWorkspace,
   readWorkspaceBlob,
   removeWorkspaceCacheEntry,
-} from '@/infrastructure/storage/workspace-fs/cache-mirror';
-import {
-  waveformMultiResPath,
-} from '@/infrastructure/storage/workspace-fs/paths';
+} from '@/infrastructure/storage/workspace-fs/cache-mirror'
+import { waveformMultiResPath } from '@/infrastructure/storage/workspace-fs/paths'
 
-const logger = createLogger('WaveformOPFS');
+const logger = createLogger('WaveformOPFS')
 
-const MAGIC = 'WFORM';
-const BINARY_VERSION = 1; // Version stored in file header (for parsing)
-const HEADER_SIZE = 48;
-const LEVEL_INDEX_SIZE = 12;
-const WAVEFORM_DIR = 'waveforms';
+const MAGIC = 'WFORM'
+const BINARY_VERSION = 1 // Version stored in file header (for parsing)
+const HEADER_SIZE = 48
+const LEVEL_INDEX_SIZE = 12
+const WAVEFORM_DIR = 'waveforms'
 
 // Multi-resolution levels (samples per second)
-export const WAVEFORM_LEVELS = [1000, 200, 50, 10] as const;
+export const WAVEFORM_LEVELS = [1000, 200, 50, 10] as const
 
 function getFloatsPerSample(channels: number): number {
-  return channels >= 2 ? 2 : 1;
+  return channels >= 2 ? 2 : 1
 }
 
 interface WaveformHeader {
-  duration: number;
-  channels: number;
-  levelCount: number;
+  duration: number
+  channels: number
+  levelCount: number
 }
 
 interface LevelIndex {
-  sampleRate: number;
-  sampleCount: number;
-  offset: number;
+  sampleRate: number
+  sampleCount: number
+  offset: number
 }
 
 export interface MultiResolutionWaveform {
-  duration: number;
-  channels: number;
+  duration: number
+  channels: number
   levels: {
-    sampleRate: number;
-    peaks: Float32Array;
-  }[];
+    sampleRate: number
+    peaks: Float32Array
+  }[]
 }
 
 /**
@@ -80,14 +78,14 @@ export interface MultiResolutionWaveform {
  */
 export function chooseLevelForZoom(pixelsPerSecond: number): number {
   // Bars are typically 2-3 pixels wide, so we want ~1 sample per 3 pixels
-  const desiredSamplesPerSecond = pixelsPerSecond / 3;
+  const desiredSamplesPerSecond = pixelsPerSecond / 3
 
   for (let i = 0; i < WAVEFORM_LEVELS.length; i++) {
     if (WAVEFORM_LEVELS[i]! <= desiredSamplesPerSecond * 2) {
-      return i;
+      return i
     }
   }
-  return WAVEFORM_LEVELS.length - 1;
+  return WAVEFORM_LEVELS.length - 1
 }
 
 /**
@@ -95,22 +93,22 @@ export function chooseLevelForZoom(pixelsPerSecond: number): number {
  * Provides efficient multi-resolution binary storage with range-based access
  */
 class WaveformOPFSStorage {
-  private rootHandle: FileSystemDirectoryHandle | null = null;
-  private dirHandle: FileSystemDirectoryHandle | null = null;
-  private initPromise: Promise<FileSystemDirectoryHandle> | null = null;
+  private rootHandle: FileSystemDirectoryHandle | null = null
+  private dirHandle: FileSystemDirectoryHandle | null = null
+  private initPromise: Promise<FileSystemDirectoryHandle> | null = null
 
   /**
    * Initialize OPFS directory (with migration)
    */
   private async ensureDirectory(): Promise<FileSystemDirectoryHandle> {
     // Return cached handle if ready
-    if (this.dirHandle) return this.dirHandle;
+    if (this.dirHandle) return this.dirHandle
 
     // Ensure only one initialization runs
-    if (this.initPromise) return this.initPromise;
+    if (this.initPromise) return this.initPromise
 
-    this.initPromise = this.initializeWithMigration();
-    return this.initPromise;
+    this.initPromise = this.initializeWithMigration()
+    return this.initPromise
   }
 
   /**
@@ -118,34 +116,36 @@ class WaveformOPFSStorage {
    */
   private async initializeWithMigration(): Promise<FileSystemDirectoryHandle> {
     try {
-      this.rootHandle = await navigator.storage.getDirectory();
+      this.rootHandle = await navigator.storage.getDirectory()
       const dir = await this.rootHandle.getDirectoryHandle(WAVEFORM_DIR, {
         create: true,
-      });
+      })
 
       // Run migration BEFORE setting dirHandle (blocks all access until complete)
-      const migration = getCacheMigration('waveform');
+      const migration = getCacheMigration('waveform')
       if (migration.needsMigration) {
-        const entries: string[] = [];
+        const entries: string[] = []
         for await (const entry of dir.values()) {
           if (entry.kind === 'file') {
-            entries.push(entry.name);
+            entries.push(entry.name)
           }
         }
 
         for (const name of entries) {
-          await dir.removeEntry(name).catch(() => {});
+          await dir.removeEntry(name).catch(() => {})
         }
 
-        migration.markComplete();
-        logger.info(`Waveform cache version updated: v${migration.oldVersion ?? 'none'} â†’ v${migration.newVersion}${entries.length > 0 ? ` (cleared ${entries.length} files)` : ''}`)
+        migration.markComplete()
+        logger.info(
+          `Waveform cache version updated: v${migration.oldVersion ?? 'none'} â†’ v${migration.newVersion}${entries.length > 0 ? ` (cleared ${entries.length} files)` : ''}`,
+        )
       }
 
-      this.dirHandle = dir;
-      return dir;
+      this.dirHandle = dir
+      return dir
     } catch (error) {
-      logger.error('Failed to initialize OPFS waveform directory:', error);
-      throw error;
+      logger.error('Failed to initialize OPFS waveform directory:', error)
+      throw error
     }
   }
 
@@ -153,25 +153,25 @@ class WaveformOPFSStorage {
    * Write header to buffer
    */
   private writeHeader(view: DataView, header: WaveformHeader): void {
-    let offset = 0;
+    let offset = 0
 
     // Magic bytes
     for (let i = 0; i < MAGIC.length; i++) {
-      view.setUint8(offset++, MAGIC.charCodeAt(i));
+      view.setUint8(offset++, MAGIC.charCodeAt(i))
     }
 
     // Version
-    view.setUint8(offset++, BINARY_VERSION);
+    view.setUint8(offset++, BINARY_VERSION)
 
     // Duration (float32)
-    view.setFloat32(offset, header.duration, true);
-    offset += 4;
+    view.setFloat32(offset, header.duration, true)
+    offset += 4
 
     // Channels
-    view.setUint8(offset++, header.channels);
+    view.setUint8(offset++, header.channels)
 
     // Level count
-    view.setUint8(offset++, header.levelCount);
+    view.setUint8(offset++, header.levelCount)
 
     // Reserved bytes (remaining up to HEADER_SIZE)
   }
@@ -180,50 +180,46 @@ class WaveformOPFSStorage {
    * Read header from buffer
    */
   private readHeader(view: DataView): WaveformHeader | null {
-    let offset = 0;
+    let offset = 0
 
     // Verify magic
-    let magic = '';
+    let magic = ''
     for (let i = 0; i < MAGIC.length; i++) {
-      magic += String.fromCharCode(view.getUint8(offset++));
+      magic += String.fromCharCode(view.getUint8(offset++))
     }
     if (magic !== MAGIC) {
-      logger.warn('Invalid waveform magic bytes');
-      return null;
+      logger.warn('Invalid waveform magic bytes')
+      return null
     }
 
     // Check version
-    const version = view.getUint8(offset++);
+    const version = view.getUint8(offset++)
     if (version !== BINARY_VERSION) {
       // Old version - will be auto-cleared by migration
-      return null;
+      return null
     }
 
     // Duration
-    const duration = view.getFloat32(offset, true);
-    offset += 4;
+    const duration = view.getFloat32(offset, true)
+    offset += 4
 
     // Channels
-    const channels = view.getUint8(offset++);
+    const channels = view.getUint8(offset++)
 
     // Level count
-    const levelCount = view.getUint8(offset);
+    const levelCount = view.getUint8(offset)
 
-    return { duration, channels, levelCount };
+    return { duration, channels, levelCount }
   }
 
   /**
    * Write level index entry
    */
-  private writeLevelIndex(
-    view: DataView,
-    index: number,
-    entry: LevelIndex
-  ): void {
-    const offset = HEADER_SIZE + index * LEVEL_INDEX_SIZE;
-    view.setUint16(offset, entry.sampleRate, true);
-    view.setUint32(offset + 2, entry.sampleCount, true);
-    view.setUint32(offset + 6, entry.offset, true);
+  private writeLevelIndex(view: DataView, index: number, entry: LevelIndex): void {
+    const offset = HEADER_SIZE + index * LEVEL_INDEX_SIZE
+    view.setUint16(offset, entry.sampleRate, true)
+    view.setUint32(offset + 2, entry.sampleCount, true)
+    view.setUint32(offset + 6, entry.offset, true)
     // 2 bytes reserved
   }
 
@@ -231,12 +227,12 @@ class WaveformOPFSStorage {
    * Read level index entry
    */
   private readLevelIndex(view: DataView, index: number): LevelIndex {
-    const offset = HEADER_SIZE + index * LEVEL_INDEX_SIZE;
+    const offset = HEADER_SIZE + index * LEVEL_INDEX_SIZE
     return {
       sampleRate: view.getUint16(offset, true),
       sampleCount: view.getUint32(offset + 2, true),
       offset: view.getUint32(offset + 6, true),
-    };
+    }
   }
 
   /**
@@ -246,138 +242,135 @@ class WaveformOPFSStorage {
     sourcePeaks: Float32Array,
     sourceSampleRate: number,
     duration: number,
-    channels: number = 1
+    channels: number = 1,
   ): { sampleRate: number; peaks: Float32Array }[] {
-    const stereo = channels >= 2;
-    const levels: { sampleRate: number; peaks: Float32Array }[] = [];
+    const stereo = channels >= 2
+    const levels: { sampleRate: number; peaks: Float32Array }[] = []
 
     for (const targetRate of WAVEFORM_LEVELS) {
       if (targetRate >= sourceSampleRate) {
         // Can't upsample, use source directly or skip
         if (levels.length === 0) {
           // First level - use source as-is
-          levels.push({ sampleRate: sourceSampleRate, peaks: sourcePeaks });
+          levels.push({ sampleRate: sourceSampleRate, peaks: sourcePeaks })
         }
-        continue;
+        continue
       }
 
       // Downsample from source
-      const numSamples = Math.ceil(duration * targetRate);
-      const ratio = sourceSampleRate / targetRate;
+      const numSamples = Math.ceil(duration * targetRate)
+      const ratio = sourceSampleRate / targetRate
 
       if (stereo) {
         // Interleaved L/R: downsample each channel independently
-        const downsampled = new Float32Array(numSamples * 2);
-        const sourcePerChannel = sourcePeaks.length / 2;
+        const downsampled = new Float32Array(numSamples * 2)
+        const sourcePerChannel = sourcePeaks.length / 2
 
         for (let i = 0; i < numSamples; i++) {
-          const startIdx = Math.floor(i * ratio);
-          const endIdx = Math.min(Math.floor((i + 1) * ratio), sourcePerChannel);
+          const startIdx = Math.floor(i * ratio)
+          const endIdx = Math.min(Math.floor((i + 1) * ratio), sourcePerChannel)
 
-          let maxL = 0;
-          let maxR = 0;
+          let maxL = 0
+          let maxR = 0
           for (let j = startIdx; j < endIdx; j++) {
-            const lVal = sourcePeaks[j * 2] ?? 0;
-            const rVal = sourcePeaks[j * 2 + 1] ?? 0;
-            if (lVal > maxL) maxL = lVal;
-            if (rVal > maxR) maxR = rVal;
+            const lVal = sourcePeaks[j * 2] ?? 0
+            const rVal = sourcePeaks[j * 2 + 1] ?? 0
+            if (lVal > maxL) maxL = lVal
+            if (rVal > maxR) maxR = rVal
           }
-          downsampled[i * 2] = maxL;
-          downsampled[i * 2 + 1] = maxR;
+          downsampled[i * 2] = maxL
+          downsampled[i * 2 + 1] = maxR
         }
 
-        levels.push({ sampleRate: targetRate, peaks: downsampled });
+        levels.push({ sampleRate: targetRate, peaks: downsampled })
       } else {
         // Mono: original behavior
-        const downsampled = new Float32Array(numSamples);
+        const downsampled = new Float32Array(numSamples)
 
         for (let i = 0; i < numSamples; i++) {
-          const startIdx = Math.floor(i * ratio);
-          const endIdx = Math.min(Math.floor((i + 1) * ratio), sourcePeaks.length);
+          const startIdx = Math.floor(i * ratio)
+          const endIdx = Math.min(Math.floor((i + 1) * ratio), sourcePeaks.length)
 
-          let maxPeak = 0;
+          let maxPeak = 0
           for (let j = startIdx; j < endIdx; j++) {
-            const val = sourcePeaks[j] ?? 0;
-            if (val > maxPeak) maxPeak = val;
+            const val = sourcePeaks[j] ?? 0
+            if (val > maxPeak) maxPeak = val
           }
-          downsampled[i] = maxPeak;
+          downsampled[i] = maxPeak
         }
 
-        levels.push({ sampleRate: targetRate, peaks: downsampled });
+        levels.push({ sampleRate: targetRate, peaks: downsampled })
       }
     }
 
-    return levels;
+    return levels
   }
 
   /**
    * Save waveform to OPFS with multi-resolution levels
    */
-  async save(
-    mediaId: string,
-    waveform: MultiResolutionWaveform
-  ): Promise<void> {
-    const dir = await this.ensureDirectory();
-    const fileName = `${mediaId}.bin`;
+  async save(mediaId: string, waveform: MultiResolutionWaveform): Promise<void> {
+    const dir = await this.ensureDirectory()
+    const fileName = `${mediaId}.bin`
 
     try {
-      const levelCount = waveform.levels.length;
-      const indexSize = levelCount * LEVEL_INDEX_SIZE;
-      const headerAndIndexSize = HEADER_SIZE + indexSize;
+      const levelCount = waveform.levels.length
+      const indexSize = levelCount * LEVEL_INDEX_SIZE
+      const headerAndIndexSize = HEADER_SIZE + indexSize
 
       // Calculate total data size
-      let totalDataSize = 0;
+      let totalDataSize = 0
       for (const level of waveform.levels) {
-        totalDataSize += level.peaks.byteLength;
+        totalDataSize += level.peaks.byteLength
       }
 
       // Create buffer
-      const totalSize = headerAndIndexSize + totalDataSize;
-      const buffer = new ArrayBuffer(totalSize);
-      const view = new DataView(buffer);
-      const uint8 = new Uint8Array(buffer);
+      const totalSize = headerAndIndexSize + totalDataSize
+      const buffer = new ArrayBuffer(totalSize)
+      const view = new DataView(buffer)
+      const uint8 = new Uint8Array(buffer)
 
       // Write header
       this.writeHeader(view, {
         duration: waveform.duration,
         channels: waveform.channels,
         levelCount,
-      });
+      })
 
       // Write index and data
-      let dataOffset = headerAndIndexSize;
+      let dataOffset = headerAndIndexSize
       for (let i = 0; i < levelCount; i++) {
-        const level = waveform.levels[i]!;
-        const floatsPerSample = getFloatsPerSample(waveform.channels);
+        const level = waveform.levels[i]!
+        const floatsPerSample = getFloatsPerSample(waveform.channels)
 
         // Write index entry
         this.writeLevelIndex(view, i, {
           sampleRate: level.sampleRate,
           sampleCount: level.peaks.length / floatsPerSample,
           offset: dataOffset,
-        });
+        })
 
         // Write level data
-        uint8.set(new Uint8Array(level.peaks.buffer), dataOffset);
-        dataOffset += level.peaks.byteLength;
+        uint8.set(new Uint8Array(level.peaks.buffer), dataOffset)
+        dataOffset += level.peaks.byteLength
       }
 
       // Write to OPFS
-      const fileHandle = await dir.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(buffer);
-      await writable.close();
+      const fileHandle = await dir.getFileHandle(fileName, { create: true })
+      const writable = await fileHandle.createWritable()
+      await writable.write(buffer)
+      await writable.close()
 
       // Mirror the binary to the workspace folder so other origins can reuse
       // the multi-resolution waveform without regenerating. Fire-and-forget.
-      void mirrorBytesToWorkspace(waveformMultiResPath(mediaId), buffer);
+      void mirrorBytesToWorkspace(waveformMultiResPath(mediaId), buffer)
 
       logger.debug(
-        `Saved waveform ${mediaId}: ${levelCount} levels, ${(totalSize / 1024).toFixed(1)}KB`
-      );
+        `Saved waveform ${mediaId}: ${levelCount} levels, ${(totalSize / 1024).toFixed(1)}KB`,
+      )
     } catch (error) {
-      logger.error(`Failed to save waveform ${mediaId}:`, error);
-      throw error;
+      logger.error(`Failed to save waveform ${mediaId}:`, error)
+      throw error
     }
   }
 
@@ -386,11 +379,11 @@ class WaveformOPFSStorage {
    */
   async exists(mediaId: string): Promise<boolean> {
     try {
-      const dir = await this.ensureDirectory();
-      await dir.getFileHandle(`${mediaId}.bin`);
-      return true;
+      const dir = await this.ensureDirectory()
+      await dir.getFileHandle(`${mediaId}.bin`)
+      return true
     } catch {
-      return false;
+      return false
     }
   }
 
@@ -401,20 +394,20 @@ class WaveformOPFSStorage {
    */
   private async hydrateFromWorkspace(mediaId: string): Promise<boolean> {
     try {
-      const blob = await readWorkspaceBlob(waveformMultiResPath(mediaId));
-      if (!blob || blob.size === 0) return false;
+      const blob = await readWorkspaceBlob(waveformMultiResPath(mediaId))
+      if (!blob || blob.size === 0) return false
 
-      const bytes = await blob.arrayBuffer();
-      const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(bytes);
-      await writable.close();
-      logger.debug(`Hydrated waveform ${mediaId} from workspace`);
-      return true;
+      const bytes = await blob.arrayBuffer()
+      const dir = await this.ensureDirectory()
+      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`, { create: true })
+      const writable = await fileHandle.createWritable()
+      await writable.write(bytes)
+      await writable.close()
+      logger.debug(`Hydrated waveform ${mediaId} from workspace`)
+      return true
     } catch (error) {
-      logger.warn(`hydrateFromWorkspace(${mediaId}) failed`, error);
-      return false;
+      logger.warn(`hydrateFromWorkspace(${mediaId}) failed`, error)
+      return false
     }
   }
 
@@ -422,39 +415,37 @@ class WaveformOPFSStorage {
    * Get waveform metadata without loading data
    */
   async getMetadata(
-    mediaId: string
+    mediaId: string,
   ): Promise<{ header: WaveformHeader; levels: LevelIndex[] } | null> {
     try {
-      const dir = await this.ensureDirectory();
-      let fileHandle: FileSystemFileHandle;
+      const dir = await this.ensureDirectory()
+      let fileHandle: FileSystemFileHandle
       try {
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
       } catch {
-        if (!(await this.hydrateFromWorkspace(mediaId))) return null;
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+        if (!(await this.hydrateFromWorkspace(mediaId))) return null
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
       }
-      const file = await fileHandle.getFile();
+      const file = await fileHandle.getFile()
 
       // Read header
-      const headerBuffer = await file.slice(0, HEADER_SIZE).arrayBuffer();
-      const header = this.readHeader(new DataView(headerBuffer));
-      if (!header) return null;
+      const headerBuffer = await file.slice(0, HEADER_SIZE).arrayBuffer()
+      const header = this.readHeader(new DataView(headerBuffer))
+      if (!header) return null
 
       // Read level index
-      const indexSize = header.levelCount * LEVEL_INDEX_SIZE;
-      const indexBuffer = await file
-        .slice(HEADER_SIZE, HEADER_SIZE + indexSize)
-        .arrayBuffer();
-      const indexView = new DataView(indexBuffer);
+      const indexSize = header.levelCount * LEVEL_INDEX_SIZE
+      const indexBuffer = await file.slice(HEADER_SIZE, HEADER_SIZE + indexSize).arrayBuffer()
+      const indexView = new DataView(indexBuffer)
 
-      const levels: LevelIndex[] = [];
+      const levels: LevelIndex[] = []
       for (let i = 0; i < header.levelCount; i++) {
-        levels.push(this.readLevelIndex(indexView, i));
+        levels.push(this.readLevelIndex(indexView, i))
       }
 
-      return { header, levels };
+      return { header, levels }
     } catch {
-      return null;
+      return null
     }
   }
 
@@ -463,52 +454,52 @@ class WaveformOPFSStorage {
    */
   async getLevel(
     mediaId: string,
-    levelIndex: number
+    levelIndex: number,
   ): Promise<{ sampleRate: number; peaks: Float32Array; channels: number } | null> {
     try {
-      const dir = await this.ensureDirectory();
-      let fileHandle;
+      const dir = await this.ensureDirectory()
+      let fileHandle
       try {
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
       } catch {
-        if (!(await this.hydrateFromWorkspace(mediaId))) return null;
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+        if (!(await this.hydrateFromWorkspace(mediaId))) return null
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
       }
 
-      const file = await fileHandle.getFile();
+      const file = await fileHandle.getFile()
 
       // Read entire file at once to avoid OPFS concurrency issues with multiple slice() calls
-      const buffer = await file.arrayBuffer();
-      const view = new DataView(buffer);
+      const buffer = await file.arrayBuffer()
+      const view = new DataView(buffer)
 
       // Parse header
-      const header = this.readHeader(view);
+      const header = this.readHeader(view)
       if (!header || levelIndex >= header.levelCount) {
-        return null;
+        return null
       }
 
       // Read level index and extract data
-      const level = this.readLevelIndex(view, levelIndex);
-      const floatsPerSample = getFloatsPerSample(header.channels);
-      const dataSize = level.sampleCount * floatsPerSample * 4; // Float32 = 4 bytes
-      const peaks = new Float32Array(buffer.slice(level.offset, level.offset + dataSize));
+      const level = this.readLevelIndex(view, levelIndex)
+      const floatsPerSample = getFloatsPerSample(header.channels)
+      const dataSize = level.sampleCount * floatsPerSample * 4 // Float32 = 4 bytes
+      const peaks = new Float32Array(buffer.slice(level.offset, level.offset + dataSize))
       return {
         sampleRate: level.sampleRate,
         peaks,
         channels: header.channels,
-      };
+      }
     } catch (error) {
       // NotFoundError is expected when cache doesn't exist - return null silently
       if (error instanceof DOMException && error.name === 'NotFoundError') {
-        return null;
+        return null
       }
       // RangeError means corrupted/old format data - silently delete so it regenerates
       if (error instanceof RangeError) {
-        await this.delete(mediaId).catch(() => {});
-        return null;
+        await this.delete(mediaId).catch(() => {})
+        return null
       }
-      logger.error(`Failed to get waveform level ${levelIndex} for ${mediaId}:`, error);
-      return null;
+      logger.error(`Failed to get waveform level ${levelIndex} for ${mediaId}:`, error)
+      return null
     }
   }
 
@@ -520,59 +511,56 @@ class WaveformOPFSStorage {
     mediaId: string,
     levelIndex: number,
     startTime: number,
-    endTime: number
+    endTime: number,
   ): Promise<{ sampleRate: number; peaks: Float32Array; startSample: number } | null> {
     try {
-      const dir = await this.ensureDirectory();
-      let fileHandle;
+      const dir = await this.ensureDirectory()
+      let fileHandle
       try {
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
       } catch {
-        if (!(await this.hydrateFromWorkspace(mediaId))) return null;
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+        if (!(await this.hydrateFromWorkspace(mediaId))) return null
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
       }
-      const file = await fileHandle.getFile();
+      const file = await fileHandle.getFile()
 
       // Read entire file at once to avoid OPFS concurrency issues
-      const buffer = await file.arrayBuffer();
-      const view = new DataView(buffer);
+      const buffer = await file.arrayBuffer()
+      const view = new DataView(buffer)
 
       // Parse header
-      const header = this.readHeader(view);
-      if (!header || levelIndex >= header.levelCount) return null;
+      const header = this.readHeader(view)
+      if (!header || levelIndex >= header.levelCount) return null
 
       // Read level index
-      const level = this.readLevelIndex(view, levelIndex);
-      const floatsPerSample = getFloatsPerSample(header.channels);
+      const level = this.readLevelIndex(view, levelIndex)
+      const floatsPerSample = getFloatsPerSample(header.channels)
 
       // Calculate sample range
-      const startSample = Math.max(0, Math.floor(startTime * level.sampleRate));
-      const endSample = Math.min(
-        level.sampleCount,
-        Math.ceil(endTime * level.sampleRate)
-      );
-      const sampleCount = endSample - startSample;
+      const startSample = Math.max(0, Math.floor(startTime * level.sampleRate))
+      const endSample = Math.min(level.sampleCount, Math.ceil(endTime * level.sampleRate))
+      const sampleCount = endSample - startSample
 
-      if (sampleCount <= 0) return null;
+      if (sampleCount <= 0) return null
 
       // Extract range from buffer
-      const rangeOffset = level.offset + startSample * floatsPerSample * 4;
-      const rangeSize = sampleCount * floatsPerSample * 4;
-      const peaks = new Float32Array(buffer.slice(rangeOffset, rangeOffset + rangeSize));
+      const rangeOffset = level.offset + startSample * floatsPerSample * 4
+      const rangeSize = sampleCount * floatsPerSample * 4
+      const peaks = new Float32Array(buffer.slice(rangeOffset, rangeOffset + rangeSize))
 
       return {
         sampleRate: level.sampleRate,
         peaks,
         startSample,
-      };
+      }
     } catch (error) {
       // RangeError means corrupted/old format data - silently delete so it regenerates
       if (error instanceof RangeError) {
-        await this.delete(mediaId).catch(() => {});
-        return null;
+        await this.delete(mediaId).catch(() => {})
+        return null
       }
-      logger.error(`Failed to get waveform range for ${mediaId}:`, error);
-      return null;
+      logger.error(`Failed to get waveform range for ${mediaId}:`, error)
+      return null
     }
   }
 
@@ -581,40 +569,40 @@ class WaveformOPFSStorage {
    */
   async getAllLevels(mediaId: string): Promise<MultiResolutionWaveform | null> {
     try {
-      const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
-      const file = await fileHandle.getFile();
+      const dir = await this.ensureDirectory()
+      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
+      const file = await fileHandle.getFile()
 
       // Read entire file
-      const buffer = await file.arrayBuffer();
-      const view = new DataView(buffer);
+      const buffer = await file.arrayBuffer()
+      const view = new DataView(buffer)
 
       // Parse header
-      const header = this.readHeader(view);
-      if (!header) return null;
+      const header = this.readHeader(view)
+      if (!header) return null
 
       // Parse levels
-      const levels: { sampleRate: number; peaks: Float32Array }[] = [];
+      const levels: { sampleRate: number; peaks: Float32Array }[] = []
       for (let i = 0; i < header.levelCount; i++) {
-        const levelIndex = this.readLevelIndex(view, i);
-        const floatsPerSample = getFloatsPerSample(header.channels);
-        const dataSize = levelIndex.sampleCount * floatsPerSample * 4;
+        const levelIndex = this.readLevelIndex(view, i)
+        const floatsPerSample = getFloatsPerSample(header.channels)
+        const dataSize = levelIndex.sampleCount * floatsPerSample * 4
         const peaks = new Float32Array(
-          buffer.slice(levelIndex.offset, levelIndex.offset + dataSize)
-        );
+          buffer.slice(levelIndex.offset, levelIndex.offset + dataSize),
+        )
         levels.push({
           sampleRate: levelIndex.sampleRate,
           peaks,
-        });
+        })
       }
 
       return {
         duration: header.duration,
         channels: header.channels,
         levels,
-      };
+      }
     } catch {
-      return null;
+      return null
     }
   }
 
@@ -623,12 +611,12 @@ class WaveformOPFSStorage {
    */
   async delete(mediaId: string): Promise<void> {
     try {
-      const dir = await this.ensureDirectory();
-      await dir.removeEntry(`${mediaId}.bin`);
+      const dir = await this.ensureDirectory()
+      await dir.removeEntry(`${mediaId}.bin`)
     } catch {
       // File may not exist, ignore
     }
-    void removeWorkspaceCacheEntry(waveformMultiResPath(mediaId));
+    void removeWorkspaceCacheEntry(waveformMultiResPath(mediaId))
   }
 
   /**
@@ -636,18 +624,18 @@ class WaveformOPFSStorage {
    */
   async list(): Promise<string[]> {
     try {
-      const dir = await this.ensureDirectory();
-      const mediaIds: string[] = [];
+      const dir = await this.ensureDirectory()
+      const mediaIds: string[] = []
 
       for await (const entry of dir.values()) {
         if (entry.kind === 'file' && entry.name.endsWith('.bin')) {
-          mediaIds.push(entry.name.replace('.bin', ''));
+          mediaIds.push(entry.name.replace('.bin', ''))
         }
       }
 
-      return mediaIds;
+      return mediaIds
     } catch {
-      return [];
+      return []
     }
   }
 
@@ -656,22 +644,22 @@ class WaveformOPFSStorage {
    */
   async getStorageUsage(): Promise<{ count: number; totalBytes: number }> {
     try {
-      const dir = await this.ensureDirectory();
-      let count = 0;
-      let totalBytes = 0;
+      const dir = await this.ensureDirectory()
+      let count = 0
+      let totalBytes = 0
 
       for await (const entry of dir.values()) {
         if (entry.kind === 'file' && entry.name.endsWith('.bin')) {
-          count++;
-          const fileHandle = await dir.getFileHandle(entry.name);
-          const file = await fileHandle.getFile();
-          totalBytes += file.size;
+          count++
+          const fileHandle = await dir.getFileHandle(entry.name)
+          const file = await fileHandle.getFile()
+          totalBytes += file.size
         }
       }
 
-      return { count, totalBytes };
+      return { count, totalBytes }
     } catch {
-      return { count: 0, totalBytes: 0 };
+      return { count: 0, totalBytes: 0 }
     }
   }
 
@@ -680,31 +668,31 @@ class WaveformOPFSStorage {
    */
   async clearAll(): Promise<void> {
     try {
-      const dir = await this.ensureDirectory();
-      const entries: string[] = [];
+      const dir = await this.ensureDirectory()
+      const entries: string[] = []
 
       for await (const entry of dir.values()) {
         if (entry.kind === 'file') {
-          entries.push(entry.name);
+          entries.push(entry.name)
         }
       }
 
       for (const name of entries) {
-        await dir.removeEntry(name);
+        await dir.removeEntry(name)
         // Remove the corresponding workspace mirror so a later hydrate can't
         // silently restore a waveform we just cleared.
         if (name.endsWith('.bin')) {
-          const mediaId = name.slice(0, -'.bin'.length);
-          await removeWorkspaceCacheEntry(waveformMultiResPath(mediaId));
+          const mediaId = name.slice(0, -'.bin'.length)
+          await removeWorkspaceCacheEntry(waveformMultiResPath(mediaId))
         }
       }
 
-      logger.debug(`Cleared ${entries.length} waveforms from OPFS`);
+      logger.debug(`Cleared ${entries.length} waveforms from OPFS`)
     } catch (error) {
-      logger.error('Failed to clear waveforms:', error);
+      logger.error('Failed to clear waveforms:', error)
     }
   }
 }
 
 // Singleton instance
-export const waveformOPFSStorage = new WaveformOPFSStorage();
+export const waveformOPFSStorage = new WaveformOPFSStorage()

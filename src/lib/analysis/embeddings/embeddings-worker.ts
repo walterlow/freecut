@@ -15,111 +15,113 @@
  *   ← { type: 'error', id?, message }        — error
  */
 
-import { pipeline, env, type FeatureExtractionPipeline } from '@huggingface/transformers';
+import { pipeline, env, type FeatureExtractionPipeline } from '@huggingface/transformers'
 
-const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
+const MODEL_ID = 'Xenova/all-MiniLM-L6-v2'
 
-env.useBrowserCache = true;
-env.allowLocalModels = false;
+env.useBrowserCache = true
+env.allowLocalModels = false
 
-let extractor: FeatureExtractionPipeline | null = null;
-let loading = false;
-let disposed = false;
-let loadGeneration = 0;
-let embeddingDim = 384;
+let extractor: FeatureExtractionPipeline | null = null
+let loading = false
+let disposed = false
+let loadGeneration = 0
+let embeddingDim = 384
 
 function post(msg: Record<string, unknown>): void {
-  self.postMessage(msg);
+  self.postMessage(msg)
 }
 
 async function loadModel(): Promise<void> {
   if (extractor) {
-    post({ type: 'ready', dim: embeddingDim });
-    return;
+    post({ type: 'ready', dim: embeddingDim })
+    return
   }
-  if (loading) return;
-  loading = true;
-  disposed = false;
-  const thisGen = ++loadGeneration;
+  if (loading) return
+  loading = true
+  disposed = false
+  const thisGen = ++loadGeneration
 
   try {
-    let lastPct = 0;
+    let lastPct = 0
     const loaded = await pipeline('feature-extraction', MODEL_ID, {
       dtype: 'q8',
       progress_callback: (info: { status?: string; total?: number; loaded?: number }) => {
         if (info.status === 'progress' && info.total && info.loaded) {
-          const pct = (info.loaded / info.total) * 100;
+          const pct = (info.loaded / info.total) * 100
           if (pct - lastPct > 2) {
-            lastPct = pct;
-            post({ type: 'progress', percent: Math.round(pct) });
+            lastPct = pct
+            post({ type: 'progress', percent: Math.round(pct) })
           }
         }
       },
-    });
+    })
 
     if (disposed || thisGen !== loadGeneration) {
-      return;
+      return
     }
 
-    extractor = loaded as FeatureExtractionPipeline;
+    extractor = loaded as FeatureExtractionPipeline
     // Probe dimension with a one-token warmup so the first real query isn't
     // the one that pays the shape-inference cost.
-    const warmup = await extractor('probe', { pooling: 'mean', normalize: true });
-    embeddingDim = Array.isArray(warmup.dims) ? Number(warmup.dims[warmup.dims.length - 1]) : 384;
+    const warmup = await extractor('probe', { pooling: 'mean', normalize: true })
+    embeddingDim = Array.isArray(warmup.dims) ? Number(warmup.dims[warmup.dims.length - 1]) : 384
 
-    post({ type: 'ready', dim: embeddingDim });
+    post({ type: 'ready', dim: embeddingDim })
   } catch (error) {
-    post({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+    post({ type: 'error', message: error instanceof Error ? error.message : String(error) })
   } finally {
-    loading = false;
+    loading = false
   }
 }
 
 async function embedBatch(id: number, texts: string[]): Promise<void> {
   if (!extractor) {
-    post({ type: 'error', id, message: 'Embeddings worker not ready' });
-    return;
+    post({ type: 'error', id, message: 'Embeddings worker not ready' })
+    return
   }
   try {
     // Mean-pool + L2-normalize so cosine similarity becomes a dot product
     // at the ranking site — no per-row normalization needed downstream.
-    const tensor = await extractor(texts, { pooling: 'mean', normalize: true });
-    const flat = tensor.data as Float32Array;
-    const dim = embeddingDim;
-    const vectors: Float32Array[] = [];
+    const tensor = await extractor(texts, { pooling: 'mean', normalize: true })
+    const flat = tensor.data as Float32Array
+    const dim = embeddingDim
+    const vectors: Float32Array[] = []
     for (let i = 0; i < texts.length; i += 1) {
-      vectors.push(flat.slice(i * dim, (i + 1) * dim));
+      vectors.push(flat.slice(i * dim, (i + 1) * dim))
     }
     post(
       { type: 'embeddings', id, vectors },
       // Transfer underlying buffers when possible — avoids a copy for each
       // 384-dim vector across the worker boundary.
-    );
+    )
   } catch (error) {
-    post({ type: 'error', id, message: error instanceof Error ? error.message : String(error) });
+    post({ type: 'error', id, message: error instanceof Error ? error.message : String(error) })
   }
 }
 
 self.addEventListener('message', (event: MessageEvent) => {
-  const message = event.data;
-  if (!message || typeof message.type !== 'string') return;
+  const message = event.data
+  if (!message || typeof message.type !== 'string') return
 
   if (message.type === 'init') {
-    void loadModel();
-    return;
+    void loadModel()
+    return
   }
 
   if (message.type === 'embed') {
-    const id = typeof message.id === 'number' ? message.id : 0;
-    const texts = Array.isArray(message.texts) ? message.texts.filter((t: unknown) => typeof t === 'string') : [];
-    void embedBatch(id, texts);
-    return;
+    const id = typeof message.id === 'number' ? message.id : 0
+    const texts = Array.isArray(message.texts)
+      ? message.texts.filter((t: unknown) => typeof t === 'string')
+      : []
+    void embedBatch(id, texts)
+    return
   }
 
   if (message.type === 'dispose') {
-    disposed = true;
-    extractor = null;
-    loading = false;
-    return;
+    disposed = true
+    extractor = null
+    loading = false
+    return
   }
-});
+})

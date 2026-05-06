@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Font loading utilities for compositions.
  * Uses native CSS Font Loading API and Canvas text measurement.
  *
@@ -9,10 +9,10 @@ import {
   loadFont as nativeLoadFont,
   loadFonts as nativeLoadFonts,
   FONT_WEIGHT_MAP as NATIVE_FONT_WEIGHT_MAP,
-} from '@/shared/typography/fonts';
+} from '@/shared/typography/fonts'
 
 // Re-export font weight map for external use
-export const FONT_WEIGHT_MAP = NATIVE_FONT_WEIGHT_MAP;
+export const FONT_WEIGHT_MAP = NATIVE_FONT_WEIGHT_MAP
 
 /**
  * Load a Google Font for use in compositions.
@@ -22,7 +22,7 @@ export const FONT_WEIGHT_MAP = NATIVE_FONT_WEIGHT_MAP;
  * @returns The CSS font-family value to use in styles
  */
 export function loadFont(fontName: string): string {
-  return nativeLoadFont(fontName);
+  return nativeLoadFont(fontName)
 }
 
 /**
@@ -33,6 +33,5 @@ export function loadFont(fontName: string): string {
  * @returns Array of CSS fontFamily values
  */
 export function loadFonts(fontNames: string[]): string[] {
-  return nativeLoadFonts(fontNames);
+  return nativeLoadFonts(fontNames)
 }
-

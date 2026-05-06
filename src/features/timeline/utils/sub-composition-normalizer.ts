@@ -1,13 +1,13 @@
-import type { TimelineItem, TimelineTrack } from '@/types/timeline';
-import { DEFAULT_TRACK_HEIGHT } from '../constants';
+import type { TimelineItem, TimelineTrack } from '@/types/timeline'
+import { DEFAULT_TRACK_HEIGHT } from '../constants'
 
 type CompositionLike = {
-  items: TimelineItem[];
-  tracks: TimelineTrack[];
-};
+  items: TimelineItem[]
+  tracks: TimelineTrack[]
+}
 
 function compareTracksByOrder(a: TimelineTrack, b: TimelineTrack): number {
-  return (a.order ?? 0) - (b.order ?? 0);
+  return (a.order ?? 0) - (b.order ?? 0)
 }
 
 function createFallbackTrack(trackId: string, order: number): TimelineTrack {
@@ -22,42 +22,42 @@ function createFallbackTrack(trackId: string, order: number): TimelineTrack {
     solo: false,
     order,
     items: [],
-  };
+  }
 }
 
 export function hydrateTracksFromItems(
   items: TimelineItem[],
   tracks: TimelineTrack[],
 ): TimelineTrack[] {
-  const itemsByTrackId = new Map<string, TimelineItem[]>();
+  const itemsByTrackId = new Map<string, TimelineItem[]>()
   for (const item of items) {
-    const trackItems = itemsByTrackId.get(item.trackId);
+    const trackItems = itemsByTrackId.get(item.trackId)
     if (trackItems) {
-      trackItems.push(item);
-      continue;
+      trackItems.push(item)
+      continue
     }
-    itemsByTrackId.set(item.trackId, [item]);
+    itemsByTrackId.set(item.trackId, [item])
   }
 
-  const sortedTracks = [...tracks].sort(compareTracksByOrder);
-  const knownTrackIds = new Set(sortedTracks.map((track) => track.id));
-  let nextOrder = sortedTracks.reduce((maxOrder, track) => Math.max(maxOrder, track.order ?? 0), -1);
+  const sortedTracks = [...tracks].sort(compareTracksByOrder)
+  const knownTrackIds = new Set(sortedTracks.map((track) => track.id))
+  let nextOrder = sortedTracks.reduce((maxOrder, track) => Math.max(maxOrder, track.order ?? 0), -1)
 
   const hydratedTracks = sortedTracks.map((track) => ({
     ...track,
     items: itemsByTrackId.get(track.id) ?? [],
-  }));
+  }))
 
   for (const [trackId, trackItems] of itemsByTrackId.entries()) {
-    if (knownTrackIds.has(trackId)) continue;
-    nextOrder += 1;
+    if (knownTrackIds.has(trackId)) continue
+    nextOrder += 1
     hydratedTracks.push({
       ...createFallbackTrack(trackId, nextOrder),
       items: trackItems,
-    });
+    })
   }
 
-  return hydratedTracks.sort(compareTracksByOrder);
+  return hydratedTracks.sort(compareTracksByOrder)
 }
 
 export function normalizeSubComposition<TComposition extends CompositionLike>(
@@ -66,5 +66,5 @@ export function normalizeSubComposition<TComposition extends CompositionLike>(
   return {
     ...composition,
     tracks: hydrateTracksFromItems(composition.items, composition.tracks),
-  };
+  }
 }

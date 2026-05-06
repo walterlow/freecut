@@ -1,13 +1,13 @@
-import { memo } from 'react';
-import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/features/timeline/constants';
+import { memo } from 'react'
+import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/features/timeline/constants'
 
 interface FilmstripSkeletonProps {
   /** Width of the clip in pixels */
-  clipWidth: number;
+  clipWidth: number
   /** Height of the skeleton (defaults to THUMBNAIL_HEIGHT from constants) */
-  height?: number;
+  height?: number
   /** Optional className for positioning */
-  className?: string;
+  className?: string
 }
 
 /**
@@ -38,5 +38,5 @@ export const FilmstripSkeleton = memo(function FilmstripSkeleton({
         animation: 'filmstrip-shimmer 1.5s ease-in-out infinite',
       }}
     />
-  );
-});
+  )
+})

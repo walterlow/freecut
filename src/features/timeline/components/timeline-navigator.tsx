@@ -1,131 +1,140 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
-import { useTimelineStore } from '../stores/timeline-store';
-import { useItemsStore } from '../stores/items-store';
-import { useZoomStore } from '../stores/zoom-store';
-import { cn } from '@/shared/ui/cn';
-import { getNavigatorResizeDragResult, getNavigatorThumbMetrics } from './timeline-navigator-utils';
+import { useTimelineViewportStore } from '../stores/timeline-viewport-store'
+import { useTimelineStore } from '../stores/timeline-store'
+import { useItemsStore } from '../stores/items-store'
+import { useZoomStore } from '../stores/zoom-store'
+import { cn } from '@/shared/ui/cn'
+import { getNavigatorResizeDragResult, getNavigatorThumbMetrics } from './timeline-navigator-utils'
 
 interface TimelineNavigatorProps {
-  actualDuration: number;
-  timelineWidth: number;
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  actualDuration: number
+  timelineWidth: number
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>
 }
 
-type DragTarget = 'thumb' | 'left' | 'right' | null;
+type DragTarget = 'thumb' | 'left' | 'right' | null
 
 export function TimelineNavigator({
   actualDuration,
   timelineWidth,
   scrollContainerRef,
 }: TimelineNavigatorProps) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const scrollAfterZoomRafRef = useRef<number | null>(null);
-  const fps = useTimelineStore((s) => s.fps);
-  const setZoomImmediate = useZoomStore((s) => s.setZoomLevelImmediate);
-  const scrollLeft = useTimelineViewportStore((s) => s.scrollLeft);
-  const viewportWidth = useTimelineViewportStore((s) => s.viewportWidth);
+  const trackRef = useRef<HTMLDivElement>(null)
+  const scrollAfterZoomRafRef = useRef<number | null>(null)
+  const fps = useTimelineStore((s) => s.fps)
+  const setZoomImmediate = useZoomStore((s) => s.setZoomLevelImmediate)
+  const scrollLeft = useTimelineViewportStore((s) => s.scrollLeft)
+  const viewportWidth = useTimelineViewportStore((s) => s.viewportWidth)
 
-  const [trackWidth, setTrackWidth] = useState(0);
-  const [dragTarget, setDragTarget] = useState<DragTarget>(null);
-  const [dragStartX, setDragStartX] = useState(0);
-  const [dragStartThumbLeft, setDragStartThumbLeft] = useState(0);
-  const [dragStartThumbWidth, setDragStartThumbWidth] = useState(0);
+  const [trackWidth, setTrackWidth] = useState(0)
+  const [dragTarget, setDragTarget] = useState<DragTarget>(null)
+  const [dragStartX, setDragStartX] = useState(0)
+  const [dragStartThumbLeft, setDragStartThumbLeft] = useState(0)
+  const [dragStartThumbWidth, setDragStartThumbWidth] = useState(0)
 
-  const maxFrame = useItemsStore((s) => s.maxItemEndFrame);
+  const maxFrame = useItemsStore((s) => s.maxItemEndFrame)
 
   const contentDuration = useMemo(() => {
-    const furthestEndSeconds = maxFrame / fps;
-    return Math.max(actualDuration, furthestEndSeconds, 10);
-  }, [actualDuration, fps, maxFrame]);
+    const furthestEndSeconds = maxFrame / fps
+    return Math.max(actualDuration, furthestEndSeconds, 10)
+  }, [actualDuration, fps, maxFrame])
 
   const { maxScrollLeft, thumbWidth, thumbTravel, thumbLeft } = getNavigatorThumbMetrics({
     timelineWidth,
     viewportWidth,
     trackWidth,
     scrollLeft,
-  });
+  })
 
-  const setScrollLeftOnContainer = useCallback((nextScrollLeft: number) => {
-    const node = scrollContainerRef.current;
-    if (!node) return;
-    node.scrollLeft = nextScrollLeft;
-  }, [scrollContainerRef]);
+  const setScrollLeftOnContainer = useCallback(
+    (nextScrollLeft: number) => {
+      const node = scrollContainerRef.current
+      if (!node) return
+      node.scrollLeft = nextScrollLeft
+    },
+    [scrollContainerRef],
+  )
 
-  const handleMouseDown = useCallback((event: React.MouseEvent, target: Exclude<DragTarget, null>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setDragTarget(target);
-    setDragStartX(event.clientX);
-    setDragStartThumbLeft(thumbLeft);
-    setDragStartThumbWidth(thumbWidth);
-  }, [thumbLeft, thumbWidth]);
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent, target: Exclude<DragTarget, null>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      setDragTarget(target)
+      setDragStartX(event.clientX)
+      setDragStartThumbLeft(thumbLeft)
+      setDragStartThumbWidth(thumbWidth)
+    },
+    [thumbLeft, thumbWidth],
+  )
 
-  const handleTrackClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!trackRef.current || dragTarget || maxScrollLeft <= 0 || thumbTravel <= 0) {
-      return;
-    }
+  const handleTrackClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!trackRef.current || dragTarget || maxScrollLeft <= 0 || thumbTravel <= 0) {
+        return
+      }
 
-    const rect = trackRef.current.getBoundingClientRect();
-    const clickX = event.clientX - rect.left;
-    const desiredThumbLeft = Math.max(0, Math.min(thumbTravel, clickX - thumbWidth / 2));
-    const nextScrollLeft = (desiredThumbLeft / thumbTravel) * maxScrollLeft;
-    setScrollLeftOnContainer(nextScrollLeft);
-  }, [dragTarget, maxScrollLeft, setScrollLeftOnContainer, thumbTravel, thumbWidth]);
+      const rect = trackRef.current.getBoundingClientRect()
+      const clickX = event.clientX - rect.left
+      const desiredThumbLeft = Math.max(0, Math.min(thumbTravel, clickX - thumbWidth / 2))
+      const nextScrollLeft = (desiredThumbLeft / thumbTravel) * maxScrollLeft
+      setScrollLeftOnContainer(nextScrollLeft)
+    },
+    [dragTarget, maxScrollLeft, setScrollLeftOnContainer, thumbTravel, thumbWidth],
+  )
 
   useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
+    const track = trackRef.current
+    if (!track) return
 
-    setTrackWidth(track.clientWidth);
+    setTrackWidth(track.clientWidth)
 
     if (typeof ResizeObserver === 'undefined') {
-      return;
+      return
     }
 
     const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
+      const entry = entries[0]
       if (entry) {
-        setTrackWidth(entry.contentRect.width);
+        setTrackWidth(entry.contentRect.width)
       }
-    });
+    })
 
-    observer.observe(track);
+    observer.observe(track)
 
     return () => {
-      observer.disconnect();
-    };
-  }, []);
+      observer.disconnect()
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
       if (scrollAfterZoomRafRef.current !== null) {
-        cancelAnimationFrame(scrollAfterZoomRafRef.current);
+        cancelAnimationFrame(scrollAfterZoomRafRef.current)
       }
-    };
-  }, []);
+    }
+  }, [])
 
   useEffect(() => {
-    if (!dragTarget) return;
+    if (!dragTarget) return
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (!trackRef.current) return;
+      if (!trackRef.current) return
 
-      const nextTrackWidth = trackRef.current.clientWidth;
-      if (nextTrackWidth <= 0) return;
+      const nextTrackWidth = trackRef.current.clientWidth
+      if (nextTrackWidth <= 0) return
 
-      const deltaX = event.clientX - dragStartX;
+      const deltaX = event.clientX - dragStartX
 
       if (dragTarget === 'thumb') {
-        if (thumbTravel <= 0 || maxScrollLeft <= 0) return;
-        const nextThumbLeft = Math.max(0, Math.min(thumbTravel, dragStartThumbLeft + deltaX));
-        const nextScrollLeft = (nextThumbLeft / thumbTravel) * maxScrollLeft;
-        setScrollLeftOnContainer(nextScrollLeft);
-        return;
+        if (thumbTravel <= 0 || maxScrollLeft <= 0) return
+        const nextThumbLeft = Math.max(0, Math.min(thumbTravel, dragStartThumbLeft + deltaX))
+        const nextScrollLeft = (nextThumbLeft / thumbTravel) * maxScrollLeft
+        setScrollLeftOnContainer(nextScrollLeft)
+        return
       }
 
-      if (contentDuration <= 0) return;
+      if (contentDuration <= 0) return
 
       const { nextZoom, nextScrollLeft } = getNavigatorResizeDragResult({
         dragTarget,
@@ -135,30 +144,30 @@ export function TimelineNavigator({
         trackWidth: nextTrackWidth,
         viewportWidth,
         contentDuration,
-      });
+      })
 
-      setZoomImmediate(nextZoom);
+      setZoomImmediate(nextZoom)
 
       if (scrollAfterZoomRafRef.current !== null) {
-        cancelAnimationFrame(scrollAfterZoomRafRef.current);
+        cancelAnimationFrame(scrollAfterZoomRafRef.current)
       }
       scrollAfterZoomRafRef.current = requestAnimationFrame(() => {
-        scrollAfterZoomRafRef.current = null;
-        setScrollLeftOnContainer(nextScrollLeft);
-      });
-    };
+        scrollAfterZoomRafRef.current = null
+        setScrollLeftOnContainer(nextScrollLeft)
+      })
+    }
 
     const handleMouseUp = () => {
-      setDragTarget(null);
-    };
+      setDragTarget(null)
+    }
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
   }, [
     contentDuration,
     dragStartThumbLeft,
@@ -170,7 +179,7 @@ export function TimelineNavigator({
     setScrollLeftOnContainer,
     thumbTravel,
     viewportWidth,
-  ]);
+  ])
 
   return (
     <div className="h-5 border-t border-border bg-background/80 px-2 py-1">
@@ -182,7 +191,9 @@ export function TimelineNavigator({
         <div
           className={cn(
             'absolute top-0 flex h-full items-center justify-between rounded-sm bg-muted-foreground/55 transition-colors',
-            dragTarget ? 'cursor-grabbing bg-muted-foreground/75' : 'cursor-grab hover:bg-muted-foreground/70'
+            dragTarget
+              ? 'cursor-grabbing bg-muted-foreground/75'
+              : 'cursor-grab hover:bg-muted-foreground/70',
           )}
           style={{
             left: thumbLeft,
@@ -208,5 +219,5 @@ export function TimelineNavigator({
         </div>
       </div>
     </div>
-  );
+  )
 }

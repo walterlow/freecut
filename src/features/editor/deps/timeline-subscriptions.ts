@@ -3,4 +3,4 @@
  * Editor modules should import timeline background subscriptions from here.
  */
 
-export { initTransitionChainSubscription } from './timeline-contract';
+export { initTransitionChainSubscription } from './timeline-contract'

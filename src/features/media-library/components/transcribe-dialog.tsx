@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Square } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Loader2, Square } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -7,52 +7,47 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Combobox } from '@/components/ui/combobox';
-import { useEditorStore } from '@/app/state/editor';
-import { usePlaybackStore } from '@/shared/state/playback';
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Combobox } from '@/components/ui/combobox'
+import { useEditorStore } from '@/app/state/editor'
+import { usePlaybackStore } from '@/shared/state/playback'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useSettingsStore } from '@/features/media-library/deps/settings-contract';
-import {
-  getMediaTranscriptionModelOptions,
-} from '../transcription/registry';
+} from '@/components/ui/select'
+import { useSettingsStore } from '@/features/media-library/deps/settings-contract'
+import { getMediaTranscriptionModelOptions } from '../transcription/registry'
 import {
   getWhisperLanguageSelectValue,
   getWhisperLanguageSettingValue,
   normalizeSelectableWhisperModel,
   WHISPER_LANGUAGE_OPTIONS,
   WHISPER_QUANTIZATION_OPTIONS,
-} from '@/shared/utils/whisper-settings';
-import type {
-  MediaTranscriptModel,
-  MediaTranscriptQuantization,
-} from '@/types/storage';
+} from '@/shared/utils/whisper-settings'
+import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage'
 
 export interface TranscribeDialogValues {
-  model: MediaTranscriptModel;
-  quantization: MediaTranscriptQuantization;
-  language: string;
+  model: MediaTranscriptModel
+  quantization: MediaTranscriptQuantization
+  language: string
 }
 
 interface TranscribeDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  fileName: string;
-  hasTranscript: boolean;
-  isRunning: boolean;
-  progressPercent: number | null;
-  progressLabel: string;
-  errorMessage?: string | null;
-  onStart: (values: TranscribeDialogValues) => void;
-  onCancel: () => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  fileName: string
+  hasTranscript: boolean
+  isRunning: boolean
+  progressPercent: number | null
+  progressLabel: string
+  errorMessage?: string | null
+  onStart: (values: TranscribeDialogValues) => void
+  onCancel: () => void
 }
 
 export function TranscribeDialog({
@@ -67,66 +62,69 @@ export function TranscribeDialog({
   onStart,
   onCancel,
 }: TranscribeDialogProps) {
-  const defaultModel = useSettingsStore((s) => s.defaultWhisperModel);
-  const defaultQuantization = useSettingsStore((s) => s.defaultWhisperQuantization);
-  const defaultLanguage = useSettingsStore((s) => s.defaultWhisperLanguage);
-  const clearMediaSkimPreview = useEditorStore((s) => s.clearMediaSkimPreview);
-  const clearCompoundClipSkimPreview = useEditorStore((s) => s.clearCompoundClipSkimPreview);
-  const beginTranscriptionDialog = useEditorStore((s) => s.beginTranscriptionDialog);
-  const endTranscriptionDialog = useEditorStore((s) => s.endTranscriptionDialog);
+  const defaultModel = useSettingsStore((s) => s.defaultWhisperModel)
+  const defaultQuantization = useSettingsStore((s) => s.defaultWhisperQuantization)
+  const defaultLanguage = useSettingsStore((s) => s.defaultWhisperLanguage)
+  const clearMediaSkimPreview = useEditorStore((s) => s.clearMediaSkimPreview)
+  const clearCompoundClipSkimPreview = useEditorStore((s) => s.clearCompoundClipSkimPreview)
+  const beginTranscriptionDialog = useEditorStore((s) => s.beginTranscriptionDialog)
+  const endTranscriptionDialog = useEditorStore((s) => s.endTranscriptionDialog)
 
-  const modelOptions = useMemo(() => getMediaTranscriptionModelOptions(), []);
+  const modelOptions = useMemo(() => getMediaTranscriptionModelOptions(), [])
 
   const [model, setModel] = useState<MediaTranscriptModel>(() =>
     normalizeSelectableWhisperModel(defaultModel),
-  );
-  const [quantization, setQuantization] = useState<MediaTranscriptQuantization>(defaultQuantization);
+  )
+  const [quantization, setQuantization] = useState<MediaTranscriptQuantization>(defaultQuantization)
   const [languageValue, setLanguageValue] = useState<string>(() =>
     getWhisperLanguageSelectValue(defaultLanguage),
-  );
+  )
 
   useEffect(() => {
-    if (!open) return;
-    setModel(normalizeSelectableWhisperModel(defaultModel));
-    setQuantization(defaultQuantization);
-    setLanguageValue(getWhisperLanguageSelectValue(defaultLanguage));
-  }, [open, defaultLanguage, defaultModel, defaultQuantization]);
+    if (!open) return
+    setModel(normalizeSelectableWhisperModel(defaultModel))
+    setQuantization(defaultQuantization)
+    setLanguageValue(getWhisperLanguageSelectValue(defaultLanguage))
+  }, [open, defaultLanguage, defaultModel, defaultQuantization])
 
   useEffect(() => {
-    if (!open) return;
-    beginTranscriptionDialog();
-    clearMediaSkimPreview();
-    clearCompoundClipSkimPreview();
-    usePlaybackStore.getState().setPreviewFrame(null);
-    usePlaybackStore.getState().pause();
+    if (!open) return
+    beginTranscriptionDialog()
+    clearMediaSkimPreview()
+    clearCompoundClipSkimPreview()
+    usePlaybackStore.getState().setPreviewFrame(null)
+    usePlaybackStore.getState().pause()
 
     return () => {
-      endTranscriptionDialog();
-    };
+      endTranscriptionDialog()
+    }
   }, [
     beginTranscriptionDialog,
     clearCompoundClipSkimPreview,
     clearMediaSkimPreview,
     endTranscriptionDialog,
     open,
-  ]);
+  ])
 
   const handleStart = () => {
     onStart({
       model,
       quantization,
       language: getWhisperLanguageSettingValue(languageValue),
-    });
-  };
+    })
+  }
 
-  const handleOpenChange = useCallback((nextOpen: boolean) => {
-    if (isRunning && !nextOpen) {
-      return;
-    }
-    onOpenChange(nextOpen);
-  }, [isRunning, onOpenChange]);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (isRunning && !nextOpen) {
+        return
+      }
+      onOpenChange(nextOpen)
+    },
+    [isRunning, onOpenChange],
+  )
 
-  const title = hasTranscript ? 'Refresh Transcript' : 'Generate Transcript';
+  const title = hasTranscript ? 'Refresh Transcript' : 'Generate Transcript'
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} modal>
@@ -136,7 +134,7 @@ export function TranscribeDialog({
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => {
-          if (isRunning) event.preventDefault();
+          if (isRunning) event.preventDefault()
         }}
       >
         <DialogHeader>
@@ -243,13 +241,11 @@ export function TranscribeDialog({
               <Button variant="outline" onClick={() => handleOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleStart}>
-                Start Transcription
-              </Button>
+              <Button onClick={handleStart}>Start Transcription</Button>
             </>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

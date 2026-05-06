@@ -1,21 +1,21 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { LayoutPresetType } from '../utils/bento-layout';
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import type { LayoutPresetType } from '../utils/bento-layout'
 
 export interface CustomBentoPreset {
-  id: string;
-  name: string;
-  preset: LayoutPresetType;
-  cols: number;
-  rows: number;
-  gap: number;
-  padding: number;
+  id: string
+  name: string
+  preset: LayoutPresetType
+  cols: number
+  rows: number
+  gap: number
+  padding: number
 }
 
 interface BentoPresetsState {
-  customPresets: CustomBentoPreset[];
-  addPreset: (preset: Omit<CustomBentoPreset, 'id'>) => void;
-  removePreset: (id: string) => void;
+  customPresets: CustomBentoPreset[]
+  addPreset: (preset: Omit<CustomBentoPreset, 'id'>) => void
+  removePreset: (id: string) => void
 }
 
 export const useBentoPresetsStore = create<BentoPresetsState>()(
@@ -25,10 +25,7 @@ export const useBentoPresetsStore = create<BentoPresetsState>()(
 
       addPreset: (preset) =>
         set((state) => ({
-          customPresets: [
-            ...state.customPresets,
-            { ...preset, id: crypto.randomUUID() },
-          ],
+          customPresets: [...state.customPresets, { ...preset, id: crypto.randomUUID() }],
         })),
 
       removePreset: (id) =>
@@ -38,6 +35,6 @@ export const useBentoPresetsStore = create<BentoPresetsState>()(
     }),
     {
       name: 'freecut-bento-presets',
-    }
-  )
-);
+    },
+  ),
+)

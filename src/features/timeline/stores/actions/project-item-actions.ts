@@ -1,12 +1,12 @@
-import type { TimelineItem } from '@/types/timeline';
-import { useItemsStore } from '../items-store';
-import { useTransitionsStore } from '../transitions-store';
-import { useKeyframesStore } from '../keyframes-store';
-import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useCompositionsStore } from '../compositions-store';
-import { useCompositionNavigationStore } from '../composition-navigation-store';
-import { useSelectionStore } from '@/shared/state/selection';
-import { getLinkedItems } from '../../utils/linked-items';
+import type { TimelineItem } from '@/types/timeline'
+import { useItemsStore } from '../items-store'
+import { useTransitionsStore } from '../transitions-store'
+import { useKeyframesStore } from '../keyframes-store'
+import { useTimelineSettingsStore } from '../timeline-settings-store'
+import { useCompositionsStore } from '../compositions-store'
+import { useCompositionNavigationStore } from '../composition-navigation-store'
+import { useSelectionStore } from '@/shared/state/selection'
+import { getLinkedItems } from '../../utils/linked-items'
 import {
   applyTransitionRepairs,
   execute,
@@ -14,23 +14,24 @@ import {
   getEffectiveCompositions,
   getRootTimelineSnapshot,
   type TimelineSnapshotLike,
-} from './shared';
+} from './shared'
 
 export interface MediaDeletionImpact {
-  itemIds: string[];
-  rootReferenceCount: number;
-  nestedReferenceCount: number;
-  totalReferenceCount: number;
+  itemIds: string[]
+  rootReferenceCount: number
+  nestedReferenceCount: number
+  totalReferenceCount: number
 }
 
 function isMediaReferenceItem(item: TimelineItem, mediaIds: ReadonlySet<string>): boolean {
-  return !!item.mediaId && mediaIds.has(item.mediaId);
+  return !!item.mediaId && mediaIds.has(item.mediaId)
 }
 
-function collectMediaReferenceItemIds(items: TimelineItem[], mediaIds: ReadonlySet<string>): string[] {
-  return items
-    .filter((item) => isMediaReferenceItem(item, mediaIds))
-    .map((item) => item.id);
+function collectMediaReferenceItemIds(
+  items: TimelineItem[],
+  mediaIds: ReadonlySet<string>,
+): string[] {
+  return items.filter((item) => isMediaReferenceItem(item, mediaIds)).map((item) => item.id)
 }
 
 function shouldCountLogicalMediaReference(
@@ -39,23 +40,24 @@ function shouldCountLogicalMediaReference(
   mediaIds: ReadonlySet<string>,
 ): boolean {
   if (!isMediaReferenceItem(item, mediaIds)) {
-    return false;
+    return false
   }
 
   if (item.type !== 'audio') {
-    return true;
+    return true
   }
 
-  const linkedItems = getLinkedItems(items, item.id);
-  return !linkedItems.some((linkedItem) => (
-    linkedItem.id !== item.id
-    && linkedItem.type !== 'audio'
-    && isMediaReferenceItem(linkedItem, mediaIds)
-  ));
+  const linkedItems = getLinkedItems(items, item.id)
+  return !linkedItems.some(
+    (linkedItem) =>
+      linkedItem.id !== item.id &&
+      linkedItem.type !== 'audio' &&
+      isMediaReferenceItem(linkedItem, mediaIds),
+  )
 }
 
 function countLogicalMediaReferences(items: TimelineItem[], mediaIds: ReadonlySet<string>): number {
-  return items.filter((item) => shouldCountLogicalMediaReference(item, items, mediaIds)).length;
+  return items.filter((item) => shouldCountLogicalMediaReference(item, items, mediaIds)).length
 }
 
 function sanitizeSnapshotByItemIds<TSnapshot extends TimelineSnapshotLike>(
@@ -64,233 +66,252 @@ function sanitizeSnapshotByItemIds<TSnapshot extends TimelineSnapshotLike>(
 ): TSnapshot & { removedItemIds: string[] } {
   const removedItemIds = snapshot.items
     .filter((item) => targetIds.has(item.id))
-    .map((item) => item.id);
+    .map((item) => item.id)
 
   if (removedItemIds.length === 0) {
     return {
       ...snapshot,
       removedItemIds,
-    };
+    }
   }
 
-  const removedIdSet = new Set(removedItemIds);
+  const removedIdSet = new Set(removedItemIds)
   return {
     ...snapshot,
     items: snapshot.items.filter((item) => !removedIdSet.has(item.id)),
-    transitions: snapshot.transitions.filter((transition) => (
-      !removedIdSet.has(transition.leftClipId) && !removedIdSet.has(transition.rightClipId)
-    )),
+    transitions: snapshot.transitions.filter(
+      (transition) =>
+        !removedIdSet.has(transition.leftClipId) && !removedIdSet.has(transition.rightClipId),
+    ),
     keyframes: snapshot.keyframes.filter((keyframe) => !removedIdSet.has(keyframe.itemId)),
     removedItemIds,
-  };
+  }
 }
 
-function applyItemUpdates(items: TimelineItem[], itemId: string, updates: Partial<TimelineItem>): {
-  items: TimelineItem[];
-  changed: boolean;
+function applyItemUpdates(
+  items: TimelineItem[],
+  itemId: string,
+  updates: Partial<TimelineItem>,
+): {
+  items: TimelineItem[]
+  changed: boolean
 } {
-  let changed = false;
+  let changed = false
   const nextItems = items.map((item) => {
     if (item.id !== itemId) {
-      return item;
+      return item
     }
 
-    changed = true;
+    changed = true
     return {
       ...item,
       ...updates,
-    } as TimelineItem;
-  });
+    } as TimelineItem
+  })
 
   return {
     items: changed ? nextItems : items,
     changed,
-  };
+  }
 }
 
 export function getMediaDeletionImpact(mediaIds: string[]): MediaDeletionImpact {
-  const targetMediaIds = new Set(mediaIds.filter(Boolean));
+  const targetMediaIds = new Set(mediaIds.filter(Boolean))
   if (targetMediaIds.size === 0) {
     return {
       itemIds: [],
       rootReferenceCount: 0,
       nestedReferenceCount: 0,
       totalReferenceCount: 0,
-    };
+    }
   }
 
-  const currentSnapshot = getCurrentTimelineSnapshot();
-  const rootSnapshot = getRootTimelineSnapshot(currentSnapshot);
-  const rootItemIds = collectMediaReferenceItemIds(rootSnapshot.items, targetMediaIds);
-  const nestedItemIds = getEffectiveCompositions(currentSnapshot)
-    .flatMap((composition) => collectMediaReferenceItemIds(composition.items, targetMediaIds));
-  const itemIds = Array.from(new Set([...rootItemIds, ...nestedItemIds]));
-  const rootReferenceCount = countLogicalMediaReferences(rootSnapshot.items, targetMediaIds);
-  const nestedReferenceCount = getEffectiveCompositions(currentSnapshot)
-    .reduce((count, composition) => count + countLogicalMediaReferences(composition.items, targetMediaIds), 0);
+  const currentSnapshot = getCurrentTimelineSnapshot()
+  const rootSnapshot = getRootTimelineSnapshot(currentSnapshot)
+  const rootItemIds = collectMediaReferenceItemIds(rootSnapshot.items, targetMediaIds)
+  const nestedItemIds = getEffectiveCompositions(currentSnapshot).flatMap((composition) =>
+    collectMediaReferenceItemIds(composition.items, targetMediaIds),
+  )
+  const itemIds = Array.from(new Set([...rootItemIds, ...nestedItemIds]))
+  const rootReferenceCount = countLogicalMediaReferences(rootSnapshot.items, targetMediaIds)
+  const nestedReferenceCount = getEffectiveCompositions(currentSnapshot).reduce(
+    (count, composition) => count + countLogicalMediaReferences(composition.items, targetMediaIds),
+    0,
+  )
 
   return {
     itemIds,
     rootReferenceCount,
     nestedReferenceCount,
     totalReferenceCount: rootReferenceCount + nestedReferenceCount,
-  };
+  }
 }
 
 export function removeProjectItems(itemIds: string[]): boolean {
-  const targetIds = Array.from(new Set(itemIds.filter(Boolean)));
-  if (targetIds.length === 0) return false;
+  const targetIds = Array.from(new Set(itemIds.filter(Boolean)))
+  if (targetIds.length === 0) return false
 
-  return execute('REMOVE_PROJECT_ITEMS', () => {
-    const targetIdSet = new Set(targetIds);
-    const currentSnapshot = getCurrentTimelineSnapshot();
-    const sanitizedCurrent = sanitizeSnapshotByItemIds(currentSnapshot, targetIdSet);
-    let removedAny = sanitizedCurrent.removedItemIds.length > 0;
+  return execute(
+    'REMOVE_PROJECT_ITEMS',
+    () => {
+      const targetIdSet = new Set(targetIds)
+      const currentSnapshot = getCurrentTimelineSnapshot()
+      const sanitizedCurrent = sanitizeSnapshotByItemIds(currentSnapshot, targetIdSet)
+      let removedAny = sanitizedCurrent.removedItemIds.length > 0
 
-    if (sanitizedCurrent.removedItemIds.length > 0) {
-      useItemsStore.getState().setItems(sanitizedCurrent.items);
-      useTransitionsStore.getState().setTransitions(sanitizedCurrent.transitions);
-      useKeyframesStore.getState().setKeyframes(sanitizedCurrent.keyframes);
-    }
-
-    const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
-    const nextCompositions = useCompositionsStore.getState().compositions.map((composition) => {
-      if (composition.id === activeCompositionId && sanitizedCurrent.removedItemIds.length > 0) {
-        return {
-          ...composition,
-          items: sanitizedCurrent.items,
-          tracks: sanitizedCurrent.tracks,
-          transitions: sanitizedCurrent.transitions,
-          keyframes: sanitizedCurrent.keyframes,
-        };
+      if (sanitizedCurrent.removedItemIds.length > 0) {
+        useItemsStore.getState().setItems(sanitizedCurrent.items)
+        useTransitionsStore.getState().setTransitions(sanitizedCurrent.transitions)
+        useKeyframesStore.getState().setKeyframes(sanitizedCurrent.keyframes)
       }
 
-      const baseSnapshot: TimelineSnapshotLike = composition.id === activeCompositionId
-        ? {
-          items: sanitizedCurrent.items,
-          tracks: sanitizedCurrent.tracks,
-          transitions: sanitizedCurrent.transitions,
-          keyframes: sanitizedCurrent.keyframes,
+      const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId
+      const nextCompositions = useCompositionsStore.getState().compositions.map((composition) => {
+        if (composition.id === activeCompositionId && sanitizedCurrent.removedItemIds.length > 0) {
+          return {
+            ...composition,
+            items: sanitizedCurrent.items,
+            tracks: sanitizedCurrent.tracks,
+            transitions: sanitizedCurrent.transitions,
+            keyframes: sanitizedCurrent.keyframes,
+          }
         }
-        : {
-          items: composition.items,
-          tracks: composition.tracks,
-          transitions: composition.transitions,
-          keyframes: composition.keyframes,
-        };
 
-      const sanitizedComposition = sanitizeSnapshotByItemIds(baseSnapshot, targetIdSet);
-      if (sanitizedComposition.removedItemIds.length > 0) {
-        removedAny = true;
+        const baseSnapshot: TimelineSnapshotLike =
+          composition.id === activeCompositionId
+            ? {
+                items: sanitizedCurrent.items,
+                tracks: sanitizedCurrent.tracks,
+                transitions: sanitizedCurrent.transitions,
+                keyframes: sanitizedCurrent.keyframes,
+              }
+            : {
+                items: composition.items,
+                tracks: composition.tracks,
+                transitions: composition.transitions,
+                keyframes: composition.keyframes,
+              }
+
+        const sanitizedComposition = sanitizeSnapshotByItemIds(baseSnapshot, targetIdSet)
+        if (sanitizedComposition.removedItemIds.length > 0) {
+          removedAny = true
+        }
+
+        return sanitizedComposition.removedItemIds.length === 0
+          ? composition
+          : {
+              ...composition,
+              items: sanitizedComposition.items,
+              tracks: sanitizedComposition.tracks,
+              transitions: sanitizedComposition.transitions,
+              keyframes: sanitizedComposition.keyframes,
+            }
+      })
+
+      const latestNavState = useCompositionNavigationStore.getState()
+      const nextStashStack = latestNavState.stashStack.map((stash) => {
+        const sanitizedStash = sanitizeSnapshotByItemIds(stash, targetIdSet)
+        if (sanitizedStash.removedItemIds.length > 0) {
+          removedAny = true
+        }
+
+        return sanitizedStash.removedItemIds.length === 0
+          ? stash
+          : {
+              ...stash,
+              items: sanitizedStash.items,
+              transitions: sanitizedStash.transitions,
+              keyframes: sanitizedStash.keyframes,
+            }
+      })
+
+      if (removedAny) {
+        useCompositionsStore.getState().setCompositions(nextCompositions)
+        useCompositionNavigationStore.setState((state) => ({
+          ...state,
+          stashStack: nextStashStack,
+        }))
+        useSelectionStore.getState().clearSelection()
+        useTimelineSettingsStore.getState().markDirty()
       }
 
-      return sanitizedComposition.removedItemIds.length === 0
-        ? composition
-        : {
-          ...composition,
-          items: sanitizedComposition.items,
-          tracks: sanitizedComposition.tracks,
-          transitions: sanitizedComposition.transitions,
-          keyframes: sanitizedComposition.keyframes,
-        };
-    });
-
-    const latestNavState = useCompositionNavigationStore.getState();
-    const nextStashStack = latestNavState.stashStack.map((stash) => {
-      const sanitizedStash = sanitizeSnapshotByItemIds(stash, targetIdSet);
-      if (sanitizedStash.removedItemIds.length > 0) {
-        removedAny = true;
-      }
-
-      return sanitizedStash.removedItemIds.length === 0
-        ? stash
-        : {
-          ...stash,
-          items: sanitizedStash.items,
-          transitions: sanitizedStash.transitions,
-          keyframes: sanitizedStash.keyframes,
-        };
-    });
-
-    if (removedAny) {
-      useCompositionsStore.getState().setCompositions(nextCompositions);
-      useCompositionNavigationStore.setState((state) => ({
-        ...state,
-        stashStack: nextStashStack,
-      }));
-      useSelectionStore.getState().clearSelection();
-      useTimelineSettingsStore.getState().markDirty();
-    }
-
-    return removedAny;
-  }, { itemIds: targetIds });
+      return removedAny
+    },
+    { itemIds: targetIds },
+  )
 }
 
 export function updateProjectItem(itemId: string, updates: Partial<TimelineItem>): boolean {
-  if (!itemId) return false;
+  if (!itemId) return false
 
-  return execute('UPDATE_PROJECT_ITEM', () => {
-    const currentSnapshot = getCurrentTimelineSnapshot();
-    const updatedCurrent = applyItemUpdates(currentSnapshot.items, itemId, updates);
-    let changed = updatedCurrent.changed;
+  return execute(
+    'UPDATE_PROJECT_ITEM',
+    () => {
+      const currentSnapshot = getCurrentTimelineSnapshot()
+      const updatedCurrent = applyItemUpdates(currentSnapshot.items, itemId, updates)
+      let changed = updatedCurrent.changed
 
-    if (updatedCurrent.changed) {
-      useItemsStore.getState().setItems(updatedCurrent.items);
-    }
-
-    const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
-    const nextCompositions = useCompositionsStore.getState().compositions.map((composition) => {
-      if (composition.id === activeCompositionId && updatedCurrent.changed) {
-        return {
-          ...composition,
-          items: updatedCurrent.items,
-        };
+      if (updatedCurrent.changed) {
+        useItemsStore.getState().setItems(updatedCurrent.items)
       }
 
-      const sourceItems = composition.id === activeCompositionId ? updatedCurrent.items : composition.items;
-      const nextItems = applyItemUpdates(sourceItems, itemId, updates);
-      if (nextItems.changed) {
-        changed = true;
-      }
-
-      return nextItems.changed
-        ? {
-          ...composition,
-          items: nextItems.items,
+      const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId
+      const nextCompositions = useCompositionsStore.getState().compositions.map((composition) => {
+        if (composition.id === activeCompositionId && updatedCurrent.changed) {
+          return {
+            ...composition,
+            items: updatedCurrent.items,
+          }
         }
-        : composition;
-    });
 
-    const nextStashStack = useCompositionNavigationStore.getState().stashStack.map((stash) => {
-      const nextItems = applyItemUpdates(stash.items, itemId, updates);
-      if (nextItems.changed) {
-        changed = true;
+        const sourceItems =
+          composition.id === activeCompositionId ? updatedCurrent.items : composition.items
+        const nextItems = applyItemUpdates(sourceItems, itemId, updates)
+        if (nextItems.changed) {
+          changed = true
+        }
+
+        return nextItems.changed
+          ? {
+              ...composition,
+              items: nextItems.items,
+            }
+          : composition
+      })
+
+      const nextStashStack = useCompositionNavigationStore.getState().stashStack.map((stash) => {
+        const nextItems = applyItemUpdates(stash.items, itemId, updates)
+        if (nextItems.changed) {
+          changed = true
+        }
+
+        return nextItems.changed
+          ? {
+              ...stash,
+              items: nextItems.items,
+            }
+          : stash
+      })
+
+      if (!changed) {
+        return false
       }
 
-      return nextItems.changed
-        ? {
-          ...stash,
-          items: nextItems.items,
-        }
-        : stash;
-    });
+      useCompositionsStore.getState().setCompositions(nextCompositions)
+      useCompositionNavigationStore.setState((state) => ({
+        ...state,
+        stashStack: nextStashStack,
+      }))
 
-    if (!changed) {
-      return false;
-    }
+      const positionChanged =
+        'from' in updates || 'durationInFrames' in updates || 'trackId' in updates
+      if (positionChanged && updatedCurrent.changed) {
+        applyTransitionRepairs([itemId])
+      }
 
-    useCompositionsStore.getState().setCompositions(nextCompositions);
-    useCompositionNavigationStore.setState((state) => ({
-      ...state,
-      stashStack: nextStashStack,
-    }));
-
-    const positionChanged = 'from' in updates || 'durationInFrames' in updates || 'trackId' in updates;
-    if (positionChanged && updatedCurrent.changed) {
-      applyTransitionRepairs([itemId]);
-    }
-
-    useTimelineSettingsStore.getState().markDirty();
-    return true;
-  }, { itemId, updates });
+      useTimelineSettingsStore.getState().markDirty()
+      return true
+    },
+    { itemId, updates },
+  )
 }

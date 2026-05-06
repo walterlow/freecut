@@ -1,9 +1,9 @@
-import { create } from 'zustand';
-import type { TimelineItem, TimelineTrack } from '@/types/timeline';
-import type { AudioEqSettings } from '@/types/audio';
-import type { Transition } from '@/types/transition';
-import type { ItemKeyframes } from '@/types/keyframe';
-import { normalizeSubComposition } from '../utils/sub-composition-normalizer';
+import { create } from 'zustand'
+import type { TimelineItem, TimelineTrack } from '@/types/timeline'
+import type { AudioEqSettings } from '@/types/audio'
+import type { Transition } from '@/types/transition'
+import type { ItemKeyframes } from '@/types/keyframe'
+import { normalizeSubComposition } from '../utils/sub-composition-normalizer'
 
 /**
  * Sub-composition data — a self-contained mini-timeline stored independently.
@@ -11,49 +11,49 @@ import { normalizeSubComposition } from '../utils/sub-composition-normalizer';
  * enabling reuse of pre-comp contents across the project.
  */
 export interface SubComposition {
-  id: string;
-  name: string;
-  items: TimelineItem[];
-  tracks: TimelineTrack[];
-  transitions: Transition[];
-  keyframes: ItemKeyframes[];
-  fps: number;
-  width: number;
-  height: number;
-  durationInFrames: number;
-  backgroundColor?: string;
-  busAudioEq?: AudioEqSettings;
+  id: string
+  name: string
+  items: TimelineItem[]
+  tracks: TimelineTrack[]
+  transitions: Transition[]
+  keyframes: ItemKeyframes[]
+  fps: number
+  width: number
+  height: number
+  durationInFrames: number
+  backgroundColor?: string
+  busAudioEq?: AudioEqSettings
 }
 
 function buildCompositionsMediaDependencyIds(compositions: SubComposition[]): string[] {
-  const mediaIds = new Set<string>();
+  const mediaIds = new Set<string>()
   for (const composition of compositions) {
     for (const item of composition.items) {
       if (item.mediaId) {
-        mediaIds.add(item.mediaId);
+        mediaIds.add(item.mediaId)
       }
     }
   }
-  return [...mediaIds].sort();
+  return [...mediaIds].sort()
 }
 
 function buildMediaDependencyKey(mediaDependencyIds: string[]): string {
-  return mediaDependencyIds.join('|');
+  return mediaDependencyIds.join('|')
 }
 
 interface CompositionsState {
-  compositions: SubComposition[];
-  compositionById: Record<string, SubComposition>;
-  mediaDependencyIds: string[];
-  mediaDependencyVersion: number;
+  compositions: SubComposition[]
+  compositionById: Record<string, SubComposition>
+  mediaDependencyIds: string[]
+  mediaDependencyVersion: number
 }
 
 interface CompositionsActions {
-  addComposition: (composition: SubComposition) => void;
-  updateComposition: (id: string, updates: Partial<Omit<SubComposition, 'id'>>) => void;
-  removeComposition: (id: string) => void;
-  getComposition: (id: string) => SubComposition | undefined;
-  setCompositions: (compositions: SubComposition[]) => void;
+  addComposition: (composition: SubComposition) => void
+  updateComposition: (id: string, updates: Partial<Omit<SubComposition, 'id'>>) => void
+  removeComposition: (id: string) => void
+  getComposition: (id: string) => SubComposition | undefined
+  setCompositions: (compositions: SubComposition[]) => void
 }
 
 export const useCompositionsStore = create<CompositionsState & CompositionsActions>()(
@@ -71,7 +71,7 @@ export const useCompositionsStore = create<CompositionsState & CompositionsActio
     updateComposition: (id, updates) =>
       set((state) => ({
         compositions: state.compositions.map((c) =>
-          c.id === id ? normalizeSubComposition({ ...c, ...updates }) : c
+          c.id === id ? normalizeSubComposition({ ...c, ...updates }) : c,
         ),
       })),
 
@@ -82,33 +82,40 @@ export const useCompositionsStore = create<CompositionsState & CompositionsActio
 
     getComposition: (id) => get().compositionById[id],
 
-    setCompositions: (compositions) => set({
-      compositions: compositions.map((composition) => normalizeSubComposition(composition)),
-    }),
-  })
-);
+    setCompositions: (compositions) =>
+      set({
+        compositions: compositions.map((composition) => normalizeSubComposition(composition)),
+      }),
+  }),
+)
 
-let prevCompositionsRef = useCompositionsStore.getState().compositions;
-let prevCompositionsMediaDependencyIds = useCompositionsStore.getState().mediaDependencyIds;
-let prevCompositionsMediaDependencyKey = buildMediaDependencyKey(prevCompositionsMediaDependencyIds);
+let prevCompositionsRef = useCompositionsStore.getState().compositions
+let prevCompositionsMediaDependencyIds = useCompositionsStore.getState().mediaDependencyIds
+let prevCompositionsMediaDependencyKey = buildMediaDependencyKey(prevCompositionsMediaDependencyIds)
 useCompositionsStore.subscribe((state) => {
   if (state.compositions === prevCompositionsRef) {
-    return;
+    return
   }
-  prevCompositionsRef = state.compositions;
-  const compositionById: Record<string, SubComposition> = {};
+  prevCompositionsRef = state.compositions
+  const compositionById: Record<string, SubComposition> = {}
   for (const composition of state.compositions) {
-    compositionById[composition.id] = composition;
+    compositionById[composition.id] = composition
   }
-  const nextMediaDependencyIds = buildCompositionsMediaDependencyIds(state.compositions);
-  const nextMediaDependencyKey = buildMediaDependencyKey(nextMediaDependencyIds);
-  const mediaDependencyIds = nextMediaDependencyKey === prevCompositionsMediaDependencyKey
-    ? state.mediaDependencyIds
-    : nextMediaDependencyIds;
-  const mediaDependencyVersion = nextMediaDependencyKey === prevCompositionsMediaDependencyKey
-    ? state.mediaDependencyVersion
-    : state.mediaDependencyVersion + 1;
-  prevCompositionsMediaDependencyIds = mediaDependencyIds;
-  prevCompositionsMediaDependencyKey = nextMediaDependencyKey;
-  useCompositionsStore.setState({ compositionById, mediaDependencyIds: prevCompositionsMediaDependencyIds, mediaDependencyVersion });
-});
+  const nextMediaDependencyIds = buildCompositionsMediaDependencyIds(state.compositions)
+  const nextMediaDependencyKey = buildMediaDependencyKey(nextMediaDependencyIds)
+  const mediaDependencyIds =
+    nextMediaDependencyKey === prevCompositionsMediaDependencyKey
+      ? state.mediaDependencyIds
+      : nextMediaDependencyIds
+  const mediaDependencyVersion =
+    nextMediaDependencyKey === prevCompositionsMediaDependencyKey
+      ? state.mediaDependencyVersion
+      : state.mediaDependencyVersion + 1
+  prevCompositionsMediaDependencyIds = mediaDependencyIds
+  prevCompositionsMediaDependencyKey = nextMediaDependencyKey
+  useCompositionsStore.setState({
+    compositionById,
+    mediaDependencyIds: prevCompositionsMediaDependencyIds,
+    mediaDependencyVersion,
+  })
+})

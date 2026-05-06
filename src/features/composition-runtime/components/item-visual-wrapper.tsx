@@ -1,35 +1,33 @@
-import React, { useMemo } from 'react';
-import { useVideoConfig } from '../hooks/use-player-compat';
-import type { TimelineItem } from '@/types/timeline';
-import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
+import React, { useMemo } from 'react'
+import { useVideoConfig } from '../hooks/use-player-compat'
+import type { TimelineItem } from '@/types/timeline'
+import { BLEND_MODE_CSS } from '@/types/blend-mode-css'
 import {
   hasCornerPin,
   computeCornerPinMatrix3d,
   drawCornerPinImage,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
-} from '../utils/corner-pin';
-import { getShapePath } from '../utils/shape-path';
-import { useCornerPinStore } from '@/features/composition-runtime/deps/stores';
-import { useItemVisualState } from './hooks/use-item-visual-state';
-import {
-  renderSvgMaskPathsToDataUrl,
-} from '../utils/clip-mask-raster';
-import { getRasterizedMaskLayerSettingsList } from '../utils/mask-preview';
-import type { MaskInfo } from './item';
-import type { CropSettings } from '@/types/transform';
-import { ContainedMediaLayout } from './contained-media-layout';
+} from '../utils/corner-pin'
+import { getShapePath } from '../utils/shape-path'
+import { useCornerPinStore } from '@/features/composition-runtime/deps/stores'
+import { useItemVisualState } from './hooks/use-item-visual-state'
+import { renderSvgMaskPathsToDataUrl } from '../utils/clip-mask-raster'
+import { getRasterizedMaskLayerSettingsList } from '../utils/mask-preview'
+import type { MaskInfo } from './item'
+import type { CropSettings } from '@/types/transform'
+import { ContainedMediaLayout } from './contained-media-layout'
 
 interface ItemVisualWrapperProps {
-  item: TimelineItem;
-  masks?: MaskInfo[];
+  item: TimelineItem
+  masks?: MaskInfo[]
   mediaContent?: {
-    fitMode: 'contain';
-    sourceWidth?: number;
-    sourceHeight?: number;
-    crop?: CropSettings;
-  };
-  children: React.ReactNode;
+    fitMode: 'contain'
+    sourceWidth?: number
+    sourceHeight?: number
+    crop?: CropSettings
+  }
+  children: React.ReactNode
 }
 
 function createRasterMaskCanvas(
@@ -37,19 +35,19 @@ function createRasterMaskCanvas(
   height: number,
 ): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
   if (typeof document === 'undefined') {
-    return null;
+    return null
   }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(width));
-  canvas.height = Math.max(1, Math.round(height));
-  const ctx = canvas.getContext('2d');
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(width))
+  canvas.height = Math.max(1, Math.round(height))
+  const ctx = canvas.getContext('2d')
 
   if (!ctx) {
-    return null;
+    return null
   }
 
-  return { canvas, ctx };
+  return { canvas, ctx }
 }
 
 function renderRasterizedMaskLayer(
@@ -57,13 +55,13 @@ function renderRasterizedMaskLayer(
   canvasWidth: number,
   canvasHeight: number,
 ): HTMLCanvasElement | null {
-  const rasterCanvas = createRasterMaskCanvas(canvasWidth, canvasHeight);
+  const rasterCanvas = createRasterMaskCanvas(canvasWidth, canvasHeight)
   if (!rasterCanvas) {
-    return null;
+    return null
   }
 
-  const { canvas, ctx } = rasterCanvas;
-  const { shape, transform } = mask;
+  const { canvas, ctx } = rasterCanvas
+  const { shape, transform } = mask
   const resolvedTransform = {
     x: transform.x ?? 0,
     y: transform.y ?? 0,
@@ -71,33 +69,33 @@ function renderRasterizedMaskLayer(
     height: Math.max(1, transform.height ?? canvasHeight),
     rotation: transform.rotation ?? 0,
     opacity: transform.opacity ?? 1,
-  };
-  const localWidth = Math.max(1, Math.round(resolvedTransform.width));
-  const localHeight = Math.max(1, Math.round(resolvedTransform.height));
-  const left = canvasWidth / 2 + resolvedTransform.x - resolvedTransform.width / 2;
-  const top = canvasHeight / 2 + resolvedTransform.y - resolvedTransform.height / 2;
-  const centerX = left + resolvedTransform.width / 2;
-  const centerY = top + resolvedTransform.height / 2;
+  }
+  const localWidth = Math.max(1, Math.round(resolvedTransform.width))
+  const localHeight = Math.max(1, Math.round(resolvedTransform.height))
+  const left = canvasWidth / 2 + resolvedTransform.x - resolvedTransform.width / 2
+  const top = canvasHeight / 2 + resolvedTransform.y - resolvedTransform.height / 2
+  const centerX = left + resolvedTransform.width / 2
+  const centerY = top + resolvedTransform.height / 2
   const resolvedPin = resolveCornerPinForSize(
     shape.cornerPin,
     resolvedTransform.width,
     resolvedTransform.height,
-  );
+  )
 
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  ctx.save();
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+  ctx.save()
 
   if (resolvedTransform.rotation !== 0) {
-    ctx.translate(centerX, centerY);
-    ctx.rotate((resolvedTransform.rotation * Math.PI) / 180);
-    ctx.translate(-centerX, -centerY);
+    ctx.translate(centerX, centerY)
+    ctx.rotate((resolvedTransform.rotation * Math.PI) / 180)
+    ctx.translate(-centerX, -centerY)
   }
 
   if (resolvedPin && hasCornerPin(resolvedPin)) {
-    const localCanvas = createRasterMaskCanvas(localWidth, localHeight);
+    const localCanvas = createRasterMaskCanvas(localWidth, localHeight)
     if (!localCanvas) {
-      ctx.restore();
-      return null;
+      ctx.restore()
+      return null
     }
 
     const localPath = getShapePath(
@@ -114,14 +112,14 @@ function renderRasterizedMaskLayer(
         canvasWidth: localWidth,
         canvasHeight: localHeight,
       },
-    );
+    )
 
-    localCanvas.ctx.fillStyle = '#ffffff';
-    localCanvas.ctx.fill(new Path2D(localPath));
+    localCanvas.ctx.fillStyle = '#ffffff'
+    localCanvas.ctx.fill(new Path2D(localPath))
     if ((shape.strokeWidth ?? 0) > 0) {
-      localCanvas.ctx.strokeStyle = '#ffffff';
-      localCanvas.ctx.lineWidth = shape.strokeWidth ?? 0;
-      localCanvas.ctx.stroke(new Path2D(localPath));
+      localCanvas.ctx.strokeStyle = '#ffffff'
+      localCanvas.ctx.lineWidth = shape.strokeWidth ?? 0
+      localCanvas.ctx.stroke(new Path2D(localPath))
     }
 
     drawCornerPinImage(
@@ -132,7 +130,7 @@ function renderRasterizedMaskLayer(
       left,
       top,
       resolvedPin,
-    );
+    )
   } else {
     const svgPath = getShapePath(
       shape,
@@ -148,20 +146,20 @@ function renderRasterizedMaskLayer(
         canvasWidth,
         canvasHeight,
       },
-    );
+    )
 
-    const path2d = new Path2D(svgPath);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill(path2d);
+    const path2d = new Path2D(svgPath)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill(path2d)
     if ((shape.strokeWidth ?? 0) > 0) {
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = shape.strokeWidth ?? 0;
-      ctx.stroke(path2d);
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = shape.strokeWidth ?? 0
+      ctx.stroke(path2d)
     }
   }
 
-  ctx.restore();
-  return canvas;
+  ctx.restore()
+  return canvas
 }
 
 function applyRasterizedMaskLayerSettings(
@@ -169,41 +167,41 @@ function applyRasterizedMaskLayerSettings(
   canvasWidth: number,
   canvasHeight: number,
   settings: {
-    invert: boolean;
-    feather: number;
+    invert: boolean
+    feather: number
   },
 ): HTMLCanvasElement {
   if (!settings.invert && settings.feather <= 0) {
-    return maskCanvas;
+    return maskCanvas
   }
 
-  const processedMask = createRasterMaskCanvas(canvasWidth, canvasHeight);
+  const processedMask = createRasterMaskCanvas(canvasWidth, canvasHeight)
   if (!processedMask) {
-    return maskCanvas;
+    return maskCanvas
   }
 
   if (settings.invert) {
-    processedMask.ctx.fillStyle = '#ffffff';
-    processedMask.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    processedMask.ctx.globalCompositeOperation = 'destination-out';
-    processedMask.ctx.drawImage(maskCanvas, 0, 0);
-    processedMask.ctx.globalCompositeOperation = 'source-over';
+    processedMask.ctx.fillStyle = '#ffffff'
+    processedMask.ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+    processedMask.ctx.globalCompositeOperation = 'destination-out'
+    processedMask.ctx.drawImage(maskCanvas, 0, 0)
+    processedMask.ctx.globalCompositeOperation = 'source-over'
   } else {
-    processedMask.ctx.drawImage(maskCanvas, 0, 0);
+    processedMask.ctx.drawImage(maskCanvas, 0, 0)
   }
 
   if (settings.feather <= 0) {
-    return processedMask.canvas;
+    return processedMask.canvas
   }
 
-  const blurredMask = createRasterMaskCanvas(canvasWidth, canvasHeight);
+  const blurredMask = createRasterMaskCanvas(canvasWidth, canvasHeight)
   if (!blurredMask) {
-    return processedMask.canvas;
+    return processedMask.canvas
   }
 
-  blurredMask.ctx.filter = `blur(${settings.feather}px)`;
-  blurredMask.ctx.drawImage(processedMask.canvas, 0, 0);
-  return blurredMask.canvas;
+  blurredMask.ctx.filter = `blur(${settings.feather}px)`
+  blurredMask.ctx.drawImage(processedMask.canvas, 0, 0)
+  return blurredMask.canvas
 }
 
 /**
@@ -225,19 +223,18 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
   mediaContent,
   children,
 }) => {
-  const { width: canvasWidth, height: canvasHeight } = useVideoConfig();
+  const { width: canvasWidth, height: canvasHeight } = useVideoConfig()
 
   // Get all visual state from consolidated hook
-  const state = useItemVisualState(item, masks);
-  const shouldRasterizeSvgMask = state.maskType === 'svg-mask'
-    && !!state.svgMaskPaths
-    && state.maskFeather > 0;
-  const hasCornerPinnedMask = masks.some((mask) => hasCornerPin(mask.shape.cornerPin));
+  const state = useItemVisualState(item, masks)
+  const shouldRasterizeSvgMask =
+    state.maskType === 'svg-mask' && !!state.svgMaskPaths && state.maskFeather > 0
+  const hasCornerPinnedMask = masks.some((mask) => hasCornerPin(mask.shape.cornerPin))
 
   // Compute mask style based on mask type
   const rasterSvgMaskDataUrl = useMemo(() => {
     if (!shouldRasterizeSvgMask || !state.svgMaskPaths) {
-      return null;
+      return null
     }
 
     return renderSvgMaskPathsToDataUrl(
@@ -246,7 +243,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       canvasHeight,
       state.maskFeather,
       state.maskInvert,
-    );
+    )
   }, [
     shouldRasterizeSvgMask,
     state.svgMaskPaths,
@@ -254,31 +251,29 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     state.maskInvert,
     canvasWidth,
     canvasHeight,
-  ]);
+  ])
   const rasterCornerPinnedMaskDataUrl = useMemo(() => {
     if (!hasCornerPinnedMask || masks.length === 0 || typeof document === 'undefined') {
-      return null;
+      return null
     }
 
-    const width = Math.max(1, Math.round(canvasWidth));
-    const height = Math.max(1, Math.round(canvasHeight));
-    const combinedMask = createRasterMaskCanvas(width, height);
+    const width = Math.max(1, Math.round(canvasWidth))
+    const height = Math.max(1, Math.round(canvasHeight))
+    const combinedMask = createRasterMaskCanvas(width, height)
     if (!combinedMask) {
-      return null;
+      return null
     }
 
-    const maskLayerSettings = getRasterizedMaskLayerSettingsList(
-      masks.map(({ shape }) => shape),
-    );
-    combinedMask.ctx.clearRect(0, 0, width, height);
-    combinedMask.ctx.fillStyle = '#ffffff';
-    combinedMask.ctx.fillRect(0, 0, width, height);
+    const maskLayerSettings = getRasterizedMaskLayerSettingsList(masks.map(({ shape }) => shape))
+    combinedMask.ctx.clearRect(0, 0, width, height)
+    combinedMask.ctx.fillStyle = '#ffffff'
+    combinedMask.ctx.fillRect(0, 0, width, height)
 
-    let appliedMaskCount = 0;
+    let appliedMaskCount = 0
     for (const [index, mask] of masks.entries()) {
-      const maskLayer = renderRasterizedMaskLayer(mask, width, height);
+      const maskLayer = renderRasterizedMaskLayer(mask, width, height)
       if (!maskLayer) {
-        continue;
+        continue
       }
 
       const processedLayer = applyRasterizedMaskLayerSettings(
@@ -286,20 +281,20 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         width,
         height,
         maskLayerSettings[index] ?? { invert: false, feather: 0 },
-      );
+      )
 
-      combinedMask.ctx.globalCompositeOperation = 'destination-in';
-      combinedMask.ctx.drawImage(processedLayer, 0, 0);
-      combinedMask.ctx.globalCompositeOperation = 'source-over';
-      appliedMaskCount += 1;
+      combinedMask.ctx.globalCompositeOperation = 'destination-in'
+      combinedMask.ctx.drawImage(processedLayer, 0, 0)
+      combinedMask.ctx.globalCompositeOperation = 'source-over'
+      appliedMaskCount += 1
     }
 
     if (appliedMaskCount === 0) {
-      return null;
+      return null
     }
 
-    return combinedMask.canvas.toDataURL('image/png');
-  }, [canvasHeight, canvasWidth, hasCornerPinnedMask, masks]);
+    return combinedMask.canvas.toDataURL('image/png')
+  }, [canvasHeight, canvasWidth, hasCornerPinnedMask, masks])
 
   const maskStyle = useMemo((): React.CSSProperties => {
     if (rasterCornerPinnedMaskDataUrl) {
@@ -312,10 +307,10 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         WebkitMaskSize: '100% 100%',
         maskPosition: '0 0',
         WebkitMaskPosition: '0 0',
-      };
+      }
     }
     if (state.maskType === 'clip' && state.maskClipPath) {
-      return { clipPath: state.maskClipPath };
+      return { clipPath: state.maskClipPath }
     }
     if (state.maskType === 'svg-mask' && rasterSvgMaskDataUrl) {
       return {
@@ -330,47 +325,43 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         transform: 'translateZ(0)',
         backfaceVisibility: 'hidden' as const,
         contain: 'paint',
-      };
+      }
     }
     if (state.maskType === 'svg-mask' && state.svgMaskId) {
       return {
         mask: `url(#${state.svgMaskId})`,
         WebkitMask: `url(#${state.svgMaskId})`,
-      };
+      }
     }
-    return {};
-  }, [state.maskType, state.maskClipPath, state.svgMaskId, rasterCornerPinnedMaskDataUrl, rasterSvgMaskDataUrl]);
+    return {}
+  }, [
+    state.maskType,
+    state.maskClipPath,
+    state.svgMaskId,
+    rasterCornerPinnedMaskDataUrl,
+    rasterSvgMaskDataUrl,
+  ])
 
   // Corner pin CSS matrix3d — use preview during drag for smooth interaction
   const cornerPinPreview = useCornerPinStore((s) =>
-    s.editingItemId === item.id ? s.previewCornerPin : null
-  );
-  const effectiveCornerPin = cornerPinPreview ?? item.cornerPin;
-  const effectiveCrop = state.propertiesPreview?.crop ?? state.animatedCrop ?? mediaContent?.crop;
+    s.editingItemId === item.id ? s.previewCornerPin : null,
+  )
+  const effectiveCornerPin = cornerPinPreview ?? item.cornerPin
+  const effectiveCrop = state.propertiesPreview?.crop ?? state.animatedCrop ?? mediaContent?.crop
   const cornerPinTargetRect = useMemo(() => {
     if (state.maskType !== null) {
-      return resolveCornerPinTargetRect(
-        state.transform.width,
-        state.transform.height,
-      );
+      return resolveCornerPinTargetRect(state.transform.width, state.transform.height)
     }
 
     if (mediaContent?.fitMode === 'contain') {
-      return resolveCornerPinTargetRect(
-        state.transform.width,
-        state.transform.height,
-        {
-          sourceWidth: mediaContent.sourceWidth ?? state.transform.width,
-          sourceHeight: mediaContent.sourceHeight ?? state.transform.height,
-          crop: effectiveCrop,
-        },
-      );
+      return resolveCornerPinTargetRect(state.transform.width, state.transform.height, {
+        sourceWidth: mediaContent.sourceWidth ?? state.transform.width,
+        sourceHeight: mediaContent.sourceHeight ?? state.transform.height,
+        crop: effectiveCrop,
+      })
     }
 
-    return resolveCornerPinTargetRect(
-      state.transform.width,
-      state.transform.height,
-    );
+    return resolveCornerPinTargetRect(state.transform.width, state.transform.height)
   }, [
     effectiveCrop,
     mediaContent?.fitMode,
@@ -379,16 +370,16 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     state.maskType,
     state.transform.height,
     state.transform.width,
-  ]);
+  ])
   const containedMediaStyle = useMemo((): React.CSSProperties => {
-    const width = state.transform.width;
-    const height = state.transform.height;
+    const width = state.transform.width
+    const height = state.transform.height
     const toPercent = (value: number, total: number) => {
       if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) {
-        return '0%';
+        return '0%'
       }
-      return `${(value / total) * 100}%`;
-    };
+      return `${(value / total) * 100}%`
+    }
 
     return {
       position: 'absolute',
@@ -396,7 +387,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       top: toPercent(cornerPinTargetRect.y, height),
       width: toPercent(cornerPinTargetRect.width, width),
       height: toPercent(cornerPinTargetRect.height, height),
-    };
+    }
   }, [
     cornerPinTargetRect.height,
     cornerPinTargetRect.width,
@@ -404,26 +395,31 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     cornerPinTargetRect.y,
     state.transform.height,
     state.transform.width,
-  ]);
+  ])
   const cornerPinStyle = useMemo((): React.CSSProperties | null => {
-    const w = cornerPinTargetRect.width;
-    const h = cornerPinTargetRect.height;
-    const resolvedCornerPin = resolveCornerPinForSize(effectiveCornerPin, w, h);
-    if (!resolvedCornerPin || !hasCornerPin(resolvedCornerPin)) return null;
-    const activeCornerPin = resolvedCornerPin;
+    const w = cornerPinTargetRect.width
+    const h = cornerPinTargetRect.height
+    const resolvedCornerPin = resolveCornerPinForSize(effectiveCornerPin, w, h)
+    if (!resolvedCornerPin || !hasCornerPin(resolvedCornerPin)) return null
+    const activeCornerPin = resolvedCornerPin
     return {
       transformOrigin: '0 0',
       transform: computeCornerPinMatrix3d(w, h, activeCornerPin),
-    };
-  }, [cornerPinTargetRect.height, cornerPinTargetRect.width, effectiveCornerPin]);
+    }
+  }, [cornerPinTargetRect.height, cornerPinTargetRect.width, effectiveCornerPin])
 
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
-    if (rasterSvgMaskDataUrl || state.maskType !== 'svg-mask' || !state.svgMaskId || !state.svgMaskPaths) {
-      return null;
+    if (
+      rasterSvgMaskDataUrl ||
+      state.maskType !== 'svg-mask' ||
+      !state.svgMaskId ||
+      !state.svgMaskPaths
+    ) {
+      return null
     }
 
-    const filterId = `blur-${state.svgMaskId}`;
+    const filterId = `blur-${state.svgMaskId}`
 
     return (
       <svg
@@ -472,12 +468,24 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
           </mask>
         </defs>
       </svg>
-    );
-  }, [rasterSvgMaskDataUrl, state.maskType, state.svgMaskId, state.svgMaskPaths, state.maskFeather, state.maskInvert, canvasWidth, canvasHeight]);
+    )
+  }, [
+    rasterSvgMaskDataUrl,
+    state.maskType,
+    state.svgMaskId,
+    state.svgMaskPaths,
+    state.maskFeather,
+    state.maskInvert,
+    canvasWidth,
+    canvasHeight,
+  ])
 
-  const blendModeCss = item.blendMode && item.blendMode !== 'normal'
-    ? BLEND_MODE_CSS[item.blendMode]
-    : undefined;
+  const blendModeCss =
+    item.type === 'shape' && item.isMask
+      ? undefined
+      : item.blendMode && item.blendMode !== 'normal'
+        ? BLEND_MODE_CSS[item.blendMode]
+        : undefined
 
   const maskContainerStyle = useMemo((): React.CSSProperties => {
     return {
@@ -488,11 +496,11 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       height: '100%',
       ...maskStyle,
       mixBlendMode: blendModeCss,
-    };
-  }, [maskStyle, blendModeCss]);
+    }
+  }, [maskStyle, blendModeCss])
 
-  const effectiveMediaChildren = mediaContent?.fitMode === 'contain'
-    ? (
+  const effectiveMediaChildren =
+    mediaContent?.fitMode === 'contain' ? (
       <ContainedMediaLayout
         sourceWidth={mediaContent.sourceWidth ?? state.transform.width}
         sourceHeight={mediaContent.sourceHeight ?? state.transform.height}
@@ -502,22 +510,23 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       >
         {children}
       </ContainedMediaLayout>
+    ) : (
+      children
     )
-    : children;
 
   const cornerPinFrameStyle = useMemo((): React.CSSProperties => {
     if (mediaContent?.fitMode === 'contain' && cornerPinStyle) {
-      return containedMediaStyle;
+      return containedMediaStyle
     }
 
     return {
       width: '100%',
       height: '100%',
-    };
-  }, [containedMediaStyle, cornerPinStyle, mediaContent?.fitMode]);
+    }
+  }, [containedMediaStyle, cornerPinStyle, mediaContent?.fitMode])
 
-  const pinnedMediaBody = mediaContent?.fitMode === 'contain'
-    ? (
+  const pinnedMediaBody =
+    mediaContent?.fitMode === 'contain' ? (
       <ContainedMediaLayout
         sourceWidth={cornerPinTargetRect.width}
         sourceHeight={cornerPinTargetRect.height}
@@ -527,8 +536,9 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       >
         {children}
       </ContainedMediaLayout>
+    ) : (
+      children
     )
-    : children;
 
   const pinnedMediaContent = (
     <div
@@ -541,7 +551,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     >
       {pinnedMediaBody}
     </div>
-  );
+  )
 
   const pinnedCornerPinContent = cornerPinStyle ? (
     <div
@@ -555,33 +565,31 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     >
       {pinnedMediaContent}
     </div>
-  ) : null;
+  ) : null
 
-  const innerContent = cornerPinStyle
-    ? (
-      <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-        {pinnedCornerPinContent}
-      </div>
-    )
-    : (
+  const innerContent = cornerPinStyle ? (
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {pinnedCornerPinContent}
+    </div>
+  ) : (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+      }}
+    >
       <div
         style={{
           width: '100%',
           height: '100%',
+          position: 'relative',
+          filter: state.cssFilter || undefined,
         }}
       >
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'relative',
-            filter: state.cssFilter || undefined,
-          }}
-        >
-          {effectiveMediaChildren}
-        </div>
+        {effectiveMediaChildren}
       </div>
-    );
+    </div>
+  )
 
   // When there's no mask, skip the full-canvas mask container div entirely
   if (state.maskType === null) {
@@ -595,7 +603,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       >
         {innerContent}
       </div>
-    );
+    )
   }
 
   return (
@@ -616,5 +624,5 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         </div>
       </div>
     </>
-  );
-};
+  )
+}

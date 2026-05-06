@@ -1,53 +1,53 @@
-import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import { cn } from '@/shared/ui/cn';
+import { memo, useState, useCallback, useRef, useEffect } from 'react'
+import { cn } from '@/shared/ui/cn'
 
-type MixedValue = number | 'mixed';
+type MixedValue = number | 'mixed'
 
-const LIVE_CHANGE_THROTTLE_MS = 16; // ~60fps max
-const CLICK_THRESHOLD = 3; // px — distinguishes click from drag
-const SNAP_TOLERANCE = 0.03125; // 1/32 — magnetic snap to deciles
-const MAX_STRETCH = 6; // px — max rubber-band overflow
-const DEAD_ZONE = 24; // px — distance past edge before rubber-band starts
-const MAX_CURSOR_RANGE = 160; // px — cursor distance at max stretch
+const LIVE_CHANGE_THROTTLE_MS = 16 // ~60fps max
+const CLICK_THRESHOLD = 3 // px — distinguishes click from drag
+const SNAP_TOLERANCE = 0.03125 // 1/32 — magnetic snap to deciles
+const MAX_STRETCH = 6 // px — max rubber-band overflow
+const DEAD_ZONE = 24 // px — distance past edge before rubber-band starts
+const MAX_CURSOR_RANGE = 160 // px — cursor distance at max stretch
 
 interface SliderInputProps {
-  value: MixedValue;
+  value: MixedValue
   /** Called on final commit (mouse up). Updates the actual value. */
-  onChange: (value: number) => void;
+  onChange: (value: number) => void
   /** Called during drag for live preview. If not provided, onChange is used. */
-  onLiveChange?: (value: number) => void;
+  onLiveChange?: (value: number) => void
   /** Optional throttle for live preview updates during drag. Set to 0 for every pointer move. */
-  liveChangeThrottleMs?: number;
-  label?: string;
-  min: number;
-  max: number;
-  step?: number;
-  unit?: string;
-  formatValue?: (value: number) => string;
-  formatInputValue?: (value: number) => string;
-  parseInputValue?: (rawValue: string) => number;
-  disabled?: boolean;
-  className?: string;
+  liveChangeThrottleMs?: number
+  label?: string
+  min: number
+  max: number
+  step?: number
+  unit?: string
+  formatValue?: (value: number) => string
+  formatInputValue?: (value: number) => string
+  parseInputValue?: (rawValue: string) => number
+  disabled?: boolean
+  className?: string
 }
 
 function decimalsForStep(step: number): number {
-  const s = step.toString();
-  const dot = s.indexOf('.');
-  return dot === -1 ? 0 : s.length - dot - 1;
+  const s = step.toString()
+  const dot = s.indexOf('.')
+  return dot === -1 ? 0 : s.length - dot - 1
 }
 
 function roundToStep(val: number, step: number): number {
-  const raw = Math.round(val / step) * step;
-  return parseFloat(raw.toFixed(decimalsForStep(step)));
+  const raw = Math.round(val / step) * step
+  return parseFloat(raw.toFixed(decimalsForStep(step)))
 }
 
 function snapToDecile(rawValue: number, min: number, max: number): number {
-  const normalized = (rawValue - min) / (max - min);
-  const nearest = Math.round(normalized * 10) / 10;
+  const normalized = (rawValue - min) / (max - min)
+  const nearest = Math.round(normalized * 10) / 10
   if (Math.abs(normalized - nearest) <= SNAP_TOLERANCE) {
-    return min + nearest * (max - min);
+    return min + nearest * (max - min)
   }
-  return rawValue;
+  return rawValue
 }
 
 /** Simple spring animation using rAF */
@@ -55,43 +55,43 @@ function animateSpring(
   from: number,
   to: number,
   onUpdate: (value: number) => void,
-  onComplete?: () => void
+  onComplete?: () => void,
 ): () => void {
-  let velocity = 0;
-  let current = from;
-  const stiffness = 300;
-  const damping = 25;
-  const mass = 0.8;
-  let rafId: number | null = null;
-  let lastTime = performance.now();
+  let velocity = 0
+  let current = from
+  const stiffness = 300
+  const damping = 25
+  const mass = 0.8
+  let rafId: number | null = null
+  let lastTime = performance.now()
 
   function tick(now: number) {
-    const dt = Math.min((now - lastTime) / 1000, 0.032);
-    lastTime = now;
+    const dt = Math.min((now - lastTime) / 1000, 0.032)
+    lastTime = now
 
-    const displacement = current - to;
-    const springForce = -stiffness * displacement;
-    const dampingForce = -damping * velocity;
-    const acceleration = (springForce + dampingForce) / mass;
+    const displacement = current - to
+    const springForce = -stiffness * displacement
+    const dampingForce = -damping * velocity
+    const acceleration = (springForce + dampingForce) / mass
 
-    velocity += acceleration * dt;
-    current += velocity * dt;
+    velocity += acceleration * dt
+    current += velocity * dt
 
-    onUpdate(current);
+    onUpdate(current)
 
     if (Math.abs(displacement) < 0.01 && Math.abs(velocity) < 0.1) {
-      onUpdate(to);
-      onComplete?.();
-      return;
+      onUpdate(to)
+      onComplete?.()
+      return
     }
 
-    rafId = requestAnimationFrame(tick);
+    rafId = requestAnimationFrame(tick)
   }
 
-  rafId = requestAnimationFrame(tick);
+  rafId = requestAnimationFrame(tick)
   return () => {
-    if (rafId !== null) cancelAnimationFrame(rafId);
-  };
+    if (rafId !== null) cancelAnimationFrame(rafId)
+  }
 }
 
 /**
@@ -120,417 +120,450 @@ export const SliderInput = memo(function SliderInput({
   disabled = false,
   className,
 }: SliderInputProps) {
-  const isMixed = value === 'mixed';
-  const numericValue = isMixed ? (min + max) / 2 : value;
+  const isMixed = value === 'mixed'
+  const numericValue = isMixed ? (min + max) / 2 : value
 
   // Refs
-  const trackRef = useRef<HTMLDivElement>(null);
-  const fillRef = useRef<HTMLDivElement>(null);
-  const handleRef = useRef<HTMLDivElement>(null);
-  const labelRef = useRef<HTMLSpanElement>(null);
-  const valueSpanRef = useRef<HTMLSpanElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const lastLiveChangeRef = useRef<number>(0);
-  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
-  const isClickRef = useRef(true);
-  const rectRef = useRef<DOMRect | null>(null);
-  const cancelSpringRef = useRef<(() => void) | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null)
+  const fillRef = useRef<HTMLDivElement>(null)
+  const handleRef = useRef<HTMLDivElement>(null)
+  const labelRef = useRef<HTMLSpanElement>(null)
+  const valueSpanRef = useRef<HTMLSpanElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const lastLiveChangeRef = useRef<number>(0)
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null)
+  const isClickRef = useRef(true)
+  const rectRef = useRef<DOMRect | null>(null)
+  const cancelSpringRef = useRef<(() => void) | null>(null)
   // Use ref for input value to avoid stale closures in blur handlers
-  const inputValueRef = useRef('');
+  const inputValueRef = useRef('')
 
   // State
-  const [fillPercent, setFillPercent] = useState(
-    () => ((numericValue - min) / (max - min)) * 100
-  );
-  const [rubberStretch, setRubberStretch] = useState(0);
-  const [isInteracting, setIsInteracting] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-  const [showInput, setShowInput] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const [localValue, setLocalValue] = useState<number | null>(null);
-  const previousNumericValueRef = useRef(numericValue);
+  const [fillPercent, setFillPercent] = useState(() => ((numericValue - min) / (max - min)) * 100)
+  const [rubberStretch, setRubberStretch] = useState(0)
+  const [isInteracting, setIsInteracting] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const [showInput, setShowInput] = useState(false)
+  const [inputValue, setInputValue] = useState('')
+  const [localValue, setLocalValue] = useState<number | null>(null)
+  const previousNumericValueRef = useRef(numericValue)
 
-  const showInputRef = useRef(false);
-  const isSubmittingRef = useRef(false);
-  const cancelEditRef = useRef(false);
-  const fillPercentRef = useRef(fillPercent);
-  const rubberStretchRef = useRef(rubberStretch);
-  const localValueRef = useRef<number | null>(localValue);
+  const showInputRef = useRef(false)
+  const isSubmittingRef = useRef(false)
+  const cancelEditRef = useRef(false)
+  const fillPercentRef = useRef(fillPercent)
+  const rubberStretchRef = useRef(rubberStretch)
+  const localValueRef = useRef<number | null>(localValue)
 
-  const displayNumericValue = localValue ?? numericValue;
+  const displayNumericValue = localValue ?? numericValue
 
   // Sync fill from props when not interacting and no spring is running
   useEffect(() => {
     if (!isInteracting && !cancelSpringRef.current) {
-      const nextFillPercent = ((numericValue - min) / (max - min)) * 100;
-      fillPercentRef.current = nextFillPercent;
-      setFillPercent(nextFillPercent);
+      const nextFillPercent = ((numericValue - min) / (max - min)) * 100
+      fillPercentRef.current = nextFillPercent
+      setFillPercent(nextFillPercent)
     }
-  }, [numericValue, min, max, isInteracting]);
+  }, [numericValue, min, max, isInteracting])
 
   useEffect(() => {
-    const previousNumericValue = previousNumericValueRef.current;
-    previousNumericValueRef.current = numericValue;
+    const previousNumericValue = previousNumericValueRef.current
+    previousNumericValueRef.current = numericValue
 
     if (showInput || isInteracting || localValue === null) {
-      return;
+      return
     }
 
     if (numericValue === localValue || numericValue !== previousNumericValue) {
-      setLocalValue(null);
+      setLocalValue(null)
     }
-  }, [numericValue, localValue, isInteracting, showInput]);
+  }, [numericValue, localValue, isInteracting, showInput])
 
   const formatDisplay = useCallback(
     (v: number) => {
-      if (formatValueProp) return formatValueProp(v);
-      const formatted = v.toFixed(decimalsForStep(step));
-      return unit ? `${formatted}${unit}` : formatted;
+      if (formatValueProp) return formatValueProp(v)
+      const formatted = v.toFixed(decimalsForStep(step))
+      return unit ? `${formatted}${unit}` : formatted
     },
-    [formatValueProp, step, unit]
-  );
+    [formatValueProp, step, unit],
+  )
 
-  const displayValue =
-    isMixed && localValue === null ? 'Mixed' : formatDisplay(displayNumericValue);
+  const displayValue = isMixed && localValue === null ? 'Mixed' : formatDisplay(displayNumericValue)
 
-  const updateDisplayedValue = useCallback((nextLocalValue: number | null) => {
-    localValueRef.current = nextLocalValue;
-    if (showInputRef.current || !valueSpanRef.current) return;
+  const updateDisplayedValue = useCallback(
+    (nextLocalValue: number | null) => {
+      localValueRef.current = nextLocalValue
+      if (showInputRef.current || !valueSpanRef.current) return
 
-    valueSpanRef.current.textContent = isMixed && nextLocalValue === null
-      ? 'Mixed'
-      : formatDisplay(nextLocalValue ?? numericValue);
-  }, [formatDisplay, isMixed, numericValue]);
+      valueSpanRef.current.textContent =
+        isMixed && nextLocalValue === null ? 'Mixed' : formatDisplay(nextLocalValue ?? numericValue)
+    },
+    [formatDisplay, isMixed, numericValue],
+  )
 
   const updateStretchVisual = useCallback((nextStretch: number) => {
-    rubberStretchRef.current = nextStretch;
-    if (!trackRef.current) return;
+    rubberStretchRef.current = nextStretch
+    if (!trackRef.current) return
 
-    const stretchWidth = Math.abs(nextStretch);
-    const stretchX = nextStretch < 0 ? nextStretch : 0;
-    trackRef.current.style.width = stretchWidth > 0 ? `calc(100% + ${stretchWidth}px)` : '';
-    trackRef.current.style.transform = stretchX !== 0 ? `translateX(${stretchX}px)` : '';
-  }, []);
+    const stretchWidth = Math.abs(nextStretch)
+    const stretchX = nextStretch < 0 ? nextStretch : 0
+    trackRef.current.style.width = stretchWidth > 0 ? `calc(100% + ${stretchWidth}px)` : ''
+    trackRef.current.style.transform = stretchX !== 0 ? `translateX(${stretchX}px)` : ''
+  }, [])
 
-  const updateFillVisual = useCallback((nextFillPercent: number, options?: {
-    active?: boolean;
-    dragging?: boolean;
-  }) => {
-    fillPercentRef.current = nextFillPercent;
-    const clampedFillPercent = Math.max(0, Math.min(100, nextFillPercent));
+  const updateFillVisual = useCallback(
+    (
+      nextFillPercent: number,
+      options?: {
+        active?: boolean
+        dragging?: boolean
+      },
+    ) => {
+      fillPercentRef.current = nextFillPercent
+      const clampedFillPercent = Math.max(0, Math.min(100, nextFillPercent))
 
-    if (fillRef.current) {
-      fillRef.current.style.width = `${clampedFillPercent}%`;
-    }
+      if (fillRef.current) {
+        fillRef.current.style.width = `${clampedFillPercent}%`
+      }
 
-    if (!handleRef.current) return;
+      if (!handleRef.current) return
 
-    const trackWidth = trackRef.current?.offsetWidth ?? 200;
-    const labelWidth = labelRef.current?.offsetWidth ?? 30;
-    const valueWidth = valueSpanRef.current?.offsetWidth ?? 40;
-    const handleBuffer = 8;
-    const leftThreshold = ((8 + labelWidth + handleBuffer) / trackWidth) * 100;
-    const rightThreshold = ((trackWidth - 8 - valueWidth - handleBuffer) / trackWidth) * 100;
-    const valueDodge = nextFillPercent < leftThreshold || nextFillPercent > rightThreshold;
-    const isActiveNow = options?.active ?? (isInteracting || isHovered);
-    const isDraggingNow = options?.dragging ?? isDragging;
-    const handleOpacity = !isActiveNow ? 0 : valueDodge ? 0.1 : isDraggingNow ? 0.9 : 0.5;
+      const trackWidth = trackRef.current?.offsetWidth ?? 200
+      const labelWidth = labelRef.current?.offsetWidth ?? 30
+      const valueWidth = valueSpanRef.current?.offsetWidth ?? 40
+      const handleBuffer = 8
+      const leftThreshold = ((8 + labelWidth + handleBuffer) / trackWidth) * 100
+      const rightThreshold = ((trackWidth - 8 - valueWidth - handleBuffer) / trackWidth) * 100
+      const valueDodge = nextFillPercent < leftThreshold || nextFillPercent > rightThreshold
+      const isActiveNow = options?.active ?? (isInteracting || isHovered)
+      const isDraggingNow = options?.dragging ?? isDragging
+      const handleOpacity = !isActiveNow ? 0 : valueDodge ? 0.1 : isDraggingNow ? 0.9 : 0.5
 
-    handleRef.current.style.left = `max(4px, calc(${clampedFillPercent}% - 1.5px))`;
-    handleRef.current.style.transform = `translateY(-50%) scaleX(${isActiveNow ? 1 : 0.25}) scaleY(${isActiveNow && valueDodge ? 0.75 : 1})`;
-    handleRef.current.style.opacity = String(handleOpacity);
-  }, [isDragging, isHovered, isInteracting]);
+      handleRef.current.style.left = `max(4px, calc(${clampedFillPercent}% - 1.5px))`
+      handleRef.current.style.transform = `translateY(-50%) scaleX(${isActiveNow ? 1 : 0.25}) scaleY(${isActiveNow && valueDodge ? 0.75 : 1})`
+      handleRef.current.style.opacity = String(handleOpacity)
+    },
+    [isDragging, isHovered, isInteracting],
+  )
 
   useEffect(() => {
-    localValueRef.current = localValue;
+    localValueRef.current = localValue
     if (!isInteracting) {
-      updateDisplayedValue(localValue);
+      updateDisplayedValue(localValue)
     }
-  }, [isInteracting, localValue, updateDisplayedValue]);
+  }, [isInteracting, localValue, updateDisplayedValue])
 
   useEffect(() => {
     if (isInteracting) {
-      updateFillVisual(fillPercentRef.current, { active: true, dragging: isDragging });
+      updateFillVisual(fillPercentRef.current, { active: true, dragging: isDragging })
     } else {
-      fillPercentRef.current = fillPercent;
-      updateFillVisual(fillPercent, { active: isHovered, dragging: false });
+      fillPercentRef.current = fillPercent
+      updateFillVisual(fillPercent, { active: isHovered, dragging: false })
     }
-  }, [fillPercent, isDragging, isHovered, isInteracting, updateFillVisual]);
+  }, [fillPercent, isDragging, isHovered, isInteracting, updateFillVisual])
 
   useEffect(() => {
-    rubberStretchRef.current = rubberStretch;
+    rubberStretchRef.current = rubberStretch
     if (!isInteracting) {
-      updateStretchVisual(rubberStretch);
+      updateStretchVisual(rubberStretch)
     }
-  }, [isInteracting, rubberStretch, updateStretchVisual]);
+  }, [isInteracting, rubberStretch, updateStretchVisual])
 
   const positionToValue = useCallback(
     (clientX: number) => {
-      const rect = rectRef.current;
-      if (!rect) return numericValue;
-      const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return Math.max(min, Math.min(max, min + percent * (max - min)));
+      const rect = rectRef.current
+      if (!rect) return numericValue
+      const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+      return Math.max(min, Math.min(max, min + percent * (max - min)))
     },
-    [min, max, numericValue]
-  );
+    [min, max, numericValue],
+  )
 
   const computeRubberStretch = useCallback((clientX: number, sign: number) => {
-    const rect = rectRef.current;
-    if (!rect) return 0;
-    const distancePast = sign < 0 ? rect.left - clientX : clientX - rect.right;
-    const overflow = Math.max(0, distancePast - DEAD_ZONE);
-    return sign * MAX_STRETCH * Math.sqrt(Math.min(overflow / MAX_CURSOR_RANGE, 1.0));
-  }, []);
+    const rect = rectRef.current
+    if (!rect) return 0
+    const distancePast = sign < 0 ? rect.left - clientX : clientX - rect.right
+    const overflow = Math.max(0, distancePast - DEAD_ZONE)
+    return sign * MAX_STRETCH * Math.sqrt(Math.min(overflow / MAX_CURSOR_RANGE, 1.0))
+  }, [])
 
   const emitLiveChange = useCallback(
     (newValue: number) => {
-      const handler = onLiveChange ?? onChange;
+      const handler = onLiveChange ?? onChange
       if (liveChangeThrottleMs <= 0) {
-        handler(newValue);
-        return;
+        handler(newValue)
+        return
       }
-      const now = performance.now();
+      const now = performance.now()
       if (now - lastLiveChangeRef.current >= liveChangeThrottleMs) {
-        lastLiveChangeRef.current = now;
-        handler(newValue);
+        lastLiveChangeRef.current = now
+        handler(newValue)
       }
     },
-    [liveChangeThrottleMs, onChange, onLiveChange]
-  );
+    [liveChangeThrottleMs, onChange, onLiveChange],
+  )
 
   const openTextInput = useCallback(() => {
     const raw = formatInputValue
       ? formatInputValue(numericValue)
-      : numericValue.toFixed(decimalsForStep(step));
-    cancelEditRef.current = false;
-    setShowInput(true);
-    showInputRef.current = true;
-    setInputValue(raw);
-    inputValueRef.current = raw;
-  }, [formatInputValue, numericValue, step]);
+      : numericValue.toFixed(decimalsForStep(step))
+    cancelEditRef.current = false
+    setShowInput(true)
+    showInputRef.current = true
+    setInputValue(raw)
+    inputValueRef.current = raw
+  }, [formatInputValue, numericValue, step])
 
   const commitTextInput = useCallback(() => {
     if (isSubmittingRef.current || cancelEditRef.current) {
-      cancelEditRef.current = false;
-      return;
+      cancelEditRef.current = false
+      return
     }
-    isSubmittingRef.current = true;
+    isSubmittingRef.current = true
 
-    const raw = inputValueRef.current;
-    const parsed = parseInputValue ? parseInputValue(raw) : parseFloat(raw);
+    const raw = inputValueRef.current
+    const parsed = parseInputValue ? parseInputValue(raw) : parseFloat(raw)
     if (!isNaN(parsed)) {
-      const clamped = Math.max(min, Math.min(max, parsed));
-      const rounded = roundToStep(clamped, step);
-      const nextFillPercent = ((rounded - min) / (max - min)) * 100;
-      fillPercentRef.current = nextFillPercent;
-      localValueRef.current = rounded;
-      setFillPercent(nextFillPercent);
-      setLocalValue(rounded);
-      onChange(rounded);
+      const clamped = Math.max(min, Math.min(max, parsed))
+      const rounded = roundToStep(clamped, step)
+      const nextFillPercent = ((rounded - min) / (max - min)) * 100
+      fillPercentRef.current = nextFillPercent
+      localValueRef.current = rounded
+      setFillPercent(nextFillPercent)
+      setLocalValue(rounded)
+      onChange(rounded)
     }
 
-    setShowInput(false);
-    showInputRef.current = false;
+    setShowInput(false)
+    showInputRef.current = false
 
     queueMicrotask(() => {
-      isSubmittingRef.current = false;
+      isSubmittingRef.current = false
       if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
+        document.activeElement.blur()
       }
-    });
-  }, [min, max, step, onChange, parseInputValue]);
+    })
+  }, [min, max, step, onChange, parseInputValue])
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (showInputRef.current || disabled) return;
+      if (showInputRef.current || disabled) return
 
       // Let clicks on the value span through for direct click-to-edit
       if (valueSpanRef.current && valueSpanRef.current.contains(e.target as Node)) {
-        return;
+        return
       }
 
-      e.preventDefault();
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      pointerDownPos.current = { x: e.clientX, y: e.clientY };
-      isClickRef.current = true;
-      localValueRef.current = null;
-      setIsInteracting(true);
+      e.preventDefault()
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      pointerDownPos.current = { x: e.clientX, y: e.clientY }
+      isClickRef.current = true
+      localValueRef.current = null
+      setIsInteracting(true)
 
       if (trackRef.current) {
-        rectRef.current = trackRef.current.getBoundingClientRect();
+        rectRef.current = trackRef.current.getBoundingClientRect()
       }
 
       if (cancelSpringRef.current) {
-        cancelSpringRef.current();
-        cancelSpringRef.current = null;
+        cancelSpringRef.current()
+        cancelSpringRef.current = null
       }
     },
-    [disabled]
-  );
+    [disabled],
+  )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isInteracting || !pointerDownPos.current) return;
+      if (!isInteracting || !pointerDownPos.current) return
 
-      const dx = e.clientX - pointerDownPos.current.x;
-      const dy = e.clientY - pointerDownPos.current.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      const dx = e.clientX - pointerDownPos.current.x
+      const dy = e.clientY - pointerDownPos.current.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
 
       if (isClickRef.current && distance > CLICK_THRESHOLD) {
-        isClickRef.current = false;
-        setIsDragging(true);
+        isClickRef.current = false
+        setIsDragging(true)
       }
 
       if (!isClickRef.current) {
-        const rect = rectRef.current;
-        let nextStretch = 0;
+        const rect = rectRef.current
+        let nextStretch = 0
         if (rect) {
           if (e.clientX < rect.left) {
-            nextStretch = computeRubberStretch(e.clientX, -1);
+            nextStretch = computeRubberStretch(e.clientX, -1)
           } else if (e.clientX > rect.right) {
-            nextStretch = computeRubberStretch(e.clientX, 1);
+            nextStretch = computeRubberStretch(e.clientX, 1)
           }
         }
-        updateStretchVisual(nextStretch);
+        updateStretchVisual(nextStretch)
 
-        const newValue = positionToValue(e.clientX);
-        const rounded = roundToStep(newValue, step);
-        const pct = ((rounded - min) / (max - min)) * 100;
-        localValueRef.current = rounded;
-        updateFillVisual(pct, { active: true, dragging: true });
-        updateDisplayedValue(rounded);
-        emitLiveChange(rounded);
+        const newValue = positionToValue(e.clientX)
+        const rounded = roundToStep(newValue, step)
+        const pct = ((rounded - min) / (max - min)) * 100
+        localValueRef.current = rounded
+        updateFillVisual(pct, { active: true, dragging: true })
+        updateDisplayedValue(rounded)
+        emitLiveChange(rounded)
       }
     },
-    [isInteracting, positionToValue, step, min, max, computeRubberStretch, emitLiveChange, updateDisplayedValue, updateFillVisual, updateStretchVisual]
-  );
+    [
+      isInteracting,
+      positionToValue,
+      step,
+      min,
+      max,
+      computeRubberStretch,
+      emitLiveChange,
+      updateDisplayedValue,
+      updateFillVisual,
+      updateStretchVisual,
+    ],
+  )
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
-      if (!isInteracting) return;
+      if (!isInteracting) return
 
       // If text input is open (e.g. from double-click), don't snap or blur
       if (showInputRef.current) {
-        setIsInteracting(false);
-        setIsDragging(false);
-        pointerDownPos.current = null;
-        return;
+        setIsInteracting(false)
+        setIsDragging(false)
+        pointerDownPos.current = null
+        return
       }
 
       if (isClickRef.current) {
-        const rawValue = positionToValue(e.clientX);
-        const discreteSteps = (max - min) / step;
+        const rawValue = positionToValue(e.clientX)
+        const discreteSteps = (max - min) / step
         const snappedValue =
           discreteSteps <= 10
             ? Math.max(min, Math.min(max, min + Math.round((rawValue - min) / step) * step))
-            : roundToStep(snapToDecile(rawValue, min, max), step);
+            : roundToStep(snapToDecile(rawValue, min, max), step)
 
-        const targetPct = ((snappedValue - min) / (max - min)) * 100;
-        const currentPct = fillPercentRef.current;
+        const targetPct = ((snappedValue - min) / (max - min)) * 100
+        const currentPct = fillPercentRef.current
 
         cancelSpringRef.current = animateSpring(
           currentPct,
           targetPct,
           (pct) => updateFillVisual(pct, { active: true, dragging: false }),
           () => {
-            cancelSpringRef.current = null;
-            setFillPercent(targetPct);
-          }
-        );
+            cancelSpringRef.current = null
+            setFillPercent(targetPct)
+          },
+        )
 
-        localValueRef.current = snappedValue;
-        setLocalValue(snappedValue);
-        onChange(roundToStep(snappedValue, step));
+        localValueRef.current = snappedValue
+        setLocalValue(snappedValue)
+        onChange(roundToStep(snappedValue, step))
       } else {
         if (localValueRef.current !== null) {
-          setFillPercent(fillPercentRef.current);
-          setLocalValue(localValueRef.current);
-          onChange(localValueRef.current);
+          setFillPercent(fillPercentRef.current)
+          setLocalValue(localValueRef.current)
+          onChange(localValueRef.current)
         }
       }
 
       if (rubberStretchRef.current !== 0) {
-        const startStretch = rubberStretchRef.current;
-        setRubberStretch(startStretch);
-        animateSpring(startStretch, 0, (v) => updateStretchVisual(v), () => {
-          updateStretchVisual(0);
-          setRubberStretch(0);
-        });
+        const startStretch = rubberStretchRef.current
+        setRubberStretch(startStretch)
+        animateSpring(
+          startStretch,
+          0,
+          (v) => updateStretchVisual(v),
+          () => {
+            updateStretchVisual(0)
+            setRubberStretch(0)
+          },
+        )
       }
 
-      setIsInteracting(false);
-      setIsDragging(false);
-      pointerDownPos.current = null;
+      setIsInteracting(false)
+      setIsDragging(false)
+      pointerDownPos.current = null
 
       if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
+        document.activeElement.blur()
       }
     },
-    [isInteracting, positionToValue, min, max, step, onChange, updateFillVisual, updateStretchVisual]
-  );
+    [
+      isInteracting,
+      positionToValue,
+      min,
+      max,
+      step,
+      onChange,
+      updateFillVisual,
+      updateStretchVisual,
+    ],
+  )
 
   // Focus input when it appears
   useEffect(() => {
     if (showInput && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+      inputRef.current.focus()
+      inputRef.current.select()
     }
-  }, [showInput]);
+  }, [showInput])
 
   // Click on value span → open text input immediately
   const handleValueClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    openTextInput();
-  };
+    e.stopPropagation()
+    e.preventDefault()
+    openTextInput()
+  }
 
   // Double-click anywhere on track → open text input
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (showInputRef.current || disabled) return;
-      e.preventDefault();
-      openTextInput();
+      if (showInputRef.current || disabled) return
+      e.preventDefault()
+      openTextInput()
     },
-    [disabled, openTextInput]
-  );
+    [disabled, openTextInput],
+  )
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    e.stopPropagation();
+    e.stopPropagation()
     if (e.key === 'Enter') {
-      commitTextInput();
+      commitTextInput()
     } else if (e.key === 'Escape') {
-      cancelEditRef.current = true;
-      setShowInput(false);
-      showInputRef.current = false;
+      cancelEditRef.current = true
+      setShowInput(false)
+      showInputRef.current = false
     }
-  };
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-    inputValueRef.current = e.target.value;
-  };
+    setInputValue(e.target.value)
+    inputValueRef.current = e.target.value
+  }
 
   // Handle dodge — fade handle when it overlaps label or value
-  const isActive = isInteracting || isHovered;
-  const HANDLE_BUFFER = 8;
-  const trackWidth = trackRef.current?.offsetWidth ?? 200;
-  const labelWidth = labelRef.current?.offsetWidth ?? 30;
-  const valueWidth = valueSpanRef.current?.offsetWidth ?? 40;
-  const leftThreshold = ((8 + labelWidth + HANDLE_BUFFER) / trackWidth) * 100;
-  const rightThreshold = ((trackWidth - 8 - valueWidth - HANDLE_BUFFER) / trackWidth) * 100;
-  const valueDodge = fillPercent < leftThreshold || fillPercent > rightThreshold;
-  const handleOpacity = !isActive ? 0 : valueDodge ? 0.1 : isDragging ? 0.9 : 0.5;
+  const isActive = isInteracting || isHovered
+  const HANDLE_BUFFER = 8
+  const trackWidth = trackRef.current?.offsetWidth ?? 200
+  const labelWidth = labelRef.current?.offsetWidth ?? 30
+  const valueWidth = valueSpanRef.current?.offsetWidth ?? 40
+  const leftThreshold = ((8 + labelWidth + HANDLE_BUFFER) / trackWidth) * 100
+  const rightThreshold = ((trackWidth - 8 - valueWidth - HANDLE_BUFFER) / trackWidth) * 100
+  const valueDodge = fillPercent < leftThreshold || fillPercent > rightThreshold
+  const handleOpacity = !isActive ? 0 : valueDodge ? 0.1 : isDragging ? 0.9 : 0.5
 
   // Hash marks — decile tick marks
-  const discreteSteps = (max - min) / step;
+  const discreteSteps = (max - min) / step
   const hashMarks =
     discreteSteps <= 10
-      ? Array.from({ length: Math.max(0, discreteSteps - 1) }, (_, i) => ((i + 1) * step) / (max - min) * 100)
-      : [10, 20, 30, 40, 50, 60, 70, 80, 90];
+      ? Array.from(
+          { length: Math.max(0, discreteSteps - 1) },
+          (_, i) => (((i + 1) * step) / (max - min)) * 100,
+        )
+      : [10, 20, 30, 40, 50, 60, 70, 80, 90]
 
-  const stretchWidth = Math.abs(rubberStretch);
-  const stretchX = rubberStretch < 0 ? rubberStretch : 0;
+  const stretchWidth = Math.abs(rubberStretch)
+  const stretchX = rubberStretch < 0 ? rubberStretch : 0
 
   return (
     <div className={cn('min-w-0 flex-1', className)}>
@@ -543,7 +576,7 @@ export const SliderInput = memo(function SliderInput({
           isActive && 'border-ring/50',
           isDragging && 'border-ring',
           disabled && 'opacity-50 pointer-events-none',
-          !disabled && 'cursor-pointer'
+          !disabled && 'cursor-pointer',
         )}
         style={{
           width: stretchWidth > 0 ? `calc(100% + ${stretchWidth}px)` : undefined,
@@ -564,7 +597,7 @@ export const SliderInput = memo(function SliderInput({
               className={cn(
                 'absolute top-1/2 -translate-y-1/2 w-px h-2 rounded-full',
                 'transition-opacity duration-150',
-                isActive ? 'bg-foreground/15' : 'bg-foreground/8'
+                isActive ? 'bg-foreground/15' : 'bg-foreground/8',
               )}
               style={{ left: `${pct}%` }}
             />
@@ -574,10 +607,7 @@ export const SliderInput = memo(function SliderInput({
         {/* Fill */}
         <div
           ref={fillRef}
-          className={cn(
-            'absolute inset-y-0 left-0 rounded-md',
-            'transition-colors duration-150'
-          )}
+          className={cn('absolute inset-y-0 left-0 rounded-md', 'transition-colors duration-150')}
           style={{
             width: `${Math.max(0, Math.min(100, fillPercentRef.current))}%`,
             background: isActive
@@ -628,7 +658,7 @@ export const SliderInput = memo(function SliderInput({
             className={cn(
               'absolute right-2 top-1/2 -translate-y-1/2 text-xs font-mono tabular-nums cursor-text',
               'text-muted-foreground hover:text-foreground transition-colors duration-150',
-              isMixed && localValue === null && 'italic opacity-50'
+              isMixed && localValue === null && 'italic opacity-50',
             )}
             onClick={handleValueClick}
             onPointerDown={(e) => e.stopPropagation()}
@@ -638,5 +668,5 @@ export const SliderInput = memo(function SliderInput({
         )}
       </div>
     </div>
-  );
-});
+  )
+})

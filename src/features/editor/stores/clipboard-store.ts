@@ -1,1 +1,1 @@
-export { useClipboardStore } from '@/shared/state/clipboard';
+export { useClipboardStore } from '@/shared/state/clipboard'

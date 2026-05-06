@@ -1,9 +1,9 @@
-﻿import { useState, useEffect } from 'react';
-import { loadProjectThumbnail } from '@/infrastructure/storage';
-import type { Project } from '@/types/project';
-import { createLogger } from '@/shared/logging/logger';
+import { useState, useEffect } from 'react'
+import { loadProjectThumbnail } from '@/infrastructure/storage'
+import type { Project } from '@/types/project'
+import { createLogger } from '@/shared/logging/logger'
 
-const logger = createLogger('ProjectThumbnail');
+const logger = createLogger('ProjectThumbnail')
 
 /**
  * Hook to load a project thumbnail from workspace-backed blob storage.
@@ -13,43 +13,43 @@ const logger = createLogger('ProjectThumbnail');
  * @returns Object URL for the thumbnail, or undefined if not available
  */
 export function useProjectThumbnail(project: Project): string | undefined {
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | undefined>(undefined);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | undefined>(undefined)
 
   useEffect(() => {
-    let objectUrl: string | undefined;
-    let cancelled = false;
+    let objectUrl: string | undefined
+    let cancelled = false
 
     async function loadThumbnail() {
       // Try to load the workspace-backed project thumbnail blob.
       if (project.thumbnailId) {
         try {
-          const blob = await loadProjectThumbnail(project.id);
+          const blob = await loadProjectThumbnail(project.id)
           if (blob && !cancelled) {
-            objectUrl = URL.createObjectURL(blob);
-            setThumbnailUrl(objectUrl);
-            return;
+            objectUrl = URL.createObjectURL(blob)
+            setThumbnailUrl(objectUrl)
+            return
           }
         } catch (error) {
-          logger.warn('Failed to load thumbnail from workspace storage:', error);
+          logger.warn('Failed to load thumbnail from workspace storage:', error)
         }
       }
 
       // Fall back to deprecated base64 thumbnail
       if (project.thumbnail && !cancelled) {
-        setThumbnailUrl(project.thumbnail);
+        setThumbnailUrl(project.thumbnail)
       }
     }
 
-    loadThumbnail();
+    loadThumbnail()
 
     // Cleanup object URL on unmount or when project changes
     return () => {
-      cancelled = true;
+      cancelled = true
       if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
+        URL.revokeObjectURL(objectUrl)
       }
-    };
-  }, [project.thumbnailId, project.thumbnail, project.updatedAt]);
+    }
+  }, [project.id, project.thumbnailId, project.thumbnail, project.updatedAt])
 
-  return thumbnailUrl;
+  return thumbnailUrl
 }

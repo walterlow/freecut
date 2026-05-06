@@ -1,16 +1,16 @@
-import { memo, useCallback, useMemo } from 'react';
-import { Blend, Info } from 'lucide-react';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
-import { useSelectionStore } from '@/shared/state/selection';
-import { resolveTransitionTargetFromSelection } from '@/features/editor/deps/timeline-utils';
+import { memo, useCallback, useMemo } from 'react'
+import { Blend, Info } from 'lucide-react'
+import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { useSelectionStore } from '@/shared/state/selection'
+import { resolveTransitionTargetFromSelection } from '@/features/editor/deps/timeline-utils'
 import type {
   WipeDirection,
   SlideDirection,
   FlipDirection,
   PresentationConfig,
-} from '@/types/transition';
-import { cn } from '@/shared/ui/cn';
-import { TRANSITION_DRAG_MIME, useTransitionDragStore } from '@/shared/state/transition-drag';
+} from '@/types/transition'
+import { cn } from '@/shared/ui/cn'
+import { TRANSITION_DRAG_MIME, useTransitionDragStore } from '@/shared/state/transition-drag'
 import {
   TRANSITION_ICON_MAP,
   TRANSITION_CATEGORY_INFO,
@@ -18,15 +18,15 @@ import {
   getTransitionPresentationConfigs,
   getTransitionConfigsByCategory,
   getTransitionCategoryStartIndices,
-} from '@/features/editor/utils/transition-ui-config';
+} from '@/features/editor/utils/transition-ui-config'
 
 interface TransitionCardProps {
-  config: PresentationConfig;
-  configIndex: number;
-  onApply: (index: number) => void;
-  clickDisabled?: boolean;
-  onDragStart: (event: React.DragEvent<HTMLButtonElement>, index: number) => void;
-  onDragEnd: () => void;
+  config: PresentationConfig
+  configIndex: number
+  onApply: (index: number) => void
+  clickDisabled?: boolean
+  onDragStart: (event: React.DragEvent<HTMLButtonElement>, index: number) => void
+  onDragEnd: () => void
 }
 
 /**
@@ -40,12 +40,12 @@ const TransitionCard = memo(function TransitionCard({
   onDragStart,
   onDragEnd,
 }: TransitionCardProps) {
-  const Icon = TRANSITION_ICON_MAP[config.icon] ?? Blend;
+  const Icon = TRANSITION_ICON_MAP[config.icon] ?? Blend
 
   const handleClick = useCallback(() => {
-    if (clickDisabled) return;
-    onApply(configIndex);
-  }, [clickDisabled, configIndex, onApply]);
+    if (clickDisabled) return
+    onApply(configIndex)
+  }, [clickDisabled, configIndex, onApply])
 
   return (
     <button
@@ -61,7 +61,7 @@ const TransitionCard = memo(function TransitionCard({
         'hover:bg-secondary/50 hover:border-primary/50',
         'transition-colors group text-center cursor-grab active:cursor-grabbing',
         'min-w-[60px] h-[56px]',
-        clickDisabled && 'focus-visible:outline-muted-foreground/40'
+        clickDisabled && 'focus-visible:outline-muted-foreground/40',
       )}
       title={config.description}
     >
@@ -70,20 +70,20 @@ const TransitionCard = memo(function TransitionCard({
         {config.label}
       </span>
     </button>
-  );
-});
+  )
+})
 
 /**
  * Category section with header and grid of cards
  */
 interface CategorySectionProps {
-  category: string;
-  configs: PresentationConfig[];
-  startIndex: number;
-  onApply: (index: number) => void;
-  clickDisabled?: boolean;
-  onDragStart: (event: React.DragEvent<HTMLButtonElement>, index: number) => void;
-  onDragEnd: () => void;
+  category: string
+  configs: PresentationConfig[]
+  startIndex: number
+  onApply: (index: number) => void
+  clickDisabled?: boolean
+  onDragStart: (event: React.DragEvent<HTMLButtonElement>, index: number) => void
+  onDragEnd: () => void
 }
 
 const CategorySection = memo(function CategorySection({
@@ -95,9 +95,9 @@ const CategorySection = memo(function CategorySection({
   onDragStart,
   onDragEnd,
 }: CategorySectionProps) {
-  const info = TRANSITION_CATEGORY_INFO[category] || { title: category };
+  const info = TRANSITION_CATEGORY_INFO[category] || { title: category }
 
-  if (configs.length === 0) return null;
+  if (configs.length === 0) return null
 
   return (
     <div className="space-y-2">
@@ -118,70 +118,85 @@ const CategorySection = memo(function CategorySection({
         ))}
       </div>
     </div>
-  );
-});
+  )
+})
 
 export const TransitionsPanel = memo(function TransitionsPanel() {
-  const addTransition = useTimelineStore((s) => s.addTransition);
-  const updateTransition = useTimelineStore((s) => s.updateTransition);
-  const items = useTimelineStore((s) => s.items);
-  const transitions = useTimelineStore((s) => s.transitions);
+  const addTransition = useTimelineStore((s) => s.addTransition)
+  const updateTransition = useTimelineStore((s) => s.updateTransition)
+  const items = useTimelineStore((s) => s.items)
+  const transitions = useTimelineStore((s) => s.transitions)
   // Get selection
-  const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
-  const selectionCount = selectedItemIds.length;
-  const selectedId = selectionCount === 1 ? selectedItemIds[0] : null;
+  const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
+  const selectionCount = selectedItemIds.length
+  const selectedId = selectionCount === 1 ? selectedItemIds[0] : null
 
   const adjacentInfo = useMemo(() => {
-    if (!selectedId) return null;
-    return resolveTransitionTargetFromSelection({ selectedItemIds: [selectedId], items, transitions });
-  }, [selectedId, items, transitions]);
+    if (!selectedId) return null
+    return resolveTransitionTargetFromSelection({
+      selectedItemIds: [selectedId],
+      items,
+      transitions,
+    })
+  }, [selectedId, items, transitions])
 
-  const setDraggedTransition = useTransitionDragStore((s) => s.setDraggedTransition);
-  const setInvalidHint = useTransitionDragStore((s) => s.setInvalidHint);
-  const clearTransitionDrag = useTransitionDragStore((s) => s.clearDrag);
+  const setDraggedTransition = useTransitionDragStore((s) => s.setDraggedTransition)
+  const setInvalidHint = useTransitionDragStore((s) => s.setInvalidHint)
+  const clearTransitionDrag = useTransitionDragStore((s) => s.clearDrag)
 
-  const handleDragStart = useCallback((event: React.DragEvent<HTMLButtonElement>, configIndex: number) => {
-    const config = getTransitionPresentationConfigs()[configIndex];
-    if (!config) return;
+  const handleDragStart = useCallback(
+    (event: React.DragEvent<HTMLButtonElement>, configIndex: number) => {
+      const config = getTransitionPresentationConfigs()[configIndex]
+      if (!config) return
 
-    const dragDescriptor = {
-      presentation: config.id,
-      direction: config.direction as WipeDirection | SlideDirection | FlipDirection | undefined,
-    };
+      const dragDescriptor = {
+        presentation: config.id,
+        direction: (config.direction ?? config.defaultDirection) as
+          | WipeDirection
+          | SlideDirection
+          | FlipDirection
+          | undefined,
+      }
 
-    event.dataTransfer.effectAllowed = 'copy';
-    event.dataTransfer.setData(TRANSITION_DRAG_MIME, JSON.stringify(dragDescriptor));
-    setDraggedTransition(dragDescriptor);
-    setInvalidHint(null);
-  }, [setDraggedTransition, setInvalidHint]);
+      event.dataTransfer.effectAllowed = 'copy'
+      event.dataTransfer.setData(TRANSITION_DRAG_MIME, JSON.stringify(dragDescriptor))
+      setDraggedTransition(dragDescriptor)
+      setInvalidHint(null)
+    },
+    [setDraggedTransition, setInvalidHint],
+  )
 
   const handleDragEnd = useCallback(() => {
-    clearTransitionDrag();
-  }, [clearTransitionDrag]);
+    clearTransitionDrag()
+  }, [clearTransitionDrag])
 
   // Apply a transition by config index
   const handleApplyByIndex = useCallback(
     (configIndex: number) => {
-      const config = getTransitionPresentationConfigs()[configIndex];
-      if (!config) return;
+      const config = getTransitionPresentationConfigs()[configIndex]
+      if (!config) return
 
       // Get fresh state at click time
-      const { items: currentItems, transitions: currentTransitions } = useTimelineStore.getState();
-      const currentSelectedIds = useSelectionStore.getState().selectedItemIds;
+      const { items: currentItems, transitions: currentTransitions } = useTimelineStore.getState()
+      const currentSelectedIds = useSelectionStore.getState().selectedItemIds
       const info = resolveTransitionTargetFromSelection({
         selectedItemIds: currentSelectedIds,
         items: currentItems,
         transitions: currentTransitions,
-      });
+      })
 
-      if (!info || (!info.hasExisting && !info.canApply)) return;
+      if (!info || (!info.hasExisting && !info.canApply)) return
 
-      const { leftClipId, rightClipId, hasExisting, existingTransitionId } = info;
-      const presentation = config.id;
-      const direction = config.direction as WipeDirection | SlideDirection | FlipDirection | undefined;
+      const { leftClipId, rightClipId, hasExisting, existingTransitionId } = info
+      const presentation = config.id
+      const direction = (config.direction ?? config.defaultDirection) as
+        | WipeDirection
+        | SlideDirection
+        | FlipDirection
+        | undefined
 
       if (hasExisting && existingTransitionId) {
-        updateTransition(existingTransitionId, { presentation, direction });
+        updateTransition(existingTransitionId, { presentation, direction })
       } else {
         addTransition(
           leftClipId,
@@ -190,13 +205,13 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
           info.suggestedDurationInFrames,
           presentation,
           direction,
-        );
+        )
       }
     },
-    [addTransition, updateTransition]
-  );
+    [addTransition, updateTransition],
+  )
 
-  const hasValidClickTarget = !!adjacentInfo && (adjacentInfo.hasExisting || adjacentInfo.canApply);
+  const hasValidClickTarget = !!adjacentInfo && (adjacentInfo.hasExisting || adjacentInfo.canApply)
 
   return (
     <div className="h-full flex flex-col">
@@ -207,16 +222,29 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
           <div className="text-muted-foreground leading-relaxed">
             {hasValidClickTarget ? (
               <span className="text-primary">
-                点击可应用到当前剪切点，或将转场拖拽到时间线上任意有效剪切点。
+                Click to apply to the selected cut, or drag a transition onto any valid cut in the
+                timeline.
               </span>
             ) : adjacentInfo?.reason ? (
-              <span>可拖拽转场到有效剪切点。当前无法点击应用：{adjacentInfo.reason}。</span>
+              <span>
+                Drag a transition onto a valid cut. Click-to-apply is unavailable here:{' '}
+                {adjacentInfo.reason}.
+              </span>
             ) : selectionCount === 1 ? (
-              <span>可拖拽转场到有效剪切点，或将片段首尾相接后选中其中一个片段再点击应用。</span>
+              <span>
+                Drag a transition onto a valid cut, or place clips next to each other and select one
+                clip to click-apply.
+              </span>
             ) : selectionCount > 1 ? (
-              <span>可拖拽转场到有效剪切点，或只选中一个视频/图片片段后点击应用。</span>
+              <span>
+                Drag a transition onto a valid cut, or select a single video or image clip to
+                click-apply.
+              </span>
             ) : (
-              <span>可拖拽转场到有效剪切点，或选中一个视频/图片片段为其相邻片段添加转场。</span>
+              <span>
+                Drag a transition onto a valid cut, or select a video or image clip to add a
+                transition to its neighbor.
+              </span>
             )}
           </div>
         </div>
@@ -225,8 +253,8 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
       {/* Transitions grid by category */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {TRANSITION_CATEGORY_ORDER.map((category) => {
-          const configs = getTransitionConfigsByCategory()[category];
-          if (!configs || configs.length === 0) return null;
+          const configs = getTransitionConfigsByCategory()[category]
+          if (!configs || configs.length === 0) return null
 
           return (
             <CategorySection
@@ -239,9 +267,9 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             />
-          );
+          )
         })}
       </div>
     </div>
-  );
-});
+  )
+})

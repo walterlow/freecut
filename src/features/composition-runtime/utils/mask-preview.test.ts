@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { getRasterizedMaskLayerSettingsList } from './mask-preview';
+import { describe, expect, it } from 'vite-plus/test'
+import { getRasterizedMaskLayerSettingsList } from './mask-preview'
 
 describe('getRasterizedMaskLayerSettingsList', () => {
   it('preserves invert and alpha feather per mask layer', () => {
@@ -14,7 +14,7 @@ describe('getRasterizedMaskLayerSettingsList', () => {
         maskFeather: 18,
         maskInvert: true,
       },
-    ]);
+    ])
 
     expect(settings).toEqual([
       {
@@ -25,6 +25,6 @@ describe('getRasterizedMaskLayerSettingsList', () => {
         invert: true,
         feather: 18,
       },
-    ]);
-  });
-});
+    ])
+  })
+})

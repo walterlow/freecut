@@ -2,179 +2,180 @@
  * Playback & Navigation shortcuts: Space, Arrow Left/Right, Home/End, Up/Down snap points.
  */
 
-import { useCallback } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
-import { useItemsStore } from '../../stores/items-store';
-import { useMarkersStore } from '../../stores/markers-store';
-import { useTransitionsStore } from '../../stores/transitions-store';
-import { HOTKEY_OPTIONS } from '@/config/hotkeys';
-import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
-import { useSourcePlayerStore } from '@/shared/state/source-player';
-import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
-import { getVisibleTrackIds } from '../../utils/group-utils';
-import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
+import { useCallback } from 'react'
+import { useHotkeys } from 'react-hotkeys-hook'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
+import { useItemsStore } from '../../stores/items-store'
+import { useMarkersStore } from '../../stores/markers-store'
+import { useTransitionsStore } from '../../stores/transitions-store'
+import { HOTKEY_OPTIONS } from '@/config/hotkeys'
+import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts'
+import { useSourcePlayerStore } from '@/shared/state/source-player'
+import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils'
+import { getVisibleTrackIds } from '../../utils/group-utils'
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings'
 
 /** Compute snap points on-demand from current store state (avoids reactive subscriptions). */
 function getSnapPoints(): number[] {
-  const items = useItemsStore.getState().items;
-  const markers = useMarkersStore.getState().markers;
-  const transitions = useTransitionsStore.getState().transitions;
-  const tracks = useItemsStore.getState().tracks;
-  const visibleTrackIds = getVisibleTrackIds(tracks);
-  const points = new Set<number>();
+  const items = useItemsStore.getState().items
+  const markers = useMarkersStore.getState().markers
+  const transitions = useTransitionsStore.getState().transitions
+  const tracks = useItemsStore.getState().tracks
+  const visibleTrackIds = getVisibleTrackIds(tracks)
+  const points = new Set<number>()
 
   for (const edge of getFilteredItemSnapEdges(items, transitions, visibleTrackIds)) {
-    points.add(edge.frame);
+    points.add(edge.frame)
   }
   for (const marker of markers) {
-    points.add(marker.frame);
+    points.add(marker.frame)
   }
-  return Array.from(points).sort((a, b) => a - b);
+  return Array.from(points).sort((a, b) => a - b)
 }
 
-export function usePlaybackShortcuts(
-  callbacks: TimelineShortcutCallbacks,
-) {
-  const hotkeys = useResolvedHotkeys();
-  const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
-  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
-  const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
-  const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
-  const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const commitTimelineSeek = useCallback((frame: number) => {
-    setPreviewFrame(null);
-    setDisplayedFrame(null);
-    setCurrentFrame(frame);
-  }, [setPreviewFrame, setDisplayedFrame, setCurrentFrame]);
+export function usePlaybackShortcuts(callbacks: TimelineShortcutCallbacks) {
+  const hotkeys = useResolvedHotkeys()
+  const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause)
+  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame)
+  const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame)
+  const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame)
+  const isPlaying = usePlaybackStore((s) => s.isPlaying)
+  const commitTimelineSeek = useCallback(
+    (frame: number) => {
+      setPreviewFrame(null)
+      setDisplayedFrame(null)
+      setCurrentFrame(frame)
+    },
+    [setPreviewFrame, setDisplayedFrame, setCurrentFrame],
+  )
 
   // Playback: Space - Play/Pause
   useHotkeys(
     hotkeys.PLAY_PAUSE,
     (event) => {
-      event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
+      event.preventDefault()
+      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState()
       if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.toggle();
-        return;
+        playerMethods.toggle()
+        return
       }
-      togglePlayPause();
+      togglePlayPause()
       if (isPlaying && callbacks.onPause) {
-        callbacks.onPause();
+        callbacks.onPause()
       } else if (!isPlaying && callbacks.onPlay) {
-        callbacks.onPlay();
+        callbacks.onPlay()
       }
     },
     { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
-    [togglePlayPause, isPlaying, callbacks]
-  );
+    [togglePlayPause, isPlaying, callbacks],
+  )
 
   // Navigation: Arrow Left - Previous frame
   useHotkeys(
     hotkeys.PREVIOUS_FRAME,
     (event) => {
-      event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
+      event.preventDefault()
+      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState()
       if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.frameBack(1);
-        return;
+        playerMethods.frameBack(1)
+        return
       }
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      commitTimelineSeek(Math.max(0, currentFrame - 1));
+      const currentFrame = usePlaybackStore.getState().currentFrame
+      commitTimelineSeek(Math.max(0, currentFrame - 1))
     },
     HOTKEY_OPTIONS,
-    [commitTimelineSeek]
-  );
+    [commitTimelineSeek],
+  )
 
   // Navigation: Arrow Right - Next frame
   useHotkeys(
     hotkeys.NEXT_FRAME,
     (event) => {
-      event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
+      event.preventDefault()
+      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState()
       if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.frameForward(1);
-        return;
+        playerMethods.frameForward(1)
+        return
       }
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      commitTimelineSeek(currentFrame + 1);
+      const currentFrame = usePlaybackStore.getState().currentFrame
+      commitTimelineSeek(currentFrame + 1)
     },
     HOTKEY_OPTIONS,
-    [commitTimelineSeek]
-  );
+    [commitTimelineSeek],
+  )
 
   // Navigation: Home - Go to start
   useHotkeys(
     hotkeys.GO_TO_START,
     (event) => {
-      event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
+      event.preventDefault()
+      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState()
       if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.seek(0);
-        return;
+        playerMethods.seek(0)
+        return
       }
-      commitTimelineSeek(0);
+      commitTimelineSeek(0)
     },
     HOTKEY_OPTIONS,
-    [commitTimelineSeek]
-  );
+    [commitTimelineSeek],
+  )
 
   // Navigation: End - Go to end of timeline (last frame of last item)
   useHotkeys(
     hotkeys.GO_TO_END,
     (event) => {
-      event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
+      event.preventDefault()
+      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState()
       if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.seek(playerMethods.getDurationInFrames() - 1);
-        return;
+        playerMethods.seek(playerMethods.getDurationInFrames() - 1)
+        return
       }
-      const currentItems = useItemsStore.getState().items;
+      const currentItems = useItemsStore.getState().items
       const lastFrame = currentItems.reduce((max, item) => {
-        const itemEnd = item.from + item.durationInFrames;
-        return Math.max(max, itemEnd);
-      }, 0);
-      commitTimelineSeek(lastFrame);
+        const itemEnd = item.from + item.durationInFrames
+        return Math.max(max, itemEnd)
+      }, 0)
+      commitTimelineSeek(lastFrame)
     },
     HOTKEY_OPTIONS,
-    [commitTimelineSeek]
-  );
+    [commitTimelineSeek],
+  )
 
   // Navigation: Down - Jump to next snap point (clip edge or marker)
   useHotkeys(
     hotkeys.NEXT_SNAP_POINT,
     (event) => {
-      event.preventDefault();
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      const nextEdge = getSnapPoints().find((edge) => edge > currentFrame);
+      event.preventDefault()
+      const currentFrame = usePlaybackStore.getState().currentFrame
+      const nextEdge = getSnapPoints().find((edge) => edge > currentFrame)
       if (nextEdge !== undefined) {
-        commitTimelineSeek(nextEdge);
+        commitTimelineSeek(nextEdge)
       }
     },
     HOTKEY_OPTIONS,
-    [commitTimelineSeek]
-  );
+    [commitTimelineSeek],
+  )
 
   // Navigation: Up - Jump to previous snap point (clip edge or marker)
   useHotkeys(
     hotkeys.PREVIOUS_SNAP_POINT,
     (event) => {
-      event.preventDefault();
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      const snapPoints = getSnapPoints();
-      let previousEdge: number | undefined;
+      event.preventDefault()
+      const currentFrame = usePlaybackStore.getState().currentFrame
+      const snapPoints = getSnapPoints()
+      let previousEdge: number | undefined
       for (let i = snapPoints.length - 1; i >= 0; i--) {
         if (snapPoints[i]! < currentFrame) {
-          previousEdge = snapPoints[i]!;
-          break;
+          previousEdge = snapPoints[i]!
+          break
         }
       }
       if (previousEdge !== undefined) {
-        commitTimelineSeek(previousEdge);
+        commitTimelineSeek(previousEdge)
       }
     },
     HOTKEY_OPTIONS,
-    [commitTimelineSeek]
-  );
+    [commitTimelineSeek],
+  )
 }

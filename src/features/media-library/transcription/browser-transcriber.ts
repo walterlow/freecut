@@ -1,185 +1,185 @@
-import { Bridge } from './lib/bridge';
+import { Bridge } from './lib/bridge'
 import type {
   TranscriptSegment,
   TranscribeOptions,
   TranscribeProgress,
   TranscribeRuntimeInfo,
   WhisperModel,
-} from './types';
-import type { MediaTranscriptQuantization } from '@/types/storage';
-import { localInferenceRuntimeRegistry } from '@/shared/state/local-inference';
-import { LOCAL_INFERENCE_UNLOADED_MESSAGE } from '@/shared/state/local-inference';
-import { formatWhisperRuntimeModelLabel, estimateWhisperRuntimeBytes } from './runtime-estimates';
-import { DEFAULT_WHISPER_MODEL } from '@/shared/utils/whisper-settings';
-import { usePlaybackStore } from '@/shared/state/playback';
+} from './types'
+import type { MediaTranscriptQuantization } from '@/types/storage'
+import { localInferenceRuntimeRegistry } from '@/shared/state/local-inference'
+import { LOCAL_INFERENCE_UNLOADED_MESSAGE } from '@/shared/state/local-inference'
+import { formatWhisperRuntimeModelLabel, estimateWhisperRuntimeBytes } from './runtime-estimates'
+import { DEFAULT_WHISPER_MODEL } from '@/shared/utils/whisper-settings'
+import { usePlaybackStore } from '@/shared/state/playback'
 
 export class BrowserTranscriber {
-  private readonly defaultOptions: TranscribeOptions;
+  private readonly defaultOptions: TranscribeOptions
 
   constructor(options: TranscribeOptions = {}) {
-    this.defaultOptions = options;
+    this.defaultOptions = options
   }
 
   transcribe(file: File, runtimeOptions: TranscribeOptions = {}): TranscribeStream {
     return new TranscribeStream(file, {
       ...this.defaultOptions,
       ...runtimeOptions,
-    });
+    })
   }
 }
 
 export class TranscribeStream implements AsyncIterable<TranscriptSegment> {
-  private readonly file: File;
-  private readonly options: TranscribeOptions;
-  private readonly runtimeId = `whisper-${crypto.randomUUID()}`;
-  private readonly queue: TranscriptSegment[] = [];
-  private doneFlag = false;
-  private error: Error | undefined;
-  private notify: (() => void) | null = null;
-  private bridge: Bridge | null = null;
-  private started = false;
-  private runtimeRegistered = false;
-  private unsubscribePlayback: (() => void) | null = null;
-  private idleResumeTimer: ReturnType<typeof setTimeout> | null = null;
-  private workerPaused = false;
+  private readonly file: File
+  private readonly options: TranscribeOptions
+  private readonly runtimeId = `whisper-${crypto.randomUUID()}`
+  private readonly queue: TranscriptSegment[] = []
+  private doneFlag = false
+  private error: Error | undefined
+  private notify: (() => void) | null = null
+  private bridge: Bridge | null = null
+  private started = false
+  private runtimeRegistered = false
+  private unsubscribePlayback: (() => void) | null = null
+  private idleResumeTimer: ReturnType<typeof setTimeout> | null = null
+  private workerPaused = false
 
   constructor(file: File, options: TranscribeOptions = {}) {
-    this.file = file;
-    this.options = options;
+    this.file = file
+    this.options = options
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<TranscriptSegment> {
-    await this.startBridge();
+    await this.startBridge()
 
     while (true) {
       if (this.queue.length > 0) {
-        const next = this.queue.shift();
+        const next = this.queue.shift()
         if (next) {
-          yield next;
+          yield next
         }
       } else if (this.error) {
-        throw this.error;
+        throw this.error
       } else if (this.doneFlag) {
-        return;
+        return
       } else {
         await new Promise<void>((resolve) => {
-          this.notify = resolve;
-        });
+          this.notify = resolve
+        })
       }
     }
   }
 
   async collect(): Promise<TranscriptSegment[]> {
-    const segments: TranscriptSegment[] = [];
+    const segments: TranscriptSegment[] = []
     for await (const segment of this) {
-      segments.push(segment);
+      segments.push(segment)
     }
-    return segments;
+    return segments
   }
 
   cancel(message = LOCAL_INFERENCE_UNLOADED_MESSAGE): void {
-    this.bridge?.terminate();
-    this.queue.length = 0;
-    this.error = new Error(message);
-    this.unregisterRuntime();
-    this.stopPlaybackWatcher();
-    this.wakeUp();
+    this.bridge?.terminate()
+    this.queue.length = 0
+    this.error = new Error(message)
+    this.unregisterRuntime()
+    this.stopPlaybackWatcher()
+    this.wakeUp()
   }
 
   private startPlaybackWatcher(): void {
-    if (this.unsubscribePlayback) return;
-    if (!this.bridge) return;
+    if (this.unsubscribePlayback) return
+    if (!this.bridge) return
 
-    const IDLE_RESUME_MS = 400;
+    const IDLE_RESUME_MS = 400
 
     const pauseWorker = () => {
       if (this.idleResumeTimer !== null) {
-        clearTimeout(this.idleResumeTimer);
-        this.idleResumeTimer = null;
+        clearTimeout(this.idleResumeTimer)
+        this.idleResumeTimer = null
       }
-      if (this.workerPaused) return;
-      this.workerPaused = true;
-      this.bridge?.setPaused(true);
-    };
+      if (this.workerPaused) return
+      this.workerPaused = true
+      this.bridge?.setPaused(true)
+    }
 
     const scheduleResume = () => {
       if (this.idleResumeTimer !== null) {
-        clearTimeout(this.idleResumeTimer);
+        clearTimeout(this.idleResumeTimer)
       }
       this.idleResumeTimer = setTimeout(() => {
-        this.idleResumeTimer = null;
-        const playback = usePlaybackStore.getState();
-        if (playback.isPlaying || playback.previewFrame !== null) return;
-        this.workerPaused = false;
-        this.bridge?.setPaused(false);
-      }, IDLE_RESUME_MS);
-    };
+        this.idleResumeTimer = null
+        const playback = usePlaybackStore.getState()
+        if (playback.isPlaying || playback.previewFrame !== null) return
+        this.workerPaused = false
+        this.bridge?.setPaused(false)
+      }, IDLE_RESUME_MS)
+    }
 
-    const initial = usePlaybackStore.getState();
+    const initial = usePlaybackStore.getState()
     if (initial.isPlaying || initial.previewFrame !== null) {
-      pauseWorker();
+      pauseWorker()
     }
 
     this.unsubscribePlayback = usePlaybackStore.subscribe((state, prev) => {
-      const isActive = state.isPlaying || state.previewFrame !== null;
-      const frameMoved = state.currentFrameEpoch !== prev.currentFrameEpoch;
+      const isActive = state.isPlaying || state.previewFrame !== null
+      const frameMoved = state.currentFrameEpoch !== prev.currentFrameEpoch
 
       if (isActive || frameMoved) {
-        pauseWorker();
-        if (!state.isPlaying) scheduleResume();
-        return;
+        pauseWorker()
+        if (!state.isPlaying) scheduleResume()
+        return
       }
 
       if (prev.isPlaying && !state.isPlaying) {
-        scheduleResume();
+        scheduleResume()
       }
-    });
+    })
   }
 
   private stopPlaybackWatcher(): void {
-    this.unsubscribePlayback?.();
-    this.unsubscribePlayback = null;
+    this.unsubscribePlayback?.()
+    this.unsubscribePlayback = null
     if (this.idleResumeTimer !== null) {
-      clearTimeout(this.idleResumeTimer);
-      this.idleResumeTimer = null;
+      clearTimeout(this.idleResumeTimer)
+      this.idleResumeTimer = null
     }
-    this.workerPaused = false;
+    this.workerPaused = false
   }
 
   private async startBridge(): Promise<void> {
     if (this.started) {
-      return;
+      return
     }
 
-    this.started = true;
-    this.registerRuntime();
+    this.started = true
+    this.registerRuntime()
     this.bridge = new Bridge({
       onSegment: (segment: TranscriptSegment) => {
-        this.queue.push(segment);
-        this.options.onSegment?.(segment);
-        this.wakeUp();
+        this.queue.push(segment)
+        this.options.onSegment?.(segment)
+        this.wakeUp()
       },
       onProgress: (event: TranscribeProgress) => {
-        this.updateRuntimeFromProgress(event);
-        this.options.onProgress?.(event);
+        this.updateRuntimeFromProgress(event)
+        this.options.onProgress?.(event)
       },
       onRuntimeInfo: (info: TranscribeRuntimeInfo) => {
-        this.updateRuntime(info);
-        this.options.onRuntimeInfo?.(info);
+        this.updateRuntime(info)
+        this.options.onRuntimeInfo?.(info)
       },
       onDone: () => {
-        this.doneFlag = true;
-        this.unregisterRuntime();
-        this.stopPlaybackWatcher();
-        this.wakeUp();
+        this.doneFlag = true
+        this.unregisterRuntime()
+        this.stopPlaybackWatcher()
+        this.wakeUp()
       },
       onError: (message: string) => {
-        this.error = new Error(message);
-        this.unregisterRuntime();
-        this.stopPlaybackWatcher();
-        this.wakeUp();
+        this.error = new Error(message)
+        this.unregisterRuntime()
+        this.stopPlaybackWatcher()
+        this.wakeUp()
       },
-    });
+    })
 
     try {
       await this.bridge.start(
@@ -187,81 +187,85 @@ export class TranscribeStream implements AsyncIterable<TranscriptSegment> {
         (this.options.model as WhisperModel | undefined) ?? DEFAULT_WHISPER_MODEL,
         this.options.language,
         this.options.quantization,
-      );
-      this.startPlaybackWatcher();
+      )
+      this.startPlaybackWatcher()
     } catch (error) {
-      this.error = error instanceof Error ? error : new Error(String(error));
-      this.unregisterRuntime();
-      this.stopPlaybackWatcher();
-      this.wakeUp();
+      this.error = error instanceof Error ? error : new Error(String(error))
+      this.unregisterRuntime()
+      this.stopPlaybackWatcher()
+      this.wakeUp()
     }
   }
 
   private registerRuntime(): void {
     if (this.runtimeRegistered) {
-      return;
+      return
     }
 
-    this.runtimeRegistered = true;
-    const model = (this.options.model as WhisperModel | undefined) ?? DEFAULT_WHISPER_MODEL;
-    const quantization = (this.options.quantization as MediaTranscriptQuantization | undefined) ?? 'hybrid';
-    const now = Date.now();
+    this.runtimeRegistered = true
+    const model = (this.options.model as WhisperModel | undefined) ?? DEFAULT_WHISPER_MODEL
+    const quantization =
+      (this.options.quantization as MediaTranscriptQuantization | undefined) ?? 'hybrid'
+    const now = Date.now()
 
-    localInferenceRuntimeRegistry.registerRuntime({
-      id: this.runtimeId,
-      feature: 'whisper',
-      featureLabel: 'Whisper',
-      modelKey: model,
-      modelLabel: formatWhisperRuntimeModelLabel(model, quantization),
-      backend: 'unknown',
-      state: 'loading',
-      estimatedBytes: estimateWhisperRuntimeBytes(model, quantization),
-      activeJobs: 1,
-      loadedAt: now,
-      lastUsedAt: now,
-      unloadable: true,
-    }, {
-      unload: () => {
-        this.cancel();
+    localInferenceRuntimeRegistry.registerRuntime(
+      {
+        id: this.runtimeId,
+        feature: 'whisper',
+        featureLabel: 'Whisper',
+        modelKey: model,
+        modelLabel: formatWhisperRuntimeModelLabel(model, quantization),
+        backend: 'unknown',
+        state: 'loading',
+        estimatedBytes: estimateWhisperRuntimeBytes(model, quantization),
+        activeJobs: 1,
+        loadedAt: now,
+        lastUsedAt: now,
+        unloadable: true,
       },
-    });
+      {
+        unload: () => {
+          this.cancel()
+        },
+      },
+    )
   }
 
   private unregisterRuntime(): void {
     if (!this.runtimeRegistered) {
-      return;
+      return
     }
 
-    this.runtimeRegistered = false;
-    localInferenceRuntimeRegistry.unregisterRuntime(this.runtimeId);
+    this.runtimeRegistered = false
+    localInferenceRuntimeRegistry.unregisterRuntime(this.runtimeId)
   }
 
   private updateRuntime(info: TranscribeRuntimeInfo): void {
     if (!this.runtimeRegistered) {
-      return;
+      return
     }
 
     localInferenceRuntimeRegistry.updateRuntime(this.runtimeId, {
       ...(info.backend ? { backend: info.backend } : {}),
       ...(info.estimatedBytes ? { estimatedBytes: info.estimatedBytes } : {}),
       lastUsedAt: Date.now(),
-    });
+    })
   }
 
   private updateRuntimeFromProgress(event: TranscribeProgress): void {
     if (!this.runtimeRegistered) {
-      return;
+      return
     }
 
     localInferenceRuntimeRegistry.updateRuntime(this.runtimeId, {
       state: event.stage === 'loading' ? 'loading' : 'running',
       lastUsedAt: Date.now(),
-    });
+    })
   }
 
   private wakeUp(): void {
-    const resolver = this.notify;
-    this.notify = null;
-    resolver?.();
+    const resolver = this.notify
+    this.notify = null
+    resolver?.()
   }
 }

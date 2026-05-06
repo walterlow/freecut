@@ -14,15 +14,15 @@
 // Types
 // ============================================
 
-type ExtrapolationType = 'clamp' | 'extend' | 'wrap' | 'identity';
+type ExtrapolationType = 'clamp' | 'extend' | 'wrap' | 'identity'
 
 interface InterpolateOptions {
   /** How to handle values before the input range */
-  extrapolateLeft?: ExtrapolationType;
+  extrapolateLeft?: ExtrapolationType
   /** How to handle values after the input range */
-  extrapolateRight?: ExtrapolationType;
+  extrapolateRight?: ExtrapolationType
   /** Easing function to apply */
-  easing?: (t: number) => number;
+  easing?: (t: number) => number
 }
 
 // ============================================
@@ -53,117 +53,113 @@ export function interpolate(
   input: number,
   inputRange: readonly number[],
   outputRange: readonly number[],
-  options: InterpolateOptions = {}
+  options: InterpolateOptions = {},
 ): number {
-  const {
-    extrapolateLeft = 'extend',
-    extrapolateRight = 'extend',
-    easing,
-  } = options;
+  const { extrapolateLeft = 'extend', extrapolateRight = 'extend', easing } = options
 
   // Validate ranges
   if (inputRange.length !== outputRange.length) {
     throw new Error(
-      `inputRange (${inputRange.length}) and outputRange (${outputRange.length}) must have the same length`
-    );
+      `inputRange (${inputRange.length}) and outputRange (${outputRange.length}) must have the same length`,
+    )
   }
 
   if (inputRange.length < 2) {
-    throw new Error('inputRange must have at least 2 values');
+    throw new Error('inputRange must have at least 2 values')
   }
 
   // Find the segment containing the input
-  let segmentIndex = 0;
+  let segmentIndex = 0
   for (let i = 1; i < inputRange.length; i++) {
     if (input < inputRange[i]!) {
-      break;
+      break
     }
-    segmentIndex = i;
+    segmentIndex = i
   }
 
   // Handle extrapolation before the range
   if (input < inputRange[0]!) {
-    const firstInput = inputRange[0]!;
-    const firstOutput = outputRange[0]!;
+    const firstInput = inputRange[0]!
+    const firstOutput = outputRange[0]!
 
     switch (extrapolateLeft) {
       case 'clamp':
-        return firstOutput;
+        return firstOutput
       case 'identity':
-        return input;
+        return input
       case 'wrap': {
-        const range = inputRange[inputRange.length - 1]! - firstInput;
-        const wrapped = ((((input - firstInput) % range) + range) % range) + firstInput;
+        const range = inputRange[inputRange.length - 1]! - firstInput
+        const wrapped = ((((input - firstInput) % range) + range) % range) + firstInput
         return interpolate(wrapped, inputRange, outputRange, {
           ...options,
           extrapolateLeft: 'extend',
-        });
+        })
       }
       case 'extend':
       default: {
         // Linear extrapolation based on first segment
         if (inputRange.length >= 2) {
-          const secondInput = inputRange[1]!;
-          const secondOutput = outputRange[1]!;
-          const slope = (secondOutput - firstOutput) / (secondInput - firstInput);
-          return firstOutput + slope * (input - firstInput);
+          const secondInput = inputRange[1]!
+          const secondOutput = outputRange[1]!
+          const slope = (secondOutput - firstOutput) / (secondInput - firstInput)
+          return firstOutput + slope * (input - firstInput)
         }
-        return firstOutput;
+        return firstOutput
       }
     }
   }
 
   // Handle extrapolation after the range
-  const lastIndex = inputRange.length - 1;
+  const lastIndex = inputRange.length - 1
   if (input > inputRange[lastIndex]!) {
-    const lastInput = inputRange[lastIndex]!;
-    const lastOutput = outputRange[lastIndex]!;
+    const lastInput = inputRange[lastIndex]!
+    const lastOutput = outputRange[lastIndex]!
 
     switch (extrapolateRight) {
       case 'clamp':
-        return lastOutput;
+        return lastOutput
       case 'identity':
-        return input;
+        return input
       case 'wrap': {
-        const firstInput = inputRange[0]!;
-        const range = lastInput - firstInput;
-        const wrapped = ((((input - firstInput) % range) + range) % range) + firstInput;
+        const firstInput = inputRange[0]!
+        const range = lastInput - firstInput
+        const wrapped = ((((input - firstInput) % range) + range) % range) + firstInput
         return interpolate(wrapped, inputRange, outputRange, {
           ...options,
           extrapolateRight: 'extend',
-        });
+        })
       }
       case 'extend':
       default: {
         // Linear extrapolation based on last segment
         if (inputRange.length >= 2) {
-          const prevInput = inputRange[lastIndex - 1]!;
-          const prevOutput = outputRange[lastIndex - 1]!;
-          const slope = (lastOutput - prevOutput) / (lastInput - prevInput);
-          return lastOutput + slope * (input - lastInput);
+          const prevInput = inputRange[lastIndex - 1]!
+          const prevOutput = outputRange[lastIndex - 1]!
+          const slope = (lastOutput - prevOutput) / (lastInput - prevInput)
+          return lastOutput + slope * (input - lastInput)
         }
-        return lastOutput;
+        return lastOutput
       }
     }
   }
 
   // Normal interpolation within range
-  const inputStart = inputRange[segmentIndex]!;
-  const inputEnd = inputRange[Math.min(segmentIndex + 1, lastIndex)]!;
-  const outputStart = outputRange[segmentIndex]!;
-  const outputEnd = outputRange[Math.min(segmentIndex + 1, lastIndex)]!;
+  const inputStart = inputRange[segmentIndex]!
+  const inputEnd = inputRange[Math.min(segmentIndex + 1, lastIndex)]!
+  const outputStart = outputRange[segmentIndex]!
+  const outputEnd = outputRange[Math.min(segmentIndex + 1, lastIndex)]!
 
   // Calculate progress within this segment (0 to 1)
-  let progress = 0;
+  let progress = 0
   if (inputEnd !== inputStart) {
-    progress = (input - inputStart) / (inputEnd - inputStart);
+    progress = (input - inputStart) / (inputEnd - inputStart)
   }
 
   // Apply easing if provided
   if (easing) {
-    progress = easing(progress);
+    progress = easing(progress)
   }
 
   // Linear interpolation
-  return outputStart + progress * (outputEnd - outputStart);
+  return outputStart + progress * (outputEnd - outputStart)
 }

@@ -7,27 +7,27 @@
  */
 export interface DragState {
   /** ID of the item being dragged (anchor item for multi-select) */
-  itemId: string;
+  itemId: string
   /** Initial frame position when drag started */
-  startFrame: number;
+  startFrame: number
   /** Initial track ID when drag started */
-  startTrackId: string;
+  startTrackId: string
   /** Initial mouse X position */
-  startMouseX: number;
+  startMouseX: number
   /** Initial mouse Y position */
-  startMouseY: number;
+  startMouseY: number
   /** Current mouse X position (updated during drag) */
-  currentMouseX: number;
+  currentMouseX: number
   /** Current mouse Y position (updated during drag) */
-  currentMouseY: number;
+  currentMouseY: number
   /** All items being dragged (for multi-select) */
   draggedItems: Array<{
-    id: string;
-    initialFrame: number;
-    initialTrackId: string;
-  }>;
+    id: string
+    initialFrame: number
+    initialTrackId: string
+  }>
   /** Whether Alt key is held (triggers duplication instead of move) */
-  isAltDrag?: boolean;
+  isAltDrag?: boolean
 }
 
 /**
@@ -35,11 +35,11 @@ export interface DragState {
  */
 export interface SnapTarget {
   /** Frame position of the snap point */
-  frame: number;
+  frame: number
   /** Type of snap target */
-  type: 'grid' | 'item-start' | 'item-end' | 'playhead';
+  type: 'grid' | 'item-start' | 'item-end' | 'playhead'
   /** Item ID if this is an item edge snap */
-  itemId?: string;
+  itemId?: string
 }
 
 /**
@@ -48,9 +48,9 @@ export interface SnapTarget {
  */
 export interface UseTimelineDragReturn {
   /** Whether an item is currently being dragged */
-  isDragging: boolean;
+  isDragging: boolean
   /** Pixel offset for visual drag preview (CSS transform) */
-  dragOffset: { x: number; y: number };
+  dragOffset: { x: number; y: number }
   /** Handler to start dragging */
-  handleDragStart: (e: React.MouseEvent) => void;
+  handleDragStart: (e: React.MouseEvent) => void
 }

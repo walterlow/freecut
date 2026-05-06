@@ -1,12 +1,12 @@
-import { useHotkeys } from 'react-hotkeys-hook';
-import { HOTKEY_OPTIONS } from '@/config/hotkeys';
-import { useResolvedHotkeys } from '@/features/editor/deps/settings';
+import { useHotkeys } from 'react-hotkeys-hook'
+import { HOTKEY_OPTIONS } from '@/config/hotkeys'
+import { useResolvedHotkeys } from '@/features/editor/deps/settings'
 
-import { useSceneBrowserStore } from '@/features/editor/deps/scene-browser';
+import { useSceneBrowserStore } from '@/features/editor/deps/scene-browser'
 
 interface EditorHotkeyCallbacks {
-  onSave?: () => void;
-  onExport?: () => void;
+  onSave?: () => void
+  onExport?: () => void
 }
 
 /**
@@ -22,33 +22,33 @@ interface EditorHotkeyCallbacks {
  * Uses react-hotkeys-hook with granular Zustand selectors
  */
 export function useEditorHotkeys(callbacks: EditorHotkeyCallbacks = {}) {
-  const hotkeys = useResolvedHotkeys();
+  const hotkeys = useResolvedHotkeys()
 
   // Save: Cmd/Ctrl+S
   useHotkeys(
     hotkeys.SAVE,
     (event) => {
-      event.preventDefault();
+      event.preventDefault()
       if (callbacks.onSave) {
-        callbacks.onSave();
+        callbacks.onSave()
       }
     },
     HOTKEY_OPTIONS,
-    [callbacks.onSave]
-  );
+    [callbacks.onSave],
+  )
 
   // Export: Cmd/Ctrl+Shift+E
   useHotkeys(
     hotkeys.EXPORT,
     (event) => {
-      event.preventDefault();
+      event.preventDefault()
       if (callbacks.onExport) {
-        callbacks.onExport();
+        callbacks.onExport()
       }
     },
     { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
-    [callbacks.onExport]
-  );
+    [callbacks.onExport],
+  )
 
   // Open Scene Browser: Cmd/Ctrl+Shift+F — capture phase because the
   // default browser binding is a no-op here but Chrome will still eat it
@@ -56,10 +56,10 @@ export function useEditorHotkeys(callbacks: EditorHotkeyCallbacks = {}) {
   useHotkeys(
     hotkeys.OPEN_SCENE_BROWSER,
     (event) => {
-      event.preventDefault();
-      useSceneBrowserStore.getState().openBrowser({ focus: true });
+      event.preventDefault()
+      useSceneBrowserStore.getState().openBrowser({ focus: true })
     },
     { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
-    []
-  );
+    [],
+  )
 }

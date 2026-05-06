@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import type { MediaMetadata } from '@/types/storage';
+import { describe, expect, it } from 'vite-plus/test'
+import type { MediaMetadata } from '@/types/storage'
 import {
   buildDroppedMediaTimelineItem,
   buildDroppedMediaTimelineItems,
   getDroppedMediaDurationInFrames,
-} from './dropped-media';
+} from './dropped-media'
 
 function makeMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
   return {
@@ -25,24 +25,18 @@ function makeMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
-  };
+  }
 }
 
 describe('getDroppedMediaDurationInFrames', () => {
   it('defaults still images to three seconds', () => {
-    expect(
-      getDroppedMediaDurationInFrames(
-        { duration: 0 },
-        'image',
-        30
-      )
-    ).toBe(90);
-  });
-});
+    expect(getDroppedMediaDurationInFrames({ duration: 0 }, 'image', 30)).toBe(90)
+  })
+})
 
 describe('buildDroppedMediaTimelineItem', () => {
   it('builds a video item with the requested placement and fitted transform', () => {
-    const media = makeMedia();
+    const media = makeMedia()
     const item = buildDroppedMediaTimelineItem({
       media,
       mediaId: media.id,
@@ -58,23 +52,23 @@ describe('buildDroppedMediaTimelineItem', () => {
         from: 48,
         durationInFrames: 120,
       },
-    });
+    })
 
-    expect(item.type).toBe('video');
-    expect(item.trackId).toBe('track-1');
-    expect(item.from).toBe(48);
-    expect(item.durationInFrames).toBe(120);
+    expect(item.type).toBe('video')
+    expect(item.trackId).toBe('track-1')
+    expect(item.from).toBe(48)
+    expect(item.durationInFrames).toBe(120)
     expect(item.transform).toEqual({
       x: 0,
       y: 0,
       width: 1920,
       height: 1080,
       rotation: 0,
-    });
-  });
+    })
+  })
 
   it('builds linked video and audio items that stay in sync', () => {
-    const media = makeMedia({ audioCodec: 'aac' });
+    const media = makeMedia({ audioCodec: 'aac' })
     const [videoItem, audioItem] = buildDroppedMediaTimelineItems({
       media,
       mediaId: media.id,
@@ -98,13 +92,13 @@ describe('buildDroppedMediaTimelineItem', () => {
           durationInFrames: 120,
         },
       },
-    });
+    })
 
-    expect(videoItem?.type).toBe('video');
-    expect(audioItem?.type).toBe('audio');
-    expect(videoItem?.from).toBe(audioItem?.from);
-    expect(videoItem?.durationInFrames).toBe(audioItem?.durationInFrames);
-    expect(videoItem?.originId).toBe(audioItem?.originId);
-    expect(videoItem?.linkedGroupId).toBe(audioItem?.linkedGroupId);
-  });
-});
+    expect(videoItem?.type).toBe('video')
+    expect(audioItem?.type).toBe('audio')
+    expect(videoItem?.from).toBe(audioItem?.from)
+    expect(videoItem?.durationInFrames).toBe(audioItem?.durationInFrames)
+    expect(videoItem?.originId).toBe(audioItem?.originId)
+    expect(videoItem?.linkedGroupId).toBe(audioItem?.linkedGroupId)
+  })
+})

@@ -9,17 +9,17 @@
  * its own per-source copy — it does not use this registry.
  */
 
-import { nearestKeyframeBefore } from './mp4-keyframe-parser';
+import { nearestKeyframeBefore } from './mp4-keyframe-parser'
 
 /** Source URL → sorted keyframe timestamps in seconds */
-const registry = new Map<string, number[]>();
+const registry = new Map<string, number[]>()
 
 /**
  * Register a keyframe index for a source URL.
  * Called when resolveMediaUrl() creates a blob URL for a media item.
  */
 export function registerKeyframeIndex(srcUrl: string, timestamps: number[]): void {
-  registry.set(srcUrl, timestamps);
+  registry.set(srcUrl, timestamps)
 }
 
 /**
@@ -28,9 +28,9 @@ export function registerKeyframeIndex(srcUrl: string, timestamps: number[]): voi
  */
 export function clearKeyframeIndex(srcUrl?: string): void {
   if (srcUrl) {
-    registry.delete(srcUrl);
+    registry.delete(srcUrl)
   } else {
-    registry.clear();
+    registry.clear()
   }
 }
 
@@ -38,7 +38,7 @@ export function clearKeyframeIndex(srcUrl?: string): void {
  * Get raw keyframe timestamps for a source URL (for forwarding to workers).
  */
 export function getKeyframeTimestamps(srcUrl: string): number[] | undefined {
-  return registry.get(srcUrl);
+  return registry.get(srcUrl)
 }
 
 /**
@@ -59,12 +59,12 @@ export function getAdaptiveStreamStart(
   targetTimestamp: number,
   marginSeconds = 0.05,
 ): number | null {
-  const timestamps = registry.get(srcUrl);
-  if (!timestamps || timestamps.length === 0) return null;
+  const timestamps = registry.get(srcUrl)
+  if (!timestamps || timestamps.length === 0) return null
 
-  const keyframeTime = nearestKeyframeBefore(timestamps, targetTimestamp);
-  if (keyframeTime === null) return null;
+  const keyframeTime = nearestKeyframeBefore(timestamps, targetTimestamp)
+  if (keyframeTime === null) return null
 
   // Start slightly before the keyframe to ensure the decoder picks it up
-  return Math.max(0, keyframeTime - marginSeconds);
+  return Math.max(0, keyframeTime - marginSeconds)
 }

@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from 'zustand'
 
 /**
  * Timeline settings state - FPS, scroll position, snap, dirty tracking.
@@ -6,23 +6,23 @@ import { create } from 'zustand';
  */
 
 interface TimelineSettingsState {
-  fps: number;
-  scrollPosition: number;
-  snapEnabled: boolean;
-  isDirty: boolean;
+  fps: number
+  scrollPosition: number
+  snapEnabled: boolean
+  isDirty: boolean
   /** True while loadTimeline() is in progress - used to coordinate initial player sync */
-  isTimelineLoading: boolean;
+  isTimelineLoading: boolean
 }
 
 interface TimelineSettingsActions {
-  setFps: (fps: number) => void;
-  setScrollPosition: (position: number) => void;
-  setSnapEnabled: (enabled: boolean) => void;
-  toggleSnap: () => void;
-  setIsDirty: (dirty: boolean) => void;
-  markDirty: () => void;
-  markClean: () => void;
-  setTimelineLoading: (loading: boolean) => void;
+  setFps: (fps: number) => void
+  setScrollPosition: (position: number) => void
+  setSnapEnabled: (enabled: boolean) => void
+  toggleSnap: () => void
+  setIsDirty: (dirty: boolean) => void
+  markDirty: () => void
+  markClean: () => void
+  setTimelineLoading: (loading: boolean) => void
 }
 
 export const useTimelineSettingsStore = create<TimelineSettingsState & TimelineSettingsActions>()(
@@ -40,8 +40,10 @@ export const useTimelineSettingsStore = create<TimelineSettingsState & TimelineS
     setSnapEnabled: (enabled) => set({ snapEnabled: enabled }),
     toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
     setIsDirty: (dirty) => set({ isDirty: dirty }),
-    markDirty: () => { if (!get().isDirty) set({ isDirty: true }); },
+    markDirty: () => {
+      if (!get().isDirty) set({ isDirty: true })
+    },
     markClean: () => set({ isDirty: false }),
     setTimelineLoading: (loading) => set({ isTimelineLoading: loading }),
-  })
-);
+  }),
+)

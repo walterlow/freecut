@@ -5,26 +5,29 @@
  * Export uses Canvas + WebCodecs (client-render-engine.ts), not Composition's renderer.
  */
 
-import { useVideoConfig as useCustomVideoConfig } from '@/features/composition-runtime/deps/player';
-import { useBridgedCurrentFrame, useBridgedIsPlaying } from '@/features/composition-runtime/deps/player';
+import { useVideoConfig as useCustomVideoConfig } from '@/features/composition-runtime/deps/player'
+import {
+  useBridgedCurrentFrame,
+  useBridgedIsPlaying,
+} from '@/features/composition-runtime/deps/player'
 
 /**
  * Get video config (fps, width, height, durationInFrames) from the custom player context.
  */
 export function useVideoConfig() {
-  return useCustomVideoConfig();
+  return useCustomVideoConfig()
 }
 
 /**
  * Get current frame from the custom player's Clock.
  */
 export function useCurrentFrame() {
-  return useBridgedCurrentFrame();
+  return useBridgedCurrentFrame()
 }
 
 /**
  * Get playing state from the custom player's Clock.
  */
 export function useIsPlaying(): boolean {
-  return useBridgedIsPlaying();
+  return useBridgedIsPlaying()
 }

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Project Bundle Import Service
  *
  * Imports a .freecut.zip bundle (ZIP archive) and creates a project with media.
@@ -6,9 +6,9 @@
  * FileSystemFileHandle for local-first storage.
  */
 
-import { unzip } from 'fflate';
-import type { Project } from '@/types/project';
-import type { MediaMetadata, ThumbnailData } from '@/types/storage';
+import { unzip } from 'fflate'
+import type { Project } from '@/types/project'
+import type { MediaMetadata, ThumbnailData } from '@/types/storage'
 import type {
   BundleManifest,
   BundleProject,
@@ -16,7 +16,7 @@ import type {
   ImportResult,
   ImportOptions,
   ImportConflict,
-} from '../types/bundle';
+} from '../types/bundle'
 import {
   createProject,
   createMedia,
@@ -24,13 +24,13 @@ import {
   saveProjectThumbnail,
   associateMediaWithProject,
   updateProject,
-} from '@/infrastructure/storage';
-import { generateThumbnail } from '@/features/project-bundle/deps/media-library';
-import { createLogger } from '@/shared/logging/logger';
-import { fileSystemService } from './file-system-service';
-import { restoreTimelineFromBundle } from './bundle-timeline';
+} from '@/infrastructure/storage'
+import { generateThumbnail } from '@/features/project-bundle/deps/media-library'
+import { createLogger } from '@/shared/logging/logger'
+import { fileSystemService } from './file-system-service'
+import { restoreTimelineFromBundle } from './bundle-timeline'
 
-const logger = createLogger('BundleImportService');
+const logger = createLogger('BundleImportService')
 
 /**
  * Import a project bundle
@@ -45,87 +45,78 @@ export async function importProjectBundle(
   file: File,
   destinationDirectory: FileSystemDirectoryHandle,
   options: Omit<ImportOptions, 'destinationDirectory'> = {},
-  onProgress?: (progress: ImportProgress) => void
+  onProgress?: (progress: ImportProgress) => void,
 ): Promise<ImportResult> {
-  const conflicts: ImportConflict[] = [];
+  const conflicts: ImportConflict[] = []
 
   // Step 1: Validate bundle
-  onProgress?.({ percent: 0, stage: 'validating' });
-  const validation = await validateBundle(file);
+  onProgress?.({ percent: 0, stage: 'validating' })
+  const validation = await validateBundle(file)
   if (!validation.valid || !validation.manifest) {
-    throw new Error(`Invalid bundle: ${validation.errors.join(', ')}`);
+    throw new Error(`Invalid bundle: ${validation.errors.join(', ')}`)
   }
 
-  const manifest = validation.manifest;
-  onProgress?.({ percent: 10, stage: 'validating' });
+  const manifest = validation.manifest
+  onProgress?.({ percent: 10, stage: 'validating' })
 
   // Step 2: Unzip bundle to memory
-  const files = await unzipBundle(file);
-  const bundleProject = JSON.parse(
-    new TextDecoder().decode(files['project.json'])
-  ) as BundleProject;
+  const files = await unzipBundle(file)
+  const bundleProject = JSON.parse(new TextDecoder().decode(files['project.json'])) as BundleProject
 
   // Step 3: Create project subdirectory in destination
-  const projectName = options.newProjectName ?? bundleProject.name;
+  const projectName = options.newProjectName ?? bundleProject.name
   const projectDir = await fileSystemService.getOrCreateSubdirectory(
     destinationDirectory,
-    projectName
-  );
+    projectName,
+  )
 
   // Step 5: Extract and import media files
-  onProgress?.({ percent: 20, stage: 'extracting' });
-  const mediaIdMap = new Map<string, string>(); // originalId -> newId
-  const totalMedia = manifest.media.length;
-  let imported = 0;
-  let skipped = 0;
+  onProgress?.({ percent: 20, stage: 'extracting' })
+  const mediaIdMap = new Map<string, string>() // originalId -> newId
+  const totalMedia = manifest.media.length
+  let imported = 0
+  let skipped = 0
 
   for (const entry of manifest.media) {
-    const percent = 20 + ((manifest.media.indexOf(entry) + 1) / totalMedia) * 50;
+    const percent = 20 + ((manifest.media.indexOf(entry) + 1) / totalMedia) * 50
 
     onProgress?.({
       percent,
       stage: 'extracting',
       currentFile: entry.fileName,
-    });
+    })
 
     try {
       // Get the file data from the unzipped bundle
-      const fileData = files[entry.relativePath];
+      const fileData = files[entry.relativePath]
       if (!fileData) {
-        logger.warn(`Missing file in bundle: ${entry.relativePath}`);
-        skipped++;
-        continue;
+        logger.warn(`Missing file in bundle: ${entry.relativePath}`)
+        skipped++
+        continue
       }
 
       // Generate unique filename if needed
-      const uniqueFileName = await fileSystemService.getUniqueFileName(
-        projectDir,
-        entry.fileName
-      );
+      const uniqueFileName = await fileSystemService.getUniqueFileName(projectDir, entry.fileName)
 
       // Write file to destination directory
-      const fileHandle = await fileSystemService.writeFile(
-        projectDir,
-        uniqueFileName,
-        fileData
-      );
+      const fileHandle = await fileSystemService.writeFile(projectDir, uniqueFileName, fileData)
 
       // Create new media ID
-      const newMediaId = crypto.randomUUID();
-      mediaIdMap.set(entry.originalId, newMediaId);
+      const newMediaId = crypto.randomUUID()
+      mediaIdMap.set(entry.originalId, newMediaId)
 
       // Generate thumbnail from the extracted file
       onProgress?.({
         percent,
         stage: 'importing_media',
         currentFile: entry.fileName,
-      });
+      })
 
-      let thumbnailId: string | undefined;
+      let thumbnailId: string | undefined
       try {
-        const extractedFile = await fileHandle.getFile();
-        const thumbnailBlob = await generateThumbnail(extractedFile);
-        thumbnailId = crypto.randomUUID();
+        const extractedFile = await fileHandle.getFile()
+        const thumbnailBlob = await generateThumbnail(extractedFile)
+        thumbnailId = crypto.randomUUID()
 
         const thumbnailData: ThumbnailData = {
           id: thumbnailId,
@@ -134,13 +125,10 @@ export async function importProjectBundle(
           timestamp: 1,
           width: 320,
           height: 180,
-        };
-        await saveThumbnail(thumbnailData);
+        }
+        await saveThumbnail(thumbnailData)
       } catch (thumbnailError) {
-        logger.warn(
-          `Failed to generate thumbnail for ${entry.fileName}:`,
-          thumbnailError
-        );
+        logger.warn(`Failed to generate thumbnail for ${entry.fileName}:`, thumbnailError)
         // Continue without thumbnail - not critical
       }
 
@@ -163,27 +151,27 @@ export async function importProjectBundle(
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
-      };
+      }
 
-      await createMedia(mediaMetadata);
-      imported++;
+      await createMedia(mediaMetadata)
+      imported++
     } catch (error) {
-      logger.error(`Failed to import media ${entry.fileName}:`, error);
+      logger.error(`Failed to import media ${entry.fileName}:`, error)
       conflicts.push({
         type: 'media_duplicate',
         description: `Failed to import: ${entry.fileName}`,
         resolution: 'skip',
         originalValue: entry.fileName,
-      });
-      skipped++;
+      })
+      skipped++
     }
   }
 
   // Step 6: Create project with remapped timeline
-  onProgress?.({ percent: 85, stage: 'linking' });
+  onProgress?.({ percent: 85, stage: 'linking' })
 
-  const newProjectId = crypto.randomUUID();
-  const importNote = `Imported from Project ${bundleProject.name}`;
+  const newProjectId = crypto.randomUUID()
+  const importNote = `Imported from Project ${bundleProject.name}`
   const project: Project = {
     id: newProjectId,
     name: projectName,
@@ -199,103 +187,101 @@ export async function importProjectBundle(
     rootFolderHandle: projectDir,
     rootFolderName: projectName,
     timeline: restoreTimelineFromBundle(bundleProject.timeline, mediaIdMap),
-  };
+  }
 
-  await createProject(project);
+  await createProject(project)
 
   // Step 7: Restore project cover thumbnail if exists in bundle
-  const coverData = files['cover.jpg'];
+  const coverData = files['cover.jpg']
   if (coverData) {
     try {
-      const blob = new Blob([new Uint8Array(coverData)], { type: 'image/jpeg' });
-      const thumbnailId = `project:${newProjectId}:cover`;
-      await saveProjectThumbnail(newProjectId, blob);
-      project.thumbnailId = thumbnailId;
-      await updateProject(newProjectId, { thumbnailId });
+      const blob = new Blob([new Uint8Array(coverData)], { type: 'image/jpeg' })
+      const thumbnailId = `project:${newProjectId}:cover`
+      await saveProjectThumbnail(newProjectId, blob)
+      project.thumbnailId = thumbnailId
+      await updateProject(newProjectId, { thumbnailId })
     } catch (err) {
       // Thumbnail restoration is optional, continue without it
-      logger.warn('Could not restore project thumbnail:', err);
+      logger.warn('Could not restore project thumbnail:', err)
     }
   }
 
   // Step 8: Associate all imported media with the project
-  onProgress?.({ percent: 95, stage: 'linking' });
+  onProgress?.({ percent: 95, stage: 'linking' })
 
   for (const [, newMediaId] of mediaIdMap) {
-    await associateMediaWithProject(newProjectId, newMediaId);
+    await associateMediaWithProject(newProjectId, newMediaId)
   }
 
-  onProgress?.({ percent: 100, stage: 'complete' });
+  onProgress?.({ percent: 100, stage: 'complete' })
 
   return {
     project,
     mediaImported: imported,
     mediaSkipped: skipped,
     conflicts,
-  };
+  }
 }
 
 /**
  * Unzip a bundle file to memory
  */
 async function unzipBundle(file: File): Promise<Record<string, Uint8Array>> {
-  const buffer = await file.arrayBuffer();
+  const buffer = await file.arrayBuffer()
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, result) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
-  });
+      if (err) reject(err)
+      else resolve(result)
+    })
+  })
 }
 
 /**
  * Validate a bundle file without importing
  */
 async function validateBundle(file: File): Promise<{
-  valid: boolean;
-  manifest?: BundleManifest;
-  errors: string[];
+  valid: boolean
+  manifest?: BundleManifest
+  errors: string[]
 }> {
-  const errors: string[] = [];
+  const errors: string[] = []
 
   try {
-    const files = await unzipBundle(file);
+    const files = await unzipBundle(file)
 
     // Check manifest
     if (!files['manifest.json']) {
-      errors.push('Missing manifest.json');
-      return { valid: false, errors };
+      errors.push('Missing manifest.json')
+      return { valid: false, errors }
     }
 
-    const manifest: BundleManifest = JSON.parse(
-      new TextDecoder().decode(files['manifest.json'])
-    );
+    const manifest: BundleManifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
 
     // Check project.json
     if (!files['project.json']) {
-      errors.push('Missing project.json');
-      return { valid: false, manifest, errors };
+      errors.push('Missing project.json')
+      return { valid: false, manifest, errors }
     }
 
     // Verify checksum
-    const manifestForHash = { ...manifest, checksum: '' };
+    const manifestForHash = { ...manifest, checksum: '' }
     const computedHashBuffer = await crypto.subtle.digest(
       'SHA-256',
-      new TextEncoder().encode(JSON.stringify(manifestForHash))
-    );
+      new TextEncoder().encode(JSON.stringify(manifestForHash)),
+    )
     const computedChecksum = Array.from(new Uint8Array(computedHashBuffer))
       .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
+      .join('')
 
     if (computedChecksum !== manifest.checksum) {
-      errors.push('Checksum mismatch - file may be corrupted');
-      return { valid: false, manifest, errors };
+      errors.push('Checksum mismatch - file may be corrupted')
+      return { valid: false, manifest, errors }
     }
 
     // Check media files exist
     for (const media of manifest.media) {
       if (!files[media.relativePath]) {
-        errors.push(`Missing media file: ${media.fileName}`);
+        errors.push(`Missing media file: ${media.fileName}`)
       }
     }
 
@@ -303,9 +289,9 @@ async function validateBundle(file: File): Promise<{
       valid: errors.length === 0,
       manifest,
       errors,
-    };
+    }
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : 'Unknown error');
-    return { valid: false, errors };
+    errors.push(error instanceof Error ? error.message : 'Unknown error')
+    return { valid: false, errors }
   }
 }

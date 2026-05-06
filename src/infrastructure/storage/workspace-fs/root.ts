@@ -10,26 +10,26 @@
  * layer: pure getter/setter + permission-lost signaling.
  */
 
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger } from '@/shared/logging/logger'
 
-const logger = createLogger('WorkspaceRoot');
+const logger = createLogger('WorkspaceRoot')
 
-let activeRoot: FileSystemDirectoryHandle | null = null;
+let activeRoot: FileSystemDirectoryHandle | null = null
 
-type PermissionLostListener = () => void;
-const permissionLostListeners = new Set<PermissionLostListener>();
+type PermissionLostListener = () => void
+const permissionLostListeners = new Set<PermissionLostListener>()
 
 export function setWorkspaceRoot(handle: FileSystemDirectoryHandle | null): void {
-  activeRoot = handle;
+  activeRoot = handle
   if (handle) {
-    logger.info(`Workspace root set: ${handle.name}`);
+    logger.info(`Workspace root set: ${handle.name}`)
   } else {
-    logger.info('Workspace root cleared');
+    logger.info('Workspace root cleared')
   }
 }
 
 export function getWorkspaceRoot(): FileSystemDirectoryHandle | null {
-  return activeRoot;
+  return activeRoot
 }
 
 /**
@@ -41,9 +41,9 @@ export function requireWorkspaceRoot(): FileSystemDirectoryHandle {
   if (!activeRoot) {
     throw new Error(
       'Workspace root is not set. The app must render <WorkspaceGate> before any storage operation runs.',
-    );
+    )
   }
-  return activeRoot;
+  return activeRoot
 }
 
 /**
@@ -51,17 +51,17 @@ export function requireWorkspaceRoot(): FileSystemDirectoryHandle {
  * a NotAllowedError from the active root — UI can show a Reconnect modal.
  */
 export function onPermissionLost(listener: PermissionLostListener): () => void {
-  permissionLostListeners.add(listener);
-  return () => permissionLostListeners.delete(listener);
+  permissionLostListeners.add(listener)
+  return () => permissionLostListeners.delete(listener)
 }
 
 export function notifyPermissionLost(): void {
-  logger.warn('Permission lost on workspace root');
+  logger.warn('Permission lost on workspace root')
   for (const listener of permissionLostListeners) {
     try {
-      listener();
+      listener()
     } catch (error) {
-      logger.warn('permission-lost listener threw', error);
+      logger.warn('permission-lost listener threw', error)
     }
   }
 }

@@ -1,6 +1,6 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
+import { cleanup, render, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 
 const mocks = vi.hoisted(() => ({
   invalidate: vi.fn().mockResolvedValue(undefined),
@@ -25,14 +25,14 @@ const mocks = vi.hoisted(() => ({
   initTransitionChainSubscription: vi.fn(() => vi.fn()),
   createProjectUpgradeBackup: vi.fn(),
   resizablePanelGroup: vi.fn(),
-}));
+}))
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mocks.navigate,
   useRouter: () => ({
     invalidate: mocks.invalidate,
   }),
-}));
+}))
 
 vi.mock('@/shared/logging/logger', () => ({
   createLogger: () => ({
@@ -40,93 +40,93 @@ vi.mock('@/shared/logging/logger', () => ({
     error: vi.fn(),
     info: vi.fn(),
   }),
-}));
+}))
 
 vi.mock('@/components/ui/resizable', () => ({
   ResizablePanelGroup: ({
     children,
     ...props
   }: {
-    children: ReactNode;
-    autoSaveId?: string;
-    className?: string;
-    direction?: string;
+    children: ReactNode
+    autoSaveId?: string
+    className?: string
+    direction?: string
   }) => {
-    mocks.resizablePanelGroup(props);
-    return <div>{children}</div>;
+    mocks.resizablePanelGroup(props)
+    return <div>{children}</div>
   },
   ResizablePanel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   ResizableHandle: () => <div data-testid="resizable-handle" />,
-}));
+}))
 
 vi.mock('@/components/error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
+}))
 
 vi.mock('./toolbar', () => ({
   Toolbar: () => <div data-testid="toolbar" />,
-}));
+}))
 
 vi.mock('./media-sidebar', () => ({
   MediaSidebar: () => <div data-testid="media-sidebar" />,
-}));
+}))
 
 vi.mock('./properties-sidebar', () => ({
   PropertiesSidebar: () => <div data-testid="properties-sidebar" />,
-}));
+}))
 
 vi.mock('./preview-area', () => ({
   PreviewArea: () => <div data-testid="preview-area" />,
-}));
+}))
 
 vi.mock('./project-debug-panel', () => ({
   ProjectDebugPanel: () => <div data-testid="project-debug-panel" />,
-}));
+}))
 
 vi.mock('./interaction-lock-region', () => ({
   InteractionLockRegion: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
+}))
 
 vi.mock('./audio-meter-panel', () => ({
   AudioMeterPanel: () => <div data-testid="audio-meter-panel" />,
-}));
+}))
 
 vi.mock('@/features/editor/deps/timeline-ui', () => ({
   Timeline: () => <div data-testid="timeline" />,
   BentoLayoutDialog: () => null,
-}));
+}))
 
 vi.mock('./clear-keyframes-dialog', () => ({
   ClearKeyframesDialog: () => null,
-}));
+}))
 
 vi.mock('./project-media-match-dialog', () => ({
   ProjectMediaMatchDialog: () => null,
-}));
+}))
 
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
     success: vi.fn(),
   },
-}));
+}))
 
 vi.mock('@/features/editor/hooks/use-editor-hotkeys', () => ({
   useEditorHotkeys: vi.fn(),
-}));
+}))
 
 vi.mock('../hooks/use-auto-save', () => ({
   useAutoSave: vi.fn(),
-}));
+}))
 
 vi.mock('@/features/editor/deps/timeline-hooks', () => ({
   useTimelineShortcuts: vi.fn(),
   useTransitionBreakageNotifications: vi.fn(),
-}));
+}))
 
 vi.mock('@/features/editor/deps/timeline-subscriptions', () => ({
   initTransitionChainSubscription: mocks.initTransitionChainSubscription,
-}));
+}))
 
 vi.mock('@/features/editor/deps/timeline-store', () => {
   const useTimelineStore = Object.assign(
@@ -138,15 +138,15 @@ vi.mock('@/features/editor/deps/timeline-store', () => {
         snapEnabled: true,
         toggleSnap: mocks.toggleSnap,
       }),
-    }
-  );
+    },
+  )
 
-  return { useTimelineStore };
-});
+  return { useTimelineStore }
+})
 
 vi.mock('@/features/editor/deps/project-bundle', () => ({
   importBundleExportDialog: mocks.importBundleExportDialog,
-}));
+}))
 
 vi.mock('@/features/editor/deps/media-library', () => {
   const useMediaLibraryStore = Object.assign(() => undefined, {
@@ -154,28 +154,37 @@ vi.mock('@/features/editor/deps/media-library', () => {
       setCurrentProject: mocks.setMediaProject,
       loadMediaItems: mocks.loadMediaItems,
     }),
-  });
+  })
+  // Lazily-mounted picker host reads `media !== null` to decide whether to
+  // render — return null so the host stays unmounted in editor tests.
+  const useEmbeddedSubtitlePickerStore = Object.assign(
+    (selector: (state: { media: null }) => unknown) => selector({ media: null }),
+    { getState: () => ({ media: null, blob: null }) },
+  )
+  // Same idea for the cache-only scan progress dialog used by the media
+  // library "Extract Embedded Subtitles" flow.
+  const useSubtitleScanProgressStore = Object.assign(
+    (selector: (state: { open: false }) => unknown) => selector({ open: false }),
+    { getState: () => ({ open: false }) },
+  )
 
-  return { useMediaLibraryStore };
-});
+  return { useMediaLibraryStore, useEmbeddedSubtitlePickerStore, useSubtitleScanProgressStore }
+})
 
 vi.mock('@/features/editor/deps/settings', () => ({
   useSettingsStore: (
-    selector: (state: {
-      editorDensity: string;
-      snapEnabled: boolean;
-    }) => unknown
+    selector: (state: { editorDensity: string; snapEnabled: boolean }) => unknown,
   ) =>
     selector({
       editorDensity: 'comfortable',
       snapEnabled: true,
     }),
-}));
+}))
 
 vi.mock('@/features/editor/deps/preview', () => ({
   useMaskEditorStore: (selector: (state: { isEditing: boolean }) => unknown) =>
     selector({ isEditing: false }),
-}));
+}))
 
 vi.mock('@/shared/state/playback', () => {
   const usePlaybackStore = Object.assign(() => undefined, {
@@ -184,64 +193,65 @@ vi.mock('@/shared/state/playback', () => {
       setPreviewFrame: mocks.setPreviewFrame,
       setPreviewQuality: mocks.setPreviewQuality,
     }),
-  });
+  })
 
-  return { usePlaybackStore };
-});
+  return { usePlaybackStore }
+})
 
 vi.mock('@/app/state/editor', () => ({
-  useEditorStore: (selector: (state: { syncSidebarLayout: typeof mocks.syncSidebarLayout }) => unknown) =>
-    selector({ syncSidebarLayout: mocks.syncSidebarLayout }),
-}));
+  useEditorStore: (
+    selector: (state: { syncSidebarLayout: typeof mocks.syncSidebarLayout }) => unknown,
+  ) => selector({ syncSidebarLayout: mocks.syncSidebarLayout }),
+}))
 
 vi.mock('@/features/editor/deps/composition-runtime', () => ({
   clearPreviewAudioCache: mocks.clearPreviewAudioCache,
-}));
+}))
 
 vi.mock('@/features/editor/deps/projects', () => {
   const useProjectStore = Object.assign(() => undefined, {
     getState: () => ({
       setCurrentProject: mocks.setProject,
     }),
-  });
+  })
 
-  return { useProjectStore };
-});
+  return { useProjectStore }
+})
 
 vi.mock('@/features/editor/deps/export-contract', () => ({
   importExportDialog: mocks.importExportDialog,
-}));
+}))
 
 vi.mock('@/app/editor-layout', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/app/editor-layout')>();
+  const actual = await importOriginal<typeof import('@/app/editor-layout')>()
   const layout = {
     ...actual.EDITOR_LAYOUT,
     timelineDefaultSize: 35,
     timelineMinSize: 20,
     timelineMaxSize: 60,
-  };
+  }
 
   return {
     ...actual,
     EDITOR_LAYOUT: layout,
     getEditorLayout: () => layout,
     getEditorLayoutCssVars: () => ({}),
-  };
-});
+  }
+})
 
 vi.mock('@/features/projects/services/project-upgrade-service', () => ({
   createProjectUpgradeBackup: mocks.createProjectUpgradeBackup,
-}));
+}))
 
 vi.mock('@/features/projects/utils/project-helpers', () => ({
   formatProjectUpgradeBackupName: () => 'Backup',
-}));
+}))
 
 vi.mock('./project-upgrade-dialog', () => ({
   ProjectUpgradeDialog: () => null,
-}));
+}))
 
-import { LoadedEditor } from './editor';
+import { LoadedEditor } from './editor'
 
 describe('LoadedEditor migration metadata refresh', () => {
   beforeAll(() => {
@@ -249,22 +259,22 @@ describe('LoadedEditor migration metadata refresh', () => {
       callback({
         didTimeout: false,
         timeRemaining: () => 50,
-      } as IdleDeadline);
-      return 1;
-    });
-    vi.stubGlobal('cancelIdleCallback', vi.fn());
-  });
+      } as IdleDeadline)
+      return 1
+    })
+    vi.stubGlobal('cancelIdleCallback', vi.fn())
+  })
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.loadTimeline.mockResolvedValue(undefined);
-    mocks.loadMediaItems.mockResolvedValue(undefined);
-    mocks.invalidate.mockResolvedValue(undefined);
-  });
+    vi.clearAllMocks()
+    mocks.loadTimeline.mockResolvedValue(undefined)
+    mocks.loadMediaItems.mockResolvedValue(undefined)
+    mocks.invalidate.mockResolvedValue(undefined)
+  })
 
   afterEach(() => {
-    cleanup();
-  });
+    cleanup()
+  })
 
   it('refreshes the editor route cache after opening an approved legacy project', async () => {
     render(
@@ -282,33 +292,33 @@ describe('LoadedEditor migration metadata refresh', () => {
           currentSchemaVersion: 9,
           requiresUpgrade: true,
         }}
-      />
-    );
+      />,
+    )
 
     await waitFor(() =>
       expect(mocks.loadTimeline).toHaveBeenCalledWith('project-1', {
         allowProjectUpgrade: true,
-      })
-    );
-    expect(mocks.loadMediaItems).toHaveBeenCalledTimes(1);
+      }),
+    )
+    expect(mocks.loadMediaItems).toHaveBeenCalledTimes(1)
 
-    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1))
 
-    const invalidateOptions = mocks.invalidate.mock.calls[0]?.[0];
-    expect(invalidateOptions).toBeTruthy();
+    const invalidateOptions = mocks.invalidate.mock.calls[0]?.[0]
+    expect(invalidateOptions).toBeTruthy()
     expect(
       invalidateOptions.filter({
         routeId: '/editor/$projectId',
         params: { projectId: 'project-1' },
-      })
-    ).toBe(true);
+      }),
+    ).toBe(true)
     expect(
       invalidateOptions.filter({
         routeId: '/editor/$projectId',
         params: { projectId: 'project-2' },
-      })
-    ).toBe(false);
-  });
+      }),
+    ).toBe(false)
+  })
 
   it('skips the route cache refresh for current-schema projects', async () => {
     render(
@@ -326,18 +336,18 @@ describe('LoadedEditor migration metadata refresh', () => {
           currentSchemaVersion: 9,
           requiresUpgrade: false,
         }}
-      />
-    );
+      />,
+    )
 
     await waitFor(() =>
       expect(mocks.loadTimeline).toHaveBeenCalledWith('project-1', {
         allowProjectUpgrade: false,
-      })
-    );
-    expect(mocks.loadMediaItems).toHaveBeenCalledTimes(1);
+      }),
+    )
+    expect(mocks.loadMediaItems).toHaveBeenCalledTimes(1)
 
-    await waitFor(() => expect(mocks.invalidate).not.toHaveBeenCalled());
-  });
+    await waitFor(() => expect(mocks.invalidate).not.toHaveBeenCalled())
+  })
 
   it('persists the timeline split layout in localStorage', async () => {
     render(
@@ -355,14 +365,14 @@ describe('LoadedEditor migration metadata refresh', () => {
           currentSchemaVersion: 9,
           requiresUpgrade: false,
         }}
-      />
-    );
+      />,
+    )
 
     expect(mocks.resizablePanelGroup).toHaveBeenCalledWith(
       expect.objectContaining({
         autoSaveId: 'editor:timeline-layout',
         direction: 'vertical',
-      })
-    );
-  });
-});
+      }),
+    )
+  })
+})

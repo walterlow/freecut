@@ -1,2 +1,2 @@
-export { useSourcePlayerStore } from './store';
-export type { SourcePlayerMethods, SourcePlayerState } from './types';
+export { useSourcePlayerStore } from './store'
+export type { SourcePlayerMethods, SourcePlayerState } from './types'

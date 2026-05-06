@@ -9,151 +9,331 @@
  * This prevents UI blocking when importing media files.
  */
 
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId } from '@/shared/logging/logger'
 
-const logger = createLogger('MediaProcessorWorker');
+const logger = createLogger('MediaProcessorWorker')
+const KEYFRAME_EXTRACTION_TIMEOUT_MS = 8_000
+const KEYFRAME_EXTRACTION_MAX_PACKETS = 5_000
+const FPS_ESTIMATION_TIMEOUT_MS = 5_000
+const FPS_ESTIMATION_MAX_PACKETS = 180
+const FPS_ESTIMATION_HARD_PACKET_CAP = 2_000
+const THUMBNAIL_TIMEOUT_MS = 12_000
 
 // Type definitions for mediabunny module
 interface MediabunnyVideoTrack {
-  displayWidth: number;
-  displayHeight: number;
-  codec: string;
-  computePacketStats(count: number): Promise<{ averagePacketRate: number } | null>;
+  displayWidth: number
+  displayHeight: number
+  codec: string
+  computePacketStats(count: number): Promise<{ averagePacketRate: number } | null>
 }
 
 interface MediabunnyAudioTrack {
-  channels?: number;
-  sampleRate?: number;
-  codec?: string;
-  canDecode?: () => Promise<boolean>;
+  channels?: number
+  sampleRate?: number
+  codec?: string
+  canDecode?: () => Promise<boolean>
 }
 
 interface MediabunnyInput {
-  computeDuration(): Promise<number>;
-  getPrimaryVideoTrack(): Promise<MediabunnyVideoTrack | null>;
-  getPrimaryAudioTrack(): Promise<MediabunnyAudioTrack | null>;
-  dispose(): void;
+  computeDuration(): Promise<number>
+  getPrimaryVideoTrack(): Promise<MediabunnyVideoTrack | null>
+  getPrimaryAudioTrack(): Promise<MediabunnyAudioTrack | null>
+  dispose(): void
 }
 
 interface CanvasWrapper {
-  canvas: OffscreenCanvas | HTMLCanvasElement;
+  canvas: OffscreenCanvas | HTMLCanvasElement
 }
 
 interface MediabunnyCanvasSink {
-  getCanvas(timestamp: number): Promise<CanvasWrapper | null>;
-  dispose?(): void;
+  getCanvas(timestamp: number): Promise<CanvasWrapper | null>
+  dispose?(): void
 }
 
 interface MediabunnyPacketRetrievalOptions {
   /** Skip loading packet data — only metadata (timestamp, type) */
-  metadataOnly?: boolean;
+  metadataOnly?: boolean
   /** Verify key packets by inspecting bitstream (cannot combine with metadataOnly) */
-  verifyKeyPackets?: boolean;
+  verifyKeyPackets?: boolean
 }
 
 interface MediabunnyEncodedPacket {
-  type: 'key' | 'delta';
-  timestamp: number;
-  duration: number;
-  close?(): void;
+  type: 'key' | 'delta'
+  timestamp: number
+  duration: number
+  close?(): void
 }
 
 interface MediabunnyEncodedPacketSink {
-  getFirstKeyPacket(options?: MediabunnyPacketRetrievalOptions): Promise<MediabunnyEncodedPacket | null>;
-  getNextKeyPacket(packet: MediabunnyEncodedPacket, options?: MediabunnyPacketRetrievalOptions): Promise<MediabunnyEncodedPacket | null>;
-  packets(startTimestamp?: number, endTimestamp?: number): AsyncIterable<MediabunnyEncodedPacket>;
-  dispose?(): void;
+  getFirstKeyPacket(
+    options?: MediabunnyPacketRetrievalOptions,
+  ): Promise<MediabunnyEncodedPacket | null>
+  getNextKeyPacket(
+    packet: MediabunnyEncodedPacket,
+    options?: MediabunnyPacketRetrievalOptions,
+  ): Promise<MediabunnyEncodedPacket | null>
+  packets(
+    startTimestamp?: number,
+    endTimestamp?: number,
+    options?: MediabunnyPacketRetrievalOptions,
+  ): AsyncIterable<MediabunnyEncodedPacket>
+  dispose?(): void
 }
 
 interface MediabunnyModule {
-  Input: new (config: { formats: unknown; source: unknown }) => MediabunnyInput;
-  ALL_FORMATS: unknown;
-  BlobSource: new (blob: Blob) => unknown;
-  CanvasSink: new (track: MediabunnyVideoTrack, options: { width: number; height: number; fit: string }) => MediabunnyCanvasSink;
-  EncodedPacketSink: new (track: MediabunnyVideoTrack) => MediabunnyEncodedPacketSink;
+  Input: new (config: { formats: unknown; source: unknown }) => MediabunnyInput
+  ALL_FORMATS: unknown
+  BlobSource: new (blob: Blob) => unknown
+  CanvasSink: new (
+    track: MediabunnyVideoTrack,
+    options: { width: number; height: number; fit: string },
+  ) => MediabunnyCanvasSink
+  EncodedPacketSink: new (track: MediabunnyVideoTrack) => MediabunnyEncodedPacketSink
 }
 
 // Message types
 export interface ProcessMediaRequest {
-  type: 'process';
-  requestId: string;
-  file: File;
-  mimeType: string;
+  type: 'process'
+  requestId: string
+  file: File
+  mimeType: string
   options?: {
-    thumbnailMaxSize?: number;
-    thumbnailQuality?: number;
-    thumbnailTimestamp?: number;
-    generateThumbnail?: boolean;
-  };
+    thumbnailMaxSize?: number
+    thumbnailQuality?: number
+    thumbnailTimestamp?: number
+    generateThumbnail?: boolean
+  }
 }
 
 export interface ProcessMediaResponse {
-  type: 'complete' | 'error';
-  requestId: string;
-  metadata?: VideoMetadata | AudioMetadata | ImageMetadata;
-  thumbnail?: Blob;
-  error?: string;
+  type: 'complete' | 'error'
+  requestId: string
+  metadata?: VideoMetadata | AudioMetadata | ImageMetadata
+  thumbnail?: Blob
+  error?: string
 }
 
 export interface VideoMetadata {
-  type: 'video';
-  duration: number;
-  width: number;
-  height: number;
-  fps: number;
-  codec: string;
-  bitrate: number;
-  audioCodec?: string;
-  audioCodecSupported: boolean;
+  type: 'video'
+  duration: number
+  width: number
+  height: number
+  fps: number
+  codec: string
+  bitrate: number
+  audioCodec?: string
+  audioCodecSupported: boolean
   /** Sorted keyframe timestamps in seconds (undefined if all-intra or extraction failed) */
-  keyframeTimestamps?: number[];
+  keyframeTimestamps?: number[]
   /** Average keyframe interval in seconds (GOP length) */
-  gopInterval?: number;
+  gopInterval?: number
 }
 
 export interface AudioMetadata {
-  type: 'audio';
-  duration: number;
-  codec?: string;
-  channels?: number;
-  sampleRate?: number;
-  bitrate?: number;
+  type: 'audio'
+  duration: number
+  codec?: string
+  channels?: number
+  sampleRate?: number
+  bitrate?: number
 }
 
 export interface ImageMetadata {
-  type: 'image';
-  width: number;
-  height: number;
+  type: 'image'
+  width: number
+  height: number
 }
 
 // Audio codecs that cannot be decoded in browser
 // Note: AC-3 and E-AC-3 are supported via @mediabunny/ac3 WASM decoder
 const UNSUPPORTED_AUDIO_CODECS = [
-  'dts',    // DTS
-  'dtsc',   // DTS Coherent Acoustics
-  'dtse',   // DTS Express
-  'dtsh',   // DTS-HD High Resolution
-  'dtsl',   // DTS-HD Master Audio
+  'dts', // DTS
+  'dtsc', // DTS Coherent Acoustics
+  'dtse', // DTS Express
+  'dtsh', // DTS-HD High Resolution
+  'dtsl', // DTS-HD Master Audio
   'truehd', // Dolby TrueHD
-  'mlpa',   // Dolby TrueHD (MLP)
-];
+  'mlpa', // Dolby TrueHD (MLP)
+]
 
 function isAudioCodecSupported(codec: string | undefined): boolean {
-  if (!codec) return true;
-  const normalizedCodec = codec.toLowerCase().trim();
-  return !UNSUPPORTED_AUDIO_CODECS.some(unsupported =>
-    normalizedCodec.includes(unsupported)
-  );
+  if (!codec) return true
+  const normalizedCodec = codec.toLowerCase().trim()
+  return !UNSUPPORTED_AUDIO_CODECS.some((unsupported) => normalizedCodec.includes(unsupported))
 }
 
 // Lazy load mediabunny only.
 // Metadata extraction and video thumbnails do not require AC-3 decoder registration.
-let mediabunnyModule: MediabunnyModule | null = null;
+let mediabunnyModule: MediabunnyModule | null = null
 async function getMediabunny(): Promise<MediabunnyModule> {
   if (!mediabunnyModule) {
-    mediabunnyModule = await import('mediabunny') as unknown as MediabunnyModule;
+    mediabunnyModule = (await import('mediabunny')) as unknown as MediabunnyModule
   }
-  return mediabunnyModule;
+  return mediabunnyModule
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out`))
+    }, timeoutMs)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId)
+    }
+  })
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  if (sorted.length % 2 === 1) {
+    return sorted[middle] ?? null
+  }
+  const left = sorted[middle - 1]
+  const right = sorted[middle]
+  return left !== undefined && right !== undefined ? (left + right) / 2 : null
+}
+
+function snapCommonFrameRate(fps: number): number {
+  if (!Number.isFinite(fps) || fps <= 0) return 30
+
+  const commonRates = [
+    24000 / 1001,
+    24,
+    25,
+    30000 / 1001,
+    30,
+    48,
+    50,
+    60000 / 1001,
+    60,
+    120000 / 1001,
+    120,
+    240000 / 1001,
+    240,
+  ]
+
+  const closest = commonRates.reduce((best, candidate) =>
+    Math.abs(candidate - fps) < Math.abs(best - fps) ? candidate : best,
+  )
+  const tolerance = closest >= 100 ? 0.08 : closest >= 50 ? 0.04 : 0.02
+  return Math.abs(closest - fps) <= tolerance ? Number(closest.toPrecision(12)) : fps
+}
+
+async function estimateVideoFps(
+  mb: MediabunnyModule,
+  videoTrack: MediabunnyVideoTrack,
+): Promise<number> {
+  const opId = createOperationId()
+  const event = logger.startEvent('video.fpsEstimation', opId)
+  event.merge({
+    codec: videoTrack.codec,
+    width: videoTrack.displayWidth,
+    height: videoTrack.displayHeight,
+    maxPackets: FPS_ESTIMATION_MAX_PACKETS,
+    hardPacketCap: FPS_ESTIMATION_HARD_PACKET_CAP,
+    timeoutMs: FPS_ESTIMATION_TIMEOUT_MS,
+  })
+
+  let sink: MediabunnyEncodedPacketSink | null = null
+  let durationSamplingError: unknown = null
+  try {
+    sink = new mb.EncodedPacketSink(videoTrack)
+    const durations: number[] = []
+    const timestamps: number[] = []
+    const startedAt = performance.now()
+    const iterator = sink
+      .packets(undefined, undefined, { metadataOnly: true })
+      [Symbol.asyncIterator]()
+    let processedPackets = 0
+    let exitReason: 'iterator-done' | 'sample-cap' | 'hard-cap' | 'time-budget' = 'iterator-done'
+
+    while (true) {
+      const result = await withTimeout(iterator.next(), FPS_ESTIMATION_TIMEOUT_MS, 'FPS estimation')
+      if (result.done) break
+      const packet = result.value
+      processedPackets++
+
+      try {
+        if (Number.isFinite(packet.duration) && packet.duration > 0) {
+          durations.push(packet.duration)
+        }
+        if (Number.isFinite(packet.timestamp)) {
+          timestamps.push(packet.timestamp)
+        }
+      } finally {
+        packet.close?.()
+      }
+
+      if (timestamps.length >= FPS_ESTIMATION_MAX_PACKETS) {
+        exitReason = 'sample-cap'
+        break
+      }
+      if (processedPackets >= FPS_ESTIMATION_HARD_PACKET_CAP) {
+        exitReason = 'hard-cap'
+        break
+      }
+      if (performance.now() - startedAt > FPS_ESTIMATION_TIMEOUT_MS) {
+        exitReason = 'time-budget'
+        break
+      }
+    }
+    await iterator.return?.()
+
+    event.merge({
+      processedPackets,
+      durationSamples: durations.length,
+      timestampSamples: timestamps.length,
+      exitReason,
+      sampleDurationMs: Math.round(performance.now() - startedAt),
+    })
+
+    const medianDuration = median(durations)
+    if (medianDuration && medianDuration > 0) {
+      const fps = snapCommonFrameRate(1 / medianDuration)
+      event.success({ source: 'packet-duration', fps })
+      return fps
+    }
+
+    const deltas = timestamps
+      .slice(1)
+      .map((timestamp, index) => timestamp - timestamps[index]!)
+      .filter((delta) => Number.isFinite(delta) && delta > 0)
+    const medianDelta = median(deltas)
+    if (medianDelta && medianDelta > 0) {
+      const fps = snapCommonFrameRate(1 / medianDelta)
+      event.success({ source: 'timestamp-delta', fps })
+      return fps
+    }
+  } catch (error) {
+    durationSamplingError = error
+    event.set('durationSamplingError', error instanceof Error ? error.message : String(error))
+  } finally {
+    sink?.dispose?.()
+  }
+
+  try {
+    const packetStats = await videoTrack.computePacketStats(FPS_ESTIMATION_MAX_PACKETS)
+    const fps = snapCommonFrameRate(packetStats?.averagePacketRate || 30)
+    event.success({
+      source: 'packet-stats-fallback',
+      fps,
+      averagePacketRate: packetStats?.averagePacketRate ?? null,
+    })
+    return fps
+  } catch (error) {
+    event.failure(durationSamplingError ?? error, {
+      source: 'default-fallback',
+      fps: 30,
+      packetStatsError: error instanceof Error ? error.message : String(error),
+    })
+    return 30
+  }
 }
 
 /**
@@ -171,29 +351,50 @@ async function extractKeyframeTimestamps(
   mb: MediabunnyModule,
   videoTrack: MediabunnyVideoTrack,
 ): Promise<number[] | undefined> {
-  let sink: MediabunnyEncodedPacketSink | null = null;
+  let sink: MediabunnyEncodedPacketSink | null = null
   try {
-    sink = new mb.EncodedPacketSink(videoTrack);
-    const timestamps: number[] = [];
-    const metadataOnly = { metadataOnly: true } as const;
+    sink = new mb.EncodedPacketSink(videoTrack)
+    const timestamps: number[] = []
+    const metadataOnly = { metadataOnly: true } as const
 
-    // Jump keyframe-to-keyframe — skips all delta packets entirely
-    let packet = await sink.getFirstKeyPacket(metadataOnly);
-    while (packet) {
-      timestamps.push(packet.timestamp);
-      packet = await sink.getNextKeyPacket(packet, metadataOnly);
+    const startedAt = performance.now()
+
+    // Jump keyframe-to-keyframe — skips all delta packets entirely. This is
+    // useful for preview seeks but must stay best-effort so long GOP indexes
+    // or unusual containers never block import.
+    let packet = await withTimeout(
+      sink.getFirstKeyPacket(metadataOnly),
+      KEYFRAME_EXTRACTION_TIMEOUT_MS,
+      'Keyframe extraction',
+    )
+    while (packet && timestamps.length < KEYFRAME_EXTRACTION_MAX_PACKETS) {
+      timestamps.push(packet.timestamp)
+      if (performance.now() - startedAt > KEYFRAME_EXTRACTION_TIMEOUT_MS) {
+        logger.warn('Keyframe extraction reached time budget; using partial index')
+        break
+      }
+
+      packet = await withTimeout(
+        sink.getNextKeyPacket(packet, metadataOnly),
+        KEYFRAME_EXTRACTION_TIMEOUT_MS,
+        'Keyframe extraction',
+      )
+    }
+
+    if (timestamps.length >= KEYFRAME_EXTRACTION_MAX_PACKETS) {
+      logger.warn('Keyframe extraction reached packet budget; using partial index')
     }
 
     if (timestamps.length === 0) {
-      return undefined;
+      return undefined
     }
 
-    return timestamps;
+    return timestamps
   } catch (error) {
-    logger.warn('Keyframe extraction failed (non-fatal):', error);
-    return undefined;
+    logger.warn('Keyframe extraction failed (non-fatal):', error)
+    return undefined
   } finally {
-    sink?.dispose?.();
+    sink?.dispose?.()
   }
 }
 
@@ -201,12 +402,12 @@ async function extractKeyframeTimestamps(
  * Extract video metadata using mediabunny
  */
 async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
-  const mb = await getMediabunny();
+  const mb = await getMediabunny()
 
   const input = new mb.Input({
     formats: mb.ALL_FORMATS,
     source: new mb.BlobSource(file),
-  });
+  })
 
   try {
     // Get all metadata in one pass (no duplicate parsing!)
@@ -214,26 +415,30 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
       input.computeDuration(),
       input.getPrimaryVideoTrack(),
       input.getPrimaryAudioTrack(),
-    ]);
+    ])
 
     if (!videoTrack) {
-      throw new Error('No video track found in file');
+      throw new Error('No video track found in file')
     }
 
-    // Get FPS and keyframe index in parallel with packet stats
-    const [packetStats, keyframeTimestamps] = await Promise.all([
-      videoTrack.computePacketStats(50),
-      extractKeyframeTimestamps(mb, videoTrack),
-    ]);
+    // Prefer per-packet durations over short prefix average rate. Matroska
+    // DefaultDuration flows into packet.duration and is more stable for
+    // fractional CFR sources such as 24000/1001.
+    //
+    // Run sequentially: both helpers create an EncodedPacketSink on the same
+    // track, and concurrent iteration would share one packet-read cursor and
+    // interleave reads — yielding a wrong FPS or corrupted keyframe index.
+    const fps = await estimateVideoFps(mb, videoTrack)
+    const keyframeTimestamps = await extractKeyframeTimestamps(mb, videoTrack)
 
-    const audioCodec = audioTrack?.codec;
-    const audioCodecSupported = isAudioCodecSupported(audioCodec);
+    const audioCodec = audioTrack?.codec
+    const audioCodecSupported = isAudioCodecSupported(audioCodec)
 
     // Compute average GOP interval from keyframe timestamps
-    let gopInterval: number | undefined;
+    let gopInterval: number | undefined
     if (keyframeTimestamps && keyframeTimestamps.length >= 2) {
-      const totalSpan = keyframeTimestamps[keyframeTimestamps.length - 1]! - keyframeTimestamps[0]!;
-      gopInterval = totalSpan / (keyframeTimestamps.length - 1);
+      const totalSpan = keyframeTimestamps[keyframeTimestamps.length - 1]! - keyframeTimestamps[0]!
+      gopInterval = totalSpan / (keyframeTimestamps.length - 1)
     }
 
     return {
@@ -241,16 +446,16 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
       duration: duration || 0,
       width: videoTrack.displayWidth || 1920,
       height: videoTrack.displayHeight || 1080,
-      fps: packetStats?.averagePacketRate || 30,
+      fps,
       codec: videoTrack.codec || 'unknown',
       bitrate: 0,
       audioCodec,
       audioCodecSupported,
       keyframeTimestamps,
       gopInterval,
-    };
+    }
   } finally {
-    input.dispose();
+    input.dispose()
   }
 }
 
@@ -258,18 +463,18 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
  * Extract audio metadata using mediabunny
  */
 async function extractAudioMetadata(file: File): Promise<AudioMetadata> {
-  const mb = await getMediabunny();
+  const mb = await getMediabunny()
 
   const input = new mb.Input({
     formats: mb.ALL_FORMATS,
     source: new mb.BlobSource(file),
-  });
+  })
 
   try {
     const [duration, audioTrack] = await Promise.all([
       input.computeDuration(),
       input.getPrimaryAudioTrack(),
-    ]);
+    ])
 
     return {
       type: 'audio',
@@ -278,9 +483,9 @@ async function extractAudioMetadata(file: File): Promise<AudioMetadata> {
       channels: audioTrack?.channels,
       sampleRate: audioTrack?.sampleRate,
       bitrate: 0,
-    };
+    }
   } finally {
-    input.dispose();
+    input.dispose()
   }
 }
 
@@ -289,25 +494,25 @@ async function extractAudioMetadata(file: File): Promise<AudioMetadata> {
  * Tries width/height attributes first, then viewBox.
  */
 function parseSvgDimensions(svgText: string): { width: number; height: number } | null {
-  const svgMatch = svgText.match(/<svg[^>]*>/i);
-  if (!svgMatch) return null;
+  const svgMatch = svgText.match(/<svg[^>]*>/i)
+  if (!svgMatch) return null
 
-  const tag = svgMatch[0];
+  const tag = svgMatch[0]
 
   // Match numeric lengths only (with optional "px" unit), reject %, em, etc.
-  const wAttr = tag.match(/\bwidth=["'](\d+(?:\.\d+)?)\s*(?:px)?["']/);
-  const hAttr = tag.match(/\bheight=["'](\d+(?:\.\d+)?)\s*(?:px)?["']/);
+  const wAttr = tag.match(/\bwidth=["'](\d+(?:\.\d+)?)\s*(?:px)?["']/)
+  const hAttr = tag.match(/\bheight=["'](\d+(?:\.\d+)?)\s*(?:px)?["']/)
   if (wAttr && hAttr) {
-    return { width: Math.round(parseFloat(wAttr[1]!)), height: Math.round(parseFloat(hAttr[1]!)) };
+    return { width: Math.round(parseFloat(wAttr[1]!)), height: Math.round(parseFloat(hAttr[1]!)) }
   }
 
   // viewBox: allow negative min-x/min-y, flexible whitespace (spaces or commas)
-  const vb = tag.match(/viewBox=["']\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/);
+  const vb = tag.match(/viewBox=["']\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/)
   if (vb) {
-    return { width: Math.round(parseFloat(vb[3]!)), height: Math.round(parseFloat(vb[4]!)) };
+    return { width: Math.round(parseFloat(vb[3]!)), height: Math.round(parseFloat(vb[4]!)) }
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -317,23 +522,23 @@ function parseSvgDimensions(svgText: string): { width: number; height: number } 
  */
 async function extractImageMetadata(file: File, mimeType: string): Promise<ImageMetadata> {
   if (mimeType === 'image/svg+xml') {
-    const text = await file.text();
-    const dims = parseSvgDimensions(text);
+    const text = await file.text()
+    const dims = parseSvgDimensions(text)
     return {
       type: 'image',
       width: dims?.width ?? 800,
       height: dims?.height ?? 600,
-    };
+    }
   }
 
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await createImageBitmap(file)
   const metadata: ImageMetadata = {
     type: 'image',
     width: bitmap.width,
     height: bitmap.height,
-  };
-  bitmap.close();
-  return metadata;
+  }
+  bitmap.close()
+  return metadata
 }
 
 /**
@@ -343,52 +548,48 @@ async function generateVideoThumbnail(
   file: File,
   maxSize: number,
   quality: number,
-  timestamp: number
+  timestamp: number,
 ): Promise<Blob> {
-  const mb = await getMediabunny();
+  const mb = await getMediabunny()
 
   const input = new mb.Input({
     source: new mb.BlobSource(file),
     formats: mb.ALL_FORMATS,
-  });
-  let sink: MediabunnyCanvasSink | null = null;
+  })
+  let sink: MediabunnyCanvasSink | null = null
 
   try {
-    const videoTrack = await input.getPrimaryVideoTrack();
+    const videoTrack = await input.getPrimaryVideoTrack()
     if (!videoTrack) {
-      throw new Error('No video track found');
+      throw new Error('No video track found')
     }
 
     // Calculate dimensions preserving aspect ratio
-    const dw = videoTrack.displayWidth || 1;
-    const dh = videoTrack.displayHeight || 1;
-    const width = dw > dh
-      ? maxSize
-      : Math.floor(maxSize * dw / dh);
-    const height = dh > dw
-      ? maxSize
-      : Math.floor(maxSize * dh / dw);
+    const dw = videoTrack.displayWidth || 1
+    const dh = videoTrack.displayHeight || 1
+    const width = dw > dh ? maxSize : Math.floor((maxSize * dw) / dh)
+    const height = dh > dw ? maxSize : Math.floor((maxSize * dh) / dw)
 
     sink = new mb.CanvasSink(videoTrack, {
       width,
       height,
       fit: 'fill',
-    });
+    })
 
     // Clamp timestamp to valid range
-    const duration = await input.computeDuration();
-    const clampedTimestamp = Math.min(timestamp, Math.max(0, duration - 0.1));
+    const duration = await input.computeDuration()
+    const clampedTimestamp = Math.min(timestamp, Math.max(0, duration - 0.1))
 
-    const wrapped = await sink.getCanvas(clampedTimestamp);
+    const wrapped = await sink.getCanvas(clampedTimestamp)
     if (!wrapped) {
-      throw new Error('Failed to extract frame from video');
+      throw new Error('Failed to extract frame from video')
     }
 
-    const canvas = wrapped.canvas as OffscreenCanvas;
-    return canvas.convertToBlob({ type: 'image/webp', quality });
+    const canvas = wrapped.canvas as OffscreenCanvas
+    return canvas.convertToBlob({ type: 'image/webp', quality })
   } finally {
-    sink?.dispose?.();
-    input.dispose();
+    sink?.dispose?.()
+    input.dispose()
   }
 }
 
@@ -399,86 +600,80 @@ async function generateImageThumbnail(
   file: File,
   maxSize: number,
   quality: number,
-  mimeType: string
+  mimeType: string,
 ): Promise<Blob> {
   // SVG thumbnails can't be generated in workers (createImageBitmap doesn't
   // support SVGs here). The main thread handles SVG thumbnail fallback.
   if (mimeType === 'image/svg+xml') {
-    throw new Error('SVG thumbnail generation not supported in worker');
+    throw new Error('SVG thumbnail generation not supported in worker')
   }
 
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await createImageBitmap(file)
 
   // Calculate dimensions preserving aspect ratio
-  const width = bitmap.width > bitmap.height
-    ? maxSize
-    : Math.floor(maxSize * bitmap.width / bitmap.height);
-  const height = bitmap.height > bitmap.width
-    ? maxSize
-    : Math.floor(maxSize * bitmap.height / bitmap.width);
+  const width =
+    bitmap.width > bitmap.height ? maxSize : Math.floor((maxSize * bitmap.width) / bitmap.height)
+  const height =
+    bitmap.height > bitmap.width ? maxSize : Math.floor((maxSize * bitmap.height) / bitmap.width)
 
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext('2d');
+  const canvas = new OffscreenCanvas(width, height)
+  const ctx = canvas.getContext('2d')
   if (!ctx) {
-    bitmap.close();
-    throw new Error('Failed to get canvas context');
+    bitmap.close()
+    throw new Error('Failed to get canvas context')
   }
 
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
+  ctx.drawImage(bitmap, 0, 0, width, height)
+  bitmap.close()
 
-  return canvas.convertToBlob({ type: 'image/webp', quality });
+  return canvas.convertToBlob({ type: 'image/webp', quality })
 }
 
 /**
  * Generate audio thumbnail (waveform placeholder)
  */
-async function generateAudioThumbnail(
-  file: File,
-  maxSize: number,
-  quality: number
-): Promise<Blob> {
-  const width = maxSize;
-  const height = Math.round(maxSize * (9 / 16));
+async function generateAudioThumbnail(file: File, maxSize: number, quality: number): Promise<Blob> {
+  const width = maxSize
+  const height = Math.round(maxSize * (9 / 16))
 
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext('2d');
+  const canvas = new OffscreenCanvas(width, height)
+  const ctx = canvas.getContext('2d')
   if (!ctx) {
-    throw new Error('Failed to get canvas context');
+    throw new Error('Failed to get canvas context')
   }
 
   // Gradient background
-  const gradient = ctx.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, '#1a1a1a');
-  gradient.addColorStop(1, '#0a0a0a');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
+  const gradient = ctx.createLinearGradient(0, 0, width, height)
+  gradient.addColorStop(0, '#1a1a1a')
+  gradient.addColorStop(1, '#0a0a0a')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, width, height)
 
   // Waveform visualization
-  ctx.strokeStyle = '#00ff88';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  const amplitude = height * 0.3;
-  const centerY = height / 2;
+  ctx.strokeStyle = '#00ff88'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  const amplitude = height * 0.3
+  const centerY = height / 2
   for (let x = 0; x < width; x++) {
-    const y = centerY + Math.sin(x * 0.02) * amplitude;
+    const y = centerY + Math.sin(x * 0.02) * amplitude
     if (x === 0) {
-      ctx.moveTo(x, y);
+      ctx.moveTo(x, y)
     } else {
-      ctx.lineTo(x, y);
+      ctx.lineTo(x, y)
     }
   }
-  ctx.stroke();
+  ctx.stroke()
 
   // Filename
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 14px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const displayName = file.name.length > 30 ? file.name.substring(0, 27) + '...' : file.name;
-  ctx.fillText(displayName, width / 2, height - 20);
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 14px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const displayName = file.name.length > 30 ? file.name.substring(0, 27) + '...' : file.name
+  ctx.fillText(displayName, width / 2, height - 20)
 
-  return canvas.convertToBlob({ type: 'image/webp', quality });
+  return canvas.convertToBlob({ type: 'image/webp', quality })
 }
 
 /**
@@ -487,26 +682,30 @@ async function generateAudioThumbnail(
 async function processMedia(
   file: File,
   mimeType: string,
-  options: ProcessMediaRequest['options'] = {}
+  options: ProcessMediaRequest['options'] = {},
 ): Promise<{ metadata: VideoMetadata | AudioMetadata | ImageMetadata; thumbnail?: Blob }> {
   const {
     thumbnailMaxSize = 320,
     thumbnailQuality = 0.6,
     thumbnailTimestamp = 1,
     generateThumbnail = true,
-  } = options;
+  } = options
 
-  let metadata: VideoMetadata | AudioMetadata | ImageMetadata;
-  let thumbnail: Blob | undefined;
+  let metadata: VideoMetadata | AudioMetadata | ImageMetadata
+  let thumbnail: Blob | undefined
 
   if (mimeType.startsWith('video/')) {
     // Video: extract metadata and generate thumbnail in parallel after metadata
-    metadata = await extractVideoMetadata(file);
+    metadata = await extractVideoMetadata(file)
     if (generateThumbnail) {
       try {
-        thumbnail = await generateVideoThumbnail(file, thumbnailMaxSize, thumbnailQuality, thumbnailTimestamp);
+        thumbnail = await withTimeout(
+          generateVideoThumbnail(file, thumbnailMaxSize, thumbnailQuality, thumbnailTimestamp),
+          THUMBNAIL_TIMEOUT_MS,
+          'Video thumbnail generation',
+        )
       } catch (err) {
-        logger.warn('Failed to generate video thumbnail:', err);
+        logger.warn('Failed to generate video thumbnail:', err)
       }
     }
   } else if (mimeType.startsWith('audio/')) {
@@ -516,51 +715,53 @@ async function processMedia(
       generateThumbnail
         ? generateAudioThumbnail(file, thumbnailMaxSize, thumbnailQuality).catch(() => undefined)
         : Promise.resolve(undefined),
-    ]);
-    metadata = audioMeta;
-    thumbnail = audioThumb;
+    ])
+    metadata = audioMeta
+    thumbnail = audioThumb
   } else if (mimeType.startsWith('image/')) {
     // Image: metadata and thumbnail can run in parallel
     const [imageMeta, imageThumb] = await Promise.all([
       extractImageMetadata(file, mimeType),
       generateThumbnail
-        ? generateImageThumbnail(file, thumbnailMaxSize, thumbnailQuality, mimeType).catch(() => undefined)
+        ? generateImageThumbnail(file, thumbnailMaxSize, thumbnailQuality, mimeType).catch(
+            () => undefined,
+          )
         : Promise.resolve(undefined),
-    ]);
-    metadata = imageMeta;
-    thumbnail = imageThumb;
+    ])
+    metadata = imageMeta
+    thumbnail = imageThumb
   } else {
-    throw new Error(`Unsupported media type: ${mimeType}`);
+    throw new Error(`Unsupported media type: ${mimeType}`)
   }
 
-  return { metadata, thumbnail };
+  return { metadata, thumbnail }
 }
 
 // Message handler
 self.onmessage = async (e: MessageEvent<ProcessMediaRequest>) => {
-  const msg = e.data;
+  const msg = e.data
 
   if (msg.type === 'process') {
     try {
-      const result = await processMedia(msg.file, msg.mimeType, msg.options);
+      const result = await processMedia(msg.file, msg.mimeType, msg.options)
 
       const response: ProcessMediaResponse = {
         type: 'complete',
         requestId: msg.requestId,
         metadata: result.metadata,
         thumbnail: result.thumbnail,
-      };
+      }
 
-      self.postMessage(response);
+      self.postMessage(response)
     } catch (error) {
       const response: ProcessMediaResponse = {
         type: 'error',
         requestId: msg.requestId,
         error: error instanceof Error ? error.message : String(error),
-      };
-      self.postMessage(response);
+      }
+      self.postMessage(response)
     }
   }
-};
+}
 
-export {};
+export {}

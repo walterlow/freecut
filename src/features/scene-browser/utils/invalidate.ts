@@ -10,19 +10,20 @@
  * have to know about the internal split.
  */
 
-import { invalidateMediaCaptionThumbBlobs } from '../hooks/use-caption-thumbnail';
-import { invalidateEmbeddingsCache } from './embeddings-cache';
-import { invalidateLazyThumbCache } from './lazy-thumb';
-import { useMediaLibraryStore } from '../deps/media-library';
+import { invalidateMediaCaptionThumbBlobs } from '../hooks/use-caption-thumbnail'
+import { invalidateEmbeddingsCache } from './embeddings-cache'
+import { invalidateLazyThumbCache } from './lazy-thumb'
+import { useMediaLibraryStore } from '../deps/media-library'
 
 export function invalidateMediaCaptionThumbnails(mediaId: string): void {
-  const thumbRelPaths = useMediaLibraryStore.getState().mediaById[mediaId]?.aiCaptions?.map(
-    (caption) => caption.thumbRelPath,
-  ) ?? [];
-  invalidateMediaCaptionThumbBlobs(mediaId, thumbRelPaths);
-  invalidateLazyThumbCache(mediaId);
+  const thumbRelPaths =
+    useMediaLibraryStore
+      .getState()
+      .mediaById[mediaId]?.aiCaptions?.map((caption) => caption.thumbRelPath) ?? []
+  invalidateMediaCaptionThumbBlobs(mediaId, thumbRelPaths)
+  invalidateLazyThumbCache(mediaId)
   // Semantic embeddings are tied 1:1 to caption indexes — a re-analyze
   // throws away the old caption array and generates a fresh one, so the
   // cached vectors no longer correspond to their (new) scenes.
-  invalidateEmbeddingsCache(mediaId);
+  invalidateEmbeddingsCache(mediaId)
 }

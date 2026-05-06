@@ -12,6 +12,6 @@ export const TEXT_STYLE_PRESET_IDS = [
   'event-card',
   'launch-stack',
   'badge',
-] as const;
+] as const
 
-export type TextStylePresetId = typeof TEXT_STYLE_PRESET_IDS[number];
+export type TextStylePresetId = (typeof TEXT_STYLE_PRESET_IDS)[number]

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Video frame extractor using mediabunny for precise frame access.
  *
  * This replaces HTML5 video element seeking which is slow and imprecise.
@@ -8,83 +8,94 @@
  * - No 500ms timeout fallbacks needed
  */
 
-import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
-import { createLogger } from '@/shared/logging/logger';
-import { getAdaptiveStreamStart } from '@/shared/utils/keyframe-index-registry';
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
+import { createLogger } from '@/shared/logging/logger'
+import { getAdaptiveStreamStart } from '@/shared/utils/keyframe-index-registry'
 
-const log = createLogger('VideoFrameExtractor');
+const log = createLogger('VideoFrameExtractor')
 
 /** Types for dynamically imported mediabunny module */
 interface MediabunnySink {
-  samples(startTimestamp?: number, endTimestamp?: number): AsyncGenerator<MediabunnySample, void, unknown>;
-  samplesAtTimestamps(timestamps: Iterable<number> | AsyncIterable<number>): AsyncGenerator<MediabunnySample | null, void, unknown>;
+  samples(
+    startTimestamp?: number,
+    endTimestamp?: number,
+  ): AsyncGenerator<MediabunnySample, void, unknown>
+  samplesAtTimestamps(
+    timestamps: Iterable<number> | AsyncIterable<number>,
+  ): AsyncGenerator<MediabunnySample | null, void, unknown>
 }
 
 interface MediabunnySample {
-  timestamp: number;
-  duration?: number;
+  timestamp: number
+  duration?: number
   draw?: (
     context: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
     x: number,
     y: number,
     width: number,
-    height: number
-  ) => void;
-  toVideoFrame(): VideoFrame | null;
-  close(): void;
+    height: number,
+  ) => void
+  toVideoFrame(): VideoFrame | null
+  close(): void
 }
 
 interface MediabunnyInput {
-  getPrimaryVideoTrack(): Promise<MediabunnyVideoTrack | null>;
-  computeDuration(): Promise<number>;
-  dispose(): void;
+  getPrimaryVideoTrack(): Promise<MediabunnyVideoTrack | null>
+  computeDuration(): Promise<number>
+  dispose(): void
 }
 
 interface MediabunnyVideoTrack {
-  duration: number;
-  displayWidth: number;
-  displayHeight: number;
-  canDecode?: () => Promise<boolean>;
+  duration: number
+  displayWidth: number
+  displayHeight: number
+  canDecode?: () => Promise<boolean>
 }
 
 export interface DrawFrameCaptureResult {
-  success: boolean;
-  capturedFrame: VideoFrame | null;
-  capturedSourceTime: number | null;
+  success: boolean
+  capturedFrame: VideoFrame | null
+  capturedSourceTime: number | null
+}
+
+export interface CaptureFrameResult {
+  success: boolean
+  frame: VideoFrame | null
+  sourceTime: number | null
 }
 
 export class VideoFrameExtractor {
-  private static readonly TIMESTAMP_EPSILON = 1e-4;
-  private static readonly LOOKAHEAD_TOLERANCE_SECONDS = 0.05;
-  private static readonly STREAM_BACKTRACK_SECONDS = 1.0;
+  private static readonly TIMESTAMP_EPSILON = 1e-4
+  private static readonly LOOKAHEAD_TOLERANCE_SECONDS = 0.05
+  private static readonly STREAM_BACKTRACK_SECONDS = 1.0
   /** Forward jump threshold: restart stream instead of reading through samples */
-  private static readonly FORWARD_JUMP_RESTART_SECONDS = 3.0;
+  private static readonly FORWARD_JUMP_RESTART_SECONDS = 3.0
 
-  private sink: MediabunnySink | null = null;
-  private input: MediabunnyInput | null = null;
-  private videoTrack: MediabunnyVideoTrack | null = null;
-  private duration: number = 0;
-  private ready: boolean = false;
-  private drawFailureCount = 0;
-  private sampleIterator: AsyncGenerator<MediabunnySample, void, unknown> | null = null;
-  private currentSample: MediabunnySample | null = null;
-  private nextSample: MediabunnySample | null = null;
-  private iteratorDone = false;
-  private lastRequestedTimestamp: number | null = null;
-  private sampleLoopError: unknown = null;
-  private lastFailureKind: 'none' | 'no-sample' | 'decode-error' = 'none';
+  private sink: MediabunnySink | null = null
+  private input: MediabunnyInput | null = null
+  private videoTrack: MediabunnyVideoTrack | null = null
+  private duration: number = 0
+  private ready: boolean = false
+  private drawFailureCount = 0
+  private sampleIterator: AsyncGenerator<MediabunnySample, void, unknown> | null = null
+  private currentSample: MediabunnySample | null = null
+  private nextSample: MediabunnySample | null = null
+  private iteratorDone = false
+  private lastRequestedTimestamp: number | null = null
+  private sampleLoopError: unknown = null
+  private lastFailureKind: 'none' | 'no-sample' | 'decode-error' = 'none'
   /**
    * Cached VideoFrame from the current sample.  Kept alive between draws so
    * that repeated draws of the same sample (common during transitions past the
    * clip's timeline end) reuse the same VideoFrame instead of calling
    * toVideoFrame() after a previous close() has invalidated the sample data.
    */
-  private cachedVideoFrame: VideoFrame | null = null;
-  private cachedVideoFrameSample: MediabunnySample | null = null;
+  private cachedVideoFrame: VideoFrame | null = null
+  private cachedVideoFrameSample: MediabunnySample | null = null
 
   constructor(
     private src: string,
-    private itemId: string
+    private itemId: string,
   ) {}
 
   /**
@@ -92,53 +103,53 @@ export class VideoFrameExtractor {
    */
   async init(): Promise<boolean> {
     try {
-      const mb = await import('mediabunny');
-      const source = createMediabunnyInputSource(mb, this.src);
+      const mb = await import('mediabunny')
+      const source = createMediabunnyInputSource(mb, this.src)
 
       // Prefer direct file-backed reads for OPFS / file handles, with BlobSource
       // fallback for in-memory blob URLs we manage locally.
       this.input = new mb.Input({
         formats: mb.ALL_FORMATS,
         source,
-      }) as unknown as MediabunnyInput;
+      }) as unknown as MediabunnyInput
 
       // Get video track
-      this.videoTrack = await this.input!.getPrimaryVideoTrack();
+      this.videoTrack = await this.input!.getPrimaryVideoTrack()
       if (!this.videoTrack) {
-        log.warn('No video track found', { itemId: this.itemId });
-        return false;
+        log.warn('No video track found', { itemId: this.itemId })
+        return false
       }
 
       if (typeof this.videoTrack.canDecode === 'function') {
-        const decodable = await this.videoTrack.canDecode();
+        const decodable = await this.videoTrack.canDecode()
         if (!decodable) {
           log.warn('Video track is not decodable via mediabunny/WebCodecs', {
             itemId: this.itemId,
-          });
-          return false;
+          })
+          return false
         }
       }
 
       // Get duration
-      this.duration = await this.input!.computeDuration();
+      this.duration = await this.input!.computeDuration()
 
       // Create video sample sink for frame extraction
       this.sink = new mb.VideoSampleSink(
-        this.videoTrack as unknown as ConstructorParameters<typeof mb.VideoSampleSink>[0]
-      );
+        this.videoTrack as unknown as ConstructorParameters<typeof mb.VideoSampleSink>[0],
+      )
 
-      this.ready = true;
+      this.ready = true
       log.debug('Initialized', {
         itemId: this.itemId,
         duration: this.duration,
         width: this.videoTrack.displayWidth,
         height: this.videoTrack.displayHeight,
-      });
+      })
 
-      return true;
+      return true
     } catch (error) {
-      log.error('Failed to initialize', { itemId: this.itemId, error });
-      return false;
+      log.error('Failed to initialize', { itemId: this.itemId, error })
+      return false
     }
   }
 
@@ -152,44 +163,44 @@ export class VideoFrameExtractor {
     x: number,
     y: number,
     width: number,
-    height: number
+    height: number,
   ): Promise<boolean> {
     if (!this.ready || !this.sink) {
-      return false;
+      return false
     }
 
-    const maxTime = Math.max(0, this.duration - 0.001);
-    const clampedTime = Math.max(0, Math.min(timestamp, maxTime));
-    let lastError: unknown = this.sampleLoopError;
+    const maxTime = Math.max(0, this.duration - 0.001)
+    const clampedTime = Math.max(0, Math.min(timestamp, maxTime))
+    let lastError: unknown = this.sampleLoopError
 
     try {
-      await this.ensureSampleForTimestamp(clampedTime);
-      const drawOk = this.drawCurrentSample(ctx, x, y, width, height);
+      await this.ensureSampleForTimestamp(clampedTime)
+      const drawOk = this.drawCurrentSample(ctx, x, y, width, height)
       if (drawOk) {
-        this.drawFailureCount = 0;
-        this.lastFailureKind = 'none';
-        return true;
+        this.drawFailureCount = 0
+        this.lastFailureKind = 'none'
+        return true
       }
 
-      lastError = this.sampleLoopError;
-      return this.reportDrawFailure(timestamp, clampedTime, lastError);
+      lastError = this.sampleLoopError
+      return this.reportDrawFailure(timestamp, clampedTime, lastError)
     } catch (error) {
-      lastError = error;
-      this.sampleLoopError = error;
+      lastError = error
+      this.sampleLoopError = error
 
-      const recovered = await this.recoverAndPrime(clampedTime, error);
+      const recovered = await this.recoverAndPrime(clampedTime, error)
       if (recovered) {
-        const drawOk = this.drawCurrentSample(ctx, x, y, width, height);
+        const drawOk = this.drawCurrentSample(ctx, x, y, width, height)
         if (drawOk) {
-          this.drawFailureCount = 0;
-          this.lastFailureKind = 'none';
-          return true;
+          this.drawFailureCount = 0
+          this.lastFailureKind = 'none'
+          return true
         }
-        lastError = this.sampleLoopError;
+        lastError = this.sampleLoopError
       }
 
-      this.lastFailureKind = this.lastFailureKind === 'no-sample' ? 'no-sample' : 'decode-error';
-      return this.reportDrawFailure(timestamp, clampedTime, lastError);
+      this.lastFailureKind = this.lastFailureKind === 'no-sample' ? 'no-sample' : 'decode-error'
+      return this.reportDrawFailure(timestamp, clampedTime, lastError)
     }
   }
 
@@ -199,119 +210,156 @@ export class VideoFrameExtractor {
     x: number,
     y: number,
     width: number,
-    height: number
+    height: number,
   ): Promise<DrawFrameCaptureResult> {
-    const success = await this.drawFrame(ctx, timestamp, x, y, width, height);
+    const success = await this.drawFrame(ctx, timestamp, x, y, width, height)
     if (!success) {
       return {
         success: false,
         capturedFrame: null,
         capturedSourceTime: null,
-      };
+      }
     }
 
     return {
       success: true,
       capturedFrame: this.cloneCurrentVideoFrame(),
       capturedSourceTime: this.currentSample?.timestamp ?? null,
-    };
+    }
+  }
+
+  async captureFrame(timestamp: number): Promise<CaptureFrameResult> {
+    const duration = this.duration
+    const clampedTime =
+      duration > 0
+        ? Math.max(0, Math.min(timestamp, duration - VideoFrameExtractor.TIMESTAMP_EPSILON))
+        : Math.max(0, timestamp)
+
+    this.sampleLoopError = null
+    this.lastFailureKind = 'none'
+
+    try {
+      await this.ensureSampleForTimestamp(clampedTime)
+      if (!this.currentSample || !this.currentSampleCoversTimestamp(clampedTime)) {
+        this.lastFailureKind = 'no-sample'
+        return { success: false, frame: null, sourceTime: null }
+      }
+
+      return {
+        success: true,
+        frame: this.cloneCurrentVideoFrame(),
+        sourceTime: this.currentSample.timestamp,
+      }
+    } catch (error) {
+      this.sampleLoopError = error
+      this.lastFailureKind = 'decode-error'
+      return { success: false, frame: null, sourceTime: null }
+    }
   }
 
   private async ensureSampleForTimestamp(timestamp: number): Promise<void> {
-    if (!this.sink) return;
+    if (!this.sink) return
 
     // Use a forward sample stream instead of samplesAtTimestamps/getSample.
     // Mediabunny's timestamp-based path can flush decoders at GOP boundaries;
     // for some files that leads to repeated "key frame required after flush".
     if (!this.sampleIterator) {
-      this.resetSampleIterator(timestamp, 'init');
+      this.resetSampleIterator(timestamp, 'init')
     } else if (
-      this.lastRequestedTimestamp !== null
-      && timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON < this.lastRequestedTimestamp
-      && !this.currentSampleCoversTimestamp(timestamp)
+      this.lastRequestedTimestamp !== null &&
+      timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON < this.lastRequestedTimestamp &&
+      !this.currentSampleCoversTimestamp(timestamp)
     ) {
       // Timeline time moved backward for this clip. Restart stream.
-      this.resetSampleIterator(timestamp, 'backward');
+      this.resetSampleIterator(timestamp, 'backward')
     } else if (
-      this.lastRequestedTimestamp !== null
-      && timestamp - this.lastRequestedTimestamp > VideoFrameExtractor.FORWARD_JUMP_RESTART_SECONDS
+      this.lastRequestedTimestamp !== null &&
+      timestamp - this.lastRequestedTimestamp > VideoFrameExtractor.FORWARD_JUMP_RESTART_SECONDS
     ) {
       // Large forward jump — restart stream at new position instead of reading
       // through hundreds of samples. Faster than sequential iteration.
-      this.resetSampleIterator(timestamp, 'backward');
+      this.resetSampleIterator(timestamp, 'backward')
     }
 
-    this.lastRequestedTimestamp = timestamp;
+    this.lastRequestedTimestamp = timestamp
 
     while (true) {
-      const candidate = await this.peekNextSample();
-      if (!candidate) break;
+      const candidate = await this.peekNextSample()
+      if (!candidate) break
       if (candidate.timestamp <= timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON) {
         // Moving to a new sample — release the cached VideoFrame first
         // so it's closed before the old sample is closed.
-        this.closeCachedVideoFrame();
-        this.closeSample(this.currentSample);
-        this.currentSample = candidate;
-        this.nextSample = null;
-        continue;
+        this.closeCachedVideoFrame()
+        this.closeSample(this.currentSample)
+        this.currentSample = candidate
+        this.nextSample = null
+        continue
       }
 
       // If this is the first sample after stream start/restart and it's only
       // slightly ahead of the requested timestamp, use it to avoid false misses
       // caused by timestamp quantization/drift.
       if (
-        !this.currentSample
-        && candidate.timestamp - timestamp <= VideoFrameExtractor.LOOKAHEAD_TOLERANCE_SECONDS
+        !this.currentSample &&
+        candidate.timestamp - timestamp <= VideoFrameExtractor.LOOKAHEAD_TOLERANCE_SECONDS
       ) {
-        this.currentSample = candidate;
-        this.nextSample = null;
+        this.currentSample = candidate
+        this.nextSample = null
       }
-      break;
+      break
     }
   }
 
   private currentSampleCoversTimestamp(timestamp: number): boolean {
-    const sample = this.currentSample;
+    const sample = this.currentSample
     if (!sample) {
-      return false;
+      return false
     }
 
     if (sample.timestamp > timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON) {
-      return false;
+      return false
     }
 
-    if (typeof sample.duration !== 'number' || !Number.isFinite(sample.duration) || sample.duration <= 0) {
-      return true;
+    if (
+      typeof sample.duration !== 'number' ||
+      !Number.isFinite(sample.duration) ||
+      sample.duration <= 0
+    ) {
+      return true
     }
 
-    return sample.timestamp + sample.duration >= timestamp - VideoFrameExtractor.TIMESTAMP_EPSILON;
+    return sample.timestamp + sample.duration >= timestamp - VideoFrameExtractor.TIMESTAMP_EPSILON
   }
 
   private async peekNextSample(): Promise<MediabunnySample | null> {
     if (this.nextSample) {
-      return this.nextSample;
+      return this.nextSample
     }
     if (!this.sampleIterator || this.iteratorDone) {
-      return null;
+      return null
     }
 
-    const nextResult = await this.sampleIterator.next();
+    const nextResult = await this.sampleIterator.next()
     if (nextResult.done) {
-      this.iteratorDone = true;
-      return null;
+      this.iteratorDone = true
+      return null
     }
 
-    this.nextSample = nextResult.value;
-    return this.nextSample;
+    this.nextSample = nextResult.value
+    return this.nextSample
   }
 
-  private resetSampleIterator(startTimestamp: number, reason: 'init' | 'backward' | 'recover'): void {
-    this.closeStreamState();
-    if (!this.sink) return;
+  private resetSampleIterator(
+    startTimestamp: number,
+    reason: 'init' | 'backward' | 'recover',
+  ): void {
+    this.closeStreamState()
+    if (!this.sink) return
 
     // Use keyframe index for precise backtrack; fall back to fixed 1.0s
-    const adaptiveStart = getAdaptiveStreamStart(this.src, startTimestamp);
-    const streamStart = adaptiveStart ?? Math.max(0, startTimestamp - VideoFrameExtractor.STREAM_BACKTRACK_SECONDS);
+    const adaptiveStart = getAdaptiveStreamStart(this.src, startTimestamp)
+    const streamStart =
+      adaptiveStart ?? Math.max(0, startTimestamp - VideoFrameExtractor.STREAM_BACKTRACK_SECONDS)
     if (reason === 'recover') {
       log.debug('Restarting mediabunny sample stream', {
         itemId: this.itemId,
@@ -319,12 +367,12 @@ export class VideoFrameExtractor {
         startTimestamp,
         streamStart,
         adaptive: adaptiveStart !== null,
-      });
+      })
     }
 
-    this.sampleIterator = this.sink.samples(streamStart, Infinity);
-    this.iteratorDone = false;
-    this.lastRequestedTimestamp = null;
+    this.sampleIterator = this.sink.samples(streamStart, Infinity)
+    this.iteratorDone = false
+    this.lastRequestedTimestamp = null
   }
 
   private drawCurrentSample(
@@ -332,30 +380,30 @@ export class VideoFrameExtractor {
     x: number,
     y: number,
     width: number,
-    height: number
+    height: number,
   ): boolean {
-    const sample = this.currentSample;
+    const sample = this.currentSample
     if (!sample) {
-      this.lastFailureKind = 'no-sample';
-      return false;
+      this.lastFailureKind = 'no-sample'
+      return false
     }
 
     try {
       // Prefer the VideoFrame path so we can respect visibleRect cropping.
       // Direct sample.draw() can include padded decode columns that halftone
       // turns into bright side fringes.
-      const videoFrame = this.getOrCreateCurrentVideoFrame();
+      const videoFrame = this.getOrCreateCurrentVideoFrame()
       if (!videoFrame) {
-        return false;
+        return false
       }
 
-      const visibleRect = videoFrame.visibleRect;
+      const visibleRect = videoFrame.visibleRect
       if (
-        visibleRect
-        && Number.isFinite(visibleRect.width)
-        && Number.isFinite(visibleRect.height)
-        && visibleRect.width > 0
-        && visibleRect.height > 0
+        visibleRect &&
+        Number.isFinite(visibleRect.width) &&
+        Number.isFinite(visibleRect.height) &&
+        visibleRect.width > 0 &&
+        visibleRect.height > 0
       ) {
         ctx.drawImage(
           videoFrame,
@@ -367,25 +415,25 @@ export class VideoFrameExtractor {
           y,
           width,
           height,
-        );
+        )
       } else {
-        ctx.drawImage(videoFrame, x, y, width, height);
+        ctx.drawImage(videoFrame, x, y, width, height)
       }
-      return true;
+      return true
     } catch (error) {
       // Draw failed — discard the cached frame so next attempt gets a fresh one
-      this.closeCachedVideoFrame();
-      this.sampleLoopError = error;
-      this.lastFailureKind = 'decode-error';
-      return false;
+      this.closeCachedVideoFrame()
+      this.sampleLoopError = error
+      this.lastFailureKind = 'decode-error'
+      return false
     }
   }
 
   private getOrCreateCurrentVideoFrame(): VideoFrame | null {
-    const sample = this.currentSample;
+    const sample = this.currentSample
     if (!sample) {
-      this.lastFailureKind = 'no-sample';
-      return null;
+      this.lastFailureKind = 'no-sample'
+      return null
     }
 
     // Reuse cached VideoFrame if we're drawing the same sample again.
@@ -394,94 +442,96 @@ export class VideoFrameExtractor {
     // the same last sample is drawn for many consecutive frames. Calling
     // toVideoFrame() after a previous VideoFrame was closed can return an
     // empty/invalidated frame because the decoded buffer was released.
-    let videoFrame = this.cachedVideoFrame;
+    let videoFrame = this.cachedVideoFrame
     if (!videoFrame || this.cachedVideoFrameSample !== sample) {
-      this.closeCachedVideoFrame();
-      videoFrame = sample.toVideoFrame();
+      this.closeCachedVideoFrame()
+      videoFrame = sample.toVideoFrame()
       if (!videoFrame) {
-        this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame');
-        this.lastFailureKind = 'decode-error';
-        return null;
+        this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame')
+        this.lastFailureKind = 'decode-error'
+        return null
       }
-      this.cachedVideoFrame = videoFrame;
-      this.cachedVideoFrameSample = sample;
+      this.cachedVideoFrame = videoFrame
+      this.cachedVideoFrameSample = sample
     }
 
-    return videoFrame;
+    return videoFrame
   }
 
   private cloneCurrentVideoFrame(): VideoFrame | null {
-    const videoFrame = this.getOrCreateCurrentVideoFrame();
+    const videoFrame = this.getOrCreateCurrentVideoFrame()
     if (!videoFrame) {
-      return null;
+      return null
     }
 
     try {
-      return videoFrame.clone();
+      return videoFrame.clone()
     } catch (error) {
-      this.sampleLoopError = error;
-      return null;
+      this.sampleLoopError = error
+      return null
     }
   }
 
   private closeCachedVideoFrame(): void {
     if (this.cachedVideoFrame) {
       try {
-        this.cachedVideoFrame.close();
+        this.cachedVideoFrame.close()
       } catch {
         // Ignore close errors
       }
-      this.cachedVideoFrame = null;
-      this.cachedVideoFrameSample = null;
+      this.cachedVideoFrame = null
+      this.cachedVideoFrameSample = null
     }
   }
 
   private async recoverAndPrime(timestamp: number, error: unknown): Promise<boolean> {
-    const message = error instanceof Error ? error.message : String(error);
-    const looksRecoverable = /key frame|configure\(\)|flush\(\)|InvalidStateError|decode/i.test(message);
+    const message = error instanceof Error ? error.message : String(error)
+    const looksRecoverable = /key frame|configure\(\)|flush\(\)|InvalidStateError|decode/i.test(
+      message,
+    )
     if (!looksRecoverable) {
-      return false;
+      return false
     }
 
     try {
-      this.resetSampleIterator(timestamp, 'recover');
-      await this.ensureSampleForTimestamp(timestamp);
-      return this.currentSample !== null;
+      this.resetSampleIterator(timestamp, 'recover')
+      await this.ensureSampleForTimestamp(timestamp)
+      return this.currentSample !== null
     } catch (recoveryError) {
-      this.sampleLoopError = recoveryError;
-      this.lastFailureKind = 'decode-error';
-      return false;
+      this.sampleLoopError = recoveryError
+      this.lastFailureKind = 'decode-error'
+      return false
     }
   }
 
   private closeStreamState(): void {
     if (this.sampleIterator) {
-      void this.sampleIterator.return?.();
+      void this.sampleIterator.return?.()
     }
-    this.sampleIterator = null;
-    this.iteratorDone = true;
-    this.lastRequestedTimestamp = null;
-    this.sampleLoopError = null;
+    this.sampleIterator = null
+    this.iteratorDone = true
+    this.lastRequestedTimestamp = null
+    this.sampleLoopError = null
     // Close cached VideoFrame before closing the sample it references
-    this.closeCachedVideoFrame();
-    this.closeSample(this.currentSample);
-    this.closeSample(this.nextSample);
-    this.currentSample = null;
-    this.nextSample = null;
+    this.closeCachedVideoFrame()
+    this.closeSample(this.currentSample)
+    this.closeSample(this.nextSample)
+    this.currentSample = null
+    this.nextSample = null
   }
 
   private closeSample(sample: MediabunnySample | null): void {
-    if (!sample) return;
+    if (!sample) return
     try {
-      sample.close();
+      sample.close()
     } catch {
       // Ignore close errors
     }
   }
 
   private reportDrawFailure(timestamp: number, clampedTime: number, error: unknown): boolean {
-    this.drawFailureCount += 1;
-    const shouldWarn = this.drawFailureCount <= 3 || this.drawFailureCount % 20 === 0;
+    this.drawFailureCount += 1
+    const shouldWarn = this.drawFailureCount <= 3 || this.drawFailureCount % 20 === 0
     const logData = {
       itemId: this.itemId,
       timestamp,
@@ -490,25 +540,25 @@ export class VideoFrameExtractor {
       failures: this.drawFailureCount,
       reason: this.lastFailureKind,
       error: error instanceof Error ? error.message : String(error),
-    };
+    }
 
     if (shouldWarn) {
-      log.warn('Mediabunny frame extraction failed', logData);
+      log.warn('Mediabunny frame extraction failed', logData)
     } else {
-      log.debug('Mediabunny frame extraction failed', logData);
+      log.debug('Mediabunny frame extraction failed', logData)
     }
-    return false;
+    return false
   }
 
   getLastFailureKind(): 'none' | 'no-sample' | 'decode-error' {
-    return this.lastFailureKind;
+    return this.lastFailureKind
   }
 
   /**
    * Whether samplesAtTimestamps has been disabled for this source due to
    * decoder errors (falls back to the safe samples() streaming path).
    */
-  private batchDisabled = false;
+  private batchDisabled = false
 
   /**
    * Batch-prewarm multiple timestamps using mediabunny's optimized
@@ -532,54 +582,60 @@ export class VideoFrameExtractor {
     height: number,
   ): Promise<number> {
     if (this.batchDisabled || !this.ready || !this.sink || timestamps.length === 0) {
-      return -1;
+      return -1
     }
 
-    let decoded = 0;
+    let decoded = 0
     try {
       for await (const sample of this.sink.samplesAtTimestamps(timestamps)) {
-        if (!sample) continue;
+        if (!sample) continue
         try {
-          const videoFrame = sample.toVideoFrame();
+          const videoFrame = sample.toVideoFrame()
           if (videoFrame) {
-            const visibleRect = videoFrame.visibleRect;
+            const visibleRect = videoFrame.visibleRect
             if (
-              visibleRect
-              && Number.isFinite(visibleRect.width)
-              && Number.isFinite(visibleRect.height)
-              && visibleRect.width > 0
-              && visibleRect.height > 0
+              visibleRect &&
+              Number.isFinite(visibleRect.width) &&
+              Number.isFinite(visibleRect.height) &&
+              visibleRect.width > 0 &&
+              visibleRect.height > 0
             ) {
               ctx.drawImage(
                 videoFrame,
-                visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height,
-                x, y, width, height,
-              );
+                visibleRect.x,
+                visibleRect.y,
+                visibleRect.width,
+                visibleRect.height,
+                x,
+                y,
+                width,
+                height,
+              )
             } else {
-              ctx.drawImage(videoFrame, x, y, width, height);
+              ctx.drawImage(videoFrame, x, y, width, height)
             }
-            videoFrame.close();
-            decoded++;
+            videoFrame.close()
+            decoded++
           }
         } finally {
-          sample.close();
+          sample.close()
         }
       }
-      return decoded;
+      return decoded
     } catch (error) {
       // "key frame required after flush" or similar decoder error —
       // disable batch mode for this source permanently.
-      const message = error instanceof Error ? error.message : String(error);
-      const isDecoderFlushError = /key frame|flush|InvalidStateError/i.test(message);
+      const message = error instanceof Error ? error.message : String(error)
+      const isDecoderFlushError = /key frame|flush|InvalidStateError/i.test(message)
       if (isDecoderFlushError) {
         log.warn('Disabling batch prewarm for source (decoder flush error)', {
           itemId: this.itemId,
           error: message,
           decoded,
-        });
-        this.batchDisabled = true;
+        })
+        this.batchDisabled = true
       }
-      return decoded > 0 ? decoded : -1;
+      return decoded > 0 ? decoded : -1
     }
   }
 
@@ -587,7 +643,7 @@ export class VideoFrameExtractor {
    * Whether batch prewarm (samplesAtTimestamps) is available for this source.
    */
   isBatchPrewarmAvailable(): boolean {
-    return !this.batchDisabled && this.ready && this.sink !== null;
+    return !this.batchDisabled && this.ready && this.sink !== null
   }
 
   /**
@@ -595,38 +651,38 @@ export class VideoFrameExtractor {
    */
   getDimensions(): { width: number; height: number } {
     if (!this.videoTrack) {
-      return { width: 1920, height: 1080 };
+      return { width: 1920, height: 1080 }
     }
     return {
       width: this.videoTrack.displayWidth,
       height: this.videoTrack.displayHeight,
-    };
+    }
   }
 
   /**
    * Get video duration in seconds
    */
   getDuration(): number {
-    return this.duration;
+    return this.duration
   }
 
   /**
    * Clean up resources
    */
   dispose(): void {
-    this.closeStreamState();
+    this.closeStreamState()
 
     try {
       // mediabunny Input lifecycle API is dispose(); close() is not guaranteed.
-      this.input?.dispose();
+      this.input?.dispose()
     } catch {
       // Ignore dispose errors
     }
-    this.sink = null;
-    this.input = null;
-    this.videoTrack = null;
-    this.ready = false;
-    this.drawFailureCount = 0;
-    this.lastFailureKind = 'none';
+    this.sink = null
+    this.input = null
+    this.videoTrack = null
+    this.ready = false
+    this.drawFailureCount = 0
+    this.lastFailureKind = 'none'
   }
 }

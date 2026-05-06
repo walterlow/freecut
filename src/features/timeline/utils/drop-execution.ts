@@ -1,70 +1,64 @@
-import type { TimelineItem } from '@/types/timeline';
-import type { MediaMetadata } from '@/types/storage';
+import type { TimelineItem } from '@/types/timeline'
+import type { MediaMetadata } from '@/types/storage'
 import {
   extractValidMediaFileEntriesFromDataTransfer,
   getMediaType,
-} from '@/features/timeline/deps/media-library-resolver';
-import type { DroppableMediaType } from './dropped-media';
-import {
-  isDroppableMediaType,
-  isValidDragMediaItem,
-  type DragMediaItem,
-} from './drag-drop-preview';
-import { preflightFirstTimelineVideoProjectMatch } from './external-file-project-match';
+} from '@/features/timeline/deps/media-library-resolver'
+import type { DroppableMediaType } from './dropped-media'
+import { isDroppableMediaType, isValidDragMediaItem, type DragMediaItem } from './drag-drop-preview'
+import { preflightFirstTimelineVideoProjectMatch } from './external-file-project-match'
 
 export interface DroppedMediaEntry {
-  media: MediaMetadata;
-  mediaId: string;
-  mediaType: DroppableMediaType;
-  label: string;
+  media: MediaMetadata
+  mediaId: string
+  mediaType: DroppableMediaType
+  label: string
 }
 
 interface DropLogger {
-  error: (message: string, ...args: unknown[]) => void;
-  warn: (message: string, ...args: unknown[]) => void;
+  error: (message: string, ...args: unknown[]) => void
+  warn: (message: string, ...args: unknown[]) => void
 }
 
 interface DropNotifications {
-  error: (message: string, options?: { description?: string }) => void;
-  warning: (message: string) => void;
+  error: (message: string, options?: { description?: string }) => void
+  warning: (message: string) => void
 }
 
 interface ResolveDroppedMediaEntriesFromExternalFilesOptions {
-  dataTransfer: DataTransfer;
-  importHandlesForPlacement: (
-    handles: FileSystemFileHandle[]
-  ) => Promise<MediaMetadata[]>;
-  notify: DropNotifications;
+  dataTransfer: DataTransfer
+  importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>
+  notify: DropNotifications
 }
 
 interface ApplyResolvedTimelineDropOptions<TTracks> {
-  addItem: (item: TimelineItem) => void;
-  addItems: (items: TimelineItem[]) => void;
-  currentTracks: TTracks;
+  addItem: (item: TimelineItem) => void
+  addItems: (items: TimelineItem[]) => void
+  currentTracks: TTracks
   dropResult: {
-    items: TimelineItem[];
-    tracks: TTracks;
-  };
-  emptyMessage: string;
-  notify: DropNotifications;
-  partialFailureLabel: string;
-  requestedCount: number;
-  setTracks: (tracks: TTracks) => void;
+    items: TimelineItem[]
+    tracks: TTracks
+  }
+  emptyMessage: string
+  notify: DropNotifications
+  partialFailureLabel: string
+  requestedCount: number
+  setTracks: (tracks: TTracks) => void
 }
 
-function isParsedMediaItemPayload(
-  payload: unknown
-): payload is {
-  type: 'media-item';
-  mediaId: string;
-  mediaType: unknown;
-  fileName: string;
+function isParsedMediaItemPayload(payload: unknown): payload is {
+  type: 'media-item'
+  mediaId: string
+  mediaType: unknown
+  fileName: string
 } {
-  if (!payload || typeof payload !== 'object') return false;
-  const candidate = payload as Record<string, unknown>;
-  return candidate.type === 'media-item'
-    && typeof candidate.mediaId === 'string'
-    && typeof candidate.fileName === 'string';
+  if (!payload || typeof payload !== 'object') return false
+  const candidate = payload as Record<string, unknown>
+  return (
+    candidate.type === 'media-item' &&
+    typeof candidate.mediaId === 'string' &&
+    typeof candidate.fileName === 'string'
+  )
 }
 
 export function resolveDroppedMediaEntriesFromPayload(
@@ -73,71 +67,77 @@ export function resolveDroppedMediaEntriesFromPayload(
   logger: DropLogger,
 ): DroppedMediaEntry[] {
   if (!payload || typeof payload !== 'object') {
-    return [];
+    return []
   }
 
-  const mediaById = new Map(mediaItems.map((media) => [media.id, media]));
-  const candidate = payload as Record<string, unknown>;
+  const mediaById = new Map(mediaItems.map((media) => [media.id, media]))
+  const candidate = payload as Record<string, unknown>
 
   if (candidate.type === 'media-items') {
-    const rawItems = Array.isArray(candidate.items) ? candidate.items : [];
-    const validItems = rawItems.filter(isValidDragMediaItem);
+    const rawItems = Array.isArray(candidate.items) ? candidate.items : []
+    const validItems = rawItems.filter(isValidDragMediaItem)
     if (validItems.length !== rawItems.length) {
       logger.warn('Skipping invalid media-items payload entries', {
         invalidCount: rawItems.length - validItems.length,
-      });
+      })
     }
 
     return validItems.flatMap((dragItem: DragMediaItem) => {
-      const media = mediaById.get(dragItem.mediaId);
+      const media = mediaById.get(dragItem.mediaId)
       if (!media) {
-        logger.error('Media not found:', dragItem.mediaId);
-        return [];
+        logger.error('Media not found:', dragItem.mediaId)
+        return []
       }
 
-      return [{
-        media,
-        mediaId: dragItem.mediaId,
-        mediaType: dragItem.mediaType,
-        label: dragItem.fileName,
-      }];
-    });
+      return [
+        {
+          media,
+          mediaId: dragItem.mediaId,
+          mediaType: dragItem.mediaType,
+          label: dragItem.fileName,
+        },
+      ]
+    })
   }
 
   if (isParsedMediaItemPayload(candidate) && isDroppableMediaType(candidate.mediaType)) {
-    const media = mediaById.get(candidate.mediaId);
+    const media = mediaById.get(candidate.mediaId)
     if (!media) {
-      logger.error('Media not found:', candidate.mediaId);
-      return [];
+      logger.error('Media not found:', candidate.mediaId)
+      return []
     }
 
-    return [{
-      media,
-      mediaId: candidate.mediaId,
-      mediaType: candidate.mediaType,
-      label: candidate.fileName,
-    }];
+    return [
+      {
+        media,
+        mediaId: candidate.mediaId,
+        mediaType: candidate.mediaType,
+        label: candidate.fileName,
+      },
+    ]
   }
 
-  return [];
+  return []
 }
 
 export function buildDroppedMediaEntriesFromImportedMedia(
   importedMedia: MediaMetadata[],
 ): DroppedMediaEntry[] {
   return importedMedia.flatMap((media) => {
-    const mediaType = getMediaType(media.mimeType);
+    const mediaType = getMediaType(media.mimeType)
     if (!isDroppableMediaType(mediaType)) {
-      return [];
+      return []
     }
 
-    return [{
-      media,
-      mediaId: media.id,
-      mediaType,
-      label: media.fileName,
-    }];
-  });
+    return [
+      {
+        media,
+        mediaId: media.id,
+        mediaType,
+        label: media.fileName,
+      },
+    ]
+  })
 }
 
 export async function resolveDroppedMediaEntriesFromExternalFiles({
@@ -145,50 +145,51 @@ export async function resolveDroppedMediaEntriesFromExternalFiles({
   importHandlesForPlacement,
   notify,
 }: ResolveDroppedMediaEntriesFromExternalFilesOptions): Promise<DroppedMediaEntry[] | null> {
-  const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(dataTransfer);
+  const { supported, entries, errors } =
+    await extractValidMediaFileEntriesFromDataTransfer(dataTransfer)
   if (!supported) {
-    notify.warning('当前浏览器不支持拖放，请使用 Chrome 或 Edge。');
-    return null;
+    notify.warning('Drag-drop not supported in this browser. Use Chrome or Edge.')
+    return null
   }
 
   if (errors.length > 0) {
-    notify.error(`部分文件被拒绝：${errors.join(', ')}`);
+    notify.error(`Some files were rejected: ${errors.join(', ')}`)
   }
 
   if (entries.length === 0) {
-    return null;
+    return null
   }
 
   try {
-    await preflightFirstTimelineVideoProjectMatch(entries);
+    await preflightFirstTimelineVideoProjectMatch(entries)
   } catch (error) {
-    notify.error('无法检查拖入的文件。', {
-      description: error instanceof Error ? error.message : '请重试。',
-    });
-    return null;
+    notify.error('Unable to inspect dropped file.', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+    return null
   }
 
-  let importedMedia: Awaited<ReturnType<typeof importHandlesForPlacement>>;
+  let importedMedia: Awaited<ReturnType<typeof importHandlesForPlacement>>
   try {
-    importedMedia = await importHandlesForPlacement(entries.map((entry) => entry.handle));
+    importedMedia = await importHandlesForPlacement(entries.map((entry) => entry.handle))
   } catch (error) {
-    notify.error('无法导入拖入的文件。', {
-      description: error instanceof Error ? error.message : '请重试。',
-    });
-    return null;
+    notify.error('Unable to import dropped files.', {
+      description: error instanceof Error ? error.message : 'Please try again.',
+    })
+    return null
   }
   if (importedMedia.length === 0) {
-    notify.error('无法导入拖入的文件');
-    return null;
+    notify.error('Unable to import dropped files')
+    return null
   }
 
-  const droppedEntries = buildDroppedMediaEntriesFromImportedMedia(importedMedia);
+  const droppedEntries = buildDroppedMediaEntriesFromImportedMedia(importedMedia)
   if (droppedEntries.length === 0) {
-    notify.warning('拖入的文件已导入，但没有可放置到时间线的内容。');
-    return null;
+    notify.warning('Dropped files were imported, but none could be placed on the timeline.')
+    return null
   }
 
-  return droppedEntries;
+  return droppedEntries
 }
 
 export function applyResolvedTimelineDrop<TTracks>({
@@ -203,25 +204,25 @@ export function applyResolvedTimelineDrop<TTracks>({
   setTracks,
 }: ApplyResolvedTimelineDropOptions<TTracks>): boolean {
   if (dropResult.items.length === 0) {
-    notify.error(emptyMessage);
-    return false;
+    notify.error(emptyMessage)
+    return false
   }
 
   if (dropResult.tracks !== currentTracks) {
-    setTracks(dropResult.tracks);
+    setTracks(dropResult.tracks)
   }
 
   if (dropResult.items.length < requestedCount) {
     notify.warning(
-      `Some ${partialFailureLabel} could not be added: ${requestedCount - dropResult.items.length} failed`
-    );
+      `Some ${partialFailureLabel} could not be added: ${requestedCount - dropResult.items.length} failed`,
+    )
   }
 
   if (dropResult.items.length === 1) {
-    addItem(dropResult.items[0]!);
+    addItem(dropResult.items[0]!)
   } else {
-    addItems(dropResult.items);
+    addItems(dropResult.items)
   }
 
-  return true;
+  return true
 }

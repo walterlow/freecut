@@ -5,29 +5,29 @@
  */
 export interface TransformProperties {
   /** Horizontal offset from canvas center (pixels). Default: 0 (centered) */
-  x?: number;
+  x?: number
   /** Vertical offset from canvas center (pixels). Default: 0 (centered) */
-  y?: number;
+  y?: number
   /** Explicit width in pixels. Default: computed from fit-to-canvas */
-  width?: number;
+  width?: number
   /** Explicit height in pixels. Default: computed from fit-to-canvas */
-  height?: number;
+  height?: number
   /** Rotation anchor X in local item pixels from the left edge. Default: width / 2 */
-  anchorX?: number;
+  anchorX?: number
   /** Rotation anchor Y in local item pixels from the top edge. Default: height / 2 */
-  anchorY?: number;
+  anchorY?: number
   /** Rotation in degrees (clockwise). Default: 0 */
-  rotation?: number;
+  rotation?: number
   /** Flip content horizontally around its center. Default: false */
-  flipHorizontal?: boolean;
+  flipHorizontal?: boolean
   /** Flip content vertically around its center. Default: false */
-  flipVertical?: boolean;
+  flipVertical?: boolean
   /** Opacity from 0 (transparent) to 1 (opaque). Default: 1 */
-  opacity?: number;
+  opacity?: number
   /** Border radius in pixels. Default: 0 */
-  cornerRadius?: number;
+  cornerRadius?: number
   /** UI state: aspect ratio lock for resize operations. Default: true */
-  aspectRatioLocked?: boolean;
+  aspectRatioLocked?: boolean
 }
 
 /**
@@ -37,11 +37,11 @@ export interface TransformProperties {
  * Negative values soften inward, positive values fade outward.
  */
 export interface CropSettings {
-  left?: number;
-  right?: number;
-  top?: number;
-  bottom?: number;
-  softness?: number;
+  left?: number
+  right?: number
+  top?: number
+  bottom?: number
+  softness?: number
 }
 
 /**
@@ -49,15 +49,15 @@ export interface CropSettings {
  * All values are concrete numbers, no undefined.
  */
 export interface ResolvedTransform {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  anchorX: number;
-  anchorY: number;
-  rotation: number;
-  opacity: number;
-  cornerRadius: number;
+  x: number
+  y: number
+  width: number
+  height: number
+  anchorX: number
+  anchorY: number
+  rotation: number
+  opacity: number
+  cornerRadius: number
 }
 
 /**
@@ -65,15 +65,15 @@ export interface ResolvedTransform {
  * Used to compute default transforms.
  */
 export interface SourceDimensions {
-  width: number;
-  height: number;
+  width: number
+  height: number
 }
 
 /**
  * Canvas settings for computing default transforms.
  */
 export interface CanvasSettings {
-  width: number;
-  height: number;
-  fps: number;
+  width: number
+  height: number
+  fps: number
 }

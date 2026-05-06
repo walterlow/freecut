@@ -1,33 +1,38 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react'
 import {
   PlayerEmitterProvider,
   ClockBridgeProvider,
   VideoConfigProvider,
   useClock,
-} from '@/features/preview/deps/player-context';
-import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library';
-import { resolveMediaUrl } from '../utils/media-resolver';
-import { SourceComposition } from './source-composition';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
+} from '@/features/preview/deps/player-context'
+import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library'
+import { resolveMediaUrl } from '../utils/media-resolver'
+import { SourceComposition } from './source-composition'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
+import { getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
 
 interface InlineSourcePreviewProps {
-  mediaId: string;
-  seekFrame: number | null;
+  mediaId: string
+  seekFrame: number | null
   containerSize: {
-    width: number;
-    height: number;
-  };
+    width: number
+    height: number
+  }
+}
+
+function getDevicePixelRatio(): number {
+  return typeof window === 'undefined' ? 1 : window.devicePixelRatio
 }
 
 function InlineSourcePreviewClockSync({ frame }: { frame: number | null }) {
-  const clock = useClock();
+  const clock = useClock()
 
   useEffect(() => {
-    clock.seekToFrame(frame ?? 0);
-  }, [clock, frame]);
+    clock.seekToFrame(frame ?? 0)
+  }, [clock, frame])
 
-  return null;
+  return null
 }
 
 export const InlineSourcePreview = memo(function InlineSourcePreview({
@@ -42,85 +47,94 @@ export const InlineSourcePreview = memo(function InlineSourcePreview({
       seekFrame={seekFrame}
       containerSize={containerSize}
     />
-  );
-});
+  )
+})
 
 const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
   mediaId,
   seekFrame,
   containerSize,
 }: InlineSourcePreviewProps) {
-  const [blobUrl, setBlobUrl] = useState('');
-  const media = useMediaLibraryStore((s) => s.mediaById[mediaId]);
-  const zoom = usePlaybackStore((s) => s.zoom);
-  const mediaWidth = media?.width || 640;
-  const mediaHeight = media?.height || 360;
+  const [blobUrl, setBlobUrl] = useState('')
+  const media = useMediaLibraryStore((s) => s.mediaById[mediaId])
+  const zoom = usePlaybackStore((s) => s.zoom)
+  const mediaWidth = media?.width || 640
+  const mediaHeight = media?.height || 360
 
   useEffect(() => {
-    let cancelled = false;
-    setBlobUrl('');
+    let cancelled = false
+    setBlobUrl('')
 
-    resolveMediaUrl(mediaId).then((url) => {
-      if (!cancelled) {
-        setBlobUrl(url);
-      }
-    }).catch(() => {
-      // Resolution failures are already logged upstream.
-    });
+    resolveMediaUrl(mediaId)
+      .then((url) => {
+        if (!cancelled) {
+          setBlobUrl(url)
+        }
+      })
+      .catch(() => {
+        // Resolution failures are already logged upstream.
+      })
 
     return () => {
-      cancelled = true;
-    };
-  }, [mediaId]);
+      cancelled = true
+    }
+  }, [mediaId])
 
   const playerSize = useMemo(() => {
-    const aspectRatio = mediaWidth / mediaHeight;
+    const aspectRatio = mediaWidth / mediaHeight
 
     if (zoom === -1) {
       if (containerSize.width > 0 && containerSize.height > 0) {
-        const containerAspectRatio = containerSize.width / containerSize.height;
+        const containerAspectRatio = containerSize.width / containerSize.height
 
         if (containerAspectRatio > aspectRatio) {
-          const height = containerSize.height;
-          return { width: height * aspectRatio, height };
+          const height = containerSize.height
+          return getPreviewPixelSnapSize(
+            { width: height * aspectRatio, height },
+            getDevicePixelRatio(),
+          )
         }
 
-        const width = containerSize.width;
-        return { width, height: width / aspectRatio };
+        const width = containerSize.width
+        return getPreviewPixelSnapSize(
+          { width, height: width / aspectRatio },
+          getDevicePixelRatio(),
+        )
       }
 
-      return { width: mediaWidth, height: mediaHeight };
+      return { width: mediaWidth, height: mediaHeight }
     }
 
-    return {
-      width: mediaWidth * zoom,
-      height: mediaHeight * zoom,
-    };
-  }, [containerSize.height, containerSize.width, mediaHeight, mediaWidth, zoom]);
+    return getPreviewPixelSnapSize(
+      {
+        width: mediaWidth * zoom,
+        height: mediaHeight * zoom,
+      },
+      getDevicePixelRatio(),
+    )
+  }, [containerSize.height, containerSize.width, mediaHeight, mediaWidth, zoom])
 
   const needsOverflow = useMemo(() => {
-    if (zoom === -1) return false;
-    if (containerSize.width === 0 || containerSize.height === 0) return false;
-    return playerSize.width > containerSize.width || playerSize.height > containerSize.height;
-  }, [containerSize.height, containerSize.width, playerSize.height, playerSize.width, zoom]);
+    if (zoom === -1) return false
+    if (containerSize.width === 0 || containerSize.height === 0) return false
+    return playerSize.width > containerSize.width || playerSize.height > containerSize.height
+  }, [containerSize.height, containerSize.width, playerSize.height, playerSize.width, zoom])
 
   if (!media) {
     return (
       <div className="w-full h-full bg-video-preview-background flex items-center justify-center text-sm text-muted-foreground">
         正在加载媒体...
       </div>
-    );
+    )
   }
 
-  const mediaType = getMediaType(media.mimeType);
+  const mediaType = getMediaType(media.mimeType)
   if (mediaType === 'unknown') {
-    return null;
+    return null
   }
 
-  const fps = media.fps || 30;
-  const durationInFrames = mediaType === 'image'
-    ? 1
-    : Math.max(1, Math.round(media.duration * fps));
+  const fps = media.fps || 30
+  const durationInFrames = mediaType === 'image' ? 1 : Math.max(1, Math.round(media.duration * fps))
 
   return (
     <div
@@ -177,5 +191,5 @@ const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
         </div>
       </div>
     </div>
-  );
-});
+  )
+})

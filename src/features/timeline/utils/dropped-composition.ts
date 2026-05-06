@@ -1,44 +1,46 @@
-import type { AudioItem, CompositionItem } from '@/types/timeline';
-import type { SubComposition } from '../stores/compositions-store';
-import { getCompositionOwnedAudioSources } from './composition-clip-summary';
-import type { DroppableMediaType } from './dropped-media';
+import type { AudioItem, CompositionItem } from '@/types/timeline'
+import type { SubComposition } from '../stores/compositions-store'
+import { getCompositionOwnedAudioSources } from './composition-clip-summary'
+import type { DroppableMediaType } from './dropped-media'
 
 export interface DroppedCompositionPlacement {
-  trackId: string;
-  from: number;
-  durationInFrames: number;
-  mediaType: DroppableMediaType;
+  trackId: string
+  from: number
+  durationInFrames: number
+  mediaType: DroppableMediaType
 }
 
 export function compositionHasOwnedAudio(params: {
-  composition: SubComposition;
-  compositionById?: Record<string, SubComposition | undefined>;
+  composition: SubComposition
+  compositionById?: Record<string, SubComposition | undefined>
 }): boolean {
-  return getCompositionOwnedAudioSources({
-    items: params.composition.items,
-    tracks: params.composition.tracks,
-    fps: params.composition.fps,
-    compositionById: params.compositionById,
-  }).length > 0;
+  return (
+    getCompositionOwnedAudioSources({
+      items: params.composition.items,
+      tracks: params.composition.tracks,
+      fps: params.composition.fps,
+      compositionById: params.compositionById,
+    }).length > 0
+  )
 }
 
 export function buildDroppedCompositionTimelineItems(params: {
-  compositionId: string;
-  composition: SubComposition;
-  label: string;
-  placements: DroppedCompositionPlacement[];
+  compositionId: string
+  composition: SubComposition
+  label: string
+  placements: DroppedCompositionPlacement[]
 }): Array<CompositionItem | AudioItem> {
-  const visualPlacement = params.placements.find((placement) => placement.mediaType !== 'audio');
-  const audioPlacement = params.placements.find((placement) => placement.mediaType === 'audio');
+  const visualPlacement = params.placements.find((placement) => placement.mediaType !== 'audio')
+  const audioPlacement = params.placements.find((placement) => placement.mediaType === 'audio')
   const wrapperSourceFields = {
     sourceStart: 0,
     sourceEnd: params.composition.durationInFrames,
     sourceDuration: params.composition.durationInFrames,
     sourceFps: params.composition.fps,
     speed: 1,
-  };
-  const linkedGroupId = visualPlacement && audioPlacement ? crypto.randomUUID() : undefined;
-  const items: Array<CompositionItem | AudioItem> = [];
+  }
+  const linkedGroupId = visualPlacement && audioPlacement ? crypto.randomUUID() : undefined
+  const items: Array<CompositionItem | AudioItem> = []
 
   if (visualPlacement) {
     items.push({
@@ -59,7 +61,7 @@ export function buildDroppedCompositionTimelineItems(params: {
         opacity: 1,
       },
       ...wrapperSourceFields,
-    });
+    })
   }
 
   if (audioPlacement) {
@@ -74,8 +76,8 @@ export function buildDroppedCompositionTimelineItems(params: {
       linkedGroupId,
       src: '',
       ...wrapperSourceFields,
-    });
+    })
   }
 
-  return items;
+  return items
 }

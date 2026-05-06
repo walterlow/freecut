@@ -1,4 +1,4 @@
-import type { GpuEffectDefinition } from '../types';
+import type { GpuEffectDefinition } from '../types'
 
 export const vignette: GpuEffectDefinition = {
   id: 'gpu-vignette',
@@ -22,16 +22,51 @@ fn vignetteFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(vigColor, color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    size: { type: 'number', label: 'Size', default: 0.5, min: 0, max: 1.5, step: 0.01, animatable: true },
-    softness: { type: 'number', label: 'Softness', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    roundness: { type: 'number', label: 'Roundness', default: 1, min: 0.5, max: 2, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    size: {
+      type: 'number',
+      label: 'Size',
+      default: 0.5,
+      min: 0,
+      max: 1.5,
+      step: 0.01,
+      animatable: true,
+    },
+    softness: {
+      type: 'number',
+      label: 'Softness',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    roundness: {
+      type: 'number',
+      label: 'Roundness',
+      default: 1,
+      min: 0.5,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.amount as number ?? 0.5, p.size as number ?? 0.5,
-    p.softness as number ?? 0.5, p.roundness as number ?? 1,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.amount as number) ?? 0.5,
+      (p.size as number) ?? 0.5,
+      (p.softness as number) ?? 0.5,
+      (p.roundness as number) ?? 1,
+    ]),
+}
 
 export const grain: GpuEffectDefinition = {
   id: 'gpu-grain',
@@ -59,15 +94,44 @@ fn grainFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(grainColor, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0.1, min: 0, max: 0.5, step: 0.01, animatable: true },
-    size: { type: 'number', label: 'Size', default: 1, min: 0.5, max: 5, step: 0.1, animatable: true },
-    speed: { type: 'number', label: 'Speed', default: 1, min: 0, max: 5, step: 0.1, animatable: false },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0.1,
+      min: 0,
+      max: 0.5,
+      step: 0.01,
+      animatable: true,
+    },
+    size: {
+      type: 'number',
+      label: 'Size',
+      default: 1,
+      min: 0.5,
+      max: 5,
+      step: 0.1,
+      animatable: true,
+    },
+    speed: {
+      type: 'number',
+      label: 'Speed',
+      default: 1,
+      min: 0,
+      max: 5,
+      step: 0.1,
+      animatable: false,
+    },
   },
   packUniforms: (p) => {
-    const time = performance.now() / 1000;
-    return new Float32Array([p.amount as number ?? 0.1, p.size as number ?? 1, p.speed as number ?? 1, time]);
+    const time = performance.now() / 1000
+    return new Float32Array([
+      (p.amount as number) ?? 0.1,
+      (p.size as number) ?? 1,
+      (p.speed as number) ?? 1,
+      time,
+    ])
   },
-};
+}
 
 export const sharpen: GpuEffectDefinition = {
   id: 'gpu-sharpen',
@@ -102,11 +166,28 @@ fn sharpenFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(sharpened, vec3f(0.0), vec3f(1.0)), center.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 1, min: 0, max: 5, step: 0.1, animatable: true },
-    radius: { type: 'number', label: 'Radius', default: 1, min: 0.5, max: 5, step: 0.1, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 1,
+      min: 0,
+      max: 5,
+      step: 0.1,
+      animatable: true,
+    },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 1,
+      min: 0.5,
+      max: 5,
+      step: 0.1,
+      animatable: true,
+    },
   },
-  packUniforms: (p, w, h) => new Float32Array([p.amount as number ?? 1, p.radius as number ?? 1, w, h]),
-};
+  packUniforms: (p, w, h) =>
+    new Float32Array([(p.amount as number) ?? 1, (p.radius as number) ?? 1, w, h]),
+}
 
 export const posterize: GpuEffectDefinition = {
   id: 'gpu-posterize',
@@ -127,10 +208,18 @@ fn posterizeFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(posterized, color.a);
 }`,
   params: {
-    levels: { type: 'number', label: 'Levels', default: 6, min: 2, max: 32, step: 1, animatable: true },
+    levels: {
+      type: 'number',
+      label: 'Levels',
+      default: 6,
+      min: 2,
+      max: 32,
+      step: 1,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.levels as number ?? 6, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.levels as number) ?? 6, 0, 0, 0]),
+}
 
 export const glow: GpuEffectDefinition = {
   id: 'gpu-glow',
@@ -177,19 +266,75 @@ fn glowFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(result, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 1, min: 0, max: 5, step: 0.1, animatable: true },
-    threshold: { type: 'number', label: 'Threshold', default: 0.6, min: 0, max: 1, step: 0.01, animatable: true },
-    radius: { type: 'number', label: 'Radius', default: 20, min: 1, max: 100, step: 1, animatable: true },
-    softness: { type: 'number', label: 'Softness', default: 0.5, min: 0.1, max: 1, step: 0.05, animatable: true },
-    rings: { type: 'number', label: 'Rings', default: 4, min: 1, max: 32, step: 1, animatable: false, quality: true },
-    samplesPerRing: { type: 'number', label: 'Samples/Ring', default: 16, min: 4, max: 64, step: 1, animatable: false, quality: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 1,
+      min: 0,
+      max: 5,
+      step: 0.1,
+      animatable: true,
+    },
+    threshold: {
+      type: 'number',
+      label: 'Threshold',
+      default: 0.6,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 20,
+      min: 1,
+      max: 100,
+      step: 1,
+      animatable: true,
+    },
+    softness: {
+      type: 'number',
+      label: 'Softness',
+      default: 0.5,
+      min: 0.1,
+      max: 1,
+      step: 0.05,
+      animatable: true,
+    },
+    rings: {
+      type: 'number',
+      label: 'Rings',
+      default: 4,
+      min: 1,
+      max: 32,
+      step: 1,
+      animatable: false,
+      quality: true,
+    },
+    samplesPerRing: {
+      type: 'number',
+      label: 'Samples/Ring',
+      default: 16,
+      min: 4,
+      max: 64,
+      step: 1,
+      animatable: false,
+      quality: true,
+    },
   },
-  packUniforms: (p, w, h) => new Float32Array([
-    p.amount as number ?? 1, p.threshold as number ?? 0.6,
-    p.radius as number ?? 20, p.softness as number ?? 0.5,
-    w, h, p.rings as number ?? 4, p.samplesPerRing as number ?? 16,
-  ]),
-};
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.amount as number) ?? 1,
+      (p.threshold as number) ?? 0.6,
+      (p.radius as number) ?? 20,
+      (p.softness as number) ?? 0.5,
+      w,
+      h,
+      (p.rings as number) ?? 4,
+      (p.samplesPerRing as number) ?? 16,
+    ]),
+}
 
 export const edgeDetect: GpuEffectDefinition = {
   id: 'gpu-edge-detect',
@@ -221,11 +366,20 @@ fn edgeDetectFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(vec3f(edge), 1.0);
 }`,
   params: {
-    strength: { type: 'number', label: 'Strength', default: 1, min: 0, max: 5, step: 0.1, animatable: true },
+    strength: {
+      type: 'number',
+      label: 'Strength',
+      default: 1,
+      min: 0,
+      max: 5,
+      step: 0.1,
+      animatable: true,
+    },
     invert: { type: 'boolean', label: 'Invert', default: false },
   },
-  packUniforms: (p, w, h) => new Float32Array([p.strength as number ?? 1, w, h, p.invert ? 1 : 0]),
-};
+  packUniforms: (p, w, h) =>
+    new Float32Array([(p.strength as number) ?? 1, w, h, p.invert ? 1 : 0]),
+}
 
 export const scanlines: GpuEffectDefinition = {
   id: 'gpu-scanlines',
@@ -247,15 +401,44 @@ fn scanlinesFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(color.rgb * darken, color.a);
 }`,
   params: {
-    density: { type: 'number', label: 'Density', default: 5, min: 1, max: 20, step: 0.5, animatable: true },
-    opacity: { type: 'number', label: 'Opacity', default: 0.3, min: 0, max: 1, step: 0.01, animatable: true },
-    speed: { type: 'number', label: 'Scroll Speed', default: 0, min: 0, max: 5, step: 0.1, animatable: false },
+    density: {
+      type: 'number',
+      label: 'Density',
+      default: 5,
+      min: 1,
+      max: 20,
+      step: 0.5,
+      animatable: true,
+    },
+    opacity: {
+      type: 'number',
+      label: 'Opacity',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    speed: {
+      type: 'number',
+      label: 'Scroll Speed',
+      default: 0,
+      min: 0,
+      max: 5,
+      step: 0.1,
+      animatable: false,
+    },
   },
   packUniforms: (p) => {
-    const time = performance.now() / 1000;
-    return new Float32Array([p.density as number ?? 5, p.opacity as number ?? 0.3, p.speed as number ?? 0, time]);
+    const time = performance.now() / 1000
+    return new Float32Array([
+      (p.density as number) ?? 5,
+      (p.opacity as number) ?? 0.3,
+      (p.speed as number) ?? 0,
+      time,
+    ])
   },
-};
+}
 
 export const colorGlitch: GpuEffectDefinition = {
   id: 'gpu-color-glitch',
@@ -281,31 +464,50 @@ fn colorGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(mix(color.rgb, glitched, shouldGlitch * params.intensity), color.a);
 }`,
   params: {
-    intensity: { type: 'number', label: 'Intensity', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    speed: { type: 'number', label: 'Speed', default: 1, min: 0.1, max: 5, step: 0.1, animatable: false },
+    intensity: {
+      type: 'number',
+      label: 'Intensity',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    speed: {
+      type: 'number',
+      label: 'Speed',
+      default: 1,
+      min: 0.1,
+      max: 5,
+      step: 0.1,
+      animatable: false,
+    },
   },
   packUniforms: (p) => {
-    const time = performance.now() / 1000;
-    return new Float32Array([p.intensity as number ?? 0.5, p.speed as number ?? 1, time, 0]);
+    const time = performance.now() / 1000
+    return new Float32Array([(p.intensity as number) ?? 0.5, (p.speed as number) ?? 1, time, 0])
   },
-};
-
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value));
 }
 
-function parseHexColor(color: string, fallback: [number, number, number, number]): [number, number, number, number] {
-  if (!color.startsWith('#')) return fallback;
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value))
+}
 
-  const hex = color.slice(1);
+function parseHexColor(
+  color: string,
+  fallback: [number, number, number, number],
+): [number, number, number, number] {
+  if (!color.startsWith('#')) return fallback
+
+  const hex = color.slice(1)
   if (hex.length === 3 || hex.length === 4) {
-    const values = hex.split('').map((ch) => parseInt(ch + ch, 16) / 255);
+    const values = hex.split('').map((ch) => parseInt(ch + ch, 16) / 255)
     return [
       values[0] ?? fallback[0],
       values[1] ?? fallback[1],
       values[2] ?? fallback[2],
       values[3] ?? 1,
-    ];
+    ]
   }
 
   if (hex.length === 6 || hex.length === 8) {
@@ -314,25 +516,25 @@ function parseHexColor(color: string, fallback: [number, number, number, number]
       parseInt(hex.slice(2, 4), 16) / 255,
       parseInt(hex.slice(4, 6), 16) / 255,
       hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
-    ];
+    ]
     if (values.every((value) => Number.isFinite(value))) {
-      return values as [number, number, number, number];
+      return values as [number, number, number, number]
     }
   }
 
-  return fallback;
+  return fallback
 }
 
 function legacySpacingToPaperSize(spacing: number | undefined, height: number): number {
-  if (!spacing || spacing <= 0 || !Number.isFinite(spacing)) return 0.5;
-  const cellsPerSide = Math.max(7, Math.min(300, height / spacing));
-  const normalized = clamp01((300 - cellsPerSide) / 293);
-  return Math.pow(normalized, 1 / 0.7);
+  if (!spacing || spacing <= 0 || !Number.isFinite(spacing)) return 0.5
+  const cellsPerSide = Math.max(7, Math.min(300, height / spacing))
+  const normalized = clamp01((300 - cellsPerSide) / 293)
+  return Math.pow(normalized, 1 / 0.7)
 }
 
 function legacyDotRatioToRadius(dotSize: number | undefined, spacing: number | undefined): number {
-  if (!dotSize || !spacing || spacing <= 0) return 1.25;
-  return Math.max(0, Math.min(2, (dotSize / spacing) * 2));
+  if (!dotSize || !spacing || spacing <= 0) return 1.25
+  return Math.max(0, Math.min(2, (dotSize / spacing) * 2))
 }
 
 // Adapted from Paper Design's halftone-dots shader (MIT, Lost Coast Labs, Inc.):
@@ -707,14 +909,18 @@ fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
     originalColors: { type: 'boolean', label: 'Original Colors', default: false },
     inverted: { type: 'boolean', label: 'Inverted', default: false },
     grid: {
-      type: 'select', label: 'Grid', default: 'hex',
+      type: 'select',
+      label: 'Grid',
+      default: 'hex',
       options: [
         { value: 'hex', label: 'Hex' },
         { value: 'square', label: 'Square' },
       ],
     },
     type: {
-      type: 'select', label: 'Type', default: 'gooey',
+      type: 'select',
+      label: 'Type',
+      default: 'gooey',
       options: [
         { value: 'classic', label: 'Classic' },
         { value: 'gooey', label: 'Gooey' },
@@ -722,37 +928,114 @@ fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
         { value: 'soft', label: 'Soft' },
       ],
     },
-    size: { type: 'number', label: 'Size', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    radius: { type: 'number', label: 'Radius', default: 1.25, min: 0, max: 2, step: 0.01, animatable: true },
-    contrast: { type: 'number', label: 'Contrast', default: 0.4, min: 0, max: 1, step: 0.01, animatable: true },
-    grainMixer: { type: 'number', label: 'Grain Mixer', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true },
-    grainOverlay: { type: 'number', label: 'Grain Overlay', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true },
-    grainSize: { type: 'number', label: 'Grain Size', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+    size: {
+      type: 'number',
+      label: 'Size',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 1.25,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+    contrast: {
+      type: 'number',
+      label: 'Contrast',
+      default: 0.4,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    grainMixer: {
+      type: 'number',
+      label: 'Grain Mixer',
+      default: 0.2,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    grainOverlay: {
+      type: 'number',
+      label: 'Grain Overlay',
+      default: 0.2,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    grainSize: {
+      type: 'number',
+      label: 'Grain Size',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
   packUniforms: (p, w, h) => {
-    const gridMap: Record<string, number> = { square: 0, hex: 1 };
-    const styleMap: Record<string, number> = { classic: 0, gooey: 1, holes: 2, soft: 3 };
-    const colorFront = parseHexColor((p.colorFront as string) ?? '#2b2b2b', [43 / 255, 43 / 255, 43 / 255, 1]);
-    const colorBack = parseHexColor((p.colorBack as string) ?? '#f2f1e8', [242 / 255, 241 / 255, 232 / 255, 1]);
-    const size = (p.size as number | undefined) ?? legacySpacingToPaperSize(p.spacing as number | undefined, h);
-    const radius = (p.radius as number | undefined) ?? legacyDotRatioToRadius(p.dotSize as number | undefined, p.spacing as number | undefined);
-    const contrast = (p.contrast as number | undefined) ?? 0.4;
-    const originalColors = (p.originalColors as boolean | undefined) ?? false;
-    const inverted = (p.inverted as boolean | undefined) ?? (p.invert as boolean | undefined) ?? false;
-    const grainMixer = (p.grainMixer as number | undefined) ?? 0.2;
-    const grainOverlay = (p.grainOverlay as number | undefined) ?? 0.2;
-    const grainSize = (p.grainSize as number | undefined) ?? 0.5;
-    const grid = (p.grid as string | undefined) ?? 'hex';
-    const type = (p.type as string | undefined) ?? (p.dotStyle as string | undefined) ?? 'gooey';
+    const gridMap: Record<string, number> = { square: 0, hex: 1 }
+    const styleMap: Record<string, number> = { classic: 0, gooey: 1, holes: 2, soft: 3 }
+    const colorFront = parseHexColor((p.colorFront as string) ?? '#2b2b2b', [
+      43 / 255,
+      43 / 255,
+      43 / 255,
+      1,
+    ])
+    const colorBack = parseHexColor((p.colorBack as string) ?? '#f2f1e8', [
+      242 / 255,
+      241 / 255,
+      232 / 255,
+      1,
+    ])
+    const size =
+      (p.size as number | undefined) ?? legacySpacingToPaperSize(p.spacing as number | undefined, h)
+    const radius =
+      (p.radius as number | undefined) ??
+      legacyDotRatioToRadius(p.dotSize as number | undefined, p.spacing as number | undefined)
+    const contrast = (p.contrast as number | undefined) ?? 0.4
+    const originalColors = (p.originalColors as boolean | undefined) ?? false
+    const inverted =
+      (p.inverted as boolean | undefined) ?? (p.invert as boolean | undefined) ?? false
+    const grainMixer = (p.grainMixer as number | undefined) ?? 0.2
+    const grainOverlay = (p.grainOverlay as number | undefined) ?? 0.2
+    const grainSize = (p.grainSize as number | undefined) ?? 0.5
+    const grid = (p.grid as string | undefined) ?? 'hex'
+    const type = (p.type as string | undefined) ?? (p.dotStyle as string | undefined) ?? 'gooey'
     return new Float32Array([
-      colorFront[0], colorFront[1], colorFront[2], colorFront[3],
-      colorBack[0], colorBack[1], colorBack[2], colorBack[3],
-      size, radius, contrast, w / Math.max(h, 1),
-      originalColors ? 1 : 0, inverted ? 1 : 0, grainMixer, grainOverlay,
-      grainSize, gridMap[grid] ?? 1, styleMap[type] ?? 1, 0,
-    ]);
+      colorFront[0],
+      colorFront[1],
+      colorFront[2],
+      colorFront[3],
+      colorBack[0],
+      colorBack[1],
+      colorBack[2],
+      colorBack[3],
+      size,
+      radius,
+      contrast,
+      w / Math.max(h, 1),
+      originalColors ? 1 : 0,
+      inverted ? 1 : 0,
+      grainMixer,
+      grainOverlay,
+      grainSize,
+      gridMap[grid] ?? 1,
+      styleMap[type] ?? 1,
+      0,
+    ])
   },
-};
+}
 
 const DITHER_PATTERN_MAP: Record<string, number> = {
   bayer2: 0,
@@ -764,31 +1047,31 @@ const DITHER_PATTERN_MAP: Record<string, number> = {
   dots: 6,
   grid: 7,
   scales: 8,
-};
+}
 
 const DITHER_MODE_MAP: Record<string, number> = {
   image: 0,
   linear: 1,
   radial: 2,
-};
+}
 
 const DITHER_STYLE_MAP: Record<string, number> = {
   threshold: 0,
   scaled: 1,
-};
+}
 
 const DITHER_SHAPE_MAP: Record<string, number> = {
   circle: 0,
   square: 1,
   diamond: 2,
-};
+}
 
 const DITHER_PALETTE_MAP: Record<string, number> = {
   bw: 0,
   gameboy: 1,
   cga: 2,
   sepia: 3,
-};
+}
 
 const ASCII_CHARSET_MAP: Record<string, number> = {
   standard: 0,
@@ -796,7 +1079,7 @@ const ASCII_CHARSET_MAP: Record<string, number> = {
   blocks: 2,
   dots: 3,
   minimal: 4,
-};
+}
 
 export const dither: GpuEffectDefinition = {
   id: 'gpu-dither',
@@ -1123,7 +1406,15 @@ fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
         { value: 'sepia', label: 'Sepia' },
       ],
     },
-    cellSize: { type: 'number', label: 'Cell Size', default: 8, min: 2, max: 32, step: 1, animatable: true },
+    cellSize: {
+      type: 'number',
+      label: 'Cell Size',
+      default: 8,
+      min: 2,
+      max: 32,
+      step: 1,
+      animatable: true,
+    },
     angle: {
       type: 'number',
       label: 'Angle',
@@ -1165,21 +1456,22 @@ fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
       visibleWhen: (params) => params.mode === 'radial',
     },
   },
-  packUniforms: (p, w, h) => new Float32Array([
-    (p.cellSize as number) ?? 8,
-    (p.angle as number) ?? 45,
-    (p.scale as number) ?? 100,
-    w,
-    h,
-    (p.offsetX as number) ?? 0,
-    (p.offsetY as number) ?? 0,
-    DITHER_PATTERN_MAP[p.pattern as string] ?? DITHER_PATTERN_MAP.bayer4 ?? 0,
-    DITHER_MODE_MAP[p.mode as string] ?? DITHER_MODE_MAP.image ?? 0,
-    DITHER_STYLE_MAP[p.style as string] ?? DITHER_STYLE_MAP.threshold ?? 0,
-    DITHER_SHAPE_MAP[p.shape as string] ?? DITHER_SHAPE_MAP.square ?? 0,
-    DITHER_PALETTE_MAP[p.palette as string] ?? DITHER_PALETTE_MAP.gameboy ?? 0,
-  ]),
-};
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.cellSize as number) ?? 8,
+      (p.angle as number) ?? 45,
+      (p.scale as number) ?? 100,
+      w,
+      h,
+      (p.offsetX as number) ?? 0,
+      (p.offsetY as number) ?? 0,
+      DITHER_PATTERN_MAP[p.pattern as string] ?? DITHER_PATTERN_MAP.bayer4 ?? 0,
+      DITHER_MODE_MAP[p.mode as string] ?? DITHER_MODE_MAP.image ?? 0,
+      DITHER_STYLE_MAP[p.style as string] ?? DITHER_STYLE_MAP.threshold ?? 0,
+      DITHER_SHAPE_MAP[p.shape as string] ?? DITHER_SHAPE_MAP.square ?? 0,
+      DITHER_PALETTE_MAP[p.palette as string] ?? DITHER_PALETTE_MAP.gameboy ?? 0,
+    ]),
+}
 
 // Inspired by Studio's cell-based ASCII renderer. This keeps the shader-friendly
 // subset: per-cell sampling, preset character sets, and source/mono coloring.
@@ -1462,9 +1754,33 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
         { value: 'minimal', label: 'Minimal' },
       ],
     },
-    fontSize: { type: 'number', label: 'Font Size', default: 8, min: 4, max: 24, step: 1, animatable: true },
-    letterSpacing: { type: 'number', label: 'Letter Spacing', default: 0, min: -2, max: 5, step: 0.1, animatable: true },
-    lineHeight: { type: 'number', label: 'Line Height', default: 1, min: 0.5, max: 2, step: 0.1, animatable: true },
+    fontSize: {
+      type: 'number',
+      label: 'Font Size',
+      default: 8,
+      min: 4,
+      max: 24,
+      step: 1,
+      animatable: true,
+    },
+    letterSpacing: {
+      type: 'number',
+      label: 'Letter Spacing',
+      default: 0,
+      min: -2,
+      max: 5,
+      step: 0.1,
+      animatable: true,
+    },
+    lineHeight: {
+      type: 'number',
+      label: 'Line Height',
+      default: 1,
+      min: 0.5,
+      max: 2,
+      step: 0.1,
+      animatable: true,
+    },
     matchSourceColor: { type: 'boolean', label: 'Match Source Color', default: true },
     textColor: {
       type: 'color',
@@ -1483,15 +1799,52 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       animatable: true,
       visibleWhen: (params) => params.matchSourceColor === true,
     },
-    asciiOpacity: { type: 'number', label: 'ASCII Opacity', default: 100, min: 0, max: 100, step: 1, animatable: true },
-    originalOpacity: { type: 'number', label: 'Original Opacity', default: 0, min: 0, max: 100, step: 1, animatable: true },
-    contrast: { type: 'number', label: 'Contrast', default: 100, min: 50, max: 200, step: 1, animatable: true },
-    brightness: { type: 'number', label: 'Brightness', default: 0, min: -100, max: 100, step: 1, animatable: true },
+    asciiOpacity: {
+      type: 'number',
+      label: 'ASCII Opacity',
+      default: 100,
+      min: 0,
+      max: 100,
+      step: 1,
+      animatable: true,
+    },
+    originalOpacity: {
+      type: 'number',
+      label: 'Original Opacity',
+      default: 0,
+      min: 0,
+      max: 100,
+      step: 1,
+      animatable: true,
+    },
+    contrast: {
+      type: 'number',
+      label: 'Contrast',
+      default: 100,
+      min: 50,
+      max: 200,
+      step: 1,
+      animatable: true,
+    },
+    brightness: {
+      type: 'number',
+      label: 'Brightness',
+      default: 0,
+      min: -100,
+      max: 100,
+      step: 1,
+      animatable: true,
+    },
     invert: { type: 'boolean', label: 'Invert', default: false },
   },
   packUniforms: (p, w, h) => {
-    const textColor = parseHexColor((p.textColor as string) ?? '#ffffff', [1, 1, 1, 1]);
-    const bgColor = parseHexColor((p.bgColor as string) ?? '#0a0a0f', [10 / 255, 10 / 255, 15 / 255, 1]);
+    const textColor = parseHexColor((p.textColor as string) ?? '#ffffff', [1, 1, 1, 1])
+    const bgColor = parseHexColor((p.bgColor as string) ?? '#0a0a0f', [
+      10 / 255,
+      10 / 255,
+      15 / 255,
+      1,
+    ])
     return new Float32Array([
       (p.fontSize as number) ?? 8,
       (p.letterSpacing as number) ?? 0,
@@ -1517,9 +1870,9 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       bgColor[1],
       bgColor[2],
       bgColor[3],
-    ]);
+    ])
   },
-};
+}
 
 export const threshold: GpuEffectDefinition = {
   id: 'gpu-threshold',
@@ -1540,7 +1893,15 @@ fn thresholdFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(vec3f(result), color.a);
 }`,
   params: {
-    level: { type: 'number', label: 'Level', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+    level: {
+      type: 'number',
+      label: 'Level',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.level as number ?? 0.5, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.level as number) ?? 0.5, 0, 0, 0]),
+}

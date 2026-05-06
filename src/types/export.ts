@@ -1,22 +1,22 @@
-import type { AudioEqSettings } from './audio';
-import type { TimelineTrack } from './timeline';
-import type { Transition } from './transition';
-import type { ItemKeyframes } from './keyframe';
+import type { AudioEqSettings } from './audio'
+import type { TimelineTrack } from './timeline'
+import type { Transition } from './transition'
+import type { ItemKeyframes } from './keyframe'
 
 // Export modes
-export type ExportMode = 'video' | 'audio';
+export type ExportMode = 'video' | 'audio'
 
 // Container formats
-export type VideoContainer = 'mp4' | 'mov' | 'webm' | 'mkv';
-export type AudioContainer = 'mp3' | 'aac' | 'wav';
+export type VideoContainer = 'mp4' | 'mov' | 'webm' | 'mkv'
+export type AudioContainer = 'mp3' | 'aac' | 'wav'
 
 export interface ExportSettings {
-  codec: 'h264' | 'h265' | 'vp8' | 'vp9' | 'av1' | 'prores';
-  quality: 'low' | 'medium' | 'high' | 'ultra';
-  resolution: { width: number; height: number };
-  bitrate?: string;
-  audioBitrate?: string;
-  proResProfile?: 'proxy' | 'light' | 'standard' | 'hq' | '4444' | '4444-xq';
+  codec: 'h264' | 'h265' | 'vp8' | 'vp9' | 'av1' | 'prores'
+  quality: 'low' | 'medium' | 'high' | 'ultra'
+  resolution: { width: number; height: number }
+  bitrate?: string
+  audioBitrate?: string
+  proResProfile?: 'proxy' | 'light' | 'standard' | 'hq' | '4444' | '4444-xq'
 }
 
 /**
@@ -24,23 +24,25 @@ export interface ExportSettings {
  * Includes container format and export mode options
  */
 export interface ExtendedExportSettings extends ExportSettings {
-  mode: ExportMode;
-  videoContainer?: VideoContainer;
-  audioContainer?: AudioContainer;
+  mode: ExportMode
+  videoContainer?: VideoContainer
+  audioContainer?: AudioContainer
+  /** Embed timeline subtitle segments as a soft subtitle track when the container supports it. */
+  embedSubtitles?: boolean
   /** When true, ignores in/out points and exports the full timeline */
-  renderWholeProject?: boolean;
+  renderWholeProject?: boolean
 }
 
 export interface CompositionInputProps {
-  fps: number;
-  durationInFrames?: number;
-  width?: number;
-  height?: number;
-  tracks: TimelineTrack[];
-  transitions?: Transition[]; // Transitions between clips
-  backgroundColor?: string; // Hex color for canvas background
-  keyframes?: ItemKeyframes[]; // Keyframe animations for items
-  busAudioEq?: AudioEqSettings;
+  fps: number
+  durationInFrames?: number
+  width?: number
+  height?: number
+  tracks: TimelineTrack[]
+  transitions?: Transition[] // Transitions between clips
+  backgroundColor?: string // Hex color for canvas background
+  keyframes?: ItemKeyframes[] // Keyframe animations for items
+  busAudioEq?: AudioEqSettings
   /** Project-scoped master bus gain in dB (0 = unity). Applied to final mix. */
-  masterBusDb?: number;
+  masterBusDb?: number
 }

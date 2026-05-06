@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { collectVisualInvalidationRanges } from './preview-frame-invalidation';
-import type { CompositionInputProps } from '@/types/export';
-import type { ItemKeyframes } from '@/types/keyframe';
-import type { TimelineItem } from '@/types/timeline';
+import { describe, expect, it } from 'vite-plus/test'
+import { collectVisualInvalidationRanges } from './preview-frame-invalidation'
+import type { CompositionInputProps } from '@/types/export'
+import type { ItemKeyframes } from '@/types/keyframe'
+import type { TimelineItem } from '@/types/timeline'
 
 function createTracks(items: TimelineItem[]): CompositionInputProps['tracks'] {
   return [
@@ -17,7 +17,7 @@ function createTracks(items: TimelineItem[]): CompositionInputProps['tracks'] {
       order: 0,
       items,
     },
-  ];
+  ]
 }
 
 describe('collectVisualInvalidationRanges', () => {
@@ -29,7 +29,7 @@ describe('collectVisualInvalidationRanges', () => {
       from: 200,
       durationInFrames: 30,
       src: 'blob:unchanged',
-    } as TimelineItem;
+    } as TimelineItem
     const previousItem = {
       id: 'item-1',
       type: 'video',
@@ -38,11 +38,11 @@ describe('collectVisualInvalidationRanges', () => {
       durationInFrames: 40,
       src: 'blob:clip',
       transform: { x: 0, y: 0, width: 100, height: 60, rotation: 0, opacity: 1 },
-    } as TimelineItem;
+    } as TimelineItem
     const nextItem = {
       ...previousItem,
       transform: { ...previousItem.transform!, x: 50 },
-    } as TimelineItem;
+    } as TimelineItem
     const previousKeyframes: ItemKeyframes[] = [
       {
         itemId: 'item-2',
@@ -53,7 +53,7 @@ describe('collectVisualInvalidationRanges', () => {
           },
         ],
       },
-    ];
+    ]
     const nextKeyframes: ItemKeyframes[] = [
       {
         itemId: 'item-2',
@@ -64,7 +64,7 @@ describe('collectVisualInvalidationRanges', () => {
           },
         ],
       },
-    ];
+    ]
     const keyedItem = {
       id: 'item-2',
       type: 'video',
@@ -72,17 +72,17 @@ describe('collectVisualInvalidationRanges', () => {
       from: 40,
       durationInFrames: 30,
       src: 'blob:keyed',
-    } as TimelineItem;
+    } as TimelineItem
 
-    expect(collectVisualInvalidationRanges({
-      previousTracks: createTracks([previousItem, keyedItem, unchangedItem]),
-      nextTracks: createTracks([nextItem, keyedItem, unchangedItem]),
-      previousKeyframes,
-      nextKeyframes,
-    })).toEqual([
-      { startFrame: 10, endFrame: 70 },
-    ]);
-  });
+    expect(
+      collectVisualInvalidationRanges({
+        previousTracks: createTracks([previousItem, keyedItem, unchangedItem]),
+        nextTracks: createTracks([nextItem, keyedItem, unchangedItem]),
+        previousKeyframes,
+        nextKeyframes,
+      }),
+    ).toEqual([{ startFrame: 10, endFrame: 70 }])
+  })
 
   it('skips invalidation when item and keyframe references are unchanged', () => {
     const item = {
@@ -92,15 +92,17 @@ describe('collectVisualInvalidationRanges', () => {
       from: 0,
       durationInFrames: 60,
       src: 'blob:clip',
-    } as TimelineItem;
-    const keyframes: ItemKeyframes[] = [];
-    const tracks = createTracks([item]);
+    } as TimelineItem
+    const keyframes: ItemKeyframes[] = []
+    const tracks = createTracks([item])
 
-    expect(collectVisualInvalidationRanges({
-      previousTracks: tracks,
-      nextTracks: tracks,
-      previousKeyframes: keyframes,
-      nextKeyframes: keyframes,
-    })).toEqual([]);
-  });
-});
+    expect(
+      collectVisualInvalidationRanges({
+        previousTracks: tracks,
+        nextTracks: tracks,
+        previousKeyframes: keyframes,
+        nextKeyframes: keyframes,
+      }),
+    ).toEqual([])
+  })
+})

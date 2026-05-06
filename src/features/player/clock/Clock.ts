@@ -1,10 +1,14 @@
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger } from '@/shared/logging/logger'
 
-const logger = createLogger('Clock');
+const logger = createLogger('Clock')
 
 // DEV-only: cached jitter monitor reference loaded via dynamic import.
 // Typed inline to avoid cross-feature import boundary violation.
-let _devJitterMonitor: { recordClockFrame: (frame: number, inTransition: boolean) => void; setFps: (fps: number) => void; onPlaybackStart: () => void } | null = null;
+let _devJitterMonitor: {
+  recordClockFrame: (frame: number, inTransition: boolean) => void
+  setFps: (fps: number) => void
+  onPlaybackStart: () => void
+} | null = null
 
 /**
  * Clock.ts - Central timing system for the video player
@@ -30,24 +34,24 @@ type ClockEventType =
   | 'seek'
   | 'ratechange'
   | 'ended'
-  | 'timeupdate';
+  | 'timeupdate'
 
 interface ClockEvent {
-  type: ClockEventType;
-  frame: number;
-  time: number;
-  isPlaying: boolean;
-  playbackRate: number;
+  type: ClockEventType
+  frame: number
+  time: number
+  isPlaying: boolean
+  playbackRate: number
 }
 
-type ClockEventCallback = (event: ClockEvent) => void;
+type ClockEventCallback = (event: ClockEvent) => void
 
 export interface ClockConfig {
-  fps: number;
-  durationInFrames: number;
-  initialFrame?: number;
-  loop?: boolean;
-  onEnded?: () => void;
+  fps: number
+  durationInFrames: number
+  initialFrame?: number
+  loop?: boolean
+  onEnded?: () => void
 }
 
 /**
@@ -55,54 +59,54 @@ export interface ClockConfig {
  */
 export class Clock {
   // Configuration
-  private _fps: number;
-  private _durationInFrames: number;
-  private _loop: boolean;
-  private _onEnded?: () => void;
+  private _fps: number
+  private _durationInFrames: number
+  private _loop: boolean
+  private _onEnded?: () => void
 
   // State
-  private _currentFrame: number;
-  private _isPlaying: boolean = false;
-  private _playbackRate: number = 1;
+  private _currentFrame: number
+  private _isPlaying: boolean = false
+  private _playbackRate: number = 1
 
   // Animation loop
-  private _animationFrameId: number | null = null;
-  private _playbackStartTime: number = 0;
-  private _playbackStartFrame: number = 0;
+  private _animationFrameId: number | null = null
+  private _playbackStartTime: number = 0
+  private _playbackStartFrame: number = 0
 
   // Audio-as-ground-truth: when set, playback timing derives from the
   // hardware audio clock (AudioContext.currentTime) instead of
   // performance.now(). This eliminates audio-video drift by definition.
-  private _audioContext: AudioContext | null = null;
+  private _audioContext: AudioContext | null = null
 
   // In/out points for range playback
-  private _inFrame: number | null = null;
-  private _outFrame: number | null = null;
+  private _inFrame: number | null = null
+  private _outFrame: number | null = null
 
   // Event listeners
-  private _listeners: Map<ClockEventType, Set<ClockEventCallback>> = new Map();
+  private _listeners: Map<ClockEventType, Set<ClockEventCallback>> = new Map()
 
   // Throttling for timeupdate events
-  private _lastTimeUpdateEmit: number = 0;
-  private readonly TIME_UPDATE_INTERVAL_MS = 100;
+  private _lastTimeUpdateEmit: number = 0
+  private readonly TIME_UPDATE_INTERVAL_MS = 100
   private readonly _handleVisibilityChange = (): void => {
     if (typeof document !== 'undefined' && !document.hidden) {
-      this._catchUpToCurrentTime();
+      this._catchUpToCurrentTime()
     }
-  };
+  }
   private readonly _handleWindowFocus = (): void => {
-    this._catchUpToCurrentTime();
-  };
+    this._catchUpToCurrentTime()
+  }
   private readonly _handlePageShow = (): void => {
-    this._catchUpToCurrentTime();
-  };
+    this._catchUpToCurrentTime()
+  }
 
   constructor(config: ClockConfig) {
-    this._fps = config.fps;
-    this._durationInFrames = config.durationInFrames;
-    this._currentFrame = config.initialFrame ?? 0;
-    this._loop = config.loop ?? false;
-    this._onEnded = config.onEnded;
+    this._fps = config.fps
+    this._durationInFrames = config.durationInFrames
+    this._currentFrame = config.initialFrame ?? 0
+    this._loop = config.loop ?? false
+    this._onEnded = config.onEnded
 
     // Initialize listener maps
     const eventTypes: ClockEventType[] = [
@@ -113,17 +117,17 @@ export class Clock {
       'ratechange',
       'ended',
       'timeupdate',
-    ];
+    ]
     eventTypes.forEach((type) => {
-      this._listeners.set(type, new Set());
-    });
+      this._listeners.set(type, new Set())
+    })
 
     if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', this._handleVisibilityChange);
+      document.addEventListener('visibilitychange', this._handleVisibilityChange)
     }
     if (typeof window !== 'undefined') {
-      window.addEventListener('focus', this._handleWindowFocus);
-      window.addEventListener('pageshow', this._handlePageShow);
+      window.addEventListener('focus', this._handleWindowFocus)
+      window.addEventListener('pageshow', this._handlePageShow)
     }
   }
 
@@ -132,51 +136,51 @@ export class Clock {
   // ============================================
 
   get fps(): number {
-    return this._fps;
+    return this._fps
   }
 
   get durationInFrames(): number {
-    return this._durationInFrames;
+    return this._durationInFrames
   }
 
   get durationInSeconds(): number {
-    return this._durationInFrames / this._fps;
+    return this._durationInFrames / this._fps
   }
 
   get currentFrame(): number {
-    return this._currentFrame;
+    return this._currentFrame
   }
 
   get currentTime(): number {
-    return this._currentFrame / this._fps;
+    return this._currentFrame / this._fps
   }
 
   get isPlaying(): boolean {
-    return this._isPlaying;
+    return this._isPlaying
   }
 
   get playbackRate(): number {
-    return this._playbackRate;
+    return this._playbackRate
   }
 
   get loop(): boolean {
-    return this._loop;
+    return this._loop
   }
 
   get inFrame(): number {
-    return this._inFrame ?? 0;
+    return this._inFrame ?? 0
   }
 
   get outFrame(): number {
-    return this._outFrame ?? this._durationInFrames - 1;
+    return this._outFrame ?? this._durationInFrames - 1
   }
 
   get actualFirstFrame(): number {
-    return this._inFrame ?? 0;
+    return this._inFrame ?? 0
   }
 
   get actualLastFrame(): number {
-    return this._outFrame ?? this._durationInFrames - 1;
+    return this._outFrame ?? this._durationInFrames - 1
   }
 
   // ============================================
@@ -185,24 +189,24 @@ export class Clock {
 
   set fps(value: number) {
     if (value <= 0) {
-      throw new Error('FPS must be positive');
+      throw new Error('FPS must be positive')
     }
-    this._fps = value;
+    this._fps = value
   }
 
   set durationInFrames(value: number) {
     if (value <= 0) {
-      throw new Error('Duration must be positive');
+      throw new Error('Duration must be positive')
     }
-    this._durationInFrames = value;
+    this._durationInFrames = value
     // Clamp current frame if it exceeds new duration
     if (this._currentFrame >= value) {
-      this.seekToFrame(value - 1);
+      this.seekToFrame(value - 1)
     }
   }
 
   set loop(value: boolean) {
-    this._loop = value;
+    this._loop = value
   }
 
   /**
@@ -211,29 +215,29 @@ export class Clock {
    * hardware audio clock instead of performance.now().
    */
   setAudioContext(ctx: AudioContext | null): void {
-    this._audioContext = ctx;
+    this._audioContext = ctx
     // Re-anchor if playing so the new time source takes effect immediately
     if (this._isPlaying) {
-      this._playbackStartTime = this._now();
-      this._playbackStartFrame = this._currentFrame;
+      this._playbackStartTime = this._now()
+      this._playbackStartFrame = this._currentFrame
     }
   }
 
   set playbackRate(value: number) {
     if (value === 0) {
-      throw new Error('Playback rate cannot be zero');
+      throw new Error('Playback rate cannot be zero')
     }
-    const oldRate = this._playbackRate;
-    this._playbackRate = value;
+    const oldRate = this._playbackRate
+    this._playbackRate = value
 
     // If playing, reset the playback start point to maintain continuity
     if (this._isPlaying) {
-      this._playbackStartTime = this._now();
-      this._playbackStartFrame = this._currentFrame;
+      this._playbackStartTime = this._now()
+      this._playbackStartFrame = this._currentFrame
     }
 
     if (oldRate !== value) {
-      this._emit('ratechange');
+      this._emit('ratechange')
     }
   }
 
@@ -243,23 +247,23 @@ export class Clock {
 
   setInPoint(frame: number | null): void {
     if (frame !== null) {
-      this._inFrame = Math.max(0, Math.min(frame, this._durationInFrames - 1));
+      this._inFrame = Math.max(0, Math.min(frame, this._durationInFrames - 1))
     } else {
-      this._inFrame = null;
+      this._inFrame = null
     }
   }
 
   setOutPoint(frame: number | null): void {
     if (frame !== null) {
-      this._outFrame = Math.max(0, Math.min(frame, this._durationInFrames - 1));
+      this._outFrame = Math.max(0, Math.min(frame, this._durationInFrames - 1))
     } else {
-      this._outFrame = null;
+      this._outFrame = null
     }
   }
 
   clearInOutPoints(): void {
-    this._inFrame = null;
-    this._outFrame = null;
+    this._inFrame = null
+    this._outFrame = null
   }
 
   // ============================================
@@ -268,45 +272,45 @@ export class Clock {
 
   play(): void {
     if (this._isPlaying) {
-      return;
+      return
     }
 
     // If at the end, restart from beginning (or in point)
     if (this._currentFrame >= this.actualLastFrame) {
-      this._currentFrame = this.actualFirstFrame;
+      this._currentFrame = this.actualFirstFrame
     }
 
-    this._isPlaying = true;
-    this._playbackStartTime = this._now();
-    this._playbackStartFrame = this._currentFrame;
+    this._isPlaying = true
+    this._playbackStartTime = this._now()
+    this._playbackStartFrame = this._currentFrame
 
     if (import.meta.env.DEV) {
       void import('@/shared/logging/frame-jitter-monitor').then((m) => {
-        _devJitterMonitor = m.getFrameJitterMonitor();
-        _devJitterMonitor.setFps(this._fps);
-        _devJitterMonitor.onPlaybackStart();
-      });
+        _devJitterMonitor = m.getFrameJitterMonitor()
+        _devJitterMonitor.setFps(this._fps)
+        _devJitterMonitor.onPlaybackStart()
+      })
     }
 
-    this._emit('play');
-    this._startAnimationLoop();
+    this._emit('play')
+    this._startAnimationLoop()
   }
 
   pause(): void {
     if (!this._isPlaying) {
-      return;
+      return
     }
 
-    this._isPlaying = false;
-    this._stopAnimationLoop();
-    this._emit('pause');
+    this._isPlaying = false
+    this._stopAnimationLoop()
+    this._emit('pause')
   }
 
   toggle(): void {
     if (this._isPlaying) {
-      this.pause();
+      this.pause()
     } else {
-      this.play();
+      this.play()
     }
   }
 
@@ -314,20 +318,20 @@ export class Clock {
    * Seek to a specific frame
    */
   seekToFrame(frame: number): void {
-    const clampedFrame = this._clampFrame(frame);
-    const frameChanged = clampedFrame !== this._currentFrame;
+    const clampedFrame = this._clampFrame(frame)
+    const frameChanged = clampedFrame !== this._currentFrame
 
-    this._currentFrame = clampedFrame;
+    this._currentFrame = clampedFrame
 
     // Reset playback reference point if playing
     if (this._isPlaying) {
-      this._playbackStartTime = this._now();
-      this._playbackStartFrame = clampedFrame;
+      this._playbackStartTime = this._now()
+      this._playbackStartFrame = clampedFrame
     }
 
     if (frameChanged) {
-      this._emit('seek');
-      this._emit('framechange');
+      this._emit('seek')
+      this._emit('framechange')
     }
   }
 
@@ -335,38 +339,38 @@ export class Clock {
    * Seek to a specific time in seconds
    */
   seekToTime(time: number): void {
-    const frame = Math.round(time * this._fps);
-    this.seekToFrame(frame);
+    const frame = Math.round(time * this._fps)
+    this.seekToFrame(frame)
   }
 
   /**
    * Move forward by a number of frames
    */
   stepForward(frames: number = 1): void {
-    if (this._isPlaying) return;
-    this.seekToFrame(this._currentFrame + frames);
+    if (this._isPlaying) return
+    this.seekToFrame(this._currentFrame + frames)
   }
 
   /**
    * Move backward by a number of frames
    */
   stepBackward(frames: number = 1): void {
-    if (this._isPlaying) return;
-    this.seekToFrame(this._currentFrame - frames);
+    if (this._isPlaying) return
+    this.seekToFrame(this._currentFrame - frames)
   }
 
   /**
    * Go to the first frame (or in point)
    */
   goToStart(): void {
-    this.seekToFrame(this.actualFirstFrame);
+    this.seekToFrame(this.actualFirstFrame)
   }
 
   /**
    * Go to the last frame (or out point)
    */
   goToEnd(): void {
-    this.seekToFrame(this.actualLastFrame);
+    this.seekToFrame(this.actualLastFrame)
   }
 
   // ============================================
@@ -374,16 +378,16 @@ export class Clock {
   // ============================================
 
   addEventListener(type: ClockEventType, callback: ClockEventCallback): void {
-    const listeners = this._listeners.get(type);
+    const listeners = this._listeners.get(type)
     if (listeners) {
-      listeners.add(callback);
+      listeners.add(callback)
     }
   }
 
   removeEventListener(type: ClockEventType, callback: ClockEventCallback): void {
-    const listeners = this._listeners.get(type);
+    const listeners = this._listeners.get(type)
     if (listeners) {
-      listeners.delete(callback);
+      listeners.delete(callback)
     }
   }
 
@@ -392,26 +396,26 @@ export class Clock {
    */
   onFrameChange(callback: (frame: number) => void): () => void {
     const wrappedCallback: ClockEventCallback = (event) => {
-      callback(event.frame);
-    };
-    this.addEventListener('framechange', wrappedCallback);
-    return () => this.removeEventListener('framechange', wrappedCallback);
+      callback(event.frame)
+    }
+    this.addEventListener('framechange', wrappedCallback)
+    return () => this.removeEventListener('framechange', wrappedCallback)
   }
 
   /**
    * Subscribe to play state changes - returns unsubscribe function
    */
   onPlayStateChange(callback: (isPlaying: boolean) => void): () => void {
-    const playCallback: ClockEventCallback = () => callback(true);
-    const pauseCallback: ClockEventCallback = () => callback(false);
+    const playCallback: ClockEventCallback = () => callback(true)
+    const pauseCallback: ClockEventCallback = () => callback(false)
 
-    this.addEventListener('play', playCallback);
-    this.addEventListener('pause', pauseCallback);
+    this.addEventListener('play', playCallback)
+    this.addEventListener('pause', pauseCallback)
 
     return () => {
-      this.removeEventListener('play', playCallback);
-      this.removeEventListener('pause', pauseCallback);
-    };
+      this.removeEventListener('play', playCallback)
+      this.removeEventListener('pause', pauseCallback)
+    }
   }
 
   // ============================================
@@ -422,21 +426,21 @@ export class Clock {
    * Convert frame number to time in seconds
    */
   frameToTime(frame: number): number {
-    return frame / this._fps;
+    return frame / this._fps
   }
 
   /**
    * Convert time in seconds to frame number
    */
   timeToFrame(time: number): number {
-    return Math.round(time * this._fps);
+    return Math.round(time * this._fps)
   }
 
   /**
    * Check if a frame is within the current in/out range
    */
   isFrameInRange(frame: number): boolean {
-    return frame >= this.actualFirstFrame && frame <= this.actualLastFrame;
+    return frame >= this.actualFirstFrame && frame <= this.actualLastFrame
   }
 
   /**
@@ -449,21 +453,21 @@ export class Clock {
       time: this.currentTime,
       isPlaying: this._isPlaying,
       playbackRate: this._playbackRate,
-    };
+    }
   }
 
   /**
    * Dispose of the clock and clean up resources
    */
   dispose(): void {
-    this._stopAnimationLoop();
-    this._listeners.forEach((listeners) => listeners.clear());
+    this._stopAnimationLoop()
+    this._listeners.forEach((listeners) => listeners.clear())
     if (typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+      document.removeEventListener('visibilitychange', this._handleVisibilityChange)
     }
     if (typeof window !== 'undefined') {
-      window.removeEventListener('focus', this._handleWindowFocus);
-      window.removeEventListener('pageshow', this._handlePageShow);
+      window.removeEventListener('focus', this._handleWindowFocus)
+      window.removeEventListener('pageshow', this._handlePageShow)
     }
   }
 
@@ -477,17 +481,17 @@ export class Clock {
    * and running; falls back to performance.now() otherwise.
    */
   private _now(): number {
-    const ctx = this._audioContext;
+    const ctx = this._audioContext
     if (ctx && ctx.state === 'running') {
-      return ctx.currentTime * 1000;
+      return ctx.currentTime * 1000
     }
-    return performance.now();
+    return performance.now()
   }
 
   private _clampFrame(frame: number): number {
-    const minFrame = this.actualFirstFrame;
-    const maxFrame = this.actualLastFrame;
-    return Math.max(minFrame, Math.min(Math.round(frame), maxFrame));
+    const minFrame = this.actualFirstFrame
+    const maxFrame = this.actualLastFrame
+    return Math.max(minFrame, Math.min(Math.round(frame), maxFrame))
   }
 
   private _emit(type: ClockEventType): void {
@@ -497,120 +501,116 @@ export class Clock {
       time: this.currentTime,
       isPlaying: this._isPlaying,
       playbackRate: this._playbackRate,
-    };
+    }
 
-    const listeners = this._listeners.get(type);
+    const listeners = this._listeners.get(type)
     if (listeners) {
       listeners.forEach((callback) => {
         try {
-          callback(event);
+          callback(event)
         } catch (error) {
-          logger.error(`Error in clock event listener (${type}):`, error);
+          logger.error(`Error in clock event listener (${type}):`, error)
         }
-      });
+      })
     }
   }
 
   private _computeFrameAtTime(now: number): number {
-    const elapsedMs = now - this._playbackStartTime;
-    const elapsedSeconds = elapsedMs / 1000;
-    const framesElapsed = elapsedSeconds * this._fps * this._playbackRate;
+    const elapsedMs = now - this._playbackStartTime
+    const elapsedSeconds = elapsedMs / 1000
+    const framesElapsed = elapsedSeconds * this._fps * this._playbackRate
 
     if (this._playbackRate >= 0) {
-      return Math.floor(this._playbackStartFrame + framesElapsed);
+      return Math.floor(this._playbackStartFrame + framesElapsed)
     }
 
-    return Math.ceil(this._playbackStartFrame + framesElapsed);
+    return Math.ceil(this._playbackStartFrame + framesElapsed)
   }
 
   private _advancePlaybackTo(now: number): boolean {
-    const newFrame = this._computeFrameAtTime(now);
+    const newFrame = this._computeFrameAtTime(now)
 
     const hasReachedEnd =
-      this._playbackRate >= 0
-        ? newFrame > this.actualLastFrame
-        : newFrame < this.actualFirstFrame;
+      this._playbackRate >= 0 ? newFrame > this.actualLastFrame : newFrame < this.actualFirstFrame
 
     if (hasReachedEnd) {
       if (this._loop) {
-        const targetFrame =
-          this._playbackRate >= 0 ? this.actualFirstFrame : this.actualLastFrame;
-        this._currentFrame = targetFrame;
-        this._playbackStartTime = now;
-        this._playbackStartFrame = targetFrame;
-        this._emit('framechange');
+        const targetFrame = this._playbackRate >= 0 ? this.actualFirstFrame : this.actualLastFrame
+        this._currentFrame = targetFrame
+        this._playbackStartTime = now
+        this._playbackStartFrame = targetFrame
+        this._emit('framechange')
       } else {
-        this._currentFrame =
-          this._playbackRate >= 0 ? this.actualLastFrame : this.actualFirstFrame;
-        this._isPlaying = false;
-        this._emit('framechange');
-        this._emit('ended');
-        this._onEnded?.();
-        this._stopAnimationLoop();
-        return true;
+        this._currentFrame = this._playbackRate >= 0 ? this.actualLastFrame : this.actualFirstFrame
+        this._isPlaying = false
+        this._emit('framechange')
+        this._emit('ended')
+        this._onEnded?.()
+        this._stopAnimationLoop()
+        return true
       }
     } else if (newFrame !== this._currentFrame) {
-      this._currentFrame = newFrame;
+      this._currentFrame = newFrame
       if (import.meta.env.DEV) {
-        _devJitterMonitor?.recordClockFrame(newFrame, false);
+        _devJitterMonitor?.recordClockFrame(newFrame, false)
       }
-      this._emit('framechange');
+      this._emit('framechange')
     }
 
     if (now - this._lastTimeUpdateEmit >= this.TIME_UPDATE_INTERVAL_MS) {
-      this._lastTimeUpdateEmit = now;
-      this._emit('timeupdate');
+      this._lastTimeUpdateEmit = now
+      this._emit('timeupdate')
     }
 
-    return false;
+    return false
   }
 
   private _catchUpToCurrentTime(): void {
     if (!this._isPlaying) {
-      return;
+      return
     }
 
-    const now = this._now();
-    const playbackEnded = this._advancePlaybackTo(now);
+    const now = this._now()
+    const playbackEnded = this._advancePlaybackTo(now)
     if (playbackEnded) {
-      return;
+      return
     }
 
     // Re-anchor to "now" so the next visible RAF continues smoothly instead of
     // replaying the same background catch-up delta.
-    this._playbackStartTime = now;
-    this._playbackStartFrame = this._currentFrame;
+    this._playbackStartTime = now
+    this._playbackStartFrame = this._currentFrame
   }
 
   private _startAnimationLoop(): void {
     if (this._animationFrameId !== null) {
-      return;
+      return
     }
 
     const tick = (): void => {
       if (!this._isPlaying) {
-        this._animationFrameId = null;
-        return;
+        this._animationFrameId = null
+        return
       }
 
-      const now = this._now();
+      const now = this._now()
 
       if (this._advancePlaybackTo(now)) {
-        this._animationFrameId = null;
-        return;
+        this._animationFrameId = null
+        return
       }
 
       // Continue the loop
-      this._animationFrameId = requestAnimationFrame(tick);
-    };
+      this._animationFrameId = requestAnimationFrame(tick)
+    }
 
-    this._animationFrameId = requestAnimationFrame(tick);
+    this._animationFrameId = requestAnimationFrame(tick)
   }
 
   private _stopAnimationLoop(): void {
     if (this._animationFrameId !== null) {
-      cancelAnimationFrame(this._animationFrameId);
-      this._animationFrameId = null;
+      cancelAnimationFrame(this._animationFrameId)
+      this._animationFrameId = null
     }
   }
 }
@@ -619,5 +619,5 @@ export class Clock {
  * Factory function to create a Clock instance
  */
 export function createClock(config: ClockConfig): Clock {
-  return new Clock(config);
+  return new Clock(config)
 }

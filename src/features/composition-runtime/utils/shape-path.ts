@@ -1,5 +1,5 @@
-﻿import type { ShapeItem } from '@/types/timeline';
-import type { MaskVertex } from '@/types/masks';
+import type { ShapeItem } from '@/types/timeline'
+import type { MaskVertex } from '@/types/masks'
 import {
   makeRect,
   makeCircle,
@@ -8,11 +8,8 @@ import {
   makeStar,
   makePolygon,
   makeHeart,
-} from '@/shared/graphics/shapes/shape-generators';
-import {
-  scalePath,
-  translatePath,
-} from '@/shared/graphics/shapes/path-utils';
+} from '@/shared/graphics/shapes/shape-generators'
+import { scalePath, translatePath } from '@/shared/graphics/shapes/path-utils'
 
 /**
  * Generates SVG path data for shape items using Composition's shape utilities.
@@ -22,22 +19,22 @@ import {
 
 interface ShapePathOptions {
   /** Canvas width for coordinate calculations */
-  canvasWidth: number;
+  canvasWidth: number
   /** Canvas height for coordinate calculations */
-  canvasHeight: number;
+  canvasHeight: number
   /** Whether aspect ratio is locked (default: true) - affects centering behavior */
-  aspectLocked?: boolean;
+  aspectLocked?: boolean
 }
 
 interface ShapeTransform {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-  opacity: number;
-  cornerRadius?: number;
-  aspectRatioLocked?: boolean;
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  opacity: number
+  cornerRadius?: number
+  aspectRatioLocked?: boolean
 }
 
 /**
@@ -52,187 +49,187 @@ interface ShapeTransform {
 export function getShapePath(
   shape: ShapeItem,
   transform: ShapeTransform,
-  options: ShapePathOptions
+  options: ShapePathOptions,
 ): string {
-  const { canvasWidth, canvasHeight } = options;
+  const { canvasWidth, canvasHeight } = options
   // Default to locked (matches ShapeContent default behavior)
-  const aspectLocked = options.aspectLocked ?? (shape.transform?.aspectRatioLocked ?? true);
+  const aspectLocked = options.aspectLocked ?? shape.transform?.aspectRatioLocked ?? true
 
   // Calculate canvas position (transform.x/y are relative to center)
-  const centerX = canvasWidth / 2;
-  const centerY = canvasHeight / 2;
+  const centerX = canvasWidth / 2
+  const centerY = canvasHeight / 2
 
-  const width = transform.width;
-  const height = transform.height;
-  const cornerRadius = shape.cornerRadius ?? 0;
+  const width = transform.width
+  const height = transform.height
+  const cornerRadius = shape.cornerRadius ?? 0
 
   // Calculate the bounding box top-left on canvas
-  const boxLeft = centerX + transform.x - width / 2;
-  const boxTop = centerY + transform.y - height / 2;
+  const boxLeft = centerX + transform.x - width / 2
+  const boxTop = centerY + transform.y - height / 2
 
   // baseSize for shapes that use it (matching ShapeContent)
-  const baseSize = Math.min(width, height);
+  const baseSize = Math.min(width, height)
 
-  let path: string;
+  let path: string
 
   switch (shape.shapeType) {
     case 'rectangle': {
       // Rectangle uses full width/height directly (no baseSize/centering)
-      const result = makeRect({ width, height, cornerRadius });
-      path = translatePath(result.path, boxLeft, boxTop);
-      break;
+      const result = makeRect({ width, height, cornerRadius })
+      path = translatePath(result.path, boxLeft, boxTop)
+      break
     }
 
     case 'circle': {
-      const radius = baseSize / 2;
-      const result = makeCircle({ radius });
+      const radius = baseSize / 2
+      const result = makeCircle({ radius })
       // Circle: generated size is diameter x diameter (square)
-      const shapeWidth = result.width;
-      const shapeHeight = result.height;
+      const shapeWidth = result.width
+      const shapeHeight = result.height
 
       if (aspectLocked) {
         // Flexbox centers the shape within the container
-        const offsetX = (width - shapeWidth) / 2;
-        const offsetY = (height - shapeHeight) / 2;
-        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY);
+        const offsetX = (width - shapeWidth) / 2
+        const offsetY = (height - shapeHeight) / 2
+        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY)
       } else {
         // Scale to fill full container
-        const scaleX = width / shapeWidth;
-        const scaleY = height / shapeHeight;
-        const scaledPath = scalePath(result.path, scaleX, scaleY);
-        path = translatePath(scaledPath, boxLeft, boxTop);
+        const scaleX = width / shapeWidth
+        const scaleY = height / shapeHeight
+        const scaledPath = scalePath(result.path, scaleX, scaleY)
+        path = translatePath(scaledPath, boxLeft, boxTop)
       }
-      break;
+      break
     }
 
     case 'ellipse': {
       // Ellipse uses full width/height via rx/ry (no baseSize/centering)
-      const rx = width / 2;
-      const ry = height / 2;
-      const result = makeEllipse({ rx, ry });
-      path = translatePath(result.path, boxLeft, boxTop);
-      break;
+      const rx = width / 2
+      const ry = height / 2
+      const result = makeEllipse({ rx, ry })
+      path = translatePath(result.path, boxLeft, boxTop)
+      break
     }
 
     case 'triangle': {
-      const direction = shape.direction ?? 'up';
-      const result = makeTriangle({ length: baseSize, direction, cornerRadius });
+      const direction = shape.direction ?? 'up'
+      const result = makeTriangle({ length: baseSize, direction, cornerRadius })
       // Triangle: generated size depends on direction (equilateral)
       // Up/Down: width=length, height=length*sqrt(3)/2
       // Left/Right: width=length*sqrt(3)/2, height=length
-      const shapeWidth = result.width;
-      const shapeHeight = result.height;
+      const shapeWidth = result.width
+      const shapeHeight = result.height
 
       if (aspectLocked) {
         // Flexbox centers the shape within the container
-        const offsetX = (width - shapeWidth) / 2;
-        const offsetY = (height - shapeHeight) / 2;
-        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY);
+        const offsetX = (width - shapeWidth) / 2
+        const offsetY = (height - shapeHeight) / 2
+        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY)
       } else {
         // Scale to fill full container
-        const scaleX = width / shapeWidth;
-        const scaleY = height / shapeHeight;
-        const scaledPath = scalePath(result.path, scaleX, scaleY);
-        path = translatePath(scaledPath, boxLeft, boxTop);
+        const scaleX = width / shapeWidth
+        const scaleY = height / shapeHeight
+        const scaledPath = scalePath(result.path, scaleX, scaleY)
+        path = translatePath(scaledPath, boxLeft, boxTop)
       }
-      break;
+      break
     }
 
     case 'star': {
-      const outerRadius = baseSize / 2;
-      const innerRadiusRatio = shape.innerRadius ?? 0.5;
-      const innerRadius = outerRadius * innerRadiusRatio;
-      const points = shape.points ?? 5;
+      const outerRadius = baseSize / 2
+      const innerRadiusRatio = shape.innerRadius ?? 0.5
+      const innerRadius = outerRadius * innerRadiusRatio
+      const points = shape.points ?? 5
 
       const result = makeStar({
         points,
         outerRadius,
         innerRadius,
         cornerRadius,
-      });
+      })
       // Star: generated size is diameter x diameter (square)
-      const shapeWidth = result.width;
-      const shapeHeight = result.height;
+      const shapeWidth = result.width
+      const shapeHeight = result.height
 
       if (aspectLocked) {
         // Flexbox centers the shape within the container
-        const offsetX = (width - shapeWidth) / 2;
-        const offsetY = (height - shapeHeight) / 2;
-        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY);
+        const offsetX = (width - shapeWidth) / 2
+        const offsetY = (height - shapeHeight) / 2
+        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY)
       } else {
         // Scale to fill full container
-        const scaleX = width / shapeWidth;
-        const scaleY = height / shapeHeight;
-        const scaledPath = scalePath(result.path, scaleX, scaleY);
-        path = translatePath(scaledPath, boxLeft, boxTop);
+        const scaleX = width / shapeWidth
+        const scaleY = height / shapeHeight
+        const scaledPath = scalePath(result.path, scaleX, scaleY)
+        path = translatePath(scaledPath, boxLeft, boxTop)
       }
-      break;
+      break
     }
 
     case 'polygon': {
-      const radius = baseSize / 2;
-      const points = shape.points ?? 6;
+      const radius = baseSize / 2
+      const points = shape.points ?? 6
 
-      const result = makePolygon({ points, radius, cornerRadius });
+      const result = makePolygon({ points, radius, cornerRadius })
       // Polygon: generated size depends on number of points
-      const shapeWidth = result.width;
-      const shapeHeight = result.height;
+      const shapeWidth = result.width
+      const shapeHeight = result.height
 
       if (aspectLocked) {
         // Flexbox centers the shape within the container
-        const offsetX = (width - shapeWidth) / 2;
-        const offsetY = (height - shapeHeight) / 2;
-        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY);
+        const offsetX = (width - shapeWidth) / 2
+        const offsetY = (height - shapeHeight) / 2
+        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY)
       } else {
         // Scale to fill full container
-        const scaleX = width / shapeWidth;
-        const scaleY = height / shapeHeight;
-        const scaledPath = scalePath(result.path, scaleX, scaleY);
-        path = translatePath(scaledPath, boxLeft, boxTop);
+        const scaleX = width / shapeWidth
+        const scaleY = height / shapeHeight
+        const scaledPath = scalePath(result.path, scaleX, scaleY)
+        path = translatePath(scaledPath, boxLeft, boxTop)
       }
-      break;
+      break
     }
 
     case 'heart': {
       // Use Composition's makeHeart for consistent path generation
       // Heart output width = 1.1 × input height, so we scale input to fit within baseSize
       // Using height = baseSize / 1.1 ensures output width = baseSize (matches ShapeContent)
-      const heartHeight = baseSize / 1.1;
-      const result = makeHeart({ height: heartHeight });
-      const shapeWidth = result.width;
-      const shapeHeight = result.height;
+      const heartHeight = baseSize / 1.1
+      const result = makeHeart({ height: heartHeight })
+      const shapeWidth = result.width
+      const shapeHeight = result.height
 
       if (aspectLocked) {
         // Flexbox centers the shape within the container
-        const offsetX = (width - shapeWidth) / 2;
-        const offsetY = (height - shapeHeight) / 2;
-        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY);
+        const offsetX = (width - shapeWidth) / 2
+        const offsetY = (height - shapeHeight) / 2
+        path = translatePath(result.path, boxLeft + offsetX, boxTop + offsetY)
       } else {
         // Scale to fill full container
-        const scaleX = width / shapeWidth;
-        const scaleY = height / shapeHeight;
-        const scaledPath = scalePath(result.path, scaleX, scaleY);
-        path = translatePath(scaledPath, boxLeft, boxTop);
+        const scaleX = width / shapeWidth
+        const scaleY = height / shapeHeight
+        const scaledPath = scalePath(result.path, scaleX, scaleY)
+        path = translatePath(scaledPath, boxLeft, boxTop)
       }
-      break;
+      break
     }
 
     case 'path': {
       // Custom bezier path — vertices are normalized 0-1 within the shape's bounding box
-      path = pathVerticesToSvgPath(shape.pathVertices ?? [], width, height);
-      path = translatePath(path, boxLeft, boxTop);
-      break;
+      path = pathVerticesToSvgPath(shape.pathVertices ?? [], width, height)
+      path = translatePath(path, boxLeft, boxTop)
+      break
     }
 
     default: {
       // Fallback to rectangle
-      const fallbackResult = makeRect({ width, height, cornerRadius: 0 });
-      path = translatePath(fallbackResult.path, boxLeft, boxTop);
-      break;
+      const fallbackResult = makeRect({ width, height, cornerRadius: 0 })
+      path = translatePath(fallbackResult.path, boxLeft, boxTop)
+      break
     }
   }
 
-  return path;
+  return path
 }
 
 /**
@@ -244,137 +241,137 @@ export function rotatePath(
   pathString: string,
   angleDegrees: number,
   centerX: number,
-  centerY: number
+  centerY: number,
 ): string {
   if (!angleDegrees || angleDegrees === 0) {
-    return pathString;
+    return pathString
   }
 
-  const angleRadians = (angleDegrees * Math.PI) / 180;
-  const cos = Math.cos(angleRadians);
-  const sin = Math.sin(angleRadians);
+  const angleRadians = (angleDegrees * Math.PI) / 180
+  const cos = Math.cos(angleRadians)
+  const sin = Math.sin(angleRadians)
 
   // Rotate a point around the center
   const rotatePoint = (x: number, y: number): [number, number] => {
-    const dx = x - centerX;
-    const dy = y - centerY;
-    return [
-      centerX + dx * cos - dy * sin,
-      centerY + dx * sin + dy * cos,
-    ];
-  };
+    const dx = x - centerX
+    const dy = y - centerY
+    return [centerX + dx * cos - dy * sin, centerY + dx * sin + dy * cos]
+  }
 
   // Parse and transform the path
   // This is a simplified parser that handles M, L, C, A, Z commands
-  const result: string[] = [];
-  const commands = pathString.match(/[MLHVCSQTAZ][^MLHVCSQTAZ]*/gi) || [];
+  const result: string[] = []
+  const commands = pathString.match(/[MLHVCSQTAZ][^MLHVCSQTAZ]*/gi) || []
 
   for (const cmd of commands) {
-    const type = cmd[0]!.toUpperCase();
-    const args = cmd.slice(1).trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+    const type = cmd[0]!.toUpperCase()
+    const args = cmd
+      .slice(1)
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number)
+      .filter((n) => !isNaN(n))
 
     switch (type) {
       case 'M':
       case 'L': {
         // Move/Line: x y
         for (let i = 0; i < args.length; i += 2) {
-          const [rx, ry] = rotatePoint(args[i]!, args[i + 1]!);
-          result.push(`${i === 0 ? type : 'L'} ${rx} ${ry}`);
+          const [rx, ry] = rotatePoint(args[i]!, args[i + 1]!)
+          result.push(`${i === 0 ? type : 'L'} ${rx} ${ry}`)
         }
-        break;
+        break
       }
       case 'H': {
         // Horizontal line - convert to L with current y (simplified: assume y=centerY)
-        const [rx, ry] = rotatePoint(args[0]!, centerY);
-        result.push(`L ${rx} ${ry}`);
-        break;
+        const [rx, ry] = rotatePoint(args[0]!, centerY)
+        result.push(`L ${rx} ${ry}`)
+        break
       }
       case 'V': {
         // Vertical line - convert to L with current x (simplified: assume x=centerX)
-        const [rx, ry] = rotatePoint(centerX, args[0]!);
-        result.push(`L ${rx} ${ry}`);
-        break;
+        const [rx, ry] = rotatePoint(centerX, args[0]!)
+        result.push(`L ${rx} ${ry}`)
+        break
       }
       case 'C': {
         // Cubic bezier: x1 y1 x2 y2 x y
         for (let i = 0; i < args.length; i += 6) {
-          const [rx1, ry1] = rotatePoint(args[i]!, args[i + 1]!);
-          const [rx2, ry2] = rotatePoint(args[i + 2]!, args[i + 3]!);
-          const [rx, ry] = rotatePoint(args[i + 4]!, args[i + 5]!);
-          result.push(`C ${rx1} ${ry1} ${rx2} ${ry2} ${rx} ${ry}`);
+          const [rx1, ry1] = rotatePoint(args[i]!, args[i + 1]!)
+          const [rx2, ry2] = rotatePoint(args[i + 2]!, args[i + 3]!)
+          const [rx, ry] = rotatePoint(args[i + 4]!, args[i + 5]!)
+          result.push(`C ${rx1} ${ry1} ${rx2} ${ry2} ${rx} ${ry}`)
         }
-        break;
+        break
       }
       case 'Q': {
         // Quadratic bezier: x1 y1 x y
         for (let i = 0; i < args.length; i += 4) {
-          const [rx1, ry1] = rotatePoint(args[i]!, args[i + 1]!);
-          const [rx, ry] = rotatePoint(args[i + 2]!, args[i + 3]!);
-          result.push(`Q ${rx1} ${ry1} ${rx} ${ry}`);
+          const [rx1, ry1] = rotatePoint(args[i]!, args[i + 1]!)
+          const [rx, ry] = rotatePoint(args[i + 2]!, args[i + 3]!)
+          result.push(`Q ${rx1} ${ry1} ${rx} ${ry}`)
         }
-        break;
+        break
       }
       case 'A': {
         // Arc: rx ry x-axis-rotation large-arc sweep x y
         // For arcs, we rotate the endpoint and adjust the x-axis-rotation
         for (let i = 0; i < args.length; i += 7) {
-          const [rx, ry] = rotatePoint(args[i + 5]!, args[i + 6]!);
-          const newXAxisRotation = (args[i + 2]! + angleDegrees) % 360;
-          result.push(`A ${args[i]} ${args[i + 1]} ${newXAxisRotation} ${args[i + 3]} ${args[i + 4]} ${rx} ${ry}`);
+          const [rx, ry] = rotatePoint(args[i + 5]!, args[i + 6]!)
+          const newXAxisRotation = (args[i + 2]! + angleDegrees) % 360
+          result.push(
+            `A ${args[i]} ${args[i + 1]} ${newXAxisRotation} ${args[i + 3]} ${args[i + 4]} ${rx} ${ry}`,
+          )
         }
-        break;
+        break
       }
       case 'Z': {
-        result.push('Z');
-        break;
+        result.push('Z')
+        break
       }
       default: {
         // Pass through unknown commands
-        result.push(cmd);
+        result.push(cmd)
       }
     }
   }
 
-  return result.join(' ');
+  return result.join(' ')
 }
 
 /**
  * Convert normalized MaskVertex[] (0-1) to an SVG path string at the given dimensions.
  * Used by 'path' shape type for custom bezier paths drawn with the pen tool.
  */
-function pathVerticesToSvgPath(
-  vertices: MaskVertex[],
-  width: number,
-  height: number,
-): string {
-  if (vertices.length < 2) return `M 0 0 L ${width} 0 L ${width} ${height} L 0 ${height} Z`;
+function pathVerticesToSvgPath(vertices: MaskVertex[], width: number, height: number): string {
+  if (vertices.length < 2) return `M 0 0 L ${width} 0 L ${width} ${height} L 0 ${height} Z`
 
-  const parts: string[] = [];
-  const first = vertices[0]!;
-  parts.push(`M ${first.position[0] * width} ${first.position[1] * height}`);
+  const parts: string[] = []
+  const first = vertices[0]!
+  parts.push(`M ${first.position[0] * width} ${first.position[1] * height}`)
 
   for (let i = 0; i < vertices.length; i++) {
-    const curr = vertices[i]!;
-    const next = vertices[(i + 1) % vertices.length]!;
+    const curr = vertices[i]!
+    const next = vertices[(i + 1) % vertices.length]!
 
-    const outH = curr.outHandle;
-    const inH = next.inHandle;
+    const outH = curr.outHandle
+    const inH = next.inHandle
 
-    const isStraight =
-      outH[0] === 0 && outH[1] === 0 && inH[0] === 0 && inH[1] === 0;
+    const isStraight = outH[0] === 0 && outH[1] === 0 && inH[0] === 0 && inH[1] === 0
 
     if (isStraight) {
-      parts.push(`L ${next.position[0] * width} ${next.position[1] * height}`);
+      parts.push(`L ${next.position[0] * width} ${next.position[1] * height}`)
     } else {
-      const cp1x = (curr.position[0] + outH[0]) * width;
-      const cp1y = (curr.position[1] + outH[1]) * height;
-      const cp2x = (next.position[0] + inH[0]) * width;
-      const cp2y = (next.position[1] + inH[1]) * height;
-      parts.push(`C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${next.position[0] * width} ${next.position[1] * height}`);
+      const cp1x = (curr.position[0] + outH[0]) * width
+      const cp1y = (curr.position[1] + outH[1]) * height
+      const cp2x = (next.position[0] + inH[0]) * width
+      const cp2y = (next.position[1] + inH[1]) * height
+      parts.push(
+        `C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${next.position[0] * width} ${next.position[1] * height}`,
+      )
     }
   }
 
-  parts.push('Z');
-  return parts.join(' ');
+  parts.push('Z')
+  return parts.join(' ')
 }
-

@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { usePlaybackStore } from './store';
-import { commitPreviewFrameToCurrentFrame } from './preview-handoff';
+import { beforeEach, describe, expect, it } from 'vite-plus/test'
+import { usePlaybackStore } from './store'
+import { commitPreviewFrameToCurrentFrame } from './preview-handoff'
 
 describe('commitPreviewFrameToCurrentFrame', () => {
   beforeEach(() => {
@@ -21,25 +21,25 @@ describe('commitPreviewFrameToCurrentFrame', () => {
       previewItemId: null,
       useProxy: true,
       previewQuality: 1,
-    });
-  });
+    })
+  })
 
   it('promotes the active preview frame before clearing it', () => {
-    usePlaybackStore.getState().setPreviewFrame(48, 'item-1');
+    usePlaybackStore.getState().setPreviewFrame(48, 'item-1')
 
-    commitPreviewFrameToCurrentFrame();
+    commitPreviewFrameToCurrentFrame()
 
-    const state = usePlaybackStore.getState();
-    expect(state.currentFrame).toBe(48);
-    expect(state.previewFrame).toBeNull();
-    expect(state.previewItemId).toBeNull();
-  });
+    const state = usePlaybackStore.getState()
+    expect(state.currentFrame).toBe(48)
+    expect(state.previewFrame).toBeNull()
+    expect(state.previewItemId).toBeNull()
+  })
 
   it('does nothing when there is no active preview frame', () => {
-    commitPreviewFrameToCurrentFrame();
+    commitPreviewFrameToCurrentFrame()
 
-    const state = usePlaybackStore.getState();
-    expect(state.currentFrame).toBe(12);
-    expect(state.previewFrame).toBeNull();
-  });
-});
+    const state = usePlaybackStore.getState()
+    expect(state.currentFrame).toBe(12)
+    expect(state.previewFrame).toBeNull()
+  })
+})

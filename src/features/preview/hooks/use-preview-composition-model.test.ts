@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { TimelineTrack } from '@/types/timeline';
-import { buildPreviewCompositionData } from './use-preview-composition-model';
+import { describe, expect, it } from 'vite-plus/test'
+import type { TimelineTrack } from '@/types/timeline'
+import { buildPreviewCompositionData } from './use-preview-composition-model'
 
 describe('buildPreviewCompositionData', () => {
   it('derives playback and fast-scrub sources separately and computes boundaries', () => {
@@ -25,7 +25,7 @@ describe('buildPreviewCompositionData', () => {
           durationInFrames: 60,
         },
       ],
-    };
+    }
 
     const result = buildPreviewCompositionData({
       combinedTracks: [track],
@@ -38,29 +38,29 @@ describe('buildPreviewCompositionData', () => {
       blobUrlVersion: 0,
       project: { width: 1920, height: 1080, backgroundColor: '#000000' },
       resolveProxyUrlFn: () => 'proxy://video',
-    });
+    })
 
     expect(result.playbackVideoSourceSpans).toEqual([
       { src: 'blob://video', startFrame: 10, endFrame: 70 },
-    ]);
+    ])
     expect(result.scrubVideoSourceSpans).toEqual([
       { src: 'proxy://video', startFrame: 10, endFrame: 70 },
-    ]);
-    expect(result.fastScrubBoundaryFrames).toEqual([10, 70]);
+    ])
+    expect(result.fastScrubBoundaryFrames).toEqual([10, 70])
     expect(result.fastScrubBoundarySources).toEqual([
       { frame: 10, srcs: ['proxy://video'] },
       { frame: 70, srcs: ['proxy://video'] },
-    ]);
-    expect(result.totalFrames).toBe(220);
-    const playbackVideoItem = result.inputProps.tracks[0]?.items[0];
-    const scrubVideoItem = result.fastScrubInputProps.tracks[0]?.items[0];
-    expect(playbackVideoItem?.type).toBe('video');
-    expect(scrubVideoItem?.type).toBe('video');
+    ])
+    expect(result.totalFrames).toBe(220)
+    const playbackVideoItem = result.inputProps.tracks[0]?.items[0]
+    const scrubVideoItem = result.fastScrubInputProps.tracks[0]?.items[0]
+    expect(playbackVideoItem?.type).toBe('video')
+    expect(scrubVideoItem?.type).toBe('video')
     if (playbackVideoItem?.type === 'video' && scrubVideoItem?.type === 'video') {
-      expect(playbackVideoItem.audioSrc).toBe('blob://video');
-      expect(scrubVideoItem.audioSrc).toBe('blob://video');
+      expect(playbackVideoItem.audioSrc).toBe('blob://video')
+      expect(scrubVideoItem.audioSrc).toBe('blob://video')
     }
-  });
+  })
 
   it('falls back to default duration for empty timelines', () => {
     const result = buildPreviewCompositionData({
@@ -73,12 +73,12 @@ describe('buildPreviewCompositionData', () => {
       useProxy: true,
       blobUrlVersion: 0,
       project: { width: 1280, height: 720 },
-    });
+    })
 
-    expect(result.totalFrames).toBe(900);
-    expect(result.playerRenderSize).toEqual({ width: 1280, height: 720 });
-    expect(result.renderSize).toEqual({ width: 1280, height: 720 });
-  });
+    expect(result.totalFrames).toBe(900)
+    expect(result.playerRenderSize).toEqual({ width: 1280, height: 720 })
+    expect(result.renderSize).toEqual({ width: 1280, height: 720 })
+  })
 
   it('uses an already-acquired blob URL before resolvedUrls catches up', () => {
     const track: TimelineTrack = {
@@ -102,7 +102,7 @@ describe('buildPreviewCompositionData', () => {
           durationInFrames: 90,
         },
       ],
-    };
+    }
 
     const result = buildPreviewCompositionData({
       combinedTracks: [track],
@@ -114,16 +114,16 @@ describe('buildPreviewCompositionData', () => {
       useProxy: false,
       blobUrlVersion: 1,
       project: { width: 1920, height: 1080 },
-      getBlobUrlFn: (mediaId) => mediaId === 'media-1' ? 'blob://warm-audio' : null,
-    });
+      getBlobUrlFn: (mediaId) => (mediaId === 'media-1' ? 'blob://warm-audio' : null),
+    })
 
-    const playbackVideoItem = result.inputProps.tracks[0]?.items[0];
-    expect(playbackVideoItem?.type).toBe('video');
+    const playbackVideoItem = result.inputProps.tracks[0]?.items[0]
+    expect(playbackVideoItem?.type).toBe('video')
     if (playbackVideoItem?.type === 'video') {
-      expect(playbackVideoItem.src).toBe('blob://warm-audio');
-      expect(playbackVideoItem.audioSrc).toBe('blob://warm-audio');
+      expect(playbackVideoItem.src).toBe('blob://warm-audio')
+      expect(playbackVideoItem.audioSrc).toBe('blob://warm-audio')
     }
-  });
+  })
 
   it('preserves bus and track EQ in preview composition props', () => {
     const track: TimelineTrack = {
@@ -152,13 +152,13 @@ describe('buildPreviewCompositionData', () => {
           durationInFrames: 120,
         },
       ],
-    };
+    }
 
     const busAudioEq = {
       highGainDb: -4,
       highCutEnabled: true,
       highCutFrequencyHz: 9000,
-    };
+    }
 
     const result = buildPreviewCompositionData({
       combinedTracks: [track],
@@ -171,11 +171,11 @@ describe('buildPreviewCompositionData', () => {
       useProxy: false,
       blobUrlVersion: 0,
       project: { width: 1920, height: 1080, backgroundColor: '#000000' },
-    });
+    })
 
-    expect(result.inputProps.busAudioEq).toEqual(busAudioEq);
-    expect(result.fastScrubInputProps.busAudioEq).toEqual(busAudioEq);
-    expect(result.inputProps.tracks[0]?.audioEq).toEqual(track.audioEq);
-    expect(result.fastScrubInputProps.tracks[0]?.audioEq).toEqual(track.audioEq);
-  });
-});
+    expect(result.inputProps.busAudioEq).toEqual(busAudioEq)
+    expect(result.fastScrubInputProps.busAudioEq).toEqual(busAudioEq)
+    expect(result.inputProps.tracks[0]?.audioEq).toEqual(track.audioEq)
+    expect(result.fastScrubInputProps.tracks[0]?.audioEq).toEqual(track.audioEq)
+  })
+})

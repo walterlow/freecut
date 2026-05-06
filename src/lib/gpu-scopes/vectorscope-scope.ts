@@ -49,7 +49,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   atomicAdd(&accumG[idx], u32(max(g * 255.0, 1.0)));
   atomicAdd(&accumB[idx], u32(max(b * 255.0, 1.0)));
 }
-`;
+`
 
 const VECTORSCOPE_RENDER = /* wgsl */ `
 struct VertexOutput { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
@@ -193,31 +193,46 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
 
   return vec4f(color, 1.0);
 }
-`;
+`
 
-export const VS_SIZE = 512;
+export const VS_SIZE = 512
 
 export class VectorscopeScope {
-  private device: GPUDevice;
-  private computePipeline: GPUComputePipeline;
-  private renderPipeline: GPURenderPipeline;
-  private computeBGL: GPUBindGroupLayout;
-  private renderBGL: GPUBindGroupLayout;
-  private accumR: GPUBuffer;
-  private accumG: GPUBuffer;
-  private accumB: GPUBuffer;
-  private computeParams: GPUBuffer;
-  private renderParams: GPUBuffer;
+  private device: GPUDevice
+  private computePipeline: GPUComputePipeline
+  private renderPipeline: GPURenderPipeline
+  private computeBGL: GPUBindGroupLayout
+  private renderBGL: GPUBindGroupLayout
+  private accumR: GPUBuffer
+  private accumG: GPUBuffer
+  private accumB: GPUBuffer
+  private computeParams: GPUBuffer
+  private renderParams: GPUBuffer
 
   constructor(device: GPUDevice, format: GPUTextureFormat) {
-    this.device = device;
+    this.device = device
 
-    const bufSize = VS_SIZE * VS_SIZE * 4;
-    this.accumR = device.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.accumG = device.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.accumB = device.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.computeParams = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.renderParams = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const bufSize = VS_SIZE * VS_SIZE * 4
+    this.accumR = device.createBuffer({
+      size: bufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.accumG = device.createBuffer({
+      size: bufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.accumB = device.createBuffer({
+      size: bufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.computeParams = device.createBuffer({
+      size: 32,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
+    this.renderParams = device.createBuffer({
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
 
     this.computeBGL = device.createBindGroupLayout({
       entries: [
@@ -227,12 +242,15 @@ export class VectorscopeScope {
         { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       ],
-    });
+    })
 
     this.computePipeline = device.createComputePipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.computeBGL] }),
-      compute: { module: device.createShaderModule({ code: VECTORSCOPE_COMPUTE }), entryPoint: 'main' },
-    });
+      compute: {
+        module: device.createShaderModule({ code: VECTORSCOPE_COMPUTE }),
+        entryPoint: 'main',
+      },
+    })
 
     this.renderBGL = device.createBindGroupLayout({
       entries: [
@@ -241,33 +259,33 @@ export class VectorscopeScope {
         { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
       ],
-    });
+    })
 
-    const renderModule = device.createShaderModule({ code: VECTORSCOPE_RENDER });
+    const renderModule = device.createShaderModule({ code: VECTORSCOPE_RENDER })
     this.renderPipeline = device.createRenderPipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.renderBGL] }),
       vertex: { module: renderModule, entryPoint: 'vs' },
       fragment: { module: renderModule, entryPoint: 'fs', targets: [{ format }] },
-    });
+    })
   }
 
   render(sourceTexture: GPUTexture, ctx: GPUCanvasContext, kr: number, kb: number) {
-    const d = this.device;
-    const srcW = sourceTexture.width;
-    const srcH = sourceTexture.height;
+    const d = this.device
+    const srcW = sourceTexture.width
+    const srcH = sourceTexture.height
 
-    const cpData = new ArrayBuffer(32);
-    new Uint32Array(cpData, 0, 4).set([VS_SIZE, srcW, srcH, 0]);
-    new Float32Array(cpData, 16, 4).set([kr, kb, 0, 0]);
-    d.queue.writeBuffer(this.computeParams, 0, cpData);
+    const cpData = new ArrayBuffer(32)
+    new Uint32Array(cpData, 0, 4).set([VS_SIZE, srcW, srcH, 0])
+    new Float32Array(cpData, 16, 4).set([kr, kb, 0, 0])
+    d.queue.writeBuffer(this.computeParams, 0, cpData)
 
-    const refValue = Math.sqrt((srcW * srcH) / (VS_SIZE * VS_SIZE)) * 18.0;
-    d.queue.writeBuffer(this.renderParams, 0, new Float32Array([VS_SIZE, refValue, 0, 0]));
+    const refValue = Math.sqrt((srcW * srcH) / (VS_SIZE * VS_SIZE)) * 18.0
+    d.queue.writeBuffer(this.renderParams, 0, new Float32Array([VS_SIZE, refValue, 0, 0]))
 
-    const encoder = d.createCommandEncoder();
-    encoder.clearBuffer(this.accumR);
-    encoder.clearBuffer(this.accumG);
-    encoder.clearBuffer(this.accumB);
+    const encoder = d.createCommandEncoder()
+    encoder.clearBuffer(this.accumR)
+    encoder.clearBuffer(this.accumG)
+    encoder.clearBuffer(this.accumB)
 
     const computeBG = d.createBindGroup({
       layout: this.computeBGL,
@@ -278,13 +296,13 @@ export class VectorscopeScope {
         { binding: 3, resource: { buffer: this.accumB } },
         { binding: 4, resource: { buffer: this.computeParams } },
       ],
-    });
+    })
 
-    const cp = encoder.beginComputePass();
-    cp.setPipeline(this.computePipeline);
-    cp.setBindGroup(0, computeBG);
-    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16));
-    cp.end();
+    const cp = encoder.beginComputePass()
+    cp.setPipeline(this.computePipeline)
+    cp.setBindGroup(0, computeBG)
+    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16))
+    cp.end()
 
     const renderBG = d.createBindGroup({
       layout: this.renderBGL,
@@ -294,27 +312,35 @@ export class VectorscopeScope {
         { binding: 2, resource: { buffer: this.accumB } },
         { binding: 3, resource: { buffer: this.renderParams } },
       ],
-    });
+    })
 
     const rp = encoder.beginRenderPass({
-      colorAttachments: [{
-        view: ctx.getCurrentTexture().createView(),
-        loadOp: 'clear',
-        storeOp: 'store',
-        clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
-      }],
-    });
-    rp.setPipeline(this.renderPipeline);
-    rp.setBindGroup(0, renderBG);
-    rp.draw(3);
-    rp.end();
+      colorAttachments: [
+        {
+          view: ctx.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
+        },
+      ],
+    })
+    rp.setPipeline(this.renderPipeline)
+    rp.setBindGroup(0, renderBG)
+    rp.draw(3)
+    rp.end()
 
-    d.queue.submit([encoder.finish()]);
+    d.queue.submit([encoder.finish()])
   }
 
   destroy() {
-    for (const b of [this.accumR, this.accumG, this.accumB, this.computeParams, this.renderParams]) {
-      b?.destroy();
+    for (const b of [
+      this.accumR,
+      this.accumG,
+      this.accumB,
+      this.computeParams,
+      this.renderParams,
+    ]) {
+      b?.destroy()
     }
   }
 }

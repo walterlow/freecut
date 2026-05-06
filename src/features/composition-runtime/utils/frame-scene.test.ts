@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test'
 import {
   createFrameCompositionSceneCache,
   resolveActiveShapeMasksAtFrame,
   resolveFrameCompositionScene,
-} from './frame-scene';
-import { resolveCompositionRenderPlan } from './scene-assembly';
+} from './frame-scene'
+import { resolveCompositionRenderPlan } from './scene-assembly'
 
 describe('frame scene', () => {
   function createMaskRenderPlan() {
@@ -50,7 +50,7 @@ describe('frame scene', () => {
         },
       ],
       transitions: [],
-    });
+    })
   }
 
   it('applies preview path vertices to active path masks', () => {
@@ -60,43 +60,46 @@ describe('frame scene', () => {
         inHandle: [0.9, 0.1] as [number, number],
         outHandle: [0.9, 0.1] as [number, number],
       },
-    ];
-    const activeMasks = resolveActiveShapeMasksAtFrame([
-      {
-        id: 'mask-path',
-        type: 'shape',
-        trackId: 'track-1',
-        from: 0,
-        durationInFrames: 30,
-        label: 'Mask path',
-        shapeType: 'path',
-        fillColor: '#fff',
-        isMask: true,
-        pathVertices: [
-          {
-            position: [0.1, 0.1],
-            inHandle: [0.1, 0.1],
-            outHandle: [0.1, 0.1],
+    ]
+    const activeMasks = resolveActiveShapeMasksAtFrame(
+      [
+        {
+          id: 'mask-path',
+          type: 'shape',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 30,
+          label: 'Mask path',
+          shapeType: 'path',
+          fillColor: '#fff',
+          isMask: true,
+          pathVertices: [
+            {
+              position: [0.1, 0.1],
+              inHandle: [0.1, 0.1],
+              outHandle: [0.1, 0.1],
+            },
+          ],
+          transform: {
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 100,
+            rotation: 0,
+            opacity: 1,
           },
-        ],
-        transform: {
-          x: 0,
-          y: 0,
-          width: 200,
-          height: 100,
-          rotation: 0,
-          opacity: 1,
         },
+      ],
+      {
+        canvas: { width: 1280, height: 720, fps: 30 },
+        frame: 5,
+        getPreviewPathVertices: () => previewVertices,
       },
-    ], {
-      canvas: { width: 1280, height: 720, fps: 30 },
-      frame: 5,
-      getPreviewPathVertices: () => previewVertices,
-    });
+    )
 
-    expect(activeMasks).toHaveLength(1);
-    expect(activeMasks[0]?.shape.pathVertices).toBe(previewVertices);
-  });
+    expect(activeMasks).toHaveLength(1)
+    expect(activeMasks[0]?.shape.pathVertices).toBe(previewVertices)
+  })
 
   it('combines active masks and transition frame state from the render plan', () => {
     const renderPlan = resolveCompositionRenderPlan({
@@ -163,13 +166,13 @@ describe('frame scene', () => {
           presentation: 'fade',
         },
       ],
-    });
+    })
 
     const frameScene = resolveFrameCompositionScene({
       renderPlan,
       frame: 25,
       canvas: { width: 1280, height: 720, fps: 30 },
-    });
+    })
 
     expect(frameScene.activeShapeMasks).toEqual([
       expect.objectContaining({
@@ -177,70 +180,79 @@ describe('frame scene', () => {
         trackOrder: 1,
         transform: expect.objectContaining({ width: 200, height: 100 }),
       }),
-    ]);
+    ])
     expect(frameScene.transitionFrameState.activeTransitions).toEqual([
       expect.objectContaining({
         transition: expect.objectContaining({ id: 'transition-1' }),
       }),
-    ]);
-    expect(frameScene.transitionFrameState.transitionClipIds).toEqual(new Set(['left', 'right']));
-  });
+    ])
+    expect(frameScene.transitionFrameState.transitionClipIds).toEqual(new Set(['left', 'right']))
+  })
 
   it('keeps frame-scene caches isolated per renderer instance', () => {
-    const renderPlan = createMaskRenderPlan();
-    const cacheA = createFrameCompositionSceneCache();
-    const cacheB = createFrameCompositionSceneCache();
+    const renderPlan = createMaskRenderPlan()
+    const cacheA = createFrameCompositionSceneCache()
+    const cacheB = createFrameCompositionSceneCache()
     const previewVerticesA = [
       {
         position: [0.2, 0.2] as [number, number],
         inHandle: [0.2, 0.2] as [number, number],
         outHandle: [0.2, 0.2] as [number, number],
       },
-    ];
+    ]
     const previewVerticesB = [
       {
         position: [0.8, 0.8] as [number, number],
         inHandle: [0.8, 0.8] as [number, number],
         outHandle: [0.8, 0.8] as [number, number],
       },
-    ];
+    ]
 
-    const sceneA = cacheA.resolve({
-      renderPlan,
-      frame: 5,
-      canvas: { width: 1280, height: 720, fps: 30 },
-      getPreviewPathVertices: () => previewVerticesA,
-    }, 0);
-    const sceneB = cacheB.resolve({
-      renderPlan,
-      frame: 5,
-      canvas: { width: 1280, height: 720, fps: 30 },
-      getPreviewPathVertices: () => previewVerticesB,
-    }, 0);
+    const sceneA = cacheA.resolve(
+      {
+        renderPlan,
+        frame: 5,
+        canvas: { width: 1280, height: 720, fps: 30 },
+        getPreviewPathVertices: () => previewVerticesA,
+      },
+      0,
+    )
+    const sceneB = cacheB.resolve(
+      {
+        renderPlan,
+        frame: 5,
+        canvas: { width: 1280, height: 720, fps: 30 },
+        getPreviewPathVertices: () => previewVerticesB,
+      },
+      0,
+    )
 
-    expect(sceneA).not.toBe(sceneB);
-    expect(sceneA.activeShapeMasks[0]?.shape.pathVertices).toBe(previewVerticesA);
-    expect(sceneB.activeShapeMasks[0]?.shape.pathVertices).toBe(previewVerticesB);
-  });
+    expect(sceneA).not.toBe(sceneB)
+    expect(sceneA.activeShapeMasks[0]?.shape.pathVertices).toBe(previewVerticesA)
+    expect(sceneB.activeShapeMasks[0]?.shape.pathVertices).toBe(previewVerticesB)
+  })
 
   it('recomputes the cached frame scene when the revision changes', () => {
-    const renderPlan = createMaskRenderPlan();
-    const cache = createFrameCompositionSceneCache();
+    const renderPlan = createMaskRenderPlan()
+    const cache = createFrameCompositionSceneCache()
     let previewVertices = [
       {
         position: [0.2, 0.2] as [number, number],
         inHandle: [0.2, 0.2] as [number, number],
         outHandle: [0.2, 0.2] as [number, number],
       },
-    ];
-    const getPreviewPathVertices = () => previewVertices;
+    ]
+    const getPreviewPathVertices = () => previewVertices
 
-    const firstScene = cache.resolve({
-      renderPlan,
-      frame: 5,
-      canvas: { width: 1280, height: 720, fps: 30 },
-      getPreviewPathVertices,
-    }, 0);
+    const firstScene = cache.resolve(
+      {
+        renderPlan,
+        frame: 5,
+        canvas: { width: 1280, height: 720, fps: 30 },
+        getPreviewPathVertices,
+      },
+      0,
+    )
 
     previewVertices = [
       {
@@ -248,59 +260,74 @@ describe('frame scene', () => {
         inHandle: [0.8, 0.8] as [number, number],
         outHandle: [0.8, 0.8] as [number, number],
       },
-    ];
+    ]
 
-    const cachedSameRevision = cache.resolve({
-      renderPlan,
-      frame: 5,
-      canvas: { width: 1280, height: 720, fps: 30 },
-      getPreviewPathVertices,
-    }, 0);
-    const updatedScene = cache.resolve({
-      renderPlan,
-      frame: 5,
-      canvas: { width: 1280, height: 720, fps: 30 },
-      getPreviewPathVertices,
-    }, 1);
+    const cachedSameRevision = cache.resolve(
+      {
+        renderPlan,
+        frame: 5,
+        canvas: { width: 1280, height: 720, fps: 30 },
+        getPreviewPathVertices,
+      },
+      0,
+    )
+    const updatedScene = cache.resolve(
+      {
+        renderPlan,
+        frame: 5,
+        canvas: { width: 1280, height: 720, fps: 30 },
+        getPreviewPathVertices,
+      },
+      1,
+    )
 
-    expect(cachedSameRevision).toBe(firstScene);
-    expect(cachedSameRevision.activeShapeMasks[0]?.shape.pathVertices).not.toBe(previewVertices);
-    expect(updatedScene).not.toBe(firstScene);
-    expect(updatedScene.activeShapeMasks[0]?.shape.pathVertices).toBe(previewVertices);
-  });
+    expect(cachedSameRevision).toBe(firstScene)
+    expect(cachedSameRevision.activeShapeMasks[0]?.shape.pathVertices).not.toBe(previewVertices)
+    expect(updatedScene).not.toBe(firstScene)
+    expect(updatedScene.activeShapeMasks[0]?.shape.pathVertices).toBe(previewVertices)
+  })
 
   it('keeps the cached frame scene when an invalidation request misses the cached frame', () => {
-    const renderPlan = createMaskRenderPlan();
-    const cache = createFrameCompositionSceneCache();
+    const renderPlan = createMaskRenderPlan()
+    const cache = createFrameCompositionSceneCache()
 
-    const firstScene = cache.resolve({
-      renderPlan,
-      frame: 5,
-      canvas: { width: 1280, height: 720, fps: 30 },
-    }, 0);
+    const firstScene = cache.resolve(
+      {
+        renderPlan,
+        frame: 5,
+        canvas: { width: 1280, height: 720, fps: 30 },
+      },
+      0,
+    )
 
     cache.invalidate({
       ranges: [{ startFrame: 10, endFrame: 20 }],
-    });
+    })
 
-    const cachedScene = cache.resolve({
-      renderPlan,
-      frame: 5,
-      canvas: { width: 1280, height: 720, fps: 30 },
-    }, 0);
+    const cachedScene = cache.resolve(
+      {
+        renderPlan,
+        frame: 5,
+        canvas: { width: 1280, height: 720, fps: 30 },
+      },
+      0,
+    )
 
-    expect(cachedScene).toBe(firstScene);
+    expect(cachedScene).toBe(firstScene)
 
     cache.invalidate({
       ranges: [{ startFrame: 5, endFrame: 6 }],
-    });
+    })
 
-    const invalidatedScene = cache.resolve({
-      renderPlan,
-      frame: 5,
-      canvas: { width: 1280, height: 720, fps: 30 },
-    }, 0);
+    const invalidatedScene = cache.resolve(
+      {
+        renderPlan,
+        frame: 5,
+        canvas: { width: 1280, height: 720, fps: 30 },
+      },
+      0,
+    )
 
-    expect(invalidatedScene).not.toBe(firstScene);
-  });
-});
+    expect(invalidatedScene).not.toBe(firstScene)
+  })
+})

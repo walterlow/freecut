@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import type { CompositionItem, TextItem, VideoItem } from '@/types/timeline';
-import type { ItemKeyframes } from '@/types/keyframe';
-import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes';
+import { describe, expect, it } from 'vite-plus/test'
+import type { CompositionItem, TextItem, VideoItem } from '@/types/timeline'
+import type { ItemKeyframes } from '@/types/keyframe'
+import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes'
 
 describe('canvas-keyframes text sizing', () => {
   it('expands text height to fit content during export', () => {
@@ -27,17 +27,17 @@ describe('canvas-keyframes text sizing', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const transform = getAnimatedTransform(item, undefined, 0, {
       width: 1920,
       height: 1080,
       fps: 30,
-    });
+    })
 
-    expect(transform.height).toBeGreaterThan(80);
-  });
-});
+    expect(transform.height).toBeGreaterThan(80)
+  })
+})
 
 describe('canvas-keyframes visual fades', () => {
   it('applies video fade in to export opacity', () => {
@@ -58,16 +58,16 @@ describe('canvas-keyframes visual fades', () => {
         rotation: 0,
         opacity: 0.8,
       },
-    };
+    }
 
     const transform = getAnimatedTransform(item, undefined, 25, {
       width: 1920,
       height: 1080,
       fps: 30,
-    });
+    })
 
-    expect(transform.opacity).toBeCloseTo(0.4, 5);
-  });
+    expect(transform.opacity).toBeCloseTo(0.4, 5)
+  })
 
   it('applies overlapping compound clip fades to export opacity', () => {
     const item: CompositionItem = {
@@ -90,17 +90,17 @@ describe('canvas-keyframes visual fades', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const transform = getAnimatedTransform(item, undefined, 45, {
       width: 1920,
       height: 1080,
       fps: 30,
-    });
+    })
 
-    expect(transform.opacity).toBeCloseTo(0.75, 5);
-  });
-});
+    expect(transform.opacity).toBeCloseTo(0.75, 5)
+  })
+})
 
 describe('canvas-keyframes crop animation', () => {
   it('resolves crop keyframes in source-pixel space for export', () => {
@@ -114,7 +114,7 @@ describe('canvas-keyframes crop animation', () => {
       src: 'blob:test',
       sourceWidth: 1920,
       sourceHeight: 1080,
-    };
+    }
     const keyframes: ItemKeyframes = {
       itemId: item.id,
       properties: [
@@ -126,13 +126,13 @@ describe('canvas-keyframes crop animation', () => {
           ],
         },
       ],
-    };
+    }
 
     const crop = getAnimatedCrop(item, keyframes, 15, {
       width: 1920,
       height: 1080,
-    });
+    })
 
-    expect(crop?.left).toBeCloseTo(0.05, 5);
-  });
-});
+    expect(crop?.left).toBeCloseTo(0.05, 5)
+  })
+})

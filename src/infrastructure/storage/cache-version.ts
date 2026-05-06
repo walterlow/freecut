@@ -12,53 +12,53 @@
  *   }
  */
 
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger } from '@/shared/logging/logger'
 
-const logger = createLogger('CacheVersion');
+const logger = createLogger('CacheVersion')
 
-const VERSION_PREFIX = 'cache-version-';
+const VERSION_PREFIX = 'cache-version-'
 
 /**
  * Cache version configuration
  * Bump version numbers here when format changes require cache invalidation
  */
 const CACHE_VERSIONS = {
-  filmstrip: 9,    // OPFS filmstrip frames (v9: invalidate incorrect partial-complete prewarms)
-  waveform: 3,     // OPFS waveform data (v3: stereo interleaved L/R peaks)
-  thumbnail: 1,    // Workspace-backed thumbnails
-  media: 1,        // OPFS media files
-} as const;
+  filmstrip: 9, // OPFS filmstrip frames (v9: invalidate incorrect partial-complete prewarms)
+  waveform: 3, // OPFS waveform data (v3: stereo interleaved L/R peaks)
+  thumbnail: 1, // Workspace-backed thumbnails
+  media: 1, // OPFS media files
+} as const
 
-type CacheType = keyof typeof CACHE_VERSIONS;
+type CacheType = keyof typeof CACHE_VERSIONS
 
 interface CacheMigration {
-  needsMigration: boolean;
-  oldVersion: number | null;
-  newVersion: number;
-  markComplete: () => void;
+  needsMigration: boolean
+  oldVersion: number | null
+  newVersion: number
+  markComplete: () => void
 }
 
 /**
  * Check if a cache needs migration and get a helper to mark it complete
  */
 export function getCacheMigration(cacheType: CacheType): CacheMigration {
-  const key = `${VERSION_PREFIX}${cacheType}`;
-  const stored = localStorage.getItem(key);
-  const oldVersion = stored ? parseInt(stored, 10) : null;
-  const newVersion = CACHE_VERSIONS[cacheType];
+  const key = `${VERSION_PREFIX}${cacheType}`
+  const stored = localStorage.getItem(key)
+  const oldVersion = stored ? parseInt(stored, 10) : null
+  const newVersion = CACHE_VERSIONS[cacheType]
 
-  const needsMigration = oldVersion !== newVersion;
+  const needsMigration = oldVersion !== newVersion
 
   return {
     needsMigration,
     oldVersion,
     newVersion,
     markComplete: () => {
-      localStorage.setItem(key, newVersion.toString());
+      localStorage.setItem(key, newVersion.toString())
       if (needsMigration) {
-        const from = oldVersion ?? 'none';
-        logger.debug(`${cacheType} cache migrated: v${from} → v${newVersion}`);
+        const from = oldVersion ?? 'none'
+        logger.debug(`${cacheType} cache migrated: v${from} → v${newVersion}`)
       }
     },
-  };
+  }
 }

@@ -1,37 +1,37 @@
-import { create } from 'zustand';
-import type { EditorState, EditorActions } from './types';
+import { create } from 'zustand'
+import type { EditorState, EditorActions } from './types'
 import {
   EDITOR_LAYOUT,
   getLeftEditorSidebarBounds,
   getRightEditorSidebarBounds,
-} from '@/app/editor-layout';
+} from '@/app/editor-layout'
 
-const LEGACY_SIDEBAR_DEFAULT_WIDTH = 320;
+const LEGACY_SIDEBAR_DEFAULT_WIDTH = 320
 
 function normalizeSidebarWidth(
   width: number,
   fallback: number,
-  bounds: { minWidth: number; maxWidth: number }
+  bounds: { minWidth: number; maxWidth: number },
 ): number {
-  if (!Number.isFinite(width)) return fallback;
-  const nextWidth = (
-    width === LEGACY_SIDEBAR_DEFAULT_WIDTH
-    && fallback !== LEGACY_SIDEBAR_DEFAULT_WIDTH
-  )
-    ? fallback
-    : width;
-  return Math.min(bounds.maxWidth, Math.max(bounds.minWidth, nextWidth));
+  if (!Number.isFinite(width)) return fallback
+  const nextWidth =
+    width === LEGACY_SIDEBAR_DEFAULT_WIDTH && fallback !== LEGACY_SIDEBAR_DEFAULT_WIDTH
+      ? fallback
+      : width
+  return Math.min(bounds.maxWidth, Math.max(bounds.minWidth, nextWidth))
 }
 
 function loadSidebarWidth(key: string, fallback: number): number {
   try {
-    const v = localStorage.getItem(key);
+    const v = localStorage.getItem(key)
     if (v !== null) {
-      const parsedWidth = Number(v);
-      return Number.isFinite(parsedWidth) ? parsedWidth : fallback;
+      const parsedWidth = Number(v)
+      return Number.isFinite(parsedWidth) ? parsedWidth : fallback
     }
-  } catch { /* noop */ }
-  return fallback;
+  } catch {
+    /* noop */
+  }
+  return fallback
 }
 
 export const useEditorStore = create<EditorState & EditorActions>((set) => ({
@@ -44,7 +44,10 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   activeTab: 'media',
   clipInspectorTab: 'video',
   sidebarWidth: loadSidebarWidth('editor:sidebarWidth', EDITOR_LAYOUT.leftSidebarDefaultWidth),
-  rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.rightSidebarDefaultWidth),
+  rightSidebarWidth: loadSidebarWidth(
+    'editor:rightSidebarWidth',
+    EDITOR_LAYOUT.rightSidebarDefaultWidth,
+  ),
   timelineHeight: 250,
   sourcePreviewMediaId: null,
   mediaSkimPreviewMediaId: null,
@@ -59,166 +62,219 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   linkedSelectionEnabled: true,
   colorScopesOpen: false,
   mixerFloating: (() => {
-    try { return localStorage.getItem('editor:mixerFloating') === 'true'; } catch { return false; }
+    try {
+      return localStorage.getItem('editor:mixerFloating') === 'true'
+    } catch {
+      return false
+    }
   })(),
   propertiesFullColumn: (() => {
-    try { return localStorage.getItem('editor:propertiesFullColumn') === 'true'; } catch { return false; }
+    try {
+      return localStorage.getItem('editor:propertiesFullColumn') === 'true'
+    } catch {
+      return false
+    }
   })(),
   mediaFullColumn: (() => {
     try {
-      const v = localStorage.getItem('editor:mediaFullColumn');
-      return v === null ? true : v === 'true';
-    } catch { return true; }
+      const v = localStorage.getItem('editor:mediaFullColumn')
+      return v === null ? true : v === 'true'
+    } catch {
+      return true
+    }
   })(),
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
   setLeftSidebarOpen: (open) => set({ leftSidebarOpen: open }),
   setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),
-  setKeyframeEditorOpen: (open) => set((state) => ({
-    keyframeEditorOpen: open,
-    keyframeEditorShortcutScopeActive: open ? state.keyframeEditorShortcutScopeActive : false,
-    leftSidebarOpen: open ? true : state.leftSidebarOpen,
-  })),
-  setKeyframeEditorShortcutScopeActive: (active) => set({ keyframeEditorShortcutScopeActive: active }),
+  setKeyframeEditorOpen: (open) =>
+    set((state) => ({
+      keyframeEditorOpen: open,
+      keyframeEditorShortcutScopeActive: open ? state.keyframeEditorShortcutScopeActive : false,
+      leftSidebarOpen: open ? true : state.leftSidebarOpen,
+    })),
+  setKeyframeEditorShortcutScopeActive: (active) =>
+    set({ keyframeEditorShortcutScopeActive: active }),
   toggleLeftSidebar: () => set((state) => ({ leftSidebarOpen: !state.leftSidebarOpen })),
   toggleRightSidebar: () => set((state) => ({ rightSidebarOpen: !state.rightSidebarOpen })),
-  toggleKeyframeEditorOpen: () => set((state) => {
-    const nextOpen = !state.keyframeEditorOpen;
-    return {
-      keyframeEditorOpen: nextOpen,
-      keyframeEditorShortcutScopeActive: nextOpen ? state.keyframeEditorShortcutScopeActive : false,
-      leftSidebarOpen: nextOpen ? true : state.leftSidebarOpen,
-    };
-  }),
+  toggleKeyframeEditorOpen: () =>
+    set((state) => {
+      const nextOpen = !state.keyframeEditorOpen
+      return {
+        keyframeEditorOpen: nextOpen,
+        keyframeEditorShortcutScopeActive: nextOpen
+          ? state.keyframeEditorShortcutScopeActive
+          : false,
+        leftSidebarOpen: nextOpen ? true : state.leftSidebarOpen,
+      }
+    }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setClipInspectorTab: (tab) => set({ clipInspectorTab: tab }),
   setSidebarWidth: (width) => {
-    try { localStorage.setItem('editor:sidebarWidth', String(width)); } catch { /* noop */ }
-    set({ sidebarWidth: width });
+    try {
+      localStorage.setItem('editor:sidebarWidth', String(width))
+    } catch {
+      /* noop */
+    }
+    set({ sidebarWidth: width })
   },
   setRightSidebarWidth: (width) => {
-    try { localStorage.setItem('editor:rightSidebarWidth', String(width)); } catch { /* noop */ }
-    set({ rightSidebarWidth: width });
+    try {
+      localStorage.setItem('editor:rightSidebarWidth', String(width))
+    } catch {
+      /* noop */
+    }
+    set({ rightSidebarWidth: width })
   },
-  syncSidebarLayout: (layout) => set((currentState) => ({
-    sidebarWidth: normalizeSidebarWidth(
-      currentState.sidebarWidth,
-      layout.leftSidebarDefaultWidth,
-      getLeftEditorSidebarBounds({
-        leftSidebarMinWidth: layout.leftSidebarMinWidth,
-        leftSidebarMaxWidth: layout.leftSidebarMaxWidth,
-      })
-    ),
-    rightSidebarWidth: normalizeSidebarWidth(
-      currentState.rightSidebarWidth,
-      layout.rightSidebarDefaultWidth,
-      getRightEditorSidebarBounds({
-        rightSidebarMinWidth: layout.rightSidebarMinWidth,
-        rightSidebarMaxWidth: layout.rightSidebarMaxWidth,
-      })
-    ),
-  })),
+  syncSidebarLayout: (layout) =>
+    set((currentState) => ({
+      sidebarWidth: normalizeSidebarWidth(
+        currentState.sidebarWidth,
+        layout.leftSidebarDefaultWidth,
+        getLeftEditorSidebarBounds({
+          leftSidebarMinWidth: layout.leftSidebarMinWidth,
+          leftSidebarMaxWidth: layout.leftSidebarMaxWidth,
+        }),
+      ),
+      rightSidebarWidth: normalizeSidebarWidth(
+        currentState.rightSidebarWidth,
+        layout.rightSidebarDefaultWidth,
+        getRightEditorSidebarBounds({
+          rightSidebarMinWidth: layout.rightSidebarMinWidth,
+          rightSidebarMaxWidth: layout.rightSidebarMaxWidth,
+        }),
+      ),
+    })),
   setTimelineHeight: (height) => set({ timelineHeight: height }),
-  setSourcePreviewMediaId: (mediaId) => set({
-    sourcePreviewMediaId: mediaId,
-    mediaSkimPreviewMediaId: null,
-    mediaSkimPreviewFrame: null,
-    compoundClipSkimPreviewCompositionId: null,
-    compoundClipSkimPreviewFrame: null,
-  }),
-  setMediaSkimPreview: (mediaId, frame = null) => set((state) => {
-    const nextFrame = mediaId ? frame : null;
-    if (
-      state.mediaSkimPreviewMediaId === mediaId
-      && state.mediaSkimPreviewFrame === nextFrame
-      && state.compoundClipSkimPreviewCompositionId === null
-      && state.compoundClipSkimPreviewFrame === null
-    ) {
-      return state;
-    }
-
-    return {
-      mediaSkimPreviewMediaId: mediaId,
-      mediaSkimPreviewFrame: nextFrame,
-      compoundClipSkimPreviewCompositionId: null,
-      compoundClipSkimPreviewFrame: null,
-    };
-  }),
-  clearMediaSkimPreview: () => set((state) => {
-    if (state.mediaSkimPreviewMediaId === null && state.mediaSkimPreviewFrame === null) {
-      return state;
-    }
-
-    return {
+  setSourcePreviewMediaId: (mediaId) =>
+    set({
+      sourcePreviewMediaId: mediaId,
       mediaSkimPreviewMediaId: null,
       mediaSkimPreviewFrame: null,
-    };
-  }),
-  setCompoundClipSkimPreview: (compositionId, frame = null) => set((state) => {
-    const nextFrame = compositionId ? frame : null;
-    if (
-      state.compoundClipSkimPreviewCompositionId === compositionId
-      && state.compoundClipSkimPreviewFrame === nextFrame
-      && state.mediaSkimPreviewMediaId === null
-      && state.mediaSkimPreviewFrame === null
-    ) {
-      return state;
-    }
-
-    return {
-      compoundClipSkimPreviewCompositionId: compositionId,
-      compoundClipSkimPreviewFrame: nextFrame,
-      mediaSkimPreviewMediaId: null,
-      mediaSkimPreviewFrame: null,
-    };
-  }),
-  clearCompoundClipSkimPreview: () => set((state) => {
-    if (
-      state.compoundClipSkimPreviewCompositionId === null
-      && state.compoundClipSkimPreviewFrame === null
-    ) {
-      return state;
-    }
-
-    return {
       compoundClipSkimPreviewCompositionId: null,
       compoundClipSkimPreviewFrame: null,
-    };
-  }),
-  beginTranscriptionDialog: () => set((state) => ({
-    transcriptionDialogDepth: state.transcriptionDialogDepth + 1,
-  })),
-  endTranscriptionDialog: () => set((state) => ({
-    transcriptionDialogDepth: Math.max(0, state.transcriptionDialogDepth - 1),
-  })),
+    }),
+  setMediaSkimPreview: (mediaId, frame = null) =>
+    set((state) => {
+      const nextFrame = mediaId ? frame : null
+      if (
+        state.mediaSkimPreviewMediaId === mediaId &&
+        state.mediaSkimPreviewFrame === nextFrame &&
+        state.compoundClipSkimPreviewCompositionId === null &&
+        state.compoundClipSkimPreviewFrame === null
+      ) {
+        return state
+      }
+
+      return {
+        mediaSkimPreviewMediaId: mediaId,
+        mediaSkimPreviewFrame: nextFrame,
+        compoundClipSkimPreviewCompositionId: null,
+        compoundClipSkimPreviewFrame: null,
+      }
+    }),
+  clearMediaSkimPreview: () =>
+    set((state) => {
+      if (state.mediaSkimPreviewMediaId === null && state.mediaSkimPreviewFrame === null) {
+        return state
+      }
+
+      return {
+        mediaSkimPreviewMediaId: null,
+        mediaSkimPreviewFrame: null,
+      }
+    }),
+  setCompoundClipSkimPreview: (compositionId, frame = null) =>
+    set((state) => {
+      const nextFrame = compositionId ? frame : null
+      if (
+        state.compoundClipSkimPreviewCompositionId === compositionId &&
+        state.compoundClipSkimPreviewFrame === nextFrame &&
+        state.mediaSkimPreviewMediaId === null &&
+        state.mediaSkimPreviewFrame === null
+      ) {
+        return state
+      }
+
+      return {
+        compoundClipSkimPreviewCompositionId: compositionId,
+        compoundClipSkimPreviewFrame: nextFrame,
+        mediaSkimPreviewMediaId: null,
+        mediaSkimPreviewFrame: null,
+      }
+    }),
+  clearCompoundClipSkimPreview: () =>
+    set((state) => {
+      if (
+        state.compoundClipSkimPreviewCompositionId === null &&
+        state.compoundClipSkimPreviewFrame === null
+      ) {
+        return state
+      }
+
+      return {
+        compoundClipSkimPreviewCompositionId: null,
+        compoundClipSkimPreviewFrame: null,
+      }
+    }),
+  beginTranscriptionDialog: () =>
+    set((state) => ({
+      transcriptionDialogDepth: state.transcriptionDialogDepth + 1,
+    })),
+  endTranscriptionDialog: () =>
+    set((state) => ({
+      transcriptionDialogDepth: Math.max(0, state.transcriptionDialogDepth - 1),
+    })),
   setSourcePatchVideoEnabled: (enabled) => set({ sourcePatchVideoEnabled: enabled }),
   setSourcePatchAudioEnabled: (enabled) => set({ sourcePatchAudioEnabled: enabled }),
   setSourcePatchVideoTrackId: (trackId) => set({ sourcePatchVideoTrackId: trackId }),
   setSourcePatchAudioTrackId: (trackId) => set({ sourcePatchAudioTrackId: trackId }),
-  toggleSourcePatchVideoEnabled: () => set((state) => ({ sourcePatchVideoEnabled: !state.sourcePatchVideoEnabled })),
-  toggleSourcePatchAudioEnabled: () => set((state) => ({ sourcePatchAudioEnabled: !state.sourcePatchAudioEnabled })),
+  toggleSourcePatchVideoEnabled: () =>
+    set((state) => ({ sourcePatchVideoEnabled: !state.sourcePatchVideoEnabled })),
+  toggleSourcePatchAudioEnabled: () =>
+    set((state) => ({ sourcePatchAudioEnabled: !state.sourcePatchAudioEnabled })),
   setLinkedSelectionEnabled: (enabled) => set({ linkedSelectionEnabled: enabled }),
-  toggleLinkedSelectionEnabled: () => set((state) => ({ linkedSelectionEnabled: !state.linkedSelectionEnabled })),
+  toggleLinkedSelectionEnabled: () =>
+    set((state) => ({ linkedSelectionEnabled: !state.linkedSelectionEnabled })),
   setColorScopesOpen: (open) => set({ colorScopesOpen: open }),
   toggleColorScopesOpen: () => set((state) => ({ colorScopesOpen: !state.colorScopesOpen })),
   setMixerFloating: (floating) => {
-    try { localStorage.setItem('editor:mixerFloating', String(floating)); } catch { /* noop */ }
-    set({ mixerFloating: floating });
+    try {
+      localStorage.setItem('editor:mixerFloating', String(floating))
+    } catch {
+      /* noop */
+    }
+    set({ mixerFloating: floating })
   },
-  toggleMixerFloating: () => set((state) => {
-    const next = !state.mixerFloating;
-    try { localStorage.setItem('editor:mixerFloating', String(next)); } catch { /* noop */ }
-    return { mixerFloating: next };
-  }),
-  togglePropertiesFullColumn: () => set((state) => {
-    const next = !state.propertiesFullColumn;
-    try { localStorage.setItem('editor:propertiesFullColumn', String(next)); } catch { /* noop */ }
-    return { propertiesFullColumn: next };
-  }),
-  toggleMediaFullColumn: () => set((state) => {
-    const next = !state.mediaFullColumn;
-    try { localStorage.setItem('editor:mediaFullColumn', String(next)); } catch { /* noop */ }
-    return { mediaFullColumn: next };
-  }),
-}));
+  toggleMixerFloating: () =>
+    set((state) => {
+      const next = !state.mixerFloating
+      try {
+        localStorage.setItem('editor:mixerFloating', String(next))
+      } catch {
+        /* noop */
+      }
+      return { mixerFloating: next }
+    }),
+  togglePropertiesFullColumn: () =>
+    set((state) => {
+      const next = !state.propertiesFullColumn
+      try {
+        localStorage.setItem('editor:propertiesFullColumn', String(next))
+      } catch {
+        /* noop */
+      }
+      return { propertiesFullColumn: next }
+    }),
+  toggleMediaFullColumn: () =>
+    set((state) => {
+      const next = !state.mediaFullColumn
+      try {
+        localStorage.setItem('editor:mediaFullColumn', String(next))
+      } catch {
+        /* noop */
+      }
+      return { mediaFullColumn: next }
+    }),
+}))

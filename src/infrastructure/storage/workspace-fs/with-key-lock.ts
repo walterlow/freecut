@@ -15,32 +15,29 @@
  * next access (see module-level notes in content.ts / projects.ts).
  */
 
-const chains = new Map<string, Promise<unknown>>();
+const chains = new Map<string, Promise<unknown>>()
 
-export async function withKeyLock<T>(
-  key: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const prev = chains.get(key) ?? Promise.resolve();
+export async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = chains.get(key) ?? Promise.resolve()
   // Silence prev's rejection for chaining purposes — we still want our own
   // work to run even if the previous caller failed. The previous caller's
   // error propagates to its own awaiter, not ours.
-  const silencedPrev = prev.catch(() => {});
-  const result = silencedPrev.then(fn);
-  const silencedResult = result.catch(() => {});
-  chains.set(key, silencedResult);
+  const silencedPrev = prev.catch(() => {})
+  const result = silencedPrev.then(fn)
+  const silencedResult = result.catch(() => {})
+  chains.set(key, silencedResult)
   try {
-    return await result;
+    return await result
   } finally {
     // If no-one chained after us, drop the key so the map doesn't grow
     // unbounded across a long session.
     if (chains.get(key) === silencedResult) {
-      chains.delete(key);
+      chains.delete(key)
     }
   }
 }
 
 /** Test-only: drop all chains so tests start from a clean slate. */
 export function __resetKeyLocksForTesting(): void {
-  chains.clear();
+  chains.clear()
 }

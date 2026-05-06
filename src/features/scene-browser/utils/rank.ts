@@ -15,17 +15,17 @@
 
 export interface RankableScene {
   /** Stable composite id — typically `${mediaId}:${captionIndex}`. */
-  id: string;
-  mediaId: string;
-  mediaFileName: string;
-  timeSec: number;
-  text: string;
-  thumbRelPath?: string;
+  id: string
+  mediaId: string
+  mediaFileName: string
+  timeSec: number
+  text: string
+  thumbRelPath?: string
   /**
    * Dominant-color palette (CIELAB + weight) for UI swatch display and
    * color-query ranking. Plumbed through from `MediaCaption.palette`.
    */
-  palette?: Array<{ l: number; a: number; b: number; weight: number }>;
+  palette?: Array<{ l: number; a: number; b: number; weight: number }>
 }
 
 /**
@@ -37,54 +37,58 @@ export interface RankableScene {
  */
 export interface SceneMatchSignals {
   /** Which ranker produced this row. */
-  ranker: 'keyword' | 'semantic';
+  ranker: 'keyword' | 'semantic'
   /** Cosine against the text (all-MiniLM) embedding, when semantic mode ran. */
-  textScore?: number;
+  textScore?: number
   /** Cosine against the CLIP image embedding, when visual ranking ran. */
-  imageScore?: number;
+  imageScore?: number
   /** True when the row cleared the keyword match threshold. */
-  keywordMatched?: boolean;
+  keywordMatched?: boolean
   /**
    * Color family (e.g. `"red"`) that the query asked for and the
    * caption text mentions. Set by the color-boost pass in the ranker.
    * Present means the final score got a boost and the UI should show a
    * Color chip; absent means no color match (or no color query).
    */
-  colorMatch?: string;
+  colorMatch?: string
   /**
    * Weighted-mean ∆E between the scene's palette and the user-selected
    * reference palette, when "find similar palette" is active. Lower is
    * closer; surfaced as a palette-distance chip on the row.
    */
-  paletteDistance?: number;
+  paletteDistance?: number
 }
 
 export interface ScoredScene extends RankableScene {
-  score: number;
+  score: number
   /** Character ranges within `text` that matched, for <mark/> rendering. */
-  matchSpans: Array<[number, number]>;
-  signals: SceneMatchSignals;
+  matchSpans: Array<[number, number]>
+  signals: SceneMatchSignals
 }
 
 export interface RankOptions {
   /** Drop scenes below this score. Defaults to 0.25. */
-  threshold?: number;
+  threshold?: number
 }
 
-const DEFAULT_THRESHOLD = 0.25;
+const DEFAULT_THRESHOLD = 0.25
 
 /** Strip punctuation and lowercase. Preserves letters, digits, CJK, whitespace. */
 function normalize(text: string): string {
-  return text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function trigrams(text: string): Set<string> {
-  const padded = `  ${text}  `;
-  const set = new Set<string>();
+  const padded = `  ${text}  `
+  const set = new Set<string>()
   for (let i = 0; i < padded.length - 2; i += 1) {
-    set.add(padded.slice(i, i + 3));
+    set.add(padded.slice(i, i + 3))
   }
-  return set;
+  return set
 }
 
 /**
@@ -94,15 +98,15 @@ function trigrams(text: string): Set<string> {
  * denominator.
  */
 function tokenTrigramSimilarity(a: string, b: string): number {
-  if (a.length < 3 || b.length < 3) return 0;
-  const left = trigrams(a);
-  const right = trigrams(b);
-  let overlap = 0;
+  if (a.length < 3 || b.length < 3) return 0
+  const left = trigrams(a)
+  const right = trigrams(b)
+  let overlap = 0
   for (const tri of left) {
-    if (right.has(tri)) overlap += 1;
+    if (right.has(tri)) overlap += 1
   }
-  const denominator = Math.min(left.size, right.size);
-  return denominator === 0 ? 0 : overlap / denominator;
+  const denominator = Math.min(left.size, right.size)
+  return denominator === 0 ? 0 : overlap / denominator
 }
 
 /**
@@ -115,21 +119,21 @@ function tokenTrigramSimilarity(a: string, b: string): number {
  * while rejecting coincidental substring overlaps.
  */
 function sharesQueryPrefix(queryToken: string, captionToken: string): boolean {
-  if (queryToken.length < 3) return false;
-  const prefixLen = Math.min(3, Math.max(2, Math.floor(queryToken.length / 2)));
-  return captionToken.startsWith(queryToken.slice(0, prefixLen));
+  if (queryToken.length < 3) return false
+  const prefixLen = Math.min(3, Math.max(2, Math.floor(queryToken.length / 2)))
+  return captionToken.startsWith(queryToken.slice(0, prefixLen))
 }
 
 /** Best fuzzy match for a single query token against any caption token. */
 function bestFuzzyTokenScore(queryToken: string, captionTokens: string[]): number {
-  let best = 0;
+  let best = 0
   for (const captionToken of captionTokens) {
-    if (!sharesQueryPrefix(queryToken, captionToken)) continue;
-    const similarity = tokenTrigramSimilarity(queryToken, captionToken);
-    if (similarity > best) best = similarity;
-    if (best === 1) return 1;
+    if (!sharesQueryPrefix(queryToken, captionToken)) continue
+    const similarity = tokenTrigramSimilarity(queryToken, captionToken)
+    if (similarity > best) best = similarity
+    if (best === 1) return 1
   }
-  return best;
+  return best
 }
 
 /**
@@ -138,66 +142,66 @@ function bestFuzzyTokenScore(queryToken: string, captionTokens: string[]): numbe
  * doesn't have to deduplicate.
  */
 function findMatchSpans(text: string, tokens: string[]): Array<[number, number]> {
-  if (tokens.length === 0) return [];
-  const lower = text.toLowerCase();
-  const raw: Array<[number, number]> = [];
+  if (tokens.length === 0) return []
+  const lower = text.toLowerCase()
+  const raw: Array<[number, number]> = []
   for (const token of tokens) {
-    if (token.length === 0) continue;
-    let from = 0;
+    if (token.length === 0) continue
+    let from = 0
     while (from <= lower.length - token.length) {
-      const idx = lower.indexOf(token, from);
-      if (idx < 0) break;
-      raw.push([idx, idx + token.length]);
-      from = idx + token.length;
+      const idx = lower.indexOf(token, from)
+      if (idx < 0) break
+      raw.push([idx, idx + token.length])
+      from = idx + token.length
     }
   }
-  if (raw.length === 0) return [];
-  raw.sort((a, b) => a[0] - b[0]);
-  const merged: Array<[number, number]> = [];
+  if (raw.length === 0) return []
+  raw.sort((a, b) => a[0] - b[0])
+  const merged: Array<[number, number]> = []
   for (const span of raw) {
-    const last = merged[merged.length - 1];
+    const last = merged[merged.length - 1]
     if (last && span[0] <= last[1]) {
-      last[1] = Math.max(last[1], span[1]);
+      last[1] = Math.max(last[1], span[1])
     } else {
-      merged.push([span[0], span[1]]);
+      merged.push([span[0], span[1]])
     }
   }
-  return merged;
+  return merged
 }
 
-const FUZZY_TOKEN_THRESHOLD = 0.6;
+const FUZZY_TOKEN_THRESHOLD = 0.6
 
 function scoreScene(query: string, queryTokens: string[], scene: RankableScene): number {
-  const captionNormalized = normalize(scene.text);
-  if (captionNormalized.length === 0) return 0;
+  const captionNormalized = normalize(scene.text)
+  if (captionNormalized.length === 0) return 0
 
   if (query.length > 0 && captionNormalized.includes(query)) {
-    return 1;
+    return 1
   }
 
-  const captionTokens = captionNormalized.split(' ');
-  if (queryTokens.length === 0) return 0;
+  const captionTokens = captionNormalized.split(' ')
+  if (queryTokens.length === 0) return 0
 
-  let exactOrPrefix = 0;
-  let fuzzySum = 0;
+  let exactOrPrefix = 0
+  let fuzzySum = 0
   for (const queryToken of queryTokens) {
     if (captionTokens.some((token) => token === queryToken || token.startsWith(queryToken))) {
-      exactOrPrefix += 1;
-      fuzzySum += 1;
-      continue;
+      exactOrPrefix += 1
+      fuzzySum += 1
+      continue
     }
-    const fuzzy = bestFuzzyTokenScore(queryToken, captionTokens);
+    const fuzzy = bestFuzzyTokenScore(queryToken, captionTokens)
     if (fuzzy >= FUZZY_TOKEN_THRESHOLD) {
-      fuzzySum += fuzzy;
+      fuzzySum += fuzzy
     }
   }
 
   // Prefix-heavy matches get a small bonus so "kitchen pots" in caption wins
   // over "kichen pts" in a different caption at the same fuzzy coverage.
-  const tokenScore = (exactOrPrefix / queryTokens.length) * 0.9;
-  const fuzzyScore = (fuzzySum / queryTokens.length) * 0.8;
+  const tokenScore = (exactOrPrefix / queryTokens.length) * 0.9
+  const fuzzyScore = (fuzzySum / queryTokens.length) * 0.8
 
-  return Math.max(tokenScore, fuzzyScore);
+  return Math.max(tokenScore, fuzzyScore)
 }
 
 /**
@@ -210,35 +214,35 @@ export function rankScenes(
   scenes: RankableScene[],
   options: RankOptions = {},
 ): ScoredScene[] {
-  const normalizedQuery = normalize(query);
+  const normalizedQuery = normalize(query)
   if (normalizedQuery.length === 0) {
     return scenes.map((scene) => ({
       ...scene,
       score: 0,
       matchSpans: [],
       signals: { ranker: 'keyword' },
-    }));
+    }))
   }
 
-  const threshold = options.threshold ?? DEFAULT_THRESHOLD;
-  const queryTokens = normalizedQuery.split(' ').filter(Boolean);
+  const threshold = options.threshold ?? DEFAULT_THRESHOLD
+  const queryTokens = normalizedQuery.split(' ').filter(Boolean)
 
-  const scored: ScoredScene[] = [];
+  const scored: ScoredScene[] = []
   for (const scene of scenes) {
-    const score = scoreScene(normalizedQuery, queryTokens, scene);
-    if (score < threshold) continue;
+    const score = scoreScene(normalizedQuery, queryTokens, scene)
+    if (score < threshold) continue
     scored.push({
       ...scene,
       score,
       matchSpans: findMatchSpans(scene.text, queryTokens),
       signals: { ranker: 'keyword', keywordMatched: true },
-    });
+    })
   }
 
   scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    if (a.mediaFileName !== b.mediaFileName) return a.mediaFileName.localeCompare(b.mediaFileName);
-    return a.timeSec - b.timeSec;
-  });
-  return scored;
+    if (b.score !== a.score) return b.score - a.score
+    if (a.mediaFileName !== b.mediaFileName) return a.mediaFileName.localeCompare(b.mediaFileName)
+    return a.timeSec - b.timeSec
+  })
+  return scored
 }

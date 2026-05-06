@@ -1,17 +1,17 @@
-import { getGpuEffect } from '@/infrastructure/gpu/effects';
+import { getGpuEffect } from '@/infrastructure/gpu/effects'
 import {
   isBuiltInAnimatableProperty,
   parseEffectAnimatableProperty,
   type AnimatableProperty,
   type BuiltInAnimatableProperty,
-} from '@/types/keyframe';
+} from '@/types/keyframe'
 
 export interface PropertyValueRange {
-  property: AnimatableProperty;
-  min: number;
-  max: number;
-  unit: string;
-  decimals: number;
+  property: AnimatableProperty
+  min: number
+  max: number
+  unit: string
+  decimals: number
 }
 
 const BUILT_IN_PROPERTY_VALUE_RANGES: Record<BuiltInAnimatableProperty, PropertyValueRange> = {
@@ -35,44 +35,54 @@ const BUILT_IN_PROPERTY_VALUE_RANGES: Record<BuiltInAnimatableProperty, Property
   lineHeight: { property: 'lineHeight', min: 0.5, max: 3, unit: 'x', decimals: 2 },
   textPadding: { property: 'textPadding', min: 0, max: 160, unit: 'px', decimals: 0 },
   backgroundRadius: { property: 'backgroundRadius', min: 0, max: 200, unit: 'px', decimals: 0 },
-  textShadowOffsetX: { property: 'textShadowOffsetX', min: -100, max: 100, unit: 'px', decimals: 0 },
-  textShadowOffsetY: { property: 'textShadowOffsetY', min: -100, max: 100, unit: 'px', decimals: 0 },
+  textShadowOffsetX: {
+    property: 'textShadowOffsetX',
+    min: -100,
+    max: 100,
+    unit: 'px',
+    decimals: 0,
+  },
+  textShadowOffsetY: {
+    property: 'textShadowOffsetY',
+    min: -100,
+    max: 100,
+    unit: 'px',
+    decimals: 0,
+  },
   textShadowBlur: { property: 'textShadowBlur', min: 0, max: 80, unit: 'px', decimals: 0 },
   strokeWidth: { property: 'strokeWidth', min: 0, max: 24, unit: 'px', decimals: 0 },
-};
+}
 
 function getDecimalsFromStep(step: number | undefined): number {
   if (step === undefined || !Number.isFinite(step) || step >= 1) {
-    return 0;
+    return 0
   }
 
-  const normalized = step.toString();
-  const decimalIndex = normalized.indexOf('.');
-  return decimalIndex === -1 ? 0 : normalized.length - decimalIndex - 1;
+  const normalized = step.toString()
+  const decimalIndex = normalized.indexOf('.')
+  return decimalIndex === -1 ? 0 : normalized.length - decimalIndex - 1
 }
 
 function inferUnit(label: string): string {
-  if (label.includes('Hue')) return '°';
-  if (label.includes('(EV)')) return 'EV';
-  return '';
+  if (label.includes('Hue')) return '°'
+  if (label.includes('(EV)')) return 'EV'
+  return ''
 }
 
-export function getPropertyValueRange(
-  property: AnimatableProperty,
-): PropertyValueRange | null {
+export function getPropertyValueRange(property: AnimatableProperty): PropertyValueRange | null {
   if (isBuiltInAnimatableProperty(property)) {
-    return BUILT_IN_PROPERTY_VALUE_RANGES[property];
+    return BUILT_IN_PROPERTY_VALUE_RANGES[property]
   }
 
-  const parsed = parseEffectAnimatableProperty(property);
+  const parsed = parseEffectAnimatableProperty(property)
   if (!parsed) {
-    return null;
+    return null
   }
 
-  const definition = getGpuEffect(parsed.gpuEffectType);
-  const param = definition?.params[parsed.paramKey];
+  const definition = getGpuEffect(parsed.gpuEffectType)
+  const param = definition?.params[parsed.paramKey]
   if (!definition || !param || param.type !== 'number') {
-    return null;
+    return null
   }
 
   return {
@@ -81,7 +91,7 @@ export function getPropertyValueRange(
     max: param.max ?? 1,
     unit: inferUnit(param.label),
     decimals: getDecimalsFromStep(param.step),
-  };
+  }
 }
 
 export const PROPERTY_VALUE_RANGES = new Proxy<Record<string, PropertyValueRange>>(
@@ -89,10 +99,10 @@ export const PROPERTY_VALUE_RANGES = new Proxy<Record<string, PropertyValueRange
   {
     get(target, prop) {
       if (typeof prop !== 'string') {
-        return undefined;
+        return undefined
       }
 
-      return target[prop] ?? getPropertyValueRange(prop as AnimatableProperty) ?? undefined;
+      return target[prop] ?? getPropertyValueRange(prop as AnimatableProperty) ?? undefined
     },
   },
-) as Record<AnimatableProperty, PropertyValueRange>;
+) as Record<AnimatableProperty, PropertyValueRange>

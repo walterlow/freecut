@@ -11,18 +11,22 @@
  * LFM provider's image path).
  */
 
-import { createLogger } from '@/shared/logging/logger';
-import { mediaLibraryService, useMediaLibraryStore, type MediaMetadata } from '../deps/media-library';
+import { createLogger } from '@/shared/logging/logger'
+import {
+  mediaLibraryService,
+  useMediaLibraryStore,
+  type MediaMetadata,
+} from '../deps/media-library'
 import {
   getCaptionsEmbeddingsMeta,
   probeCaptionThumbnail,
   saveCaptionThumbnail,
-} from '../deps/storage';
+} from '../deps/storage'
 
-const log = createLogger('SceneBrowser:LazyThumb');
+const log = createLogger('SceneBrowser:LazyThumb')
 
-const PERSIST_DEBOUNCE_MS = 1500;
-const pendingPersists = new Map<string, ReturnType<typeof setTimeout>>();
+const PERSIST_DEBOUNCE_MS = 1500
+const pendingPersists = new Map<string, ReturnType<typeof setTimeout>>()
 
 /**
  * Rewrite `captions.json` + the metadata mirror for `mediaId` with the
@@ -32,38 +36,36 @@ const pendingPersists = new Map<string, ReturnType<typeof setTimeout>>();
  * thumb in quick succession otherwise trigger 161 JSON rewrites.
  */
 function schedulePersist(mediaId: string): void {
-  const existing = pendingPersists.get(mediaId);
-  if (existing) clearTimeout(existing);
+  const existing = pendingPersists.get(mediaId)
+  if (existing) clearTimeout(existing)
   const timer = setTimeout(() => {
-    pendingPersists.delete(mediaId);
-    const latest = useMediaLibraryStore.getState().mediaById[mediaId];
-    if (!latest?.aiCaptions) return;
-    void mediaLibraryService
-      .updateMediaCaptions(mediaId, latest.aiCaptions)
-      .catch((error) => {
-        log.warn('Persisting caption thumb pointers failed', { mediaId, error });
-      });
-  }, PERSIST_DEBOUNCE_MS);
-  pendingPersists.set(mediaId, timer);
+    pendingPersists.delete(mediaId)
+    const latest = useMediaLibraryStore.getState().mediaById[mediaId]
+    if (!latest?.aiCaptions) return
+    void mediaLibraryService.updateMediaCaptions(mediaId, latest.aiCaptions).catch((error) => {
+      log.warn('Persisting caption thumb pointers failed', { mediaId, error })
+    })
+  }, PERSIST_DEBOUNCE_MS)
+  pendingPersists.set(mediaId, timer)
 }
 
-const MAX_DIM = 512;
-const SEEK_TIMEOUT_MS = 8_000;
+const MAX_DIM = 512
+const SEEK_TIMEOUT_MS = 8_000
 
 interface PendingRequest {
-  mediaId: string;
-  captionIndex: number;
-  timeSec: number;
-  resolve: (relPath: string | null) => void;
+  mediaId: string
+  captionIndex: number
+  timeSec: number
+  resolve: (relPath: string | null) => void
 }
 
-const queue: PendingRequest[] = [];
-let running = false;
-const resultCache = new Map<string, string | null>();
-const inflight = new Map<string, Promise<string | null>>();
+const queue: PendingRequest[] = []
+let running = false
+const resultCache = new Map<string, string | null>()
+const inflight = new Map<string, Promise<string | null>>()
 
 function cacheKey(mediaId: string, captionIndex: number): string {
-  return `${mediaId}:${captionIndex}`;
+  return `${mediaId}:${captionIndex}`
 }
 
 /**
@@ -74,75 +76,75 @@ function cacheKey(mediaId: string, captionIndex: number): string {
  * `taggingMediaIds` gate below.
  */
 export function invalidateLazyThumbCache(mediaId: string): void {
-  const prefix = `${mediaId}:`;
+  const prefix = `${mediaId}:`
   for (const key of resultCache.keys()) {
-    if (key.startsWith(prefix)) resultCache.delete(key);
+    if (key.startsWith(prefix)) resultCache.delete(key)
   }
   for (let i = queue.length - 1; i >= 0; i -= 1) {
-    const request = queue[i]!;
+    const request = queue[i]!
     if (request.mediaId === mediaId) {
-      request.resolve(null);
-      queue.splice(i, 1);
+      request.resolve(null)
+      queue.splice(i, 1)
     }
   }
-  const pendingPersist = pendingPersists.get(mediaId);
+  const pendingPersist = pendingPersists.get(mediaId)
   if (pendingPersist) {
-    clearTimeout(pendingPersist);
-    pendingPersists.delete(mediaId);
+    clearTimeout(pendingPersist)
+    pendingPersists.delete(mediaId)
   }
 }
 
 async function seekVideoTo(video: HTMLVideoElement, timeSec: number): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(`Seek timed out at ${timeSec}s`));
-    }, SEEK_TIMEOUT_MS);
+      cleanup()
+      reject(new Error(`Seek timed out at ${timeSec}s`))
+    }, SEEK_TIMEOUT_MS)
     const onSeeked = () => {
-      cleanup();
-      resolve();
-    };
+      cleanup()
+      resolve()
+    }
     const onError = () => {
-      cleanup();
-      reject(new Error('Video seek failed'));
-    };
+      cleanup()
+      reject(new Error('Video seek failed'))
+    }
     const cleanup = () => {
-      clearTimeout(timeout);
-      video.removeEventListener('seeked', onSeeked);
-      video.removeEventListener('error', onError);
-    };
-    video.addEventListener('seeked', onSeeked, { once: true });
-    video.addEventListener('error', onError, { once: true });
-    video.currentTime = Math.max(0, timeSec);
-  });
+      clearTimeout(timeout)
+      video.removeEventListener('seeked', onSeeked)
+      video.removeEventListener('error', onError)
+    }
+    video.addEventListener('seeked', onSeeked, { once: true })
+    video.addEventListener('error', onError, { once: true })
+    video.currentTime = Math.max(0, timeSec)
+  })
 }
 
 async function captureFrame(video: HTMLVideoElement): Promise<Blob> {
-  const vw = video.videoWidth || 640;
-  const vh = video.videoHeight || 360;
-  const scale = Math.min(MAX_DIM / Math.max(vw, vh), 1);
-  const width = Math.max(1, Math.round(vw * scale));
-  const height = Math.max(1, Math.round(vh * scale));
-  const canvas = new OffscreenCanvas(width, height);
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('OffscreenCanvas 2d context unavailable');
-  context.drawImage(video, 0, 0, width, height);
-  return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 });
+  const vw = video.videoWidth || 640
+  const vh = video.videoHeight || 360
+  const scale = Math.min(MAX_DIM / Math.max(vw, vh), 1)
+  const width = Math.max(1, Math.round(vw * scale))
+  const height = Math.max(1, Math.round(vh * scale))
+  const canvas = new OffscreenCanvas(width, height)
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('OffscreenCanvas 2d context unavailable')
+  context.drawImage(video, 0, 0, width, height)
+  return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
 }
 
 async function captureImage(blob: Blob): Promise<Blob> {
-  const bitmap = await createImageBitmap(blob);
+  const bitmap = await createImageBitmap(blob)
   try {
-    const scale = Math.min(MAX_DIM / Math.max(bitmap.width, bitmap.height), 1);
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = new OffscreenCanvas(width, height);
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('OffscreenCanvas 2d context unavailable');
-    context.drawImage(bitmap, 0, 0, width, height);
-    return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 });
+    const scale = Math.min(MAX_DIM / Math.max(bitmap.width, bitmap.height), 1)
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = new OffscreenCanvas(width, height)
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('OffscreenCanvas 2d context unavailable')
+    context.drawImage(bitmap, 0, 0, width, height)
+    return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
   } finally {
-    bitmap.close();
+    bitmap.close()
   }
 }
 
@@ -151,105 +153,111 @@ async function captureImage(blob: Blob): Promise<Blob> {
  * then schedule a debounced write-back so the pointer survives reloads.
  */
 function patchStoreThumbPath(mediaId: string, captionIndex: number, relPath: string): void {
-  const store = useMediaLibraryStore.getState();
-  const media = store.mediaById[mediaId];
-  if (!media || !media.aiCaptions) return;
-  const existing = media.aiCaptions[captionIndex];
-  if (!existing || existing.thumbRelPath === relPath) return;
+  const store = useMediaLibraryStore.getState()
+  const media = store.mediaById[mediaId]
+  if (!media || !media.aiCaptions) return
+  const existing = media.aiCaptions[captionIndex]
+  if (!existing || existing.thumbRelPath === relPath) return
   const updated: NonNullable<MediaMetadata['aiCaptions']> = media.aiCaptions.map((caption, i) =>
     i === captionIndex ? { ...caption, thumbRelPath: relPath } : caption,
-  );
-  store.updateMediaCaptions(mediaId, updated);
-  schedulePersist(mediaId);
+  )
+  store.updateMediaCaptions(mediaId, updated)
+  schedulePersist(mediaId)
 }
 
 async function getCaptionStorageOptions(
   mediaId: string,
 ): Promise<{ contentHash?: string; sampleIntervalSec?: number }> {
-  const media = useMediaLibraryStore.getState().mediaById[mediaId];
-  const meta = await getCaptionsEmbeddingsMeta(mediaId).catch(() => null);
+  const media = useMediaLibraryStore.getState().mediaById[mediaId]
+  const meta = await getCaptionsEmbeddingsMeta(mediaId).catch(() => null)
   return {
     contentHash: meta?.contentHash ?? media?.contentHash,
     sampleIntervalSec: meta?.sampleIntervalSec,
-  };
+  }
 }
 
 async function generateOne(request: PendingRequest): Promise<string | null> {
-  const { mediaId, captionIndex, timeSec } = request;
-  const state = useMediaLibraryStore.getState();
-  const media = state.mediaById[mediaId];
-  if (!media) return null;
+  const { mediaId, captionIndex, timeSec } = request
+  const state = useMediaLibraryStore.getState()
+  const media = state.mediaById[mediaId]
+  if (!media) return null
   // A concurrent Analyze-with-AI run owns this media's thumbs for the
   // duration of its sweep — skip lazy work so we don't race the main
   // pipeline and clobber a fresh thumbnail with a stale one.
-  if (state.taggingMediaIds.has(mediaId)) return null;
+  if (state.taggingMediaIds.has(mediaId)) return null
 
-  const isImage = media.mimeType.startsWith('image/');
-  const blobUrl = await mediaLibraryService.getMediaBlobUrl(mediaId);
-  if (!blobUrl) return null;
+  const isImage = media.mimeType.startsWith('image/')
+  const blobUrl = await mediaLibraryService.getMediaBlobUrl(mediaId)
+  if (!blobUrl) return null
 
   try {
-    let jpeg: Blob;
+    let jpeg: Blob
     if (isImage) {
-      const response = await fetch(blobUrl);
-      const sourceBlob = await response.blob();
-      jpeg = await captureImage(sourceBlob);
+      const response = await fetch(blobUrl)
+      const sourceBlob = await response.blob()
+      jpeg = await captureImage(sourceBlob)
     } else {
-      const video = document.createElement('video');
-      video.muted = true;
-      video.preload = 'auto';
-      video.crossOrigin = 'anonymous';
-      video.src = blobUrl;
+      const video = document.createElement('video')
+      video.muted = true
+      video.preload = 'auto'
+      video.crossOrigin = 'anonymous'
+      video.src = blobUrl
       try {
         await new Promise<void>((resolve, reject) => {
-          const onLoad = () => { cleanup(); resolve(); };
-          const onError = () => { cleanup(); reject(new Error('Video load failed')); };
+          const onLoad = () => {
+            cleanup()
+            resolve()
+          }
+          const onError = () => {
+            cleanup()
+            reject(new Error('Video load failed'))
+          }
           const cleanup = () => {
-            video.removeEventListener('loadedmetadata', onLoad);
-            video.removeEventListener('error', onError);
-          };
-          video.addEventListener('loadedmetadata', onLoad, { once: true });
-          video.addEventListener('error', onError, { once: true });
-        });
-        await seekVideoTo(video, timeSec);
-        jpeg = await captureFrame(video);
+            video.removeEventListener('loadedmetadata', onLoad)
+            video.removeEventListener('error', onError)
+          }
+          video.addEventListener('loadedmetadata', onLoad, { once: true })
+          video.addEventListener('error', onError, { once: true })
+        })
+        await seekVideoTo(video, timeSec)
+        jpeg = await captureFrame(video)
       } finally {
-        video.pause();
-        video.removeAttribute('src');
-        video.load();
+        video.pause()
+        video.removeAttribute('src')
+        video.load()
       }
     }
 
     // Re-check the tagging gate before writing — Analyze-with-AI may have
     // started between our initial check and the slow seek + capture above.
     if (useMediaLibraryStore.getState().taggingMediaIds.has(mediaId)) {
-      return null;
+      return null
     }
-    const cacheOptions = await getCaptionStorageOptions(mediaId);
-    const relPath = await saveCaptionThumbnail(mediaId, captionIndex, jpeg, cacheOptions);
-    patchStoreThumbPath(mediaId, captionIndex, relPath);
-    return relPath;
+    const cacheOptions = await getCaptionStorageOptions(mediaId)
+    const relPath = await saveCaptionThumbnail(mediaId, captionIndex, jpeg, cacheOptions)
+    patchStoreThumbPath(mediaId, captionIndex, relPath)
+    return relPath
   } catch (error) {
-    log.warn('Lazy thumbnail generation failed', { mediaId, captionIndex, timeSec, error });
-    return null;
+    log.warn('Lazy thumbnail generation failed', { mediaId, captionIndex, timeSec, error })
+    return null
   } finally {
-    URL.revokeObjectURL(blobUrl);
+    URL.revokeObjectURL(blobUrl)
   }
 }
 
 async function drain(): Promise<void> {
-  if (running) return;
-  running = true;
+  if (running) return
+  running = true
   try {
     while (queue.length > 0) {
-      const request = queue.shift()!;
-      const key = cacheKey(request.mediaId, request.captionIndex);
-      const relPath = await generateOne(request);
-      resultCache.set(key, relPath);
-      request.resolve(relPath);
+      const request = queue.shift()!
+      const key = cacheKey(request.mediaId, request.captionIndex)
+      const relPath = await generateOne(request)
+      resultCache.set(key, relPath)
+      request.resolve(relPath)
     }
   } finally {
-    running = false;
+    running = false
   }
 }
 
@@ -268,30 +276,30 @@ export function requestLazyCaptionThumbnail(
   captionIndex: number,
   timeSec: number,
 ): Promise<string | null> {
-  const key = cacheKey(mediaId, captionIndex);
-  const cached = resultCache.get(key);
-  if (cached !== undefined) return Promise.resolve(cached);
+  const key = cacheKey(mediaId, captionIndex)
+  const cached = resultCache.get(key)
+  if (cached !== undefined) return Promise.resolve(cached)
 
-  const pending = inflight.get(key);
-  if (pending) return pending;
+  const pending = inflight.get(key)
+  if (pending) return pending
 
   const promise = (async () => {
-    const cacheOptions = await getCaptionStorageOptions(mediaId);
-    const existing = await probeCaptionThumbnail(mediaId, captionIndex, cacheOptions);
+    const cacheOptions = await getCaptionStorageOptions(mediaId)
+    const existing = await probeCaptionThumbnail(mediaId, captionIndex, cacheOptions)
     if (existing) {
-      patchStoreThumbPath(mediaId, captionIndex, existing);
-      resultCache.set(key, existing);
-      return existing;
+      patchStoreThumbPath(mediaId, captionIndex, existing)
+      resultCache.set(key, existing)
+      return existing
     }
     const generated = await new Promise<string | null>((resolve) => {
-      queue.push({ mediaId, captionIndex, timeSec, resolve });
-      void drain();
-    });
-    resultCache.set(key, generated);
-    return generated;
+      queue.push({ mediaId, captionIndex, timeSec, resolve })
+      void drain()
+    })
+    resultCache.set(key, generated)
+    return generated
   })().finally(() => {
-    inflight.delete(key);
-  });
-  inflight.set(key, promise);
-  return promise;
+    inflight.delete(key)
+  })
+  inflight.set(key, promise)
+  return promise
 }

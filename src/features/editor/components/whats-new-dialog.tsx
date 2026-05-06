@@ -1,86 +1,79 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
-import { Sparkles, Bug, Zap, ExternalLink } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { cn } from '@/shared/ui/cn';
-import changelogData from '@/data/changelog.json';
-import type {
-  ChangelogEntry,
-  ChangelogFile,
-  ChangelogGroup,
-} from '@/data/changelog-types';
-import { markChangelogSeen } from './whats-new-seen';
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
+import { Sparkles, Bug, Zap, ExternalLink } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+import { cn } from '@/shared/ui/cn'
+import changelogData from '@/data/changelog.json'
+import type { ChangelogEntry, ChangelogFile, ChangelogGroup } from '@/data/changelog-types'
+import { markChangelogSeen } from './whats-new-seen'
 
-const data = changelogData as ChangelogFile;
-const GITHUB_REPO_URL = 'https://github.com/walterlow/freecut';
+const data = changelogData as ChangelogFile
+const GITHUB_REPO_URL = 'https://github.com/walterlow/freecut'
 
 const GROUP_CONFIG: Record<
   ChangelogGroup,
   { label: string; icon: ComponentType<{ className?: string }> }
 > = {
-  added: { label: '新增', icon: Sparkles },
-  fixed: { label: '修复', icon: Bug },
-  improved: { label: '改进', icon: Zap },
-};
+  added: { label: 'Added', icon: Sparkles },
+  fixed: { label: 'Fixed', icon: Bug },
+  improved: { label: 'Improved', icon: Zap },
+}
 
-const GROUP_ORDER: ChangelogGroup[] = ['added', 'fixed', 'improved'];
+const GROUP_ORDER: ChangelogGroup[] = ['added', 'fixed', 'improved']
+
+function capitalize(s: string): string {
+  return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s
+}
 
 function formatEntryLabel(entry: ChangelogEntry): string {
-  return entry.version === 'current' ? '本周更新' : entry.version;
+  return entry.version === 'current' ? 'This Week' : entry.version
 }
 
 function formatWeekRange(mondayIso: string): string {
-  const monday = new Date(`${mondayIso}T00:00:00Z`);
-  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const monday = new Date(`${mondayIso}T00:00:00Z`)
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000)
   const fmt = new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
-  });
-  return `${fmt.format(monday)} — ${fmt.format(sunday)}`;
+  })
+  return `${fmt.format(monday)} — ${fmt.format(sunday)}`
 }
 
 function formatEntrySubtitle(entry: ChangelogEntry): string {
-  if (entry.subtitle) return entry.subtitle;
-  if (entry.version === 'current') return `截至 ${formatSingleDate(entry.date)}`;
-  return `${formatWeekRange(entry.date)} 当周`;
+  if (entry.subtitle) return entry.subtitle
+  if (entry.version === 'current') return `As of ${formatSingleDate(entry.date)}`
+  return `Week of ${formatWeekRange(entry.date)}`
 }
 
 function formatSingleDate(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
+  const d = new Date(`${iso}T00:00:00Z`)
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(d);
+  }).format(d)
 }
 
 interface WhatsNewDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
 export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
   const entries = useMemo<ChangelogEntry[]>(
     () => (data.current ? [data.current, ...data.releases] : data.releases),
     [],
-  );
+  )
 
-  const [selectedVersion, setSelectedVersion] = useState<string>(
-    () => entries[0]?.version ?? '',
-  );
+  const [selectedVersion, setSelectedVersion] = useState<string>(() => entries[0]?.version ?? '')
 
   useEffect(() => {
-    if (open) markChangelogSeen();
-  }, [open]);
+    if (open) markChangelogSeen()
+  }, [open])
 
-  const selected = entries.find((e) => e.version === selectedVersion) ?? entries[0];
-  const latestReleaseVersion = data.releases[0]?.version;
+  const selected = entries.find((e) => e.version === selectedVersion) ?? entries[0]
+  const latestReleaseVersion = data.releases[0]?.version
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -88,7 +81,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
         <DialogHeader className="px-6 pt-5 pb-3">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            最近更新
+            What's New
           </DialogTitle>
         </DialogHeader>
         <Separator />
@@ -97,8 +90,8 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
             <ScrollArea className="h-full">
               <ul className="p-2 space-y-0.5">
                 {entries.map((entry) => {
-                  const isCurrent = entry.version === 'current';
-                  const isSelected = selectedVersion === entry.version;
+                  const isCurrent = entry.version === 'current'
+                  const isSelected = selectedVersion === entry.version
                   return (
                     <li key={entry.version}>
                       <button
@@ -110,12 +103,10 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium truncate">
-                            {formatEntryLabel(entry)}
-                          </span>
+                          <span className="font-medium truncate">{formatEntryLabel(entry)}</span>
                           {isCurrent && (
                             <span className="text-[10px] uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">
-                              新
+                              New
                             </span>
                           )}
                         </div>
@@ -124,7 +115,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
                         </div>
                       </button>
                     </li>
-                  );
+                  )
                 })}
               </ul>
             </ScrollArea>
@@ -135,74 +126,45 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
         </div>
         <Separator />
         <div className="px-6 py-3 flex justify-between items-center text-xs text-muted-foreground">
-          <span>{latestReleaseVersion ? `版本发布：v${latestReleaseVersion}` : '预发布版本'}</span>
+          <span>{latestReleaseVersion ? `Released: v${latestReleaseVersion}` : 'Pre-release'}</span>
           <a
             href={`${GITHUB_REPO_URL}/blob/main/CHANGELOG.md`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 hover:text-foreground hover:underline"
           >
-            完整更新日志
+            Full changelog
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
   return (
     <div className="px-6 py-5 space-y-6">
-      <header className="space-y-1">
-        <h2 className="text-lg font-semibold">{formatEntryLabel(entry)}</h2>
-        <p className="text-sm text-muted-foreground">{formatEntrySubtitle(entry)}</p>
-      </header>
-
-      {entry.highlights && entry.highlights.length > 0 && (
-        <section className="rounded-lg border bg-primary/5 p-4 space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-primary">
-            重点内容
-          </h3>
-          <ul className="space-y-1.5">
-            {entry.highlights.map((highlight, i) => (
-              <li key={i} className="flex gap-2 text-sm">
-                <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                <span>{highlight}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {GROUP_ORDER.map((groupKey) => {
-        const items = entry.groups[groupKey];
-        if (!items || items.length === 0) return null;
-        const { label, icon: Icon } = GROUP_CONFIG[groupKey];
+        const items = entry.groups[groupKey]
+        if (!items || items.length === 0) return null
+        const { label, icon: Icon } = GROUP_CONFIG[groupKey]
         return (
-          <section key={groupKey} className="space-y-2">
-            <h3 className="flex items-center gap-2 text-sm font-semibold">
-              <Icon className="h-4 w-4 text-muted-foreground" />
+          <section key={groupKey} className="space-y-2.5">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Icon className="h-3.5 w-3.5" />
               {label}
             </h3>
-            <ul className="space-y-1.5 pl-6">
+            <ul className="space-y-1.5 list-disc pl-5 marker:text-muted-foreground/60">
               {items.map((item, i) => (
-                <li key={i} className="text-sm flex gap-2">
-                  <span className="text-muted-foreground shrink-0">•</span>
-                  <span>
-                    {item.scope && (
-                      <span className="text-xs text-muted-foreground font-mono mr-1.5">
-                        {item.scope}
-                      </span>
-                    )}
-                    {item.title}
-                  </span>
+                <li key={i} className="text-xs leading-relaxed">
+                  {capitalize(item.title)}
                 </li>
               ))}
             </ul>
           </section>
-        );
+        )
       })}
     </div>
-  );
+  )
 }

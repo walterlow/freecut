@@ -1,10 +1,10 @@
-import type { GpuEffectDefinition } from '../types';
+import type { GpuEffectDefinition } from '../types'
 import {
   GPU_CURVES_CHANNELS,
   getDefaultGpuCurvesChannelControl,
   getGpuCurvesChannelParamKeys,
   readGpuCurvesChannelControl,
-} from '@/shared/utils/gpu-curves';
+} from '@/shared/utils/gpu-curves'
 
 export const brightness: GpuEffectDefinition = {
   id: 'gpu-brightness',
@@ -24,10 +24,18 @@ fn brightnessFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(adjusted, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0, min: -1, max: 1, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0,
+      min: -1,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.amount as number ?? 0, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.amount as number) ?? 0, 0, 0, 0]),
+}
 
 export const contrast: GpuEffectDefinition = {
   id: 'gpu-contrast',
@@ -47,10 +55,18 @@ fn contrastFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(adjusted, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 1, min: 0, max: 3, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 1,
+      min: 0,
+      max: 3,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.amount as number ?? 1, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.amount as number) ?? 1, 0, 0, 0]),
+}
 
 export const exposure: GpuEffectDefinition = {
   id: 'gpu-exposure',
@@ -72,14 +88,42 @@ fn exposureFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(adjusted, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    exposure: { type: 'number', label: 'Exposure (EV)', default: 0, min: -3, max: 3, step: 0.1, animatable: true },
-    offset: { type: 'number', label: 'Offset', default: 0, min: -0.5, max: 0.5, step: 0.01, animatable: true },
-    gamma: { type: 'number', label: 'Gamma', default: 1, min: 0.2, max: 3, step: 0.01, animatable: true },
+    exposure: {
+      type: 'number',
+      label: 'Exposure (EV)',
+      default: 0,
+      min: -3,
+      max: 3,
+      step: 0.1,
+      animatable: true,
+    },
+    offset: {
+      type: 'number',
+      label: 'Offset',
+      default: 0,
+      min: -0.5,
+      max: 0.5,
+      step: 0.01,
+      animatable: true,
+    },
+    gamma: {
+      type: 'number',
+      label: 'Gamma',
+      default: 1,
+      min: 0.2,
+      max: 3,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.exposure as number ?? 0, p.offset as number ?? 0, p.gamma as number ?? 1, 0,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.exposure as number) ?? 0,
+      (p.offset as number) ?? 0,
+      (p.gamma as number) ?? 1,
+      0,
+    ]),
+}
 
 export const hueShift: GpuEffectDefinition = {
   id: 'gpu-hue-shift',
@@ -100,10 +144,18 @@ fn hueShiftFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(hsv2rgb(hsv), color.a);
 }`,
   params: {
-    shift: { type: 'number', label: 'Shift', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
+    shift: {
+      type: 'number',
+      label: 'Shift',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.shift as number ?? 0, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.shift as number) ?? 0, 0, 0, 0]),
+}
 
 export const invert: GpuEffectDefinition = {
   id: 'gpu-invert',
@@ -121,7 +173,7 @@ fn invertFragment(input: VertexOutput) -> @location(0) vec4f {
 }`,
   params: {},
   packUniforms: () => null,
-};
+}
 
 export const levels: GpuEffectDefinition = {
   id: 'gpu-levels',
@@ -148,17 +200,64 @@ fn levelsFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(adjusted, color.a);
 }`,
   params: {
-    inputBlack: { type: 'number', label: 'Input Black', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    inputWhite: { type: 'number', label: 'Input White', default: 1, min: 0, max: 1, step: 0.01, animatable: true },
-    gamma: { type: 'number', label: 'Gamma', default: 1, min: 0.1, max: 3, step: 0.01, animatable: true },
-    outputBlack: { type: 'number', label: 'Output Black', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    outputWhite: { type: 'number', label: 'Output White', default: 1, min: 0, max: 1, step: 0.01, animatable: true },
+    inputBlack: {
+      type: 'number',
+      label: 'Input Black',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    inputWhite: {
+      type: 'number',
+      label: 'Input White',
+      default: 1,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    gamma: {
+      type: 'number',
+      label: 'Gamma',
+      default: 1,
+      min: 0.1,
+      max: 3,
+      step: 0.01,
+      animatable: true,
+    },
+    outputBlack: {
+      type: 'number',
+      label: 'Output Black',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    outputWhite: {
+      type: 'number',
+      label: 'Output White',
+      default: 1,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.inputBlack as number ?? 0, p.inputWhite as number ?? 1, p.gamma as number ?? 1,
-    p.outputBlack as number ?? 0, p.outputWhite as number ?? 1, 0, 0, 0,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.inputBlack as number) ?? 0,
+      (p.inputWhite as number) ?? 1,
+      (p.gamma as number) ?? 1,
+      (p.outputBlack as number) ?? 0,
+      (p.outputWhite as number) ?? 1,
+      0,
+      0,
+      0,
+    ]),
+}
 
 export const saturation: GpuEffectDefinition = {
   id: 'gpu-saturation',
@@ -179,10 +278,18 @@ fn saturationFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(adjusted, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 1, min: 0, max: 3, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 1,
+      min: 0,
+      max: 3,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.amount as number ?? 1, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.amount as number) ?? 1, 0, 0, 0]),
+}
 
 export const temperature: GpuEffectDefinition = {
   id: 'gpu-temperature',
@@ -207,13 +314,28 @@ fn temperatureFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(adjusted, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    temperature: { type: 'number', label: 'Temperature', default: 0, min: -1, max: 1, step: 0.01, animatable: true },
-    tint: { type: 'number', label: 'Tint', default: 0, min: -1, max: 1, step: 0.01, animatable: true },
+    temperature: {
+      type: 'number',
+      label: 'Temperature',
+      default: 0,
+      min: -1,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    tint: {
+      type: 'number',
+      label: 'Tint',
+      default: 0,
+      min: -1,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.temperature as number ?? 0, p.tint as number ?? 0, 0, 0,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([(p.temperature as number) ?? 0, (p.tint as number) ?? 0, 0, 0]),
+}
 
 export const grayscale: GpuEffectDefinition = {
   id: 'gpu-grayscale',
@@ -234,10 +356,18 @@ fn grayscaleFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(adjusted, color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 1, min: 0, max: 1, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 1,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.amount as number ?? 1, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.amount as number) ?? 1, 0, 0, 0]),
+}
 
 export const sepia: GpuEffectDefinition = {
   id: 'gpu-sepia',
@@ -261,10 +391,18 @@ fn sepiaFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(adjusted, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 1, min: 0, max: 1, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 1,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.amount as number ?? 1, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.amount as number) ?? 1, 0, 0, 0]),
+}
 
 export const curves: GpuEffectDefinition = {
   id: 'gpu-curves',
@@ -385,31 +523,70 @@ fn curvesFragment(input: VertexOutput) -> @location(0) vec4f {
 }`,
   params: Object.fromEntries(
     GPU_CURVES_CHANNELS.flatMap((channel) => {
-      const keys = getGpuCurvesChannelParamKeys(channel);
-      const defaults = getDefaultGpuCurvesChannelControl();
-      const prefix = channel.charAt(0).toUpperCase() + channel.slice(1);
+      const keys = getGpuCurvesChannelParamKeys(channel)
+      const defaults = getDefaultGpuCurvesChannelControl()
+      const prefix = channel.charAt(0).toUpperCase() + channel.slice(1)
       return [
-        [keys.shadowX, { type: 'number', label: `${prefix} Shadow X`, default: defaults.shadow.x, min: 0, max: 1, step: 0.001, animatable: true }],
-        [keys.shadowY, { type: 'number', label: `${prefix} Shadow Y`, default: defaults.shadow.y, min: 0, max: 1, step: 0.001, animatable: true }],
-        [keys.highlightX, { type: 'number', label: `${prefix} Highlight X`, default: defaults.highlight.x, min: 0, max: 1, step: 0.001, animatable: true }],
-        [keys.highlightY, { type: 'number', label: `${prefix} Highlight Y`, default: defaults.highlight.y, min: 0, max: 1, step: 0.001, animatable: true }],
-      ];
+        [
+          keys.shadowX,
+          {
+            type: 'number',
+            label: `${prefix} Shadow X`,
+            default: defaults.shadow.x,
+            min: 0,
+            max: 1,
+            step: 0.001,
+            animatable: true,
+          },
+        ],
+        [
+          keys.shadowY,
+          {
+            type: 'number',
+            label: `${prefix} Shadow Y`,
+            default: defaults.shadow.y,
+            min: 0,
+            max: 1,
+            step: 0.001,
+            animatable: true,
+          },
+        ],
+        [
+          keys.highlightX,
+          {
+            type: 'number',
+            label: `${prefix} Highlight X`,
+            default: defaults.highlight.x,
+            min: 0,
+            max: 1,
+            step: 0.001,
+            animatable: true,
+          },
+        ],
+        [
+          keys.highlightY,
+          {
+            type: 'number',
+            label: `${prefix} Highlight Y`,
+            default: defaults.highlight.y,
+            min: 0,
+            max: 1,
+            step: 0.001,
+            animatable: true,
+          },
+        ],
+      ]
     }),
   ),
   packUniforms: (p) => {
-    const floats: number[] = [];
+    const floats: number[] = []
     for (const channel of GPU_CURVES_CHANNELS) {
-      const control = readGpuCurvesChannelControl(p, channel);
-      floats.push(
-        control.shadow.x,
-        control.shadow.y,
-        control.highlight.x,
-        control.highlight.y,
-      );
+      const control = readGpuCurvesChannelControl(p, channel)
+      floats.push(control.shadow.x, control.shadow.y, control.highlight.x, control.highlight.y)
     }
-    return new Float32Array(floats);
+    return new Float32Array(floats)
   },
-};
+}
 
 export const colorWheels: GpuEffectDefinition = {
   id: 'gpu-color-wheels',
@@ -458,24 +635,104 @@ fn colorWheelsFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(c, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    shadowsHue: { type: 'number', label: 'Shadows Hue', default: 0, min: 0, max: 360, step: 1, animatable: true },
-    shadowsAmount: { type: 'number', label: 'Shadows Amount', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    midtonesHue: { type: 'number', label: 'Midtones Hue', default: 0, min: 0, max: 360, step: 1, animatable: true },
-    midtonesAmount: { type: 'number', label: 'Midtones Amount', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    highlightsHue: { type: 'number', label: 'Highlights Hue', default: 0, min: 0, max: 360, step: 1, animatable: true },
-    highlightsAmount: { type: 'number', label: 'Highlights Amount', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    temperature: { type: 'number', label: 'Temperature', default: 0, min: -100, max: 100, step: 1, animatable: true },
-    tint: { type: 'number', label: 'Tint', default: 0, min: -100, max: 100, step: 1, animatable: true },
-    saturation: { type: 'number', label: 'Saturation', default: 0, min: -100, max: 100, step: 1, animatable: true },
+    shadowsHue: {
+      type: 'number',
+      label: 'Shadows Hue',
+      default: 0,
+      min: 0,
+      max: 360,
+      step: 1,
+      animatable: true,
+    },
+    shadowsAmount: {
+      type: 'number',
+      label: 'Shadows Amount',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    midtonesHue: {
+      type: 'number',
+      label: 'Midtones Hue',
+      default: 0,
+      min: 0,
+      max: 360,
+      step: 1,
+      animatable: true,
+    },
+    midtonesAmount: {
+      type: 'number',
+      label: 'Midtones Amount',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    highlightsHue: {
+      type: 'number',
+      label: 'Highlights Hue',
+      default: 0,
+      min: 0,
+      max: 360,
+      step: 1,
+      animatable: true,
+    },
+    highlightsAmount: {
+      type: 'number',
+      label: 'Highlights Amount',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    temperature: {
+      type: 'number',
+      label: 'Temperature',
+      default: 0,
+      min: -100,
+      max: 100,
+      step: 1,
+      animatable: true,
+    },
+    tint: {
+      type: 'number',
+      label: 'Tint',
+      default: 0,
+      min: -100,
+      max: 100,
+      step: 1,
+      animatable: true,
+    },
+    saturation: {
+      type: 'number',
+      label: 'Saturation',
+      default: 0,
+      min: -100,
+      max: 100,
+      step: 1,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.shadowsHue as number ?? 0, p.shadowsAmount as number ?? 0,
-    p.midtonesHue as number ?? 0, p.midtonesAmount as number ?? 0,
-    p.highlightsHue as number ?? 0, p.highlightsAmount as number ?? 0,
-    p.temperature as number ?? 0, p.tint as number ?? 0,
-    p.saturation as number ?? 0, 0, 0, 0,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.shadowsHue as number) ?? 0,
+      (p.shadowsAmount as number) ?? 0,
+      (p.midtonesHue as number) ?? 0,
+      (p.midtonesAmount as number) ?? 0,
+      (p.highlightsHue as number) ?? 0,
+      (p.highlightsAmount as number) ?? 0,
+      (p.temperature as number) ?? 0,
+      (p.tint as number) ?? 0,
+      (p.saturation as number) ?? 0,
+      0,
+      0,
+      0,
+    ]),
+}
 
 export const vibrance: GpuEffectDefinition = {
   id: 'gpu-vibrance',
@@ -500,7 +757,15 @@ fn vibranceFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(clamp(adjusted, vec3f(0.0), vec3f(1.0)), color.a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0, min: -1, max: 1, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0,
+      min: -1,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.amount as number ?? 0, 0, 0, 0]),
-};
+  packUniforms: (p) => new Float32Array([(p.amount as number) ?? 0, 0, 0, 0]),
+}

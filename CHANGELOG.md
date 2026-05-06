@@ -4,30 +4,99 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 <!-- Entries below are generated via the `changelog` skill. Newest first. -->
 
-## [Current] — week of 2026-04-13
-
-**Highlights**
-- Projects now live on disk in a workspace folder you choose
-- Per-clip pitch shift in semitones and cents
-- Floating six-band clip EQ panels
+## [Current] — week of 2026-04-27
 
 ### Added
-- Projects now live on disk in a workspace folder you choose
-- Multi-workspace support with waveform mirroring
-- Multi-select projects with marquee and bulk delete
-- Trash section with soft-delete, undo, and permanent delete
-- Legacy browser-storage migration progress banner
-- Per-clip pitch shift in semitones and cents
-- Compact DaVinci-style six-band clip EQ with floating panel
-- Mixer tuck handle to slide channel strips behind the bus
-- Separate project master bus from per-device monitor volume
+- Motion, iris, shape, and DaVinci-style wipe transition packs
+- Lens warp zoom transition
+- Liquid distort transition
+- Searchable transition preset picker
+- Tunable transition parameters in the properties panel
+- Transition placement controls with alignment-aware drops
+- Compound clips can now host transitions
+- Reset buttons on transition parameter sliders
+- Extract embedded subtitles from video files (works for MKVs over 2GB)
+- Subtitle segments on the timeline with live cue overlay during playback
+- Cue editor in the inspector with bold/italic/underline, positioning, and click-to-seek
+- Subtitle style presets, including a TikTok-style preset
+- Burn or embed subtitles in exports
+- Reverse playback for video, audio, and GPU effects
+- Reverse-aware exports preserve the reversed audio and video
+- Detect and remove silence across selected clips with preview overlay and ripple delete
 
 ### Fixed
-- Preview no longer fails when media blobs expire
+- Effect drag overlays no longer stick or hijack adjacent lanes
+- Transition preset selection syncs with the chosen direction
+- Removed the transition duration cap
+- Multi-channel audio downmixes to stereo with proper coefficients on export
+- Subtitle cues trim and split alongside their segment
+- Cue time inputs accept 4-digit seconds without truncating
+- Preview no longer drifts from stale player frames while paused
+- Paused scrub stays on the rendered path with sharp output
+
+### Improved
+- Subtitle cue editor stays responsive with hundreds of cues
+- Smoother playback start when entering a transition
+
+## [2026.04.20] — week of 2026-04-20 to 2026-04-26
+
+### Added
+- Stacked text spans for mixed-style titles
+- Text box backgrounds and scalable text presets
+- Richer text animation presets grouped by layout
+- Animated text previews in the runtime and editor
+- Promote span text controls and move preset selector to the inspector
+- Canvas snap system overhaul with visual guides
+- Video flip transforms (horizontal and vertical)
+- Transform anchors in preview and export
+- Anchor and flip controls keyframeable inside compound clips
+- Keyframeable color effect parameters
+- MOSS multilingual TTS in the browser
+- Replace Kitten TTS with Kokoro TTS
+- Collapsible AI panel sections
+- Import media from a direct URL
+- Dedup media imports and captions by content
+- Move scenes toggle next to search as a segmented control
+
+### Fixed
+- Animated crop renders correctly in exports
+- Curves effect now uses point-based S-curves
+- Compound clip hover preview renders through the canvas engine
+- Restore middle-click drag to resize the A/V divider from anywhere
+- Smooth live pitch preview on Semi Tones and Cents sliders
+- Pixel-snap audio volume line to avoid sub-pixel blur
+- Stop nested video black flashes from stale references
+- Project list no longer blanks with a spinner during edits
+- Add Effect picker no longer flashes on first open
+- Live-trim attached captions during regular trims
+- Batch playback speed undo as a single step
+
+## [2026.04.13] — week of 2026-04-13 to 2026-04-19
+
+### Added
+- Per-clip pitch shift in semitones and cents
+- Compact DaVinci-style six-band clip EQ with floating panels
+- Mixer tuck handle to slide channel strips behind the bus
+- Separate project master bus from per-device monitor volume
+- AI caption generation with timeline insertion
+- AI analysis indicators in the media library
+- Find scenes with a similar palette
+- Color mode with library palette grid
+- Scene browser hotkey
+- Projects now live on disk in a workspace folder you choose
+- Multi-workspace support with waveform mirroring
+- Multi-select projects with marquee, bulk delete, and double-click to open
+- Trash section with soft-delete, undo, and permanent delete
+- Legacy browser-storage migration progress banner
+- What's New dialog with weekly changelog viewer
+- Source monitor scrubbing matches timeline playback
+
+### Fixed
 - Disabled tracks remain editable and styled after reload
 - Pen mask tracks are now visible in classic timelines
-- Transitions stay aligned to source time across splits
 - Pen paths default to shapes with 5-second duration
+- Transitions stay aligned to source time across splits
+- Preview no longer fails when media blobs expire
 - UI accessibility, transition alpha, and viewport clamp fixes
 
 ### Improved
@@ -36,11 +105,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Smaller 960×540 proxy resolution with worker-side loading
 
 ## [2026.04.06] — week of 2026-04-06 to 2026-04-12
-
-**Highlights**
-- Unified clip EQ across preview, export, and editor
-- AI-powered captioning, text-to-speech music, and scene detection
-- Alt+C as alternate split-at-playhead shortcut
 
 ### Added
 - Clip EQ with five-band presets across preview and export
@@ -69,11 +133,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Frame-accurate source time snapping prevents skipped frames
 
 ## [2026.03.30] — week of 2026-03-30 to 2026-04-05
-
-**Highlights**
-- Nested compound clips with cycle detection
-- Local AI Text-to-Speech panel
-- AV1 codec export support
 
 ### Added
 - Nested compound clips with cycle detection and deep-nested rename/delete
@@ -107,11 +166,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Overlapping items on the same track now detected and prevented
 
 ## [2026.03.23] — week of 2026-03-23 to 2026-03-29
-
-**Highlights**
-- Full editing toolset: trim, ripple, rolling, slip, slide
-- Linked audio-video compound clips replace track groups
-- Floating mixer with stereo LED meters and real-time fader metering
 
 ### Added
 - Trim, ripple, rolling, slip, and slide tools with live previews
@@ -150,11 +204,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 ## [2026.03.16] — week of 2026-03-16 to 2026-03-22
 
-**Highlights**
-- Pen mode with canvas drop and mask editing
-- Audio transcription
-- GPU transitions migrated to WebGPU shaders
-
 ### Added
 - Pen mode with canvas drop, scopes, and interaction lock
 - Mask editing with in-panel keyframe editor
@@ -174,18 +223,11 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 ## [2026.03.09] — week of 2026-03-09 to 2026-03-15
 
-**Highlights**
-- New distort and stylize effects with color parameters
-
 ### Added
 - Distort and stylize effect family with color parameters
 - Structured wide-event logging across core features
 
 ## [2026.02.23] — week of 2026-02-23 to 2026-03-01
-
-**Highlights**
-- Timeline and preview performance overhaul
-- Export packet remux fast path
 
 ### Fixed
 - No more infinite retry storms on failed video source init
@@ -203,11 +245,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Chunked window optimizations for export, timeline, and waveforms
 
 ## [2026.02.16] — week of 2026-02-16 to 2026-02-22
-
-**Highlights**
-- Ripple, rolling, slip, and slide editing tools with 2-up previews
-- Font picker with searchable catalog and live preview
-- NLE-style waveforms and FCP-style transition bridge
 
 ### Added
 - Ripple edit tool with downstream clip shifting
@@ -246,11 +283,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 ## [2026.02.09] — week of 2026-02-09 to 2026-02-15
 
-**Highlights**
-- Pre-compositions with 1-level nesting
-- Track groups with gate behavior
-- Animatable volume and gain keyframes
-
 ### Added
 - Track groups with collapse, drag, and gate behavior
 - Source monitor with In/Out points and Insert/Overwrite editing
@@ -279,11 +311,6 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 - Filmstrip extraction throttled for lower CPU load
 
 ## [2026.02.02] — initial release
-
-**Highlights**
-- First public beta — multi-track video editor in the browser
-- Custom playback engine with WebGPU acceleration
-- Export via WebCodecs with client and server render modes
 
 ### Added
 - Multi-track timeline: drag, drop, trim, razor, zoom, snap

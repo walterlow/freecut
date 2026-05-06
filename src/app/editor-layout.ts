@@ -69,30 +69,30 @@ export const EDITOR_DENSITY_PRESETS = {
     timelineClipLabelRowHeight: 24,
     timelineWaveformRowHeight: 24,
   },
-} as const;
+} as const
 
-export type EditorDensityPresetName = keyof typeof EDITOR_DENSITY_PRESETS;
-export type EditorLayout = (typeof EDITOR_DENSITY_PRESETS)[EditorDensityPresetName];
-type LeftSidebarLayoutBounds = { leftSidebarMinWidth: number; leftSidebarMaxWidth: number };
-type RightSidebarLayoutBounds = { rightSidebarMinWidth: number; rightSidebarMaxWidth: number };
+export type EditorDensityPresetName = keyof typeof EDITOR_DENSITY_PRESETS
+export type EditorLayout = (typeof EDITOR_DENSITY_PRESETS)[EditorDensityPresetName]
+type LeftSidebarLayoutBounds = { leftSidebarMinWidth: number; leftSidebarMaxWidth: number }
+type RightSidebarLayoutBounds = { rightSidebarMinWidth: number; rightSidebarMaxWidth: number }
 
-export const DEFAULT_EDITOR_DENSITY_PRESET: EditorDensityPresetName = 'compact';
+export const DEFAULT_EDITOR_DENSITY_PRESET: EditorDensityPresetName = 'compact'
 
 export const EDITOR_DENSITY_OPTIONS = [
   { value: 'compact', label: '紧凑' },
   { value: 'default', label: '默认' },
 ] as const satisfies ReadonlyArray<{
-  value: EditorDensityPresetName;
-  label: string;
-}>;
+  value: EditorDensityPresetName
+  label: string
+}>
 
 export function getEditorLayout(
-  preset: EditorDensityPresetName = DEFAULT_EDITOR_DENSITY_PRESET
+  preset: EditorDensityPresetName = DEFAULT_EDITOR_DENSITY_PRESET,
 ): EditorLayout {
-  return EDITOR_DENSITY_PRESETS[preset];
+  return EDITOR_DENSITY_PRESETS[preset]
 }
 
-export const EDITOR_LAYOUT = getEditorLayout();
+export const EDITOR_LAYOUT = getEditorLayout()
 
 const EDITOR_LAYOUT_CSS_VAR_NAMES = {
   toolbarHeight: '--editor-toolbar-height',
@@ -114,7 +114,7 @@ const EDITOR_LAYOUT_CSS_VAR_NAMES = {
   timelineTrackHeight: '--editor-timeline-track-height',
   timelineClipLabelRowHeight: '--editor-timeline-clip-label-row-height',
   timelineWaveformRowHeight: '--editor-timeline-waveform-row-height',
-} as const;
+} as const
 
 export const EDITOR_LAYOUT_CSS_VALUES = {
   toolbarHeight: `var(${EDITOR_LAYOUT_CSS_VAR_NAMES.toolbarHeight})`,
@@ -136,7 +136,7 @@ export const EDITOR_LAYOUT_CSS_VALUES = {
   timelineTrackHeight: `var(${EDITOR_LAYOUT_CSS_VAR_NAMES.timelineTrackHeight})`,
   timelineClipLabelRowHeight: `var(${EDITOR_LAYOUT_CSS_VAR_NAMES.timelineClipLabelRowHeight})`,
   timelineWaveformRowHeight: `var(${EDITOR_LAYOUT_CSS_VAR_NAMES.timelineWaveformRowHeight})`,
-} as const;
+} as const
 
 export function getEditorLayoutCssVars(layout = EDITOR_LAYOUT): Record<string, string> {
   return {
@@ -159,72 +159,75 @@ export function getEditorLayoutCssVars(layout = EDITOR_LAYOUT): Record<string, s
     [EDITOR_LAYOUT_CSS_VAR_NAMES.timelineTrackHeight]: `${layout.timelineTrackHeight}px`,
     [EDITOR_LAYOUT_CSS_VAR_NAMES.timelineClipLabelRowHeight]: `${layout.timelineClipLabelRowHeight}px`,
     [EDITOR_LAYOUT_CSS_VAR_NAMES.timelineWaveformRowHeight]: `${layout.timelineWaveformRowHeight}px`,
-  };
+  }
 }
 
-export const EDITOR_LAYOUT_CSS_VARS = getEditorLayoutCssVars();
+export const EDITOR_LAYOUT_CSS_VARS = getEditorLayoutCssVars()
 
-const LEFT_SIDEBAR_MAX_VIEWPORT_RATIO = 0.45;
+const LEFT_SIDEBAR_MAX_VIEWPORT_RATIO = 0.45
 
 function clampSidebarWidth(width: number, bounds: { minWidth: number; maxWidth: number }): number {
-  return Math.min(bounds.maxWidth, Math.max(bounds.minWidth, width));
+  return Math.min(bounds.maxWidth, Math.max(bounds.minWidth, width))
 }
 
 function getViewportWidth(): number | null {
-  if (typeof window !== 'undefined' && Number.isFinite(window.innerWidth) && window.innerWidth > 0) {
-    return window.innerWidth;
+  if (
+    typeof window !== 'undefined' &&
+    Number.isFinite(window.innerWidth) &&
+    window.innerWidth > 0
+  ) {
+    return window.innerWidth
   }
 
   if (typeof document !== 'undefined') {
-    const documentWidth = document.documentElement?.clientWidth;
+    const documentWidth = document.documentElement?.clientWidth
     if (Number.isFinite(documentWidth) && documentWidth > 0) {
-      return documentWidth;
+      return documentWidth
     }
   }
 
-  return null;
+  return null
 }
 
 export function getLeftEditorSidebarBounds(
-  layoutOrPreset: EditorLayout | LeftSidebarLayoutBounds | EditorDensityPresetName = EDITOR_LAYOUT
+  layoutOrPreset: EditorLayout | LeftSidebarLayoutBounds | EditorDensityPresetName = EDITOR_LAYOUT,
 ): { minWidth: number; maxWidth: number } {
-  const layout = typeof layoutOrPreset === 'string'
-    ? getEditorLayout(layoutOrPreset)
-    : layoutOrPreset;
-  const viewportWidth = getViewportWidth();
-  const viewportMaxWidth = viewportWidth === null
-    ? layout.leftSidebarMaxWidth
-    : Math.floor(viewportWidth * LEFT_SIDEBAR_MAX_VIEWPORT_RATIO);
+  const layout =
+    typeof layoutOrPreset === 'string' ? getEditorLayout(layoutOrPreset) : layoutOrPreset
+  const viewportWidth = getViewportWidth()
+  const viewportMaxWidth =
+    viewportWidth === null
+      ? layout.leftSidebarMaxWidth
+      : Math.floor(viewportWidth * LEFT_SIDEBAR_MAX_VIEWPORT_RATIO)
 
   return {
     minWidth: layout.leftSidebarMinWidth,
     maxWidth: Math.max(layout.leftSidebarMinWidth, viewportMaxWidth),
-  };
+  }
 }
 
 export function getRightEditorSidebarBounds(
-  layoutOrPreset: EditorLayout | RightSidebarLayoutBounds | EditorDensityPresetName = EDITOR_LAYOUT
+  layoutOrPreset: EditorLayout | RightSidebarLayoutBounds | EditorDensityPresetName = EDITOR_LAYOUT,
 ): { minWidth: number; maxWidth: number } {
-  const layout = typeof layoutOrPreset === 'string'
-    ? getEditorLayout(layoutOrPreset)
-    : layoutOrPreset;
+  const layout =
+    typeof layoutOrPreset === 'string' ? getEditorLayout(layoutOrPreset) : layoutOrPreset
 
   return {
     minWidth: layout.rightSidebarMinWidth,
     maxWidth: layout.rightSidebarMaxWidth,
-  };
+  }
 }
 
 export function clampLeftEditorSidebarWidth(
   width: number,
-  layoutOrPreset: EditorLayout | EditorDensityPresetName = EDITOR_LAYOUT
+  layoutOrPreset: EditorLayout | EditorDensityPresetName = EDITOR_LAYOUT,
 ): number {
-  return clampSidebarWidth(width, getLeftEditorSidebarBounds(layoutOrPreset));
+  return clampSidebarWidth(width, getLeftEditorSidebarBounds(layoutOrPreset))
 }
 
 export function clampRightEditorSidebarWidth(
   width: number,
-  layoutOrPreset: EditorLayout | EditorDensityPresetName = EDITOR_LAYOUT
+  layoutOrPreset: EditorLayout | EditorDensityPresetName = EDITOR_LAYOUT,
 ): number {
-  return clampSidebarWidth(width, getRightEditorSidebarBounds(layoutOrPreset));
+  return clampSidebarWidth(width, getRightEditorSidebarBounds(layoutOrPreset))
 }

@@ -1,13 +1,13 @@
-"use client"
+'use client'
 
-import { Check, ChevronsUpDown } from "lucide-react"
-import * as React from "react"
+import { Check, ChevronsUpDown } from 'lucide-react'
+import * as React from 'react'
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { cn } from "@/shared/ui/cn"
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/shared/ui/cn'
 
 export interface ComboboxOption {
   value: string
@@ -32,28 +32,28 @@ export function Combobox({
   value,
   options,
   onValueChange,
-  placeholder = "Select an option",
-  searchPlaceholder = "Search...",
-  emptyMessage = "No results found.",
+  placeholder = 'Select an option',
+  searchPlaceholder = 'Search...',
+  emptyMessage = 'No results found.',
   disabled = false,
   className,
   triggerClassName,
   contentClassName,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = React.useState('')
   const deferredQuery = React.useDeferredValue(query)
   const triggerRef = React.useRef<HTMLButtonElement | null>(null)
   const [contentWidth, setContentWidth] = React.useState<number>()
 
   const selectedOption = React.useMemo(
     () => options.find((option) => option.value === value),
-    [options, value]
+    [options, value],
   )
 
   React.useEffect(() => {
     if (!open) {
-      setQuery("")
+      setQuery('')
       return
     }
 
@@ -68,7 +68,7 @@ export function Combobox({
 
     updateWidth()
 
-    if (typeof ResizeObserver === "undefined") {
+    if (typeof ResizeObserver === 'undefined') {
       return
     }
 
@@ -88,14 +88,12 @@ export function Combobox({
 
     return options.filter((option) => {
       const haystacks = [option.label, option.value, ...(option.keywords ?? [])]
-      return haystacks.some((entry) =>
-        entry.toLowerCase().includes(normalizedQuery)
-      )
+      return haystacks.some((entry) => entry.toLowerCase().includes(normalizedQuery))
     })
   }, [deferredQuery, options])
 
   return (
-    <div className={cn("w-full", className)}>
+    <div className={cn('w-full', className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -106,21 +104,19 @@ export function Combobox({
             aria-expanded={open}
             disabled={disabled}
             className={cn(
-              "h-9 w-full justify-between bg-transparent px-3 font-normal shadow-sm",
-              "hover:bg-transparent",
-              !selectedOption && "text-muted-foreground",
-              triggerClassName
+              'h-9 w-full justify-between bg-transparent px-3 font-normal shadow-sm',
+              'hover:bg-transparent',
+              !selectedOption && 'text-muted-foreground',
+              triggerClassName,
             )}
           >
-            <span className="truncate">
-              {selectedOption?.label ?? placeholder}
-            </span>
+            <span className="truncate">{selectedOption?.label ?? placeholder}</span>
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className={cn("p-0", contentClassName)}
+          className={cn('p-0', contentClassName)}
           style={contentWidth ? { width: contentWidth } : undefined}
         >
           <div className="border-b p-2">
@@ -148,8 +144,8 @@ export function Combobox({
                       role="option"
                       aria-selected={isSelected}
                       className={cn(
-                        "flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors",
-                        "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                        'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors',
+                        'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
                       )}
                       onClick={() => {
                         onValueChange(option.value)
@@ -159,8 +155,8 @@ export function Combobox({
                       <span className="truncate">{option.label}</span>
                       <Check
                         className={cn(
-                          "ml-2 h-4 w-4 shrink-0",
-                          isSelected ? "opacity-100" : "opacity-0"
+                          'ml-2 h-4 w-4 shrink-0',
+                          isSelected ? 'opacity-100' : 'opacity-0',
                         )}
                       />
                     </button>

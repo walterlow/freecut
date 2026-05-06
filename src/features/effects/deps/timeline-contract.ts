@@ -3,5 +3,5 @@
  * Effects modules should import timeline stores/actions from here.
  */
 
-export { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-export { useKeyframesStore } from '@/features/timeline/stores/keyframes-store';
+export { useTimelineStore } from '@/features/timeline/stores/timeline-store'
+export { useKeyframesStore } from '@/features/timeline/stores/keyframes-store'

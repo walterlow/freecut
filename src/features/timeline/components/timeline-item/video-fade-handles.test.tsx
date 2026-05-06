@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { VideoFadeHandles } from './video-fade-handles';
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vite-plus/test'
+import { VideoFadeHandles } from './video-fade-handles'
 
 describe('VideoFadeHandles', () => {
   it('renders both fade handles when the select tool is active', () => {
@@ -17,17 +17,17 @@ describe('VideoFadeHandles', () => {
         fadeOutLabel="Fade Out 0.60s"
         onFadeHandleMouseDown={vi.fn()}
         onFadeHandleDoubleClick={vi.fn()}
-      />
-    );
+      />,
+    )
 
-    expect(screen.getByRole('button', { name: '调整视频淡入' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '调整视频淡出' })).toBeInTheDocument();
-  });
+    expect(screen.getByRole('button', { name: 'Adjust video fade in' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Adjust video fade out' })).toBeInTheDocument()
+  })
 
   it('shows the hover label and prevents double-click from bubbling', () => {
-    const parentClick = vi.fn();
-    const parentDoubleClick = vi.fn();
-    const onFadeHandleDoubleClick = vi.fn();
+    const parentClick = vi.fn()
+    const parentDoubleClick = vi.fn()
+    const onFadeHandleDoubleClick = vi.fn()
 
     render(
       <div onClick={parentClick} onDoubleClick={parentDoubleClick}>
@@ -44,19 +44,19 @@ describe('VideoFadeHandles', () => {
           onFadeHandleMouseDown={vi.fn()}
           onFadeHandleDoubleClick={onFadeHandleDoubleClick}
         />
-      </div>
-    );
+      </div>,
+    )
 
-    const fadeInHandle = screen.getByRole('button', { name: '调整视频淡入' });
+    const fadeInHandle = screen.getByRole('button', { name: 'Adjust video fade in' })
 
-    fireEvent.mouseEnter(fadeInHandle);
-    expect(screen.getByText('Fade In 1.00s')).toBeInTheDocument();
+    fireEvent.mouseEnter(fadeInHandle)
+    expect(screen.getByText('Fade In 1.00s')).toBeInTheDocument()
 
-    fireEvent.click(fadeInHandle);
-    fireEvent.doubleClick(fadeInHandle);
+    fireEvent.click(fadeInHandle)
+    fireEvent.doubleClick(fadeInHandle)
 
-    expect(parentClick).not.toHaveBeenCalled();
-    expect(parentDoubleClick).not.toHaveBeenCalled();
-    expect(onFadeHandleDoubleClick).toHaveBeenCalledTimes(1);
-  });
-});
+    expect(parentClick).not.toHaveBeenCalled()
+    expect(parentDoubleClick).not.toHaveBeenCalled()
+    expect(onFadeHandleDoubleClick).toHaveBeenCalledTimes(1)
+  })
+})

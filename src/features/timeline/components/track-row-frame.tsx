@@ -1,20 +1,20 @@
-import type { MouseEvent, PropsWithChildren } from 'react';
-import { TRACK_SECTION_DIVIDER_HEIGHT } from '@/features/timeline/constants';
-import { cn } from '@/shared/ui/cn';
+import type { MouseEvent, PropsWithChildren } from 'react'
+import { TRACK_SECTION_DIVIDER_HEIGHT } from '@/features/timeline/constants'
+import { cn } from '@/shared/ui/cn'
 
 interface TrackRowFrameProps extends PropsWithChildren {
-  className?: string;
-  showTopDivider?: boolean;
-  hideBottomDivider?: boolean;
-  onResizeMouseDown?: (event: MouseEvent<HTMLButtonElement>) => void;
-  onResizeDoubleClick?: (event: MouseEvent<HTMLButtonElement>) => void;
-  resizeHandleLabel?: string;
-  resizeHandlePosition?: 'top' | 'bottom';
+  className?: string
+  showTopDivider?: boolean
+  hideBottomDivider?: boolean
+  onResizeMouseDown?: (event: MouseEvent<HTMLButtonElement>) => void
+  onResizeDoubleClick?: (event: MouseEvent<HTMLButtonElement>) => void
+  resizeHandleLabel?: string
+  resizeHandlePosition?: 'top' | 'bottom'
 }
 
 interface TrackSectionDividerProps {
-  className?: string;
-  onMouseDown?: (event: MouseEvent<HTMLButtonElement>) => void;
+  className?: string
+  onMouseDown?: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
 /**
@@ -30,7 +30,7 @@ export function TrackRowFrame({
   resizeHandleLabel,
   resizeHandlePosition = 'bottom',
 }: TrackRowFrameProps) {
-  const resizeHandlePositionClass = resizeHandlePosition === 'top' ? 'top-0' : 'bottom-0';
+  const resizeHandlePositionClass = resizeHandlePosition === 'top' ? 'top-0' : 'bottom-0'
 
   return (
     <div className={cn('relative', className)}>
@@ -55,7 +55,7 @@ export function TrackRowFrame({
           tabIndex={-1}
           className={cn(
             'absolute inset-x-0 z-30 h-[6px] cursor-row-resize bg-transparent focus-visible:outline-none',
-            resizeHandlePositionClass
+            resizeHandlePositionClass,
           )}
           aria-label={resizeHandleLabel ?? '调整轨道高度'}
           onMouseDown={onResizeMouseDown}
@@ -63,12 +63,15 @@ export function TrackRowFrame({
         />
       )}
     </div>
-  );
+  )
 }
 
 export function TrackSectionDivider({ className, onMouseDown }: TrackSectionDividerProps) {
   return (
-    <div className={cn('relative', className)} style={{ height: `${TRACK_SECTION_DIVIDER_HEIGHT}px` }}>
+    <div
+      className={cn('relative', className)}
+      style={{ height: `${TRACK_SECTION_DIVIDER_HEIGHT}px` }}
+    >
       <div
         aria-hidden="true"
         data-testid="track-row-section-divider"
@@ -86,5 +89,5 @@ export function TrackSectionDivider({ className, onMouseDown }: TrackSectionDivi
         />
       )}
     </div>
-  );
+  )
 }

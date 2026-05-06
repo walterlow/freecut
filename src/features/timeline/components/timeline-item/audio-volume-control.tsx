@@ -1,16 +1,17 @@
-import { memo, useEffect, useState, type RefObject } from 'react';
+import { memo, useEffect, useRef, useState, type RefObject } from 'react'
+import { FloatingReadout } from './floating-readout'
 
-const AUDIO_VOLUME_HOVER_ARM_DELAY_MS = 180;
+const AUDIO_VOLUME_HOVER_ARM_DELAY_MS = 180
 
 interface AudioVolumeControlProps {
-  trackLocked: boolean;
-  activeTool: string;
-  lineYPercent: number;
-  isEditing: boolean;
-  editLabel?: string | null;
-  editLabelRef?: RefObject<HTMLDivElement | null>;
-  onVolumeMouseDown: (e: React.MouseEvent) => void;
-  onVolumeDoubleClick: () => void;
+  trackLocked: boolean
+  activeTool: string
+  lineYPercent: number
+  isEditing: boolean
+  editLabel?: string | null
+  editLabelRef?: RefObject<HTMLElement | null>
+  onVolumeMouseDown: (e: React.MouseEvent) => void
+  onVolumeDoubleClick: () => void
 }
 
 export const AudioVolumeControl = memo(function AudioVolumeControl({
@@ -23,38 +24,40 @@ export const AudioVolumeControl = memo(function AudioVolumeControl({
   onVolumeMouseDown,
   onVolumeDoubleClick,
 }: AudioVolumeControlProps) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [isHoverArmed, setIsHoverArmed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false)
+  const [isHoverArmed, setIsHoverArmed] = useState(false)
+  const volumeHandleRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (isEditing) {
-      setIsHoverArmed(true);
-      return;
+      setIsHoverArmed(true)
+      return
     }
 
     if (!isHovered) {
-      setIsHoverArmed(false);
-      return;
+      setIsHoverArmed(false)
+      return
     }
 
     const timeoutId = window.setTimeout(() => {
-      setIsHoverArmed(true);
-    }, AUDIO_VOLUME_HOVER_ARM_DELAY_MS);
+      setIsHoverArmed(true)
+    }, AUDIO_VOLUME_HOVER_ARM_DELAY_MS)
 
     return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [isEditing, isHovered]);
+      window.clearTimeout(timeoutId)
+    }
+  }, [isEditing, isHovered])
 
-  const isDragEnabled = isEditing || isHoverArmed;
+  const isDragEnabled = isEditing || isHoverArmed
 
   if (trackLocked || activeTool !== 'select') {
-    return null;
+    return null
   }
 
   return (
     <div className="absolute inset-x-0 inset-y-0 pointer-events-none z-30">
       <button
+        ref={volumeHandleRef}
         type="button"
         className={`absolute left-0 right-0 h-2 -translate-y-1/2 pointer-events-auto touch-none ${isDragEnabled ? 'cursor-ns-resize' : 'cursor-default'}`}
         style={{ top: `var(--timeline-audio-volume-line-y, ${lineYPercent}%)` }}
@@ -62,26 +65,26 @@ export const AudioVolumeControl = memo(function AudioVolumeControl({
         onMouseLeave={() => setIsHovered(false)}
         onClick={(e) => {
           if (!isDragEnabled) {
-            return;
+            return
           }
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault()
+          e.stopPropagation()
         }}
         onMouseDown={(e) => {
           if (!isDragEnabled) {
-            return;
+            return
           }
 
-          e.preventDefault();
-          e.stopPropagation();
-          onVolumeMouseDown(e);
+          e.preventDefault()
+          e.stopPropagation()
+          onVolumeMouseDown(e)
         }}
         onDoubleClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault()
+          e.stopPropagation()
 
           if (isDragEnabled) {
-            onVolumeDoubleClick();
+            onVolumeDoubleClick()
           }
         }}
         tabIndex={-1}
@@ -89,14 +92,14 @@ export const AudioVolumeControl = memo(function AudioVolumeControl({
       />
 
       {isEditing && editLabel && (
-        <div
-          ref={editLabelRef}
-          className="absolute left-1/2 -translate-x-1/2 -translate-y-full rounded bg-slate-950/95 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-lg whitespace-nowrap"
-          style={{ top: `calc(var(--timeline-audio-volume-line-y, ${lineYPercent}%) - 10px)` }}
+        <FloatingReadout
+          anchorRef={volumeHandleRef}
+          measureKey={`${lineYPercent}:${editLabel}`}
+          offsetY={6}
         >
-          {editLabel}
-        </div>
+          <span ref={editLabelRef}>{editLabel}</span>
+        </FloatingReadout>
       )}
     </div>
-  );
-});
+  )
+})

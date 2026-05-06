@@ -1,15 +1,15 @@
 // React and external libraries
-import { useState, useCallback, useEffect, useRef, memo } from 'react';
+import { useState, useCallback, useEffect, useRef, memo } from 'react'
 
 // Stores and selectors
-import { useTimelineStore } from '../stores/timeline-store';
-import { useSelectionStore } from '@/shared/state/selection';
+import { useTimelineStore } from '../stores/timeline-store'
+import { useSelectionStore } from '@/shared/state/selection'
 
 // Utilities and hooks
-import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
+import { useTimelineZoomContext } from '../contexts/timeline-zoom-context'
 
 // Types
-import type { ProjectMarker } from '@/types/timeline';
+import type { ProjectMarker } from '@/types/timeline'
 
 /**
  * Timeline Project Markers Component
@@ -21,67 +21,70 @@ import type { ProjectMarker } from '@/types/timeline';
  * - Shows label tooltip on hover
  */
 export const TimelineProjectMarkers = memo(function TimelineProjectMarkers() {
-  const markers = useTimelineStore((s) => s.markers);
-  const updateMarker = useTimelineStore((s) => s.updateMarker);
-  const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
-  const selectMarker = useSelectionStore((s) => s.selectMarker);
-  const { frameToPixels, pixelsToFrame } = useTimelineZoomContext();
+  const markers = useTimelineStore((s) => s.markers)
+  const updateMarker = useTimelineStore((s) => s.updateMarker)
+  const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId)
+  const selectMarker = useSelectionStore((s) => s.selectMarker)
+  const { frameToPixels, pixelsToFrame } = useTimelineZoomContext()
 
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Use refs to avoid stale closures
-  const pixelsToFrameRef = useRef(pixelsToFrame);
-  const updateMarkerRef = useRef(updateMarker);
+  const pixelsToFrameRef = useRef(pixelsToFrame)
+  const updateMarkerRef = useRef(updateMarker)
 
   // Update refs when functions change
   useEffect(() => {
-    pixelsToFrameRef.current = pixelsToFrame;
-    updateMarkerRef.current = updateMarker;
-  }, [pixelsToFrame, updateMarker]);
+    pixelsToFrameRef.current = pixelsToFrame
+    updateMarkerRef.current = updateMarker
+  }, [pixelsToFrame, updateMarker])
 
   // Handle drag start and selection
-  const handleMouseDown = useCallback((e: React.MouseEvent, markerId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Select the marker (clears any clip selection)
-    selectMarker(markerId);
-    setDraggingId(markerId);
-  }, [selectMarker]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent, markerId: string) => {
+      e.preventDefault()
+      e.stopPropagation()
+      // Select the marker (clears any clip selection)
+      selectMarker(markerId)
+      setDraggingId(markerId)
+    },
+    [selectMarker],
+  )
 
   // Handle dragging
   useEffect(() => {
-    if (!draggingId) return;
+    if (!draggingId) return
 
-    const originalCursor = document.body.style.cursor;
-    document.body.style.cursor = 'grabbing';
+    const originalCursor = document.body.style.cursor
+    document.body.style.cursor = 'grabbing'
 
     const handleMouseMove = (e: MouseEvent) => {
-      const container = containerRef.current?.closest('.timeline-ruler');
-      if (!container) return;
+      const container = containerRef.current?.closest('.timeline-ruler')
+      if (!container) return
 
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const frame = Math.max(0, pixelsToFrameRef.current(x));
+      const rect = container.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const frame = Math.max(0, pixelsToFrameRef.current(x))
 
-      updateMarkerRef.current(draggingId, { frame });
-    };
+      updateMarkerRef.current(draggingId, { frame })
+    }
 
     const handleMouseUp = () => {
-      setDraggingId(null);
-    };
+      setDraggingId(null)
+    }
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = originalCursor;
-    };
-  }, [draggingId]);
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = originalCursor
+    }
+  }, [draggingId])
 
-  if (markers.length === 0) return null;
+  if (markers.length === 0) return null
 
   return (
     <div ref={containerRef} className="absolute inset-0 pointer-events-none">
@@ -97,23 +100,33 @@ export const TimelineProjectMarkers = memo(function TimelineProjectMarkers() {
         />
       ))}
     </div>
-  );
-});
+  )
+})
 
 interface MarkerIndicatorProps {
-  marker: ProjectMarker;
-  markerId: string;
-  leftPosition: number;
-  isDragging: boolean;
-  isSelected: boolean;
-  onMouseDown: (e: React.MouseEvent, markerId: string) => void;
+  marker: ProjectMarker
+  markerId: string
+  leftPosition: number
+  isDragging: boolean
+  isSelected: boolean
+  onMouseDown: (e: React.MouseEvent, markerId: string) => void
 }
 
-const MarkerIndicator = memo(function MarkerIndicator({ marker, markerId, leftPosition, isDragging, isSelected, onMouseDown }: MarkerIndicatorProps) {
+const MarkerIndicator = memo(function MarkerIndicator({
+  marker,
+  markerId,
+  leftPosition,
+  isDragging,
+  isSelected,
+  onMouseDown,
+}: MarkerIndicatorProps) {
   // Stable callback that passes markerId
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    onMouseDown(e, markerId);
-  }, [onMouseDown, markerId]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      onMouseDown(e, markerId)
+    },
+    [onMouseDown, markerId],
+  )
 
   return (
     <div
@@ -168,5 +181,5 @@ const MarkerIndicator = memo(function MarkerIndicator({ marker, markerId, leftPo
         }}
       />
     </div>
-  );
-});
+  )
+})

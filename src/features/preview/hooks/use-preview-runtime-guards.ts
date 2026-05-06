@@ -1,29 +1,27 @@
-import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
-import type { PreviewQuality } from '@/shared/state/playback';
-import { usePlaybackStore } from '@/shared/state/playback';
-import {
-  ADAPTIVE_PREVIEW_QUALITY_ENABLED,
-} from '../utils/preview-constants';
-import { createAdaptivePreviewQualityState } from '../utils/adaptive-preview-quality';
+import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import type { PreviewQuality } from '@/shared/state/playback'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { ADAPTIVE_PREVIEW_QUALITY_ENABLED } from '../utils/preview-constants'
+import { createAdaptivePreviewQualityState } from '../utils/adaptive-preview-quality'
 
 interface UsePreviewRuntimeGuardsParams {
-  isGizmoInteracting: boolean;
-  isGizmoInteractingRef: MutableRefObject<boolean>;
-  isPlaying: boolean;
-  adaptiveQualityCap: PreviewQuality;
-  setAdaptiveQualityCap: Dispatch<SetStateAction<PreviewQuality>>;
-  adaptiveQualityStateRef: MutableRefObject<ReturnType<typeof createAdaptivePreviewQualityState>>;
-  adaptiveFrameSampleRef: MutableRefObject<{ frame: number; tsMs: number } | null>;
+  isGizmoInteracting: boolean
+  isGizmoInteractingRef: MutableRefObject<boolean>
+  isPlaying: boolean
+  adaptiveQualityCap: PreviewQuality
+  setAdaptiveQualityCap: Dispatch<SetStateAction<PreviewQuality>>
+  adaptiveQualityStateRef: MutableRefObject<ReturnType<typeof createAdaptivePreviewQualityState>>
+  adaptiveFrameSampleRef: MutableRefObject<{ frame: number; tsMs: number } | null>
 }
 
 function clearPreviewFramePreservingViewedFrame() {
-  const playback = usePlaybackStore.getState();
-  if (playback.previewFrame === null) return;
+  const playback = usePlaybackStore.getState()
+  if (playback.previewFrame === null) return
 
   if (playback.currentFrame !== playback.previewFrame) {
-    playback.setCurrentFrame(playback.previewFrame);
+    playback.setCurrentFrame(playback.previewFrame)
   }
-  playback.setPreviewFrame(null);
+  playback.setPreviewFrame(null)
 }
 
 export function usePreviewRuntimeGuards({
@@ -35,39 +33,39 @@ export function usePreviewRuntimeGuards({
   adaptiveQualityStateRef,
   adaptiveFrameSampleRef,
 }: UsePreviewRuntimeGuardsParams) {
-  isGizmoInteractingRef.current = isGizmoInteracting;
+  isGizmoInteractingRef.current = isGizmoInteracting
 
   useEffect(() => {
-    clearPreviewFramePreservingViewedFrame();
-  }, []);
+    clearPreviewFramePreservingViewedFrame()
+  }, [])
 
   useEffect(() => {
-    if (!isGizmoInteracting) return;
+    if (!isGizmoInteracting) return
 
     // During active transform drags, clear stale hover-scrub state without
     // changing the viewed frame. This avoids a one-frame render source/frame jump.
-    clearPreviewFramePreservingViewedFrame();
-  }, [isGizmoInteracting]);
+    clearPreviewFramePreservingViewedFrame()
+  }, [isGizmoInteracting])
 
   useEffect(() => {
     if (!ADAPTIVE_PREVIEW_QUALITY_ENABLED) {
-      adaptiveFrameSampleRef.current = null;
-      adaptiveQualityStateRef.current = createAdaptivePreviewQualityState(1);
+      adaptiveFrameSampleRef.current = null
+      adaptiveQualityStateRef.current = createAdaptivePreviewQualityState(1)
       if (adaptiveQualityCap !== 1) {
-        setAdaptiveQualityCap(1);
+        setAdaptiveQualityCap(1)
       }
-      return;
+      return
     }
 
     if (isPlaying) {
-      adaptiveFrameSampleRef.current = null;
-      return;
+      adaptiveFrameSampleRef.current = null
+      return
     }
 
-    adaptiveFrameSampleRef.current = null;
-    adaptiveQualityStateRef.current = createAdaptivePreviewQualityState(1);
+    adaptiveFrameSampleRef.current = null
+    adaptiveQualityStateRef.current = createAdaptivePreviewQualityState(1)
     if (adaptiveQualityCap !== 1) {
-      setAdaptiveQualityCap(1);
+      setAdaptiveQualityCap(1)
     }
   }, [
     adaptiveFrameSampleRef,
@@ -75,5 +73,5 @@ export function usePreviewRuntimeGuards({
     adaptiveQualityStateRef,
     isPlaying,
     setAdaptiveQualityCap,
-  ]);
+  ])
 }

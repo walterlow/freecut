@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { TrimHandles } from './trim-handles';
-import { VideoFadeHandles } from './video-fade-handles';
-import { AudioFadeHandles } from './audio-fade-handles';
-import { AudioVolumeControl } from './audio-volume-control';
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vite-plus/test'
+import { TrimHandles } from './trim-handles'
+import { VideoFadeHandles } from './video-fade-handles'
+import { AudioFadeHandles } from './audio-fade-handles'
+import { AudioVolumeControl } from './audio-volume-control'
 
 describe('TrimHandles', () => {
   const defaultProps = {
@@ -25,38 +25,34 @@ describe('TrimHandles', () => {
     onTrimStart: vi.fn(),
     onJoinLeft: vi.fn(),
     onJoinRight: vi.fn(),
-  };
+  }
 
   it('fires onTrimStart on mousedown when the left handle is visible', () => {
-    const onTrimStart = vi.fn();
-    render(
-      <TrimHandles {...defaultProps} hoveredEdge="start" onTrimStart={onTrimStart} />
-    );
+    const onTrimStart = vi.fn()
+    render(<TrimHandles {...defaultProps} hoveredEdge="start" onTrimStart={onTrimStart} />)
 
-    const handles = document.querySelectorAll('[class*="absolute"][class*="left-0"]');
+    const handles = document.querySelectorAll('[class*="absolute"][class*="left-0"]')
     const leftHandle = Array.from(handles).find(
-      (el) => !el.classList.contains('pointer-events-none')
-    );
-    expect(leftHandle).toBeTruthy();
-    fireEvent.mouseDown(leftHandle!);
-    expect(onTrimStart).toHaveBeenCalledWith(expect.any(Object), 'start');
-  });
+      (el) => !el.classList.contains('pointer-events-none'),
+    )
+    expect(leftHandle).toBeTruthy()
+    fireEvent.mouseDown(leftHandle!)
+    expect(onTrimStart).toHaveBeenCalledWith(expect.any(Object), 'start')
+  })
 
   it('fires onTrimStart on mousedown when the right handle is visible', () => {
-    const onTrimStart = vi.fn();
-    render(
-      <TrimHandles {...defaultProps} hoveredEdge="end" onTrimStart={onTrimStart} />
-    );
+    const onTrimStart = vi.fn()
+    render(<TrimHandles {...defaultProps} hoveredEdge="end" onTrimStart={onTrimStart} />)
 
-    const handles = document.querySelectorAll('[class*="absolute"][class*="right-0"]');
+    const handles = document.querySelectorAll('[class*="absolute"][class*="right-0"]')
     const rightHandle = Array.from(handles).find(
-      (el) => !el.classList.contains('pointer-events-none')
-    );
-    expect(rightHandle).toBeTruthy();
-    fireEvent.mouseDown(rightHandle!);
-    expect(onTrimStart).toHaveBeenCalledWith(expect.any(Object), 'end');
-  });
-});
+      (el) => !el.classList.contains('pointer-events-none'),
+    )
+    expect(rightHandle).toBeTruthy()
+    fireEvent.mouseDown(rightHandle!)
+    expect(onTrimStart).toHaveBeenCalledWith(expect.any(Object), 'end')
+  })
+})
 
 /**
  * Regression test: overlay wrappers (video fade, audio fade, audio volume)
@@ -85,17 +81,17 @@ describe('overlay containers must not block trim handle events', () => {
         isEditing={false}
         onFadeHandleMouseDown={vi.fn()}
         onFadeHandleDoubleClick={vi.fn()}
-      />
-    );
+      />,
+    )
 
-    const root = container.firstElementChild!;
-    expect(root.className).toContain('pointer-events-none');
+    const root = container.firstElementChild!
+    expect(root.className).toContain('pointer-events-none')
     // Interactive buttons must opt back in
-    const buttons = screen.getAllByRole('button');
+    const buttons = screen.getAllByRole('button')
     for (const btn of buttons) {
-      expect(btn.className).toContain('pointer-events-auto');
+      expect(btn.className).toContain('pointer-events-auto')
     }
-  });
+  })
 
   it('VideoFadeHandles returns null for non-select tools so its parent wrapper alone remains', () => {
     const { container } = render(
@@ -109,12 +105,12 @@ describe('overlay containers must not block trim handle events', () => {
         isEditing={false}
         onFadeHandleMouseDown={vi.fn()}
         onFadeHandleDoubleClick={vi.fn()}
-      />
-    );
+      />,
+    )
 
     // Component returns null — no children
-    expect(container.firstElementChild).toBeNull();
-  });
+    expect(container.firstElementChild).toBeNull()
+  })
 
   it('AudioFadeHandles root is pointer-events-none', () => {
     const { container } = render(
@@ -131,16 +127,16 @@ describe('overlay containers must not block trim handle events', () => {
         onFadeHandleDoubleClick={vi.fn()}
         onFadeCurveDotMouseDown={vi.fn()}
         onFadeCurveDotDoubleClick={vi.fn()}
-      />
-    );
+      />,
+    )
 
-    const root = container.firstElementChild!;
-    expect(root.className).toContain('pointer-events-none');
-    const buttons = screen.getAllByRole('button');
+    const root = container.firstElementChild!
+    expect(root.className).toContain('pointer-events-none')
+    const buttons = screen.getAllByRole('button')
     for (const btn of buttons) {
-      expect(btn.className).toContain('pointer-events-auto');
+      expect(btn.className).toContain('pointer-events-auto')
     }
-  });
+  })
 
   it('AudioVolumeControl root is pointer-events-none', () => {
     const { container } = render(
@@ -152,18 +148,18 @@ describe('overlay containers must not block trim handle events', () => {
         editLabel={null}
         onVolumeMouseDown={vi.fn()}
         onVolumeDoubleClick={vi.fn()}
-      />
-    );
+      />,
+    )
 
-    const root = container.firstElementChild!;
-    expect(root.className).toContain('pointer-events-none');
+    const root = container.firstElementChild!
+    expect(root.className).toContain('pointer-events-none')
     // The drag target opts back in
-    const button = screen.getByRole('button', { name: '调整片段音量' });
-    expect(button.className).toContain('pointer-events-auto');
-  });
+    const button = screen.getByRole('button', { name: 'Adjust clip volume' })
+    expect(button.className).toContain('pointer-events-auto')
+  })
 
   it('trim handle mousedown reaches handler even with sibling overlay wrapper', () => {
-    const onTrimStart = vi.fn();
+    const onTrimStart = vi.fn()
 
     // Simulate the DOM structure from the timeline item:
     // parent clip div → [overlay wrapper (z-30, pointer-events-none)] + [TrimHandles]
@@ -196,20 +192,20 @@ describe('overlay containers must not block trim handle events', () => {
           onJoinLeft={vi.fn()}
           onJoinRight={vi.fn()}
         />
-      </div>
-    );
+      </div>,
+    )
 
     // The overlay wrapper must not intercept the event
-    const overlayWrapper = screen.getByTestId('overlay-wrapper');
-    expect(overlayWrapper.className).toContain('pointer-events-none');
+    const overlayWrapper = screen.getByTestId('overlay-wrapper')
+    expect(overlayWrapper.className).toContain('pointer-events-none')
 
     // Find the visible trim handle and fire mouseDown
-    const handles = document.querySelectorAll('[class*="absolute"][class*="left-0"]');
+    const handles = document.querySelectorAll('[class*="absolute"][class*="left-0"]')
     const leftHandle = Array.from(handles).find(
-      (el) => !el.classList.contains('pointer-events-none') && !el.classList.contains('opacity-0')
-    );
-    expect(leftHandle).toBeTruthy();
-    fireEvent.mouseDown(leftHandle!);
-    expect(onTrimStart).toHaveBeenCalledWith(expect.any(Object), 'start');
-  });
-});
+      (el) => !el.classList.contains('pointer-events-none') && !el.classList.contains('opacity-0'),
+    )
+    expect(leftHandle).toBeTruthy()
+    fireEvent.mouseDown(leftHandle!)
+    expect(onTrimStart).toHaveBeenCalledWith(expect.any(Object), 'start')
+  })
+})

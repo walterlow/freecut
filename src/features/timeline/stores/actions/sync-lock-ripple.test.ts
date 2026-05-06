@@ -1,15 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline';
-import type { Transition } from '@/types/transition';
+import { beforeEach, describe, expect, it } from 'vite-plus/test'
+import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import type { Transition } from '@/types/transition'
 import {
   buildInsertedGapPreviewUpdatesForSyncLockedTracks,
   buildRemovedIntervalPreviewUpdatesForSyncLockedTracks,
   propagateInsertedGapToSyncLockedTracks,
   propagateRemovedIntervalsToSyncLockedTracks,
-} from './sync-lock-ripple';
-import { applyTransitionRepairs } from './shared';
-import { useItemsStore } from '../items-store';
-import { useTransitionsStore } from '../transitions-store';
+} from './sync-lock-ripple'
+import { applyTransitionRepairs } from './shared'
+import { useItemsStore } from '../items-store'
+import { useTransitionsStore } from '../transitions-store'
 
 function makeTrack(
   overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>,
@@ -24,7 +24,7 @@ function makeTrack(
     volume: 0,
     items: [],
     ...overrides,
-  };
+  }
 }
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
@@ -38,7 +38,7 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
     src: 'blob:video',
     mediaId: 'media-video',
     ...overrides,
-  };
+  }
 }
 
 function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
@@ -52,7 +52,7 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
     src: 'blob:audio',
     mediaId: 'media-audio',
     ...overrides,
-  };
+  }
 }
 
 function makeTransition(overrides: Partial<Transition> = {}): Transition {
@@ -66,15 +66,15 @@ function makeTransition(overrides: Partial<Transition> = {}): Transition {
     trackId: 'video-track',
     durationInFrames: 10,
     ...overrides,
-  };
+  }
 }
 
 describe('sync-lock ripple preview helpers', () => {
   beforeEach(() => {
-    useItemsStore.getState().setTracks([]);
-    useItemsStore.getState().setItems([]);
-    useTransitionsStore.getState().setTransitions([]);
-  });
+    useItemsStore.getState().setTracks([])
+    useItemsStore.getState().setItems([])
+    useTransitionsStore.getState().setTransitions([])
+  })
 
   it('moves downstream clips on other sync-locked tracks during removed-interval preview', () => {
     const updates = buildRemovedIntervalPreviewUpdatesForSyncLockedTracks({
@@ -88,12 +88,10 @@ describe('sync-lock ripple preview helpers', () => {
       ],
       editedTrackIds: new Set(['video-track']),
       intervals: [{ start: 50, end: 60 }],
-    });
+    })
 
-    expect(updates).toEqual([
-      expect.objectContaining({ id: 'audio-after', from: 80 }),
-    ]);
-  });
+    expect(updates).toEqual([expect.objectContaining({ id: 'audio-after', from: 80 })])
+  })
 
   it('collapses a continuous sync-locked clip and hides fully covered clips during removed-interval preview', () => {
     const updates = buildRemovedIntervalPreviewUpdatesForSyncLockedTracks({
@@ -108,13 +106,15 @@ describe('sync-lock ripple preview helpers', () => {
       ],
       editedTrackIds: new Set(['video-track']),
       intervals: [{ start: 50, end: 60 }],
-    });
+    })
 
-    expect(updates).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'music-bed', durationInFrames: 110 }),
-      expect.objectContaining({ id: 'stinger', hidden: true }),
-    ]));
-  });
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'music-bed', durationInFrames: 110 }),
+        expect.objectContaining({ id: 'stinger', hidden: true }),
+      ]),
+    )
+  })
 
   it('opens a live gap on other sync-locked tracks during inserted-gap preview', () => {
     const updates = buildInsertedGapPreviewUpdatesForSyncLockedTracks({
@@ -130,13 +130,15 @@ describe('sync-lock ripple preview helpers', () => {
       editedTrackIds: new Set(['video-track']),
       cutFrame: 50,
       amount: 10,
-    });
+    })
 
-    expect(updates).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'music-bed', durationInFrames: 130 }),
-      expect.objectContaining({ id: 'audio-after', from: 70 }),
-    ]));
-  });
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'music-bed', durationInFrames: 130 }),
+        expect.objectContaining({ id: 'audio-after', from: 70 }),
+      ]),
+    )
+  })
 
   it('skips tracks with sync lock disabled in preview helpers', () => {
     const updates = buildRemovedIntervalPreviewUpdatesForSyncLockedTracks({
@@ -150,16 +152,18 @@ describe('sync-lock ripple preview helpers', () => {
       ],
       editedTrackIds: new Set(['video-track']),
       intervals: [{ start: 50, end: 60 }],
-    });
+    })
 
-    expect(updates).toEqual([]);
-  });
+    expect(updates).toEqual([])
+  })
 
   it('preserves transitions when sync lock splits a transitioned clip', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'edited-track', name: 'Edited', order: 0, kind: 'audio' }),
-      makeTrack({ id: 'video-track', name: 'V1', order: 1, kind: 'video' }),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'edited-track', name: 'Edited', order: 0, kind: 'audio' }),
+        makeTrack({ id: 'video-track', name: 'V1', order: 1, kind: 'video' }),
+      ])
     useItemsStore.getState().setItems([
       makeAudioItem({ id: 'edited-anchor', trackId: 'edited-track', durationInFrames: 30 }),
       makeVideoItem({
@@ -180,56 +184,71 @@ describe('sync-lock ripple preview helpers', () => {
         sourceEnd: 50,
         sourceDuration: 120,
       }),
-    ]);
-    useTransitionsStore.getState().setTransitions([
-      makeTransition(),
-    ]);
+    ])
+    useTransitionsStore.getState().setTransitions([makeTransition()])
 
     const result = propagateRemovedIntervalsToSyncLockedTracks({
       editedTrackIds: new Set(['edited-track']),
       intervals: [{ start: 20, end: 40 }],
-    });
-    applyTransitionRepairs(result.affectedIds, new Set(result.removedIds));
+    })
+    applyTransitionRepairs(result.affectedIds, new Set(result.removedIds))
 
-    const transitions = useTransitionsStore.getState().transitions;
-    const splitTail = useItemsStore.getState().items.find((item) =>
-      item.trackId === 'video-track'
-      && item.id !== 'video-1'
-      && item.id !== 'video-2'
-    );
+    const transitions = useTransitionsStore.getState().transitions
+    const splitTail = useItemsStore
+      .getState()
+      .items.find(
+        (item) => item.trackId === 'video-track' && item.id !== 'video-1' && item.id !== 'video-2',
+      )
 
-    expect(splitTail).toBeDefined();
-    expect(splitTail).toMatchObject({ from: 20, durationInFrames: 20 });
+    expect(splitTail).toBeDefined()
+    expect(splitTail).toMatchObject({ from: 20, durationInFrames: 20 })
     expect(transitions).toEqual([
       expect.objectContaining({
         leftClipId: splitTail?.id,
         rightClipId: 'video-2',
       }),
-    ]);
-  });
+    ])
+  })
 
   it('clears linked groups when sync lock splits only one clip from a linked set', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'edited-track', name: 'Edited', order: 0, kind: 'audio' }),
-      makeTrack({ id: 'audio-track', name: 'A1', order: 1, kind: 'audio' }),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'edited-track', name: 'Edited', order: 0, kind: 'audio' }),
+        makeTrack({ id: 'audio-track', name: 'A1', order: 1, kind: 'audio' }),
+      ])
     useItemsStore.getState().setItems([
       makeAudioItem({ id: 'edited-anchor', trackId: 'edited-track', durationInFrames: 30 }),
-      makeAudioItem({ id: 'music-bed', trackId: 'audio-track', durationInFrames: 60, linkedGroupId: 'group-1' }),
-    ]);
+      makeAudioItem({
+        id: 'music-bed',
+        trackId: 'audio-track',
+        durationInFrames: 60,
+        linkedGroupId: 'group-1',
+      }),
+    ])
 
     propagateInsertedGapToSyncLockedTracks({
       editedTrackIds: new Set(['edited-track']),
       cutFrame: 20,
       amount: 10,
-    });
+    })
 
-    const splitSegments = useItemsStore.getState().items
-      .filter((item) => item.trackId === 'audio-track')
-      .sort((left, right) => left.from - right.from);
+    const splitSegments = useItemsStore
+      .getState()
+      .items.filter((item) => item.trackId === 'audio-track')
+      .sort((left, right) => left.from - right.from)
 
-    expect(splitSegments).toHaveLength(2);
-    expect(splitSegments[0]).toMatchObject({ id: 'music-bed', from: 0, durationInFrames: 20, linkedGroupId: undefined });
-    expect(splitSegments[1]).toMatchObject({ from: 30, durationInFrames: 40, linkedGroupId: undefined });
-  });
-});
+    expect(splitSegments).toHaveLength(2)
+    expect(splitSegments[0]).toMatchObject({
+      id: 'music-bed',
+      from: 0,
+      durationInFrames: 20,
+      linkedGroupId: undefined,
+    })
+    expect(splitSegments[1]).toMatchObject({
+      from: 30,
+      durationInFrames: 40,
+      linkedGroupId: undefined,
+    })
+  })
+})

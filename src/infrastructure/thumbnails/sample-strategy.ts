@@ -6,11 +6,11 @@
  * scene-boundary > content-aware > even distribution.
  */
 
-import type { SceneCut } from '@/infrastructure/analysis';
+import type { SceneCut } from '@/infrastructure/analysis'
 
 interface ClipBoundary {
-  from: number;
-  to: number;
+  from: number
+  to: number
 }
 
 /**
@@ -22,27 +22,25 @@ export function sampleBySceneBoundaries(
   totalFrames: number,
   maxSamples: number,
 ): number[] {
-  const boundaries = [0, ...sceneCuts.map((sc) => sc.frame), totalFrames];
-  const segments: Array<[number, number]> = [];
+  const boundaries = [0, ...sceneCuts.map((sc) => sc.frame), totalFrames]
+  const segments: Array<[number, number]> = []
   for (let i = 0; i < boundaries.length - 1; i++) {
-    const start = boundaries[i]!;
-    const end = boundaries[i + 1]!;
-    segments.push([start, end]);
+    const start = boundaries[i]!
+    const end = boundaries[i + 1]!
+    segments.push([start, end])
   }
 
-  let selectedSegments = segments;
+  let selectedSegments = segments
   if (segments.length > maxSamples) {
-    selectedSegments = [];
+    selectedSegments = []
     for (let i = 0; i < maxSamples; i++) {
-      const idx = Math.floor((i / maxSamples) * segments.length);
-      const seg = segments[idx];
-      if (seg) selectedSegments.push(seg);
+      const idx = Math.floor((i / maxSamples) * segments.length)
+      const seg = segments[idx]
+      if (seg) selectedSegments.push(seg)
     }
   }
 
-  return selectedSegments.map(([start, end]) =>
-    Math.floor((start + end) / 2)
-  );
+  return selectedSegments.map(([start, end]) => Math.floor((start + end) / 2))
 }
 
 /**
@@ -55,44 +53,41 @@ export function sampleByClipBoundaries(
   maxSamples: number,
 ): number[] {
   if (clips.length === 0) {
-    return sampleEvenDistribution(totalFrames, maxSamples);
+    return sampleEvenDistribution(totalFrames, maxSamples)
   }
 
-  const frames = new Set<number>();
+  const frames = new Set<number>()
 
   for (const clip of clips) {
-    frames.add(clip.from);
+    frames.add(clip.from)
   }
 
-  const budget = maxSamples - frames.size;
+  const budget = maxSamples - frames.size
   if (budget > 0) {
-    const step = totalFrames / (budget + 1);
+    const step = totalFrames / (budget + 1)
     for (let i = 1; i <= budget; i++) {
-      frames.add(Math.floor(i * step));
+      frames.add(Math.floor(i * step))
     }
   }
 
   return Array.from(frames)
     .filter((f) => f >= 0 && f < totalFrames)
     .sort((a, b) => a - b)
-    .slice(0, maxSamples);
+    .slice(0, maxSamples)
 }
 
 /**
  * Even distribution sampling: evenly spaced frames.
  * Fallback — no scene or clip data needed.
  */
-export function sampleEvenDistribution(
-  totalFrames: number,
-  maxSamples: number,
-): number[] {
-  if (totalFrames <= 0 || maxSamples <= 0) return [];
-  if (maxSamples === 1) return [Math.floor(totalFrames / 2)];
+export function sampleEvenDistribution(totalFrames: number, maxSamples: number): number[] {
+  if (totalFrames <= 0 || maxSamples <= 0) return []
+  if (maxSamples === 1) return [Math.floor(totalFrames / 2)]
 
-  const frames: number[] = [];
-  const step = totalFrames / maxSamples;
+  const frames: number[] = []
+  const step = totalFrames / maxSamples
   for (let i = 0; i < maxSamples; i++) {
-    frames.push(Math.floor(i * step + step / 2));
+    frames.push(Math.floor(i * step + step / 2))
   }
-  return frames;
+  return frames
 }

@@ -1,1 +1,1 @@
-export { PropertySection } from '@/shared/ui/property-controls/property-section';
+export { PropertySection } from '@/shared/ui/property-controls/property-section'

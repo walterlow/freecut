@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
-import type { SnapLine } from '../utils/canvas-snap-utils';
-import type { CoordinateParams } from '../types/gizmo';
-import { getEffectiveScale } from '../utils/coordinate-transform';
+import { useMemo } from 'react'
+import type { SnapLine } from '../utils/canvas-snap-utils'
+import type { CoordinateParams } from '../types/gizmo'
+import { getEffectiveScale } from '../utils/coordinate-transform'
 
 interface SnapGuidesProps {
-  snapLines: SnapLine[];
-  coordParams: CoordinateParams;
+  snapLines: SnapLine[]
+  coordParams: CoordinateParams
 }
 
 /**
@@ -13,17 +13,17 @@ interface SnapGuidesProps {
  * Shows colored lines across the canvas when items snap to edges or percentage positions.
  */
 export function SnapGuides({ snapLines, coordParams }: SnapGuidesProps) {
-  const scale = useMemo(() => getEffectiveScale(coordParams), [coordParams]);
+  const scale = useMemo(() => getEffectiveScale(coordParams), [coordParams])
 
   if (snapLines.length === 0) {
-    return null;
+    return null
   }
 
   return (
     <>
       {snapLines.map((line, index) => {
         // Convert canvas coordinate to screen coordinate
-        const screenPos = line.position * scale;
+        const screenPos = line.position * scale
 
         if (line.type === 'vertical') {
           return (
@@ -56,7 +56,7 @@ export function SnapGuides({ snapLines, coordParams }: SnapGuidesProps) {
                 </span>
               )}
             </div>
-          );
+          )
         }
 
         // Horizontal line
@@ -90,8 +90,8 @@ export function SnapGuides({ snapLines, coordParams }: SnapGuidesProps) {
               </span>
             )}
           </div>
-        );
+        )
       })}
     </>
-  );
+  )
 }

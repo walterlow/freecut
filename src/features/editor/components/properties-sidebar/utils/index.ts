@@ -1,1 +1,1 @@
-export { getMixedValue } from './mixed-value';
+export { getMixedValue } from './mixed-value'

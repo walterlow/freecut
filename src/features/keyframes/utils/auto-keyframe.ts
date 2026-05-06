@@ -1,36 +1,41 @@
-import type { AnimatableProperty, TransformAnimatableProperty, ItemKeyframes, EasingType } from '@/types/keyframe';
-import type { TimelineItem } from '@/types/timeline';
-import { isAutoKeyframeEnabled } from '../stores/auto-keyframe-store';
+import type {
+  AnimatableProperty,
+  TransformAnimatableProperty,
+  ItemKeyframes,
+  EasingType,
+} from '@/types/keyframe'
+import type { TimelineItem } from '@/types/timeline'
+import { isAutoKeyframeEnabled } from '../stores/auto-keyframe-store'
 
 export interface AutoKeyframeAddOperation {
-  type: 'add';
-  itemId: string;
-  property: AnimatableProperty;
-  frame: number;
-  value: number;
-  easing?: EasingType;
+  type: 'add'
+  itemId: string
+  property: AnimatableProperty
+  frame: number
+  value: number
+  easing?: EasingType
 }
 
 export interface AutoKeyframeUpdateOperation {
-  type: 'update';
-  itemId: string;
-  property: AnimatableProperty;
-  keyframeId: string;
-  updates: { value?: number };
+  type: 'update'
+  itemId: string
+  property: AnimatableProperty
+  keyframeId: string
+  updates: { value?: number }
 }
 
-export type AutoKeyframeOperation = AutoKeyframeAddOperation | AutoKeyframeUpdateOperation;
+export type AutoKeyframeOperation = AutoKeyframeAddOperation | AutoKeyframeUpdateOperation
 
 /**
  * Result of auto-keyframing a property
  */
 interface AutoKeyframeResult {
   /** Whether this property was auto-keyframed */
-  handled: boolean;
+  handled: boolean
   /** Action to perform: 'add' new keyframe or 'update' existing */
-  action?: 'add' | 'update';
+  action?: 'add' | 'update'
   /** Existing keyframe ID if updating */
-  existingKeyframeId?: string;
+  existingKeyframeId?: string
 }
 
 /**
@@ -43,24 +48,24 @@ function shouldAutoKeyframe(
   itemKeyframes: ItemKeyframes | undefined,
   property: AnimatableProperty,
   relativeFrame: number,
-  itemDurationInFrames: number
+  itemDurationInFrames: number,
 ): AutoKeyframeResult {
   // Frame is outside item bounds
   if (relativeFrame < 0 || relativeFrame >= itemDurationInFrames) {
-    return { handled: false };
+    return { handled: false }
   }
 
   // Find keyframes for this property
-  const propKeyframes = itemKeyframes?.properties.find((p) => p.property === property);
+  const propKeyframes = itemKeyframes?.properties.find((p) => p.property === property)
 
-  const existingKeyframe = propKeyframes?.keyframes.find((k) => k.frame === relativeFrame);
+  const existingKeyframe = propKeyframes?.keyframes.find((k) => k.frame === relativeFrame)
   if (existingKeyframe) {
-    return { handled: true, action: 'update', existingKeyframeId: existingKeyframe.id };
+    return { handled: true, action: 'update', existingKeyframeId: existingKeyframe.id }
   }
 
   return isAutoKeyframeEnabled(itemId, property)
     ? { handled: true, action: 'add' }
-    : { handled: false };
+    : { handled: false }
 }
 
 /**
@@ -72,19 +77,19 @@ export function getAutoKeyframeOperation(
   itemKeyframes: ItemKeyframes | undefined,
   property: AnimatableProperty,
   value: number,
-  currentFrame: number
+  currentFrame: number,
 ): AutoKeyframeOperation | null {
-  const relativeFrame = currentFrame - item.from;
+  const relativeFrame = currentFrame - item.from
   const result = shouldAutoKeyframe(
     item.id,
     itemKeyframes,
     property,
     relativeFrame,
-    item.durationInFrames
-  );
+    item.durationInFrames,
+  )
 
   if (!result.handled) {
-    return null;
+    return null
   }
 
   if (result.action === 'update' && result.existingKeyframeId) {
@@ -94,7 +99,7 @@ export function getAutoKeyframeOperation(
       property,
       keyframeId: result.existingKeyframeId,
       updates: { value },
-    };
+    }
   }
 
   return {
@@ -104,7 +109,7 @@ export function getAutoKeyframeOperation(
     frame: relativeFrame,
     value,
     easing: 'linear',
-  };
+  }
 }
 
 /**
@@ -117,27 +122,50 @@ export function autoKeyframeProperty(
   property: AnimatableProperty,
   value: number,
   currentFrame: number,
-  addKeyframe: (itemId: string, property: AnimatableProperty, frame: number, value: number, easing?: EasingType) => void,
-  updateKeyframe: (itemId: string, property: AnimatableProperty, keyframeId: string, updates: { value?: number }) => void
+  addKeyframe: (
+    itemId: string,
+    property: AnimatableProperty,
+    frame: number,
+    value: number,
+    easing?: EasingType,
+  ) => void,
+  updateKeyframe: (
+    itemId: string,
+    property: AnimatableProperty,
+    keyframeId: string,
+    updates: { value?: number },
+  ) => void,
 ): boolean {
-  const operation = getAutoKeyframeOperation(item, itemKeyframes, property, value, currentFrame);
+  const operation = getAutoKeyframeOperation(item, itemKeyframes, property, value, currentFrame)
   if (!operation) {
-    return false;
+    return false
   }
 
   if (operation.type === 'update') {
-    updateKeyframe(operation.itemId, operation.property, operation.keyframeId, operation.updates);
+    updateKeyframe(operation.itemId, operation.property, operation.keyframeId, operation.updates)
   } else {
-    addKeyframe(operation.itemId, operation.property, operation.frame, operation.value, operation.easing);
+    addKeyframe(
+      operation.itemId,
+      operation.property,
+      operation.frame,
+      operation.value,
+      operation.easing,
+    )
   }
 
-  return true;
+  return true
 }
 
 /**
  * Properties that can be animated via gizmo transforms
  */
-export const GIZMO_ANIMATABLE_PROPS: TransformAnimatableProperty[] = ['x', 'y', 'width', 'height', 'rotation'];
+export const GIZMO_ANIMATABLE_PROPS: TransformAnimatableProperty[] = [
+  'x',
+  'y',
+  'width',
+  'height',
+  'rotation',
+]
 
 /**
  * All animatable transform properties

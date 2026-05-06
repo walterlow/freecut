@@ -1,24 +1,24 @@
-﻿/**
+/**
  * Canvas Shape Rendering System
  *
  * Renders all shape types with full styling support for client-side export.
  * Leverages existing shape-path utilities and converts SVG paths to Path2D.
  */
 
-import type { ShapeItem } from '@/types/timeline';
-import type { ResolvedTransform } from '@/types/transform';
-import { getShapePath, rotatePath } from '@/features/export/deps/composition-runtime';
-import { svgPathToPath2D } from './canvas-masks';
-import { createLogger } from '@/shared/logging/logger';
+import type { ShapeItem } from '@/types/timeline'
+import type { ResolvedTransform } from '@/types/transform'
+import { getShapePath, rotatePath } from '@/features/export/deps/composition-runtime'
+import { svgPathToPath2D } from './canvas-masks'
+import { createLogger } from '@/shared/logging/logger'
 
-const log = createLogger('CanvasShapes');
+const log = createLogger('CanvasShapes')
 
 /**
  * Canvas dimensions for shape rendering
  */
 interface ShapeCanvasSettings {
-  width: number;
-  height: number;
+  width: number
+  height: number
 }
 
 /**
@@ -32,7 +32,7 @@ interface ShapeCanvasSettings {
 function getShapePath2D(
   shape: ShapeItem,
   transform: ResolvedTransform,
-  canvas: ShapeCanvasSettings
+  canvas: ShapeCanvasSettings,
 ): Path2D {
   // Use existing shape-path utility to generate SVG path
   const svgPath = getShapePath(
@@ -48,18 +48,18 @@ function getShapePath2D(
     {
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
-    }
-  );
+    },
+  )
 
   // Apply rotation by baking it into the path coordinates
-  let finalPath = svgPath;
+  let finalPath = svgPath
   if (transform.rotation !== 0) {
-    const centerX = canvas.width / 2 + transform.x;
-    const centerY = canvas.height / 2 + transform.y;
-    finalPath = rotatePath(svgPath, transform.rotation, centerX, centerY);
+    const centerX = canvas.width / 2 + transform.x
+    const centerY = canvas.height / 2 + transform.y
+    finalPath = rotatePath(svgPath, transform.rotation, centerX, centerY)
   }
 
-  return svgPathToPath2D(finalPath);
+  return svgPathToPath2D(finalPath)
 }
 
 /**
@@ -74,31 +74,31 @@ export function renderShape(
   ctx: OffscreenCanvasRenderingContext2D,
   shape: ShapeItem,
   transform: ResolvedTransform,
-  canvas: ShapeCanvasSettings
+  canvas: ShapeCanvasSettings,
 ): void {
   // Don't render masks as shapes - they're handled by the mask system
-  if (shape.isMask) return;
+  if (shape.isMask) return
 
-  ctx.save();
+  ctx.save()
 
   try {
     // Get the shape path
-    const path = getShapePath2D(shape, transform, canvas);
+    const path = getShapePath2D(shape, transform, canvas)
 
     // Apply opacity
-    ctx.globalAlpha = transform.opacity;
+    ctx.globalAlpha = transform.opacity
 
     // Fill the shape
     if (shape.fillColor) {
-      ctx.fillStyle = shape.fillColor;
-      ctx.fill(path);
+      ctx.fillStyle = shape.fillColor
+      ctx.fill(path)
     }
 
     // Stroke the shape
     if (shape.strokeWidth && shape.strokeWidth > 0 && shape.strokeColor) {
-      ctx.strokeStyle = shape.strokeColor;
-      ctx.lineWidth = shape.strokeWidth;
-      ctx.stroke(path);
+      ctx.strokeStyle = shape.strokeColor
+      ctx.lineWidth = shape.strokeWidth
+      ctx.stroke(path)
     }
 
     // Apply corner radius clipping if needed
@@ -108,10 +108,9 @@ export function renderShape(
       log.debug('Corner radius applied via shape path', {
         shapeId: shape.id,
         cornerRadius: transform.cornerRadius,
-      });
+      })
     }
   } finally {
-    ctx.restore();
+    ctx.restore()
   }
 }
-

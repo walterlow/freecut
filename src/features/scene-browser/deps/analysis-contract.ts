@@ -15,7 +15,7 @@ export {
   extractDominantColorPhrase,
   deltaE2000,
   rgbToLab,
-} from '@/infrastructure/analysis';
+} from '@/infrastructure/analysis'
 export type {
   EmbeddingsOptions,
   EmbeddingsProgress,
@@ -24,4 +24,4 @@ export type {
   TranscriptSegment,
   PaletteEntry,
   LabColor,
-} from '@/infrastructure/analysis';
+} from '@/infrastructure/analysis'

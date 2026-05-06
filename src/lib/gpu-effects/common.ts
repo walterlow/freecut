@@ -120,4 +120,4 @@ fn noise2d(p: vec2f) -> f32 {
     u.y
   );
 }
-`;
+`

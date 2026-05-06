@@ -2,4 +2,4 @@ export {
   mediaTranscriptionService,
   getMediaTranscriptionModelLabel,
   getMediaTranscriptionModelOptions,
-} from './media-library-contract';
+} from './media-library-contract'

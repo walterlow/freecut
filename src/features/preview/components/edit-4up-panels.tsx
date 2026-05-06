@@ -1,27 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
-import type { EditTwoUpPanelData } from './edit-2up-panels';
-import {
-  VideoFrame,
-  ImageFrame,
-  TypePlaceholder,
-} from './edit-2up-panels';
-import { useEditOverlayPanelPrewarm } from './use-edit-overlay-panel-prewarm';
-import type { TimelineItem } from '@/types/timeline';
+import { useEffect, useRef, useState } from 'react'
+import type { EditTwoUpPanelData } from './edit-2up-panels'
+import { VideoFrame, ImageFrame, TypePlaceholder } from './edit-2up-panels'
+import { useEditOverlayPanelPrewarm } from './use-edit-overlay-panel-prewarm'
+import type { TimelineItem } from '@/types/timeline'
 import {
   getItemAspectRatio,
   computeFittedMediaSize,
   renderPanelMedia,
-} from './edit-panel-media-utils';
+} from './edit-panel-media-utils'
 
-const TEXT_SPACE = 56;
-const GAP = 8;
-const CORNER_SCALE = 0.22;
+const TEXT_SPACE = 56
+const GAP = 8
+const CORNER_SCALE = 0.22
 
 interface EditFourUpPanelsProps {
-  leftPanel: EditTwoUpPanelData;
-  rightPanel: EditTwoUpPanelData;
-  topLeftCorner?: EditTwoUpPanelData;
-  topRightCorner?: EditTwoUpPanelData;
+  leftPanel: EditTwoUpPanelData
+  rightPanel: EditTwoUpPanelData
+  topLeftCorner?: EditTwoUpPanelData
+  topRightCorner?: EditTwoUpPanelData
 }
 
 export function EditFourUpPanels({
@@ -30,48 +26,45 @@ export function EditFourUpPanels({
   topLeftCorner,
   topRightCorner,
 }: EditFourUpPanelsProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
   useEditOverlayPanelPrewarm([
     leftPanel,
     rightPanel,
     topLeftCorner ?? { item: null },
     topRightCorner ?? { item: null },
-  ]);
+  ])
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const el = containerRef.current
+    if (!el) return
 
     const ro = new ResizeObserver(([entry]) => {
-      if (!entry) return;
-      const { width, height } = entry.contentRect;
+      if (!entry) return
+      const { width, height } = entry.contentRect
       setContainerSize((prev) =>
         prev.width === width && prev.height === height ? prev : { width, height },
-      );
-    });
+      )
+    })
 
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   if (containerSize.width <= 0 || containerSize.height <= 0) {
-    return <div ref={containerRef} className="absolute inset-0 z-30 bg-black" />;
+    return <div ref={containerRef} className="absolute inset-0 z-30 bg-black" />
   }
 
-  const panelWidth = Math.max((containerSize.width - GAP) / 2, 1);
-  const maxAreaHeight = containerSize.height - TEXT_SPACE;
+  const panelWidth = Math.max((containerSize.width - GAP) / 2, 1)
+  const maxAreaHeight = containerSize.height - TEXT_SPACE
 
-  const leftNatural = panelWidth / getItemAspectRatio(leftPanel.item);
-  const rightNatural = panelWidth / getItemAspectRatio(rightPanel.item);
-  const sharedAreaHeight = Math.max(
-    1,
-    Math.min(Math.max(leftNatural, rightNatural), maxAreaHeight),
-  );
+  const leftNatural = panelWidth / getItemAspectRatio(leftPanel.item)
+  const rightNatural = panelWidth / getItemAspectRatio(rightPanel.item)
+  const sharedAreaHeight = Math.max(1, Math.min(Math.max(leftNatural, rightNatural), maxAreaHeight))
 
   // Corner thumbnail sizing
-  const cornerWidth = Math.max(panelWidth * CORNER_SCALE, 1);
-  const cornerHeight = Math.max(cornerWidth / (16 / 9), 1);
+  const cornerWidth = Math.max(panelWidth * CORNER_SCALE, 1)
+  const cornerHeight = Math.max(cornerWidth / (16 / 9), 1)
 
   return (
     <div
@@ -103,18 +96,18 @@ export function EditFourUpPanels({
       <MainPanel data={leftPanel} areaHeight={sharedAreaHeight} panelWidth={panelWidth} />
       <MainPanel data={rightPanel} areaHeight={sharedAreaHeight} panelWidth={panelWidth} />
     </div>
-  );
+  )
 }
 
 interface MainPanelProps {
-  data: EditTwoUpPanelData;
-  areaHeight: number;
-  panelWidth: number;
+  data: EditTwoUpPanelData
+  areaHeight: number
+  panelWidth: number
 }
 
 function MainPanel({ data, areaHeight, panelWidth }: MainPanelProps) {
-  const ar = getItemAspectRatio(data.item);
-  const { mediaWidth, mediaHeight } = computeFittedMediaSize(panelWidth, areaHeight, ar);
+  const ar = getItemAspectRatio(data.item)
+  const { mediaWidth, mediaHeight } = computeFittedMediaSize(panelWidth, areaHeight, ar)
 
   return (
     <div className="flex-1 min-w-0 flex flex-col items-center justify-center">
@@ -144,22 +137,22 @@ function MainPanel({ data, areaHeight, panelWidth }: MainPanelProps) {
       </div>
       <span className="text-lg font-mono text-white/90 tabular-nums pt-1">{data.timecode}</span>
     </div>
-  );
+  )
 }
 
 interface CornerThumbnailProps {
-  item: TimelineItem;
-  sourceTime?: number;
-  width: number;
-  height: number;
-  position: 'top-left' | 'top-right';
+  item: TimelineItem
+  sourceTime?: number
+  width: number
+  height: number
+  position: 'top-left' | 'top-right'
 }
 
 function CornerThumbnail({ item, sourceTime, width, height, position }: CornerThumbnailProps) {
-  const isVideo = item.type === 'video';
-  const isImage = item.type === 'image';
+  const isVideo = item.type === 'video'
+  const isImage = item.type === 'image'
 
-  const positionClass = position === 'top-left' ? 'left-2 top-2' : 'right-2 top-2';
+  const positionClass = position === 'top-left' ? 'left-2 top-2' : 'right-2 top-2'
 
   return (
     <div
@@ -178,5 +171,5 @@ function CornerThumbnail({ item, sourceTime, width, height, position }: CornerTh
         <TypePlaceholder type={item.type} text={item.type} />
       )}
     </div>
-  );
+  )
 }

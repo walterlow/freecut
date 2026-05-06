@@ -3,26 +3,26 @@
  * Renders background grid lines and axis labels for the value graph.
  */
 
-import { memo, useMemo } from 'react';
-import type { GraphViewport } from './types';
+import { memo, useMemo } from 'react'
+import type { GraphViewport } from './types'
 
 interface GraphGridProps {
   /** Viewport dimensions and range */
-  viewport: GraphViewport;
+  viewport: GraphViewport
   /** Padding inside the graph area */
-  padding: { top: number; right: number; bottom: number; left: number };
+  padding: { top: number; right: number; bottom: number; left: number }
   /** Show axis labels */
-  showLabels?: boolean;
+  showLabels?: boolean
   /** Show X-axis (time) labels — set false when an external ruler provides them */
-  showXLabels?: boolean;
+  showXLabels?: boolean
   /** Major grid line interval for X (frames) */
-  xMajorInterval?: number;
+  xMajorInterval?: number
   /** Major grid line interval for Y (value) */
-  yMajorInterval?: number;
+  yMajorInterval?: number
   /** How to display the time ruler */
-  rulerUnit?: 'frames' | 'seconds';
+  rulerUnit?: 'frames' | 'seconds'
   /** FPS used when the ruler is shown in seconds */
-  fps?: number;
+  fps?: number
 }
 
 /**
@@ -39,90 +39,92 @@ export const GraphGrid = memo(function GraphGrid({
   rulerUnit = 'frames',
   fps = 30,
 }: GraphGridProps) {
-  const { width, height, startFrame, endFrame, minValue, maxValue } = viewport;
+  const { width, height, startFrame, endFrame, minValue, maxValue } = viewport
 
   // Calculate usable area
-  const graphLeft = padding.left;
-  const graphTop = padding.top;
-  const graphWidth = width - padding.left - padding.right;
-  const graphHeight = height - padding.top - padding.bottom;
+  const graphLeft = padding.left
+  const graphTop = padding.top
+  const graphWidth = width - padding.left - padding.right
+  const graphHeight = height - padding.top - padding.bottom
 
   // Calculate frame and value ranges
-  const frameRange = endFrame - startFrame;
-  const valueRange = maxValue - minValue;
+  const frameRange = endFrame - startFrame
+  const valueRange = maxValue - minValue
 
   // Auto-calculate intervals if not provided
   const xMajorInterval = useMemo(() => {
-    if (xMajorProp) return xMajorProp;
+    if (xMajorProp) return xMajorProp
     // Target ~5-10 major lines
-    const pixelsPerFrame = graphWidth / frameRange;
-    const targetSpacing = 80; // pixels
-    const roughInterval = targetSpacing / pixelsPerFrame;
+    const pixelsPerFrame = graphWidth / frameRange
+    const targetSpacing = 80 // pixels
+    const roughInterval = targetSpacing / pixelsPerFrame
     // Round to nice numbers
-    const magnitude = Math.pow(10, Math.floor(Math.log10(roughInterval)));
-    const normalized = roughInterval / magnitude;
-    if (normalized < 2) return magnitude;
-    if (normalized < 5) return 2 * magnitude;
-    return 5 * magnitude;
-  }, [xMajorProp, graphWidth, frameRange]);
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roughInterval)))
+    const normalized = roughInterval / magnitude
+    if (normalized < 2) return magnitude
+    if (normalized < 5) return 2 * magnitude
+    return 5 * magnitude
+  }, [xMajorProp, graphWidth, frameRange])
 
   const yMajorInterval = useMemo(() => {
-    if (yMajorProp) return yMajorProp;
+    if (yMajorProp) return yMajorProp
     // Nice intervals including 0.25 for opacity and 45/90/180 for rotation
-    const niceIntervals = [0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 45, 50, 90, 100, 180, 250, 500, 1000];
+    const niceIntervals = [0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 45, 50, 90, 100, 180, 250, 500, 1000]
     // Target 4-6 major lines
-    const targetLines = 5;
-    const idealInterval = valueRange / targetLines;
+    const targetLines = 5
+    const idealInterval = valueRange / targetLines
     // Find the smallest nice interval >= idealInterval
-    let bestInterval = niceIntervals[niceIntervals.length - 1];
+    let bestInterval = niceIntervals[niceIntervals.length - 1]
     for (const interval of niceIntervals) {
       if (interval >= idealInterval) {
-        bestInterval = interval;
-        break;
+        bestInterval = interval
+        break
       }
     }
-    return bestInterval;
-  }, [yMajorProp, valueRange]);
+    return bestInterval
+  }, [yMajorProp, valueRange])
 
   // Generate vertical grid lines (X axis - frames)
   const xLines = useMemo(() => {
-    const lines: Array<{ x: number; frame: number; isMajor: boolean }> = [];
-    const minorInterval = xMajorInterval / 5;
-    const firstFrame = Math.ceil(startFrame / minorInterval) * minorInterval;
+    const lines: Array<{ x: number; frame: number; isMajor: boolean }> = []
+    const minorInterval = xMajorInterval / 5
+    const firstFrame = Math.ceil(startFrame / minorInterval) * minorInterval
 
     for (let frame = firstFrame; frame <= endFrame; frame += minorInterval) {
-      const x = graphLeft + ((frame - startFrame) / frameRange) * graphWidth;
-      const isMajor = Math.abs(frame % xMajorInterval) < 0.01;
-      lines.push({ x, frame, isMajor });
+      const x = graphLeft + ((frame - startFrame) / frameRange) * graphWidth
+      const isMajor = Math.abs(frame % xMajorInterval) < 0.01
+      lines.push({ x, frame, isMajor })
     }
-    return lines;
-  }, [startFrame, endFrame, xMajorInterval, graphLeft, frameRange, graphWidth]);
+    return lines
+  }, [startFrame, endFrame, xMajorInterval, graphLeft, frameRange, graphWidth])
 
   // Generate horizontal grid lines (Y axis - values)
   const yLines = useMemo(() => {
-    if (!yMajorInterval) return [];
-    const lines: Array<{ y: number; value: number; isMajor: boolean }> = [];
+    if (!yMajorInterval) return []
+    const lines: Array<{ y: number; value: number; isMajor: boolean }> = []
     // For small intervals, skip minor lines to avoid clutter
-    const useMinorLines = yMajorInterval >= 1;
-    const minorInterval = useMinorLines ? yMajorInterval / 5 : yMajorInterval;
+    const useMinorLines = yMajorInterval >= 1
+    const minorInterval = useMinorLines ? yMajorInterval / 5 : yMajorInterval
 
     // Start from a clean multiple of the interval at or below minValue
-    const firstValue = Math.floor(minValue / minorInterval) * minorInterval;
+    const firstValue = Math.floor(minValue / minorInterval) * minorInterval
     // Use small epsilon for floating point comparison
-    const epsilon = minorInterval * 0.001;
+    const epsilon = minorInterval * 0.001
 
     for (let value = firstValue; value <= maxValue + epsilon; value += minorInterval) {
       // Snap to clean values to avoid floating point drift
-      const snappedValue = Math.round(value / minorInterval) * minorInterval;
-      if (snappedValue < minValue - epsilon || snappedValue > maxValue + epsilon) continue;
+      const snappedValue = Math.round(value / minorInterval) * minorInterval
+      if (snappedValue < minValue - epsilon || snappedValue > maxValue + epsilon) continue
 
-      const y = graphTop + (1 - (snappedValue - minValue) / valueRange) * graphHeight;
+      const y = graphTop + (1 - (snappedValue - minValue) / valueRange) * graphHeight
       // Check if major: value is a multiple of major interval
-      const isMajor = Math.abs(Math.round(snappedValue / yMajorInterval) * yMajorInterval - snappedValue) < epsilon;
-      lines.push({ y, value: snappedValue, isMajor });
+      const isMajor =
+        Math.abs(Math.round(snappedValue / yMajorInterval) * yMajorInterval - snappedValue) <
+        epsilon
+      lines.push({ y, value: snappedValue, isMajor })
     }
-    return lines;
-  }, [minValue, maxValue, yMajorInterval, graphTop, valueRange, graphHeight]);
+    return lines
+  }, [minValue, maxValue, yMajorInterval, graphTop, valueRange, graphHeight])
 
   return (
     <g className="graph-grid" style={{ pointerEvents: 'none' }}>
@@ -178,7 +180,8 @@ export const GraphGrid = memo(function GraphGrid({
       )}
 
       {/* X axis labels (hidden when external ruler provides them) */}
-      {showLabels && showXLabels &&
+      {showLabels &&
+        showXLabels &&
         xLines
           .filter((l) => l.isMajor)
           .map(({ x, frame }) => (
@@ -229,22 +232,22 @@ export const GraphGrid = memo(function GraphGrid({
         rx={4}
       />
     </g>
-  );
-});
+  )
+})
 
 function formatFrameLabel(frame: number, rulerUnit: 'frames' | 'seconds', fps: number): string {
   if (rulerUnit === 'frames' || fps <= 0) {
-    return String(Math.round(frame));
+    return String(Math.round(frame))
   }
 
-  const seconds = frame / fps;
+  const seconds = frame / fps
   if (seconds >= 60) {
-    const minutes = Math.floor(seconds / 60);
-    const remainder = seconds - minutes * 60;
-    return `${minutes}:${remainder.toFixed(1).padStart(4, '0')}`;
+    const minutes = Math.floor(seconds / 60)
+    const remainder = seconds - minutes * 60
+    return `${minutes}:${remainder.toFixed(1).padStart(4, '0')}`
   }
 
-  return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`;
+  return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`
 }
 
 /**
@@ -252,16 +255,16 @@ function formatFrameLabel(frame: number, rulerUnit: 'frames' | 'seconds', fps: n
  */
 function formatValue(value: number): string {
   if (Math.abs(value) >= 1000) {
-    return value.toFixed(0);
+    return value.toFixed(0)
   }
   if (Math.abs(value) >= 100) {
-    return value.toFixed(0);
+    return value.toFixed(0)
   }
   if (Math.abs(value) >= 10) {
-    return value.toFixed(1);
+    return value.toFixed(1)
   }
   if (Math.abs(value) >= 1) {
-    return value.toFixed(1);
+    return value.toFixed(1)
   }
-  return value.toFixed(2);
+  return value.toFixed(2)
 }

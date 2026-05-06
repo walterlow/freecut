@@ -1,1 +1,1 @@
-export { usePlaybackStore } from '@/shared/state/playback';
+export { usePlaybackStore } from '@/shared/state/playback'

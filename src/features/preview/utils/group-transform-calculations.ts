@@ -1,7 +1,7 @@
-import type { Transform, Point, BoundingBox, GroupTransformState } from '../types/gizmo';
-import { rotatePoint, getTransformCenter } from './coordinate-transform';
+import type { Transform, Point, BoundingBox, GroupTransformState } from '../types/gizmo'
+import { rotatePoint, getTransformCenter } from './coordinate-transform'
 
-const MIN_SIZE = 20;
+const MIN_SIZE = 20
 
 /**
  * Calculate the axis-aligned bounding box that encompasses all rotated items.
@@ -10,26 +10,26 @@ const MIN_SIZE = 20;
 export function calculateGroupBounds(
   transforms: Map<string, Transform>,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ): BoundingBox {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
 
   for (const transform of transforms.values()) {
     // Get item center in canvas coordinates
-    const center = getTransformCenter(transform, canvasWidth, canvasHeight);
-    const halfWidth = transform.width / 2;
-    const halfHeight = transform.height / 2;
+    const center = getTransformCenter(transform, canvasWidth, canvasHeight)
+    const halfWidth = transform.width / 2
+    const halfHeight = transform.height / 2
 
     // If no rotation, use simple bounds
     if (transform.rotation === 0) {
-      minX = Math.min(minX, center.x - halfWidth);
-      minY = Math.min(minY, center.y - halfHeight);
-      maxX = Math.max(maxX, center.x + halfWidth);
-      maxY = Math.max(maxY, center.y + halfHeight);
-      continue;
+      minX = Math.min(minX, center.x - halfWidth)
+      minY = Math.min(minY, center.y - halfHeight)
+      maxX = Math.max(maxX, center.x + halfWidth)
+      maxY = Math.max(maxY, center.y + halfHeight)
+      continue
     }
 
     // With rotation, calculate all 4 corners
@@ -38,14 +38,14 @@ export function calculateGroupBounds(
       { x: center.x + halfWidth, y: center.y - halfHeight },
       { x: center.x + halfWidth, y: center.y + halfHeight },
       { x: center.x - halfWidth, y: center.y + halfHeight },
-    ];
+    ]
 
     for (const corner of corners) {
-      const rotated = rotatePoint(corner, center, transform.rotation);
-      minX = Math.min(minX, rotated.x);
-      minY = Math.min(minY, rotated.y);
-      maxX = Math.max(maxX, rotated.x);
-      maxY = Math.max(maxY, rotated.y);
+      const rotated = rotatePoint(corner, center, transform.rotation)
+      minX = Math.min(minX, rotated.x)
+      minY = Math.min(minY, rotated.y)
+      maxX = Math.max(maxX, rotated.x)
+      maxY = Math.max(maxY, rotated.y)
     }
   }
 
@@ -56,7 +56,7 @@ export function calculateGroupBounds(
     bottom: maxY,
     width: maxX - minX,
     height: maxY - minY,
-  };
+  }
 }
 
 /**
@@ -66,28 +66,28 @@ export function initializeGroupState(
   itemIds: string[],
   transforms: Map<string, Transform>,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ): GroupTransformState {
-  const groupBounds = calculateGroupBounds(transforms, canvasWidth, canvasHeight);
+  const groupBounds = calculateGroupBounds(transforms, canvasWidth, canvasHeight)
   const groupCenter: Point = {
     x: (groupBounds.left + groupBounds.right) / 2,
     y: (groupBounds.top + groupBounds.bottom) / 2,
-  };
+  }
 
-  const itemOffsets = new Map<string, Point>();
-  const itemRotations = new Map<string, number>();
+  const itemOffsets = new Map<string, Point>()
+  const itemRotations = new Map<string, number>()
 
   for (const [id, transform] of transforms) {
     // Item center in canvas coordinates
-    const itemCenter = getTransformCenter(transform, canvasWidth, canvasHeight);
+    const itemCenter = getTransformCenter(transform, canvasWidth, canvasHeight)
 
     // Offset from group center
     itemOffsets.set(id, {
       x: itemCenter.x - groupCenter.x,
       y: itemCenter.y - groupCenter.y,
-    });
+    })
 
-    itemRotations.set(id, transform.rotation);
+    itemRotations.set(id, transform.rotation)
   }
 
   return {
@@ -97,7 +97,7 @@ export function initializeGroupState(
     itemTransforms: new Map(transforms),
     itemOffsets,
     itemRotations,
-  };
+  }
 }
 
 /**
@@ -106,19 +106,19 @@ export function initializeGroupState(
 export function applyGroupTranslation(
   groupState: GroupTransformState,
   deltaX: number,
-  deltaY: number
+  deltaY: number,
 ): Map<string, Transform> {
-  const result = new Map<string, Transform>();
+  const result = new Map<string, Transform>()
 
   for (const [id, startTransform] of groupState.itemTransforms) {
     result.set(id, {
       ...startTransform,
       x: startTransform.x + deltaX,
       y: startTransform.y + deltaY,
-    });
+    })
   }
 
-  return result;
+  return result
 }
 
 /**
@@ -131,34 +131,32 @@ export function applyGroupScale(
   scaleFactorY: number,
   canvasWidth: number,
   canvasHeight: number,
-  maintainAspectRatio: boolean = true
+  maintainAspectRatio: boolean = true,
 ): Map<string, Transform> {
-  const result = new Map<string, Transform>();
-  const { groupCenter, itemOffsets, itemTransforms } = groupState;
+  const result = new Map<string, Transform>()
+  const { groupCenter, itemOffsets, itemTransforms } = groupState
 
   // For aspect ratio lock, use uniform scale
-  const scaleFactor = maintainAspectRatio
-    ? Math.max(scaleFactorX, scaleFactorY)
-    : 1;
-  const finalScaleX = maintainAspectRatio ? scaleFactor : scaleFactorX;
-  const finalScaleY = maintainAspectRatio ? scaleFactor : scaleFactorY;
+  const scaleFactor = maintainAspectRatio ? Math.max(scaleFactorX, scaleFactorY) : 1
+  const finalScaleX = maintainAspectRatio ? scaleFactor : scaleFactorX
+  const finalScaleY = maintainAspectRatio ? scaleFactor : scaleFactorY
 
   // Enforce minimum scale to prevent collapse
-  const minScaleX = MIN_SIZE / Math.max(...Array.from(itemTransforms.values()).map(t => t.width));
-  const minScaleY = MIN_SIZE / Math.max(...Array.from(itemTransforms.values()).map(t => t.height));
-  const clampedScaleX = Math.max(minScaleX, finalScaleX);
-  const clampedScaleY = Math.max(minScaleY, finalScaleY);
+  const minScaleX = MIN_SIZE / Math.max(...Array.from(itemTransforms.values()).map((t) => t.width))
+  const minScaleY = MIN_SIZE / Math.max(...Array.from(itemTransforms.values()).map((t) => t.height))
+  const clampedScaleX = Math.max(minScaleX, finalScaleX)
+  const clampedScaleY = Math.max(minScaleY, finalScaleY)
 
   for (const [id, startTransform] of itemTransforms) {
-    const offset = itemOffsets.get(id)!;
+    const offset = itemOffsets.get(id)!
 
     // Scale the offset from group center
-    const newOffsetX = offset.x * clampedScaleX;
-    const newOffsetY = offset.y * clampedScaleY;
+    const newOffsetX = offset.x * clampedScaleX
+    const newOffsetY = offset.y * clampedScaleY
 
     // New center in canvas coordinates
-    const newCenterX = groupCenter.x + newOffsetX;
-    const newCenterY = groupCenter.y + newOffsetY;
+    const newCenterX = groupCenter.x + newOffsetX
+    const newCenterY = groupCenter.y + newOffsetY
 
     // Convert back to transform coordinates (offset from canvas center)
     result.set(id, {
@@ -167,10 +165,10 @@ export function applyGroupScale(
       y: newCenterY - canvasHeight / 2,
       width: Math.max(MIN_SIZE, startTransform.width * clampedScaleX),
       height: Math.max(MIN_SIZE, startTransform.height * clampedScaleY),
-    });
+    })
   }
 
-  return result;
+  return result
 }
 
 /**
@@ -181,42 +179,42 @@ export function applyGroupRotation(
   groupState: GroupTransformState,
   rotationDelta: number,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ): Map<string, Transform> {
-  const result = new Map<string, Transform>();
-  const { groupCenter, itemOffsets, itemTransforms, itemRotations } = groupState;
+  const result = new Map<string, Transform>()
+  const { groupCenter, itemOffsets, itemTransforms, itemRotations } = groupState
 
   for (const [id, startTransform] of itemTransforms) {
-    const offset = itemOffsets.get(id)!;
-    const startRotation = itemRotations.get(id)!;
+    const offset = itemOffsets.get(id)!
+    const startRotation = itemRotations.get(id)!
 
     // Calculate item center in canvas coordinates
     const itemCenter: Point = {
       x: groupCenter.x + offset.x,
       y: groupCenter.y + offset.y,
-    };
+    }
 
     // Rotate the item center around group center
-    const rotatedCenter = rotatePoint(itemCenter, groupCenter, rotationDelta);
+    const rotatedCenter = rotatePoint(itemCenter, groupCenter, rotationDelta)
 
     // Convert back to transform coordinates
-    const newX = rotatedCenter.x - canvasWidth / 2;
-    const newY = rotatedCenter.y - canvasHeight / 2;
+    const newX = rotatedCenter.x - canvasWidth / 2
+    const newY = rotatedCenter.y - canvasHeight / 2
 
     // Add rotation delta to item's own rotation
-    let newRotation = startRotation + rotationDelta;
-    while (newRotation > 180) newRotation -= 360;
-    while (newRotation < -180) newRotation += 360;
+    let newRotation = startRotation + rotationDelta
+    while (newRotation > 180) newRotation -= 360
+    while (newRotation < -180) newRotation += 360
 
     result.set(id, {
       ...startTransform,
       x: newX,
       y: newY,
       rotation: newRotation,
-    });
+    })
   }
 
-  return result;
+  return result
 }
 
 /**
@@ -226,22 +224,20 @@ export function applyGroupRotation(
 export function calculateGroupScaleFactor(
   groupState: GroupTransformState,
   startPoint: Point,
-  currentPoint: Point
+  currentPoint: Point,
 ): number {
-  const { groupCenter } = groupState;
+  const { groupCenter } = groupState
 
   // Calculate distances from group center
   const startDist = Math.sqrt(
-    Math.pow(startPoint.x - groupCenter.x, 2) +
-    Math.pow(startPoint.y - groupCenter.y, 2)
-  );
+    Math.pow(startPoint.x - groupCenter.x, 2) + Math.pow(startPoint.y - groupCenter.y, 2),
+  )
   const currentDist = Math.sqrt(
-    Math.pow(currentPoint.x - groupCenter.x, 2) +
-    Math.pow(currentPoint.y - groupCenter.y, 2)
-  );
+    Math.pow(currentPoint.x - groupCenter.x, 2) + Math.pow(currentPoint.y - groupCenter.y, 2),
+  )
 
   // Avoid division by zero
-  return startDist > 0 ? currentDist / startDist : 1;
+  return startDist > 0 ? currentDist / startDist : 1
 }
 
 /**
@@ -250,19 +246,15 @@ export function calculateGroupScaleFactor(
 export function calculateGroupRotationDelta(
   groupState: GroupTransformState,
   startPoint: Point,
-  currentPoint: Point
+  currentPoint: Point,
 ): number {
-  const { groupCenter } = groupState;
+  const { groupCenter } = groupState
 
-  const startAngle = Math.atan2(
-    startPoint.y - groupCenter.y,
-    startPoint.x - groupCenter.x
-  ) * (180 / Math.PI);
+  const startAngle =
+    Math.atan2(startPoint.y - groupCenter.y, startPoint.x - groupCenter.x) * (180 / Math.PI)
 
-  const currentAngle = Math.atan2(
-    currentPoint.y - groupCenter.y,
-    currentPoint.x - groupCenter.x
-  ) * (180 / Math.PI);
+  const currentAngle =
+    Math.atan2(currentPoint.y - groupCenter.y, currentPoint.x - groupCenter.x) * (180 / Math.PI)
 
-  return currentAngle - startAngle;
+  return currentAngle - startAngle
 }

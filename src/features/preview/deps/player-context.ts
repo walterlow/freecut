@@ -8,4 +8,4 @@ export {
   VideoConfigProvider,
   useVideoConfig,
   usePlayer,
-} from './player-contract';
+} from './player-contract'

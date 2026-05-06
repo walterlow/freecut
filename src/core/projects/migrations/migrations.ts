@@ -7,48 +7,55 @@
  * IMPORTANT: Never modify existing migrations. Always add new ones.
  */
 
-import type { Migration } from './types';
-import type { Project, ProjectTimeline } from '@/types/project';
+import type { Migration } from './types'
+import type { Project, ProjectTimeline } from '@/types/project'
 
 // Historical constants used by specific migrations.
 // Keep these as literals so old migration behavior doesn't drift when
 // current UI defaults change.
-const TRACK_HEIGHT_V2_TARGET = 64;
-const TRACK_HEIGHT_V4_TARGET = 80;
+const TRACK_HEIGHT_V2_TARGET = 64
+const TRACK_HEIGHT_V4_TARGET = 80
 
-type ProjectItem = ProjectTimeline['items'][number];
-type ProjectTransition = NonNullable<ProjectTimeline['transitions']>[number];
+type ProjectItem = ProjectTimeline['items'][number]
+type ProjectTransition = NonNullable<ProjectTimeline['transitions']>[number]
 
 function isLegacyLinkedPair(anchor: ProjectItem, candidate: ProjectItem): boolean {
-  if (candidate.id === anchor.id) return false;
-  const isMediaPair = (anchor.type === 'video' && candidate.type === 'audio')
-    || (anchor.type === 'audio' && candidate.type === 'video');
-  if (!isMediaPair) return false;
-  if (!anchor.originId || anchor.originId !== candidate.originId) return false;
-  if (!anchor.mediaId || anchor.mediaId !== candidate.mediaId) return false;
-  return anchor.from === candidate.from && anchor.durationInFrames === candidate.durationInFrames;
+  if (candidate.id === anchor.id) return false
+  const isMediaPair =
+    (anchor.type === 'video' && candidate.type === 'audio') ||
+    (anchor.type === 'audio' && candidate.type === 'video')
+  if (!isMediaPair) return false
+  if (!anchor.originId || anchor.originId !== candidate.originId) return false
+  if (!anchor.mediaId || anchor.mediaId !== candidate.mediaId) return false
+  return anchor.from === candidate.from && anchor.durationInFrames === candidate.durationInFrames
 }
 
-function isLinkedCompanion(anchor: ProjectItem, candidate: ProjectItem, targetType: ProjectItem['type']): boolean {
-  if (candidate.id === anchor.id || candidate.type !== targetType) return false;
+function isLinkedCompanion(
+  anchor: ProjectItem,
+  candidate: ProjectItem,
+  targetType: ProjectItem['type'],
+): boolean {
+  if (candidate.id === anchor.id || candidate.type !== targetType) return false
 
   if (anchor.linkedGroupId && candidate.linkedGroupId) {
-    return anchor.linkedGroupId === candidate.linkedGroupId;
+    return anchor.linkedGroupId === candidate.linkedGroupId
   }
 
-  return isLegacyLinkedPair(anchor, candidate);
+  return isLegacyLinkedPair(anchor, candidate)
 }
 
 function getLinkedAudioCompanion(items: ProjectItem[], anchor: ProjectItem): ProjectItem | null {
-  if (anchor.type !== 'video') return null;
-  return items.find((candidate) => isLinkedCompanion(anchor, candidate, 'audio')) ?? null;
+  if (anchor.type !== 'video') return null
+  return items.find((candidate) => isLinkedCompanion(anchor, candidate, 'audio')) ?? null
 }
 
 function isSynchronizedLinkedAudio(videoClip: ProjectItem, audioClip: ProjectItem): boolean {
-  return videoClip.type === 'video'
-    && audioClip.type === 'audio'
-    && audioClip.from === videoClip.from
-    && audioClip.durationInFrames === videoClip.durationInFrames;
+  return (
+    videoClip.type === 'video' &&
+    audioClip.type === 'audio' &&
+    audioClip.from === videoClip.from &&
+    audioClip.durationInFrames === videoClip.durationInFrames
+  )
 }
 
 function getManagedLinkedAudioPair(
@@ -56,53 +63,64 @@ function getManagedLinkedAudioPair(
   leftClip: ProjectItem,
   rightClip: ProjectItem,
 ): { leftAudio: ProjectItem; rightAudio: ProjectItem } | null {
-  if (leftClip.type !== 'video' || rightClip.type !== 'video') return null;
+  if (leftClip.type !== 'video' || rightClip.type !== 'video') return null
 
-  const leftAudio = getLinkedAudioCompanion(items, leftClip);
-  const rightAudio = getLinkedAudioCompanion(items, rightClip);
-  if (!leftAudio || !rightAudio) return null;
-  if (leftAudio.trackId !== rightAudio.trackId) return null;
-  if (!isSynchronizedLinkedAudio(leftClip, leftAudio) || !isSynchronizedLinkedAudio(rightClip, rightAudio)) {
-    return null;
+  const leftAudio = getLinkedAudioCompanion(items, leftClip)
+  const rightAudio = getLinkedAudioCompanion(items, rightClip)
+  if (!leftAudio || !rightAudio) return null
+  if (leftAudio.trackId !== rightAudio.trackId) return null
+  if (
+    !isSynchronizedLinkedAudio(leftClip, leftAudio) ||
+    !isSynchronizedLinkedAudio(rightClip, rightAudio)
+  ) {
+    return null
   }
 
-  return { leftAudio, rightAudio };
+  return { leftAudio, rightAudio }
 }
 
 function sourceFramesToTimelineFrames(sourceFrames: number, speed: number | undefined): number {
-  const playbackRate = speed ?? 1;
-  return Math.floor(sourceFrames / playbackRate);
+  const playbackRate = speed ?? 1
+  return Math.floor(sourceFrames / playbackRate)
 }
 
 function getAvailableHandle(item: ProjectItem, side: 'start' | 'end'): number {
-  if (item.type === 'image' || item.type === 'text' || item.type === 'shape' || item.type === 'adjustment') {
-    return Infinity;
+  if (
+    item.type === 'image' ||
+    item.type === 'text' ||
+    item.type === 'shape' ||
+    item.type === 'adjustment'
+  ) {
+    return Infinity
   }
 
   if (item.type !== 'video') {
-    return 0;
+    return 0
   }
 
-  const sourceStart = item.sourceStart ?? 0;
-  const sourceDuration = item.sourceDuration ?? 0;
-  const sourceEnd = item.sourceEnd ?? sourceDuration;
+  const sourceStart = item.sourceStart ?? 0
+  const sourceDuration = item.sourceDuration ?? 0
+  const sourceEnd = item.sourceEnd ?? sourceDuration
 
   if (side === 'start') {
-    return sourceFramesToTimelineFrames(sourceStart, item.speed);
+    return sourceFramesToTimelineFrames(sourceStart, item.speed)
   }
 
-  return sourceFramesToTimelineFrames(Math.max(0, sourceDuration - sourceEnd), item.speed);
+  return sourceFramesToTimelineFrames(Math.max(0, sourceDuration - sourceEnd), item.speed)
 }
 
-function getTransitionPortions(durationInFrames: number, alignment: number | undefined): {
-  leftPortion: number;
-  rightPortion: number;
+function getTransitionPortions(
+  durationInFrames: number,
+  alignment: number | undefined,
+): {
+  leftPortion: number
+  rightPortion: number
 } {
-  const safeDuration = Math.max(1, Math.floor(durationInFrames));
-  const clampedAlignment = Math.max(0, Math.min(1, alignment ?? 0.5));
-  const leftPortion = Math.floor(safeDuration * clampedAlignment);
-  const rightPortion = safeDuration - leftPortion;
-  return { leftPortion, rightPortion };
+  const safeDuration = Math.max(1, Math.floor(durationInFrames))
+  const clampedAlignment = Math.max(0, Math.min(1, alignment ?? 0.5))
+  const leftPortion = Math.floor(safeDuration * clampedAlignment)
+  const rightPortion = safeDuration - leftPortion
+  return { leftPortion, rightPortion }
 }
 
 function getMaxTransitionDurationForHandles(
@@ -110,28 +128,48 @@ function getMaxTransitionDurationForHandles(
   rightClip: ProjectItem,
   alignment: number | undefined,
 ): number {
-  const maxByClipDuration = Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1);
-  if (maxByClipDuration < 1) return 0;
+  const maxByClipDuration = Math.floor(
+    Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1,
+  )
+  if (maxByClipDuration < 1) return 0
 
-  const leftHandle = getAvailableHandle(leftClip, 'end');
-  const rightHandle = getAvailableHandle(rightClip, 'start');
+  const outgoingTailHandle = getAvailableHandle(leftClip, 'end')
+  const incomingHeadHandle = getAvailableHandle(rightClip, 'start')
 
-  for (let duration = maxByClipDuration; duration >= 1; duration -= 1) {
-    const portions = getTransitionPortions(duration, alignment);
-    if (portions.leftPortion <= leftHandle && portions.rightPortion <= rightHandle) {
-      return duration;
+  const canFitDuration = (duration: number): boolean => {
+    const portions = getTransitionPortions(duration, alignment)
+    return portions.rightPortion <= outgoingTailHandle && portions.leftPortion <= incomingHeadHandle
+  }
+
+  let low = 1
+  let high = maxByClipDuration
+  let best = 0
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    if (canFitDuration(mid)) {
+      best = mid
+      low = mid + 1
+    } else {
+      high = mid - 1
     }
   }
 
-  return 0;
+  return best
 }
 
-function rippleTrackItems(items: ProjectItem[], anchorId: string, trackId: string, originalFrom: number, delta: number): void {
+function rippleTrackItems(
+  items: ProjectItem[],
+  anchorId: string,
+  trackId: string,
+  originalFrom: number,
+  delta: number,
+): void {
   for (const item of items) {
-    if (item.id === anchorId) continue;
-    if (item.trackId !== trackId) continue;
+    if (item.id === anchorId) continue
+    if (item.trackId !== trackId) continue
     if (item.from > originalFrom) {
-      item.from += delta;
+      item.from += delta
     }
   }
 }
@@ -139,112 +177,109 @@ function rippleTrackItems(items: ProjectItem[], anchorId: string, trackId: strin
 function migrateTimelineTransitionsToCutCentered(
   timeline: Pick<ProjectTimeline, 'items' | 'transitions'>,
 ): Pick<ProjectTimeline, 'items' | 'transitions'> {
-  const originalTransitions = timeline.transitions ?? [];
+  const originalTransitions = timeline.transitions ?? []
   if (originalTransitions.length === 0) {
-    return { items: timeline.items, transitions: timeline.transitions };
+    return { items: timeline.items, transitions: timeline.transitions }
   }
 
-  const items = timeline.items.map((item) => ({ ...item }));
-  const itemById = new Map(items.map((item) => [item.id, item]));
+  const items = timeline.items.map((item) => ({ ...item }))
+  const itemById = new Map(items.map((item) => [item.id, item]))
   const sortedTransitions = [...originalTransitions].sort((a, b) => {
-    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId);
-    const aRight = itemById.get(a.rightClipId)?.from ?? 0;
-    const bRight = itemById.get(b.rightClipId)?.from ?? 0;
-    if (aRight !== bRight) return aRight - bRight;
-    return a.id.localeCompare(b.id);
-  });
+    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId)
+    const aRight = itemById.get(a.rightClipId)?.from ?? 0
+    const bRight = itemById.get(b.rightClipId)?.from ?? 0
+    if (aRight !== bRight) return aRight - bRight
+    return a.id.localeCompare(b.id)
+  })
 
-  const migratedTransitions: ProjectTransition[] = [];
+  const migratedTransitions: ProjectTransition[] = []
 
   for (const transition of sortedTransitions) {
-    const leftClip = itemById.get(transition.leftClipId);
-    const rightClip = itemById.get(transition.rightClipId);
+    const leftClip = itemById.get(transition.leftClipId)
+    const rightClip = itemById.get(transition.rightClipId)
     if (!leftClip || !rightClip) {
-      migratedTransitions.push(transition);
-      continue;
+      migratedTransitions.push(transition)
+      continue
     }
 
-    const originalRightFrom = rightClip.from;
-    const leftEnd = leftClip.from + leftClip.durationInFrames;
-    const overlap = Math.max(0, leftEnd - rightClip.from);
-    const managedLinkedAudioPair = overlap > 1
-      ? getManagedLinkedAudioPair(items, leftClip, rightClip)
-      : null;
+    const originalRightFrom = rightClip.from
+    const leftEnd = leftClip.from + leftClip.durationInFrames
+    const overlap = Math.max(0, leftEnd - rightClip.from)
+    const managedLinkedAudioPair =
+      overlap > 1 ? getManagedLinkedAudioPair(items, leftClip, rightClip) : null
 
     if (overlap > 1) {
-      rightClip.from += overlap;
-      rippleTrackItems(items, rightClip.id, rightClip.trackId, originalRightFrom, overlap);
+      rightClip.from += overlap
+      rippleTrackItems(items, rightClip.id, rightClip.trackId, originalRightFrom, overlap)
 
       if (managedLinkedAudioPair) {
-        const originalRightAudioFrom = managedLinkedAudioPair.rightAudio.from;
-        managedLinkedAudioPair.rightAudio.from += overlap;
+        const originalRightAudioFrom = managedLinkedAudioPair.rightAudio.from
+        managedLinkedAudioPair.rightAudio.from += overlap
         rippleTrackItems(
           items,
           managedLinkedAudioPair.rightAudio.id,
           managedLinkedAudioPair.rightAudio.trackId,
           originalRightAudioFrom,
           overlap,
-        );
+        )
       }
     }
 
-    const cutAligned = Math.abs((leftClip.from + leftClip.durationInFrames) - rightClip.from) <= 1;
+    const cutAligned = Math.abs(leftClip.from + leftClip.durationInFrames - rightClip.from) <= 1
     if (!cutAligned) {
-      migratedTransitions.push(transition);
-      continue;
+      migratedTransitions.push(transition)
+      continue
     }
 
-    const maxDuration = getMaxTransitionDurationForHandles(leftClip, rightClip, transition.alignment);
+    const maxDuration = getMaxTransitionDurationForHandles(
+      leftClip,
+      rightClip,
+      transition.alignment,
+    )
     if (maxDuration < 1) {
-      continue;
+      continue
     }
 
     migratedTransitions.push(
       transition.durationInFrames > maxDuration
         ? { ...transition, durationInFrames: maxDuration }
         : transition,
-    );
+    )
   }
 
   return {
     items,
     transitions: migratedTransitions,
-  };
+  }
 }
 
-function renumberTrackOrders(
-  tracks: ProjectTimeline['tracks'],
-): ProjectTimeline['tracks'] {
+function renumberTrackOrders(tracks: ProjectTimeline['tracks']): ProjectTimeline['tracks'] {
   return tracks
     .map((track, index) => ({ track, index }))
     .sort((left, right) => {
-      const leftOrder = left.track.order ?? left.index;
-      const rightOrder = right.track.order ?? right.index;
-      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-      return left.index - right.index;
+      const leftOrder = left.track.order ?? left.index
+      const rightOrder = right.track.order ?? right.index
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder
+      return left.index - right.index
     })
     .map(({ track }, index) => ({
       ...track,
       order: index,
-    }));
+    }))
 }
 
-function backfillOriginIds(
-  items: ProjectTimeline['items'],
-): ProjectTimeline['items'] {
-  return items.map((item) => (
+function backfillOriginIds(items: ProjectTimeline['items']): ProjectTimeline['items'] {
+  return items.map((item) =>
     item.originId
       ? item
       : {
           ...item,
           originId: item.id,
-        }
-  ));
+        },
+  )
 }
 
-function migrateTimelineIdentityFields(
-  timeline: ProjectTimeline,
-): ProjectTimeline {
+function migrateTimelineIdentityFields(timeline: ProjectTimeline): ProjectTimeline {
   return {
     ...timeline,
     tracks: renumberTrackOrders(timeline.tracks),
@@ -254,7 +289,7 @@ function migrateTimelineIdentityFields(
       tracks: renumberTrackOrders(composition.tracks),
       items: backfillOriginIds(composition.items),
     })),
-  };
+  }
 }
 
 /**
@@ -276,16 +311,16 @@ const migrations: Record<number, Migration> = {
     description: 'Fix track height from 80px to 64px (constants consistency)',
     migrate: (project: Project): Project => {
       if (!project.timeline?.tracks) {
-        return project;
+        return project
       }
 
       const updatedTracks = project.timeline.tracks.map((track) => {
         // Only fix tracks that have the buggy 80px height
         if (track.height === 80) {
-          return { ...track, height: TRACK_HEIGHT_V2_TARGET };
+          return { ...track, height: TRACK_HEIGHT_V2_TARGET }
         }
-        return track;
-      });
+        return track
+      })
 
       return {
         ...project,
@@ -293,7 +328,7 @@ const migrations: Record<number, Migration> = {
           ...project.timeline,
           tracks: updatedTracks,
         },
-      };
+      }
     },
   },
 
@@ -309,13 +344,13 @@ const migrations: Record<number, Migration> = {
     description: 'Add alignment default (0.5) to transitions for asymmetric timing',
     migrate: (project: Project): Project => {
       if (!project.timeline?.transitions) {
-        return project;
+        return project
       }
 
       const updatedTransitions = project.timeline.transitions.map((t) => ({
         ...t,
         alignment: t.alignment ?? 0.5,
-      }));
+      }))
 
       return {
         ...project,
@@ -323,7 +358,7 @@ const migrations: Record<number, Migration> = {
           ...project.timeline,
           transitions: updatedTransitions,
         },
-      };
+      }
     },
   },
   /**
@@ -338,15 +373,15 @@ const migrations: Record<number, Migration> = {
     description: 'Increase track height from 64px to 80px for 3-row clip layout',
     migrate: (project: Project): Project => {
       if (!project.timeline?.tracks) {
-        return project;
+        return project
       }
 
       const updatedTracks = project.timeline.tracks.map((track) => {
         if (track.height === 64) {
-          return { ...track, height: TRACK_HEIGHT_V4_TARGET };
+          return { ...track, height: TRACK_HEIGHT_V4_TARGET }
         }
-        return track;
-      });
+        return track
+      })
 
       return {
         ...project,
@@ -354,7 +389,7 @@ const migrations: Record<number, Migration> = {
           ...project.timeline,
           tracks: updatedTracks,
         },
-      };
+      }
     },
   },
 
@@ -373,56 +408,56 @@ const migrations: Record<number, Migration> = {
     description: 'Convert transitions from virtual-window model to FCP-style overlap model',
     migrate: (project: Project): Project => {
       if (!project.timeline?.transitions || project.timeline.transitions.length === 0) {
-        return project;
+        return project
       }
 
-      const items = [...(project.timeline.items ?? [])];
-      const transitions = [...project.timeline.transitions];
-      const itemsById = new Map(items.map((item) => [item.id, item]));
+      const items = [...(project.timeline.items ?? [])]
+      const transitions = [...project.timeline.transitions]
+      const itemsById = new Map(items.map((item) => [item.id, item]))
 
       // Process each transition: convert adjacent clips to overlapping
-      const updatedTransitions = [];
+      const updatedTransitions = []
 
       for (const transition of transitions) {
-        const leftClip = itemsById.get(transition.leftClipId);
-        const rightClip = itemsById.get(transition.rightClipId);
+        const leftClip = itemsById.get(transition.leftClipId)
+        const rightClip = itemsById.get(transition.rightClipId)
         if (!leftClip || !rightClip) {
-          updatedTransitions.push(transition);
-          continue;
+          updatedTransitions.push(transition)
+          continue
         }
 
         // Check if clips are adjacent (old model) — if already overlapping, skip
-        const leftEnd = leftClip.from + leftClip.durationInFrames;
-        const isAdjacent = Math.abs(leftEnd - rightClip.from) <= 1;
+        const leftEnd = leftClip.from + leftClip.durationInFrames
+        const isAdjacent = Math.abs(leftEnd - rightClip.from) <= 1
         if (!isAdjacent) {
           // Already overlapping or separated — keep as is
-          updatedTransitions.push(transition);
-          continue;
+          updatedTransitions.push(transition)
+          continue
         }
 
         // Clamp transition duration to clip durations
-        let duration = transition.durationInFrames;
-        const maxByClip = Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1;
+        let duration = transition.durationInFrames
+        const maxByClip = Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1
         if (duration > maxByClip) {
-          duration = Math.max(1, maxByClip);
+          duration = Math.max(1, maxByClip)
         }
 
         if (duration < 1) {
           // Can't convert — remove transition
-          continue;
+          continue
         }
 
         // Slide right clip left (sourceStart stays unchanged — the first D
         // source frames become the transition-in region)
-        rightClip.from -= duration;
+        rightClip.from -= duration
 
         // Ripple all items after the right clip's original position on the same track
-        const originalRightFrom = rightClip.from + duration; // original position before slide
+        const originalRightFrom = rightClip.from + duration // original position before slide
         for (const item of items) {
-          if (item.id === rightClip.id) continue;
-          if (item.trackId !== rightClip.trackId) continue;
+          if (item.id === rightClip.id) continue
+          if (item.trackId !== rightClip.trackId) continue
           if (item.from > originalRightFrom) {
-            item.from -= duration;
+            item.from -= duration
           }
         }
 
@@ -430,8 +465,8 @@ const migrations: Record<number, Migration> = {
         updatedTransitions.push(
           duration !== transition.durationInFrames
             ? { ...transition, durationInFrames: duration }
-            : transition
-        );
+            : transition,
+        )
       }
 
       return {
@@ -441,7 +476,7 @@ const migrations: Record<number, Migration> = {
           items,
           transitions: updatedTransitions,
         },
-      };
+      }
     },
   },
 
@@ -458,34 +493,38 @@ const migrations: Record<number, Migration> = {
       'Migrate legacy effects (CSS filters, glitch, halftone, vignette, color grading) to GPU shader effects',
     migrate: (project: Project): Project => {
       if (!project.timeline?.items) {
-        return project;
+        return project
       }
 
       const updatedItems = project.timeline.items.map((item) => {
         const effects = (item as Record<string, unknown>).effects as
           | Array<{ id: string; effect: Record<string, unknown>; enabled: boolean }>
-          | undefined;
+          | undefined
 
         if (!effects || effects.length === 0) {
-          return item;
+          return item
         }
 
-        const convertedEffects: Array<{ id: string; effect: Record<string, unknown>; enabled: boolean }> = [];
+        const convertedEffects: Array<{
+          id: string
+          effect: Record<string, unknown>
+          enabled: boolean
+        }> = []
 
         for (const entry of effects) {
-          const effect = entry.effect;
-          const type = effect.type as string;
+          const effect = entry.effect
+          const type = effect.type as string
 
           // Pass through existing gpu-effect entries unchanged
           if (type === 'gpu-effect') {
-            convertedEffects.push(entry);
-            continue;
+            convertedEffects.push(entry)
+            continue
           }
 
           if (type === 'css-filter') {
-            const filter = effect.filter as string;
-            const value = effect.value as number;
-            let gpuEffect: Record<string, unknown> | null = null;
+            const filter = effect.filter as string
+            const value = effect.value as number
+            let gpuEffect: Record<string, unknown> | null = null
 
             switch (filter) {
               case 'brightness':
@@ -493,71 +532,71 @@ const migrations: Record<number, Migration> = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-brightness',
                   params: { amount: (value - 100) / 100 },
-                };
-                break;
+                }
+                break
               case 'contrast':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-contrast',
                   params: { amount: value / 100 },
-                };
-                break;
+                }
+                break
               case 'saturate':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-saturation',
                   params: { amount: value / 100 },
-                };
-                break;
+                }
+                break
               case 'blur':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-gaussian-blur',
                   params: { radius: value, samples: 5 },
-                };
-                break;
+                }
+                break
               case 'hue-rotate':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-hue-shift',
                   params: { shift: value / 360 },
-                };
-                break;
+                }
+                break
               case 'grayscale':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-grayscale',
                   params: { amount: value / 100 },
-                };
-                break;
+                }
+                break
               case 'sepia':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-sepia',
                   params: { amount: value / 100 },
-                };
-                break;
+                }
+                break
               case 'invert':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-invert',
                   params: {},
-                };
-                break;
+                }
+                break
               default:
                 // Unknown css-filter variant — pass through as-is
-                convertedEffects.push(entry);
-                continue;
+                convertedEffects.push(entry)
+                continue
             }
 
-            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
-            continue;
+            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled })
+            continue
           }
 
           if (type === 'glitch') {
-            const variant = effect.variant as string;
-            const intensity = effect.intensity as number;
-            let gpuEffect: Record<string, unknown> | null = null;
+            const variant = effect.variant as string
+            const intensity = effect.intensity as number
+            let gpuEffect: Record<string, unknown> | null = null
 
             switch (variant) {
               case 'rgb-split':
@@ -565,29 +604,29 @@ const migrations: Record<number, Migration> = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-rgb-split',
                   params: { amount: intensity * 0.05, angle: 0 },
-                };
-                break;
+                }
+                break
               case 'scanlines':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-scanlines',
                   params: { density: 5, opacity: intensity },
-                };
-                break;
+                }
+                break
               case 'color-glitch':
                 gpuEffect = {
                   type: 'gpu-effect',
                   gpuEffectType: 'gpu-color-glitch',
                   params: { intensity, speed: 1 },
-                };
-                break;
+                }
+                break
               default:
-                convertedEffects.push(entry);
-                continue;
+                convertedEffects.push(entry)
+                continue
             }
 
-            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
-            continue;
+            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled })
+            continue
           }
 
           if (type === 'canvas-effect' && effect.variant === 'halftone') {
@@ -602,9 +641,9 @@ const migrations: Record<number, Migration> = {
                 intensity: effect.intensity,
                 invert: effect.inverted ?? false,
               },
-            };
-            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
-            continue;
+            }
+            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled })
+            continue
           }
 
           if (type === 'overlay-effect' && effect.variant === 'vignette') {
@@ -617,17 +656,17 @@ const migrations: Record<number, Migration> = {
                 softness: effect.softness ?? 0.5,
                 roundness: 1,
               },
-            };
-            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
-            continue;
+            }
+            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled })
+            continue
           }
 
           if (type === 'color-grading') {
-            const variant = effect.variant as string;
+            const variant = effect.variant as string
 
             if (variant === 'lut') {
               // Drop LUT effects — no GPU equivalent for custom .cube files
-              continue;
+              continue
             }
 
             if (variant === 'curves') {
@@ -643,9 +682,9 @@ const migrations: Record<number, Migration> = {
                   green: effect.green,
                   blue: effect.blue,
                 },
-              };
-              convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
-              continue;
+              }
+              convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled })
+              continue
             }
 
             if (variant === 'wheels') {
@@ -663,21 +702,21 @@ const migrations: Record<number, Migration> = {
                   tint: effect.tint,
                   saturation: effect.saturation,
                 },
-              };
-              convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
-              continue;
+              }
+              convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled })
+              continue
             }
           }
 
           // Unknown effect type — pass through as-is
-          convertedEffects.push(entry);
+          convertedEffects.push(entry)
         }
 
         return {
           ...item,
           effects: convertedEffects,
-        };
-      });
+        }
+      })
 
       return {
         ...project,
@@ -685,7 +724,7 @@ const migrations: Record<number, Migration> = {
           ...project.timeline,
           items: updatedItems,
         },
-      };
+      }
     },
   },
 
@@ -721,26 +760,26 @@ const migrations: Record<number, Migration> = {
     description: 'Convert legacy overlap transitions back to cut-centered handle-based transitions',
     migrate: (project: Project): Project => {
       if (!project.timeline) {
-        return project;
+        return project
       }
 
       const rootTimeline = migrateTimelineTransitionsToCutCentered({
         items: project.timeline.items ?? [],
         transitions: project.timeline.transitions,
-      });
+      })
 
       const compositions = project.timeline.compositions?.map((composition) => {
         const migrated = migrateTimelineTransitionsToCutCentered({
           items: composition.items ?? [],
           transitions: composition.transitions,
-        });
+        })
 
         return {
           ...composition,
           items: migrated.items,
           transitions: migrated.transitions,
-        };
-      });
+        }
+      })
 
       return {
         ...project,
@@ -750,7 +789,7 @@ const migrations: Record<number, Migration> = {
           transitions: rootTimeline.transitions,
           compositions,
         },
-      };
+      }
     },
   },
 
@@ -766,13 +805,13 @@ const migrations: Record<number, Migration> = {
     description: 'Renumber legacy track orders and backfill missing originId fields',
     migrate: (project: Project): Project => {
       if (!project.timeline) {
-        return project;
+        return project
       }
 
       return {
         ...project,
         timeline: migrateTimelineIdentityFields(project.timeline),
-      };
+      }
     },
   },
   10: {
@@ -780,32 +819,32 @@ const migrations: Record<number, Migration> = {
     description:
       'Introduce project-scoped masterBusDb (split from per-device monitor volume). Defaults to 0 dB = unity.',
     migrate: (project: Project): Project => {
-      if (!project.timeline) return project;
-      if (typeof project.timeline.masterBusDb === 'number') return project;
+      if (!project.timeline) return project
+      if (typeof project.timeline.masterBusDb === 'number') return project
       return {
         ...project,
         timeline: {
           ...project.timeline,
           masterBusDb: 0,
         },
-      };
+      }
     },
   },
-};
+}
 
 /**
  * Get all migrations that need to be applied for a given version.
  * Returns migrations in order from lowest to highest version.
  */
 export function getMigrationsToApply(fromVersion: number, toVersion: number): Migration[] {
-  const result: Migration[] = [];
+  const result: Migration[] = []
 
   for (let v = fromVersion + 1; v <= toVersion; v++) {
-    const migration = migrations[v];
+    const migration = migrations[v]
     if (migration) {
-      result.push(migration);
+      result.push(migration)
     }
   }
 
-  return result;
+  return result
 }

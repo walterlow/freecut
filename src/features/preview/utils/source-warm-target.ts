@@ -1,13 +1,13 @@
-import type { PreviewInteractionMode } from './preview-interaction-mode';
+import type { PreviewInteractionMode } from './preview-interaction-mode'
 
 export interface SourceWarmTargetInput {
-  mode: PreviewInteractionMode;
-  currentPoolSourceCount: number;
-  currentPoolElementCount: number;
-  maxSources: number;
-  minSources: number;
-  hardCapSources: number;
-  hardCapElements: number;
+  mode: PreviewInteractionMode
+  currentPoolSourceCount: number
+  currentPoolElementCount: number
+  maxSources: number
+  minSources: number
+  hardCapSources: number
+  hardCapElements: number
 }
 
 /**
@@ -24,19 +24,20 @@ export function getSourceWarmTarget(input: SourceWarmTargetInput): number {
     minSources,
     hardCapSources,
     hardCapElements,
-  } = input;
+  } = input
 
-  const modeBudget = mode === 'playing'
-    ? maxSources
-    : mode === 'scrubbing'
-      ? Math.max(minSources, maxSources - 4)
-      : Math.max(minSources, maxSources - 8);
+  const modeBudget =
+    mode === 'playing'
+      ? maxSources
+      : mode === 'scrubbing'
+        ? Math.max(minSources, maxSources - 4)
+        : Math.max(minSources, maxSources - 8)
 
-  const sourcePressure = Math.max(0, currentPoolSourceCount - hardCapSources);
+  const sourcePressure = Math.max(0, currentPoolSourceCount - hardCapSources)
   // Element pressure degrades target gradually to avoid oscillation.
-  const elementOverage = Math.max(0, currentPoolElementCount - hardCapElements);
-  const elementPressure = Math.ceil(elementOverage / 2);
-  const pressuredBudget = modeBudget - sourcePressure - elementPressure;
+  const elementOverage = Math.max(0, currentPoolElementCount - hardCapElements)
+  const elementPressure = Math.ceil(elementOverage / 2)
+  const pressuredBudget = modeBudget - sourcePressure - elementPressure
 
-  return Math.max(minSources, Math.min(maxSources, pressuredBudget));
+  return Math.max(minSources, Math.min(maxSources, pressuredBudget))
 }

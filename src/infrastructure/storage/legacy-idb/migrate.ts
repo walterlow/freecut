@@ -17,21 +17,18 @@
  *   smooth and monotonically increasing even when stores are sparse.
  */
 
-import { createLogger, createOperationId } from '@/shared/logging/logger';
-import { requireWorkspaceRoot } from '@/infrastructure/storage/workspace-fs/root';
-import {
-  readJson,
-  writeJsonAtomic,
-} from '@/infrastructure/storage/workspace-fs/fs-primitives';
-import { MARKER_FILENAME } from '@/infrastructure/storage/workspace-fs/paths';
-import type { WorkspaceMarker } from '@/infrastructure/storage/workspace-fs/bootstrap';
-import type { Project } from '@/types/project';
+import { createLogger, createOperationId } from '@/shared/logging/logger'
+import { requireWorkspaceRoot } from '@/infrastructure/storage/workspace-fs/root'
+import { readJson, writeJsonAtomic } from '@/infrastructure/storage/workspace-fs/fs-primitives'
+import { MARKER_FILENAME } from '@/infrastructure/storage/workspace-fs/paths'
+import type { WorkspaceMarker } from '@/infrastructure/storage/workspace-fs/bootstrap'
+import type { Project } from '@/types/project'
 import type {
   MediaMetadata,
   ProjectMediaAssociation,
   WaveformRecord,
   DecodedPreviewAudio,
-} from '@/types/storage';
+} from '@/types/storage'
 
 // Legacy readers — consolidated read-only access to `video-editor-db`.
 import {
@@ -44,31 +41,31 @@ import {
   readGifFrames,
   readThumbnailByMediaId,
   readTranscript,
-} from './reader';
+} from './reader'
 
 // New writers — workspace-fs.
-import { createProject } from '@/infrastructure/storage/workspace-fs/projects';
-import { createMedia } from '@/infrastructure/storage/workspace-fs/media';
-import { saveThumbnail } from '@/infrastructure/storage/workspace-fs/thumbnails';
-import { associateMediaWithProject } from '@/infrastructure/storage/workspace-fs/project-media';
-import { saveGifFrames } from '@/infrastructure/storage/workspace-fs/gif-frames';
-import { saveWaveformRecord } from '@/infrastructure/storage/workspace-fs/waveforms';
-import { saveDecodedPreviewAudio } from '@/infrastructure/storage/workspace-fs/decoded-preview-audio';
-import { saveTranscript } from '@/infrastructure/storage/workspace-fs/transcripts';
+import { createProject } from '@/infrastructure/storage/workspace-fs/projects'
+import { createMedia } from '@/infrastructure/storage/workspace-fs/media'
+import { saveThumbnail } from '@/infrastructure/storage/workspace-fs/thumbnails'
+import { associateMediaWithProject } from '@/infrastructure/storage/workspace-fs/project-media'
+import { saveGifFrames } from '@/infrastructure/storage/workspace-fs/gif-frames'
+import { saveWaveformRecord } from '@/infrastructure/storage/workspace-fs/waveforms'
+import { saveDecodedPreviewAudio } from '@/infrastructure/storage/workspace-fs/decoded-preview-audio'
+import { saveTranscript } from '@/infrastructure/storage/workspace-fs/transcripts'
 
-const logger = createLogger('LegacyIDB:Migrate');
+const logger = createLogger('LegacyIDB:Migrate')
 
 export interface MigrationReport {
-  projects: number;
-  media: number;
-  thumbnails: number;
-  associations: number;
-  transcripts: number;
-  gifFrames: number;
-  waveformRecords: number;
-  decodedAudioRecords: number;
-  errors: Array<{ store: string; id: string; error: string }>;
-  durationMs: number;
+  projects: number
+  media: number
+  thumbnails: number
+  associations: number
+  transcripts: number
+  gifFrames: number
+  waveformRecords: number
+  decodedAudioRecords: number
+  errors: Array<{ store: string; id: string; error: string }>
+  durationMs: number
 }
 
 /**
@@ -84,16 +81,16 @@ export type MigrationPhase =
   | 'gifFrames'
   | 'waveforms'
   | 'decodedAudio'
-  | 'finalizing';
+  | 'finalizing'
 
 export interface MigrationProgress {
-  phase: MigrationPhase;
+  phase: MigrationPhase
   /** Human-readable phase label for display (e.g. "Migrating media"). */
-  phaseLabel: string;
+  phaseLabel: string
   /** Units of work completed so far across all phases. */
-  processed: number;
+  processed: number
   /** Total units of work planned for this run. */
-  total: number;
+  total: number
 }
 
 export interface MigrateOptions {
@@ -105,7 +102,7 @@ export interface MigrateOptions {
    * Exceptions thrown from the callback are caught and logged; they never
    * abort the migration.
    */
-  onProgress?: (progress: MigrationProgress) => void;
+  onProgress?: (progress: MigrationProgress) => void
 }
 
 const PHASE_LABELS: Record<MigrationPhase, string> = {
@@ -118,7 +115,7 @@ const PHASE_LABELS: Record<MigrationPhase, string> = {
   waveforms: 'Migrating waveforms',
   decodedAudio: 'Migrating decoded audio',
   finalizing: 'Finalizing',
-};
+}
 
 /**
  * Detect whether the legacy `video-editor-db` still has any projects.
@@ -126,11 +123,11 @@ const PHASE_LABELS: Record<MigrationPhase, string> = {
  */
 export async function hasLegacyData(): Promise<boolean> {
   try {
-    const projects = await readAllProjects();
-    return projects.length > 0;
+    const projects = await readAllProjects()
+    return projects.length > 0
   } catch (error) {
-    logger.warn('hasLegacyData failed', error);
-    return false;
+    logger.warn('hasLegacyData failed', error)
+    return false
   }
 }
 
@@ -139,59 +136,57 @@ export async function hasLegacyData(): Promise<boolean> {
  * Presence of `migratedFromLegacyAt` indicates migration has run.
  */
 export async function getMigrationStatus(): Promise<{
-  migrated: boolean;
-  at?: number;
+  migrated: boolean
+  at?: number
 }> {
   try {
-    const root = requireWorkspaceRoot();
-    const marker = await readJson<WorkspaceMarker>(root, [MARKER_FILENAME]);
-    if (!marker?.migratedFromLegacyAt) return { migrated: false };
-    return { migrated: true, at: marker.migratedFromLegacyAt };
+    const root = requireWorkspaceRoot()
+    const marker = await readJson<WorkspaceMarker>(root, [MARKER_FILENAME])
+    if (!marker?.migratedFromLegacyAt) return { migrated: false }
+    return { migrated: true, at: marker.migratedFromLegacyAt }
   } catch {
-    return { migrated: false };
+    return { migrated: false }
   }
 }
 
 async function markMigrated(): Promise<void> {
-  const root = requireWorkspaceRoot();
-  const existing = await readJson<WorkspaceMarker>(root, [MARKER_FILENAME]);
+  const root = requireWorkspaceRoot()
+  const existing = await readJson<WorkspaceMarker>(root, [MARKER_FILENAME])
   const updated: WorkspaceMarker = {
     schemaVersion: existing?.schemaVersion ?? '1.0',
     createdAt: existing?.createdAt ?? Date.now(),
     migratedFromLegacyAt: Date.now(),
-  };
-  await writeJsonAtomic(root, [MARKER_FILENAME], updated);
+  }
+  await writeJsonAtomic(root, [MARKER_FILENAME], updated)
 }
 
 /** Marker file kept alongside `.freecut-workspace.json` when migration had
  *  per-store errors. Its presence drives a "retry failed items" UI. Cleared
  *  by a successful re-run. */
-const MIGRATION_ERRORS_FILENAME = '.freecut-migration-errors.json';
+const MIGRATION_ERRORS_FILENAME = '.freecut-migration-errors.json'
 
 interface PersistedMigrationErrors {
-  recordedAt: number;
-  errors: MigrationReport['errors'];
+  recordedAt: number
+  errors: MigrationReport['errors']
 }
 
 async function writeMigrationErrors(errors: MigrationReport['errors']): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   if (errors.length === 0) {
     // Clear any previous error marker from an earlier failed run.
     try {
-      const { removeEntry } = await import(
-        '@/infrastructure/storage/workspace-fs/fs-primitives'
-      );
-      await removeEntry(root, [MIGRATION_ERRORS_FILENAME]);
+      const { removeEntry } = await import('@/infrastructure/storage/workspace-fs/fs-primitives')
+      await removeEntry(root, [MIGRATION_ERRORS_FILENAME])
     } catch {
       // Best-effort cleanup.
     }
-    return;
+    return
   }
   const payload: PersistedMigrationErrors = {
     recordedAt: Date.now(),
     errors,
-  };
-  await writeJsonAtomic(root, [MIGRATION_ERRORS_FILENAME], payload);
+  }
+  await writeJsonAtomic(root, [MIGRATION_ERRORS_FILENAME], payload)
 }
 
 /**
@@ -201,25 +196,20 @@ async function writeMigrationErrors(errors: MigrationReport['errors']): Promise<
  */
 export async function getMigrationErrors(): Promise<MigrationReport['errors']> {
   try {
-    const root = requireWorkspaceRoot();
-    const payload = await readJson<PersistedMigrationErrors>(root, [MIGRATION_ERRORS_FILENAME]);
-    return payload?.errors ?? [];
+    const root = requireWorkspaceRoot()
+    const payload = await readJson<PersistedMigrationErrors>(root, [MIGRATION_ERRORS_FILENAME])
+    return payload?.errors ?? []
   } catch {
-    return [];
+    return []
   }
 }
 
-function pushError(
-  report: MigrationReport,
-  store: string,
-  id: string,
-  error: unknown,
-): void {
+function pushError(report: MigrationReport, store: string, id: string, error: unknown): void {
   report.errors.push({
     store,
     id,
     error: error instanceof Error ? error.message : String(error),
-  });
+  })
 }
 
 /**
@@ -228,54 +218,51 @@ function pushError(
  * from the UI callback are swallowed so progress reporting can't break
  * the migration.
  */
-function createProgressTracker(
-  total: number,
-  onProgress: MigrateOptions['onProgress'],
-) {
-  let processed = 0;
+function createProgressTracker(total: number, onProgress: MigrateOptions['onProgress']) {
+  let processed = 0
   const emit = (phase: MigrationPhase) => {
-    if (!onProgress) return;
+    if (!onProgress) return
     try {
       onProgress({
         phase,
         phaseLabel: PHASE_LABELS[phase],
         processed,
         total,
-      });
+      })
     } catch (error) {
-      logger.warn('onProgress callback threw', error);
+      logger.warn('onProgress callback threw', error)
     }
-  };
+  }
   return {
     tick(phase: MigrationPhase) {
-      processed++;
-      emit(phase);
+      processed++
+      emit(phase)
     },
     emitPhaseStart(phase: MigrationPhase) {
-      emit(phase);
+      emit(phase)
     },
-  };
+  }
 }
 
-type Tick = (phase: MigrationPhase) => void;
+type Tick = (phase: MigrationPhase) => void
 
 async function migrateProjects(
   report: MigrationReport,
   projects: Project[],
   tick: Tick,
 ): Promise<Set<string>> {
-  const ids = new Set<string>();
+  const ids = new Set<string>()
   for (const project of projects) {
     try {
-      await createProject(project);
-      report.projects++;
-      ids.add(project.id);
+      await createProject(project)
+      report.projects++
+      ids.add(project.id)
     } catch (error) {
-      pushError(report, 'projects', project.id, error);
+      pushError(report, 'projects', project.id, error)
     }
-    tick('projects');
+    tick('projects')
   }
-  return ids;
+  return ids
 }
 
 async function migrateMedia(
@@ -283,18 +270,18 @@ async function migrateMedia(
   media: MediaMetadata[],
   tick: Tick,
 ): Promise<Set<string>> {
-  const ids = new Set<string>();
+  const ids = new Set<string>()
   for (const item of media) {
     try {
-      await createMedia(item);
-      report.media++;
-      ids.add(item.id);
+      await createMedia(item)
+      report.media++
+      ids.add(item.id)
     } catch (error) {
-      pushError(report, 'media', item.id, error);
+      pushError(report, 'media', item.id, error)
     }
-    tick('media');
+    tick('media')
   }
-  return ids;
+  return ids
 }
 
 async function migrateThumbnails(
@@ -304,15 +291,15 @@ async function migrateThumbnails(
 ): Promise<void> {
   for (const mediaId of mediaIds) {
     try {
-      const thumb = await readThumbnailByMediaId(mediaId);
+      const thumb = await readThumbnailByMediaId(mediaId)
       if (thumb) {
-        await saveThumbnail(thumb);
-        report.thumbnails++;
+        await saveThumbnail(thumb)
+        report.thumbnails++
       }
     } catch (error) {
-      pushError(report, 'thumbnails', mediaId, error);
+      pushError(report, 'thumbnails', mediaId, error)
     }
-    tick('thumbnails');
+    tick('thumbnails')
   }
 }
 
@@ -325,15 +312,15 @@ async function migrateProjectMedia(
   for (const assoc of associations) {
     if (projectIds.has(assoc.projectId)) {
       try {
-        await associateMediaWithProject(assoc.projectId, assoc.mediaId);
-        report.associations++;
+        await associateMediaWithProject(assoc.projectId, assoc.mediaId)
+        report.associations++
       } catch (error) {
-        pushError(report, 'projectMedia', `${assoc.projectId}:${assoc.mediaId}`, error);
+        pushError(report, 'projectMedia', `${assoc.projectId}:${assoc.mediaId}`, error)
       }
     }
     // Tick even when the project isn't in scope — callers counted every
     // association toward `total`, so we must tick to match.
-    tick('associations');
+    tick('associations')
   }
 }
 
@@ -344,15 +331,15 @@ async function migrateTranscripts(
 ): Promise<void> {
   for (const mediaId of mediaIds) {
     try {
-      const transcript = await readTranscript(mediaId);
+      const transcript = await readTranscript(mediaId)
       if (transcript) {
-        await saveTranscript(transcript);
-        report.transcripts++;
+        await saveTranscript(transcript)
+        report.transcripts++
       }
     } catch (error) {
-      pushError(report, 'transcripts', mediaId, error);
+      pushError(report, 'transcripts', mediaId, error)
     }
-    tick('transcripts');
+    tick('transcripts')
   }
 }
 
@@ -363,15 +350,15 @@ async function migrateGifFrames(
 ): Promise<void> {
   for (const mediaId of mediaIds) {
     try {
-      const frames = await readGifFrames(mediaId);
+      const frames = await readGifFrames(mediaId)
       if (frames) {
-        await saveGifFrames(frames);
-        report.gifFrames++;
+        await saveGifFrames(frames)
+        report.gifFrames++
       }
     } catch (error) {
-      pushError(report, 'gifFrames', mediaId, error);
+      pushError(report, 'gifFrames', mediaId, error)
     }
-    tick('gifFrames');
+    tick('gifFrames')
   }
 }
 
@@ -382,12 +369,12 @@ async function migrateWaveforms(
 ): Promise<void> {
   for (const record of waveforms) {
     try {
-      await saveWaveformRecord(record);
-      report.waveformRecords++;
+      await saveWaveformRecord(record)
+      report.waveformRecords++
     } catch (error) {
-      pushError(report, 'waveforms', record.id, error);
+      pushError(report, 'waveforms', record.id, error)
     }
-    tick('waveforms');
+    tick('waveforms')
   }
 }
 
@@ -398,12 +385,12 @@ async function migrateDecodedAudio(
 ): Promise<void> {
   for (const record of decoded) {
     try {
-      await saveDecodedPreviewAudio(record);
-      report.decodedAudioRecords++;
+      await saveDecodedPreviewAudio(record)
+      report.decodedAudioRecords++
     } catch (error) {
-      pushError(report, 'decodedPreviewAudio', record.id, error);
+      pushError(report, 'decodedPreviewAudio', record.id, error)
     }
-    tick('decodedAudio');
+    tick('decodedAudio')
   }
 }
 
@@ -412,12 +399,10 @@ async function migrateDecodedAudio(
  * folder. Idempotent: re-running skips duplicates (create* throw on
  * existing; caught as errors and ignored).
  */
-export async function migrateFromLegacyIDB(
-  options: MigrateOptions = {},
-): Promise<MigrationReport> {
-  const opId = createOperationId();
-  const event = logger.startEvent('workspace.migrate', opId);
-  const started = Date.now();
+export async function migrateFromLegacyIDB(options: MigrateOptions = {}): Promise<MigrationReport> {
+  const opId = createOperationId()
+  const event = logger.startEvent('workspace.migrate', opId)
+  const started = Date.now()
   const report: MigrationReport = {
     projects: 0,
     media: 0,
@@ -429,21 +414,20 @@ export async function migrateFromLegacyIDB(
     decodedAudioRecords: 0,
     errors: [],
     durationMs: 0,
-  };
+  }
 
   try {
     // Pre-fetch every `readAll*` store so we know the real total-work
     // count before writing anything. The per-id readers (thumbnails,
     // transcripts, gifFrames) are counted as one tick per media id —
     // matches what we actually loop over below.
-    const [projects, media, associations, waveforms, decodedAudio] =
-      await Promise.all([
-        readAllProjects(),
-        readAllMedia(),
-        readAllProjectMedia(),
-        readAllWaveforms(),
-        readAllDecodedPreviewAudio(),
-      ]);
+    const [projects, media, associations, waveforms, decodedAudio] = await Promise.all([
+      readAllProjects(),
+      readAllMedia(),
+      readAllProjectMedia(),
+      readAllWaveforms(),
+      readAllDecodedPreviewAudio(),
+    ])
 
     const total =
       projects.length +
@@ -453,27 +437,27 @@ export async function migrateFromLegacyIDB(
       media.length + // transcripts
       media.length + // gifFrames
       waveforms.length +
-      decodedAudio.length;
+      decodedAudio.length
 
-    const tracker = createProgressTracker(total, options.onProgress);
+    const tracker = createProgressTracker(total, options.onProgress)
     // Emit an initial 0% tick so the UI can render an accurate total
     // before any writes land.
-    tracker.emitPhaseStart('projects');
+    tracker.emitPhaseStart('projects')
 
-    const projectIds = await migrateProjects(report, projects, tracker.tick);
-    const mediaIds = await migrateMedia(report, media, tracker.tick);
-    await migrateThumbnails(report, mediaIds, tracker.tick);
-    await migrateProjectMedia(report, associations, projectIds, tracker.tick);
-    await migrateTranscripts(report, mediaIds, tracker.tick);
-    await migrateGifFrames(report, mediaIds, tracker.tick);
-    await migrateWaveforms(report, waveforms, tracker.tick);
-    await migrateDecodedAudio(report, decodedAudio, tracker.tick);
+    const projectIds = await migrateProjects(report, projects, tracker.tick)
+    const mediaIds = await migrateMedia(report, media, tracker.tick)
+    await migrateThumbnails(report, mediaIds, tracker.tick)
+    await migrateProjectMedia(report, associations, projectIds, tracker.tick)
+    await migrateTranscripts(report, mediaIds, tracker.tick)
+    await migrateGifFrames(report, mediaIds, tracker.tick)
+    await migrateWaveforms(report, waveforms, tracker.tick)
+    await migrateDecodedAudio(report, decodedAudio, tracker.tick)
 
-    tracker.emitPhaseStart('finalizing');
+    tracker.emitPhaseStart('finalizing')
 
     // Persist per-store errors so the UI can surface a retry banner on
     // next launch. A clean run clears the error marker.
-    await writeMigrationErrors(report.errors);
+    await writeMigrationErrors(report.errors)
 
     // Set the "migration ran" marker only on a fully clean run. A run with
     // any errors leaves the marker unset so re-running retries the whole
@@ -482,13 +466,13 @@ export async function migrateFromLegacyIDB(
     // behavior (noise, but no data loss). Once every store succeeds, the
     // marker is set and future launches skip the migration entirely.
     if (report.errors.length === 0) {
-      await markMigrated();
+      await markMigrated()
     } else {
       logger.warn(
         `Migration completed with ${report.errors.length} errors; marker not set to allow retry.`,
-      );
+      )
     }
-    report.durationMs = Date.now() - started;
+    report.durationMs = Date.now() - started
 
     event.merge({
       projects: report.projects,
@@ -503,13 +487,13 @@ export async function migrateFromLegacyIDB(
       durationMs: report.durationMs,
       markedMigrated: report.errors.length === 0,
       totalUnits: total,
-    });
-    event.success();
-    return report;
+    })
+    event.success()
+    return report
   } catch (error) {
-    report.durationMs = Date.now() - started;
-    event.failure(error, { errorCount: report.errors.length });
-    throw error;
+    report.durationMs = Date.now() - started
+    event.failure(error, { errorCount: report.errors.length })
+    throw error
   }
 }
 
@@ -518,5 +502,5 @@ export async function migrateFromLegacyIDB(
  * Only invoke from a user-confirmed action after a successful migration.
  */
 export async function deleteLegacyIDB(): Promise<void> {
-  await closeAndDeleteLegacyDB();
+  await closeAndDeleteLegacyDB()
 }

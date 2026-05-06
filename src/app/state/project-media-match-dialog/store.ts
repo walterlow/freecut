@@ -1,36 +1,32 @@
-import { create } from 'zustand';
+import { create } from 'zustand'
 
 export interface ProjectMediaMatchCandidate {
-  fileName: string;
-  width: number;
-  height: number;
-  fps: number;
+  fileName: string
+  width: number
+  height: number
+  fps: number
 }
 
-export type ProjectMediaMatchChoice =
-  | 'match-both'
-  | 'fps-only'
-  | 'size-only'
-  | 'keep-current';
+export type ProjectMediaMatchChoice = 'match-both' | 'fps-only' | 'size-only' | 'keep-current'
 
 interface ProjectMediaMatchDialogState {
-  isOpen: boolean;
-  projectId: string | null;
-  candidate: ProjectMediaMatchCandidate | null;
-  handledProjectIds: string[];
-  resolver: ((choice: ProjectMediaMatchChoice) => void) | null;
+  isOpen: boolean
+  projectId: string | null
+  candidate: ProjectMediaMatchCandidate | null
+  handledProjectIds: string[]
+  resolver: ((choice: ProjectMediaMatchChoice) => void) | null
   requestProjectMediaMatch: (
     projectId: string,
-    candidate: ProjectMediaMatchCandidate
-  ) => Promise<ProjectMediaMatchChoice>;
-  resolveProjectMediaMatch: (choice: ProjectMediaMatchChoice) => void;
-  markProjectMediaMatchHandled: (projectId: string) => void;
-  hasHandledProjectMediaMatch: (projectId: string) => boolean;
-  resetProjectMediaMatchDialog: () => void;
+    candidate: ProjectMediaMatchCandidate,
+  ) => Promise<ProjectMediaMatchChoice>
+  resolveProjectMediaMatch: (choice: ProjectMediaMatchChoice) => void
+  markProjectMediaMatchHandled: (projectId: string) => void
+  hasHandledProjectMediaMatch: (projectId: string) => boolean
+  resetProjectMediaMatchDialog: () => void
 }
 
 function addHandledProjectId(existing: string[], projectId: string): string[] {
-  return existing.includes(projectId) ? existing : [...existing, projectId];
+  return existing.includes(projectId) ? existing : [...existing, projectId]
 }
 
 export const useProjectMediaMatchDialogStore = create<ProjectMediaMatchDialogState>((set, get) => ({
@@ -42,12 +38,12 @@ export const useProjectMediaMatchDialogStore = create<ProjectMediaMatchDialogSta
 
   requestProjectMediaMatch: (projectId, candidate) => {
     if (!projectId || get().handledProjectIds.includes(projectId)) {
-      return Promise.resolve('keep-current');
+      return Promise.resolve('keep-current')
     }
 
-    const previousResolver = get().resolver;
+    const previousResolver = get().resolver
     if (previousResolver) {
-      previousResolver('keep-current');
+      previousResolver('keep-current')
     }
 
     return new Promise<ProjectMediaMatchChoice>((resolve) => {
@@ -56,13 +52,13 @@ export const useProjectMediaMatchDialogStore = create<ProjectMediaMatchDialogSta
         projectId,
         candidate,
         resolver: resolve,
-      });
-    });
+      })
+    })
   },
 
   resolveProjectMediaMatch: (choice) => {
-    const { resolver, projectId, handledProjectIds } = get();
-    resolver?.(choice);
+    const { resolver, projectId, handledProjectIds } = get()
+    resolver?.(choice)
 
     set({
       isOpen: false,
@@ -72,32 +68,32 @@ export const useProjectMediaMatchDialogStore = create<ProjectMediaMatchDialogSta
       handledProjectIds: projectId
         ? addHandledProjectId(handledProjectIds, projectId)
         : handledProjectIds,
-    });
+    })
   },
 
   markProjectMediaMatchHandled: (projectId) => {
     if (!projectId) {
-      return;
+      return
     }
 
     set((state) => ({
       handledProjectIds: addHandledProjectId(state.handledProjectIds, projectId),
-    }));
+    }))
   },
 
   hasHandledProjectMediaMatch: (projectId) => {
-    return get().handledProjectIds.includes(projectId);
+    return get().handledProjectIds.includes(projectId)
   },
 
   resetProjectMediaMatchDialog: () => {
-    const { resolver } = get();
-    resolver?.('keep-current');
+    const { resolver } = get()
+    resolver?.('keep-current')
     set({
       isOpen: false,
       projectId: null,
       candidate: null,
       resolver: null,
       handledProjectIds: [],
-    });
+    })
   },
-}));
+}))

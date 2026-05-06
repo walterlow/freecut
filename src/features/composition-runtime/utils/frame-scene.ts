@@ -1,59 +1,54 @@
-import type { ItemKeyframes } from '@/types/keyframe';
-import type { ShapeItem, TimelineItem } from '@/types/timeline';
-import type { CanvasSettings, ResolvedTransform } from '@/types/transform';
-import type { CompositionRenderPlan } from './scene-assembly';
-import type { ShapeMaskWithTrackOrder } from './scene-assembly';
-import {
-  resolveTransform,
-  getSourceDimensions,
-} from './transform-resolver';
+import type { ItemKeyframes } from '@/types/keyframe'
+import type { ShapeItem, TimelineItem } from '@/types/timeline'
+import type { CanvasSettings, ResolvedTransform } from '@/types/transform'
+import type { CompositionRenderPlan } from './scene-assembly'
+import type { ShapeMaskWithTrackOrder } from './scene-assembly'
+import { resolveTransform, getSourceDimensions } from './transform-resolver'
 import {
   applyPreviewPathVerticesToShape,
   type PreviewPathVerticesOverride,
-} from './preview-path-override';
-import { expandTextTransformToFitContent } from './text-layout';
+} from './preview-path-override'
+import { expandTextTransformToFitContent } from './text-layout'
 import {
   resolveAnimatedTransform,
   hasKeyframeAnimation,
   resolveAnimatedTextItem,
-} from '../deps/keyframes';
-import {
-  resolveTransitionFrameState,
-  type TransitionFrameState,
-} from './transition-scene';
+} from '../deps/keyframes'
+import { resolveTransitionFrameState, type TransitionFrameState } from './transition-scene'
 import {
   hasFrameInvalidation,
   isFrameInRanges,
   type FrameInvalidationRequest,
-} from '@/shared/utils/frame-invalidation';
+} from '@/shared/utils/frame-invalidation'
+import { hasCornerPin } from './corner-pin'
 
-export type TransformOverride = Partial<ResolvedTransform> | undefined;
+export type TransformOverride = Partial<ResolvedTransform> | undefined
 
 export interface ResolvedShapeMask {
-  shape: ShapeItem;
-  transform: ResolvedTransform;
-  trackOrder: number;
+  shape: ShapeItem
+  transform: ResolvedTransform
+  trackOrder: number
 }
 
 export interface FrameCompositionScene<TItem extends TimelineItem = TimelineItem> {
-  frame: number;
-  activeShapeMasks: ResolvedShapeMask[];
-  transitionFrameState: TransitionFrameState<TItem>;
+  frame: number
+  activeShapeMasks: ResolvedShapeMask[]
+  transitionFrameState: TransitionFrameState<TItem>
 }
 
 export interface FrameCompositionSceneCache {
   resolve(
     params: Parameters<typeof resolveFrameCompositionScene>[0],
     revision?: unknown,
-  ): FrameCompositionScene;
-  invalidate(request?: FrameInvalidationRequest): void;
+  ): FrameCompositionScene
+  invalidate(request?: FrameInvalidationRequest): void
 }
 
 export function applyTransformOverride(
   baseTransform: ResolvedTransform,
   override?: TransformOverride,
 ): ResolvedTransform {
-  if (!override) return baseTransform;
+  if (!override) return baseTransform
 
   return {
     ...baseTransform,
@@ -62,7 +57,7 @@ export function applyTransformOverride(
     anchorY: override.anchorY ?? baseTransform.anchorY,
     opacity: override.opacity ?? baseTransform.opacity,
     cornerRadius: override.cornerRadius ?? baseTransform.cornerRadius,
-  };
+  }
 }
 
 export function resolveItemTransformAtRelativeFrame(
@@ -73,25 +68,26 @@ export function resolveItemTransformAtRelativeFrame(
     keyframes,
     previewTransform,
   }: {
-    canvas: CanvasSettings;
-    relativeFrame: number;
-    keyframes?: ItemKeyframes;
-    previewTransform?: TransformOverride;
-  }
+    canvas: CanvasSettings
+    relativeFrame: number
+    keyframes?: ItemKeyframes
+    previewTransform?: TransformOverride
+  },
 ): ResolvedTransform {
-  const baseResolved = resolveTransform(item, canvas, getSourceDimensions(item));
-  const animatedResolved = keyframes && hasKeyframeAnimation(keyframes)
-    ? resolveAnimatedTransform(baseResolved, keyframes, relativeFrame)
-    : baseResolved;
+  const baseResolved = resolveTransform(item, canvas, getSourceDimensions(item))
+  const animatedResolved =
+    keyframes && hasKeyframeAnimation(keyframes)
+      ? resolveAnimatedTransform(baseResolved, keyframes, relativeFrame)
+      : baseResolved
 
-  const resolved = applyTransformOverride(animatedResolved, previewTransform);
+  const resolved = applyTransformOverride(animatedResolved, previewTransform)
 
-  return item.type === 'text'
+  return item.type === 'text' && !hasCornerPin(item.cornerPin)
     ? expandTextTransformToFitContent(
         resolveAnimatedTextItem(item, keyframes, relativeFrame, canvas),
         resolved,
       )
-    : resolved;
+    : resolved
 }
 
 export function resolveItemTransformAtFrame(
@@ -102,18 +98,18 @@ export function resolveItemTransformAtFrame(
     keyframes,
     previewTransform,
   }: {
-    canvas: CanvasSettings;
-    frame: number;
-    keyframes?: ItemKeyframes;
-    previewTransform?: TransformOverride;
-  }
+    canvas: CanvasSettings
+    frame: number
+    keyframes?: ItemKeyframes
+    previewTransform?: TransformOverride
+  },
 ): ResolvedTransform {
   return resolveItemTransformAtRelativeFrame(item, {
     canvas,
     relativeFrame: frame - item.from,
     keyframes,
     previewTransform,
-  });
+  })
 }
 
 export function resolveActiveShapeMasksAtFrame(
@@ -125,40 +121,36 @@ export function resolveActiveShapeMasksAtFrame(
     getPreviewTransform,
     getPreviewPathVertices,
   }: {
-    canvas: CanvasSettings;
-    frame: number;
-    getKeyframes?: (itemId: string) => ItemKeyframes | undefined;
-    getPreviewTransform?: (itemId: string) => TransformOverride;
-    getPreviewPathVertices?: PreviewPathVerticesOverride;
-  }
+    canvas: CanvasSettings
+    frame: number
+    getKeyframes?: (itemId: string) => ItemKeyframes | undefined
+    getPreviewTransform?: (itemId: string) => TransformOverride
+    getPreviewPathVertices?: PreviewPathVerticesOverride
+  },
 ): ResolvedShapeMask[] {
-  if (masks.length === 0) return [];
+  if (masks.length === 0) return []
 
   return masks
-    .map((maskSource) => (
-      'mask' in maskSource
-        ? maskSource
-        : { mask: maskSource, trackOrder: 0 }
-    ))
+    .map((maskSource) => ('mask' in maskSource ? maskSource : { mask: maskSource, trackOrder: 0 }))
     .filter(({ mask }) => {
-      const start = mask.from;
-      const end = mask.from + mask.durationInFrames;
-      return frame >= start && frame < end;
+      const start = mask.from
+      const end = mask.from + mask.durationInFrames
+      return frame >= start && frame < end
     })
     .map(({ mask, trackOrder }) => {
-      const shape = applyPreviewPathVerticesToShape(mask, getPreviewPathVertices);
+      const shape = applyPreviewPathVerticesToShape(mask, getPreviewPathVertices)
 
       return {
         shape,
         trackOrder,
         transform: resolveItemTransformAtFrame(shape, {
-        canvas,
-        frame,
+          canvas,
+          frame,
           keyframes: getKeyframes?.(mask.id),
           previewTransform: getPreviewTransform?.(mask.id),
         }),
-      };
-    });
+      }
+    })
 }
 
 export function resolveFrameCompositionScene({
@@ -169,12 +161,12 @@ export function resolveFrameCompositionScene({
   getPreviewTransform,
   getPreviewPathVertices,
 }: {
-  renderPlan: CompositionRenderPlan;
-  frame: number;
-  canvas: CanvasSettings;
-  getKeyframes?: (itemId: string) => ItemKeyframes | undefined;
-  getPreviewTransform?: (itemId: string) => TransformOverride;
-  getPreviewPathVertices?: PreviewPathVerticesOverride;
+  renderPlan: CompositionRenderPlan
+  frame: number
+  canvas: CanvasSettings
+  getKeyframes?: (itemId: string) => ItemKeyframes | undefined
+  getPreviewTransform?: (itemId: string) => TransformOverride
+  getPreviewPathVertices?: PreviewPathVerticesOverride
 }): FrameCompositionScene {
   return {
     frame,
@@ -189,7 +181,7 @@ export function resolveFrameCompositionScene({
       transitionWindows: renderPlan.transitionWindows,
       frame,
     }),
-  };
+  }
 }
 
 /**
@@ -198,90 +190,86 @@ export function resolveFrameCompositionScene({
  * and preview callback identities.
  */
 export function createFrameCompositionSceneCache(): FrameCompositionSceneCache {
-  let cachedScene: FrameCompositionScene | null = null;
-  let cachedFrame = -1;
-  let cachedRevision: unknown = undefined;
-  let cachedRenderPlan: CompositionRenderPlan | null = null;
-  let cachedCanvasWidth = -1;
-  let cachedCanvasHeight = -1;
-  let cachedCanvasFps = -1;
-  let cachedGetKeyframes: ((itemId: string) => ItemKeyframes | undefined) | undefined;
-  let cachedGetPreviewTransform: ((itemId: string) => TransformOverride) | undefined;
-  let cachedGetPreviewPathVertices: PreviewPathVerticesOverride | undefined;
+  let cachedScene: FrameCompositionScene | null = null
+  let cachedFrame = -1
+  let cachedRevision: unknown = undefined
+  let cachedRenderPlan: CompositionRenderPlan | null = null
+  let cachedCanvasWidth = -1
+  let cachedCanvasHeight = -1
+  let cachedCanvasFps = -1
+  let cachedGetKeyframes: ((itemId: string) => ItemKeyframes | undefined) | undefined
+  let cachedGetPreviewTransform: ((itemId: string) => TransformOverride) | undefined
+  let cachedGetPreviewPathVertices: PreviewPathVerticesOverride | undefined
 
   return {
     resolve(params, revision) {
-      const canvasMatches = (
-        cachedCanvasWidth === params.canvas.width
-        && cachedCanvasHeight === params.canvas.height
-        && cachedCanvasFps === params.canvas.fps
-      );
-      const callbacksMatch = (
-        cachedGetKeyframes === params.getKeyframes
-        && cachedGetPreviewTransform === params.getPreviewTransform
-        && cachedGetPreviewPathVertices === params.getPreviewPathVertices
-      );
+      const canvasMatches =
+        cachedCanvasWidth === params.canvas.width &&
+        cachedCanvasHeight === params.canvas.height &&
+        cachedCanvasFps === params.canvas.fps
+      const callbacksMatch =
+        cachedGetKeyframes === params.getKeyframes &&
+        cachedGetPreviewTransform === params.getPreviewTransform &&
+        cachedGetPreviewPathVertices === params.getPreviewPathVertices
 
       if (
-        cachedScene
-        && cachedFrame === params.frame
-        && cachedRevision === revision
-        && cachedRenderPlan === params.renderPlan
-        && canvasMatches
-        && callbacksMatch
+        cachedScene &&
+        cachedFrame === params.frame &&
+        cachedRevision === revision &&
+        cachedRenderPlan === params.renderPlan &&
+        canvasMatches &&
+        callbacksMatch
       ) {
-        return cachedScene;
+        return cachedScene
       }
 
-      cachedScene = resolveFrameCompositionScene(params);
-      cachedFrame = params.frame;
-      cachedRevision = revision;
-      cachedRenderPlan = params.renderPlan;
-      cachedCanvasWidth = params.canvas.width;
-      cachedCanvasHeight = params.canvas.height;
-      cachedCanvasFps = params.canvas.fps;
-      cachedGetKeyframes = params.getKeyframes;
-      cachedGetPreviewTransform = params.getPreviewTransform;
-      cachedGetPreviewPathVertices = params.getPreviewPathVertices;
-      return cachedScene;
+      cachedScene = resolveFrameCompositionScene(params)
+      cachedFrame = params.frame
+      cachedRevision = revision
+      cachedRenderPlan = params.renderPlan
+      cachedCanvasWidth = params.canvas.width
+      cachedCanvasHeight = params.canvas.height
+      cachedCanvasFps = params.canvas.fps
+      cachedGetKeyframes = params.getKeyframes
+      cachedGetPreviewTransform = params.getPreviewTransform
+      cachedGetPreviewPathVertices = params.getPreviewPathVertices
+      return cachedScene
     },
     invalidate(request) {
-      if (
-        cachedScene
-        && request
-        && hasFrameInvalidation(request)
-      ) {
-        const isMatchingFrame = request.frames?.includes(cachedFrame) ?? false;
-        const isMatchingRange = request.ranges ? isFrameInRanges(cachedFrame, request.ranges) : false;
+      if (cachedScene && request && hasFrameInvalidation(request)) {
+        const isMatchingFrame = request.frames?.includes(cachedFrame) ?? false
+        const isMatchingRange = request.ranges
+          ? isFrameInRanges(cachedFrame, request.ranges)
+          : false
         if (!isMatchingFrame && !isMatchingRange) {
-          return;
+          return
         }
       }
 
-      cachedScene = null;
-      cachedFrame = -1;
-      cachedRevision = undefined;
-      cachedRenderPlan = null;
-      cachedCanvasWidth = -1;
-      cachedCanvasHeight = -1;
-      cachedCanvasFps = -1;
-      cachedGetKeyframes = undefined;
-      cachedGetPreviewTransform = undefined;
-      cachedGetPreviewPathVertices = undefined;
+      cachedScene = null
+      cachedFrame = -1
+      cachedRevision = undefined
+      cachedRenderPlan = null
+      cachedCanvasWidth = -1
+      cachedCanvasHeight = -1
+      cachedCanvasFps = -1
+      cachedGetKeyframes = undefined
+      cachedGetPreviewTransform = undefined
+      cachedGetPreviewPathVertices = undefined
     },
-  };
+  }
 }
 
-const defaultFrameSceneCache = createFrameCompositionSceneCache();
+const defaultFrameSceneCache = createFrameCompositionSceneCache()
 
 export function resolveFrameCompositionSceneCached(
   params: Parameters<typeof resolveFrameCompositionScene>[0],
   revision?: unknown,
 ): FrameCompositionScene {
-  return defaultFrameSceneCache.resolve(params, revision);
+  return defaultFrameSceneCache.resolve(params, revision)
 }
 
 /** Invalidate the default cached scene (call when composition structure changes). */
 export function invalidateFrameSceneCache(): void {
-  defaultFrameSceneCache.invalidate();
+  defaultFrameSceneCache.invalidate()
 }

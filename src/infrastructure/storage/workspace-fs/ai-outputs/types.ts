@@ -7,8 +7,12 @@
  * works uniformly. Service-specific data goes inside `data`.
  */
 
-import type { MediaCaption } from '@/infrastructure/analysis';
-import type { MediaTranscript, MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage';
+import type { MediaCaption } from '@/infrastructure/analysis'
+import type {
+  MediaTranscript,
+  MediaTranscriptModel,
+  MediaTranscriptQuantization,
+} from '@/types/storage'
 
 /**
  * Registry of AI output kinds. Adding a new AI service means:
@@ -17,70 +21,67 @@ import type { MediaTranscript, MediaTranscriptModel, MediaTranscriptQuantization
  * 3. (Optional) Add a thin wrapper in `workspace-fs/` that calls
  *    `readAiOutput/writeAiOutput` with that kind.
  */
-export type AiOutputKind =
-  | 'transcript'
-  | 'captions'
-  | 'scenes';
+export type AiOutputKind = 'transcript' | 'captions' | 'scenes'
 
 /**
  * Typed payload per kind. Matches the `data` field on `AiOutput<T>`.
  * New kinds must be registered here so the storage API stays strongly typed.
  */
 export interface AiOutputPayloads {
-  transcript: TranscriptPayload;
-  captions: CaptionsPayload;
-  scenes: ScenesPayload;
+  transcript: TranscriptPayload
+  captions: CaptionsPayload
+  scenes: ScenesPayload
 }
 
 /**
  * Current schema version for the envelope itself. Bump when the envelope
  * shape changes (not when a payload changes — that's the payload's concern).
  */
-export const AI_OUTPUT_SCHEMA_VERSION = 1;
+export const AI_OUTPUT_SCHEMA_VERSION = 1
 
 export interface AiOutput<K extends AiOutputKind> {
-  schemaVersion: typeof AI_OUTPUT_SCHEMA_VERSION;
-  kind: K;
-  mediaId: string;
+  schemaVersion: typeof AI_OUTPUT_SCHEMA_VERSION
+  kind: K
+  mediaId: string
   /** Stable service identifier, e.g. `"whisper-wasm"`, `"lfm-captioning"`. */
-  service: string;
+  service: string
   /** Model id/version, e.g. `"whisper-small"`, `"lfm-2.5-vl"`. */
-  model: string;
+  model: string
   /** Service-specific inputs that affect the output (quantization, threshold, sample interval). */
-  params: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-  data: AiOutputPayloads[K];
+  params: Record<string, unknown>
+  createdAt: number
+  updatedAt: number
+  data: AiOutputPayloads[K]
 }
 
 /* ───────────────── Payload shapes ───────────────── */
 
 export interface TranscriptPayload {
-  language?: string;
-  quantization: MediaTranscriptQuantization;
-  modelVariant: MediaTranscriptModel;
-  text: string;
-  segments: Array<{ text: string; start: number; end: number }>;
+  language?: string
+  quantization: MediaTranscriptQuantization
+  modelVariant: MediaTranscriptModel
+  text: string
+  segments: Array<{ text: string; start: number; end: number }>
 }
 
 export type CaptionsPayload = {
-  sampleIntervalSec?: number;
+  sampleIntervalSec?: number
   /**
    * Identifier of the text embedding model whose vectors live in the
    * companion `captions-embeddings.bin` file. Absence means embeddings
    * haven't been computed yet (keyword search still works).
    */
-  embeddingModel?: string;
+  embeddingModel?: string
   /** Dimension of each text embedding vector, e.g. 384 for all-MiniLM-L6-v2. */
-  embeddingDim?: number;
+  embeddingDim?: number
   /**
    * Identifier of the image (CLIP) embedding model whose vectors live
    * in `captions-image-embeddings.bin`. Independent of the text model;
    * present only when thumbnails have been visually indexed.
    */
-  imageEmbeddingModel?: string;
+  imageEmbeddingModel?: string
   /** Dimension of each image embedding vector, e.g. 512 for CLIP base. */
-  imageEmbeddingDim?: number;
+  imageEmbeddingDim?: number
   /**
    * SHA-256 of the source media bytes. When present, this envelope was
    * saved via the shared content-addressable cache — embedding bins and
@@ -88,24 +89,24 @@ export type CaptionsPayload = {
    * shared across every mediaId that resolves to the same hash. Per-caption
    * `thumbRelPath` values point into the content tree in this mode.
    */
-  contentHash?: string;
-  captions: MediaCaption[];
-};
+  contentHash?: string
+  captions: MediaCaption[]
+}
 
 export interface SceneCutPayload {
-  frame: number;
-  time: number;
+  frame: number
+  time: number
   /** Service-defined motion metadata (histogram distance, flow magnitude, etc.). */
-  motion: unknown;
-  verified?: boolean;
+  motion: unknown
+  verified?: boolean
 }
 
 export interface ScenesPayload {
-  method: 'histogram' | 'optical-flow';
-  sampleIntervalMs: number;
-  verificationModel?: string;
-  fps: number;
-  cuts: SceneCutPayload[];
+  method: 'histogram' | 'optical-flow'
+  sampleIntervalMs: number
+  verificationModel?: string
+  fps: number
+  cuts: SceneCutPayload[]
 }
 
 /* ───────────────── Conversions ───────────────── */
@@ -132,7 +133,7 @@ export function transcriptFromLegacy(record: MediaTranscript): AiOutput<'transcr
       text: record.text,
       segments: record.segments,
     },
-  };
+  }
 }
 
 /** Inverse of {@link transcriptFromLegacy}. */
@@ -147,5 +148,5 @@ export function transcriptToLegacy(envelope: AiOutput<'transcript'>): MediaTrans
     segments: envelope.data.segments,
     createdAt: envelope.createdAt,
     updatedAt: envelope.updatedAt,
-  };
+  }
 }

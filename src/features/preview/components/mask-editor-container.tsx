@@ -6,19 +6,19 @@
  * passes coordinate params to the overlay.
  */
 
-import { memo, useCallback, useMemo } from 'react';
-import { useMaskEditorStore } from '../stores/mask-editor-store';
-import { useItemsStore } from '@/features/preview/deps/timeline-store';
-import { MaskEditorOverlay } from './mask-editor-overlay';
-import type { CoordinateParams, Transform } from '../types/gizmo';
-import { useVisualTransforms } from '../hooks/use-visual-transform';
-import { ErrorBoundary } from '@/components/error-boundary';
+import { memo, useCallback, useMemo } from 'react'
+import { useMaskEditorStore } from '../stores/mask-editor-store'
+import { useItemsStore } from '@/features/preview/deps/timeline-store'
+import { MaskEditorOverlay } from './mask-editor-overlay'
+import type { CoordinateParams, Transform } from '../types/gizmo'
+import { useVisualTransforms } from '../hooks/use-visual-transform'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 interface MaskEditorContainerProps {
-  containerRect: DOMRect | null;
-  playerSize: { width: number; height: number };
-  projectSize: { width: number; height: number };
-  zoom: number;
+  containerRect: DOMRect | null
+  playerSize: { width: number; height: number }
+  projectSize: { width: number; height: number }
+  zoom: number
 }
 
 export const MaskEditorContainer = memo(function MaskEditorContainer({
@@ -27,35 +27,39 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
   projectSize,
   zoom,
 }: MaskEditorContainerProps) {
-  const isEditing = useMaskEditorStore((s) => s.isEditing);
-  const editingItemId = useMaskEditorStore((s) => s.editingItemId);
-  const shapePenMode = useMaskEditorStore((s) => s.shapePenMode);
+  const isEditing = useMaskEditorStore((s) => s.isEditing)
+  const editingItemId = useMaskEditorStore((s) => s.editingItemId)
+  const shapePenMode = useMaskEditorStore((s) => s.shapePenMode)
 
   const editingItem = useItemsStore(
     useCallback(
-      (s) => editingItemId ? (s.itemById[editingItemId] ?? null) : null,
-      [editingItemId]
-    )
-  );
-  const visualTransforms = useVisualTransforms(editingItem ? [editingItem] : [], projectSize);
+      (s) => (editingItemId ? (s.itemById[editingItemId] ?? null) : null),
+      [editingItemId],
+    ),
+  )
+  const visualTransforms = useVisualTransforms(editingItem ? [editingItem] : [], projectSize)
 
   const coordParams = useMemo((): CoordinateParams | null => {
-    if (!containerRect) return null;
-    return { containerRect, playerSize, projectSize, zoom };
-  }, [containerRect, playerSize, projectSize, zoom]);
+    if (!containerRect) return null
+    return { containerRect, playerSize, projectSize, zoom }
+  }, [containerRect, playerSize, projectSize, zoom])
 
   const itemTransform = useMemo((): Transform | null => {
     // Shape pen mode: use full canvas as the coordinate space
     if (shapePenMode) {
       return {
-        x: 0, y: 0,
-        width: projectSize.width, height: projectSize.height,
-        rotation: 0, opacity: 1, cornerRadius: 0,
-      };
+        x: 0,
+        y: 0,
+        width: projectSize.width,
+        height: projectSize.height,
+        rotation: 0,
+        opacity: 1,
+        cornerRadius: 0,
+      }
     }
-    if (!editingItem) return null;
-    const resolved = visualTransforms.get(editingItem.id);
-    if (!resolved) return null;
+    if (!editingItem) return null
+    const resolved = visualTransforms.get(editingItem.id)
+    if (!resolved) return null
     return {
       x: resolved.x,
       y: resolved.y,
@@ -64,10 +68,10 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
       rotation: resolved.rotation,
       opacity: resolved.opacity,
       cornerRadius: resolved.cornerRadius,
-    };
-  }, [editingItem, projectSize, shapePenMode, visualTransforms]);
+    }
+  }, [editingItem, projectSize, shapePenMode, visualTransforms])
 
-  if (!isEditing || !coordParams || !itemTransform) return null;
+  if (!isEditing || !coordParams || !itemTransform) return null
 
   return (
     <ErrorBoundary level="component">
@@ -77,5 +81,5 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
         itemTransform={itemTransform}
       />
     </ErrorBoundary>
-  );
-});
+  )
+})

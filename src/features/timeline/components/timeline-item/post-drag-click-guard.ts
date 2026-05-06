@@ -1,12 +1,12 @@
-import type { SelectionState } from '@/shared/state/selection/types';
+import type { SelectionState } from '@/shared/state/selection/types'
 
 export function shouldSuppressTimelineItemClickAfterDrag(
   activeTool: SelectionState['activeTool'],
   dragWasActive: boolean,
 ): boolean {
   if (!dragWasActive) {
-    return false;
+    return false
   }
 
-  return activeTool === 'select' || activeTool === 'trim-edit';
+  return activeTool === 'select' || activeTool === 'trim-edit'
 }

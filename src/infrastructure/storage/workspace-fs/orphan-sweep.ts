@@ -22,49 +22,47 @@
  *   - `content/<hash[0:2]>/` — refcounted, handled by refcount logic.
  */
 
-import { createLogger } from '@/shared/logging/logger';
-import { requireWorkspaceRoot } from './root';
-import { listDirectory } from './fs-primitives';
-import { MEDIA_DIR } from './paths';
+import { createLogger } from '@/shared/logging/logger'
+import { requireWorkspaceRoot } from './root'
+import { listDirectory } from './fs-primitives'
+import { MEDIA_DIR } from './paths'
 
-const logger = createLogger('WorkspaceFS:OrphanSweep');
+const logger = createLogger('WorkspaceFS:OrphanSweep')
 
 export interface OrphanSweepReport {
-  liveMediaCount: number;
+  liveMediaCount: number
   /** Total entries that were (or would be, in dry-run) removed. */
-  totalRemoved: number;
+  totalRemoved: number
   /** Dry-run = report only, do not touch disk. */
-  dryRun: boolean;
-  durationMs: number;
+  dryRun: boolean
+  durationMs: number
 }
 
 export interface OrphanSweepOptions {
-  dryRun?: boolean;
+  dryRun?: boolean
 }
 
-async function countLiveMedia(
-  root: FileSystemDirectoryHandle,
-): Promise<number> {
-  const entries = await listDirectory(root, [MEDIA_DIR]);
-  return entries.filter((e) => e.kind === 'directory').length;
+async function countLiveMedia(root: FileSystemDirectoryHandle): Promise<number> {
+  const entries = await listDirectory(root, [MEDIA_DIR])
+  return entries.filter((e) => e.kind === 'directory').length
 }
 
 export async function sweepWorkspaceOrphans(
   options: OrphanSweepOptions = {},
 ): Promise<OrphanSweepReport> {
-  const dryRun = options.dryRun ?? false;
-  const started = Date.now();
-  const root = requireWorkspaceRoot();
+  const dryRun = options.dryRun ?? false
+  const started = Date.now()
+  const root = requireWorkspaceRoot()
 
-  const liveMediaCount = await countLiveMedia(root);
+  const liveMediaCount = await countLiveMedia(root)
 
   const report: OrphanSweepReport = {
     liveMediaCount,
     totalRemoved: 0,
     dryRun,
     durationMs: Date.now() - started,
-  };
+  }
 
-  logger.info('Orphan sweep: v2 layout has no orphaned per-media caches');
-  return report;
+  logger.info('Orphan sweep: v2 layout has no orphaned per-media caches')
+  return report
 }

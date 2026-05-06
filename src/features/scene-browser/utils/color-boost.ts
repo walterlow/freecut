@@ -14,17 +14,17 @@
  * magnitudes so it composes cleanly with the text/image scores.
  */
 
-import { deltaE2000, type LabColor, type PaletteEntry } from '../deps/analysis';
+import { deltaE2000, type LabColor, type PaletteEntry } from '../deps/analysis'
 
 export interface ColorBoostResult {
   /** Additive score contribution, in cosine-compatible units. */
-  boost: number;
+  boost: number
   /** Query color family that matched (e.g. "red"). */
-  family: string;
+  family: string
   /** Minimum ∆E across the scene's palette. */
-  deltaE: number;
+  deltaE: number
   /** The palette entry that produced the minimum distance. */
-  matched: PaletteEntry;
+  matched: PaletteEntry
 }
 
 /**
@@ -33,42 +33,50 @@ export interface ColorBoostResult {
  * 0. Linear falloff in between keeps the math simple and explains
  * itself in chip tooltips.
  */
-const MAX_BOOST = 0.18;
-const ZERO_BOOST_DELTA_E = 30;
+const MAX_BOOST = 0.18
+const ZERO_BOOST_DELTA_E = 30
 
 function boostFromDeltaE(deltaE: number, weight: number): number {
-  if (deltaE >= ZERO_BOOST_DELTA_E) return 0;
-  const linear = (ZERO_BOOST_DELTA_E - deltaE) / ZERO_BOOST_DELTA_E;
+  if (deltaE >= ZERO_BOOST_DELTA_E) return 0
+  const linear = (ZERO_BOOST_DELTA_E - deltaE) / ZERO_BOOST_DELTA_E
   // Weight shrinks the contribution when the matched color is a tiny
   // fraction of the thumbnail (a 3% pixel slice of red doesn't really
   // make the scene "red").
-  const weightFactor = Math.min(1, weight / 0.2);
-  return MAX_BOOST * linear * weightFactor;
+  const weightFactor = Math.min(1, weight / 0.2)
+  return MAX_BOOST * linear * weightFactor
 }
 
 /** Families that demand a visibly chromatic palette entry to match. */
 const CHROMATIC_FAMILIES = new Set([
-  'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'coral',
-]);
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'teal',
+  'blue',
+  'purple',
+  'pink',
+  'coral',
+])
 
 /** Minimum chroma (sqrt(a²+b²)) for a palette entry to match a chromatic family. */
-const MIN_ENTRY_CHROMA = 15;
+const MIN_ENTRY_CHROMA = 15
 
 /** Max hue-angle difference (degrees) between palette entry and chromatic family. */
-const MAX_HUE_DELTA_DEG = 45;
+const MAX_HUE_DELTA_DEG = 45
 
 function labHueDeg(a: number, b: number): number {
-  const deg = (Math.atan2(b, a) * 180) / Math.PI;
-  return deg < 0 ? deg + 360 : deg;
+  const deg = (Math.atan2(b, a) * 180) / Math.PI
+  return deg < 0 ? deg + 360 : deg
 }
 
 function labChroma(a: number, b: number): number {
-  return Math.sqrt(a * a + b * b);
+  return Math.sqrt(a * a + b * b)
 }
 
 function hueDelta(h1: number, h2: number): number {
-  const diff = Math.abs(h1 - h2) % 360;
-  return diff > 180 ? 360 - diff : diff;
+  const diff = Math.abs(h1 - h2) % 360
+  return diff > 180 ? 360 - diff : diff
 }
 
 /**
@@ -83,11 +91,11 @@ function paletteEntryCompatibleWithFamily(
   family: ColorFamilyDefinition,
   entry: PaletteEntry,
 ): boolean {
-  if (!CHROMATIC_FAMILIES.has(family.family)) return true;
-  if (labChroma(entry.a, entry.b) < MIN_ENTRY_CHROMA) return false;
-  const familyHue = labHueDeg(family.lab.a, family.lab.b);
-  const entryHue = labHueDeg(entry.a, entry.b);
-  return hueDelta(familyHue, entryHue) <= MAX_HUE_DELTA_DEG;
+  if (!CHROMATIC_FAMILIES.has(family.family)) return true
+  if (labChroma(entry.a, entry.b) < MIN_ENTRY_CHROMA) return false
+  const familyHue = labHueDeg(family.lab.a, family.lab.b)
+  const entryHue = labHueDeg(entry.a, entry.b)
+  return hueDelta(familyHue, entryHue) <= MAX_HUE_DELTA_DEG
 }
 
 /**
@@ -102,43 +110,87 @@ function paletteEntryCompatibleWithFamily(
  * reading; users can always add descriptive words to disambiguate).
  */
 export interface ColorFamilyDefinition {
-  family: string;
-  lab: LabColor;
-  synonyms: string[];
+  family: string
+  lab: LabColor
+  synonyms: string[]
 }
 
 export interface ParsedColorQuery {
-  colors: ColorFamilyDefinition[];
+  colors: ColorFamilyDefinition[]
   /**
    * True when the query is asking for palette alone (e.g. `color:yellow`,
    * `yellow color`, `crimson tones`) rather than "yellow jacket" /
    * "blue car" object semantics.
    */
-  paletteOnly: boolean;
+  paletteOnly: boolean
 }
 
 const COLOR_FAMILIES: ColorFamilyDefinition[] = [
-  { family: 'red',    lab: { l: 53, a: 70, b: 50 },  synonyms: ['red', 'crimson', 'scarlet', 'maroon', 'ruby', 'burgundy'] },
-  { family: 'orange', lab: { l: 65, a: 40, b: 65 },  synonyms: ['orange', 'amber', 'tangerine', 'peach', 'apricot'] },
-  { family: 'yellow', lab: { l: 90, a: -5, b: 80 },  synonyms: ['yellow', 'golden', 'gold', 'mustard', 'lemon'] },
-  { family: 'green',  lab: { l: 60, a: -55, b: 50 }, synonyms: ['green', 'emerald', 'lime', 'olive', 'forest', 'mint', 'sage'] },
-  { family: 'teal',   lab: { l: 60, a: -40, b: -15 },synonyms: ['teal', 'turquoise', 'cyan', 'aqua'] },
-  { family: 'blue',   lab: { l: 40, a: 15, b: -60 }, synonyms: ['blue', 'navy', 'azure', 'cobalt', 'indigo', 'sapphire'] },
-  { family: 'purple', lab: { l: 40, a: 50, b: -45 }, synonyms: ['purple', 'violet', 'magenta', 'lavender', 'plum', 'lilac'] },
+  {
+    family: 'red',
+    lab: { l: 53, a: 70, b: 50 },
+    synonyms: ['red', 'crimson', 'scarlet', 'maroon', 'ruby', 'burgundy'],
+  },
+  {
+    family: 'orange',
+    lab: { l: 65, a: 40, b: 65 },
+    synonyms: ['orange', 'amber', 'tangerine', 'peach', 'apricot'],
+  },
+  {
+    family: 'yellow',
+    lab: { l: 90, a: -5, b: 80 },
+    synonyms: ['yellow', 'golden', 'gold', 'mustard', 'lemon'],
+  },
+  {
+    family: 'green',
+    lab: { l: 60, a: -55, b: 50 },
+    synonyms: ['green', 'emerald', 'lime', 'olive', 'forest', 'mint', 'sage'],
+  },
+  {
+    family: 'teal',
+    lab: { l: 60, a: -40, b: -15 },
+    synonyms: ['teal', 'turquoise', 'cyan', 'aqua'],
+  },
+  {
+    family: 'blue',
+    lab: { l: 40, a: 15, b: -60 },
+    synonyms: ['blue', 'navy', 'azure', 'cobalt', 'indigo', 'sapphire'],
+  },
+  {
+    family: 'purple',
+    lab: { l: 40, a: 50, b: -45 },
+    synonyms: ['purple', 'violet', 'magenta', 'lavender', 'plum', 'lilac'],
+  },
   // Pink hue sits around 340-355° (negative b*), not the 5-10° range —
   // at b=+5 we drift into salmon/coral and start matching warm skin
   // tones in dimly lit scenes. Classic "pink" needs a cool shift.
-  { family: 'pink',   lab: { l: 70, a: 50, b: -8 },  synonyms: ['pink', 'rose', 'fuchsia'] },
-  { family: 'coral',  lab: { l: 68, a: 45, b: 25 },  synonyms: ['coral', 'salmon'] },
-  { family: 'brown',  lab: { l: 40, a: 15, b: 35 },  synonyms: ['brown', 'tan', 'beige', 'chocolate', 'khaki', 'sepia'] },
-  { family: 'white',  lab: { l: 95, a: 0, b: 0 },    synonyms: ['white', 'ivory', 'cream', 'snow', 'pearl'] },
-  { family: 'black',  lab: { l: 10, a: 0, b: 0 },    synonyms: ['black', 'ebony', 'charcoal', 'midnight', 'onyx'] },
-  { family: 'gray',   lab: { l: 55, a: 0, b: 0 },    synonyms: ['gray', 'grey', 'silver', 'slate', 'ash'] },
-];
+  { family: 'pink', lab: { l: 70, a: 50, b: -8 }, synonyms: ['pink', 'rose', 'fuchsia'] },
+  { family: 'coral', lab: { l: 68, a: 45, b: 25 }, synonyms: ['coral', 'salmon'] },
+  {
+    family: 'brown',
+    lab: { l: 40, a: 15, b: 35 },
+    synonyms: ['brown', 'tan', 'beige', 'chocolate', 'khaki', 'sepia'],
+  },
+  {
+    family: 'white',
+    lab: { l: 95, a: 0, b: 0 },
+    synonyms: ['white', 'ivory', 'cream', 'snow', 'pearl'],
+  },
+  {
+    family: 'black',
+    lab: { l: 10, a: 0, b: 0 },
+    synonyms: ['black', 'ebony', 'charcoal', 'midnight', 'onyx'],
+  },
+  {
+    family: 'gray',
+    lab: { l: 55, a: 0, b: 0 },
+    synonyms: ['gray', 'grey', 'silver', 'slate', 'ash'],
+  },
+]
 
-const SYNONYM_TO_FAMILY = new Map<string, ColorFamilyDefinition>();
+const SYNONYM_TO_FAMILY = new Map<string, ColorFamilyDefinition>()
 for (const def of COLOR_FAMILIES) {
-  for (const synonym of def.synonyms) SYNONYM_TO_FAMILY.set(synonym, def);
+  for (const synonym of def.synonyms) SYNONYM_TO_FAMILY.set(synonym, def)
 }
 
 const COLOR_INTENT_TOKENS = new Set([
@@ -158,7 +210,7 @@ const COLOR_INTENT_TOKENS = new Set([
   'dominant',
   'swatch',
   'swatches',
-]);
+])
 
 const COLOR_QUERY_FILLER_TOKENS = new Set([
   'a',
@@ -191,10 +243,14 @@ const COLOR_QUERY_FILLER_TOKENS = new Set([
   'video',
   'videos',
   'please',
-]);
+])
 
 function tokenize(text: string): string[] {
-  return text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
 }
 
 /**
@@ -203,15 +259,15 @@ function tokenize(text: string): string[] {
  * "yellow jacket" or "orange sunset" don't get treated as palette-only.
  */
 export function parseColorQuery(query: string): ParsedColorQuery {
-  const tokens = tokenize(query);
-  const explicitIntent = tokens.some((token) => COLOR_INTENT_TOKENS.has(token));
-  const seen = new Set<string>();
-  const colors: ColorFamilyDefinition[] = [];
+  const tokens = tokenize(query)
+  const explicitIntent = tokens.some((token) => COLOR_INTENT_TOKENS.has(token))
+  const seen = new Set<string>()
+  const colors: ColorFamilyDefinition[] = []
   for (const token of tokens) {
-    const def = SYNONYM_TO_FAMILY.get(token);
+    const def = SYNONYM_TO_FAMILY.get(token)
     if (def && !seen.has(def.family)) {
-      seen.add(def.family);
-      colors.push(def);
+      seen.add(def.family)
+      colors.push(def)
     }
   }
 
@@ -220,23 +276,24 @@ export function parseColorQuery(query: string): ParsedColorQuery {
   // weakness on bare color tokens doesn't surface unrelated scenes above
   // palette-matching ones. Multi-word queries like "pink jacket" still
   // flow through the normal semantic path with an additive color boost.
-  const allTokensAreColors = tokens.length > 0
-    && tokens.every((token) => SYNONYM_TO_FAMILY.has(token));
+  const allTokensAreColors =
+    tokens.length > 0 && tokens.every((token) => SYNONYM_TO_FAMILY.has(token))
   if (allTokensAreColors) {
-    return { colors, paletteOnly: true };
+    return { colors, paletteOnly: true }
   }
 
   if (!explicitIntent || colors.length === 0) {
-    return { colors: [], paletteOnly: false };
+    return { colors: [], paletteOnly: false }
   }
 
-  const paletteOnly = !tokens.some((token) => (
-    !COLOR_INTENT_TOKENS.has(token)
-    && !COLOR_QUERY_FILLER_TOKENS.has(token)
-    && !SYNONYM_TO_FAMILY.has(token)
-  ));
+  const paletteOnly = !tokens.some(
+    (token) =>
+      !COLOR_INTENT_TOKENS.has(token) &&
+      !COLOR_QUERY_FILLER_TOKENS.has(token) &&
+      !SYNONYM_TO_FAMILY.has(token),
+  )
 
-  return { colors, paletteOnly };
+  return { colors, paletteOnly }
 }
 
 /**
@@ -245,7 +302,7 @@ export function parseColorQuery(query: string): ParsedColorQuery {
  * ranking for this query.
  */
 export function extractQueryColors(query: string): ColorFamilyDefinition[] {
-  return parseColorQuery(query).colors;
+  return parseColorQuery(query).colors
 }
 
 /**
@@ -257,21 +314,21 @@ export function colorBoostFor(
   queryColors: ColorFamilyDefinition[],
   palette: PaletteEntry[] | undefined,
 ): ColorBoostResult | null {
-  if (queryColors.length === 0 || !palette || palette.length === 0) return null;
+  if (queryColors.length === 0 || !palette || palette.length === 0) return null
 
-  let best: ColorBoostResult | null = null;
+  let best: ColorBoostResult | null = null
   for (const query of queryColors) {
     for (const entry of palette) {
-      if (!paletteEntryCompatibleWithFamily(query, entry)) continue;
-      const distance = deltaE2000(query.lab, { l: entry.l, a: entry.a, b: entry.b });
-      const boost = boostFromDeltaE(distance, entry.weight);
-      if (boost <= 0) continue;
+      if (!paletteEntryCompatibleWithFamily(query, entry)) continue
+      const distance = deltaE2000(query.lab, { l: entry.l, a: entry.a, b: entry.b })
+      const boost = boostFromDeltaE(distance, entry.weight)
+      if (boost <= 0) continue
       if (!best || boost > best.boost) {
-        best = { boost, family: query.family, deltaE: distance, matched: entry };
+        best = { boost, family: query.family, deltaE: distance, matched: entry }
       }
     }
   }
-  return best;
+  return best
 }
 
 /**
@@ -285,16 +342,16 @@ export function colorBoostFor(
  * usually within ∆E 30).
  */
 export function nearestColorFamily(entry: LabColor): string | null {
-  let bestFamily: string | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestFamily: string | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
   for (const def of COLOR_FAMILIES) {
-    const distance = deltaE2000(def.lab, entry);
+    const distance = deltaE2000(def.lab, entry)
     if (distance < bestDistance) {
-      bestDistance = distance;
-      bestFamily = def.family;
+      bestDistance = distance
+      bestFamily = def.family
     }
   }
-  return bestDistance < ZERO_BOOST_DELTA_E ? bestFamily : null;
+  return bestDistance < ZERO_BOOST_DELTA_E ? bestFamily : null
 }
 
 /**
@@ -308,44 +365,38 @@ export function nearestColorFamily(entry: LabColor): string | null {
  * Output is a weighted-mean ∆E 2000 across matched entries. Palettes with
  * no overlap return POSITIVE_INFINITY so the ranker can drop them.
  */
-export function palettePairDistance(
-  a: PaletteEntry[],
-  b: PaletteEntry[],
-): number {
-  if (a.length === 0 || b.length === 0) return Number.POSITIVE_INFINITY;
-  const forward = greedyDirectionalDistance(a, b);
-  const reverse = greedyDirectionalDistance(b, a);
+export function palettePairDistance(a: PaletteEntry[], b: PaletteEntry[]): number {
+  if (a.length === 0 || b.length === 0) return Number.POSITIVE_INFINITY
+  const forward = greedyDirectionalDistance(a, b)
+  const reverse = greedyDirectionalDistance(b, a)
   if (!Number.isFinite(forward) || !Number.isFinite(reverse)) {
-    return Number.POSITIVE_INFINITY;
+    return Number.POSITIVE_INFINITY
   }
-  return (forward + reverse) / 2;
+  return (forward + reverse) / 2
 }
 
-function greedyDirectionalDistance(
-  source: PaletteEntry[],
-  target: PaletteEntry[],
-): number {
-  let totalWeight = 0;
-  let totalWeighted = 0;
+function greedyDirectionalDistance(source: PaletteEntry[], target: PaletteEntry[]): number {
+  let totalWeight = 0
+  let totalWeighted = 0
   for (const s of source) {
-    let best = Number.POSITIVE_INFINITY;
+    let best = Number.POSITIVE_INFINITY
     for (const t of target) {
-      const d = deltaE2000({ l: s.l, a: s.a, b: s.b }, { l: t.l, a: t.a, b: t.b });
-      if (d < best) best = d;
+      const d = deltaE2000({ l: s.l, a: s.a, b: s.b }, { l: t.l, a: t.a, b: t.b })
+      if (d < best) best = d
     }
-    if (!Number.isFinite(best)) continue;
-    totalWeighted += best * s.weight;
-    totalWeight += s.weight;
+    if (!Number.isFinite(best)) continue
+    totalWeighted += best * s.weight
+    totalWeight += s.weight
   }
-  if (totalWeight <= 0) return Number.POSITIVE_INFINITY;
-  return totalWeighted / totalWeight;
+  if (totalWeight <= 0) return Number.POSITIVE_INFINITY
+  return totalWeighted / totalWeight
 }
 
 export interface PaletteSimilarityResult {
   /** Cosine-compatible boost (higher = more similar). */
-  boost: number;
+  boost: number
   /** Weighted-mean ∆E 2000 between the two palettes. */
-  distance: number;
+  distance: number
 }
 
 /**
@@ -357,9 +408,9 @@ export function paletteSimilarityBoost(
   reference: PaletteEntry[] | undefined,
   candidate: PaletteEntry[] | undefined,
 ): PaletteSimilarityResult | null {
-  if (!reference || !candidate) return null;
-  const distance = palettePairDistance(reference, candidate);
-  if (!Number.isFinite(distance) || distance >= ZERO_BOOST_DELTA_E) return null;
-  const linear = (ZERO_BOOST_DELTA_E - distance) / ZERO_BOOST_DELTA_E;
-  return { boost: MAX_BOOST * linear, distance };
+  if (!reference || !candidate) return null
+  const distance = palettePairDistance(reference, candidate)
+  if (!Number.isFinite(distance) || distance >= ZERO_BOOST_DELTA_E) return null
+  const linear = (ZERO_BOOST_DELTA_E - distance) / ZERO_BOOST_DELTA_E
+  return { boost: MAX_BOOST * linear, distance }
 }

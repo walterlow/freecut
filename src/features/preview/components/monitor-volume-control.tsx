@@ -11,35 +11,31 @@
  * the mute button inside the popover.
  */
 
-import { useMemo, type CSSProperties } from 'react';
-import { Volume1, Volume2, VolumeX } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { Slider } from '@/components/ui/slider';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { useMemo, type CSSProperties } from 'react'
+import { Volume1, Volume2, VolumeX } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Slider } from '@/components/ui/slider'
+import { usePlaybackStore } from '@/shared/state/playback'
 
 interface MonitorVolumeControlProps {
   /** Style forwarded to the trigger button so it matches sibling controls. */
-  buttonStyle?: CSSProperties;
+  buttonStyle?: CSSProperties
 }
 
 export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps) {
-  const volume = usePlaybackStore((s) => s.volume);
-  const muted = usePlaybackStore((s) => s.muted);
-  const setVolume = usePlaybackStore((s) => s.setVolume);
-  const toggleMute = usePlaybackStore((s) => s.toggleMute);
+  const volume = usePlaybackStore((s) => s.volume)
+  const muted = usePlaybackStore((s) => s.muted)
+  const setVolume = usePlaybackStore((s) => s.setVolume)
+  const toggleMute = usePlaybackStore((s) => s.toggleMute)
 
   const Icon = useMemo(() => {
-    if (muted || volume <= 0) return VolumeX;
-    if (volume < 0.5) return Volume1;
-    return Volume2;
-  }, [muted, volume]);
+    if (muted || volume <= 0) return VolumeX
+    if (volume < 0.5) return Volume1
+    return Volume2
+  }, [muted, volume])
 
-  const percent = Math.round(volume * 100);
+  const percent = Math.round(volume * 100)
 
   return (
     <Popover>
@@ -55,12 +51,7 @@ export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps)
           <Icon className="w-3.5 h-3.5" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-56 p-3 space-y-3"
-        align="center"
-        side="top"
-        sideOffset={6}
-      >
+      <PopoverContent className="w-56 p-3 space-y-3" align="center" side="top" sideOffset={6}>
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium">监听</span>
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
@@ -75,11 +66,7 @@ export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps)
             onClick={toggleMute}
             aria-label={muted ? '取消监听静音' : '监听静音'}
           >
-            {muted ? (
-              <VolumeX className="w-3.5 h-3.5" />
-            ) : (
-              <Volume2 className="w-3.5 h-3.5" />
-            )}
+            {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
           </Button>
           <Slider
             value={[muted ? 0 : volume]}
@@ -87,9 +74,9 @@ export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps)
             max={1}
             step={0.01}
             onValueChange={([v]) => {
-              if (v === undefined) return;
-              if (muted && v > 0) toggleMute();
-              setVolume(v);
+              if (v === undefined) return
+              if (muted && v > 0) toggleMute()
+              setVolume(v)
             }}
             className="flex-1"
           />
@@ -102,5 +89,5 @@ export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps)
         </p>
       </PopoverContent>
     </Popover>
-  );
+  )
 }

@@ -1,13 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline';
-import { useItemsStore } from './items-store';
-import { useTransitionsStore } from './transitions-store';
-import { useKeyframesStore } from './keyframes-store';
-import { useCompositionsStore } from './compositions-store';
-import { useCompositionNavigationStore } from './composition-navigation-store';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { beforeEach, describe, expect, it } from 'vite-plus/test'
+import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import { useItemsStore } from './items-store'
+import { useTransitionsStore } from './transitions-store'
+import { useKeyframesStore } from './keyframes-store'
+import { useCompositionsStore } from './compositions-store'
+import { useCompositionNavigationStore } from './composition-navigation-store'
+import { usePlaybackStore } from '@/shared/state/playback'
 
-function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>): TimelineTrack {
+function makeTrack(
+  overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>,
+): TimelineTrack {
   return {
     height: 80,
     locked: false,
@@ -17,7 +19,7 @@ function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' 
     volume: 0,
     items: [],
     ...overrides,
-  };
+  }
 }
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
@@ -35,25 +37,27 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
     sourceDuration: 120,
     sourceFps: 30,
     ...overrides,
-  };
+  }
 }
 
 describe('composition-navigation-store', () => {
   beforeEach(() => {
-    useItemsStore.getState().setTracks([]);
-    useItemsStore.getState().setItems([]);
-    useTransitionsStore.getState().setTransitions([]);
-    useKeyframesStore.getState().setKeyframes([]);
-    useCompositionsStore.getState().setCompositions([]);
-    useCompositionNavigationStore.getState().resetToRoot();
-    usePlaybackStore.getState().setCurrentFrame(0);
-  });
+    useItemsStore.getState().setTracks([])
+    useItemsStore.getState().setItems([])
+    useTransitionsStore.getState().setTransitions([])
+    useKeyframesStore.getState().setKeyframes([])
+    useCompositionsStore.getState().setCompositions([])
+    useCompositionNavigationStore.getState().resetToRoot()
+    usePlaybackStore.getState().setCurrentFrame(0)
+  })
 
   it('maps playhead using the specific wrapper instance used to enter a compound clip', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
+      ])
     useItemsStore.getState().setItems([
       {
         id: 'comp-a-first-video',
@@ -91,7 +95,7 @@ describe('composition-navigation-store', () => {
         linkedGroupId: 'group-2',
         src: '',
       } satisfies AudioItem,
-    ]);
+    ])
     useCompositionsStore.getState().setCompositions([
       {
         id: 'comp-a',
@@ -105,13 +109,15 @@ describe('composition-navigation-store', () => {
         height: 1080,
         durationInFrames: 40,
       },
-    ]);
+    ])
 
-    usePlaybackStore.getState().setCurrentFrame(95);
+    usePlaybackStore.getState().setCurrentFrame(95)
 
-    useCompositionNavigationStore.getState().enterComposition('comp-a', 'Comp A', 'comp-a-second-audio');
+    useCompositionNavigationStore
+      .getState()
+      .enterComposition('comp-a', 'Comp A', 'comp-a-second-audio')
 
-    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('comp-a');
-    expect(usePlaybackStore.getState().currentFrame).toBe(15);
-  });
-});
+    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('comp-a')
+    expect(usePlaybackStore.getState().currentFrame).toBe(15)
+  })
+})

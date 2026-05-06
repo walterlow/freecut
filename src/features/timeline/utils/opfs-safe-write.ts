@@ -1,18 +1,18 @@
 export async function safeWrite(
   writable: FileSystemWritableFileStream,
-  data: FileSystemWriteChunkType
+  data: FileSystemWriteChunkType,
 ): Promise<void> {
-  let error: unknown;
+  let error: unknown
   try {
-    await writable.write(data);
-    await writable.close();
+    await writable.write(data)
+    await writable.close()
   } catch (writeError) {
-    error = writeError;
-    throw writeError;
+    error = writeError
+    throw writeError
   } finally {
     if (error) {
       try {
-        await writable.abort(error);
+        await writable.abort(error)
       } catch {
         // Ignore abort failures from already-closed handles.
       }

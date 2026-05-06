@@ -5,15 +5,15 @@
  * Replacement for Composition's AbsoluteFill.
  */
 
-import React, { memo, forwardRef } from 'react';
+import React, { memo, forwardRef } from 'react'
 
 interface AbsoluteFillProps {
   /** Children to render */
-  children?: React.ReactNode;
+  children?: React.ReactNode
   /** Custom styles (merged with absolute fill styles) */
-  style?: React.CSSProperties;
+  style?: React.CSSProperties
   /** Custom class name */
-  className?: string;
+  className?: string
 }
 
 /**
@@ -29,7 +29,7 @@ const absoluteFillStyle: React.CSSProperties = {
   height: '100%',
   display: 'flex',
   flexDirection: 'column',
-};
+}
 
 /**
  * AbsoluteFill Component
@@ -38,20 +38,16 @@ const absoluteFillStyle: React.CSSProperties = {
  * Useful as a container for compositing layers.
  */
 export const AbsoluteFill = memo(
-  forwardRef<HTMLDivElement, AbsoluteFillProps>(
-    ({ children, style, className }, ref) => {
-      // Merge styles
-      const mergedStyle = style
-        ? { ...absoluteFillStyle, ...style }
-        : absoluteFillStyle;
+  forwardRef<HTMLDivElement, AbsoluteFillProps>(({ children, style, className }, ref) => {
+    // Merge styles
+    const mergedStyle = style ? { ...absoluteFillStyle, ...style } : absoluteFillStyle
 
-      return (
-        <div ref={ref} className={className} style={mergedStyle}>
-          {children}
-        </div>
-      );
-    }
-  )
-);
+    return (
+      <div ref={ref} className={className} style={mergedStyle}>
+        {children}
+      </div>
+    )
+  }),
+)
 
-AbsoluteFill.displayName = 'AbsoluteFill';
+AbsoluteFill.displayName = 'AbsoluteFill'

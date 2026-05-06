@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import type { VideoItem } from '@/types/timeline';
-import type { ActiveTransition } from './canvas-transitions';
+import { describe, expect, it } from 'vite-plus/test'
+import type { VideoItem } from '@/types/timeline'
+import type { ActiveTransition } from './canvas-transitions'
 import {
   getItemRenderTimelineSpan,
   getRenderTimelineSourceStart,
   resolveTransitionRenderTimelineSpan,
-} from './render-span';
+} from './render-span'
 
 function createVideoItem(overrides?: Partial<VideoItem>): VideoItem {
   return {
@@ -17,7 +17,7 @@ function createVideoItem(overrides?: Partial<VideoItem>): VideoItem {
     label: 'Clip',
     src: 'clip.mp4',
     ...overrides,
-  };
+  }
 }
 
 function createActiveTransition(overrides?: Partial<ActiveTransition>): ActiveTransition {
@@ -42,29 +42,29 @@ function createActiveTransition(overrides?: Partial<ActiveTransition>): ActiveTr
     rightPortion: 10,
     cutPoint: 60,
     ...overrides,
-  } as ActiveTransition;
+  } as ActiveTransition
 }
 
 describe('render-span', () => {
   it('falls back to legacy offset when deriving source start', () => {
-    const clip = createVideoItem({ offset: 18 });
+    const clip = createVideoItem({ offset: 18 })
 
     expect(getItemRenderTimelineSpan(clip)).toEqual({
       from: 60,
       durationInFrames: 40,
       sourceStart: 18,
-    });
-    expect(getRenderTimelineSourceStart(clip)).toBe(18);
-  });
+    })
+    expect(getRenderTimelineSourceStart(clip)).toBe(18)
+  })
 
   it('uses legacy offset when resolving transition preroll source anchoring', () => {
-    const clip = createVideoItem({ id: 'right', offset: 18 });
-    const transition = createActiveTransition({ rightClip: clip });
+    const clip = createVideoItem({ id: 'right', offset: 18 })
+    const transition = createActiveTransition({ rightClip: clip })
 
     expect(resolveTransitionRenderTimelineSpan(clip, transition, 30)).toEqual({
       from: 50,
       durationInFrames: 50,
       sourceStart: 8,
-    });
-  });
-});
+    })
+  })
+})

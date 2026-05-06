@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const chromatic: GpuTransitionDefinition = {
   id: 'chromatic',
@@ -86,11 +86,8 @@ fn chromaticFragment(input: VertexOutput) -> @location(0) vec4f {
   return color;
 }`,
   packUniforms: (progress, width, height, direction, properties) => {
-    const spread = (properties?.spread as number) ?? 1.5;
-    const intensity = (properties?.intensity as number) ?? 1.0;
-    return new Float32Array([
-      progress, width, height, direction,
-      spread, intensity, 0, 0,
-    ]);
+    const spread = (properties?.spread as number) ?? 1.5
+    const intensity = (properties?.intensity as number) ?? 1.0
+    return new Float32Array([progress, width, height, direction, spread, intensity, 0, 0])
   },
-};
+}

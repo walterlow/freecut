@@ -13,10 +13,10 @@ export {
   makeStar,
   makePolygon,
   makeHeart,
-} from './shape-generators';
+} from './shape-generators'
 
 // Path transformation utilities
-export { scalePath, translatePath } from './path-utils';
+export { scalePath, translatePath } from './path-utils'
 
 // Shape React components
-export { Rect, Circle, Ellipse, Triangle, Star, Polygon, Heart } from './components';
+export { Rect, Circle, Ellipse, Triangle, Star, Polygon, Heart } from './components'

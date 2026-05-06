@@ -1,7 +1,7 @@
-import { StrictMode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LocalModelCacheControl } from './local-model-cache-control';
+import { StrictMode } from 'react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
+import { LocalModelCacheControl } from './local-model-cache-control'
 
 const mocks = vi.hoisted(() => ({
   inspectAllLocalModelCaches: vi.fn(),
@@ -9,20 +9,20 @@ const mocks = vi.hoisted(() => ({
   supportsLocalModelCacheInspection: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-}));
+}))
 
 vi.mock('@/shared/utils/local-model-cache', () => ({
   inspectAllLocalModelCaches: mocks.inspectAllLocalModelCaches,
   clearLocalModelCache: mocks.clearLocalModelCache,
   supportsLocalModelCacheInspection: mocks.supportsLocalModelCacheInspection,
-}));
+}))
 
 vi.mock('sonner', () => ({
   toast: {
     success: mocks.toastSuccess,
     error: mocks.toastError,
   },
-}));
+}))
 
 vi.mock('@/shared/logging/logger', () => ({
   createLogger: () => ({
@@ -31,12 +31,12 @@ vi.mock('@/shared/logging/logger', () => ({
     info: vi.fn(),
     debug: vi.fn(),
   }),
-}));
+}))
 
 describe('LocalModelCacheControl', () => {
   beforeEach(() => {
-    mocks.supportsLocalModelCacheInspection.mockReturnValue(true);
-    mocks.clearLocalModelCache.mockResolvedValue(true);
+    mocks.supportsLocalModelCacheInspection.mockReturnValue(true)
+    mocks.clearLocalModelCache.mockResolvedValue(true)
     mocks.inspectAllLocalModelCaches.mockResolvedValue([
       {
         id: 'whisper',
@@ -51,21 +51,21 @@ describe('LocalModelCacheControl', () => {
         sizeStatus: 'partial',
         inspectionState: 'ready',
       },
-    ]);
-  });
+    ])
+  })
 
   it('exits checking state after async inspection in StrictMode and displays cache data', async () => {
     render(
       <StrictMode>
         <LocalModelCacheControl />
-      </StrictMode>
-    );
+      </StrictMode>,
+    )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled();
-    });
+      expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled()
+    })
 
-    expect(screen.getByText('Whisper')).toBeInTheDocument();
-    expect(screen.getByText('Approx. 12.0 MB')).toBeInTheDocument();
-  });
-});
+    expect(screen.getByText('Whisper')).toBeInTheDocument()
+    expect(screen.getByText('Approx. 12.0 MB')).toBeInTheDocument()
+  })
+})

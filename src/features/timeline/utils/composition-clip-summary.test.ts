@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import type { AudioItem, CompositionItem, TimelineTrack, VideoItem } from '@/types/timeline';
+import { describe, expect, it } from 'vite-plus/test'
+import type { AudioItem, CompositionItem, TimelineTrack, VideoItem } from '@/types/timeline'
 import {
   getCompositionOwnedAudioSources,
   getCompositionVisualSegments,
   summarizeCompositionClipContent,
-} from './composition-clip-summary';
+} from './composition-clip-summary'
 
-function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order'>): TimelineTrack {
+function makeTrack(
+  overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order'>,
+): TimelineTrack {
   return {
     kind: 'video',
     height: 80,
@@ -16,7 +18,7 @@ function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' 
     solo: false,
     items: [],
     ...overrides,
-  };
+  }
 }
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
@@ -34,7 +36,7 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
     sourceDuration: 120,
     sourceFps: 30,
     ...overrides,
-  };
+  }
 }
 
 function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
@@ -52,7 +54,7 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
     sourceDuration: 120,
     sourceFps: 30,
     ...overrides,
-  };
+  }
 }
 
 function makeCompositionItem(overrides: Partial<CompositionItem> = {}): CompositionItem {
@@ -73,7 +75,7 @@ function makeCompositionItem(overrides: Partial<CompositionItem> = {}): Composit
     sourceFps: 30,
     speed: 1,
     ...overrides,
-  };
+  }
 }
 
 describe('composition-clip-summary', () => {
@@ -103,7 +105,7 @@ describe('composition-clip-summary', () => {
         height: 1080,
         durationInFrames: 40,
       },
-    };
+    }
 
     const summary = summarizeCompositionClipContent({
       items: [
@@ -121,9 +123,9 @@ describe('composition-clip-summary', () => {
       tracks: [makeTrack({ id: 'track-v1', name: 'V1', order: 0, kind: 'video' })],
       fps: 30,
       compositionById,
-    });
+    })
 
-    expect(summary.visualMediaId).toBe('nested-visual');
+    expect(summary.visualMediaId).toBe('nested-visual')
     expect(summary.visualSource).toMatchObject({
       itemId: 'child-video',
       mediaId: 'nested-visual',
@@ -131,8 +133,8 @@ describe('composition-clip-summary', () => {
       sourceDuration: 240,
       sourceFps: 30,
       speed: 2,
-    });
-  });
+    })
+  })
 
   it('collects nested audio once when a compound clip has linked visual and audio wrappers', () => {
     const compositionById = {
@@ -164,7 +166,7 @@ describe('composition-clip-summary', () => {
         height: 1080,
         durationInFrames: 30,
       },
-    };
+    }
 
     const sources = getCompositionOwnedAudioSources({
       items: [
@@ -189,9 +191,9 @@ describe('composition-clip-summary', () => {
       ],
       fps: 30,
       compositionById,
-    });
+    })
 
-    expect(sources).toHaveLength(1);
+    expect(sources).toHaveLength(1)
     expect(sources[0]).toMatchObject({
       itemId: 'child-audio',
       mediaId: 'nested-audio',
@@ -200,8 +202,8 @@ describe('composition-clip-summary', () => {
       sourceStart: 0,
       sourceFps: 30,
       speed: 1,
-    });
-  });
+    })
+  })
 
   it('returns ordered visual segments for a compound clip spanning two sub-comp videos', () => {
     const compositionById = {
@@ -240,7 +242,7 @@ describe('composition-clip-summary', () => {
         height: 1080,
         durationInFrames: 120,
       },
-    };
+    }
 
     const wrapper = makeCompositionItem({
       id: 'parent-wrapper',
@@ -253,28 +255,28 @@ describe('composition-clip-summary', () => {
       sourceDuration: 120,
       sourceFps: 30,
       speed: 1,
-    });
+    })
 
     const segments = getCompositionVisualSegments({
       wrapper,
       parentFps: 30,
       compositionById,
-    });
+    })
 
-    expect(segments).toHaveLength(2);
+    expect(segments).toHaveLength(2)
     expect(segments[0]).toMatchObject({
       itemId: 'child-video-a',
       mediaId: 'media-a',
       from: 0,
       durationInFrames: 60,
-    });
+    })
     expect(segments[1]).toMatchObject({
       itemId: 'child-video-b',
       mediaId: 'media-b',
       from: 60,
       durationInFrames: 60,
-    });
-  });
+    })
+  })
 
   it('sorts segments so topmost tracks render last (painted on top)', () => {
     const compositionById = {
@@ -308,23 +310,23 @@ describe('composition-clip-summary', () => {
         height: 1080,
         durationInFrames: 60,
       },
-    };
+    }
 
     const wrapper = makeCompositionItem({
       compositionId: 'child-comp',
       durationInFrames: 60,
       sourceEnd: 60,
       sourceDuration: 60,
-    });
+    })
 
     const segments = getCompositionVisualSegments({
       wrapper,
       parentFps: 30,
       compositionById,
-    });
+    })
 
-    expect(segments.map((s) => s.itemId)).toEqual(['bottom-video', 'top-video']);
-  });
+    expect(segments.map((s) => s.itemId)).toEqual(['bottom-video', 'top-video'])
+  })
 
   it('recurses into a nested composition to surface its inner video segments', () => {
     const compositionById = {
@@ -387,7 +389,7 @@ describe('composition-clip-summary', () => {
         height: 1080,
         durationInFrames: 120,
       },
-    };
+    }
 
     const wrapper = makeCompositionItem({
       id: 'parent-wrapper',
@@ -397,28 +399,28 @@ describe('composition-clip-summary', () => {
       sourceEnd: 120,
       sourceDuration: 120,
       sourceFps: 30,
-    });
+    })
 
     const segments = getCompositionVisualSegments({
       wrapper,
       parentFps: 30,
       compositionById,
-    });
+    })
 
-    expect(segments).toHaveLength(2);
+    expect(segments).toHaveLength(2)
     expect(segments[0]).toMatchObject({
       itemId: 'inner-video',
       mediaId: 'inner-media',
       from: 0,
       durationInFrames: 60,
-    });
+    })
     expect(segments[1]).toMatchObject({
       itemId: 'outer-video',
       mediaId: 'outer-media',
       from: 60,
       durationInFrames: 60,
-    });
-  });
+    })
+  })
 
   it('guards against cyclic composition references', () => {
     const compositionById = {
@@ -444,30 +446,30 @@ describe('composition-clip-summary', () => {
         height: 1080,
         durationInFrames: 30,
       },
-    };
+    }
 
     const wrapper = makeCompositionItem({
       compositionId: 'self-ref',
       durationInFrames: 30,
       sourceEnd: 30,
       sourceDuration: 30,
-    });
+    })
 
     const segments = getCompositionVisualSegments({
       wrapper,
       parentFps: 30,
       compositionById,
-    });
+    })
 
-    expect(segments).toEqual([]);
-  });
+    expect(segments).toEqual([])
+  })
 
   it('returns empty segments when wrapper is not a composition', () => {
     const segments = getCompositionVisualSegments({
       wrapper: makeVideoItem(),
       parentFps: 30,
       compositionById: {},
-    });
-    expect(segments).toEqual([]);
-  });
-});
+    })
+    expect(segments).toEqual([])
+  })
+})

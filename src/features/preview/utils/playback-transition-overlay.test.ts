@@ -1,101 +1,109 @@
-import { describe, expect, it } from 'vitest';
-import { resolvePlaybackTransitionOverlayState } from './playback-transition-overlay';
+import { describe, expect, it } from 'vite-plus/test'
+import { resolvePlaybackTransitionOverlayState } from './playback-transition-overlay'
 
 describe('resolvePlaybackTransitionOverlayState', () => {
   it('activates the overlay inside a transition window', () => {
-    expect(resolvePlaybackTransitionOverlayState([
-      { startFrame: 40, endFrame: 60 },
-    ], 48, 8)).toEqual({
+    expect(
+      resolvePlaybackTransitionOverlayState([{ startFrame: 40, endFrame: 60 }], 48, 8),
+    ).toEqual({
       hasActiveTransition: true,
       shouldHoldOverlay: true,
       shouldPrewarm: true,
       nextTransitionStartFrame: 40,
-    });
-  });
+    })
+  })
 
   it('prewarms shortly before the next transition window', () => {
-    expect(resolvePlaybackTransitionOverlayState([
-      { startFrame: 40, endFrame: 60 },
-    ], 35, 8)).toEqual({
+    expect(
+      resolvePlaybackTransitionOverlayState([{ startFrame: 40, endFrame: 60 }], 35, 8),
+    ).toEqual({
       hasActiveTransition: false,
       shouldHoldOverlay: false,
       shouldPrewarm: true,
       nextTransitionStartFrame: 40,
-    });
-  });
+    })
+  })
 
   it('does not prewarm when the next transition is outside the lookahead window', () => {
-    expect(resolvePlaybackTransitionOverlayState([
-      { startFrame: 40, endFrame: 60 },
-    ], 20, 8)).toEqual({
+    expect(
+      resolvePlaybackTransitionOverlayState([{ startFrame: 40, endFrame: 60 }], 20, 8),
+    ).toEqual({
       hasActiveTransition: false,
       shouldHoldOverlay: false,
       shouldPrewarm: false,
       nextTransitionStartFrame: 40,
-    });
-  });
+    })
+  })
 
   it('stops activating after the transition window ends', () => {
-    expect(resolvePlaybackTransitionOverlayState([
-      { startFrame: 40, endFrame: 60 },
-    ], 60, 8)).toEqual({
+    expect(
+      resolvePlaybackTransitionOverlayState([{ startFrame: 40, endFrame: 60 }], 60, 8),
+    ).toEqual({
       hasActiveTransition: false,
       shouldHoldOverlay: false,
       shouldPrewarm: false,
       nextTransitionStartFrame: null,
-    });
-  });
+    })
+  })
 
   it('keeps holding the overlay for a short cooldown after the transition', () => {
-    expect(resolvePlaybackTransitionOverlayState([
-      { startFrame: 40, endFrame: 60 },
-    ], 61, 8, 3)).toEqual({
+    expect(
+      resolvePlaybackTransitionOverlayState([{ startFrame: 40, endFrame: 60 }], 61, 8, 3),
+    ).toEqual({
       hasActiveTransition: false,
       shouldHoldOverlay: true,
       shouldPrewarm: false,
       nextTransitionStartFrame: null,
-    });
-  });
+    })
+  })
 
   it('allows a transition window to override the shared cooldown', () => {
-    expect(resolvePlaybackTransitionOverlayState([
-      { startFrame: 40, endFrame: 60, cooldownFrames: 0 },
-    ], 61, 8, 3)).toEqual({
+    expect(
+      resolvePlaybackTransitionOverlayState(
+        [{ startFrame: 40, endFrame: 60, cooldownFrames: 0 }],
+        61,
+        8,
+        3,
+      ),
+    ).toEqual({
       hasActiveTransition: false,
       shouldHoldOverlay: false,
       shouldPrewarm: false,
       nextTransitionStartFrame: null,
-    });
-  });
+    })
+  })
 
   it('handles multiple transition windows', () => {
     const windows = [
       { startFrame: 100, endFrame: 200 },
       { startFrame: 400, endFrame: 500 },
-    ];
+    ]
 
     // Between windows — finds next
-    expect(resolvePlaybackTransitionOverlayState(windows, 300, 30))
-      .toMatchObject({ hasActiveTransition: false, nextTransitionStartFrame: 400 });
+    expect(resolvePlaybackTransitionOverlayState(windows, 300, 30)).toMatchObject({
+      hasActiveTransition: false,
+      nextTransitionStartFrame: 400,
+    })
 
     // Before first — finds first
-    expect(resolvePlaybackTransitionOverlayState(windows, 50, 30))
-      .toMatchObject({ nextTransitionStartFrame: 100 });
+    expect(resolvePlaybackTransitionOverlayState(windows, 50, 30)).toMatchObject({
+      nextTransitionStartFrame: 100,
+    })
 
     // After last — no next
-    expect(resolvePlaybackTransitionOverlayState(windows, 600, 30))
-      .toMatchObject({ nextTransitionStartFrame: null });
-  });
+    expect(resolvePlaybackTransitionOverlayState(windows, 600, 30)).toMatchObject({
+      nextTransitionStartFrame: null,
+    })
+  })
 
   it('handles empty windows', () => {
-    expect(resolvePlaybackTransitionOverlayState([], 100, 30))
-      .toMatchObject({
-        hasActiveTransition: false,
-        shouldPrewarm: false,
-        nextTransitionStartFrame: null,
-      });
-  });
-});
+    expect(resolvePlaybackTransitionOverlayState([], 100, 30)).toMatchObject({
+      hasActiveTransition: false,
+      shouldPrewarm: false,
+      nextTransitionStartFrame: null,
+    })
+  })
+})
 
 /**
  * Manual regression test scenarios for transition/playback performance.

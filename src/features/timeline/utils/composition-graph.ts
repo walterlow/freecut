@@ -1,96 +1,104 @@
-import type { AudioItem, CompositionItem, TimelineItem, TimelineTrack } from '@/types/timeline';
-import type { SubComposition } from '../stores/compositions-store';
+import type { AudioItem, CompositionItem, TimelineItem, TimelineTrack } from '@/types/timeline'
+import type { SubComposition } from '../stores/compositions-store'
 
-export type CompositionByIdLookup = Record<string, SubComposition>;
+export type CompositionByIdLookup = Record<string, SubComposition>
 
 export function isCompositionWrapperItem(
-  item: TimelineItem
+  item: TimelineItem,
 ): item is CompositionItem | (AudioItem & { compositionId: string }) {
-  return !!item.compositionId && (item.type === 'composition' || item.type === 'audio');
+  return !!item.compositionId && (item.type === 'composition' || item.type === 'audio')
 }
 
 export function getDirectReferencedCompositionIds(items: TimelineItem[]): string[] {
-  const compositionIds = new Set<string>();
+  const compositionIds = new Set<string>()
   for (const item of items) {
     if (isCompositionWrapperItem(item)) {
-      compositionIds.add(item.compositionId);
+      compositionIds.add(item.compositionId)
     }
   }
-  return [...compositionIds];
+  return [...compositionIds]
 }
 
 export function compositionReferencesComposition(
   compositionId: string,
   targetCompositionId: string,
   compositionById: CompositionByIdLookup,
-  visited: Set<string> = new Set()
+  visited: Set<string> = new Set(),
 ): boolean {
   if (compositionId === targetCompositionId) {
-    return true;
+    return true
   }
   if (visited.has(compositionId)) {
-    return false;
+    return false
   }
-  visited.add(compositionId);
+  visited.add(compositionId)
 
-  const composition = compositionById[compositionId];
+  const composition = compositionById[compositionId]
   if (!composition) {
-    return false;
+    return false
   }
 
   for (const referencedId of getDirectReferencedCompositionIds(composition.items)) {
     if (referencedId === targetCompositionId) {
-      return true;
+      return true
     }
-    if (compositionReferencesComposition(referencedId, targetCompositionId, compositionById, visited)) {
-      return true;
+    if (
+      compositionReferencesComposition(referencedId, targetCompositionId, compositionById, visited)
+    ) {
+      return true
     }
   }
 
-  return false;
+  return false
 }
 
 export function wouldCreateCompositionCycle(params: {
-  parentCompositionId: string | null;
-  insertedCompositionId: string;
-  compositionById: CompositionByIdLookup;
+  parentCompositionId: string | null
+  insertedCompositionId: string
+  compositionById: CompositionByIdLookup
 }): boolean {
-  const { parentCompositionId, insertedCompositionId, compositionById } = params;
+  const { parentCompositionId, insertedCompositionId, compositionById } = params
   if (!parentCompositionId) {
-    return false;
+    return false
   }
-  return compositionReferencesComposition(insertedCompositionId, parentCompositionId, compositionById);
+  return compositionReferencesComposition(
+    insertedCompositionId,
+    parentCompositionId,
+    compositionById,
+  )
 }
 
 export function collectReachableCompositionIdsFromItems(
   items: TimelineItem[],
   compositionById: CompositionByIdLookup,
-  visited: Set<string> = new Set()
+  visited: Set<string> = new Set(),
 ): string[] {
-  const reachableIds: string[] = [];
+  const reachableIds: string[] = []
 
   for (const compositionId of getDirectReferencedCompositionIds(items)) {
     if (visited.has(compositionId)) {
-      continue;
+      continue
     }
-    visited.add(compositionId);
-    reachableIds.push(compositionId);
+    visited.add(compositionId)
+    reachableIds.push(compositionId)
 
-    const composition = compositionById[compositionId];
+    const composition = compositionById[compositionId]
     if (!composition) {
-      continue;
+      continue
     }
 
-    reachableIds.push(...collectReachableCompositionIdsFromItems(composition.items, compositionById, visited));
+    reachableIds.push(
+      ...collectReachableCompositionIdsFromItems(composition.items, compositionById, visited),
+    )
   }
 
-  return reachableIds;
+  return reachableIds
 }
 
 export function collectReachableCompositionIdsFromTracks(
   tracks: TimelineTrack[],
-  compositionById: CompositionByIdLookup
+  compositionById: CompositionByIdLookup,
 ): string[] {
-  const items = tracks.flatMap((track) => track.items ?? []);
-  return collectReachableCompositionIdsFromItems(items, compositionById);
+  const items = tracks.flatMap((track) => track.items ?? [])
+  return collectReachableCompositionIdsFromItems(items, compositionById)
 }

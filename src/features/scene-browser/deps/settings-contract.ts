@@ -3,5 +3,5 @@
  * store through this contract so the boundary checker stays happy.
  */
 
-export { useSettingsStore } from '@/features/settings/stores/settings-store';
-export type { CaptionSearchMode } from '@/features/settings/stores/settings-store';
+export { useSettingsStore } from '@/features/settings/stores/settings-store'
+export type { CaptionSearchMode } from '@/features/settings/stores/settings-store'

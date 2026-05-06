@@ -1,37 +1,52 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'
 import {
   useCompositionsStore,
   useItemsStore,
   useTransitionsStore,
   type SubComposition,
-} from '@/features/preview/deps/timeline-store';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
-import type { ItemEffect } from '@/types/effects';
-import type { TimelineItem } from '@/types/timeline';
+} from '@/features/preview/deps/timeline-store'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { useGizmoStore } from '@/features/preview/stores/gizmo-store'
+import type { ItemEffect } from '@/types/effects'
+import type { TimelineItem } from '@/types/timeline'
+import type { Transition } from '@/types/transition'
+import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner'
+import { hasCornerPin } from '@/features/preview/deps/composition-runtime'
 
 function hasEnabledGpuEffect(effects: ItemEffect[] | undefined): boolean {
-  return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false;
+  return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
 }
 
-function subCompositionHasGpuEffectsOrBlend(
+function hasRenderableBlendMode(item: TimelineItem): boolean {
+  if (item.type === 'shape' && item.isMask) return false
+  return item.blendMode !== undefined && item.blendMode !== 'normal'
+}
+
+function needsRenderedOverlayPath(item: TimelineItem): boolean {
+  return (
+    hasEnabledGpuEffect(item.effects) ||
+    hasRenderableBlendMode(item) ||
+    hasCornerPin(item.cornerPin)
+  )
+}
+
+function subCompositionNeedsRenderedOverlayPath(
   subComp: SubComposition,
   compositionById?: Record<string, SubComposition>,
   visited: Set<string> = new Set(),
 ): boolean {
-  if (visited.has(subComp.id)) return false;
-  visited.add(subComp.id);
+  if (visited.has(subComp.id)) return false
+  visited.add(subComp.id)
   return subComp.items.some((subItem) => {
-    if (hasEnabledGpuEffect(subItem.effects)) return true;
-    if (subItem.blendMode !== undefined && subItem.blendMode !== 'normal') return true;
+    if (needsRenderedOverlayPath(subItem)) return true
     if (subItem.type === 'composition' && compositionById) {
-      const nested = compositionById[subItem.compositionId];
-      if (nested && subCompositionHasGpuEffectsOrBlend(nested, compositionById, visited)) {
-        return true;
+      const nested = compositionById[subItem.compositionId]
+      if (nested && subCompositionNeedsRenderedOverlayPath(nested, compositionById, visited)) {
+        return true
       }
     }
-    return false;
-  });
+    return false
+  })
 }
 
 /**
@@ -46,86 +61,113 @@ function subCompositionHasGpuEffectsOrBlend(
  */
 export function shouldForceContinuousPreviewOverlay(
   items: TimelineItem[],
-  transitionCount: number,
+  transitionsOrCount: Transition[] | number,
   frame: number,
   previewEffectsByItemId?: ReadonlyMap<string, ItemEffect[]>,
   compositionById?: Record<string, SubComposition>,
+  options: { forceTransitionFrames?: boolean } = {},
 ): boolean {
-  void transitionCount;
   if (!Number.isFinite(frame)) {
-    return false;
+    return false
+  }
+
+  if (Array.isArray(transitionsOrCount) && transitionsOrCount.length > 0) {
+    const clipMap = new Map<string, TimelineItem>()
+    for (const item of items) {
+      clipMap.set(item.id, item)
+    }
+
+    for (const window of resolveTransitionWindows(transitionsOrCount, clipMap)) {
+      if (frame >= window.startFrame && frame < window.endFrame) {
+        if (options.forceTransitionFrames) {
+          return true
+        }
+        if (window.leftClip.type === 'composition' || window.rightClip.type === 'composition') {
+          return true
+        }
+        if (hasCornerPin(window.leftClip.cornerPin) || hasCornerPin(window.rightClip.cornerPin)) {
+          return true
+        }
+        // Multiple transitions on different tracks can cover the same
+        // frame; keep checking later windows so a corner-pinned or
+        // composition participant on a sibling track still wins.
+        continue
+      }
+    }
   }
 
   return items.some((item) => {
     if (frame < item.from || frame >= item.from + item.durationInFrames) {
-      return false;
+      return false
     }
-    const effectiveEffects = previewEffectsByItemId?.get(item.id) ?? item.effects;
-    if (hasEnabledGpuEffect(effectiveEffects)) return true;
-    if (item.blendMode && item.blendMode !== 'normal') return true;
+    const effectiveEffects = previewEffectsByItemId?.get(item.id) ?? item.effects
+    if (hasEnabledGpuEffect(effectiveEffects)) return true
+    if (hasRenderableBlendMode(item)) return true
+    if (hasCornerPin(item.cornerPin)) return true
     if (item.type === 'composition' && compositionById) {
-      const subComp = compositionById[item.compositionId];
-      if (subComp && subCompositionHasGpuEffectsOrBlend(subComp, compositionById)) return true;
+      const subComp = compositionById[item.compositionId]
+      if (subComp && subCompositionNeedsRenderedOverlayPath(subComp, compositionById)) return true
     }
-    return false;
-  });
+    return false
+  })
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function useGpuEffectsOverlay(..._args: unknown[]) {
-  const [needsOverlay, setNeedsOverlay] = useState(false);
+  const [needsOverlay, setNeedsOverlay] = useState(false)
 
   useEffect(() => {
     const check = () => {
-      const items = useItemsStore.getState().items;
-      const transitions = useTransitionsStore.getState().transitions;
-      const compositionById = useCompositionsStore.getState().compositionById;
-      const playback = usePlaybackStore.getState();
-      const frame = playback.previewFrame ?? playback.currentFrame;
-      const preview = useGizmoStore.getState().preview;
+      const items = useItemsStore.getState().items
+      const transitions = useTransitionsStore.getState().transitions
+      const compositionById = useCompositionsStore.getState().compositionById
+      const playback = usePlaybackStore.getState()
+      const frame = playback.previewFrame ?? playback.currentFrame
+      const preview = useGizmoStore.getState().preview
       const previewEffectsByItemId = preview
         ? new Map(
-          Object.entries(preview)
-            .filter(([, itemPreview]) => Array.isArray(itemPreview.effects))
-            .map(([itemId, itemPreview]) => [itemId, itemPreview.effects!]),
-        )
-        : undefined;
+            Object.entries(preview)
+              .filter(([, itemPreview]) => Array.isArray(itemPreview.effects))
+              .map(([itemId, itemPreview]) => [itemId, itemPreview.effects!]),
+          )
+        : undefined
 
       setNeedsOverlay((prev) => {
         const next = shouldForceContinuousPreviewOverlay(
           items,
-          transitions.length,
+          transitions,
           frame,
           previewEffectsByItemId,
           compositionById,
-        );
-        return prev === next ? prev : next;
-      });
-    };
-    check();
-    const unsubItems = useItemsStore.subscribe(check);
-    const unsubTransitions = useTransitionsStore.subscribe(check);
-    const unsubCompositions = useCompositionsStore.subscribe(check);
+          { forceTransitionFrames: playback.previewFrame !== null },
+        )
+        return prev === next ? prev : next
+      })
+    }
+    check()
+    const unsubItems = useItemsStore.subscribe(check)
+    const unsubTransitions = useTransitionsStore.subscribe(check)
+    const unsubCompositions = useCompositionsStore.subscribe(check)
     const unsubGizmo = useGizmoStore.subscribe((state, prev) => {
       if (state.preview === prev.preview) {
-        return;
+        return
       }
-      check();
-    });
+      check()
+    })
     const unsubPlayback = usePlaybackStore.subscribe((state, prev) => {
       if (state.currentFrame === prev.currentFrame && state.previewFrame === prev.previewFrame) {
-        return;
+        return
       }
-      check();
-    });
+      check()
+    })
     return () => {
-      unsubItems();
-      unsubTransitions();
-      unsubCompositions();
-      unsubGizmo();
-      unsubPlayback();
-    };
-  }, []);
+      unsubItems()
+      unsubTransitions()
+      unsubCompositions()
+      unsubGizmo()
+      unsubPlayback()
+    }
+  }, [])
 
-  return needsOverlay;
+  return needsOverlay
 }

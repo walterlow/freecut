@@ -3,49 +3,40 @@
  * Corners: nw, ne, se, sw
  * Edges: n, e, s, w
  */
-export type GizmoHandle =
-  | 'nw'
-  | 'n'
-  | 'ne'
-  | 'e'
-  | 'se'
-  | 's'
-  | 'sw'
-  | 'w'
-  | 'rotate';
+export type GizmoHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate'
 
 /**
  * Gizmo interaction mode.
  */
-export type GizmoMode = 'idle' | 'translate' | 'scale' | 'rotate';
+export type GizmoMode = 'idle' | 'translate' | 'scale' | 'rotate'
 
 /**
  * Transform state for gizmo operations.
  * Uses canvas coordinates (original composition size).
  */
 export interface Transform {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  anchorX?: number;
-  anchorY?: number;
-  rotation: number;
-  flipHorizontal?: boolean;
-  flipVertical?: boolean;
-  opacity: number;
+  x: number
+  y: number
+  width: number
+  height: number
+  anchorX?: number
+  anchorY?: number
+  rotation: number
+  flipHorizontal?: boolean
+  flipVertical?: boolean
+  opacity: number
   /** Corner radius for rounded corners (optional, preserved during transform) */
-  cornerRadius?: number;
+  cornerRadius?: number
   /** Whether aspect ratio is locked (affects shape rendering behavior) */
-  aspectRatioLocked?: boolean;
+  aspectRatioLocked?: boolean
 }
 
 /**
  * Point in 2D space.
  */
 export interface Point {
-  x: number;
-  y: number;
+  x: number
+  y: number
 }
 
 /**
@@ -53,29 +44,37 @@ export interface Point {
  */
 export interface GizmoState {
   /** Current interaction mode */
-  mode: GizmoMode;
+  mode: GizmoMode
   /** Active scale/rotate handle (null for translate) */
-  activeHandle: GizmoHandle | null;
+  activeHandle: GizmoHandle | null
   /** Mouse position at drag start (canvas coords) */
-  startPoint: Point;
+  startPoint: Point
   /** Item transform at drag start */
-  startTransform: Transform;
+  startTransform: Transform
   /** Current mouse position (canvas coords) */
-  currentPoint: Point;
+  currentPoint: Point
   /** Whether shift key is held (for free resize) */
-  shiftKey: boolean;
+  shiftKey: boolean
   /** Whether ctrl key is held (for corner-anchored scaling) */
-  ctrlKey: boolean;
+  ctrlKey: boolean
   /** Whether alt/option key is held (temporary snap override) */
-  altKey: boolean;
+  altKey: boolean
   /** Item ID being transformed */
-  itemId: string;
+  itemId: string
   /** Item type (for type-specific behavior like text free scaling) */
-  itemType?: 'video' | 'audio' | 'image' | 'text' | 'shape' | 'adjustment' | 'composition';
+  itemType?:
+    | 'video'
+    | 'audio'
+    | 'image'
+    | 'text'
+    | 'shape'
+    | 'adjustment'
+    | 'composition'
+    | 'subtitle'
   /** Whether aspect ratio is locked for this item (from item.transform.aspectRatioLocked) */
-  aspectRatioLocked?: boolean;
+  aspectRatioLocked?: boolean
   /** Stroke width for snapping expansion (shapes with strokes) */
-  strokeWidth?: number;
+  strokeWidth?: number
 }
 
 /**
@@ -83,25 +82,25 @@ export interface GizmoState {
  */
 export interface CoordinateParams {
   /** Container element's bounding rectangle */
-  containerRect: DOMRect;
+  containerRect: DOMRect
   /** Rendered player size (after zoom) */
-  playerSize: { width: number; height: number };
+  playerSize: { width: number; height: number }
   /** Original project/canvas size */
-  projectSize: { width: number; height: number };
+  projectSize: { width: number; height: number }
   /** Current zoom level (-1 for auto-fit, or percentage) */
-  zoom: number;
+  zoom: number
 }
 
 /**
  * Axis-aligned bounding box.
  */
 export interface BoundingBox {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  width: number;
-  height: number;
+  left: number
+  top: number
+  right: number
+  bottom: number
+  width: number
+  height: number
 }
 
 /**
@@ -110,15 +109,15 @@ export interface BoundingBox {
  */
 export interface GroupTransformState {
   /** IDs of all items in the group */
-  itemIds: string[];
+  itemIds: string[]
   /** Combined axis-aligned bounding box of all items (in canvas coordinates) */
-  groupBounds: BoundingBox;
+  groupBounds: BoundingBox
   /** Center of the group bounding box */
-  groupCenter: Point;
+  groupCenter: Point
   /** Individual item transforms at interaction start */
-  itemTransforms: Map<string, Transform>;
+  itemTransforms: Map<string, Transform>
   /** Relative offsets of each item's center from the group center */
-  itemOffsets: Map<string, Point>;
+  itemOffsets: Map<string, Point>
   /** Original rotation of each item (needed for group rotation) */
-  itemRotations: Map<string, number>;
+  itemRotations: Map<string, number>
 }

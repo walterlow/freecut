@@ -1,71 +1,83 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { Layers, ArrowRight, Play, FolderOpen, Download, Star, ExternalLink } from 'lucide-react';
-import { FreeCutLogo } from '@/components/brand/freecut-logo';
-import { Button } from '@/components/ui/button';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { Layers, ArrowRight, Play, FolderOpen, Download, Star, ExternalLink } from 'lucide-react'
+import { FreeCutLogo } from '@/components/brand/freecut-logo'
+import { Button } from '@/components/ui/button'
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from '@/components/ui/accordion';
+} from '@/components/ui/accordion'
 
 export const Route = createFileRoute('/')({
   component: LandingPage,
-});
+})
 
 const faqItems = [
   {
-    question: 'FreeCut 真的是免费的吗？',
-    answer: '是的，FreeCut 完全免费，并且基于 MIT 协议开源，没有隐藏收费、订阅，也不会添加水印。',
+    question: 'Is FreeCut really free?',
+    answer:
+      'Yes, FreeCut is completely free and open source under the MIT license. There are no hidden fees, subscriptions, or watermarks.',
   },
   {
-    question: '需要安装什么吗？',
-    answer: '不需要安装。FreeCut 完全运行在浏览器中，打开网页就能开始剪辑。',
+    question: 'Do I need to install anything?',
+    answer:
+      'No installation required. FreeCut runs entirely in your browser. Just open the website and start editing.',
   },
   {
-    question: '我的视频存在哪里？',
-    answer: '你的视频和项目默认保存在本地浏览器环境中，或通过现代文件系统 API 直接引用你的本地文件。',
+    question: 'Where are my videos stored?',
+    answer:
+      'Your videos and projects are stored locally in your browser or referenced to your local files using modern storage APIs.',
   },
   {
     id: 'browser-support',
-    question: '支持哪些浏览器？',
+    question: 'What browsers are supported?',
     answer: (
       <>
         <p className="mb-3">
-          FreeCut 目前在 Chrome 或 Edge 113+ 上体验最好。它依赖 WebGPU、
-          WebCodecs、OPFS 和 File System Access 等现代浏览器能力，
-          所以当前完整工作流优先面向 Chromium 内核浏览器。
+          FreeCut currently works best in Chrome or Edge 113+. It relies on modern browser APIs like
+          WebGPU, WebCodecs, OPFS, and File System Access, so the full workflow is currently
+          Chromium-first.
         </p>
         <p>
-          <strong>Brave 用户：</strong>File System Access API 默认关闭。请访问{' '}
+          <strong>Brave users:</strong> The File System Access API is disabled by default. To enable
+          it, navigate to{' '}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">
             brave://flags/#file-system-access-api
           </code>
-          ，将其设置为 <strong>Enabled</strong>，然后重启浏览器。
+          , set it to <strong>Enabled</strong>, and relaunch the browser.
         </p>
       </>
     ),
   },
   {
-    question: '支持导出哪些格式？',
-    answer: '视频支持 MP4、MOV、WebM、MKV；音频支持 MP3、AAC、WAV（PCM）。当前导出界面可选择 H.264、H.265、VP8、VP9 和 AV1，并提供低、中、高、超高画质预设。',
+    question: 'What export formats are supported?',
+    answer:
+      'Video: MP4, MOV, WebM, MKV. Audio: MP3, AAC, WAV (PCM). The current export UI exposes H.264, H.265, VP8, VP9, and AV1 with low, medium, high, and ultra quality presets.',
   },
   {
-    question: '后续会继续改进什么？',
-    answer: '当前重点仍然是 Beta 阶段的稳定性打磨，包括文档与实际功能对齐、提升可访问性与测试覆盖率，并让 FPS、吸附、预览质量、导出设置等默认值更好地贯穿整个编辑器。',
+    question: 'Future Improvements',
+    answer:
+      'The current focus is beta hardening: align product docs with shipped behavior, tighten accessibility and test coverage, and make defaults like FPS, snap, preview quality, and export settings flow through the real editor.',
   },
   {
-    question: '特别感谢',
+    question: 'Special shoutout',
     answer: (
       <>
         <p className="mb-3">
-          特别感谢{' '}
-          <a href="https://mediabunny.dev/" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">
+          A huge thank you to{' '}
+          <a
+            href="https://mediabunny.dev/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline hover:text-primary/80"
+          >
             Mediabunny
           </a>{' '}
-          让浏览器端视频编码变得如此简单。没有他们的出色工作，这个项目就不会存在。
+          for making browser-based video encoding easy. This project wouldn't exist without their
+          amazing work!
         </p>
-        <p className="mb-2 font-medium text-foreground">技术栈：</p>
+        <p className="mb-2 font-medium text-foreground">Built with:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li>React</li>
           <li>TypeScript</li>
@@ -75,13 +87,13 @@ const faqItems = [
       </>
     ),
   },
-];
+]
 
 const showcaseItems = [
   {
     id: 'timeline',
-    title: '时间线剪辑',
-    description: '支持视频、音频、文字和图形的多轨道编辑',
+    title: 'Timeline Editing',
+    description: 'Multi-track editing with video, audio, text, and shapes',
     icon: Layers,
     media: '/assets/landing/timeline.png',
     className: 'md:col-span-2 md:row-span-1',
@@ -89,8 +101,8 @@ const showcaseItems = [
   },
   {
     id: 'keyframe',
-    title: '简洁关键帧编辑',
-    description: '用直观的关键帧动画做出流畅转场和动效',
+    title: 'Simple KeyFrame Editor',
+    description: 'Intuitive keyframe animation for smooth transitions',
     icon: Play,
     media: '/assets/landing/keyframe.png',
     className: 'md:row-span-2',
@@ -98,8 +110,8 @@ const showcaseItems = [
   },
   {
     id: 'projects',
-    title: '项目管理',
-    description: '创建、整理并统一管理你的剪辑项目',
+    title: 'Project Management',
+    description: 'Create, organize, and manage your projects',
     icon: FolderOpen,
     media: '/assets/landing/projects.png',
     className: '',
@@ -107,14 +119,14 @@ const showcaseItems = [
   },
   {
     id: 'export',
-    title: '网页端导出',
-    description: '直接在浏览器本地渲染并导出视频。',
+    title: 'Export on the Web',
+    description: 'Render your videos locally with your browser.',
     icon: Download,
     media: '/assets/landing/export.png',
     className: '',
     aspectClass: 'aspect-video',
   },
-];
+]
 
 function LandingPage() {
   return (
@@ -130,28 +142,27 @@ function LandingPage() {
           <div className="mb-6 flex items-center gap-3">
             <FreeCutLogo size="lg" />
             <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
-              测试版
+              Beta
             </span>
           </div>
 
           <h1 className="mb-4 max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-            浏览器里，{' '}
-            <span className="text-primary">直接剪视频。</span>
+            Edit videos. <span className="text-primary">In your browser.</span>
           </h1>
 
           <p className="mb-6 max-w-lg text-lg text-muted-foreground sm:text-xl">
-            专业级视频编辑，零安装。
-            在浏览器里就能完成内容创作。
+            Professional video editing, zero installation. Create stunning content in your browser.
           </p>
 
           <p className="mb-6 max-w-lg text-sm text-amber-600 dark:text-amber-500">
-            当前仍处于 Beta 阶段，部分功能可能还不够稳定，但已经可以开始体验完整流程。  
+            ⚠️ DISCLAIMER: This is very much in beta and might be buggy. I hope you still enjoy the
+            experience.
           </p>
 
           <div className="flex flex-col items-center gap-4 sm:flex-row">
             <Button asChild size="lg" className="gap-2 px-8">
               <Link to="/projects">
-                立即开始
+                Get Started
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -163,7 +174,7 @@ function LandingPage() {
                 rel="noopener noreferrer"
               >
                 <Star className="h-4 w-4" />
-                在 GitHub 点个 Star
+                Star on GitHub
               </a>
             </Button>
           </div>
@@ -175,10 +186,10 @@ function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-12 text-center">
             <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
-              核心剪辑能力
+              Multi featured editing capabilities
             </h2>
             <p className="mx-auto max-w-2xl text-muted-foreground">
-              一套完整的视频编辑工具，直接运行在你的浏览器里。
+              A complete video editing suite, right in your browser.
             </p>
           </div>
 
@@ -201,7 +212,7 @@ function LandingPage() {
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="flex flex-col items-center gap-3 text-muted-foreground/50">
                         <item.icon className="h-12 w-12" />
-                        <span className="text-xs uppercase tracking-wider">预览图</span>
+                        <span className="text-xs uppercase tracking-wider">Screenshot</span>
                       </div>
                       {/* Subtle grid pattern */}
                       <div
@@ -238,11 +249,9 @@ function LandingPage() {
       <section className="border-t border-border px-6 py-20">
         <div className="mx-auto max-w-4xl">
           <div className="mb-10 text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
-              看看实际效果
-            </h2>
+            <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">See it in Action</h2>
             <p className="mx-auto max-w-2xl text-muted-foreground">
-              通过一个简短演示快速了解 FreeCut 的剪辑能力。
+              Watch a quick demo of FreeCut's editing capabilities.
             </p>
           </div>
 
@@ -255,7 +264,7 @@ function LandingPage() {
             <div className="relative aspect-video w-full overflow-hidden bg-muted">
               <img
                 src="/assets/landing/timeline.png"
-                alt="FreeCut 演示预览"
+                alt="FreeCut demo preview"
                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
               <div className="absolute inset-0 bg-black/30 transition-colors group-hover:bg-black/20" />
@@ -265,7 +274,7 @@ function LandingPage() {
                 </div>
               </div>
               <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-sm text-white backdrop-blur-sm">
-                <span>在 YouTube 观看演示</span>
+                <span>Watch Demo on YouTube</span>
                 <ExternalLink className="h-3.5 w-3.5" />
               </div>
             </div>
@@ -278,22 +287,16 @@ function LandingPage() {
         <div className="mx-auto max-w-3xl">
           <div className="mb-10 text-center">
             <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
-              常见问题
+              Frequently Asked Questions
             </h2>
-            <p className="text-muted-foreground">
-              关于 FreeCut，你需要了解的都在这里。
-            </p>
+            <p className="text-muted-foreground">Everything you need to know about FreeCut.</p>
           </div>
 
           <Accordion type="single" collapsible className="w-full">
             {faqItems.map((item, index) => (
               <AccordionItem key={index} value={`item-${index}`} id={item.id}>
-                <AccordionTrigger className="text-left">
-                  {item.question}
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  {item.answer}
-                </AccordionContent>
+                <AccordionTrigger className="text-left">{item.question}</AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">{item.answer}</AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
@@ -303,16 +306,14 @@ function LandingPage() {
       {/* CTA Footer Section */}
       <section className="border-t border-border px-6 py-20">
         <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-          <h2 className="mb-4 text-2xl font-bold sm:text-3xl">
-            准备开始剪辑了吗？
-          </h2>
+          <h2 className="mb-4 text-2xl font-bold sm:text-3xl">Ready to start editing?</h2>
           <p className="mb-8 text-muted-foreground">
-            几秒钟内就能创建你的第一个项目。
+            Jump in and create your first project in seconds.
           </p>
           <div className="flex flex-col items-center gap-4 sm:flex-row">
             <Button asChild size="lg" className="gap-2 px-8">
               <Link to="/projects">
-                开始剪辑
+                Start Editing
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -324,7 +325,7 @@ function LandingPage() {
                 rel="noopener noreferrer"
               >
                 <Star className="h-4 w-4" />
-                在 GitHub 点个 Star
+                Star on GitHub
               </a>
             </Button>
           </div>
@@ -334,9 +335,9 @@ function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-border px-6 py-8">
         <div className="mx-auto max-w-5xl text-center text-sm text-muted-foreground">
-          MIT 许可证 © {new Date().getFullYear()} FreeCut
+          MIT License © {new Date().getFullYear()} FreeCut
         </div>
       </footer>
     </div>
-  );
+  )
 }

@@ -1,4 +1,4 @@
-import type { SceneCut } from './scene-detection';
+import type { SceneCut } from './scene-detection'
 
 /**
  * Seek video and wait for the seeked event with a timeout fallback.
@@ -6,17 +6,17 @@ import type { SceneCut } from './scene-detection';
 export async function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void> {
   return new Promise<void>((resolve) => {
     const onSeeked = () => {
-      video.removeEventListener('seeked', onSeeked);
-      clearTimeout(timeout);
-      resolve();
-    };
+      video.removeEventListener('seeked', onSeeked)
+      clearTimeout(timeout)
+      resolve()
+    }
     const timeout = setTimeout(() => {
-      video.removeEventListener('seeked', onSeeked);
-      resolve();
-    }, 1000);
-    video.addEventListener('seeked', onSeeked);
-    video.currentTime = timeSec;
-  });
+      video.removeEventListener('seeked', onSeeked)
+      resolve()
+    }, 1000)
+    video.addEventListener('seeked', onSeeked)
+    video.currentTime = timeSec
+  })
 }
 
 /**
@@ -24,23 +24,23 @@ export async function seekVideo(video: HTMLVideoElement, timeSec: number): Promi
  * the one with the highest total motion in each cluster.
  */
 export function deduplicateCuts(cuts: SceneCut[], minGapSec: number): SceneCut[] {
-  if (cuts.length <= 1) return cuts;
+  if (cuts.length <= 1) return cuts
 
-  const result: SceneCut[] = [];
-  let clusterBest = cuts[0]!;
+  const result: SceneCut[] = []
+  let clusterBest = cuts[0]!
 
   for (let i = 1; i < cuts.length; i++) {
-    const cut = cuts[i]!;
+    const cut = cuts[i]!
     if (cut.time - clusterBest.time < minGapSec) {
       if (cut.motion.totalMotion > clusterBest.motion.totalMotion) {
-        clusterBest = cut;
+        clusterBest = cut
       }
     } else {
-      result.push(clusterBest);
-      clusterBest = cut;
+      result.push(clusterBest)
+      clusterBest = cut
     }
   }
-  result.push(clusterBest);
+  result.push(clusterBest)
 
-  return result;
+  return result
 }

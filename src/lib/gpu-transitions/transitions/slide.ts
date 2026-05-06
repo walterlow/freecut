@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const slide: GpuTransitionDefinition = {
   id: 'slide',
@@ -64,6 +64,6 @@ fn slideFragment(input: VertexOutput) -> @location(0) vec4f {
   return mix(left, right, splitTest);
 }`,
   packUniforms: (progress, width, height, direction) => {
-    return new Float32Array([progress, width, height, direction]);
+    return new Float32Array([progress, width, height, direction])
   },
-};
+}

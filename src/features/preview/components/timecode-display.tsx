@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { getResolvedPlaybackFrame, usePlaybackStore } from '@/shared/state/playback';
-import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
-import { formatTimecodeCompact } from '@/shared/utils/time-utils';
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { getResolvedPlaybackFrame, usePlaybackStore } from '@/shared/state/playback'
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
+import { formatTimecodeCompact } from '@/shared/utils/time-utils'
 
 interface TimecodeDisplayProps {
-  fps: number;
-  totalFrames: number;
+  fps: number
+  totalFrames: number
 }
 
 /**
@@ -18,29 +18,29 @@ interface TimecodeDisplayProps {
  * - Primary color for current time
  */
 export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
-  const [showFrames, setShowFrames] = useState(false);
-  const currentTimeRef = useRef<HTMLSpanElement>(null);
-  const frameDigits = Math.max(totalFrames.toString().length, 1);
-  const reservedCharWidth = Math.max(frameDigits, 8);
-  const lastFrame = Math.max(0, totalFrames - 1);
-  const reservedDisplayWidth = `calc(${reservedCharWidth * 2 + 1}ch + 0.75rem)`;
+  const [showFrames, setShowFrames] = useState(false)
+  const currentTimeRef = useRef<HTMLSpanElement>(null)
+  const frameDigits = Math.max(totalFrames.toString().length, 1)
+  const reservedCharWidth = Math.max(frameDigits, 8)
+  const lastFrame = Math.max(0, totalFrames - 1)
+  const reservedDisplayWidth = `calc(${reservedCharWidth * 2 + 1}ch + 0.75rem)`
 
   // Use refs for values accessed in subscription to avoid stale closures
-  const showFramesRef = useRef(showFrames);
-  showFramesRef.current = showFrames;
-  const fpsRef = useRef(fps);
-  fpsRef.current = fps;
-  const totalFramesRef = useRef(totalFrames);
-  totalFramesRef.current = totalFrames;
+  const showFramesRef = useRef(showFrames)
+  showFramesRef.current = showFrames
+  const fpsRef = useRef(fps)
+  fpsRef.current = fps
+  const totalFramesRef = useRef(totalFrames)
+  totalFramesRef.current = totalFrames
 
   // Format frame number with padding based on total frames to prevent layout shift
   const formatFrameNumber = useCallback((frame: number) => {
-    const maxDigits = Math.max(totalFramesRef.current.toString().length, 1);
-    return frame.toString().padStart(maxDigits, '0');
-  }, []);
+    const maxDigits = Math.max(totalFramesRef.current.toString().length, 1)
+    return frame.toString().padStart(maxDigits, '0')
+  }, [])
 
   const getVisibleFrame = useCallback(() => {
-    const playbackState = usePlaybackStore.getState();
+    const playbackState = usePlaybackStore.getState()
     return getResolvedPlaybackFrame({
       currentFrame: playbackState.currentFrame,
       currentFrameEpoch: playbackState.currentFrameEpoch,
@@ -48,43 +48,43 @@ export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
       previewFrameEpoch: playbackState.previewFrameEpoch,
       isPlaying: playbackState.isPlaying,
       displayedFrame: usePreviewBridgeStore.getState().displayedFrame,
-    });
-  }, []);
+    })
+  }, [])
 
   // Subscribe to the resolved visible preview frame and update DOM directly
   // (no React re-renders during playback/scrub).
   useEffect(() => {
     const updateDisplay = (frame: number) => {
-      if (!currentTimeRef.current) return;
+      if (!currentTimeRef.current) return
       currentTimeRef.current.textContent = showFramesRef.current
         ? formatFrameNumber(frame)
-        : formatTimecodeCompact(frame, fpsRef.current);
-    };
+        : formatTimecodeCompact(frame, fpsRef.current)
+    }
 
     // Initial update
-    updateDisplay(getVisibleFrame());
+    updateDisplay(getVisibleFrame())
 
     const syncDisplay = () => {
-      updateDisplay(getVisibleFrame());
-    };
+      updateDisplay(getVisibleFrame())
+    }
 
-    const unsubscribePlayback = usePlaybackStore.subscribe(syncDisplay);
-    const unsubscribePreviewBridge = usePreviewBridgeStore.subscribe(syncDisplay);
+    const unsubscribePlayback = usePlaybackStore.subscribe(syncDisplay)
+    const unsubscribePreviewBridge = usePreviewBridgeStore.subscribe(syncDisplay)
 
     return () => {
-      unsubscribePlayback();
-      unsubscribePreviewBridge();
-    };
-  }, [formatFrameNumber, getVisibleFrame]);
+      unsubscribePlayback()
+      unsubscribePreviewBridge()
+    }
+  }, [formatFrameNumber, getVisibleFrame])
 
   // Update display when showFrames or fps changes (rare - can trigger re-render)
   useEffect(() => {
-    if (!currentTimeRef.current) return;
-    const frame = getVisibleFrame();
+    if (!currentTimeRef.current) return
+    const frame = getVisibleFrame()
     currentTimeRef.current.textContent = showFrames
       ? formatFrameNumber(frame)
-      : formatTimecodeCompact(frame, fps);
-  }, [showFrames, fps, formatFrameNumber, getVisibleFrame]);
+      : formatTimecodeCompact(frame, fps)
+  }, [showFrames, fps, formatFrameNumber, getVisibleFrame])
 
   return (
     <button
@@ -93,16 +93,15 @@ export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
       style={{ width: reservedDisplayWidth }}
       onClick={() => setShowFrames((prev) => !prev)}
     >
-      <span
-        ref={currentTimeRef}
-        className="text-primary font-semibold"
-      >
-        {showFrames ? formatFrameNumber(getVisibleFrame()) : formatTimecodeCompact(getVisibleFrame(), fps)}
+      <span ref={currentTimeRef} className="text-primary font-semibold">
+        {showFrames
+          ? formatFrameNumber(getVisibleFrame())
+          : formatTimecodeCompact(getVisibleFrame(), fps)}
       </span>
       <span className="text-muted-foreground/50">/</span>
       <span>
         {showFrames ? formatFrameNumber(lastFrame) : formatTimecodeCompact(lastFrame, fps)}
       </span>
     </button>
-  );
+  )
 }

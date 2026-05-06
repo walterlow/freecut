@@ -15,8 +15,8 @@ import type {
   WipeDirection,
   SlideDirection,
   FlipDirection,
-} from '@/types/transition';
-import type { TransitionStyleCalculation } from './engine';
+} from '@/types/transition'
+import type { TransitionStyleCalculation } from './engine'
 
 /**
  * Renderer interface for CSS/DOM-based transitions (preview + Composition).
@@ -33,8 +33,8 @@ export interface TransitionRenderer {
     canvasWidth: number,
     canvasHeight: number,
     direction?: WipeDirection | SlideDirection | FlipDirection,
-    properties?: Record<string, unknown>
-  ): TransitionStyleCalculation;
+    properties?: Record<string, unknown>,
+  ): TransitionStyleCalculation
 
   /**
    * Render the transition onto a Canvas 2D context (for export).
@@ -53,22 +53,22 @@ export interface TransitionRenderer {
     progress: number,
     direction?: WipeDirection | SlideDirection | FlipDirection,
     canvas?: { width: number; height: number },
-    properties?: Record<string, unknown>
-  ): void;
+    properties?: Record<string, unknown>,
+  ): void
 
   /** Optional GLSL fragment shader source for WebGL acceleration */
-  glslShader?: string;
+  glslShader?: string
 
   /** GPU transition ID for WebGPU-accelerated rendering via TransitionPipeline */
-  gpuTransitionId?: string;
+  gpuTransitionId?: string
 }
 
 /**
  * Entry stored in the registry for each transition.
  */
 interface TransitionRegistryEntry {
-  definition: TransitionDefinition;
-  renderer: TransitionRenderer;
+  definition: TransitionDefinition
+  renderer: TransitionRenderer
 }
 
 /**
@@ -76,103 +76,103 @@ interface TransitionRegistryEntry {
  * Stores transition definitions and renderers by presentation ID.
  */
 export class TransitionRegistry {
-  private entries: Map<string, TransitionRegistryEntry> = new Map();
+  private entries: Map<string, TransitionRegistryEntry> = new Map()
 
   /**
    * Register a transition with its definition and renderer.
    */
   register(id: string, definition: TransitionDefinition, renderer: TransitionRenderer): void {
     if (this.entries.has(id)) {
-      console.warn(`[TransitionRegistry] Transition "${id}" is being overwritten`);
+      console.warn(`[TransitionRegistry] Transition "${id}" is being overwritten`)
     }
-    this.entries.set(id, { definition, renderer });
+    this.entries.set(id, { definition, renderer })
   }
 
   /**
    * Unregister a transition by ID.
    */
   unregister(id: string): boolean {
-    return this.entries.delete(id);
+    return this.entries.delete(id)
   }
 
   /**
    * Get a registry entry by ID.
    */
   get(id: string): TransitionRegistryEntry | undefined {
-    return this.entries.get(id);
+    return this.entries.get(id)
   }
 
   /**
    * Get just the renderer for a transition ID.
    */
   getRenderer(id: string): TransitionRenderer | undefined {
-    return this.entries.get(id)?.renderer;
+    return this.entries.get(id)?.renderer
   }
 
   /**
    * Get just the definition for a transition ID.
    */
   getDefinition(id: string): TransitionDefinition | undefined {
-    return this.entries.get(id)?.definition;
+    return this.entries.get(id)?.definition
   }
 
   /**
    * Check if a transition ID is registered.
    */
   has(id: string): boolean {
-    return this.entries.has(id);
+    return this.entries.has(id)
   }
 
   /**
    * Get all registered entries.
    */
   getAll(): Map<string, TransitionRegistryEntry> {
-    return new Map(this.entries);
+    return new Map(this.entries)
   }
 
   /**
    * Get all entries in a given category.
    */
   getByCategory(category: TransitionCategory): TransitionRegistryEntry[] {
-    const result: TransitionRegistryEntry[] = [];
+    const result: TransitionRegistryEntry[] = []
     for (const entry of this.entries.values()) {
       if (entry.definition.category === category) {
-        result.push(entry);
+        result.push(entry)
       }
     }
-    return result;
+    return result
   }
 
   /**
    * Get all definitions (for UI listing).
    */
   getDefinitions(): TransitionDefinition[] {
-    return Array.from(this.entries.values()).map((e) => e.definition);
+    return Array.from(this.entries.values()).map((e) => e.definition)
   }
 
   /**
    * Get all registered IDs.
    */
   getIds(): string[] {
-    return Array.from(this.entries.keys());
+    return Array.from(this.entries.keys())
   }
 
   /**
    * Clear all registered transitions.
    */
   clear(): void {
-    this.entries.clear();
+    this.entries.clear()
   }
 
   /**
    * Get count of registered transitions.
    */
   get size(): number {
-    return this.entries.size;
+    return this.entries.size
   }
 }
 
 /**
  * Global singleton transition registry.
  */
-export const transitionRegistry = new TransitionRegistry();
+export const transitionRegistry = new TransitionRegistry()

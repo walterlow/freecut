@@ -5,15 +5,15 @@
  * Ensures data integrity and provides helpful error messages.
  */
 
-import { z } from 'zod';
-import { TEXT_STYLE_PRESET_IDS } from '@/shared/typography/text-style-preset-ids';
-import { SNAPSHOT_VERSION } from '../types/snapshot';
+import { z } from 'zod'
+import { TEXT_STYLE_PRESET_IDS } from '@/shared/typography/text-style-preset-ids'
+import { SNAPSHOT_VERSION } from '../types/snapshot'
 
 // ============================================================================
 // Keyframe Schemas
 // ============================================================================
 
-const animatablePropertySchema = z.string().min(1);
+const animatablePropertySchema = z.string().min(1)
 
 const easingTypeSchema = z.enum([
   'linear',
@@ -22,33 +22,28 @@ const easingTypeSchema = z.enum([
   'ease-in-out',
   'cubic-bezier',
   'spring',
-]);
+])
 
 const bezierControlPointsSchema = z.object({
   x1: z.number().min(0).max(1),
   y1: z.number(),
   x2: z.number().min(0).max(1),
   y2: z.number(),
-});
+})
 
 const springParametersSchema = z.object({
   tension: z.number().min(0).max(500),
   friction: z.number().min(0).max(100),
   mass: z.number().min(0.1).max(10),
-});
+})
 
 const easingConfigSchema = z.object({
   type: easingTypeSchema,
   bezier: bezierControlPointsSchema.optional(),
   spring: springParametersSchema.optional(),
-});
+})
 
-const audioEqCutSlopeSchema = z.union([
-  z.literal(6),
-  z.literal(12),
-  z.literal(18),
-  z.literal(24),
-]);
+const audioEqCutSlopeSchema = z.union([z.literal(6), z.literal(12), z.literal(18), z.literal(24)])
 
 const keyframeSchema = z.object({
   id: z.string().min(1),
@@ -56,23 +51,32 @@ const keyframeSchema = z.object({
   value: z.number(),
   easing: easingTypeSchema,
   easingConfig: easingConfigSchema.optional(),
-});
+})
 
 const propertyKeyframesSchema = z.object({
   property: animatablePropertySchema,
   keyframes: z.array(keyframeSchema),
-});
+})
 
 const itemKeyframesSchema = z.object({
   itemId: z.string().min(1),
   properties: z.array(propertyKeyframesSchema),
-});
+})
 
 // ============================================================================
 // Timeline Item Schemas
 // ============================================================================
 
-const itemTypeSchema = z.enum(['video', 'audio', 'text', 'image', 'shape', 'composition', 'adjustment']);
+const itemTypeSchema = z.enum([
+  'video',
+  'audio',
+  'text',
+  'image',
+  'shape',
+  'composition',
+  'adjustment',
+  'subtitle',
+])
 
 const shapeTypeSchema = z.enum([
   'rectangle',
@@ -83,28 +87,28 @@ const shapeTypeSchema = z.enum([
   'polygon',
   'heart',
   'path',
-]);
+])
 
-const directionSchema = z.enum(['up', 'down', 'left', 'right']);
+const directionSchema = z.enum(['up', 'down', 'left', 'right'])
 
 // Text-specific schemas
-const fontWeightSchema = z.enum(['normal', 'medium', 'semibold', 'bold']);
-const fontStyleSchema = z.enum(['normal', 'italic']);
-const textStylePresetIdSchema = z.enum(TEXT_STYLE_PRESET_IDS);
-const textAlignSchema = z.enum(['left', 'center', 'right']);
-const verticalAlignSchema = z.enum(['top', 'middle', 'bottom']);
+const fontWeightSchema = z.enum(['normal', 'medium', 'semibold', 'bold'])
+const fontStyleSchema = z.enum(['normal', 'italic'])
+const textStylePresetIdSchema = z.enum(TEXT_STYLE_PRESET_IDS)
+const textAlignSchema = z.enum(['left', 'center', 'right'])
+const verticalAlignSchema = z.enum(['top', 'middle', 'bottom'])
 
 const textShadowSchema = z.object({
   offsetX: z.number(),
   offsetY: z.number(),
   blur: z.number(),
   color: z.string(),
-});
+})
 
 const textStrokeSchema = z.object({
   width: z.number(),
   color: z.string(),
-});
+})
 
 const textSpanSchema = z.object({
   text: z.string(),
@@ -115,7 +119,7 @@ const textSpanSchema = z.object({
   underline: z.boolean().optional(),
   color: z.string().optional(),
   letterSpacing: z.number().optional(),
-});
+})
 
 const textSingleLayoutDraftSchema = z.object({
   text: z.string(),
@@ -126,47 +130,57 @@ const textSingleLayoutDraftSchema = z.object({
   underline: z.boolean().optional(),
   color: z.string().optional(),
   letterSpacing: z.number().optional(),
-});
+})
 
 const textLayoutDraftsSchema = z.object({
   single: textSingleLayoutDraftSchema.optional(),
   twoSpans: z.array(textSpanSchema).optional(),
   threeSpans: z.array(textSpanSchema).optional(),
-});
+})
 
 const captionSourceSchema = z.object({
-  type: z.enum(['transcript', 'ai-captions']),
+  // Mirrors GeneratedCaptionSource['type'] in src/types/timeline.ts. Keep
+  // both enums in sync — bundles produced from imports/embedded subtitle
+  // tracks otherwise fail validation on re-import.
+  type: z.enum(['transcript', 'ai-captions', 'subtitle-import', 'embedded-subtitles']),
   clipId: z.string().min(1),
   mediaId: z.string().min(1),
-});
+})
 
 // Mask schemas
-const maskTypeSchema = z.enum(['clip', 'alpha']);
+const maskTypeSchema = z.enum(['clip', 'alpha'])
 
 const maskVertexSchema = z.object({
   position: z.tuple([z.number(), z.number()]),
   inHandle: z.tuple([z.number(), z.number()]),
   outHandle: z.tuple([z.number(), z.number()]),
-});
+})
 
 // ============================================================================
 // Effect Schemas
 // ============================================================================
 
 const cssFilterTypeSchema = z.enum([
-  'brightness', 'contrast', 'saturate', 'blur', 'hue-rotate', 'grayscale', 'sepia', 'invert',
-]);
+  'brightness',
+  'contrast',
+  'saturate',
+  'blur',
+  'hue-rotate',
+  'grayscale',
+  'sepia',
+  'invert',
+])
 
-const glitchVariantSchema = z.enum(['rgb-split', 'scanlines', 'color-glitch']);
+const glitchVariantSchema = z.enum(['rgb-split', 'scanlines', 'color-glitch'])
 
-const halftonePatternTypeSchema = z.enum(['dots', 'lines', 'rays', 'ripples']);
-const halftoneBlendModeSchema = z.enum(['multiply', 'screen', 'overlay', 'soft-light']);
+const halftonePatternTypeSchema = z.enum(['dots', 'lines', 'rays', 'ripples'])
+const halftoneBlendModeSchema = z.enum(['multiply', 'screen', 'overlay', 'soft-light'])
 
 const cssFilterEffectSchema = z.object({
   type: z.literal('css-filter'),
   filter: cssFilterTypeSchema,
   value: z.number(),
-});
+})
 
 const glitchEffectSchema = z.object({
   type: z.literal('glitch'),
@@ -174,7 +188,7 @@ const glitchEffectSchema = z.object({
   intensity: z.number().min(0).max(1),
   speed: z.number().min(0.5).max(2),
   seed: z.number(),
-});
+})
 
 const halftoneEffectSchema = z.object({
   type: z.literal('canvas-effect'),
@@ -190,7 +204,7 @@ const halftoneEffectSchema = z.object({
   fadeAngle: z.number().min(-1).max(360),
   fadeAmount: z.number().min(0).max(1),
   dotColor: z.string(),
-});
+})
 
 const vignetteEffectSchema = z.object({
   type: z.literal('overlay-effect'),
@@ -200,7 +214,7 @@ const vignetteEffectSchema = z.object({
   softness: z.number().min(0).max(1),
   color: z.string(),
   shape: z.enum(['circular', 'elliptical']),
-});
+})
 
 const lutEffectSchema = z.object({
   type: z.literal('color-grading'),
@@ -225,17 +239,21 @@ const lutEffectSchema = z.object({
   intensity: z.number().min(0).max(1),
   cubeName: z.string().optional(),
   cubeData: z.string().optional(),
-});
+})
 
 const curvesEffectSchema = z.object({
   type: z.literal('color-grading'),
   variant: z.literal('curves'),
-  channels: z.object({
-    master: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
-    red: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
-    green: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
-    blue: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
-  }).optional(),
+  channels: z
+    .object({
+      master: z
+        .array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }))
+        .min(2),
+      red: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
+      green: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
+      blue: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
+    })
+    .optional(),
   shadows: z.number().min(-100).max(100),
   midtones: z.number().min(-100).max(100),
   highlights: z.number().min(-100).max(100),
@@ -243,7 +261,7 @@ const curvesEffectSchema = z.object({
   red: z.number().min(-100).max(100),
   green: z.number().min(-100).max(100),
   blue: z.number().min(-100).max(100),
-});
+})
 
 const wheelsEffectSchema = z.object({
   type: z.literal('color-grading'),
@@ -257,19 +275,19 @@ const wheelsEffectSchema = z.object({
   temperature: z.number().min(-100).max(100),
   tint: z.number().min(-100).max(100),
   saturation: z.number().min(-100).max(100),
-});
+})
 
 const gpuEffectSchema = z.object({
   type: z.literal('gpu-effect'),
   gpuEffectType: z.string().min(1),
   params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
-});
+})
 
 const colorGradingEffectSchema = z.discriminatedUnion('variant', [
   lutEffectSchema,
   curvesEffectSchema,
   wheelsEffectSchema,
-]);
+])
 
 const visualEffectSchema = z.union([
   gpuEffectSchema,
@@ -278,13 +296,13 @@ const visualEffectSchema = z.union([
   halftoneEffectSchema,
   vignetteEffectSchema,
   colorGradingEffectSchema,
-]);
+])
 
 const itemEffectSchema = z.object({
   id: z.string().min(1),
   effect: visualEffectSchema,
   enabled: z.boolean(),
-});
+})
 
 const transformSchema = z.object({
   x: z.number().optional(),
@@ -299,7 +317,7 @@ const transformSchema = z.object({
   opacity: z.number().min(0).max(1).optional(),
   cornerRadius: z.number().min(0).optional(),
   aspectRatioLocked: z.boolean().optional(),
-});
+})
 
 const cropSchema = z.object({
   left: z.number().min(0).max(1).optional(),
@@ -307,7 +325,7 @@ const cropSchema = z.object({
   top: z.number().min(0).max(1).optional(),
   bottom: z.number().min(0).max(1).optional(),
   softness: z.number().min(-1).max(1).optional(),
-});
+})
 
 const cornerPinSchema = z.object({
   topLeft: z.tuple([z.number(), z.number()]),
@@ -316,158 +334,162 @@ const cornerPinSchema = z.object({
   bottomLeft: z.tuple([z.number(), z.number()]),
   referenceWidth: z.number().positive().optional(),
   referenceHeight: z.number().positive().optional(),
-});
+})
 
-const timelineItemSchema = z.object({
-  id: z.string().min(1),
-  trackId: z.string().min(1),
-  from: z.number().int().min(0),
-  durationInFrames: z.number().int().min(1),
-  label: z.string(),
-  mediaId: z.string().optional(),
-  originId: z.string().optional(),
-  linkedGroupId: z.string().optional(),
-  type: itemTypeSchema,
-  // Source fields
-  src: z.string().optional(),
-  thumbnailUrl: z.string().optional(),
-  offset: z.number().optional(), // deprecated
-  waveformData: z.array(z.number()).optional(),
-  sourceStart: z.number().optional(),
-  sourceEnd: z.number().optional(),
-  sourceDuration: z.number().optional(),
-  sourceFps: z.number().positive().optional(),
-  // Trim fields
-  trimStart: z.number().optional(),
-  trimEnd: z.number().optional(),
-  // Text fields
-  text: z.string().optional(),
-  textSpans: z.array(textSpanSchema).optional(),
-  textLayoutDrafts: textLayoutDraftsSchema.optional(),
-  textRole: z.literal('caption').optional(),
-  captionSource: captionSourceSchema.optional(),
-  fontSize: z.number().optional(),
-  fontFamily: z.string().optional(),
-  fontWeight: fontWeightSchema.optional(),
-  fontStyle: fontStyleSchema.optional(),
-  underline: z.boolean().optional(),
-  color: z.string().optional(),
-  textStylePresetId: textStylePresetIdSchema.optional(),
-  textStyleScale: z.number().positive().optional(),
-  backgroundColor: z.string().optional(),
-  backgroundRadius: z.number().min(0).optional(),
-  textAlign: textAlignSchema.optional(),
-  verticalAlign: verticalAlignSchema.optional(),
-  lineHeight: z.number().optional(),
-  letterSpacing: z.number().optional(),
-  textPadding: z.number().min(0).optional(),
-  textShadow: textShadowSchema.optional(),
-  stroke: textStrokeSchema.optional(),
-  // Shape fields
-  shapeType: shapeTypeSchema.optional(),
-  fillColor: z.string().optional(),
-  strokeColor: z.string().optional(),
-  strokeWidth: z.number().optional(),
-  direction: directionSchema.optional(),
-  points: z.number().optional(),
-  innerRadius: z.number().optional(),
-  pathVertices: z.array(maskVertexSchema).optional(),
-  // Mask fields
-  isMask: z.boolean().optional(),
-  maskType: maskTypeSchema.optional(),
-  maskFeather: z.number().min(0).max(100).optional(),
-  maskInvert: z.boolean().optional(),
-  // Speed
-  speed: z.number().min(0.1).max(10).optional(),
-  // Source dimensions
-  sourceWidth: z.number().optional(),
-  sourceHeight: z.number().optional(),
-  // Transform
-  transform: transformSchema.optional(),
-  crop: cropSchema.optional(),
-  // Audio properties
-  volume: z.number().min(-60).max(12).optional(),
-  audioFadeIn: z.number().min(0).optional(),
-  audioFadeOut: z.number().min(0).optional(),
-  audioFadeInCurve: z.number().min(-1).max(1).optional(),
-  audioFadeOutCurve: z.number().min(-1).max(1).optional(),
-  audioFadeInCurveX: z.number().min(0).max(1).optional(),
-  audioFadeOutCurveX: z.number().min(0).max(1).optional(),
-  audioPitchSemitones: z.number().int().min(-12).max(12).optional(),
-  audioPitchCents: z.number().int().min(-100).max(100).optional(),
-  audioEqOutputGainDb: z.number().min(-20).max(20).optional(),
-  audioEqBand1Enabled: z.boolean().optional(),
-  audioEqBand1Type: z.enum(['low-shelf', 'peaking', 'high-shelf', 'high-pass']).optional(),
-  audioEqBand1FrequencyHz: z.number().min(20).max(399).optional(),
-  audioEqBand1GainDb: z.number().min(-20).max(20).optional(),
-  audioEqBand1Q: z.number().min(0.3).max(10.3).optional(),
-  audioEqBand1SlopeDbPerOct: audioEqCutSlopeSchema.optional(),
-  audioEqLowCutEnabled: z.boolean().optional(),
-  audioEqLowCutFrequencyHz: z.number().min(20).max(399).optional(),
-  audioEqLowCutSlopeDbPerOct: audioEqCutSlopeSchema.optional(),
-  audioEqLowEnabled: z.boolean().optional(),
-  audioEqLowType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
-  audioEqLowGainDb: z.number().min(-20).max(20).optional(),
-  audioEqLowFrequencyHz: z.number().min(20).max(22000).optional(),
-  audioEqLowQ: z.number().min(0.3).max(10.3).optional(),
-  audioEqLowMidEnabled: z.boolean().optional(),
-  audioEqLowMidType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
-  audioEqLowMidGainDb: z.number().min(-20).max(20).optional(),
-  audioEqLowMidFrequencyHz: z.number().min(20).max(22000).optional(),
-  audioEqLowMidQ: z.number().min(0.3).max(10.3).optional(),
-  audioEqMidGainDb: z.number().min(-20).max(20).optional(),
-  audioEqHighMidEnabled: z.boolean().optional(),
-  audioEqHighMidType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
-  audioEqHighMidGainDb: z.number().min(-20).max(20).optional(),
-  audioEqHighMidFrequencyHz: z.number().min(20).max(22000).optional(),
-  audioEqHighMidQ: z.number().min(0.3).max(10.3).optional(),
-  audioEqHighEnabled: z.boolean().optional(),
-  audioEqHighType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
-  audioEqHighGainDb: z.number().min(-20).max(20).optional(),
-  audioEqHighFrequencyHz: z.number().min(1400).max(22000).optional(),
-  audioEqHighQ: z.number().min(0.3).max(10.3).optional(),
-  audioEqBand6Enabled: z.boolean().optional(),
-  audioEqBand6Type: z.enum(['low-pass', 'low-shelf', 'peaking', 'high-shelf']).optional(),
-  audioEqBand6FrequencyHz: z.number().min(1400).max(22000).optional(),
-  audioEqBand6GainDb: z.number().min(-20).max(20).optional(),
-  audioEqBand6Q: z.number().min(0.3).max(10.3).optional(),
-  audioEqBand6SlopeDbPerOct: audioEqCutSlopeSchema.optional(),
-  audioEqHighCutEnabled: z.boolean().optional(),
-  audioEqHighCutFrequencyHz: z.number().min(1400).max(22000).optional(),
-  audioEqHighCutSlopeDbPerOct: audioEqCutSlopeSchema.optional(),
-  // Video properties
-  fadeIn: z.number().min(0).optional(),
-  fadeOut: z.number().min(0).optional(),
-  // Effects
-  effects: z.array(itemEffectSchema).optional(),
-  // Adjustment layer
-  effectOpacity: z.number().min(0).max(1).optional(),
-  // Composition item fields
-  compositionWidth: z.number().optional(),
-  compositionHeight: z.number().optional(),
-  // Layer compositing
-  blendMode: z.string().optional(),
-  cornerPin: cornerPinSchema.optional(),
-}).passthrough();
+const timelineItemSchema = z
+  .object({
+    id: z.string().min(1),
+    trackId: z.string().min(1),
+    from: z.number().int().min(0),
+    durationInFrames: z.number().int().min(1),
+    label: z.string(),
+    mediaId: z.string().optional(),
+    originId: z.string().optional(),
+    linkedGroupId: z.string().optional(),
+    type: itemTypeSchema,
+    // Source fields
+    src: z.string().optional(),
+    thumbnailUrl: z.string().optional(),
+    offset: z.number().optional(), // deprecated
+    waveformData: z.array(z.number()).optional(),
+    sourceStart: z.number().optional(),
+    sourceEnd: z.number().optional(),
+    sourceDuration: z.number().optional(),
+    sourceFps: z.number().positive().optional(),
+    // Trim fields
+    trimStart: z.number().optional(),
+    trimEnd: z.number().optional(),
+    // Text fields
+    text: z.string().optional(),
+    textSpans: z.array(textSpanSchema).optional(),
+    textLayoutDrafts: textLayoutDraftsSchema.optional(),
+    textRole: z.literal('caption').optional(),
+    captionSource: captionSourceSchema.optional(),
+    fontSize: z.number().optional(),
+    fontFamily: z.string().optional(),
+    fontWeight: fontWeightSchema.optional(),
+    fontStyle: fontStyleSchema.optional(),
+    underline: z.boolean().optional(),
+    color: z.string().optional(),
+    textStylePresetId: textStylePresetIdSchema.optional(),
+    textStyleScale: z.number().positive().optional(),
+    backgroundColor: z.string().optional(),
+    backgroundRadius: z.number().min(0).optional(),
+    textAlign: textAlignSchema.optional(),
+    verticalAlign: verticalAlignSchema.optional(),
+    lineHeight: z.number().optional(),
+    letterSpacing: z.number().optional(),
+    textPadding: z.number().min(0).optional(),
+    textShadow: textShadowSchema.optional(),
+    stroke: textStrokeSchema.optional(),
+    // Shape fields
+    shapeType: shapeTypeSchema.optional(),
+    fillColor: z.string().optional(),
+    strokeColor: z.string().optional(),
+    strokeWidth: z.number().optional(),
+    direction: directionSchema.optional(),
+    points: z.number().optional(),
+    innerRadius: z.number().optional(),
+    pathVertices: z.array(maskVertexSchema).optional(),
+    // Mask fields
+    isMask: z.boolean().optional(),
+    maskType: maskTypeSchema.optional(),
+    maskFeather: z.number().min(0).max(100).optional(),
+    maskInvert: z.boolean().optional(),
+    // Speed
+    speed: z.number().min(0.1).max(10).optional(),
+    // Source dimensions
+    sourceWidth: z.number().optional(),
+    sourceHeight: z.number().optional(),
+    // Transform
+    transform: transformSchema.optional(),
+    crop: cropSchema.optional(),
+    // Audio properties
+    volume: z.number().min(-60).max(12).optional(),
+    audioFadeIn: z.number().min(0).optional(),
+    audioFadeOut: z.number().min(0).optional(),
+    audioFadeInCurve: z.number().min(-1).max(1).optional(),
+    audioFadeOutCurve: z.number().min(-1).max(1).optional(),
+    audioFadeInCurveX: z.number().min(0).max(1).optional(),
+    audioFadeOutCurveX: z.number().min(0).max(1).optional(),
+    audioPitchSemitones: z.number().int().min(-12).max(12).optional(),
+    audioPitchCents: z.number().int().min(-100).max(100).optional(),
+    audioEqOutputGainDb: z.number().min(-20).max(20).optional(),
+    audioEqBand1Enabled: z.boolean().optional(),
+    audioEqBand1Type: z.enum(['low-shelf', 'peaking', 'high-shelf', 'high-pass']).optional(),
+    audioEqBand1FrequencyHz: z.number().min(20).max(399).optional(),
+    audioEqBand1GainDb: z.number().min(-20).max(20).optional(),
+    audioEqBand1Q: z.number().min(0.3).max(10.3).optional(),
+    audioEqBand1SlopeDbPerOct: audioEqCutSlopeSchema.optional(),
+    audioEqLowCutEnabled: z.boolean().optional(),
+    audioEqLowCutFrequencyHz: z.number().min(20).max(399).optional(),
+    audioEqLowCutSlopeDbPerOct: audioEqCutSlopeSchema.optional(),
+    audioEqLowEnabled: z.boolean().optional(),
+    audioEqLowType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
+    audioEqLowGainDb: z.number().min(-20).max(20).optional(),
+    audioEqLowFrequencyHz: z.number().min(20).max(22000).optional(),
+    audioEqLowQ: z.number().min(0.3).max(10.3).optional(),
+    audioEqLowMidEnabled: z.boolean().optional(),
+    audioEqLowMidType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
+    audioEqLowMidGainDb: z.number().min(-20).max(20).optional(),
+    audioEqLowMidFrequencyHz: z.number().min(20).max(22000).optional(),
+    audioEqLowMidQ: z.number().min(0.3).max(10.3).optional(),
+    audioEqMidGainDb: z.number().min(-20).max(20).optional(),
+    audioEqHighMidEnabled: z.boolean().optional(),
+    audioEqHighMidType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
+    audioEqHighMidGainDb: z.number().min(-20).max(20).optional(),
+    audioEqHighMidFrequencyHz: z.number().min(20).max(22000).optional(),
+    audioEqHighMidQ: z.number().min(0.3).max(10.3).optional(),
+    audioEqHighEnabled: z.boolean().optional(),
+    audioEqHighType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
+    audioEqHighGainDb: z.number().min(-20).max(20).optional(),
+    audioEqHighFrequencyHz: z.number().min(1400).max(22000).optional(),
+    audioEqHighQ: z.number().min(0.3).max(10.3).optional(),
+    audioEqBand6Enabled: z.boolean().optional(),
+    audioEqBand6Type: z.enum(['low-pass', 'low-shelf', 'peaking', 'high-shelf']).optional(),
+    audioEqBand6FrequencyHz: z.number().min(1400).max(22000).optional(),
+    audioEqBand6GainDb: z.number().min(-20).max(20).optional(),
+    audioEqBand6Q: z.number().min(0.3).max(10.3).optional(),
+    audioEqBand6SlopeDbPerOct: audioEqCutSlopeSchema.optional(),
+    audioEqHighCutEnabled: z.boolean().optional(),
+    audioEqHighCutFrequencyHz: z.number().min(1400).max(22000).optional(),
+    audioEqHighCutSlopeDbPerOct: audioEqCutSlopeSchema.optional(),
+    // Video properties
+    fadeIn: z.number().min(0).optional(),
+    fadeOut: z.number().min(0).optional(),
+    // Effects
+    effects: z.array(itemEffectSchema).optional(),
+    // Adjustment layer
+    effectOpacity: z.number().min(0).max(1).optional(),
+    // Composition item fields
+    compositionWidth: z.number().optional(),
+    compositionHeight: z.number().optional(),
+    // Layer compositing
+    blendMode: z.string().optional(),
+    cornerPin: cornerPinSchema.optional(),
+  })
+  .passthrough()
 
 // ============================================================================
 // Track Schema
 // ============================================================================
 
-const trackSchema = z.object({
-  id: z.string().min(1),
-  name: z.string(),
-  height: z.number().int().min(20).max(500),
-  locked: z.boolean(),
-  visible: z.boolean(),
-  muted: z.boolean(),
-  solo: z.boolean(),
-  color: z.string().optional(),
-  order: z.number().int(),
-  parentTrackId: z.string().optional(),
-  isGroup: z.boolean().optional(),
-  isCollapsed: z.boolean().optional(),
-}).passthrough();
+const trackSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    height: z.number().int().min(20).max(500),
+    locked: z.boolean(),
+    visible: z.boolean(),
+    muted: z.boolean(),
+    solo: z.boolean(),
+    color: z.string().optional(),
+    order: z.number().int(),
+    parentTrackId: z.string().optional(),
+    isGroup: z.boolean().optional(),
+    isCollapsed: z.boolean().optional(),
+  })
+  .passthrough()
 
 // ============================================================================
 // Marker and Transition Schemas
@@ -478,7 +500,7 @@ const markerSchema = z.object({
   frame: z.number().int().min(0),
   label: z.string().optional(),
   color: z.string(),
-});
+})
 
 const transitionSchema = z.object({
   id: z.string().min(1),
@@ -491,49 +513,55 @@ const transitionSchema = z.object({
   timing: z.string().optional(),
   direction: z.string().optional(),
   alignment: z.number().min(0).max(1).optional(),
-  bezierPoints: z.object({
-    x1: z.number().min(0).max(1),
-    y1: z.number(),
-    x2: z.number().min(0).max(1),
-    y2: z.number(),
-  }).optional(),
+  bezierPoints: z
+    .object({
+      x1: z.number().min(0).max(1),
+      y1: z.number(),
+      x2: z.number().min(0).max(1),
+      y2: z.number(),
+    })
+    .optional(),
   presetId: z.string().min(1).optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.number().int().min(0).optional(),
   lastModifiedAt: z.number().int().min(0).optional(),
-});
+})
 
 // ============================================================================
 // Timeline Schema
 // ============================================================================
 
-const compositionSchema = z.object({
-  id: z.string().min(1),
-  name: z.string(),
-  items: z.array(timelineItemSchema),
-  tracks: z.array(trackSchema),
-  transitions: z.array(transitionSchema).optional(),
-  keyframes: z.array(itemKeyframesSchema).optional(),
-  fps: z.number().int().min(1).max(240),
-  width: z.number().int().min(1).max(7680),
-  height: z.number().int().min(1).max(4320),
-  durationInFrames: z.number().int().min(1),
-  backgroundColor: z.string().optional(),
-}).passthrough();
+const compositionSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    items: z.array(timelineItemSchema),
+    tracks: z.array(trackSchema),
+    transitions: z.array(transitionSchema).optional(),
+    keyframes: z.array(itemKeyframesSchema).optional(),
+    fps: z.number().int().min(1).max(240),
+    width: z.number().int().min(1).max(7680),
+    height: z.number().int().min(1).max(4320),
+    durationInFrames: z.number().int().min(1),
+    backgroundColor: z.string().optional(),
+  })
+  .passthrough()
 
-const timelineSchema = z.object({
-  tracks: z.array(trackSchema),
-  items: z.array(timelineItemSchema),
-  currentFrame: z.number().int().min(0).optional(),
-  zoomLevel: z.number().min(0.01).max(10).optional(),
-  scrollPosition: z.number().min(0).optional(),
-  inPoint: z.number().int().min(0).optional(),
-  outPoint: z.number().int().min(0).optional(),
-  markers: z.array(markerSchema).optional(),
-  transitions: z.array(transitionSchema).optional(),
-  compositions: z.array(compositionSchema).optional(),
-  keyframes: z.array(itemKeyframesSchema).optional(),
-}).passthrough();
+const timelineSchema = z
+  .object({
+    tracks: z.array(trackSchema),
+    items: z.array(timelineItemSchema),
+    currentFrame: z.number().int().min(0).optional(),
+    zoomLevel: z.number().min(0.01).max(10).optional(),
+    scrollPosition: z.number().min(0).optional(),
+    inPoint: z.number().int().min(0).optional(),
+    outPoint: z.number().int().min(0).optional(),
+    markers: z.array(markerSchema).optional(),
+    transitions: z.array(transitionSchema).optional(),
+    compositions: z.array(compositionSchema).optional(),
+    keyframes: z.array(itemKeyframesSchema).optional(),
+  })
+  .passthrough()
 
 // ============================================================================
 // Project Resolution Schema
@@ -543,26 +571,31 @@ const projectResolutionSchema = z.object({
   width: z.number().int().min(320).max(7680),
   height: z.number().int().min(240).max(4320),
   fps: z.number().int().min(1).max(240),
-  backgroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-});
+  backgroundColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .optional(),
+})
 
 // ============================================================================
 // Project Schema
 // ============================================================================
 
-const projectSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1).max(100),
-  description: z.string().max(500),
-  createdAt: z.number().int().min(0),
-  updatedAt: z.number().int().min(0),
-  duration: z.number().min(0),
-  schemaVersion: z.number().int().optional(),
-  thumbnail: z.string().optional(),
-  thumbnailId: z.string().optional(),
-  metadata: projectResolutionSchema,
-  timeline: timelineSchema.optional(),
-}).passthrough();
+const projectSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1).max(100),
+    description: z.string().max(500),
+    createdAt: z.number().int().min(0),
+    updatedAt: z.number().int().min(0),
+    duration: z.number().min(0),
+    schemaVersion: z.number().int().optional(),
+    thumbnail: z.string().optional(),
+    thumbnailId: z.string().optional(),
+    metadata: projectResolutionSchema,
+    timeline: timelineSchema.optional(),
+  })
+  .passthrough()
 
 // ============================================================================
 // Media Reference Schema
@@ -580,27 +613,29 @@ const mediaReferenceSchema = z.object({
   codec: z.string(),
   bitrate: z.number().min(0),
   contentHash: z.string().optional(),
-});
+})
 
 // ============================================================================
 // Snapshot Schema
 // ============================================================================
 
-const snapshotSchema = z.object({
-  version: z.string(),
-  exportedAt: z.string().datetime(),
-  editorVersion: z.string(),
-  project: projectSchema,
-  mediaReferences: z.array(mediaReferenceSchema),
-  checksum: z.string().optional(),
-}).passthrough();
+const snapshotSchema = z
+  .object({
+    version: z.string(),
+    exportedAt: z.string().datetime(),
+    editorVersion: z.string(),
+    project: projectSchema,
+    mediaReferences: z.array(mediaReferenceSchema),
+    checksum: z.string().optional(),
+  })
+  .passthrough()
 
 // ============================================================================
 // Type Exports (inferred from schemas)
 // ============================================================================
 
-type ValidatedProject = z.infer<typeof projectSchema>;
-type ValidatedSnapshot = z.infer<typeof snapshotSchema>;
+type ValidatedProject = z.infer<typeof projectSchema>
+type ValidatedSnapshot = z.infer<typeof snapshotSchema>
 
 // ============================================================================
 // Validation Functions
@@ -610,30 +645,30 @@ type ValidatedSnapshot = z.infer<typeof snapshotSchema>;
  * Validate a project object
  */
 export function validateProject(data: unknown): {
-  success: boolean;
-  data?: ValidatedProject;
-  errors?: z.ZodError;
+  success: boolean
+  data?: ValidatedProject
+  errors?: z.ZodError
 } {
-  const result = projectSchema.safeParse(data);
+  const result = projectSchema.safeParse(data)
   if (result.success) {
-    return { success: true, data: result.data };
+    return { success: true, data: result.data }
   }
-  return { success: false, errors: result.error };
+  return { success: false, errors: result.error }
 }
 
 /**
  * Validate a snapshot object
  */
 export function validateSnapshot(data: unknown): {
-  success: boolean;
-  data?: ValidatedSnapshot;
-  errors?: z.ZodError;
+  success: boolean
+  data?: ValidatedSnapshot
+  errors?: z.ZodError
 } {
-  const result = snapshotSchema.safeParse(data);
+  const result = snapshotSchema.safeParse(data)
   if (result.success) {
-    return { success: true, data: result.data };
+    return { success: true, data: result.data }
   }
-  return { success: false, errors: result.error };
+  return { success: false, errors: result.error }
 }
 
 /**
@@ -641,16 +676,16 @@ export function validateSnapshot(data: unknown): {
  */
 export function formatValidationErrors(errors: z.ZodError): string[] {
   return errors.issues.map((issue) => {
-    const path = issue.path.join('.');
-    return `${path ? `${path}: ` : ''}${issue.message}`;
-  });
+    const path = issue.path.join('.')
+    return `${path ? `${path}: ` : ''}${issue.message}`
+  })
 }
 
 /**
  * Check if snapshot version is compatible
  */
 export function isVersionCompatible(version: string): boolean {
-  const [major] = version.split('.');
-  const [currentMajor] = SNAPSHOT_VERSION.split('.');
-  return major === currentMajor;
+  const [major] = version.split('.')
+  const [currentMajor] = SNAPSHOT_VERSION.split('.')
+  return major === currentMajor
 }

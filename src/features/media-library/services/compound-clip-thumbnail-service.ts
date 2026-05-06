@@ -1,4 +1,4 @@
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger } from '@/shared/logging/logger'
 import {
   buildSubCompositionInput,
   buildSubCompositionPreviewSignature,
@@ -9,53 +9,49 @@ import {
   resolveMediaUrls,
   useCompositionsStore,
   type SubComposition,
-} from '../deps/timeline-contract';
-import { getThumbnailDimensions } from './media-asset-helpers';
+} from '../deps/timeline-contract'
+import { getThumbnailDimensions } from './media-asset-helpers'
 
-const logger = createLogger('CompoundClipThumbnailService');
-const THUMBNAIL_MAX_SIZE = 320;
+const logger = createLogger('CompoundClipThumbnailService')
+const THUMBNAIL_MAX_SIZE = 320
 
 class CompoundClipThumbnailService {
-  private thumbnailUrlCache = new Map<string, { signature: string; url: string }>();
-  private pending = new Map<string, { signature: string; promise: Promise<string | null> }>();
+  private thumbnailUrlCache = new Map<string, { signature: string; url: string }>()
+  private pending = new Map<string, { signature: string; promise: Promise<string | null> }>()
 
-  async getThumbnailBlobUrl(
-    compositionId: string,
-  ): Promise<string | null> {
-    const compositionById = useCompositionsStore.getState().compositionById;
-    const composition = compositionById[compositionId];
+  async getThumbnailBlobUrl(compositionId: string): Promise<string | null> {
+    const compositionById = useCompositionsStore.getState().compositionById
+    const composition = compositionById[compositionId]
     if (!composition) {
-      return null;
+      return null
     }
 
     if (typeof OffscreenCanvas !== 'function') {
-      return null;
+      return null
     }
 
-    const signature = buildSubCompositionPreviewSignature(compositionId, compositionById);
-    const cached = this.thumbnailUrlCache.get(compositionId);
+    const signature = buildSubCompositionPreviewSignature(compositionId, compositionById)
+    const cached = this.thumbnailUrlCache.get(compositionId)
     if (cached?.signature === signature) {
-      return cached.url;
+      return cached.url
     }
 
-    const pending = this.pending.get(compositionId);
+    const pending = this.pending.get(compositionId)
     if (pending?.signature === signature) {
-      return pending.promise;
+      return pending.promise
     }
 
-    const promise = this.generateThumbnailBlobUrl(
-      composition,
-      compositionById,
-      signature,
-    ).finally(() => {
-      const currentPending = this.pending.get(compositionId);
-      if (currentPending?.promise === promise) {
-        this.pending.delete(compositionId);
-      }
-    });
+    const promise = this.generateThumbnailBlobUrl(composition, compositionById, signature).finally(
+      () => {
+        const currentPending = this.pending.get(compositionId)
+        if (currentPending?.promise === promise) {
+          this.pending.delete(compositionId)
+        }
+      },
+    )
 
-    this.pending.set(compositionId, { signature, promise });
-    return promise;
+    this.pending.set(compositionId, { signature, promise })
+    return promise
   }
 
   private async generateThumbnailBlobUrl(
@@ -63,19 +59,19 @@ class CompoundClipThumbnailService {
     compositionById: Record<string, SubComposition | undefined>,
     signature: string,
   ): Promise<string | null> {
-    const compositionId = composition.id;
+    const compositionId = composition.id
 
     try {
-      const mediaIds = collectSubCompositionMediaIds(compositionId, compositionById);
-      await Promise.all(mediaIds.map((mediaId) => resolveMediaUrl(mediaId)));
+      const mediaIds = collectSubCompositionMediaIds(compositionId, compositionById)
+      await Promise.all(mediaIds.map((mediaId) => resolveMediaUrl(mediaId)))
 
-      const compositionInput = buildSubCompositionInput(composition);
-      const resolvedTracks = await resolveMediaUrls(compositionInput.tracks, { useProxy: false });
+      const compositionInput = buildSubCompositionInput(composition)
+      const resolvedTracks = await resolveMediaUrls(compositionInput.tracks, { useProxy: false })
       const thumbnailDimensions = getThumbnailDimensions(
         composition.width,
         composition.height,
         THUMBNAIL_MAX_SIZE,
-      );
+      )
 
       const thumbnailBlob = await renderSingleFrame({
         composition: {
@@ -87,37 +83,37 @@ class CompoundClipThumbnailService {
         height: thumbnailDimensions.height,
         quality: 0.8,
         format: 'image/jpeg',
-      });
+      })
 
-      const nextUrl = URL.createObjectURL(thumbnailBlob);
-      const currentPending = this.pending.get(compositionId);
+      const nextUrl = URL.createObjectURL(thumbnailBlob)
+      const currentPending = this.pending.get(compositionId)
       if (currentPending?.signature !== signature) {
-        URL.revokeObjectURL(nextUrl);
-        return this.thumbnailUrlCache.get(compositionId)?.url ?? null;
+        URL.revokeObjectURL(nextUrl)
+        return this.thumbnailUrlCache.get(compositionId)?.url ?? null
       }
 
-      const previous = this.thumbnailUrlCache.get(compositionId);
+      const previous = this.thumbnailUrlCache.get(compositionId)
       if (previous && previous.url !== nextUrl) {
-        URL.revokeObjectURL(previous.url);
+        URL.revokeObjectURL(previous.url)
       }
 
-      this.thumbnailUrlCache.set(compositionId, { signature, url: nextUrl });
-      return nextUrl;
+      this.thumbnailUrlCache.set(compositionId, { signature, url: nextUrl })
+      return nextUrl
     } catch (error) {
-      logger.warn(`Failed to generate thumbnail for compound clip ${compositionId}:`, error);
-      return this.thumbnailUrlCache.get(compositionId)?.url ?? null;
+      logger.warn(`Failed to generate thumbnail for compound clip ${compositionId}:`, error)
+      return this.thumbnailUrlCache.get(compositionId)?.url ?? null
     }
   }
 
   clearThumbnailCache(compositionId: string): void {
-    const cached = this.thumbnailUrlCache.get(compositionId);
+    const cached = this.thumbnailUrlCache.get(compositionId)
     if (!cached) {
-      return;
+      return
     }
 
-    URL.revokeObjectURL(cached.url);
-    this.thumbnailUrlCache.delete(compositionId);
+    URL.revokeObjectURL(cached.url)
+    this.thumbnailUrlCache.delete(compositionId)
   }
 }
 
-export const compoundClipThumbnailService = new CompoundClipThumbnailService();
+export const compoundClipThumbnailService = new CompoundClipThumbnailService()

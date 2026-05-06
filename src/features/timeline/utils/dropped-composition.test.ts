@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import type { TimelineTrack, VideoItem } from '@/types/timeline';
-import type { SubComposition } from '../stores/compositions-store';
+import { describe, expect, it } from 'vite-plus/test'
+import type { TimelineTrack, VideoItem } from '@/types/timeline'
+import type { SubComposition } from '../stores/compositions-store'
 import {
   buildDroppedCompositionTimelineItems,
   compositionHasOwnedAudio,
-} from './dropped-composition';
+} from './dropped-composition'
 
-function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>): TimelineTrack {
+function makeTrack(
+  overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>,
+): TimelineTrack {
   return {
     height: 80,
     locked: false,
@@ -16,7 +18,7 @@ function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' 
     volume: 0,
     items: [],
     ...overrides,
-  };
+  }
 }
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
@@ -34,7 +36,7 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
     sourceDuration: 120,
     sourceFps: 30,
     ...overrides,
-  };
+  }
 }
 
 describe('dropped-composition', () => {
@@ -92,20 +94,22 @@ describe('dropped-composition', () => {
         id: 'comp-grandchild',
         name: 'Grandchild',
         tracks: [makeTrack({ id: 'grand-a1', name: 'A1', kind: 'audio', order: 0 })],
-        items: [{
-          id: 'grand-audio',
-          type: 'audio',
-          trackId: 'grand-a1',
-          from: 0,
-          durationInFrames: 40,
-          label: 'audio.wav',
-          src: 'blob:audio',
-          mediaId: 'media-audio',
-          sourceStart: 0,
-          sourceEnd: 40,
-          sourceDuration: 40,
-          sourceFps: 30,
-        }],
+        items: [
+          {
+            id: 'grand-audio',
+            type: 'audio',
+            trackId: 'grand-a1',
+            from: 0,
+            durationInFrames: 40,
+            label: 'audio.wav',
+            src: 'blob:audio',
+            mediaId: 'media-audio',
+            sourceStart: 0,
+            sourceEnd: 40,
+            sourceDuration: 40,
+            sourceFps: 30,
+          },
+        ],
         transitions: [],
         keyframes: [],
         fps: 30,
@@ -113,7 +117,7 @@ describe('dropped-composition', () => {
         height: 1080,
         durationInFrames: 40,
       },
-    };
+    }
     const composition: SubComposition = {
       id: 'comp-parent',
       name: 'Parent',
@@ -135,7 +139,12 @@ describe('dropped-composition', () => {
           sourceDuration: 40,
           sourceFps: 30,
         },
-        makeVideoItem({ id: 'parent-video', trackId: 'parent-v1', from: 50, mediaId: 'media-video' }),
+        makeVideoItem({
+          id: 'parent-video',
+          trackId: 'parent-v1',
+          from: 50,
+          mediaId: 'media-video',
+        }),
       ],
       transitions: [],
       keyframes: [],
@@ -143,12 +152,14 @@ describe('dropped-composition', () => {
       width: 1920,
       height: 1080,
       durationInFrames: 90,
-    };
+    }
 
-    expect(compositionHasOwnedAudio({
-      composition,
-      compositionById,
-    })).toBe(true);
+    expect(
+      compositionHasOwnedAudio({
+        composition,
+        compositionById,
+      }),
+    ).toBe(true)
 
     const droppedItems = buildDroppedCompositionTimelineItems({
       compositionId: composition.id,
@@ -158,9 +169,9 @@ describe('dropped-composition', () => {
         { trackId: 'track-v1', from: 12, durationInFrames: 90, mediaType: 'video' },
         { trackId: 'track-a1', from: 12, durationInFrames: 90, mediaType: 'audio' },
       ],
-    });
+    })
 
-    expect(droppedItems).toHaveLength(2);
+    expect(droppedItems).toHaveLength(2)
     expect(droppedItems[0]).toMatchObject({
       type: 'composition',
       trackId: 'track-v1',
@@ -169,7 +180,7 @@ describe('dropped-composition', () => {
       sourceEnd: 90,
       sourceDuration: 90,
       sourceFps: 30,
-    });
+    })
     expect(droppedItems[1]).toMatchObject({
       type: 'audio',
       trackId: 'track-a1',
@@ -178,7 +189,7 @@ describe('dropped-composition', () => {
       sourceEnd: 90,
       sourceDuration: 90,
       sourceFps: 30,
-    });
-    expect(droppedItems[0]?.linkedGroupId).toBe(droppedItems[1]?.linkedGroupId);
-  });
-});
+    })
+    expect(droppedItems[0]?.linkedGroupId).toBe(droppedItems[1]?.linkedGroupId)
+  })
+})

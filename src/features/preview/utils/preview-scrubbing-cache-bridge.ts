@@ -1,13 +1,13 @@
-import type { ScrubbingCache, VideoFrameEntry } from './scrubbing-cache';
+import type { ScrubbingCache, VideoFrameEntry } from './scrubbing-cache'
 
-let activePreviewScrubbingCache: ScrubbingCache | null = null;
+let activePreviewScrubbingCache: ScrubbingCache | null = null
 
 export function setActivePreviewScrubbingCache(cache: ScrubbingCache | null): void {
-  activePreviewScrubbingCache = cache;
+  activePreviewScrubbingCache = cache
 }
 
 export function getActivePreviewScrubbingCache(): ScrubbingCache | null {
-  return activePreviewScrubbingCache;
+  return activePreviewScrubbingCache
 }
 
 export function getActivePreviewVideoFrameEntry(
@@ -15,5 +15,5 @@ export function getActivePreviewVideoFrameEntry(
   sourceTime?: number,
   maxSourceTimeDelta = Number.POSITIVE_INFINITY,
 ): VideoFrameEntry | undefined {
-  return activePreviewScrubbingCache?.getVideoFrameEntry(itemId, sourceTime, maxSourceTimeDelta);
+  return activePreviewScrubbingCache?.getVideoFrameEntry(itemId, sourceTime, maxSourceTimeDelta)
 }

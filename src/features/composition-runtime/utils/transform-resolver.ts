@@ -3,27 +3,24 @@ import type {
   SourceDimensions,
   CanvasSettings,
   TransformProperties,
-} from '@/types/transform';
-import type { TimelineItem, VideoItem, ImageItem, CompositionItem } from '@/types/timeline';
-import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
+} from '@/types/transform'
+import type { TimelineItem, VideoItem, ImageItem, CompositionItem } from '@/types/timeline'
+import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores'
 
-function buildCssTransform(
-  rotation: number,
-  transform?: TransformProperties
-): string | undefined {
-  const transforms: string[] = [];
+function buildCssTransform(rotation: number, transform?: TransformProperties): string | undefined {
+  const transforms: string[] = []
 
   if (rotation !== 0) {
-    transforms.push(`rotate(${rotation}deg)`);
+    transforms.push(`rotate(${rotation}deg)`)
   }
 
-  const scaleX = transform?.flipHorizontal ? -1 : 1;
-  const scaleY = transform?.flipVertical ? -1 : 1;
+  const scaleX = transform?.flipHorizontal ? -1 : 1
+  const scaleY = transform?.flipVertical ? -1 : 1
   if (scaleX !== 1 || scaleY !== 1) {
-    transforms.push(`scale(${scaleX}, ${scaleY})`);
+    transforms.push(`scale(${scaleX}, ${scaleY})`)
   }
 
-  return transforms.length > 0 ? transforms.join(' ') : undefined;
+  return transforms.length > 0 ? transforms.join(' ') : undefined
 }
 
 /**
@@ -39,28 +36,28 @@ function buildCssTransform(
 export function resolveTransform(
   item: TimelineItem,
   canvas: CanvasSettings,
-  sourceDimensions?: SourceDimensions
+  sourceDimensions?: SourceDimensions,
 ): ResolvedTransform {
-  const transform = item.transform;
+  const transform = item.transform
 
   // Get source dimensions (from item, parameter, or default to canvas size)
-  const sourceWidth = sourceDimensions?.width ?? canvas.width;
-  const sourceHeight = sourceDimensions?.height ?? canvas.height;
+  const sourceWidth = sourceDimensions?.width ?? canvas.width
+  const sourceHeight = sourceDimensions?.height ?? canvas.height
 
   // Compute fit-to-canvas scale (maintains aspect ratio)
-  const scaleX = canvas.width / sourceWidth;
-  const scaleY = canvas.height / sourceHeight;
-  const fitScale = Math.min(scaleX, scaleY); // Fit within bounds
+  const scaleX = canvas.width / sourceWidth
+  const scaleY = canvas.height / sourceHeight
+  const fitScale = Math.min(scaleX, scaleY) // Fit within bounds
 
   // Default dimensions (fit-to-canvas)
-  const defaultWidth = sourceWidth * fitScale;
-  const defaultHeight = sourceHeight * fitScale;
+  const defaultWidth = sourceWidth * fitScale
+  const defaultHeight = sourceHeight * fitScale
 
   // Resolve each property (use explicit value or compute default)
-  const width = transform?.width ?? defaultWidth;
-  const height = transform?.height ?? defaultHeight;
-  const anchorX = transform?.anchorX ?? (width / 2);
-  const anchorY = transform?.anchorY ?? (height / 2);
+  const width = transform?.width ?? defaultWidth
+  const height = transform?.height ?? defaultHeight
+  const anchorX = transform?.anchorX ?? width / 2
+  const anchorY = transform?.anchorY ?? height / 2
 
   return {
     x: transform?.x ?? 0, // Centered (offset from center)
@@ -72,48 +69,46 @@ export function resolveTransform(
     rotation: transform?.rotation ?? 0,
     opacity: transform?.opacity ?? 1,
     cornerRadius: transform?.cornerRadius ?? 0,
-  };
+  }
 }
 
 /**
  * Get source dimensions for an item.
  * Returns undefined if dimensions are not available.
  */
-export function getSourceDimensions(
-  item: TimelineItem
-): SourceDimensions | undefined {
+export function getSourceDimensions(item: TimelineItem): SourceDimensions | undefined {
   if (item.type === 'video') {
-    const videoItem = item as VideoItem;
+    const videoItem = item as VideoItem
     if (videoItem.sourceWidth && videoItem.sourceHeight) {
-      return { width: videoItem.sourceWidth, height: videoItem.sourceHeight };
+      return { width: videoItem.sourceWidth, height: videoItem.sourceHeight }
     }
     if (videoItem.mediaId) {
-      const media = useMediaLibraryStore.getState().mediaById[videoItem.mediaId];
+      const media = useMediaLibraryStore.getState().mediaById[videoItem.mediaId]
       if (media?.width && media?.height) {
-        return { width: media.width, height: media.height };
+        return { width: media.width, height: media.height }
       }
     }
   }
   if (item.type === 'image') {
-    const imageItem = item as ImageItem;
+    const imageItem = item as ImageItem
     if (imageItem.sourceWidth && imageItem.sourceHeight) {
-      return { width: imageItem.sourceWidth, height: imageItem.sourceHeight };
+      return { width: imageItem.sourceWidth, height: imageItem.sourceHeight }
     }
     if (imageItem.mediaId) {
-      const media = useMediaLibraryStore.getState().mediaById[imageItem.mediaId];
+      const media = useMediaLibraryStore.getState().mediaById[imageItem.mediaId]
       if (media?.width && media?.height) {
-        return { width: media.width, height: media.height };
+        return { width: media.width, height: media.height }
       }
     }
   }
   if (item.type === 'composition') {
-    const compItem = item as CompositionItem;
+    const compItem = item as CompositionItem
     if (compItem.compositionWidth && compItem.compositionHeight) {
-      return { width: compItem.compositionWidth, height: compItem.compositionHeight };
+      return { width: compItem.compositionWidth, height: compItem.compositionHeight }
     }
-    return undefined;
+    return undefined
   }
-  return undefined;
+  return undefined
 }
 
 /**
@@ -123,18 +118,19 @@ export function getSourceDimensions(
 export function toTransformStyle(
   resolved: ResolvedTransform,
   canvas: CanvasSettings,
-  transform?: TransformProperties
+  transform?: TransformProperties,
 ): React.CSSProperties {
-  const centerX = canvas.width / 2;
-  const centerY = canvas.height / 2;
+  const centerX = canvas.width / 2
+  const centerY = canvas.height / 2
 
   // Position from center: resolved.x/y is offset from center
   // This gives the top-left corner position
-  const left = centerX + resolved.x - resolved.width / 2;
-  const top = centerY + resolved.y - resolved.height / 2;
+  const left = centerX + resolved.x - resolved.width / 2
+  const top = centerY + resolved.y - resolved.height / 2
 
   // Round rotation to avoid floating point precision issues
-  const rotation = Math.abs(resolved.rotation) < 0.01 ? 0 : Math.round(resolved.rotation * 100) / 100;
+  const rotation =
+    Math.abs(resolved.rotation) < 0.01 ? 0 : Math.round(resolved.rotation * 100) / 100
 
   return {
     position: 'absolute',
@@ -148,5 +144,5 @@ export function toTransformStyle(
     opacity: resolved.opacity,
     borderRadius: resolved.cornerRadius > 0 ? resolved.cornerRadius : undefined,
     willChange: 'transform', // Hint for GPU acceleration
-  };
+  }
 }

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { TimelineItem } from '@/types/timeline';
-import { supportsVisualFadeControls } from './visual-fade-items';
+import { describe, expect, it } from 'vite-plus/test'
+import type { TimelineItem } from '@/types/timeline'
+import { supportsVisualFadeControls } from './visual-fade-items'
 
 describe('supportsVisualFadeControls', () => {
   it('returns true for video and compound video segments', () => {
@@ -12,7 +12,7 @@ describe('supportsVisualFadeControls', () => {
       from: 0,
       durationInFrames: 120,
       mediaId: 'media-1',
-    } as TimelineItem;
+    } as TimelineItem
     const compositionItem = {
       id: 'comp-1',
       type: 'composition',
@@ -23,11 +23,11 @@ describe('supportsVisualFadeControls', () => {
       compositionId: 'composition-1',
       compositionWidth: 1920,
       compositionHeight: 1080,
-    } as TimelineItem;
+    } as TimelineItem
 
-    expect(supportsVisualFadeControls(videoItem)).toBe(true);
-    expect(supportsVisualFadeControls(compositionItem)).toBe(true);
-  });
+    expect(supportsVisualFadeControls(videoItem)).toBe(true)
+    expect(supportsVisualFadeControls(compositionItem)).toBe(true)
+  })
 
   it('keeps audio wrappers out of the visual fade control path', () => {
     const compositionAudioWrapper = {
@@ -39,8 +39,8 @@ describe('supportsVisualFadeControls', () => {
       durationInFrames: 120,
       compositionId: 'composition-1',
       mediaId: 'media-1',
-    } as TimelineItem;
+    } as TimelineItem
 
-    expect(supportsVisualFadeControls(compositionAudioWrapper)).toBe(false);
-  });
-});
+    expect(supportsVisualFadeControls(compositionAudioWrapper)).toBe(false)
+  })
+})

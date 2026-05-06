@@ -6,104 +6,105 @@
  * live preview during drag operations.
  */
 
-import { create } from 'zustand';
-import type { MaskVertex } from '@/types/masks';
+import { create } from 'zustand'
+import type { MaskVertex } from '@/types/masks'
 
 function normalizeVertexSelection(vertexIndices: number[]): number[] {
-  return [...new Set(vertexIndices.filter((index) => Number.isInteger(index) && index >= 0))]
-    .sort((a, b) => a - b);
+  return [...new Set(vertexIndices.filter((index) => Number.isInteger(index) && index >= 0))].sort(
+    (a, b) => a - b,
+  )
 }
 
 export interface MaskEditorState {
   /** Whether mask editing mode is active */
-  isEditing: boolean;
+  isEditing: boolean
   /** The path shape item currently being edited */
-  editingItemId: string | null;
+  editingItemId: string | null
   /** All selected vertices for batch toolbar actions */
-  selectedVertexIndices: number[];
+  selectedVertexIndices: number[]
   /** Which vertex is selected for toolbar actions */
-  selectedVertexIndex: number | null;
+  selectedVertexIndex: number | null
   /** Which vertex index is being dragged (null if none) */
-  draggingVertexIndex: number | null;
+  draggingVertexIndex: number | null
   /** Which handle is being dragged: 'in' or 'out' (null if dragging vertex position) */
-  draggingHandle: 'in' | 'out' | null;
+  draggingHandle: 'in' | 'out' | null
   /** Live preview of mask vertices during drag */
-  previewVertices: MaskVertex[] | null;
+  previewVertices: MaskVertex[] | null
   /** Vertex index that is hovered (for visual feedback) */
-  hoveredVertexIndex: number | null;
+  hoveredVertexIndex: number | null
   /** Hovered handle type */
-  hoveredHandle: 'in' | 'out' | null;
+  hoveredHandle: 'in' | 'out' | null
 
   // --- Pen tool state ---
   /** Whether the pen tool is active (drawing a new path) */
-  penMode: boolean;
+  penMode: boolean
   /** Vertices placed so far by the pen tool (open path) */
-  penVertices: MaskVertex[];
+  penVertices: MaskVertex[]
   /** Whether currently dragging to create handles on the latest pen vertex */
-  penDraggingHandle: boolean;
+  penDraggingHandle: boolean
   /** Current mouse position in normalized coords (for rubber-band line) */
-  penCursorPos: [number, number] | null;
+  penCursorPos: [number, number] | null
 
   // --- Shape pen tool state ---
   /** Whether drawing a new shape mask path */
-  shapePenMode: boolean;
+  shapePenMode: boolean
   /** Monotonic counter to request finishing the current pen path */
-  finishPenRequestVersion: number;
+  finishPenRequestVersion: number
   /** Monotonic counter to request canceling the current pen path */
-  cancelPenRequestVersion: number;
+  cancelPenRequestVersion: number
   /** Monotonic counter to request converting the selected knot(s) */
-  convertSelectedVertexRequestVersion: number;
+  convertSelectedVertexRequestVersion: number
   /** Requested knot conversion mode for the current selection */
-  convertSelectedVertexRequestMode: 'corner' | 'bezier' | null;
+  convertSelectedVertexRequestMode: 'corner' | 'bezier' | null
 }
 
 export interface MaskEditorActions {
   /** Enter path editing mode for a specific item */
-  startEditing: (itemId: string) => void;
+  startEditing: (itemId: string) => void
   /** Exit mask editing mode */
-  stopEditing: () => void;
+  stopEditing: () => void
   /** Select multiple vertices for toolbar actions */
-  selectVertices: (vertexIndices: number[], primaryIndex?: number | null) => void;
+  selectVertices: (vertexIndices: number[], primaryIndex?: number | null) => void
   /** Select a vertex for toolbar actions */
-  selectVertex: (vertexIndex: number | null) => void;
+  selectVertex: (vertexIndex: number | null) => void
   /** Start dragging a vertex position */
-  startVertexDrag: (vertexIndex: number) => void;
+  startVertexDrag: (vertexIndex: number) => void
   /** Start dragging a bezier handle */
-  startHandleDrag: (vertexIndex: number, handle: 'in' | 'out') => void;
+  startHandleDrag: (vertexIndex: number, handle: 'in' | 'out') => void
   /** Update preview during drag */
-  updatePreview: (vertices: MaskVertex[]) => void;
+  updatePreview: (vertices: MaskVertex[]) => void
   /** End drag and clear preview */
-  endDrag: () => void;
+  endDrag: () => void
   /** Set hover state */
-  setHover: (vertexIndex: number | null, handle?: 'in' | 'out' | null) => void;
+  setHover: (vertexIndex: number | null, handle?: 'in' | 'out' | null) => void
 
   // --- Pen tool actions ---
   /** Enter pen drawing mode for an item */
-  startPenMode: (itemId: string) => void;
+  startPenMode: (itemId: string) => void
   /** Cancel pen mode without committing */
-  cancelPenMode: () => void;
+  cancelPenMode: () => void
   /** Add a vertex at normalized position (click without drag) */
-  addPenVertex: (vertex: MaskVertex) => void;
+  addPenVertex: (vertex: MaskVertex) => void
   /** Replace the current open pen path vertices */
-  setPenVertices: (vertices: MaskVertex[]) => void;
+  setPenVertices: (vertices: MaskVertex[]) => void
   /** Update the last pen vertex's out handle (during click+drag) */
-  updatePenLastHandle: (outHandle: [number, number]) => void;
+  updatePenLastHandle: (outHandle: [number, number]) => void
   /** Set pen dragging state */
-  setPenDragging: (dragging: boolean) => void;
+  setPenDragging: (dragging: boolean) => void
   /** Update cursor position for rubber-band line */
-  setPenCursorPos: (pos: [number, number] | null) => void;
+  setPenCursorPos: (pos: [number, number] | null) => void
   /** Get the pen vertices (for closing/committing the path) */
-  getPenVertices: () => MaskVertex[];
+  getPenVertices: () => MaskVertex[]
 
   // --- Shape pen tool ---
   /** Enter shape pen mode (draws a new ShapeItem with shapeType='path') */
-  startShapePenMode: () => void;
+  startShapePenMode: () => void
   /** Request finishing the active pen path from external UI */
-  requestFinishPenMode: () => void;
+  requestFinishPenMode: () => void
   /** Request canceling the active pen path from external UI */
-  requestCancelPenMode: () => void;
+  requestCancelPenMode: () => void
   /** Request converting the selected knot selection from external UI */
-  requestConvertSelectedVertex: (mode: 'corner' | 'bezier') => void;
+  requestConvertSelectedVertex: (mode: 'corner' | 'bezier') => void
 }
 
 export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()((set, get) => ({
@@ -172,17 +173,17 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
 
   selectVertices: (vertexIndices, primaryIndex = null) =>
     set(() => {
-      const selectedVertexIndices = normalizeVertexSelection(vertexIndices);
+      const selectedVertexIndices = normalizeVertexSelection(vertexIndices)
       const resolvedPrimaryIndex =
         selectedVertexIndices.length === 0
           ? null
           : primaryIndex !== null && selectedVertexIndices.includes(primaryIndex)
             ? primaryIndex
-            : selectedVertexIndices[selectedVertexIndices.length - 1] ?? null;
+            : (selectedVertexIndices[selectedVertexIndices.length - 1] ?? null)
       return {
         selectedVertexIndices,
         selectedVertexIndex: resolvedPrimaryIndex,
-      };
+      }
     }),
 
   selectVertex: (vertexIndex) =>
@@ -211,8 +212,7 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       draggingHandle: handle,
     })),
 
-  updatePreview: (vertices) =>
-    set({ previewVertices: vertices }),
+  updatePreview: (vertices) => set({ previewVertices: vertices }),
 
   endDrag: () =>
     set({
@@ -273,27 +273,24 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       penVertices: [...state.penVertices, vertex],
     })),
 
-  setPenVertices: (vertices) =>
-    set({ penVertices: vertices }),
+  setPenVertices: (vertices) => set({ penVertices: vertices }),
 
   updatePenLastHandle: (outHandle) =>
     set((state) => {
-      const verts = [...state.penVertices];
-      const last = verts[verts.length - 1];
-      if (!last) return state;
+      const verts = [...state.penVertices]
+      const last = verts[verts.length - 1]
+      if (!last) return state
       verts[verts.length - 1] = {
         ...last,
         outHandle,
         inHandle: [-outHandle[0], -outHandle[1]],
-      };
-      return { penVertices: verts };
+      }
+      return { penVertices: verts }
     }),
 
-  setPenDragging: (dragging) =>
-    set({ penDraggingHandle: dragging }),
+  setPenDragging: (dragging) => set({ penDraggingHandle: dragging }),
 
-  setPenCursorPos: (pos) =>
-    set({ penCursorPos: pos }),
+  setPenCursorPos: (pos) => set({ penCursorPos: pos }),
 
   getPenVertices: () => get().penVertices,
 
@@ -334,4 +331,4 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       convertSelectedVertexRequestVersion: state.convertSelectedVertexRequestVersion + 1,
       convertSelectedVertexRequestMode: mode,
     })),
-}));
+}))

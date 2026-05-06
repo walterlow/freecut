@@ -1,23 +1,23 @@
-import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner';
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing';
+import type { TimelineItem } from '@/types/timeline'
+import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner'
+import { easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
 
 export interface ActiveTransition<TItem extends TimelineItem = TimelineItem> {
-  transition: ResolvedTransitionWindow<TItem>['transition'];
-  leftClip: TItem;
-  rightClip: TItem;
-  progress: number;
-  transitionStart: number;
-  transitionEnd: number;
-  durationInFrames: number;
-  leftPortion: number;
-  rightPortion: number;
-  cutPoint: number;
+  transition: ResolvedTransitionWindow<TItem>['transition']
+  leftClip: TItem
+  rightClip: TItem
+  progress: number
+  transitionStart: number
+  transitionEnd: number
+  durationInFrames: number
+  leftPortion: number
+  rightPortion: number
+  cutPoint: number
 }
 
 export interface TransitionFrameState<TItem extends TimelineItem = TimelineItem> {
-  activeTransitions: ActiveTransition<TItem>[];
-  transitionClipIds: Set<string>;
+  activeTransitions: ActiveTransition<TItem>[]
+  transitionClipIds: Set<string>
 }
 
 export function collectTransitionParticipantClipIds<TItem extends TimelineItem>({
@@ -26,21 +26,21 @@ export function collectTransitionParticipantClipIds<TItem extends TimelineItem>(
   lookaheadFrames,
   lookbehindFrames = 0,
 }: {
-  transitionWindows: ResolvedTransitionWindow<TItem>[];
-  frame: number;
-  lookaheadFrames: number;
-  lookbehindFrames?: number;
+  transitionWindows: ResolvedTransitionWindow<TItem>[]
+  frame: number
+  lookaheadFrames: number
+  lookbehindFrames?: number
 }): Set<string> {
-  const transitionClipIds = new Set<string>();
+  const transitionClipIds = new Set<string>()
 
   for (const window of transitionWindows) {
-    if (frame >= window.endFrame + Math.max(0, lookbehindFrames)) continue;
-    if (frame + lookaheadFrames < window.startFrame) continue;
-    transitionClipIds.add(window.transition.leftClipId);
-    transitionClipIds.add(window.transition.rightClipId);
+    if (frame >= window.endFrame + Math.max(0, lookbehindFrames)) continue
+    if (frame + lookaheadFrames < window.startFrame) continue
+    transitionClipIds.add(window.transition.leftClipId)
+    transitionClipIds.add(window.transition.rightClipId)
   }
 
-  return transitionClipIds;
+  return transitionClipIds
 }
 
 export function calculateTransitionProgress(
@@ -49,22 +49,20 @@ export function calculateTransitionProgress(
   timing: string,
   bezierPoints?: { x1: number; y1: number; x2: number; y2: number },
 ): number {
-  const maxFrame = Math.max(1, duration - 1);
-  const linearProgress = Math.max(0, Math.min(1, localFrame / maxFrame));
+  const maxFrame = Math.max(1, duration - 1)
+  const linearProgress = Math.max(0, Math.min(1, localFrame / maxFrame))
 
   switch (timing) {
-    case 'spring':
-      return springEasing(linearProgress, { tension: 180, friction: 12, mass: 1 });
     case 'ease-in':
-      return easeIn(linearProgress);
+      return easeIn(linearProgress)
     case 'ease-out':
-      return easeOut(linearProgress);
+      return easeOut(linearProgress)
     case 'ease-in-out':
-      return easeInOut(linearProgress);
+      return easeInOut(linearProgress)
     case 'cubic-bezier':
-      return bezierPoints ? cubicBezier(linearProgress, bezierPoints) : linearProgress;
+      return bezierPoints ? cubicBezier(linearProgress, bezierPoints) : linearProgress
     default:
-      return linearProgress;
+      return linearProgress
   }
 }
 
@@ -72,16 +70,16 @@ export function resolveTransitionFrameState<TItem extends TimelineItem>({
   transitionWindows,
   frame,
 }: {
-  transitionWindows: ResolvedTransitionWindow<TItem>[];
-  frame: number;
+  transitionWindows: ResolvedTransitionWindow<TItem>[]
+  frame: number
 }): TransitionFrameState<TItem> {
-  const activeTransitions: ActiveTransition<TItem>[] = [];
-  const transitionClipIds = new Set<string>();
+  const activeTransitions: ActiveTransition<TItem>[] = []
+  const transitionClipIds = new Set<string>()
 
   for (const window of transitionWindows) {
-    if (frame < window.startFrame || frame >= window.endFrame) continue;
+    if (frame < window.startFrame || frame >= window.endFrame) continue
 
-    const localFrame = frame - window.startFrame;
+    const localFrame = frame - window.startFrame
     activeTransitions.push({
       transition: window.transition,
       leftClip: window.leftClip,
@@ -98,11 +96,11 @@ export function resolveTransitionFrameState<TItem extends TimelineItem>({
       leftPortion: window.leftPortion,
       rightPortion: window.rightPortion,
       cutPoint: window.cutPoint,
-    });
+    })
 
-    transitionClipIds.add(window.transition.leftClipId);
-    transitionClipIds.add(window.transition.rightClipId);
+    transitionClipIds.add(window.transition.leftClipId)
+    transitionClipIds.add(window.transition.rightClipId)
   }
 
-  return { activeTransitions, transitionClipIds };
+  return { activeTransitions, transitionClipIds }
 }

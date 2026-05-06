@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { getScreenTransformOrigin } from './coordinate-transform';
+import { describe, expect, it } from 'vite-plus/test'
+import { getScreenTransformOrigin } from './coordinate-transform'
 
 describe('getScreenTransformOrigin', () => {
   it('scales the anchor into screen pixels', () => {
@@ -19,9 +19,9 @@ describe('getScreenTransformOrigin', () => {
         playerSize: { width: 500, height: 300 },
         projectSize: { width: 1000, height: 600 },
         zoom: -1,
-      }
-    );
+      },
+    )
 
-    expect(origin).toBe('10px 15px');
-  });
-});
+    expect(origin).toBe('10px 15px')
+  })
+})

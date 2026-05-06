@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test'
 import {
+  calculateTransitionProgress,
   collectTransitionParticipantClipIds,
   resolveTransitionFrameState,
-} from './transition-scene';
+} from './transition-scene'
 
 describe('transition scene', () => {
+  it('treats legacy spring transition timing as linear progress', () => {
+    expect(calculateTransitionProgress(5, 10, 'spring')).toBeCloseTo(5 / 9)
+  })
+
   it('resolves active transitions and participating clip ids for a frame', () => {
     const state = resolveTransitionFrameState({
       transitionWindows: [
@@ -46,7 +51,7 @@ describe('transition scene', () => {
         },
       ],
       frame: 25,
-    });
+    })
 
     expect(state.activeTransitions).toEqual([
       expect.objectContaining({
@@ -57,9 +62,9 @@ describe('transition scene', () => {
         transitionStart: 20,
         transitionEnd: 30,
       }),
-    ]);
-    expect(state.transitionClipIds).toEqual(new Set(['left', 'right']));
-  });
+    ])
+    expect(state.transitionClipIds).toEqual(new Set(['left', 'right']))
+  })
 
   it('collects active and imminent transition clip ids within a lookahead window', () => {
     const transitionWindows = [
@@ -99,25 +104,31 @@ describe('transition scene', () => {
         leftPortion: 10,
         rightPortion: 10,
       },
-    ];
+    ]
 
-    expect(collectTransitionParticipantClipIds({
-      transitionWindows,
-      frame: 5,
-      lookaheadFrames: 20,
-    })).toEqual(new Set(['left', 'right']));
+    expect(
+      collectTransitionParticipantClipIds({
+        transitionWindows,
+        frame: 5,
+        lookaheadFrames: 20,
+      }),
+    ).toEqual(new Set(['left', 'right']))
 
-    expect(collectTransitionParticipantClipIds({
-      transitionWindows,
-      frame: 31,
-      lookaheadFrames: 20,
-    })).toEqual(new Set());
+    expect(
+      collectTransitionParticipantClipIds({
+        transitionWindows,
+        frame: 31,
+        lookaheadFrames: 20,
+      }),
+    ).toEqual(new Set())
 
-    expect(collectTransitionParticipantClipIds({
-      transitionWindows,
-      frame: 31,
-      lookaheadFrames: 0,
-      lookbehindFrames: 3,
-    })).toEqual(new Set(['left', 'right']));
-  });
-});
+    expect(
+      collectTransitionParticipantClipIds({
+        transitionWindows,
+        frame: 31,
+        lookaheadFrames: 0,
+        lookbehindFrames: 3,
+      }),
+    ).toEqual(new Set(['left', 'right']))
+  })
+})

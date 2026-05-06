@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test'
 import {
   getLocalInferenceSummary,
   isLocalInferenceCancellationError,
   LOCAL_INFERENCE_UNLOADED_MESSAGE,
   type LocalInferenceRuntimeRecord,
-} from './types';
+} from './types'
 
 function createRuntime(
   overrides: Partial<LocalInferenceRuntimeRecord> = {},
@@ -23,18 +23,18 @@ function createRuntime(
     lastUsedAt: 1000,
     unloadable: true,
     ...overrides,
-  };
+  }
 }
 
 describe('local-inference types', () => {
   it('returns null when there are no runtimes', () => {
-    expect(getLocalInferenceSummary({})).toBeNull();
-  });
+    expect(getLocalInferenceSummary({})).toBeNull()
+  })
 
   it('summarizes a single runtime', () => {
     const summary = getLocalInferenceSummary({
       'runtime-1': createRuntime(),
-    });
+    })
 
     expect(summary).toEqual({
       totalRuntimes: 1,
@@ -44,8 +44,8 @@ describe('local-inference types', () => {
       backendLabel: 'WEBGPU',
       primaryLabel: 'Whisper Tiny',
       unloadableCount: 1,
-    });
-  });
+    })
+  })
 
   it('aggregates multiple runtimes and prioritizes active states', () => {
     const summary = getLocalInferenceSummary({
@@ -69,7 +69,7 @@ describe('local-inference types', () => {
         state: 'error',
         estimatedBytes: undefined,
       }),
-    });
+    })
 
     expect(summary).toEqual({
       totalRuntimes: 3,
@@ -79,14 +79,14 @@ describe('local-inference types', () => {
       backendLabel: 'Mixed',
       primaryLabel: '3 Local Models',
       unloadableCount: 2,
-    });
-  });
+    })
+  })
 
   it('detects unload cancellations', () => {
-    expect(
-      isLocalInferenceCancellationError(new Error(LOCAL_INFERENCE_UNLOADED_MESSAGE))
-    ).toBe(true);
-    expect(isLocalInferenceCancellationError(new Error('Something else'))).toBe(false);
-    expect(isLocalInferenceCancellationError('Local inference unloaded')).toBe(false);
-  });
-});
+    expect(isLocalInferenceCancellationError(new Error(LOCAL_INFERENCE_UNLOADED_MESSAGE))).toBe(
+      true,
+    )
+    expect(isLocalInferenceCancellationError(new Error('Something else'))).toBe(false)
+    expect(isLocalInferenceCancellationError('Local inference unloaded')).toBe(false)
+  })
+})

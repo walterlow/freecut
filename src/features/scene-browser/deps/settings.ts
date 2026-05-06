@@ -1,1 +1,1 @@
-export * from './settings-contract';
+export * from './settings-contract'

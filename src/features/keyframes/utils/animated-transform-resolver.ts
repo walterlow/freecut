@@ -3,9 +3,9 @@
  * Merges keyframe-animated values with base transform properties.
  */
 
-import type { ResolvedTransform } from '@/types/transform';
-import type { ItemKeyframes, TransformAnimatableProperty } from '@/types/keyframe';
-import { getPropertyKeyframes, interpolatePropertyValue } from './interpolation';
+import type { ResolvedTransform } from '@/types/transform'
+import type { ItemKeyframes, TransformAnimatableProperty } from '@/types/keyframe'
+import { getPropertyKeyframes, interpolatePropertyValue } from './interpolation'
 
 /**
  * All animatable transform properties (excludes non-spatial props like volume).
@@ -20,7 +20,7 @@ const ANIMATABLE_TRANSFORM_PROPERTIES: TransformAnimatableProperty[] = [
   'rotation',
   'opacity',
   'cornerRadius',
-];
+]
 
 /**
  * Resolve an animated transform at a specific frame.
@@ -34,26 +34,26 @@ const ANIMATABLE_TRANSFORM_PROPERTIES: TransformAnimatableProperty[] = [
 export function resolveAnimatedTransform(
   baseResolved: ResolvedTransform,
   itemKeyframes: ItemKeyframes | undefined,
-  frame: number
+  frame: number,
 ): ResolvedTransform {
   // No keyframes - return base transform unchanged
   if (!itemKeyframes || itemKeyframes.properties.length === 0) {
-    return baseResolved;
+    return baseResolved
   }
 
   // Start with base transform
-  const result = { ...baseResolved };
+  const result = { ...baseResolved }
 
   // Apply animated values for each property that has keyframes
   for (const property of ANIMATABLE_TRANSFORM_PROPERTIES) {
-    const keyframes = getPropertyKeyframes(itemKeyframes, property);
+    const keyframes = getPropertyKeyframes(itemKeyframes, property)
     if (keyframes.length > 0) {
-      const baseValue = baseResolved[property];
-      result[property] = interpolatePropertyValue(keyframes, frame, baseValue);
+      const baseValue = baseResolved[property]
+      result[property] = interpolatePropertyValue(keyframes, frame, baseValue)
     }
   }
 
-  return result;
+  return result
 }
 
 /**
@@ -63,6 +63,6 @@ export function resolveAnimatedTransform(
  * @returns True if the item has at least one keyframe
  */
 export function hasKeyframeAnimation(itemKeyframes: ItemKeyframes | undefined): boolean {
-  if (!itemKeyframes) return false;
-  return itemKeyframes.properties.some((p) => p.keyframes.length > 0);
+  if (!itemKeyframes) return false
+  return itemKeyframes.properties.some((p) => p.keyframes.length > 0)
 }

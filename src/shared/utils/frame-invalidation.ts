@@ -1,24 +1,24 @@
 export interface FrameRange {
-  startFrame: number;
-  endFrame: number;
+  startFrame: number
+  endFrame: number
 }
 
 export interface FrameInvalidationRequest {
-  frames?: number[];
-  ranges?: FrameRange[];
+  frames?: number[]
+  ranges?: FrameRange[]
 }
 
 export function hasFrameInvalidation(request?: FrameInvalidationRequest): boolean {
-  if (!request) return false;
-  return (request.frames?.length ?? 0) > 0 || (request.ranges?.length ?? 0) > 0;
+  if (!request) return false
+  return (request.frames?.length ?? 0) > 0 || (request.ranges?.length ?? 0) > 0
 }
 
 export function isFrameInRange(frame: number, range: FrameRange): boolean {
-  return frame >= range.startFrame && frame < range.endFrame;
+  return frame >= range.startFrame && frame < range.endFrame
 }
 
 export function isFrameInRanges(frame: number, ranges: FrameRange[]): boolean {
-  return ranges.some((range) => isFrameInRange(frame, range));
+  return ranges.some((range) => isFrameInRange(frame, range))
 }
 
 export function normalizeFrameRanges(ranges: FrameRange[]): FrameRange[] {
@@ -29,20 +29,20 @@ export function normalizeFrameRanges(ranges: FrameRange[]): FrameRange[] {
       endFrame: Math.trunc(range.endFrame),
     }))
     .filter((range) => range.endFrame > range.startFrame)
-    .sort((a, b) => a.startFrame - b.startFrame);
+    .sort((a, b) => a.startFrame - b.startFrame)
 
-  if (normalized.length <= 1) return normalized;
+  if (normalized.length <= 1) return normalized
 
-  const merged: FrameRange[] = [normalized[0]!];
+  const merged: FrameRange[] = [normalized[0]!]
   for (let index = 1; index < normalized.length; index += 1) {
-    const current = normalized[index]!;
-    const previous = merged[merged.length - 1]!;
+    const current = normalized[index]!
+    const previous = merged[merged.length - 1]!
     if (current.startFrame <= previous.endFrame) {
-      previous.endFrame = Math.max(previous.endFrame, current.endFrame);
-      continue;
+      previous.endFrame = Math.max(previous.endFrame, current.endFrame)
+      continue
     }
-    merged.push({ ...current });
+    merged.push({ ...current })
   }
 
-  return merged;
+  return merged
 }

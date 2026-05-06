@@ -18,8 +18,14 @@ const ALLOWED_FACADE_FILES = new Set([
   'src/infrastructure/gpu/transitions.ts',
   'src/infrastructure/gpu/masks.ts',
   'src/infrastructure/gpu/scopes.ts',
+  'src/infrastructure/gpu/media.ts',
+  'src/infrastructure/gpu/shapes.ts',
+  'src/infrastructure/gpu/text.ts',
+  'src/infrastructure/audio/time-stretch.ts',
   'src/infrastructure/analysis/index.ts',
 ]);
+
+const ALLOWED_SHARED_LIB_IMPORT_PREFIXES = ['@/lib/gpu-shared/'];
 
 function normalizePath(filePath) {
   return filePath.split(path.sep).join('/');
@@ -60,6 +66,10 @@ function isAllowedLegacyLibImporter(relativePath) {
   return false;
 }
 
+function isAllowedLegacyLibImport(specifier) {
+  return ALLOWED_SHARED_LIB_IMPORT_PREFIXES.some((prefix) => specifier.startsWith(prefix));
+}
+
 function main() {
   if (!fs.existsSync(SRC_DIR)) {
     console.error('Cannot find src directory.');
@@ -75,7 +85,9 @@ function main() {
 
     const source = fs.readFileSync(absolutePath, 'utf8');
     const specifiers = collectSpecifiers(source);
-    const legacyImports = specifiers.filter((specifier) => specifier.startsWith('@/lib/'));
+    const legacyImports = specifiers.filter(
+      (specifier) => specifier.startsWith('@/lib/') && !isAllowedLegacyLibImport(specifier)
+    );
     if (legacyImports.length === 0) continue;
 
     for (const specifier of legacyImports) {

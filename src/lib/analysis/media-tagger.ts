@@ -10,36 +10,28 @@ import {
   getDefaultMediaCaptioningProvider,
   mediaCaptioningProviderRegistry,
   DEFAULT_MEDIA_CAPTIONING_PROVIDER_ID,
-} from './captioning/registry';
+} from './captioning/registry'
 import type {
   CaptioningOptions,
   CaptioningProgress,
   MediaCaption,
   MediaCaptioningProvider,
-} from './captioning/types';
+} from './captioning/types'
 
-export type {
-  CaptioningOptions,
-  CaptioningProgress,
-  MediaCaption,
-  MediaCaptioningProvider,
-};
+export type { CaptioningOptions, CaptioningProgress, MediaCaption, MediaCaptioningProvider }
 
-export {
-  mediaCaptioningProviderRegistry,
-  DEFAULT_MEDIA_CAPTIONING_PROVIDER_ID,
-};
+export { mediaCaptioningProviderRegistry, DEFAULT_MEDIA_CAPTIONING_PROVIDER_ID }
 
 export async function captionVideo(
   video: HTMLVideoElement,
   options?: CaptioningOptions,
 ): Promise<MediaCaption[]> {
-  return getDefaultMediaCaptioningProvider().captionVideo(video, options);
+  return getDefaultMediaCaptioningProvider().captionVideo(video, options)
 }
 
 export async function captionImage(
   imageBlob: Blob,
   options?: CaptioningOptions,
 ): Promise<MediaCaption[]> {
-  return getDefaultMediaCaptioningProvider().captionImage(imageBlob, options);
+  return getDefaultMediaCaptioningProvider().captionImage(imageBlob, options)
 }

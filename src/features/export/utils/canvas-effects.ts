@@ -4,23 +4,23 @@
  * Applies GPU shader effects to canvas items for client-side export.
  */
 
-import type { ItemKeyframes } from '@/types/keyframe';
-import type { ItemEffect, GpuEffect } from '@/types/effects';
-import type { AdjustmentItem, TimelineItem } from '@/types/timeline';
-import { createLogger } from '@/shared/logging/logger';
-import type { EffectsPipeline, GpuEffectInstance } from '@/infrastructure/gpu/effects';
-import { applyMasks, type MaskCanvasSettings } from './canvas-masks';
-import type { CanvasPool } from './canvas-pool';
-import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes';
+import type { ItemKeyframes } from '@/types/keyframe'
+import type { ItemEffect, GpuEffect } from '@/types/effects'
+import type { AdjustmentItem, TimelineItem } from '@/types/timeline'
+import { createLogger } from '@/shared/logging/logger'
+import type { EffectsPipeline, GpuEffectInstance } from '@/infrastructure/gpu/effects'
+import { applyMasks, type MaskCanvasSettings } from './canvas-masks'
+import type { CanvasPool } from './canvas-pool'
+import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes'
 
-const log = createLogger('CanvasEffects');
+const log = createLogger('CanvasEffects')
 
 /**
  * Adjustment layer with its track order for scope calculation
  */
 export interface AdjustmentLayerWithTrackOrder {
-  layer: AdjustmentItem;
-  trackOrder: number;
+  layer: AdjustmentItem
+  trackOrder: number
 }
 
 /**
@@ -37,21 +37,21 @@ export async function renderEffectsFromMaskedSource(
   canvas: EffectCanvasSettings & MaskCanvasSettings,
   gpuPipeline?: EffectsPipeline | null,
 ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] }> {
-  const poolCanvases: OffscreenCanvas[] = [];
-  let effectSource = sourceCanvas;
+  const poolCanvases: OffscreenCanvas[] = []
+  let effectSource = sourceCanvas
 
   if (masks.length > 0) {
-    const { canvas: maskedSourceCanvas, ctx: maskedSourceCtx } = canvasPool.acquire();
-    applyMasks(maskedSourceCtx, sourceCanvas, masks, canvas);
-    effectSource = maskedSourceCanvas;
-    poolCanvases.push(maskedSourceCanvas);
+    const { canvas: maskedSourceCanvas, ctx: maskedSourceCtx } = canvasPool.acquire()
+    applyMasks(maskedSourceCtx, sourceCanvas, masks, canvas)
+    effectSource = maskedSourceCanvas
+    poolCanvases.push(maskedSourceCanvas)
   }
 
   if (effects.length === 0) {
-    return { source: effectSource, poolCanvases };
+    return { source: effectSource, poolCanvases }
   }
 
-  const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
+  const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire()
   const deferredGpuCanvas = await applyAllEffectsAsync(
     effectCtx,
     effectSource,
@@ -59,30 +59,30 @@ export async function renderEffectsFromMaskedSource(
     frame,
     canvas,
     gpuPipeline,
-  );
-  poolCanvases.push(effectCanvas);
+  )
+  poolCanvases.push(effectCanvas)
 
   return {
     source: deferredGpuCanvas ?? effectCanvas,
     poolCanvases,
-  };
+  }
 }
 
 /**
  * Canvas settings for effect rendering
  */
 interface EffectCanvasSettings {
-  width: number;
-  height: number;
+  width: number
+  height: number
 }
 
 export interface EffectSourceMask {
-  path?: Path2D;
-  bitmapMask?: OffscreenCanvas;
-  inverted: boolean;
-  feather: number;
-  maskType: 'clip' | 'alpha';
-  trackOrder?: number;
+  path?: Path2D
+  bitmapMask?: OffscreenCanvas
+  inverted: boolean
+  feather: number
+  maskType: 'clip' | 'alpha'
+  trackOrder?: number
 }
 
 // ============================================================================
@@ -96,15 +96,15 @@ export function getGpuEffectInstances(effects: ItemEffect[]): GpuEffectInstance[
   return effects
     .filter((e) => e.enabled && e.effect.type === 'gpu-effect')
     .map((e) => {
-      const gpuEffect = e.effect as GpuEffect;
+      const gpuEffect = e.effect as GpuEffect
       return {
         id: e.id,
         type: gpuEffect.gpuEffectType,
         name: gpuEffect.gpuEffectType,
         enabled: true,
         params: { ...gpuEffect.params },
-      };
-    });
+      }
+    })
 }
 
 /**
@@ -127,25 +127,25 @@ function applyGpuEffects(
   gpuInstances: GpuEffectInstance[],
   pipeline: EffectsPipeline,
 ): OffscreenCanvas | null {
-  if (gpuInstances.length === 0) return null;
+  if (gpuInstances.length === 0) return null
 
   try {
-    const result = pipeline.applyEffectsToCanvas(ctx.canvas as OffscreenCanvas, gpuInstances);
+    const result = pipeline.applyEffectsToCanvas(ctx.canvas as OffscreenCanvas, gpuInstances)
     if (result) {
       if (pipeline.isBatching()) {
         // Pool mode: return GPU canvas for deferred compositing.
         // GPU work is submitted — defer drawImage to allow pipelining.
-        return result;
+        return result
       }
       // Non-pool: draw back immediately
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(result, 0, 0);
-      return null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(result, 0, 0)
+      return null
     }
   } catch (error) {
-    log.warn('GPU effects zero-copy path failed, skipping', error);
+    log.warn('GPU effects zero-copy path failed, skipping', error)
   }
-  return null;
+  return null
 }
 
 // ============================================================================
@@ -171,32 +171,32 @@ export function getAdjustmentLayerEffects(
   getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined,
   getCurrentKeyframes?: (itemId: string) => ItemKeyframes | undefined,
 ): ItemEffect[] {
-  if (adjustmentLayers.length === 0) return [];
+  if (adjustmentLayers.length === 0) return []
 
   return adjustmentLayers
     .map(({ layer, trackOrder }) => {
-      const liveLayer = getLiveItemSnapshot?.(layer.id);
+      const liveLayer = getLiveItemSnapshot?.(layer.id)
       return {
         layer: liveLayer?.type === 'adjustment' ? liveLayer : layer,
         trackOrder,
-      };
+      }
     })
     .filter(({ layer, trackOrder }) => {
       // Item must be BEHIND the adjustment (higher track order = lower zIndex)
-      if (itemTrackOrder <= trackOrder) return false;
+      if (itemTrackOrder <= trackOrder) return false
       // Adjustment must be active at current frame
-      return frame >= layer.from && frame < layer.from + layer.durationInFrames;
+      return frame >= layer.from && frame < layer.from + layer.durationInFrames
     })
     .sort((a, b) => a.trackOrder - b.trackOrder) // Apply in track order
     .flatMap(({ layer }) => {
-      const effectiveEffects = getPreviewEffectsOverride?.(layer.id) ?? layer.effects;
+      const effectiveEffects = getPreviewEffectsOverride?.(layer.id) ?? layer.effects
       const animatedEffects = resolveAnimatedColorEffects(
         effectiveEffects,
         getCurrentKeyframes?.(layer.id),
         frame - layer.from,
-      );
-      return animatedEffects?.filter((e) => e.enabled) ?? [];
-    });
+      )
+      return animatedEffects?.filter((e) => e.enabled) ?? []
+    })
 }
 
 /**
@@ -205,13 +205,13 @@ export function getAdjustmentLayerEffects(
  */
 export function combineEffects(
   itemEffects: ItemEffect[] | undefined,
-  adjustmentEffects: ItemEffect[]
+  adjustmentEffects: ItemEffect[],
 ): ItemEffect[] {
-  const combined = [...adjustmentEffects];
+  const combined = [...adjustmentEffects]
   if (itemEffects) {
-    combined.push(...itemEffects.filter((e) => e.enabled));
+    combined.push(...itemEffects.filter((e) => e.enabled))
   }
-  return combined;
+  return combined
 }
 
 // ============================================================================
@@ -242,21 +242,21 @@ export function applyAllEffects(
 ): OffscreenCanvas | null {
   if (effects.length === 0) {
     // No effects - just draw source
-    ctx.drawImage(sourceCanvas, 0, 0);
-    return null;
+    ctx.drawImage(sourceCanvas, 0, 0)
+    return null
   }
 
   // Draw source content
-  ctx.drawImage(sourceCanvas, 0, 0);
+  ctx.drawImage(sourceCanvas, 0, 0)
 
   // Apply GPU shader effects (zero-copy canvas→GPU→canvas path)
-  const gpuInstances = getGpuEffectInstances(effects);
+  const gpuInstances = getGpuEffectInstances(effects)
   if (gpuInstances.length > 0 && gpuPipeline) {
-    const deferredCanvas = applyGpuEffects(ctx, canvas, gpuInstances, gpuPipeline);
-    if (deferredCanvas) return deferredCanvas;
+    const deferredCanvas = applyGpuEffects(ctx, canvas, gpuInstances, gpuPipeline)
+    if (deferredCanvas) return deferredCanvas
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -275,5 +275,5 @@ export async function applyAllEffectsAsync(
   gpuPipeline?: EffectsPipeline | null,
 ): Promise<OffscreenCanvas | null> {
   // Both preview and export use the zero-copy canvas→GPU→canvas path.
-  return applyAllEffects(ctx, sourceCanvas, effects, frame, canvas, gpuPipeline);
+  return applyAllEffects(ctx, sourceCanvas, effects, frame, canvas, gpuPipeline)
 }

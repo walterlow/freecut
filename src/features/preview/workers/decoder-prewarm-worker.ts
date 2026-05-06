@@ -6,30 +6,30 @@
  * Returns decoded ImageBitmaps that the render loop can draw directly.
  */
 
-import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
-import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-url-registry';
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
+import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-url-registry'
 
-const TIMESTAMP_EPSILON = 1e-4;
-const LOOKAHEAD_TOLERANCE_SECONDS = 0.05;
-const STREAM_BACKTRACK_SECONDS = 1.0;
-const FORWARD_JUMP_RESTART_SECONDS = 3.0;
+const TIMESTAMP_EPSILON = 1e-4
+const LOOKAHEAD_TOLERANCE_SECONDS = 0.05
+const STREAM_BACKTRACK_SECONDS = 1.0
+const FORWARD_JUMP_RESTART_SECONDS = 3.0
 
 /** Per-source keyframe index received from main thread */
-const keyframeIndexBySrc = new Map<string, number[]>();
+const keyframeIndexBySrc = new Map<string, number[]>()
 
 /**
  * Binary search for the largest keyframe timestamp <= target.
  */
 function nearestKeyframeBefore(timestamps: number[], target: number): number | null {
-  if (timestamps.length === 0 || timestamps[0]! > target) return null;
-  let lo = 0;
-  let hi = timestamps.length - 1;
+  if (timestamps.length === 0 || timestamps[0]! > target) return null
+  let lo = 0
+  let hi = timestamps.length - 1
   while (lo < hi) {
-    const mid = (lo + hi + 1) >>> 1;
-    if (timestamps[mid]! <= target) lo = mid;
-    else hi = mid - 1;
+    const mid = (lo + hi + 1) >>> 1
+    if (timestamps[mid]! <= target) lo = mid
+    else hi = mid - 1
   }
-  return timestamps[lo]!;
+  return timestamps[lo]!
 }
 
 /**
@@ -37,79 +37,82 @@ function nearestKeyframeBefore(timestamps: number[], target: number): number | n
  * Returns null if no index available (caller falls back to fixed backtrack).
  */
 function getAdaptiveStart(src: string, targetTimestamp: number): number | null {
-  const timestamps = keyframeIndexBySrc.get(src);
-  if (!timestamps || timestamps.length === 0) return null;
-  const kf = nearestKeyframeBefore(timestamps, targetTimestamp);
-  if (kf === null) return null;
-  return Math.max(0, kf - 0.05); // small margin
+  const timestamps = keyframeIndexBySrc.get(src)
+  if (!timestamps || timestamps.length === 0) return null
+  const kf = nearestKeyframeBefore(timestamps, targetTimestamp)
+  if (kf === null) return null
+  return Math.max(0, kf - 0.05) // small margin
 }
 
 // Lazy-load mediabunny (same pattern as filmstrip and proxy workers)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mb: any = null;
+let mb: any = null
 async function getMediabunny() {
-  if (!mb) mb = await import('mediabunny');
-  return mb;
+  if (!mb) mb = await import('mediabunny')
+  return mb
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type WorkerSample = any;
+type WorkerSample = any
 
 interface ExtractorState {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  input: any;
+  input: any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sink: any;
-  canvas: OffscreenCanvas;
-  ctx: OffscreenCanvasRenderingContext2D;
-  sampleIterator: AsyncGenerator<WorkerSample, void, unknown> | null;
-  currentSample: WorkerSample | null;
-  nextSample: WorkerSample | null;
-  iteratorDone: boolean;
-  lastRequestedTimestamp: number | null;
-  cachedVideoFrame: VideoFrame | null;
-  cachedVideoFrameSample: WorkerSample | null;
-  drawLock: Promise<void> | null;
+  sink: any
+  canvas: OffscreenCanvas
+  ctx: OffscreenCanvasRenderingContext2D
+  sampleIterator: AsyncGenerator<WorkerSample, void, unknown> | null
+  currentSample: WorkerSample | null
+  nextSample: WorkerSample | null
+  iteratorDone: boolean
+  lastRequestedTimestamp: number | null
+  cachedVideoFrame: VideoFrame | null
+  cachedVideoFrameSample: WorkerSample | null
+  drawLock: Promise<void> | null
 }
 
-const extractors = new Map<string, ExtractorState>();
-const initPromises = new Map<string, Promise<ExtractorState | null>>();
+const extractors = new Map<string, ExtractorState>()
+const initPromises = new Map<string, Promise<ExtractorState | null>>()
 
 interface WorkerSourceOptions {
-  blob?: Blob;
-  sourceMetadata?: ObjectUrlSourceMetadata;
+  blob?: Blob
+  sourceMetadata?: ObjectUrlSourceMetadata
 }
 
-async function getExtractor(src: string, options?: WorkerSourceOptions): Promise<ExtractorState | null> {
-  const existing = extractors.get(src);
-  if (existing) return existing;
+async function getExtractor(
+  src: string,
+  options?: WorkerSourceOptions,
+): Promise<ExtractorState | null> {
+  const existing = extractors.get(src)
+  if (existing) return existing
 
-  const inflight = initPromises.get(src);
-  if (inflight) return inflight;
+  const inflight = initPromises.get(src)
+  if (inflight) return inflight
 
   const promise = (async () => {
-    const mediabunny = await getMediabunny();
+    const mediabunny = await getMediabunny()
     const source = createMediabunnyInputSource(mediabunny, src, {
       metadata: options?.sourceMetadata,
       fallbackBlob: options?.blob,
-    });
+    })
     const input = new mediabunny.Input({
       formats: mediabunny.ALL_FORMATS,
       source,
-    });
+    })
 
-    self.postMessage({ type: 'debug', step: 'init_started' });
+    self.postMessage({ type: 'debug', step: 'init_started' })
 
     try {
-      const videoTrack = await input.getPrimaryVideoTrack();
+      const videoTrack = await input.getPrimaryVideoTrack()
       if (!videoTrack) {
-        input.dispose?.();
-        return null;
+        input.dispose?.()
+        return null
       }
 
       if (typeof videoTrack.canDecode === 'function' && !(await videoTrack.canDecode())) {
-        input.dispose?.();
-        return null;
+        input.dispose?.()
+        return null
       }
 
       // Lazy-extract keyframe index for sources that arrive without one.
@@ -117,37 +120,37 @@ async function getExtractor(src: string, options?: WorkerSourceOptions): Promise
       // Ensures adaptive seek is available from the very first decode.
       if (!keyframeIndexBySrc.has(src)) {
         try {
-          const eps = new mediabunny.EncodedPacketSink(videoTrack);
-          const kfTimestamps: number[] = [];
-          const metadataOpts = { metadataOnly: true } as const;
-          let pkt = await eps.getFirstKeyPacket(metadataOpts);
+          const eps = new mediabunny.EncodedPacketSink(videoTrack)
+          const kfTimestamps: number[] = []
+          const metadataOpts = { metadataOnly: true } as const
+          let pkt = await eps.getFirstKeyPacket(metadataOpts)
           while (pkt) {
-            kfTimestamps.push(pkt.timestamp);
-            pkt = await eps.getNextKeyPacket(pkt, metadataOpts);
+            kfTimestamps.push(pkt.timestamp)
+            pkt = await eps.getNextKeyPacket(pkt, metadataOpts)
           }
-          eps.dispose?.();
+          eps.dispose?.()
           if (kfTimestamps.length > 0) {
-            keyframeIndexBySrc.set(src, kfTimestamps);
+            keyframeIndexBySrc.set(src, kfTimestamps)
             self.postMessage({
               type: 'keyframes_extracted',
               src,
               keyframeTimestamps: kfTimestamps,
-            });
+            })
           }
         } catch {
           // Non-fatal — falls back to fixed 1s backtrack
         }
       }
 
-      const sink = new mediabunny.VideoSampleSink(videoTrack);
-      const canvas = new OffscreenCanvas(1, 1);
-      const ctx = canvas.getContext('2d');
+      const sink = new mediabunny.VideoSampleSink(videoTrack)
+      const canvas = new OffscreenCanvas(1, 1)
+      const ctx = canvas.getContext('2d')
       if (!ctx) {
-        input.dispose?.();
-        return null;
+        input.dispose?.()
+        return null
       }
 
-      self.postMessage({ type: 'debug', step: 'init_complete' });
+      self.postMessage({ type: 'debug', step: 'init_complete' })
 
       const state: ExtractorState = {
         input,
@@ -162,196 +165,205 @@ async function getExtractor(src: string, options?: WorkerSourceOptions): Promise
         cachedVideoFrame: null,
         cachedVideoFrameSample: null,
         drawLock: null,
-      };
-      extractors.set(src, state);
-      return state;
+      }
+      extractors.set(src, state)
+      return state
     } catch (error) {
-      input.dispose?.();
-      throw error;
+      input.dispose?.()
+      throw error
     }
-  })();
+  })()
 
-  initPromises.set(src, promise);
+  initPromises.set(src, promise)
   try {
-    return await promise;
+    return await promise
   } finally {
-    initPromises.delete(src);
+    initPromises.delete(src)
   }
 }
 
 function closeSample(sample: WorkerSample | null): void {
-  if (!sample || typeof sample.close !== 'function') return;
+  if (!sample || typeof sample.close !== 'function') return
   try {
-    sample.close();
+    sample.close()
   } catch {
     // Ignore close errors.
   }
 }
 
 function closeCachedVideoFrame(state: ExtractorState): void {
-  if (!state.cachedVideoFrame) return;
+  if (!state.cachedVideoFrame) return
   try {
-    state.cachedVideoFrame.close();
+    state.cachedVideoFrame.close()
   } catch {
     // Ignore close errors.
   }
-  state.cachedVideoFrame = null;
-  state.cachedVideoFrameSample = null;
+  state.cachedVideoFrame = null
+  state.cachedVideoFrameSample = null
 }
 
 function closeStreamState(state: ExtractorState): void {
   if (state.sampleIterator) {
-    void state.sampleIterator.return?.();
+    void state.sampleIterator.return?.()
   }
-  state.sampleIterator = null;
-  state.iteratorDone = true;
-  state.lastRequestedTimestamp = null;
-  closeCachedVideoFrame(state);
-  closeSample(state.currentSample);
-  closeSample(state.nextSample);
-  state.currentSample = null;
-  state.nextSample = null;
+  state.sampleIterator = null
+  state.iteratorDone = true
+  state.lastRequestedTimestamp = null
+  closeCachedVideoFrame(state)
+  closeSample(state.currentSample)
+  closeSample(state.nextSample)
+  state.currentSample = null
+  state.nextSample = null
 }
 
 function resetSampleIterator(state: ExtractorState, startTimestamp: number, src?: string): void {
-  closeStreamState(state);
+  closeStreamState(state)
   // Use keyframe index for precise backtrack; fall back to fixed 1.0s
-  const adaptiveStart = src ? getAdaptiveStart(src, startTimestamp) : null;
-  const streamStart = adaptiveStart ?? Math.max(0, startTimestamp - STREAM_BACKTRACK_SECONDS);
-  state.sampleIterator = state.sink.samples(streamStart, Infinity) as AsyncGenerator<WorkerSample, void, unknown>;
-  state.iteratorDone = false;
-  state.lastRequestedTimestamp = null;
+  const adaptiveStart = src ? getAdaptiveStart(src, startTimestamp) : null
+  const streamStart = adaptiveStart ?? Math.max(0, startTimestamp - STREAM_BACKTRACK_SECONDS)
+  state.sampleIterator = state.sink.samples(streamStart, Infinity) as AsyncGenerator<
+    WorkerSample,
+    void,
+    unknown
+  >
+  state.iteratorDone = false
+  state.lastRequestedTimestamp = null
 }
 
 async function peekNextSample(state: ExtractorState): Promise<WorkerSample | null> {
   if (state.nextSample) {
-    return state.nextSample;
+    return state.nextSample
   }
   if (!state.sampleIterator || state.iteratorDone) {
-    return null;
+    return null
   }
 
-  const nextResult = await state.sampleIterator.next();
+  const nextResult = await state.sampleIterator.next()
   if (nextResult.done) {
-    state.iteratorDone = true;
-    return null;
+    state.iteratorDone = true
+    return null
   }
 
-  state.nextSample = nextResult.value;
-  return state.nextSample;
+  state.nextSample = nextResult.value
+  return state.nextSample
 }
 
-async function ensureSampleForTimestamp(state: ExtractorState, timestamp: number, src?: string): Promise<void> {
+async function ensureSampleForTimestamp(
+  state: ExtractorState,
+  timestamp: number,
+  src?: string,
+): Promise<void> {
   if (!state.sampleIterator) {
-    resetSampleIterator(state, timestamp, src);
+    resetSampleIterator(state, timestamp, src)
   } else if (
-    state.lastRequestedTimestamp !== null
-    && timestamp + TIMESTAMP_EPSILON < state.lastRequestedTimestamp
-    && !currentSampleCoversTimestamp(state, timestamp)
+    state.lastRequestedTimestamp !== null &&
+    timestamp + TIMESTAMP_EPSILON < state.lastRequestedTimestamp &&
+    !currentSampleCoversTimestamp(state, timestamp)
   ) {
-    resetSampleIterator(state, timestamp, src);
+    resetSampleIterator(state, timestamp, src)
   } else if (
-    state.lastRequestedTimestamp !== null
-    && timestamp - state.lastRequestedTimestamp > FORWARD_JUMP_RESTART_SECONDS
+    state.lastRequestedTimestamp !== null &&
+    timestamp - state.lastRequestedTimestamp > FORWARD_JUMP_RESTART_SECONDS
   ) {
-    resetSampleIterator(state, timestamp, src);
+    resetSampleIterator(state, timestamp, src)
   }
 
-  state.lastRequestedTimestamp = timestamp;
+  state.lastRequestedTimestamp = timestamp
 
   while (true) {
-    const candidate = await peekNextSample(state);
-    if (!candidate) break;
+    const candidate = await peekNextSample(state)
+    if (!candidate) break
 
     if (candidate.timestamp <= timestamp + TIMESTAMP_EPSILON) {
-      closeCachedVideoFrame(state);
-      closeSample(state.currentSample);
-      state.currentSample = candidate;
-      state.nextSample = null;
-      continue;
+      closeCachedVideoFrame(state)
+      closeSample(state.currentSample)
+      state.currentSample = candidate
+      state.nextSample = null
+      continue
     }
 
-    if (
-      !state.currentSample
-      && candidate.timestamp - timestamp <= LOOKAHEAD_TOLERANCE_SECONDS
-    ) {
-      state.currentSample = candidate;
-      state.nextSample = null;
+    if (!state.currentSample && candidate.timestamp - timestamp <= LOOKAHEAD_TOLERANCE_SECONDS) {
+      state.currentSample = candidate
+      state.nextSample = null
     }
-    break;
+    break
   }
 }
 
 function currentSampleCoversTimestamp(state: ExtractorState, timestamp: number): boolean {
-  const sample = state.currentSample as { timestamp?: number; duration?: number } | null;
+  const sample = state.currentSample as { timestamp?: number; duration?: number } | null
   if (!sample || typeof sample.timestamp !== 'number') {
-    return false;
+    return false
   }
 
   if (sample.timestamp > timestamp + TIMESTAMP_EPSILON) {
-    return false;
+    return false
   }
 
-  if (typeof sample.duration !== 'number' || !Number.isFinite(sample.duration) || sample.duration <= 0) {
-    return true;
+  if (
+    typeof sample.duration !== 'number' ||
+    !Number.isFinite(sample.duration) ||
+    sample.duration <= 0
+  ) {
+    return true
   }
 
-  return sample.timestamp + sample.duration >= timestamp - TIMESTAMP_EPSILON;
+  return sample.timestamp + sample.duration >= timestamp - TIMESTAMP_EPSILON
 }
 
 function getOrCreateCurrentVideoFrame(state: ExtractorState): VideoFrame | null {
-  const sample = state.currentSample;
+  const sample = state.currentSample
   if (!sample) {
-    return null;
+    return null
   }
 
-  let videoFrame = state.cachedVideoFrame;
+  let videoFrame = state.cachedVideoFrame
   if (!videoFrame || state.cachedVideoFrameSample !== sample) {
-    closeCachedVideoFrame(state);
+    closeCachedVideoFrame(state)
     if (typeof sample.toVideoFrame === 'function') {
-      videoFrame = sample.toVideoFrame();
+      videoFrame = sample.toVideoFrame()
     } else {
-      videoFrame = sample.frame ?? null;
+      videoFrame = sample.frame ?? null
     }
     if (!videoFrame) {
-      return null;
+      return null
     }
-    state.cachedVideoFrame = videoFrame;
-    state.cachedVideoFrameSample = sample;
+    state.cachedVideoFrame = videoFrame
+    state.cachedVideoFrameSample = sample
   }
 
-  return videoFrame;
+  return videoFrame
 }
 
 function renderCurrentSampleToBitmap(state: ExtractorState): ImageBitmap | null {
-  const videoFrame = getOrCreateCurrentVideoFrame(state);
+  const videoFrame = getOrCreateCurrentVideoFrame(state)
   if (!videoFrame) {
-    return null;
+    return null
   }
 
-  const visibleRect = (videoFrame as VideoFrame & {
-    visibleRect?: { x: number; y: number; width: number; height: number };
-  }).visibleRect;
+  const visibleRect = (
+    videoFrame as VideoFrame & {
+      visibleRect?: { x: number; y: number; width: number; height: number }
+    }
+  ).visibleRect
 
-  const width = visibleRect?.width && visibleRect.width > 0
-    ? visibleRect.width
-    : videoFrame.displayWidth;
-  const height = visibleRect?.height && visibleRect.height > 0
-    ? visibleRect.height
-    : videoFrame.displayHeight;
+  const width =
+    visibleRect?.width && visibleRect.width > 0 ? visibleRect.width : videoFrame.displayWidth
+  const height =
+    visibleRect?.height && visibleRect.height > 0 ? visibleRect.height : videoFrame.displayHeight
   if (width < 1 || height < 1) {
-    return null;
+    return null
   }
 
-  state.canvas.width = width;
-  state.canvas.height = height;
+  state.canvas.width = width
+  state.canvas.height = height
 
   if (
-    visibleRect
-    && Number.isFinite(visibleRect.width)
-    && Number.isFinite(visibleRect.height)
-    && visibleRect.width > 0
-    && visibleRect.height > 0
+    visibleRect &&
+    Number.isFinite(visibleRect.width) &&
+    Number.isFinite(visibleRect.height) &&
+    visibleRect.width > 0 &&
+    visibleRect.height > 0
   ) {
     state.ctx.drawImage(
       videoFrame,
@@ -363,40 +375,51 @@ function renderCurrentSampleToBitmap(state: ExtractorState): ImageBitmap | null 
       0,
       width,
       height,
-    );
+    )
   } else {
-    state.ctx.drawImage(videoFrame, 0, 0, width, height);
+    state.ctx.drawImage(videoFrame, 0, 0, width, height)
   }
 
-  return state.canvas.transferToImageBitmap();
+  return state.canvas.transferToImageBitmap()
 }
 
-async function recoverAndPrime(state: ExtractorState, timestamp: number, error: unknown, src?: string): Promise<boolean> {
-  const message = error instanceof Error ? error.message : String(error);
-  const looksRecoverable = /key frame|configure\(\)|flush\(\)|InvalidStateError|decode/i.test(message);
+async function recoverAndPrime(
+  state: ExtractorState,
+  timestamp: number,
+  error: unknown,
+  src?: string,
+): Promise<boolean> {
+  const message = error instanceof Error ? error.message : String(error)
+  const looksRecoverable = /key frame|configure\(\)|flush\(\)|InvalidStateError|decode/i.test(
+    message,
+  )
   if (!looksRecoverable) {
-    return false;
+    return false
   }
 
   try {
-    resetSampleIterator(state, timestamp, src);
-    await ensureSampleForTimestamp(state, timestamp, src);
-    return state.currentSample !== null;
+    resetSampleIterator(state, timestamp, src)
+    await ensureSampleForTimestamp(state, timestamp, src)
+    return state.currentSample !== null
   } catch {
-    return false;
+    return false
   }
 }
 
-async function preseekWithState(state: ExtractorState, timestamp: number, src?: string): Promise<ImageBitmap | null> {
+async function preseekWithState(
+  state: ExtractorState,
+  timestamp: number,
+  src?: string,
+): Promise<ImageBitmap | null> {
   try {
-    await ensureSampleForTimestamp(state, timestamp, src);
-    return renderCurrentSampleToBitmap(state);
+    await ensureSampleForTimestamp(state, timestamp, src)
+    return renderCurrentSampleToBitmap(state)
   } catch (error) {
-    const recovered = await recoverAndPrime(state, timestamp, error, src);
+    const recovered = await recoverAndPrime(state, timestamp, error, src)
     if (!recovered) {
-      return null;
+      return null
     }
-    return renderCurrentSampleToBitmap(state);
+    return renderCurrentSampleToBitmap(state)
   }
 }
 
@@ -406,13 +429,16 @@ async function preseek(
   blob?: Blob,
   sourceMetadata?: ObjectUrlSourceMetadata,
 ): Promise<ImageBitmap | null> {
-  const state = await getExtractor(src, { blob, sourceMetadata });
-  if (!state) return null;
+  const state = await getExtractor(src, { blob, sourceMetadata })
+  if (!state) return null
 
-  const previous = state.drawLock ?? Promise.resolve();
-  const result = previous.then(() => preseekWithState(state, timestamp, src));
-  state.drawLock = result.then(() => undefined, () => undefined);
-  return result;
+  const previous = state.drawLock ?? Promise.resolve()
+  const result = previous.then(() => preseekWithState(state, timestamp, src))
+  state.drawLock = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  return result
 }
 
 /**
@@ -429,143 +455,165 @@ async function batchPreseek(
   blob?: Blob,
   sourceMetadata?: ObjectUrlSourceMetadata,
 ): Promise<Map<number, ImageBitmap>> {
-  const results = new Map<number, ImageBitmap>();
-  const state = await getExtractor(src, { blob, sourceMetadata });
-  if (!state || timestamps.length === 0) return results;
+  const results = new Map<number, ImageBitmap>()
+  const state = await getExtractor(src, { blob, sourceMetadata })
+  if (!state || timestamps.length === 0) return results
 
   // Serialize with the single-frame path via drawLock
-  const previous = state.drawLock ?? Promise.resolve();
+  const previous = state.drawLock ?? Promise.resolve()
   const result = previous.then(async () => {
     try {
       // samplesAtTimestamps uses an optimized pipeline that shares decoder
       // state across the batch — each packet decoded at most once.
-      const iterator = state.sink.samplesAtTimestamps(timestamps);
-      let i = 0;
+      const iterator = state.sink.samplesAtTimestamps(timestamps)
+      let i = 0
       for await (const sample of iterator) {
         if (!sample || i >= timestamps.length) {
-          i++;
-          continue;
+          i++
+          continue
         }
 
-        const ts = timestamps[i]!;
-        i++;
+        const ts = timestamps[i]!
+        i++
 
         try {
           const videoFrame: VideoFrame | null =
-            typeof sample.toVideoFrame === 'function' ? sample.toVideoFrame() : (sample.frame ?? null);
+            typeof sample.toVideoFrame === 'function'
+              ? sample.toVideoFrame()
+              : (sample.frame ?? null)
           if (!videoFrame) {
-            sample.close?.();
-            continue;
+            sample.close?.()
+            continue
           }
 
-          const visibleRect = (videoFrame as VideoFrame & {
-            visibleRect?: { x: number; y: number; width: number; height: number };
-          }).visibleRect;
+          const visibleRect = (
+            videoFrame as VideoFrame & {
+              visibleRect?: { x: number; y: number; width: number; height: number }
+            }
+          ).visibleRect
 
-          const width = visibleRect?.width && visibleRect.width > 0
-            ? visibleRect.width : videoFrame.displayWidth;
-          const height = visibleRect?.height && visibleRect.height > 0
-            ? visibleRect.height : videoFrame.displayHeight;
+          const width =
+            visibleRect?.width && visibleRect.width > 0
+              ? visibleRect.width
+              : videoFrame.displayWidth
+          const height =
+            visibleRect?.height && visibleRect.height > 0
+              ? visibleRect.height
+              : videoFrame.displayHeight
           if (width < 1 || height < 1) {
-            videoFrame.close();
-            sample.close?.();
-            continue;
+            videoFrame.close()
+            sample.close?.()
+            continue
           }
 
-          state.canvas.width = width;
-          state.canvas.height = height;
+          state.canvas.width = width
+          state.canvas.height = height
 
           if (visibleRect && visibleRect.width > 0 && visibleRect.height > 0) {
             state.ctx.drawImage(
               videoFrame,
-              visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height,
-              0, 0, width, height,
-            );
+              visibleRect.x,
+              visibleRect.y,
+              visibleRect.width,
+              visibleRect.height,
+              0,
+              0,
+              width,
+              height,
+            )
           } else {
-            state.ctx.drawImage(videoFrame, 0, 0, width, height);
+            state.ctx.drawImage(videoFrame, 0, 0, width, height)
           }
 
-          videoFrame.close();
-          const bitmap = state.canvas.transferToImageBitmap();
-          results.set(ts, bitmap);
+          videoFrame.close()
+          const bitmap = state.canvas.transferToImageBitmap()
+          results.set(ts, bitmap)
         } finally {
-          sample.close?.();
+          sample.close?.()
         }
       }
     } catch {
       // Batch decode failed — return whatever we got
     }
-    return results;
-  });
-  state.drawLock = result.then(() => undefined, () => undefined);
-  return result;
+    return results
+  })
+  state.drawLock = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  return result
 }
 
 // Signal worker is alive.
-self.postMessage({ type: 'ready' });
+self.postMessage({ type: 'ready' })
 
 self.onmessage = async (event: MessageEvent) => {
-  const msg = event.data;
+  const msg = event.data
 
   // Eagerly load mediabunny WASM so first preseek doesn't pay the cold start
   if (msg.type === 'warmup') {
-    void getMediabunny();
-    return;
+    void getMediabunny()
+    return
   }
 
   // Register keyframe index for a source (sent once per source from main thread)
   if (msg.type === 'set_keyframes') {
     if (msg.src && Array.isArray(msg.keyframeTimestamps)) {
-      keyframeIndexBySrc.set(msg.src, msg.keyframeTimestamps);
+      keyframeIndexBySrc.set(msg.src, msg.keyframeTimestamps)
     }
-    return;
+    return
   }
 
   // Batch preseek: decode multiple timestamps via optimized pipeline
   if (msg.type === 'batch_preseek') {
     if (msg.keyframeTimestamps && !keyframeIndexBySrc.has(msg.src)) {
-      keyframeIndexBySrc.set(msg.src, msg.keyframeTimestamps);
+      keyframeIndexBySrc.set(msg.src, msg.keyframeTimestamps)
     }
     try {
-      const sorted = [...msg.timestamps].sort((a: number, b: number) => a - b);
-      const bitmaps = await batchPreseek(msg.src, sorted, msg.blob, msg.sourceMetadata);
-      const transfer: Transferable[] = [];
-      const entries: Array<{ timestamp: number; bitmap: ImageBitmap }> = [];
+      const sorted = [...msg.timestamps].sort((a: number, b: number) => a - b)
+      const bitmaps = await batchPreseek(msg.src, sorted, msg.blob, msg.sourceMetadata)
+      const transfer: Transferable[] = []
+      const entries: Array<{ timestamp: number; bitmap: ImageBitmap }> = []
       for (const [ts, bitmap] of bitmaps) {
-        entries.push({ timestamp: ts, bitmap });
-        transfer.push(bitmap);
+        entries.push({ timestamp: ts, bitmap })
+        transfer.push(bitmap)
       }
       self.postMessage(
         { type: 'batch_preseek_done', id: msg.id, success: true, entries },
         { transfer },
-      );
+      )
     } catch (error) {
       self.postMessage({
         type: 'batch_preseek_done',
         id: msg.id,
         success: false,
         error: error instanceof Error ? error.message : String(error),
-      });
+      })
     }
-    return;
+    return
   }
 
-  if (msg.type !== 'preseek') return;
+  if (msg.type !== 'preseek') return
 
   // Accept inline keyframe data on first preseek for a source
   if (msg.keyframeTimestamps && !keyframeIndexBySrc.has(msg.src)) {
-    keyframeIndexBySrc.set(msg.src, msg.keyframeTimestamps);
+    keyframeIndexBySrc.set(msg.src, msg.keyframeTimestamps)
   }
 
   try {
-    const bitmap = await preseek(msg.src, msg.timestamp, msg.blob, msg.sourceMetadata);
+    const bitmap = await preseek(msg.src, msg.timestamp, msg.blob, msg.sourceMetadata)
     if (bitmap) {
       self.postMessage(
         { type: 'preseek_done', id: msg.id, success: true, timestamp: msg.timestamp, bitmap },
         { transfer: [bitmap] },
-      );
+      )
     } else {
-      self.postMessage({ type: 'preseek_done', id: msg.id, success: false, timestamp: msg.timestamp });
+      self.postMessage({
+        type: 'preseek_done',
+        id: msg.id,
+        success: false,
+        timestamp: msg.timestamp,
+      })
     }
   } catch (error) {
     self.postMessage({
@@ -574,6 +622,6 @@ self.onmessage = async (event: MessageEvent) => {
       success: false,
       timestamp: msg.timestamp,
       error: error instanceof Error ? error.message : String(error),
-    });
+    })
   }
-};
+}

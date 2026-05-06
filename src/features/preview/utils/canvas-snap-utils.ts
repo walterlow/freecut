@@ -1,19 +1,19 @@
-import type { BoundingBox, Point, Transform } from '../types/gizmo';
+import type { BoundingBox, Point, Transform } from '../types/gizmo'
 
 /**
  * Snap thresholds are authored in SCREEN pixels so the feel stays constant
  * across preview zoom levels. Callers pass the current canvasScale
  * (screen_px / canvas_px); we derive canvas-pixel thresholds per call.
  */
-const SNAP_ENTER_THRESHOLD_SCREEN_PX = 8;
-const SNAP_EXIT_THRESHOLD_SCREEN_PX = 18;
+const SNAP_ENTER_THRESHOLD_SCREEN_PX = 8
+const SNAP_EXIT_THRESHOLD_SCREEN_PX = 18
 
 function getThresholds(canvasScale: number): { enter: number; exit: number } {
-  const scale = canvasScale > 0 ? canvasScale : 1;
+  const scale = canvasScale > 0 ? canvasScale : 1
   return {
     enter: SNAP_ENTER_THRESHOLD_SCREEN_PX / scale,
     exit: SNAP_EXIT_THRESHOLD_SCREEN_PX / scale,
-  };
+  }
 }
 
 /**
@@ -27,33 +27,33 @@ function findBestMatch<T extends { pos: number; label?: string }>(
   edges: readonly number[],
   currentSnapPositions: ReadonlySet<number>,
   enterThreshold: number,
-  exitThreshold: number
+  exitThreshold: number,
 ): { snapPoint: T; edge: number; distance: number } | null {
-  let best: { snapPoint: T; edge: number; distance: number } | null = null;
+  let best: { snapPoint: T; edge: number; distance: number } | null = null
   for (const sp of snapPoints) {
-    const threshold = currentSnapPositions.has(sp.pos) ? exitThreshold : enterThreshold;
+    const threshold = currentSnapPositions.has(sp.pos) ? exitThreshold : enterThreshold
     for (const edge of edges) {
-      const distance = Math.abs(edge - sp.pos);
-      if (distance >= threshold) continue;
+      const distance = Math.abs(edge - sp.pos)
+      if (distance >= threshold) continue
       if (!best || distance < best.distance) {
-        best = { snapPoint: sp, edge, distance };
+        best = { snapPoint: sp, edge, distance }
       }
     }
   }
-  return best;
+  return best
 }
 
 /** Snap line type for visual feedback */
 export interface SnapLine {
-  type: 'horizontal' | 'vertical';
-  position: number; // Canvas coordinate
-  label?: string;
+  type: 'horizontal' | 'vertical'
+  position: number // Canvas coordinate
+  label?: string
 }
 
 /** Result of snap calculation */
 interface SnapResult {
-  transform: Transform;
-  snapLines: SnapLine[];
+  transform: Transform
+  snapLines: SnapLine[]
 }
 
 /**
@@ -72,7 +72,7 @@ function getTranslateSnapPoints(canvasWidth: number, canvasHeight: number) {
       { pos: canvasHeight * 0.5, label: '50%' },
       { pos: canvasHeight, label: '边缘' },
     ],
-  };
+  }
 }
 
 /**
@@ -81,20 +81,20 @@ function getTranslateSnapPoints(canvasWidth: number, canvasHeight: number) {
  * horizontals (top / centerY / bottom). Duplicate positions are collapsed.
  */
 function getOtherItemSnapPoints(bounds: BoundingBox[]) {
-  const vertical = new Map<number, string>();
-  const horizontal = new Map<number, string>();
+  const vertical = new Map<number, string>()
+  const horizontal = new Map<number, string>()
   for (const b of bounds) {
-    vertical.set(b.left, 'Align');
-    vertical.set((b.left + b.right) / 2, 'Center');
-    vertical.set(b.right, 'Align');
-    horizontal.set(b.top, 'Align');
-    horizontal.set((b.top + b.bottom) / 2, 'Center');
-    horizontal.set(b.bottom, 'Align');
+    vertical.set(b.left, 'Align')
+    vertical.set((b.left + b.right) / 2, 'Center')
+    vertical.set(b.right, 'Align')
+    horizontal.set(b.top, 'Align')
+    horizontal.set((b.top + b.bottom) / 2, 'Center')
+    horizontal.set(b.bottom, 'Align')
   }
   return {
     vertical: Array.from(vertical, ([pos, label]) => ({ pos, label })),
     horizontal: Array.from(horizontal, ([pos, label]) => ({ pos, label })),
-  };
+  }
 }
 
 /**
@@ -117,7 +117,7 @@ function getScaleSnapPoints(canvasWidth: number, canvasHeight: number) {
       { pos: canvasHeight * 0.75, label: '75%' },
       { pos: canvasHeight, label: '100%' },
     ],
-  };
+  }
 }
 
 /**
@@ -134,9 +134,9 @@ export function computeItemAabb(
   transform: Transform,
   canvasWidth: number,
   canvasHeight: number,
-  strokeExpansion: number = 0
+  strokeExpansion: number = 0,
 ): BoundingBox {
-  const b = getItemBounds(transform, canvasWidth, canvasHeight, strokeExpansion);
+  const b = getItemBounds(transform, canvasWidth, canvasHeight, strokeExpansion)
   return {
     left: b.left,
     top: b.top,
@@ -144,25 +144,25 @@ export function computeItemAabb(
     bottom: b.bottom,
     width: b.right - b.left,
     height: b.bottom - b.top,
-  };
+  }
 }
 
 function getItemBounds(
   transform: Transform,
   canvasWidth: number,
   canvasHeight: number,
-  strokeExpansion: number = 0
+  strokeExpansion: number = 0,
 ) {
   // transform.x/y is the pre-rotation CENTER of the item in canvas space
   // (offset from canvas center). The renderer then applies CSS rotation with
   // transform-origin = anchor (relative to the item's top-left). For anchors
   // off-center this means the *visual* center drifts when rotated — so for
   // snap we must rotate corners around the anchor, not the geometric center.
-  const centerX = canvasWidth / 2 + transform.x;
-  const centerY = canvasHeight / 2 + transform.y;
-  const expand = strokeExpansion / 2;
-  const halfW = transform.width / 2 + expand;
-  const halfH = transform.height / 2 + expand;
+  const centerX = canvasWidth / 2 + transform.x
+  const centerY = canvasHeight / 2 + transform.y
+  const expand = strokeExpansion / 2
+  const halfW = transform.width / 2 + expand
+  const halfH = transform.height / 2 + expand
 
   // For unrotated items, anchor is irrelevant — AABB matches the rectangle.
   if (!transform.rotation) {
@@ -173,23 +173,23 @@ function getItemBounds(
       bottom: centerY + halfH,
       centerX,
       centerY,
-    };
+    }
   }
 
-  const anchorOffsetX = (transform.anchorX ?? transform.width / 2) - transform.width / 2;
-  const anchorOffsetY = (transform.anchorY ?? transform.height / 2) - transform.height / 2;
-  const anchorX = centerX + anchorOffsetX;
-  const anchorY = centerY + anchorOffsetY;
+  const anchorOffsetX = (transform.anchorX ?? transform.width / 2) - transform.width / 2
+  const anchorOffsetY = (transform.anchorY ?? transform.height / 2) - transform.height / 2
+  const anchorX = centerX + anchorOffsetX
+  const anchorY = centerY + anchorOffsetY
 
-  const rad = (transform.rotation * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
+  const rad = (transform.rotation * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
 
   // Fast path: centered anchor rotates symmetrically around the center, so
   // the rotated AABB has a closed form and the visual center stays put.
   if (anchorOffsetX === 0 && anchorOffsetY === 0) {
-    const ex = Math.abs(halfW * cos) + Math.abs(halfH * sin);
-    const ey = Math.abs(halfW * sin) + Math.abs(halfH * cos);
+    const ex = Math.abs(halfW * cos) + Math.abs(halfH * sin)
+    const ey = Math.abs(halfW * sin) + Math.abs(halfH * cos)
     return {
       left: centerX - ex,
       right: centerX + ex,
@@ -197,7 +197,7 @@ function getItemBounds(
       bottom: centerY + ey,
       centerX,
       centerY,
-    };
+    }
   }
 
   // Off-center anchor: rotate each corner around the anchor and take the AABB.
@@ -206,20 +206,20 @@ function getItemBounds(
     [centerX + halfW, centerY - halfH],
     [centerX + halfW, centerY + halfH],
     [centerX - halfW, centerY + halfH],
-  ];
-  let left = Infinity;
-  let right = -Infinity;
-  let top = Infinity;
-  let bottom = -Infinity;
+  ]
+  let left = Infinity
+  let right = -Infinity
+  let top = Infinity
+  let bottom = -Infinity
   for (const [cx, cy] of corners) {
-    const dx = cx - anchorX;
-    const dy = cy - anchorY;
-    const rx = anchorX + dx * cos - dy * sin;
-    const ry = anchorY + dx * sin + dy * cos;
-    if (rx < left) left = rx;
-    if (rx > right) right = rx;
-    if (ry < top) top = ry;
-    if (ry > bottom) bottom = ry;
+    const dx = cx - anchorX
+    const dy = cy - anchorY
+    const rx = anchorX + dx * cos - dy * sin
+    const ry = anchorY + dx * sin + dy * cos
+    if (rx < left) left = rx
+    if (rx > right) right = rx
+    if (ry < top) top = ry
+    if (ry > bottom) bottom = ry
   }
 
   return {
@@ -229,7 +229,7 @@ function getItemBounds(
     bottom,
     centerX: (left + right) / 2,
     centerY: (top + bottom) / 2,
-  };
+  }
 }
 
 /**
@@ -245,53 +245,59 @@ export function applySnapping(
   currentSnapLines: SnapLine[] = [],
   strokeExpansion: number = 0,
   canvasScale: number = 1,
-  otherItemBounds: BoundingBox[] = []
+  otherItemBounds: BoundingBox[] = [],
 ): SnapResult {
-  const canvasSnap = getTranslateSnapPoints(canvasWidth, canvasHeight);
-  const otherSnap = getOtherItemSnapPoints(otherItemBounds);
+  const canvasSnap = getTranslateSnapPoints(canvasWidth, canvasHeight)
+  const otherSnap = getOtherItemSnapPoints(otherItemBounds)
   // Canvas points come first so they win ties (preferred for edges/centers).
   const snapPoints = {
     vertical: [...canvasSnap.vertical, ...otherSnap.vertical],
     horizontal: [...canvasSnap.horizontal, ...otherSnap.horizontal],
-  };
-  const bounds = getItemBounds(transform, canvasWidth, canvasHeight, strokeExpansion);
-  const snapLines: SnapLine[] = [];
-  const { enter: enterThreshold, exit: exitThreshold } = getThresholds(canvasScale);
+  }
+  const bounds = getItemBounds(transform, canvasWidth, canvasHeight, strokeExpansion)
+  const snapLines: SnapLine[] = []
+  const { enter: enterThreshold, exit: exitThreshold } = getThresholds(canvasScale)
 
   // Check if currently snapped to vertical/horizontal lines
-  const currentVerticalSnap = currentSnapLines.find((l) => l.type === 'vertical');
-  const currentHorizontalSnap = currentSnapLines.find((l) => l.type === 'horizontal');
+  const currentVerticalSnap = currentSnapLines.find((l) => l.type === 'vertical')
+  const currentHorizontalSnap = currentSnapLines.find((l) => l.type === 'horizontal')
 
-  let deltaX = 0;
-  let deltaY = 0;
+  let deltaX = 0
+  let deltaY = 0
 
   // Pick the globally-closest (snapPoint, edge) pair per axis. Picking the
   // nearest edge avoids order-dependent bias — e.g. a small item straddling
   // a line used to always snap via its left edge because the old loop broke
   // on first match.
-  const xEdges = [bounds.left, bounds.centerX, bounds.right];
-  const yEdges = [bounds.top, bounds.centerY, bounds.bottom];
-  const currentX = new Set(currentVerticalSnap ? [currentVerticalSnap.position] : []);
-  const currentY = new Set(currentHorizontalSnap ? [currentHorizontalSnap.position] : []);
+  const xEdges = [bounds.left, bounds.centerX, bounds.right]
+  const yEdges = [bounds.top, bounds.centerY, bounds.bottom]
+  const currentX = new Set(currentVerticalSnap ? [currentVerticalSnap.position] : [])
+  const currentY = new Set(currentHorizontalSnap ? [currentHorizontalSnap.position] : [])
 
-  const bestX = findBestMatch(snapPoints.vertical, xEdges, currentX, enterThreshold, exitThreshold);
+  const bestX = findBestMatch(snapPoints.vertical, xEdges, currentX, enterThreshold, exitThreshold)
   if (bestX) {
-    deltaX = bestX.snapPoint.pos - bestX.edge;
+    deltaX = bestX.snapPoint.pos - bestX.edge
     snapLines.push({
       type: 'vertical',
       position: bestX.snapPoint.pos,
       label: bestX.snapPoint.label,
-    });
+    })
   }
 
-  const bestY = findBestMatch(snapPoints.horizontal, yEdges, currentY, enterThreshold, exitThreshold);
+  const bestY = findBestMatch(
+    snapPoints.horizontal,
+    yEdges,
+    currentY,
+    enterThreshold,
+    exitThreshold,
+  )
   if (bestY) {
-    deltaY = bestY.snapPoint.pos - bestY.edge;
+    deltaY = bestY.snapPoint.pos - bestY.edge
     snapLines.push({
       type: 'horizontal',
       position: bestY.snapPoint.pos,
       label: bestY.snapPoint.label,
-    });
+    })
   }
 
   // Apply snap deltas to transform
@@ -300,12 +306,12 @@ export function applySnapping(
     ...transform,
     x: Math.round(transform.x + deltaX),
     y: Math.round(transform.y + deltaY),
-  };
+  }
 
   return {
     transform: snappedTransform,
     snapLines,
-  };
+  }
 }
 
 /**
@@ -322,70 +328,68 @@ export function applyScaleSnapping(
   currentSnapLines: SnapLine[] = [],
   strokeExpansion: number = 0,
   canvasScale: number = 1,
-  maintainAspectRatio: boolean = true
+  maintainAspectRatio: boolean = true,
 ): SnapResult {
-  const snapPoints = getScaleSnapPoints(canvasWidth, canvasHeight);
-  const bounds = getItemBounds(transform, canvasWidth, canvasHeight, strokeExpansion);
-  const snapLines: SnapLine[] = [];
-  const aspectRatio = transform.width / transform.height;
-  const { enter: enterThreshold, exit: exitThreshold } = getThresholds(canvasScale);
+  const snapPoints = getScaleSnapPoints(canvasWidth, canvasHeight)
+  const bounds = getItemBounds(transform, canvasWidth, canvasHeight, strokeExpansion)
+  const snapLines: SnapLine[] = []
+  const aspectRatio = transform.width / transform.height
+  const { enter: enterThreshold, exit: exitThreshold } = getThresholds(canvasScale)
 
   // Check current snap positions for hysteresis
   const currentVerticalSnaps = currentSnapLines
     .filter((l) => l.type === 'vertical')
-    .map((l) => l.position);
+    .map((l) => l.position)
   const currentHorizontalSnaps = currentSnapLines
     .filter((l) => l.type === 'horizontal')
-    .map((l) => l.position);
+    .map((l) => l.position)
 
   // Find the best (snap point × edge) per axis so free-scale
   // (maintainAspectRatio=false) can snap width/height independently instead
   // of being forced onto the item's current aspect ratio.
-  const currentVSet = new Set(currentVerticalSnaps);
-  const currentHSet = new Set(currentHorizontalSnaps);
+  const currentVSet = new Set(currentVerticalSnaps)
+  const currentHSet = new Set(currentHorizontalSnaps)
 
   const widthMatch = findBestMatch(
     snapPoints.vertical,
     [bounds.left, bounds.right],
     currentVSet,
     enterThreshold,
-    exitThreshold
-  );
+    exitThreshold,
+  )
   const heightMatch = findBestMatch(
     snapPoints.horizontal,
     [bounds.top, bounds.bottom],
     currentHSet,
     enterThreshold,
-    exitThreshold
-  );
+    exitThreshold,
+  )
 
-  const bestWidth =
-    widthMatch && {
-      distance: widthMatch.distance,
-      newValue:
-        widthMatch.edge === bounds.left
-          ? (bounds.centerX - widthMatch.snapPoint.pos) * 2
-          : (widthMatch.snapPoint.pos - bounds.centerX) * 2,
-      snapLine: {
-        type: 'vertical' as const,
-        position: widthMatch.snapPoint.pos,
-        label: widthMatch.snapPoint.label,
-      },
-    };
+  const bestWidth = widthMatch && {
+    distance: widthMatch.distance,
+    newValue:
+      widthMatch.edge === bounds.left
+        ? (bounds.centerX - widthMatch.snapPoint.pos) * 2
+        : (widthMatch.snapPoint.pos - bounds.centerX) * 2,
+    snapLine: {
+      type: 'vertical' as const,
+      position: widthMatch.snapPoint.pos,
+      label: widthMatch.snapPoint.label,
+    },
+  }
 
-  const bestHeight =
-    heightMatch && {
-      distance: heightMatch.distance,
-      newValue:
-        heightMatch.edge === bounds.top
-          ? (bounds.centerY - heightMatch.snapPoint.pos) * 2
-          : (heightMatch.snapPoint.pos - bounds.centerY) * 2,
-      snapLine: {
-        type: 'horizontal' as const,
-        position: heightMatch.snapPoint.pos,
-        label: heightMatch.snapPoint.label,
-      },
-    };
+  const bestHeight = heightMatch && {
+    distance: heightMatch.distance,
+    newValue:
+      heightMatch.edge === bounds.top
+        ? (bounds.centerY - heightMatch.snapPoint.pos) * 2
+        : (heightMatch.snapPoint.pos - bounds.centerY) * 2,
+    snapLine: {
+      type: 'horizontal' as const,
+      position: heightMatch.snapPoint.pos,
+      label: heightMatch.snapPoint.label,
+    },
+  }
 
   // If no snap found on either axis, return rounded transform
   if (!bestWidth && !bestHeight) {
@@ -398,102 +402,101 @@ export function applyScaleSnapping(
         height: Math.round(transform.height),
       },
       snapLines: [],
-    };
+    }
   }
 
-  let newWidth: number;
-  let newHeight: number;
+  let newWidth: number
+  let newHeight: number
 
   if (maintainAspectRatio) {
     // Pick the closer of the two axis snaps and propagate through aspect.
-    const chooseWidth =
-      bestWidth && (!bestHeight || bestWidth.distance <= bestHeight.distance);
+    const chooseWidth = bestWidth && (!bestHeight || bestWidth.distance <= bestHeight.distance)
     if (chooseWidth && bestWidth) {
-      newWidth = bestWidth.newValue;
-      newHeight = newWidth / aspectRatio;
+      newWidth = bestWidth.newValue
+      newHeight = newWidth / aspectRatio
     } else if (bestHeight) {
-      newHeight = bestHeight.newValue;
-      newWidth = newHeight * aspectRatio;
+      newHeight = bestHeight.newValue
+      newWidth = newHeight * aspectRatio
     } else {
       // Unreachable — guarded above — but keep TS happy.
-      newWidth = transform.width;
-      newHeight = transform.height;
+      newWidth = transform.width
+      newHeight = transform.height
     }
   } else {
     // Free-scale: snap each axis independently, keep the unsnapped axis.
-    newWidth = bestWidth ? bestWidth.newValue : transform.width;
-    newHeight = bestHeight ? bestHeight.newValue : transform.height;
+    newWidth = bestWidth ? bestWidth.newValue : transform.width
+    newHeight = bestHeight ? bestHeight.newValue : transform.height
   }
 
   // Track position adjustments for 100% snap
-  let newX = transform.x;
-  let newY = transform.y;
+  let newX = transform.x
+  let newY = transform.y
 
   // Snap to exact canvas dimensions when width/height is close to canvas size
   // This handles 100% scale regardless of center position drift during fast movement
-  const sizeTolerance = 15; // Generous tolerance for fast movement
+  const sizeTolerance = 15 // Generous tolerance for fast movement
 
   if (Math.abs(newWidth - canvasWidth) < sizeTolerance) {
-    newWidth = canvasWidth;
+    newWidth = canvasWidth
     // Only propagate through aspect when it's locked — free-scale keeps
     // the independently-snapped height.
-    if (maintainAspectRatio) newHeight = newWidth / aspectRatio;
-    newX = 0; // Also center horizontally for perfect 100%
+    if (maintainAspectRatio) newHeight = newWidth / aspectRatio
+    newX = 0 // Also center horizontally for perfect 100%
   }
 
   if (Math.abs(newHeight - canvasHeight) < sizeTolerance) {
-    newHeight = canvasHeight;
-    if (maintainAspectRatio) newWidth = newHeight * aspectRatio;
-    newY = 0; // Also center vertically for perfect 100%
+    newHeight = canvasHeight
+    if (maintainAspectRatio) newWidth = newHeight * aspectRatio
+    newY = 0 // Also center vertically for perfect 100%
   }
 
-  const edgeTolerance = 3;
+  const edgeTolerance = 3
 
   // Recalculate bounds with adjusted position for snap line display
-  const finalCenterX = canvasWidth / 2 + newX;
-  const finalCenterY = canvasHeight / 2 + newY;
+  const finalCenterX = canvasWidth / 2 + newX
+  const finalCenterY = canvasHeight / 2 + newY
   const snappedBounds = {
     left: finalCenterX - newWidth / 2,
     right: finalCenterX + newWidth / 2,
     top: finalCenterY - newHeight / 2,
     bottom: finalCenterY + newHeight / 2,
-  };
+  }
 
   // Check if edges align with snap points for visual feedback
   for (const snapPoint of snapPoints.vertical) {
     if (Math.abs(snappedBounds.left - snapPoint.pos) < edgeTolerance) {
-      snapLines.push({ type: 'vertical', position: snapPoint.pos, label: snapPoint.label });
+      snapLines.push({ type: 'vertical', position: snapPoint.pos, label: snapPoint.label })
     }
     if (Math.abs(snappedBounds.right - snapPoint.pos) < edgeTolerance) {
-      snapLines.push({ type: 'vertical', position: snapPoint.pos, label: snapPoint.label });
+      snapLines.push({ type: 'vertical', position: snapPoint.pos, label: snapPoint.label })
     }
   }
 
   for (const snapPoint of snapPoints.horizontal) {
     if (Math.abs(snappedBounds.top - snapPoint.pos) < edgeTolerance) {
-      snapLines.push({ type: 'horizontal', position: snapPoint.pos, label: snapPoint.label });
+      snapLines.push({ type: 'horizontal', position: snapPoint.pos, label: snapPoint.label })
     }
     if (Math.abs(snappedBounds.bottom - snapPoint.pos) < edgeTolerance) {
-      snapLines.push({ type: 'horizontal', position: snapPoint.pos, label: snapPoint.label });
+      snapLines.push({ type: 'horizontal', position: snapPoint.pos, label: snapPoint.label })
     }
   }
 
   // Round to integers
-  let finalWidth = Math.round(Math.max(20, newWidth));
-  let finalHeight = Math.round(Math.max(20, newHeight));
-  let finalX = Math.round(newX);
-  let finalY = Math.round(newY);
+  let finalWidth = Math.round(Math.max(20, newWidth))
+  let finalHeight = Math.round(Math.max(20, newHeight))
+  let finalX = Math.round(newX)
+  let finalY = Math.round(newY)
 
   // Final check: force exact canvas dimensions if very close
   // This catches edge cases from floating point calculations
-  const finalTolerance = 5;
+  const finalTolerance = 5
   if (Math.abs(finalWidth - canvasWidth) <= finalTolerance) {
-    finalWidth = canvasWidth;
-    finalX = 0;
+    finalWidth = canvasWidth
+    finalX = 0
   }
   if (Math.abs(finalHeight - canvasHeight) <= finalTolerance) {
-    finalHeight = canvasHeight;
-    finalY = 0;
+    finalHeight = canvasHeight
+    finalY = 0
   }
 
   const snappedTransform: Transform = {
@@ -502,12 +505,12 @@ export function applyScaleSnapping(
     y: finalY,
     width: finalWidth,
     height: finalHeight,
-  };
+  }
 
   return {
     transform: snappedTransform,
     snapLines,
-  };
+  }
 }
 
 /**
@@ -518,7 +521,7 @@ export function applyScaleSnapping(
 function groupBoundsToVirtualTransform(
   bounds: BoundingBox,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ): Transform {
   return {
     x: (bounds.left + bounds.right) / 2 - canvasWidth / 2,
@@ -527,7 +530,7 @@ function groupBoundsToVirtualTransform(
     height: bounds.height,
     rotation: 0,
     opacity: 1,
-  };
+  }
 }
 
 /**
@@ -542,9 +545,9 @@ export function applyGroupTranslationSnapping(
   canvasHeight: number,
   currentSnapLines: SnapLine[] = [],
   canvasScale: number = 1,
-  otherItemBounds: BoundingBox[] = []
+  otherItemBounds: BoundingBox[] = [],
 ): { deltaX: number; deltaY: number; snapLines: SnapLine[] } {
-  const virtual = groupBoundsToVirtualTransform(postTranslateBounds, canvasWidth, canvasHeight);
+  const virtual = groupBoundsToVirtualTransform(postTranslateBounds, canvasWidth, canvasHeight)
   const { transform: snapped, snapLines } = applySnapping(
     virtual,
     canvasWidth,
@@ -552,13 +555,13 @@ export function applyGroupTranslationSnapping(
     currentSnapLines,
     0,
     canvasScale,
-    otherItemBounds
-  );
+    otherItemBounds,
+  )
   return {
     deltaX: snapped.x - virtual.x,
     deltaY: snapped.y - virtual.y,
     snapLines,
-  };
+  }
 }
 
 /**
@@ -576,7 +579,7 @@ export function applyGroupScaleSnapping(
   canvasWidth: number,
   canvasHeight: number,
   currentSnapLines: SnapLine[] = [],
-  canvasScale: number = 1
+  canvasScale: number = 1,
 ): { scaleFactor: number; snapLines: SnapLine[] } {
   const virtual: Transform = {
     x: groupCenter.x - canvasWidth / 2,
@@ -585,23 +588,23 @@ export function applyGroupScaleSnapping(
     height: postScaleBounds.height,
     rotation: 0,
     opacity: 1,
-  };
+  }
   const { transform: snapped, snapLines } = applyScaleSnapping(
     virtual,
     canvasWidth,
     canvasHeight,
     currentSnapLines,
     0,
-    canvasScale
-  );
+    canvasScale,
+  )
 
   // Derive a single uniform scale factor from whichever axis gives the
   // most meaningful relative change. Both axes should be close since
   // applyScaleSnapping maintains aspect ratio for the virtual bounds.
-  const widthRatio = originalWidth > 0 ? snapped.width / originalWidth : 1;
-  const heightRatio = originalHeight > 0 ? snapped.height / originalHeight : 1;
+  const widthRatio = originalWidth > 0 ? snapped.width / originalWidth : 1
+  const heightRatio = originalHeight > 0 ? snapped.height / originalHeight : 1
   const scaleFactor =
-    Math.abs(widthRatio - 1) >= Math.abs(heightRatio - 1) ? widthRatio : heightRatio;
+    Math.abs(widthRatio - 1) >= Math.abs(heightRatio - 1) ? widthRatio : heightRatio
 
-  return { scaleFactor, snapLines };
+  return { scaleFactor, snapLines }
 }

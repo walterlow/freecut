@@ -1,15 +1,15 @@
-﻿import { memo } from 'react';
-import { cn } from '@/shared/ui/cn';
+import { memo } from 'react'
+import { cn } from '@/shared/ui/cn'
 
 interface JoinIndicatorsProps {
-  hasJoinableLeft: boolean;
-  hasJoinableRight: boolean;
-  trackLocked: boolean;
-  dragAffectsJoin: { left: boolean; right: boolean };
-  hoveredEdge: 'start' | 'end' | null;
-  isTrimming: boolean;
-  isStretching: boolean;
-  isBeingDragged: boolean;
+  hasJoinableLeft: boolean
+  hasJoinableRight: boolean
+  trackLocked: boolean
+  dragAffectsJoin: { left: boolean; right: boolean }
+  hoveredEdge: 'start' | 'end' | null
+  isTrimming: boolean
+  isStretching: boolean
+  isBeingDragged: boolean
 }
 
 /**
@@ -28,45 +28,47 @@ export const JoinIndicators = memo(function JoinIndicators({
 }: JoinIndicatorsProps) {
   // Hide join indicators when this item is being dragged (anchor or follower)
   // This ensures indicators don't show when moving to a different track
-  const showLeft = hasJoinableLeft &&
+  const showLeft =
+    hasJoinableLeft &&
     !trackLocked &&
     !dragAffectsJoin.left &&
     !isBeingDragged &&
     hoveredEdge !== 'start' &&
     !isTrimming &&
-    !isStretching;
+    !isStretching
 
-  const showRight = hasJoinableRight &&
+  const showRight =
+    hasJoinableRight &&
     !trackLocked &&
     !dragAffectsJoin.right &&
     !isBeingDragged &&
     hoveredEdge !== 'end' &&
     !isTrimming &&
-    !isStretching;
+    !isStretching
 
   const joinIndicatorStyle = {
     backgroundColor: 'var(--color-timeline-join)',
     boxShadow: '0 0 3px 0 var(--color-timeline-join)',
-  } as const;
+  } as const
 
   return (
     <>
       <div
         className={cn(
-          "absolute left-0 top-0 bottom-0 w-px pointer-events-none transition-opacity duration-75",
-          showLeft ? "opacity-100" : "opacity-0"
+          'absolute left-0 top-0 bottom-0 w-px pointer-events-none transition-opacity duration-75',
+          showLeft ? 'opacity-100' : 'opacity-0',
         )}
         style={joinIndicatorStyle}
         title="可与前一个片段拼接（J）"
       />
       <div
         className={cn(
-          "absolute right-0 top-0 bottom-0 w-px pointer-events-none transition-opacity duration-75",
-          showRight ? "opacity-100" : "opacity-0"
+          'absolute right-0 top-0 bottom-0 w-px pointer-events-none transition-opacity duration-75',
+          showRight ? 'opacity-100' : 'opacity-0',
         )}
         style={joinIndicatorStyle}
         title="可与后一个片段拼接（J）"
       />
     </>
-  );
-});
+  )
+})

@@ -1,7 +1,7 @@
-import { memo } from 'react';
-import { Eye, MessageSquareText, Palette, Sparkles, Type } from 'lucide-react';
-import { cn } from '@/shared/ui/cn';
-import type { SceneMatchSignals } from '../utils/rank';
+import { memo } from 'react'
+import { Eye, MessageSquareText, Palette, Sparkles, Type } from 'lucide-react'
+import { cn } from '@/shared/ui/cn'
+import type { SceneMatchSignals } from '../utils/rank'
 
 /**
  * all-MiniLM-L6-v2 and CLIP cosines both compress heavily — a 0.38 text
@@ -14,28 +14,34 @@ import type { SceneMatchSignals } from '../utils/rank';
  * text hit actually looks full.
  */
 
-const TEXT_TIER_STRONG = 0.5;
-const TEXT_TIER_GOOD = 0.4;
-const TEXT_TIER_FAIR = 0.3;
+const TEXT_TIER_STRONG = 0.5
+const TEXT_TIER_GOOD = 0.4
+const TEXT_TIER_FAIR = 0.3
 
-const IMAGE_TIER_STRONG = 0.3;
-const IMAGE_TIER_GOOD = 0.25;
-const IMAGE_TIER_FAIR = 0.22;
+const IMAGE_TIER_STRONG = 0.3
+const IMAGE_TIER_GOOD = 0.25
+const IMAGE_TIER_FAIR = 0.22
 
-type Tier = 'strong' | 'good' | 'fair';
+type Tier = 'strong' | 'good' | 'fair'
 
-function scoreTier(score: number, thresholds: { strong: number; good: number; fair: number }): Tier | null {
-  if (score >= thresholds.strong) return 'strong';
-  if (score >= thresholds.good) return 'good';
-  if (score >= thresholds.fair) return 'fair';
-  return null;
+function scoreTier(
+  score: number,
+  thresholds: { strong: number; good: number; fair: number },
+): Tier | null {
+  if (score >= thresholds.strong) return 'strong'
+  if (score >= thresholds.good) return 'good'
+  if (score >= thresholds.fair) return 'fair'
+  return null
 }
 
 function tierLabel(tier: Tier): string {
   switch (tier) {
-    case 'strong': return 'Strong';
-    case 'good': return 'Good';
-    case 'fair': return 'Fair';
+    case 'strong':
+      return 'Strong'
+    case 'good':
+      return 'Good'
+    case 'fair':
+      return 'Fair'
   }
 }
 
@@ -47,16 +53,16 @@ function tierLabel(tier: Tier): string {
  * matching the intuition that it's a solid but not perfect match.
  */
 function calibratedFraction(score: number, floor: number, ceiling: number): number {
-  if (ceiling <= floor) return 0;
-  return Math.max(0, Math.min(1, (score - floor) / (ceiling - floor)));
+  if (ceiling <= floor) return 0
+  return Math.max(0, Math.min(1, (score - floor) / (ceiling - floor)))
 }
 
 function textFraction(score: number): number {
-  return calibratedFraction(score, TEXT_TIER_FAIR, 0.6);
+  return calibratedFraction(score, TEXT_TIER_FAIR, 0.6)
 }
 
 function imageFraction(score: number): number {
-  return calibratedFraction(score, IMAGE_TIER_FAIR, 0.35);
+  return calibratedFraction(score, IMAGE_TIER_FAIR, 0.35)
 }
 
 /**
@@ -77,11 +83,11 @@ function imageFraction(score: number): number {
  */
 
 interface SceneMatchBadgesProps {
-  signals: SceneMatchSignals;
-  score: number;
+  signals: SceneMatchSignals
+  score: number
   /** `true` for the first scene in the list — earns a "Top" label. */
-  isTop?: boolean;
-  className?: string;
+  isTop?: boolean
+  className?: string
 }
 
 export const SceneMatchBadges = memo(function SceneMatchBadges({
@@ -90,7 +96,7 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
   isTop,
   className,
 }: SceneMatchBadgesProps) {
-  const chips: React.ReactNode[] = [];
+  const chips: React.ReactNode[] = []
 
   if (signals.ranker === 'keyword' && signals.keywordMatched) {
     chips.push(
@@ -101,18 +107,28 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
         label="Keyword"
         hint={`Keyword match · cosine ${score.toFixed(2)}`}
       />,
-    );
+    )
   }
 
   if (signals.ranker === 'semantic') {
-    const textScore = signals.textScore;
-    const imageScore = signals.imageScore;
-    const textTier = typeof textScore === 'number'
-      ? scoreTier(textScore, { strong: TEXT_TIER_STRONG, good: TEXT_TIER_GOOD, fair: TEXT_TIER_FAIR })
-      : null;
-    const imageTier = typeof imageScore === 'number'
-      ? scoreTier(imageScore, { strong: IMAGE_TIER_STRONG, good: IMAGE_TIER_GOOD, fair: IMAGE_TIER_FAIR })
-      : null;
+    const textScore = signals.textScore
+    const imageScore = signals.imageScore
+    const textTier =
+      typeof textScore === 'number'
+        ? scoreTier(textScore, {
+            strong: TEXT_TIER_STRONG,
+            good: TEXT_TIER_GOOD,
+            fair: TEXT_TIER_FAIR,
+          })
+        : null
+    const imageTier =
+      typeof imageScore === 'number'
+        ? scoreTier(imageScore, {
+            strong: IMAGE_TIER_STRONG,
+            good: IMAGE_TIER_GOOD,
+            fair: IMAGE_TIER_FAIR,
+          })
+        : null
 
     if (textTier) {
       chips.push(
@@ -123,7 +139,7 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           label={`Meaning · ${tierLabel(textTier)}`}
           hint={`Text-embedding cosine: ${(textScore ?? 0).toFixed(3)}`}
         />,
-      );
+      )
     }
     if (imageTier) {
       chips.push(
@@ -134,7 +150,7 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           label={`Visual · ${tierLabel(imageTier)}`}
           hint={`CLIP cosine: ${(imageScore ?? 0).toFixed(3)}`}
         />,
-      );
+      )
     }
     if (signals.colorMatch) {
       chips.push(
@@ -145,7 +161,7 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           label={`Color · ${signals.colorMatch}`}
           hint={`Palette match on ${signals.colorMatch} (∆E 2000)`}
         />,
-      );
+      )
     }
     if (typeof signals.paletteDistance === 'number') {
       chips.push(
@@ -156,7 +172,7 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           label={`Palette · ∆E ${signals.paletteDistance.toFixed(1)}`}
           hint="Weighted-mean ∆E 2000 to the reference palette"
         />,
-      );
+      )
     }
 
     if (!textTier && !imageTier && !signals.colorMatch && signals.paletteDistance === undefined) {
@@ -170,11 +186,11 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           label="Below threshold"
           hint={`cosine ${score.toFixed(3)}`}
         />,
-      );
+      )
     }
   }
 
-  if (chips.length === 0 && !isTop) return null;
+  if (chips.length === 0 && !isTop) return null
 
   return (
     <div className={cn('flex flex-wrap items-center gap-1', className)}>
@@ -188,31 +204,31 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
       )}
       {chips}
     </div>
-  );
-});
+  )
+})
 
 interface ChipProps {
-  tone: 'keyword' | 'text' | 'visual' | 'top' | 'palette';
-  icon: React.ReactNode;
-  label: string;
-  hint?: string;
+  tone: 'keyword' | 'text' | 'visual' | 'top' | 'palette'
+  icon: React.ReactNode
+  label: string
+  hint?: string
 }
 
 function Chip({ tone, icon, label, hint }: ChipProps) {
   const cls = (() => {
     switch (tone) {
       case 'keyword':
-        return 'bg-amber-400/15 text-amber-300 border-amber-400/30';
+        return 'bg-amber-400/15 text-amber-300 border-amber-400/30'
       case 'text':
-        return 'bg-sky-400/15 text-sky-300 border-sky-400/30';
+        return 'bg-sky-400/15 text-sky-300 border-sky-400/30'
       case 'visual':
-        return 'bg-purple-400/15 text-purple-300 border-purple-400/30';
+        return 'bg-purple-400/15 text-purple-300 border-purple-400/30'
       case 'palette':
-        return 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30';
+        return 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30'
       case 'top':
-        return 'bg-primary/15 text-primary border-primary/40';
+        return 'bg-primary/15 text-primary border-primary/40'
     }
-  })();
+  })()
 
   return (
     <span
@@ -225,7 +241,7 @@ function Chip({ tone, icon, label, hint }: ChipProps) {
       {icon}
       {label}
     </span>
-  );
+  )
 }
 
 /**
@@ -238,8 +254,8 @@ export const SceneMatchStrength = memo(function SceneMatchStrength({
   signals,
   score,
 }: {
-  signals: SceneMatchSignals;
-  score: number;
+  signals: SceneMatchSignals
+  score: number
 }) {
   if (signals.ranker === 'keyword') {
     return (
@@ -249,18 +265,18 @@ export const SceneMatchStrength = memo(function SceneMatchStrength({
           style={{ width: `${Math.max(20, Math.min(100, score * 100))}%` }}
         />
       </div>
-    );
+    )
   }
 
-  const hasTextScore = typeof signals.textScore === 'number';
-  const hasImageScore = typeof signals.imageScore === 'number';
+  const hasTextScore = typeof signals.textScore === 'number'
+  const hasImageScore = typeof signals.imageScore === 'number'
 
   // Palette-only ranking has neither text nor image cosines — showing
   // two empty bars reads as broken UI, so skip the strength row entirely.
-  if (!hasTextScore && !hasImageScore) return null;
+  if (!hasTextScore && !hasImageScore) return null
 
-  const textPct = hasTextScore ? textFraction(signals.textScore!) : 0;
-  const imagePct = hasImageScore ? imageFraction(signals.imageScore!) : 0;
+  const textPct = hasTextScore ? textFraction(signals.textScore!) : 0
+  const imagePct = hasImageScore ? imageFraction(signals.imageScore!) : 0
 
   return (
     <div className="flex h-0.5 w-full gap-0.5">
@@ -271,5 +287,5 @@ export const SceneMatchStrength = memo(function SceneMatchStrength({
         <div className="h-full bg-purple-400/70" style={{ width: `${imagePct * 100}%` }} />
       </div>
     </div>
-  );
-});
+  )
+})

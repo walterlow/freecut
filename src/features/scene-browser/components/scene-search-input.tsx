@@ -1,16 +1,16 @@
-import { useEffect, useRef } from 'react';
-import { Check, ChevronDown, Palette, Search, Sparkles, Type, X } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { useEffect, useRef } from 'react'
+import { Check, ChevronDown, Palette, Search, Sparkles, Type, X } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { cn } from '@/shared/ui/cn';
-import { useSettingsStore, type CaptionSearchMode } from '../deps/settings';
-import { useSceneBrowserStore } from '../stores/scene-browser-store';
-import { LibraryPaletteGrid } from './library-palette-grid';
+} from '@/components/ui/dropdown-menu'
+import { cn } from '@/shared/ui/cn'
+import { useSettingsStore, type CaptionSearchMode } from '../deps/settings'
+import { useSceneBrowserStore } from '../stores/scene-browser-store'
+import { LibraryPaletteGrid } from './library-palette-grid'
 
 /**
  * Row-1 toggles: Color mode, and (when not in color mode) the
@@ -20,12 +20,12 @@ import { LibraryPaletteGrid } from './library-palette-grid';
  * actual input surface to a second row.
  */
 export function SceneSearchModeButtons({ compact = false }: { compact?: boolean }) {
-  const colorMode = useSceneBrowserStore((s) => s.colorMode);
-  const setColorMode = useSceneBrowserStore((s) => s.setColorMode);
-  const captionSearchMode = useSettingsStore((s) => s.captionSearchMode);
-  const setSetting = useSettingsStore((s) => s.setSetting);
+  const colorMode = useSceneBrowserStore((s) => s.colorMode)
+  const setColorMode = useSceneBrowserStore((s) => s.setColorMode)
+  const captionSearchMode = useSettingsStore((s) => s.captionSearchMode)
+  const setSetting = useSettingsStore((s) => s.setSetting)
 
-  const semanticActive = captionSearchMode === 'semantic';
+  const semanticActive = captionSearchMode === 'semantic'
 
   return (
     <>
@@ -57,9 +57,7 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
                   : 'border-border bg-secondary text-muted-foreground hover:text-foreground',
               )}
               title={
-                semanticActive
-                  ? 'Semantic search (by meaning)'
-                  : 'Keyword search (exact match)'
+                semanticActive ? 'Semantic search (by meaning)' : 'Keyword search (exact match)'
               }
               aria-label={semanticActive ? 'Semantic search' : 'Keyword search'}
             >
@@ -69,7 +67,9 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem onClick={() => setSetting('captionSearchMode', 'keyword' satisfies CaptionSearchMode)}>
+            <DropdownMenuItem
+              onClick={() => setSetting('captionSearchMode', 'keyword' satisfies CaptionSearchMode)}
+            >
               <Type className="mr-2 h-3 w-3" />
               <div className="flex flex-col">
                 <span>Keyword</span>
@@ -77,7 +77,11 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
               </div>
               {!semanticActive && <Check className="ml-auto h-3 w-3" />}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setSetting('captionSearchMode', 'semantic' satisfies CaptionSearchMode)}>
+            <DropdownMenuItem
+              onClick={() =>
+                setSetting('captionSearchMode', 'semantic' satisfies CaptionSearchMode)
+              }
+            >
               <Sparkles className="mr-2 h-3 w-3" />
               <div className="flex flex-col">
                 <span>Semantic</span>
@@ -89,7 +93,7 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
         </DropdownMenu>
       )}
     </>
-  );
+  )
 }
 
 /**
@@ -98,24 +102,24 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
  * row on its own.
  */
 export function SceneSearchField() {
-  const query = useSceneBrowserStore((s) => s.query);
-  const setQuery = useSceneBrowserStore((s) => s.setQuery);
-  const focusNonce = useSceneBrowserStore((s) => s.focusNonce);
-  const reference = useSceneBrowserStore((s) => s.reference);
-  const setReference = useSceneBrowserStore((s) => s.setReference);
-  const colorMode = useSceneBrowserStore((s) => s.colorMode);
-  const scope = useSceneBrowserStore((s) => s.scope);
-  const captionSearchMode = useSettingsStore((s) => s.captionSearchMode);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const query = useSceneBrowserStore((s) => s.query)
+  const setQuery = useSceneBrowserStore((s) => s.setQuery)
+  const focusNonce = useSceneBrowserStore((s) => s.focusNonce)
+  const reference = useSceneBrowserStore((s) => s.reference)
+  const setReference = useSceneBrowserStore((s) => s.setReference)
+  const colorMode = useSceneBrowserStore((s) => s.colorMode)
+  const scope = useSceneBrowserStore((s) => s.scope)
+  const captionSearchMode = useSettingsStore((s) => s.captionSearchMode)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (focusNonce > 0) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
+      inputRef.current?.focus()
+      inputRef.current?.select()
     }
-  }, [focusNonce]);
+  }, [focusNonce])
 
-  const semanticActive = captionSearchMode === 'semantic';
+  const semanticActive = captionSearchMode === 'semantic'
 
   if (colorMode) {
     return (
@@ -135,7 +139,7 @@ export function SceneSearchField() {
           <LibraryPaletteGrid scope={scope} />
         )}
       </div>
-    );
+    )
   }
 
   return (
@@ -182,5 +186,5 @@ export function SceneSearchField() {
         </button>
       )}
     </div>
-  );
+  )
 }

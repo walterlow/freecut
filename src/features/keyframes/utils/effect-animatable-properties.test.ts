@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { buildEffectAnimatableProperty, type ItemKeyframes } from '@/types/keyframe';
-import type { TimelineItem } from '@/types/timeline';
-import type { ItemEffect } from '@/types/effects';
+import { describe, expect, it } from 'vite-plus/test'
+import { buildEffectAnimatableProperty, type ItemKeyframes } from '@/types/keyframe'
+import type { TimelineItem } from '@/types/timeline'
+import type { ItemEffect } from '@/types/effects'
 import {
   getAnimatableEffectPropertiesForItem,
   getResolvedAnimatedEffectParamValue,
   resolveAnimatedGpuEffects,
-} from './effect-animatable-properties';
+} from './effect-animatable-properties'
 
 function createVideoItem(effectEntry: ItemEffect): TimelineItem {
   return {
@@ -18,7 +18,7 @@ function createVideoItem(effectEntry: ItemEffect): TimelineItem {
     label: 'Clip',
     src: 'clip.mp4',
     effects: [effectEntry],
-  };
+  }
 }
 
 describe('effect animatable properties', () => {
@@ -38,13 +38,13 @@ describe('effect animatable properties', () => {
           offsetY: 0,
         },
       },
-    });
+    })
 
     expect(getAnimatableEffectPropertiesForItem(ditherItem)).toEqual([
       buildEffectAnimatableProperty('gpu-dither', 'effect-1', 'cellSize'),
       buildEffectAnimatableProperty('gpu-dither', 'effect-1', 'angle'),
-    ]);
-  });
+    ])
+  })
 
   it('does not resolve hidden params while their branch is inactive', () => {
     const effectEntry: ItemEffect = {
@@ -58,8 +58,8 @@ describe('effect animatable properties', () => {
           colorSaturation: 100,
         },
       },
-    };
-    const property = buildEffectAnimatableProperty('gpu-ascii', 'effect-1', 'colorSaturation');
+    }
+    const property = buildEffectAnimatableProperty('gpu-ascii', 'effect-1', 'colorSaturation')
     const itemKeyframes: ItemKeyframes = {
       itemId: 'item-1',
       properties: [
@@ -71,15 +71,17 @@ describe('effect animatable properties', () => {
           ],
         },
       ],
-    };
-
-    expect(getResolvedAnimatedEffectParamValue(effectEntry, itemKeyframes, 5, 'colorSaturation')).toBe(100);
-
-    const resolved = resolveAnimatedGpuEffects([effectEntry], itemKeyframes, 5);
-    expect(resolved?.[0]?.effect.type).toBe('gpu-effect');
-    if (resolved?.[0]?.effect.type !== 'gpu-effect') {
-      throw new Error('Expected gpu effect');
     }
-    expect(resolved[0].effect.params.colorSaturation).toBe(100);
-  });
-});
+
+    expect(
+      getResolvedAnimatedEffectParamValue(effectEntry, itemKeyframes, 5, 'colorSaturation'),
+    ).toBe(100)
+
+    const resolved = resolveAnimatedGpuEffects([effectEntry], itemKeyframes, 5)
+    expect(resolved?.[0]?.effect.type).toBe('gpu-effect')
+    if (resolved?.[0]?.effect.type !== 'gpu-effect') {
+      throw new Error('Expected gpu effect')
+    }
+    expect(resolved[0].effect.params.colorSaturation).toBe(100)
+  })
+})

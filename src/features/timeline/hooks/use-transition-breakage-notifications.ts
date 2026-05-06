@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
-import { toast } from 'sonner';
-import { onDomainEvent } from '@/shared/events/domain-events';
-import type { TransitionBreakage } from '@/types/transition';
+import { useEffect } from 'react'
+import { toast } from 'sonner'
+import { onDomainEvent } from '@/shared/events/domain-events'
+import type { TransitionBreakage } from '@/types/transition'
 
 /**
  * Hook that subscribes to transition breakage events and shows notifications
@@ -12,10 +12,10 @@ import type { TransitionBreakage } from '@/types/transition';
 export function useTransitionBreakageNotifications() {
   useEffect(() => {
     return onDomainEvent('timeline.transitionBreakagesDetected', ({ breakages }) => {
-      if (breakages.length === 0) return;
-      showBreakageNotification(breakages);
-    });
-  }, []);
+      if (breakages.length === 0) return
+      showBreakageNotification(breakages)
+    })
+  }, [])
 }
 
 /**
@@ -23,11 +23,9 @@ export function useTransitionBreakageNotifications() {
  */
 function showBreakageNotification(breakages: TransitionBreakage[]) {
   if (breakages.length === 1) {
-    const breakage = breakages[0]!;
-    toast.warning(breakage.message);
+    const breakage = breakages[0]!
+    toast.warning(breakage.message)
   } else {
-    toast.warning(
-      `${breakages.length} transitions removed due to clip changes`
-    );
+    toast.warning(`${breakages.length} transitions removed due to clip changes`)
   }
 }

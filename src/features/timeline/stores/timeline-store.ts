@@ -15,7 +15,7 @@
  */
 
 // Main facade hook - maintains identical API to previous implementation
-export { useTimelineStore } from './timeline-store-facade';
+export { useTimelineStore } from './timeline-store-facade'
 
 // Re-export all actions for direct use
-export * from './timeline-actions';
+export * from './timeline-actions'

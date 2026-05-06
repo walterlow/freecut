@@ -18,33 +18,26 @@
  * project ids into the media-scoped helpers below.
  */
 
-import type { ThumbnailData } from '@/types/storage';
-import { createLogger } from '@/shared/logging/logger';
+import type { ThumbnailData } from '@/types/storage'
+import { createLogger } from '@/shared/logging/logger'
 
-import { requireWorkspaceRoot } from './root';
-import {
-  readBlob,
-  removeEntry,
-  writeBlob,
-} from './fs-primitives';
-import {
-  mediaThumbnailPath,
-  projectThumbnailPath,
-} from './paths';
-import { blobToArrayBuffer } from './blob-utils';
+import { requireWorkspaceRoot } from './root'
+import { readBlob, removeEntry, writeBlob } from './fs-primitives'
+import { mediaThumbnailPath, projectThumbnailPath } from './paths'
+import { blobToArrayBuffer } from './blob-utils'
 
-const logger = createLogger('WorkspaceFS:Thumbnails');
+const logger = createLogger('WorkspaceFS:Thumbnails')
 
 /* ────────────────────────────── Public API ───────────────────────────── */
 
 export async function saveThumbnail(thumbnail: ThumbnailData): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    const bytes = new Uint8Array(await blobToArrayBuffer(thumbnail.blob));
-    await writeBlob(root, mediaThumbnailPath(thumbnail.mediaId), bytes);
+    const bytes = new Uint8Array(await blobToArrayBuffer(thumbnail.blob))
+    await writeBlob(root, mediaThumbnailPath(thumbnail.mediaId), bytes)
   } catch (error) {
-    logger.error('saveThumbnail failed', error);
-    throw new Error('Failed to save thumbnail', { cause: error });
+    logger.error('saveThumbnail failed', error)
+    throw new Error('Failed to save thumbnail', { cause: error })
   }
 }
 
@@ -54,16 +47,14 @@ export async function saveThumbnail(thumbnail: ThumbnailData): Promise<void> {
  * `getThumbnailByMediaId`.
  */
 export async function getThumbnail(id: string): Promise<ThumbnailData | undefined> {
-  return getThumbnailByMediaId(id);
+  return getThumbnailByMediaId(id)
 }
 
-export async function getThumbnailByMediaId(
-  mediaId: string,
-): Promise<ThumbnailData | undefined> {
-  const root = requireWorkspaceRoot();
+export async function getThumbnailByMediaId(mediaId: string): Promise<ThumbnailData | undefined> {
+  const root = requireWorkspaceRoot()
   try {
-    const blob = await readBlob(root, mediaThumbnailPath(mediaId));
-    if (!blob) return undefined;
+    const blob = await readBlob(root, mediaThumbnailPath(mediaId))
+    if (!blob) return undefined
     return {
       id: mediaId,
       mediaId,
@@ -71,55 +62,52 @@ export async function getThumbnailByMediaId(
       timestamp: 0,
       width: 0,
       height: 0,
-    };
+    }
   } catch (error) {
-    logger.error(`getThumbnailByMediaId(${mediaId}) failed`, error);
-    return undefined;
+    logger.error(`getThumbnailByMediaId(${mediaId}) failed`, error)
+    return undefined
   }
 }
 
 export async function deleteThumbnailsByMediaId(mediaId: string): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    await removeEntry(root, mediaThumbnailPath(mediaId));
+    await removeEntry(root, mediaThumbnailPath(mediaId))
   } catch (error) {
-    logger.error(`deleteThumbnailsByMediaId(${mediaId}) failed`, error);
-    throw new Error('Failed to delete thumbnails');
+    logger.error(`deleteThumbnailsByMediaId(${mediaId}) failed`, error)
+    throw new Error('Failed to delete thumbnails')
   }
 }
 
 /* ─────────────────────────── Project thumbnails ───────────────────────── */
 
-export async function saveProjectThumbnail(
-  projectId: string,
-  blob: Blob,
-): Promise<void> {
-  const root = requireWorkspaceRoot();
+export async function saveProjectThumbnail(projectId: string, blob: Blob): Promise<void> {
+  const root = requireWorkspaceRoot()
   try {
-    const bytes = new Uint8Array(await blobToArrayBuffer(blob));
-    await writeBlob(root, projectThumbnailPath(projectId), bytes);
+    const bytes = new Uint8Array(await blobToArrayBuffer(blob))
+    await writeBlob(root, projectThumbnailPath(projectId), bytes)
   } catch (error) {
-    logger.error(`saveProjectThumbnail(${projectId}) failed`, error);
-    throw new Error('Failed to save project thumbnail', { cause: error });
+    logger.error(`saveProjectThumbnail(${projectId}) failed`, error)
+    throw new Error('Failed to save project thumbnail', { cause: error })
   }
 }
 
 export async function loadProjectThumbnail(projectId: string): Promise<Blob | undefined> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    const blob = await readBlob(root, projectThumbnailPath(projectId));
-    return blob ?? undefined;
+    const blob = await readBlob(root, projectThumbnailPath(projectId))
+    return blob ?? undefined
   } catch (error) {
-    logger.error(`loadProjectThumbnail(${projectId}) failed`, error);
-    return undefined;
+    logger.error(`loadProjectThumbnail(${projectId}) failed`, error)
+    return undefined
   }
 }
 
 export async function deleteProjectThumbnail(projectId: string): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    await removeEntry(root, projectThumbnailPath(projectId));
+    await removeEntry(root, projectThumbnailPath(projectId))
   } catch (error) {
-    logger.error(`deleteProjectThumbnail(${projectId}) failed`, error);
+    logger.error(`deleteProjectThumbnail(${projectId}) failed`, error)
   }
 }

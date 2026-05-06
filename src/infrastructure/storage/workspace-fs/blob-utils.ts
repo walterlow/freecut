@@ -7,7 +7,7 @@
 
 export async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   if (typeof blob.arrayBuffer === 'function') {
-    return blob.arrayBuffer();
+    return blob.arrayBuffer()
   }
-  return new Response(blob).arrayBuffer();
+  return new Response(blob).arrayBuffer()
 }

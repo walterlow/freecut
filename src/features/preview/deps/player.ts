@@ -3,6 +3,6 @@
  * Preview modules should import player components/hooks/services from here.
  */
 
-export * from './player-core';
-export * from './player-context';
-export * from './player-pool';
+export * from './player-core'
+export * from './player-context'
+export * from './player-pool'

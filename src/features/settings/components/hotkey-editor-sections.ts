@@ -1,14 +1,14 @@
-import type { HotkeyKey } from '@/config/hotkeys';
+import type { HotkeyKey } from '@/config/hotkeys'
 
 export interface HotkeyEditorItem {
-  label: string;
-  keys: readonly HotkeyKey[];
+  label: string
+  keys: readonly HotkeyKey[]
 }
 
 export interface HotkeyEditorSection {
-  title: string;
-  blurb: string;
-  items: readonly HotkeyEditorItem[];
+  title: string
+  blurb: string
+  items: readonly HotkeyEditorItem[]
 }
 
 export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
@@ -38,7 +38,10 @@ export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
       { label: 'Unlink selected clips', keys: ['UNLINK_AUDIO_VIDEO'] },
       { label: 'Toggle linked selection', keys: ['TOGGLE_LINKED_SELECTION'] },
       { label: 'Nudge (1px)', keys: ['NUDGE_LEFT', 'NUDGE_RIGHT', 'NUDGE_UP', 'NUDGE_DOWN'] },
-      { label: 'Nudge (10px)', keys: ['NUDGE_LEFT_LARGE', 'NUDGE_RIGHT_LARGE', 'NUDGE_UP_LARGE', 'NUDGE_DOWN_LARGE'] },
+      {
+        label: 'Nudge (10px)',
+        keys: ['NUDGE_LEFT_LARGE', 'NUDGE_RIGHT_LARGE', 'NUDGE_UP_LARGE', 'NUDGE_DOWN_LARGE'],
+      },
     ],
   },
   {
@@ -117,4 +120,4 @@ export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
       { label: 'Open Scene Browser (search AI captions)', keys: ['OPEN_SCENE_BROWSER'] },
     ],
   },
-] as const;
+] as const

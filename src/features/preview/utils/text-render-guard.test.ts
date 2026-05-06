@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import type { ItemKeyframes } from '@/types/keyframe';
-import type { TimelineTrack } from '@/types/timeline';
-import { shouldPreferPlayerForStyledTextScrub } from './text-render-guard';
+import { describe, expect, it } from 'vite-plus/test'
+import type { ItemKeyframes } from '@/types/keyframe'
+import type { TimelineTrack } from '@/types/timeline'
+import { shouldPreferPlayerForStyledTextScrub } from './text-render-guard'
 
 const BASE_TRACK: TimelineTrack = {
   id: 'track-1',
@@ -13,7 +13,7 @@ const BASE_TRACK: TimelineTrack = {
   solo: false,
   order: 0,
   items: [],
-};
+}
 
 describe('shouldPreferPlayerForStyledTextScrub', () => {
   it('returns true for visible glow text with animation', () => {
@@ -39,7 +39,7 @@ describe('shouldPreferPlayerForStyledTextScrub', () => {
           },
         ],
       },
-    ];
+    ]
     const keyframes: ItemKeyframes[] = [
       {
         itemId: 'text-1',
@@ -53,10 +53,10 @@ describe('shouldPreferPlayerForStyledTextScrub', () => {
           },
         ],
       },
-    ];
+    ]
 
-    expect(shouldPreferPlayerForStyledTextScrub(tracks, keyframes)).toBe(true);
-  });
+    expect(shouldPreferPlayerForStyledTextScrub(tracks, keyframes)).toBe(true)
+  })
 
   it('returns false for styled text without animation', () => {
     const tracks: TimelineTrack[] = [
@@ -81,10 +81,10 @@ describe('shouldPreferPlayerForStyledTextScrub', () => {
           },
         ],
       },
-    ];
+    ]
 
-    expect(shouldPreferPlayerForStyledTextScrub(tracks, [])).toBe(false);
-  });
+    expect(shouldPreferPlayerForStyledTextScrub(tracks, [])).toBe(false)
+  })
 
   it('returns true for visible generated captions even without styling or animation', () => {
     const tracks: TimelineTrack[] = [
@@ -109,10 +109,10 @@ describe('shouldPreferPlayerForStyledTextScrub', () => {
           },
         ],
       },
-    ];
+    ]
 
-    expect(shouldPreferPlayerForStyledTextScrub(tracks, [])).toBe(true);
-  });
+    expect(shouldPreferPlayerForStyledTextScrub(tracks, [])).toBe(true)
+  })
 
   it('ignores hidden tracks', () => {
     const tracks: TimelineTrack[] = [
@@ -138,7 +138,7 @@ describe('shouldPreferPlayerForStyledTextScrub', () => {
           },
         ],
       },
-    ];
+    ]
     const keyframes: ItemKeyframes[] = [
       {
         itemId: 'text-1',
@@ -152,8 +152,8 @@ describe('shouldPreferPlayerForStyledTextScrub', () => {
           },
         ],
       },
-    ];
+    ]
 
-    expect(shouldPreferPlayerForStyledTextScrub(tracks, keyframes)).toBe(false);
-  });
-});
+    expect(shouldPreferPlayerForStyledTextScrub(tracks, keyframes)).toBe(false)
+  })
+})

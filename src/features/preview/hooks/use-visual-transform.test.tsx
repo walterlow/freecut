@@ -1,45 +1,45 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { createJSONStorage } from 'zustand/middleware';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
-import { useTimelineStore } from '@/features/preview/deps/timeline-store';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
-import { useVisualTransforms } from './use-visual-transform';
-import type { TimelineItem } from '@/types/timeline';
+import { act, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it } from 'vite-plus/test'
+import { createJSONStorage } from 'zustand/middleware'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
+import { useTimelineStore } from '@/features/preview/deps/timeline-store'
+import { useGizmoStore } from '@/features/preview/stores/gizmo-store'
+import { useVisualTransforms } from './use-visual-transform'
+import type { TimelineItem } from '@/types/timeline'
 
-const localStorageState = new Map<string, string>();
+const localStorageState = new Map<string, string>()
 const localStorageMock: Storage = {
   get length() {
-    return localStorageState.size;
+    return localStorageState.size
   },
   clear() {
-    localStorageState.clear();
+    localStorageState.clear()
   },
   getItem(key) {
-    return localStorageState.get(key) ?? null;
+    return localStorageState.get(key) ?? null
   },
   key(index) {
-    return Array.from(localStorageState.keys())[index] ?? null;
+    return Array.from(localStorageState.keys())[index] ?? null
   },
   removeItem(key) {
-    localStorageState.delete(key);
+    localStorageState.delete(key)
   },
   setItem(key, value) {
-    localStorageState.set(key, value);
+    localStorageState.set(key, value)
   },
-};
+}
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
   configurable: true,
-});
+})
 
 usePlaybackStore.persist.setOptions({
   storage: createJSONStorage(() => localStorageMock),
-});
+})
 
-const PROJECT_SIZE = { width: 1920, height: 1080 } as const;
+const PROJECT_SIZE = { width: 1920, height: 1080 } as const
 
 const ITEM = {
   id: 'item-1',
@@ -58,7 +58,7 @@ const ITEM = {
     rotation: 0,
     opacity: 1,
   },
-} as unknown as TimelineItem;
+} as unknown as TimelineItem
 
 const WRAPPED_TEXT_ITEM = {
   ...ITEM,
@@ -74,27 +74,38 @@ const WRAPPED_TEXT_ITEM = {
     width: 200,
     height: 80,
   },
-} as unknown as TimelineItem;
+} as unknown as TimelineItem
+
+const CORNER_PINNED_WRAPPED_TEXT_ITEM = {
+  ...WRAPPED_TEXT_ITEM,
+  id: 'item-3',
+  cornerPin: {
+    topLeft: [0, 0],
+    topRight: [12, -8],
+    bottomRight: [10, 14],
+    bottomLeft: [-10, 6],
+  },
+} as unknown as TimelineItem
 
 function VisualTransformsProbe({ item = ITEM }: { item?: TimelineItem }) {
-  const transforms = useVisualTransforms([item], PROJECT_SIZE);
-  const resolved = transforms.get(item.id);
+  const transforms = useVisualTransforms([item], PROJECT_SIZE)
+  const resolved = transforms.get(item.id)
   return (
     <div
       data-testid="visual-probe"
       data-x={String(resolved?.x ?? Number.NaN)}
       data-height={String(resolved?.height ?? Number.NaN)}
     />
-  );
+  )
 }
 
 function resetStores() {
   if (typeof localStorage !== 'undefined') {
     if (typeof localStorage.clear === 'function') {
-      localStorage.clear();
+      localStorage.clear()
     } else if (typeof localStorage.removeItem === 'function') {
-      localStorage.removeItem('playback-store');
-      localStorage.removeItem('editor-store');
+      localStorage.removeItem('playback-store')
+      localStorage.removeItem('editor-store')
     }
   }
 
@@ -113,13 +124,13 @@ function resetStores() {
     previewItemId: null,
     useProxy: true,
     previewQuality: 1,
-  });
+  })
   usePreviewBridgeStore.setState({
     displayedFrame: null,
     captureFrame: null,
     captureFrameImageData: null,
     captureCanvasSource: null,
-  });
+  })
 
   useTimelineStore.setState({
     keyframes: [
@@ -137,7 +148,7 @@ function resetStores() {
         ],
       },
     ],
-  });
+  })
 
   useGizmoStore.setState({
     activeGizmo: null,
@@ -145,63 +156,73 @@ function resetStores() {
     preview: null,
     snapLines: [],
     canvasBackgroundPreview: null,
-  });
+  })
 }
 
 describe('useVisualTransforms skimming frame resolution', () => {
   beforeEach(() => {
-    resetStores();
-  });
+    resetStores()
+  })
 
   it('uses previewFrame while paused', async () => {
-    render(<VisualTransformsProbe />);
+    render(<VisualTransformsProbe />)
 
     await waitFor(() => {
-      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '110');
-    });
+      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '110')
+    })
 
     act(() => {
-      usePlaybackStore.getState().setPreviewFrame(20);
-    });
+      usePlaybackStore.getState().setPreviewFrame(20)
+    })
 
     await waitFor(() => {
-      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '220');
-    });
-  });
+      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '220')
+    })
+  })
 
   it('ignores previewFrame while playing', async () => {
-    render(<VisualTransformsProbe />);
+    render(<VisualTransformsProbe />)
 
     act(() => {
-      const playback = usePlaybackStore.getState();
-      playback.setPreviewFrame(20);
-      playback.play();
-    });
+      const playback = usePlaybackStore.getState()
+      playback.setPreviewFrame(20)
+      playback.play()
+    })
 
     await waitFor(() => {
-      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '110');
-    });
-  });
+      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '110')
+    })
+  })
 
   it('falls back to currentFrame when previewFrame is stale', async () => {
-    render(<VisualTransformsProbe />);
+    render(<VisualTransformsProbe />)
 
     act(() => {
-      const playback = usePlaybackStore.getState();
-      playback.setPreviewFrame(20);
-      playback.setCurrentFrame(30);
-    });
+      const playback = usePlaybackStore.getState()
+      playback.setPreviewFrame(20)
+      playback.setCurrentFrame(30)
+    })
 
     await waitFor(() => {
-      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '330');
-    });
-  });
+      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '330')
+    })
+  })
 
   it('keeps expanded text bounds even without a live properties preview', async () => {
-    render(<VisualTransformsProbe item={WRAPPED_TEXT_ITEM} />);
+    render(<VisualTransformsProbe item={WRAPPED_TEXT_ITEM} />)
 
     await waitFor(() => {
-      expect(Number(screen.getByTestId('visual-probe').getAttribute('data-height'))).toBeGreaterThan(80);
-    });
-  });
-});
+      expect(
+        Number(screen.getByTestId('visual-probe').getAttribute('data-height')),
+      ).toBeGreaterThan(80)
+    })
+  })
+
+  it('keeps corner-pinned text bounds anchored to the gizmo box', async () => {
+    render(<VisualTransformsProbe item={CORNER_PINNED_WRAPPED_TEXT_ITEM} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-height', '80')
+    })
+  })
+})

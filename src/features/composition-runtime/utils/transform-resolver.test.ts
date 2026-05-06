@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { toTransformStyle } from './transform-resolver';
+import { describe, expect, it } from 'vite-plus/test'
+import { toTransformStyle } from './transform-resolver'
 
 describe('toTransformStyle', () => {
   it('includes horizontal flip in the CSS transform', () => {
@@ -17,11 +17,11 @@ describe('toTransformStyle', () => {
       },
       { width: 1920, height: 1080, fps: 30 },
       { flipHorizontal: true },
-    );
+    )
 
-    expect(style.transform).toBe('rotate(45deg) scale(-1, 1)');
-    expect(style.transformOrigin).toBe('160px 90px');
-  });
+    expect(style.transform).toBe('rotate(45deg) scale(-1, 1)')
+    expect(style.transformOrigin).toBe('160px 90px')
+  })
 
   it('supports vertical-only flips without rotation', () => {
     const style = toTransformStyle(
@@ -38,10 +38,10 @@ describe('toTransformStyle', () => {
       },
       { width: 1920, height: 1080, fps: 30 },
       { flipVertical: true },
-    );
+    )
 
-    expect(style.transform).toBe('scale(1, -1)');
-  });
+    expect(style.transform).toBe('scale(1, -1)')
+  })
 
   it('uses explicit anchor values for transform origin', () => {
     const style = toTransformStyle(
@@ -57,8 +57,8 @@ describe('toTransformStyle', () => {
         cornerRadius: 0,
       },
       { width: 1920, height: 1080, fps: 30 },
-    );
+    )
 
-    expect(style.transformOrigin).toBe('24px 36px');
-  });
-});
+    expect(style.transformOrigin).toBe('24px 36px')
+  })
+})

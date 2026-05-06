@@ -3,8 +3,4 @@
  * Editor modules should import lazy cache helpers from here.
  */
 
-export {
-  importGifFrameCache,
-  importFilmstripCache,
-  importWaveformCache,
-} from './timeline-contract';
+export { importGifFrameCache, importFilmstripCache, importWaveformCache } from './timeline-contract'

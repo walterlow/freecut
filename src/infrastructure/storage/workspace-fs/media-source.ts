@@ -14,17 +14,13 @@
  * on first read, so existing media converges naturally.
  */
 
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger } from '@/shared/logging/logger'
 
-import { requireWorkspaceRoot } from './root';
-import {
-  listDirectory,
-  readBlob,
-  writeBlob,
-} from './fs-primitives';
-import { mediaDir, mediaSourceByFileName } from './paths';
+import { requireWorkspaceRoot } from './root'
+import { listDirectory, readBlob, writeBlob } from './fs-primitives'
+import { mediaDir, mediaSourceByFileName } from './paths'
 
-const logger = createLogger('WorkspaceFS:MediaSource');
+const logger = createLogger('WorkspaceFS:MediaSource')
 
 /** Reserved media/{id}/* filenames that are NOT the source blob. */
 const NON_SOURCE_NAMES = new Set([
@@ -33,7 +29,7 @@ const NON_SOURCE_NAMES = new Set([
   'thumbnail.meta.json',
   'source.link.json',
   'cache',
-]);
+])
 
 /**
  * Locate the source file for a media entry by scanning the media dir.
@@ -45,13 +41,13 @@ async function findSourceSegments(
   root: FileSystemDirectoryHandle,
   mediaId: string,
 ): Promise<string[] | null> {
-  const entries = await listDirectory(root, mediaDir(mediaId));
+  const entries = await listDirectory(root, mediaDir(mediaId))
   for (const entry of entries) {
-    if (entry.kind !== 'file') continue;
-    if (NON_SOURCE_NAMES.has(entry.name)) continue;
-    return [...mediaDir(mediaId), entry.name];
+    if (entry.kind !== 'file') continue
+    if (NON_SOURCE_NAMES.has(entry.name)) continue
+    return [...mediaDir(mediaId), entry.name]
   }
-  return null;
+  return null
 }
 
 /**
@@ -60,21 +56,21 @@ async function findSourceSegments(
  * imported on another origin that hasn't been mirrored yet).
  */
 export async function readMediaSource(mediaId: string): Promise<Blob | null> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    const segments = await findSourceSegments(root, mediaId);
-    if (!segments) return null;
-    return await readBlob(root, segments);
+    const segments = await findSourceSegments(root, mediaId)
+    if (!segments) return null
+    return await readBlob(root, segments)
   } catch (error) {
-    logger.warn(`readMediaSource(${mediaId}) failed`, error);
-    return null;
+    logger.warn(`readMediaSource(${mediaId}) failed`, error)
+    return null
   }
 }
 
 export async function hasMediaSource(mediaId: string): Promise<boolean> {
-  const root = requireWorkspaceRoot();
-  const segments = await findSourceSegments(root, mediaId);
-  return segments !== null;
+  const root = requireWorkspaceRoot()
+  const segments = await findSourceSegments(root, mediaId)
+  return segments !== null
 }
 
 /**
@@ -88,24 +84,24 @@ export async function writeMediaSource(
   blob: Blob,
   fileName: string | undefined,
 ): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
     // Already have a source file here (new layout or legacy) — don't write a
     // second one under a different name.
-    if (await findSourceSegments(root, mediaId)) return;
+    if (await findSourceSegments(root, mediaId)) return
 
-    const path = mediaSourceByFileName(mediaId, fileName ?? 'source.bin');
-    const bytes = new Uint8Array(await blobToArrayBuffer(blob));
-    await writeBlob(root, path, bytes);
+    const path = mediaSourceByFileName(mediaId, fileName ?? 'source.bin')
+    const bytes = new Uint8Array(await blobToArrayBuffer(blob))
+    await writeBlob(root, path, bytes)
     logger.info(
       `Mirrored media source to workspace: ${mediaId} (${path[path.length - 1]}, ${bytes.byteLength} bytes)`,
-    );
+    )
   } catch (error) {
-    logger.warn(`writeMediaSource(${mediaId}) failed`, error);
+    logger.warn(`writeMediaSource(${mediaId}) failed`, error)
   }
 }
 
 async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-  if (typeof blob.arrayBuffer === 'function') return blob.arrayBuffer();
-  return new Response(blob).arrayBuffer();
+  if (typeof blob.arrayBuffer === 'function') return blob.arrayBuffer()
+  return new Response(blob).arrayBuffer()
 }

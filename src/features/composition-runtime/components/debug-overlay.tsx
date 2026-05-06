@@ -1,41 +1,41 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 interface DebugOverlayProps {
   /** Unique identifier for the item */
-  id?: string;
+  id?: string
   /** Timeline start frame of the item */
-  from?: number;
+  from?: number
   /** Playback speed multiplier */
-  speed: number;
+  speed: number
   /** Original trimBefore value (frames) */
-  trimBefore: number;
+  trimBefore: number
   /** Clamped/safe trimBefore value (frames) */
-  safeTrimBefore: number;
+  safeTrimBefore: number
   /** Source start position (frames) */
-  sourceStart?: number;
+  sourceStart?: number
   /** Source end position bound (frames) */
-  sourceEnd?: number;
+  sourceEnd?: number
   /** Effective source end bound used for clamping (frames) */
-  sourceEndBound?: number;
+  sourceEndBound?: number
   /** Total source duration (frames) */
-  sourceDuration: number;
+  sourceDuration: number
   /** Timeline duration (frames) */
-  durationInFrames: number;
+  durationInFrames: number
   /** Source frames needed for playback */
-  sourceFramesNeeded: number;
+  sourceFramesNeeded: number
   /** Source end position needed (frames) */
-  sourceEndPosition: number;
+  sourceEndPosition: number
   /** Source media fps used for source frame conversions */
-  sourceFps?: number;
+  sourceFps?: number
   /** Whether seek position is invalid */
-  isInvalidSeek: boolean;
+  isInvalidSeek: boolean
   /** Whether playback would exceed source */
-  exceedsSource: boolean;
+  exceedsSource: boolean
   /** Frames per second for time calculations */
-  fps?: number;
+  fps?: number
   /** Position of overlay */
-  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 }
 
 /**
@@ -81,42 +81,42 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
 }) => {
   // Debug overlay is only rendered during preview (not during export)
   // so we can always assume preview mode
-  const isPreview = true;
+  const isPreview = true
 
   // Track player container position for portal mode
-  const [containerRect, setContainerRect] = useState<DOMRect | null>(null);
+  const [containerRect, setContainerRect] = useState<DOMRect | null>(null)
 
   useEffect(() => {
-    if (!isPreview) return;
+    if (!isPreview) return
 
-    const container = document.querySelector('[data-player-container]');
-    if (!container) return;
+    const container = document.querySelector('[data-player-container]')
+    if (!container) return
 
     const updateRect = () => {
-      setContainerRect(container.getBoundingClientRect());
-    };
+      setContainerRect(container.getBoundingClientRect())
+    }
 
-    updateRect();
+    updateRect()
 
     // Update on resize/scroll
-    const observer = new ResizeObserver(updateRect);
-    observer.observe(container);
-    window.addEventListener('scroll', updateRect, true);
-    window.addEventListener('resize', updateRect);
+    const observer = new ResizeObserver(updateRect)
+    observer.observe(container)
+    window.addEventListener('scroll', updateRect, true)
+    window.addEventListener('resize', updateRect)
 
     return () => {
-      observer.disconnect();
-      window.removeEventListener('scroll', updateRect, true);
-      window.removeEventListener('resize', updateRect);
-    };
-  }, [isPreview]);
+      observer.disconnect()
+      window.removeEventListener('scroll', updateRect, true)
+      window.removeEventListener('resize', updateRect)
+    }
+  }, [isPreview])
 
   const positionStyles: React.CSSProperties = {
     'top-left': { top: 10, left: 10 },
     'top-right': { top: 10, right: 10 },
     'bottom-left': { bottom: 10, left: 10 },
     'bottom-right': { bottom: 10, right: 10 },
-  }[position];
+  }[position]
 
   const copyToClipboard = useCallback(() => {
     const data = {
@@ -129,9 +129,8 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
       sourceStart: sourceStart ?? 'undefined',
       sourceEnd: sourceEnd ?? 'undefined',
       sourceEndBound: sourceEndBound ?? 'undefined',
-      sourceSpan: sourceStart !== undefined && sourceEnd !== undefined
-        ? sourceEnd - sourceStart
-        : 'unknown',
+      sourceSpan:
+        sourceStart !== undefined && sourceEnd !== undefined ? sourceEnd - sourceStart : 'unknown',
       sourceDuration: sourceDuration || 'NOT SET',
       durationInFrames,
       sourceFramesNeeded,
@@ -141,9 +140,25 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
       srcEndNeeded: `${(sourceEndPosition / sourceFps).toFixed(2)}s`,
       isInvalidSeek,
       exceedsSource,
-    };
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-  }, [id, from, speed, trimBefore, safeTrimBefore, sourceStart, sourceEnd, sourceEndBound, sourceDuration, durationInFrames, sourceFramesNeeded, sourceEndPosition, sourceFps, isInvalidSeek, exceedsSource]);
+    }
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+  }, [
+    id,
+    from,
+    speed,
+    trimBefore,
+    safeTrimBefore,
+    sourceStart,
+    sourceEnd,
+    sourceEndBound,
+    sourceDuration,
+    durationInFrames,
+    sourceFramesNeeded,
+    sourceEndPosition,
+    sourceFps,
+    isInvalidSeek,
+    exceedsSource,
+  ])
 
   // Calculate position for portal mode (anchored to player container bottom-right)
   const portalPositionStyles: React.CSSProperties = containerRect
@@ -156,13 +171,15 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
         position: 'fixed' as const,
         bottom: 10,
         right: 10,
-      };
+      }
 
   const content = (
     <div
       data-debug-overlay
       style={{
-        ...(isPreview ? portalPositionStyles : { position: 'absolute' as const, ...positionStyles }),
+        ...(isPreview
+          ? portalPositionStyles
+          : { position: 'absolute' as const, ...positionStyles }),
         background: 'rgba(0,0,0,0.8)',
         color: '#fff',
         padding: '8px 12px',
@@ -174,12 +191,20 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
         pointerEvents: 'auto',
       }}
     >
-      <div style={{ color: '#0f0', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          color: '#0f0',
+          marginBottom: 4,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         <span>DEBUG: {id?.slice(0, 8) ?? 'unknown'}</span>
         <button
           onClick={(e) => {
-            e.stopPropagation();
-            copyToClipboard();
+            e.stopPropagation()
+            copyToClipboard()
           }}
           onPointerDown={(e) => e.stopPropagation()}
           style={{
@@ -207,7 +232,10 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
       <div>sourceStart: {sourceStart ?? 'undefined'}</div>
       <div>sourceEnd: {sourceEnd ?? 'undefined'}</div>
       <div>sourceEndBound: {sourceEndBound ?? 'undefined'}</div>
-      <div>sourceSpan: {sourceStart !== undefined && sourceEnd !== undefined ? sourceEnd - sourceStart : 'unknown'}</div>
+      <div>
+        sourceSpan:{' '}
+        {sourceStart !== undefined && sourceEnd !== undefined ? sourceEnd - sourceStart : 'unknown'}
+      </div>
       <div>sourceDuration: {sourceDuration || 'NOT SET'}</div>
       <div>sourceFps: {sourceFps.toFixed(3)}</div>
       <div>durationInFrames: {durationInFrames}</div>
@@ -232,13 +260,13 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
         </div>
       )}
     </div>
-  );
+  )
 
   // In preview mode, use portal to escape the player's stacking context
   // This allows the button to be clickable above the GizmoOverlay
   if (isPreview && typeof document !== 'undefined') {
-    return createPortal(content, document.body);
+    return createPortal(content, document.body)
   }
 
-  return content;
-};
+  return content
+}

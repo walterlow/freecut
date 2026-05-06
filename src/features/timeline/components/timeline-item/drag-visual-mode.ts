@@ -1,29 +1,36 @@
-export type TimelineItemGestureMode = 'none' | 'trim' | 'rolling' | 'ripple' | 'stretch' | 'slip' | 'slide';
+export type TimelineItemGestureMode =
+  | 'none'
+  | 'trim'
+  | 'rolling'
+  | 'ripple'
+  | 'stretch'
+  | 'slip'
+  | 'slide'
 
 interface TimelineItemGestureModeParams {
-  isTrimming: boolean;
-  isRollingEdit: boolean;
-  isRippleEdit: boolean;
-  isStretching: boolean;
-  isSlipSlideActive: boolean;
-  slipSlideMode: 'slip' | 'slide' | null;
+  isTrimming: boolean
+  isRollingEdit: boolean
+  isRippleEdit: boolean
+  isStretching: boolean
+  isSlipSlideActive: boolean
+  slipSlideMode: 'slip' | 'slide' | null
 }
 
 interface TimelineItemDragParticipationParams {
-  itemId: string;
+  itemId: string
   dragState: {
-    isDragging: boolean;
-    draggedItemIds: string[];
-    draggedItemIdSet?: Set<string>;
-    isAltDrag?: boolean;
-  } | null;
-  gestureMode: TimelineItemGestureMode;
+    isDragging: boolean
+    draggedItemIds: string[]
+    draggedItemIdSet?: Set<string>
+    isAltDrag?: boolean
+  } | null
+  gestureMode: TimelineItemGestureMode
 }
 
 interface TimelineItemDragOpacityParams {
-  isBeingDragged: boolean;
-  isAltDrag: boolean;
-  gestureMode: TimelineItemGestureMode;
+  isBeingDragged: boolean
+  isAltDrag: boolean
+  gestureMode: TimelineItemGestureMode
 }
 
 export function getTimelineItemGestureMode({
@@ -35,18 +42,18 @@ export function getTimelineItemGestureMode({
   slipSlideMode,
 }: TimelineItemGestureModeParams): TimelineItemGestureMode {
   if (isTrimming) {
-    if (isRollingEdit) return 'rolling';
-    if (isRippleEdit) return 'ripple';
-    return 'trim';
+    if (isRollingEdit) return 'rolling'
+    if (isRippleEdit) return 'ripple'
+    return 'trim'
   }
 
-  if (isStretching) return 'stretch';
+  if (isStretching) return 'stretch'
 
   if (isSlipSlideActive) {
-    return slipSlideMode === 'slide' ? 'slide' : 'slip';
+    return slipSlideMode === 'slide' ? 'slide' : 'slip'
   }
 
-  return 'none';
+  return 'none'
 }
 
 export function getTimelineItemDragParticipation({
@@ -55,14 +62,14 @@ export function getTimelineItemDragParticipation({
   gestureMode,
 }: TimelineItemDragParticipationParams): 0 | 1 | 2 {
   if (
-    gestureMode !== 'none'
-    || !dragState?.isDragging
-    || !(dragState.draggedItemIdSet ?? new Set(dragState.draggedItemIds)).has(itemId)
+    gestureMode !== 'none' ||
+    !dragState?.isDragging ||
+    !(dragState.draggedItemIdSet ?? new Set(dragState.draggedItemIds)).has(itemId)
   ) {
-    return 0;
+    return 0
   }
 
-  return dragState.isAltDrag ? 2 : 1;
+  return dragState.isAltDrag ? 2 : 1
 }
 
 export function shouldDimTimelineItemForDrag({
@@ -70,5 +77,5 @@ export function shouldDimTimelineItemForDrag({
   isAltDrag,
   gestureMode,
 }: TimelineItemDragOpacityParams): boolean {
-  return isBeingDragged && !isAltDrag && gestureMode === 'none';
+  return isBeingDragged && !isAltDrag && gestureMode === 'none'
 }

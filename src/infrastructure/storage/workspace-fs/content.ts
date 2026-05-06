@@ -11,19 +11,15 @@
  * many thousands of entries.
  */
 
-import type { ContentRecord } from '@/types/storage';
-import { createLogger } from '@/shared/logging/logger';
+import type { ContentRecord } from '@/types/storage'
+import { createLogger } from '@/shared/logging/logger'
 
-import { requireWorkspaceRoot } from './root';
-import {
-  readJson,
-  removeEntry,
-  writeJsonAtomic,
-} from './fs-primitives';
-import { contentDir, contentRefsPath } from './paths';
-import { withKeyLock } from './with-key-lock';
+import { requireWorkspaceRoot } from './root'
+import { readJson, removeEntry, writeJsonAtomic } from './fs-primitives'
+import { contentDir, contentRefsPath } from './paths'
+import { withKeyLock } from './with-key-lock'
 
-const logger = createLogger('WorkspaceFS:Content');
+const logger = createLogger('WorkspaceFS:Content')
 
 /**
  * Per-hash serialization for refcount mutations.
@@ -39,61 +35,61 @@ const logger = createLogger('WorkspaceFS:Content');
  * load because hashes are stable.
  */
 function refLockKey(hash: string): string {
-  return `content-refs:${hash}`;
+  return `content-refs:${hash}`
 }
 
 export async function incrementContentRef(hash: string): Promise<number> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
     return await withKeyLock(refLockKey(hash), async () => {
-      const existing = await readJson<ContentRecord>(root, contentRefsPath(hash));
+      const existing = await readJson<ContentRecord>(root, contentRefsPath(hash))
       if (!existing) {
-        throw new Error(`Content not found: ${hash}`);
+        throw new Error(`Content not found: ${hash}`)
       }
       const updated: ContentRecord = {
         ...existing,
         referenceCount: existing.referenceCount + 1,
-      };
-      await writeJsonAtomic(root, contentRefsPath(hash), updated);
-      return updated.referenceCount;
-    });
+      }
+      await writeJsonAtomic(root, contentRefsPath(hash), updated)
+      return updated.referenceCount
+    })
   } catch (error) {
-    logger.error(`incrementContentRef(${hash}) failed`, error);
-    throw error;
+    logger.error(`incrementContentRef(${hash}) failed`, error)
+    throw error
   }
 }
 
 export async function decrementContentRef(hash: string): Promise<number> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
     return await withKeyLock(refLockKey(hash), async () => {
-      const existing = await readJson<ContentRecord>(root, contentRefsPath(hash));
+      const existing = await readJson<ContentRecord>(root, contentRefsPath(hash))
       if (!existing) {
-        throw new Error(`Content not found: ${hash}`);
+        throw new Error(`Content not found: ${hash}`)
       }
       const updated: ContentRecord = {
         ...existing,
         referenceCount: Math.max(0, existing.referenceCount - 1),
-      };
-      await writeJsonAtomic(root, contentRefsPath(hash), updated);
-      return updated.referenceCount;
-    });
+      }
+      await writeJsonAtomic(root, contentRefsPath(hash), updated)
+      return updated.referenceCount
+    })
   } catch (error) {
-    logger.error(`decrementContentRef(${hash}) failed`, error);
-    throw error;
+    logger.error(`decrementContentRef(${hash}) failed`, error)
+    throw error
   }
 }
 
 export async function deleteContent(hash: string): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
     // Serialized under the same key as increment/decrement so a delete
     // cannot interleave with a concurrent refcount mutation.
     await withKeyLock(refLockKey(hash), async () => {
-      await removeEntry(root, contentDir(hash), { recursive: true });
-    });
+      await removeEntry(root, contentDir(hash), { recursive: true })
+    })
   } catch (error) {
-    logger.error(`deleteContent(${hash}) failed`, error);
-    throw new Error(`Failed to delete content: ${hash}`);
+    logger.error(`deleteContent(${hash}) failed`, error)
+    throw new Error(`Failed to delete content: ${hash}`)
   }
 }

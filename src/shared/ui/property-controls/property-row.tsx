@@ -1,30 +1,21 @@
-﻿import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { cn } from '@/shared/ui/cn';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/shared/ui/cn'
 
 interface PropertyRowProps {
-  label: string;
-  children: React.ReactNode;
-  tooltip?: string;
-  className?: string;
+  label: string
+  children: React.ReactNode
+  tooltip?: string
+  className?: string
 }
 
 /**
  * Consistent two-column layout for property controls.
  * Label on left, control on right.
  */
-export function PropertyRow({
-  label,
-  children,
-  tooltip,
-  className,
-}: PropertyRowProps) {
+export function PropertyRow({ label, children, tooltip, className }: PropertyRowProps) {
   const labelContent = (
     <span className="text-xs text-muted-foreground min-w-[56px] text-right">{label}</span>
-  );
+  )
 
   return (
     <div className={cn('flex items-center justify-between gap-2 min-w-0 py-1', className)}>
@@ -40,6 +31,5 @@ export function PropertyRow({
       )}
       <div className="flex-1 min-w-0 flex items-center">{children}</div>
     </div>
-  );
+  )
 }
-

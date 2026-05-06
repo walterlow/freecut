@@ -7,7 +7,7 @@
  *  - `useSceneBrowserStore` — control open/close, query, scope, sort.
  */
 
-export { SceneBrowserPanel } from './components/scene-browser-panel';
-export { useSceneBrowserStore } from './stores/scene-browser-store';
-export type { SceneBrowserSortMode } from './stores/scene-browser-store';
-export { invalidateMediaCaptionThumbnails } from './utils/invalidate';
+export { SceneBrowserPanel } from './components/scene-browser-panel'
+export { useSceneBrowserStore } from './stores/scene-browser-store'
+export type { SceneBrowserSortMode } from './stores/scene-browser-store'
+export { invalidateMediaCaptionThumbnails } from './utils/invalidate'

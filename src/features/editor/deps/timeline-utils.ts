@@ -19,4 +19,4 @@ export {
   timelineToSourceFrames,
   sourceToTimelineFrames,
   linkItems,
-} from './timeline-contract';
+} from './timeline-contract'

@@ -5,7 +5,7 @@
  * and restoring project structure.
  */
 
-import type { Project } from '@/types/project';
+import type { Project } from '@/types/project'
 import {
   ProjectSnapshot,
   SnapshotImportOptions,
@@ -14,28 +14,22 @@ import {
   SnapshotValidationError,
   SnapshotValidationWarning,
   SNAPSHOT_VERSION,
-} from '../types/snapshot';
+} from '../types/snapshot'
 import {
   validateSnapshot,
   formatValidationErrors,
   isVersionCompatible,
-} from '../schemas/project-schema';
-import { verifySnapshotChecksum } from './json-export-service';
-import {
-  createProject,
-  getAllMedia,
-  associateMediaWithProject,
-} from '@/infrastructure/storage';
-import { migrateProject } from '@/core/projects/migrations';
+} from '../schemas/project-schema'
+import { verifySnapshotChecksum } from './json-export-service'
+import { createProject, getAllMedia, associateMediaWithProject } from '@/infrastructure/storage'
+import { migrateProject } from '@/core/projects/migrations'
 
 /**
  * Validate a snapshot without importing
  */
-export async function validateSnapshotData(
-  data: unknown
-): Promise<SnapshotValidationResult> {
-  const errors: SnapshotValidationError[] = [];
-  const warnings: SnapshotValidationWarning[] = [];
+export async function validateSnapshotData(data: unknown): Promise<SnapshotValidationResult> {
+  const errors: SnapshotValidationError[] = []
+  const warnings: SnapshotValidationWarning[] = []
 
   // Check if it's an object
   if (!data || typeof data !== 'object') {
@@ -43,11 +37,11 @@ export async function validateSnapshotData(
       path: '',
       message: '快照必须是有效的 JSON 对象',
       code: 'invalid_type',
-    });
-    return { valid: false, errors, warnings };
+    })
+    return { valid: false, errors, warnings }
   }
 
-  const snapshot = data as Record<string, unknown>;
+  const snapshot = data as Record<string, unknown>
 
   // Check version
   if (typeof snapshot.version !== 'string') {
@@ -55,63 +49,64 @@ export async function validateSnapshotData(
       path: 'version',
       message: '缺少版本字段或版本字段无效',
       code: 'missing_field',
-    });
+    })
   } else if (!isVersionCompatible(snapshot.version)) {
     warnings.push({
       path: 'version',
       message: `快照版本 ${snapshot.version} 可能与当前版本 ${SNAPSHOT_VERSION} 不完全兼容`,
       code: 'version_mismatch',
-    });
+    })
   }
 
   // Run Zod validation
-  const validation = validateSnapshot(data);
+  const validation = validateSnapshot(data)
   if (!validation.success && validation.errors) {
-    const formattedErrors = formatValidationErrors(validation.errors);
+    const formattedErrors = formatValidationErrors(validation.errors)
     for (const msg of formattedErrors) {
       errors.push({
         path: msg.split(':')[0] || '',
         message: msg,
         code: 'schema_mismatch',
-      });
+      })
     }
   }
 
   if (validation.success) {
     try {
-      const validSnapshot = validation.data;
+      const validSnapshot = validation.data
       if (!validSnapshot) {
-        throw new Error('Validation succeeded without snapshot data');
+        throw new Error('Validation succeeded without snapshot data')
       }
-      const migrationResult = migrateProject(validSnapshot.project as Project);
+      const migrationResult = migrateProject(validSnapshot.project as Project)
       if (migrationResult.migrated) {
-        const appliedRange = migrationResult.appliedMigrations.length > 0
-          ? `v${migrationResult.fromVersion} to v${migrationResult.toVersion}`
-          : 'current normalized format';
+        const appliedRange =
+          migrationResult.appliedMigrations.length > 0
+            ? `v${migrationResult.fromVersion} to v${migrationResult.toVersion}`
+            : 'current normalized format'
         warnings.push({
           path: 'project.schemaVersion',
           message: `导入时快照将从 ${appliedRange} 升级`,
           code: 'version_mismatch',
-        });
+        })
       }
     } catch (error) {
       errors.push({
         path: 'project',
         message: `快照迁移失败：${error instanceof Error ? error.message : '未知错误'}`,
         code: 'schema_mismatch',
-      });
+      })
     }
   }
 
   // Verify checksum if present
   if (validation.success && validation.data?.checksum) {
-    const checksumValid = await verifySnapshotChecksum(validation.data as ProjectSnapshot);
+    const checksumValid = await verifySnapshotChecksum(validation.data as ProjectSnapshot)
     if (!checksumValid) {
       warnings.push({
         path: 'checksum',
         message: '快照校验和不匹配，数据可能已被修改',
         code: 'unknown_field',
-      });
+      })
     }
   }
 
@@ -119,7 +114,7 @@ export async function validateSnapshotData(
     valid: errors.length === 0,
     errors,
     warnings,
-  };
+  }
 }
 
 /**
@@ -127,9 +122,9 @@ export async function validateSnapshotData(
  */
 function parseSnapshotJson(jsonString: string): unknown {
   try {
-    return JSON.parse(jsonString);
+    return JSON.parse(jsonString)
   } catch (e) {
-    throw new Error(`Invalid JSON: ${e instanceof Error ? e.message : 'Parse error'}`);
+    throw new Error(`Invalid JSON: ${e instanceof Error ? e.message : 'Parse error'}`)
   }
 }
 
@@ -138,7 +133,7 @@ function parseSnapshotJson(jsonString: string): unknown {
  */
 async function importProjectFromSnapshot(
   snapshot: ProjectSnapshot,
-  options: SnapshotImportOptions = {}
+  options: SnapshotImportOptions = {},
 ): Promise<SnapshotImportResult> {
   const {
     generateNewIds = true,
@@ -146,29 +141,28 @@ async function importProjectFromSnapshot(
     skipValidation = false,
     matchMediaByHash = true,
     matchMediaByName = true,
-  } = options;
+  } = options
 
-  const warnings: string[] = [];
+  const warnings: string[] = []
 
   // Validate if not skipped
   if (!skipValidation) {
-    const validation = await validateSnapshotData(snapshot);
+    const validation = await validateSnapshotData(snapshot)
     if (!validation.valid) {
-      throw new Error(
-        `Invalid snapshot: ${validation.errors.map((e) => e.message).join(', ')}`
-      );
+      throw new Error(`Invalid snapshot: ${validation.errors.map((e) => e.message).join(', ')}`)
     }
-    warnings.push(...validation.warnings.map((w) => w.message));
+    warnings.push(...validation.warnings.map((w) => w.message))
   }
 
   // Prepare project data
-  const migrationResult = migrateProject(snapshot.project as Project);
-  let project: Project = { ...migrationResult.project };
+  const migrationResult = migrateProject(snapshot.project as Project)
+  let project: Project = { ...migrationResult.project }
   if (migrationResult.migrated) {
-    const appliedRange = migrationResult.appliedMigrations.length > 0
-      ? `Migrated project from v${migrationResult.fromVersion} to v${migrationResult.toVersion}`
-      : 'Normalized project to current format';
-    warnings.push(appliedRange);
+    const appliedRange =
+      migrationResult.appliedMigrations.length > 0
+        ? `Migrated project from v${migrationResult.fromVersion} to v${migrationResult.toVersion}`
+        : 'Normalized project to current format'
+    warnings.push(appliedRange)
   }
 
   // Generate new ID if requested
@@ -178,37 +172,37 @@ async function importProjectFromSnapshot(
       id: crypto.randomUUID(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
-    };
+    }
 
     // Generate new IDs for timeline items
     if (project.timeline) {
-      const trackIdMap = new Map<string, string>();
-      const itemIdMap = new Map<string, string>();
+      const trackIdMap = new Map<string, string>()
+      const itemIdMap = new Map<string, string>()
 
       // Remap track IDs
       const newTracks = project.timeline.tracks.map((track) => {
-        const newId = crypto.randomUUID();
-        trackIdMap.set(track.id, newId);
-        return { ...track, id: newId };
-      });
+        const newId = crypto.randomUUID()
+        trackIdMap.set(track.id, newId)
+        return { ...track, id: newId }
+      })
 
       // Remap item IDs and track references
       const newItems = project.timeline.items.map((item) => {
-        const newId = crypto.randomUUID();
-        itemIdMap.set(item.id, newId);
+        const newId = crypto.randomUUID()
+        itemIdMap.set(item.id, newId)
         return {
           ...item,
           id: newId,
           trackId: trackIdMap.get(item.trackId) || item.trackId,
           originId: newId, // Reset originId
-        };
-      });
+        }
+      })
 
       // Remap marker IDs
       const newMarkers = project.timeline.markers?.map((marker) => ({
         ...marker,
         id: crypto.randomUUID(),
-      }));
+      }))
 
       // Remap transition IDs and clip references
       const newTransitions = project.timeline.transitions?.map((transition) => ({
@@ -217,7 +211,7 @@ async function importProjectFromSnapshot(
         trackId: trackIdMap.get(transition.trackId) || transition.trackId,
         leftClipId: itemIdMap.get(transition.leftClipId) || transition.leftClipId,
         rightClipId: itemIdMap.get(transition.rightClipId) || transition.rightClipId,
-      }));
+      }))
 
       // Remap keyframe item references
       const newKeyframes = project.timeline.keyframes?.map((itemKeyframes) => ({
@@ -230,7 +224,7 @@ async function importProjectFromSnapshot(
             id: crypto.randomUUID(),
           })),
         })),
-      }));
+      }))
 
       project.timeline = {
         ...project.timeline,
@@ -239,50 +233,50 @@ async function importProjectFromSnapshot(
         markers: newMarkers,
         transitions: newTransitions,
         keyframes: newKeyframes,
-      };
+      }
     }
   }
 
   // Override name if provided
   if (newProjectName) {
-    project.name = newProjectName;
+    project.name = newProjectName
   }
 
   // Match media references to existing media
-  const matchedMedia: SnapshotImportResult['matchedMedia'] = [];
-  const unmatchedMedia: string[] = [];
+  const matchedMedia: SnapshotImportResult['matchedMedia'] = []
+  const unmatchedMedia: string[] = []
 
   if (snapshot.mediaReferences.length > 0) {
-    const existingMedia = await getAllMedia();
+    const existingMedia = await getAllMedia()
 
     for (const ref of snapshot.mediaReferences) {
-      let matched = false;
+      let matched = false
 
       // Try to match by exact ID first
-      const exactMatch = existingMedia.find((m) => m.id === ref.id);
+      const exactMatch = existingMedia.find((m) => m.id === ref.id)
       if (exactMatch) {
         matchedMedia.push({
           snapshotMediaId: ref.id,
           localMediaId: exactMatch.id,
           matchType: 'exact',
-        });
-        matched = true;
-        continue;
+        })
+        matched = true
+        continue
       }
 
       // Try to match by content hash
       if (matchMediaByHash && ref.contentHash) {
         const hashMatch = existingMedia.find(
-          (m) => m.contentHash && m.contentHash === ref.contentHash
-        );
+          (m) => m.contentHash && m.contentHash === ref.contentHash,
+        )
         if (hashMatch) {
           matchedMedia.push({
             snapshotMediaId: ref.id,
             localMediaId: hashMatch.id,
             matchType: 'hash',
-          });
-          matched = true;
-          continue;
+          })
+          matched = true
+          continue
         }
       }
 
@@ -292,29 +286,27 @@ async function importProjectFromSnapshot(
           (m) =>
             m.fileName === ref.fileName &&
             m.fileSize === ref.fileSize &&
-            m.mimeType === ref.mimeType
-        );
+            m.mimeType === ref.mimeType,
+        )
         if (nameMatch) {
           matchedMedia.push({
             snapshotMediaId: ref.id,
             localMediaId: nameMatch.id,
             matchType: 'name',
-          });
-          matched = true;
-          continue;
+          })
+          matched = true
+          continue
         }
       }
 
       if (!matched) {
-        unmatchedMedia.push(ref.id);
+        unmatchedMedia.push(ref.id)
       }
     }
 
     // Remap media IDs in timeline items
     if (project.timeline && matchedMedia.length > 0) {
-      const mediaIdMap = new Map(
-        matchedMedia.map((m) => [m.snapshotMediaId, m.localMediaId])
-      );
+      const mediaIdMap = new Map(matchedMedia.map((m) => [m.snapshotMediaId, m.localMediaId]))
 
       project.timeline.items = project.timeline.items.map((item) => {
         if (item.mediaId && mediaIdMap.has(item.mediaId)) {
@@ -324,26 +316,24 @@ async function importProjectFromSnapshot(
             // Clear cached URLs so they get regenerated
             src: undefined,
             thumbnailUrl: undefined,
-          };
+          }
         }
-        return item;
-      });
+        return item
+      })
     }
 
     // Add warnings for unmatched media
     if (unmatchedMedia.length > 0) {
-      warnings.push(
-        `${unmatchedMedia.length} media file(s) could not be matched to existing media`
-      );
+      warnings.push(`${unmatchedMedia.length} media file(s) could not be matched to existing media`)
     }
   }
 
   // Save project to database
-  await createProject(project);
+  await createProject(project)
 
   // Associate matched media with project
   for (const match of matchedMedia) {
-    await associateMediaWithProject(project.id, match.localMediaId);
+    await associateMediaWithProject(project.id, match.localMediaId)
   }
 
   return {
@@ -351,7 +341,7 @@ async function importProjectFromSnapshot(
     matchedMedia,
     unmatchedMedia,
     warnings,
-  };
+  }
 }
 
 /**
@@ -359,21 +349,19 @@ async function importProjectFromSnapshot(
  */
 export async function importProjectFromJsonString(
   jsonString: string,
-  options: SnapshotImportOptions = {}
+  options: SnapshotImportOptions = {},
 ): Promise<SnapshotImportResult> {
-  const data = parseSnapshotJson(jsonString);
-  const validation = await validateSnapshotData(data);
+  const data = parseSnapshotJson(jsonString)
+  const validation = await validateSnapshotData(data)
 
   if (!validation.valid) {
-    throw new Error(
-      `Invalid snapshot: ${validation.errors.map((e) => e.message).join(', ')}`
-    );
+    throw new Error(`Invalid snapshot: ${validation.errors.map((e) => e.message).join(', ')}`)
   }
 
   return importProjectFromSnapshot(data as ProjectSnapshot, {
     ...options,
     skipValidation: true, // Already validated
-  });
+  })
 }
 
 /**
@@ -381,66 +369,66 @@ export async function importProjectFromJsonString(
  */
 async function importProjectFromFile(
   file: File,
-  options: SnapshotImportOptions = {}
+  options: SnapshotImportOptions = {},
 ): Promise<SnapshotImportResult> {
-  const text = await file.text();
-  return importProjectFromJsonString(text, options);
+  const text = await file.text()
+  return importProjectFromJsonString(text, options)
 }
 
 /**
  * Read snapshot from clipboard
  */
 async function readSnapshotFromClipboard(): Promise<ProjectSnapshot> {
-  const text = await navigator.clipboard.readText();
-  const data = parseSnapshotJson(text);
-  const validation = await validateSnapshotData(data);
+  const text = await navigator.clipboard.readText()
+  const data = parseSnapshotJson(text)
+  const validation = await validateSnapshotData(data)
 
   if (!validation.valid) {
     throw new Error(
-      `Invalid snapshot in clipboard: ${validation.errors.map((e) => e.message).join(', ')}`
-    );
+      `Invalid snapshot in clipboard: ${validation.errors.map((e) => e.message).join(', ')}`,
+    )
   }
 
-  return data as ProjectSnapshot;
+  return data as ProjectSnapshot
 }
 
 /**
  * Import a project from clipboard
  */
 export async function importProjectFromClipboard(
-  options: SnapshotImportOptions = {}
+  options: SnapshotImportOptions = {},
 ): Promise<SnapshotImportResult> {
-  const snapshot = await readSnapshotFromClipboard();
+  const snapshot = await readSnapshotFromClipboard()
   return importProjectFromSnapshot(snapshot, {
     ...options,
     skipValidation: true, // Already validated
-  });
+  })
 }
 
 /**
  * Show file picker and import snapshot
  */
 export async function showImportFilePicker(
-  options: SnapshotImportOptions = {}
+  options: SnapshotImportOptions = {},
 ): Promise<SnapshotImportResult | null> {
   // Create file input
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json,.freecut.json';
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json,.freecut.json'
 
   return new Promise((resolve) => {
     input.onchange = async () => {
-      const file = input.files?.[0];
+      const file = input.files?.[0]
       if (!file) {
-        resolve(null);
-        return;
+        resolve(null)
+        return
       }
 
-      const result = await importProjectFromFile(file, options);
-      resolve(result);
-    };
+      const result = await importProjectFromFile(file, options)
+      resolve(result)
+    }
 
-    input.oncancel = () => resolve(null);
-    input.click();
-  });
+    input.oncancel = () => resolve(null)
+    input.click()
+  })
 }

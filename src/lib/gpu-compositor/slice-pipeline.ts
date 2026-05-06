@@ -31,21 +31,21 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(srcTexture, texSampler, input.uv);
 }
-`;
+`
 
 export class SlicePipeline {
-  private device: GPUDevice;
-  private pipeline: GPURenderPipeline;
-  private bindGroupLayout: GPUBindGroupLayout;
-  private sampler: GPUSampler;
-  private vertexBuffer: GPUBuffer | null = null;
-  private vertexBufferSize = 0;
+  private device: GPUDevice
+  private pipeline: GPURenderPipeline
+  private bindGroupLayout: GPUBindGroupLayout
+  private sampler: GPUSampler
+  private vertexBuffer: GPUBuffer | null = null
+  private vertexBufferSize = 0
 
   constructor(device: GPUDevice) {
-    this.device = device;
-    this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    this.device = device
+    this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
 
-    const module = device.createShaderModule({ label: 'slice', code: SLICE_SHADER });
+    const module = device.createShaderModule({ label: 'slice', code: SLICE_SHADER })
 
     this.bindGroupLayout = device.createBindGroupLayout({
       label: 'slice-layout',
@@ -53,7 +53,7 @@ export class SlicePipeline {
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
         { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
       ],
-    });
+    })
 
     this.pipeline = device.createRenderPipeline({
       label: 'slice-pipeline',
@@ -61,13 +61,15 @@ export class SlicePipeline {
       vertex: {
         module,
         entryPoint: 'vertexMain',
-        buffers: [{
-          arrayStride: 16, // 4 floats × 4 bytes
-          attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x2' },  // position
-            { shaderLocation: 1, offset: 8, format: 'float32x2' },  // uv
-          ],
-        }],
+        buffers: [
+          {
+            arrayStride: 16, // 4 floats × 4 bytes
+            attributes: [
+              { shaderLocation: 0, offset: 0, format: 'float32x2' }, // position
+              { shaderLocation: 1, offset: 8, format: 'float32x2' }, // uv
+            ],
+          },
+        ],
       },
       fragment: {
         module,
@@ -75,7 +77,7 @@ export class SlicePipeline {
         targets: [{ format: 'rgba8unorm' }],
       },
       primitive: { topology: 'triangle-list' },
-    });
+    })
   }
 
   /**
@@ -92,19 +94,19 @@ export class SlicePipeline {
     outputView: GPUTextureView,
     commandEncoder: GPUCommandEncoder,
   ): void {
-    const byteSize = vertexData.byteLength;
+    const byteSize = vertexData.byteLength
 
     // Resize vertex buffer if needed
     if (!this.vertexBuffer || this.vertexBufferSize < byteSize) {
-      this.vertexBuffer?.destroy();
+      this.vertexBuffer?.destroy()
       this.vertexBuffer = this.device.createBuffer({
         size: byteSize,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      });
-      this.vertexBufferSize = byteSize;
+      })
+      this.vertexBufferSize = byteSize
     }
 
-    this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexData.buffer);
+    this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexData.buffer)
 
     const bindGroup = this.device.createBindGroup({
       layout: this.bindGroupLayout,
@@ -112,25 +114,27 @@ export class SlicePipeline {
         { binding: 0, resource: this.sampler },
         { binding: 1, resource: sourceView },
       ],
-    });
+    })
 
     const pass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: outputView,
-        loadOp: 'clear',
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        storeOp: 'store',
-      }],
-    });
-    pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, this.vertexBuffer);
-    pass.draw(vertexData.length / 4); // 4 floats per vertex
-    pass.end();
+      colorAttachments: [
+        {
+          view: outputView,
+          loadOp: 'clear',
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          storeOp: 'store',
+        },
+      ],
+    })
+    pass.setPipeline(this.pipeline)
+    pass.setBindGroup(0, bindGroup)
+    pass.setVertexBuffer(0, this.vertexBuffer)
+    pass.draw(vertexData.length / 4) // 4 floats per vertex
+    pass.end()
   }
 
   destroy(): void {
-    this.vertexBuffer?.destroy();
-    this.vertexBuffer = null;
+    this.vertexBuffer?.destroy()
+    this.vertexBuffer = null
   }
 }

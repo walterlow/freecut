@@ -1,30 +1,26 @@
-import type { CSSProperties } from 'react';
-import { cn } from '@/shared/ui/cn';
+import type { CSSProperties } from 'react'
+import { cn } from '@/shared/ui/cn'
 
 export interface KeyframeMarqueeRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
-export const KEYFRAME_MARQUEE_THRESHOLD = 2;
+export const KEYFRAME_MARQUEE_THRESHOLD = 2
 
 const KEYFRAME_MARQUEE_CLASSNAME =
-  'absolute border border-primary/70 bg-primary/20 pointer-events-none z-20';
+  'absolute border border-primary/70 bg-primary/20 pointer-events-none z-20'
 
 interface KeyframeMarqueeOverlayProps {
-  rect: KeyframeMarqueeRect | null;
-  className?: string;
-  style?: CSSProperties;
+  rect: KeyframeMarqueeRect | null
+  className?: string
+  style?: CSSProperties
 }
 
-export function KeyframeMarqueeOverlay({
-  rect,
-  className,
-  style,
-}: KeyframeMarqueeOverlayProps) {
-  if (!rect) return null;
+export function KeyframeMarqueeOverlay({ rect, className, style }: KeyframeMarqueeOverlayProps) {
+  if (!rect) return null
 
   return (
     <div
@@ -37,15 +33,15 @@ export function KeyframeMarqueeOverlay({
         ...style,
       }}
     />
-  );
+  )
 }
 
 interface KeyframeSvgMarqueeProps {
-  rect: KeyframeMarqueeRect | null;
+  rect: KeyframeMarqueeRect | null
 }
 
 export function KeyframeSvgMarquee({ rect }: KeyframeSvgMarqueeProps) {
-  if (!rect) return null;
+  if (!rect) return null
 
   return (
     <rect
@@ -61,5 +57,5 @@ export function KeyframeSvgMarquee({ rect }: KeyframeSvgMarqueeProps) {
       strokeOpacity={0.7}
       strokeWidth={1}
     />
-  );
+  )
 }

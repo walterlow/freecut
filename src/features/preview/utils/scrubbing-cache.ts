@@ -15,81 +15,82 @@ import {
   hasFrameInvalidation,
   isFrameInRanges,
   type FrameInvalidationRequest,
-} from '@/shared/utils/frame-invalidation';
+} from '@/shared/utils/frame-invalidation'
 
 // ---------------------------------------------------------------------------
 // Tier 1 — VRAM GPU Texture Cache
 // ---------------------------------------------------------------------------
 
 interface GpuCacheEntry {
-  texture: GPUTexture;
-  view: GPUTextureView;
+  texture: GPUTexture
+  view: GPUTextureView
 }
 
 /** Eviction hint: prefer evicting frames in the opposite scrub direction */
 interface EvictionHint {
-  currentFrame: number;
-  direction: -1 | 0 | 1;
+  currentFrame: number
+  direction: -1 | 0 | 1
 }
 
 class GpuTextureCache {
-  private cache = new Map<number, GpuCacheEntry>();
-  private maxFrames: number;
-  private device: GPUDevice | null = null;
-  private texW = 0;
-  private texH = 0;
-  private hint: EvictionHint | null = null;
+  private cache = new Map<number, GpuCacheEntry>()
+  private maxFrames: number
+  private device: GPUDevice | null = null
+  private texW = 0
+  private texH = 0
+  private hint: EvictionHint | null = null
 
   constructor(maxFrames: number) {
-    this.maxFrames = maxFrames;
+    this.maxFrames = maxFrames
   }
 
   setEvictionHint(hint: EvictionHint): void {
-    this.hint = hint;
+    this.hint = hint
   }
 
   setDevice(device: GPUDevice, width: number, height: number): void {
-    if (this.device === device && this.texW === width && this.texH === height) return;
+    if (this.device === device && this.texW === width && this.texH === height) return
     // Device or dimensions changed — flush
-    this.clear();
-    this.device = device;
-    this.texW = width;
-    this.texH = height;
+    this.clear()
+    this.device = device
+    this.texW = width
+    this.texH = height
     // Adaptive VRAM budget based on detected device memory.
     // navigator.deviceMemory (GB, rounded) is available in Chromium — use as proxy
     // for GPU memory on integrated GPUs. Fall back to conservative 500MB.
-    const deviceMemoryGb = (navigator as { deviceMemory?: number }).deviceMemory;
-    const vramBudgetBytes = deviceMemoryGb !== undefined
-      ? Math.min(deviceMemoryGb * 0.125, 1) * 1_000_000_000 // 12.5% of system RAM, max 1GB
-      : 500_000_000; // conservative default (~500MB)
-    const bytesPerFrame = width * height * 4;
-    this.maxFrames = Math.min(this.maxFrames, Math.floor(vramBudgetBytes / bytesPerFrame));
+    const deviceMemoryGb = (navigator as { deviceMemory?: number }).deviceMemory
+    const vramBudgetBytes =
+      deviceMemoryGb !== undefined
+        ? Math.min(deviceMemoryGb * 0.125, 1) * 1_000_000_000 // 12.5% of system RAM, max 1GB
+        : 500_000_000 // conservative default (~500MB)
+    const bytesPerFrame = width * height * 4
+    this.maxFrames = Math.min(this.maxFrames, Math.floor(vramBudgetBytes / bytesPerFrame))
   }
 
   get(frame: number): GpuCacheEntry | undefined {
-    const entry = this.cache.get(frame);
-    if (!entry) return undefined;
+    const entry = this.cache.get(frame)
+    if (!entry) return undefined
     // LRU touch: delete + re-insert moves to end
-    this.cache.delete(frame);
-    this.cache.set(frame, entry);
-    return entry;
+    this.cache.delete(frame)
+    this.cache.set(frame, entry)
+    return entry
   }
 
   put(frame: number, source: ImageBitmap | OffscreenCanvas): GpuCacheEntry | null {
-    if (!this.device || this.texW < 2 || this.texH < 2) return null;
+    if (!this.device || this.texW < 2 || this.texH < 2) return null
 
     // Already cached
     if (this.cache.has(frame)) {
-      return this.cache.get(frame)!;
+      return this.cache.get(frame)!
     }
 
     // Evict if full — prefer frames in the opposite scrub direction
     if (this.cache.size >= this.maxFrames) {
-      const victim = this.pickEvictionVictim();
+      const victim = this.pickEvictionVictim()
       if (victim !== undefined) {
-        const old = this.cache.get(victim);
-        old?.texture.destroy();
-        this.cache.delete(victim);
+        const old = this.cache.get(victim)
+        old?.texture.destroy()
+        this.cache.delete(victim)
       }
     }
 
@@ -97,19 +98,22 @@ class GpuTextureCache {
       const texture = this.device.createTexture({
         size: { width: this.texW, height: this.texH },
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-      });
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.RENDER_ATTACHMENT,
+      })
       this.device.queue.copyExternalImageToTexture(
         { source, flipY: false },
         { texture },
         { width: this.texW, height: this.texH },
-      );
-      const view = texture.createView();
-      const entry: GpuCacheEntry = { texture, view };
-      this.cache.set(frame, entry);
-      return entry;
+      )
+      const view = texture.createView()
+      const entry: GpuCacheEntry = { texture, view }
+      this.cache.set(frame, entry)
+      return entry
     } catch {
-      return null;
+      return null
     }
   }
 
@@ -120,40 +124,40 @@ class GpuTextureCache {
    */
   private pickEvictionVictim(): number | undefined {
     if (!this.hint || this.hint.direction === 0) {
-      return this.cache.keys().next().value;
+      return this.cache.keys().next().value
     }
-    const { currentFrame, direction } = this.hint;
+    const { currentFrame, direction } = this.hint
     // Scan oldest-first; pick the first frame in the opposite direction
     for (const frame of this.cache.keys()) {
       if (direction > 0 ? frame < currentFrame : frame > currentFrame) {
-        return frame;
+        return frame
       }
     }
     // All frames are in the same direction — fall back to LRU
-    return this.cache.keys().next().value;
+    return this.cache.keys().next().value
   }
 
   has(frame: number): boolean {
-    return this.cache.has(frame);
+    return this.cache.has(frame)
   }
 
   get size(): number {
-    return this.cache.size;
+    return this.cache.size
   }
 
   deleteMatching(predicate: (frame: number) => boolean): void {
     for (const [frame, entry] of this.cache.entries()) {
-      if (!predicate(frame)) continue;
-      entry.texture.destroy();
-      this.cache.delete(frame);
+      if (!predicate(frame)) continue
+      entry.texture.destroy()
+      this.cache.delete(frame)
     }
   }
 
   clear(): void {
     for (const entry of this.cache.values()) {
-      entry.texture.destroy();
+      entry.texture.destroy()
     }
-    this.cache.clear();
+    this.cache.clear()
   }
 }
 
@@ -161,19 +165,19 @@ class GpuTextureCache {
 // Tier 2 — Per-Video Last-Frame Cache
 // ---------------------------------------------------------------------------
 
-export type Tier2VideoFrame = ImageBitmap | VideoFrame;
+export type Tier2VideoFrame = ImageBitmap | VideoFrame
 
 export interface VideoFrameEntry {
-  frame: Tier2VideoFrame;
-  sourceTime: number;
+  frame: Tier2VideoFrame
+  sourceTime: number
 }
 
 class VideoFrameCache {
-  private cache = new Map<string, VideoFrameEntry[]>();
-  private maxEntriesPerItem: number;
+  private cache = new Map<string, VideoFrameEntry[]>()
+  private maxEntriesPerItem: number
 
   constructor(maxEntriesPerItem = 4) {
-    this.maxEntriesPerItem = Math.max(1, maxEntriesPerItem);
+    this.maxEntriesPerItem = Math.max(1, maxEntriesPerItem)
   }
 
   get(
@@ -181,72 +185,74 @@ class VideoFrameCache {
     sourceTime?: number,
     maxSourceTimeDelta = Number.POSITIVE_INFINITY,
   ): VideoFrameEntry | undefined {
-    const entries = this.cache.get(itemId);
+    const entries = this.cache.get(itemId)
     if (!entries || entries.length === 0) {
-      return undefined;
+      return undefined
     }
 
     if (sourceTime === undefined) {
-      return entries[entries.length - 1];
+      return entries[entries.length - 1]
     }
 
-    let bestIndex = -1;
-    let bestDistance = Number.POSITIVE_INFINITY;
+    let bestIndex = -1
+    let bestDistance = Number.POSITIVE_INFINITY
     for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i]!;
-      const distance = Math.abs(entry.sourceTime - sourceTime);
+      const entry = entries[i]!
+      const distance = Math.abs(entry.sourceTime - sourceTime)
       if (distance > maxSourceTimeDelta || distance >= bestDistance) {
-        continue;
+        continue
       }
-      bestDistance = distance;
-      bestIndex = i;
+      bestDistance = distance
+      bestIndex = i
     }
 
     if (bestIndex === -1) {
-      return undefined;
+      return undefined
     }
 
-    const [entry] = entries.splice(bestIndex, 1);
-    entries.push(entry!);
-    return entry;
+    const [entry] = entries.splice(bestIndex, 1)
+    entries.push(entry!)
+    return entry
   }
 
   put(itemId: string, frame: Tier2VideoFrame, sourceTime: number): void {
-    const entries = this.cache.get(itemId) ?? [];
-    const existingIndex = entries.findIndex((entry) => Math.abs(entry.sourceTime - sourceTime) <= Number.EPSILON);
+    const entries = this.cache.get(itemId) ?? []
+    const existingIndex = entries.findIndex(
+      (entry) => Math.abs(entry.sourceTime - sourceTime) <= Number.EPSILON,
+    )
     if (existingIndex !== -1) {
-      const [existing] = entries.splice(existingIndex, 1);
-      existing?.frame.close();
+      const [existing] = entries.splice(existingIndex, 1)
+      existing?.frame.close()
     }
 
-    entries.push({ frame, sourceTime });
+    entries.push({ frame, sourceTime })
     while (entries.length > this.maxEntriesPerItem) {
-      const evicted = entries.shift();
-      evicted?.frame.close();
+      const evicted = entries.shift()
+      evicted?.frame.close()
     }
 
-    this.cache.set(itemId, entries);
+    this.cache.set(itemId, entries)
   }
 
   has(itemId: string): boolean {
-    return this.cache.has(itemId);
+    return this.cache.has(itemId)
   }
 
   get size(): number {
-    let total = 0;
+    let total = 0
     for (const entries of this.cache.values()) {
-      total += entries.length;
+      total += entries.length
     }
-    return total;
+    return total
   }
 
   clear(): void {
     for (const entries of this.cache.values()) {
       for (const entry of entries) {
-        entry.frame.close();
+        entry.frame.close()
       }
     }
-    this.cache.clear();
+    this.cache.clear()
   }
 }
 
@@ -255,95 +261,96 @@ class VideoFrameCache {
 // ---------------------------------------------------------------------------
 
 class RamPreviewCache {
-  private cache = new Map<number, ImageBitmap>();
-  private maxFrames: number;
-  private maxBytes: number;
-  private currentBytes = 0;
-  private bytesPerFrame = 0;
-  private hint: EvictionHint | null = null;
+  private cache = new Map<number, ImageBitmap>()
+  private maxFrames: number
+  private maxBytes: number
+  private currentBytes = 0
+  private bytesPerFrame = 0
+  private hint: EvictionHint | null = null
 
   constructor(maxFrames: number, maxBytes: number) {
-    this.maxFrames = maxFrames;
-    this.maxBytes = maxBytes;
+    this.maxFrames = maxFrames
+    this.maxBytes = maxBytes
   }
 
   setEvictionHint(hint: EvictionHint): void {
-    this.hint = hint;
+    this.hint = hint
   }
 
   setDimensions(width: number, height: number): void {
-    this.bytesPerFrame = width * height * 4;
+    this.bytesPerFrame = width * height * 4
   }
 
   get(frame: number): ImageBitmap | undefined {
-    const bitmap = this.cache.get(frame);
-    if (!bitmap) return undefined;
+    const bitmap = this.cache.get(frame)
+    if (!bitmap) return undefined
     // LRU touch
-    this.cache.delete(frame);
-    this.cache.set(frame, bitmap);
-    return bitmap;
+    this.cache.delete(frame)
+    this.cache.set(frame, bitmap)
+    return bitmap
   }
 
   put(frame: number, bitmap: ImageBitmap): void {
     if (this.cache.has(frame)) {
-      bitmap.close();
-      return;
+      bitmap.close()
+      return
     }
 
     // Evict until within both limits — prefer frames in opposite scrub direction
     while (
-      (this.cache.size >= this.maxFrames || this.currentBytes + this.bytesPerFrame > this.maxBytes) &&
+      (this.cache.size >= this.maxFrames ||
+        this.currentBytes + this.bytesPerFrame > this.maxBytes) &&
       this.cache.size > 0
     ) {
-      const victim = this.pickEvictionVictim();
-      if (victim === undefined) break;
-      const old = this.cache.get(victim)!;
-      old.close();
-      this.cache.delete(victim);
-      this.currentBytes -= this.bytesPerFrame;
+      const victim = this.pickEvictionVictim()
+      if (victim === undefined) break
+      const old = this.cache.get(victim)!
+      old.close()
+      this.cache.delete(victim)
+      this.currentBytes -= this.bytesPerFrame
     }
 
-    this.cache.set(frame, bitmap);
-    this.currentBytes += this.bytesPerFrame;
+    this.cache.set(frame, bitmap)
+    this.currentBytes += this.bytesPerFrame
   }
 
   private pickEvictionVictim(): number | undefined {
     if (!this.hint || this.hint.direction === 0) {
-      return this.cache.keys().next().value;
+      return this.cache.keys().next().value
     }
-    const { currentFrame, direction } = this.hint;
+    const { currentFrame, direction } = this.hint
     for (const frame of this.cache.keys()) {
       if (direction > 0 ? frame < currentFrame : frame > currentFrame) {
-        return frame;
+        return frame
       }
     }
-    return this.cache.keys().next().value;
+    return this.cache.keys().next().value
   }
 
   has(frame: number): boolean {
-    return this.cache.has(frame);
+    return this.cache.has(frame)
   }
 
   get size(): number {
-    return this.cache.size;
+    return this.cache.size
   }
 
   deleteMatching(predicate: (frame: number) => boolean): void {
     for (const [frame, bitmap] of this.cache.entries()) {
-      if (!predicate(frame)) continue;
-      bitmap.close();
-      this.cache.delete(frame);
-      this.currentBytes -= this.bytesPerFrame;
+      if (!predicate(frame)) continue
+      bitmap.close()
+      this.cache.delete(frame)
+      this.currentBytes -= this.bytesPerFrame
     }
-    this.currentBytes = Math.max(0, this.currentBytes);
+    this.currentBytes = Math.max(0, this.currentBytes)
   }
 
   clear(): void {
     for (const bitmap of this.cache.values()) {
-      bitmap.close();
+      bitmap.close()
     }
-    this.cache.clear();
-    this.currentBytes = 0;
+    this.cache.clear()
+    this.currentBytes = 0
   }
 }
 
@@ -352,45 +359,45 @@ class RamPreviewCache {
 // ---------------------------------------------------------------------------
 
 export interface ScrubbingCacheStats {
-  tier1Size: number;
-  tier2Size: number;
-  tier3Size: number;
-  tier1Hits: number;
-  tier2Hits: number;
-  tier3Hits: number;
-  misses: number;
+  tier1Size: number
+  tier2Size: number
+  tier3Size: number
+  tier1Hits: number
+  tier2Hits: number
+  tier3Hits: number
+  misses: number
 }
 
 export class ScrubbingCache {
-  private tier1: GpuTextureCache;
-  private tier2: VideoFrameCache;
-  private tier3: RamPreviewCache;
+  private tier1: GpuTextureCache
+  private tier2: VideoFrameCache
+  private tier3: RamPreviewCache
 
   // Stats
-  private _tier1Hits = 0;
-  private _tier2Hits = 0;
-  private _tier3Hits = 0;
-  private _misses = 0;
+  private _tier1Hits = 0
+  private _tier2Hits = 0
+  private _tier3Hits = 0
+  private _misses = 0
 
   // GPU blit resources (for Tier 1 cache hit rendering)
-  private blitPipeline: GPURenderPipeline | null = null;
-  private blitBindGroupLayout: GPUBindGroupLayout | null = null;
-  private blitSampler: GPUSampler | null = null;
-  private blitCanvas: OffscreenCanvas | null = null;
-  private blitCtx: GPUCanvasContext | null = null;
-  private blitDevice: GPUDevice | null = null;
-  private blitFormat: GPUTextureFormat = 'rgba8unorm';
-  private blitW = 0;
-  private blitH = 0;
+  private blitPipeline: GPURenderPipeline | null = null
+  private blitBindGroupLayout: GPUBindGroupLayout | null = null
+  private blitSampler: GPUSampler | null = null
+  private blitCanvas: OffscreenCanvas | null = null
+  private blitCtx: GPUCanvasContext | null = null
+  private blitDevice: GPUDevice | null = null
+  private blitFormat: GPUTextureFormat = 'rgba8unorm'
+  private blitW = 0
+  private blitH = 0
 
   constructor(
     maxGpuFrames = 300,
     maxRamFrames = 900,
     maxRamBytes = 8_000_000_000, // ~8GB — allows 900 frames at 1080p (~8MB each)
   ) {
-    this.tier1 = new GpuTextureCache(maxGpuFrames);
-    this.tier2 = new VideoFrameCache();
-    this.tier3 = new RamPreviewCache(maxRamFrames, maxRamBytes);
+    this.tier1 = new GpuTextureCache(maxGpuFrames)
+    this.tier2 = new VideoFrameCache()
+    this.tier3 = new RamPreviewCache(maxRamFrames, maxRamBytes)
   }
 
   /**
@@ -398,21 +405,21 @@ export class ScrubbingCache {
    * Enables Tier 1 caching and GPU blit for cache hits.
    */
   setGpuDevice(device: GPUDevice, width: number, height: number): void {
-    this.tier1.setDevice(device, width, height);
-    this.tier3.setDimensions(width, height);
+    this.tier1.setDevice(device, width, height)
+    this.tier3.setDimensions(width, height)
 
     if (this.blitDevice !== device) {
-      this.blitDevice = device;
-      this.blitFormat = navigator.gpu.getPreferredCanvasFormat();
-      this.blitSampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-      this.initBlitPipeline(device);
+      this.blitDevice = device
+      this.blitFormat = navigator.gpu.getPreferredCanvasFormat()
+      this.blitSampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
+      this.initBlitPipeline(device)
     }
 
     if (this.blitW !== width || this.blitH !== height) {
-      this.blitW = width;
-      this.blitH = height;
-      this.blitCanvas = null;
-      this.blitCtx = null;
+      this.blitW = width
+      this.blitH = height
+      this.blitCanvas = null
+      this.blitCtx = null
     }
   }
 
@@ -427,9 +434,9 @@ export class ScrubbingCache {
    * Call on every scrub position change (cheap, just stores two numbers).
    */
   setEvictionHint(currentFrame: number, direction: -1 | 0 | 1): void {
-    const hint: EvictionHint = { currentFrame, direction };
-    this.tier1.setEvictionHint(hint);
-    this.tier3.setEvictionHint(hint);
+    const hint: EvictionHint = { currentFrame, direction }
+    this.tier1.setEvictionHint(hint)
+    this.tier3.setEvictionHint(hint)
   }
 
   // -----------------------------------------------------------------------
@@ -438,20 +445,20 @@ export class ScrubbingCache {
 
   /** Check Tier 1 GPU cache. Returns an OffscreenCanvas with the frame if hit. */
   getGpuFrame(frame: number): OffscreenCanvas | null {
-    const entry = this.tier1.get(frame);
-    if (!entry) return null;
+    const entry = this.tier1.get(frame)
+    if (!entry) return null
 
-    const canvas = this.blitToCanvas(entry.view);
+    const canvas = this.blitToCanvas(entry.view)
     if (canvas) {
-      this._tier1Hits++;
-      return canvas;
+      this._tier1Hits++
+      return canvas
     }
-    return null;
+    return null
   }
 
   /** Upload a composited frame to Tier 1 GPU cache. */
   putGpuFrame(frame: number, source: ImageBitmap | OffscreenCanvas): void {
-    this.tier1.put(frame, source);
+    this.tier1.put(frame, source)
   }
 
   // -----------------------------------------------------------------------
@@ -464,17 +471,17 @@ export class ScrubbingCache {
     sourceTime?: number,
     maxSourceTimeDelta = Number.POSITIVE_INFINITY,
   ): VideoFrameEntry | undefined {
-    const entry = this.tier2.get(itemId, sourceTime, maxSourceTimeDelta);
+    const entry = this.tier2.get(itemId, sourceTime, maxSourceTimeDelta)
     if (!entry) {
-      return undefined;
+      return undefined
     }
-    this._tier2Hits++;
-    return entry;
+    this._tier2Hits++
+    return entry
   }
 
   /** Cache a decoded video frame for a specific item. */
   putVideoFrame(itemId: string, frame: Tier2VideoFrame, sourceTime: number): void {
-    this.tier2.put(itemId, frame, sourceTime);
+    this.tier2.put(itemId, frame, sourceTime)
   }
 
   // -----------------------------------------------------------------------
@@ -483,19 +490,19 @@ export class ScrubbingCache {
 
   /** Check Tier 3 RAM cache. Returns ImageBitmap if hit. */
   getRamFrame(frame: number): ImageBitmap | undefined {
-    const bitmap = this.tier3.get(frame);
+    const bitmap = this.tier3.get(frame)
     if (bitmap) {
-      this._tier3Hits++;
+      this._tier3Hits++
       // Promote to Tier 1 on access
-      this.tier1.put(frame, bitmap);
-      return bitmap;
+      this.tier1.put(frame, bitmap)
+      return bitmap
     }
-    return undefined;
+    return undefined
   }
 
   /** Store a composited frame in Tier 3 RAM cache. */
   putRamFrame(frame: number, bitmap: ImageBitmap): void {
-    this.tier3.put(frame, bitmap);
+    this.tier3.put(frame, bitmap)
   }
 
   // -----------------------------------------------------------------------
@@ -508,15 +515,15 @@ export class ScrubbingCache {
    */
   getFrame(frame: number): ImageBitmap | OffscreenCanvas | null {
     // Tier 1 — GPU texture (fastest: ~0.1ms blit)
-    const gpuResult = this.getGpuFrame(frame);
-    if (gpuResult) return gpuResult;
+    const gpuResult = this.getGpuFrame(frame)
+    if (gpuResult) return gpuResult
 
     // Tier 3 — RAM ImageBitmap (promotes to Tier 1 on access)
-    const ramResult = this.getRamFrame(frame);
-    if (ramResult) return ramResult;
+    const ramResult = this.getRamFrame(frame)
+    if (ramResult) return ramResult
 
-    this._misses++;
-    return null;
+    this._misses++
+    return null
   }
 
   /**
@@ -535,23 +542,25 @@ export class ScrubbingCache {
   cacheFrame(frame: number, canvas: OffscreenCanvas, gpuOnly = false): void {
     // Tier 1: GPU upload directly from canvas (near-free)
     if (!this.tier1.has(frame)) {
-      this.tier1.put(frame, canvas);
+      this.tier1.put(frame, canvas)
     }
 
-    if (gpuOnly) return;
+    if (gpuOnly) return
 
     // Tier 3: RAM buffer (async bitmap creation in background)
     if (!this.tier3.has(frame)) {
       createImageBitmap(canvas).then(
         (bitmap) => {
           if (!this.tier3.has(frame)) {
-            this.tier3.put(frame, bitmap);
+            this.tier3.put(frame, bitmap)
           } else {
-            bitmap.close();
+            bitmap.close()
           }
         },
-        () => { /* canvas may be zero-size or detached */ }
-      );
+        () => {
+          /* canvas may be zero-size or detached */
+        },
+      )
     }
   }
 
@@ -562,25 +571,23 @@ export class ScrubbingCache {
   /** Evict specific cached frames, cached frame ranges, or flush all tiers. */
   invalidate(request?: FrameInvalidationRequest): void {
     if (!request || !hasFrameInvalidation(request)) {
-      this.tier1.clear();
-      this.tier3.clear();
-      return;
+      this.tier1.clear()
+      this.tier3.clear()
+      return
     }
 
-    const explicitFrames = request.frames ? new Set(request.frames) : null;
-    const ranges = request.ranges ?? [];
-    const shouldDeleteFrame = (frame: number) => (
-      (explicitFrames?.has(frame) ?? false)
-      || isFrameInRanges(frame, ranges)
-    );
+    const explicitFrames = request.frames ? new Set(request.frames) : null
+    const ranges = request.ranges ?? []
+    const shouldDeleteFrame = (frame: number) =>
+      (explicitFrames?.has(frame) ?? false) || isFrameInRanges(frame, ranges)
 
-    this.tier1.deleteMatching(shouldDeleteFrame);
-    this.tier3.deleteMatching(shouldDeleteFrame);
+    this.tier1.deleteMatching(shouldDeleteFrame)
+    this.tier3.deleteMatching(shouldDeleteFrame)
   }
 
   /** Clear Tier 2 (per-video last-frame). Call when timeline items change. */
   invalidateVideoFrames(): void {
-    this.tier2.clear();
+    this.tier2.clear()
   }
 
   // -----------------------------------------------------------------------
@@ -596,7 +603,7 @@ export class ScrubbingCache {
       tier2Hits: this._tier2Hits,
       tier3Hits: this._tier3Hits,
       misses: this._misses,
-    };
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -604,15 +611,15 @@ export class ScrubbingCache {
   // -----------------------------------------------------------------------
 
   dispose(): void {
-    this.tier1.clear();
-    this.tier2.clear();
-    this.tier3.clear();
-    this.blitCanvas = null;
-    this.blitCtx = null;
-    this.blitPipeline = null;
-    this.blitBindGroupLayout = null;
-    this.blitSampler = null;
-    this.blitDevice = null;
+    this.tier1.clear()
+    this.tier2.clear()
+    this.tier3.clear()
+    this.blitCanvas = null
+    this.blitCtx = null
+    this.blitPipeline = null
+    this.blitBindGroupLayout = null
+    this.blitSampler = null
+    this.blitDevice = null
   }
 
   // -----------------------------------------------------------------------
@@ -643,38 +650,46 @@ struct VertexOutput {
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @fragment fn blitFragment(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(inputTex, texSampler, input.uv);
-}`;
+}`
 
-    const module = device.createShaderModule({ label: 'scrub-cache-blit', code: BLIT_SHADER });
+    const module = device.createShaderModule({ label: 'scrub-cache-blit', code: BLIT_SHADER })
     this.blitBindGroupLayout = device.createBindGroupLayout({
       label: 'scrub-cache-blit-layout',
       entries: [
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
         { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
       ],
-    });
+    })
     this.blitPipeline = device.createRenderPipeline({
       label: 'scrub-cache-blit-pipeline',
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.blitBindGroupLayout] }),
       vertex: { module, entryPoint: 'vertexMain' },
       fragment: { module, entryPoint: 'blitFragment', targets: [{ format: this.blitFormat }] },
       primitive: { topology: 'triangle-list' },
-    });
+    })
   }
 
   private blitToCanvas(textureView: GPUTextureView): OffscreenCanvas | null {
     if (!this.blitDevice || !this.blitPipeline || !this.blitBindGroupLayout || !this.blitSampler) {
-      return null;
+      return null
     }
 
-    if (!this.blitCanvas || this.blitCanvas.width !== this.blitW || this.blitCanvas.height !== this.blitH) {
-      this.blitCanvas = new OffscreenCanvas(this.blitW, this.blitH);
-      const ctx = this.blitCanvas.getContext('webgpu') as GPUCanvasContext | null;
-      if (!ctx) return null;
-      ctx.configure({ device: this.blitDevice, format: this.blitFormat, alphaMode: 'premultiplied' });
-      this.blitCtx = ctx;
+    if (
+      !this.blitCanvas ||
+      this.blitCanvas.width !== this.blitW ||
+      this.blitCanvas.height !== this.blitH
+    ) {
+      this.blitCanvas = new OffscreenCanvas(this.blitW, this.blitH)
+      const ctx = this.blitCanvas.getContext('webgpu') as GPUCanvasContext | null
+      if (!ctx) return null
+      ctx.configure({
+        device: this.blitDevice,
+        format: this.blitFormat,
+        alphaMode: 'premultiplied',
+      })
+      this.blitCtx = ctx
     }
-    if (!this.blitCtx) return null;
+    if (!this.blitCtx) return null
 
     const bindGroup = this.blitDevice.createBindGroup({
       layout: this.blitBindGroupLayout,
@@ -682,22 +697,24 @@ struct VertexOutput {
         { binding: 0, resource: this.blitSampler },
         { binding: 1, resource: textureView },
       ],
-    });
+    })
 
-    const encoder = this.blitDevice.createCommandEncoder();
+    const encoder = this.blitDevice.createCommandEncoder()
     const pass = encoder.beginRenderPass({
-      colorAttachments: [{
-        view: this.blitCtx.getCurrentTexture().createView(),
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    pass.setPipeline(this.blitPipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.draw(6);
-    pass.end();
-    this.blitDevice.queue.submit([encoder.finish()]);
+      colorAttachments: [
+        {
+          view: this.blitCtx.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+    })
+    pass.setPipeline(this.blitPipeline)
+    pass.setBindGroup(0, bindGroup)
+    pass.draw(6)
+    pass.end()
+    this.blitDevice.queue.submit([encoder.finish()])
 
-    return this.blitCanvas;
+    return this.blitCanvas
   }
 }

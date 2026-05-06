@@ -1,31 +1,31 @@
-import { create } from 'zustand';
+import { create } from 'zustand'
 
 interface RippleEditPreviewState {
   /** The item being trimmed */
-  trimmedItemId: string | null;
+  trimmedItemId: string | null
   /** Which handle on the trimmed item: 'start' or 'end' */
-  handle: 'start' | 'end' | null;
+  handle: 'start' | 'end' | null
   /** Track ID of the trimmed item (for filtering downstream items) */
-  trackId: string | null;
+  trackId: string | null
   /** IDs of downstream items that should shift during the ripple preview */
-  downstreamItemIds: Set<string>;
+  downstreamItemIds: Set<string>
   /** Shift delta in frames for downstream items (positive = shift right, negative = shift left) */
-  delta: number;
+  delta: number
   /** Trim delta in frames for the trimmed item (same value the hook sends to setTrimState) */
-  trimDelta: number;
+  trimDelta: number
 }
 
 interface RippleEditPreviewActions {
   setPreview: (params: {
-    trimmedItemId: string;
-    handle: 'start' | 'end';
-    trackId: string;
-    downstreamItemIds: Set<string>;
-    delta: number;
-    trimDelta: number;
-  }) => void;
-  setDeltas: (delta: number, trimDelta: number) => void;
-  clearPreview: () => void;
+    trimmedItemId: string
+    handle: 'start' | 'end'
+    trackId: string
+    downstreamItemIds: Set<string>
+    delta: number
+    trimDelta: number
+  }) => void
+  setDeltas: (delta: number, trimDelta: number) => void
+  clearPreview: () => void
 }
 
 export const useRippleEditPreviewStore = create<
@@ -48,4 +48,4 @@ export const useRippleEditPreviewStore = create<
       delta: 0,
       trimDelta: 0,
     }),
-}));
+}))

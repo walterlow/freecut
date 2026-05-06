@@ -14,7 +14,7 @@ export {
   updateProject,
   deleteProject,
   getDBStats,
-} from '@/infrastructure/storage/workspace-fs/projects';
+} from '@/infrastructure/storage/workspace-fs/projects'
 
 // Media
 export {
@@ -25,7 +25,7 @@ export {
   deleteMedia,
   validateMediaHandle,
   type MediaHandleValidation,
-} from '@/infrastructure/storage/workspace-fs/media';
+} from '@/infrastructure/storage/workspace-fs/media'
 
 // Thumbnails
 export {
@@ -36,14 +36,14 @@ export {
   saveProjectThumbnail,
   loadProjectThumbnail,
   deleteProjectThumbnail,
-} from '@/infrastructure/storage/workspace-fs/thumbnails';
+} from '@/infrastructure/storage/workspace-fs/thumbnails'
 
 // Content-addressable blob references
 export {
   incrementContentRef,
   decrementContentRef,
   deleteContent,
-} from '@/infrastructure/storage/workspace-fs/content';
+} from '@/infrastructure/storage/workspace-fs/content'
 
 // Project-media associations
 export {
@@ -52,7 +52,7 @@ export {
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject,
-} from '@/infrastructure/storage/workspace-fs/project-media';
+} from '@/infrastructure/storage/workspace-fs/project-media'
 
 // Waveforms
 export {
@@ -64,7 +64,7 @@ export {
   saveWaveformMeta,
   saveWaveformBin,
   deleteWaveform,
-} from '@/infrastructure/storage/workspace-fs/waveforms';
+} from '@/infrastructure/storage/workspace-fs/waveforms'
 
 // GIF frames
 export {
@@ -72,14 +72,14 @@ export {
   getGifFrames,
   deleteGifFrames,
   clearAllGifFrames,
-} from '@/infrastructure/storage/workspace-fs/gif-frames';
+} from '@/infrastructure/storage/workspace-fs/gif-frames'
 
 // Decoded preview audio
 export {
   getDecodedPreviewAudio,
   saveDecodedPreviewAudio,
   deleteDecodedPreviewAudio,
-} from '@/infrastructure/storage/workspace-fs/decoded-preview-audio';
+} from '@/infrastructure/storage/workspace-fs/decoded-preview-audio'
 
 // Transcripts
 export {
@@ -87,7 +87,7 @@ export {
   getTranscriptMediaIds,
   saveTranscript,
   deleteTranscript,
-} from '@/infrastructure/storage/workspace-fs/transcripts';
+} from '@/infrastructure/storage/workspace-fs/transcripts'
 
 // AI captions (vision-language-model frame descriptions)
 export {
@@ -107,7 +107,15 @@ export {
   deleteCaptionEmbeddings,
   saveCaptionImageEmbeddings,
   getCaptionImageEmbeddings,
-} from '@/infrastructure/storage/workspace-fs/captions';
+} from '@/infrastructure/storage/workspace-fs/captions'
+
+// Embedded text-subtitle track cache (parsed once per source fingerprint)
+export {
+  getEmbeddedSubtitleSidecar,
+  saveEmbeddedSubtitleSidecar,
+  deleteEmbeddedSubtitleSidecar,
+  type EmbeddedSubtitleSidecar,
+} from '@/infrastructure/storage/workspace-fs/embedded-subtitles'
 
 // Scene-detection results
 export {
@@ -115,7 +123,7 @@ export {
   saveScenes,
   deleteScenes,
   type SavedScenes,
-} from '@/infrastructure/storage/workspace-fs/scenes';
+} from '@/infrastructure/storage/workspace-fs/scenes'
 
 // Generic AI-output envelope (use these directly for new AI services)
 export {
@@ -128,14 +136,14 @@ export {
   type AiOutput,
   type AiOutputKind,
   type AiOutputPayloads,
-} from '@/infrastructure/storage/workspace-fs/ai-outputs';
+} from '@/infrastructure/storage/workspace-fs/ai-outputs'
 
 // Orphan cache sweep
 export {
   sweepWorkspaceOrphans,
   type OrphanSweepReport,
   type OrphanSweepOptions,
-} from '@/infrastructure/storage/workspace-fs/orphan-sweep';
+} from '@/infrastructure/storage/workspace-fs/orphan-sweep'
 
 // Soft-delete / trash for projects
 export {
@@ -148,4 +156,4 @@ export {
   DEFAULT_TRASH_TTL_MS,
   type TrashMarker,
   type TrashedProjectEntry,
-} from '@/infrastructure/storage/workspace-fs/trash';
+} from '@/infrastructure/storage/workspace-fs/trash'

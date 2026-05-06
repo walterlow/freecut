@@ -1,25 +1,31 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { type Clock, createClock } from './Clock';
-import { ClockProvider, useClock, useClockFrame, useClockIsPlaying, useClockPlaybackRate } from './ClockContext';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import { type Clock, createClock } from './Clock'
+import {
+  ClockProvider,
+  useClock,
+  useClockFrame,
+  useClockIsPlaying,
+  useClockPlaybackRate,
+} from './ClockContext'
 import {
   BridgedSetTimelineContext,
   BridgedTimelineContext,
   type SetTimelineContextValue,
   type TimelineContextValue,
-} from './clock-bridge-context';
+} from './clock-bridge-context'
 
 interface ClockBridgeProviderProps {
-  children: React.ReactNode;
-  fps: number;
-  durationInFrames: number;
-  initialFrame?: number;
-  initiallyMuted?: boolean;
-  inFrame?: number | null;
-  outFrame?: number | null;
-  initialPlaybackRate?: number;
-  loop?: boolean;
-  onEnded?: () => void;
-  onVolumeChange?: (volume: number, isMuted: boolean) => void;
+  children: React.ReactNode
+  fps: number
+  durationInFrames: number
+  initialFrame?: number
+  initiallyMuted?: boolean
+  inFrame?: number | null
+  outFrame?: number | null
+  initialPlaybackRate?: number
+  loop?: boolean
+  onEnded?: () => void
+  onVolumeChange?: (volume: number, isMuted: boolean) => void
 }
 
 function ClockBridgeInner({
@@ -27,27 +33,27 @@ function ClockBridgeInner({
   inFrame,
   outFrame,
 }: {
-  children: React.ReactNode;
-  inFrame: number | null;
-  outFrame: number | null;
+  children: React.ReactNode
+  inFrame: number | null
+  outFrame: number | null
 }) {
-  const clock = useClock();
-  const frame = useClockFrame();
-  const playing = useClockIsPlaying();
-  const playbackRate = useClockPlaybackRate();
+  const clock = useClock()
+  const frame = useClockFrame()
+  const playing = useClockIsPlaying()
+  const playbackRate = useClockPlaybackRate()
 
-  const imperativePlaying = useRef(playing);
+  const imperativePlaying = useRef(playing)
   useEffect(() => {
-    imperativePlaying.current = playing;
-  }, [playing]);
-
-  useEffect(() => {
-    clock.setInPoint(inFrame);
-  }, [clock, inFrame]);
+    imperativePlaying.current = playing
+  }, [playing])
 
   useEffect(() => {
-    clock.setOutPoint(outFrame);
-  }, [clock, outFrame]);
+    clock.setInPoint(inFrame)
+  }, [clock, inFrame])
+
+  useEffect(() => {
+    clock.setOutPoint(outFrame)
+  }, [clock, outFrame])
 
   const timelineContextValue = useMemo((): TimelineContextValue => {
     return {
@@ -57,50 +63,50 @@ function ClockBridgeInner({
       playbackRate,
       imperativePlaying,
       setPlaybackRate: (rate: number) => {
-        clock.playbackRate = rate;
+        clock.playbackRate = rate
       },
       inFrame,
       outFrame,
-    };
-  }, [frame, playing, playbackRate, inFrame, outFrame, clock]);
+    }
+  }, [frame, playing, playbackRate, inFrame, outFrame, clock])
 
   const setFrame = useCallback(
     (action: React.SetStateAction<Record<string, number>>) => {
       if (typeof action === 'function') {
-        const currentState = { 'player-comp': clock.currentFrame };
-        const newState = action(currentState);
-        const newFrame = newState['player-comp'];
+        const currentState = { 'player-comp': clock.currentFrame }
+        const newState = action(currentState)
+        const newFrame = newState['player-comp']
         if (newFrame !== undefined && newFrame !== clock.currentFrame) {
-          clock.seekToFrame(newFrame);
+          clock.seekToFrame(newFrame)
         }
       } else {
-        const newFrame = action['player-comp'];
+        const newFrame = action['player-comp']
         if (newFrame !== undefined && newFrame !== clock.currentFrame) {
-          clock.seekToFrame(newFrame);
+          clock.seekToFrame(newFrame)
         }
       }
     },
-    [clock]
-  );
+    [clock],
+  )
 
   const setPlaying = useCallback(
     (action: React.SetStateAction<boolean>) => {
-      const newPlaying = typeof action === 'function' ? action(clock.isPlaying) : action;
+      const newPlaying = typeof action === 'function' ? action(clock.isPlaying) : action
       if (newPlaying && !clock.isPlaying) {
-        clock.play();
+        clock.play()
       } else if (!newPlaying && clock.isPlaying) {
-        clock.pause();
+        clock.pause()
       }
     },
-    [clock]
-  );
+    [clock],
+  )
 
   const setTimelineContextValue = useMemo((): SetTimelineContextValue => {
     return {
       setFrame,
       setPlaying,
-    };
-  }, [setFrame, setPlaying]);
+    }
+  }, [setFrame, setPlaying])
 
   return (
     <BridgedTimelineContext.Provider value={timelineContextValue}>
@@ -108,7 +114,7 @@ function ClockBridgeInner({
         {children}
       </BridgedSetTimelineContext.Provider>
     </BridgedTimelineContext.Provider>
-  );
+  )
 }
 
 export function ClockBridgeProvider({
@@ -126,7 +132,7 @@ export function ClockBridgeProvider({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onVolumeChange: _onVolumeChange,
 }: ClockBridgeProviderProps): React.ReactElement {
-  const clockRef = useRef<Clock | null>(null);
+  const clockRef = useRef<Clock | null>(null)
 
   if (clockRef.current === null) {
     clockRef.current = createClock({
@@ -135,10 +141,10 @@ export function ClockBridgeProvider({
       initialFrame,
       loop,
       onEnded,
-    });
+    })
 
     if (initialPlaybackRate !== 1) {
-      clockRef.current.playbackRate = initialPlaybackRate;
+      clockRef.current.playbackRate = initialPlaybackRate
     }
   }
 
@@ -155,5 +161,5 @@ export function ClockBridgeProvider({
         {children}
       </ClockBridgeInner>
     </ClockProvider>
-  );
+  )
 }

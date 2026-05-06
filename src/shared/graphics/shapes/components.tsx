@@ -4,7 +4,7 @@
  * These components render SVG elements that match the Composition shapes API.
  */
 
-import React from 'react';
+import React from 'react'
 import {
   makeRect,
   makeCircle,
@@ -13,14 +13,14 @@ import {
   makeStar,
   makePolygon,
   makeHeart,
-} from './shape-generators';
+} from './shape-generators'
 
 interface BaseShapeProps {
-  fill?: string;
-  stroke?: string;
-  strokeWidth?: number;
-  style?: React.CSSProperties;
-  className?: string;
+  fill?: string
+  stroke?: string
+  strokeWidth?: number
+  style?: React.CSSProperties
+  className?: string
 }
 
 /**
@@ -28,12 +28,12 @@ interface BaseShapeProps {
  */
 export const Rect: React.FC<
   BaseShapeProps & {
-    width: number;
-    height: number;
-    cornerRadius?: number;
+    width: number
+    height: number
+    cornerRadius?: number
   }
 > = ({ width, height, cornerRadius = 0, fill, stroke, strokeWidth, style, className }) => {
-  const { path } = makeRect({ width, height, cornerRadius });
+  const { path } = makeRect({ width, height, cornerRadius })
 
   return (
     <svg
@@ -45,18 +45,18 @@ export const Rect: React.FC<
     >
       <path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     </svg>
-  );
-};
+  )
+}
 
 /**
  * Circle shape component
  */
 export const Circle: React.FC<
   BaseShapeProps & {
-    radius: number;
+    radius: number
   }
 > = ({ radius, fill, stroke, strokeWidth, style, className }) => {
-  const { path, width, height } = makeCircle({ radius });
+  const { path, width, height } = makeCircle({ radius })
 
   return (
     <svg
@@ -68,19 +68,19 @@ export const Circle: React.FC<
     >
       <path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     </svg>
-  );
-};
+  )
+}
 
 /**
  * Ellipse shape component
  */
 export const Ellipse: React.FC<
   BaseShapeProps & {
-    rx: number;
-    ry: number;
+    rx: number
+    ry: number
   }
 > = ({ rx, ry, fill, stroke, strokeWidth, style, className }) => {
-  const { path, width, height } = makeEllipse({ rx, ry });
+  const { path, width, height } = makeEllipse({ rx, ry })
 
   return (
     <svg
@@ -92,20 +92,29 @@ export const Ellipse: React.FC<
     >
       <path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     </svg>
-  );
-};
+  )
+}
 
 /**
  * Triangle shape component
  */
 export const Triangle: React.FC<
   BaseShapeProps & {
-    length: number;
-    direction?: 'up' | 'down' | 'left' | 'right';
-    cornerRadius?: number;
+    length: number
+    direction?: 'up' | 'down' | 'left' | 'right'
+    cornerRadius?: number
   }
-> = ({ length, direction = 'up', cornerRadius = 0, fill, stroke, strokeWidth, style, className }) => {
-  const { path, width, height } = makeTriangle({ length, direction, cornerRadius });
+> = ({
+  length,
+  direction = 'up',
+  cornerRadius = 0,
+  fill,
+  stroke,
+  strokeWidth,
+  style,
+  className,
+}) => {
+  const { path, width, height } = makeTriangle({ length, direction, cornerRadius })
 
   return (
     <svg
@@ -117,21 +126,31 @@ export const Triangle: React.FC<
     >
       <path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     </svg>
-  );
-};
+  )
+}
 
 /**
  * Star shape component
  */
 export const Star: React.FC<
   BaseShapeProps & {
-    points: number;
-    outerRadius: number;
-    innerRadius: number;
-    cornerRadius?: number;
+    points: number
+    outerRadius: number
+    innerRadius: number
+    cornerRadius?: number
   }
-> = ({ points, outerRadius, innerRadius, cornerRadius = 0, fill, stroke, strokeWidth, style, className }) => {
-  const { path, width, height } = makeStar({ points, outerRadius, innerRadius, cornerRadius });
+> = ({
+  points,
+  outerRadius,
+  innerRadius,
+  cornerRadius = 0,
+  fill,
+  stroke,
+  strokeWidth,
+  style,
+  className,
+}) => {
+  const { path, width, height } = makeStar({ points, outerRadius, innerRadius, cornerRadius })
 
   return (
     <svg
@@ -143,20 +162,20 @@ export const Star: React.FC<
     >
       <path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     </svg>
-  );
-};
+  )
+}
 
 /**
  * Polygon shape component
  */
 export const Polygon: React.FC<
   BaseShapeProps & {
-    points: number;
-    radius: number;
-    cornerRadius?: number;
+    points: number
+    radius: number
+    cornerRadius?: number
   }
 > = ({ points, radius, cornerRadius = 0, fill, stroke, strokeWidth, style, className }) => {
-  const { path, width, height } = makePolygon({ points, radius, cornerRadius });
+  const { path, width, height } = makePolygon({ points, radius, cornerRadius })
 
   return (
     <svg
@@ -168,18 +187,18 @@ export const Polygon: React.FC<
     >
       <path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     </svg>
-  );
-};
+  )
+}
 
 /**
  * Heart shape component
  */
 export const Heart: React.FC<
   BaseShapeProps & {
-    height: number;
+    height: number
   }
 > = ({ height, fill, stroke, strokeWidth, style, className }) => {
-  const result = makeHeart({ height });
+  const result = makeHeart({ height })
 
   return (
     <svg
@@ -191,5 +210,5 @@ export const Heart: React.FC<
     >
       <path d={result.path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     </svg>
-  );
-};
+  )
+}

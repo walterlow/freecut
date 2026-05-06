@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import type { CompositionInputProps } from '@/types/export';
-import { toTrackTopologyFingerprint } from './preview-constants';
+import { describe, expect, it } from 'vite-plus/test'
+import type { CompositionInputProps } from '@/types/export'
+import { toTrackTopologyFingerprint } from './preview-constants'
 
 function makeTracks(
-  overrides: Partial<CompositionInputProps['tracks'][number]['items'][number]> & Record<string, unknown> = {},
+  overrides: Partial<CompositionInputProps['tracks'][number]['items'][number]> &
+    Record<string, unknown> = {},
 ): CompositionInputProps['tracks'] {
   return [
     {
@@ -33,40 +34,40 @@ function makeTracks(
         },
       ],
     },
-  ] as CompositionInputProps['tracks'];
+  ] as CompositionInputProps['tracks']
 }
 
 describe('toTrackTopologyFingerprint', () => {
   it('stays stable across timing-only trim changes', () => {
-    const before = makeTracks();
+    const before = makeTracks()
     const after = makeTracks({
       from: 112,
       durationInFrames: 68,
       sourceStart: 37,
       sourceEnd: 312,
       speed: 1.25,
-    });
+    })
 
-    expect(toTrackTopologyFingerprint(after)).toBe(toTrackTopologyFingerprint(before));
-  });
+    expect(toTrackTopologyFingerprint(after)).toBe(toTrackTopologyFingerprint(before))
+  })
 
   it('changes when the underlying source changes', () => {
-    const before = makeTracks();
+    const before = makeTracks()
     const after = makeTracks({
       src: 'proxy://clip-1-v2',
-    });
+    })
 
-    expect(toTrackTopologyFingerprint(after)).not.toBe(toTrackTopologyFingerprint(before));
-  });
+    expect(toTrackTopologyFingerprint(after)).not.toBe(toTrackTopologyFingerprint(before))
+  })
 
   it('changes when clip identity changes', () => {
-    const before = makeTracks();
+    const before = makeTracks()
     const after = makeTracks({
       id: 'clip-2',
-    });
+    })
 
-    expect(toTrackTopologyFingerprint(after)).not.toBe(toTrackTopologyFingerprint(before));
-  });
+    expect(toTrackTopologyFingerprint(after)).not.toBe(toTrackTopologyFingerprint(before))
+  })
 
   it('changes when a shape toggles into or out of mask mode', () => {
     const before = makeTracks({
@@ -75,15 +76,15 @@ describe('toTrackTopologyFingerprint', () => {
       mediaId: undefined,
       src: undefined,
       isMask: false,
-    });
+    })
     const after = makeTracks({
       id: 'shape-1',
       type: 'shape',
       mediaId: undefined,
       src: undefined,
       isMask: true,
-    });
+    })
 
-    expect(toTrackTopologyFingerprint(after)).not.toBe(toTrackTopologyFingerprint(before));
-  });
-});
+    expect(toTrackTopologyFingerprint(after)).not.toBe(toTrackTopologyFingerprint(before))
+  })
+})

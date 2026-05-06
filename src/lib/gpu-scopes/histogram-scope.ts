@@ -45,7 +45,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   atomicAdd(&histB[b], 1u);
   atomicAdd(&histL[l], 1u);
 }
-`;
+`
 
 const HISTOGRAM_RENDER = /* wgsl */ `
 struct VertexOutput { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
@@ -169,31 +169,49 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
 
   return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
 }
-`;
+`
 
 export class HistogramScope {
-  private device: GPUDevice;
-  private computePipeline: GPUComputePipeline;
-  private renderPipeline: GPURenderPipeline;
-  private computeBGL: GPUBindGroupLayout;
-  private renderBGL: GPUBindGroupLayout;
-  private histR: GPUBuffer;
-  private histG: GPUBuffer;
-  private histB: GPUBuffer;
-  private histL: GPUBuffer;
-  private computeParams: GPUBuffer;
-  private renderParams: GPUBuffer;
+  private device: GPUDevice
+  private computePipeline: GPUComputePipeline
+  private renderPipeline: GPURenderPipeline
+  private computeBGL: GPUBindGroupLayout
+  private renderBGL: GPUBindGroupLayout
+  private histR: GPUBuffer
+  private histG: GPUBuffer
+  private histB: GPUBuffer
+  private histL: GPUBuffer
+  private computeParams: GPUBuffer
+  private renderParams: GPUBuffer
 
   constructor(device: GPUDevice, format: GPUTextureFormat) {
-    this.device = device;
+    this.device = device
 
-    const histBufSize = 256 * 4;
-    this.histR = device.createBuffer({ size: histBufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.histG = device.createBuffer({ size: histBufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.histB = device.createBuffer({ size: histBufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.histL = device.createBuffer({ size: histBufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.computeParams = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.renderParams = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const histBufSize = 256 * 4
+    this.histR = device.createBuffer({
+      size: histBufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.histG = device.createBuffer({
+      size: histBufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.histB = device.createBuffer({
+      size: histBufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.histL = device.createBuffer({
+      size: histBufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.computeParams = device.createBuffer({
+      size: 32,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
+    this.renderParams = device.createBuffer({
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
 
     this.computeBGL = device.createBindGroupLayout({
       entries: [
@@ -204,12 +222,15 @@ export class HistogramScope {
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       ],
-    });
+    })
 
     this.computePipeline = device.createComputePipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.computeBGL] }),
-      compute: { module: device.createShaderModule({ code: HISTOGRAM_COMPUTE }), entryPoint: 'main' },
-    });
+      compute: {
+        module: device.createShaderModule({ code: HISTOGRAM_COMPUTE }),
+        entryPoint: 'main',
+      },
+    })
 
     this.renderBGL = device.createBindGroupLayout({
       entries: [
@@ -219,14 +240,14 @@ export class HistogramScope {
         { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
       ],
-    });
+    })
 
-    const renderModule = device.createShaderModule({ code: HISTOGRAM_RENDER });
+    const renderModule = device.createShaderModule({ code: HISTOGRAM_RENDER })
     this.renderPipeline = device.createRenderPipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.renderBGL] }),
       vertex: { module: renderModule, entryPoint: 'vs' },
       fragment: { module: renderModule, entryPoint: 'fs', targets: [{ format }] },
-    });
+    })
   }
 
   render(
@@ -238,21 +259,21 @@ export class HistogramScope {
     rangeMin: number,
     rangeMax: number,
   ) {
-    const d = this.device;
-    const srcW = sourceTexture.width;
-    const srcH = sourceTexture.height;
+    const d = this.device
+    const srcW = sourceTexture.width
+    const srcH = sourceTexture.height
 
-    const cpData = new ArrayBuffer(32);
-    new Uint32Array(cpData, 0, 4).set([srcW, srcH, 0, 0]);
-    new Float32Array(cpData, 16, 4).set([kr, kb, rangeMin, rangeMax]);
-    d.queue.writeBuffer(this.computeParams, 0, cpData);
-    d.queue.writeBuffer(this.renderParams, 0, new Float32Array([srcW * srcH, mode, 0, 0]));
+    const cpData = new ArrayBuffer(32)
+    new Uint32Array(cpData, 0, 4).set([srcW, srcH, 0, 0])
+    new Float32Array(cpData, 16, 4).set([kr, kb, rangeMin, rangeMax])
+    d.queue.writeBuffer(this.computeParams, 0, cpData)
+    d.queue.writeBuffer(this.renderParams, 0, new Float32Array([srcW * srcH, mode, 0, 0]))
 
-    const encoder = d.createCommandEncoder();
-    encoder.clearBuffer(this.histR);
-    encoder.clearBuffer(this.histG);
-    encoder.clearBuffer(this.histB);
-    encoder.clearBuffer(this.histL);
+    const encoder = d.createCommandEncoder()
+    encoder.clearBuffer(this.histR)
+    encoder.clearBuffer(this.histG)
+    encoder.clearBuffer(this.histB)
+    encoder.clearBuffer(this.histL)
 
     const computeBG = d.createBindGroup({
       layout: this.computeBGL,
@@ -264,13 +285,13 @@ export class HistogramScope {
         { binding: 4, resource: { buffer: this.histL } },
         { binding: 5, resource: { buffer: this.computeParams } },
       ],
-    });
+    })
 
-    const cp = encoder.beginComputePass();
-    cp.setPipeline(this.computePipeline);
-    cp.setBindGroup(0, computeBG);
-    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16));
-    cp.end();
+    const cp = encoder.beginComputePass()
+    cp.setPipeline(this.computePipeline)
+    cp.setBindGroup(0, computeBG)
+    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16))
+    cp.end()
 
     const renderBG = d.createBindGroup({
       layout: this.renderBGL,
@@ -281,27 +302,36 @@ export class HistogramScope {
         { binding: 3, resource: { buffer: this.histL } },
         { binding: 4, resource: { buffer: this.renderParams } },
       ],
-    });
+    })
 
     const rp = encoder.beginRenderPass({
-      colorAttachments: [{
-        view: ctx.getCurrentTexture().createView(),
-        loadOp: 'clear',
-        storeOp: 'store',
-        clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
-      }],
-    });
-    rp.setPipeline(this.renderPipeline);
-    rp.setBindGroup(0, renderBG);
-    rp.draw(3);
-    rp.end();
+      colorAttachments: [
+        {
+          view: ctx.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
+        },
+      ],
+    })
+    rp.setPipeline(this.renderPipeline)
+    rp.setBindGroup(0, renderBG)
+    rp.draw(3)
+    rp.end()
 
-    d.queue.submit([encoder.finish()]);
+    d.queue.submit([encoder.finish()])
   }
 
   destroy() {
-    for (const b of [this.histR, this.histG, this.histB, this.histL, this.computeParams, this.renderParams]) {
-      b?.destroy();
+    for (const b of [
+      this.histR,
+      this.histG,
+      this.histB,
+      this.histL,
+      this.computeParams,
+      this.renderParams,
+    ]) {
+      b?.destroy()
     }
   }
 }

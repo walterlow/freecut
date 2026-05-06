@@ -1,29 +1,26 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  captureContextMenuEventInit,
-  replayContextMenuEvent,
-} from './lazy-context-menu';
+import { describe, expect, it, vi } from 'vite-plus/test'
+import { captureContextMenuEventInit, replayContextMenuEvent } from './lazy-context-menu'
 
 describe('lazy-context-menu', () => {
   it('captures and replays a contextmenu event with pointer coordinates and modifiers intact', () => {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
+    const target = document.createElement('div')
+    document.body.appendChild(target)
 
     const handler = vi.fn((event: MouseEvent) => {
-      expect(event.type).toBe('contextmenu');
-      expect(event.clientX).toBe(180);
-      expect(event.clientY).toBe(96);
-      expect(event.screenX).toBe(420);
-      expect(event.screenY).toBe(240);
-      expect(event.button).toBe(2);
-      expect(event.buttons).toBe(2);
-      expect(event.ctrlKey).toBe(true);
-      expect(event.shiftKey).toBe(true);
-      expect(event.altKey).toBe(false);
-      expect(event.metaKey).toBe(false);
-    });
+      expect(event.type).toBe('contextmenu')
+      expect(event.clientX).toBe(180)
+      expect(event.clientY).toBe(96)
+      expect(event.screenX).toBe(420)
+      expect(event.screenY).toBe(240)
+      expect(event.button).toBe(2)
+      expect(event.buttons).toBe(2)
+      expect(event.ctrlKey).toBe(true)
+      expect(event.shiftKey).toBe(true)
+      expect(event.altKey).toBe(false)
+      expect(event.metaKey).toBe(false)
+    })
 
-    target.addEventListener('contextmenu', handler);
+    target.addEventListener('contextmenu', handler)
 
     const eventInit = captureContextMenuEventInit({
       clientX: 180,
@@ -36,12 +33,12 @@ describe('lazy-context-menu', () => {
       shiftKey: true,
       altKey: false,
       metaKey: false,
-    });
+    })
 
-    replayContextMenuEvent(target, eventInit);
+    replayContextMenuEvent(target, eventInit)
 
-    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledTimes(1)
 
-    target.remove();
-  });
-});
+    target.remove()
+  })
+})

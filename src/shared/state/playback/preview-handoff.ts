@@ -1,4 +1,4 @@
-import { usePlaybackStore } from './store';
+import { usePlaybackStore } from './store'
 
 /**
  * Promote an active transient skim/preview frame into the authoritative
@@ -6,11 +6,11 @@ import { usePlaybackStore } from './store';
  * from briefly snapping back to the stale pre-skim playhead frame.
  */
 export function commitPreviewFrameToCurrentFrame(): void {
-  const playback = usePlaybackStore.getState();
+  const playback = usePlaybackStore.getState()
   if (playback.previewFrame === null) {
-    return;
+    return
   }
 
-  playback.setScrubFrame(playback.previewFrame, playback.previewItemId);
-  playback.setPreviewFrame(null);
+  playback.setScrubFrame(playback.previewFrame, playback.previewItemId)
+  playback.setPreviewFrame(null)
 }

@@ -1,33 +1,34 @@
-import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage';
+import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage'
 import {
   BROWSER_WHISPER_MODEL_LABELS,
   BROWSER_WHISPER_MODEL_OPTIONS,
   DEFAULT_BROWSER_WHISPER_MODEL,
   normalizeSelectableBrowserWhisperModel,
-} from './browser-whisper-models';
+} from './browser-whisper-models'
 
-export const DEFAULT_WHISPER_MODEL: MediaTranscriptModel = DEFAULT_BROWSER_WHISPER_MODEL;
-export const DEFAULT_WHISPER_QUANTIZATION: MediaTranscriptQuantization = 'hybrid';
-export const DEFAULT_WHISPER_LANGUAGE = '';
-export const WHISPER_AUTO_LANGUAGE_VALUE = 'auto';
+export const DEFAULT_WHISPER_MODEL: MediaTranscriptModel = DEFAULT_BROWSER_WHISPER_MODEL
+export const DEFAULT_WHISPER_QUANTIZATION: MediaTranscriptQuantization = 'hybrid'
+export const DEFAULT_WHISPER_LANGUAGE = ''
+export const WHISPER_AUTO_LANGUAGE_VALUE = 'auto'
 
-export const WHISPER_MODEL_LABELS: Record<MediaTranscriptModel, string> = BROWSER_WHISPER_MODEL_LABELS;
+export const WHISPER_MODEL_LABELS: Record<MediaTranscriptModel, string> =
+  BROWSER_WHISPER_MODEL_LABELS
 
 export const WHISPER_MODEL_OPTIONS: ReadonlyArray<{
-  value: MediaTranscriptModel;
-  label: string;
-}> = BROWSER_WHISPER_MODEL_OPTIONS;
+  value: MediaTranscriptModel
+  label: string
+}> = BROWSER_WHISPER_MODEL_OPTIONS
 
 export function normalizeSelectableWhisperModel(
   model: MediaTranscriptModel | undefined,
 ): MediaTranscriptModel {
-  return normalizeSelectableBrowserWhisperModel(model);
+  return normalizeSelectableBrowserWhisperModel(model)
 }
 
 export const WHISPER_QUANTIZATION_OPTIONS: ReadonlyArray<{
-  value: MediaTranscriptQuantization;
-  label: string;
-  description: string;
+  value: MediaTranscriptQuantization
+  label: string
+  description: string
 }> = [
   {
     value: 'hybrid',
@@ -54,14 +55,13 @@ export const WHISPER_QUANTIZATION_OPTIONS: ReadonlyArray<{
     label: 'Q4 (Lowest Memory)',
     description: 'Last-resort low-memory mode. Expect rougher captions and slower tuning.',
   },
-];
+]
 
 export function getWhisperQuantizationOption(
   value: MediaTranscriptQuantization | undefined,
 ): (typeof WHISPER_QUANTIZATION_OPTIONS)[number] {
-  const fallback = WHISPER_QUANTIZATION_OPTIONS[0]!;
-  return WHISPER_QUANTIZATION_OPTIONS.find((option) => option.value === value)
-    ?? fallback;
+  const fallback = WHISPER_QUANTIZATION_OPTIONS[0]!
+  return WHISPER_QUANTIZATION_OPTIONS.find((option) => option.value === value) ?? fallback
 }
 
 const WHISPER_LANGUAGE_NAMES = {
@@ -165,17 +165,17 @@ const WHISPER_LANGUAGE_NAMES = {
   jw: 'javanese',
   su: 'sundanese',
   yue: 'cantonese',
-} as const;
+} as const
 
-const WHISPER_LANGUAGE_VALUES = new Set(Object.keys(WHISPER_LANGUAGE_NAMES));
+const WHISPER_LANGUAGE_VALUES = new Set(Object.keys(WHISPER_LANGUAGE_NAMES))
 
 function formatWhisperLanguageLabel(languageName: string): string {
-  return languageName.replace(/\b\w/g, (char) => char.toUpperCase());
+  return languageName.replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 export const WHISPER_LANGUAGE_OPTIONS: ReadonlyArray<{
-  value: string;
-  label: string;
+  value: string
+  label: string
 }> = [
   { value: WHISPER_AUTO_LANGUAGE_VALUE, label: 'Auto-detect' },
   ...Object.entries(WHISPER_LANGUAGE_NAMES)
@@ -184,24 +184,22 @@ export const WHISPER_LANGUAGE_OPTIONS: ReadonlyArray<{
       label: formatWhisperLanguageLabel(label),
     }))
     .sort((left, right) => left.label.localeCompare(right.label)),
-];
+]
 
 export function getWhisperLanguageSelectValue(language: string | undefined): string {
-  const normalized = normalizeWhisperLanguage(language);
+  const normalized = normalizeWhisperLanguage(language)
   if (!normalized) {
-    return WHISPER_AUTO_LANGUAGE_VALUE;
+    return WHISPER_AUTO_LANGUAGE_VALUE
   }
 
-  return WHISPER_LANGUAGE_VALUES.has(normalized)
-    ? normalized
-    : WHISPER_AUTO_LANGUAGE_VALUE;
+  return WHISPER_LANGUAGE_VALUES.has(normalized) ? normalized : WHISPER_AUTO_LANGUAGE_VALUE
 }
 
 export function getWhisperLanguageSettingValue(value: string): string {
-  return value === WHISPER_AUTO_LANGUAGE_VALUE ? DEFAULT_WHISPER_LANGUAGE : value;
+  return value === WHISPER_AUTO_LANGUAGE_VALUE ? DEFAULT_WHISPER_LANGUAGE : value
 }
 
 export function normalizeWhisperLanguage(language: string | undefined): string | undefined {
-  const trimmed = language?.trim().toLowerCase();
-  return trimmed ? trimmed : undefined;
+  const trimmed = language?.trim().toLowerCase()
+  return trimmed ? trimmed : undefined
 }

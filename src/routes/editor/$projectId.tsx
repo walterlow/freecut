@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations';
-import { getProject } from '@/infrastructure/storage';
+import { createFileRoute } from '@tanstack/react-router'
+import { CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations'
+import { getProject } from '@/infrastructure/storage'
 
 export const Route = createFileRoute('/editor/$projectId')({
   // Editor loader data is tiny and migration state must be fresh on reopen.
@@ -9,13 +9,13 @@ export const Route = createFileRoute('/editor/$projectId')({
   preloadGcTime: 0,
   loader: async ({ params }) => {
     // Validate project exists - actual loading happens in Editor via loadTimeline
-    const project = await getProject(params.projectId);
+    const project = await getProject(params.projectId)
 
     if (!project) {
-      throw new Error(`Project not found: ${params.projectId}`);
+      throw new Error(`Project not found: ${params.projectId}`)
     }
 
-    const storedSchemaVersion = project.schemaVersion ?? 1;
+    const storedSchemaVersion = project.schemaVersion ?? 1
 
     // Only pass metadata needed for Editor initialization (not timeline data)
     return {
@@ -32,6 +32,6 @@ export const Route = createFileRoute('/editor/$projectId')({
         currentSchemaVersion: CURRENT_SCHEMA_VERSION,
         requiresUpgrade: storedSchemaVersion < CURRENT_SCHEMA_VERSION,
       },
-    };
+    }
   },
-});
+})

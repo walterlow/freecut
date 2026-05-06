@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { TimelineItem } from '@/types/timeline';
-import { getRollingEditPanelFrames } from './rolling-edit-overlay-utils';
+import { describe, expect, it } from 'vite-plus/test'
+import type { TimelineItem } from '@/types/timeline'
+import { getRollingEditPanelFrames } from './rolling-edit-overlay-utils'
 
 function makeVideoItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
   return {
@@ -16,7 +16,7 @@ function makeVideoItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
     sourceDuration: 200,
     sourceFps: 30,
     ...overrides,
-  } as TimelineItem;
+  } as TimelineItem
 }
 
 describe('getRollingEditPanelFrames', () => {
@@ -26,13 +26,13 @@ describe('getRollingEditPanelFrames', () => {
       from: 0,
       durationInFrames: 100,
       sourceStart: 0,
-    });
+    })
     const neighborItem = makeVideoItem({
       id: 'right',
       from: 100,
       durationInFrames: 100,
       sourceStart: 50,
-    });
+    })
 
     const result = getRollingEditPanelFrames({
       trimmedItem,
@@ -40,13 +40,13 @@ describe('getRollingEditPanelFrames', () => {
       handle: 'end',
       neighborDelta: -30,
       fps: 30,
-    });
+    })
 
-    expect(result.leftItem.id).toBe('left');
-    expect(result.rightItem.id).toBe('right');
-    expect(result.outInfo.sourceFrame).toBe(69);
-    expect(result.inInfo.sourceFrame).toBe(20);
-  });
+    expect(result.leftItem.id).toBe('left')
+    expect(result.rightItem.id).toBe('right')
+    expect(result.outInfo.sourceFrame).toBe(69)
+    expect(result.inInfo.sourceFrame).toBe(20)
+  })
 
   it('shows later incoming source frames when the edit point rolls right from a start handle drag', () => {
     const neighborItem = makeVideoItem({
@@ -54,13 +54,13 @@ describe('getRollingEditPanelFrames', () => {
       from: 0,
       durationInFrames: 100,
       sourceStart: 0,
-    });
+    })
     const trimmedItem = makeVideoItem({
       id: 'right',
       from: 100,
       durationInFrames: 100,
       sourceStart: 40,
-    });
+    })
 
     const result = getRollingEditPanelFrames({
       trimmedItem,
@@ -68,11 +68,11 @@ describe('getRollingEditPanelFrames', () => {
       handle: 'start',
       neighborDelta: 12,
       fps: 30,
-    });
+    })
 
-    expect(result.leftItem.id).toBe('left');
-    expect(result.rightItem.id).toBe('right');
-    expect(result.outInfo.sourceFrame).toBe(111);
-    expect(result.inInfo.sourceFrame).toBe(52);
-  });
-});
+    expect(result.leftItem.id).toBe('left')
+    expect(result.rightItem.id).toBe('right')
+    expect(result.outInfo.sourceFrame).toBe(111)
+    expect(result.inInfo.sourceFrame).toBe(52)
+  })
+})

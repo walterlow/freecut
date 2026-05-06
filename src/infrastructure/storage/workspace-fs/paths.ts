@@ -52,19 +52,19 @@
  *        thumbnail.meta.json sidecar dropped.
  */
 
-export const WORKSPACE_SCHEMA_VERSION = '2.0';
+export const WORKSPACE_SCHEMA_VERSION = '2.0'
 
-export const README_FILENAME = 'README.md';
-export const MARKER_FILENAME = '.freecut-workspace.json';
-export const INDEX_FILENAME = 'index.json';
+export const README_FILENAME = 'README.md'
+export const MARKER_FILENAME = '.freecut-workspace.json'
+export const INDEX_FILENAME = 'index.json'
 
-export const PROJECTS_DIR = 'projects';
-export const MEDIA_DIR = 'media';
-export const CONTENT_DIR = 'content';
+export const PROJECTS_DIR = 'projects'
+export const MEDIA_DIR = 'media'
+export const CONTENT_DIR = 'content'
 
-export const PROJECT_FILENAME = 'project.json';
-export const PROJECT_THUMBNAIL_FILENAME = 'thumbnail.jpg';
-export const PROJECT_MEDIA_LINKS_FILENAME = 'media-links.json';
+export const PROJECT_FILENAME = 'project.json'
+export const PROJECT_THUMBNAIL_FILENAME = 'thumbnail.jpg'
+export const PROJECT_MEDIA_LINKS_FILENAME = 'media-links.json'
 
 /**
  * Marker file present inside a project directory that has been soft-deleted.
@@ -76,80 +76,80 @@ export const PROJECT_MEDIA_LINKS_FILENAME = 'media-links.json';
  * Naming choice: `.freecut-trashed.json` makes the state self-explanatory
  * when browsing the workspace folder externally with a file manager.
  */
-export const PROJECT_TRASHED_MARKER_FILENAME = '.freecut-trashed.json';
+export const PROJECT_TRASHED_MARKER_FILENAME = '.freecut-trashed.json'
 
-export const MEDIA_METADATA_FILENAME = 'metadata.json';
-export const MEDIA_THUMBNAIL_FILENAME = 'thumbnail.jpg';
-export const MEDIA_SOURCE_LINK_FILENAME = 'source.link.json';
-export const MEDIA_CACHE_DIR = 'cache';
+export const MEDIA_METADATA_FILENAME = 'metadata.json'
+export const MEDIA_THUMBNAIL_FILENAME = 'thumbnail.jpg'
+export const MEDIA_SOURCE_LINK_FILENAME = 'source.link.json'
+export const MEDIA_CACHE_DIR = 'cache'
 
-export const CACHE_WAVEFORM_DIR = 'waveform';
-export const CACHE_FILMSTRIP_DIR = 'filmstrip';
-export const CACHE_GIF_FRAMES_DIR = 'gif-frames';
-export const CACHE_DECODED_AUDIO_DIR = 'decoded-audio';
-export const CACHE_AI_DIR = 'ai';
+export const CACHE_WAVEFORM_DIR = 'waveform'
+export const CACHE_FILMSTRIP_DIR = 'filmstrip'
+export const CACHE_GIF_FRAMES_DIR = 'gif-frames'
+export const CACHE_DECODED_AUDIO_DIR = 'decoded-audio'
+export const CACHE_AI_DIR = 'ai'
 /** Single file per media under cache/. Non-browser audio codecs are decoded
  *  once to WAV and reused for preview playback. */
-export const CACHE_PREVIEW_AUDIO_FILENAME = 'preview-audio.wav';
+export const CACHE_PREVIEW_AUDIO_FILENAME = 'preview-audio.wav'
 /** Single file per media under cache/waveform/. Header-indexed multi-res
  *  binary format for timeline waveform rendering. */
-export const CACHE_WAVEFORM_MULTI_RES_FILENAME = 'multi-res.bin';
+export const CACHE_WAVEFORM_MULTI_RES_FILENAME = 'multi-res.bin'
 /** Per-caption thumbnail JPEGs captured alongside LFM caption generation. */
-export const CACHE_CAPTION_THUMBS_DIR = 'captions-thumbs';
+export const CACHE_CAPTION_THUMBS_DIR = 'captions-thumbs'
 /**
  * Legacy path for transcripts — was `cache/transcript.json` before AI outputs
  * were consolidated under `cache/ai/`. Readers fall back to this on miss; a
  * subsequent save rewrites to the new path.
  */
-export const CACHE_TRANSCRIPT_FILENAME_LEGACY = 'transcript.json';
-export const CACHE_META_FILENAME = 'meta.json';
+export const CACHE_TRANSCRIPT_FILENAME_LEGACY = 'transcript.json'
+export const CACHE_META_FILENAME = 'meta.json'
 
-export const CONTENT_REFS_FILENAME = 'refs.json';
+export const CONTENT_REFS_FILENAME = 'refs.json'
 
 /** Segments for `projects/{id}/`. */
 export function projectDir(id: string): string[] {
-  return [PROJECTS_DIR, id];
+  return [PROJECTS_DIR, id]
 }
 
 /** Segments for `projects/{id}/project.json`. */
 export function projectJsonPath(id: string): string[] {
-  return [...projectDir(id), PROJECT_FILENAME];
+  return [...projectDir(id), PROJECT_FILENAME]
 }
 
 /** Segments for `projects/{id}/thumbnail.jpg`. */
 export function projectThumbnailPath(id: string): string[] {
-  return [...projectDir(id), PROJECT_THUMBNAIL_FILENAME];
+  return [...projectDir(id), PROJECT_THUMBNAIL_FILENAME]
 }
 
 /** Segments for `projects/{id}/media-links.json`. */
 export function projectMediaLinksPath(id: string): string[] {
-  return [...projectDir(id), PROJECT_MEDIA_LINKS_FILENAME];
+  return [...projectDir(id), PROJECT_MEDIA_LINKS_FILENAME]
 }
 
 /** Segments for `projects/{id}/.freecut-trashed.json`. */
 export function projectTrashedMarkerPath(id: string): string[] {
-  return [...projectDir(id), PROJECT_TRASHED_MARKER_FILENAME];
+  return [...projectDir(id), PROJECT_TRASHED_MARKER_FILENAME]
 }
 
 /** Segments for `media/{id}/`. */
 export function mediaDir(id: string): string[] {
-  return [MEDIA_DIR, id];
+  return [MEDIA_DIR, id]
 }
 
 /** Segments for `media/{id}/metadata.json`. */
 export function mediaMetadataPath(id: string): string[] {
-  return [...mediaDir(id), MEDIA_METADATA_FILENAME];
+  return [...mediaDir(id), MEDIA_METADATA_FILENAME]
 }
 
 /** Segments for `media/{id}/thumbnail.jpg`. */
 export function mediaThumbnailPath(id: string): string[] {
-  return [...mediaDir(id), MEDIA_THUMBNAIL_FILENAME];
+  return [...mediaDir(id), MEDIA_THUMBNAIL_FILENAME]
 }
 
 /** Segments for the legacy `media/{id}/source.{ext}` layout. */
 export function mediaSourcePath(id: string, extension: string): string[] {
-  const ext = extension.startsWith('.') ? extension.slice(1) : extension;
-  return [...mediaDir(id), `source.${ext}`];
+  const ext = extension.startsWith('.') ? extension.slice(1) : extension
+  return [...mediaDir(id), `source.${ext}`]
 }
 
 /**
@@ -158,104 +158,131 @@ export function mediaSourcePath(id: string, extension: string): string[] {
  * intelligible (`MyVacation.mp4` rather than `source.mp4`).
  */
 export function mediaSourceByFileName(id: string, fileName: string): string[] {
-  return [...mediaDir(id), sanitizeWorkspaceFileName(fileName)];
+  return [...mediaDir(id), sanitizeWorkspaceFileName(fileName)]
 }
 
 /** Never-allowed characters, per NTFS + ext4 intersection. */
 // eslint-disable-next-line no-control-regex -- control chars are exactly what we want to strip
-const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000-\u001F]/g;
+const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000-\u001F]/g
 
 /** Names reserved by Windows; suffix with `_` to sidestep them. */
 const WINDOWS_RESERVED_NAMES = new Set([
-  'CON', 'PRN', 'AUX', 'NUL',
-  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
-]);
+  'CON',
+  'PRN',
+  'AUX',
+  'NUL',
+  'COM1',
+  'COM2',
+  'COM3',
+  'COM4',
+  'COM5',
+  'COM6',
+  'COM7',
+  'COM8',
+  'COM9',
+  'LPT1',
+  'LPT2',
+  'LPT3',
+  'LPT4',
+  'LPT5',
+  'LPT6',
+  'LPT7',
+  'LPT8',
+  'LPT9',
+])
 
-const MAX_FILENAME_LENGTH = 200;
+const MAX_FILENAME_LENGTH = 200
 
 /**
  * Produce a cross-filesystem-safe variant of a user-supplied filename.
  * Falls back to `source.bin` for empty / all-invalid inputs.
  */
 export function sanitizeWorkspaceFileName(fileName: string): string {
-  const trimmed = (fileName ?? '').replace(/^\s+|[\s.]+$/g, '');
-  if (!trimmed) return 'source.bin';
+  const trimmed = (fileName ?? '').replace(/^\s+|[\s.]+$/g, '')
+  if (!trimmed) return 'source.bin'
 
-  let cleaned = trimmed.replace(INVALID_FILENAME_CHARS, '_');
+  let cleaned = trimmed.replace(INVALID_FILENAME_CHARS, '_')
 
   // Extract the extension so truncation doesn't chop it off.
-  const dot = cleaned.lastIndexOf('.');
-  const hasExt = dot > 0 && dot < cleaned.length - 1;
-  const stem = hasExt ? cleaned.slice(0, dot) : cleaned;
-  const ext = hasExt ? cleaned.slice(dot) : '';
+  const dot = cleaned.lastIndexOf('.')
+  const hasExt = dot > 0 && dot < cleaned.length - 1
+  const stem = hasExt ? cleaned.slice(0, dot) : cleaned
+  const ext = hasExt ? cleaned.slice(dot) : ''
 
-  const stemBudget = Math.max(1, MAX_FILENAME_LENGTH - ext.length);
-  const bounded = stem.length > stemBudget ? stem.slice(0, stemBudget) : stem;
+  const stemBudget = Math.max(1, MAX_FILENAME_LENGTH - ext.length)
+  const bounded = stem.length > stemBudget ? stem.slice(0, stemBudget) : stem
 
   // Windows reserved names are matched case-insensitively against the stem.
-  const isReserved = WINDOWS_RESERVED_NAMES.has(bounded.toUpperCase());
-  cleaned = `${isReserved ? `${bounded}_` : bounded}${ext}`;
+  const isReserved = WINDOWS_RESERVED_NAMES.has(bounded.toUpperCase())
+  cleaned = `${isReserved ? `${bounded}_` : bounded}${ext}`
 
-  return cleaned || 'source.bin';
+  return cleaned || 'source.bin'
 }
 
 /** Segments for `media/{id}/source.link.json`. */
 export function mediaSourceLinkPath(id: string): string[] {
-  return [...mediaDir(id), MEDIA_SOURCE_LINK_FILENAME];
+  return [...mediaDir(id), MEDIA_SOURCE_LINK_FILENAME]
 }
 
 /** Segments for `media/{id}/cache/`. */
 export function mediaCacheDir(id: string): string[] {
-  return [...mediaDir(id), MEDIA_CACHE_DIR];
+  return [...mediaDir(id), MEDIA_CACHE_DIR]
 }
 
 export function waveformDir(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_WAVEFORM_DIR];
+  return [...mediaCacheDir(mediaId), CACHE_WAVEFORM_DIR]
 }
 
 export function waveformBinPath(mediaId: string, binIndex: number): string[] {
-  return [...waveformDir(mediaId), `bin-${binIndex}.bin`];
+  return [...waveformDir(mediaId), `bin-${binIndex}.bin`]
 }
 
 /** Segments for `media/{id}/cache/waveform/multi-res.bin` — the header-indexed
  *  binary used by the timeline waveform renderer. Separate from the chunked
  *  `bin-{N}.bin` format which is produced by the decoded-audio pipeline. */
 export function waveformMultiResPath(mediaId: string): string[] {
-  return [...waveformDir(mediaId), CACHE_WAVEFORM_MULTI_RES_FILENAME];
+  return [...waveformDir(mediaId), CACHE_WAVEFORM_MULTI_RES_FILENAME]
 }
 
 /** Segments for `media/{id}/cache/filmstrip/`. */
 export function filmstripDir(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_FILMSTRIP_DIR];
+  return [...mediaCacheDir(mediaId), CACHE_FILMSTRIP_DIR]
 }
 
 /** Segments for `media/{id}/cache/filmstrip/{N}.{ext}` — one frame per second. */
 export function filmstripFramePath(mediaId: string, frameIndex: number, ext: string): string[] {
-  return [...filmstripDir(mediaId), `${frameIndex}.${ext}`];
+  return [...filmstripDir(mediaId), `${frameIndex}.${ext}`]
 }
 
 /** Segments for `media/{id}/cache/filmstrip/meta.json`. */
 export function filmstripMetaPath(mediaId: string): string[] {
-  return [...filmstripDir(mediaId), CACHE_META_FILENAME];
+  return [...filmstripDir(mediaId), CACHE_META_FILENAME]
 }
 
 /** Segments for `media/{id}/cache/preview-audio.wav` — conformed preview
  *  audio for non-browser-native codecs. One WAV per media. */
 export function previewAudioPath(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_PREVIEW_AUDIO_FILENAME];
+  return [...mediaCacheDir(mediaId), CACHE_PREVIEW_AUDIO_FILENAME]
+}
+
+export function reverseConformDir(mediaId: string): string[] {
+  return [...mediaCacheDir(mediaId), 'reverse-conform']
+}
+
+export function reverseConformFilePath(mediaId: string, key: string): string[] {
+  return [...reverseConformDir(mediaId), `${sanitizeWorkspaceFileName(key)}.mp4`]
 }
 
 export function gifFramesDir(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_GIF_FRAMES_DIR];
+  return [...mediaCacheDir(mediaId), CACHE_GIF_FRAMES_DIR]
 }
 
 export function gifFramePath(mediaId: string, frameIndex: number): string[] {
-  return [...gifFramesDir(mediaId), `frame-${frameIndex}.png`];
+  return [...gifFramesDir(mediaId), `frame-${frameIndex}.png`]
 }
 
 export function decodedAudioDir(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_DECODED_AUDIO_DIR];
+  return [...mediaCacheDir(mediaId), CACHE_DECODED_AUDIO_DIR]
 }
 
 export function decodedAudioBinPath(
@@ -263,7 +290,7 @@ export function decodedAudioBinPath(
   channel: 'left' | 'right',
   binIndex: number,
 ): string[] {
-  return [...decodedAudioDir(mediaId), `${channel}-${binIndex}.bin`];
+  return [...decodedAudioDir(mediaId), `${channel}-${binIndex}.bin`]
 }
 
 /**
@@ -271,7 +298,7 @@ export function decodedAudioBinPath(
  * (transcripts, captions, scene cuts, etc.). One file per `AiOutputKind`.
  */
 export function aiOutputsDir(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_AI_DIR];
+  return [...mediaCacheDir(mediaId), CACHE_AI_DIR]
 }
 
 /**
@@ -279,17 +306,17 @@ export function aiOutputsDir(mediaId: string): string[] {
  * enum (see `ai-outputs/types.ts`) — this helper only does path assembly.
  */
 export function aiOutputPath(mediaId: string, kind: string): string[] {
-  return [...aiOutputsDir(mediaId), `${kind}.json`];
+  return [...aiOutputsDir(mediaId), `${kind}.json`]
 }
 
 /** Segments for `media/{id}/cache/ai/captions-thumbs/`. */
 export function captionThumbsDir(mediaId: string): string[] {
-  return [...aiOutputsDir(mediaId), CACHE_CAPTION_THUMBS_DIR];
+  return [...aiOutputsDir(mediaId), CACHE_CAPTION_THUMBS_DIR]
 }
 
 /** Segments for `media/{id}/cache/ai/captions-thumbs/{index}.jpg`. */
 export function captionThumbPath(mediaId: string, index: number): string[] {
-  return [...captionThumbsDir(mediaId), `${index}.jpg`];
+  return [...captionThumbsDir(mediaId), `${index}.jpg`]
 }
 
 /**
@@ -298,7 +325,7 @@ export function captionThumbPath(mediaId: string, index: number): string[] {
  * (e.g. 500 captions = 750 KB vs ~4 MB if round-tripped through JSON).
  */
 export function captionEmbeddingsPath(mediaId: string): string[] {
-  return [...aiOutputsDir(mediaId), 'captions-embeddings.bin'];
+  return [...aiOutputsDir(mediaId), 'captions-embeddings.bin']
 }
 
 /**
@@ -308,7 +335,7 @@ export function captionEmbeddingsPath(mediaId: string): string[] {
  * matching on what the clip *looks like* when caption text is thin.
  */
 export function captionImageEmbeddingsPath(mediaId: string): string[] {
-  return [...aiOutputsDir(mediaId), 'captions-image-embeddings.bin'];
+  return [...aiOutputsDir(mediaId), 'captions-image-embeddings.bin']
 }
 
 /**
@@ -316,7 +343,7 @@ export function captionImageEmbeddingsPath(mediaId: string): string[] {
  * safe to persist in JSON / `MediaCaption.thumbRelPath`.
  */
 export function captionThumbRelPath(mediaId: string, index: number): string {
-  return captionThumbPath(mediaId, index).join('/');
+  return captionThumbPath(mediaId, index).join('/')
 }
 
 /* ---------------- Content-keyed caption storage (shared cache) ---------------- */
@@ -331,7 +358,7 @@ export function captionThumbRelPath(mediaId: string, index: number): string {
 // captions even though their source bytes never land in `content/{hash}/data.{ext}`.
 
 export function contentAiDir(hash: string): string[] {
-  return [...contentDir(hash), CACHE_AI_DIR];
+  return [...contentDir(hash), CACHE_AI_DIR]
 }
 
 /**
@@ -341,13 +368,13 @@ export function contentAiDir(hash: string): string[] {
  */
 export function contentCaptionCacheVariantKey(sampleIntervalSec?: number): string | null {
   if (
-    sampleIntervalSec === undefined
-    || !Number.isFinite(sampleIntervalSec)
-    || sampleIntervalSec <= 0
+    sampleIntervalSec === undefined ||
+    !Number.isFinite(sampleIntervalSec) ||
+    sampleIntervalSec <= 0
   ) {
-    return null;
+    return null
   }
-  return `si-${Math.round(sampleIntervalSec * 100)}`;
+  return `si-${Math.round(sampleIntervalSec * 100)}`
 }
 
 /**
@@ -356,28 +383,31 @@ export function contentCaptionCacheVariantKey(sampleIntervalSec?: number): strin
  * `content/{hash}/ai/{variantKey}/`.
  */
 export function contentCaptionCacheDir(hash: string, sampleIntervalSec?: number): string[] {
-  const variantKey = contentCaptionCacheVariantKey(sampleIntervalSec);
-  return variantKey ? [...contentAiDir(hash), variantKey] : contentAiDir(hash);
+  const variantKey = contentCaptionCacheVariantKey(sampleIntervalSec)
+  return variantKey ? [...contentAiDir(hash), variantKey] : contentAiDir(hash)
 }
 
 export function contentAiRefsPath(hash: string, sampleIntervalSec?: number): string[] {
-  return [...contentCaptionCacheDir(hash, sampleIntervalSec), CONTENT_REFS_FILENAME];
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), CONTENT_REFS_FILENAME]
 }
 
 export function contentCaptionsJsonPath(hash: string, sampleIntervalSec?: number): string[] {
-  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions.json'];
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions.json']
 }
 
 export function contentCaptionEmbeddingsPath(hash: string, sampleIntervalSec?: number): string[] {
-  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions-embeddings.bin'];
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions-embeddings.bin']
 }
 
-export function contentCaptionImageEmbeddingsPath(hash: string, sampleIntervalSec?: number): string[] {
-  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions-image-embeddings.bin'];
+export function contentCaptionImageEmbeddingsPath(
+  hash: string,
+  sampleIntervalSec?: number,
+): string[] {
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), 'captions-image-embeddings.bin']
 }
 
 export function contentCaptionThumbsDir(hash: string, sampleIntervalSec?: number): string[] {
-  return [...contentCaptionCacheDir(hash, sampleIntervalSec), CACHE_CAPTION_THUMBS_DIR];
+  return [...contentCaptionCacheDir(hash, sampleIntervalSec), CACHE_CAPTION_THUMBS_DIR]
 }
 
 export function contentCaptionThumbPath(
@@ -385,7 +415,7 @@ export function contentCaptionThumbPath(
   index: number,
   sampleIntervalSec?: number,
 ): string[] {
-  return [...contentCaptionThumbsDir(hash, sampleIntervalSec), `${index}.jpg`];
+  return [...contentCaptionThumbsDir(hash, sampleIntervalSec), `${index}.jpg`]
 }
 
 /**
@@ -398,7 +428,7 @@ export function contentCaptionThumbRelPath(
   index: number,
   sampleIntervalSec?: number,
 ): string {
-  return contentCaptionThumbPath(hash, index, sampleIntervalSec).join('/');
+  return contentCaptionThumbPath(hash, index, sampleIntervalSec).join('/')
 }
 
 /**
@@ -406,26 +436,26 @@ export function contentCaptionThumbRelPath(
  * `aiOutputPath(mediaId, 'transcript')`.
  */
 export function legacyTranscriptPath(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_TRANSCRIPT_FILENAME_LEGACY];
+  return [...mediaCacheDir(mediaId), CACHE_TRANSCRIPT_FILENAME_LEGACY]
 }
 
 export function cacheMetaPath(dir: string[]): string[] {
-  return [...dir, CACHE_META_FILENAME];
+  return [...dir, CACHE_META_FILENAME]
 }
 
 /** Segments for `content/{hash[0:2]}/{hash}/`. Sharded by hash prefix. */
 export function contentDir(hash: string): string[] {
-  const shard = hash.slice(0, 2);
-  return [CONTENT_DIR, shard, hash];
+  const shard = hash.slice(0, 2)
+  return [CONTENT_DIR, shard, hash]
 }
 
 export function contentRefsPath(hash: string): string[] {
-  return [...contentDir(hash), CONTENT_REFS_FILENAME];
+  return [...contentDir(hash), CONTENT_REFS_FILENAME]
 }
 
 export function contentDataPath(hash: string, extension: string): string[] {
-  const ext = extension.startsWith('.') ? extension.slice(1) : extension;
-  return [...contentDir(hash), `data.${ext}`];
+  const ext = extension.startsWith('.') ? extension.slice(1) : extension
+  return [...contentDir(hash), `data.${ext}`]
 }
 
 /* ---------------- Content-deduped shared store ---------------- */
@@ -436,20 +466,20 @@ export function contentDataPath(hash: string, extension: string): string[] {
 // proxy file. The sibling `content/<hash[0:2]>/<hash>/` tree is reserved
 // for future source-blob dedup via `contentDir()` / `contentDataPath()`.
 
-export const CONTENT_PROXIES_DIR = 'proxies';
+export const CONTENT_PROXIES_DIR = 'proxies'
 
 export function proxiesRoot(): string[] {
-  return [CONTENT_DIR, CONTENT_PROXIES_DIR];
+  return [CONTENT_DIR, CONTENT_PROXIES_DIR]
 }
 
 export function proxyFilePath(proxyKey: string): string[] {
-  return [...proxiesRoot(), proxyKey, 'proxy.mp4'];
+  return [...proxiesRoot(), proxyKey, 'proxy.mp4']
 }
 
 export function proxyMetaPath(proxyKey: string): string[] {
-  return [...proxiesRoot(), proxyKey, 'meta.json'];
+  return [...proxiesRoot(), proxyKey, 'meta.json']
 }
 
 export function proxyDir(proxyKey: string): string[] {
-  return [...proxiesRoot(), proxyKey];
+  return [...proxiesRoot(), proxyKey]
 }

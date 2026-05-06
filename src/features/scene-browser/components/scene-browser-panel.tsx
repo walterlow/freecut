@@ -1,131 +1,143 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { BrainCircuit, Check, ChevronDown, Filter, LayoutGrid, List, Loader2, Sparkles, Wand2 } from 'lucide-react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  BrainCircuit,
+  Check,
+  ChevronDown,
+  Filter,
+  LayoutGrid,
+  List,
+  Loader2,
+  Sparkles,
+  Wand2,
+} from 'lucide-react'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from '@/components/ui/select'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/shared/ui/cn';
-import { useMediaLibraryStore, mediaAnalysisService } from '../deps/media-library';
-import { useSceneBrowserStore, type SceneBrowserSortMode, type SceneBrowserViewMode } from '../stores/scene-browser-store';
-import { useRankedScenes } from '../hooks/use-ranked-scenes';
-import { useSemanticIndex } from '../hooks/use-semantic-index';
-import { SceneSearchField, SceneSearchModeButtons } from './scene-search-input';
-import { SceneRow } from './scene-row';
-import { SceneCard } from './scene-card';
+} from '@/components/ui/dropdown-menu'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/shared/ui/cn'
+import { useMediaLibraryStore, mediaAnalysisService } from '../deps/media-library'
+import {
+  useSceneBrowserStore,
+  type SceneBrowserSortMode,
+  type SceneBrowserViewMode,
+} from '../stores/scene-browser-store'
+import { useRankedScenes } from '../hooks/use-ranked-scenes'
+import { useSemanticIndex } from '../hooks/use-semantic-index'
+import { SceneSearchField, SceneSearchModeButtons } from './scene-search-input'
+import { SceneRow } from './scene-row'
+import { SceneCard } from './scene-card'
 
 interface SceneBrowserPanelProps {
-  className?: string;
+  className?: string
 }
 
 const SORT_OPTIONS: Array<{ value: SceneBrowserSortMode; label: string }> = [
   { value: 'relevance', label: 'Relevance' },
   { value: 'time', label: 'Timestamp' },
   { value: 'name', label: 'Media name' },
-];
+]
 
 export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
-  const query = useSceneBrowserStore((s) => s.query);
-  const scope = useSceneBrowserStore((s) => s.scope);
-  const setScope = useSceneBrowserStore((s) => s.setScope);
-  const sortMode = useSceneBrowserStore((s) => s.sortMode);
-  const setSortMode = useSceneBrowserStore((s) => s.setSortMode);
-  const viewMode = useSceneBrowserStore((s) => s.viewMode);
-  const setViewMode = useSceneBrowserStore((s) => s.setViewMode);
+  const query = useSceneBrowserStore((s) => s.query)
+  const scope = useSceneBrowserStore((s) => s.scope)
+  const setScope = useSceneBrowserStore((s) => s.setScope)
+  const sortMode = useSceneBrowserStore((s) => s.sortMode)
+  const setSortMode = useSceneBrowserStore((s) => s.setSortMode)
+  const viewMode = useSceneBrowserStore((s) => s.viewMode)
+  const setViewMode = useSceneBrowserStore((s) => s.setViewMode)
 
-  const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
+  const mediaItems = useMediaLibraryStore((s) => s.mediaItems)
   const mediaWithCaptions = useMemo(
     () => mediaItems.filter((m) => (m.aiCaptions?.length ?? 0) > 0),
     [mediaItems],
-  );
+  )
 
-  const [analyzeBusy, setAnalyzeBusy] = useState(false);
+  const [analyzeBusy, setAnalyzeBusy] = useState(false)
   const analyzableMedia = useMemo(
-    () => mediaItems.filter((m) => m.mimeType.startsWith('video/') || m.mimeType.startsWith('image/')),
+    () =>
+      mediaItems.filter((m) => m.mimeType.startsWith('video/') || m.mimeType.startsWith('image/')),
     [mediaItems],
-  );
+  )
   const missingCount = useMemo(
     () => analyzableMedia.filter((m) => (m.aiCaptions?.length ?? 0) === 0).length,
     [analyzableMedia],
-  );
+  )
 
-  const headerRef = useRef<HTMLDivElement | null>(null);
-  const [headerWidth, setHeaderWidth] = useState<number>(Number.POSITIVE_INFINITY);
+  const headerRef = useRef<HTMLDivElement | null>(null)
+  const [headerWidth, setHeaderWidth] = useState<number>(Number.POSITIVE_INFINITY)
   useLayoutEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
+    const el = headerRef.current
+    if (!el) return
     const update = () => {
-      setHeaderWidth(el.clientWidth);
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+      setHeaderWidth(el.clientWidth)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   // Two thresholds for compacting — buttons (Color/Keyword/Analyze) carry
   // fixed-width labels and only need to collapse when genuinely cramped,
   // but the scope `<Select>` shows arbitrary-length filenames in a 144px
   // pill, so we collapse it earlier and much earlier when a specific
   // media is picked (any real filename truncates in that width).
-  const compact = headerWidth < 360;
-  const compactScope = headerWidth < 440 || (scope !== null && headerWidth < 560);
+  const compact = headerWidth < 360
+  const compactScope = headerWidth < 440 || (scope !== null && headerWidth < 560)
 
   const runAnalyze = useCallback(
     async (kind: 'missing' | 'all' | 'scope', mediaId?: string) => {
-      if (analyzeBusy) return;
-      setAnalyzeBusy(true);
+      if (analyzeBusy) return
+      setAnalyzeBusy(true)
       try {
         if (kind === 'scope' && mediaId) {
-          await mediaAnalysisService.analyzeMedia(mediaId);
+          await mediaAnalysisService.analyzeMedia(mediaId)
         } else if (kind === 'missing') {
-          await mediaAnalysisService.analyzeBatch({ onlyMissing: true });
+          await mediaAnalysisService.analyzeBatch({ onlyMissing: true })
         } else {
-          await mediaAnalysisService.analyzeBatch({ onlyMissing: false });
+          await mediaAnalysisService.analyzeBatch({ onlyMissing: false })
         }
       } finally {
-        setAnalyzeBusy(false);
+        setAnalyzeBusy(false)
       }
     },
     [analyzeBusy],
-  );
+  )
 
-  const {
-    scenes,
-    totalScenes,
-    clipsWithCaptions,
-    reanalyzingMedia,
-    isQuerying,
-  } = useRankedScenes();
-  const indexProgress = useSemanticIndex();
+  const { scenes, totalScenes, clipsWithCaptions, reanalyzingMedia, isQuerying } = useRankedScenes()
+  const indexProgress = useSemanticIndex()
 
   const scopedMedia = useMemo(
-    () => (scope ? mediaWithCaptions.find((m) => m.id === scope) ?? null : null),
+    () => (scope ? (mediaWithCaptions.find((m) => m.id === scope) ?? null) : null),
     [scope, mediaWithCaptions],
-  );
+  )
 
-  const handleScopeChange = useCallback((value: string) => {
-    setScope(value === 'all' ? null : value);
-  }, [setScope]);
+  const handleScopeChange = useCallback(
+    (value: string) => {
+      setScope(value === 'all' ? null : value)
+    },
+    [setScope],
+  )
 
-  const showMediaName = scope === null;
-  const hasAnyCaptions = totalScenes > 0;
-  const hasResults = scenes.length > 0;
-  const isFiltered = query.trim().length > 0;
+  const showMediaName = scope === null
+  const hasAnyCaptions = totalScenes > 0
+  const hasResults = scenes.length > 0
+  const isFiltered = query.trim().length > 0
 
   const scopeLabel = scopedMedia
     ? `${clipsWithCaptions} clip · ${totalScenes} ${totalScenes === 1 ? 'scene' : 'scenes'}`
-    : `${clipsWithCaptions} ${clipsWithCaptions === 1 ? 'clip' : 'clips'} · ${totalScenes} ${totalScenes === 1 ? 'scene' : 'scenes'}`;
+    : `${clipsWithCaptions} ${clipsWithCaptions === 1 ? 'clip' : 'clips'} · ${totalScenes} ${totalScenes === 1 ? 'scene' : 'scenes'}`
 
   return (
     <div className={cn('flex min-h-0 flex-col', className)}>
@@ -202,9 +214,7 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
           clamped to viewport width so the scrollbar sits in its own column. */}
       <ScrollArea className="flex-1 min-h-0 mr-2 [&>[data-radix-scroll-area-viewport]>div]:!block">
         <div className={cn('pl-2 pr-3 py-2', viewMode === 'list' && 'space-y-0.5')}>
-          {reanalyzingMedia.length > 0 && (
-            <ReanalyzingBanner items={reanalyzingMedia} />
-          )}
+          {reanalyzingMedia.length > 0 && <ReanalyzingBanner items={reanalyzingMedia} />}
           {(indexProgress.indexTotal > 0 || indexProgress.loadingModel) && (
             <SemanticIndexBanner progress={indexProgress} />
           )}
@@ -238,33 +248,27 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
         </div>
       </ScrollArea>
     </div>
-  );
+  )
 }
 
 function SemanticIndexBanner({
   progress,
 }: {
-  progress: { indexing: number; indexTotal: number; loadingModel: boolean };
+  progress: { indexing: number; indexTotal: number; loadingModel: boolean }
 }) {
   const label = progress.loadingModel
     ? 'Downloading semantic model (~22 MB, first run only)…'
-    : `Indexing captions for semantic search — ${progress.indexing}/${progress.indexTotal} clips`;
+    : `Indexing captions for semantic search — ${progress.indexing}/${progress.indexTotal} clips`
   return (
     <div className="flex items-center gap-2 rounded-md border border-purple-400/20 bg-purple-400/5 px-3 py-2 text-[11px] text-purple-300/90">
       <BrainCircuit className="h-3 w-3 shrink-0 animate-pulse" />
       <span className="truncate">{label}</span>
     </div>
-  );
+  )
 }
 
-function ReanalyzingBanner({
-  items,
-}: {
-  items: Array<{ id: string; fileName: string }>;
-}) {
-  const label = items.length === 1
-    ? items[0]!.fileName
-    : `${items.length} clips`;
+function ReanalyzingBanner({ items }: { items: Array<{ id: string; fileName: string }> }) {
+  const label = items.length === 1 ? items[0]!.fileName : `${items.length} clips`
   return (
     <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] text-primary/90">
       <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
@@ -272,7 +276,7 @@ function ReanalyzingBanner({
         Re-analyzing <span className="font-medium">{label}</span> — scenes will refresh when done.
       </span>
     </div>
-  );
+  )
 }
 
 /**
@@ -287,12 +291,12 @@ function CompactScopePicker({
   mediaWithCaptions,
   onChange,
 }: {
-  scope: string | null;
-  scopedMedia: { id: string; fileName: string } | null;
-  mediaWithCaptions: ReadonlyArray<{ id: string; fileName: string }>;
-  onChange: (value: string) => void;
+  scope: string | null
+  scopedMedia: { id: string; fileName: string } | null
+  mediaWithCaptions: ReadonlyArray<{ id: string; fileName: string }>
+  onChange: (value: string) => void
 }) {
-  const title = scopedMedia ? `Scope: ${scopedMedia.fileName}` : 'Scope: All media';
+  const title = scopedMedia ? `Scope: ${scopedMedia.fileName}` : 'Scope: All media'
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -328,7 +332,7 @@ function CompactScopePicker({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }
 
 function AnalyzeMenu({
@@ -339,14 +343,14 @@ function AnalyzeMenu({
   onRun,
   compact,
 }: {
-  busy: boolean;
-  totalAnalyzable: number;
-  missingCount: number;
-  scopedMedia: { id: string; fileName: string } | null;
-  onRun: (kind: 'missing' | 'all' | 'scope', mediaId?: string) => void;
-  compact?: boolean;
+  busy: boolean
+  totalAnalyzable: number
+  missingCount: number
+  scopedMedia: { id: string; fileName: string } | null
+  onRun: (kind: 'missing' | 'all' | 'scope', mediaId?: string) => void
+  compact?: boolean
 }) {
-  const disabled = totalAnalyzable === 0;
+  const disabled = totalAnalyzable === 0
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -392,15 +396,15 @@ function AnalyzeMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }
 
 function ViewModeToggle({
   value,
   onChange,
 }: {
-  value: SceneBrowserViewMode;
-  onChange: (mode: SceneBrowserViewMode) => void;
+  value: SceneBrowserViewMode
+  onChange: (mode: SceneBrowserViewMode) => void
 }) {
   return (
     <div className="flex items-center rounded-md border border-border bg-secondary p-0.5">
@@ -435,15 +439,15 @@ function ViewModeToggle({
         <LayoutGrid className="h-3 w-3" />
       </button>
     </div>
-  );
+  )
 }
 
 function EmptyState({
   hasAnyCaptions,
   isFiltered,
 }: {
-  hasAnyCaptions: boolean;
-  isFiltered: boolean;
+  hasAnyCaptions: boolean
+  isFiltered: boolean
 }) {
   if (!hasAnyCaptions) {
     return (
@@ -451,11 +455,11 @@ function EmptyState({
         <Sparkles className="h-6 w-6 text-purple-400/60" />
         <p className="text-[12px]">No AI captions yet.</p>
         <p className="max-w-xs text-[11px] text-muted-foreground/80">
-          Run <span className="font-medium">Analyze with AI</span> on a clip from the media
-          library to generate searchable scene captions.
+          Run <span className="font-medium">Analyze with AI</span> on a clip from the media library
+          to generate searchable scene captions.
         </p>
       </div>
-    );
+    )
   }
   if (isFiltered) {
     return (
@@ -465,7 +469,7 @@ function EmptyState({
           Try a shorter query or switch scope to <span className="font-medium">All media</span>.
         </p>
       </div>
-    );
+    )
   }
-  return null;
+  return null
 }

@@ -1,4 +1,4 @@
-import type { SceneCaptionData } from '../captioning/types';
+import type { SceneCaptionData } from '../captioning/types'
 
 /**
  * Embedding context builder.
@@ -22,22 +22,22 @@ import type { SceneCaptionData } from '../captioning/types';
  */
 
 export interface TranscriptSegment {
-  text: string;
-  start: number;
-  end: number;
+  text: string
+  start: number
+  end: number
 }
 
 export interface BuildEmbeddingTextInput {
-  caption: { text: string; timeSec: number };
-  sceneData?: SceneCaptionData;
+  caption: { text: string; timeSec: number }
+  sceneData?: SceneCaptionData
   /**
    * Retained for call-site compatibility but unused — filename tokens
    * turned out to be noise for editor workflows (proxied filenames,
    * generic "final_export" stems drifted meaning more than they helped).
    */
-  fileName?: string;
+  fileName?: string
   /** Full transcript for the source media, used to slice per-caption. */
-  transcriptSegments?: TranscriptSegment[] | null;
+  transcriptSegments?: TranscriptSegment[] | null
   /**
    * Human-readable dominant-color phrase for the caption's thumbnail,
    * e.g. `"warm orange, deep teal, near black"`. Computed off the JPEG
@@ -45,14 +45,14 @@ export interface BuildEmbeddingTextInput {
    * a fuzzy hint for the transformer; the structural Lab palette in
    * `paletteForLab` is what powers exact color-query ranking.
    */
-  colorPhrase?: string;
+  colorPhrase?: string
 }
 
 /** ± radius in seconds around the caption timestamp to pull transcript from. */
-const DEFAULT_TRANSCRIPT_RADIUS_SEC = 2;
+const DEFAULT_TRANSCRIPT_RADIUS_SEC = 2
 
 /** Longer values drown the caption signal in transcript chatter. */
-const TRANSCRIPT_MAX_CHARS = 220;
+const TRANSCRIPT_MAX_CHARS = 220
 
 /**
  * Pull transcript text that overlaps with a caption's time window. Joins
@@ -64,22 +64,22 @@ export function sliceTranscript(
   timeSec: number,
   radiusSec: number = DEFAULT_TRANSCRIPT_RADIUS_SEC,
 ): string {
-  if (!segments || segments.length === 0) return '';
-  const from = timeSec - radiusSec;
-  const to = timeSec + radiusSec;
-  const chunks: string[] = [];
+  if (!segments || segments.length === 0) return ''
+  const from = timeSec - radiusSec
+  const to = timeSec + radiusSec
+  const chunks: string[] = []
   for (const segment of segments) {
-    if (segment.end < from || segment.start > to) continue;
-    const text = segment.text.trim();
-    if (text) chunks.push(text);
+    if (segment.end < from || segment.start > to) continue
+    const text = segment.text.trim()
+    if (text) chunks.push(text)
   }
-  const joined = chunks.join(' ').replace(/\s+/g, ' ').trim();
-  if (joined.length <= TRANSCRIPT_MAX_CHARS) return joined;
+  const joined = chunks.join(' ').replace(/\s+/g, ' ').trim()
+  if (joined.length <= TRANSCRIPT_MAX_CHARS) return joined
   // Clip to a word boundary so the truncation doesn't leave half-words
   // in the embedding input.
-  const clipped = joined.slice(0, TRANSCRIPT_MAX_CHARS);
-  const lastSpace = clipped.lastIndexOf(' ');
-  return lastSpace > TRANSCRIPT_MAX_CHARS * 0.6 ? clipped.slice(0, lastSpace) : clipped;
+  const clipped = joined.slice(0, TRANSCRIPT_MAX_CHARS)
+  const lastSpace = clipped.lastIndexOf(' ')
+  return lastSpace > TRANSCRIPT_MAX_CHARS * 0.6 ? clipped.slice(0, lastSpace) : clipped
 }
 
 /**
@@ -94,24 +94,24 @@ export function sliceTranscript(
  * *filename* rather than the scene content.
  */
 export function buildEmbeddingText(input: BuildEmbeddingTextInput): string {
-  const lines: string[] = [];
-  const caption = input.caption.text.trim();
-  lines.push(`SCENE: ${caption}`);
+  const lines: string[] = []
+  const caption = input.caption.text.trim()
+  lines.push(`SCENE: ${caption}`)
 
-  const shotType = input.sceneData?.shotType?.trim();
-  if (shotType) lines.push(`SHOT: ${shotType}`);
+  const shotType = input.sceneData?.shotType?.trim()
+  if (shotType) lines.push(`SHOT: ${shotType}`)
 
-  const timeOfDay = input.sceneData?.timeOfDay?.trim();
-  if (timeOfDay) lines.push(`TIME: ${timeOfDay}`);
+  const timeOfDay = input.sceneData?.timeOfDay?.trim()
+  if (timeOfDay) lines.push(`TIME: ${timeOfDay}`)
 
-  const weather = input.sceneData?.weather?.trim();
-  if (weather) lines.push(`WEATHER: ${weather}`);
+  const weather = input.sceneData?.weather?.trim()
+  if (weather) lines.push(`WEATHER: ${weather}`)
 
-  const speech = sliceTranscript(input.transcriptSegments, input.caption.timeSec);
-  if (speech) lines.push(`SPEECH: ${speech}`);
+  const speech = sliceTranscript(input.transcriptSegments, input.caption.timeSec)
+  if (speech) lines.push(`SPEECH: ${speech}`)
 
-  const colors = input.colorPhrase?.trim();
-  if (colors) lines.push(`COLORS: ${colors}`);
+  const colors = input.colorPhrase?.trim()
+  if (colors) lines.push(`COLORS: ${colors}`)
 
-  return lines.join('\n');
+  return lines.join('\n')
 }

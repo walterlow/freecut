@@ -14,28 +14,28 @@
  * Path inputs are arrays of segments — consistent with paths.ts.
  */
 
-import { createLogger } from '@/shared/logging/logger';
-import { notifyPermissionLost } from './root';
-import { withKeyLock } from './with-key-lock';
+import { createLogger } from '@/shared/logging/logger'
+import { notifyPermissionLost } from './root'
+import { withKeyLock } from './with-key-lock'
 
-const logger = createLogger('WorkspaceFS');
+const logger = createLogger('WorkspaceFS')
 
 function isNotFound(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'NotFoundError';
+  return error instanceof DOMException && error.name === 'NotFoundError'
 }
 
 function isNotAllowed(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'NotAllowedError';
+  return error instanceof DOMException && error.name === 'NotAllowedError'
 }
 
 function wrap<T>(operation: string, fn: () => Promise<T>): Promise<T> {
   return fn().catch((error) => {
     if (isNotAllowed(error)) {
-      notifyPermissionLost();
+      notifyPermissionLost()
     }
-    logger.warn(`${operation} failed`, error);
-    throw error;
-  });
+    logger.warn(`${operation} failed`, error)
+    throw error
+  })
 }
 
 /**
@@ -47,11 +47,11 @@ async function resolveDir(
   segments: string[],
   create: boolean,
 ): Promise<FileSystemDirectoryHandle> {
-  let dir = root;
+  let dir = root
   for (const segment of segments) {
-    dir = await dir.getDirectoryHandle(segment, { create });
+    dir = await dir.getDirectoryHandle(segment, { create })
   }
-  return dir;
+  return dir
 }
 
 /**
@@ -63,12 +63,12 @@ async function resolveFileParent(
   create: boolean,
 ): Promise<{ parent: FileSystemDirectoryHandle; fileName: string }> {
   if (segments.length === 0) {
-    throw new Error('fs-primitives: empty path segments');
+    throw new Error('fs-primitives: empty path segments')
   }
-  const parentSegments = segments.slice(0, -1);
-  const fileName = segments[segments.length - 1]!;
-  const parent = await resolveDir(root, parentSegments, create);
-  return { parent, fileName };
+  const parentSegments = segments.slice(0, -1)
+  const fileName = segments[segments.length - 1]!
+  const parent = await resolveDir(root, parentSegments, create)
+  return { parent, fileName }
 }
 
 /* ────────────────────────────── Read helpers ─────────────────────────── */
@@ -79,17 +79,17 @@ export async function readJson<T>(
 ): Promise<T | null> {
   return wrap('readJson', async () => {
     try {
-      const { parent, fileName } = await resolveFileParent(root, segments, false);
-      const file = await parent.getFileHandle(fileName, { create: false });
-      const blob = await file.getFile();
-      const text = await blob.text();
-      if (text.length === 0) return null;
-      return JSON.parse(text) as T;
+      const { parent, fileName } = await resolveFileParent(root, segments, false)
+      const file = await parent.getFileHandle(fileName, { create: false })
+      const blob = await file.getFile()
+      const text = await blob.text()
+      if (text.length === 0) return null
+      return JSON.parse(text) as T
     } catch (error) {
-      if (isNotFound(error)) return null;
-      throw error;
+      if (isNotFound(error)) return null
+      throw error
     }
-  });
+  })
 }
 
 export async function readBlob(
@@ -98,23 +98,23 @@ export async function readBlob(
 ): Promise<Blob | null> {
   return wrap('readBlob', async () => {
     try {
-      const { parent, fileName } = await resolveFileParent(root, segments, false);
-      const file = await parent.getFileHandle(fileName, { create: false });
-      return await file.getFile();
+      const { parent, fileName } = await resolveFileParent(root, segments, false)
+      const file = await parent.getFileHandle(fileName, { create: false })
+      return await file.getFile()
     } catch (error) {
-      if (isNotFound(error)) return null;
-      throw error;
+      if (isNotFound(error)) return null
+      throw error
     }
-  });
+  })
 }
 
 export async function readArrayBuffer(
   root: FileSystemDirectoryHandle,
   segments: string[],
 ): Promise<ArrayBuffer | null> {
-  const blob = await readBlob(root, segments);
-  if (!blob) return null;
-  return blob.arrayBuffer();
+  const blob = await readBlob(root, segments)
+  if (!blob) return null
+  return blob.arrayBuffer()
 }
 
 /* ────────────────────────────── Write helpers ────────────────────────── */
@@ -135,7 +135,7 @@ export async function readArrayBuffer(
  * tab has its own tmp writable lifecycle.
  */
 function writeJsonAtomicLockKey(segments: string[]): string {
-  return `writeJsonAtomic:${segments.join('/')}`;
+  return `writeJsonAtomic:${segments.join('/')}`
 }
 
 export async function writeJsonAtomic(
@@ -145,37 +145,37 @@ export async function writeJsonAtomic(
 ): Promise<number> {
   return wrap('writeJsonAtomic', () =>
     withKeyLock(writeJsonAtomicLockKey(segments), async () => {
-      const { parent, fileName } = await resolveFileParent(root, segments, true);
-      const tmpName = `${fileName}.tmp`;
-      const json = JSON.stringify(data, null, 2);
+      const { parent, fileName } = await resolveFileParent(root, segments, true)
+      const tmpName = `${fileName}.tmp`
+      const json = JSON.stringify(data, null, 2)
 
-      const tmpHandle = await parent.getFileHandle(tmpName, { create: true });
-      const writable = await tmpHandle.createWritable();
-      await writable.write(json);
-      await writable.close();
+      const tmpHandle = await parent.getFileHandle(tmpName, { create: true })
+      const writable = await tmpHandle.createWritable()
+      await writable.write(json)
+      await writable.close()
 
       type MovableHandle = FileSystemFileHandle & {
-        move?: (parent: FileSystemDirectoryHandle, newName: string) => Promise<void>;
-      };
-      const movable = tmpHandle as MovableHandle;
+        move?: (parent: FileSystemDirectoryHandle, newName: string) => Promise<void>
+      }
+      const movable = tmpHandle as MovableHandle
       if (typeof movable.move === 'function') {
-        await movable.move(parent, fileName);
+        await movable.move(parent, fileName)
       } else {
         // Fallback: copy tmp → target, then remove tmp.
-        const targetHandle = await parent.getFileHandle(fileName, { create: true });
-        const targetWritable = await targetHandle.createWritable();
-        await targetWritable.write(json);
-        await targetWritable.close();
+        const targetHandle = await parent.getFileHandle(fileName, { create: true })
+        const targetWritable = await targetHandle.createWritable()
+        await targetWritable.write(json)
+        await targetWritable.close()
         try {
-          await parent.removeEntry(tmpName);
+          await parent.removeEntry(tmpName)
         } catch (error) {
-          if (!isNotFound(error)) throw error;
+          if (!isNotFound(error)) throw error
         }
       }
 
-      return json.length;
+      return json.length
     }),
-  );
+  )
 }
 
 export async function writeBlob(
@@ -191,13 +191,13 @@ export async function writeBlob(
   // not constrain parallelism of unrelated writes.
   return wrap('writeBlob', () =>
     withKeyLock(`writeBlob:${segments.join('/')}`, async () => {
-      const { parent, fileName } = await resolveFileParent(root, segments, true);
-      const fh = await parent.getFileHandle(fileName, { create: true });
-      const writable = await fh.createWritable();
-      await writable.write(data as FileSystemWriteChunkType);
-      await writable.close();
+      const { parent, fileName } = await resolveFileParent(root, segments, true)
+      const fh = await parent.getFileHandle(fileName, { create: true })
+      const writable = await fh.createWritable()
+      await writable.write(data as FileSystemWriteChunkType)
+      await writable.close()
     }),
-  );
+  )
 }
 
 /* ────────────────────────────── Delete helpers ───────────────────────── */
@@ -211,24 +211,24 @@ export async function removeEntry(
   options: { recursive?: boolean } = {},
 ): Promise<void> {
   if (segments.length === 0) {
-    throw new Error('fs-primitives: refusing to remove empty path');
+    throw new Error('fs-primitives: refusing to remove empty path')
   }
   return wrap('removeEntry', async () => {
     try {
-      const { parent, fileName } = await resolveFileParent(root, segments, false);
-      await parent.removeEntry(fileName, { recursive: options.recursive ?? false });
+      const { parent, fileName } = await resolveFileParent(root, segments, false)
+      await parent.removeEntry(fileName, { recursive: options.recursive ?? false })
     } catch (error) {
-      if (isNotFound(error)) return;
-      throw error;
+      if (isNotFound(error)) return
+      throw error
     }
-  });
+  })
 }
 
 /* ────────────────────────────── Enumeration ──────────────────────────── */
 
 export interface DirectoryEntry {
-  name: string;
-  kind: 'file' | 'directory';
+  name: string
+  kind: 'file' | 'directory'
 }
 
 export async function listDirectory(
@@ -237,17 +237,17 @@ export async function listDirectory(
 ): Promise<DirectoryEntry[]> {
   return wrap('listDirectory', async () => {
     try {
-      const dir = await resolveDir(root, segments, false);
-      const entries: DirectoryEntry[] = [];
+      const dir = await resolveDir(root, segments, false)
+      const entries: DirectoryEntry[] = []
       for await (const entry of dir.values()) {
-        entries.push({ name: entry.name, kind: entry.kind });
+        entries.push({ name: entry.name, kind: entry.kind })
       }
-      return entries;
+      return entries
     } catch (error) {
-      if (isNotFound(error)) return [];
-      throw error;
+      if (isNotFound(error)) return []
+      throw error
     }
-  });
+  })
 }
 
 export async function exists(
@@ -255,22 +255,22 @@ export async function exists(
   segments: string[],
 ): Promise<boolean> {
   try {
-    const { parent, fileName } = await resolveFileParent(root, segments, false);
+    const { parent, fileName } = await resolveFileParent(root, segments, false)
     try {
-      await parent.getFileHandle(fileName, { create: false });
-      return true;
+      await parent.getFileHandle(fileName, { create: false })
+      return true
     } catch (error) {
-      if (!isNotFound(error)) throw error;
+      if (!isNotFound(error)) throw error
     }
     try {
-      await parent.getDirectoryHandle(fileName, { create: false });
-      return true;
+      await parent.getDirectoryHandle(fileName, { create: false })
+      return true
     } catch (error) {
-      if (!isNotFound(error)) throw error;
+      if (!isNotFound(error)) throw error
     }
-    return false;
+    return false
   } catch (error) {
-    if (isNotFound(error)) return false;
-    throw error;
+    if (isNotFound(error)) return false
+    throw error
   }
 }

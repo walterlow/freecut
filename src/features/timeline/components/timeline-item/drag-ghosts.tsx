@@ -1,12 +1,12 @@
-﻿import { forwardRef, memo } from 'react';
-import { cn } from '@/shared/ui/cn';
+import { forwardRef, memo } from 'react'
+import { cn } from '@/shared/ui/cn'
 
 interface DragGhostsProps {
-  isAltDrag: boolean;
-  isDragging: boolean;
-  left: number;
-  width: number;
-  dragOffset: { x: number; y: number };
+  isAltDrag: boolean
+  isDragging: boolean
+  left: number
+  width: number
+  dragOffset: { x: number; y: number }
 }
 
 /**
@@ -23,8 +23,8 @@ export const AnchorDragGhost = memo(function AnchorDragGhost({
   return (
     <div
       className={cn(
-        "absolute inset-y-0 rounded border-2 border-dashed border-primary bg-primary/20 pointer-events-none z-50",
-        !(isAltDrag && isDragging) && "hidden"
+        'absolute inset-y-0 rounded border-2 border-dashed border-primary bg-primary/20 pointer-events-none z-50',
+        !(isAltDrag && isDragging) && 'hidden',
       )}
       style={{
         left: `${left + dragOffset.x}px`,
@@ -36,20 +36,23 @@ export const AnchorDragGhost = memo(function AnchorDragGhost({
         +
       </div>
     </div>
-  );
-});
+  )
+})
 
 interface FollowerDragGhostProps {
-  left: number;
-  width: number;
+  left: number
+  width: number
 }
 
 /**
  * Ghost element for follower items during alt-drag
  * Visibility is controlled via RAF in parent component
  */
-export const FollowerDragGhost = memo(forwardRef<HTMLDivElement, FollowerDragGhostProps>(
-  function FollowerDragGhost({ left, width }, ref) {
+export const FollowerDragGhost = memo(
+  forwardRef<HTMLDivElement, FollowerDragGhostProps>(function FollowerDragGhost(
+    { left, width },
+    ref,
+  ) {
     return (
       <div
         ref={ref}
@@ -64,7 +67,6 @@ export const FollowerDragGhost = memo(forwardRef<HTMLDivElement, FollowerDragGho
           +
         </div>
       </div>
-    );
-  }
-));
-
+    )
+  }),
+)

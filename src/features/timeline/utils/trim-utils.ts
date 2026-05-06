@@ -1,19 +1,19 @@
-import type { TimelineItem } from '@/types/timeline';
+import type { TimelineItem } from '@/types/timeline'
 import {
   getSourceProperties,
   getMaxTimelineDuration as calcMaxDuration,
   getMaxStartExtension,
   isMediaItem,
   timelineToSourceFrames,
-} from './source-calculations';
-import { useCompositionsStore } from '../stores/compositions-store';
-import { isCompositionAudioItem } from '@/shared/utils/linked-media';
+} from './source-calculations'
+import { useCompositionsStore } from '../stores/compositions-store'
+import { isCompositionAudioItem } from '@/shared/utils/linked-media'
 
-export type TrimHandle = 'start' | 'end';
+export type TrimHandle = 'start' | 'end'
 
 interface TrimClampResult {
-  clampedAmount: number;
-  maxExtend: number | null;
+  clampedAmount: number
+  maxExtend: number | null
 }
 
 /**
@@ -22,16 +22,17 @@ interface TrimClampResult {
  * so the wrapper can be ripple/slide resized to match.
  */
 function getEffectiveSourceDuration(item: TimelineItem): number | undefined {
-  const compositionId = item.type === 'composition'
-    ? item.compositionId
-    : isCompositionAudioItem(item)
+  const compositionId =
+    item.type === 'composition'
       ? item.compositionId
-      : null;
+      : isCompositionAudioItem(item)
+        ? item.compositionId
+        : null
   if (compositionId) {
-    const subComp = useCompositionsStore.getState().getComposition(compositionId);
-    if (subComp) return subComp.durationInFrames;
+    const subComp = useCompositionsStore.getState().getComposition(compositionId)
+    if (subComp) return subComp.durationInFrames
   }
-  return getSourceProperties(item).sourceDuration;
+  return getSourceProperties(item).sourceDuration
 }
 
 /**
@@ -55,22 +56,22 @@ export function clampTrimAmount(
   item: TimelineItem,
   handle: TrimHandle,
   trimAmount: number,
-  timelineFps: number = 30
+  timelineFps: number = 30,
 ): TrimClampResult {
-  let clampedAmount = trimAmount;
-  let maxExtend: number | null = null;
+  let clampedAmount = trimAmount
+  let maxExtend: number | null = null
 
   if (isMediaItem(item)) {
-    const { sourceStart, sourceFps, speed } = getSourceProperties(item);
-    const sourceDuration = getEffectiveSourceDuration(item);
-    const effectiveSourceFps = sourceFps ?? timelineFps;
+    const { sourceStart, sourceFps, speed } = getSourceProperties(item)
+    const sourceDuration = getEffectiveSourceDuration(item)
+    const effectiveSourceFps = sourceFps ?? timelineFps
 
     if (handle === 'start') {
       // Start handle: negative trimAmount = extending left
       if (trimAmount < 0) {
-        maxExtend = getMaxStartExtension(sourceStart, speed, effectiveSourceFps, timelineFps);
+        maxExtend = getMaxStartExtension(sourceStart, speed, effectiveSourceFps, timelineFps)
         if (-trimAmount > maxExtend) {
-          clampedAmount = -maxExtend;
+          clampedAmount = -maxExtend
         }
       }
     } else {
@@ -78,20 +79,26 @@ export function clampTrimAmount(
       // Always use sourceDuration - trimming should always be reversible
       // (user can extend back to full source regardless of rate stretch state)
       if (sourceDuration !== undefined) {
-        const maxDuration = calcMaxDuration(sourceDuration, sourceStart, speed, effectiveSourceFps, timelineFps);
-        maxExtend = maxDuration - item.durationInFrames;
+        const maxDuration = calcMaxDuration(
+          sourceDuration,
+          sourceStart,
+          speed,
+          effectiveSourceFps,
+          timelineFps,
+        )
+        maxExtend = maxDuration - item.durationInFrames
 
         if (item.durationInFrames + trimAmount > maxDuration) {
-          clampedAmount = maxDuration - item.durationInFrames;
+          clampedAmount = maxDuration - item.durationInFrames
         }
       }
     }
   }
 
   // Clamp to minimum duration of 1 frame (applies to all items)
-  clampedAmount = clampToMinDuration(item.durationInFrames, handle, clampedAmount);
+  clampedAmount = clampToMinDuration(item.durationInFrames, handle, clampedAmount)
 
-  return { clampedAmount, maxExtend };
+  return { clampedAmount, maxExtend }
 }
 
 /**
@@ -108,50 +115,50 @@ export function clampToAdjacentItems(
   handle: TrimHandle,
   trimAmount: number,
   allItems: TimelineItem[],
-  transitionLinkedIds?: Set<string>
+  transitionLinkedIds?: Set<string>,
 ): number {
-  const itemEnd = item.from + item.durationInFrames;
+  const itemEnd = item.from + item.durationInFrames
 
   if (handle === 'end' && trimAmount > 0) {
     // Extending right — find nearest item that starts at or after our current end
-    let nearestStart = Infinity;
+    let nearestStart = Infinity
     for (const other of allItems) {
-      if (other.id === item.id) continue;
-      if (other.trackId !== item.trackId) continue;
+      if (other.id === item.id) continue
+      if (other.trackId !== item.trackId) continue
       // Skip transition-linked clips — they're allowed to overlap
-      if (transitionLinkedIds?.has(other.id)) continue;
+      if (transitionLinkedIds?.has(other.id)) continue
       if (other.from >= itemEnd) {
-        nearestStart = Math.min(nearestStart, other.from);
+        nearestStart = Math.min(nearestStart, other.from)
       }
     }
     if (nearestStart !== Infinity) {
-      const maxExtend = nearestStart - itemEnd;
+      const maxExtend = nearestStart - itemEnd
       if (trimAmount > maxExtend) {
-        return maxExtend;
+        return maxExtend
       }
     }
   } else if (handle === 'start' && trimAmount < 0) {
     // Extending left — find nearest item that ends at or before our current start
-    let nearestEnd = -Infinity;
+    let nearestEnd = -Infinity
     for (const other of allItems) {
-      if (other.id === item.id) continue;
-      if (other.trackId !== item.trackId) continue;
+      if (other.id === item.id) continue
+      if (other.trackId !== item.trackId) continue
       // Skip transition-linked clips — they're allowed to overlap
-      if (transitionLinkedIds?.has(other.id)) continue;
-      const otherEnd = other.from + other.durationInFrames;
+      if (transitionLinkedIds?.has(other.id)) continue
+      const otherEnd = other.from + other.durationInFrames
       if (otherEnd <= item.from) {
-        nearestEnd = Math.max(nearestEnd, otherEnd);
+        nearestEnd = Math.max(nearestEnd, otherEnd)
       }
     }
     if (nearestEnd !== -Infinity) {
-      const maxExtend = item.from - nearestEnd;
+      const maxExtend = item.from - nearestEnd
       if (-trimAmount > maxExtend) {
-        return maxExtend > 0 ? -maxExtend : 0;
+        return maxExtend > 0 ? -maxExtend : 0
       }
     }
   }
 
-  return trimAmount;
+  return trimAmount
 }
 
 /**
@@ -160,30 +167,30 @@ export function clampToAdjacentItems(
 function clampToMinDuration(
   currentDuration: number,
   handle: TrimHandle,
-  trimAmount: number
+  trimAmount: number,
 ): number {
   if (handle === 'start') {
     // Start: positive trim shrinks, negative extends
-    const newDuration = currentDuration - trimAmount;
+    const newDuration = currentDuration - trimAmount
     if (newDuration <= 0) {
-      return currentDuration - 1;
+      return currentDuration - 1
     }
   } else {
     // End: positive trim extends, negative shrinks
-    const newDuration = currentDuration + trimAmount;
+    const newDuration = currentDuration + trimAmount
     if (newDuration <= 0) {
-      return -currentDuration + 1;
+      return -currentDuration + 1
     }
   }
-  return trimAmount;
+  return trimAmount
 }
 
 /**
  * Calculate new source boundaries after a trim operation.
  */
 interface TrimSourceUpdate {
-  sourceStart?: number;
-  sourceEnd?: number;
+  sourceStart?: number
+  sourceEnd?: number
 }
 
 export function calculateTrimSourceUpdate(
@@ -191,39 +198,48 @@ export function calculateTrimSourceUpdate(
   handle: TrimHandle,
   clampedAmount: number,
   newDuration: number,
-  timelineFps: number = 30
+  timelineFps: number = 30,
 ): TrimSourceUpdate | null {
-  if (!isMediaItem(item)) return null;
+  if (!isMediaItem(item)) return null
 
-  const { sourceStart, sourceFps, speed } = getSourceProperties(item);
-  const sourceDuration = getEffectiveSourceDuration(item);
-  const effectiveSourceFps = sourceFps ?? timelineFps;
+  const { sourceStart, sourceFps, speed } = getSourceProperties(item)
+  const sourceDuration = getEffectiveSourceDuration(item)
+  const effectiveSourceFps = sourceFps ?? timelineFps
 
   if (handle === 'start') {
     // Trimming start: update sourceStart
-    const sourceFramesDelta = timelineToSourceFrames(clampedAmount, speed, timelineFps, effectiveSourceFps);
+    const sourceFramesDelta = timelineToSourceFrames(
+      clampedAmount,
+      speed,
+      timelineFps,
+      effectiveSourceFps,
+    )
     return {
       sourceStart: sourceStart + sourceFramesDelta,
-    };
+    }
   } else {
     // Trimming end: update sourceEnd.
     // For clips with explicit sourceEnd, update by delta to avoid
     // cumulative one-frame loss from duration-based recomputation.
-    const sourceFramesDelta = timelineToSourceFrames(clampedAmount, speed, timelineFps, effectiveSourceFps);
-    const explicitSourceEnd = item.sourceEnd;
-    const recomputedSourceEnd = sourceStart + timelineToSourceFrames(newDuration, speed, timelineFps, effectiveSourceFps);
-    const newSourceEnd = explicitSourceEnd !== undefined
-      ? explicitSourceEnd + sourceFramesDelta
-      : recomputedSourceEnd;
+    const sourceFramesDelta = timelineToSourceFrames(
+      clampedAmount,
+      speed,
+      timelineFps,
+      effectiveSourceFps,
+    )
+    const explicitSourceEnd = item.sourceEnd
+    const recomputedSourceEnd =
+      sourceStart + timelineToSourceFrames(newDuration, speed, timelineFps, effectiveSourceFps)
+    const newSourceEnd =
+      explicitSourceEnd !== undefined ? explicitSourceEnd + sourceFramesDelta : recomputedSourceEnd
 
     // Keep at least 1 source frame and clamp to media bounds.
-    const minSourceEnd = sourceStart + 1;
-    const boundedByMin = Math.max(minSourceEnd, newSourceEnd);
-    const clampedSourceEnd = sourceDuration !== undefined
-      ? Math.min(boundedByMin, sourceDuration)
-      : boundedByMin;
+    const minSourceEnd = sourceStart + 1
+    const boundedByMin = Math.max(minSourceEnd, newSourceEnd)
+    const clampedSourceEnd =
+      sourceDuration !== undefined ? Math.min(boundedByMin, sourceDuration) : boundedByMin
     return {
       sourceEnd: clampedSourceEnd,
-    };
+    }
   }
 }

@@ -1,20 +1,23 @@
-import type { GpuEffectDefinition } from '../types';
+import type { GpuEffectDefinition } from '../types'
 
-function parseHexColor(color: string, fallback: [number, number, number, number]): [number, number, number, number] {
-  if (!color.startsWith('#')) return fallback;
+function parseHexColor(
+  color: string,
+  fallback: [number, number, number, number],
+): [number, number, number, number] {
+  if (!color.startsWith('#')) return fallback
 
-  const hex = color.slice(1);
+  const hex = color.slice(1)
   if (hex.length === 3 || hex.length === 4) {
-    const values = hex.split('').map((ch) => parseInt(ch + ch, 16) / 255);
+    const values = hex.split('').map((ch) => parseInt(ch + ch, 16) / 255)
     if (values.slice(0, 3).every((v) => Number.isFinite(v))) {
       return [
         values[0] ?? fallback[0],
         values[1] ?? fallback[1],
         values[2] ?? fallback[2],
         values[3] ?? 1,
-      ];
+      ]
     }
-    return fallback;
+    return fallback
   }
 
   if (hex.length === 6 || hex.length === 8) {
@@ -23,13 +26,13 @@ function parseHexColor(color: string, fallback: [number, number, number, number]
       parseInt(hex.slice(2, 4), 16) / 255,
       parseInt(hex.slice(4, 6), 16) / 255,
       hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
-    ];
+    ]
     if (values.every((value) => Number.isFinite(value))) {
-      return values as [number, number, number, number];
+      return values as [number, number, number, number]
     }
   }
 
-  return fallback;
+  return fallback
 }
 
 export const pixelate: GpuEffectDefinition = {
@@ -54,10 +57,18 @@ fn pixelateFragment(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(inputTex, texSampler, uv);
 }`,
   params: {
-    size: { type: 'number', label: 'Pixel Size', default: 8, min: 1, max: 64, step: 1, animatable: true },
+    size: {
+      type: 'number',
+      label: 'Pixel Size',
+      default: 8,
+      min: 1,
+      max: 64,
+      step: 1,
+      animatable: true,
+    },
   },
-  packUniforms: (p, w, h) => new Float32Array([p.size as number ?? 8, w, h, 0]),
-};
+  packUniforms: (p, w, h) => new Float32Array([(p.size as number) ?? 8, w, h, 0]),
+}
 
 export const rgbSplit: GpuEffectDefinition = {
   id: 'gpu-rgb-split',
@@ -80,11 +91,28 @@ fn rgbSplitFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(r, g, b, a);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0.01, min: 0, max: 0.1, step: 0.001, animatable: true },
-    angle: { type: 'number', label: 'Angle', default: 0, min: 0, max: 6.28318, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0.01,
+      min: 0,
+      max: 0.1,
+      step: 0.001,
+      animatable: true,
+    },
+    angle: {
+      type: 'number',
+      label: 'Angle',
+      default: 0,
+      min: 0,
+      max: 6.28318,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.amount as number ?? 0.01, p.angle as number ?? 0, 0, 0]),
-};
+  packUniforms: (p) =>
+    new Float32Array([(p.amount as number) ?? 0.01, (p.angle as number) ?? 0, 0, 0]),
+}
 
 export const twirl: GpuEffectDefinition = {
   id: 'gpu-twirl',
@@ -114,15 +142,51 @@ fn twirlFragment(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(inputTex, texSampler, finalUV);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 1, min: -10, max: 10, step: 0.1, animatable: true },
-    radius: { type: 'number', label: 'Radius', default: 0.5, min: 0.1, max: 1, step: 0.01, animatable: true },
-    centerX: { type: 'number', label: 'Center X', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    centerY: { type: 'number', label: 'Center Y', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 1,
+      min: -10,
+      max: 10,
+      step: 0.1,
+      animatable: true,
+    },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 0.5,
+      min: 0.1,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerX: {
+      type: 'number',
+      label: 'Center X',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerY: {
+      type: 'number',
+      label: 'Center Y',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.amount as number ?? 1, p.radius as number ?? 0.5, p.centerX as number ?? 0.5, p.centerY as number ?? 0.5,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.amount as number) ?? 1,
+      (p.radius as number) ?? 0.5,
+      (p.centerX as number) ?? 0.5,
+      (p.centerY as number) ?? 0.5,
+    ]),
+}
 
 export const wave: GpuEffectDefinition = {
   id: 'gpu-wave',
@@ -143,16 +207,51 @@ fn waveFragment(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(inputTex, texSampler, uv);
 }`,
   params: {
-    amplitudeX: { type: 'number', label: 'Horizontal Amp', default: 0.02, min: 0, max: 0.1, step: 0.001, animatable: true },
-    amplitudeY: { type: 'number', label: 'Vertical Amp', default: 0.02, min: 0, max: 0.1, step: 0.001, animatable: true },
-    frequencyX: { type: 'number', label: 'Horizontal Freq', default: 5, min: 1, max: 20, step: 0.5, animatable: true },
-    frequencyY: { type: 'number', label: 'Vertical Freq', default: 5, min: 1, max: 20, step: 0.5, animatable: true },
+    amplitudeX: {
+      type: 'number',
+      label: 'Horizontal Amp',
+      default: 0.02,
+      min: 0,
+      max: 0.1,
+      step: 0.001,
+      animatable: true,
+    },
+    amplitudeY: {
+      type: 'number',
+      label: 'Vertical Amp',
+      default: 0.02,
+      min: 0,
+      max: 0.1,
+      step: 0.001,
+      animatable: true,
+    },
+    frequencyX: {
+      type: 'number',
+      label: 'Horizontal Freq',
+      default: 5,
+      min: 1,
+      max: 20,
+      step: 0.5,
+      animatable: true,
+    },
+    frequencyY: {
+      type: 'number',
+      label: 'Vertical Freq',
+      default: 5,
+      min: 1,
+      max: 20,
+      step: 0.5,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.amplitudeX as number ?? 0.02, p.amplitudeY as number ?? 0.02,
-    p.frequencyX as number ?? 5, p.frequencyY as number ?? 5,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.amplitudeX as number) ?? 0.02,
+      (p.amplitudeY as number) ?? 0.02,
+      (p.frequencyX as number) ?? 5,
+      (p.frequencyY as number) ?? 5,
+    ]),
+}
 
 export const bulge: GpuEffectDefinition = {
   id: 'gpu-bulge',
@@ -181,15 +280,51 @@ fn bulgeFragment(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(inputTex, texSampler, finalUV);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0.5, min: 0.1, max: 3, step: 0.1, animatable: true },
-    radius: { type: 'number', label: 'Radius', default: 0.5, min: 0.1, max: 1, step: 0.01, animatable: true },
-    centerX: { type: 'number', label: 'Center X', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    centerY: { type: 'number', label: 'Center Y', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0.5,
+      min: 0.1,
+      max: 3,
+      step: 0.1,
+      animatable: true,
+    },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 0.5,
+      min: 0.1,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerX: {
+      type: 'number',
+      label: 'Center X',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerY: {
+      type: 'number',
+      label: 'Center Y',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.amount as number ?? 0.5, p.radius as number ?? 0.5, p.centerX as number ?? 0.5, p.centerY as number ?? 0.5,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.amount as number) ?? 0.5,
+      (p.radius as number) ?? 0.5,
+      (p.centerX as number) ?? 0.5,
+      (p.centerY as number) ?? 0.5,
+    ]),
+}
 
 export const kaleidoscope: GpuEffectDefinition = {
   id: 'gpu-kaleidoscope',
@@ -214,11 +349,28 @@ fn kaleidoscopeFragment(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(inputTex, texSampler, uv);
 }`,
   params: {
-    segments: { type: 'number', label: 'Segments', default: 6, min: 2, max: 16, step: 1, animatable: true },
-    rotation: { type: 'number', label: 'Rotation', default: 0, min: 0, max: 6.28318, step: 0.01, animatable: true },
+    segments: {
+      type: 'number',
+      label: 'Segments',
+      default: 6,
+      min: 2,
+      max: 16,
+      step: 1,
+      animatable: true,
+    },
+    rotation: {
+      type: 'number',
+      label: 'Rotation',
+      default: 0,
+      min: 0,
+      max: 6.28318,
+      step: 0.01,
+      animatable: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([p.segments as number ?? 6, p.rotation as number ?? 0, 0, 0]),
-};
+  packUniforms: (p) =>
+    new Float32Array([(p.segments as number) ?? 6, (p.rotation as number) ?? 0, 0, 0]),
+}
 
 export const mirror: GpuEffectDefinition = {
   id: 'gpu-mirror',
@@ -243,7 +395,7 @@ fn mirrorFragment(input: VertexOutput) -> @location(0) vec4f {
     vertical: { type: 'boolean', label: 'Vertical', default: false },
   },
   packUniforms: (p) => new Float32Array([p.horizontal ? 1 : 0, p.vertical ? 1 : 0, 0, 0]),
-};
+}
 
 // Adapted from Paper Design's fluted-glass shader (published package source).
 export const flutedGlass: GpuEffectDefinition = {
@@ -575,11 +727,37 @@ fn flutedGlassFragment(input: VertexOutput) -> @location(0) vec4f {
     colorBack: { type: 'color', label: 'Back Color', default: '#00000000' },
     colorShadow: { type: 'color', label: 'Shadow Color', default: '#000000' },
     colorHighlight: { type: 'color', label: 'Highlight Color', default: '#ffffff' },
-    shadows: { type: 'number', label: 'Shadows', default: 0.25, min: 0, max: 1, step: 0.01, animatable: true },
-    highlights: { type: 'number', label: 'Highlights', default: 0.1, min: 0, max: 1, step: 0.01, animatable: true },
-    size: { type: 'number', label: 'Size', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+    shadows: {
+      type: 'number',
+      label: 'Shadows',
+      default: 0.25,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    highlights: {
+      type: 'number',
+      label: 'Highlights',
+      default: 0.1,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    size: {
+      type: 'number',
+      label: 'Size',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
     shape: {
-      type: 'select', label: 'Shape', default: 'lines',
+      type: 'select',
+      label: 'Shape',
+      default: 'lines',
       options: [
         { value: 'lines', label: 'Lines' },
         { value: 'linesIrregular', label: 'Irregular Lines' },
@@ -588,9 +766,19 @@ fn flutedGlassFragment(input: VertexOutput) -> @location(0) vec4f {
         { value: 'pattern', label: 'Pattern' },
       ],
     },
-    angle: { type: 'number', label: 'Angle', default: 0, min: 0, max: 180, step: 1, animatable: true },
+    angle: {
+      type: 'number',
+      label: 'Angle',
+      default: 0,
+      min: 0,
+      max: 180,
+      step: 1,
+      animatable: true,
+    },
     distortionShape: {
-      type: 'select', label: 'Distortion Shape', default: 'prism',
+      type: 'select',
+      label: 'Distortion Shape',
+      default: 'prism',
       options: [
         { value: 'prism', label: 'Prism' },
         { value: 'lens', label: 'Lens' },
@@ -599,18 +787,114 @@ fn flutedGlassFragment(input: VertexOutput) -> @location(0) vec4f {
         { value: 'flat', label: 'Flat' },
       ],
     },
-    distortion: { type: 'number', label: 'Distortion', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    shift: { type: 'number', label: 'Shift', default: 0, min: -1, max: 1, step: 0.01, animatable: true },
-    stretch: { type: 'number', label: 'Stretch', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    blur: { type: 'number', label: 'Blur', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    edges: { type: 'number', label: 'Edges', default: 0.25, min: 0, max: 1, step: 0.01, animatable: true },
-    margin: { type: 'number', label: 'Margin', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    marginLeft: { type: 'number', label: 'Left Margin', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    marginRight: { type: 'number', label: 'Right Margin', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    marginTop: { type: 'number', label: 'Top Margin', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    marginBottom: { type: 'number', label: 'Bottom Margin', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    grainMixer: { type: 'number', label: 'Grain Mixer', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
-    grainOverlay: { type: 'number', label: 'Grain Overlay', default: 0, min: 0, max: 1, step: 0.01, animatable: true },
+    distortion: {
+      type: 'number',
+      label: 'Distortion',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    shift: {
+      type: 'number',
+      label: 'Shift',
+      default: 0,
+      min: -1,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    stretch: {
+      type: 'number',
+      label: 'Stretch',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    blur: {
+      type: 'number',
+      label: 'Blur',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    edges: {
+      type: 'number',
+      label: 'Edges',
+      default: 0.25,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    margin: {
+      type: 'number',
+      label: 'Margin',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    marginLeft: {
+      type: 'number',
+      label: 'Left Margin',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    marginRight: {
+      type: 'number',
+      label: 'Right Margin',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    marginTop: {
+      type: 'number',
+      label: 'Top Margin',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    marginBottom: {
+      type: 'number',
+      label: 'Bottom Margin',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    grainMixer: {
+      type: 'number',
+      label: 'Grain Mixer',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    grainOverlay: {
+      type: 'number',
+      label: 'Grain Overlay',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
   },
   packUniforms: (p, w, h) => {
     const gridShapeMap: Record<string, number> = {
@@ -619,31 +903,55 @@ fn flutedGlassFragment(input: VertexOutput) -> @location(0) vec4f {
       wave: 3,
       zigzag: 4,
       pattern: 5,
-    };
+    }
     const distortionShapeMap: Record<string, number> = {
       prism: 1,
       lens: 2,
       contour: 3,
       cascade: 4,
       flat: 5,
-    };
-    const margin = (p.margin as number | undefined) ?? 0;
-    const marginLeft = (p.marginLeft as number | undefined) ?? margin;
-    const marginRight = (p.marginRight as number | undefined) ?? margin;
-    const marginTop = (p.marginTop as number | undefined) ?? margin;
-    const marginBottom = (p.marginBottom as number | undefined) ?? margin;
-    const colorBack = parseHexColor((p.colorBack as string) ?? '#00000000', [0, 0, 0, 0]);
-    const colorShadow = parseHexColor((p.colorShadow as string) ?? '#000000', [0, 0, 0, 1]);
-    const colorHighlight = parseHexColor((p.colorHighlight as string) ?? '#ffffff', [1, 1, 1, 1]);
+    }
+    const margin = (p.margin as number | undefined) ?? 0
+    const marginLeft = (p.marginLeft as number | undefined) ?? margin
+    const marginRight = (p.marginRight as number | undefined) ?? margin
+    const marginTop = (p.marginTop as number | undefined) ?? margin
+    const marginBottom = (p.marginBottom as number | undefined) ?? margin
+    const colorBack = parseHexColor((p.colorBack as string) ?? '#00000000', [0, 0, 0, 0])
+    const colorShadow = parseHexColor((p.colorShadow as string) ?? '#000000', [0, 0, 0, 1])
+    const colorHighlight = parseHexColor((p.colorHighlight as string) ?? '#ffffff', [1, 1, 1, 1])
     return new Float32Array([
-      colorBack[0], colorBack[1], colorBack[2], colorBack[3],
-      colorShadow[0], colorShadow[1], colorShadow[2], colorShadow[3],
-      colorHighlight[0], colorHighlight[1], colorHighlight[2], colorHighlight[3],
-      p.size as number ?? 0.5, p.shadows as number ?? 0.25, p.angle as number ?? 0, p.stretch as number ?? 0,
-      gridShapeMap[p.shape as string] ?? 1, p.distortion as number ?? 0.5, p.highlights as number ?? 0.1, distortionShapeMap[p.distortionShape as string] ?? 1,
-      p.shift as number ?? 0, p.blur as number ?? 0, p.edges as number ?? 0.25, p.grainMixer as number ?? 0,
-      p.grainOverlay as number ?? 0, w, h, w / Math.max(h, 1),
-      marginLeft, marginTop, marginRight, marginBottom,
-    ]);
+      colorBack[0],
+      colorBack[1],
+      colorBack[2],
+      colorBack[3],
+      colorShadow[0],
+      colorShadow[1],
+      colorShadow[2],
+      colorShadow[3],
+      colorHighlight[0],
+      colorHighlight[1],
+      colorHighlight[2],
+      colorHighlight[3],
+      (p.size as number) ?? 0.5,
+      (p.shadows as number) ?? 0.25,
+      (p.angle as number) ?? 0,
+      (p.stretch as number) ?? 0,
+      gridShapeMap[p.shape as string] ?? 1,
+      (p.distortion as number) ?? 0.5,
+      (p.highlights as number) ?? 0.1,
+      distortionShapeMap[p.distortionShape as string] ?? 1,
+      (p.shift as number) ?? 0,
+      (p.blur as number) ?? 0,
+      (p.edges as number) ?? 0.25,
+      (p.grainMixer as number) ?? 0,
+      (p.grainOverlay as number) ?? 0,
+      w,
+      h,
+      w / Math.max(h, 1),
+      marginLeft,
+      marginTop,
+      marginRight,
+      marginBottom,
+    ])
   },
-};
+}

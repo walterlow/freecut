@@ -15,19 +15,19 @@ export function computeClampedSlipDelta(
   sourceDuration: number | undefined,
   delta: number,
 ): number {
-  if (sourceEnd === undefined) return 0;
+  if (sourceEnd === undefined) return 0
 
-  let clamped = delta;
+  let clamped = delta
 
   // Clamp: sourceStart + delta >= 0
   if (sourceStart + clamped < 0) {
-    clamped = -sourceStart;
+    clamped = -sourceStart
   }
 
   // Clamp: sourceEnd + delta <= sourceDuration
   if (sourceDuration !== undefined && sourceEnd + clamped > sourceDuration) {
-    clamped = sourceDuration - sourceEnd;
+    clamped = sourceDuration - sourceEnd
   }
 
-  return clamped;
+  return clamped
 }

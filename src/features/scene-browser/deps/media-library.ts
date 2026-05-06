@@ -4,7 +4,7 @@
  * one-directional (feature-boundary rule in CLAUDE.md).
  */
 
-export * from './media-library-contract';
-export { useSourcePlayerStore } from '@/shared/state/source-player';
-export { useEditorStore } from '@/app/state/editor';
-export type { MediaMetadata } from '@/types/storage';
+export * from './media-library-contract'
+export { useSourcePlayerStore } from '@/shared/state/source-player'
+export { useEditorStore } from '@/app/state/editor'
+export type { MediaMetadata } from '@/types/storage'

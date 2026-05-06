@@ -1,29 +1,29 @@
-﻿import { useCallback, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Link2, Link2Off } from 'lucide-react';
-import { NumberInput } from './number-input';
-import { cn } from '@/shared/ui/cn';
+import { useCallback, useRef, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Link2, Link2Off } from 'lucide-react'
+import { NumberInput } from './number-input'
+import { cn } from '@/shared/ui/cn'
 
-type MixedValue = number | 'mixed';
+type MixedValue = number | 'mixed'
 
 interface LinkedDimensionsProps {
-  width: MixedValue;
-  height: MixedValue;
-  aspectLocked: boolean;
-  onWidthChange: (value: number) => void;
-  onHeightChange: (value: number) => void;
+  width: MixedValue
+  height: MixedValue
+  aspectLocked: boolean
+  onWidthChange: (value: number) => void
+  onHeightChange: (value: number) => void
   /** Called during scrub for live preview */
-  onWidthLiveChange?: (value: number) => void;
+  onWidthLiveChange?: (value: number) => void
   /** Called during scrub for live preview */
-  onHeightLiveChange?: (value: number) => void;
-  onAspectLockToggle: () => void;
-  disabled?: boolean;
-  minWidth?: number;
-  minHeight?: number;
-  maxWidth?: number;
-  maxHeight?: number;
-  step?: number;
-  className?: string;
+  onHeightLiveChange?: (value: number) => void
+  onAspectLockToggle: () => void
+  disabled?: boolean
+  minWidth?: number
+  minHeight?: number
+  maxWidth?: number
+  maxHeight?: number
+  step?: number
+  className?: string
 }
 
 /**
@@ -48,48 +48,50 @@ export function LinkedDimensions({
   className,
 }: LinkedDimensionsProps) {
   // Store aspect ratio when lock is engaged
-  const aspectRatioRef = useRef<number>(1);
+  const aspectRatioRef = useRef<number>(1)
 
   // Update aspect ratio when either dimension changes while unlocked
   // or when lock is first engaged
   useEffect(() => {
     if (width !== 'mixed' && height !== 'mixed' && height > 0) {
-      aspectRatioRef.current = width / height;
+      aspectRatioRef.current = width / height
     }
-  }, [width, height]);
+  }, [width, height])
 
   // Commit handlers call both onChange callbacks
   const handleWidthChange = useCallback(
     (newWidth: number) => {
-      onWidthChange(newWidth);
+      onWidthChange(newWidth)
     },
-    [onWidthChange]
-  );
+    [onWidthChange],
+  )
 
   const handleHeightChange = useCallback(
     (newHeight: number) => {
-      onHeightChange(newHeight);
+      onHeightChange(newHeight)
     },
-    [onHeightChange]
-  );
+    [onHeightChange],
+  )
 
   // Live handlers for preview during scrub
   const handleWidthLiveChange = useCallback(
     (newWidth: number) => {
-      onWidthLiveChange?.(newWidth);
+      onWidthLiveChange?.(newWidth)
     },
-    [onWidthLiveChange]
-  );
+    [onWidthLiveChange],
+  )
 
   const handleHeightLiveChange = useCallback(
     (newHeight: number) => {
-      onHeightLiveChange?.(newHeight);
+      onHeightLiveChange?.(newHeight)
     },
-    [onHeightLiveChange]
-  );
+    [onHeightLiveChange],
+  )
 
   return (
-    <div className={cn('grid grid-cols-[1fr_auto_1fr] gap-1 flex-1 min-w-0 items-center', className)}>
+    <div
+      className={cn('grid grid-cols-[1fr_auto_1fr] gap-1 flex-1 min-w-0 items-center', className)}
+    >
       <NumberInput
         value={width}
         onChange={handleWidthChange}
@@ -105,18 +107,11 @@ export function LinkedDimensions({
       <Button
         variant="ghost"
         size="icon"
-        className={cn(
-          'h-7 w-7',
-          aspectLocked && 'text-primary'
-        )}
+        className={cn('h-7 w-7', aspectLocked && 'text-primary')}
         onClick={onAspectLockToggle}
         disabled={disabled}
       >
-        {aspectLocked ? (
-          <Link2 className="w-3.5 h-3.5" />
-        ) : (
-          <Link2Off className="w-3.5 h-3.5" />
-        )}
+        {aspectLocked ? <Link2 className="w-3.5 h-3.5" /> : <Link2Off className="w-3.5 h-3.5" />}
       </Button>
 
       <NumberInput
@@ -131,6 +126,5 @@ export function LinkedDimensions({
         disabled={disabled}
       />
     </div>
-  );
+  )
 }
-

@@ -1,12 +1,12 @@
-import { useSyncExternalStore } from 'react';
-import { getMarqueeRect, type MarqueeController } from '@/hooks/use-marquee-selection';
+import { useSyncExternalStore } from 'react'
+import { getMarqueeRect, type MarqueeController } from '@/hooks/use-marquee-selection'
 
 interface MarqueeOverlayProps {
   /** Subscription-based controller returned from `useMarqueeSelection` */
-  marquee: MarqueeController;
+  marquee: MarqueeController
 
   /** Custom className for styling */
-  className?: string;
+  className?: string
 }
 
 /**
@@ -18,11 +18,11 @@ interface MarqueeOverlayProps {
  * the tree above stays quiet.
  */
 export function MarqueeOverlay({ marquee, className }: MarqueeOverlayProps) {
-  const state = useSyncExternalStore(marquee.subscribe, marquee.getSnapshot, marquee.getSnapshot);
+  const state = useSyncExternalStore(marquee.subscribe, marquee.getSnapshot, marquee.getSnapshot)
 
-  if (!state.active) return null;
+  if (!state.active) return null
 
-  const rect = getMarqueeRect(state.startX, state.startY, state.currentX, state.currentY);
+  const rect = getMarqueeRect(state.startX, state.startY, state.currentX, state.currentY)
 
   return (
     <div
@@ -38,5 +38,5 @@ export function MarqueeOverlay({ marquee, className }: MarqueeOverlayProps) {
         height: `${rect.height}px`,
       }}
     />
-  );
+  )
 }

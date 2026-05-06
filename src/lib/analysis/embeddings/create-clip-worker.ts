@@ -1,5 +1,5 @@
-import ClipWorker from './clip-worker.ts?worker';
+import ClipWorker from './clip-worker.ts?worker'
 
 export function createClipWorker(): Worker {
-  return new ClipWorker();
+  return new ClipWorker()
 }

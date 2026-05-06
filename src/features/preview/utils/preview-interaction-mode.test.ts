@@ -1,8 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import {
-  getPreviewAnchorFrame,
-  getPreviewInteractionMode,
-} from './preview-interaction-mode';
+import { describe, expect, it } from 'vite-plus/test'
+import { getPreviewAnchorFrame, getPreviewInteractionMode } from './preview-interaction-mode'
 
 describe('getPreviewInteractionMode', () => {
   it('prioritizes playing over other states', () => {
@@ -11,9 +8,9 @@ describe('getPreviewInteractionMode', () => {
         isPlaying: true,
         previewFrame: 12,
         isGizmoInteracting: true,
-      })
-    ).toBe('playing');
-  });
+      }),
+    ).toBe('playing')
+  })
 
   it('returns gizmo_dragging when paused and gizmo is active', () => {
     expect(
@@ -21,9 +18,9 @@ describe('getPreviewInteractionMode', () => {
         isPlaying: false,
         previewFrame: 12,
         isGizmoInteracting: true,
-      })
-    ).toBe('gizmo_dragging');
-  });
+      }),
+    ).toBe('gizmo_dragging')
+  })
 
   it('returns scrubbing when paused with preview frame', () => {
     expect(
@@ -31,9 +28,9 @@ describe('getPreviewInteractionMode', () => {
         isPlaying: false,
         previewFrame: 12,
         isGizmoInteracting: false,
-      })
-    ).toBe('scrubbing');
-  });
+      }),
+    ).toBe('scrubbing')
+  })
 
   it('returns paused when no active interaction', () => {
     expect(
@@ -41,21 +38,17 @@ describe('getPreviewInteractionMode', () => {
         isPlaying: false,
         previewFrame: null,
         isGizmoInteracting: false,
-      })
-    ).toBe('paused');
-  });
-});
+      }),
+    ).toBe('paused')
+  })
+})
 
 describe('getPreviewAnchorFrame', () => {
   it('uses preview frame in scrubbing mode', () => {
-    expect(
-      getPreviewAnchorFrame('scrubbing', { currentFrame: 10, previewFrame: 42 })
-    ).toBe(42);
-  });
+    expect(getPreviewAnchorFrame('scrubbing', { currentFrame: 10, previewFrame: 42 })).toBe(42)
+  })
 
   it('uses current frame in non-scrubbing modes', () => {
-    expect(
-      getPreviewAnchorFrame('paused', { currentFrame: 10, previewFrame: 42 })
-    ).toBe(10);
-  });
-});
+    expect(getPreviewAnchorFrame('paused', { currentFrame: 10, previewFrame: 42 })).toBe(10)
+  })
+})

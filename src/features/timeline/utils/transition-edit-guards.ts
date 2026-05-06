@@ -1,5 +1,5 @@
-import type { Transition } from '@/types/transition';
-import type { TrimHandle } from './trim-utils';
+import type { Transition } from '@/types/transition'
+import type { TrimHandle } from './trim-utils'
 
 /**
  * Returns true when trimming this item edge would directly edit a transition bridge.
@@ -12,9 +12,9 @@ export function hasTransitionBridgeAtHandle(
   handle: TrimHandle,
 ): boolean {
   if (handle === 'start') {
-    return transitions.some((t) => t.rightClipId === itemId);
+    return transitions.some((t) => t.rightClipId === itemId)
   }
-  return transitions.some((t) => t.leftClipId === itemId);
+  return transitions.some((t) => t.leftClipId === itemId)
 }
 
 export function getTransitionBridgeAtHandle(
@@ -23,9 +23,9 @@ export function getTransitionBridgeAtHandle(
   handle: TrimHandle,
 ): Transition | null {
   if (handle === 'start') {
-    return transitions.find((t) => t.rightClipId === itemId) ?? null;
+    return transitions.find((t) => t.rightClipId === itemId) ?? null
   }
-  return transitions.find((t) => t.leftClipId === itemId) ?? null;
+  return transitions.find((t) => t.leftClipId === itemId) ?? null
 }
 
 /**
@@ -35,7 +35,7 @@ export function hasAnyTransitionBridge(
   transitions: Transition[],
   itemIds: Iterable<string>,
 ): boolean {
-  const ids = new Set(itemIds);
-  if (ids.size === 0) return false;
-  return transitions.some((t) => ids.has(t.leftClipId) || ids.has(t.rightClipId));
+  const ids = new Set(itemIds)
+  if (ids.size === 0) return false
+  return transitions.some((t) => ids.has(t.leftClipId) || ids.has(t.rightClipId))
 }

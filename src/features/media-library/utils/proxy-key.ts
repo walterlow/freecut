@@ -1,4 +1,4 @@
-import type { MediaMetadata } from '@/types/storage';
+import type { MediaMetadata } from '@/types/storage'
 
 type ProxyKeyMedia = Pick<
   MediaMetadata,
@@ -12,15 +12,15 @@ type ProxyKeyMedia = Pick<
   | 'fileLastModified'
   | 'width'
   | 'height'
->;
+>
 
 function fnv1a32(input: string): string {
-  let hash = 0x811c9dc5;
+  let hash = 0x811c9dc5
   for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    hash ^= input.charCodeAt(i)
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
   }
-  return (hash >>> 0).toString(16).padStart(8, '0');
+  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 /**
@@ -37,11 +37,11 @@ function fnv1a32(input: string): string {
  */
 export function getSharedProxyKey(media: ProxyKeyMedia): string {
   if (media.contentHash) {
-    return media.contentHash;
+    return media.contentHash
   }
 
   if (media.storageType === 'opfs' && media.opfsPath) {
-    return `${fnv1a32(media.opfsPath)}-${media.fileSize}`;
+    return `${fnv1a32(media.opfsPath)}-${media.fileSize}`
   }
 
   const fingerprint = [
@@ -51,7 +51,7 @@ export function getSharedProxyKey(media: ProxyKeyMedia): string {
     media.fileLastModified ?? 0,
     media.width,
     media.height,
-  ].join('|');
+  ].join('|')
 
-  return `${fnv1a32(fingerprint)}-${media.fileSize}-${media.fileLastModified ?? 0}`;
+  return `${fnv1a32(fingerprint)}-${media.fileSize}-${media.fileLastModified ?? 0}`
 }

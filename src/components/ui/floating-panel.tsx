@@ -1,96 +1,94 @@
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import { createPortal } from 'react-dom';
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface FloatingPanelBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export interface FloatingPanelProps {
   /** Content rendered inside the panel body */
-  children: ReactNode;
+  children: ReactNode
   /** Panel title shown in the drag handle header */
-  title?: string;
+  title?: string
   /** Extra content rendered in the header (right side) */
-  headerExtra?: ReactNode;
+  headerExtra?: ReactNode
   /** Initial / default bounds when no persisted state exists */
-  defaultBounds: FloatingPanelBounds;
+  defaultBounds: FloatingPanelBounds
   /** Minimum width */
-  minWidth?: number;
+  minWidth?: number
   /** Minimum height */
-  minHeight?: number;
+  minHeight?: number
   /** localStorage key for persisting position & size */
-  storageKey?: string;
+  storageKey?: string
   /** Whether the panel can be resized */
-  resizable?: boolean;
+  resizable?: boolean
   /** When true, panel height fits content instead of using a fixed value */
-  autoHeight?: boolean;
+  autoHeight?: boolean
   /** When true, panel width fits content instead of using a fixed value */
-  autoWidth?: boolean;
+  autoWidth?: boolean
   /** Called when the panel requests to close / dock */
-  onClose?: () => void;
+  onClose?: () => void
   /** Additional className on the outer container */
-  className?: string;
+  className?: string
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const EDGE_MARGIN = 8;
+const EDGE_MARGIN = 8
 
 function clampToViewport(bounds: FloatingPanelBounds): FloatingPanelBounds {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  const vw = window.innerWidth
+  const vh = window.innerHeight
   return {
     x: Math.max(EDGE_MARGIN, Math.min(vw - bounds.width - EDGE_MARGIN, bounds.x)),
     y: Math.max(EDGE_MARGIN, Math.min(vh - bounds.height - EDGE_MARGIN, bounds.y)),
     width: Math.min(vw - EDGE_MARGIN * 2, bounds.width),
     height: Math.min(vh - EDGE_MARGIN * 2, bounds.height),
-  };
+  }
 }
 
 function loadBounds(key: string, fallback: FloatingPanelBounds): FloatingPanelBounds {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<FloatingPanelBounds>;
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as Partial<FloatingPanelBounds>
     if (
       typeof parsed.x === 'number' &&
       typeof parsed.y === 'number' &&
       typeof parsed.width === 'number' &&
       typeof parsed.height === 'number'
     ) {
-      return clampToViewport({ x: parsed.x, y: parsed.y, width: parsed.width, height: parsed.height });
+      return clampToViewport({
+        x: parsed.x,
+        y: parsed.y,
+        width: parsed.width,
+        height: parsed.height,
+      })
     }
   } catch {
     // ignore
   }
-  return fallback;
+  return fallback
 }
 
 function saveBounds(key: string, bounds: FloatingPanelBounds): void {
   try {
-    localStorage.setItem(key, JSON.stringify(bounds));
+    localStorage.setItem(key, JSON.stringify(bounds))
   } catch {
     // ignore
   }
 }
 
-type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
 const RESIZE_CURSORS: Record<ResizeEdge, string> = {
   n: 'cursor-ns-resize',
@@ -101,7 +99,7 @@ const RESIZE_CURSORS: Record<ResizeEdge, string> = {
   nw: 'cursor-nwse-resize',
   se: 'cursor-nwse-resize',
   sw: 'cursor-nesw-resize',
-};
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -122,142 +120,144 @@ export const FloatingPanel = memo(function FloatingPanel({
   className = '',
 }: FloatingPanelProps) {
   const [bounds, setBounds] = useState<FloatingPanelBounds>(() => {
-    const initial = storageKey ? loadBounds(storageKey, defaultBounds) : defaultBounds;
+    const initial = storageKey ? loadBounds(storageKey, defaultBounds) : defaultBounds
     // When autoHeight/autoWidth, use small placeholders for positioning
     // so the panel isn't clamped too far. Actual size comes from content.
-    const heightForLayout = autoHeight ? 100 : initial.height;
-    const widthForLayout = autoWidth ? 200 : initial.width;
+    const heightForLayout = autoHeight ? 100 : initial.height
+    const widthForLayout = autoWidth ? 200 : initial.width
     const resolved = {
       ...initial,
       x: initial.x < 0 ? window.innerWidth - widthForLayout - EDGE_MARGIN * 4 : initial.x,
       y: initial.y < 0 ? window.innerHeight - heightForLayout - EDGE_MARGIN * 4 : initial.y,
-    };
+    }
     return clampToViewport({
       ...resolved,
       width: autoWidth ? widthForLayout : Math.max(minWidth, resolved.width),
       height: autoHeight ? heightForLayout : Math.max(minHeight, initial.height),
-    });
-  });
+    })
+  })
 
-  const boundsRef = useRef(bounds);
-  boundsRef.current = bounds;
+  const boundsRef = useRef(bounds)
+  boundsRef.current = bounds
 
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null)
 
   const dragRef = useRef<{
-    type: 'move' | 'resize';
-    edge?: ResizeEdge;
-    startX: number;
-    startY: number;
-    startBounds: FloatingPanelBounds;
-  } | null>(null);
+    type: 'move' | 'resize'
+    edge?: ResizeEdge
+    startX: number
+    startY: number
+    startBounds: FloatingPanelBounds
+  } | null>(null)
 
   useEffect(() => {
-    if (storageKey) saveBounds(storageKey, bounds);
-  }, [bounds, storageKey]);
+    if (storageKey) saveBounds(storageKey, bounds)
+  }, [bounds, storageKey])
 
   useEffect(() => {
     const handleResize = () => {
       setBounds((prev) => {
-        const effectiveHeight = autoHeight && panelRef.current
-          ? panelRef.current.offsetHeight
-          : prev.height;
-        const effectiveWidth = autoWidth && panelRef.current
-          ? panelRef.current.offsetWidth
-          : prev.width;
-        return clampToViewport({ ...prev, width: effectiveWidth, height: effectiveHeight });
-      });
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [autoHeight, autoWidth]);
+        const effectiveHeight =
+          autoHeight && panelRef.current ? panelRef.current.offsetHeight : prev.height
+        const effectiveWidth =
+          autoWidth && panelRef.current ? panelRef.current.offsetWidth : prev.width
+        return clampToViewport({ ...prev, width: effectiveWidth, height: effectiveHeight })
+      })
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [autoHeight, autoWidth])
 
   useEffect(() => {
-    if ((!autoHeight && !autoWidth) || !panelRef.current) return;
+    if ((!autoHeight && !autoWidth) || !panelRef.current) return
     const ro = new ResizeObserver(() => {
-      if (!panelRef.current) return;
+      if (!panelRef.current) return
       setBounds((prev) => {
-        const next = { ...prev };
-        if (autoHeight) next.height = panelRef.current!.offsetHeight;
-        if (autoWidth) next.width = panelRef.current!.offsetWidth;
-        return clampToViewport(next);
-      });
-    });
-    ro.observe(panelRef.current);
-    return () => ro.disconnect();
-  }, [autoHeight, autoWidth]);
+        const next = { ...prev }
+        if (autoHeight) next.height = panelRef.current!.offsetHeight
+        if (autoWidth) next.width = panelRef.current!.offsetWidth
+        return clampToViewport(next)
+      })
+    })
+    ro.observe(panelRef.current)
+    return () => ro.disconnect()
+  }, [autoHeight, autoWidth])
 
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      e.preventDefault();
+      const drag = dragRef.current
+      if (!drag) return
+      e.preventDefault()
 
-      const dx = e.clientX - drag.startX;
-      const dy = e.clientY - drag.startY;
-      const s = drag.startBounds;
+      const dx = e.clientX - drag.startX
+      const dy = e.clientY - drag.startY
+      const s = drag.startBounds
 
       if (drag.type === 'move') {
-        const effectiveHeight = autoHeight && panelRef.current
-          ? panelRef.current.offsetHeight
-          : s.height;
-        setBounds(clampToViewport({ x: s.x + dx, y: s.y + dy, width: s.width, height: effectiveHeight }));
-        return;
+        const effectiveHeight =
+          autoHeight && panelRef.current ? panelRef.current.offsetHeight : s.height
+        setBounds(
+          clampToViewport({ x: s.x + dx, y: s.y + dy, width: s.width, height: effectiveHeight }),
+        )
+        return
       }
 
-      let { x, y, width, height } = s;
-      const edge = drag.edge!;
+      let { x, y, width, height } = s
+      const edge = drag.edge!
 
-      if (!autoWidth && edge.includes('e')) width = Math.max(minWidth, s.width + dx);
+      if (!autoWidth && edge.includes('e')) width = Math.max(minWidth, s.width + dx)
       if (!autoWidth && edge.includes('w')) {
-        const newWidth = Math.max(minWidth, s.width - dx);
-        x = s.x + (s.width - newWidth);
-        width = newWidth;
+        const newWidth = Math.max(minWidth, s.width - dx)
+        x = s.x + (s.width - newWidth)
+        width = newWidth
       }
-      if (edge.includes('s')) height = Math.max(minHeight, s.height + dy);
+      if (edge.includes('s')) height = Math.max(minHeight, s.height + dy)
       if (edge.includes('n')) {
-        const newHeight = Math.max(minHeight, s.height - dy);
-        y = s.y + (s.height - newHeight);
-        height = newHeight;
+        const newHeight = Math.max(minHeight, s.height - dy)
+        y = s.y + (s.height - newHeight)
+        height = newHeight
       }
 
-      setBounds(clampToViewport({ x, y, width, height }));
-    };
+      setBounds(clampToViewport({ x, y, width, height }))
+    }
 
     const handlePointerUp = () => {
-      dragRef.current = null;
-    };
+      dragRef.current = null
+    }
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
     return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [minHeight, minWidth]);
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [autoHeight, autoWidth, minHeight, minWidth])
 
   const handleTitlePointerDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     dragRef.current = {
       type: 'move',
       startX: e.clientX,
       startY: e.clientY,
       startBounds: { ...boundsRef.current },
-    };
-  }, []);
+    }
+  }, [])
 
-  const handleResizePointerDown = useCallback((edge: ResizeEdge, e: React.PointerEvent) => {
-    if (!resizable) return;
-    e.preventDefault();
-    e.stopPropagation();
-    dragRef.current = {
-      type: 'resize',
-      edge,
-      startX: e.clientX,
-      startY: e.clientY,
-      startBounds: { ...boundsRef.current },
-    };
-  }, [resizable]);
+  const handleResizePointerDown = useCallback(
+    (edge: ResizeEdge, e: React.PointerEvent) => {
+      if (!resizable) return
+      e.preventDefault()
+      e.stopPropagation()
+      dragRef.current = {
+        type: 'resize',
+        edge,
+        startX: e.clientX,
+        startY: e.clientY,
+        startBounds: { ...boundsRef.current },
+      }
+    },
+    [resizable],
+  )
 
   const resizeHandle = (edge: ResizeEdge, positionClass: string) => (
     <div
@@ -265,7 +265,7 @@ export const FloatingPanel = memo(function FloatingPanel({
       className={`absolute ${positionClass} ${RESIZE_CURSORS[edge]} z-10`}
       onPointerDown={(e) => handleResizePointerDown(edge, e)}
     />
-  );
+  )
 
   const panel = (
     <div
@@ -274,7 +274,9 @@ export const FloatingPanel = memo(function FloatingPanel({
       style={{
         left: bounds.x,
         top: bounds.y,
-        ...(autoWidth ? { maxWidth: window.innerWidth - bounds.x - EDGE_MARGIN } : { width: bounds.width }),
+        ...(autoWidth
+          ? { maxWidth: window.innerWidth - bounds.x - EDGE_MARGIN }
+          : { width: bounds.width }),
         ...(autoHeight ? {} : { height: bounds.height }),
       }}
     >
@@ -284,10 +286,30 @@ export const FloatingPanel = memo(function FloatingPanel({
           {resizeHandle('s', 'bottom-0 left-2 right-2 h-[4px]')}
           {!autoWidth && resizeHandle('e', 'right-0 top-2 bottom-2 w-[4px]')}
           {!autoWidth && resizeHandle('w', 'left-0 top-2 bottom-2 w-[4px]')}
-          {resizeHandle('nw', autoWidth ? 'top-0 left-0 w-[8px] h-[8px] !cursor-ns-resize' : 'top-0 left-0 w-[8px] h-[8px]')}
-          {resizeHandle('ne', autoWidth ? 'top-0 right-0 w-[8px] h-[8px] !cursor-ns-resize' : 'top-0 right-0 w-[8px] h-[8px]')}
-          {resizeHandle('sw', autoWidth ? 'bottom-0 left-0 w-[8px] h-[8px] !cursor-ns-resize' : 'bottom-0 left-0 w-[8px] h-[8px]')}
-          {resizeHandle('se', autoWidth ? 'bottom-0 right-0 w-[8px] h-[8px] !cursor-ns-resize' : 'bottom-0 right-0 w-[8px] h-[8px]')}
+          {resizeHandle(
+            'nw',
+            autoWidth
+              ? 'top-0 left-0 w-[8px] h-[8px] !cursor-ns-resize'
+              : 'top-0 left-0 w-[8px] h-[8px]',
+          )}
+          {resizeHandle(
+            'ne',
+            autoWidth
+              ? 'top-0 right-0 w-[8px] h-[8px] !cursor-ns-resize'
+              : 'top-0 right-0 w-[8px] h-[8px]',
+          )}
+          {resizeHandle(
+            'sw',
+            autoWidth
+              ? 'bottom-0 left-0 w-[8px] h-[8px] !cursor-ns-resize'
+              : 'bottom-0 left-0 w-[8px] h-[8px]',
+          )}
+          {resizeHandle(
+            'se',
+            autoWidth
+              ? 'bottom-0 right-0 w-[8px] h-[8px] !cursor-ns-resize'
+              : 'bottom-0 right-0 w-[8px] h-[8px]',
+          )}
         </>
       ) : null}
 
@@ -317,7 +339,7 @@ export const FloatingPanel = memo(function FloatingPanel({
         {children}
       </div>
     </div>
-  );
+  )
 
-  return createPortal(panel, document.body);
-});
+  return createPortal(panel, document.body)
+})

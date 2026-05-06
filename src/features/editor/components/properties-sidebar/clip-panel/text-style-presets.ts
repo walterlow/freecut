@@ -6,4 +6,4 @@ export {
   buildTextStylePresetUpdates,
   type TextStylePreset,
   type TextStylePresetId,
-} from '@/shared/typography/text-style-presets';
+} from '@/shared/typography/text-style-presets'

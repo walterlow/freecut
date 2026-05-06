@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import type { TextItem } from '@/types/timeline';
-import type { ItemKeyframes } from '@/types/keyframe';
+import { describe, expect, it } from 'vite-plus/test'
+import type { TextItem } from '@/types/timeline'
+import type { ItemKeyframes } from '@/types/keyframe'
 import {
   TEXT_ANIMATION_PRESETS,
   buildTextAnimationKeyframes,
   getTextAnimationDurationFrames,
-} from './text-animation-presets';
+} from './text-animation-presets'
 
 const baseItem: TextItem = {
   id: 'text-1',
@@ -24,14 +24,14 @@ const baseItem: TextItem = {
     rotation: 0,
     opacity: 1,
   },
-};
+}
 
 describe('text animation presets', () => {
   it('includes a none option for animation selectors', () => {
     expect(TEXT_ANIMATION_PRESETS[0]).toEqual({
       id: 'none',
       label: 'None',
-    });
+    })
     expect(TEXT_ANIMATION_PRESETS.map((preset) => preset.id)).toEqual([
       'none',
       'fade',
@@ -42,8 +42,8 @@ describe('text animation presets', () => {
       'tilt',
       'pop',
       'swing',
-    ]);
-  });
+    ])
+  })
 
   it('builds fade intro keyframes at clip start', () => {
     const payloads = buildTextAnimationKeyframes({
@@ -59,7 +59,7 @@ describe('text animation presets', () => {
         rotation: 0,
         opacity: 0.8,
       },
-    });
+    })
 
     expect(payloads).toEqual([
       {
@@ -81,8 +81,8 @@ describe('text animation presets', () => {
         easing: 'linear',
         easingConfig: undefined,
       },
-    ]);
-  });
+    ])
+  })
 
   it('uses size-aware offsets for rise presets', () => {
     const payloads = buildTextAnimationKeyframes({
@@ -98,7 +98,7 @@ describe('text animation presets', () => {
         rotation: 0,
         opacity: 1,
       },
-    });
+    })
 
     expect(payloads).toEqual([
       {
@@ -139,8 +139,8 @@ describe('text animation presets', () => {
         easing: 'linear',
         easingConfig: undefined,
       },
-    ]);
-  });
+    ])
+  })
 
   it('preserves easing on an existing end keyframe', () => {
     const itemKeyframes: ItemKeyframes = {
@@ -148,12 +148,10 @@ describe('text animation presets', () => {
       properties: [
         {
           property: 'opacity',
-          keyframes: [
-            { id: 'opacity-end', frame: 14, value: 1, easing: 'ease-in' },
-          ],
+          keyframes: [{ id: 'opacity-end', frame: 14, value: 1, easing: 'ease-in' }],
         },
       ],
-    };
+    }
 
     const payloads = buildTextAnimationKeyframes({
       item: baseItem,
@@ -169,13 +167,13 @@ describe('text animation presets', () => {
         opacity: 1,
       },
       itemKeyframes,
-    });
+    })
 
     expect(payloads[1]).toMatchObject({
       frame: 14,
       easing: 'ease-in',
-    });
-  });
+    })
+  })
 
   it('builds fade outro keyframes at clip end', () => {
     const payloads = buildTextAnimationKeyframes({
@@ -191,7 +189,7 @@ describe('text animation presets', () => {
         rotation: 0,
         opacity: 0.8,
       },
-    });
+    })
 
     expect(payloads).toEqual([
       {
@@ -213,8 +211,8 @@ describe('text animation presets', () => {
         easing: 'linear',
         easingConfig: undefined,
       },
-    ]);
-  });
+    ])
+  })
 
   it('neutralizes managed intro keyframes when none is selected', () => {
     const itemKeyframes: ItemKeyframes = {
@@ -242,7 +240,7 @@ describe('text animation presets', () => {
           ],
         },
       ],
-    };
+    }
 
     const payloads = buildTextAnimationKeyframes({
       item: baseItem,
@@ -258,7 +256,7 @@ describe('text animation presets', () => {
         opacity: 1,
       },
       itemKeyframes,
-    });
+    })
 
     expect(payloads).toEqual([
       {
@@ -293,8 +291,8 @@ describe('text animation presets', () => {
         easing: 'linear',
         easingConfig: undefined,
       },
-    ]);
-  });
+    ])
+  })
 
   it('builds pop intro keyframes with springy motion', () => {
     const payloads = buildTextAnimationKeyframes({
@@ -310,7 +308,7 @@ describe('text animation presets', () => {
         rotation: 2,
         opacity: 1,
       },
-    });
+    })
 
     expect(payloads).toEqual([
       {
@@ -370,12 +368,12 @@ describe('text animation presets', () => {
         easing: 'linear',
         easingConfig: undefined,
       },
-    ]);
-  });
+    ])
+  })
 
   it('clamps intro duration to short clips', () => {
-    expect(getTextAnimationDurationFrames(6, 30)).toBe(5);
-    expect(getTextAnimationDurationFrames(1, 30)).toBe(0);
-    expect(getTextAnimationDurationFrames(90, 30)).toBe(14);
-  });
-});
+    expect(getTextAnimationDurationFrames(6, 30)).toBe(5)
+    expect(getTextAnimationDurationFrames(1, 30)).toBe(0)
+    expect(getTextAnimationDurationFrames(90, 30)).toBe(14)
+  })
+})

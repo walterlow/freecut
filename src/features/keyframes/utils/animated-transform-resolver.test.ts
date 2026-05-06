@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { ItemKeyframes } from '@/types/keyframe';
-import { resolveAnimatedTransform } from './animated-transform-resolver';
+import { describe, expect, it } from 'vite-plus/test'
+import type { ItemKeyframes } from '@/types/keyframe'
+import { resolveAnimatedTransform } from './animated-transform-resolver'
 
 describe('resolveAnimatedTransform', () => {
   it('interpolates anchor keyframes alongside the base transform', () => {
@@ -14,7 +14,7 @@ describe('resolveAnimatedTransform', () => {
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
-    };
+    }
 
     const itemKeyframes: ItemKeyframes = {
       itemId: 'video-1',
@@ -34,13 +34,13 @@ describe('resolveAnimatedTransform', () => {
           ],
         },
       ],
-    };
+    }
 
-    const resolved = resolveAnimatedTransform(baseTransform, itemKeyframes, 5);
+    const resolved = resolveAnimatedTransform(baseTransform, itemKeyframes, 5)
 
-    expect(resolved.anchorX).toBe(90);
-    expect(resolved.anchorY).toBe(70);
-    expect(resolved.width).toBe(320);
-    expect(resolved.height).toBe(180);
-  });
-});
+    expect(resolved.anchorX).toBe(90)
+    expect(resolved.anchorY).toBe(70)
+    expect(resolved.width).toBe(320)
+    expect(resolved.height).toBe(180)
+  })
+})

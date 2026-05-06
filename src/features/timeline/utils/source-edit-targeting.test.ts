@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { TimelineTrack } from '@/types/timeline';
-import { resolveSourceEditTrackTargets } from './source-edit-targeting';
+import { describe, expect, it } from 'vite-plus/test'
+import type { TimelineTrack } from '@/types/timeline'
+import { resolveSourceEditTrackTargets } from './source-edit-targeting'
 
 function makeTrack(overrides: Partial<TimelineTrack> = {}): TimelineTrack {
   return {
@@ -15,7 +15,7 @@ function makeTrack(overrides: Partial<TimelineTrack> = {}): TimelineTrack {
     order: 0,
     items: [],
     ...overrides,
-  };
+  }
 }
 
 describe('resolveSourceEditTrackTargets', () => {
@@ -28,12 +28,18 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: true,
       patchAudio: true,
       preferredTrackHeight: 72,
-    });
+    })
 
-    expect(result).toMatchObject({ videoTrackId: 'track-1' });
-    expect(result?.tracks.find((track) => track.id === 'track-1')).toMatchObject({ name: 'V1', kind: 'video' });
-    expect(result?.tracks.find((track) => track.id === result.audioTrackId)).toMatchObject({ name: 'A1', kind: 'audio' });
-  });
+    expect(result).toMatchObject({ videoTrackId: 'track-1' })
+    expect(result?.tracks.find((track) => track.id === 'track-1')).toMatchObject({
+      name: 'V1',
+      kind: 'video',
+    })
+    expect(result?.tracks.find((track) => track.id === result.audioTrackId)).toMatchObject({
+      name: 'A1',
+      kind: 'audio',
+    })
+  })
 
   it('uses an active audio lane for source audio and patches video above it', () => {
     const result = resolveSourceEditTrackTargets({
@@ -44,11 +50,14 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: true,
       patchAudio: true,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result?.audioTrackId).toBe('a1');
-    expect(result?.tracks.find((track) => track.id === result.videoTrackId)).toMatchObject({ name: 'V1', kind: 'video' });
-  });
+    expect(result?.audioTrackId).toBe('a1')
+    expect(result?.tracks.find((track) => track.id === result.videoTrackId)).toMatchObject({
+      name: 'V1',
+      kind: 'video',
+    })
+  })
 
   it('routes audio-only edits to the first audio destination when the active lane is video', () => {
     const result = resolveSourceEditTrackTargets({
@@ -62,11 +71,11 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: false,
       patchAudio: true,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result).toMatchObject({ audioTrackId: 'a1' });
-    expect(result?.videoTrackId).toBeUndefined();
-  });
+    expect(result).toMatchObject({ audioTrackId: 'a1' })
+    expect(result?.videoTrackId).toBeUndefined()
+  })
 
   it('supports video-only source patching from a linked source clip', () => {
     const result = resolveSourceEditTrackTargets({
@@ -77,11 +86,11 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: true,
       patchAudio: false,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result?.videoTrackId).toBeTruthy();
-    expect(result?.audioTrackId).toBeUndefined();
-  });
+    expect(result?.videoTrackId).toBeTruthy()
+    expect(result?.audioTrackId).toBeUndefined()
+  })
 
   it('defaults linked source audio to the first available audio destination', () => {
     const result = resolveSourceEditTrackTargets({
@@ -97,10 +106,10 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: true,
       patchAudio: true,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result).toMatchObject({ videoTrackId: 'v2', audioTrackId: 'a1' });
-  });
+    expect(result).toMatchObject({ videoTrackId: 'v2', audioTrackId: 'a1' })
+  })
 
   it('uses an explicitly selected audio destination for linked source edits', () => {
     const result = resolveSourceEditTrackTargets({
@@ -117,10 +126,10 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: true,
       patchAudio: true,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result).toMatchObject({ videoTrackId: 'v2', audioTrackId: 'a2' });
-  });
+    expect(result).toMatchObject({ videoTrackId: 'v2', audioTrackId: 'a2' })
+  })
 
   it('uses an explicitly selected audio destination for audio-only source edits', () => {
     const result = resolveSourceEditTrackTargets({
@@ -137,10 +146,10 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: false,
       patchAudio: true,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result).toMatchObject({ audioTrackId: 'a2' });
-  });
+    expect(result).toMatchObject({ audioTrackId: 'a2' })
+  })
 
   it('uses an explicitly selected destination without requiring an active lane', () => {
     const result = resolveSourceEditTrackTargets({
@@ -156,10 +165,10 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: false,
       patchAudio: true,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result).toMatchObject({ audioTrackId: 'a2' });
-  });
+    expect(result).toMatchObject({ audioTrackId: 'a2' })
+  })
 
   it('keeps an explicitly selected video destination when the active lane is audio', () => {
     const result = resolveSourceEditTrackTargets({
@@ -176,10 +185,10 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: true,
       patchAudio: false,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result).toMatchObject({ videoTrackId: 'v2' });
-  });
+    expect(result).toMatchObject({ videoTrackId: 'v2' })
+  })
 
   it('ignores a locked active lane when an explicit destination is selected', () => {
     const result = resolveSourceEditTrackTargets({
@@ -194,10 +203,10 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: true,
       patchAudio: false,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result).toMatchObject({ videoTrackId: 'v2' });
-  });
+    expect(result).toMatchObject({ videoTrackId: 'v2' })
+  })
 
   it('creates a first audio destination when no audio tracks exist yet', () => {
     const result = resolveSourceEditTrackTargets({
@@ -208,12 +217,12 @@ describe('resolveSourceEditTrackTargets', () => {
       patchVideo: true,
       patchAudio: true,
       preferredTrackHeight: 64,
-    });
+    })
 
-    expect(result?.videoTrackId).toBe('v4');
+    expect(result?.videoTrackId).toBe('v4')
     expect(result?.tracks.find((track) => track.id === result?.audioTrackId)).toMatchObject({
       kind: 'audio',
       name: 'A1',
-    });
-  });
-});
+    })
+  })
+})

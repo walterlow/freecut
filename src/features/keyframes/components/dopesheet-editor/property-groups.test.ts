@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { getPropertyAccordionGroups } from './property-groups';
+import { describe, expect, it } from 'vite-plus/test'
+import { getPropertyAccordionGroups } from './property-groups'
 
 describe('getPropertyAccordionGroups', () => {
   it('groups transform and audio properties in a stable order', () => {
-    expect(getPropertyAccordionGroups(['volume', 'cropRight', 'anchorY', 'y', 'anchorX', 'x'])).toEqual([
+    expect(
+      getPropertyAccordionGroups(['volume', 'cropRight', 'anchorY', 'y', 'anchorX', 'x']),
+    ).toEqual([
       {
         id: 'transform',
         label: 'Transform',
@@ -19,6 +21,6 @@ describe('getPropertyAccordionGroups', () => {
         label: 'Audio',
         properties: ['volume'],
       },
-    ]);
-  });
-});
+    ])
+  })
+})

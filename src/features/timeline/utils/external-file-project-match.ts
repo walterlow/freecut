@@ -1,39 +1,38 @@
-import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog';
-import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog'
+import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import {
   getMimeType,
   mediaProcessorService,
   type ExtractedMediaFileEntry,
-} from '@/features/timeline/deps/media-library-resolver';
+} from '@/features/timeline/deps/media-library-resolver'
 
 export async function preflightFirstTimelineVideoProjectMatch(
-  entries: ExtractedMediaFileEntry[]
+  entries: ExtractedMediaFileEntry[],
 ): Promise<void> {
-  const currentProjectId = useMediaLibraryStore.getState().currentProjectId;
+  const currentProjectId = useMediaLibraryStore.getState().currentProjectId
   if (!currentProjectId) {
-    return;
+    return
   }
 
   const hasExistingProjectVideo = useMediaLibraryStore
     .getState()
-    .mediaItems
-    .some((item) => item.mimeType.startsWith('video/'));
+    .mediaItems.some((item) => item.mimeType.startsWith('video/'))
   if (hasExistingProjectVideo) {
-    return;
+    return
   }
 
-  const firstVideoEntry = entries.find((entry) => entry.mediaType === 'video');
+  const firstVideoEntry = entries.find((entry) => entry.mediaType === 'video')
   if (!firstVideoEntry) {
-    return;
+    return
   }
 
-  const mimeType = getMimeType(firstVideoEntry.file);
+  const mimeType = getMimeType(firstVideoEntry.file)
   const { metadata } = await mediaProcessorService.processMedia(firstVideoEntry.file, mimeType, {
     generateThumbnail: false,
-  });
+  })
 
   if (metadata.type !== 'video') {
-    throw new Error('Unable to inspect dropped video.');
+    throw new Error('Unable to inspect dropped video.')
   }
 
   await useProjectMediaMatchDialogStore.getState().requestProjectMediaMatch(currentProjectId, {
@@ -41,5 +40,5 @@ export async function preflightFirstTimelineVideoProjectMatch(
     width: metadata.width,
     height: metadata.height,
     fps: metadata.fps,
-  });
+  })
 }

@@ -17,19 +17,13 @@
  * `['media', id, 'cache', 'filmstrip', '3.jpg']`, etc).
  */
 
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger } from '@/shared/logging/logger'
 
-import { getWorkspaceRoot } from './root';
-import {
-  exists,
-  readBlob,
-  removeEntry,
-  writeBlob,
-  writeJsonAtomic,
-} from './fs-primitives';
-import { blobToArrayBuffer } from './blob-utils';
+import { getWorkspaceRoot } from './root'
+import { exists, readBlob, removeEntry, writeBlob, writeJsonAtomic } from './fs-primitives'
+import { blobToArrayBuffer } from './blob-utils'
 
-const logger = createLogger('WorkspaceFS:CacheMirror');
+const logger = createLogger('WorkspaceFS:CacheMirror')
 
 /**
  * Write a blob to the workspace at the given path. Safe to call on every
@@ -37,18 +31,15 @@ const logger = createLogger('WorkspaceFS:CacheMirror');
  * fully hydrates), it's a no-op instead of a throw — cache writes are
  * never critical-path.
  */
-export async function mirrorBlobToWorkspace(
-  segments: string[],
-  blob: Blob,
-): Promise<void> {
-  const root = getWorkspaceRoot();
-  if (!root) return;
+export async function mirrorBlobToWorkspace(segments: string[], blob: Blob): Promise<void> {
+  const root = getWorkspaceRoot()
+  if (!root) return
   try {
-    if (await exists(root, segments)) return; // idempotent
-    const bytes = new Uint8Array(await blobToArrayBuffer(blob));
-    await writeBlob(root, segments, bytes);
+    if (await exists(root, segments)) return // idempotent
+    const bytes = new Uint8Array(await blobToArrayBuffer(blob))
+    await writeBlob(root, segments, bytes)
   } catch (error) {
-    logger.warn(`mirrorBlobToWorkspace(${segments.join('/')}) failed`, error);
+    logger.warn(`mirrorBlobToWorkspace(${segments.join('/')}) failed`, error)
   }
 }
 
@@ -60,30 +51,27 @@ export async function mirrorBytesToWorkspace(
   segments: string[],
   bytes: ArrayBuffer | Uint8Array,
 ): Promise<void> {
-  const root = getWorkspaceRoot();
-  if (!root) return;
+  const root = getWorkspaceRoot()
+  if (!root) return
   try {
-    if (await exists(root, segments)) return;
-    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    await writeBlob(root, segments, u8);
+    if (await exists(root, segments)) return
+    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+    await writeBlob(root, segments, u8)
   } catch (error) {
-    logger.warn(`mirrorBytesToWorkspace(${segments.join('/')}) failed`, error);
+    logger.warn(`mirrorBytesToWorkspace(${segments.join('/')}) failed`, error)
   }
 }
 
 /**
  * Mirror a JSON value atomically.
  */
-export async function mirrorJsonToWorkspace(
-  segments: string[],
-  data: unknown,
-): Promise<void> {
-  const root = getWorkspaceRoot();
-  if (!root) return;
+export async function mirrorJsonToWorkspace(segments: string[], data: unknown): Promise<void> {
+  const root = getWorkspaceRoot()
+  if (!root) return
   try {
-    await writeJsonAtomic(root, segments, data);
+    await writeJsonAtomic(root, segments, data)
   } catch (error) {
-    logger.warn(`mirrorJsonToWorkspace(${segments.join('/')}) failed`, error);
+    logger.warn(`mirrorJsonToWorkspace(${segments.join('/')}) failed`, error)
   }
 }
 
@@ -92,31 +80,27 @@ export async function mirrorJsonToWorkspace(
  * Returns null when not present (including when there's no active
  * workspace root, which the caller can treat as a miss).
  */
-export async function readWorkspaceBlob(
-  segments: string[],
-): Promise<Blob | null> {
-  const root = getWorkspaceRoot();
-  if (!root) return null;
+export async function readWorkspaceBlob(segments: string[]): Promise<Blob | null> {
+  const root = getWorkspaceRoot()
+  if (!root) return null
   try {
-    return await readBlob(root, segments);
+    return await readBlob(root, segments)
   } catch (error) {
-    logger.warn(`readWorkspaceBlob(${segments.join('/')}) failed`, error);
-    return null;
+    logger.warn(`readWorkspaceBlob(${segments.join('/')}) failed`, error)
+    return null
   }
 }
 
 /**
  * Check whether a path exists in the workspace without reading it.
  */
-export async function workspaceCacheExists(
-  segments: string[],
-): Promise<boolean> {
-  const root = getWorkspaceRoot();
-  if (!root) return false;
+export async function workspaceCacheExists(segments: string[]): Promise<boolean> {
+  const root = getWorkspaceRoot()
+  if (!root) return false
   try {
-    return await exists(root, segments);
+    return await exists(root, segments)
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -127,11 +111,11 @@ export async function removeWorkspaceCacheEntry(
   segments: string[],
   options: { recursive?: boolean } = {},
 ): Promise<void> {
-  const root = getWorkspaceRoot();
-  if (!root) return;
+  const root = getWorkspaceRoot()
+  if (!root) return
   try {
-    await removeEntry(root, segments, options);
+    await removeEntry(root, segments, options)
   } catch (error) {
-    logger.warn(`removeWorkspaceCacheEntry(${segments.join('/')}) failed`, error);
+    logger.warn(`removeWorkspaceCacheEntry(${segments.join('/')}) failed`, error)
   }
 }

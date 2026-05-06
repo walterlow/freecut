@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { VideoItem } from '@/types/timeline';
-import { computeSlideContinuitySourceDelta } from './slide-utils';
+import { describe, expect, it } from 'vite-plus/test'
+import type { VideoItem } from '@/types/timeline'
+import { computeSlideContinuitySourceDelta } from './slide-utils'
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   return {
@@ -19,7 +19,7 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
     sourceFps: 30,
     speed: 1,
     ...overrides,
-  };
+  }
 }
 
 describe('computeSlideContinuitySourceDelta', () => {
@@ -30,25 +30,25 @@ describe('computeSlideContinuitySourceDelta', () => {
       durationInFrames: 100,
       sourceStart: 0,
       sourceEnd: 100,
-    });
+    })
     const middle = makeVideoItem({
       id: 'middle',
       from: 100,
       durationInFrames: 100,
       sourceStart: 100,
       sourceEnd: 200,
-    });
+    })
     const right = makeVideoItem({
       id: 'right',
       from: 200,
       durationInFrames: 100,
       sourceStart: 200,
       sourceEnd: 300,
-    });
+    })
 
-    const delta = computeSlideContinuitySourceDelta(middle, left, right, 20, 30);
-    expect(delta).toBe(20);
-  });
+    const delta = computeSlideContinuitySourceDelta(middle, left, right, 20, 30)
+    expect(delta).toBe(20)
+  })
 
   it('returns 0 for non-split chains', () => {
     const left = makeVideoItem({
@@ -59,7 +59,7 @@ describe('computeSlideContinuitySourceDelta', () => {
       durationInFrames: 100,
       sourceStart: 0,
       sourceEnd: 100,
-    });
+    })
     const middle = makeVideoItem({
       id: 'middle',
       originId: 'middle-origin',
@@ -68,7 +68,7 @@ describe('computeSlideContinuitySourceDelta', () => {
       durationInFrames: 100,
       sourceStart: 100,
       sourceEnd: 200,
-    });
+    })
     const right = makeVideoItem({
       id: 'right',
       originId: 'right-origin',
@@ -77,33 +77,33 @@ describe('computeSlideContinuitySourceDelta', () => {
       durationInFrames: 100,
       sourceStart: 200,
       sourceEnd: 300,
-    });
+    })
 
-    const delta = computeSlideContinuitySourceDelta(middle, left, right, 20, 30);
-    expect(delta).toBe(0);
-  });
+    const delta = computeSlideContinuitySourceDelta(middle, left, right, 20, 30)
+    expect(delta).toBe(0)
+  })
 
   it('returns 0 when slideDelta is 0', () => {
-    const item = makeVideoItem();
-    const left = makeVideoItem({ id: 'left' });
-    const right = makeVideoItem({ id: 'right' });
-    const delta = computeSlideContinuitySourceDelta(item, left, right, 0, 30);
-    expect(delta).toBe(0);
-  });
+    const item = makeVideoItem()
+    const left = makeVideoItem({ id: 'left' })
+    const right = makeVideoItem({ id: 'right' })
+    const delta = computeSlideContinuitySourceDelta(item, left, right, 0, 30)
+    expect(delta).toBe(0)
+  })
 
   it('returns 0 when leftNeighbor is null', () => {
-    const item = makeVideoItem();
-    const right = makeVideoItem({ id: 'right' });
-    const delta = computeSlideContinuitySourceDelta(item, null, right, 10, 30);
-    expect(delta).toBe(0);
-  });
+    const item = makeVideoItem()
+    const right = makeVideoItem({ id: 'right' })
+    const delta = computeSlideContinuitySourceDelta(item, null, right, 10, 30)
+    expect(delta).toBe(0)
+  })
 
   it('returns 0 when rightNeighbor is null', () => {
-    const item = makeVideoItem();
-    const left = makeVideoItem({ id: 'left' });
-    const delta = computeSlideContinuitySourceDelta(item, left, null, 10, 30);
-    expect(delta).toBe(0);
-  });
+    const item = makeVideoItem()
+    const left = makeVideoItem({ id: 'left' })
+    const delta = computeSlideContinuitySourceDelta(item, left, null, 10, 30)
+    expect(delta).toBe(0)
+  })
 
   it('returns 0 for non-media item types', () => {
     const textItem = {
@@ -115,20 +115,20 @@ describe('computeSlideContinuitySourceDelta', () => {
       label: 'Hello',
       text: 'Hello',
       color: '#ffffff',
-    };
-    const left = makeVideoItem({ id: 'left', from: 0 });
-    const right = makeVideoItem({ id: 'right', from: 200 });
-    const delta = computeSlideContinuitySourceDelta(textItem, left, right, 10, 30);
-    expect(delta).toBe(0);
-  });
+    }
+    const left = makeVideoItem({ id: 'left', from: 0 })
+    const right = makeVideoItem({ id: 'right', from: 200 })
+    const delta = computeSlideContinuitySourceDelta(textItem, left, right, 10, 30)
+    expect(delta).toBe(0)
+  })
 
   it('returns 0 when sourceEnd is undefined', () => {
-    const item = makeVideoItem({ sourceEnd: undefined });
-    const left = makeVideoItem({ id: 'left', from: 0 });
-    const right = makeVideoItem({ id: 'right', from: 200 });
-    const delta = computeSlideContinuitySourceDelta(item, left, right, 10, 30);
-    expect(delta).toBe(0);
-  });
+    const item = makeVideoItem({ sourceEnd: undefined })
+    const left = makeVideoItem({ id: 'left', from: 0 })
+    const right = makeVideoItem({ id: 'right', from: 200 })
+    const delta = computeSlideContinuitySourceDelta(item, left, right, 10, 30)
+    expect(delta).toBe(0)
+  })
 
   it('applies fps and speed conversion for mismatched source/timeline fps', () => {
     // sourceFps=60, speed=2, timelineFps=30
@@ -142,7 +142,7 @@ describe('computeSlideContinuitySourceDelta', () => {
       sourceDuration: 1000,
       sourceFps: 60,
       speed: 2,
-    });
+    })
     const middle = makeVideoItem({
       id: 'middle',
       from: 50,
@@ -152,7 +152,7 @@ describe('computeSlideContinuitySourceDelta', () => {
       sourceDuration: 1000,
       sourceFps: 60,
       speed: 2,
-    });
+    })
     const right = makeVideoItem({
       id: 'right',
       from: 100,
@@ -162,12 +162,12 @@ describe('computeSlideContinuitySourceDelta', () => {
       sourceDuration: 1000,
       sourceFps: 60,
       speed: 2,
-    });
+    })
 
-    const delta = computeSlideContinuitySourceDelta(middle, left, right, 10, 30);
+    const delta = computeSlideContinuitySourceDelta(middle, left, right, 10, 30)
     // sourceDelta = round((10/30) * 60 * 2) = 40
-    expect(delta).toBe(40);
-  });
+    expect(delta).toBe(40)
+  })
 
   it('returns 0 when full source delta cannot be applied', () => {
     const left = makeVideoItem({
@@ -176,7 +176,7 @@ describe('computeSlideContinuitySourceDelta', () => {
       durationInFrames: 100,
       sourceStart: 0,
       sourceEnd: 100,
-    });
+    })
     const middle = makeVideoItem({
       id: 'middle',
       from: 100,
@@ -184,7 +184,7 @@ describe('computeSlideContinuitySourceDelta', () => {
       sourceStart: 100,
       sourceEnd: 200,
       sourceDuration: 205,
-    });
+    })
     const right = makeVideoItem({
       id: 'right',
       from: 200,
@@ -192,9 +192,9 @@ describe('computeSlideContinuitySourceDelta', () => {
       sourceStart: 200,
       sourceEnd: 300,
       sourceDuration: 600,
-    });
+    })
 
-    const delta = computeSlideContinuitySourceDelta(middle, left, right, 20, 30);
-    expect(delta).toBe(0);
-  });
-});
+    const delta = computeSlideContinuitySourceDelta(middle, left, right, 20, 30)
+    expect(delta).toBe(0)
+  })
+})

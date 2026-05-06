@@ -1,44 +1,44 @@
-import { useState, useEffect, useRef, useEffectEvent } from 'react';
-import { waveformCache, type CachedWaveform } from '../services/waveform-cache';
-import { getPreviewStartupDelayMs, schedulePreviewWork } from './preview-work-budget';
-import { createLogger } from '@/shared/logging/logger';
+import { useState, useEffect, useRef, useEffectEvent } from 'react'
+import { waveformCache, type CachedWaveform } from '../services/waveform-cache'
+import { getPreviewStartupDelayMs, schedulePreviewWork } from './preview-work-budget'
+import { createLogger } from '@/shared/logging/logger'
 
-const logger = createLogger('useWaveform');
+const logger = createLogger('useWaveform')
 
 interface UseWaveformOptions {
   /** Media ID from the timeline item */
-  mediaId: string;
+  mediaId: string
   /** Blob URL for the audio file */
-  blobUrl: string | null;
+  blobUrl: string | null
   /** Whether the clip is currently visible in viewport */
-  isVisible: boolean;
+  isVisible: boolean
   /** Whether to enable waveform (allows conditional disabling) */
-  enabled?: boolean;
+  enabled?: boolean
   /** Source/media duration used to size the deferred startup budget */
-  deferDurationSec?: number;
+  deferDurationSec?: number
 }
 
 interface UseWaveformResult {
   /** Peak amplitude data (raw mono or stereo-interleaved waveform) */
-  peaks: Float32Array | null;
+  peaks: Float32Array | null
   /** Audio duration in seconds */
-  duration: number;
+  duration: number
   /** Samples per second in peaks data */
-  sampleRate: number;
+  sampleRate: number
   /** Number of audio channels */
-  channels: number;
+  channels: number
   /** Whether peak data is stereo interleaved [L0, R0, L1, R1, ...] */
-  stereo: boolean;
+  stereo: boolean
   /** Highest peak observed so far */
-  maxPeak: number;
+  maxPeak: number
   /** Number of decoded peak entries available so far */
-  loadedSamples: number;
+  loadedSamples: number
   /** Whether waveform is currently loading */
-  isLoading: boolean;
+  isLoading: boolean
   /** Loading progress (0-100) */
-  progress: number;
+  progress: number
   /** Error message if generation failed */
-  error: string | null;
+  error: string | null
 }
 
 /**
@@ -61,137 +61,140 @@ export function useWaveform({
   // State for waveform data - initialize from memory cache to avoid skeleton flash
   // This is important when clips move across tracks (component remounts but cache persists)
   const [waveform, setWaveform] = useState<CachedWaveform | null>(() => {
-    return waveformCache.getFromMemoryCacheSync(mediaId);
-  });
-  const [isLoading, setIsLoading] = useState(false);
+    return waveformCache.getFromMemoryCacheSync(mediaId)
+  })
+  const [isLoading, setIsLoading] = useState(false)
   const [progress, setProgress] = useState(() => {
     // If we have cached data, start at 100%
-    const cached = waveformCache.getFromMemoryCacheSync(mediaId);
-    return cached?.isComplete ? 100 : 0;
-  });
-  const [error, setError] = useState<string | null>(null);
+    const cached = waveformCache.getFromMemoryCacheSync(mediaId)
+    return cached?.isComplete ? 100 : 0
+  })
+  const [error, setError] = useState<string | null>(null)
 
   // Refs to avoid duplicate starts when visibility/layout churns.
-  const isGeneratingRef = useRef(false);
-  const hasPendingStartRef = useRef(false);
-  const lastMediaIdRef = useRef<string>(mediaId);
+  const isGeneratingRef = useRef(false)
+  const hasPendingStartRef = useRef(false)
+  const lastMediaIdRef = useRef<string>(mediaId)
 
   // Reset state when mediaId changes (e.g., after relinking orphaned clip)
   useEffect(() => {
     if (lastMediaIdRef.current !== mediaId) {
-      lastMediaIdRef.current = mediaId;
-      isGeneratingRef.current = false;
-      hasPendingStartRef.current = false;
-      setWaveform(waveformCache.getFromMemoryCacheSync(mediaId));
-      setIsLoading(false);
-      setProgress(waveformCache.getFromMemoryCacheSync(mediaId)?.isComplete ? 100 : 0);
-      setError(null);
+      lastMediaIdRef.current = mediaId
+      isGeneratingRef.current = false
+      hasPendingStartRef.current = false
+      setWaveform(waveformCache.getFromMemoryCacheSync(mediaId))
+      setIsLoading(false)
+      setProgress(waveformCache.getFromMemoryCacheSync(mediaId)?.isComplete ? 100 : 0)
+      setError(null)
     }
-  }, [mediaId]);
+  }, [mediaId])
 
   // Progress callback - using useEffectEvent so it doesn't need to be in effect deps
   const onProgress = useEffectEvent((nextProgress: number) => {
-    setProgress(nextProgress);
-  });
+    setProgress(nextProgress)
+  })
 
   // Subscribe to progressive updates
   useEffect(() => {
     if (!enabled || !blobUrl) {
-      return;
+      return
     }
 
     const unsubscribe = waveformCache.subscribe(mediaId, (updated) => {
-      setWaveform(updated);
+      setWaveform(updated)
       if (updated.isComplete) {
-        setIsLoading(false);
-        setProgress(100);
+        setIsLoading(false)
+        setProgress(100)
       }
-    });
+    })
 
-    return unsubscribe;
-  }, [mediaId, enabled, blobUrl]);
+    return unsubscribe
+  }, [mediaId, enabled, blobUrl])
 
   // Load waveform when visible and conditions are met
   useEffect(() => {
     if (!enabled || !blobUrl) {
-      return;
+      return
     }
 
     if (isGeneratingRef.current || hasPendingStartRef.current) {
-      return;
+      return
     }
 
     if (!isVisible) {
-      return;
+      return
     }
 
     if (waveform?.isComplete) {
-      return;
+      return
     }
 
-    hasPendingStartRef.current = true;
-    setIsLoading(true);
-    setError(null);
+    hasPendingStartRef.current = true
+    setIsLoading(true)
+    setError(null)
 
-    let cancelled = false;
-    const requestMediaId = mediaId;
-    const cancelScheduledStart = schedulePreviewWork(() => {
-      if (cancelled || lastMediaIdRef.current !== requestMediaId) {
-        hasPendingStartRef.current = false;
-        return;
-      }
+    let cancelled = false
+    const requestMediaId = mediaId
+    const cancelScheduledStart = schedulePreviewWork(
+      () => {
+        if (cancelled || lastMediaIdRef.current !== requestMediaId) {
+          hasPendingStartRef.current = false
+          return
+        }
 
-      hasPendingStartRef.current = false;
-      isGeneratingRef.current = true;
-      setProgress(0);
+        hasPendingStartRef.current = false
+        isGeneratingRef.current = true
+        setProgress(0)
 
-      waveformCache
-        .getWaveform(mediaId, blobUrl, onProgress)
-        .then((result) => {
-          if (cancelled || lastMediaIdRef.current !== requestMediaId) {
-            return;
-          }
-          setWaveform(result);
-          setIsLoading(false);
-          setProgress(100);
-        })
-        .catch((err) => {
-          if (cancelled || lastMediaIdRef.current !== requestMediaId) {
-            return;
-          }
-          if (err.message !== 'Aborted') {
-            logger.warn(`Waveform generation failed for ${mediaId}`, err);
-            setError(err.message || 'Failed to generate waveform');
-          }
-          setIsLoading(false);
-        })
-        .finally(() => {
-          if (lastMediaIdRef.current === requestMediaId) {
-            isGeneratingRef.current = false;
-            hasPendingStartRef.current = false;
-          }
-        });
-    }, {
-      delayMs: getPreviewStartupDelayMs(deferDurationSec),
-    });
+        waveformCache
+          .getWaveform(mediaId, blobUrl, onProgress)
+          .then((result) => {
+            if (cancelled || lastMediaIdRef.current !== requestMediaId) {
+              return
+            }
+            setWaveform(result)
+            setIsLoading(false)
+            setProgress(100)
+          })
+          .catch((err) => {
+            if (cancelled || lastMediaIdRef.current !== requestMediaId) {
+              return
+            }
+            if (err.message !== 'Aborted') {
+              logger.warn(`Waveform generation failed for ${mediaId}`, err)
+              setError(err.message || 'Failed to generate waveform')
+            }
+            setIsLoading(false)
+          })
+          .finally(() => {
+            if (lastMediaIdRef.current === requestMediaId) {
+              isGeneratingRef.current = false
+              hasPendingStartRef.current = false
+            }
+          })
+      },
+      {
+        delayMs: getPreviewStartupDelayMs(deferDurationSec),
+      },
+    )
 
     // Don't abort on effect re-runs - let generation continue in background.
     // The cache will hold the result for when we need it.
     return () => {
-      cancelled = true;
+      cancelled = true
       if (!isGeneratingRef.current) {
-        hasPendingStartRef.current = false;
+        hasPendingStartRef.current = false
       }
-      cancelScheduledStart();
-    };
-  }, [mediaId, blobUrl, isVisible, enabled, waveform?.isComplete, deferDurationSec]);
+      cancelScheduledStart()
+    }
+  }, [mediaId, blobUrl, isVisible, enabled, waveform?.isComplete, deferDurationSec])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      waveformCache.abort(mediaId);
-    };
-  }, [mediaId]);
+      waveformCache.abort(mediaId)
+    }
+  }, [mediaId])
 
   return {
     peaks: waveform?.peaks ?? null,
@@ -204,5 +207,5 @@ export function useWaveform({
     isLoading,
     progress,
     error,
-  };
+  }
 }

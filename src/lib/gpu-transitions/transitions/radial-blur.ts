@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const radialBlur: GpuTransitionDefinition = {
   id: 'radialBlur',
@@ -88,12 +88,9 @@ fn radialBlurFragment(input: VertexOutput) -> @location(0) vec4f {
   return color;
 }`,
   packUniforms: (progress, width, height, _direction, properties) => {
-    const blurStrength = (properties?.blurStrength as number) ?? 1.0;
-    const spin = (properties?.spin as number) ?? 0.3;
-    const samples = (properties?.samples as number) ?? 12.0;
-    return new Float32Array([
-      progress, width, height, blurStrength,
-      spin, samples, 0, 0,
-    ]);
+    const blurStrength = (properties?.blurStrength as number) ?? 1.0
+    const spin = (properties?.spin as number) ?? 0.3
+    const samples = (properties?.samples as number) ?? 12.0
+    return new Float32Array([progress, width, height, blurStrength, spin, samples, 0, 0])
   },
-};
+}

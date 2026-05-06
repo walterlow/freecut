@@ -1,17 +1,17 @@
-﻿import { useEffect, useRef } from 'react';
-import { toast } from 'sonner';
-import { useSettingsStore } from '@/features/editor/deps/settings';
-import { createLogger } from '@/shared/logging/logger';
+import { useEffect, useRef } from 'react'
+import { toast } from 'sonner'
+import { useSettingsStore } from '@/features/editor/deps/settings'
+import { createLogger } from '@/shared/logging/logger'
 
-const logger = createLogger('AutoSave');
+const logger = createLogger('AutoSave')
 
 interface UseAutoSaveOptions {
   /** Whether there are unsaved changes */
-  isDirty: boolean;
+  isDirty: boolean
   /** Function to call when auto-saving */
-  onSave: () => Promise<void>;
+  onSave: () => Promise<void>
   /** Whether auto-save is enabled (can be used to disable during export, etc.) */
-  enabled?: boolean;
+  enabled?: boolean
 }
 
 /**
@@ -27,51 +27,51 @@ interface UseAutoSaveOptions {
  * });
  */
 export function useAutoSave({ isDirty, onSave, enabled = true }: UseAutoSaveOptions) {
-  const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
-  const isSavingRef = useRef(false);
+  const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval)
+  const isSavingRef = useRef(false)
 
   useEffect(() => {
     // Auto-save disabled if interval is 0 or hook is disabled
     if (autoSaveInterval === 0 || !enabled) {
-      return;
+      return
     }
 
-    const intervalMs = autoSaveInterval * 60 * 1000; // Convert minutes to ms
+    const intervalMs = autoSaveInterval * 60 * 1000 // Convert minutes to ms
 
-    let idleCallbackId: number | undefined;
+    let idleCallbackId: number | undefined
 
     const intervalId = setInterval(() => {
       // Only save if there are unsaved changes and not already saving
       if (!isDirty || isSavingRef.current) {
-        return;
+        return
       }
 
       // Defer save to idle time so it doesn't interrupt active editing (e.g., dragging).
       // timeout ensures save still fires within 10s even under continuous activity.
       idleCallbackId = requestIdleCallback(
         async () => {
-          if (isSavingRef.current) return;
-          isSavingRef.current = true;
-          const event = logger.startEvent('save');
-          event.set('interval_min', autoSaveInterval);
+          if (isSavingRef.current) return
+          isSavingRef.current = true
+          const event = logger.startEvent('save')
+          event.set('interval_min', autoSaveInterval)
 
           try {
-            await onSave();
-            event.success();
+            await onSave()
+            event.success()
           } catch (error) {
-            event.failure(error);
-            toast.error('自动保存失败');
+            event.failure(error)
+            toast.error('Auto-save failed')
           } finally {
-            isSavingRef.current = false;
+            isSavingRef.current = false
           }
         },
-        { timeout: 10_000 }
-      );
-    }, intervalMs);
+        { timeout: 10_000 },
+      )
+    }, intervalMs)
 
     return () => {
-      clearInterval(intervalId);
-      if (idleCallbackId !== undefined) cancelIdleCallback(idleCallbackId);
-    };
-  }, [autoSaveInterval, isDirty, onSave, enabled]);
+      clearInterval(intervalId)
+      if (idleCallbackId !== undefined) cancelIdleCallback(idleCallbackId)
+    }
+  }, [autoSaveInterval, isDirty, onSave, enabled])
 }

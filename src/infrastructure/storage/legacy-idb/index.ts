@@ -17,4 +17,4 @@ export {
   type MigrationProgress,
   type MigrationPhase,
   type MigrateOptions,
-} from './migrate';
+} from './migrate'

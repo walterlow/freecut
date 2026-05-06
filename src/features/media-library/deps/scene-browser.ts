@@ -1,1 +1,1 @@
-export * from './scene-browser-contract';
+export * from './scene-browser-contract'

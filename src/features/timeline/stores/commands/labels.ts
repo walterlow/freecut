@@ -1,4 +1,4 @@
-import type { TimelineCommand } from './types';
+import type { TimelineCommand } from './types'
 
 function toTitleCaseWords(input: string): string {
   return input
@@ -6,104 +6,105 @@ function toTitleCaseWords(input: string): string {
     .split('_')
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+    .join(' ')
 }
 
 function readCount(payload: Record<string, unknown> | undefined): number | null {
-  if (!payload) return null;
+  if (!payload) return null
 
   if (typeof payload.count === 'number' && Number.isFinite(payload.count)) {
-    return Math.max(1, Math.round(payload.count));
+    return Math.max(1, Math.round(payload.count))
   }
 
   if (Array.isArray(payload.ids)) {
-    return Math.max(1, payload.ids.length);
+    return Math.max(1, payload.ids.length)
   }
 
   if (typeof payload.id === 'string' && payload.id.length > 0) {
-    return 1;
+    return 1
   }
 
-  return null;
+  return null
 }
 
 function formatTransformLabel(command: TimelineCommand): string {
-  const payload = command.payload;
-  const operation = typeof payload?.operation === 'string' ? payload.operation : 'transform';
-  const count = readCount(payload);
-  const noun = count === null || count === 1 ? 'item' : `${count} items`;
+  const payload = command.payload
+  const operation = typeof payload?.operation === 'string' ? payload.operation : 'transform'
+  const count = readCount(payload)
+  const noun = count === null || count === 1 ? 'item' : `${count} items`
 
   switch (operation) {
     case 'move':
-      return `Move ${noun}`;
+      return `Move ${noun}`
     case 'resize':
-      return `Resize ${noun}`;
+      return `Resize ${noun}`
     case 'rotate':
-      return `Rotate ${noun}`;
+      return `Rotate ${noun}`
     case 'opacity':
-      return `Adjust opacity (${noun})`;
+      return `Adjust opacity (${noun})`
     case 'corner_radius':
-      return `Adjust corner radius (${noun})`;
+      return `Adjust corner radius (${noun})`
     default:
-      return `Transform ${noun}`;
+      return `Transform ${noun}`
   }
 }
 
 export function formatTimelineCommandLabel(command: TimelineCommand): string {
   if (command.type === 'UPDATE_TRANSFORM' || command.type === 'UPDATE_TRANSFORMS') {
-    return formatTransformLabel(command);
+    return formatTransformLabel(command)
   }
 
   if (command.type === 'UPDATE_PROJECT_METADATA') {
     const fields = Array.isArray(command.payload?.fields)
       ? command.payload.fields.filter((field): field is string => typeof field === 'string')
-      : [];
+      : []
 
     if (fields.includes('fps') && (fields.includes('width') || fields.includes('height'))) {
-      return 'Resize canvas and change frame rate';
+      return 'Resize canvas and change frame rate'
     }
 
     if (fields.includes('width') || fields.includes('height')) {
-      return 'Resize canvas';
+      return 'Resize canvas'
     }
 
     if (fields.includes('fps')) {
-      return 'Change frame rate';
+      return 'Change frame rate'
     }
 
     if (fields.includes('backgroundColor')) {
-      return 'Change canvas background';
+      return 'Change canvas background'
     }
 
-    return 'Update project settings';
+    return 'Update project settings'
   }
 
   if (command.type === 'APPLY_AUTO_KEYFRAME_OPERATIONS') {
-    const count = readCount(command.payload);
+    const count = readCount(command.payload)
     if (count !== null) {
-      return `Auto-keyframe ${count} ${count === 1 ? 'property' : 'properties'}`;
+      return `Auto-keyframe ${count} ${count === 1 ? 'property' : 'properties'}`
     }
-    return 'Auto-keyframe properties';
+    return 'Auto-keyframe properties'
   }
 
   if (command.type === 'APPLY_BENTO_LAYOUT') {
-    const count = readCount(command.payload);
+    const count = readCount(command.payload)
     if (count !== null) {
-      return `Apply bento layout (${count} ${count === 1 ? 'item' : 'items'})`;
+      return `Apply bento layout (${count} ${count === 1 ? 'item' : 'items'})`
     }
-    return 'Apply bento layout';
+    return 'Apply bento layout'
   }
 
-  if (command.type === 'SET_IN_POINT') return 'Set In point';
-  if (command.type === 'SET_OUT_POINT') return 'Set Out point';
-  if (command.type === 'CLEAR_IN_OUT_POINTS') return 'Clear In/Out points';
-  if (command.type === 'CLEAR_MARKERS') return 'Clear markers';
-  if (command.type === 'CLEAR_TIMELINE') return 'Clear timeline';
+  if (command.type === 'SET_IN_POINT') return 'Set In point'
+  if (command.type === 'SET_OUT_POINT') return 'Set Out point'
+  if (command.type === 'CLEAR_IN_OUT_POINTS') return 'Clear In/Out points'
+  if (command.type === 'CLEAR_MARKERS') return 'Clear markers'
+  if (command.type === 'CLEAR_TIMELINE') return 'Clear timeline'
+  if (command.type === 'REMOVE_FILLER_WORDS') return 'Remove filler words'
 
-  const count = readCount(command.payload);
-  const base = toTitleCaseWords(command.type);
+  const count = readCount(command.payload)
+  const base = toTitleCaseWords(command.type)
   if (count !== null && count > 1) {
-    return `${base} (${count})`;
+    return `${base} (${count})`
   }
-  return base;
+  return base
 }

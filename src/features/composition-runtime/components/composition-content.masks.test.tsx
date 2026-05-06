@@ -1,13 +1,18 @@
-import React from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { act, render } from '@testing-library/react';
-import { VideoConfigProvider } from '@/features/composition-runtime/deps/player';
-import { useCompositionsStore, useTimelineStore, useGizmoStore, useMaskEditorStore } from '@/features/composition-runtime/deps/stores';
-import type { CompositionItem, ShapeItem, TimelineTrack } from '@/types/timeline';
-import { Item } from './item';
+import React from 'react'
+import { describe, it, expect, beforeEach, vi } from 'vite-plus/test'
+import { act, render } from '@testing-library/react'
+import { VideoConfigProvider } from '@/features/composition-runtime/deps/player'
+import {
+  useCompositionsStore,
+  useTimelineStore,
+  useGizmoStore,
+  useMaskEditorStore,
+} from '@/features/composition-runtime/deps/stores'
+import type { CompositionItem, ShapeItem, TimelineTrack } from '@/types/timeline'
+import { Item } from './item'
 
 vi.mock('@/features/composition-runtime/deps/player', async () => {
-  const React = await import('react');
+  const React = await import('react')
 
   const VideoConfigContext = React.createContext({
     fps: 30,
@@ -15,48 +20,50 @@ vi.mock('@/features/composition-runtime/deps/player', async () => {
     height: 720,
     durationInFrames: 120,
     id: 'test',
-  });
+  })
   const SequenceContext = React.createContext<{
-    from: number;
-    durationInFrames: number;
-    localFrame: number;
-    parentFrom: number;
-  } | null>(null);
+    from: number
+    durationInFrames: number
+    localFrame: number
+    parentFrom: number
+  } | null>(null)
 
   const interpolate = (
     input: number,
     inputRange: number[],
     outputRange: number[],
-    options?: { extrapolateLeft?: 'clamp'; extrapolateRight?: 'clamp' }
+    options?: { extrapolateLeft?: 'clamp'; extrapolateRight?: 'clamp' },
   ) => {
-    if (inputRange.length < 2 || outputRange.length < 2) return outputRange[0] ?? 0;
-    const inStart = inputRange[0] ?? 0;
-    const inEnd = inputRange[inputRange.length - 1] ?? 1;
-    const outStart = outputRange[0] ?? 0;
-    const outEnd = outputRange[outputRange.length - 1] ?? 0;
-    let t = (input - inStart) / (inEnd - inStart || 1);
+    if (inputRange.length < 2 || outputRange.length < 2) return outputRange[0] ?? 0
+    const inStart = inputRange[0] ?? 0
+    const inEnd = inputRange[inputRange.length - 1] ?? 1
+    const outStart = outputRange[0] ?? 0
+    const outEnd = outputRange[outputRange.length - 1] ?? 0
+    let t = (input - inStart) / (inEnd - inStart || 1)
     if (options?.extrapolateLeft === 'clamp' || options?.extrapolateRight === 'clamp') {
-      t = Math.max(0, Math.min(1, t));
+      t = Math.max(0, Math.min(1, t))
     }
-    return outStart + (outEnd - outStart) * t;
-  };
+    return outStart + (outEnd - outStart) * t
+  }
 
   return {
-    AbsoluteFill: ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => (
-      <div style={style}>{children}</div>
-    ),
+    AbsoluteFill: ({
+      children,
+      style,
+    }: {
+      children: React.ReactNode
+      style?: React.CSSProperties
+    }) => <div style={style}>{children}</div>,
     Sequence: ({
       children,
       from,
       durationInFrames,
     }: {
-      children: React.ReactNode;
-      from: number;
-      durationInFrames: number;
+      children: React.ReactNode
+      from: number
+      durationInFrames: number
     }) => (
-      <SequenceContext.Provider
-        value={{ from, durationInFrames, localFrame: 0, parentFrom: 0 }}
-      >
+      <SequenceContext.Provider value={{ from, durationInFrames, localFrame: 0, parentFrom: 0 }}>
         <div data-sequence-from={from} data-sequence-duration={durationInFrames}>
           {children}
         </div>
@@ -71,12 +78,12 @@ vi.mock('@/features/composition-runtime/deps/player', async () => {
       durationInFrames,
       id = 'test',
     }: {
-      children: React.ReactNode;
-      fps: number;
-      width: number;
-      height: number;
-      durationInFrames: number;
-      id?: string;
+      children: React.ReactNode
+      fps: number
+      width: number
+      height: number
+      durationInFrames: number
+      id?: string
     }) => (
       <VideoConfigContext.Provider value={{ fps, width, height, durationInFrames, id }}>
         {children}
@@ -86,8 +93,8 @@ vi.mock('@/features/composition-runtime/deps/player', async () => {
     interpolate,
     useBridgedCurrentFrame: () => 0,
     useBridgedIsPlaying: () => false,
-  };
-});
+  }
+})
 
 describe('CompositionContent masks', () => {
   beforeEach(() => {
@@ -96,17 +103,19 @@ describe('CompositionContent masks', () => {
       compositionById: {},
       mediaDependencyIds: [],
       mediaDependencyVersion: 0,
-    });
-    useTimelineStore.setState({ keyframes: [] } as Partial<ReturnType<typeof useTimelineStore.getState>>);
+    })
+    useTimelineStore.setState({ keyframes: [] } as Partial<
+      ReturnType<typeof useTimelineStore.getState>
+    >)
     useGizmoStore.setState({
       activeGizmo: null,
       previewTransform: null,
       preview: null,
       snapLines: [],
       canvasBackgroundPreview: null,
-    });
-    useMaskEditorStore.getState().stopEditing();
-  });
+    })
+    useMaskEditorStore.getState().stopEditing()
+  })
 
   it('updates the applied mask clip-path while preview vertices are dragged', () => {
     const contentItem: ShapeItem = {
@@ -126,7 +135,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const maskItem: ShapeItem = {
       id: 'path-mask',
@@ -164,7 +173,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const { container } = render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
@@ -179,14 +188,14 @@ describe('CompositionContent masks', () => {
             },
           ]}
         />
-      </VideoConfigProvider>
-    );
+      </VideoConfigProvider>,
+    )
 
-    const maskedElement = container.querySelector('[style*="clip-path"]');
-    expect(maskedElement).not.toBeNull();
-    expect((maskedElement as HTMLElement).style.width).toBe('100%');
-    expect((maskedElement as HTMLElement).style.height).toBe('100%');
-    const before = maskedElement?.getAttribute('style');
+    const maskedElement = container.querySelector('[style*="clip-path"]')
+    expect(maskedElement).not.toBeNull()
+    expect((maskedElement as HTMLElement).style.width).toBe('100%')
+    expect((maskedElement as HTMLElement).style.height).toBe('100%')
+    const before = maskedElement?.getAttribute('style')
 
     act(() => {
       useMaskEditorStore.setState({
@@ -209,12 +218,12 @@ describe('CompositionContent masks', () => {
             outHandle: [0.8, 0.85],
           },
         ],
-      });
-    });
+      })
+    })
 
-    const after = container.querySelector('[style*="clip-path"]')?.getAttribute('style');
-    expect(after).not.toBe(before);
-  });
+    const after = container.querySelector('[style*="clip-path"]')?.getAttribute('style')
+    expect(after).not.toBe(before)
+  })
 
   it('keeps clip masks on the full-canvas mask wrapper when corner pin is active', () => {
     const contentItem: ShapeItem = {
@@ -240,7 +249,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const maskItem: ShapeItem = {
       id: 'heart-mask',
@@ -261,7 +270,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const { container } = render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
@@ -276,18 +285,18 @@ describe('CompositionContent masks', () => {
             },
           ]}
         />
-      </VideoConfigProvider>
-    );
+      </VideoConfigProvider>,
+    )
 
     const pinnedElement = Array.from(container.querySelectorAll('div')).find((element) =>
-      (element as HTMLElement).style.transform.includes('matrix3d')
-    ) as HTMLElement | undefined;
-    const maskedWrapper = container.querySelector('[style*="clip-path"]');
+      (element as HTMLElement).style.transform.includes('matrix3d'),
+    ) as HTMLElement | undefined
+    const maskedWrapper = container.querySelector('[style*="clip-path"]')
 
-    expect(pinnedElement).toBeDefined();
-    expect(maskedWrapper).not.toBeNull();
-    expect(pinnedElement?.querySelector('[style*="clip-path"]')).toBeNull();
-  });
+    expect(pinnedElement).toBeDefined()
+    expect(maskedWrapper).not.toBeNull()
+    expect(pinnedElement?.querySelector('[style*="clip-path"]')).toBeNull()
+  })
 
   it('keeps clip masks hard-edged even if a feather value is present', () => {
     const contentItem: ShapeItem = {
@@ -307,7 +316,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const maskItem: ShapeItem = {
       id: 'clip-mask-with-feather',
@@ -329,7 +338,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const { container } = render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
@@ -344,12 +353,12 @@ describe('CompositionContent masks', () => {
             },
           ]}
         />
-      </VideoConfigProvider>
-    );
+      </VideoConfigProvider>,
+    )
 
-    expect(container.querySelector('[style*="clip-path"]')).not.toBeNull();
-    expect(container.querySelector('mask')).toBeNull();
-  });
+    expect(container.querySelector('[style*="clip-path"]')).not.toBeNull()
+    expect(container.querySelector('mask')).toBeNull()
+  })
 
   it('applies sub-comp masks only to content on lower tracks', () => {
     const subTracks: TimelineTrack[] = [
@@ -375,7 +384,7 @@ describe('CompositionContent masks', () => {
         order: 1,
         items: [],
       },
-    ];
+    ]
 
     const maskItem: ShapeItem = {
       id: 'sub-mask',
@@ -396,7 +405,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const contentItem: ShapeItem = {
       id: 'sub-content',
@@ -415,7 +424,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const subComp = {
       id: 'sub-comp-1',
@@ -428,14 +437,14 @@ describe('CompositionContent masks', () => {
       width: 1280,
       height: 720,
       durationInFrames: 60,
-    };
+    }
 
     useCompositionsStore.setState({
       compositions: [subComp],
       compositionById: { [subComp.id]: subComp },
       mediaDependencyIds: [],
       mediaDependencyVersion: 0,
-    });
+    })
 
     const compositionItem: CompositionItem = {
       id: 'parent-comp-item',
@@ -447,21 +456,21 @@ describe('CompositionContent masks', () => {
       label: 'Nested comp',
       compositionWidth: 1280,
       compositionHeight: 720,
-    };
+    }
 
     const { container } = render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
         <Item item={compositionItem} muted={false} masks={[]} />
-      </VideoConfigProvider>
-    );
+      </VideoConfigProvider>,
+    )
 
     // Regression guard: mask control shapes inside precomp should not render as
     // regular timeline items when viewed from parent timeline.
-    expect(container.querySelectorAll('[data-sequence-from]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-sequence-from]')).toHaveLength(1)
 
     // Regression guard: sub-comp mask should still clip child content in parent view.
-    expect(container.querySelector('[style*="clip-path"]')).not.toBeNull();
-  });
+    expect(container.querySelector('[style*="clip-path"]')).not.toBeNull()
+  })
 
   it('does not apply a sub-comp mask to content above the mask track', () => {
     const subTracks: TimelineTrack[] = [
@@ -487,7 +496,7 @@ describe('CompositionContent masks', () => {
         order: 0,
         items: [],
       },
-    ];
+    ]
 
     const maskItem: ShapeItem = {
       id: 'sub-mask',
@@ -508,7 +517,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const contentItem: ShapeItem = {
       id: 'sub-content',
@@ -527,7 +536,7 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
     const subComp = {
       id: 'sub-comp-1',
@@ -540,14 +549,14 @@ describe('CompositionContent masks', () => {
       width: 1280,
       height: 720,
       durationInFrames: 60,
-    };
+    }
 
     useCompositionsStore.setState({
       compositions: [subComp],
       compositionById: { [subComp.id]: subComp },
       mediaDependencyIds: [],
       mediaDependencyVersion: 0,
-    });
+    })
 
     const compositionItem: CompositionItem = {
       id: 'parent-comp-item',
@@ -559,14 +568,14 @@ describe('CompositionContent masks', () => {
       label: 'Nested comp',
       compositionWidth: 1280,
       compositionHeight: 720,
-    };
+    }
 
     const { container } = render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
         <Item item={compositionItem} muted={false} masks={[]} />
-      </VideoConfigProvider>
-    );
+      </VideoConfigProvider>,
+    )
 
-    expect(container.querySelector('[style*="clip-path"]')).toBeNull();
-  });
-});
+    expect(container.querySelector('[style*="clip-path"]')).toBeNull()
+  })
+})

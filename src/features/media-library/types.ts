@@ -1,99 +1,99 @@
-import type { MediaMetadata } from '@/types/storage';
-import type { TranscriptionProgressSnapshot } from '@/shared/utils/transcription-progress';
+import type { MediaMetadata } from '@/types/storage'
+import type { TranscriptionProgressSnapshot } from '@/shared/utils/transcription-progress'
 
 export interface MediaLibraryNotification {
-  type: 'info' | 'success' | 'warning' | 'error';
-  message: string;
+  type: 'info' | 'success' | 'warning' | 'error'
+  message: string
 }
 
 export interface MediaLibrarySelection {
-  mediaIds: string[];
-  compositionIds: string[];
+  mediaIds: string[]
+  compositionIds: string[]
 }
 
-export type MediaTranscriptStatus = 'idle' | 'queued' | 'transcribing' | 'ready' | 'error';
+export type MediaTranscriptStatus = 'idle' | 'queued' | 'transcribing' | 'ready' | 'error'
 
-export type MediaTranscriptProgress = TranscriptionProgressSnapshot;
+export type MediaTranscriptProgress = TranscriptionProgressSnapshot
 
 /**
  * Information about a file with an unsupported audio codec
  */
 export interface UnsupportedCodecFile {
-  fileName: string;
-  audioCodec: string;
-  handle?: FileSystemFileHandle;
+  fileName: string
+  audioCodec: string
+  handle?: FileSystemFileHandle
 }
 
 /**
  * Error types for media that cannot be accessed
  */
 export type MediaErrorType =
-  | 'permission_denied'  // File handle permission expired
-  | 'file_missing'       // File moved or deleted from disk
-  | 'metadata_deleted';  // Media metadata deleted from IndexedDB
+  | 'permission_denied' // File handle permission expired
+  | 'file_missing' // File moved or deleted from disk
+  | 'metadata_deleted' // Media metadata deleted from IndexedDB
 
 /**
  * Information about a media file with a broken/invalid file handle
  */
 export interface BrokenMediaInfo {
-  mediaId: string;
-  fileName: string;
-  errorType: MediaErrorType;
+  mediaId: string
+  fileName: string
+  errorType: MediaErrorType
 }
 
 /**
  * Information about a timeline clip that references deleted media
  */
 export interface OrphanedClipInfo {
-  itemId: string;           // Timeline item ID
-  mediaId: string;          // Missing media ID
-  itemType: 'video' | 'audio' | 'image';
-  fileName: string;         // From item.label for matching
-  trackId: string;
+  itemId: string // Timeline item ID
+  mediaId: string // Missing media ID
+  itemType: 'video' | 'audio' | 'image'
+  fileName: string // From item.label for matching
+  trackId: string
 }
 
 export interface MediaLibraryState {
-  currentProjectId: string | null; // v3: Project context for scoped operations
-  mediaItems: MediaMetadata[];
-  mediaById: Record<string, MediaMetadata>;
-  isLoading: boolean;
-  importingIds: string[]; // IDs of media items currently being imported
-  error: string | null;
-  errorLink: string | null;
-  notification: MediaLibraryNotification | null;
-  selectedMediaIds: string[];
-  selectedCompositionIds: string[];
-  searchQuery: string;
-  filterByType: 'video' | 'audio' | 'image' | null;
-  sortBy: 'name' | 'date' | 'size';
-  viewMode: 'grid' | 'list';
+  currentProjectId: string | null // v3: Project context for scoped operations
+  mediaItems: MediaMetadata[]
+  mediaById: Record<string, MediaMetadata>
+  isLoading: boolean
+  importingIds: string[] // IDs of media items currently being imported
+  error: string | null
+  errorLink: string | null
+  notification: MediaLibraryNotification | null
+  selectedMediaIds: string[]
+  selectedCompositionIds: string[]
+  searchQuery: string
+  filterByType: 'video' | 'audio' | 'image' | null
+  sortBy: 'name' | 'date' | 'size'
+  viewMode: 'grid' | 'list'
   /** Grid item size (1 = largest / fewer columns, 5 = smallest / more columns) */
-  mediaItemSize: number;
+  mediaItemSize: number
 
   // Broken media tracking (lazy detection)
-  brokenMediaIds: string[];
-  brokenMediaInfo: Map<string, BrokenMediaInfo>;
-  showMissingMediaDialog: boolean;
+  brokenMediaIds: string[]
+  brokenMediaInfo: Map<string, BrokenMediaInfo>
+  showMissingMediaDialog: boolean
 
   // Orphaned clips tracking (clips referencing deleted media)
-  orphanedClips: OrphanedClipInfo[];
-  showOrphanedClipsDialog: boolean;
+  orphanedClips: OrphanedClipInfo[]
+  showOrphanedClipsDialog: boolean
 
   // Unsupported audio codec confirmation
-  unsupportedCodecFiles: UnsupportedCodecFile[];
-  showUnsupportedCodecDialog: boolean;
-  unsupportedCodecResolver: ((confirmed: boolean) => void) | null;
+  unsupportedCodecFiles: UnsupportedCodecFile[]
+  showUnsupportedCodecDialog: boolean
+  unsupportedCodecResolver: ((confirmed: boolean) => void) | null
 
   // Proxy video generation
-  proxyStatus: Map<string, 'generating' | 'ready' | 'error'>;
-  proxyProgress: Map<string, number>;
+  proxyStatus: Map<string, 'generating' | 'ready' | 'error'>
+  proxyProgress: Map<string, number>
 
   // Transcript generation
-  transcriptStatus: Map<string, MediaTranscriptStatus>;
-  transcriptProgress: Map<string, MediaTranscriptProgress>;
+  transcriptStatus: Map<string, MediaTranscriptStatus>
+  transcriptProgress: Map<string, MediaTranscriptProgress>
 
   // AI tagging
-  taggingMediaIds: Set<string>;
+  taggingMediaIds: Set<string>
   /**
    * Deterministic progress for the currently running AI analysis run (single
    * item or batch). Null when no analysis is in flight. `completed` counts
@@ -103,119 +103,114 @@ export interface MediaLibraryState {
    * current item then skips the rest.
    */
   analysisProgress: {
-    total: number;
-    completed: number;
-    cancelRequested: boolean;
-  } | null;
+    total: number
+    completed: number
+    cancelRequested: boolean
+  } | null
 }
 
 export interface MediaLibraryActions {
   // v3: Project context
-  setCurrentProject: (projectId: string | null) => void;
+  setCurrentProject: (projectId: string | null) => void
 
   // CRUD Operations (project-scoped in v3)
-  loadMediaItems: () => Promise<void>;
+  loadMediaItems: () => Promise<void>
   /**
    * Import media using file picker (instant, no copy - local-first)
    * Uses FileSystemFileHandle to reference files directly on user's disk
    */
-  importMedia: () => Promise<MediaMetadata[]>;
+  importMedia: () => Promise<MediaMetadata[]>
   /**
    * Import media from a direct URL into OPFS-backed storage.
    * Best for CORS-enabled direct media files (mp4, mp3, png, etc.).
    */
-  importMediaFromUrl: (url: string) => Promise<MediaMetadata[]>;
+  importMediaFromUrl: (url: string) => Promise<MediaMetadata[]>
   /**
    * Import media from file handles (for drag-drop)
    * Uses FileSystemFileHandle directly without file picker
    */
-  importHandles: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
+  importHandles: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>
   /**
    * Import media for direct placement flows.
    * Existing media are returned too so drop targets can place duplicates without re-importing.
    */
-  importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
-  /**
-   * Import media from an HTTP(S) URL.
-   * The file is fetched and persisted to OPFS.
-   */
-  importFromUrl: (url: string) => Promise<(MediaMetadata & { isDuplicate?: boolean }) | null>;
-  deleteMedia: (id: string) => Promise<void>;
-  deleteMediaBatch: (ids: string[]) => Promise<void>;
+  importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>
+  deleteMedia: (id: string) => Promise<void>
+  deleteMediaBatch: (ids: string[]) => Promise<void>
 
   // Selection
-  setSelection: (selection: MediaLibrarySelection) => void;
-  selectMedia: (ids: string[]) => void;
-  selectCompositions: (ids: string[]) => void;
-  toggleMediaSelection: (id: string) => void;
-  toggleCompositionSelection: (id: string) => void;
-  clearSelection: () => void;
+  setSelection: (selection: MediaLibrarySelection) => void
+  selectMedia: (ids: string[]) => void
+  selectCompositions: (ids: string[]) => void
+  toggleMediaSelection: (id: string) => void
+  toggleCompositionSelection: (id: string) => void
+  clearSelection: () => void
 
   // Filters & Search
-  setSearchQuery: (query: string) => void;
-  setFilterByType: (type: 'video' | 'audio' | 'image' | null) => void;
-  setSortBy: (sortBy: 'name' | 'date' | 'size') => void;
-  setViewMode: (viewMode: 'grid' | 'list') => void;
-  setMediaItemSize: (size: number) => void;
+  setSearchQuery: (query: string) => void
+  setFilterByType: (type: 'video' | 'audio' | 'image' | null) => void
+  setSortBy: (sortBy: 'name' | 'date' | 'size') => void
+  setViewMode: (viewMode: 'grid' | 'list') => void
+  setMediaItemSize: (size: number) => void
 
   // Utility
-  clearError: () => void;
-  showNotification: (notification: MediaLibraryNotification) => void;
-  clearNotification: () => void;
+  clearError: () => void
+  showNotification: (notification: MediaLibraryNotification) => void
+  clearNotification: () => void
 
   // Broken media / Relinking
-  markMediaBroken: (id: string, info: BrokenMediaInfo) => void;
-  markMediaHealthy: (id: string) => void;
-  relinkMedia: (mediaId: string, newHandle: FileSystemFileHandle) => Promise<boolean>;
+  markMediaBroken: (id: string, info: BrokenMediaInfo) => void
+  markMediaHealthy: (id: string) => void
+  relinkMedia: (mediaId: string, newHandle: FileSystemFileHandle) => Promise<boolean>
   relinkMediaBatch: (
-    relinks: Array<{ mediaId: string; handle: FileSystemFileHandle }>
-  ) => Promise<{ success: string[]; failed: string[] }>;
-  openMissingMediaDialog: () => void;
-  closeMissingMediaDialog: () => void;
+    relinks: Array<{ mediaId: string; handle: FileSystemFileHandle }>,
+  ) => Promise<{ success: string[]; failed: string[] }>
+  openMissingMediaDialog: () => void
+  closeMissingMediaDialog: () => void
 
   // Orphaned clips management
-  setOrphanedClips: (clips: OrphanedClipInfo[]) => void;
-  clearOrphanedClips: () => void;
-  openOrphanedClipsDialog: () => void;
-  closeOrphanedClipsDialog: () => void;
+  setOrphanedClips: (clips: OrphanedClipInfo[]) => void
+  clearOrphanedClips: () => void
+  openOrphanedClipsDialog: () => void
+  closeOrphanedClipsDialog: () => void
   /**
    * Relink an orphaned clip to a different media item from the library.
    * Updates the clip's mediaId, label, and source dimensions.
    */
-  relinkOrphanedClip: (itemId: string, newMediaId: string) => Promise<boolean>;
+  relinkOrphanedClip: (itemId: string, newMediaId: string) => Promise<boolean>
   /**
    * Remove orphaned clips from the timeline.
    */
-  removeOrphanedClips: (itemIds: string[]) => void;
+  removeOrphanedClips: (itemIds: string[]) => void
 
   // Unsupported audio codec dialog
   /**
    * Show the unsupported codec dialog and wait for user response.
    * Returns a promise that resolves to true if user confirms, false if cancelled.
    */
-  confirmUnsupportedCodecs: (files: UnsupportedCodecFile[]) => Promise<boolean>;
-  resolveUnsupportedCodecDialog: (confirmed: boolean) => void;
+  confirmUnsupportedCodecs: (files: UnsupportedCodecFile[]) => Promise<boolean>
+  resolveUnsupportedCodecDialog: (confirmed: boolean) => void
 
   // Proxy video generation
-  setProxyStatus: (mediaId: string, status: 'generating' | 'ready' | 'error') => void;
-  clearProxyStatus: (mediaId: string) => void;
-  setProxyProgress: (mediaId: string, progress: number) => void;
+  setProxyStatus: (mediaId: string, status: 'generating' | 'ready' | 'error') => void
+  clearProxyStatus: (mediaId: string) => void
+  setProxyProgress: (mediaId: string, progress: number) => void
 
   // Transcript generation
-  setTranscriptStatus: (mediaId: string, status: MediaTranscriptStatus) => void;
-  setTranscriptProgress: (mediaId: string, progress: MediaTranscriptProgress) => void;
-  clearTranscriptProgress: (mediaId: string) => void;
+  setTranscriptStatus: (mediaId: string, status: MediaTranscriptStatus) => void
+  setTranscriptProgress: (mediaId: string, progress: MediaTranscriptProgress) => void
+  clearTranscriptProgress: (mediaId: string) => void
 
   // AI captioning
-  setTaggingMedia: (mediaId: string, active: boolean) => void;
-  updateMediaCaptions: (mediaId: string, captions: NonNullable<MediaMetadata['aiCaptions']>) => void;
+  setTaggingMedia: (mediaId: string, active: boolean) => void
+  updateMediaCaptions: (mediaId: string, captions: NonNullable<MediaMetadata['aiCaptions']>) => void
 
   /** Start (or merge into) an analysis run — adds `count` to `total`. */
-  beginAnalysisRun: (count: number) => void;
+  beginAnalysisRun: (count: number) => void
   /** Increment the completed counter by one (or by `n`). */
-  incrementAnalysisCompleted: (n?: number) => void;
+  incrementAnalysisCompleted: (n?: number) => void
   /** Ask the current run to stop after the in-flight item. */
-  requestAnalysisCancel: () => void;
+  requestAnalysisCancel: () => void
   /** Clear analysisProgress when the run is done. */
-  endAnalysisRun: () => void;
+  endAnalysisRun: () => void
 }

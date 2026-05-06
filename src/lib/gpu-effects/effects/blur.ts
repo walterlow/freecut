@@ -1,4 +1,4 @@
-import type { GpuEffectDefinition } from '../types';
+import type { GpuEffectDefinition } from '../types'
 
 export const gaussianBlur: GpuEffectDefinition = {
   id: 'gpu-gaussian-blur',
@@ -34,13 +34,29 @@ fn gaussianBlurFragment(input: VertexOutput) -> @location(0) vec4f {
   return color / totalWeight;
 }`,
   params: {
-    radius: { type: 'number', label: 'Radius', default: 10, min: 0, max: 50, step: 1, animatable: true },
-    samples: { type: 'number', label: 'Samples', default: 5, min: 1, max: 64, step: 1, animatable: false, quality: true },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 10,
+      min: 0,
+      max: 50,
+      step: 1,
+      animatable: true,
+    },
+    samples: {
+      type: 'number',
+      label: 'Samples',
+      default: 5,
+      min: 1,
+      max: 64,
+      step: 1,
+      animatable: false,
+      quality: true,
+    },
   },
-  packUniforms: (p, w, h) => new Float32Array([
-    p.radius as number ?? 10, w, h, p.samples as number ?? 5,
-  ]),
-};
+  packUniforms: (p, w, h) =>
+    new Float32Array([(p.radius as number) ?? 10, w, h, (p.samples as number) ?? 5]),
+}
 
 export const boxBlur: GpuEffectDefinition = {
   id: 'gpu-box-blur',
@@ -72,10 +88,18 @@ fn boxBlurFragment(input: VertexOutput) -> @location(0) vec4f {
   return color / count;
 }`,
   params: {
-    radius: { type: 'number', label: 'Radius', default: 5, min: 0, max: 20, step: 1, animatable: true },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 5,
+      min: 0,
+      max: 20,
+      step: 1,
+      animatable: true,
+    },
   },
-  packUniforms: (p, w, h) => new Float32Array([p.radius as number ?? 5, w, h, 0]),
-};
+  packUniforms: (p, w, h) => new Float32Array([(p.radius as number) ?? 5, w, h, 0]),
+}
 
 export const motionBlur: GpuEffectDefinition = {
   id: 'gpu-motion-blur',
@@ -107,14 +131,43 @@ fn motionBlurFragment(input: VertexOutput) -> @location(0) vec4f {
   return color / totalWeight;
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0.05, min: 0, max: 0.3, step: 0.005, animatable: true },
-    angle: { type: 'number', label: 'Angle', default: 0, min: 0, max: 6.28318, step: 0.01, animatable: true },
-    samples: { type: 'number', label: 'Samples', default: 24, min: 4, max: 128, step: 1, animatable: false, quality: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0.05,
+      min: 0,
+      max: 0.3,
+      step: 0.005,
+      animatable: true,
+    },
+    angle: {
+      type: 'number',
+      label: 'Angle',
+      default: 0,
+      min: 0,
+      max: 6.28318,
+      step: 0.01,
+      animatable: true,
+    },
+    samples: {
+      type: 'number',
+      label: 'Samples',
+      default: 24,
+      min: 4,
+      max: 128,
+      step: 1,
+      animatable: false,
+      quality: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.amount as number ?? 0.05, p.angle as number ?? 0, p.samples as number ?? 24, 0,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.amount as number) ?? 0.05,
+      (p.angle as number) ?? 0,
+      (p.samples as number) ?? 24,
+      0,
+    ]),
+}
 
 export const radialBlur: GpuEffectDefinition = {
   id: 'gpu-radial-blur',
@@ -150,15 +203,52 @@ fn radialBlurFragment(input: VertexOutput) -> @location(0) vec4f {
   return color / totalWeight;
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0.5, min: 0, max: 2, step: 0.01, animatable: true },
-    centerX: { type: 'number', label: 'Center X', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    centerY: { type: 'number', label: 'Center Y', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    samples: { type: 'number', label: 'Samples', default: 32, min: 4, max: 256, step: 1, animatable: false, quality: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0.5,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+    centerX: {
+      type: 'number',
+      label: 'Center X',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerY: {
+      type: 'number',
+      label: 'Center Y',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    samples: {
+      type: 'number',
+      label: 'Samples',
+      default: 32,
+      min: 4,
+      max: 256,
+      step: 1,
+      animatable: false,
+      quality: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.amount as number ?? 0.5, p.centerX as number ?? 0.5, p.centerY as number ?? 0.5, p.samples as number ?? 32,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.amount as number) ?? 0.5,
+      (p.centerX as number) ?? 0.5,
+      (p.centerY as number) ?? 0.5,
+      (p.samples as number) ?? 32,
+    ]),
+}
 
 export const zoomBlur: GpuEffectDefinition = {
   id: 'gpu-zoom-blur',
@@ -187,12 +277,49 @@ fn zoomBlurFragment(input: VertexOutput) -> @location(0) vec4f {
   return color / f32(samples);
 }`,
   params: {
-    amount: { type: 'number', label: 'Amount', default: 0.3, min: 0, max: 1, step: 0.01, animatable: true },
-    centerX: { type: 'number', label: 'Center X', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    centerY: { type: 'number', label: 'Center Y', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    samples: { type: 'number', label: 'Samples', default: 16, min: 4, max: 256, step: 1, animatable: false, quality: true },
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerX: {
+      type: 'number',
+      label: 'Center X',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerY: {
+      type: 'number',
+      label: 'Center Y',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    samples: {
+      type: 'number',
+      label: 'Samples',
+      default: 16,
+      min: 4,
+      max: 256,
+      step: 1,
+      animatable: false,
+      quality: true,
+    },
   },
-  packUniforms: (p) => new Float32Array([
-    p.amount as number ?? 0.3, p.centerX as number ?? 0.5, p.centerY as number ?? 0.5, p.samples as number ?? 16,
-  ]),
-};
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.amount as number) ?? 0.3,
+      (p.centerX as number) ?? 0.5,
+      (p.centerY as number) ?? 0.5,
+      (p.samples as number) ?? 16,
+    ]),
+}

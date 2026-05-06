@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const glitch: GpuTransitionDefinition = {
   id: 'glitch',
@@ -98,12 +98,9 @@ fn glitchFragment(input: VertexOutput) -> @location(0) vec4f {
   return color;
 }`,
   packUniforms: (progress, width, height, _direction, properties) => {
-    const intensity = (properties?.intensity as number) ?? 1.0;
-    const blockSize = (properties?.blockSize as number) ?? 30.0;
-    const rgbSplit = (properties?.rgbSplit as number) ?? 1.0;
-    return new Float32Array([
-      progress, width, height, intensity,
-      blockSize, rgbSplit, 0, 0,
-    ]);
+    const intensity = (properties?.intensity as number) ?? 1.0
+    const blockSize = (properties?.blockSize as number) ?? 30.0
+    const rgbSplit = (properties?.rgbSplit as number) ?? 1.0
+    return new Float32Array([progress, width, height, intensity, blockSize, rgbSplit, 0, 0])
   },
-};
+}

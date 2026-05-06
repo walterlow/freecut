@@ -13,17 +13,11 @@
  */
 
 // Sequence component and hooks
-export {
-  Sequence,
-} from './Sequence';
-export { useSequenceContext } from './sequence-context';
+export { Sequence } from './Sequence'
+export { useSequenceContext } from './sequence-context'
 
 // AbsoluteFill component
-export {
-  AbsoluteFill,
-} from './AbsoluteFill';
+export { AbsoluteFill } from './AbsoluteFill'
 
 // Interpolation utilities
-export {
-  interpolate,
-} from './interpolate';
+export { interpolate } from './interpolate'

@@ -1,52 +1,52 @@
-import { Component, type ReactNode, type ErrorInfo } from 'react';
-import { Button } from '@/components/ui/button';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
-import { createLogger } from '@/shared/logging/logger';
+import { Component, type ReactNode, type ErrorInfo } from 'react'
+import { Button } from '@/components/ui/button'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { createLogger } from '@/shared/logging/logger'
 
-const logger = createLogger('ErrorBoundary');
+const logger = createLogger('ErrorBoundary')
 
 interface Props {
-  children: ReactNode;
-  fallback?: ReactNode;
-  onError?: (error: Error, errorInfo: ErrorInfo) => void;
-  level?: 'app' | 'feature' | 'component';
+  children: ReactNode
+  fallback?: ReactNode
+  onError?: (error: Error, errorInfo: ErrorInfo) => void
+  level?: 'app' | 'feature' | 'component'
 }
 
 interface State {
-  hasError: boolean;
-  error: Error | null;
+  hasError: boolean
+  error: Error | null
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, error: null };
+    super(props)
+    this.state = { hasError: false, error: null }
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error }
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     // Log to console in development
     if (import.meta.env.DEV) {
-      logger.error('ErrorBoundary caught:', error, errorInfo);
+      logger.error('ErrorBoundary caught:', error, errorInfo)
     }
 
-    this.props.onError?.(error, errorInfo);
+    this.props.onError?.(error, errorInfo)
   }
 
   handleReset = (): void => {
-    this.setState({ hasError: false, error: null });
-  };
+    this.setState({ hasError: false, error: null })
+  }
 
   render(): ReactNode {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback;
+        return this.props.fallback
       }
 
-      const { level = 'component' } = this.props;
+      const { level = 'component' } = this.props
 
       return (
         <div className="flex flex-col items-center justify-center p-8 gap-4 text-center">
@@ -67,9 +67,7 @@ export class ErrorBoundary extends Component<Props, State> {
               Try Again
             </Button>
             {level === 'app' && (
-              <Button onClick={() => window.location.reload()}>
-                Reload Page
-              </Button>
+              <Button onClick={() => window.location.reload()}>Reload Page</Button>
             )}
           </div>
           {import.meta.env.DEV && this.state.error?.stack && (
@@ -78,9 +76,9 @@ export class ErrorBoundary extends Component<Props, State> {
             </pre>
           )}
         </div>
-      );
+      )
     }
 
-    return this.props.children;
+    return this.props.children
   }
 }

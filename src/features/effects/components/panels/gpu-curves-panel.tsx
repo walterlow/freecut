@@ -1,10 +1,10 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type React from 'react';
-import { Eye, EyeOff, RotateCcw, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
-import { PropertyRow } from '@/shared/ui/property-controls';
-import { buildMonotoneCurveSvgPath } from '@/shared/utils/curve-spline';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type React from 'react'
+import { Eye, EyeOff, RotateCcw, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects'
+import { PropertyRow } from '@/shared/ui/property-controls'
+import { buildMonotoneCurveSvgPath } from '@/shared/utils/curve-spline'
 import {
   buildGpuCurvesChannelPoints,
   getDefaultGpuCurvesChannelControl,
@@ -18,39 +18,45 @@ import {
   toGpuCurvesChannelParamUpdates,
   type GpuCurvesChannelControl,
   type GpuCurvesChannelKey,
-} from '@/shared/utils/gpu-curves';
-import type { GpuEffect, ItemEffect } from '@/types/effects';
+} from '@/shared/utils/gpu-curves'
+import type { GpuEffect, ItemEffect } from '@/types/effects'
 
 interface GpuCurvesPanelProps {
-  effect: ItemEffect;
-  gpuEffect: GpuEffect;
-  definition: GpuEffectDefinition;
-  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
-  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
-  onParamsBatchChange: (effectId: string, updates: Record<string, number | boolean | string>) => void;
-  onParamsBatchLiveChange: (effectId: string, updates: Record<string, number | boolean | string>) => void;
-  onReset: (effectId: string) => void;
-  onToggle: (effectId: string) => void;
-  onRemove: (effectId: string) => void;
+  effect: ItemEffect
+  gpuEffect: GpuEffect
+  definition: GpuEffectDefinition
+  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void
+  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void
+  onParamsBatchChange: (
+    effectId: string,
+    updates: Record<string, number | boolean | string>,
+  ) => void
+  onParamsBatchLiveChange: (
+    effectId: string,
+    updates: Record<string, number | boolean | string>,
+  ) => void
+  onReset: (effectId: string) => void
+  onToggle: (effectId: string) => void
+  onRemove: (effectId: string) => void
 }
 
-type DraftParams = Record<string, number>;
-type PointKey = keyof GpuCurvesChannelControl;
+type DraftParams = Record<string, number>
+type PointKey = keyof GpuCurvesChannelControl
 
-const CURVE_SIZE = 230;
+const CURVE_SIZE = 230
 const CHANNELS: Array<{ key: GpuCurvesChannelKey; label: string; color: string }> = [
   { key: 'master', label: 'Master', color: '#e5e7eb' },
   { key: 'red', label: 'Red', color: '#ef4444' },
   { key: 'green', label: 'Green', color: '#22c55e' },
   { key: 'blue', label: 'Blue', color: '#3b82f6' },
-];
+]
 
 function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+  return Math.max(min, Math.min(max, value))
 }
 
 function getResetParamsForChannel(channel: GpuCurvesChannelKey): Record<string, number> {
-  return toGpuCurvesChannelParamUpdates(channel, getDefaultGpuCurvesChannelControl());
+  return toGpuCurvesChannelParamUpdates(channel, getDefaultGpuCurvesChannelControl())
 }
 
 export const GpuCurvesPanel = memo(function GpuCurvesPanel({
@@ -63,36 +69,36 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
   onToggle,
   onRemove,
 }: GpuCurvesPanelProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [activeChannel, setActiveChannel] = useState<GpuCurvesChannelKey>('master');
-  const [dragging, setDragging] = useState(false);
-  const [draft, setDraft] = useState<DraftParams>(() => getGpuCurvesDraftParams(gpuEffect.params));
-  const draftRef = useRef(draft);
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [activeChannel, setActiveChannel] = useState<GpuCurvesChannelKey>('master')
+  const [dragging, setDragging] = useState(false)
+  const [draft, setDraft] = useState<DraftParams>(() => getGpuCurvesDraftParams(gpuEffect.params))
+  const draftRef = useRef(draft)
 
   useEffect(() => {
-    draftRef.current = draft;
-  }, [draft]);
+    draftRef.current = draft
+  }, [draft])
 
   useEffect(() => {
     if (!dragging) {
-      setDraft(getGpuCurvesDraftParams(gpuEffect.params));
+      setDraft(getGpuCurvesDraftParams(gpuEffect.params))
     }
-  }, [dragging, gpuEffect.params]);
+  }, [dragging, gpuEffect.params])
 
   const isDefault = useMemo(() => {
-    const defaults = getGpuCurvesDefaultParams();
-    return Object.entries(defaults).every(([key, value]) => draft[key] === value);
-  }, [draft]);
+    const defaults = getGpuCurvesDefaultParams()
+    return Object.entries(defaults).every(([key, value]) => draft[key] === value)
+  }, [draft])
 
-  const activeChannelMeta = CHANNELS.find((channel) => channel.key === activeChannel)!;
+  const activeChannelMeta = CHANNELS.find((channel) => channel.key === activeChannel)!
   const activeControl = useMemo(
     () => readGpuCurvesChannelControl(draft, activeChannel),
     [activeChannel, draft],
-  );
+  )
   const handlePoints = useMemo(
     () => buildGpuCurvesChannelPoints(activeControl).slice(1, 3),
     [activeControl],
-  );
+  )
 
   const curvePaths = useMemo(
     () =>
@@ -107,92 +113,100 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
         ]),
       ) as Record<GpuCurvesChannelKey, string>,
     [draft],
-  );
+  )
 
   const dragRef = useRef<{
-    channel: GpuCurvesChannelKey;
-    pointKey: PointKey;
-  } | null>(null);
+    channel: GpuCurvesChannelKey
+    pointKey: PointKey
+  } | null>(null)
 
   const getNormalizedPointFromClient = useCallback((clientX: number, clientY: number) => {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const rect = svg.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return null;
+    const svg = svgRef.current
+    if (!svg) return null
+    const rect = svg.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
     return {
       x: clamp((clientX - rect.left) / rect.width, 0, 1),
       y: clamp(1 - (clientY - rect.top) / rect.height, 0, 1),
-    };
-  }, []);
+    }
+  }, [])
 
-  const computeDragUpdates = useCallback((clientX: number, clientY: number) => {
-    const state = dragRef.current;
-    if (!state) return null;
+  const computeDragUpdates = useCallback(
+    (clientX: number, clientY: number) => {
+      const state = dragRef.current
+      if (!state) return null
 
-    const position = getNormalizedPointFromClient(clientX, clientY);
-    if (!position) return null;
+      const position = getNormalizedPointFromClient(clientX, clientY)
+      if (!position) return null
 
-    const current = readGpuCurvesChannelControl(draftRef.current, state.channel);
-    const otherPoint = state.pointKey === 'shadow' ? current.highlight : current.shadow;
+      const current = readGpuCurvesChannelControl(draftRef.current, state.channel)
+      const otherPoint = state.pointKey === 'shadow' ? current.highlight : current.shadow
 
-    const nextControl: GpuCurvesChannelControl = {
-      ...current,
-      [state.pointKey]: {
-        x: state.pointKey === 'shadow'
-          ? clamp(position.x, GPU_CURVES_POINT_MIN_X, otherPoint.x - GPU_CURVES_POINT_MIN_GAP)
-          : clamp(position.x, otherPoint.x + GPU_CURVES_POINT_MIN_GAP, GPU_CURVES_POINT_MAX_X),
-        y: position.y,
-      },
-    };
+      const nextControl: GpuCurvesChannelControl = {
+        ...current,
+        [state.pointKey]: {
+          x:
+            state.pointKey === 'shadow'
+              ? clamp(position.x, GPU_CURVES_POINT_MIN_X, otherPoint.x - GPU_CURVES_POINT_MIN_GAP)
+              : clamp(position.x, otherPoint.x + GPU_CURVES_POINT_MIN_GAP, GPU_CURVES_POINT_MAX_X),
+          y: position.y,
+        },
+      }
 
-    return toGpuCurvesChannelParamUpdates(state.channel, nextControl);
-  }, [getNormalizedPointFromClient]);
+      return toGpuCurvesChannelParamUpdates(state.channel, nextControl)
+    },
+    [getNormalizedPointFromClient],
+  )
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
-      const updates = computeDragUpdates(event.clientX, event.clientY);
-      if (!updates) return;
-      setDraft((prev) => ({ ...prev, ...updates }));
-      onParamsBatchLiveChange(effect.id, updates);
-    };
+      const updates = computeDragUpdates(event.clientX, event.clientY)
+      if (!updates) return
+      setDraft((prev) => ({ ...prev, ...updates }))
+      onParamsBatchLiveChange(effect.id, updates)
+    }
 
     const handleMouseUp = (event: MouseEvent) => {
-      const state = dragRef.current;
-      if (!state) return;
+      const state = dragRef.current
+      if (!state) return
 
-      const updates = computeDragUpdates(event.clientX, event.clientY)
-        ?? toGpuCurvesChannelParamUpdates(state.channel, readGpuCurvesChannelControl(draftRef.current, state.channel));
+      const updates =
+        computeDragUpdates(event.clientX, event.clientY) ??
+        toGpuCurvesChannelParamUpdates(
+          state.channel,
+          readGpuCurvesChannelControl(draftRef.current, state.channel),
+        )
 
-      setDraft((prev) => ({ ...prev, ...updates }));
-      onParamsBatchChange(effect.id, updates);
-      dragRef.current = null;
-      setDragging(false);
-    };
+      setDraft((prev) => ({ ...prev, ...updates }))
+      onParamsBatchChange(effect.id, updates)
+      dragRef.current = null
+      setDragging(false)
+    }
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [computeDragUpdates, effect.id, onParamsBatchChange, onParamsBatchLiveChange]);
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [computeDragUpdates, effect.id, onParamsBatchChange, onParamsBatchLiveChange])
 
   const handlePointMouseDown = useCallback(
     (event: React.MouseEvent, pointKey: PointKey) => {
-      if (!effect.enabled) return;
-      event.preventDefault();
-      event.stopPropagation();
-      dragRef.current = { channel: activeChannel, pointKey };
-      setDragging(true);
+      if (!effect.enabled) return
+      event.preventDefault()
+      event.stopPropagation()
+      dragRef.current = { channel: activeChannel, pointKey }
+      setDragging(true)
     },
     [activeChannel, effect.enabled],
-  );
+  )
 
   const handleResetChannel = useCallback(() => {
-    const updates = getResetParamsForChannel(activeChannel);
-    setDraft((prev) => ({ ...prev, ...updates }));
-    onParamsBatchChange(effect.id, updates);
-  }, [activeChannel, effect.id, onParamsBatchChange]);
+    const updates = getResetParamsForChannel(activeChannel)
+    setDraft((prev) => ({ ...prev, ...updates }))
+    onParamsBatchChange(effect.id, updates)
+  }, [activeChannel, effect.id, onParamsBatchChange])
 
   return (
     <div className="space-y-0">
@@ -296,9 +310,27 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
 
             {activeChannel === 'master' && (
               <>
-                <path d={curvePaths.red} stroke="#ef4444" strokeWidth={1.2} fill="none" opacity={0.35} />
-                <path d={curvePaths.green} stroke="#22c55e" strokeWidth={1.2} fill="none" opacity={0.35} />
-                <path d={curvePaths.blue} stroke="#3b82f6" strokeWidth={1.2} fill="none" opacity={0.35} />
+                <path
+                  d={curvePaths.red}
+                  stroke="#ef4444"
+                  strokeWidth={1.2}
+                  fill="none"
+                  opacity={0.35}
+                />
+                <path
+                  d={curvePaths.green}
+                  stroke="#22c55e"
+                  strokeWidth={1.2}
+                  fill="none"
+                  opacity={0.35}
+                />
+                <path
+                  d={curvePaths.blue}
+                  stroke="#3b82f6"
+                  strokeWidth={1.2}
+                  fill="none"
+                  opacity={0.35}
+                />
               </>
             )}
 
@@ -320,9 +352,9 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             />
 
             {handlePoints.map((point, index) => {
-              const pointKey = index === 0 ? 'shadow' : 'highlight';
-              const x = point.x * CURVE_SIZE;
-              const y = (1 - point.y) * CURVE_SIZE;
+              const pointKey = index === 0 ? 'shadow' : 'highlight'
+              const x = point.x * CURVE_SIZE
+              const y = (1 - point.y) * CURVE_SIZE
 
               return (
                 <g key={pointKey}>
@@ -346,14 +378,15 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                     onMouseDown={(event) => handlePointMouseDown(event, pointKey)}
                   />
                 </g>
-              );
+              )
             })}
           </svg>
         </div>
         <div className="mt-1 text-center text-[10px] text-muted-foreground">
-          Drag both points to shape the {activeChannelMeta.label.toLowerCase()} curve. Pull the left point down and the right point up for a classic S-curve.
+          Drag both points to shape the {activeChannelMeta.label.toLowerCase()} curve. Pull the left
+          point down and the right point up for a classic S-curve.
         </div>
       </div>
     </div>
-  );
-});
+  )
+})

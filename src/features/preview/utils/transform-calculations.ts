@@ -1,7 +1,7 @@
-import type { GizmoState, GizmoHandle, Transform, Point } from '../types/gizmo';
-import { rotatePoint, getAngleFromCenter, getTransformAnchor } from './coordinate-transform';
+import type { GizmoState, GizmoHandle, Transform, Point } from '../types/gizmo'
+import { rotatePoint, getAngleFromCenter, getTransformAnchor } from './coordinate-transform'
 
-const MIN_SIZE = 20;
+const MIN_SIZE = 20
 
 /**
  * Calculate new transform based on current gizmo interaction.
@@ -13,11 +13,11 @@ export function calculateTransform(
   shiftKey: boolean,
   canvasWidth: number,
   canvasHeight: number,
-  cornerAnchored: boolean = false
+  cornerAnchored: boolean = false,
 ): Transform {
   switch (gizmo.mode) {
     case 'translate':
-      return calculateTranslation(gizmo.startTransform, gizmo.startPoint, currentPoint);
+      return calculateTranslation(gizmo.startTransform, gizmo.startPoint, currentPoint)
     case 'scale':
       return calculateScale(
         gizmo.startTransform,
@@ -27,18 +27,18 @@ export function calculateTransform(
         !shiftKey, // Locked aspect ratio when shift NOT pressed
         canvasWidth,
         canvasHeight,
-        cornerAnchored
-      );
+        cornerAnchored,
+      )
     case 'rotate':
       return calculateRotation(
         gizmo.startTransform,
         gizmo.startPoint,
         currentPoint,
         canvasWidth,
-        canvasHeight
-      );
+        canvasHeight,
+      )
     default:
-      return gizmo.startTransform;
+      return gizmo.startTransform
   }
 }
 
@@ -46,16 +46,12 @@ export function calculateTransform(
  * Calculate translation (drag to move).
  * Note: Values are NOT rounded here - rounding happens in snap functions.
  */
-function calculateTranslation(
-  start: Transform,
-  startPoint: Point,
-  currentPoint: Point
-): Transform {
+function calculateTranslation(start: Transform, startPoint: Point, currentPoint: Point): Transform {
   return {
     ...start,
     x: start.x + (currentPoint.x - startPoint.x),
     y: start.y + (currentPoint.y - startPoint.y),
-  };
+  }
 }
 
 /**
@@ -72,28 +68,28 @@ function calculateScale(
   maintainAspectRatio: boolean,
   canvasWidth: number,
   canvasHeight: number,
-  cornerAnchored: boolean = false
+  cornerAnchored: boolean = false,
 ): Transform {
   // Get center of the item in canvas coordinates
-  const centerX = canvasWidth / 2 + start.x;
-  const centerY = canvasHeight / 2 + start.y;
-  const center: Point = { x: centerX, y: centerY };
+  const centerX = canvasWidth / 2 + start.x
+  const centerY = canvasHeight / 2 + start.y
+  const center: Point = { x: centerX, y: centerY }
 
   // Work in local (unrotated) space for scale calculations
-  const localStart = rotatePoint(startPoint, center, -start.rotation);
-  const localCurrent = rotatePoint(currentPoint, center, -start.rotation);
+  const localStart = rotatePoint(startPoint, center, -start.rotation)
+  const localCurrent = rotatePoint(currentPoint, center, -start.rotation)
 
   // Determine which edges are affected
-  const affectsLeft = handle.includes('w');
-  const affectsRight = handle.includes('e');
-  const affectsTop = handle.includes('n');
-  const affectsBottom = handle.includes('s');
-  const isCornerHandle = (affectsLeft || affectsRight) && (affectsTop || affectsBottom);
+  const affectsLeft = handle.includes('w')
+  const affectsRight = handle.includes('e')
+  const affectsTop = handle.includes('n')
+  const affectsBottom = handle.includes('s')
+  const isCornerHandle = (affectsLeft || affectsRight) && (affectsTop || affectsBottom)
 
-  let newWidth: number;
-  let newHeight: number;
-  let newX = start.x;
-  let newY = start.y;
+  let newWidth: number
+  let newHeight: number
+  let newX = start.x
+  let newY = start.y
 
   if (maintainAspectRatio && isCornerHandle) {
     // For corner handles with aspect ratio lock, use scale factor approach
@@ -101,95 +97,95 @@ function calculateScale(
     if (cornerAnchored) {
       // Corner-anchored: use distance from anchor point (opposite corner)
       // Anchor is opposite corner in local coordinates
-      const anchorX = affectsRight ? centerX - start.width / 2 : centerX + start.width / 2;
-      const anchorY = affectsBottom ? centerY - start.height / 2 : centerY + start.height / 2;
+      const anchorX = affectsRight ? centerX - start.width / 2 : centerX + start.width / 2
+      const anchorY = affectsBottom ? centerY - start.height / 2 : centerY + start.height / 2
 
       const startDist = Math.sqrt(
-        Math.pow(localStart.x - anchorX, 2) + Math.pow(localStart.y - anchorY, 2)
-      );
+        Math.pow(localStart.x - anchorX, 2) + Math.pow(localStart.y - anchorY, 2),
+      )
       const currentDist = Math.sqrt(
-        Math.pow(localCurrent.x - anchorX, 2) + Math.pow(localCurrent.y - anchorY, 2)
-      );
+        Math.pow(localCurrent.x - anchorX, 2) + Math.pow(localCurrent.y - anchorY, 2),
+      )
 
-      const scaleFactor = startDist > 0 ? currentDist / startDist : 1;
-      newWidth = Math.max(MIN_SIZE, start.width * scaleFactor);
-      newHeight = Math.max(MIN_SIZE, start.height * scaleFactor);
+      const scaleFactor = startDist > 0 ? currentDist / startDist : 1
+      newWidth = Math.max(MIN_SIZE, start.width * scaleFactor)
+      newHeight = Math.max(MIN_SIZE, start.height * scaleFactor)
 
       // Adjust position to keep anchor fixed
-      const widthDiff = newWidth - start.width;
-      const heightDiff = newHeight - start.height;
-      newX = affectsRight ? start.x + widthDiff / 2 : start.x - widthDiff / 2;
-      newY = affectsBottom ? start.y + heightDiff / 2 : start.y - heightDiff / 2;
+      const widthDiff = newWidth - start.width
+      const heightDiff = newHeight - start.height
+      newX = affectsRight ? start.x + widthDiff / 2 : start.x - widthDiff / 2
+      newY = affectsBottom ? start.y + heightDiff / 2 : start.y - heightDiff / 2
     } else {
       // Center-anchored (default): use distance from center
       const startDist = Math.sqrt(
-        Math.pow(localStart.x - centerX, 2) + Math.pow(localStart.y - centerY, 2)
-      );
+        Math.pow(localStart.x - centerX, 2) + Math.pow(localStart.y - centerY, 2),
+      )
       const currentDist = Math.sqrt(
-        Math.pow(localCurrent.x - centerX, 2) + Math.pow(localCurrent.y - centerY, 2)
-      );
+        Math.pow(localCurrent.x - centerX, 2) + Math.pow(localCurrent.y - centerY, 2),
+      )
 
-      const scaleFactor = startDist > 0 ? currentDist / startDist : 1;
-      newWidth = Math.max(MIN_SIZE, start.width * scaleFactor);
-      newHeight = Math.max(MIN_SIZE, start.height * scaleFactor);
+      const scaleFactor = startDist > 0 ? currentDist / startDist : 1
+      newWidth = Math.max(MIN_SIZE, start.width * scaleFactor)
+      newHeight = Math.max(MIN_SIZE, start.height * scaleFactor)
     }
   } else {
     // Edge handles or free scaling (shift held)
-    const dx = localCurrent.x - localStart.x;
-    const dy = localCurrent.y - localStart.y;
+    const dx = localCurrent.x - localStart.x
+    const dy = localCurrent.y - localStart.y
 
     // Calculate width/height deltas based on handle
     // For center-anchored: multiply by 2 since we scale from center
     // For corner-anchored: multiply by 1 since only one side moves
-    const multiplier = cornerAnchored ? 1 : 2;
-    let widthDelta = 0;
-    let heightDelta = 0;
+    const multiplier = cornerAnchored ? 1 : 2
+    let widthDelta = 0
+    let heightDelta = 0
 
     if (affectsRight) {
-      widthDelta = dx * multiplier;
+      widthDelta = dx * multiplier
     } else if (affectsLeft) {
-      widthDelta = -dx * multiplier;
+      widthDelta = -dx * multiplier
     }
 
     if (affectsBottom) {
-      heightDelta = dy * multiplier;
+      heightDelta = dy * multiplier
     } else if (affectsTop) {
-      heightDelta = -dy * multiplier;
+      heightDelta = -dy * multiplier
     }
 
-    newWidth = Math.max(MIN_SIZE, start.width + widthDelta);
-    newHeight = Math.max(MIN_SIZE, start.height + heightDelta);
+    newWidth = Math.max(MIN_SIZE, start.width + widthDelta)
+    newHeight = Math.max(MIN_SIZE, start.height + heightDelta)
 
     // Maintain aspect ratio for edge handles
     if (maintainAspectRatio) {
-      const aspectRatio = start.width / start.height;
-      const isHorizontalEdge = (affectsLeft || affectsRight) && !(affectsTop || affectsBottom);
+      const aspectRatio = start.width / start.height
+      const isHorizontalEdge = (affectsLeft || affectsRight) && !(affectsTop || affectsBottom)
 
       if (isHorizontalEdge) {
-        newHeight = newWidth / aspectRatio;
+        newHeight = newWidth / aspectRatio
       } else {
-        newWidth = newHeight * aspectRatio;
+        newWidth = newHeight * aspectRatio
       }
     }
 
     // For corner-anchored scaling, adjust position to keep opposite edge/corner fixed
     if (cornerAnchored) {
-      const widthDiff = newWidth - start.width;
-      const heightDiff = newHeight - start.height;
+      const widthDiff = newWidth - start.width
+      const heightDiff = newHeight - start.height
 
       // Shift center to maintain anchor point
       // When dragging right handles, anchor is on left, so center shifts right
       // When dragging left handles, anchor is on right, so center shifts left
       if (affectsRight) {
-        newX = start.x + widthDiff / 2;
+        newX = start.x + widthDiff / 2
       } else if (affectsLeft) {
-        newX = start.x - widthDiff / 2;
+        newX = start.x - widthDiff / 2
       }
 
       if (affectsBottom) {
-        newY = start.y + heightDiff / 2;
+        newY = start.y + heightDiff / 2
       } else if (affectsTop) {
-        newY = start.y - heightDiff / 2;
+        newY = start.y - heightDiff / 2
       }
     }
   }
@@ -201,7 +197,7 @@ function calculateScale(
     y: newY,
     width: newWidth,
     height: newHeight,
-  };
+  }
 }
 
 /**
@@ -212,22 +208,22 @@ function calculateRotation(
   startPoint: Point,
   currentPoint: Point,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ): Transform {
-  const center = getTransformAnchor(start, canvasWidth, canvasHeight);
+  const center = getTransformAnchor(start, canvasWidth, canvasHeight)
 
   // Calculate angle change
-  const startAngle = getAngleFromCenter(startPoint, center);
-  const currentAngle = getAngleFromCenter(currentPoint, center);
-  const deltaAngle = currentAngle - startAngle;
+  const startAngle = getAngleFromCenter(startPoint, center)
+  const currentAngle = getAngleFromCenter(currentPoint, center)
+  const deltaAngle = currentAngle - startAngle
 
   // Normalize rotation to -180 to 180 range
-  let newRotation = start.rotation + deltaAngle;
-  while (newRotation > 180) newRotation -= 360;
-  while (newRotation < -180) newRotation += 360;
+  let newRotation = start.rotation + deltaAngle
+  while (newRotation > 180) newRotation -= 360
+  while (newRotation < -180) newRotation += 360
 
   return {
     ...start,
     rotation: newRotation,
-  };
+  }
 }

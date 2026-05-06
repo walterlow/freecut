@@ -9,16 +9,16 @@
  * mismatched source/timeline FPS) are left untouched.
  */
 export function snapSourceTime(time: number, sourceFps: number): number {
-  const sourceFrame = time * sourceFps;
-  const rounded = Math.round(sourceFrame);
+  const sourceFrame = time * sourceFps
+  const rounded = Math.round(sourceFrame)
   if (Math.abs(sourceFrame - rounded) < 1e-6) {
     // Add a micro-epsilon (1/10000 of a frame) so that
     // Math.floor(snapped * sourceFps) survives the round-trip.
     // Without this, rounded/sourceFps * sourceFps can land at
     // (rounded - 1e-14), causing Math.floor to return rounded-1.
-    return (rounded + 1e-4) / sourceFps;
+    return (rounded + 1e-4) / sourceFps
   }
-  return time;
+  return time
 }
 
 /**
@@ -31,13 +31,17 @@ export function getVideoTargetTimeSeconds(
   sequenceLocalFrame: number,
   playbackRate: number,
   timelineFps: number,
-  sequenceFrameOffset: number = 0
+  sequenceFrameOffset: number = 0,
+  isReversed: boolean = false,
+  reverseSourceEnd?: number,
 ): number {
-  const relativeFrame = sequenceLocalFrame - sequenceFrameOffset;
-  return snapSourceTime(
-    (safeTrimBefore / sourceFps) + (relativeFrame * playbackRate / timelineFps),
-    sourceFps,
-  );
+  const relativeFrame = sequenceLocalFrame - sequenceFrameOffset
+  const sourceFrameOffset = (relativeFrame * playbackRate * sourceFps) / timelineFps
+  if (isReversed) {
+    const sourceEnd = reverseSourceEnd ?? safeTrimBefore
+    return snapSourceTime(Math.max(0, sourceEnd - sourceFrameOffset - 1) / sourceFps, sourceFps)
+  }
+  return snapSourceTime(safeTrimBefore / sourceFps + sourceFrameOffset / sourceFps, sourceFps)
 }
 
 /**
@@ -55,10 +59,14 @@ export function getAudioTargetTimeSeconds(
   sourceFps: number,
   sequenceLocalFrame: number,
   playbackRate: number,
-  timelineFps: number
+  timelineFps: number,
+  isReversed: boolean = false,
+  reverseSourceEnd?: number,
 ): number {
-  return snapSourceTime(
-    (trimBefore / sourceFps) + (sequenceLocalFrame * playbackRate / timelineFps),
-    sourceFps,
-  );
+  const sourceFrameOffset = (sequenceLocalFrame * playbackRate * sourceFps) / timelineFps
+  if (isReversed) {
+    const sourceEnd = reverseSourceEnd ?? trimBefore
+    return snapSourceTime(Math.max(0, sourceEnd - sourceFrameOffset - 1) / sourceFps, sourceFps)
+  }
+  return snapSourceTime(trimBefore / sourceFps + sourceFrameOffset / sourceFps, sourceFps)
 }

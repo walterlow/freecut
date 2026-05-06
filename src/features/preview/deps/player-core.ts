@@ -1,1 +1,1 @@
-export { AbsoluteFill, Player, type PlayerRef } from './player-contract';
+export { AbsoluteFill, Player, type PlayerRef } from './player-contract'

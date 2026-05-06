@@ -3,7 +3,7 @@
  * Timeline modules should import media-library stores/services/utils from here.
  */
 
-export * from './media-library-store';
-export * from './media-library-service';
-export * from './media-transcription-service';
-export * from './media-library-resolver';
+export * from './media-library-store'
+export * from './media-library-service'
+export * from './media-transcription-service'
+export * from './media-library-resolver'

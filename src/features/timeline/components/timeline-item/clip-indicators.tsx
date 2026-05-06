@@ -1,25 +1,28 @@
-import { memo } from 'react';
-import { Link2Off, Diamond } from 'lucide-react';
-import { cn } from '@/shared/ui/cn';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
+import { memo } from 'react'
+import { Link2Off, Diamond } from 'lucide-react'
+import { cn } from '@/shared/ui/cn'
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
 
 interface ClipIndicatorsProps {
   /** Whether the item has keyframe animations */
-  hasKeyframes: boolean;
+  hasKeyframes: boolean
   /** Current playback speed (1 = normal) */
-  currentSpeed: number;
+  currentSpeed: number
+  /** Whether media playback is reversed */
+  isReversed: boolean
+  reverseConformStatus?: 'pending' | 'ready' | 'error'
   /** Whether the item is currently being rate stretched */
-  isStretching: boolean;
+  isStretching: boolean
   /** Visual feedback during stretch (speed preview) */
-  stretchFeedback: { speed: number } | null;
+  stretchFeedback: { speed: number } | null
   /** Whether the item's media is broken/missing */
-  isBroken: boolean;
+  isBroken: boolean
   /** Whether the item has a mediaId */
-  hasMediaId: boolean;
+  hasMediaId: boolean
   /** Whether the item is a shape configured as a mask */
-  isMask: boolean;
+  isMask: boolean
   /** Whether the item is a shape */
-  isShape: boolean;
+  isShape: boolean
 }
 
 /**
@@ -32,6 +35,8 @@ interface ClipIndicatorsProps {
 export const ClipIndicators = memo(function ClipIndicators({
   hasKeyframes,
   currentSpeed,
+  isReversed,
+  reverseConformStatus,
   isStretching,
   stretchFeedback,
   isBroken,
@@ -39,12 +44,17 @@ export const ClipIndicators = memo(function ClipIndicators({
   isMask,
   isShape,
 }: ClipIndicatorsProps) {
-  const showSpeedBadge = Math.abs(currentSpeed - 1) > 0.005 && !isStretching;
+  const showSpeedBadge = Math.abs(currentSpeed - 1) > 0.005 && !isStretching
 
   return (
     <>
       {/* Label-row badges ââ‚¬” single container to prevent overlap */}
-      {(hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
+      {(hasKeyframes ||
+        (isShape && isMask) ||
+        showSpeedBadge ||
+        isReversed ||
+        reverseConformStatus === 'pending' ||
+        reverseConformStatus === 'error') && (
         <div
           className="absolute right-1 z-10 pointer-events-none flex items-center gap-1"
           style={{ top: 0, height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
@@ -70,6 +80,38 @@ export const ClipIndicators = memo(function ClipIndicators({
               {currentSpeed.toFixed(2)}x
             </span>
           )}
+          {isReversed && (
+            <span
+              className="px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono"
+              title={
+                reverseConformStatus === 'ready'
+                  ? 'Reversed playback prepared'
+                  : reverseConformStatus === 'pending'
+                    ? 'Preparing reversed clip'
+                    : reverseConformStatus === 'error'
+                      ? 'Reversed playback; preparation failed'
+                      : 'Reversed playback'
+              }
+            >
+              REV
+            </span>
+          )}
+          {reverseConformStatus === 'pending' && (
+            <span
+              className="px-1 py-0.5 text-[10px] font-bold bg-sky-600/80 text-white rounded font-mono"
+              title="Preparing reversed clip"
+            >
+              PREP
+            </span>
+          )}
+          {reverseConformStatus === 'error' && (
+            <span
+              className="px-1 py-0.5 text-[10px] font-bold bg-red-600/80 text-white rounded font-mono"
+              title="Reverse preparation failed"
+            >
+              ERR
+            </span>
+          )}
         </div>
       )}
 
@@ -86,8 +128,8 @@ export const ClipIndicators = memo(function ClipIndicators({
       {/* Preview speed overlay during stretch */}
       <div
         className={cn(
-          "absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none z-10 transition-opacity duration-75",
-          isStretching && stretchFeedback ? "opacity-100" : "opacity-0"
+          'absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none z-10 transition-opacity duration-75',
+          isStretching && stretchFeedback ? 'opacity-100' : 'opacity-0',
         )}
       >
         <span className="text-white font-mono text-sm font-bold">
@@ -95,5 +137,5 @@ export const ClipIndicators = memo(function ClipIndicators({
         </span>
       </div>
     </>
-  );
-});
+  )
+})

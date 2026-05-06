@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { validateSnapshotData } from './json-import-service';
+import { describe, expect, it } from 'vite-plus/test'
+import { validateSnapshotData } from './json-import-service'
 
 describe('validateSnapshotData', () => {
   it('accepts legacy snapshots that need migration instead of rejecting them up front', async () => {
@@ -114,17 +114,17 @@ describe('validateSnapshotData', () => {
         },
       },
       mediaReferences: [],
-    });
+    })
 
-    expect(result.valid).toBe(true);
-    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
     expect(result.warnings).toContainEqual(
       expect.objectContaining({
         path: 'project.schemaVersion',
         message: expect.stringContaining('upgraded'),
       }),
-    );
-  });
+    )
+  })
 
   it('accepts snapshots that use any shipped text preset id', async () => {
     const result = await validateSnapshotData({
@@ -177,9 +177,9 @@ describe('validateSnapshotData', () => {
         },
       },
       mediaReferences: [],
-    });
+    })
 
-    expect(result.valid).toBe(true);
-    expect(result.errors).toEqual([]);
-  });
-});
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+})

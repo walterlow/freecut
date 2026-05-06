@@ -6,22 +6,22 @@
  * as keyframe animations would conflict with transition effects.
  */
 
-import type { Transition } from '@/types/transition';
-import type { TimelineItem } from '@/types/timeline';
-import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
+import type { Transition } from '@/types/transition'
+import type { TimelineItem } from '@/types/timeline'
+import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner'
 
 /**
  * Frame range representing a blocked region (inclusive start, exclusive end)
  */
 export interface BlockedFrameRange {
   /** Start frame (inclusive, relative to clip start) */
-  start: number;
+  start: number
   /** End frame (exclusive, relative to clip start) */
-  end: number;
+  end: number
   /** The transition that causes this blocked region */
-  transition: Transition;
+  transition: Transition
   /** Whether this clip is the outgoing (left) or incoming (right) clip */
-  role: 'outgoing' | 'incoming';
+  role: 'outgoing' | 'incoming'
 }
 
 /**
@@ -40,49 +40,49 @@ export interface BlockedFrameRange {
 export function getTransitionBlockedRanges(
   clipId: string,
   clip: TimelineItem,
-  transitions: Transition[]
+  transitions: Transition[],
 ): BlockedFrameRange[] {
-  const blockedRanges: BlockedFrameRange[] = [];
-  let incomingTransition: Transition | undefined;
-  let outgoingTransition: Transition | undefined;
-  let incomingPortion = 0;
-  let outgoingPortion = 0;
+  const blockedRanges: BlockedFrameRange[] = []
+  let incomingTransition: Transition | undefined
+  let outgoingTransition: Transition | undefined
+  let incomingPortion = 0
+  let outgoingPortion = 0
 
   for (const transition of transitions) {
     if (transition.leftClipId === clipId) {
       const portions = calculateTransitionPortions(
         transition.durationInFrames,
-        transition.alignment
-      );
-      outgoingTransition = transition;
-      outgoingPortion = portions.leftPortion;
+        transition.alignment,
+      )
+      outgoingTransition = transition
+      outgoingPortion = portions.leftPortion
     }
 
     if (transition.rightClipId === clipId) {
       const portions = calculateTransitionPortions(
         transition.durationInFrames,
-        transition.alignment
-      );
-      incomingTransition = transition;
-      incomingPortion = portions.rightPortion;
+        transition.alignment,
+      )
+      incomingTransition = transition
+      incomingPortion = portions.rightPortion
     }
   }
 
   // Keep blocked ranges chain-safe for clips with both incoming and outgoing transitions.
   if (incomingTransition && outgoingTransition) {
-    const available = Math.max(0, clip.durationInFrames);
-    const total = incomingPortion + outgoingPortion;
+    const available = Math.max(0, clip.durationInFrames)
+    const total = incomingPortion + outgoingPortion
     if (total > available && total > 0) {
-      const scale = available / total;
-      incomingPortion = Math.floor(incomingPortion * scale);
-      outgoingPortion = Math.floor(outgoingPortion * scale);
+      const scale = available / total
+      incomingPortion = Math.floor(incomingPortion * scale)
+      outgoingPortion = Math.floor(outgoingPortion * scale)
 
-      const remainder = available - (incomingPortion + outgoingPortion);
+      const remainder = available - (incomingPortion + outgoingPortion)
       if (remainder > 0) {
         if (incomingPortion <= outgoingPortion) {
-          incomingPortion += remainder;
+          incomingPortion += remainder
         } else {
-          outgoingPortion += remainder;
+          outgoingPortion += remainder
         }
       }
     }
@@ -94,7 +94,7 @@ export function getTransitionBlockedRanges(
       end: Math.min(incomingPortion, clip.durationInFrames),
       transition: incomingTransition,
       role: 'incoming',
-    });
+    })
   }
 
   if (outgoingTransition && outgoingPortion > 0) {
@@ -103,10 +103,10 @@ export function getTransitionBlockedRanges(
       end: clip.durationInFrames,
       transition: outgoingTransition,
       role: 'outgoing',
-    });
+    })
   }
 
-  return blockedRanges;
+  return blockedRanges
 }
 
 /**
@@ -122,17 +122,17 @@ export function isFrameInTransitionRegion(
   frame: number,
   clipId: string,
   clip: TimelineItem,
-  transitions: Transition[]
+  transitions: Transition[],
 ): BlockedFrameRange | undefined {
-  const blockedRanges = getTransitionBlockedRanges(clipId, clip, transitions);
+  const blockedRanges = getTransitionBlockedRanges(clipId, clip, transitions)
 
   for (const range of blockedRanges) {
     if (frame >= range.start && frame < range.end) {
-      return range;
+      return range
     }
   }
 
-  return undefined;
+  return undefined
 }
 
 /**
@@ -142,7 +142,6 @@ export function isFrameInTransitionRegion(
  * @returns User-friendly message
  */
 export function getTransitionBlockedMessage(range: BlockedFrameRange): string {
-  const position = range.role === 'outgoing' ? 'end' : 'start';
-  return `Keyframes cannot be added here. This region is part of a transition at the ${position} of the clip.`;
+  const position = range.role === 'outgoing' ? 'end' : 'start'
+  return `Keyframes cannot be added here. This region is part of a transition at the ${position} of the clip.`
 }
-

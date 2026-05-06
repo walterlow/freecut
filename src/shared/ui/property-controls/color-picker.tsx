@@ -1,26 +1,26 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
-import { HexColorPicker } from 'react-colorful';
-import { Button } from '@/components/ui/button';
-import { PropertyRow } from './property-row';
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { RotateCcw } from 'lucide-react'
+import { HexColorPicker } from 'react-colorful'
+import { Button } from '@/components/ui/button'
+import { PropertyRow } from './property-row'
 
 interface ColorPickerProps {
   /** Current color value (hex or oklch format) */
-  color: string;
+  color: string
   /** Called when color is committed (picker closed) */
-  onChange: (color: string) => void;
+  onChange: (color: string) => void
   /** Called during drag for live preview */
-  onLiveChange?: (color: string) => void;
+  onLiveChange?: (color: string) => void
   /** Optional reset handler */
-  onReset?: () => void;
+  onReset?: () => void
   /** Default color for reset comparison */
-  defaultColor?: string;
+  defaultColor?: string
   /** Disable the picker */
-  disabled?: boolean;
+  disabled?: boolean
   /** Preset color swatches to show */
-  presets?: string[];
+  presets?: string[]
   /** Label for PropertyRow wrapper (omit for inline mode) */
-  label?: string;
+  label?: string
 }
 
 /**
@@ -40,53 +40,53 @@ export const ColorPicker = memo(function ColorPicker({
   presets,
   label,
 }: ColorPickerProps) {
-  const [localColor, setLocalColor] = useState(color);
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [localColor, setLocalColor] = useState(color)
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Sync local state when color prop changes
   useEffect(() => {
-    setLocalColor(color);
-  }, [color]);
+    setLocalColor(color)
+  }, [color])
 
   const handleColorChange = useCallback(
     (newColor: string) => {
-      setLocalColor(newColor);
-      onLiveChange?.(newColor);
+      setLocalColor(newColor)
+      onLiveChange?.(newColor)
     },
-    [onLiveChange]
-  );
+    [onLiveChange],
+  )
 
   const handleCommit = useCallback(() => {
-    onChange(localColor);
-  }, [localColor, onChange]);
+    onChange(localColor)
+  }, [localColor, onChange])
 
   const handleClose = useCallback(() => {
-    handleCommit();
-    setIsOpen(false);
-  }, [handleCommit]);
+    handleCommit()
+    setIsOpen(false)
+  }, [handleCommit])
 
   const handlePresetClick = useCallback(
     (preset: string) => {
-      setLocalColor(preset);
-      onChange(preset);
+      setLocalColor(preset)
+      onChange(preset)
     },
-    [onChange]
-  );
+    [onChange],
+  )
 
   // Click outside to close
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) return
 
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        handleClose();
+        handleClose()
       }
-    };
+    }
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, handleClose]);
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen, handleClose])
 
   const pickerContent = (
     <div ref={containerRef} className="relative flex items-center gap-1 w-full">
@@ -100,9 +100,7 @@ export const ColorPicker = memo(function ColorPicker({
           className="w-6 h-6 rounded border border-border flex-shrink-0"
           style={{ backgroundColor: localColor }}
         />
-        <span className="text-xs font-mono text-muted-foreground uppercase">
-          {localColor}
-        </span>
+        <span className="text-xs font-mono text-muted-foreground uppercase">{localColor}</span>
       </button>
 
       {onReset && defaultColor && color !== defaultColor && !disabled && (
@@ -139,12 +137,12 @@ export const ColorPicker = memo(function ColorPicker({
         </div>
       )}
     </div>
-  );
+  )
 
   // If label provided, wrap in PropertyRow; otherwise render inline
   if (label) {
-    return <PropertyRow label={label}>{pickerContent}</PropertyRow>;
+    return <PropertyRow label={label}>{pickerContent}</PropertyRow>
   }
 
-  return pickerContent;
-});
+  return pickerContent
+})

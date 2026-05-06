@@ -1,9 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import type { AudioItem, TextItem, VideoItem } from '@/types/timeline';
-import { useItemsStore } from './items-store';
-import { useTimelineSettingsStore } from './timeline-settings-store';
-import { timelineToSourceFrames } from '../utils/source-calculations';
-import { rollingTrimItems } from './actions/item-actions';
+import { beforeEach, describe, expect, it } from 'vite-plus/test'
+import type {
+  AudioItem,
+  ShapeItem,
+  SubtitleSegmentItem,
+  TextItem,
+  VideoItem,
+} from '@/types/timeline'
+import { useItemsStore } from './items-store'
+import { useTimelineSettingsStore } from './timeline-settings-store'
+import { timelineToSourceFrames } from '../utils/source-calculations'
+import { rollingTrimItems } from './actions/item-actions'
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   return {
@@ -16,7 +22,7 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
     src: 'blob:test',
     mediaId: 'media-1',
     ...overrides,
-  };
+  }
 }
 
 function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
@@ -30,7 +36,7 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
     src: 'blob:test',
     mediaId: 'media-1',
     ...overrides,
-  };
+  }
 }
 
 function makeTextItem(overrides: Partial<TextItem> = {}): TextItem {
@@ -44,15 +50,49 @@ function makeTextItem(overrides: Partial<TextItem> = {}): TextItem {
     text: 'Caption',
     color: '#ffffff',
     ...overrides,
-  };
+  }
+}
+
+function makeSubtitleItem(overrides: Partial<SubtitleSegmentItem> = {}): SubtitleSegmentItem {
+  return {
+    id: 'subtitle-1',
+    type: 'subtitle',
+    trackId: 'track-subtitle',
+    from: 0,
+    durationInFrames: 30,
+    label: 'Transcript',
+    mediaId: 'media-1',
+    source: {
+      type: 'transcript',
+      mediaId: 'media-1',
+      clipId: 'clip-1',
+    },
+    cues: [{ id: 'cue-1', startSeconds: 0, endSeconds: 1, text: 'Caption' }],
+    color: '#ffffff',
+    ...overrides,
+  }
+}
+
+function makeShapeItem(overrides: Partial<ShapeItem> = {}): ShapeItem {
+  return {
+    id: 'shape-1',
+    type: 'shape',
+    trackId: 'track-shape',
+    from: 0,
+    durationInFrames: 30,
+    label: 'Shape',
+    shapeType: 'path',
+    fillColor: '#3b82f6',
+    ...overrides,
+  }
 }
 
 describe('items-store rate stretch', () => {
   beforeEach(() => {
-    useTimelineSettingsStore.setState({ fps: 30 });
-    useItemsStore.getState().setItems([]);
-    useItemsStore.getState().setTracks([]);
-  });
+    useTimelineSettingsStore.setState({ fps: 30 })
+    useItemsStore.getState().setItems([])
+    useItemsStore.getState().setTracks([])
+  })
 
   it('preserves explicit source bounds for split clips', () => {
     const splitClip = makeVideoItem({
@@ -62,18 +102,18 @@ describe('items-store rate stretch', () => {
       sourceEnd: 3425,
       sourceDuration: 4809,
       sourceFps: 23.981,
-    });
+    })
 
-    useItemsStore.getState().setItems([splitClip]);
-    useItemsStore.getState()._rateStretchItem('split-clip', 0, 1500, 1.25);
+    useItemsStore.getState().setItems([splitClip])
+    useItemsStore.getState()._rateStretchItem('split-clip', 0, 1500, 1.25)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'split-clip') as VideoItem;
-    expect(updated).toBeDefined();
-    expect(updated.sourceStart).toBe(1924);
-    expect(updated.sourceEnd).toBe(3425);
-    expect(updated.durationInFrames).toBe(1500);
-    expect(updated.speed).toBeGreaterThan(1.25);
-  });
+    const updated = useItemsStore.getState().items.find((i) => i.id === 'split-clip') as VideoItem
+    expect(updated).toBeDefined()
+    expect(updated.sourceStart).toBe(1924)
+    expect(updated.sourceEnd).toBe(3425)
+    expect(updated.durationInFrames).toBe(1500)
+    expect(updated.speed).toBeGreaterThan(1.25)
+  })
 
   it('re-derives speed from fixed split source span even if incoming speed is mismatched', () => {
     const splitClip = makeVideoItem({
@@ -83,22 +123,29 @@ describe('items-store rate stretch', () => {
       sourceEnd: 4809,
       sourceDuration: 4809,
       sourceFps: 23.981,
-    });
+    })
 
-    useItemsStore.getState().setItems([splitClip]);
+    useItemsStore.getState().setItems([splitClip])
     // Intentionally pass mismatched speed; store should normalize it.
-    useItemsStore.getState()._rateStretchItem('split-clip-mismatch', 4285, 1467, 1);
+    useItemsStore.getState()._rateStretchItem('split-clip-mismatch', 4285, 1467, 1)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'split-clip-mismatch') as VideoItem;
-    expect(updated).toBeDefined();
-    expect(updated.sourceStart).toBe(3425);
-    expect(updated.sourceEnd).toBe(4809);
-    expect(updated.durationInFrames).toBe(1467);
-    expect(updated.speed).not.toBe(1);
+    const updated = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'split-clip-mismatch') as VideoItem
+    expect(updated).toBeDefined()
+    expect(updated.sourceStart).toBe(3425)
+    expect(updated.sourceEnd).toBe(4809)
+    expect(updated.durationInFrames).toBe(1467)
+    expect(updated.speed).not.toBe(1)
 
-    const needed = timelineToSourceFrames(updated.durationInFrames, updated.speed ?? 1, 30, updated.sourceFps ?? 30);
-    expect(needed).toBeGreaterThanOrEqual((updated.sourceEnd ?? 0) - (updated.sourceStart ?? 0));
-  });
+    const needed = timelineToSourceFrames(
+      updated.durationInFrames,
+      updated.speed ?? 1,
+      30,
+      updated.sourceFps ?? 30,
+    )
+    expect(needed).toBeGreaterThanOrEqual((updated.sourceEnd ?? 0) - (updated.sourceStart ?? 0))
+  })
 
   it('splitItem sets explicit sourceStart on both left and right items', () => {
     // Original clip with no explicit sourceStart (undefined)
@@ -109,23 +156,131 @@ describe('items-store rate stretch', () => {
       sourceDuration: 300,
       sourceFps: 30,
       // sourceStart intentionally undefined
-    });
+    })
 
-    useItemsStore.getState().setItems([clip]);
-    const result = useItemsStore.getState()._splitItem('full-clip', 150);
+    useItemsStore.getState().setItems([clip])
+    const result = useItemsStore.getState()._splitItem('full-clip', 150)
 
-    expect(result).not.toBeNull();
-    const left = useItemsStore.getState().items.find((i) => i.id === 'full-clip') as VideoItem;
-    const right = useItemsStore.getState().items.find((i) => i.id !== 'full-clip') as VideoItem;
+    expect(result).not.toBeNull()
+    const left = useItemsStore.getState().items.find((i) => i.id === 'full-clip') as VideoItem
+    const right = useItemsStore.getState().items.find((i) => i.id !== 'full-clip') as VideoItem
 
     // Left item must have explicit sourceStart so rate stretch treats it as explicit bounds
-    expect(left.sourceStart).toBe(0);
-    expect(left.sourceEnd).toBe(150);
+    expect(left.sourceStart).toBe(0)
+    expect(left.sourceEnd).toBe(150)
 
     // Right item should have correct bounds
-    expect(right.sourceStart).toBe(150);
-    expect(right.sourceEnd).toBe(300);
-  });
+    expect(right.sourceStart).toBe(150)
+    expect(right.sourceEnd).toBe(300)
+  })
+
+  it('trimItemStart re-anchors cues and drops those before the new boundary', () => {
+    useTimelineSettingsStore.getState().setFps(30)
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: 'subs-trim-start',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 300, // 10s
+      label: 'Subs',
+      color: '#fff',
+      source: { type: 'subtitle-import', fileName: 'a.srt', format: 'srt', importedAt: 0 },
+      cues: [
+        { id: 'a', startSeconds: 0, endSeconds: 1.5, text: 'before' },
+        { id: 'b', startSeconds: 1.5, endSeconds: 2.5, text: 'straddles' },
+        { id: 'c', startSeconds: 5, endSeconds: 6, text: 'after' },
+      ],
+    }
+
+    useItemsStore.getState().setItems([segment])
+    // Trim 60 frames = 2s off the start.
+    useItemsStore.getState()._trimItemStart('subs-trim-start', 60, { skipAdjacentClamp: true })
+    const updated = useItemsStore
+      .getState()
+      .items.find(
+        (i) => i.id === 'subs-trim-start',
+      ) as import('@/types/timeline').SubtitleSegmentItem
+
+    expect(updated.from).toBe(60)
+    expect(updated.durationInFrames).toBe(240)
+    // 'a' wholly inside the trimmed-away window — dropped.
+    // 'b' straddled — clamped to 0.
+    // 'c' kept, shifted by -2s.
+    expect(updated.cues.map((c) => c.id)).toEqual(['b', 'c'])
+    expect(updated.cues[0]).toMatchObject({ startSeconds: 0, endSeconds: 0.5 })
+    expect(updated.cues[1]).toMatchObject({ startSeconds: 3, endSeconds: 4 })
+  })
+
+  it('trimItemEnd drops or clamps cues past the new end', () => {
+    useTimelineSettingsStore.getState().setFps(30)
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: 'subs-trim-end',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Subs',
+      color: '#fff',
+      source: { type: 'subtitle-import', fileName: 'a.srt', format: 'srt', importedAt: 0 },
+      cues: [
+        { id: 'a', startSeconds: 1, endSeconds: 2, text: 'inside' },
+        { id: 'b', startSeconds: 4, endSeconds: 6, text: 'straddles' },
+        { id: 'c', startSeconds: 8, endSeconds: 9, text: 'past end' },
+      ],
+    }
+
+    useItemsStore.getState().setItems([segment])
+    // Trim end inward by 150 frames = 5s — new end at 5s.
+    useItemsStore.getState()._trimItemEnd('subs-trim-end', -150, { skipAdjacentClamp: true })
+    const updated = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'subs-trim-end') as import('@/types/timeline').SubtitleSegmentItem
+
+    expect(updated.durationInFrames).toBe(150)
+    // 'a' fully inside, 'b' clamped to end at 5, 'c' dropped.
+    expect(updated.cues.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(updated.cues[1]).toMatchObject({ startSeconds: 4, endSeconds: 5 })
+  })
+
+  it('splitItem partitions a SubtitleSegmentItem cue list at the cut frame', () => {
+    useTimelineSettingsStore.getState().setFps(30)
+    const segment: import('@/types/timeline').SubtitleSegmentItem = {
+      id: 'subs',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 300, // 10s at 30fps
+      label: 'Subs',
+      color: '#fff',
+      source: { type: 'subtitle-import', fileName: 'a.srt', format: 'srt', importedAt: 0 },
+      cues: [
+        { id: 'a', startSeconds: 0, endSeconds: 2, text: 'wholly left' },
+        { id: 'b', startSeconds: 4, endSeconds: 6, text: 'straddles cut' },
+        { id: 'c', startSeconds: 7, endSeconds: 9, text: 'wholly right' },
+      ],
+    }
+
+    useItemsStore.getState().setItems([segment])
+    // Cut at frame 150 = 5s.
+    const result = useItemsStore.getState()._splitItem('subs', 150)
+    expect(result).not.toBeNull()
+    const left = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'subs') as import('@/types/timeline').SubtitleSegmentItem
+    const right = useItemsStore
+      .getState()
+      .items.find(
+        (i) => i.id !== 'subs' && i.type === 'subtitle',
+      ) as import('@/types/timeline').SubtitleSegmentItem
+
+    expect(left.cues.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(left.cues[1]).toMatchObject({ id: 'b', endSeconds: 5 })
+
+    // Right cues are rebased so their times start from 0 at the new segment.
+    expect(right.cues.map((c) => c.id)).toEqual(['b-r', 'c'])
+    expect(right.cues[0]).toMatchObject({ startSeconds: 0, endSeconds: 1 })
+    expect(right.cues[1]).toMatchObject({ startSeconds: 2, endSeconds: 4 })
+  })
 
   it('rate stretch on left split clip preserves source boundaries', () => {
     // Simulate a left split clip with explicit bounds (as fixed by splitItem)
@@ -137,21 +292,21 @@ describe('items-store rate stretch', () => {
       sourceEnd: 150,
       sourceDuration: 300,
       sourceFps: 30,
-    });
+    })
 
-    useItemsStore.getState().setItems([leftClip]);
+    useItemsStore.getState().setItems([leftClip])
     // Rate stretch to 0.5x speed (double duration)
-    useItemsStore.getState()._rateStretchItem('left-split', 0, 300, 0.5);
+    useItemsStore.getState()._rateStretchItem('left-split', 0, 300, 0.5)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'left-split') as VideoItem;
-    expect(updated).toBeDefined();
+    const updated = useItemsStore.getState().items.find((i) => i.id === 'left-split') as VideoItem
+    expect(updated).toBeDefined()
     // Source bounds must NOT change - the clip should only use frames 0-150
-    expect(updated.sourceStart).toBe(0);
-    expect(updated.sourceEnd).toBe(150);
-    expect(updated.durationInFrames).toBe(300);
+    expect(updated.sourceStart).toBe(0)
+    expect(updated.sourceEnd).toBe(150)
+    expect(updated.durationInFrames).toBe(300)
     // Speed should be derived from the fixed 150-frame source span
-    expect(updated.speed).toBeCloseTo(0.5, 1);
-  });
+    expect(updated.speed).toBeCloseTo(0.5, 1)
+  })
 
   it('recomputes sourceEnd when explicit bounds are not present', () => {
     const openEndedClip = makeVideoItem({
@@ -161,17 +316,17 @@ describe('items-store rate stretch', () => {
       sourceDuration: 250,
       sourceFps: 30,
       sourceEnd: undefined,
-    });
+    })
 
-    useItemsStore.getState().setItems([openEndedClip]);
-    useItemsStore.getState()._rateStretchItem('open-ended', 0, 200, 1);
+    useItemsStore.getState().setItems([openEndedClip])
+    useItemsStore.getState()._rateStretchItem('open-ended', 0, 200, 1)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'open-ended') as VideoItem;
-    expect(updated).toBeDefined();
-    expect(updated.sourceStart).toBe(100);
+    const updated = useItemsStore.getState().items.find((i) => i.id === 'open-ended') as VideoItem
+    expect(updated).toBeDefined()
+    expect(updated.sourceStart).toBe(100)
     // sourceStart + needed(200) would be 300, clamped by sourceDuration(250)
-    expect(updated.sourceEnd).toBe(250);
-  });
+    expect(updated.sourceEnd).toBe(250)
+  })
 
   it('normalizes legacy end-only bounds to sourceStart=0', () => {
     const legacySplit = makeVideoItem({
@@ -181,15 +336,17 @@ describe('items-store rate stretch', () => {
       sourceEnd: 300,
       sourceDuration: 4809,
       sourceFps: 23.981,
-    });
+    })
 
-    useItemsStore.getState().setItems([legacySplit]);
+    useItemsStore.getState().setItems([legacySplit])
 
-    const normalized = useItemsStore.getState().items.find((i) => i.id === 'legacy-end-only') as VideoItem;
-    expect(normalized).toBeDefined();
-    expect(normalized.sourceStart).toBe(0);
-    expect(normalized.sourceEnd).toBe(300);
-  });
+    const normalized = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'legacy-end-only') as VideoItem
+    expect(normalized).toBeDefined()
+    expect(normalized.sourceStart).toBe(0)
+    expect(normalized.sourceEnd).toBe(300)
+  })
 
   it('rate stretch preserves legacy end-only split bounds', () => {
     const legacySplit = makeVideoItem({
@@ -200,20 +357,27 @@ describe('items-store rate stretch', () => {
       sourceEnd: 4809,
       sourceDuration: 4809,
       sourceFps: 23.981,
-    });
+    })
 
-    useItemsStore.getState().setItems([legacySplit]);
-    useItemsStore.getState()._rateStretchItem('legacy-end-only-stretch', 3985, 1661, 1.223);
+    useItemsStore.getState().setItems([legacySplit])
+    useItemsStore.getState()._rateStretchItem('legacy-end-only-stretch', 3985, 1661, 1.223)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'legacy-end-only-stretch') as VideoItem;
-    expect(updated).toBeDefined();
-    expect(updated.sourceStart).toBe(0);
-    expect(updated.sourceEnd).toBe(4809);
-    expect(updated.durationInFrames).toBe(1661);
+    const updated = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'legacy-end-only-stretch') as VideoItem
+    expect(updated).toBeDefined()
+    expect(updated.sourceStart).toBe(0)
+    expect(updated.sourceEnd).toBe(4809)
+    expect(updated.durationInFrames).toBe(1661)
 
-    const needed = timelineToSourceFrames(updated.durationInFrames, updated.speed ?? 1, 30, updated.sourceFps ?? 30);
-    expect(needed).toBe((updated.sourceEnd ?? 0) - (updated.sourceStart ?? 0));
-  });
+    const needed = timelineToSourceFrames(
+      updated.durationInFrames,
+      updated.speed ?? 1,
+      30,
+      updated.sourceFps ?? 30,
+    )
+    expect(needed).toBe((updated.sourceEnd ?? 0) - (updated.sourceStart ?? 0))
+  })
 
   it('trim end on explicit split bounds applies delta-based sourceEnd update', () => {
     const splitClip = makeVideoItem({
@@ -225,27 +389,29 @@ describe('items-store rate stretch', () => {
       sourceDuration: 4809,
       sourceFps: 23.981,
       speed: 1,
-    });
+    })
 
-    useItemsStore.getState().setItems([splitClip]);
-    useItemsStore.getState()._trimItemEnd('trim-end-split', -164);
+    useItemsStore.getState().setItems([splitClip])
+    useItemsStore.getState()._trimItemEnd('trim-end-split', -164)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'trim-end-split') as VideoItem;
-    expect(updated).toBeDefined();
-    expect(updated.durationInFrames).toBe(1867);
+    const updated = useItemsStore
+      .getState()
+      .items.find((i) => i.id === 'trim-end-split') as VideoItem
+    expect(updated).toBeDefined()
+    expect(updated.durationInFrames).toBe(1867)
     // -164 timeline frames at 30fps equals -131 source frames at 23.981fps.
-    expect(updated.sourceEnd).toBe(4678);
-    expect(updated.sourceStart).toBe(3185);
-    expect(updated.sourceDuration).toBe(4809);
-  });
-});
+    expect(updated.sourceEnd).toBe(4678)
+    expect(updated.sourceStart).toBe(3185)
+    expect(updated.sourceDuration).toBe(4809)
+  })
+})
 
 describe('items-store indexes', () => {
   beforeEach(() => {
-    useTimelineSettingsStore.setState({ fps: 30 });
-    useItemsStore.getState().setItems([]);
-    useItemsStore.getState().setTracks([]);
-  });
+    useTimelineSettingsStore.setState({ fps: 30 })
+    useItemsStore.getState().setItems([])
+    useItemsStore.getState().setTracks([])
+  })
 
   it('indexes legacy generated captions as replaceable for their containing clip', () => {
     const clip = makeVideoItem({
@@ -253,7 +419,7 @@ describe('items-store indexes', () => {
       from: 200,
       durationInFrames: 40,
       mediaId: 'media-legacy',
-    });
+    })
     const legacyCaption = makeTextItem({
       id: 'legacy-caption',
       from: 205,
@@ -261,12 +427,31 @@ describe('items-store indexes', () => {
       mediaId: 'media-legacy',
       label: 'Legacy caption',
       text: 'Legacy caption',
-    });
+    })
 
-    useItemsStore.getState().setItems([clip, legacyCaption]);
+    useItemsStore.getState().setItems([clip, legacyCaption])
 
-    expect(useItemsStore.getState().replaceableCaptionClipIds.has('legacy-clip')).toBe(true);
-  });
+    expect(useItemsStore.getState().replaceableCaptionClipIds.has('legacy-clip')).toBe(true)
+  })
+
+  it('indexes transcript subtitle segments as replaceable for their source clip', () => {
+    const clip = makeVideoItem({
+      id: 'transcript-clip',
+      mediaId: 'media-transcript',
+    })
+    const transcriptSegment = makeSubtitleItem({
+      source: {
+        type: 'transcript',
+        mediaId: 'media-transcript',
+        clipId: 'transcript-clip',
+      },
+      mediaId: 'media-transcript',
+    })
+
+    useItemsStore.getState().setItems([clip, transcriptSegment])
+
+    expect(useItemsStore.getState().replaceableCaptionClipIds.has('transcript-clip')).toBe(true)
+  })
 
   it('indexes legacy linked audio/video pairs for O(1) lookups', () => {
     const video = makeVideoItem({
@@ -275,31 +460,64 @@ describe('items-store indexes', () => {
       mediaId: 'media-legacy',
       from: 120,
       durationInFrames: 48,
-    });
+    })
     const audio = makeAudioItem({
       id: 'audio-legacy',
       originId: 'origin-1',
       mediaId: 'media-legacy',
       from: 120,
       durationInFrames: 48,
-    });
+    })
 
-    useItemsStore.getState().setItems([video, audio]);
+    useItemsStore.getState().setItems([video, audio])
 
-    const linkedVideoItems = useItemsStore.getState().linkedItemsByItemId['video-legacy'];
-    const linkedAudioItems = useItemsStore.getState().linkedItemsByItemId['audio-legacy'];
+    const linkedVideoItems = useItemsStore.getState().linkedItemsByItemId['video-legacy']
+    const linkedAudioItems = useItemsStore.getState().linkedItemsByItemId['audio-legacy']
 
-    expect(linkedVideoItems?.map((item) => item.id)).toEqual(['video-legacy', 'audio-legacy']);
-    expect(linkedAudioItems?.map((item) => item.id)).toEqual(['video-legacy', 'audio-legacy']);
-  });
-});
+    expect(linkedVideoItems?.map((item) => item.id)).toEqual(['video-legacy', 'audio-legacy'])
+    expect(linkedAudioItems?.map((item) => item.id)).toEqual(['video-legacy', 'audio-legacy'])
+  })
+})
+
+describe('items-store shape mask normalization', () => {
+  beforeEach(() => {
+    useItemsStore.getState().setItems([])
+    useItemsStore.getState().setTracks([])
+  })
+
+  it('forces shape masks to normal blend mode when loading old item data', () => {
+    useItemsStore.getState().setItems([
+      makeShapeItem({
+        isMask: true,
+        blendMode: 'dissolve',
+      }),
+    ])
+
+    const mask = useItemsStore.getState().items[0] as ShapeItem
+    expect(mask.blendMode).toBe('normal')
+  })
+
+  it('forces shape masks to normal blend mode when an update enables mask mode', () => {
+    useItemsStore.getState().setItems([
+      makeShapeItem({
+        blendMode: 'dissolve',
+      }),
+    ])
+
+    useItemsStore.getState()._updateItem('shape-1', { isMask: true })
+
+    const mask = useItemsStore.getState().items[0] as ShapeItem
+    expect(mask.isMask).toBe(true)
+    expect(mask.blendMode).toBe('normal')
+  })
+})
 
 describe('rolling edit', () => {
   beforeEach(() => {
-    useTimelineSettingsStore.setState({ fps: 30 });
-    useItemsStore.getState().setItems([]);
-    useItemsStore.getState().setTracks([]);
-  });
+    useTimelineSettingsStore.setState({ fps: 30 })
+    useItemsStore.getState().setItems([])
+    useItemsStore.getState().setTracks([])
+  })
 
   it('moves edit point right between adjacent same-track clips (positive delta)', () => {
     const left = makeVideoItem({
@@ -311,7 +529,7 @@ describe('rolling edit', () => {
       sourceEnd: 200,
       sourceDuration: 200,
       sourceFps: 30,
-    });
+    })
     const right = makeVideoItem({
       id: 'right',
       trackId: 'track-1',
@@ -322,25 +540,25 @@ describe('rolling edit', () => {
       sourceDuration: 200,
       sourceFps: 30,
       mediaId: 'media-2',
-    });
+    })
 
-    useItemsStore.getState().setItems([left, right]);
+    useItemsStore.getState().setItems([left, right])
 
     // Move edit point right by 20 frames
-    rollingTrimItems('left', 'right', 20);
+    rollingTrimItems('left', 'right', 20)
 
-    const items = useItemsStore.getState().items;
-    const updatedLeft = items.find((i) => i.id === 'left')!;
-    const updatedRight = items.find((i) => i.id === 'right')!;
+    const items = useItemsStore.getState().items
+    const updatedLeft = items.find((i) => i.id === 'left')!
+    const updatedRight = items.find((i) => i.id === 'right')!
 
     // Left clip extended by 20
-    expect(updatedLeft.durationInFrames).toBe(120);
+    expect(updatedLeft.durationInFrames).toBe(120)
     // Right clip shrunk by 20, start moved right by 20
-    expect(updatedRight.from).toBe(120);
-    expect(updatedRight.durationInFrames).toBe(80);
+    expect(updatedRight.from).toBe(120)
+    expect(updatedRight.durationInFrames).toBe(80)
     // Total duration unchanged
-    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(200);
-  });
+    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(200)
+  })
 
   it('moves edit point left between adjacent same-track clips (negative delta)', () => {
     const left = makeVideoItem({
@@ -352,7 +570,7 @@ describe('rolling edit', () => {
       sourceEnd: 200,
       sourceDuration: 200,
       sourceFps: 30,
-    });
+    })
     // Right clip starts at source frame 50 so it has room to extend left
     const right = makeVideoItem({
       id: 'right',
@@ -364,25 +582,25 @@ describe('rolling edit', () => {
       sourceDuration: 250,
       sourceFps: 30,
       mediaId: 'media-2',
-    });
+    })
 
-    useItemsStore.getState().setItems([left, right]);
+    useItemsStore.getState().setItems([left, right])
 
     // Move edit point left by 30 frames
-    rollingTrimItems('left', 'right', -30);
+    rollingTrimItems('left', 'right', -30)
 
-    const items = useItemsStore.getState().items;
-    const updatedLeft = items.find((i) => i.id === 'left')!;
-    const updatedRight = items.find((i) => i.id === 'right')!;
+    const items = useItemsStore.getState().items
+    const updatedLeft = items.find((i) => i.id === 'left')!
+    const updatedRight = items.find((i) => i.id === 'right')!
 
     // Left clip shrunk by 30
-    expect(updatedLeft.durationInFrames).toBe(70);
+    expect(updatedLeft.durationInFrames).toBe(70)
     // Right clip extended by 30, start moved left by 30
-    expect(updatedRight.from).toBe(70);
-    expect(updatedRight.durationInFrames).toBe(130);
+    expect(updatedRight.from).toBe(70)
+    expect(updatedRight.durationInFrames).toBe(130)
     // Total duration unchanged
-    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(200);
-  });
+    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(200)
+  })
 
   it('does nothing when editPointDelta is zero', () => {
     const left = makeVideoItem({
@@ -390,22 +608,22 @@ describe('rolling edit', () => {
       trackId: 'track-1',
       from: 0,
       durationInFrames: 100,
-    });
+    })
     const right = makeVideoItem({
       id: 'right',
       trackId: 'track-1',
       from: 100,
       durationInFrames: 100,
       mediaId: 'media-2',
-    });
+    })
 
-    useItemsStore.getState().setItems([left, right]);
-    rollingTrimItems('left', 'right', 0);
+    useItemsStore.getState().setItems([left, right])
+    rollingTrimItems('left', 'right', 0)
 
-    const items = useItemsStore.getState().items;
-    expect(items.find((i) => i.id === 'left')!.durationInFrames).toBe(100);
-    expect(items.find((i) => i.id === 'right')!.durationInFrames).toBe(100);
-  });
+    const items = useItemsStore.getState().items
+    expect(items.find((i) => i.id === 'left')!.durationInFrames).toBe(100)
+    expect(items.find((i) => i.id === 'right')!.durationInFrames).toBe(100)
+  })
 
   it('clamps delta when right clip is too short to shrink by full amount', () => {
     const left = makeVideoItem({
@@ -417,7 +635,7 @@ describe('rolling edit', () => {
       sourceEnd: 200,
       sourceDuration: 200,
       sourceFps: 30,
-    });
+    })
     // Right clip is only 40 frames long — min-duration guard (1 frame) limits
     // shrink to 39, so a delta of 90 gets clamped.
     const right = makeVideoItem({
@@ -430,25 +648,25 @@ describe('rolling edit', () => {
       sourceDuration: 200,
       sourceFps: 30,
       mediaId: 'media-2',
-    });
+    })
 
-    useItemsStore.getState().setItems([left, right]);
+    useItemsStore.getState().setItems([left, right])
 
     // Request 90 but right can only shrink by 39 (100 - 1 min duration)
-    rollingTrimItems('left', 'right', 90);
+    rollingTrimItems('left', 'right', 90)
 
-    const items = useItemsStore.getState().items;
-    const updatedLeft = items.find((i) => i.id === 'left')!;
-    const updatedRight = items.find((i) => i.id === 'right')!;
+    const items = useItemsStore.getState().items
+    const updatedLeft = items.find((i) => i.id === 'left')!
+    const updatedRight = items.find((i) => i.id === 'right')!
 
     // Right clamped to minimum 1 frame (shrank by 39, not 90)
-    expect(updatedRight.durationInFrames).toBe(1);
-    expect(updatedRight.from).toBe(139);
+    expect(updatedRight.durationInFrames).toBe(1)
+    expect(updatedRight.from).toBe(139)
     // Left extended by 39 (adjacency-clamped to freed space)
-    expect(updatedLeft.durationInFrames).toBe(139);
+    expect(updatedLeft.durationInFrames).toBe(139)
     // Total duration unchanged
-    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(140);
+    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(140)
     // Clips remain adjacent
-    expect(updatedLeft.from + updatedLeft.durationInFrames).toBe(updatedRight.from);
-  });
-});
+    expect(updatedLeft.from + updatedLeft.durationInFrames).toBe(updatedRight.from)
+  })
+})

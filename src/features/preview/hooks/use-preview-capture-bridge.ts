@@ -1,17 +1,21 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
-import type { CaptureOptions } from '@/shared/state/playback';
+import { useEffect, useRef, type MutableRefObject } from 'react'
+import type { CaptureOptions } from '@/shared/state/playback'
 
 interface UsePreviewCaptureBridgeParams {
-  captureCurrentFrame: (options?: CaptureOptions) => Promise<string | null>;
-  captureCurrentFrameImageData: (options?: CaptureOptions) => Promise<ImageData | null>;
-  captureCanvasSource: () => Promise<OffscreenCanvas | HTMLCanvasElement | null>;
-  setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void;
-  setCaptureFrameImageData: (fn: ((options?: CaptureOptions) => Promise<ImageData | null>) | null) => void;
-  setCaptureCanvasSource: (fn: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null) => void;
-  setDisplayedFrame: (frame: number | null) => void;
-  captureInFlightRef: MutableRefObject<Promise<string | null> | null>;
-  captureImageDataInFlightRef: MutableRefObject<Promise<ImageData | null> | null>;
-  captureScaleCanvasRef: MutableRefObject<HTMLCanvasElement | null>;
+  captureCurrentFrame: (options?: CaptureOptions) => Promise<string | null>
+  captureCurrentFrameImageData: (options?: CaptureOptions) => Promise<ImageData | null>
+  captureCanvasSource: () => Promise<OffscreenCanvas | HTMLCanvasElement | null>
+  setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void
+  setCaptureFrameImageData: (
+    fn: ((options?: CaptureOptions) => Promise<ImageData | null>) | null,
+  ) => void
+  setCaptureCanvasSource: (
+    fn: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null,
+  ) => void
+  setDisplayedFrame: (frame: number | null) => void
+  captureInFlightRef: MutableRefObject<Promise<string | null> | null>
+  captureImageDataInFlightRef: MutableRefObject<Promise<ImageData | null> | null>
+  captureScaleCanvasRef: MutableRefObject<HTMLCanvasElement | null>
 }
 
 export function usePreviewCaptureBridge({
@@ -26,30 +30,30 @@ export function usePreviewCaptureBridge({
   captureImageDataInFlightRef,
   captureScaleCanvasRef,
 }: UsePreviewCaptureBridgeParams) {
-  const unmountingRef = useRef(false);
+  const unmountingRef = useRef(false)
 
   useEffect(() => {
-    unmountingRef.current = false;
+    unmountingRef.current = false
     return () => {
-      unmountingRef.current = true;
-    };
-  }, []);
+      unmountingRef.current = true
+    }
+  }, [])
 
   useEffect(() => {
-    setCaptureFrame(captureCurrentFrame);
-    setCaptureFrameImageData(captureCurrentFrameImageData);
-    setCaptureCanvasSource(captureCanvasSource);
+    setCaptureFrame(captureCurrentFrame)
+    setCaptureFrameImageData(captureCurrentFrameImageData)
+    setCaptureCanvasSource(captureCanvasSource)
     return () => {
-      setCaptureFrame(null);
-      setCaptureFrameImageData(null);
-      setCaptureCanvasSource(null);
+      setCaptureFrame(null)
+      setCaptureFrameImageData(null)
+      setCaptureCanvasSource(null)
       if (unmountingRef.current) {
-        setDisplayedFrame(null);
+        setDisplayedFrame(null)
       }
-      captureInFlightRef.current = null;
-      captureImageDataInFlightRef.current = null;
-      captureScaleCanvasRef.current = null;
-    };
+      captureInFlightRef.current = null
+      captureImageDataInFlightRef.current = null
+      captureScaleCanvasRef.current = null
+    }
   }, [
     captureCanvasSource,
     captureCurrentFrame,
@@ -61,5 +65,5 @@ export function usePreviewCaptureBridge({
     setCaptureFrame,
     setCaptureFrameImageData,
     setDisplayedFrame,
-  ]);
+  ])
 }

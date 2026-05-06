@@ -12,13 +12,13 @@
  * Distance: ∆E 2000 so perceptual differences drive cluster membership.
  */
 
-import { deltaE2000, type LabColor, type PaletteEntry } from '../deps/analysis';
+import { deltaE2000, type LabColor, type PaletteEntry } from '../deps/analysis'
 
 export interface LabCluster extends LabColor {
   /** Sum of pixel-coverage weights of all entries in the cluster. */
-  weight: number;
+  weight: number
   /** Count of raw palette entries that landed here. */
-  count: number;
+  count: number
 }
 
 /**
@@ -29,21 +29,21 @@ export interface LabCluster extends LabColor {
 export function flattenLibraryPalettes(
   palettesBySource: Iterable<PaletteEntry[] | undefined>,
 ): PaletteEntry[] {
-  const flat: PaletteEntry[] = [];
+  const flat: PaletteEntry[] = []
   for (const palette of palettesBySource) {
-    if (!palette || palette.length === 0) continue;
-    const total = palette.reduce((sum, e) => sum + e.weight, 0);
-    if (total <= 0) continue;
+    if (!palette || palette.length === 0) continue
+    const total = palette.reduce((sum, e) => sum + e.weight, 0)
+    if (total <= 0) continue
     for (const entry of palette) {
       flat.push({
         l: entry.l,
         a: entry.a,
         b: entry.b,
         weight: entry.weight / total,
-      });
+      })
     }
   }
-  return flat;
+  return flat
 }
 
 /**
@@ -56,48 +56,57 @@ export function clusterPaletteEntries(
   k: number,
   maxIter = 20,
 ): LabCluster[] {
-  if (entries.length === 0 || k <= 0) return [];
-  const effectiveK = Math.min(k, entries.length);
+  if (entries.length === 0 || k <= 0) return []
+  const effectiveK = Math.min(k, entries.length)
 
-  const centers: LabColor[] = seedCentersKMeansPP(entries, effectiveK);
+  const centers: LabColor[] = seedCentersKMeansPP(entries, effectiveK)
 
   for (let iter = 0; iter < maxIter; iter += 1) {
-    const assignments = assignEntriesToCenters(entries, centers);
-    const { centers: nextCenters, weights, counts } = recomputeCenters(entries, assignments, centers.length);
-    if (nextCenters.length === 0) break;
+    const assignments = assignEntriesToCenters(entries, centers)
+    const {
+      centers: nextCenters,
+      weights,
+      counts,
+    } = recomputeCenters(entries, assignments, centers.length)
+    if (nextCenters.length === 0) break
 
-    const converged = nextCenters.length === centers.length
-      && nextCenters.every((c, i) => {
-        const prev = centers[i];
-        return prev !== undefined && deltaE2000(c, prev) < 0.5;
-      });
+    const converged =
+      nextCenters.length === centers.length &&
+      nextCenters.every((c, i) => {
+        const prev = centers[i]
+        return prev !== undefined && deltaE2000(c, prev) < 0.5
+      })
 
-    centers.length = 0;
-    centers.push(...nextCenters);
+    centers.length = 0
+    centers.push(...nextCenters)
 
     if (converged) {
       return centers.map((c, i) => ({
-        l: c.l, a: c.a, b: c.b,
+        l: c.l,
+        a: c.a,
+        b: c.b,
         weight: weights[i] ?? 0,
         count: counts[i] ?? 0,
-      }));
+      }))
     }
   }
 
   // Final assignment for weights/counts when we exhaust iterations.
-  const assignments = assignEntriesToCenters(entries, centers);
-  const weights = new Array<number>(centers.length).fill(0);
-  const counts = new Array<number>(centers.length).fill(0);
+  const assignments = assignEntriesToCenters(entries, centers)
+  const weights = new Array<number>(centers.length).fill(0)
+  const counts = new Array<number>(centers.length).fill(0)
   for (let i = 0; i < entries.length; i += 1) {
-    const k = assignments[i]!;
-    weights[k] = (weights[k] ?? 0) + entries[i]!.weight;
-    counts[k] = (counts[k] ?? 0) + 1;
+    const k = assignments[i]!
+    weights[k] = (weights[k] ?? 0) + entries[i]!.weight
+    counts[k] = (counts[k] ?? 0) + 1
   }
   return centers.map((c, i) => ({
-    l: c.l, a: c.a, b: c.b,
+    l: c.l,
+    a: c.a,
+    b: c.b,
     weight: weights[i] ?? 0,
     count: counts[i] ?? 0,
-  }));
+  }))
 }
 
 function seedCentersKMeansPP(entries: PaletteEntry[], k: number): LabColor[] {
@@ -106,53 +115,53 @@ function seedCentersKMeansPP(entries: PaletteEntry[], k: number): LabColor[] {
   // maximizes min-distance-to-existing × weight (D² weighted sampling
   // argmax instead of random sampling — same asymptotic quality, stable
   // output).
-  let heaviest = 0;
+  let heaviest = 0
   for (let i = 1; i < entries.length; i += 1) {
-    if (entries[i]!.weight > entries[heaviest]!.weight) heaviest = i;
+    if (entries[i]!.weight > entries[heaviest]!.weight) heaviest = i
   }
-  const seed = entries[heaviest]!;
-  const centers: LabColor[] = [{ l: seed.l, a: seed.a, b: seed.b }];
+  const seed = entries[heaviest]!
+  const centers: LabColor[] = [{ l: seed.l, a: seed.a, b: seed.b }]
 
   while (centers.length < k) {
-    let bestIdx = -1;
-    let bestScore = -1;
+    let bestIdx = -1
+    let bestScore = -1
     for (let i = 0; i < entries.length; i += 1) {
-      const entry = entries[i]!;
-      let minD = Number.POSITIVE_INFINITY;
+      const entry = entries[i]!
+      let minD = Number.POSITIVE_INFINITY
       for (const c of centers) {
-        const d = deltaE2000(c, { l: entry.l, a: entry.a, b: entry.b });
-        if (d < minD) minD = d;
+        const d = deltaE2000(c, { l: entry.l, a: entry.a, b: entry.b })
+        if (d < minD) minD = d
       }
-      if (!Number.isFinite(minD)) continue;
-      const score = minD * minD * entry.weight;
+      if (!Number.isFinite(minD)) continue
+      const score = minD * minD * entry.weight
       if (score > bestScore) {
-        bestScore = score;
-        bestIdx = i;
+        bestScore = score
+        bestIdx = i
       }
     }
-    if (bestIdx < 0 || bestScore <= 0) break;
-    const picked = entries[bestIdx]!;
-    centers.push({ l: picked.l, a: picked.a, b: picked.b });
+    if (bestIdx < 0 || bestScore <= 0) break
+    const picked = entries[bestIdx]!
+    centers.push({ l: picked.l, a: picked.a, b: picked.b })
   }
-  return centers;
+  return centers
 }
 
-function assignEntriesToCenters(
-  entries: PaletteEntry[],
-  centers: LabColor[],
-): number[] {
-  const out = new Array<number>(entries.length);
+function assignEntriesToCenters(entries: PaletteEntry[], centers: LabColor[]): number[] {
+  const out = new Array<number>(entries.length)
   for (let i = 0; i < entries.length; i += 1) {
-    const entry = entries[i]!;
-    let bestK = 0;
-    let bestD = Number.POSITIVE_INFINITY;
+    const entry = entries[i]!
+    let bestK = 0
+    let bestD = Number.POSITIVE_INFINITY
     for (let k = 0; k < centers.length; k += 1) {
-      const d = deltaE2000(centers[k]!, { l: entry.l, a: entry.a, b: entry.b });
-      if (d < bestD) { bestD = d; bestK = k; }
+      const d = deltaE2000(centers[k]!, { l: entry.l, a: entry.a, b: entry.b })
+      if (d < bestD) {
+        bestD = d
+        bestK = k
+      }
     }
-    out[i] = bestK;
+    out[i] = bestK
   }
-  return out;
+  return out
 }
 
 function recomputeCenters(
@@ -160,31 +169,31 @@ function recomputeCenters(
   assignments: number[],
   k: number,
 ): { centers: LabColor[]; weights: number[]; counts: number[] } {
-  const sumL = new Array<number>(k).fill(0);
-  const sumA = new Array<number>(k).fill(0);
-  const sumB = new Array<number>(k).fill(0);
-  const sumW = new Array<number>(k).fill(0);
-  const counts = new Array<number>(k).fill(0);
+  const sumL = new Array<number>(k).fill(0)
+  const sumA = new Array<number>(k).fill(0)
+  const sumB = new Array<number>(k).fill(0)
+  const sumW = new Array<number>(k).fill(0)
+  const counts = new Array<number>(k).fill(0)
 
   for (let i = 0; i < entries.length; i += 1) {
-    const entry = entries[i]!;
-    const cluster = assignments[i]!;
-    sumL[cluster] = (sumL[cluster] ?? 0) + entry.l * entry.weight;
-    sumA[cluster] = (sumA[cluster] ?? 0) + entry.a * entry.weight;
-    sumB[cluster] = (sumB[cluster] ?? 0) + entry.b * entry.weight;
-    sumW[cluster] = (sumW[cluster] ?? 0) + entry.weight;
-    counts[cluster] = (counts[cluster] ?? 0) + 1;
+    const entry = entries[i]!
+    const cluster = assignments[i]!
+    sumL[cluster] = (sumL[cluster] ?? 0) + entry.l * entry.weight
+    sumA[cluster] = (sumA[cluster] ?? 0) + entry.a * entry.weight
+    sumB[cluster] = (sumB[cluster] ?? 0) + entry.b * entry.weight
+    sumW[cluster] = (sumW[cluster] ?? 0) + entry.weight
+    counts[cluster] = (counts[cluster] ?? 0) + 1
   }
 
-  const centers: LabColor[] = [];
-  const weights: number[] = [];
-  const outCounts: number[] = [];
+  const centers: LabColor[] = []
+  const weights: number[] = []
+  const outCounts: number[] = []
   for (let i = 0; i < k; i += 1) {
-    const w = sumW[i] ?? 0;
-    if (w <= 0) continue;
-    centers.push({ l: sumL[i]! / w, a: sumA[i]! / w, b: sumB[i]! / w });
-    weights.push(w);
-    outCounts.push(counts[i] ?? 0);
+    const w = sumW[i] ?? 0
+    if (w <= 0) continue
+    centers.push({ l: sumL[i]! / w, a: sumA[i]! / w, b: sumB[i]! / w })
+    weights.push(w)
+    outCounts.push(counts[i] ?? 0)
   }
-  return { centers, weights, counts: outCounts };
+  return { centers, weights, counts: outCounts }
 }

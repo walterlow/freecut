@@ -3,4 +3,4 @@
  * Preview modules should import settings stores through here.
  */
 
-export { useSettingsStore } from '@/features/settings/stores/settings-store';
+export { useSettingsStore } from '@/features/settings/stores/settings-store'

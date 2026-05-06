@@ -1,25 +1,27 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline';
-import { useSelectionStore } from '@/shared/state/selection';
-import { useProjectStore } from '@/features/timeline/deps/projects';
-import { useItemsStore } from '../items-store';
-import { useTransitionsStore } from '../transitions-store';
-import { useKeyframesStore } from '../keyframes-store';
-import { useTimelineCommandStore } from '../timeline-command-store';
-import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useCompositionsStore } from '../compositions-store';
-import { useCompositionNavigationStore } from '../composition-navigation-store';
-import { useEditorStore } from '@/app/state/editor';
+import { beforeEach, describe, expect, it } from 'vite-plus/test'
+import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import { useSelectionStore } from '@/shared/state/selection'
+import { useProjectStore } from '@/features/timeline/deps/projects'
+import { useItemsStore } from '../items-store'
+import { useTransitionsStore } from '../transitions-store'
+import { useKeyframesStore } from '../keyframes-store'
+import { useTimelineCommandStore } from '../timeline-command-store'
+import { useTimelineSettingsStore } from '../timeline-settings-store'
+import { useCompositionsStore } from '../compositions-store'
+import { useCompositionNavigationStore } from '../composition-navigation-store'
+import { useEditorStore } from '@/app/state/editor'
 import {
   createPreComp,
   deleteCompoundClips,
   dissolvePreComp,
   getCompoundClipDeletionImpact,
   renameCompoundClip,
-} from './composition-actions';
-import { splitItem } from './item-actions';
+} from './composition-actions'
+import { splitItem } from './item-actions'
 
-function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>): TimelineTrack {
+function makeTrack(
+  overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>,
+): TimelineTrack {
   return {
     height: 80,
     locked: false,
@@ -29,7 +31,7 @@ function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' 
     volume: 0,
     items: [],
     ...overrides,
-  };
+  }
 }
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
@@ -48,7 +50,7 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
     sourceDuration: 120,
     sourceFps: 30,
     ...overrides,
-  };
+  }
 }
 
 function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
@@ -67,21 +69,21 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
     sourceDuration: 120,
     sourceFps: 30,
     ...overrides,
-  };
+  }
 }
 
 describe('composition-actions split wrappers', () => {
   beforeEach(() => {
-    useItemsStore.getState().setTracks([]);
-    useItemsStore.getState().setItems([]);
-    useTransitionsStore.getState().setTransitions([]);
-    useKeyframesStore.getState().setKeyframes([]);
-    useCompositionsStore.getState().setCompositions([]);
-    useTimelineCommandStore.getState().clearHistory();
-    useCompositionNavigationStore.getState().resetToRoot();
-    useSelectionStore.getState().clearSelection();
-    useTimelineSettingsStore.getState().setFps(30);
-    useEditorStore.setState({ linkedSelectionEnabled: true });
+    useItemsStore.getState().setTracks([])
+    useItemsStore.getState().setItems([])
+    useTransitionsStore.getState().setTransitions([])
+    useKeyframesStore.getState().setKeyframes([])
+    useCompositionsStore.getState().setCompositions([])
+    useTimelineCommandStore.getState().clearHistory()
+    useCompositionNavigationStore.getState().resetToRoot()
+    useSelectionStore.getState().clearSelection()
+    useTimelineSettingsStore.getState().setFps(30)
+    useEditorStore.setState({ linkedSelectionEnabled: true })
     useProjectStore.getState().setCurrentProject({
       id: 'project-1',
       name: 'Project',
@@ -94,93 +96,120 @@ describe('composition-actions split wrappers', () => {
         height: 1080,
         fps: 30,
       },
-    });
-  });
+    })
+  })
 
   it('creates linked compound video and audio wrappers on paired tracks', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-    ]);
-    useItemsStore.getState().setItems([
-      makeVideoItem(),
-      makeAudioItem(),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
+      ])
+    useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()])
 
-    useSelectionStore.getState().selectItems(['video-1']);
+    useSelectionStore.getState().selectItems(['video-1'])
 
-    const created = createPreComp('Compound 1');
+    const created = createPreComp('Compound 1')
 
-    expect(created).toMatchObject({ type: 'composition', trackId: 'track-v1', label: 'Compound 1' });
-    expect(useCompositionsStore.getState().compositions).toHaveLength(1);
-    expect(useCompositionsStore.getState().compositions[0]?.tracks.map((track) => `${track.name}:${track.kind}`)).toEqual([
-      'V1:video',
-      'A1:audio',
-    ]);
+    expect(created).toMatchObject({ type: 'composition', trackId: 'track-v1', label: 'Compound 1' })
+    expect(useCompositionsStore.getState().compositions).toHaveLength(1)
+    expect(
+      useCompositionsStore
+        .getState()
+        .compositions[0]?.tracks.map((track) => `${track.name}:${track.kind}`),
+    ).toEqual(['V1:video', 'A1:audio'])
 
-    const wrapperItems = useItemsStore.getState().items;
-    expect(wrapperItems).toHaveLength(2);
-    const visualWrapper = wrapperItems.find((item) => item.type === 'composition');
-    const audioWrapper = wrapperItems.find((item) => item.type === 'audio' && item.compositionId);
-    expect(visualWrapper).toMatchObject({ trackId: 'track-v1', sourceStart: 0, sourceEnd: 60, sourceDuration: 60 });
-    expect(audioWrapper).toMatchObject({ trackId: 'track-a1', compositionId: visualWrapper?.compositionId, sourceStart: 0, sourceEnd: 60, sourceDuration: 60 });
-    expect(audioWrapper?.linkedGroupId).toBe(visualWrapper?.linkedGroupId);
-  });
+    const wrapperItems = useItemsStore.getState().items
+    expect(wrapperItems).toHaveLength(2)
+    const visualWrapper = wrapperItems.find((item) => item.type === 'composition')
+    const audioWrapper = wrapperItems.find((item) => item.type === 'audio' && item.compositionId)
+    expect(visualWrapper).toMatchObject({
+      trackId: 'track-v1',
+      sourceStart: 0,
+      sourceEnd: 60,
+      sourceDuration: 60,
+    })
+    expect(audioWrapper).toMatchObject({
+      trackId: 'track-a1',
+      compositionId: visualWrapper?.compositionId,
+      sourceStart: 0,
+      sourceEnd: 60,
+      sourceDuration: 60,
+    })
+    expect(audioWrapper?.linkedGroupId).toBe(visualWrapper?.linkedGroupId)
+  })
 
   it('dissolves linked compound wrappers back to original tracks', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-    ]);
-    useItemsStore.getState().setItems([
-      makeVideoItem(),
-      makeAudioItem(),
-    ]);
-    useSelectionStore.getState().selectItems(['video-1']);
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
+      ])
+    useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()])
+    useSelectionStore.getState().selectItems(['video-1'])
 
-    createPreComp('Compound 1');
+    createPreComp('Compound 1')
 
-    const visualWrapper = useItemsStore.getState().items.find((item) => item.type === 'composition');
-    expect(visualWrapper).toBeDefined();
+    const visualWrapper = useItemsStore.getState().items.find((item) => item.type === 'composition')
+    expect(visualWrapper).toBeDefined()
 
-    expect(dissolvePreComp(visualWrapper!.id)).toBe(true);
+    expect(dissolvePreComp(visualWrapper!.id)).toBe(true)
 
-    const restoredItems = useItemsStore.getState().items;
-    expect(restoredItems).toHaveLength(2);
-    expect(restoredItems.find((item) => item.type === 'video')).toMatchObject({ trackId: 'track-v1', from: 0, durationInFrames: 60 });
-    expect(restoredItems.find((item) => item.type === 'audio' && !item.compositionId)).toMatchObject({ trackId: 'track-a1', from: 0, durationInFrames: 60 });
-    expect(useCompositionsStore.getState().compositions).toHaveLength(0);
-  });
+    const restoredItems = useItemsStore.getState().items
+    expect(restoredItems).toHaveLength(2)
+    expect(restoredItems.find((item) => item.type === 'video')).toMatchObject({
+      trackId: 'track-v1',
+      from: 0,
+      durationInFrames: 60,
+    })
+    expect(
+      restoredItems.find((item) => item.type === 'audio' && !item.compositionId),
+    ).toMatchObject({ trackId: 'track-a1', from: 0, durationInFrames: 60 })
+    expect(useCompositionsStore.getState().compositions).toHaveLength(0)
+  })
 
   it('dissolves only the selected split wrapper window and keeps sibling wrappers', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-    ]);
-    useItemsStore.getState().setItems([
-      makeVideoItem(),
-      makeAudioItem(),
-    ]);
-    useSelectionStore.getState().selectItems(['video-1']);
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
+      ])
+    useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()])
+    useSelectionStore.getState().selectItems(['video-1'])
 
-    const created = createPreComp('Compound 1');
-    expect(created?.type).toBe('composition');
-    splitItem(created!.id, 30);
+    const created = createPreComp('Compound 1')
+    expect(created?.type).toBe('composition')
+    splitItem(created!.id, 30)
 
-    expect(dissolvePreComp(created!.id)).toBe(true);
+    expect(dissolvePreComp(created!.id)).toBe(true)
 
-    const items = useItemsStore.getState().items;
-    expect(items.find((item) => item.type === 'video' && !item.compositionId)).toMatchObject({ trackId: 'track-v1', from: 0, durationInFrames: 30, sourceStart: 0, sourceEnd: 30 });
-    expect(items.find((item) => item.type === 'audio' && !item.compositionId)).toMatchObject({ trackId: 'track-a1', from: 0, durationInFrames: 30, sourceStart: 0, sourceEnd: 30 });
-    expect(items.filter((item) => item.type === 'composition')).toHaveLength(1);
-    expect(items.filter((item) => item.type === 'audio' && item.compositionId)).toHaveLength(1);
-    expect(useCompositionsStore.getState().compositions).toHaveLength(1);
-  });
+    const items = useItemsStore.getState().items
+    expect(items.find((item) => item.type === 'video' && !item.compositionId)).toMatchObject({
+      trackId: 'track-v1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 30,
+    })
+    expect(items.find((item) => item.type === 'audio' && !item.compositionId)).toMatchObject({
+      trackId: 'track-a1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 30,
+    })
+    expect(items.filter((item) => item.type === 'composition')).toHaveLength(1)
+    expect(items.filter((item) => item.type === 'audio' && item.compositionId)).toHaveLength(1)
+    expect(useCompositionsStore.getState().compositions).toHaveLength(1)
+  })
 
   it('preserves internal transitions when dissolving a compound clip', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 })])
     useItemsStore.getState().setItems([
       makeVideoItem({
         id: 'video-1',
@@ -204,47 +233,49 @@ describe('composition-actions split wrappers', () => {
         sourceEnd: 120,
         sourceDuration: 180,
       }),
-    ]);
-    useTransitionsStore.getState().setTransitions([{
-      id: 'transition-1',
-      leftClipId: 'video-1',
-      rightClipId: 'video-2',
-      trackId: 'track-v1',
-      type: 'crossfade',
-      durationInFrames: 12,
-      presentation: 'fade',
-      timing: 'linear',
-      alignment: 0.5,
-    }]);
-    useSelectionStore.getState().selectItems(['video-1', 'video-2']);
+    ])
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        leftClipId: 'video-1',
+        rightClipId: 'video-2',
+        trackId: 'track-v1',
+        type: 'crossfade',
+        durationInFrames: 12,
+        presentation: 'fade',
+        timing: 'linear',
+        alignment: 0.5,
+      },
+    ])
+    useSelectionStore.getState().selectItems(['video-1', 'video-2'])
 
-    const created = createPreComp('Compound 1');
-    expect(created?.type).toBe('composition');
-    expect(useCompositionsStore.getState().compositions[0]?.transitions).toHaveLength(1);
+    const created = createPreComp('Compound 1')
+    expect(created?.type).toBe('composition')
+    expect(useCompositionsStore.getState().compositions[0]?.transitions).toHaveLength(1)
 
-    expect(dissolvePreComp(created!.id)).toBe(true);
+    expect(dissolvePreComp(created!.id)).toBe(true)
 
-    const restoredItems = useItemsStore.getState().items.filter((item) => item.type === 'video');
-    const restoredIds = new Set(restoredItems.map((item) => item.id));
-    const restoredTransitions = useTransitionsStore.getState().transitions;
+    const restoredItems = useItemsStore.getState().items.filter((item) => item.type === 'video')
+    const restoredIds = new Set(restoredItems.map((item) => item.id))
+    const restoredTransitions = useTransitionsStore.getState().transitions
 
-    expect(restoredItems).toHaveLength(2);
-    expect(restoredTransitions).toHaveLength(1);
+    expect(restoredItems).toHaveLength(2)
+    expect(restoredTransitions).toHaveLength(1)
     expect(restoredTransitions[0]).toMatchObject({
       type: 'crossfade',
       durationInFrames: 12,
       trackId: 'track-v1',
       timing: 'linear',
       alignment: 0.5,
-    });
-    expect(restoredIds.has(restoredTransitions[0]!.leftClipId)).toBe(true);
-    expect(restoredIds.has(restoredTransitions[0]!.rightClipId)).toBe(true);
-  });
+    })
+    expect(restoredIds.has(restoredTransitions[0]!.leftClipId)).toBe(true)
+    expect(restoredIds.has(restoredTransitions[0]!.rightClipId)).toBe(true)
+  })
 
   it('keeps a shared compound definition when dissolving one instance and another still exists', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 })])
     useItemsStore.getState().setItems([
       {
         id: 'comp-a-first',
@@ -270,7 +301,7 @@ describe('composition-actions split wrappers', () => {
         compositionHeight: 1080,
         transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
       },
-    ]);
+    ])
     useCompositionsStore.getState().setCompositions([
       {
         id: 'comp-a',
@@ -284,19 +315,23 @@ describe('composition-actions split wrappers', () => {
         height: 1080,
         durationInFrames: 60,
       },
-    ]);
+    ])
 
-    expect(dissolvePreComp('comp-a-first')).toBe(true);
+    expect(dissolvePreComp('comp-a-first')).toBe(true)
 
-    expect(useCompositionsStore.getState().getComposition('comp-a')).toBeDefined();
-    expect(useItemsStore.getState().items.some((item) => item.id === 'comp-a-second')).toBe(true);
-    expect(useItemsStore.getState().items.some((item) => item.type === 'video' && item.id !== 'comp-a-second')).toBe(true);
-  });
+    expect(useCompositionsStore.getState().getComposition('comp-a')).toBeDefined()
+    expect(useItemsStore.getState().items.some((item) => item.id === 'comp-a-second')).toBe(true)
+    expect(
+      useItemsStore
+        .getState()
+        .items.some((item) => item.type === 'video' && item.id !== 'comp-a-second'),
+    ).toBe(true)
+  })
 
   it('creates compound clip track with video kind when selection is a single mask shape', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 })])
     useItemsStore.getState().setItems([
       {
         id: 'shape-mask-1',
@@ -309,45 +344,43 @@ describe('composition-actions split wrappers', () => {
         fillColor: '#ffffff',
         isMask: true,
       },
-    ]);
-    useSelectionStore.getState().selectItems(['shape-mask-1']);
+    ])
+    useSelectionStore.getState().selectItems(['shape-mask-1'])
 
-    const created = createPreComp('Compound Mask');
-    expect(created).toMatchObject({ type: 'composition', trackId: 'track-v1' });
+    const created = createPreComp('Compound Mask')
+    expect(created).toMatchObject({ type: 'composition', trackId: 'track-v1' })
 
-    const subComp = useCompositionsStore.getState().compositions[0];
-    expect(subComp).toBeDefined();
-    expect(subComp!.tracks).toHaveLength(1);
-    const subTrack = subComp!.tracks[0]!;
-    expect(subTrack.kind).toBe('video');
-    expect(subComp!.items).toHaveLength(1);
-    const subItem = subComp!.items[0]!;
-    expect(subItem.trackId).toBe(subTrack.id);
-    expect(subItem.type).toBe('shape');
-    expect(subItem.type === 'shape' && subItem.isMask).toBe(true);
+    const subComp = useCompositionsStore.getState().compositions[0]
+    expect(subComp).toBeDefined()
+    expect(subComp!.tracks).toHaveLength(1)
+    const subTrack = subComp!.tracks[0]!
+    expect(subTrack.kind).toBe('video')
+    expect(subComp!.items).toHaveLength(1)
+    const subItem = subComp!.items[0]!
+    expect(subItem.trackId).toBe(subTrack.id)
+    expect(subItem.type).toBe('shape')
+    expect(subItem.type === 'shape' && subItem.isMask).toBe(true)
 
-    useCompositionNavigationStore.getState().enterComposition(subComp!.id, 'Compound Mask');
-    const loadedTracks = useItemsStore.getState().tracks;
-    expect(loadedTracks).toHaveLength(1);
-    expect(loadedTracks[0]!.kind).toBe('video');
-    expect(loadedTracks[0]!.id).toBe(subTrack.id);
-    const loadedItems = useItemsStore.getState().items;
-    expect(loadedItems).toHaveLength(1);
-    expect(loadedItems[0]!.trackId).toBe(subTrack.id);
-    const loadedItem = loadedItems[0]!;
-    expect(loadedItem.type === 'shape' && loadedItem.isMask).toBe(true);
-  });
+    useCompositionNavigationStore.getState().enterComposition(subComp!.id, 'Compound Mask')
+    const loadedTracks = useItemsStore.getState().tracks
+    expect(loadedTracks).toHaveLength(1)
+    expect(loadedTracks[0]!.kind).toBe('video')
+    expect(loadedTracks[0]!.id).toBe(subTrack.id)
+    const loadedItems = useItemsStore.getState().items
+    expect(loadedItems).toHaveLength(1)
+    expect(loadedItems[0]!.trackId).toBe(subTrack.id)
+    const loadedItem = loadedItems[0]!
+    expect(loadedItem.type === 'shape' && loadedItem.isMask).toBe(true)
+  })
 
   it('creates nested compound clips while editing inside another compound clip', () => {
-    useItemsStore.getState().setTracks([]);
-    useItemsStore.getState().setItems([]);
+    useItemsStore.getState().setTracks([])
+    useItemsStore.getState().setItems([])
     useCompositionsStore.getState().setCompositions([
       {
         id: 'comp-parent',
         name: 'Parent',
-        tracks: [
-          makeTrack({ id: 'comp-track-v1', name: 'V1', kind: 'video', order: 0 }),
-        ],
+        tracks: [makeTrack({ id: 'comp-track-v1', name: 'V1', kind: 'video', order: 0 })],
         items: [
           makeVideoItem({
             id: 'nested-video-1',
@@ -379,25 +412,29 @@ describe('composition-actions split wrappers', () => {
         height: 1080,
         durationInFrames: 80,
       },
-    ]);
+    ])
 
-    useCompositionNavigationStore.getState().enterComposition('comp-parent', 'Parent');
-    useSelectionStore.getState().selectItems(['nested-video-1', 'nested-video-2']);
+    useCompositionNavigationStore.getState().enterComposition('comp-parent', 'Parent')
+    useSelectionStore.getState().selectItems(['nested-video-1', 'nested-video-2'])
 
-    const created = createPreComp('Nested Compound');
+    const created = createPreComp('Nested Compound')
 
-    expect(created).toMatchObject({ type: 'composition', label: 'Nested Compound' });
-    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('comp-parent');
-    expect(useCompositionsStore.getState().compositions).toHaveLength(2);
-    expect(useItemsStore.getState().items.filter((item) => item.type === 'composition')).toHaveLength(1);
-  });
+    expect(created).toMatchObject({ type: 'composition', label: 'Nested Compound' })
+    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('comp-parent')
+    expect(useCompositionsStore.getState().compositions).toHaveLength(2)
+    expect(
+      useItemsStore.getState().items.filter((item) => item.type === 'composition'),
+    ).toHaveLength(1)
+  })
 
   it('preserves compound audio tracks when wrapping a compound clip with linked selection off', () => {
-    useEditorStore.setState({ linkedSelectionEnabled: false });
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-    ]);
+    useEditorStore.setState({ linkedSelectionEnabled: false })
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
+      ])
     useItemsStore.getState().setItems([
       {
         id: 'comp-visual',
@@ -423,7 +460,7 @@ describe('composition-actions split wrappers', () => {
         linkedGroupId: 'linked-1',
         src: '',
       } satisfies AudioItem,
-    ]);
+    ])
     useCompositionsStore.getState().setCompositions([
       {
         id: 'comp-1',
@@ -449,29 +486,37 @@ describe('composition-actions split wrappers', () => {
         height: 1080,
         durationInFrames: 60,
       },
-    ]);
+    ])
 
-    useSelectionStore.getState().selectItems(['comp-visual']);
+    useSelectionStore.getState().selectItems(['comp-visual'])
 
-    const created = createPreComp('Wrapped Compound');
+    const created = createPreComp('Wrapped Compound')
 
-    expect(created).toMatchObject({ type: 'composition', label: 'Wrapped Compound' });
-    expect(useCompositionsStore.getState().compositions).toHaveLength(2);
+    expect(created).toMatchObject({ type: 'composition', label: 'Wrapped Compound' })
+    expect(useCompositionsStore.getState().compositions).toHaveLength(2)
 
-    const createdComposition = useCompositionsStore.getState().compositions.find((composition) => composition.id === created?.compositionId);
+    const createdComposition = useCompositionsStore
+      .getState()
+      .compositions.find((composition) => composition.id === created?.compositionId)
     expect(createdComposition?.tracks.map((track) => `${track.name}:${track.kind}`)).toEqual([
       'V1:video',
       'A1:audio',
-    ]);
-    expect(createdComposition?.items.filter((item) => item.type === 'composition')).toHaveLength(1);
-    expect(createdComposition?.items.filter((item) => item.type === 'audio' && item.compositionId === 'comp-1')).toHaveLength(1);
-  });
+    ])
+    expect(createdComposition?.items.filter((item) => item.type === 'composition')).toHaveLength(1)
+    expect(
+      createdComposition?.items.filter(
+        (item) => item.type === 'audio' && item.compositionId === 'comp-1',
+      ),
+    ).toHaveLength(1)
+  })
 
   it('deletes compound clips across the root timeline, nested compounds, and open editor state', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
+      ])
     useItemsStore.getState().setItems([
       {
         id: 'root-comp-a-video',
@@ -495,7 +540,7 @@ describe('composition-actions split wrappers', () => {
         compositionId: 'comp-a',
         src: '',
       } satisfies AudioItem,
-    ]);
+    ])
     useCompositionsStore.getState().setCompositions([
       {
         id: 'comp-a',
@@ -552,47 +597,63 @@ describe('composition-actions split wrappers', () => {
           }),
         ],
         transitions: [],
-        keyframes: [{
-          itemId: 'nested-comp-a-video',
-          properties: [{
-            property: 'opacity',
-            keyframes: [{ id: 'kf-1', frame: 0, value: 1, easing: 'linear' }],
-          }],
-        }],
+        keyframes: [
+          {
+            itemId: 'nested-comp-a-video',
+            properties: [
+              {
+                property: 'opacity',
+                keyframes: [{ id: 'kf-1', frame: 0, value: 1, easing: 'linear' }],
+              },
+            ],
+          },
+        ],
         fps: 30,
         width: 1920,
         height: 1080,
         durationInFrames: 130,
       },
-    ]);
+    ])
 
     expect(getCompoundClipDeletionImpact(['comp-a'])).toEqual({
       rootReferenceCount: 2,
       nestedReferenceCount: 2,
       totalReferenceCount: 4,
-    });
+    })
 
-    useCompositionNavigationStore.getState().enterComposition('comp-b', 'Comp B');
+    useCompositionNavigationStore.getState().enterComposition('comp-b', 'Comp B')
 
-    expect(deleteCompoundClips(['comp-a'])).toBe(true);
+    expect(deleteCompoundClips(['comp-a'])).toBe(true)
 
-    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('comp-b');
-    expect(useItemsStore.getState().items.some((item) => item.compositionId === 'comp-a')).toBe(false);
-    expect(useKeyframesStore.getState().keyframes).toHaveLength(0);
-    expect(useCompositionsStore.getState().compositions.map((composition) => composition.id)).toEqual(['comp-b']);
-    expect(useCompositionsStore.getState().compositions[0]?.items.some((item) => item.compositionId === 'comp-a')).toBe(false);
+    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('comp-b')
+    expect(useItemsStore.getState().items.some((item) => item.compositionId === 'comp-a')).toBe(
+      false,
+    )
+    expect(useKeyframesStore.getState().keyframes).toHaveLength(0)
+    expect(
+      useCompositionsStore.getState().compositions.map((composition) => composition.id),
+    ).toEqual(['comp-b'])
+    expect(
+      useCompositionsStore
+        .getState()
+        .compositions[0]?.items.some((item) => item.compositionId === 'comp-a'),
+    ).toBe(false)
 
-    useCompositionNavigationStore.getState().exitComposition();
+    useCompositionNavigationStore.getState().exitComposition()
 
-    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe(null);
-    expect(useItemsStore.getState().items.some((item) => item.compositionId === 'comp-a')).toBe(false);
-  });
+    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe(null)
+    expect(useItemsStore.getState().items.some((item) => item.compositionId === 'comp-a')).toBe(
+      false,
+    )
+  })
 
   it('renames compound clips across wrapper labels and breadcrumbs', () => {
-    useItemsStore.getState().setTracks([
-      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-    ]);
+    useItemsStore
+      .getState()
+      .setTracks([
+        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
+      ])
     useItemsStore.getState().setItems([
       {
         id: 'root-comp-a-video',
@@ -616,7 +677,7 @@ describe('composition-actions split wrappers', () => {
         compositionId: 'comp-a',
         src: '',
       } satisfies AudioItem,
-    ]);
+    ])
     useCompositionsStore.getState().setCompositions([
       {
         id: 'comp-a',
@@ -673,33 +734,38 @@ describe('composition-actions split wrappers', () => {
         height: 1080,
         durationInFrames: 60,
       },
-    ]);
+    ])
 
-    useCompositionNavigationStore.getState().enterComposition('comp-b', 'Comp B');
+    useCompositionNavigationStore.getState().enterComposition('comp-b', 'Comp B')
 
-    expect(renameCompoundClip('comp-a', 'Renamed Comp')).toBe(true);
+    expect(renameCompoundClip('comp-a', 'Renamed Comp')).toBe(true)
 
-    expect(useCompositionsStore.getState().getComposition('comp-a')?.name).toBe('Renamed Comp');
-    expect(useItemsStore.getState().items.every((item) => item.compositionId !== 'comp-a' || item.label === 'Renamed Comp')).toBe(true);
-    expect(useCompositionNavigationStore.getState().breadcrumbs.map((breadcrumb) => breadcrumb.label)).toEqual([
-      'Main Timeline',
-      'Comp B',
-    ]);
+    expect(useCompositionsStore.getState().getComposition('comp-a')?.name).toBe('Renamed Comp')
+    expect(
+      useItemsStore
+        .getState()
+        .items.every((item) => item.compositionId !== 'comp-a' || item.label === 'Renamed Comp'),
+    ).toBe(true)
+    expect(
+      useCompositionNavigationStore.getState().breadcrumbs.map((breadcrumb) => breadcrumb.label),
+    ).toEqual(['Main Timeline', 'Comp B'])
 
-    expect(renameCompoundClip('comp-b', 'Renamed Parent')).toBe(true);
-    expect(useCompositionNavigationStore.getState().breadcrumbs.map((breadcrumb) => breadcrumb.label)).toEqual([
-      'Main Timeline',
-      'Renamed Parent',
-    ]);
+    expect(renameCompoundClip('comp-b', 'Renamed Parent')).toBe(true)
+    expect(
+      useCompositionNavigationStore.getState().breadcrumbs.map((breadcrumb) => breadcrumb.label),
+    ).toEqual(['Main Timeline', 'Renamed Parent'])
 
-    useCompositionNavigationStore.getState().exitComposition();
+    useCompositionNavigationStore.getState().exitComposition()
 
-    expect(useItemsStore.getState().items.every((item) => item.compositionId !== 'comp-a' || item.label === 'Renamed Comp')).toBe(true);
+    expect(
+      useItemsStore
+        .getState()
+        .items.every((item) => item.compositionId !== 'comp-a' || item.label === 'Renamed Comp'),
+    ).toBe(true)
 
-    useCompositionNavigationStore.getState().enterComposition('comp-a', 'Renamed Comp');
-    expect(useCompositionNavigationStore.getState().breadcrumbs.map((breadcrumb) => breadcrumb.label)).toEqual([
-      'Main Timeline',
-      'Renamed Comp',
-    ]);
-  });
-});
+    useCompositionNavigationStore.getState().enterComposition('comp-a', 'Renamed Comp')
+    expect(
+      useCompositionNavigationStore.getState().breadcrumbs.map((breadcrumb) => breadcrumb.label),
+    ).toEqual(['Main Timeline', 'Renamed Comp'])
+  })
+})

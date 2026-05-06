@@ -1,8 +1,5 @@
-export function getExclusiveSourceOutPoint(
-  currentFrame: number,
-  durationInFrames: number,
-): number {
-  return Math.max(1, Math.min(durationInFrames, currentFrame + 1));
+export function getExclusiveSourceOutPoint(currentFrame: number, durationInFrames: number): number {
+  return Math.max(1, Math.min(durationInFrames, currentFrame + 1))
 }
 
 export function getSourcePointPercent(
@@ -10,19 +7,16 @@ export function getSourcePointPercent(
   durationInFrames: number,
 ): number | null {
   if (point === null || durationInFrames <= 0) {
-    return null;
+    return null
   }
 
-  const clampedPoint = Math.max(0, Math.min(durationInFrames, point));
-  return (clampedPoint / durationInFrames) * 100;
+  const clampedPoint = Math.max(0, Math.min(durationInFrames, point))
+  return (clampedPoint / durationInFrames) * 100
 }
 
-export function getSourceStripPointFromRatio(
-  ratio: number,
-  durationInFrames: number,
-): number {
-  const clampedRatio = Math.max(0, Math.min(1, ratio));
-  return Math.round(clampedRatio * durationInFrames);
+export function getSourceStripPointFromRatio(ratio: number, durationInFrames: number): number {
+  const clampedRatio = Math.max(0, Math.min(1, ratio))
+  return Math.round(clampedRatio * durationInFrames)
 }
 
 export function clampDraggedSourceInPoint(
@@ -30,12 +24,12 @@ export function clampDraggedSourceInPoint(
   outPoint: number | null,
   lastFrame: number,
 ): number {
-  const clampedPoint = Math.max(0, Math.min(lastFrame, point));
+  const clampedPoint = Math.max(0, Math.min(lastFrame, point))
   if (outPoint === null) {
-    return clampedPoint;
+    return clampedPoint
   }
 
-  return Math.min(clampedPoint, Math.max(0, outPoint - 1));
+  return Math.min(clampedPoint, Math.max(0, outPoint - 1))
 }
 
 export function clampDraggedSourceOutPoint(
@@ -43,9 +37,9 @@ export function clampDraggedSourceOutPoint(
   inPoint: number | null,
   durationInFrames: number,
 ): number {
-  const clampedPoint = Math.max(0, Math.min(durationInFrames, point));
-  const minimumOutPoint = inPoint === null ? 1 : inPoint + 1;
-  return Math.max(minimumOutPoint, clampedPoint);
+  const clampedPoint = Math.max(0, Math.min(durationInFrames, point))
+  const minimumOutPoint = inPoint === null ? 1 : inPoint + 1
+  return Math.max(minimumOutPoint, clampedPoint)
 }
 
 export function shiftSourceIoRange(
@@ -54,12 +48,12 @@ export function shiftSourceIoRange(
   delta: number,
   durationInFrames: number,
 ): { inPoint: number; outPoint: number } {
-  const rangeDuration = Math.max(1, startOut - startIn);
-  const maxInPoint = Math.max(0, durationInFrames - rangeDuration);
-  const nextInPoint = Math.max(0, Math.min(maxInPoint, startIn + delta));
+  const rangeDuration = Math.max(1, startOut - startIn)
+  const maxInPoint = Math.max(0, durationInFrames - rangeDuration)
+  const nextInPoint = Math.max(0, Math.min(maxInPoint, startIn + delta))
 
   return {
     inPoint: nextInPoint,
     outPoint: nextInPoint + rangeDuration,
-  };
+  }
 }

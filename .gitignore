@@ -69,3 +69,5 @@ tmp
 /filmstrips/
 /preview-audio/
 /waveform-bin/
+
+*.lock

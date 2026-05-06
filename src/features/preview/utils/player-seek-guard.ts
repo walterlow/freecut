@@ -1,8 +1,8 @@
-import type { PreviewInteractionMode } from './preview-interaction-mode';
+import type { PreviewInteractionMode } from './preview-interaction-mode'
 
 export interface CurrentFrameSeekGuardInput {
-  interactionMode: PreviewInteractionMode;
-  previewFrameChanged: boolean;
+  interactionMode: PreviewInteractionMode
+  previewFrameChanged: boolean
 }
 
 /**
@@ -12,7 +12,7 @@ export function shouldSkipCurrentFrameSeek({
   interactionMode,
   previewFrameChanged,
 }: CurrentFrameSeekGuardInput): boolean {
-  if (interactionMode === 'gizmo_dragging') return true;
-  if (interactionMode === 'scrubbing' && previewFrameChanged) return true;
-  return false;
+  if (interactionMode === 'gizmo_dragging') return true
+  if (interactionMode === 'scrubbing' && previewFrameChanged) return true
+  return false
 }

@@ -188,4 +188,45 @@ fn applyBlendMode(base: vec3f, layer: vec3f, mode: u32) -> vec3f {
     default:  { return blendNormal(base, layer); }
   }
 }
-`;
+
+fn compositorHash21(p: vec2f) -> f32 {
+  let p3 = fract(vec3f(p.xyx) * 0.1031);
+  let q = p3 + dot(p3, p3.yzx + vec3f(33.33));
+  return fract((q.x + q.y) * q.z);
+}
+
+fn compositeDissolveAlpha(alpha: f32, seed: vec2f) -> f32 {
+  return select(0.0, 1.0, compositorHash21(seed) < alpha);
+}
+
+fn compositeBlendSourceOver(
+  baseColor: vec4f,
+  layerColor: vec4f,
+  sourceAlpha: f32,
+  postDissolveAlpha: f32,
+  mode: u32,
+  seed: vec2f,
+  dissolveAlpha: f32
+) -> vec4f {
+  var srcAlpha = clamp(sourceAlpha, 0.0, 1.0);
+  if (mode == 1u) {
+    let ditherAlpha = clamp(dissolveAlpha, 0.0, 1.0);
+    let coverage = compositeDissolveAlpha(ditherAlpha, seed);
+    srcAlpha = coverage * clamp(srcAlpha / max(ditherAlpha, 0.00001), 0.0, 1.0);
+  }
+  srcAlpha *= clamp(postDissolveAlpha, 0.0, 1.0);
+  if (srcAlpha <= 0.0) {
+    return baseColor;
+  }
+
+  let baseAlpha = clamp(baseColor.a, 0.0, 1.0);
+  let blended = applyBlendMode(baseColor.rgb, layerColor.rgb, mode);
+  let premulRgb =
+    blended * baseAlpha * srcAlpha +
+    layerColor.rgb * srcAlpha * (1.0 - baseAlpha) +
+    baseColor.rgb * baseAlpha * (1.0 - srcAlpha);
+  let outAlpha = srcAlpha + baseAlpha * (1.0 - srcAlpha);
+  let outRgb = select(vec3f(0.0), premulRgb / max(outAlpha, 0.00001), outAlpha > 0.00001);
+  return vec4f(outRgb, outAlpha);
+}
+`

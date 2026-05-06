@@ -1,92 +1,93 @@
-﻿/**
+/**
  * Media Processor Service
  *
  * Manages the media processor worker for off-main-thread media processing.
  * Provides a simple async API for extracting metadata and generating thumbnails.
  */
 
-import { createLogger } from '@/shared/logging/logger';
-import { createManagedWorker } from '@/shared/utils/managed-worker';
+import { createLogger } from '@/shared/logging/logger'
+import { createManagedWorker } from '@/shared/utils/managed-worker'
 import type {
   ProcessMediaRequest,
   ProcessMediaResponse,
   VideoMetadata,
   AudioMetadata,
   ImageMetadata,
-} from '../workers/media-processor.worker';
+} from '../workers/media-processor.worker'
 
-const logger = createLogger('MediaProcessorService');
+const logger = createLogger('MediaProcessorService')
+const PROCESS_MEDIA_TIMEOUT_MS = 120_000
 
-type MediaMetadataResult = VideoMetadata | AudioMetadata | ImageMetadata;
+type MediaMetadataResult = VideoMetadata | AudioMetadata | ImageMetadata
 
 interface ProcessMediaResult {
-  metadata: MediaMetadataResult;
-  thumbnail?: Blob;
+  metadata: MediaMetadataResult
+  thumbnail?: Blob
 }
 
 interface PendingRequest {
-  resolve: (result: ProcessMediaResult) => void;
-  reject: (error: Error) => void;
+  resolve: (result: ProcessMediaResult) => void
+  reject: (error: Error) => void
 }
 
 class MediaProcessorService {
-  private requestId = 0;
-  private pendingRequests = new Map<string, PendingRequest>();
+  private requestId = 0
+  private pendingRequests = new Map<string, PendingRequest>()
   private readonly workerManager = createManagedWorker({
-    createWorker: () => new Worker(
-      new URL('../workers/media-processor.worker.ts', import.meta.url),
-      { type: 'module' }
-    ),
+    createWorker: () =>
+      new Worker(new URL('../workers/media-processor.worker.ts', import.meta.url), {
+        type: 'module',
+      }),
     setupWorker: (worker) => {
       worker.onmessage = (event: MessageEvent<ProcessMediaResponse>) => {
-        this.handleMessage(event.data);
-      };
+        this.handleMessage(event.data)
+      }
 
       worker.onerror = (event) => {
-        logger.error('Media processor worker error:', event.message);
-        this.workerManager.terminate();
+        logger.error('Media processor worker error:', event.message)
+        this.workerManager.terminate()
 
         for (const [id, pending] of this.pendingRequests) {
-          pending.reject(new Error(`Worker error: ${event.message}`));
-          this.pendingRequests.delete(id);
+          pending.reject(new Error(`Worker error: ${event.message}`))
+          this.pendingRequests.delete(id)
         }
-      };
+      }
 
       return () => {
-        worker.onmessage = null;
-        worker.onerror = null;
-      };
+        worker.onmessage = null
+        worker.onerror = null
+      }
     },
-  });
+  })
 
   /**
    * Initialize the worker (lazy)
    */
   private ensureWorker(): Worker {
-    return this.workerManager.getWorker();
+    return this.workerManager.getWorker()
   }
 
   /**
    * Handle messages from the worker
    */
   private handleMessage(response: ProcessMediaResponse): void {
-    const pending = this.pendingRequests.get(response.requestId);
+    const pending = this.pendingRequests.get(response.requestId)
     if (!pending) {
-      logger.warn('Received response for unknown request:', response.requestId);
-      return;
+      logger.warn('Received response for unknown request:', response.requestId)
+      return
     }
 
-    this.pendingRequests.delete(response.requestId);
+    this.pendingRequests.delete(response.requestId)
 
     if (response.type === 'error') {
-      pending.reject(new Error(response.error || 'Unknown error'));
+      pending.reject(new Error(response.error || 'Unknown error'))
     } else if (response.type === 'complete' && response.metadata) {
       pending.resolve({
         metadata: response.metadata,
         thumbnail: response.thumbnail,
-      });
+      })
     } else {
-      pending.reject(new Error('Invalid response from worker'));
+      pending.reject(new Error('Invalid response from worker'))
     }
   }
 
@@ -104,32 +105,41 @@ class MediaProcessorService {
     file: File,
     mimeType: string,
     options?: {
-      thumbnailMaxSize?: number;
-      thumbnailQuality?: number;
-      thumbnailTimestamp?: number;
-      generateThumbnail?: boolean;
-    }
+      thumbnailMaxSize?: number
+      thumbnailQuality?: number
+      thumbnailTimestamp?: number
+      generateThumbnail?: boolean
+    },
   ): Promise<ProcessMediaResult> {
-    const worker = this.ensureWorker();
-    const requestId = `media-${++this.requestId}`;
+    const worker = this.ensureWorker()
+    const requestId = `media-${++this.requestId}`
 
     return new Promise<ProcessMediaResult>((resolve, reject) => {
-      // Set timeout for processing (30 seconds max)
+      // Large MKV/MOV files can take a while to probe in-browser. If a worker
+      // does hang, terminate it so the next import gets a fresh worker.
+      // Terminating drops every in-flight request on the floor, so reject
+      // them all here before the worker dies — otherwise other importers
+      // would hang forever waiting on a worker that no longer exists.
       const timeout = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
-        reject(new Error('Media processing timeout'));
-      }, 30000);
+        const timeoutError = new Error('Media processing timeout')
+        for (const [, pending] of this.pendingRequests) {
+          pending.reject(timeoutError)
+        }
+        this.pendingRequests.clear()
+        this.workerManager.terminate()
+        reject(timeoutError)
+      }, PROCESS_MEDIA_TIMEOUT_MS)
 
       this.pendingRequests.set(requestId, {
         resolve: (result) => {
-          clearTimeout(timeout);
-          resolve(result);
+          clearTimeout(timeout)
+          resolve(result)
         },
         reject: (error) => {
-          clearTimeout(timeout);
-          reject(error);
+          clearTimeout(timeout)
+          reject(error)
         },
-      });
+      })
 
       const request: ProcessMediaRequest = {
         type: 'process',
@@ -137,10 +147,10 @@ class MediaProcessorService {
         file,
         mimeType,
         options,
-      };
+      }
 
-      worker.postMessage(request);
-    });
+      worker.postMessage(request)
+    })
   }
 
   /**
@@ -154,77 +164,80 @@ class MediaProcessorService {
   async processMediaBatch(
     files: Array<{ file: File; mimeType: string }>,
     concurrency = 3,
-    onProgress?: (completed: number, total: number) => void
+    onProgress?: (completed: number, total: number) => void,
   ): Promise<Array<ProcessMediaResult | Error>> {
-    const results: Array<ProcessMediaResult | Error> = new Array(files.length);
-    let completed = 0;
+    const results: Array<ProcessMediaResult | Error> = new Array(files.length)
+    let completed = 0
 
     // Process in chunks for controlled concurrency
-    const chunks: Array<Array<{ index: number; file: File; mimeType: string }>> = [];
+    const chunks: Array<Array<{ index: number; file: File; mimeType: string }>> = []
     for (let i = 0; i < files.length; i += concurrency) {
       chunks.push(
         files.slice(i, i + concurrency).map((f, j) => ({
           index: i + j,
           ...f,
-        }))
-      );
+        })),
+      )
     }
 
     for (const chunk of chunks) {
       const chunkResults = await Promise.allSettled(
-        chunk.map(({ file, mimeType }) => this.processMedia(file, mimeType))
-      );
+        chunk.map(({ file, mimeType }) => this.processMedia(file, mimeType)),
+      )
 
       for (let i = 0; i < chunkResults.length; i++) {
-        const result = chunkResults[i];
-        const chunkItem = chunk[i];
-        if (!result || !chunkItem) continue;
+        const result = chunkResults[i]
+        const chunkItem = chunk[i]
+        if (!result || !chunkItem) continue
 
-        const originalIndex = chunkItem.index;
+        const originalIndex = chunkItem.index
 
         if (result.status === 'fulfilled') {
-          results[originalIndex] = result.value;
+          results[originalIndex] = result.value
         } else {
           // result.status === 'rejected'
-          const reason = result.reason as Error | undefined;
-          results[originalIndex] = new Error(reason?.message || 'Processing failed');
+          const reason = result.reason as Error | undefined
+          results[originalIndex] = new Error(reason?.message || 'Processing failed')
         }
 
-        completed++;
-        onProgress?.(completed, files.length);
+        completed++
+        onProgress?.(completed, files.length)
       }
     }
 
-    return results;
+    return results
   }
 
   /**
    * Check if a video file has unsupported audio codec
    * This is now included in the metadata extraction - no separate call needed
    */
-  hasUnsupportedAudioCodec(metadata: MediaMetadataResult): { unsupported: boolean; codec?: string } {
+  hasUnsupportedAudioCodec(metadata: MediaMetadataResult): {
+    unsupported: boolean
+    codec?: string
+  } {
     if (metadata.type === 'video') {
       return {
         unsupported: !metadata.audioCodecSupported,
         codec: metadata.audioCodec,
-      };
+      }
     }
-    return { unsupported: false };
+    return { unsupported: false }
   }
 
   /**
    * Terminate the worker
    */
   dispose(): void {
-    this.workerManager.terminate();
+    this.workerManager.terminate()
 
     // Reject all pending requests
     for (const [id, pending] of this.pendingRequests) {
-      pending.reject(new Error('Worker disposed'));
-      this.pendingRequests.delete(id);
+      pending.reject(new Error('Worker disposed'))
+      this.pendingRequests.delete(id)
     }
   }
 }
 
 // Singleton instance
-export const mediaProcessorService = new MediaProcessorService();
+export const mediaProcessorService = new MediaProcessorService()

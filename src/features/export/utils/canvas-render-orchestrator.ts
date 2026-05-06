@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Canvas Render Orchestrator
  *
  * Top-level entry points that drive the full render pipeline:
@@ -11,214 +11,227 @@
  * progress reporting and cancellation.
  */
 
-import type { CompositionInputProps } from '@/types/export';
-import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
-import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer';
-import { createOutputFormat, getDefaultAudioCodec, getMimeType } from './client-renderer';
-import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
-import { createLogger } from '@/shared/logging/logger';
-import { hasMediaCrop } from '@/shared/utils/media-crop';
+import type { CompositionInputProps } from '@/types/export'
+import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline'
+import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer'
+import { createOutputFormat, getDefaultAudioCodec, getMimeType } from './client-renderer'
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
+import { createLogger } from '@/shared/logging/logger'
+import { hasMediaCrop } from '@/shared/utils/media-crop'
+import {
+  buildTranscriptSubtitleWebVtt,
+  omitTranscriptSubtitleItemsForSoftSubtitleExport,
+} from './embedded-subtitle-export'
 
 // Subsystems
-import { createCompositionRenderer } from './client-render-engine';
+import { createCompositionRenderer } from './client-render-engine'
 
-function getLog() { return createLogger('CanvasRenderOrchestrator'); }
+function getLog() {
+  return createLogger('CanvasRenderOrchestrator')
+}
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 // Type for mediabunny module (dynamically imported)
-type MediabunnyModule = typeof import('mediabunny');
-type CanvasAudioModule = typeof import('./canvas-audio');
+type MediabunnyModule = typeof import('mediabunny')
+type CanvasAudioModule = typeof import('./canvas-audio')
 
-let canvasAudioModulePromise: Promise<CanvasAudioModule> | null = null;
+let canvasAudioModulePromise: Promise<CanvasAudioModule> | null = null
 
 async function loadCanvasAudio(): Promise<CanvasAudioModule> {
   if (!canvasAudioModulePromise) {
-    canvasAudioModulePromise = import('./canvas-audio');
+    canvasAudioModulePromise = import('./canvas-audio')
   }
-  return canvasAudioModulePromise;
+  return canvasAudioModulePromise
 }
 
 export interface RenderEngineOptions {
-  settings: ClientExportSettings;
-  composition: CompositionInputProps;
-  onProgress: (progress: RenderProgress) => void;
-  signal?: AbortSignal;
+  settings: ClientExportSettings
+  composition: CompositionInputProps
+  onProgress: (progress: RenderProgress) => void
+  signal?: AbortSignal
 }
 
 interface AudioRenderOptions {
-  settings: ClientExportSettings;
-  composition: CompositionInputProps;
-  onProgress: (progress: RenderProgress) => void;
-  signal?: AbortSignal;
+  settings: ClientExportSettings
+  composition: CompositionInputProps
+  onProgress: (progress: RenderProgress) => void
+  signal?: AbortSignal
 }
 
 interface SingleFrameOptions {
-  composition: CompositionInputProps;
-  frame: number;
-  width?: number;
-  height?: number;
-  quality?: number;
-  format?: 'image/jpeg' | 'image/png' | 'image/webp';
+  composition: CompositionInputProps
+  frame: number
+  width?: number
+  height?: number
+  quality?: number
+  format?: 'image/jpeg' | 'image/png' | 'image/webp'
 }
 
 interface PacketRemuxPlan {
-  src: string;
-  trimStartSeconds: number;
-  trimEndSeconds: number;
-  includeAudio: boolean;
+  src: string
+  trimStartSeconds: number
+  trimEndSeconds: number
+  includeAudio: boolean
 }
 
-const EPSILON = 1e-6;
+const EPSILON = 1e-6
 
 function isIdentityTransform(item: VideoItem): boolean {
-  const transform = item.transform;
-  if (hasMediaCrop(item.crop)) return false;
-  if (!transform) return true;
+  const transform = item.transform
+  if (hasMediaCrop(item.crop)) return false
+  if (!transform) return true
 
-  if (transform.width !== undefined || transform.height !== undefined) return false;
-  if (transform.x !== undefined && Math.abs(transform.x) > EPSILON) return false;
-  if (transform.y !== undefined && Math.abs(transform.y) > EPSILON) return false;
-  if (transform.rotation !== undefined && Math.abs(transform.rotation) > EPSILON) return false;
-  if (transform.cornerRadius !== undefined && Math.abs(transform.cornerRadius) > EPSILON) return false;
-  if (transform.opacity !== undefined && Math.abs(transform.opacity - 1) > EPSILON) return false;
-  return true;
+  if (transform.width !== undefined || transform.height !== undefined) return false
+  if (transform.x !== undefined && Math.abs(transform.x) > EPSILON) return false
+  if (transform.y !== undefined && Math.abs(transform.y) > EPSILON) return false
+  if (transform.rotation !== undefined && Math.abs(transform.rotation) > EPSILON) return false
+  if (transform.cornerRadius !== undefined && Math.abs(transform.cornerRadius) > EPSILON)
+    return false
+  if (transform.opacity !== undefined && Math.abs(transform.opacity - 1) > EPSILON) return false
+  return true
 }
 
 function getPacketRemuxPlan(
   settings: ClientExportSettings,
-  composition: CompositionInputProps
+  composition: CompositionInputProps,
 ): PacketRemuxPlan | null {
-  if (settings.mode !== 'video') return null;
-  if (composition.durationInFrames === undefined || composition.durationInFrames <= 0) return null;
-  if ((composition.transitions?.length ?? 0) > 0) return null;
-  if ((composition.keyframes?.length ?? 0) > 0) return null;
+  if (settings.mode !== 'video') return null
+  if (composition.durationInFrames === undefined || composition.durationInFrames <= 0) return null
+  if ((composition.transitions?.length ?? 0) > 0) return null
+  if ((composition.keyframes?.length ?? 0) > 0) return null
 
-  const tracks: TimelineTrack[] = (composition.tracks ?? []).filter((track) => track.visible !== false);
-  const items: Array<{ item: TimelineItem; track: TimelineTrack }> = [];
+  const tracks: TimelineTrack[] = (composition.tracks ?? []).filter(
+    (track) => track.visible !== false,
+  )
+  const items: Array<{ item: TimelineItem; track: TimelineTrack }> = []
 
   for (const track of tracks) {
     for (const item of track.items ?? []) {
       if (item.durationInFrames > 0) {
-        items.push({ item, track });
+        items.push({ item, track })
       }
     }
   }
 
-  if (items.length !== 1) return null;
+  if (items.length !== 1) return null
 
-  const { item, track } = items[0]!;
-  if (item.type !== 'video') return null;
+  const { item, track } = items[0]!
+  if (item.type !== 'video') return null
 
-  const videoItem = item as VideoItem;
-  if (!videoItem.src) return null;
-  if (videoItem.from !== 0) return null;
-  if (videoItem.durationInFrames !== composition.durationInFrames) return null;
-  if ((videoItem.effects?.length ?? 0) > 0) return null;
-  if (!isIdentityTransform(videoItem)) return null;
+  const videoItem = item as VideoItem
+  if (!videoItem.src) return null
+  if (videoItem.isReversed === true) return null
+  if (videoItem.from !== 0) return null
+  if (videoItem.durationInFrames !== composition.durationInFrames) return null
+  if ((videoItem.effects?.length ?? 0) > 0) return null
+  if (!isIdentityTransform(videoItem)) return null
 
-  const speed = videoItem.speed ?? 1;
-  if (Math.abs(speed - 1) > EPSILON) return null;
+  const speed = videoItem.speed ?? 1
+  if (Math.abs(speed - 1) > EPSILON) return null
 
-  const hasVisualFades = Math.abs(videoItem.fadeIn ?? 0) > EPSILON
-    || Math.abs(videoItem.fadeOut ?? 0) > EPSILON;
-  if (hasVisualFades) return null;
+  const hasVisualFades =
+    Math.abs(videoItem.fadeIn ?? 0) > EPSILON || Math.abs(videoItem.fadeOut ?? 0) > EPSILON
+  if (hasVisualFades) return null
 
-  const includeAudio = track.muted !== true;
+  const includeAudio = track.muted !== true
   if (includeAudio) {
-    const hasAudioAdjustments = Math.abs(videoItem.volume ?? 0) > EPSILON
-      || Math.abs(videoItem.audioFadeIn ?? 0) > EPSILON
-      || Math.abs(videoItem.audioFadeOut ?? 0) > EPSILON;
-    if (hasAudioAdjustments) return null;
+    const hasAudioAdjustments =
+      Math.abs(videoItem.volume ?? 0) > EPSILON ||
+      Math.abs(videoItem.audioFadeIn ?? 0) > EPSILON ||
+      Math.abs(videoItem.audioFadeOut ?? 0) > EPSILON
+    if (hasAudioAdjustments) return null
   }
 
-  const sourceFps = videoItem.sourceFps ?? composition.fps;
-  if (!Number.isFinite(sourceFps) || sourceFps <= 0) return null;
-  if (Math.abs((settings.fps ?? composition.fps) - composition.fps) > EPSILON) return null;
+  const sourceFps = videoItem.sourceFps ?? composition.fps
+  if (!Number.isFinite(sourceFps) || sourceFps <= 0) return null
+  if (Math.abs((settings.fps ?? composition.fps) - composition.fps) > EPSILON) return null
 
   // Require clip to start at source frame 0 — a trimmed-from-middle clip can't be
   // remuxed directly and must fall back to frame-by-frame rendering.
-  const sourceStartFrames = videoItem.sourceStart ?? videoItem.trimStart ?? videoItem.offset ?? 0;
-  if (Math.abs(sourceStartFrames) > EPSILON) return null;
-  const trimStartSeconds = Math.max(0, sourceStartFrames / sourceFps);
-  const clipDurationSeconds = videoItem.durationInFrames / composition.fps;
-  if (!Number.isFinite(clipDurationSeconds) || clipDurationSeconds <= 0) return null;
+  const sourceStartFrames = videoItem.sourceStart ?? videoItem.trimStart ?? videoItem.offset ?? 0
+  if (Math.abs(sourceStartFrames) > EPSILON) return null
+  const trimStartSeconds = Math.max(0, sourceStartFrames / sourceFps)
+  const clipDurationSeconds = videoItem.durationInFrames / composition.fps
+  if (!Number.isFinite(clipDurationSeconds) || clipDurationSeconds <= 0) return null
 
-  const trimEndSeconds = trimStartSeconds + clipDurationSeconds;
-  if (!Number.isFinite(trimEndSeconds) || trimEndSeconds <= trimStartSeconds) return null;
+  const trimEndSeconds = trimStartSeconds + clipDurationSeconds
+  if (!Number.isFinite(trimEndSeconds) || trimEndSeconds <= trimStartSeconds) return null
 
   return {
     src: videoItem.src,
     trimStartSeconds,
     trimEndSeconds,
     includeAudio,
-  };
+  }
 }
 
-async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<ClientRenderResult | null> {
-  const { settings, composition, onProgress, signal } = options;
-  const durationInFrames = composition.durationInFrames ?? 0;
-  const fps = composition.fps;
-  const durationSeconds = durationInFrames / Math.max(fps, 1);
+async function tryPacketRemuxComposition(
+  options: RenderEngineOptions,
+): Promise<ClientRenderResult | null> {
+  const { settings, composition, onProgress, signal } = options
+  const durationInFrames = composition.durationInFrames ?? 0
+  const fps = composition.fps
+  const durationSeconds = durationInFrames / Math.max(fps, 1)
 
-  const plan = getPacketRemuxPlan(settings, composition);
-  if (!plan) return null;
+  const plan = getPacketRemuxPlan(settings, composition)
+  if (!plan) return null
   if (signal?.aborted) {
-    throw new DOMException('渲染已取消', 'AbortError');
+    throw new DOMException('Render cancelled', 'AbortError')
   }
 
-  const mediabunny: MediabunnyModule = await import('mediabunny');
-  const { Input, Output, BufferTarget, Conversion, ALL_FORMATS } = mediabunny;
+  const mediabunny: MediabunnyModule = await import('mediabunny')
+  const { Input, Output, BufferTarget, Conversion, ALL_FORMATS } = mediabunny
 
-  const format = await createOutputFormat(settings.container, { fastStart: true }) as {
-    getSupportedVideoCodecs?: () => string[];
-    getSupportedAudioCodecs?: () => string[];
-  };
+  const format = (await createOutputFormat(settings.container, { fastStart: true })) as {
+    getSupportedVideoCodecs?: () => string[]
+    getSupportedAudioCodecs?: () => string[]
+  }
 
   const input = new Input({
     formats: ALL_FORMATS,
     source: createMediabunnyInputSource(mediabunny, plan.src),
-  });
+  })
 
   let conversion: {
-    cancel: () => Promise<void>;
-    isValid: boolean;
-    onProgress?: (progress: number) => unknown;
-    execute: () => Promise<void>;
-  } | null = null;
+    cancel: () => Promise<void>
+    isValid: boolean
+    onProgress?: (progress: number) => unknown
+    execute: () => Promise<void>
+  } | null = null
   const cancelConversion = () => {
-    if (!conversion) return;
-    void conversion.cancel().catch(() => undefined);
-  };
+    if (!conversion) return
+    void conversion.cancel().catch(() => undefined)
+  }
 
-  signal?.addEventListener('abort', cancelConversion, { once: true });
+  signal?.addEventListener('abort', cancelConversion, { once: true })
 
   try {
-    const videoTrack = await input.getPrimaryVideoTrack();
+    const videoTrack = await input.getPrimaryVideoTrack()
     if (!videoTrack?.codec) {
-      return null;
+      return null
     }
 
-    const supportedVideoCodecs = format.getSupportedVideoCodecs?.() ?? [];
+    const supportedVideoCodecs = format.getSupportedVideoCodecs?.() ?? []
     if (!supportedVideoCodecs.includes(videoTrack.codec) || videoTrack.codec !== settings.codec) {
-      return null;
+      return null
     }
 
     if (
-      videoTrack.displayWidth !== settings.resolution.width
-      || videoTrack.displayHeight !== settings.resolution.height
+      videoTrack.displayWidth !== settings.resolution.width ||
+      videoTrack.displayHeight !== settings.resolution.height
     ) {
-      return null;
+      return null
     }
 
     if (plan.includeAudio) {
-      const audioTrack = await input.getPrimaryAudioTrack();
+      const audioTrack = await input.getPrimaryAudioTrack()
       if (audioTrack?.codec) {
-        const supportedAudioCodecs = format.getSupportedAudioCodecs?.() ?? [];
+        const supportedAudioCodecs = format.getSupportedAudioCodecs?.() ?? []
         if (!supportedAudioCodecs.includes(audioTrack.codec)) {
-          return null;
+          return null
         }
       }
     }
@@ -227,15 +240,15 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
       phase: 'preparing',
       progress: 5,
       totalFrames: durationInFrames,
-      message: '正在准备封包直通...',
-    });
+      message: 'Preparing packet remux...',
+    })
 
     // Create output resources only after all validation checks pass.
-    const target = new BufferTarget();
+    const target = new BufferTarget()
     const output = new Output({
       format: format as unknown as ConstructorParameters<typeof Output>[0]['format'],
       target,
-    });
+    })
 
     try {
       conversion = await Conversion.init({
@@ -249,43 +262,41 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
           codec: settings.codec,
           forceTranscode: false,
         },
-        audio: plan.includeAudio
-          ? { forceTranscode: false }
-          : { discard: true },
+        audio: plan.includeAudio ? { forceTranscode: false } : { discard: true },
         showWarnings: false,
-      });
+      })
 
       if (!conversion.isValid) {
-        return null;
+        return null
       }
 
       conversion.onProgress = (progress: number) => {
-        const clamped = Math.max(0, Math.min(1, progress));
+        const clamped = Math.max(0, Math.min(1, progress))
         onProgress({
           phase: 'encoding',
           progress: Math.round(clamped * 90),
           currentFrame: Math.round(clamped * durationInFrames),
           totalFrames: durationInFrames,
-          message: '正在重封装封包...',
-        });
-      };
-
-      await conversion.execute();
-
-      const buffer = target.buffer;
-      if (!buffer) {
-        throw new Error('未生成输出缓冲区');
+          message: 'Remuxing packets...',
+        })
       }
 
-      const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) });
+      await conversion.execute()
+
+      const buffer = target.buffer
+      if (!buffer) {
+        throw new Error('No output buffer generated')
+      }
+
+      const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) })
 
       onProgress({
         phase: 'finalizing',
         progress: 100,
         currentFrame: durationInFrames,
         totalFrames: durationInFrames,
-        message: '完成！',
-      });
+        message: 'Complete!',
+      })
 
       getLog().info('Packet remux export completed', {
         durationSeconds,
@@ -293,29 +304,29 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
         container: settings.container,
         codec: settings.codec,
         includeAudio: plan.includeAudio,
-      });
+      })
 
       return {
         blob,
         mimeType: getMimeType(settings.container, settings.codec),
         duration: durationSeconds,
         fileSize: blob.size,
-      };
+      }
     } finally {
-      (output as unknown as { dispose?: () => void }).dispose?.();
+      ;(output as unknown as { dispose?: () => void }).dispose?.()
     }
   } catch (error) {
-    const isCanceled = signal?.aborted
-      || (error instanceof Error && error.name === 'ConversionCanceledError');
+    const isCanceled =
+      signal?.aborted || (error instanceof Error && error.name === 'ConversionCanceledError')
     if (isCanceled) {
-      throw new DOMException('渲染已取消', 'AbortError');
+      throw new DOMException('Render cancelled', 'AbortError')
     }
 
-    getLog().warn('Packet remux path failed; falling back to frame render', { error });
-    return null;
+    getLog().warn('Packet remux path failed; falling back to frame render', { error })
+    return null
   } finally {
-    signal?.removeEventListener('abort', cancelConversion);
-    input.dispose();
+    signal?.removeEventListener('abort', cancelConversion)
+    input.dispose()
   }
 }
 
@@ -327,9 +338,9 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
  * Main render function – orchestrates the entire client-side render.
  */
 export async function renderComposition(options: RenderEngineOptions): Promise<ClientRenderResult> {
-  const { settings, composition, onProgress, signal } = options;
-  const { fps, durationInFrames = 0 } = composition;
-  const canvasAudio = await loadCanvasAudio();
+  const { settings, composition, onProgress, signal } = options
+  const { fps, durationInFrames = 0 } = composition
+  const canvasAudio = await loadCanvasAudio()
 
   getLog().info('Starting enhanced client render', {
     fps,
@@ -341,57 +352,64 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     tracksCount: composition.tracks?.length ?? 0,
     hasTransitions: (composition.transitions?.length ?? 0) > 0,
     hasKeyframes: (composition.keyframes?.length ?? 0) > 0,
-  });
+  })
 
   // Validate inputs
   if (durationInFrames <= 0) {
-    throw new Error('合成内容时长为 0');
+    throw new Error('Composition has no duration')
   }
 
-  const totalFrames = durationInFrames;
-  const durationSeconds = totalFrames / fps;
+  const totalFrames = durationInFrames
+  const durationSeconds = totalFrames / fps
 
   onProgress({
     phase: 'preparing',
     progress: 0,
     totalFrames,
-    message: '正在加载编码器...',
-  });
+    message: 'Loading encoder...',
+  })
 
   // Check for abort
   if (signal?.aborted) {
-    throw new DOMException('渲染已取消', 'AbortError');
+    throw new DOMException('Render cancelled', 'AbortError')
   }
 
   // Fast path: when the timeline is a single unmodified clip, remux packets directly.
-  const remuxResult = await tryPacketRemuxComposition(options);
+  const remuxResult = await tryPacketRemuxComposition(options)
   if (remuxResult) {
-    return remuxResult;
+    return remuxResult
   }
 
   // Dynamically import mediabunny (AC-3 decoder is loaded lazily by canvas-audio when needed)
-  const mediabunny: MediabunnyModule = await import('mediabunny');
-  const { Output, BufferTarget, VideoSampleSource, VideoSample, AudioBufferSource } = mediabunny;
+  const mediabunny: MediabunnyModule = await import('mediabunny')
+  const {
+    Output,
+    BufferTarget,
+    VideoSampleSource,
+    VideoSample,
+    AudioBufferSource,
+    TextSubtitleSource,
+  } = mediabunny
 
   onProgress({
     phase: 'preparing',
     progress: 5,
     totalFrames,
-    message: '正在处理音频...',
-  });
+    message: 'Processing audio...',
+  })
 
   // Process audio in parallel with setup
-  let audioData: { samples: Float32Array[]; sampleRate: number; channels: number } | null = null;
+  let audioData: { samples: Float32Array[]; sampleRate: number; channels: number } | null = null
   if (await canvasAudio.hasAudioContent(composition)) {
     try {
-      audioData = await canvasAudio.processAudio(composition, signal);
+      audioData = await canvasAudio.processAudio(composition, signal)
       getLog().info('Audio processed', {
         hasAudio: !!audioData,
         sampleRate: audioData?.sampleRate,
         channels: audioData?.channels,
-      });
+      })
     } catch (error) {
-      getLog().error('Audio processing failed, continuing without audio', { error });
+      getLog().error('Audio processing failed, continuing without audio', { error })
     }
   }
 
@@ -399,64 +417,91 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     phase: 'preparing',
     progress: 15,
     totalFrames,
-    message: '正在创建编码器...',
-  });
+    message: 'Creating encoder...',
+  })
 
   // Create output format
-  const format = await createOutputFormat(settings.container, { fastStart: true });
+  const format = await createOutputFormat(settings.container, { fastStart: true })
 
   // Create buffer target to collect the output
-  const target = new BufferTarget();
+  const target = new BufferTarget()
 
   // Create output
   const output = new Output({
     format,
     target,
-  });
+  })
+
+  const transcriptSubtitleVtt = settings.embedSubtitles
+    ? buildTranscriptSubtitleWebVtt(composition)
+    : null
+  const supportsWebVttSubtitles = format.getSupportedSubtitleCodecs().includes('webvtt')
+  const embedTranscriptSubtitles = transcriptSubtitleVtt !== null && supportsWebVttSubtitles
+  const renderCompositionInput = embedTranscriptSubtitles
+    ? omitTranscriptSubtitleItemsForSoftSubtitleExport(composition)
+    : composition
+
+  if (transcriptSubtitleVtt !== null && !supportsWebVttSubtitles) {
+    throw new Error(
+      `${settings.container.toUpperCase()} export does not support embedded transcript subtitles. ` +
+        'Use MP4, WebM, or MKV for embedded subtitles.',
+    )
+  }
+
+  let transcriptSubtitleSource: InstanceType<typeof TextSubtitleSource> | null = null
+  if (embedTranscriptSubtitles) {
+    transcriptSubtitleSource = new TextSubtitleSource('webvtt')
+    output.addSubtitleTrack(transcriptSubtitleSource, {
+      languageCode: 'eng',
+      name: 'Transcript',
+      disposition: {
+        default: true,
+      },
+    })
+    getLog().info('Transcript subtitles will be embedded as WebVTT track', {
+      container: settings.container,
+    })
+  }
 
   // Get composition (project) resolution – this is what we render at
-  const compositionWidth = composition.width ?? settings.resolution.width;
-  const compositionHeight = composition.height ?? settings.resolution.height;
+  const compositionWidth = renderCompositionInput.width ?? settings.resolution.width
+  const compositionHeight = renderCompositionInput.height ?? settings.resolution.height
 
   // Export resolution – this is what we output (may be different from composition)
-  const exportWidth = settings.resolution.width;
-  const exportHeight = settings.resolution.height;
+  const exportWidth = settings.resolution.width
+  const exportHeight = settings.resolution.height
 
   // Check if we need to scale (export resolution differs from composition)
-  const needsScaling = exportWidth !== compositionWidth || exportHeight !== compositionHeight;
+  const needsScaling = exportWidth !== compositionWidth || exportHeight !== compositionHeight
 
   getLog().info('Resolution settings', {
     composition: { width: compositionWidth, height: compositionHeight },
     export: { width: exportWidth, height: exportHeight },
     needsScaling,
-  });
+  })
 
   // Create canvas for rendering frames at COMPOSITION resolution
   // This ensures all positioning/transforms are calculated correctly
-  const renderCanvas = new OffscreenCanvas(compositionWidth, compositionHeight);
+  const renderCanvas = new OffscreenCanvas(compositionWidth, compositionHeight)
   // Keep default context settings to preserve hardware acceleration.
   // `willReadFrequently` can force software rendering and slow draw-heavy workloads.
-  const ctx = renderCanvas.getContext('2d');
+  const ctx = renderCanvas.getContext('2d')
 
   if (!ctx) {
-    throw new Error('Failed to create OffscreenCanvas 2D context');
+    throw new Error('Failed to create OffscreenCanvas 2D context')
   }
 
   // Create output canvas at EXPORT resolution (for encoding)
   // If no scaling needed, we'll use renderCanvas directly
-  const outputCanvas = needsScaling
-    ? new OffscreenCanvas(exportWidth, exportHeight)
-    : renderCanvas;
-  const outputCtx = needsScaling
-    ? outputCanvas.getContext('2d')!
-    : ctx;
+  const outputCanvas = needsScaling ? new OffscreenCanvas(exportWidth, exportHeight) : renderCanvas
+  const outputCtx = needsScaling ? outputCanvas.getContext('2d')! : ctx
 
   onProgress({
     phase: 'preparing',
     progress: 20,
     totalFrames,
-    message: '正在设置视频编码器...',
-  });
+    message: 'Setting up video encoder...',
+  })
 
   // Create video source for explicit frame capture (at export resolution)
   // VideoSampleSource lets us control frame capture timing precisely with VideoSample
@@ -466,63 +511,70 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     bitrate: settings.videoBitrate ?? 10_000_000,
     keyFrameInterval: 2, // Keyframe every 2 seconds for better seeking
     latencyMode: 'quality', // Enables B-frames and consistent frame quality for offline encoding
-  });
+  })
 
   // Add video track
   output.addVideoTrack(videoSource, {
     frameRate: fps,
-  });
+  })
 
   // Prepare audio source and buffer (stored outside try block for access after start)
-  let audioSource: InstanceType<typeof AudioBufferSource> | null = null;
-  let audioBuffer: AudioBuffer | null = null;
+  let audioSource: InstanceType<typeof AudioBufferSource> | null = null
+  let audioBuffer: AudioBuffer | null = null
 
   if (audioData) {
     try {
       // Create audio buffer from processed samples
-      audioBuffer = canvasAudio.createAudioBuffer(audioData);
+      audioBuffer = canvasAudio.createAudioBuffer(audioData)
 
       // Select the container-compatible audio codec for the muxer.
-      const audioCodec = getDefaultAudioCodec(settings.container);
+      const audioCodec = getDefaultAudioCodec(settings.container)
       if (audioCodec !== 'aac' && audioCodec !== 'opus') {
-        throw new Error(`Unsupported audio codec ${audioCodec} for ${settings.container.toUpperCase()} export`);
+        throw new Error(
+          `Unsupported audio codec ${audioCodec} for ${settings.container.toUpperCase()} export`,
+        )
       }
 
       // Create audio source for encoding
       audioSource = new AudioBufferSource({
         codec: audioCodec,
         bitrate: settings.audioBitrate ?? 192000,
-      });
+      })
 
       // Add audio track to output (audio data fed after start())
-      output.addAudioTrack(audioSource);
+      output.addAudioTrack(audioSource)
       getLog().info('Audio track added to output', {
         duration: audioBuffer.duration,
         channels: audioBuffer.numberOfChannels,
         sampleRate: audioBuffer.sampleRate,
         codec: audioCodec,
-      });
+      })
     } catch (error) {
-      getLog().error('Failed to setup audio track', { error });
-      audioSource = null;
-      audioBuffer = null;
+      getLog().error('Failed to setup audio track', { error })
+      audioSource = null
+      audioBuffer = null
     }
   }
 
   // Start the output
-  await output.start();
+  await output.start()
+
+  if (transcriptSubtitleSource && transcriptSubtitleVtt) {
+    await transcriptSubtitleSource.add(transcriptSubtitleVtt)
+    transcriptSubtitleSource.close()
+  }
 
   // Feed audio buffer after output has started
   // AudioBufferSource.add() must be called after output.start()
   if (audioSource && audioBuffer) {
     try {
-      await audioSource.add(audioBuffer);
+      await audioSource.add(audioBuffer)
       getLog().info('Audio buffer fed to encoder', {
         duration: audioBuffer.duration,
         samples: audioBuffer.length,
-      });
+      })
     } catch (error) {
-      getLog().error('Failed to feed audio to encoder', { error });
+      getLog().error('Failed to feed audio to encoder', { error })
     }
   }
 
@@ -531,21 +583,21 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     progress: 0,
     currentFrame: 0,
     totalFrames,
-    message: '正在渲染帧...',
-  });
+    message: 'Rendering frames...',
+  })
 
   // Create a composition renderer
-  const frameRenderer = await createCompositionRenderer(composition, renderCanvas, ctx);
+  const frameRenderer = await createCompositionRenderer(renderCompositionInput, renderCanvas, ctx)
 
   try {
     // Preload media
-    await frameRenderer.preload();
+    await frameRenderer.preload()
 
     // Render each frame using a pipelined double-buffer approach.
     // VideoSample copies pixel data on construction, so the canvas is free
     // immediately after. We overlap the previous frame's encode with the
     // next frame's render for ~25-40% throughput improvement.
-    let pendingEncode: Promise<void> | null = null;
+    let pendingEncode: Promise<void> | null = null
 
     for (let frame = 0; frame < totalFrames; frame++) {
       // Check for abort — drain any in-flight encode first so the encoder
@@ -553,129 +605,133 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
       // we are aborting anyway and must always surface AbortError.
       if (signal?.aborted) {
         if (pendingEncode) {
-          try { await pendingEncode; } catch { /* discarded — aborting */ }
+          try {
+            await pendingEncode
+          } catch {
+            /* discarded — aborting */
+          }
         }
-        await output.cancel();
-        throw new DOMException('渲染已取消', 'AbortError');
+        await output.cancel()
+        throw new DOMException('Render cancelled', 'AbortError')
       }
 
       // Render frame to canvas first — this overlaps with the previous frame's
       // encode that is still in flight. The previous VideoSample already copied
       // its pixels, so writing to the canvas here cannot corrupt it.
-      await frameRenderer.renderFrame(frame);
+      await frameRenderer.renderFrame(frame)
 
       // Scale to output resolution if needed
       if (needsScaling) {
-        outputCtx.clearRect(0, 0, exportWidth, exportHeight);
-        outputCtx.drawImage(renderCanvas, 0, 0, exportWidth, exportHeight);
+        outputCtx.clearRect(0, 0, exportWidth, exportHeight)
+        outputCtx.drawImage(renderCanvas, 0, 0, exportWidth, exportHeight)
       }
 
       // Now wait for the previous encode to finish before capturing a new
       // VideoSample. This ensures at most one encode is in flight and that
       // frames are fed to the encoder in order.
-      if (pendingEncode) await pendingEncode;
+      if (pendingEncode) await pendingEncode
 
       // Calculate timestamp in seconds
-      const timestamp = frame / fps;
-      const frameDuration = 1 / fps;
+      const timestamp = frame / fps
+      const frameDuration = 1 / fps
 
       // Snapshot canvas pixels into a VideoSample. The constructor copies
       // pixel data immediately — the canvas is free for the next render.
-      const sample = new VideoSample(outputCanvas, { timestamp, duration: frameDuration });
+      const sample = new VideoSample(outputCanvas, { timestamp, duration: frameDuration })
 
       // Kick off encoding in the background. NOT awaited here — it runs
       // concurrently with the next iteration's renderFrame().
-      const isKeyFrame = frame === 0;
+      const isKeyFrame = frame === 0
       pendingEncode = (async () => {
         try {
           if (isKeyFrame) {
-            await videoSource.add(sample, { keyFrame: true });
+            await videoSource.add(sample, { keyFrame: true })
           } else {
-            await videoSource.add(sample);
+            await videoSource.add(sample)
           }
         } finally {
           // VideoSampleSource does NOT close samples (unlike CanvasSource).
           // We must close to release the underlying VideoFrame's GPU memory,
           // otherwise the browser throttles after ~8-16 outstanding frames.
-          sample.close();
+          sample.close()
         }
-      })();
+      })()
 
       // Report progress
-      const progress = Math.round((frame / totalFrames) * 100);
+      const progress = Math.round((frame / totalFrames) * 100)
       onProgress({
         phase: 'rendering',
         progress,
         currentFrame: frame,
         totalFrames,
-        message: `正在渲染帧 ${frame + 1}/${totalFrames}`,
-      });
+        message: `Rendering frame ${frame + 1}/${totalFrames}`,
+      })
     }
 
     // Drain the final in-flight encode before finalizing
-    if (pendingEncode) await pendingEncode;
+    if (pendingEncode) await pendingEncode
 
     onProgress({
       phase: 'finalizing',
       progress: 95,
       currentFrame: totalFrames,
       totalFrames,
-      message: '正在完成视频封装...',
-    });
+      message: 'Finalizing video...',
+    })
 
     // Close audio source before finalizing (signals no more audio data)
     if (audioSource) {
       try {
-        audioSource.close();
-        getLog().info('Audio source closed');
+        audioSource.close()
+        getLog().info('Audio source closed')
       } catch (error) {
-        getLog().error('Failed to close audio source', { error });
+        getLog().error('Failed to close audio source', { error })
       }
     }
 
     // Finalize output
-    await output.finalize();
+    await output.finalize()
 
     // Get the buffer
-    const buffer = target.buffer;
+    const buffer = target.buffer
     if (!buffer) {
-      throw new Error('未生成输出缓冲区');
+      throw new Error('No output buffer generated')
     }
 
-    const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) });
+    const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) })
 
     onProgress({
       phase: 'finalizing',
       progress: 100,
       currentFrame: totalFrames,
       totalFrames,
-      message: '完成！',
-    });
+      message: 'Complete!',
+    })
 
     // Cleanup
-    frameRenderer.dispose();
-    canvasAudio.clearAudioDecodeCache();
+    frameRenderer.dispose()
+    canvasAudio.clearAudioDecodeCache()
 
     return {
       blob,
       mimeType: getMimeType(settings.container, settings.codec),
       duration: durationSeconds,
       fileSize: blob.size,
-    };
+    }
   } catch (error) {
     // Cleanup on error
-    frameRenderer.dispose();
-    canvasAudio.clearAudioDecodeCache();
+    frameRenderer.dispose()
+    canvasAudio.clearAudioDecodeCache()
 
     // Attempt to cancel the output on error
     try {
       if (output.state === 'started') {
-        await output.cancel();
+        await output.cancel()
       }
     } catch {
       // Ignore cancel errors
     }
-    throw error;
+    throw error
   }
 }
 
@@ -696,61 +752,67 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
     height = 180,
     quality = 0.85,
     format = 'image/jpeg',
-  } = options;
+  } = options
 
-  const compositionWidth = composition.width || 1920;
-  const compositionHeight = composition.height || 1080;
+  const compositionWidth = composition.width || 1920
+  const compositionHeight = composition.height || 1080
 
-  getLog().debug('Rendering single frame', { frame, width, height, compositionWidth, compositionHeight });
+  getLog().debug('Rendering single frame', {
+    frame,
+    width,
+    height,
+    compositionWidth,
+    compositionHeight,
+  })
 
   // Create canvas at full composition size
-  const renderCanvas = new OffscreenCanvas(compositionWidth, compositionHeight);
-  const renderCtx = renderCanvas.getContext('2d');
+  const renderCanvas = new OffscreenCanvas(compositionWidth, compositionHeight)
+  const renderCtx = renderCanvas.getContext('2d')
   if (!renderCtx) {
-    throw new Error('Failed to get 2d context');
+    throw new Error('Failed to get 2d context')
   }
 
   // Use the SAME renderer as export – single source of truth
-  const renderer = await createCompositionRenderer(composition, renderCanvas, renderCtx);
+  const renderer = await createCompositionRenderer(composition, renderCanvas, renderCtx)
   try {
-    await renderer.preload();
-    await renderer.renderFrame(frame);
+    await renderer.preload()
+    await renderer.renderFrame(frame)
 
     // Progressive downscale to thumbnail size to avoid aliasing/moire
     // with high-frequency effects (e.g. halftone fine lines).
     // Halve dimensions repeatedly until within 2x of target, then final scale.
-    let srcCanvas: OffscreenCanvas = renderCanvas;
-    let srcW = compositionWidth;
-    let srcH = compositionHeight;
+    let srcCanvas: OffscreenCanvas = renderCanvas
+    let srcW = compositionWidth
+    let srcH = compositionHeight
 
     while (srcW > width * 2 || srcH > height * 2) {
-      const nextW = Math.max(Math.ceil(srcW / 2), width);
-      const nextH = Math.max(Math.ceil(srcH / 2), height);
-      const step = new OffscreenCanvas(nextW, nextH);
-      const stepCtx = step.getContext('2d')!;
-      stepCtx.imageSmoothingQuality = 'high';
-      stepCtx.drawImage(srcCanvas, 0, 0, nextW, nextH);
-      srcCanvas = step;
-      srcW = nextW;
-      srcH = nextH;
+      const nextW = Math.max(Math.ceil(srcW / 2), width)
+      const nextH = Math.max(Math.ceil(srcH / 2), height)
+      const step = new OffscreenCanvas(nextW, nextH)
+      const stepCtx = step.getContext('2d')!
+      stepCtx.imageSmoothingQuality = 'high'
+      stepCtx.drawImage(srcCanvas, 0, 0, nextW, nextH)
+      srcCanvas = step
+      srcW = nextW
+      srcH = nextH
     }
 
-    const thumbnailCanvas = new OffscreenCanvas(width, height);
-    const thumbnailCtx = thumbnailCanvas.getContext('2d');
+    const thumbnailCanvas = new OffscreenCanvas(width, height)
+    const thumbnailCtx = thumbnailCanvas.getContext('2d')
     if (!thumbnailCtx) {
-      throw new Error('Failed to get thumbnail 2d context');
+      throw new Error('Failed to get thumbnail 2d context')
     }
 
-    thumbnailCtx.imageSmoothingQuality = 'high';
-    thumbnailCtx.drawImage(srcCanvas, 0, 0, width, height);
+    thumbnailCtx.imageSmoothingQuality = 'high'
+    thumbnailCtx.drawImage(srcCanvas, 0, 0, width, height)
 
-    const blob = await thumbnailCanvas.convertToBlob({ type: format, quality });
-    return blob;
+    const blob = await thumbnailCanvas.convertToBlob({ type: format, quality })
+    return blob
   } finally {
     try {
-      renderer.dispose();
+      renderer.dispose()
     } catch (error) {
-      getLog().warn('Failed to dispose single-frame renderer', { error });
+      getLog().warn('Failed to dispose single-frame renderer', { error })
     }
   }
 }
@@ -764,9 +826,9 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
  * Extracts and mixes all audio from the composition and encodes to the specified format.
  */
 export async function renderAudioOnly(options: AudioRenderOptions): Promise<ClientRenderResult> {
-  const { settings, composition, onProgress, signal } = options;
-  const { fps, durationInFrames = 0 } = composition;
-  const canvasAudio = await loadCanvasAudio();
+  const { settings, composition, onProgress, signal } = options
+  const { fps, durationInFrames = 0 } = composition
+  const canvasAudio = await loadCanvasAudio()
 
   getLog().info('Starting audio-only render', {
     fps,
@@ -775,39 +837,39 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     container: settings.container,
     audioCodec: settings.audioCodec,
     audioBitrate: settings.audioBitrate,
-  });
+  })
 
   // Validate inputs
   if (durationInFrames <= 0) {
-    throw new Error('合成内容时长为 0');
+    throw new Error('Composition has no duration')
   }
 
-  const durationSeconds = durationInFrames / fps;
+  const durationSeconds = durationInFrames / fps
 
   onProgress({
     phase: 'preparing',
     progress: 0,
     totalFrames: durationInFrames,
-    message: '正在加载编码器...',
-  });
+    message: 'Loading encoder...',
+  })
 
   // Check for abort
   if (signal?.aborted) {
-    throw new DOMException('渲染已取消', 'AbortError');
+    throw new DOMException('Render cancelled', 'AbortError')
   }
 
   // Dynamically import mediabunny (AC-3 decoder is loaded lazily by canvas-audio when needed)
-  const mediabunny = await import('mediabunny');
-  const { Output, BufferTarget, AudioBufferSource } = mediabunny;
+  const mediabunny = await import('mediabunny')
+  const { Output, BufferTarget, AudioBufferSource } = mediabunny
 
   // Register MP3 encoder if exporting to MP3
   if (settings.container === 'mp3') {
     try {
-      const { registerMp3Encoder } = await import('@mediabunny/mp3-encoder');
-      registerMp3Encoder();
-      getLog().info('MP3 encoder registered');
+      const { registerMp3Encoder } = await import('@mediabunny/mp3-encoder')
+      registerMp3Encoder()
+      getLog().info('MP3 encoder registered')
     } catch (err) {
-      getLog().warn('Failed to load MP3 encoder extension', err);
+      getLog().warn('Failed to load MP3 encoder extension', err)
     }
   }
 
@@ -815,136 +877,136 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     phase: 'preparing',
     progress: 10,
     totalFrames: durationInFrames,
-    message: '正在处理音频...',
-  });
+    message: 'Processing audio...',
+  })
 
   // Process audio
   if (!(await canvasAudio.hasAudioContent(composition))) {
-    throw new Error('合成内容中未找到音频');
+    throw new Error('No audio content found in composition')
   }
 
-  const audioData = await canvasAudio.processAudio(composition, signal);
+  const audioData = await canvasAudio.processAudio(composition, signal)
   if (!audioData) {
-    throw new Error('音频处理失败');
+    throw new Error('Failed to process audio')
   }
 
   onProgress({
     phase: 'preparing',
     progress: 50,
     totalFrames: durationInFrames,
-    message: '正在创建编码器...',
-  });
+    message: 'Creating encoder...',
+  })
 
   // Create output format
-  const format = await createOutputFormat(settings.container, { fastStart: true });
+  const format = await createOutputFormat(settings.container, { fastStart: true })
 
   // Create buffer target to collect the output
-  const target = new BufferTarget();
+  const target = new BufferTarget()
 
   // Create output
   const output = new Output({
     format,
     target,
-  });
+  })
 
   // Determine audio codec based on container (container = codec for audio-only)
-  let audioCodec: 'mp3' | 'aac' | 'pcm-s16';
+  let audioCodec: 'mp3' | 'aac' | 'pcm-s16'
   switch (settings.container) {
     case 'mp3':
-      audioCodec = 'mp3';
-      break;
+      audioCodec = 'mp3'
+      break
     case 'aac':
-      audioCodec = 'aac';
-      break;
+      audioCodec = 'aac'
+      break
     default:
-      audioCodec = 'pcm-s16';
+      audioCodec = 'pcm-s16'
   }
 
   // PCM codecs don't need browser encoding support – they're raw samples
-  const isPcmCodec = audioCodec === 'pcm-s16';
+  const isPcmCodec = audioCodec === 'pcm-s16'
 
   if (!isPcmCodec) {
     // Check if codec is supported
-    const { canEncodeAudio } = mediabunny;
+    const { canEncodeAudio } = mediabunny
     const isSupported = await canEncodeAudio(audioCodec, {
       bitrate: settings.audioBitrate ?? 192000,
       numberOfChannels: 2,
       sampleRate: 48000,
-    });
+    })
 
     if (!isSupported) {
       throw new Error(
-        `当前浏览器不支持 ${audioCodec.toUpperCase()} 编码。` +
-        '请尝试导出为 WAV（无损）。'
-      );
+        `${audioCodec.toUpperCase()} encoding is not supported in this browser. ` +
+          `Try exporting as WAV (lossless) instead.`,
+      )
     }
-    getLog().info(`Using ${audioCodec.toUpperCase()} codec`);
+    getLog().info(`Using ${audioCodec.toUpperCase()} codec`)
   }
 
   // Create audio buffer from processed samples
-  const audioBuffer = canvasAudio.createAudioBuffer(audioData);
+  const audioBuffer = canvasAudio.createAudioBuffer(audioData)
 
   // Create audio source for encoding
   const audioSource = new AudioBufferSource({
     codec: audioCodec,
     bitrate: settings.audioBitrate ?? 192000,
-  });
+  })
 
   // Add audio track to output
-  output.addAudioTrack(audioSource);
+  output.addAudioTrack(audioSource)
 
   getLog().info('Audio track configured', {
     duration: audioBuffer.duration,
     channels: audioBuffer.numberOfChannels,
     sampleRate: audioBuffer.sampleRate,
     codec: audioCodec,
-  });
+  })
 
   onProgress({
     phase: 'encoding',
     progress: 60,
     totalFrames: durationInFrames,
-    message: '正在编码音频...',
-  });
+    message: 'Encoding audio...',
+  })
 
   // Start the output
-  await output.start();
+  await output.start()
 
   // Feed audio buffer
-  await audioSource.add(audioBuffer);
+  await audioSource.add(audioBuffer)
 
   onProgress({
     phase: 'finalizing',
     progress: 90,
     totalFrames: durationInFrames,
-    message: '正在完成音频封装...',
-  });
+    message: 'Finalizing audio...',
+  })
 
   // Close audio source
-  audioSource.close();
+  audioSource.close()
 
   // Finalize output
-  await output.finalize();
+  await output.finalize()
 
   // Get the buffer
-  const buffer = target.buffer;
+  const buffer = target.buffer
   if (!buffer) {
-    throw new Error('未生成输出缓冲区');
+    throw new Error('No output buffer generated')
   }
 
-  const blob = new Blob([buffer], { type: getMimeType(settings.container) });
+  const blob = new Blob([buffer], { type: getMimeType(settings.container) })
 
   onProgress({
     phase: 'finalizing',
     progress: 100,
     totalFrames: durationInFrames,
-    message: '完成！',
-  });
+    message: 'Complete!',
+  })
 
   return {
     blob,
     mimeType: getMimeType(settings.container),
     duration: durationSeconds,
     fileSize: blob.size,
-  };
+  }
 }

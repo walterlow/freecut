@@ -1,9 +1,9 @@
 export interface FastScrubOverlayGuardInput {
-  isGizmoInteracting: boolean;
-  isPlaying: boolean;
-  currentFrame: number;
-  previewFrame: number | null;
-  renderedFrame: number;
+  isGizmoInteracting: boolean
+  isPlaying: boolean
+  currentFrame: number
+  previewFrame: number | null
+  renderedFrame: number
 }
 
 /**
@@ -17,8 +17,8 @@ export function shouldShowFastScrubOverlay({
   previewFrame,
   renderedFrame,
 }: FastScrubOverlayGuardInput): boolean {
-  if (isPlaying) return false;
-  const targetFrame = isGizmoInteracting ? currentFrame : previewFrame;
-  if (targetFrame === null) return false;
-  return targetFrame === renderedFrame;
+  if (isPlaying) return false
+  const targetFrame = isGizmoInteracting ? currentFrame : previewFrame
+  if (targetFrame === null) return false
+  return targetFrame === renderedFrame
 }

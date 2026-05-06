@@ -1,63 +1,63 @@
-export type RenderMode = 'export' | 'preview';
+export type RenderMode = 'export' | 'preview'
 
-export type PreviewMediabunnyInitAction = 'none' | 'await-ready' | 'warm-background-and-skip';
+export type PreviewMediabunnyInitAction = 'none' | 'await-ready' | 'warm-background-and-skip'
 
 export interface PreviewDomVideoDrawDecision {
-  hasReadyDomVideo: boolean;
-  shouldDraw: boolean;
-  drift: number | null;
-  driftThreshold: number | null;
+  hasReadyDomVideo: boolean
+  shouldDraw: boolean
+  drift: number | null
+  driftThreshold: number | null
 }
 
 export interface ResolvePreviewDomVideoDrawDecisionOptions {
-  domVideo: HTMLVideoElement | null;
-  sourceTime: number;
-  speed: number;
-  isRenderingTransition: boolean;
+  domVideo: HTMLVideoElement | null
+  sourceTime: number
+  speed: number
+  isRenderingTransition: boolean
 }
 
 export interface ResolvePreviewMediabunnyInitActionOptions {
-  renderMode: RenderMode;
-  hasMediabunny: boolean;
-  isMediabunnyDisabled: boolean;
-  hasEnsureVideoItemReady: boolean;
-  speed: number;
+  renderMode: RenderMode
+  hasMediabunny: boolean
+  isMediabunnyDisabled: boolean
+  hasEnsureVideoItemReady: boolean
+  speed: number
 }
 
 export interface PreviewStrictWaitingFallbackOptions {
-  renderMode: RenderMode;
-  hasMediabunny: boolean;
-  hasFallbackVideoElement: boolean;
+  renderMode: RenderMode
+  hasMediabunny: boolean
+  hasFallbackVideoElement: boolean
 }
 
 export interface PreviewWorkerBitmapOptions {
-  renderMode: RenderMode;
-  hasReadyDomVideo: boolean;
+  renderMode: RenderMode
+  hasReadyDomVideo: boolean
 }
 
 export interface PreviewVideoElementFallbackOptions {
-  renderMode: RenderMode;
-  hasFallbackVideoElement: boolean;
-  hasMediabunny: boolean;
-  isMediabunnyDisabled: boolean;
-  mediabunnyFailedThisFrame: boolean;
+  renderMode: RenderMode
+  hasFallbackVideoElement: boolean
+  hasMediabunny: boolean
+  isMediabunnyDisabled: boolean
+  mediabunnyFailedThisFrame: boolean
 }
 
 export function isVariableSpeedPlayback(speed: number): boolean {
-  return Math.abs(speed - 1) >= 0.01;
+  return Math.abs(speed - 1) >= 0.01
 }
 
 export function getPreviewDomVideoDriftThreshold(speed: number, isInTransition: boolean): number {
-  const baseDriftThreshold = isInTransition ? 1.0 : 0.2;
+  const baseDriftThreshold = isInTransition ? 1.0 : 0.2
   return Math.abs(speed) > 1.01
     ? Math.max(baseDriftThreshold, 0.5 * Math.abs(speed))
-    : baseDriftThreshold;
+    : baseDriftThreshold
 }
 
 export function resolvePreviewDomVideoDrawDecision(
   options: ResolvePreviewDomVideoDrawDecisionOptions,
 ): PreviewDomVideoDrawDecision {
-  const { domVideo, sourceTime, speed, isRenderingTransition } = options;
+  const { domVideo, sourceTime, speed, isRenderingTransition } = options
 
   if (!domVideo || domVideo.readyState < 2 || domVideo.videoWidth <= 0) {
     return {
@@ -65,56 +65,51 @@ export function resolvePreviewDomVideoDrawDecision(
       shouldDraw: false,
       drift: null,
       driftThreshold: null,
-    };
+    }
   }
 
-  const drift = Math.abs(domVideo.currentTime - sourceTime);
+  const drift = Math.abs(domVideo.currentTime - sourceTime)
   const driftThreshold = getPreviewDomVideoDriftThreshold(
     speed,
     isRenderingTransition || domVideo.dataset.transitionHold === '1',
-  );
+  )
 
   return {
     hasReadyDomVideo: true,
     shouldDraw: drift <= driftThreshold,
     drift,
     driftThreshold,
-  };
+  }
 }
 
 export function resolvePreviewMediabunnyInitAction(
   options: ResolvePreviewMediabunnyInitActionOptions,
 ): PreviewMediabunnyInitAction {
-  const {
-    renderMode,
-    hasMediabunny,
-    isMediabunnyDisabled,
-    hasEnsureVideoItemReady,
-    speed,
-  } = options;
+  const { renderMode, hasMediabunny, isMediabunnyDisabled, hasEnsureVideoItemReady, speed } =
+    options
 
   if (
-    renderMode !== 'preview'
-    || hasMediabunny
-    || isMediabunnyDisabled
-    || !hasEnsureVideoItemReady
+    renderMode !== 'preview' ||
+    hasMediabunny ||
+    isMediabunnyDisabled ||
+    !hasEnsureVideoItemReady
   ) {
-    return 'none';
+    return 'none'
   }
 
-  return isVariableSpeedPlayback(speed) ? 'warm-background-and-skip' : 'await-ready';
+  return isVariableSpeedPlayback(speed) ? 'warm-background-and-skip' : 'await-ready'
 }
 
 export function shouldUsePreviewStrictWaitingFallback(
   options: PreviewStrictWaitingFallbackOptions,
 ): boolean {
-  const { renderMode, hasMediabunny, hasFallbackVideoElement } = options;
-  return renderMode === 'preview' && !hasMediabunny && !hasFallbackVideoElement;
+  const { renderMode, hasMediabunny, hasFallbackVideoElement } = options
+  return renderMode === 'preview' && !hasMediabunny && !hasFallbackVideoElement
 }
 
 export function shouldTryPreviewWorkerBitmap(options: PreviewWorkerBitmapOptions): boolean {
-  const { renderMode, hasReadyDomVideo } = options;
-  return renderMode === 'preview' && !hasReadyDomVideo;
+  const { renderMode, hasReadyDomVideo } = options
+  return renderMode === 'preview' && !hasReadyDomVideo
 }
 
 export function shouldAllowPreviewVideoElementFallback(
@@ -126,9 +121,11 @@ export function shouldAllowPreviewVideoElementFallback(
     hasMediabunny,
     isMediabunnyDisabled,
     mediabunnyFailedThisFrame,
-  } = options;
+  } = options
 
-  return renderMode === 'preview'
-    && hasFallbackVideoElement
-    && (mediabunnyFailedThisFrame || !hasMediabunny || isMediabunnyDisabled);
+  return (
+    renderMode === 'preview' &&
+    hasFallbackVideoElement &&
+    (mediabunnyFailedThisFrame || !hasMediabunny || isMediabunnyDisabled)
+  )
 }

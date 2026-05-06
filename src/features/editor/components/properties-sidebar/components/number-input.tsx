@@ -1,1 +1,1 @@
-export { NumberInput } from '@/shared/ui/property-controls/number-input';
+export { NumberInput } from '@/shared/ui/property-controls/number-input'

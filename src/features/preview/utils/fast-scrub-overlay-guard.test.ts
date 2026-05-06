@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { shouldShowFastScrubOverlay } from './fast-scrub-overlay-guard';
+import { describe, expect, it } from 'vite-plus/test'
+import { shouldShowFastScrubOverlay } from './fast-scrub-overlay-guard'
 
 describe('shouldShowFastScrubOverlay', () => {
   it('returns true when scrub is active at the rendered frame', () => {
@@ -10,9 +10,9 @@ describe('shouldShowFastScrubOverlay', () => {
         currentFrame: 90,
         previewFrame: 120,
         renderedFrame: 120,
-      })
-    ).toBe(true);
-  });
+      }),
+    ).toBe(true)
+  })
 
   it('returns true while gizmo is interacting when rendered frame matches current frame', () => {
     expect(
@@ -22,9 +22,9 @@ describe('shouldShowFastScrubOverlay', () => {
         currentFrame: 120,
         previewFrame: 120,
         renderedFrame: 120,
-      })
-    ).toBe(true);
-  });
+      }),
+    ).toBe(true)
+  })
 
   it('returns false while gizmo is interacting when rendered frame is stale', () => {
     expect(
@@ -34,9 +34,9 @@ describe('shouldShowFastScrubOverlay', () => {
         currentFrame: 121,
         previewFrame: 120,
         renderedFrame: 120,
-      })
-    ).toBe(false);
-  });
+      }),
+    ).toBe(false)
+  })
 
   it('returns false while playing', () => {
     expect(
@@ -46,9 +46,9 @@ describe('shouldShowFastScrubOverlay', () => {
         currentFrame: 120,
         previewFrame: 120,
         renderedFrame: 120,
-      })
-    ).toBe(false);
-  });
+      }),
+    ).toBe(false)
+  })
 
   it('returns false when preview frame is cleared', () => {
     expect(
@@ -58,9 +58,9 @@ describe('shouldShowFastScrubOverlay', () => {
         currentFrame: 120,
         previewFrame: null,
         renderedFrame: 120,
-      })
-    ).toBe(false);
-  });
+      }),
+    ).toBe(false)
+  })
 
   it('returns false when rendered frame is stale', () => {
     expect(
@@ -70,7 +70,7 @@ describe('shouldShowFastScrubOverlay', () => {
         currentFrame: 120,
         previewFrame: 121,
         renderedFrame: 120,
-      })
-    ).toBe(false);
-  });
-});
+      }),
+    ).toBe(false)
+  })
+})

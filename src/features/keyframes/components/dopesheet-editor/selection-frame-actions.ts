@@ -1,45 +1,47 @@
-import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe';
-import type { BlockedFrameRange } from '../../utils/transition-region';
-import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints';
-import { clampFrame, clampToAvoidBlockedRanges } from './frame-utils';
+import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe'
+import type { BlockedFrameRange } from '../../utils/transition-region'
+import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
+import { clampFrame, clampToAvoidBlockedRanges } from './frame-utils'
 
 type KeyframeMetaLike = {
-  property: AnimatableProperty;
-  keyframe: Keyframe;
-};
+  property: AnimatableProperty
+  keyframe: Keyframe
+}
 
 export interface SelectionFramePreview {
-  movableSelectionIds: string[];
-  previewFrames: Record<string, number> | null;
-  appliedDeltaFrames: number;
+  movableSelectionIds: string[]
+  previewFrames: Record<string, number> | null
+  appliedDeltaFrames: number
 }
 
 interface BuildSelectionFramePreviewArgs {
-  selectionIds: Iterable<string>;
-  requestedDeltaFrames: number;
-  keyframeMetaById: ReadonlyMap<string, KeyframeMetaLike>;
-  isPropertyLocked: (property: AnimatableProperty) => boolean;
-  keyframesByProperty: Partial<Record<AnimatableProperty, Keyframe[]>>;
-  totalFrames: number;
-  transitionBlockedRanges: BlockedFrameRange[];
+  selectionIds: Iterable<string>
+  requestedDeltaFrames: number
+  keyframeMetaById: ReadonlyMap<string, KeyframeMetaLike>
+  isPropertyLocked: (property: AnimatableProperty) => boolean
+  keyframesByProperty: Partial<Record<AnimatableProperty, Keyframe[]>>
+  totalFrames: number
+  transitionBlockedRanges: BlockedFrameRange[]
 }
 
 interface CommitSelectionFramePreviewArgs {
-  selectionIds: Iterable<string>;
-  previewFrames: Record<string, number> | null;
-  keyframeMetaById: ReadonlyMap<string, KeyframeMetaLike>;
-  isPropertyLocked: (property: AnimatableProperty) => boolean;
-  itemId: string;
-  onKeyframeMove?: (ref: KeyframeRef, newFrame: number, newValue: number) => void;
+  selectionIds: Iterable<string>
+  previewFrames: Record<string, number> | null
+  keyframeMetaById: ReadonlyMap<string, KeyframeMetaLike>
+  isPropertyLocked: (property: AnimatableProperty) => boolean
+  itemId: string
+  onKeyframeMove?: (ref: KeyframeRef, newFrame: number, newValue: number) => void
 }
 
 interface DuplicateSelectionFramePreviewArgs {
-  selectionIds: Iterable<string>;
-  previewFrames: Record<string, number> | null;
-  keyframeMetaById: ReadonlyMap<string, KeyframeMetaLike>;
-  isPropertyLocked: (property: AnimatableProperty) => boolean;
-  itemId: string;
-  onDuplicateKeyframes?: (entries: Array<{ ref: KeyframeRef; frame: number; value: number }>) => void;
+  selectionIds: Iterable<string>
+  previewFrames: Record<string, number> | null
+  keyframeMetaById: ReadonlyMap<string, KeyframeMetaLike>
+  isPropertyLocked: (property: AnimatableProperty) => boolean
+  itemId: string
+  onDuplicateKeyframes?: (
+    entries: Array<{ ref: KeyframeRef; frame: number; value: number }>,
+  ) => void
 }
 
 export function buildSelectionFramePreview({
@@ -52,16 +54,16 @@ export function buildSelectionFramePreview({
   transitionBlockedRanges,
 }: BuildSelectionFramePreviewArgs): SelectionFramePreview {
   const movableSelectionIds = Array.from(selectionIds).filter((keyframeId) => {
-    const meta = keyframeMetaById.get(keyframeId);
-    return !!meta && !isPropertyLocked(meta.property);
-  });
+    const meta = keyframeMetaById.get(keyframeId)
+    return !!meta && !isPropertyLocked(meta.property)
+  })
 
   if (movableSelectionIds.length === 0 || requestedDeltaFrames === 0) {
     return {
       movableSelectionIds,
       previewFrames: null,
       appliedDeltaFrames: 0,
-    };
+    }
   }
 
   const constrainedDeltaFrames = constrainSelectedKeyframeDelta({
@@ -69,43 +71,44 @@ export function buildSelectionFramePreview({
     selectedKeyframeIds: new Set(movableSelectionIds),
     totalFrames,
     deltaFrames: requestedDeltaFrames,
-  });
+  })
 
   // Compute a single blocked-safe delta for the whole selection so all keyframes
   // move by the same amount and stay in sync.
-  const allowedDeltas: number[] = [];
+  const allowedDeltas: number[] = []
   for (const keyframeId of movableSelectionIds) {
-    const meta = keyframeMetaById.get(keyframeId);
-    if (!meta) continue;
+    const meta = keyframeMetaById.get(keyframeId)
+    if (!meta) continue
 
-    const initialFrame = meta.keyframe.frame;
-    let candidate = clampFrame(initialFrame + constrainedDeltaFrames, totalFrames);
-    candidate = clampToAvoidBlockedRanges(candidate, initialFrame, transitionBlockedRanges);
-    candidate = clampFrame(candidate, totalFrames);
-    allowedDeltas.push(candidate - initialFrame);
+    const initialFrame = meta.keyframe.frame
+    let candidate = clampFrame(initialFrame + constrainedDeltaFrames, totalFrames)
+    candidate = clampToAvoidBlockedRanges(candidate, initialFrame, transitionBlockedRanges)
+    candidate = clampFrame(candidate, totalFrames)
+    allowedDeltas.push(candidate - initialFrame)
   }
 
-  const commonDelta = allowedDeltas.length === 0
-    ? 0
-    : constrainedDeltaFrames > 0
-      ? Math.min(...allowedDeltas)
-      : Math.max(...allowedDeltas);
+  const commonDelta =
+    allowedDeltas.length === 0
+      ? 0
+      : constrainedDeltaFrames > 0
+        ? Math.min(...allowedDeltas)
+        : Math.max(...allowedDeltas)
 
-  const nextPreviewFrames: Record<string, number> = {};
+  const nextPreviewFrames: Record<string, number> = {}
   for (const keyframeId of movableSelectionIds) {
-    const meta = keyframeMetaById.get(keyframeId);
-    if (!meta) continue;
+    const meta = keyframeMetaById.get(keyframeId)
+    if (!meta) continue
 
-    const nextFrame = meta.keyframe.frame + commonDelta;
-    if (nextFrame === meta.keyframe.frame) continue;
-    nextPreviewFrames[keyframeId] = nextFrame;
+    const nextFrame = meta.keyframe.frame + commonDelta
+    if (nextFrame === meta.keyframe.frame) continue
+    nextPreviewFrames[keyframeId] = nextFrame
   }
 
   return {
     movableSelectionIds,
     previewFrames: Object.keys(nextPreviewFrames).length > 0 ? nextPreviewFrames : null,
     appliedDeltaFrames: commonDelta,
-  };
+  }
 }
 
 export function commitSelectionFramePreview({
@@ -117,30 +120,26 @@ export function commitSelectionFramePreview({
   onKeyframeMove,
 }: CommitSelectionFramePreviewArgs): boolean {
   if (!onKeyframeMove || !previewFrames) {
-    return false;
+    return false
   }
 
-  let hasChanges = false;
+  let hasChanges = false
   for (const keyframeId of selectionIds) {
-    const nextFrame = previewFrames[keyframeId];
+    const nextFrame = previewFrames[keyframeId]
     if (nextFrame === undefined) {
-      continue;
+      continue
     }
 
-    const meta = keyframeMetaById.get(keyframeId);
+    const meta = keyframeMetaById.get(keyframeId)
     if (!meta || isPropertyLocked(meta.property)) {
-      continue;
+      continue
     }
 
-    onKeyframeMove(
-      { itemId, property: meta.property, keyframeId },
-      nextFrame,
-      meta.keyframe.value
-    );
-    hasChanges = true;
+    onKeyframeMove({ itemId, property: meta.property, keyframeId }, nextFrame, meta.keyframe.value)
+    hasChanges = true
   }
 
-  return hasChanges;
+  return hasChanges
 }
 
 export function duplicateSelectionFramePreview({
@@ -152,32 +151,32 @@ export function duplicateSelectionFramePreview({
   onDuplicateKeyframes,
 }: DuplicateSelectionFramePreviewArgs): boolean {
   if (!onDuplicateKeyframes || !previewFrames) {
-    return false;
+    return false
   }
 
-  const entries: Array<{ ref: KeyframeRef; frame: number; value: number }> = [];
+  const entries: Array<{ ref: KeyframeRef; frame: number; value: number }> = []
   for (const keyframeId of selectionIds) {
-    const nextFrame = previewFrames[keyframeId];
+    const nextFrame = previewFrames[keyframeId]
     if (nextFrame === undefined) {
-      continue;
+      continue
     }
 
-    const meta = keyframeMetaById.get(keyframeId);
+    const meta = keyframeMetaById.get(keyframeId)
     if (!meta || isPropertyLocked(meta.property)) {
-      continue;
+      continue
     }
 
     entries.push({
       ref: { itemId, property: meta.property, keyframeId },
       frame: nextFrame,
       value: meta.keyframe.value,
-    });
+    })
   }
 
   if (entries.length === 0) {
-    return false;
+    return false
   }
 
-  onDuplicateKeyframes(entries);
-  return true;
+  onDuplicateKeyframes(entries)
+  return true
 }

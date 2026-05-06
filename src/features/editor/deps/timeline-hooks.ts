@@ -3,7 +3,4 @@
  * Editor modules should import timeline feature hooks from here.
  */
 
-export {
-  useTimelineShortcuts,
-  useTransitionBreakageNotifications,
-} from './timeline-contract';
+export { useTimelineShortcuts, useTransitionBreakageNotifications } from './timeline-contract'

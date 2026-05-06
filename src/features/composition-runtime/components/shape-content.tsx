@@ -1,8 +1,8 @@
-﻿import React, { useCallback } from 'react';
-import { Rect, Circle, Triangle, Ellipse, Star, Polygon, Heart } from '@/shared/graphics/shapes';
-import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
-import type { ShapeItem } from '@/types/timeline';
-import { useCompositionSpace } from '../contexts/composition-space-context';
+import React, { useCallback } from 'react'
+import { Rect, Circle, Triangle, Ellipse, Star, Polygon, Heart } from '@/shared/graphics/shapes'
+import { useGizmoStore } from '@/features/composition-runtime/deps/stores'
+import type { ShapeItem } from '@/types/timeline'
+import { useCompositionSpace } from '../contexts/composition-space-context'
 
 /**
  * Shape content with live property preview support.
@@ -10,59 +10,60 @@ import { useCompositionSpace } from '../contexts/composition-space-context';
  * Reads preview values from gizmo store for real-time updates during editing.
  */
 export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
-  const compositionSpace = useCompositionSpace();
-  const renderScaleX = compositionSpace?.scaleX ?? 1;
-  const renderScaleY = compositionSpace?.scaleY ?? 1;
-  const renderScale = compositionSpace?.scale ?? 1;
+  const compositionSpace = useCompositionSpace()
+  const renderScaleX = compositionSpace?.scaleX ?? 1
+  const renderScaleY = compositionSpace?.scaleY ?? 1
+  const renderScale = compositionSpace?.scale ?? 1
 
   // Read transform preview from gizmo store for real-time scaling
-  const activeGizmo = useGizmoStore((s) => s.activeGizmo);
-  const previewTransform = useGizmoStore((s) => s.previewTransform);
+  const activeGizmo = useGizmoStore((s) => s.activeGizmo)
+  const previewTransform = useGizmoStore((s) => s.previewTransform)
   // Read from unified preview system (includes transforms, properties, and effects)
-  const itemPreview = useGizmoStore(
-    useCallback((s) => s.preview?.[item.id], [item.id])
-  );
+  const itemPreview = useGizmoStore(useCallback((s) => s.preview?.[item.id], [item.id]))
 
   // Use preview values if available, otherwise use item's stored values
-  const shapePropsPreview = itemPreview?.properties;
-  const fillColor = shapePropsPreview?.fillColor ?? item.fillColor ?? '#3b82f6';
-  const strokeColor = shapePropsPreview?.strokeColor ?? item.strokeColor;
-  const strokeWidth = (shapePropsPreview?.strokeWidth ?? item.strokeWidth ?? 0) * renderScale;
-  const cornerRadius = (shapePropsPreview?.cornerRadius ?? item.cornerRadius ?? 0) * renderScale;
-  const direction = shapePropsPreview?.direction ?? item.direction ?? 'up';
-  const points = shapePropsPreview?.points ?? item.points ?? 5;
-  const innerRadius = shapePropsPreview?.innerRadius ?? item.innerRadius ?? 0.5;
-  const shapeType = shapePropsPreview?.shapeType ?? item.shapeType;
+  const shapePropsPreview = itemPreview?.properties
+  const fillColor = shapePropsPreview?.fillColor ?? item.fillColor ?? '#3b82f6'
+  const strokeColor = shapePropsPreview?.strokeColor ?? item.strokeColor
+  const strokeWidth = (shapePropsPreview?.strokeWidth ?? item.strokeWidth ?? 0) * renderScale
+  const cornerRadius = (shapePropsPreview?.cornerRadius ?? item.cornerRadius ?? 0) * renderScale
+  const direction = shapePropsPreview?.direction ?? item.direction ?? 'up'
+  const points = shapePropsPreview?.points ?? item.points ?? 5
+  const innerRadius = shapePropsPreview?.innerRadius ?? item.innerRadius ?? 0.5
+  const shapeType = shapePropsPreview?.shapeType ?? item.shapeType
 
   // Get dimensions with preview support for real-time gizmo scaling
   // Priority: Unified preview (group/properties) > Single gizmo preview > Base transform
-  let width = (item.transform?.width ?? 200) * renderScaleX;
-  let height = (item.transform?.height ?? 200) * renderScaleY;
+  let width = (item.transform?.width ?? 200) * renderScaleX
+  let height = (item.transform?.height ?? 200) * renderScaleY
 
-  const itemPreviewTransform = itemPreview?.transform;
-  const isGizmoPreviewActive = activeGizmo?.itemId === item.id && previewTransform !== null;
+  const itemPreviewTransform = itemPreview?.transform
+  const isGizmoPreviewActive = activeGizmo?.itemId === item.id && previewTransform !== null
 
   if (itemPreviewTransform) {
-    width = (itemPreviewTransform.width ?? (width / renderScaleX)) * renderScaleX;
-    height = (itemPreviewTransform.height ?? (height / renderScaleY)) * renderScaleY;
+    width = (itemPreviewTransform.width ?? width / renderScaleX) * renderScaleX
+    height = (itemPreviewTransform.height ?? height / renderScaleY) * renderScaleY
   } else if (isGizmoPreviewActive && previewTransform) {
-    width = previewTransform.width * renderScaleX;
-    height = previewTransform.height * renderScaleY;
+    width = previewTransform.width * renderScaleX
+    height = previewTransform.height * renderScaleY
   }
 
   // Common stroke props
-  const strokeProps = strokeWidth > 0 && strokeColor ? {
-    stroke: strokeColor,
-    strokeWidth,
-  } : {};
+  const strokeProps =
+    strokeWidth > 0 && strokeColor
+      ? {
+          stroke: strokeColor,
+          strokeWidth,
+        }
+      : {}
 
   // Check if aspect ratio is locked (for squish/squash behavior)
   // Read from preview transforms if available, otherwise from item
-  let aspectLocked = item.transform?.aspectRatioLocked ?? true;
+  let aspectLocked = item.transform?.aspectRatioLocked ?? true
   if (itemPreviewTransform?.aspectRatioLocked !== undefined) {
-    aspectLocked = itemPreviewTransform.aspectRatioLocked;
+    aspectLocked = itemPreviewTransform.aspectRatioLocked
   } else if (isGizmoPreviewActive && previewTransform?.aspectRatioLocked !== undefined) {
-    aspectLocked = previewTransform.aspectRatioLocked;
+    aspectLocked = previewTransform.aspectRatioLocked
   }
 
   // Centering wrapper style for SVG shapes
@@ -72,18 +73,20 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-  };
+  }
 
   // For shapes that need to squish/squash when aspect is unlocked,
   // we render at base size and apply CSS scale transform
-  const baseSize = Math.min(width, height);
-  const scaleX = aspectLocked ? 1 : width / baseSize;
-  const scaleY = aspectLocked ? 1 : height / baseSize;
-  const needsScale = !aspectLocked && (scaleX !== 1 || scaleY !== 1);
+  const baseSize = Math.min(width, height)
+  const scaleX = aspectLocked ? 1 : width / baseSize
+  const scaleY = aspectLocked ? 1 : height / baseSize
+  const needsScale = !aspectLocked && (scaleX !== 1 || scaleY !== 1)
 
-  const scaleStyle: React.CSSProperties = needsScale ? {
-    transform: `scale(${scaleX}, ${scaleY})`,
-  } : {};
+  const scaleStyle: React.CSSProperties = needsScale
+    ? {
+        transform: `scale(${scaleX}, ${scaleY})`,
+      }
+    : {}
 
   // Render appropriate shape based on shapeType
   switch (shapeType) {
@@ -99,22 +102,18 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
             {...strokeProps}
           />
         </div>
-      );
+      )
 
     case 'circle': {
       // Circle: squish/squash when aspect unlocked
-      const radius = baseSize / 2;
+      const radius = baseSize / 2
       return (
         <div style={centerStyle}>
           <div style={scaleStyle}>
-            <Circle
-              radius={radius}
-              fill={fillColor}
-              {...strokeProps}
-            />
+            <Circle radius={radius} fill={fillColor} {...strokeProps} />
           </div>
         </div>
-      );
+      )
     }
 
     case 'triangle': {
@@ -131,29 +130,24 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
             />
           </div>
         </div>
-      );
+      )
     }
 
     case 'ellipse': {
       // Ellipse naturally supports non-proportional via rx/ry
-      const rx = width / 2;
-      const ry = height / 2;
+      const rx = width / 2
+      const ry = height / 2
       return (
         <div style={centerStyle}>
-          <Ellipse
-            rx={rx}
-            ry={ry}
-            fill={fillColor}
-            {...strokeProps}
-          />
+          <Ellipse rx={rx} ry={ry} fill={fillColor} {...strokeProps} />
         </div>
-      );
+      )
     }
 
     case 'star': {
       // Star: squish/squash when aspect unlocked
-      const outerRadius = baseSize / 2;
-      const innerRadiusValue = outerRadius * innerRadius;
+      const outerRadius = baseSize / 2
+      const innerRadiusValue = outerRadius * innerRadius
       return (
         <div style={centerStyle}>
           <div style={scaleStyle}>
@@ -167,12 +161,12 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
             />
           </div>
         </div>
-      );
+      )
     }
 
     case 'polygon': {
       // Polygon: squish/squash when aspect unlocked
-      const radius = baseSize / 2;
+      const radius = baseSize / 2
       return (
         <div style={centerStyle}>
           <div style={scaleStyle}>
@@ -185,14 +179,14 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
             />
           </div>
         </div>
-      );
+      )
     }
 
     case 'heart': {
       // Heart: use Composition's Heart component for consistency with mask path generation
       // Heart output width = 1.1 × input height, so we scale input to fit within baseSize
       // Using height = baseSize / 1.1 ensures output width = baseSize (fits container)
-      const heartHeight = baseSize / 1.1;
+      const heartHeight = baseSize / 1.1
       return (
         <div style={centerStyle}>
           <div style={scaleStyle}>
@@ -204,32 +198,34 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
             />
           </div>
         </div>
-      );
+      )
     }
 
     case 'path': {
       // Custom bezier path drawn with pen tool
-      const pathVerts = item.pathVertices;
+      const pathVerts = item.pathVertices
       if (!pathVerts || pathVerts.length < 2) {
-        return <div style={{ width: '100%', height: '100%', backgroundColor: fillColor }} />;
+        return <div style={{ width: '100%', height: '100%', backgroundColor: fillColor }} />
       }
       // Build SVG path from normalized vertices
-      const pathParts: string[] = [];
-      const firstV = pathVerts[0]!;
-      pathParts.push(`M ${firstV.position[0] * width} ${firstV.position[1] * height}`);
+      const pathParts: string[] = []
+      const firstV = pathVerts[0]!
+      pathParts.push(`M ${firstV.position[0] * width} ${firstV.position[1] * height}`)
       for (let i = 0; i < pathVerts.length; i++) {
-        const curr = pathVerts[i]!;
-        const next = pathVerts[(i + 1) % pathVerts.length]!;
-        const outH = curr.outHandle;
-        const inH = next.inHandle;
-        const isStraight = outH[0] === 0 && outH[1] === 0 && inH[0] === 0 && inH[1] === 0;
+        const curr = pathVerts[i]!
+        const next = pathVerts[(i + 1) % pathVerts.length]!
+        const outH = curr.outHandle
+        const inH = next.inHandle
+        const isStraight = outH[0] === 0 && outH[1] === 0 && inH[0] === 0 && inH[1] === 0
         if (isStraight) {
-          pathParts.push(`L ${next.position[0] * width} ${next.position[1] * height}`);
+          pathParts.push(`L ${next.position[0] * width} ${next.position[1] * height}`)
         } else {
-          pathParts.push(`C ${(curr.position[0] + outH[0]) * width} ${(curr.position[1] + outH[1]) * height} ${(next.position[0] + inH[0]) * width} ${(next.position[1] + inH[1]) * height} ${next.position[0] * width} ${next.position[1] * height}`);
+          pathParts.push(
+            `C ${(curr.position[0] + outH[0]) * width} ${(curr.position[1] + outH[1]) * height} ${(next.position[0] + inH[0]) * width} ${(next.position[1] + inH[1]) * height} ${next.position[0] * width} ${next.position[1] * height}`,
+          )
         }
       }
-      pathParts.push('Z');
+      pathParts.push('Z')
       return (
         <div style={centerStyle}>
           <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -240,7 +236,7 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
             />
           </svg>
         </div>
-      );
+      )
     }
 
     default:
@@ -254,7 +250,6 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
             borderRadius: cornerRadius,
           }}
         />
-      );
+      )
   }
-};
-
+}

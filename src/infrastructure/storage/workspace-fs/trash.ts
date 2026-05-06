@@ -26,46 +26,34 @@
  * layer stays free of media-library dependencies.
  */
 
-import { createLogger } from '@/shared/logging/logger';
-import { requireWorkspaceRoot } from './root';
-import {
-  exists,
-  listDirectory,
-  readJson,
-  writeJsonAtomic,
-} from './fs-primitives';
-import {
-  PROJECTS_DIR,
-  projectJsonPath,
-  projectTrashedMarkerPath,
-} from './paths';
-import {
-  writeWorkspaceIndex,
-  type WorkspaceIndexEntry,
-} from './workspace-index';
-import { withKeyLock } from './with-key-lock';
+import { createLogger } from '@/shared/logging/logger'
+import { requireWorkspaceRoot } from './root'
+import { exists, listDirectory, readJson, writeJsonAtomic } from './fs-primitives'
+import { PROJECTS_DIR, projectJsonPath, projectTrashedMarkerPath } from './paths'
+import { writeWorkspaceIndex, type WorkspaceIndexEntry } from './workspace-index'
+import { withKeyLock } from './with-key-lock'
 
-const logger = createLogger('WorkspaceFS:Trash');
+const logger = createLogger('WorkspaceFS:Trash')
 
 /** Default TTL for auto-purge: 30 days. */
-export const DEFAULT_TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const DEFAULT_TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /** Lock key shared with projects.refreshIndex so trash ops don't race with it. */
-const INDEX_LOCK_KEY = 'projects:index';
+const INDEX_LOCK_KEY = 'projects:index'
 
 /* ────────────────────────────── Types ──────────────────────────────── */
 
 export interface TrashMarker {
   /** ms since epoch when the project was soft-deleted. */
-  deletedAt: number;
+  deletedAt: number
   /** Project name at the time of deletion — survives if project.json is
    *  changed before restore. */
-  originalName: string;
+  originalName: string
 }
 
 export interface TrashedProjectEntry {
-  id: string;
-  marker: TrashMarker;
+  id: string
+  marker: TrashMarker
 }
 
 /* ────────────────────────────── Helpers ────────────────────────────── */
@@ -74,14 +62,11 @@ async function readMarker(
   root: FileSystemDirectoryHandle,
   id: string,
 ): Promise<TrashMarker | null> {
-  return readJson<TrashMarker>(root, projectTrashedMarkerPath(id));
+  return readJson<TrashMarker>(root, projectTrashedMarkerPath(id))
 }
 
-async function markerExists(
-  root: FileSystemDirectoryHandle,
-  id: string,
-): Promise<boolean> {
-  return exists(root, projectTrashedMarkerPath(id));
+async function markerExists(root: FileSystemDirectoryHandle, id: string): Promise<boolean> {
+  return exists(root, projectTrashedMarkerPath(id))
 }
 
 /**
@@ -89,26 +74,24 @@ async function markerExists(
  * Used by soft-delete and restore to keep the index in sync without
  * touching live-project code paths.
  */
-async function rebuildAndWriteIndex(
-  root: FileSystemDirectoryHandle,
-): Promise<void> {
-  const entries = await listDirectory(root, [PROJECTS_DIR]);
-  const indexEntries: WorkspaceIndexEntry[] = [];
+async function rebuildAndWriteIndex(root: FileSystemDirectoryHandle): Promise<void> {
+  const entries = await listDirectory(root, [PROJECTS_DIR])
+  const indexEntries: WorkspaceIndexEntry[] = []
   for (const entry of entries) {
-    if (entry.kind !== 'directory') continue;
-    if (await markerExists(root, entry.name)) continue;
+    if (entry.kind !== 'directory') continue
+    if (await markerExists(root, entry.name)) continue
     const project = await readJson<{ id: string; name: string; updatedAt: number }>(
       root,
       projectJsonPath(entry.name),
-    );
-    if (!project) continue;
+    )
+    if (!project) continue
     indexEntries.push({
       id: project.id,
       name: project.name,
       updatedAt: project.updatedAt,
-    });
+    })
   }
-  await writeWorkspaceIndex(root, indexEntries);
+  await writeWorkspaceIndex(root, indexEntries)
 }
 
 /* ────────────────────────────── Public API ─────────────────────────── */
@@ -118,32 +101,30 @@ async function rebuildAndWriteIndex(
  * it from the projects list. Idempotent — re-trashing an already-trashed
  * project is a no-op that returns the original marker.
  */
-export async function softDeleteProject(
-  id: string,
-): Promise<TrashMarker> {
-  const root = requireWorkspaceRoot();
+export async function softDeleteProject(id: string): Promise<TrashMarker> {
+  const root = requireWorkspaceRoot()
   // Read project name before anything else; if the project doesn't exist
   // there's nothing to trash.
-  const project = await readJson<{ name?: string }>(root, projectJsonPath(id));
+  const project = await readJson<{ name?: string }>(root, projectJsonPath(id))
   if (!project) {
-    throw new Error(`Project not found: ${id}`);
+    throw new Error(`Project not found: ${id}`)
   }
 
-  const existingMarker = await readMarker(root, id);
+  const existingMarker = await readMarker(root, id)
   if (existingMarker) {
-    logger.debug(`softDeleteProject(${id}): already trashed`);
-    return existingMarker;
+    logger.debug(`softDeleteProject(${id}): already trashed`)
+    return existingMarker
   }
 
   const marker: TrashMarker = {
     deletedAt: Date.now(),
     originalName: project.name ?? id,
-  };
+  }
 
-  await writeJsonAtomic(root, projectTrashedMarkerPath(id), marker);
-  await withKeyLock(INDEX_LOCK_KEY, () => rebuildAndWriteIndex(root));
-  logger.info(`Soft-deleted project ${id} ("${marker.originalName}")`);
-  return marker;
+  await writeJsonAtomic(root, projectTrashedMarkerPath(id), marker)
+  await withKeyLock(INDEX_LOCK_KEY, () => rebuildAndWriteIndex(root))
+  logger.info(`Soft-deleted project ${id} ("${marker.originalName}")`)
+  return marker
 }
 
 /**
@@ -152,21 +133,21 @@ export async function softDeleteProject(
  * Throws if the project directory no longer exists (e.g. already purged).
  */
 export async function restoreProject(id: string): Promise<void> {
-  const root = requireWorkspaceRoot();
-  const project = await readJson<{ id: string }>(root, projectJsonPath(id));
+  const root = requireWorkspaceRoot()
+  const project = await readJson<{ id: string }>(root, projectJsonPath(id))
   if (!project) {
-    throw new Error(`Project not found (may have been purged): ${id}`);
+    throw new Error(`Project not found (may have been purged): ${id}`)
   }
 
   if (!(await markerExists(root, id))) {
-    logger.debug(`restoreProject(${id}): not trashed`);
-    return;
+    logger.debug(`restoreProject(${id}): not trashed`)
+    return
   }
 
-  const { removeEntry } = await import('./fs-primitives');
-  await removeEntry(root, projectTrashedMarkerPath(id));
-  await withKeyLock(INDEX_LOCK_KEY, () => rebuildAndWriteIndex(root));
-  logger.info(`Restored project ${id}`);
+  const { removeEntry } = await import('./fs-primitives')
+  await removeEntry(root, projectTrashedMarkerPath(id))
+  await withKeyLock(INDEX_LOCK_KEY, () => rebuildAndWriteIndex(root))
+  logger.info(`Restored project ${id}`)
 }
 
 /**
@@ -174,8 +155,8 @@ export async function restoreProject(id: string): Promise<void> {
  * exists() check).
  */
 export async function isProjectTrashed(id: string): Promise<boolean> {
-  const root = requireWorkspaceRoot();
-  return markerExists(root, id);
+  const root = requireWorkspaceRoot()
+  return markerExists(root, id)
 }
 
 /**
@@ -183,18 +164,18 @@ export async function isProjectTrashed(id: string): Promise<boolean> {
  * first. Used by the Trash UI and by `sweepTrashOlderThan`.
  */
 export async function listTrashedProjects(): Promise<TrashedProjectEntry[]> {
-  const root = requireWorkspaceRoot();
-  const entries = await listDirectory(root, [PROJECTS_DIR]);
-  const trashed: TrashedProjectEntry[] = [];
+  const root = requireWorkspaceRoot()
+  const entries = await listDirectory(root, [PROJECTS_DIR])
+  const trashed: TrashedProjectEntry[] = []
   for (const entry of entries) {
-    if (entry.kind !== 'directory') continue;
-    const marker = await readMarker(root, entry.name);
+    if (entry.kind !== 'directory') continue
+    const marker = await readMarker(root, entry.name)
     if (marker) {
-      trashed.push({ id: entry.name, marker });
+      trashed.push({ id: entry.name, marker })
     }
   }
-  trashed.sort((a, b) => b.marker.deletedAt - a.marker.deletedAt);
-  return trashed;
+  trashed.sort((a, b) => b.marker.deletedAt - a.marker.deletedAt)
+  return trashed
 }
 
 /**
@@ -206,16 +187,16 @@ export async function listTrashedProjects(): Promise<TrashedProjectEntry[]> {
  * is just a direct read.
  */
 export async function getTrashedProjectMediaIds(id: string): Promise<string[]> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   if (!(await markerExists(root, id))) {
-    return [];
+    return []
   }
-  const { projectMediaLinksPath } = await import('./paths');
+  const { projectMediaLinksPath } = await import('./paths')
   const links = await readJson<{ mediaIds?: Array<{ id: string }> }>(
     root,
     projectMediaLinksPath(id),
-  );
-  return links?.mediaIds?.map((m) => m.id) ?? [];
+  )
+  return links?.mediaIds?.map((m) => m.id) ?? []
 }
 
 /**
@@ -231,22 +212,20 @@ export async function sweepTrashOlderThan(
   ttlMs: number,
   onPurge: (id: string) => Promise<void>,
 ): Promise<string[]> {
-  const cutoff = Date.now() - ttlMs;
-  const trashed = await listTrashedProjects();
-  const expired = trashed.filter((e) => e.marker.deletedAt < cutoff);
-  const purged: string[] = [];
+  const cutoff = Date.now() - ttlMs
+  const trashed = await listTrashedProjects()
+  const expired = trashed.filter((e) => e.marker.deletedAt < cutoff)
+  const purged: string[] = []
   for (const entry of expired) {
     try {
-      await onPurge(entry.id);
-      purged.push(entry.id);
+      await onPurge(entry.id)
+      purged.push(entry.id)
     } catch (error) {
-      logger.warn(`sweepTrashOlderThan: onPurge(${entry.id}) failed`, error);
+      logger.warn(`sweepTrashOlderThan: onPurge(${entry.id}) failed`, error)
     }
   }
   if (purged.length > 0) {
-    logger.info(
-      `Auto-purged ${purged.length} expired trashed project(s) (TTL=${ttlMs}ms)`,
-    );
+    logger.info(`Auto-purged ${purged.length} expired trashed project(s) (TTL=${ttlMs}ms)`)
   }
-  return purged;
+  return purged
 }

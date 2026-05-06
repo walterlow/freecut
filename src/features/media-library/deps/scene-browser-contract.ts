@@ -7,4 +7,4 @@ export {
   SceneBrowserPanel,
   useSceneBrowserStore,
   invalidateMediaCaptionThumbnails,
-} from '@/features/scene-browser';
+} from '@/features/scene-browser'

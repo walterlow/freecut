@@ -1,83 +1,102 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
-import { linearLevelToPercent, setLiveTrackVolumeOverride, clearLiveTrackVolumeOverride, setLiveBusVolumeOverride, clearLiveBusVolumeOverride } from './audio-meter-utils';
-import { getMixerLiveGain, setMixerLiveGains } from '@/shared/state/mixer-live-gain';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+  type RefObject,
+} from 'react'
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
+import {
+  linearLevelToPercent,
+  setLiveTrackVolumeOverride,
+  clearLiveTrackVolumeOverride,
+  setLiveBusVolumeOverride,
+  clearLiveBusVolumeOverride,
+} from './audio-meter-utils'
+import { getMixerLiveGain, setMixerLiveGains } from '@/shared/state/mixer-live-gain'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface AudioMixerTrack {
-  id: string;
-  name: string;
-  kind?: 'video' | 'audio';
-  color?: string;
-  muted: boolean;
-  solo: boolean;
-  volume: number; // dB, -60 to +12
-  eqEnabled?: boolean;
-  itemIds: string[]; // item IDs on this track (for live gain during fader drag)
+  id: string
+  name: string
+  kind?: 'video' | 'audio'
+  color?: string
+  muted: boolean
+  solo: boolean
+  volume: number // dB, -60 to +12
+  eqEnabled?: boolean
+  itemIds: string[] // item IDs on this track (for live gain during fader drag)
 }
 
 export interface AudioMixerViewProps {
-  tracks: AudioMixerTrack[];
-  perTrackLevels: Map<string, {
-    left: number;
-    right: number;
-    unresolvedSourceCount: number;
-    resolvedSourceCount: number;
-  }>;
+  tracks: AudioMixerTrack[]
+  perTrackLevels: Map<
+    string,
+    {
+      left: number
+      right: number
+      unresolvedSourceCount: number
+      resolvedSourceCount: number
+    }
+  >
   masterEstimate: {
-    left: number;
-    right: number;
-    unresolvedSourceCount: number;
-    resolvedSourceCount: number;
-  };
-  isPlaying: boolean;
-  masterVolumeDb: number;
-  masterMuted: boolean;
-  onMasterVolumeChange: (volumeDb: number) => void;
-  onMasterMuteToggle: () => void;
-  onTrackVolumeChange: (trackId: string, volumeDb: number) => void;
-  onTrackMuteToggle: (trackId: string) => void;
-  onTrackSoloToggle: (trackId: string) => void;
-  onTrackEqToggle?: (trackId: string) => void;
-  onBusEqToggle?: () => void;
-  activeEqTrackId?: string | null;
-  busEqActive?: boolean;
-  busEqEnabled?: boolean;
-  headerExtra?: ReactNode;
+    left: number
+    right: number
+    unresolvedSourceCount: number
+    resolvedSourceCount: number
+  }
+  isPlaying: boolean
+  masterVolumeDb: number
+  masterMuted: boolean
+  onMasterVolumeChange: (volumeDb: number) => void
+  onMasterMuteToggle: () => void
+  onTrackVolumeChange: (trackId: string, volumeDb: number) => void
+  onTrackMuteToggle: (trackId: string) => void
+  onTrackSoloToggle: (trackId: string) => void
+  onTrackEqToggle?: (trackId: string) => void
+  onBusEqToggle?: () => void
+  activeEqTrackId?: string | null
+  busEqActive?: boolean
+  busEqEnabled?: boolean
+  headerExtra?: ReactNode
   /** Expanded layout for floating panel — wider strips, bigger meters */
-  expanded?: boolean;
+  expanded?: boolean
 }
 
 // ---------------------------------------------------------------------------
 // dB <-> fader mapping
 // ---------------------------------------------------------------------------
 
-const FADER_DB_MIN = -60;
-const FADER_DB_MAX = 12;
-const FADER_DB_RANGE = FADER_DB_MAX - FADER_DB_MIN; // 72
-const FADER_KNOB_HEIGHT_PX = 22;
-const FADER_KNOB_DRAG_TOLERANCE_PX = 14;
+const FADER_DB_MIN = -60
+const FADER_DB_MAX = 12
+const FADER_DB_RANGE = FADER_DB_MAX - FADER_DB_MIN // 72
+const FADER_KNOB_HEIGHT_PX = 22
+const FADER_KNOB_DRAG_TOLERANCE_PX = 14
 
 function dbToFaderPercent(db: number): number {
-  if (!Number.isFinite(db)) return 83.33; // 0 dB default for NaN/Infinity
-  const clamped = Math.max(FADER_DB_MIN, Math.min(FADER_DB_MAX, db));
-  if (clamped <= FADER_DB_MIN) return 0;
-  if (clamped >= FADER_DB_MAX) return 100;
-  return ((clamped - FADER_DB_MIN) / FADER_DB_RANGE) * 100;
+  if (!Number.isFinite(db)) return 83.33 // 0 dB default for NaN/Infinity
+  const clamped = Math.max(FADER_DB_MIN, Math.min(FADER_DB_MAX, db))
+  if (clamped <= FADER_DB_MIN) return 0
+  if (clamped >= FADER_DB_MAX) return 100
+  return ((clamped - FADER_DB_MIN) / FADER_DB_RANGE) * 100
 }
 
 function faderPercentToDb(percent: number): number {
-  const clamped = Math.max(0, Math.min(100, percent));
-  return (clamped / 100) * FADER_DB_RANGE + FADER_DB_MIN;
+  const clamped = Math.max(0, Math.min(100, percent))
+  return (clamped / 100) * FADER_DB_RANGE + FADER_DB_MIN
 }
 
 function formatFaderDb(db: number): string {
-  if (!Number.isFinite(db)) return '+0.0';
-  if (db <= FADER_DB_MIN) return '-inf';
-  return `${db >= 0 ? '+' : ''}${db.toFixed(1)}`;
+  if (!Number.isFinite(db)) return '+0.0'
+  if (db <= FADER_DB_MIN) return '-inf'
+  return `${db >= 0 ? '+' : ''}${db.toFixed(1)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -87,22 +106,24 @@ function formatFaderDb(db: number): string {
 // Segment dimensions: 3px tall segments with 1px gaps = 4px pitch.
 // CSS mask-image creates the segmented look over the existing gradient fill.
 // This keeps the same animation system (height %) while adding the hardware feel.
-const SEGMENT_MASK = 'repeating-linear-gradient(to top, black 0px, black 3px, transparent 3px, transparent 4px)';
-const UNLIT_LED_BG = 'repeating-linear-gradient(to top, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 3px, transparent 3px, transparent 4px)';
+const SEGMENT_MASK =
+  'repeating-linear-gradient(to top, black 0px, black 3px, transparent 3px, transparent 4px)'
+const UNLIT_LED_BG =
+  'repeating-linear-gradient(to top, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 3px, transparent 3px, transparent 4px)'
 
 interface SegmentedMeterBarProps {
   /** CSS height value, e.g. "42%" */
-  height: string;
+  height: string
   /** CSS bottom value for peak hold, e.g. "58%" */
-  peakBottom?: string;
+  peakBottom?: string
   /** Whether the source is still scanning (unresolved waveform) */
-  scanning?: boolean;
+  scanning?: boolean
   /** Additional className for the outer container */
-  className?: string;
+  className?: string
   /** Optional attributes for the active fill element */
-  fillProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | undefined>;
+  fillProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | undefined>
   /** Imperative ref used for smooth local meter preview during fader drag */
-  fillRef?: RefObject<HTMLDivElement | null>;
+  fillRef?: RefObject<HTMLDivElement | null>
 }
 
 const SegmentedMeterBar = memo(function SegmentedMeterBar({
@@ -116,10 +137,7 @@ const SegmentedMeterBar = memo(function SegmentedMeterBar({
   return (
     <div className={`relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden ${className}`}>
       {/* Unlit LED backdrop */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: UNLIT_LED_BG }}
-      />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: UNLIT_LED_BG }} />
 
       {/* Active fill — gradient with segment mask */}
       <div
@@ -147,29 +165,29 @@ const SegmentedMeterBar = memo(function SegmentedMeterBar({
         />
       )}
     </div>
-  );
-});
+  )
+})
 
 // ---------------------------------------------------------------------------
 // Scale marks (shared left column)
 // ---------------------------------------------------------------------------
 
-const FADER_SCALE_MARKS = [12, 6, 0, -6, -12, -20, -30, -40, -50, -60] as const;
+const FADER_SCALE_MARKS = [12, 6, 0, -6, -12, -20, -30, -40, -50, -60] as const
 
 function getMeterFallbackPercent(params: {
-  unresolvedSourceCount: number;
-  resolvedSourceCount: number;
-  isPlaying: boolean;
+  unresolvedSourceCount: number
+  resolvedSourceCount: number
+  isPlaying: boolean
 }): number {
   if (!params.isPlaying) {
-    return 0;
+    return 0
   }
 
   if (params.unresolvedSourceCount > 0 && params.resolvedSourceCount === 0) {
-    return 18;
+    return 18
   }
 
-  return 0;
+  return 0
 }
 
 // ---------------------------------------------------------------------------
@@ -177,16 +195,16 @@ function getMeterFallbackPercent(params: {
 // ---------------------------------------------------------------------------
 
 interface ChannelFaderProps {
-  trackId: string;
-  volumeDb: number;
+  trackId: string
+  volumeDb: number
   /** Item IDs on this track — used to set per-item live gain during drag */
-  itemIds: string[];
+  itemIds: string[]
   /** Called once on drag end — triggers store update + markDirty */
-  onVolumeChange: (trackId: string, volumeDb: number) => void;
+  onVolumeChange: (trackId: string, volumeDb: number) => void
   /** Imperative ref for updating the dB readout during drag (no re-render) */
-  dbReadoutRef?: RefObject<HTMLDivElement | null>;
+  dbReadoutRef?: RefObject<HTMLDivElement | null>
   /** Immediate visual preview for the per-track meter while graph estimates catch up */
-  onMeterPreviewChange?: (previewDb: number | null) => void;
+  onMeterPreviewChange?: (previewDb: number | null) => void
 }
 
 const ChannelFader = memo(function ChannelFader({
@@ -197,148 +215,157 @@ const ChannelFader = memo(function ChannelFader({
   dbReadoutRef,
   onMeterPreviewChange,
 }: ChannelFaderProps) {
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const knobRef = useRef<HTMLDivElement | null>(null);
-  const isDraggingRef = useRef(false);
-  const dragOffsetPercentRef = useRef(0);
-  const latestDbRef = useRef(volumeDb);
-  const dragStartDbRef = useRef(volumeDb);
-  const dragStartGainsRef = useRef<Map<string, number>>(new Map());
-  const finalizeDragRef = useRef<(params?: {
-    pointerId?: number;
-    target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null;
-  }) => void>(() => {});
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const knobRef = useRef<HTMLDivElement | null>(null)
+  const isDraggingRef = useRef(false)
+  const dragOffsetPercentRef = useRef(0)
+  const latestDbRef = useRef(volumeDb)
+  const dragStartDbRef = useRef(volumeDb)
+  const dragStartGainsRef = useRef<Map<string, number>>(new Map())
+  const finalizeDragRef = useRef<
+    (params?: {
+      pointerId?: number
+      target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null
+    }) => void
+  >(() => {})
 
   // Sync from props when not dragging
   if (!isDraggingRef.current) {
-    latestDbRef.current = volumeDb;
+    latestDbRef.current = volumeDb
   }
 
   const percentFromPointerEvent = useCallback((e: PointerEvent): number => {
-    const el = trackRef.current;
-    if (!el) return 0;
-    const rect = el.getBoundingClientRect();
-    if (rect.height <= 0) return 0;
-    const y = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY));
-    return (y / rect.height) * 100;
-  }, []);
+    const el = trackRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    if (rect.height <= 0) return 0
+    const y = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY))
+    return (y / rect.height) * 100
+  }, [])
 
   const dragOffsetPercentFromPointerEvent = useCallback((e: PointerEvent): number => {
-    const el = trackRef.current;
-    if (!el) return 0;
+    const el = trackRef.current
+    if (!el) return 0
 
-    const rect = el.getBoundingClientRect();
-    if (rect.height <= 0) return 0;
+    const rect = el.getBoundingClientRect()
+    if (rect.height <= 0) return 0
 
-    const pointerYFromBottom = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY));
-    const currentPercent = dbToFaderPercent(latestDbRef.current);
-    const knobCenterYFromBottom = (currentPercent / 100) * rect.height;
-    const pointerIsNearKnob = Math.abs(pointerYFromBottom - knobCenterYFromBottom) <= Math.max(
-      FADER_KNOB_DRAG_TOLERANCE_PX,
-      FADER_KNOB_HEIGHT_PX / 2,
-    );
+    const pointerYFromBottom = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY))
+    const currentPercent = dbToFaderPercent(latestDbRef.current)
+    const knobCenterYFromBottom = (currentPercent / 100) * rect.height
+    const pointerIsNearKnob =
+      Math.abs(pointerYFromBottom - knobCenterYFromBottom) <=
+      Math.max(FADER_KNOB_DRAG_TOLERANCE_PX, FADER_KNOB_HEIGHT_PX / 2)
 
     if (!pointerIsNearKnob) {
-      return 0;
+      return 0
     }
 
-    return currentPercent - ((pointerYFromBottom / rect.height) * 100);
-  }, []);
+    return currentPercent - (pointerYFromBottom / rect.height) * 100
+  }, [])
 
   // Pure DOM update + live audio gain — zero store writes, zero React renders of composition
-  const applyDragValue = useCallback((db: number) => {
-    latestDbRef.current = db;
-    if (knobRef.current) {
-      knobRef.current.style.top = `${100 - dbToFaderPercent(db)}%`;
-    }
-    if (dbReadoutRef?.current) {
-      dbReadoutRef.current.textContent = formatFaderDb(db);
-    }
-    // Compute gain multiplier relative to the committed track volume.
-    const committedDb = dragStartDbRef.current;
-    const gainRatio = Math.pow(10, (db - committedDb) / 20);
-    setMixerLiveGains(itemIds.map((id) => ({
-      itemId: id,
-      gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
-    })));
+  const applyDragValue = useCallback(
+    (db: number) => {
+      latestDbRef.current = db
+      if (knobRef.current) {
+        knobRef.current.style.top = `${100 - dbToFaderPercent(db)}%`
+      }
+      if (dbReadoutRef?.current) {
+        dbReadoutRef.current.textContent = formatFaderDb(db)
+      }
+      // Compute gain multiplier relative to the committed track volume.
+      const committedDb = dragStartDbRef.current
+      const gainRatio = Math.pow(10, (db - committedDb) / 20)
+      setMixerLiveGains(
+        itemIds.map((id) => ({
+          itemId: id,
+          gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
+        })),
+      )
 
-    // Feed live volume into the meter source builder so both per-track
-    // and bus meters update in real-time during drag.
-    setLiveTrackVolumeOverride(trackId, db);
-    onMeterPreviewChange?.(db);
-  }, [dbReadoutRef, itemIds, onMeterPreviewChange, trackId, volumeDb]);
+      // Feed live volume into the meter source builder so both per-track
+      // and bus meters update in real-time during drag.
+      setLiveTrackVolumeOverride(trackId, db)
+      onMeterPreviewChange?.(db)
+    },
+    [dbReadoutRef, itemIds, onMeterPreviewChange, trackId],
+  )
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-      isDraggingRef.current = true;
-      dragStartDbRef.current = latestDbRef.current;
-      dragStartGainsRef.current = new Map(itemIds.map((id) => [id, getMixerLiveGain(id)]));
-      dragOffsetPercentRef.current = dragOffsetPercentFromPointerEvent(e.nativeEvent);
-      const percent = percentFromPointerEvent(e.nativeEvent);
-      const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
-      applyDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
+      e.preventDefault()
+      e.currentTarget.setPointerCapture?.(e.pointerId)
+      isDraggingRef.current = true
+      dragStartDbRef.current = latestDbRef.current
+      dragStartGainsRef.current = new Map(itemIds.map((id) => [id, getMixerLiveGain(id)]))
+      dragOffsetPercentRef.current = dragOffsetPercentFromPointerEvent(e.nativeEvent)
+      const percent = percentFromPointerEvent(e.nativeEvent)
+      const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current))
+      applyDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10)
     },
-    [applyDragValue, dragOffsetPercentFromPointerEvent, percentFromPointerEvent],
-  );
+    [applyDragValue, dragOffsetPercentFromPointerEvent, itemIds, percentFromPointerEvent],
+  )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!isDraggingRef.current) return;
-      const percent = percentFromPointerEvent(e.nativeEvent);
-      const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
-      applyDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
+      if (!isDraggingRef.current) return
+      const percent = percentFromPointerEvent(e.nativeEvent)
+      const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current))
+      applyDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10)
     },
     [applyDragValue, percentFromPointerEvent],
-  );
+  )
 
-  const finalizeDrag = useCallback((params?: {
-    pointerId?: number;
-    target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null;
-  }) => {
-    if (!isDraggingRef.current) {
-      return;
-    }
+  const finalizeDrag = useCallback(
+    (params?: {
+      pointerId?: number
+      target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null
+    }) => {
+      if (!isDraggingRef.current) {
+        return
+      }
 
-    const { pointerId, target } = params ?? {};
-    isDraggingRef.current = false;
-    dragOffsetPercentRef.current = 0;
-    if (target && pointerId !== undefined) {
-      target.releasePointerCapture?.(pointerId);
-    }
-    // Commit to store first so the graph recompiles with the new value,
-    // then clear the live override so the next resolution uses the compiled value.
-    onVolumeChange(trackId, latestDbRef.current);
-    clearLiveTrackVolumeOverride(trackId);
-    onMeterPreviewChange?.(null);
-  }, [onMeterPreviewChange, onVolumeChange, trackId]);
-  finalizeDragRef.current = finalizeDrag;
+      const { pointerId, target } = params ?? {}
+      isDraggingRef.current = false
+      dragOffsetPercentRef.current = 0
+      if (target && pointerId !== undefined) {
+        target.releasePointerCapture?.(pointerId)
+      }
+      // Commit to store first so the graph recompiles with the new value,
+      // then clear the live override so the next resolution uses the compiled value.
+      onVolumeChange(trackId, latestDbRef.current)
+      clearLiveTrackVolumeOverride(trackId)
+      onMeterPreviewChange?.(null)
+    },
+    [onMeterPreviewChange, onVolumeChange, trackId],
+  )
+  finalizeDragRef.current = finalizeDrag
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       finalizeDrag({
         pointerId: e.pointerId,
         target: e.currentTarget,
-      });
+      })
     },
     [finalizeDrag],
-  );
+  )
 
   useEffect(() => {
     return () => {
-      finalizeDragRef.current();
-    };
-  }, []);
+      finalizeDragRef.current()
+    }
+  }, [])
 
   const handleDoubleClick = useCallback(() => {
-    applyDragValue(0);
-    onVolumeChange(trackId, 0);
-    clearLiveTrackVolumeOverride(trackId);
-  }, [applyDragValue, onVolumeChange, trackId]);
+    applyDragValue(0)
+    onVolumeChange(trackId, 0)
+    clearLiveTrackVolumeOverride(trackId)
+  }, [applyDragValue, onVolumeChange, trackId])
 
-  const knobPercent = dbToFaderPercent(volumeDb);
-  const unityPercent = dbToFaderPercent(0);
+  const knobPercent = dbToFaderPercent(volumeDb)
+  const unityPercent = dbToFaderPercent(0)
 
   return (
     <div
@@ -386,28 +413,30 @@ const ChannelFader = memo(function ChannelFader({
         </div>
       </div>
     </div>
-  );
-});
+  )
+})
 
 // ---------------------------------------------------------------------------
 // Channel strip
 // ---------------------------------------------------------------------------
 
 interface ChannelStripProps {
-  track: AudioMixerTrack;
-  level: {
-    left: number;
-    right: number;
-    unresolvedSourceCount: number;
-    resolvedSourceCount: number;
-  } | undefined;
-  isPlaying: boolean;
-  expanded?: boolean;
-  onVolumeChange: (trackId: string, volumeDb: number) => void;
-  onMuteToggle: (trackId: string) => void;
-  onSoloToggle: (trackId: string) => void;
-  onEqToggle?: (trackId: string) => void;
-  eqActive?: boolean;
+  track: AudioMixerTrack
+  level:
+    | {
+        left: number
+        right: number
+        unresolvedSourceCount: number
+        resolvedSourceCount: number
+      }
+    | undefined
+  isPlaying: boolean
+  expanded?: boolean
+  onVolumeChange: (trackId: string, volumeDb: number) => void
+  onMuteToggle: (trackId: string) => void
+  onSoloToggle: (trackId: string) => void
+  onEqToggle?: (trackId: string) => void
+  eqActive?: boolean
 }
 
 const ChannelStrip = memo(function ChannelStrip({
@@ -421,57 +450,62 @@ const ChannelStrip = memo(function ChannelStrip({
   onEqToggle,
   eqActive = false,
 }: ChannelStripProps) {
-  const dbReadoutRef = useRef<HTMLDivElement | null>(null);
-  const leftBarRef = useRef<HTMLDivElement | null>(null);
-  const rightBarRef = useRef<HTMLDivElement | null>(null);
-  const leftPercentRef = useRef(0);
-  const rightPercentRef = useRef(0);
+  const dbReadoutRef = useRef<HTMLDivElement | null>(null)
+  const leftBarRef = useRef<HTMLDivElement | null>(null)
+  const rightBarRef = useRef<HTMLDivElement | null>(null)
+  const leftPercentRef = useRef(0)
+  const rightPercentRef = useRef(0)
   const handleMuteClick = useCallback(() => {
-    onMuteToggle(track.id);
-  }, [onMuteToggle, track.id]);
+    onMuteToggle(track.id)
+  }, [onMuteToggle, track.id])
 
   const handleSoloClick = useCallback(() => {
-    onSoloToggle(track.id);
-  }, [onSoloToggle, track.id]);
+    onSoloToggle(track.id)
+  }, [onSoloToggle, track.id])
 
   const handleEqClick = useCallback(() => {
-    onEqToggle?.(track.id);
-  }, [onEqToggle, track.id]);
+    onEqToggle?.(track.id)
+  }, [onEqToggle, track.id])
 
   const fallbackPercent = level
     ? getMeterFallbackPercent({
-      unresolvedSourceCount: level.unresolvedSourceCount,
-      resolvedSourceCount: level.resolvedSourceCount,
-      isPlaying,
-    })
-    : 0;
-  const leftPercent = isPlaying ? Math.max(level ? linearLevelToPercent(level.left) : 0, fallbackPercent) : 0;
-  const rightPercent = isPlaying ? Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent) : 0;
-  const showScanningFallback = fallbackPercent > 0;
-  leftPercentRef.current = leftPercent;
-  rightPercentRef.current = rightPercent;
+        unresolvedSourceCount: level.unresolvedSourceCount,
+        resolvedSourceCount: level.resolvedSourceCount,
+        isPlaying,
+      })
+    : 0
+  const leftPercent = isPlaying
+    ? Math.max(level ? linearLevelToPercent(level.left) : 0, fallbackPercent)
+    : 0
+  const rightPercent = isPlaying
+    ? Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent)
+    : 0
+  const showScanningFallback = fallbackPercent > 0
+  leftPercentRef.current = leftPercent
+  rightPercentRef.current = rightPercent
 
   const syncMeterBars = useCallback(() => {
-    if (!leftBarRef.current || !rightBarRef.current) return;
-    leftBarRef.current.style.height = `${leftPercentRef.current}%`;
-    rightBarRef.current.style.height = `${rightPercentRef.current}%`;
-  }, []);
+    if (!leftBarRef.current || !rightBarRef.current) return
+    leftBarRef.current.style.height = `${leftPercentRef.current}%`
+    rightBarRef.current.style.height = `${rightPercentRef.current}%`
+  }, [])
 
   useEffect(() => {
-    syncMeterBars();
-  }, [syncMeterBars, leftPercent, rightPercent]);
+    syncMeterBars()
+  }, [syncMeterBars, leftPercent, rightPercent])
 
   // dB readout color: green at unity, amber when boosted, dim when cut
-  const dbColor = track.volume > 0.05
-    ? 'text-amber-400/90'
-    : track.volume > -0.05
-      ? 'text-emerald-400/80'
-      : 'text-muted-foreground/60';
+  const dbColor =
+    track.volume > 0.05
+      ? 'text-amber-400/90'
+      : track.volume > -0.05
+        ? 'text-emerald-400/80'
+        : 'text-muted-foreground/60'
 
-  const stripWidth = expanded ? 'min-w-[68px] w-[68px]' : 'min-w-[52px] w-[52px]';
-  const meterBarWidth = expanded ? 'w-[14px]' : 'w-[14px]';
-  const meterBarGap = 'gap-[2px]';
-  const buttonSize = expanded ? 'w-[22px] h-[18px] text-[10px]' : 'w-[18px] h-[16px] text-[9px]';
+  const stripWidth = expanded ? 'min-w-[68px] w-[68px]' : 'min-w-[52px] w-[52px]'
+  const meterBarWidth = expanded ? 'w-[14px]' : 'w-[14px]'
+  const meterBarGap = 'gap-[2px]'
+  const buttonSize = expanded ? 'w-[22px] h-[18px] text-[10px]' : 'w-[18px] h-[16px] text-[9px]'
 
   return (
     <div className={`flex h-full ${stripWidth}`}>
@@ -538,7 +572,9 @@ const ChannelStrip = memo(function ChannelStrip({
         </div>
 
         {/* Fader + segmented level meter area */}
-        <div className={`flex-1 w-full min-h-0 flex items-stretch ${expanded ? 'gap-0.5' : 'gap-px'} py-1`}>
+        <div
+          className={`flex-1 w-full min-h-0 flex items-stretch ${expanded ? 'gap-0.5' : 'gap-px'} py-1`}
+        >
           {/* Segmented per-track level bars */}
           <div className={`flex ${meterBarGap} ${meterBarWidth} shrink-0`}>
             <SegmentedMeterBar
@@ -579,23 +615,23 @@ const ChannelStrip = memo(function ChannelStrip({
         </div>
       </div>
     </div>
-  );
-});
+  )
+})
 
 // ---------------------------------------------------------------------------
 // Bus / master meter
 // ---------------------------------------------------------------------------
 
 interface BusMeterProps {
-  masterEstimate: AudioMixerViewProps['masterEstimate'];
-  isPlaying: boolean;
-  volumeDb: number;
-  muted: boolean;
-  allItemIds: string[];
-  onVolumeChange: (volumeDb: number) => void;
-  onMuteToggle: () => void;
-  onEqToggle?: () => void;
-  eqActive?: boolean;
+  masterEstimate: AudioMixerViewProps['masterEstimate']
+  isPlaying: boolean
+  volumeDb: number
+  muted: boolean
+  allItemIds: string[]
+  onVolumeChange: (volumeDb: number) => void
+  onMuteToggle: () => void
+  onEqToggle?: () => void
+  eqActive?: boolean
 }
 
 const BusMeter = memo(function BusMeter({
@@ -609,141 +645,168 @@ const BusMeter = memo(function BusMeter({
   onEqToggle,
   eqActive = false,
 }: BusMeterProps) {
-  const leftBarRef = useRef<HTMLDivElement | null>(null);
-  const rightBarRef = useRef<HTMLDivElement | null>(null);
-  const dbReadoutRef = useRef<HTMLDivElement | null>(null);
+  const leftBarRef = useRef<HTMLDivElement | null>(null)
+  const rightBarRef = useRef<HTMLDivElement | null>(null)
+  const dbReadoutRef = useRef<HTMLDivElement | null>(null)
 
   // Bus fader state
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const knobRef = useRef<HTMLDivElement | null>(null);
-  const isDraggingRef = useRef(false);
-  const dragOffsetPercentRef = useRef(0);
-  const latestDbRef = useRef(volumeDb);
-  const dragStartDbRef = useRef(volumeDb);
-  const dragStartGainsRef = useRef<Map<string, number>>(new Map());
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const knobRef = useRef<HTMLDivElement | null>(null)
+  const isDraggingRef = useRef(false)
+  const dragOffsetPercentRef = useRef(0)
+  const latestDbRef = useRef(volumeDb)
+  const dragStartDbRef = useRef(volumeDb)
+  const dragStartGainsRef = useRef<Map<string, number>>(new Map())
 
   // Sync from props when not dragging
   if (!isDraggingRef.current) {
-    latestDbRef.current = volumeDb;
+    latestDbRef.current = volumeDb
   }
 
   const percentFromPointerEvent = useCallback((e: PointerEvent): number => {
-    const el = trackRef.current;
-    if (!el) return 0;
-    const rect = el.getBoundingClientRect();
-    if (rect.height <= 0) return 0;
-    const y = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY));
-    return (y / rect.height) * 100;
-  }, []);
+    const el = trackRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    if (rect.height <= 0) return 0
+    const y = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY))
+    return (y / rect.height) * 100
+  }, [])
 
   const dragOffsetPercentFromPointerEvent = useCallback((e: PointerEvent): number => {
-    const el = trackRef.current;
-    if (!el) return 0;
-    const rect = el.getBoundingClientRect();
-    if (rect.height <= 0) return 0;
-    const pointerYFromBottom = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY));
-    const currentPercent = dbToFaderPercent(latestDbRef.current);
-    const knobCenterYFromBottom = (currentPercent / 100) * rect.height;
-    const pointerIsNearKnob = Math.abs(pointerYFromBottom - knobCenterYFromBottom) <= Math.max(
-      FADER_KNOB_DRAG_TOLERANCE_PX,
-      FADER_KNOB_HEIGHT_PX / 2,
-    );
-    if (!pointerIsNearKnob) return 0;
-    return currentPercent - ((pointerYFromBottom / rect.height) * 100);
-  }, []);
+    const el = trackRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    if (rect.height <= 0) return 0
+    const pointerYFromBottom = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY))
+    const currentPercent = dbToFaderPercent(latestDbRef.current)
+    const knobCenterYFromBottom = (currentPercent / 100) * rect.height
+    const pointerIsNearKnob =
+      Math.abs(pointerYFromBottom - knobCenterYFromBottom) <=
+      Math.max(FADER_KNOB_DRAG_TOLERANCE_PX, FADER_KNOB_HEIGHT_PX / 2)
+    if (!pointerIsNearKnob) return 0
+    return currentPercent - (pointerYFromBottom / rect.height) * 100
+  }, [])
 
-  const applyBusDragValue = useCallback((db: number) => {
-    latestDbRef.current = db;
-    if (knobRef.current) {
-      knobRef.current.style.top = `${100 - dbToFaderPercent(db)}%`;
-    }
-    if (dbReadoutRef.current) {
-      dbReadoutRef.current.textContent = formatFaderDb(db);
-      dbReadoutRef.current.className = `text-[10px] font-mono py-0.5 leading-none ${
-        db > 0.05 ? 'text-amber-400/90' : db > -0.05 ? 'text-emerald-400/80' : 'text-muted-foreground/60'
-      }`;
-    }
-    // Apply live gain to all items (bus = master gain offset)
-    const committedDb = dragStartDbRef.current;
-    const gainRatio = Math.pow(10, (db - committedDb) / 20);
-    setMixerLiveGains(allItemIds.map((id) => ({
-      itemId: id,
-      gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
-    })));
-    setLiveBusVolumeOverride(db);
-  }, [allItemIds]);
+  const applyBusDragValue = useCallback(
+    (db: number) => {
+      latestDbRef.current = db
+      if (knobRef.current) {
+        knobRef.current.style.top = `${100 - dbToFaderPercent(db)}%`
+      }
+      if (dbReadoutRef.current) {
+        dbReadoutRef.current.textContent = formatFaderDb(db)
+        dbReadoutRef.current.className = `text-[10px] font-mono py-0.5 leading-none ${
+          db > 0.05
+            ? 'text-amber-400/90'
+            : db > -0.05
+              ? 'text-emerald-400/80'
+              : 'text-muted-foreground/60'
+        }`
+      }
+      // Apply live gain to all items (bus = master gain offset)
+      const committedDb = dragStartDbRef.current
+      const gainRatio = Math.pow(10, (db - committedDb) / 20)
+      setMixerLiveGains(
+        allItemIds.map((id) => ({
+          itemId: id,
+          gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
+        })),
+      )
+      setLiveBusVolumeOverride(db)
+    },
+    [allItemIds],
+  )
 
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    isDraggingRef.current = true;
-    dragStartDbRef.current = latestDbRef.current;
-    dragStartGainsRef.current = new Map(allItemIds.map((id) => [id, getMixerLiveGain(id)]));
-    dragOffsetPercentRef.current = dragOffsetPercentFromPointerEvent(e.nativeEvent);
-    const percent = percentFromPointerEvent(e.nativeEvent);
-    const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
-    applyBusDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
-  }, [allItemIds, applyBusDragValue, dragOffsetPercentFromPointerEvent, percentFromPointerEvent]);
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.currentTarget.setPointerCapture?.(e.pointerId)
+      isDraggingRef.current = true
+      dragStartDbRef.current = latestDbRef.current
+      dragStartGainsRef.current = new Map(allItemIds.map((id) => [id, getMixerLiveGain(id)]))
+      dragOffsetPercentRef.current = dragOffsetPercentFromPointerEvent(e.nativeEvent)
+      const percent = percentFromPointerEvent(e.nativeEvent)
+      const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current))
+      applyBusDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10)
+    },
+    [allItemIds, applyBusDragValue, dragOffsetPercentFromPointerEvent, percentFromPointerEvent],
+  )
 
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return;
-    const percent = percentFromPointerEvent(e.nativeEvent);
-    const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
-    applyBusDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
-  }, [applyBusDragValue, percentFromPointerEvent]);
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isDraggingRef.current) return
+      const percent = percentFromPointerEvent(e.nativeEvent)
+      const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current))
+      applyBusDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10)
+    },
+    [applyBusDragValue, percentFromPointerEvent],
+  )
 
-  const finalizeBusDrag = useCallback((params?: {
-    pointerId?: number;
-    target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null;
-  }) => {
-    if (!isDraggingRef.current) return;
-    const { pointerId, target } = params ?? {};
-    isDraggingRef.current = false;
-    dragOffsetPercentRef.current = 0;
-    if (target && pointerId !== undefined) {
-      target.releasePointerCapture?.(pointerId);
-    }
-    onVolumeChange(latestDbRef.current);
-    clearLiveBusVolumeOverride();
-  }, [onVolumeChange]);
+  const finalizeBusDrag = useCallback(
+    (params?: {
+      pointerId?: number
+      target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null
+    }) => {
+      if (!isDraggingRef.current) return
+      const { pointerId, target } = params ?? {}
+      isDraggingRef.current = false
+      dragOffsetPercentRef.current = 0
+      if (target && pointerId !== undefined) {
+        target.releasePointerCapture?.(pointerId)
+      }
+      onVolumeChange(latestDbRef.current)
+      clearLiveBusVolumeOverride()
+    },
+    [onVolumeChange],
+  )
 
-  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    finalizeBusDrag({ pointerId: e.pointerId, target: e.currentTarget });
-  }, [finalizeBusDrag]);
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      finalizeBusDrag({ pointerId: e.pointerId, target: e.currentTarget })
+    },
+    [finalizeBusDrag],
+  )
 
   useEffect(() => {
-    return () => { finalizeBusDrag(); };
-  }, [finalizeBusDrag]);
+    return () => {
+      finalizeBusDrag()
+    }
+  }, [finalizeBusDrag])
 
   const handleDoubleClick = useCallback(() => {
-    applyBusDragValue(0);
-    onVolumeChange(0);
-    clearLiveBusVolumeOverride();
-  }, [applyBusDragValue, onVolumeChange]);
+    applyBusDragValue(0)
+    onVolumeChange(0)
+    clearLiveBusVolumeOverride()
+  }, [applyBusDragValue, onVolumeChange])
 
   // Smooth the bus meter with CSS transitions rather than rAF
   const fallbackPercent = getMeterFallbackPercent({
     unresolvedSourceCount: masterEstimate.unresolvedSourceCount,
     resolvedSourceCount: masterEstimate.resolvedSourceCount,
     isPlaying,
-  });
-  const leftPercent = isPlaying ? Math.max(linearLevelToPercent(masterEstimate.left), fallbackPercent) : 0;
-  const rightPercent = isPlaying ? Math.max(linearLevelToPercent(masterEstimate.right), fallbackPercent) : 0;
-  const showScanningFallback = fallbackPercent > 0;
+  })
+  const leftPercent = isPlaying
+    ? Math.max(linearLevelToPercent(masterEstimate.left), fallbackPercent)
+    : 0
+  const rightPercent = isPlaying
+    ? Math.max(linearLevelToPercent(masterEstimate.right), fallbackPercent)
+    : 0
+  const showScanningFallback = fallbackPercent > 0
 
   // Use refs to imperatively update for smoother animation
   useEffect(() => {
-    if (leftBarRef.current) leftBarRef.current.style.height = `${leftPercent}%`;
-    if (rightBarRef.current) rightBarRef.current.style.height = `${rightPercent}%`;
-  }, [leftPercent, rightPercent]);
+    if (leftBarRef.current) leftBarRef.current.style.height = `${leftPercent}%`
+    if (rightBarRef.current) rightBarRef.current.style.height = `${rightPercent}%`
+  }, [leftPercent, rightPercent])
 
-  const knobPercent = dbToFaderPercent(volumeDb);
-  const unityPercent = dbToFaderPercent(0);
-  const dbColor = volumeDb > 0.05
-    ? 'text-amber-400/90'
-    : volumeDb > -0.05
-      ? 'text-emerald-400/80'
-      : 'text-muted-foreground/60';
+  const knobPercent = dbToFaderPercent(volumeDb)
+  const unityPercent = dbToFaderPercent(0)
+  const dbColor =
+    volumeDb > 0.05
+      ? 'text-amber-400/90'
+      : volumeDb > -0.05
+        ? 'text-emerald-400/80'
+        : 'text-muted-foreground/60'
 
   return (
     <div className="flex flex-col items-center h-full w-[60px] min-w-[60px] shrink-0">
@@ -751,7 +814,7 @@ const BusMeter = memo(function BusMeter({
       <div className="flex flex-col items-center h-full w-full rounded-[3px] bg-black/30 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)] border border-border/20 px-1">
         {/* Label */}
         <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 py-1 leading-tight font-mono whitespace-nowrap">
-          总线 1
+          Bus 1
         </div>
         <div className="flex justify-center py-0.5 shrink-0">
           <button
@@ -762,7 +825,7 @@ const BusMeter = memo(function BusMeter({
                 : 'border border-transparent bg-muted/30 text-muted-foreground/45 hover:bg-sky-500/10 hover:text-sky-300'
             } ${!onEqToggle ? 'pointer-events-none opacity-50' : ''}`}
             onClick={onEqToggle}
-            aria-label="EQ 总线 1"
+            aria-label="EQ Bus 1"
             aria-pressed={eqActive}
           >
             EQ
@@ -779,7 +842,7 @@ const BusMeter = memo(function BusMeter({
                 : 'bg-muted/40 text-muted-foreground/40 hover:bg-muted/70 hover:text-muted-foreground/70'
             }`}
             onClick={onMuteToggle}
-            aria-label="静音主控"
+            aria-label="Mute master"
             aria-pressed={muted}
           >
             M
@@ -792,7 +855,10 @@ const BusMeter = memo(function BusMeter({
           <div className="flex gap-[2px] w-[14px] shrink-0">
             <div className="relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden">
               {/* Unlit LED backdrop */}
-              <div className="absolute inset-0 pointer-events-none" style={{ background: UNLIT_LED_BG }} />
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ background: UNLIT_LED_BG }}
+              />
               {/* Active fill */}
               <div
                 ref={leftBarRef}
@@ -808,7 +874,10 @@ const BusMeter = memo(function BusMeter({
             </div>
             <div className="relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden">
               {/* Unlit LED backdrop */}
-              <div className="absolute inset-0 pointer-events-none" style={{ background: UNLIT_LED_BG }} />
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ background: UNLIT_LED_BG }}
+              />
               {/* Active fill */}
               <div
                 ref={rightBarRef}
@@ -834,11 +903,11 @@ const BusMeter = memo(function BusMeter({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={() => {
-                if (!isDraggingRef.current) return;
-                isDraggingRef.current = false;
-                dragOffsetPercentRef.current = 0;
-                applyBusDragValue(volumeDb);
-                clearLiveBusVolumeOverride();
+                if (!isDraggingRef.current) return
+                isDraggingRef.current = false
+                dragOffsetPercentRef.current = 0
+                applyBusDragValue(volumeDb)
+                clearLiveBusVolumeOverride()
               }}
               onDoubleClick={handleDoubleClick}
             >
@@ -880,8 +949,8 @@ const BusMeter = memo(function BusMeter({
         </div>
       </div>
     </div>
-  );
-});
+  )
+})
 
 // ---------------------------------------------------------------------------
 // Scale column (dB marks on the left side)
@@ -898,7 +967,7 @@ const ScaleColumn = memo(function ScaleColumn() {
       {/* Scale area */}
       <div className="relative flex-1" style={{ height: 'calc(100% - 54px)' }}>
         {FADER_SCALE_MARKS.map((mark) => {
-          const percent = dbToFaderPercent(mark);
+          const percent = dbToFaderPercent(mark)
           return (
             <div
               key={mark}
@@ -907,36 +976,36 @@ const ScaleColumn = memo(function ScaleColumn() {
             >
               {mark}
             </div>
-          );
+          )
         })}
       </div>
     </div>
-  );
-});
+  )
+})
 
 // ---------------------------------------------------------------------------
 // Tracks resize handle — drag to tuck channel strips behind the bus
 // ---------------------------------------------------------------------------
 
-const TRACKS_PEEK_WIDTH = 4; // min visible sliver when fully tucked
+const TRACKS_PEEK_WIDTH = 4 // min visible sliver when fully tucked
 
 interface MixerBodyProps {
-  tracks: AudioMixerTrack[];
-  perTrackLevels: AudioMixerViewProps['perTrackLevels'];
-  masterEstimate: AudioMixerViewProps['masterEstimate'];
-  isPlaying: boolean;
-  expanded?: boolean;
-  masterVolumeDb: number;
-  masterMuted: boolean;
-  allItemIds: string[];
-  onMasterVolumeChange: (volumeDb: number) => void;
-  onMasterMuteToggle: () => void;
-  onTrackVolumeChange: (trackId: string, volumeDb: number) => void;
-  onTrackMuteToggle: (trackId: string) => void;
-  onTrackSoloToggle: (trackId: string) => void;
-  onTrackEqToggle?: (trackId: string) => void;
-  onBusEqToggle?: () => void;
-  busEqEnabled?: boolean;
+  tracks: AudioMixerTrack[]
+  perTrackLevels: AudioMixerViewProps['perTrackLevels']
+  masterEstimate: AudioMixerViewProps['masterEstimate']
+  isPlaying: boolean
+  expanded?: boolean
+  masterVolumeDb: number
+  masterMuted: boolean
+  allItemIds: string[]
+  onMasterVolumeChange: (volumeDb: number) => void
+  onMasterMuteToggle: () => void
+  onTrackVolumeChange: (trackId: string, volumeDb: number) => void
+  onTrackMuteToggle: (trackId: string) => void
+  onTrackSoloToggle: (trackId: string) => void
+  onTrackEqToggle?: (trackId: string) => void
+  onBusEqToggle?: () => void
+  busEqEnabled?: boolean
 }
 
 const MixerBody = memo(function MixerBody({
@@ -957,55 +1026,59 @@ const MixerBody = memo(function MixerBody({
   onBusEqToggle,
   busEqEnabled,
 }: MixerBodyProps) {
-  const stripPx = expanded ? 68 : 52;
+  const stripPx = expanded ? 68 : 52
   // Channel strips + trailing border (scale column is outside the tuckable area)
-  const MIN_EMPTY_WIDTH = 80;
-  const naturalWidth = tracks.length > 0
-    ? tracks.length * stripPx + 2
-    : MIN_EMPTY_WIDTH;
-  const [tracksWidth, setTracksWidth] = useState<number | null>(null); // null = natural
-  const [animating, setAnimating] = useState(false);
-  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
-  const didDragRef = useRef(false);
-  const tracksWidthRef = useRef<number | null>(tracksWidth);
-  tracksWidthRef.current = tracksWidth;
+  const MIN_EMPTY_WIDTH = 80
+  const naturalWidth = tracks.length > 0 ? tracks.length * stripPx + 2 : MIN_EMPTY_WIDTH
+  const [tracksWidth, setTracksWidth] = useState<number | null>(null) // null = natural
+  const [animating, setAnimating] = useState(false)
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const didDragRef = useRef(false)
+  const tracksWidthRef = useRef<number | null>(tracksWidth)
+  tracksWidthRef.current = tracksWidth
 
   // Reset to natural width when track count changes
   useEffect(() => {
-    setTracksWidth(null);
-  }, [tracks.length]);
+    setTracksWidth(null)
+  }, [tracks.length])
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    setAnimating(false); // kill transition during drag
-    const current = tracksWidthRef.current ?? naturalWidth;
-    dragRef.current = { startX: e.clientX, startWidth: current };
-    didDragRef.current = false;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }, [naturalWidth]);
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault()
+      setAnimating(false) // kill transition during drag
+      const current = tracksWidthRef.current ?? naturalWidth
+      dragRef.current = { startX: e.clientX, startWidth: current }
+      didDragRef.current = false
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    },
+    [naturalWidth],
+  )
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const dx = e.clientX - drag.startX;
-    if (Math.abs(dx) > 2) didDragRef.current = true;
-    // Left-edge resize: drag left = wider, drag right = narrower
-    const next = Math.max(TRACKS_PEEK_WIDTH, Math.min(naturalWidth, drag.startWidth - dx));
-    setTracksWidth(next);
-  }, [naturalWidth]);
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      const drag = dragRef.current
+      if (!drag) return
+      const dx = e.clientX - drag.startX
+      if (Math.abs(dx) > 2) didDragRef.current = true
+      // Left-edge resize: drag left = wider, drag right = narrower
+      const next = Math.max(TRACKS_PEEK_WIDTH, Math.min(naturalWidth, drag.startWidth - dx))
+      setTracksWidth(next)
+    },
+    [naturalWidth],
+  )
 
   const handlePointerUp = useCallback(() => {
-    dragRef.current = null;
-  }, []);
+    dragRef.current = null
+  }, [])
 
-  const effectiveWidth = tracksWidth ?? naturalWidth;
-  const isTucked = effectiveWidth < naturalWidth;
+  const effectiveWidth = tracksWidth ?? naturalWidth
+  const isTucked = effectiveWidth < naturalWidth
 
   const handleClick = useCallback(() => {
-    if (didDragRef.current) return; // don't toggle after a drag
-    setAnimating(true);
-    setTracksWidth(isTucked ? null : TRACKS_PEEK_WIDTH);
-  }, [isTucked]);
+    if (didDragRef.current) return // don't toggle after a drag
+    setAnimating(true)
+    setTracksWidth(isTucked ? null : TRACKS_PEEK_WIDTH)
+  }, [isTucked])
 
   return (
     <div className={`flex-1 min-h-0 flex ${expanded ? 'px-1 py-1.5' : 'px-0.5 py-1'} gap-0.5`}>
@@ -1013,7 +1086,7 @@ const MixerBody = memo(function MixerBody({
       {tracks.length > 0 && (
         <button
           type="button"
-          aria-label="收起混音器"
+          aria-label="Tuck mixer"
           aria-pressed={isTucked}
           className="w-[5px] shrink-0 flex items-center justify-center cursor-col-resize select-none group border-0 bg-transparent p-0"
           onPointerDown={handlePointerDown}
@@ -1022,11 +1095,13 @@ const MixerBody = memo(function MixerBody({
           onPointerCancel={handlePointerUp}
           onClick={handleClick}
         >
-          <div className={`w-[2px] h-8 rounded-full transition-colors ${
-            isTucked
-              ? 'bg-primary/70 group-hover:bg-primary'
-              : 'bg-primary/30 group-hover:bg-primary/60'
-          }`} />
+          <div
+            className={`w-[2px] h-8 rounded-full transition-colors ${
+              isTucked
+                ? 'bg-primary/70 group-hover:bg-primary'
+                : 'bg-primary/30 group-hover:bg-primary/60'
+            }`}
+          />
         </button>
       )}
 
@@ -1056,13 +1131,11 @@ const MixerBody = memo(function MixerBody({
           ))}
 
           {/* Trailing border after last strip */}
-          {tracks.length > 0 && (
-            <div className="w-[2px] shrink-0 bg-border/40" />
-          )}
+          {tracks.length > 0 && <div className="w-[2px] shrink-0 bg-border/40" />}
 
           {tracks.length === 0 && (
             <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground/30 italic">
-              暂无音频轨道
+              No audio tracks
             </div>
           )}
         </div>
@@ -1081,8 +1154,8 @@ const MixerBody = memo(function MixerBody({
         eqActive={!!busEqEnabled}
       />
     </div>
-  );
-});
+  )
+})
 
 // ---------------------------------------------------------------------------
 // Main mixer view
@@ -1108,18 +1181,12 @@ export const AudioMixerView = memo(function AudioMixerView({
 }: AudioMixerViewProps) {
   const outerClassName = expanded
     ? 'panel-bg flex h-full flex-col overflow-hidden w-fit'
-    : 'panel-bg border-l border-border flex h-full flex-col overflow-hidden w-fit';
+    : 'panel-bg border-l border-border flex h-full flex-col overflow-hidden w-fit'
 
-  const allItemIds = useMemo(
-    () => tracks.flatMap((track) => track.itemIds),
-    [tracks],
-  );
+  const allItemIds = useMemo(() => tracks.flatMap((track) => track.itemIds), [tracks])
 
   return (
-    <aside
-      className={outerClassName}
-      aria-label="音频混音器"
-    >
+    <aside className={outerClassName} aria-label="Audio mixer">
       {/* Header — only shown when docked (floating panel has its own title bar) */}
       {!expanded && (
         <div
@@ -1127,7 +1194,7 @@ export const AudioMixerView = memo(function AudioMixerView({
           style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
         >
           <span className="min-w-0 text-xs text-muted-foreground font-mono uppercase tracking-[0.18em]">
-            混音器
+            Mixer
           </span>
           {headerExtra ?? (
             <span
@@ -1158,5 +1225,5 @@ export const AudioMixerView = memo(function AudioMixerView({
         busEqEnabled={busEqEnabled}
       />
     </aside>
-  );
-});
+  )
+})

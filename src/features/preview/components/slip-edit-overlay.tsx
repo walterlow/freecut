@@ -1,13 +1,11 @@
-import { useMemo } from 'react';
-import {
-  useTimelineStore,
-} from '@/features/preview/deps/timeline-store';
-import { useSlipEditPreviewStore } from '@/features/preview/deps/timeline-edit-preview';
-import { EditFourUpPanels } from './edit-4up-panels';
-import { getSourceFrameInfo } from './edit-overlay-utils';
+import { useMemo } from 'react'
+import { useTimelineStore } from '@/features/preview/deps/timeline-store'
+import { useSlipEditPreviewStore } from '@/features/preview/deps/timeline-edit-preview'
+import { EditFourUpPanels } from './edit-4up-panels'
+import { getSourceFrameInfo } from './edit-overlay-utils'
 
 interface SlipEditOverlayProps {
-  fps: number;
+  fps: number
 }
 
 /**
@@ -22,37 +20,34 @@ interface SlipEditOverlayProps {
  * - Top-right: Slipped clip's current OUT frame before drag delta
  */
 export function SlipEditOverlay({ fps }: SlipEditOverlayProps) {
-  const itemId = useSlipEditPreviewStore((s) => s.itemId);
-  const slipDelta = useSlipEditPreviewStore((s) => s.slipDelta);
-  const items = useTimelineStore((s) => s.items);
+  const itemId = useSlipEditPreviewStore((s) => s.itemId)
+  const slipDelta = useSlipEditPreviewStore((s) => s.slipDelta)
+  const items = useTimelineStore((s) => s.items)
 
-  const itemsMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
-  const slippedItem = itemId ? (itemsMap.get(itemId) ?? null) : null;
+  const itemsMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
+  const slippedItem = itemId ? (itemsMap.get(itemId) ?? null) : null
 
-  if (!slippedItem) return null;
+  if (!slippedItem) return null
 
-  const outLocalFrame = Math.max(0, slippedItem.durationInFrames - 1);
+  const outLocalFrame = Math.max(0, slippedItem.durationInFrames - 1)
 
   // Baseline (pre-drag): slipped clip's currently committed IN/OUT.
-  const currentInInfo = getSourceFrameInfo(slippedItem, 0, fps);
-  const currentOutInfo = getSourceFrameInfo(slippedItem, outLocalFrame, fps);
+  const currentInInfo = getSourceFrameInfo(slippedItem, 0, fps)
+  const currentOutInfo = getSourceFrameInfo(slippedItem, outLocalFrame, fps)
 
   // Create a virtual item with sourceStart/sourceEnd shifted by slipDelta
   // so getSourceFrameInfo seeks to the correct slipped source time.
   const virtualItem = {
     ...slippedItem,
     sourceStart: (slippedItem.sourceStart ?? 0) + slipDelta,
-    sourceEnd:
-      slippedItem.sourceEnd !== undefined
-        ? slippedItem.sourceEnd + slipDelta
-        : undefined,
-  };
+    sourceEnd: slippedItem.sourceEnd !== undefined ? slippedItem.sourceEnd + slipDelta : undefined,
+  }
 
   // Center-left: new IN frame (local frame 0)
-  const inInfo = getSourceFrameInfo(virtualItem, 0, fps);
+  const inInfo = getSourceFrameInfo(virtualItem, 0, fps)
 
   // Center-right: new OUT frame (local frame durationInFrames - 1)
-  const outInfo = getSourceFrameInfo(virtualItem, outLocalFrame, fps);
+  const outInfo = getSourceFrameInfo(virtualItem, outLocalFrame, fps)
 
   return (
     <EditFourUpPanels
@@ -81,6 +76,5 @@ export function SlipEditOverlay({ fps }: SlipEditOverlayProps) {
         label: '',
       }}
     />
-  );
+  )
 }
-

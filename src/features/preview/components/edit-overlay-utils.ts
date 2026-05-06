@@ -1,12 +1,12 @@
-import type { TimelineItem } from '@/types/timeline';
-import { getVideoTargetTimeSeconds } from '@/features/preview/deps/composition-runtime';
-import { formatTimecode } from '@/shared/utils/time-utils';
+import type { TimelineItem } from '@/types/timeline'
+import { getVideoTargetTimeSeconds } from '@/features/preview/deps/composition-runtime'
+import { formatTimecode } from '@/shared/utils/time-utils'
 
 export interface SourceFrameInfo {
-  sourceTime: number;
-  sourceFrame: number;
-  sourceFps: number;
-  timecode: string;
+  sourceTime: number
+  sourceFrame: number
+  sourceFps: number
+  timecode: string
 }
 
 export function getSourceFrameInfo(
@@ -14,9 +14,9 @@ export function getSourceFrameInfo(
   localFrame: number,
   timelineFps: number,
 ): SourceFrameInfo {
-  const sourceFps = item.sourceFps ?? timelineFps;
-  const sourceRate = item.speed ?? 1;
-  const sourceStart = item.sourceStart ?? 0;
+  const sourceFps = item.sourceFps ?? timelineFps
+  const sourceRate = item.speed ?? 1
+  const sourceStart = item.sourceStart ?? 0
 
   const sourceTime = getVideoTargetTimeSeconds(
     sourceStart,
@@ -25,13 +25,13 @@ export function getSourceFrameInfo(
     sourceRate,
     timelineFps,
     0,
-  );
-  const sourceFrame = Math.max(0, Math.round(sourceTime * sourceFps));
+  )
+  const sourceFrame = Math.max(0, Math.round(sourceTime * sourceFps))
 
   return {
     sourceTime,
     sourceFrame,
     sourceFps,
     timecode: formatTimecode(sourceFrame, sourceFps),
-  };
+  }
 }

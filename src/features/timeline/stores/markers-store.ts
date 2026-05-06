@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import type { ProjectMarker } from '@/types/timeline';
+import { create } from 'zustand'
+import type { ProjectMarker } from '@/types/timeline'
 
 /**
  * Markers state - timeline markers and in/out points.
@@ -7,41 +7,41 @@ import type { ProjectMarker } from '@/types/timeline';
  */
 
 interface MarkersState {
-  markers: ProjectMarker[];
-  inPoint: number | null;
-  outPoint: number | null;
+  markers: ProjectMarker[]
+  inPoint: number | null
+  outPoint: number | null
 }
 
 interface MarkersActions {
   // Bulk setters for snapshot restore
-  setMarkers: (markers: ProjectMarker[]) => void;
-  setInPoint: (frame: number | null) => void;
-  setOutPoint: (frame: number | null) => void;
+  setMarkers: (markers: ProjectMarker[]) => void
+  setInPoint: (frame: number | null) => void
+  setOutPoint: (frame: number | null) => void
 
   // CRUD operations
-  addMarker: (frame: number, color?: string, label?: string) => void;
-  updateMarker: (id: string, updates: Partial<Omit<ProjectMarker, 'id'>>) => void;
-  removeMarker: (id: string) => void;
-  clearAllMarkers: () => void;
+  addMarker: (frame: number, color?: string, label?: string) => void
+  updateMarker: (id: string, updates: Partial<Omit<ProjectMarker, 'id'>>) => void
+  removeMarker: (id: string) => void
+  clearAllMarkers: () => void
 
   // In/out point operations
-  clearInOutPoints: () => void;
+  clearInOutPoints: () => void
 }
 
-export const useMarkersStore = create<MarkersState & MarkersActions>()(
-  (set) => ({
-    // State
-    markers: [],
-    inPoint: null,
-    outPoint: null,
+export const useMarkersStore = create<MarkersState & MarkersActions>()((set) => ({
+  // State
+  markers: [],
+  inPoint: null,
+  outPoint: null,
 
-    // Bulk setters
-    setMarkers: (markers) => set({ markers }),
-    setInPoint: (frame) => set({ inPoint: frame }),
-    setOutPoint: (frame) => set({ outPoint: frame }),
+  // Bulk setters
+  setMarkers: (markers) => set({ markers }),
+  setInPoint: (frame) => set({ inPoint: frame }),
+  setOutPoint: (frame) => set({ outPoint: frame }),
 
-    // Marker CRUD
-    addMarker: (frame, color = '#3B82F6', label = '') => set((state) => ({
+  // Marker CRUD
+  addMarker: (frame, color = '#3B82F6', label = '') =>
+    set((state) => ({
       markers: [
         ...state.markers,
         {
@@ -53,19 +53,18 @@ export const useMarkersStore = create<MarkersState & MarkersActions>()(
       ],
     })),
 
-    updateMarker: (id, updates) => set((state) => ({
-      markers: state.markers.map((m) =>
-        m.id === id ? { ...m, ...updates } : m
-      ),
+  updateMarker: (id, updates) =>
+    set((state) => ({
+      markers: state.markers.map((m) => (m.id === id ? { ...m, ...updates } : m)),
     })),
 
-    removeMarker: (id) => set((state) => ({
+  removeMarker: (id) =>
+    set((state) => ({
       markers: state.markers.filter((m) => m.id !== id),
     })),
 
-    clearAllMarkers: () => set({ markers: [] }),
+  clearAllMarkers: () => set({ markers: [] }),
 
-    // In/out points
-    clearInOutPoints: () => set({ inPoint: null, outPoint: null }),
-  })
-);
+  // In/out points
+  clearInOutPoints: () => set({ inPoint: null, outPoint: null }),
+}))

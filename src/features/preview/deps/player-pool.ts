@@ -1,1 +1,1 @@
-export { getGlobalVideoSourcePool } from './player-contract';
+export { getGlobalVideoSourcePool } from './player-contract'

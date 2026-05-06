@@ -1,49 +1,48 @@
-import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import React from 'react'
+import { describe, expect, it, vi, beforeEach } from 'vite-plus/test'
+import { render, screen } from '@testing-library/react'
 
-const sequenceContextValue = { localFrame: 28 };
-const ensureReadyLanesMock = vi.fn(() => Promise.resolve());
+const sequenceContextValue = { localFrame: 28 }
+const ensureReadyLanesMock = vi.fn(() => Promise.resolve())
 
 vi.mock('@/features/composition-runtime/deps/player', () => ({
   Sequence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useSequenceContext: () => sequenceContextValue,
   useVideoSourcePool: () => ({ ensureReadyLanes: ensureReadyLanesMock }),
-}));
+}))
 
 vi.mock('../hooks/use-player-compat', () => ({
   useVideoConfig: () => ({ fps: 30, width: 1280, height: 720, durationInFrames: 120 }),
-}));
+}))
 
 vi.mock('../hooks/use-transition-participant-sync', () => ({
   useTransitionParticipantSync: vi.fn(),
-}));
+}))
 
 vi.mock('@/features/composition-runtime/deps/stores', () => ({
-  useMediaLibraryStore: (selector: (state: { mediaItems: Array<{ id: string; fps: number }> }) => unknown) => (
-    selector({ mediaItems: [] })
-  ),
-}));
+  useMediaLibraryStore: (
+    selector: (state: { mediaItems: Array<{ id: string; fps: number }> }) => unknown,
+  ) => selector({ mediaItems: [] }),
+}))
 
 vi.mock('./video-content', () => ({
   VideoContent: ({ item }: { item: { id: string; crop?: { softness?: number } } }) => (
-    <div
-      data-testid={`shadow-video-${item.id}`}
-      data-softness={item.crop?.softness ?? ''}
-    />
+    <div data-testid={`shadow-video-${item.id}`} data-softness={item.crop?.softness ?? ''} />
   ),
-}));
+}))
 
-import { StableVideoSequence } from './stable-video-sequence';
+import { StableVideoSequence } from './stable-video-sequence'
 
 describe('StableVideoSequence', () => {
   beforeEach(() => {
-    ensureReadyLanesMock.mockClear();
-    sequenceContextValue.localFrame = 28;
-  });
+    ensureReadyLanesMock.mockClear()
+    sequenceContextValue.localFrame = 28
+  })
 
   it('uses a lightweight hidden bridge for shadow participants instead of renderItem', () => {
-    const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
+    const renderItem = vi.fn((item: { id: string }) => (
+      <div data-testid={`render-${item.id}`}>{item.id}</div>
+    ))
 
     render(
       <StableVideoSequence
@@ -99,18 +98,20 @@ describe('StableVideoSequence', () => {
         ]}
         renderItem={renderItem}
       />,
-    );
+    )
 
-    expect(screen.getByTestId('render-left')).toBeInTheDocument();
-    expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument();
-    expect(screen.queryByTestId('render-right')).not.toBeInTheDocument();
-    expect(renderItem).toHaveBeenCalledTimes(1);
-    expect(renderItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'left' }));
-  });
+    expect(screen.getByTestId('render-left')).toBeInTheDocument()
+    expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument()
+    expect(screen.queryByTestId('render-right')).not.toBeInTheDocument()
+    expect(renderItem).toHaveBeenCalledTimes(1)
+    expect(renderItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'left' }))
+  })
 
   it('mounts same-origin shadow participants early enough before transition entry', () => {
-    sequenceContextValue.localFrame = 22;
-    const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
+    sequenceContextValue.localFrame = 22
+    const renderItem = vi.fn((item: { id: string }) => (
+      <div data-testid={`render-${item.id}`}>{item.id}</div>
+    ))
 
     render(
       <StableVideoSequence
@@ -166,19 +167,19 @@ describe('StableVideoSequence', () => {
         ]}
         renderItem={renderItem}
       />,
-    );
+    )
 
-    expect(screen.getByTestId('render-left')).toBeInTheDocument();
-    expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument();
-    expect(screen.queryByTestId('render-right')).not.toBeInTheDocument();
-  });
+    expect(screen.getByTestId('render-left')).toBeInTheDocument()
+    expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument()
+    expect(screen.queryByTestId('render-right')).not.toBeInTheDocument()
+  })
 
   it('updates transition participant crop softness when the clip crop changes', () => {
     const renderItem = vi.fn((item: { id: string; crop?: { softness?: number } }) => (
       <div data-testid={`render-${item.id}`} data-softness={item.crop?.softness ?? ''}>
         {item.id}
       </div>
-    ));
+    ))
 
     const { rerender } = render(
       <StableVideoSequence
@@ -236,10 +237,10 @@ describe('StableVideoSequence', () => {
         ]}
         renderItem={renderItem}
       />,
-    );
+    )
 
-    expect(screen.getByTestId('render-left')).toHaveAttribute('data-softness', '0.1');
-    expect(screen.getByTestId('shadow-video-right')).toHaveAttribute('data-softness', '0.1');
+    expect(screen.getByTestId('render-left')).toHaveAttribute('data-softness', '0.1')
+    expect(screen.getByTestId('shadow-video-right')).toHaveAttribute('data-softness', '0.1')
 
     rerender(
       <StableVideoSequence
@@ -297,9 +298,9 @@ describe('StableVideoSequence', () => {
         ]}
         renderItem={renderItem}
       />,
-    );
+    )
 
-    expect(screen.getByTestId('render-left')).toHaveAttribute('data-softness', '0.25');
-    expect(screen.getByTestId('shadow-video-right')).toHaveAttribute('data-softness', '0.25');
-  });
-});
+    expect(screen.getByTestId('render-left')).toHaveAttribute('data-softness', '0.25')
+    expect(screen.getByTestId('shadow-video-right')).toHaveAttribute('data-softness', '0.25')
+  })
+})

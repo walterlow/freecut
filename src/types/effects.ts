@@ -1,25 +1,25 @@
 // GPU shader effect configuration
 export interface GpuEffect {
-  type: 'gpu-effect';
-  gpuEffectType: string; // ID from GPU_EFFECT_REGISTRY (e.g. 'gpu-brightness')
-  params: Record<string, number | boolean | string>;
+  type: 'gpu-effect'
+  gpuEffectType: string // ID from GPU_EFFECT_REGISTRY (e.g. 'gpu-brightness')
+  params: Record<string, number | boolean | string>
 }
 
 // Union of all visual effects (GPU-only since v6 migration)
-export type VisualEffect = GpuEffect;
+export type VisualEffect = GpuEffect
 
 // Effect instance applied to a timeline item
 export interface ItemEffect {
-  id: string;
-  effect: VisualEffect;
-  enabled: boolean;
+  id: string
+  effect: VisualEffect
+  enabled: boolean
 }
 
 // Effect presets (combinations of multiple effects)
 interface EffectPreset {
-  id: string;
-  name: string;
-  effects: VisualEffect[];
+  id: string
+  name: string
+  effects: VisualEffect[]
 }
 
 export const EFFECT_PRESETS: EffectPreset[] = [
@@ -73,4 +73,4 @@ export const EFFECT_PRESETS: EffectPreset[] = [
       { type: 'gpu-effect', gpuEffectType: 'gpu-saturation', params: { amount: 0.7 } },
     ],
   },
-];
+]

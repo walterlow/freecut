@@ -11,53 +11,53 @@
  * multicasts to every subscriber. Safe with React StrictMode's double-effect.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react'
 
-type PathnameListener = () => void;
+type PathnameListener = () => void
 
-const listeners = new Set<PathnameListener>();
-let patched = false;
+const listeners = new Set<PathnameListener>()
+let patched = false
 
 function notify() {
   for (const listener of listeners) {
-    listener();
+    listener()
   }
 }
 
 function ensurePatched() {
-  if (patched || typeof window === 'undefined') return;
-  patched = true;
+  if (patched || typeof window === 'undefined') return
+  patched = true
 
-  const originalPush = window.history.pushState.bind(window.history);
-  const originalReplace = window.history.replaceState.bind(window.history);
+  const originalPush = window.history.pushState.bind(window.history)
+  const originalReplace = window.history.replaceState.bind(window.history)
 
   window.history.pushState = function (...args) {
-    originalPush(...args);
-    notify();
-  };
+    originalPush(...args)
+    notify()
+  }
   window.history.replaceState = function (...args) {
-    originalReplace(...args);
-    notify();
-  };
-  window.addEventListener('popstate', notify);
+    originalReplace(...args)
+    notify()
+  }
+  window.addEventListener('popstate', notify)
 }
 
 function subscribe(listener: PathnameListener): () => void {
-  ensurePatched();
-  listeners.add(listener);
+  ensurePatched()
+  listeners.add(listener)
   return () => {
-    listeners.delete(listener);
-  };
+    listeners.delete(listener)
+  }
 }
 
 function getSnapshot(): string {
-  return typeof window === 'undefined' ? '/' : window.location.pathname;
+  return typeof window === 'undefined' ? '/' : window.location.pathname
 }
 
 function getServerSnapshot(): string {
-  return '/';
+  return '/'
 }
 
 export function usePathname(): string {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }

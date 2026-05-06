@@ -1,33 +1,34 @@
-import { useMemo, useCallback, useEffect, memo } from 'react';
-import { Film, Sparkles, Volume2 } from 'lucide-react';
-import { useShallow } from 'zustand/react/shallow';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
-import { useEditorStore } from '@/app/state/editor';
-import { useSelectionStore } from '@/shared/state/selection';
-import { useItemsStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
-import { useProjectStore } from '@/features/editor/deps/projects';
-import type { ClipInspectorTab } from '@/app/state/editor';
-import type { SelectionState, SelectionActions } from '@/shared/state/selection';
-import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
-import type { TransformProperties } from '@/types/transform';
-import type { TimelineItem, VideoItem, CompositionItem } from '@/types/timeline';
+import { useMemo, useCallback, useEffect, memo } from 'react'
+import { Film, Sparkles, Volume2 } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
+import { useEditorStore } from '@/app/state/editor'
+import { useSelectionStore } from '@/shared/state/selection'
+import { useItemsStore, useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { useProjectStore } from '@/features/editor/deps/projects'
+import type { ClipInspectorTab } from '@/app/state/editor'
+import type { SelectionState, SelectionActions } from '@/shared/state/selection'
+import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store'
+import type { TransformProperties } from '@/types/transform'
+import type { TimelineItem, VideoItem, CompositionItem } from '@/types/timeline'
 
-import { LayoutSection } from './layout-section';
-import { FillSection } from './fill-section';
-import { VideoSection } from './video-section';
-import { GifSection } from './gif-section';
-import { AudioSection } from './audio-section';
-import { TextSection } from './text-section';
-import { ShapeSection } from './shape-section';
-import { CornerPinSection } from './corner-pin-section';
-import { EffectsSection } from '@/features/editor/deps/effects-contract';
+import { LayoutSection } from './layout-section'
+import { FillSection } from './fill-section'
+import { VideoSection } from './video-section'
+import { GifSection } from './gif-section'
+import { AudioSection } from './audio-section'
+import { TextSection } from './text-section'
+import { SubtitleSection } from './subtitle-section'
+import { ShapeSection } from './shape-section'
+import { CornerPinSection } from './corner-pin-section'
+import { EffectsSection } from '@/features/editor/deps/effects-contract'
 
 /**
  * Check if an item is a GIF (image with .gif extension)
  */
 function isGifItem(item: TimelineItem): boolean {
-  return item.type === 'image' && (item.label?.toLowerCase().endsWith('.gif') ?? false);
+  return item.type === 'image' && (item.label?.toLowerCase().endsWith('.gif') ?? false)
 }
 
 /**
@@ -35,21 +36,28 @@ function isGifItem(item: TimelineItem): boolean {
  * Uses Set for O(1) type lookups instead of repeated array iterations.
  */
 function computeItemTypeInfo(items: TimelineItem[]) {
-  const types = new Set(items.map(item => item.type));
-  const hasGifItems = items.some(isGifItem);
+  const types = new Set(items.map((item) => item.type))
+  const hasGifItems = items.some(isGifItem)
 
   return {
-    hasVisualItems: types.has('video') || types.has('image') || types.has('text') || types.has('shape') || types.has('adjustment') || types.has('composition'),
+    hasVisualItems:
+      types.has('video') ||
+      types.has('image') ||
+      types.has('text') ||
+      types.has('shape') ||
+      types.has('adjustment') ||
+      types.has('composition') ||
+      types.has('subtitle'),
     hasVideoItems: types.has('video'),
     hasGifItems,
     hasAudioItems: types.has('video') || types.has('audio'),
     hasTextItems: types.has('text'),
     hasShapeItems: types.has('shape'),
     hasAdjustmentItems: types.has('adjustment'),
-    isOnlyTextOrShape: items.length > 0 && items.every(
-      item => item.type === 'text' || item.type === 'shape'
-    ),
-  };
+    hasSubtitleItems: types.has('subtitle'),
+    isOnlyTextOrShape:
+      items.length > 0 && items.every((item) => item.type === 'text' || item.type === 'shape'),
+  }
 }
 
 /**
@@ -59,29 +67,36 @@ function computeItemTypeInfo(items: TimelineItem[]) {
  */
 export const ClipPanel = memo(function ClipPanel() {
   // Granular selectors with explicit types
-  const clipInspectorTab = useEditorStore((s) => s.clipInspectorTab);
-  const setClipInspectorTab = useEditorStore((s) => s.setClipInspectorTab);
-  const selectedItemIds = useSelectionStore((s: SelectionState & SelectionActions) => s.selectedItemIds);
-  const updateItemsTransform = useTimelineStore((s: TimelineState & TimelineActions) => s.updateItemsTransform);
-  const projectWidth = useProjectStore((s) => s.currentProject?.metadata.width ?? 1920);
-  const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080);
-  const projectFps = useProjectStore((s) => s.currentProject?.metadata.fps ?? 30);
+  const clipInspectorTab = useEditorStore((s) => s.clipInspectorTab)
+  const setClipInspectorTab = useEditorStore((s) => s.setClipInspectorTab)
+  const selectedItemIds = useSelectionStore(
+    (s: SelectionState & SelectionActions) => s.selectedItemIds,
+  )
+  const updateItemsTransform = useTimelineStore(
+    (s: TimelineState & TimelineActions) => s.updateItemsTransform,
+  )
+  const projectWidth = useProjectStore((s) => s.currentProject?.metadata.width ?? 1920)
+  const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080)
+  const projectFps = useProjectStore((s) => s.currentProject?.metadata.fps ?? 30)
   const selectedItems = useItemsStore(
     useShallow(
-      useCallback((s) => {
-        const items: TimelineItem[] = [];
+      useCallback(
+        (s) => {
+          const items: TimelineItem[] = []
 
-        for (const itemId of selectedItemIds) {
-          const item = s.itemById[itemId];
-          if (item) {
-            items.push(item);
+          for (const itemId of selectedItemIds) {
+            const item = s.itemById[itemId]
+            if (item) {
+              items.push(item)
+            }
           }
-        }
 
-        return items;
-      }, [selectedItemIds])
-    )
-  );
+          return items
+        },
+        [selectedItemIds],
+      ),
+    ),
+  )
 
   // Canvas settings
   const canvas = useMemo(
@@ -90,14 +105,11 @@ export const ClipPanel = memo(function ClipPanel() {
       height: projectHeight,
       fps: projectFps,
     }),
-    [projectFps, projectHeight, projectWidth]
-  );
+    [projectFps, projectHeight, projectWidth],
+  )
 
   // CONSOLIDATED: Single pass for all item type checks
-  const itemTypeInfo = useMemo(
-    () => computeItemTypeInfo(selectedItems),
-    [selectedItems]
-  );
+  const itemTypeInfo = useMemo(() => computeItemTypeInfo(selectedItems), [selectedItems])
 
   // Destructure for cleaner usage
   const {
@@ -108,88 +120,97 @@ export const ClipPanel = memo(function ClipPanel() {
     hasTextItems,
     hasShapeItems,
     hasAdjustmentItems,
+    hasSubtitleItems,
     isOnlyTextOrShape,
-  } = itemTypeInfo;
+  } = itemTypeInfo
 
   // Memoized filtered arrays for child components - prevents new array creation each render
   const layoutFillItems = useMemo(
-    () => selectedItems.filter((item: TimelineItem) => item.type !== 'audio' && item.type !== 'adjustment'),
-    [selectedItems]
-  );
+    () =>
+      selectedItems.filter(
+        (item: TimelineItem) => item.type !== 'audio' && item.type !== 'adjustment',
+      ),
+    [selectedItems],
+  )
 
   const mediaTransformItems = useMemo(
-    () => selectedItems.filter(
-      (item): item is VideoItem | CompositionItem => item.type === 'video' || item.type === 'composition'
-    ),
-    [selectedItems]
-  );
+    () =>
+      selectedItems.filter(
+        (item): item is VideoItem | CompositionItem =>
+          item.type === 'video' || item.type === 'composition',
+      ),
+    [selectedItems],
+  )
 
   const visualItems = useMemo(
     () => selectedItems.filter((item: TimelineItem) => item.type !== 'audio'),
-    [selectedItems]
-  );
+    [selectedItems],
+  )
 
   // Compute aspectLocked from items' transforms
   // If any item has explicit aspectRatioLocked, use that; otherwise use default based on type
   const aspectLocked = useMemo(() => {
-    if (selectedItems.length === 0) return true;
+    if (selectedItems.length === 0) return true
 
     // Check if any item has explicit aspectRatioLocked set
     const firstWithExplicit = selectedItems.find(
-      (item: TimelineItem) => item.transform?.aspectRatioLocked !== undefined
-    );
+      (item: TimelineItem) => item.transform?.aspectRatioLocked !== undefined,
+    )
     if (firstWithExplicit) {
-      return firstWithExplicit.transform!.aspectRatioLocked!;
+      return firstWithExplicit.transform!.aspectRatioLocked!
     }
 
     // Default based on item types: text/shape = unlocked, others = locked
-    return !isOnlyTextOrShape;
-  }, [selectedItems, isOnlyTextOrShape]);
+    return !isOnlyTextOrShape
+  }, [selectedItems, isOnlyTextOrShape])
 
   // Toggle aspect lock - updates all selected items' transforms
   const handleAspectLockToggle = useCallback(() => {
-    const newValue = !aspectLocked;
-    const itemIds = selectedItems.map((item: TimelineItem) => item.id);
-    updateItemsTransform(itemIds, { aspectRatioLocked: newValue });
-  }, [aspectLocked, selectedItems, updateItemsTransform]);
+    const newValue = !aspectLocked
+    const itemIds = selectedItems.map((item: TimelineItem) => item.id)
+    updateItemsTransform(itemIds, { aspectRatioLocked: newValue })
+  }, [aspectLocked, selectedItems, updateItemsTransform])
 
   // Handle transform changes
   const handleTransformChange = useCallback(
     (ids: string[], updates: Partial<TransformProperties>) => {
-      updateItemsTransform(ids, updates);
+      updateItemsTransform(ids, updates)
     },
-    [updateItemsTransform]
-  );
+    [updateItemsTransform],
+  )
 
   // Determine which categories should be visible
-  const showVideoTab = layoutFillItems.length > 0;
-  const showAudioTab = hasAudioItems;
-  const showEffectsTab = hasVisualItems;
+  const showVideoTab = layoutFillItems.length > 0
+  const showAudioTab = hasAudioItems
+  const showEffectsTab = hasVisualItems
 
   const availableTabs = useMemo(() => {
-    const tabs: ClipInspectorTab[] = [];
-    if (showVideoTab) tabs.push('video');
-    if (showAudioTab) tabs.push('audio');
-    if (showEffectsTab) tabs.push('effects');
-    return tabs;
-  }, [showAudioTab, showEffectsTab, showVideoTab]);
+    const tabs: ClipInspectorTab[] = []
+    if (showVideoTab) tabs.push('video')
+    if (showAudioTab) tabs.push('audio')
+    if (showEffectsTab) tabs.push('effects')
+    return tabs
+  }, [showAudioTab, showEffectsTab, showVideoTab])
 
-  const fallbackTab = availableTabs[0] ?? 'video';
-  const activeTab = availableTabs.includes(clipInspectorTab) ? clipInspectorTab : fallbackTab;
+  const fallbackTab = availableTabs[0] ?? 'video'
+  const activeTab = availableTabs.includes(clipInspectorTab) ? clipInspectorTab : fallbackTab
 
   useEffect(() => {
-    if (selectedItems.length === 0) return;
+    if (selectedItems.length === 0) return
     if (clipInspectorTab !== activeTab) {
-      setClipInspectorTab(activeTab);
+      setClipInspectorTab(activeTab)
     }
-  }, [activeTab, clipInspectorTab, selectedItems.length, setClipInspectorTab]);
+  }, [activeTab, clipInspectorTab, selectedItems.length, setClipInspectorTab])
 
-  const handleTabChange = useCallback((value: string) => {
-    setClipInspectorTab(value as ClipInspectorTab);
-  }, [setClipInspectorTab]);
+  const handleTabChange = useCallback(
+    (value: string) => {
+      setClipInspectorTab(value as ClipInspectorTab)
+    },
+    [setClipInspectorTab],
+  )
 
   if (selectedItems.length === 0) {
-    return null;
+    return null
   }
 
   return (
@@ -197,27 +218,15 @@ export const ClipPanel = memo(function ClipPanel() {
       {/* Tabbed sections */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-3 h-8">
-          <TabsTrigger
-            value="video"
-            disabled={!showVideoTab}
-            className="text-xs gap-1 px-2"
-          >
+          <TabsTrigger value="video" disabled={!showVideoTab} className="text-xs gap-1 px-2">
             <Film className="h-3 w-3" />
             视频
           </TabsTrigger>
-          <TabsTrigger
-            value="audio"
-            disabled={!showAudioTab}
-            className="text-xs gap-1 px-2"
-          >
+          <TabsTrigger value="audio" disabled={!showAudioTab} className="text-xs gap-1 px-2">
             <Volume2 className="h-3 w-3" />
             音频
           </TabsTrigger>
-          <TabsTrigger
-            value="effects"
-            disabled={!showEffectsTab}
-            className="text-xs gap-1 px-2"
-          >
+          <TabsTrigger value="effects" disabled={!showEffectsTab} className="text-xs gap-1 px-2">
             <Sparkles className="h-3 w-3" />
             效果
           </TabsTrigger>
@@ -245,9 +254,7 @@ export const ClipPanel = memo(function ClipPanel() {
                   onTransformChange={handleTransformChange}
                 />
               )}
-              {showVideoTab && (
-                <CornerPinSection items={layoutFillItems} />
-              )}
+              {showVideoTab && <CornerPinSection items={layoutFillItems} />}
               {hasTextItems && (
                 <TextSection
                   items={selectedItems}
@@ -257,6 +264,7 @@ export const ClipPanel = memo(function ClipPanel() {
                 />
               )}
               {hasShapeItems && <ShapeSection items={selectedItems} />}
+              {hasSubtitleItems && <SubtitleSection items={selectedItems} canvas={canvas} />}
               {hasGifItems && <GifSection items={selectedItems} />}
             </div>
           )}
@@ -280,16 +288,12 @@ export const ClipPanel = memo(function ClipPanel() {
               <EffectsSection items={visualItems} />
               {hasTextItems && <Separator />}
               {hasTextItems && (
-                <TextSection
-                  items={selectedItems}
-                  canvas={canvas}
-                  showContentSection={false}
-                />
+                <TextSection items={selectedItems} canvas={canvas} showContentSection={false} />
               )}
             </>
           )}
         </TabsContent>
       </Tabs>
     </div>
-  );
-});
+  )
+})

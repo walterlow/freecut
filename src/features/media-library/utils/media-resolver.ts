@@ -1,21 +1,24 @@
-﻿import { mediaLibraryService, FileAccessError } from '@/features/media-library/services/media-library-service';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
-import { proxyService } from '@/features/media-library/services/proxy-service';
-import { getSharedProxyKey } from '@/features/media-library/utils/proxy-key';
-import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
-import { registerKeyframeIndex } from '@/shared/utils/keyframe-index-registry';
-import type { TimelineTrack } from '@/types/timeline';
-import { createLogger } from '@/shared/logging/logger';
-import { validateMediaHandle } from '@/infrastructure/storage';
-import type { MediaErrorType } from '@/features/media-library/types';
+import {
+  mediaLibraryService,
+  FileAccessError,
+} from '@/features/media-library/services/media-library-service'
+import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store'
+import { proxyService } from '@/features/media-library/services/proxy-service'
+import { getSharedProxyKey } from '@/features/media-library/utils/proxy-key'
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
+import { registerKeyframeIndex } from '@/shared/utils/keyframe-index-registry'
+import type { TimelineTrack } from '@/types/timeline'
+import { createLogger } from '@/shared/logging/logger'
+import { validateMediaHandle } from '@/infrastructure/storage'
+import type { MediaErrorType } from '@/features/media-library/types'
 
-const logger = createLogger('MediaResolver');
+const logger = createLogger('MediaResolver')
 
 /**
  * Pending requests to prevent concurrent OPFS access to the same file
  * This prevents multiple sync access handle creation for the same OPFS file
  */
-const pendingRequests = new Map<string, Promise<string>>();
+const pendingRequests = new Map<string, Promise<string>>()
 
 /**
  * Map a `validateMediaHandle` outcome to a `BrokenMediaInfo.errorType`.
@@ -33,12 +36,12 @@ function mapValidationToErrorType(
   switch (kind) {
     case 'ok':
     case 'no-handle':
-      return null;
+      return null
     case 'permission':
-      return 'permission_denied';
+      return 'permission_denied'
     case 'missing':
     case 'changed':
-      return 'file_missing';
+      return 'file_missing'
   }
 }
 
@@ -50,25 +53,25 @@ function mapValidationToErrorType(
  */
 export async function resolveMediaUrl(mediaId: string): Promise<string> {
   // Check centralized manager first - URLs persist until explicit release
-  const cached = blobUrlManager.get(mediaId);
+  const cached = blobUrlManager.get(mediaId)
   if (cached) {
-    return cached;
+    return cached
   }
 
   // Check if there's already a pending request for this media
   if (pendingRequests.has(mediaId)) {
-    return pendingRequests.get(mediaId)!;
+    return pendingRequests.get(mediaId)!
   }
 
   // Create the request promise
   const requestPromise = (async () => {
     try {
       // Get media metadata from library
-      const media = await mediaLibraryService.getMedia(mediaId);
+      const media = await mediaLibraryService.getMedia(mediaId)
 
       if (!media) {
-        logger.warn(`Media not found: ${mediaId}`);
-        return ''; // Fallback: empty string (Composition will skip)
+        logger.warn(`Media not found: ${mediaId}`)
+        return '' // Fallback: empty string (Composition will skip)
       }
 
       // For handle-backed media, validate the saved FileSystemFileHandle
@@ -81,28 +84,25 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
       // content-addressable media are self-contained and can't be
       // mutated out-of-band.
       if (media.storageType === 'handle') {
-        const validation = await validateMediaHandle(mediaId);
-        const mapped = mapValidationToErrorType(validation.kind);
+        const validation = await validateMediaHandle(mediaId)
+        const mapped = mapValidationToErrorType(validation.kind)
         if (mapped) {
-          logger.warn(
-            `Handle validation failed for ${mediaId}: ${validation.kind}`,
-            validation,
-          );
+          logger.warn(`Handle validation failed for ${mediaId}: ${validation.kind}`, validation)
           useMediaLibraryStore.getState().markMediaBroken(mediaId, {
             mediaId,
             fileName: media.fileName,
             errorType: mapped,
-          });
-          return '';
+          })
+          return ''
         }
       }
 
       // Get blob from OPFS (returns Blob to prevent access handle leaks)
-      const blob = await mediaLibraryService.getMediaFile(mediaId);
+      const blob = await mediaLibraryService.getMediaFile(mediaId)
 
       if (!blob) {
-        logger.warn(`Media blob not found: ${mediaId}`);
-        return '';
+        logger.warn(`Media blob not found: ${mediaId}`)
+        return ''
       }
 
       // Acquire blob URL through centralized manager (handles caching + ref counting)
@@ -112,38 +112,38 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
         fileHandle: media.storageType === 'handle' ? media.fileHandle : undefined,
         opfsPath: media.storageType === 'opfs' ? media.opfsPath : undefined,
         fileSize: media.fileSize,
-      });
+      })
 
       // Register keyframe index for adaptive seek backtracking
       if (media.keyframeTimestamps && media.keyframeTimestamps.length > 0) {
-        registerKeyframeIndex(blobUrl, media.keyframeTimestamps);
+        registerKeyframeIndex(blobUrl, media.keyframeTimestamps)
       }
 
-      return blobUrl;
+      return blobUrl
     } catch (error) {
-      logger.error(`Failed to resolve media ${mediaId}:`, error);
+      logger.error(`Failed to resolve media ${mediaId}:`, error)
 
       // Mark media as broken if it's a file access error
       if (error instanceof FileAccessError) {
-        const media = await mediaLibraryService.getMedia(mediaId);
+        const media = await mediaLibraryService.getMedia(mediaId)
         useMediaLibraryStore.getState().markMediaBroken(mediaId, {
           mediaId,
           fileName: media?.fileName ?? 'Unknown file',
           errorType: error.type === 'permission_denied' ? 'permission_denied' : 'file_missing',
-        });
+        })
       }
 
-      return ''; // Fallback: empty string
+      return '' // Fallback: empty string
     } finally {
       // Clean up pending request
-      pendingRequests.delete(mediaId);
+      pendingRequests.delete(mediaId)
     }
-  })();
+  })()
 
   // Store the pending request
-  pendingRequests.set(mediaId, requestPromise);
+  pendingRequests.set(mediaId, requestPromise)
 
-  return requestPromise;
+  return requestPromise
 }
 
 /**
@@ -151,17 +151,17 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
  * Returns null if no proxy exists (caller should fall back to full-res).
  */
 export function resolveProxyUrl(mediaId: string): string | null {
-  const media = useMediaLibraryStore.getState().mediaById[mediaId];
+  const media = useMediaLibraryStore.getState().mediaById[mediaId]
   if (media) {
-    const proxyKey = getSharedProxyKey(media);
+    const proxyKey = getSharedProxyKey(media)
     // Safety net for legacy state restores where the mapping may be missing.
     if (proxyService.getProxyKey(mediaId) !== proxyKey) {
-      proxyService.setProxyKey(mediaId, proxyKey);
+      proxyService.setProxyKey(mediaId, proxyKey)
     }
-    return proxyService.getProxyBlobUrl(mediaId, proxyKey);
+    return proxyService.getProxyBlobUrl(mediaId, proxyKey)
   }
 
-  return proxyService.getProxyBlobUrl(mediaId);
+  return proxyService.getProxyBlobUrl(mediaId)
 }
 
 /**
@@ -174,16 +174,16 @@ export function resolveProxyUrl(mediaId: string): string | null {
  */
 export async function resolveMediaUrls(
   tracks: TimelineTrack[],
-  options?: { useProxy?: boolean; signal?: AbortSignal }
+  options?: { useProxy?: boolean; signal?: AbortSignal },
 ): Promise<TimelineTrack[]> {
-  const useProxy = options?.useProxy ?? true;
-  const signal = options?.signal;
+  const useProxy = options?.useProxy ?? true
+  const signal = options?.signal
 
   // Deep clone tracks to avoid mutating original
-  const resolvedTracks: TimelineTrack[] = JSON.parse(JSON.stringify(tracks));
+  const resolvedTracks: TimelineTrack[] = JSON.parse(JSON.stringify(tracks))
 
   // Resolve all media URLs in parallel
-  const resolutionPromises: Promise<void>[] = [];
+  const resolutionPromises: Promise<void>[] = []
 
   for (const track of resolvedTracks) {
     for (const item of track.items) {
@@ -195,30 +195,30 @@ export async function resolveMediaUrls(
         const promise = resolveMediaUrl(item.mediaId).then((blobUrl) => {
           // For video items in preview mode, prefer proxy URL if available
           if (useProxy && item.type === 'video') {
-            const proxyUrl = resolveProxyUrl(item.mediaId!);
-            item.src = proxyUrl || blobUrl;
-            item.audioSrc = blobUrl;
+            const proxyUrl = resolveProxyUrl(item.mediaId!)
+            item.src = proxyUrl || blobUrl
+            item.audioSrc = blobUrl
           } else {
-            item.src = blobUrl;
+            item.src = blobUrl
             if (item.type === 'video') {
-              item.audioSrc = blobUrl;
+              item.audioSrc = blobUrl
             }
           }
-        });
-        resolutionPromises.push(promise);
+        })
+        resolutionPromises.push(promise)
       }
     }
   }
 
   // Wait for all resolutions to complete
-  await Promise.all(resolutionPromises);
+  await Promise.all(resolutionPromises)
 
   // Check if aborted after resolution
   if (signal?.aborted) {
-    throw new DOMException('Media resolution aborted', 'AbortError');
+    throw new DOMException('Media resolution aborted', 'AbortError')
   }
 
-  return resolvedTracks;
+  return resolvedTracks
 }
 
 /**
@@ -226,6 +226,6 @@ export async function resolveMediaUrls(
  * Call this on component unmount to prevent memory leaks
  */
 export function cleanupBlobUrls(): void {
-  blobUrlManager.releaseAll();
-  pendingRequests.clear();
+  blobUrlManager.releaseAll()
+  pendingRequests.clear()
 }

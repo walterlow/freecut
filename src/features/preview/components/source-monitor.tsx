@@ -1,6 +1,21 @@
-import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { X, Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, ChevronDown, Repeat, ArrowLeftToLine, ArrowRightToLine, XCircle, ArrowDownToLine, Replace } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
+import {
+  X,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Repeat,
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  XCircle,
+  ArrowDownToLine,
+  Replace,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,14 +23,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+} from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import {
   getTrackKind,
   performInsertEdit,
   performOverwriteEdit,
   resolveSourceEditTrackTargets,
-} from '@/features/preview/deps/timeline-source-edit';
+} from '@/features/preview/deps/timeline-source-edit'
 import {
   PlayerEmitterProvider,
   ClockBridgeProvider,
@@ -23,9 +38,9 @@ import {
   useClockIsPlaying,
   VideoConfigProvider,
   usePlayer,
-} from '@/features/preview/deps/player-context';
-import { SourceComposition } from './source-composition';
-import { resolveMediaUrl } from '../utils/media-resolver';
+} from '@/features/preview/deps/player-context'
+import { SourceComposition } from './source-composition'
+import { resolveMediaUrl } from '../utils/media-resolver'
 import {
   clampDraggedSourceInPoint,
   clampDraggedSourceOutPoint,
@@ -33,39 +48,44 @@ import {
   getSourcePointPercent,
   getSourceStripPointFromRatio,
   shiftSourceIoRange,
-} from '../utils/source-io';
-import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library';
-import { useItemsStore } from '@/features/preview/deps/timeline-store';
-import { useSettingsStore } from '@/features/preview/deps/settings';
-import { useEditorStore } from '@/app/state/editor';
-import { useSourcePlayerStore } from '@/shared/state/source-player';
-import { useSelectionStore } from '@/shared/state/selection';
-import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout';
-import { createScrubThrottleState, shouldCommitScrubFrame } from '../deps/timeline-utils';
-import { cn } from '@/shared/ui/cn';
-import { formatTimecodeCompact } from '@/shared/utils/time-utils';
-import type { TimelineTrack } from '@/types/timeline';
+} from '../utils/source-io'
+import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library'
+import { useItemsStore } from '@/features/preview/deps/timeline-store'
+import { useSettingsStore } from '@/features/preview/deps/settings'
+import { useEditorStore } from '@/app/state/editor'
+import { useSourcePlayerStore } from '@/shared/state/source-player'
+import { useSelectionStore } from '@/shared/state/selection'
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout'
+import { createScrubThrottleState, shouldCommitScrubFrame } from '../deps/timeline-utils'
+import { cn } from '@/shared/ui/cn'
+import { formatTimecodeCompact } from '@/shared/utils/time-utils'
+import { getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
+import type { TimelineTrack } from '@/types/timeline'
 
 interface SourceMonitorProps {
-  mediaId: string;
-  onClose?: () => void;
-  variant?: 'panel' | 'program';
-  interactive?: boolean;
-  seekFrame?: number | null;
+  mediaId: string
+  onClose?: () => void
+  variant?: 'panel' | 'program'
+  interactive?: boolean
+  seekFrame?: number | null
 }
 
-const SOURCE_MONITOR_RESIZE_MIN_UPDATE_MS = 33;
+const SOURCE_MONITOR_RESIZE_MIN_UPDATE_MS = 33
+
+function getDevicePixelRatio(): number {
+  return typeof window === 'undefined' ? 1 : window.devicePixelRatio
+}
 
 function isPatchDestinationTrack(
   track: TimelineTrack | null,
   kind: 'video' | 'audio',
 ): track is TimelineTrack {
   if (!track || track.locked || track.isGroup) {
-    return false;
+    return false
   }
 
-  const trackKind = getTrackKind(track);
-  return trackKind === kind || trackKind === null;
+  const trackKind = getTrackKind(track)
+  return trackKind === kind || trackKind === null
 }
 
 function getPatchDestinationOptions(
@@ -74,7 +94,7 @@ function getPatchDestinationOptions(
 ): TimelineTrack[] {
   return [...tracks]
     .filter((track) => isPatchDestinationTrack(track, kind))
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => a.order - b.order)
 }
 
 function SourcePatchDestinationPicker({
@@ -84,13 +104,13 @@ function SourcePatchDestinationPicker({
   options,
   onSelectTrack,
 }: {
-  kind: 'video' | 'audio';
-  label: string;
-  selectedTrackId: string | null;
-  options: TimelineTrack[];
-  onSelectTrack: (trackId: string | null) => void;
+  kind: 'video' | 'audio'
+  label: string
+  selectedTrackId: string | null
+  options: TimelineTrack[]
+  onSelectTrack: (trackId: string | null) => void
 }) {
-  const kindLabel = kind === 'video' ? '视频' : '音频';
+  const kindLabel = kind === 'video' ? 'Video' : 'Audio'
 
   return (
     <DropdownMenu>
@@ -102,7 +122,7 @@ function SourcePatchDestinationPicker({
             'h-6 min-w-[3.75rem] justify-between gap-1 px-1.5 font-mono text-[10px]',
             !selectedTrackId && 'text-muted-foreground',
           )}
-          aria-label={`选择${kindLabel}源补丁目标轨道`}
+          aria-label={`Choose ${kindLabel.toLowerCase()} source patch destination`}
         >
           <span className="truncate">{label}</span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
@@ -110,7 +130,7 @@ function SourcePatchDestinationPicker({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
         <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-normal">
-          {kindLabel}目标轨道
+          {kindLabel} destination
         </DropdownMenuLabel>
         <DropdownMenuItem
           className={cn(
@@ -119,28 +139,30 @@ function SourcePatchDestinationPicker({
           )}
           onSelect={() => onSelectTrack(null)}
         >
-          自动
+          Auto
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        {options.length > 0 ? options.map((track) => (
-          <DropdownMenuItem
-            key={track.id}
-            className={cn(
-              'font-mono text-xs',
-              selectedTrackId === track.id && 'bg-accent text-accent-foreground',
-            )}
-            onSelect={() => onSelectTrack(track.id)}
-          >
-            {track.name}
-          </DropdownMenuItem>
-        )) : (
+        {options.length > 0 ? (
+          options.map((track) => (
+            <DropdownMenuItem
+              key={track.id}
+              className={cn(
+                'font-mono text-xs',
+                selectedTrackId === track.id && 'bg-accent text-accent-foreground',
+              )}
+              onSelect={() => onSelectTrack(track.id)}
+            >
+              {track.name}
+            </DropdownMenuItem>
+          ))
+        ) : (
           <DropdownMenuItem disabled className="font-mono text-xs">
-            编辑时创建
+            Create on edit
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }
 
 export const SourceMonitor = memo(function SourceMonitor({
@@ -159,8 +181,8 @@ export const SourceMonitor = memo(function SourceMonitor({
       interactive={interactive}
       seekFrame={seekFrame}
     />
-  );
-});
+  )
+})
 
 const SourceMonitorContent = memo(function SourceMonitorContent({
   mediaId,
@@ -169,62 +191,60 @@ const SourceMonitorContent = memo(function SourceMonitorContent({
   interactive = true,
   seekFrame = null,
 }: SourceMonitorProps) {
-  const [blobUrl, setBlobUrl] = useState<string>('');
-  const media = useMediaLibraryStore((s) => s.mediaItems.find((m) => m.id === mediaId));
+  const [blobUrl, setBlobUrl] = useState<string>('')
+  const media = useMediaLibraryStore((s) => s.mediaItems.find((m) => m.id === mediaId))
 
   // Sync current media ID into source player store for I/O points
   useEffect(() => {
-    if (!interactive) return;
-    useSourcePlayerStore.getState().setCurrentMediaId(mediaId);
+    if (!interactive) return
+    useSourcePlayerStore.getState().setCurrentMediaId(mediaId)
     return () => {
       // In React Strict Mode the source monitor may mount, clean up, and remount
       // while still representing the same open panel. Only release ownership once
       // the editor has actually switched away from this source monitor.
       if (useEditorStore.getState().sourcePreviewMediaId === mediaId) {
-        return;
+        return
       }
-      useSourcePlayerStore.getState().releaseCurrentMediaId(mediaId);
-    };
-  }, [interactive, mediaId]);
+      useSourcePlayerStore.getState().releaseCurrentMediaId(mediaId)
+    }
+  }, [interactive, mediaId])
 
   // Auto-close if media is deleted
   useEffect(() => {
     if (!media) {
-      onClose?.();
+      onClose?.()
     }
-  }, [media, onClose]);
+  }, [media, onClose])
 
   // Resolve the original source URL once. SourceComposition can swap to a
   // ready proxy for video preview without losing the original fallback URL.
   useEffect(() => {
-    let cancelled = false;
-    resolveMediaUrl(mediaId).then((url) => {
-      if (!cancelled) setBlobUrl(url);
-    }).catch(() => {
-      // Resolution failure already logged in resolveMediaUrl
-    });
-    return () => { cancelled = true; };
-  }, [mediaId]);
+    let cancelled = false
+    resolveMediaUrl(mediaId)
+      .then((url) => {
+        if (!cancelled) setBlobUrl(url)
+      })
+      .catch(() => {
+        // Resolution failure already logged in resolveMediaUrl
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mediaId])
 
-  if (!media) return null;
+  if (!media) return null
 
-  const mediaType = getMediaType(media.mimeType);
-  if (mediaType === 'unknown') return null;
+  const mediaType = getMediaType(media.mimeType)
+  if (mediaType === 'unknown') return null
 
-  const fps = media.fps || 30;
-  const mediaWidth = media.width || 640;
-  const mediaHeight = media.height || 360;
-  const durationInFrames = mediaType === 'image'
-    ? 1
-    : Math.max(1, Math.round(media.duration * fps));
+  const fps = media.fps || 30
+  const mediaWidth = media.width || 640
+  const mediaHeight = media.height || 360
+  const durationInFrames = mediaType === 'image' ? 1 : Math.max(1, Math.round(media.duration * fps))
 
   return (
     <PlayerEmitterProvider>
-      <ClockBridgeProvider
-        fps={fps}
-        durationInFrames={durationInFrames}
-        onVolumeChange={() => {}}
-      >
+      <ClockBridgeProvider fps={fps} durationInFrames={durationInFrames} onVolumeChange={() => {}}>
         <VideoConfigProvider
           fps={fps}
           width={mediaWidth}
@@ -249,25 +269,25 @@ const SourceMonitorContent = memo(function SourceMonitorContent({
         </VideoConfigProvider>
       </ClockBridgeProvider>
     </PlayerEmitterProvider>
-  );
-});
+  )
+})
 
 // -- Inner component (rendered inside provider tree) --
 
 interface SourceMonitorInnerProps {
-  mediaId: string;
-  src: string;
-  mediaType: 'video' | 'audio' | 'image';
-  hasAudio: boolean;
-  fileName: string;
-  mediaWidth: number;
-  mediaHeight: number;
-  durationInFrames: number;
-  fps: number;
-  variant: 'panel' | 'program';
-  interactive: boolean;
-  seekFrame: number | null;
-  onClose?: () => void;
+  mediaId: string
+  src: string
+  mediaType: 'video' | 'audio' | 'image'
+  hasAudio: boolean
+  fileName: string
+  mediaWidth: number
+  mediaHeight: number
+  durationInFrames: number
+  fps: number
+  variant: 'panel' | 'program'
+  interactive: boolean
+  seekFrame: number | null
+  onClose?: () => void
 }
 
 function SourceMonitorInner({
@@ -285,155 +305,166 @@ function SourceMonitorInner({
   seekFrame,
   onClose,
 }: SourceMonitorInnerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const contentHostRef = useRef<HTMLDivElement>(null);
-  const contentScaleRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null)
+  const contentHostRef = useRef<HTMLDivElement>(null)
+  const contentScaleRef = useRef<HTMLDivElement>(null)
   const lastLayoutRef = useRef<{
-    scaledWidth: number;
-    scaledHeight: number;
-    scale: number;
-  } | null>(null);
-  const editorDensity = useSettingsStore((s) => s.editorDensity);
-  const editorLayout = getEditorLayout(editorDensity);
+    scaledWidth: number
+    scaledHeight: number
+    scale: number
+  } | null>(null)
+  const editorDensity = useSettingsStore((s) => s.editorDensity)
+  const editorLayout = getEditorLayout(editorDensity)
 
   const updateLayout = useCallback(() => {
-    const container = containerRef.current;
-    const host = contentHostRef.current;
-    const scaleDiv = contentScaleRef.current;
-    if (!container || !host || !scaleDiv) return;
+    const container = containerRef.current
+    const host = contentHostRef.current
+    const scaleDiv = contentScaleRef.current
+    if (!container || !host || !scaleDiv) return
 
-    const cw = Math.max(0, container.clientWidth - editorLayout.previewPadding);
-    const ch = Math.max(0, container.clientHeight - editorLayout.previewPadding);
-    const scale = cw > 0 && ch > 0
-      ? Math.min(cw / mediaWidth, ch / mediaHeight)
-      : 1;
+    const cw = Math.max(0, container.clientWidth - editorLayout.previewPadding)
+    const ch = Math.max(0, container.clientHeight - editorLayout.previewPadding)
+    const scale = cw > 0 && ch > 0 ? Math.min(cw / mediaWidth, ch / mediaHeight) : 1
 
-    const sw = mediaWidth * scale;
-    const sh = mediaHeight * scale;
+    const snappedSize = getPreviewPixelSnapSize(
+      {
+        width: mediaWidth * scale,
+        height: mediaHeight * scale,
+      },
+      getDevicePixelRatio(),
+    )
+    const sw = snappedSize.width
+    const sh = snappedSize.height
+    const scaleX = sw / mediaWidth
+    const scaleY = sh / mediaHeight
 
-    const previousLayout = lastLayoutRef.current;
+    const previousLayout = lastLayoutRef.current
     if (
-      previousLayout
-      && previousLayout.scaledWidth === sw
-      && previousLayout.scaledHeight === sh
-      && previousLayout.scale === scale
+      previousLayout &&
+      previousLayout.scaledWidth === sw &&
+      previousLayout.scaledHeight === sh &&
+      previousLayout.scale === scaleX
     ) {
-      return;
+      return
     }
 
     lastLayoutRef.current = {
       scaledWidth: sw,
       scaledHeight: sh,
-      scale,
-    };
+      scale: scaleX,
+    }
 
-    host.style.width = `${sw}px`;
-    host.style.height = `${sh}px`;
-    host.style.marginLeft = `${-sw / 2}px`;
-    host.style.marginTop = `${-sh / 2}px`;
+    host.style.width = `${sw}px`
+    host.style.height = `${sh}px`
+    host.style.marginLeft = `${-sw / 2}px`
+    host.style.marginTop = `${-sh / 2}px`
 
-    scaleDiv.style.width = `${mediaWidth}px`;
-    scaleDiv.style.height = `${mediaHeight}px`;
-    scaleDiv.style.transform = `scale(${scale})`;
-  }, [editorLayout.previewPadding, mediaWidth, mediaHeight]);
+    scaleDiv.style.width = `${mediaWidth}px`
+    scaleDiv.style.height = `${mediaHeight}px`
+    scaleDiv.style.transform = `scale(${scaleX}, ${scaleY})`
+  }, [editorLayout.previewPadding, mediaWidth, mediaHeight])
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let rafId: number | null = null;
-    let lastUpdateTs = 0;
+    const el = containerRef.current
+    if (!el) return
+    let rafId: number | null = null
+    let lastUpdateTs = 0
     const schedule = () => {
-      if (rafId !== null) return;
+      if (rafId !== null) return
       rafId = requestAnimationFrame(() => {
-        const now = performance.now();
+        const now = performance.now()
         if (now - lastUpdateTs < SOURCE_MONITOR_RESIZE_MIN_UPDATE_MS) {
           rafId = requestAnimationFrame(() => {
-            rafId = null;
-            lastUpdateTs = performance.now();
-            updateLayout();
-          });
-          return;
+            rafId = null
+            lastUpdateTs = performance.now()
+            updateLayout()
+          })
+          return
         }
 
-        rafId = null;
-        lastUpdateTs = now;
-        updateLayout();
-      });
-    };
-    const obs = new ResizeObserver(schedule);
-    obs.observe(el);
-    updateLayout();
+        rafId = null
+        lastUpdateTs = now
+        updateLayout()
+      })
+    }
+    const obs = new ResizeObserver(schedule)
+    obs.observe(el)
+    updateLayout()
     return () => {
-      obs.disconnect();
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, [updateLayout]);
+      obs.disconnect()
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
+  }, [updateLayout])
 
   // When media URL resolves, the preview host nodes mount after the initial
   // layout pass. Force one more measurement so the source appears immediately.
   useEffect(() => {
-    if (!src) return;
+    if (!src) return
     const rafId = requestAnimationFrame(() => {
-      updateLayout();
-    });
+      updateLayout()
+    })
     return () => {
-      cancelAnimationFrame(rafId);
-    };
-  }, [src, updateLayout]);
+      cancelAnimationFrame(rafId)
+    }
+  }, [src, updateLayout])
 
-  const setHoveredPanel = useSourcePlayerStore((s) => s.setHoveredPanel);
-  const setPlayerMethods = useSourcePlayerStore((s) => s.setPlayerMethods);
+  const setHoveredPanel = useSourcePlayerStore((s) => s.setHoveredPanel)
+  const setPlayerMethods = useSourcePlayerStore((s) => s.setPlayerMethods)
 
   // Reset hover and player methods on unmount
   useEffect(() => {
-    if (!interactive) return;
+    if (!interactive) return
     return () => {
-      setHoveredPanel(null);
-      setPlayerMethods(null);
-    };
-  }, [interactive, setHoveredPanel, setPlayerMethods]);
+      setHoveredPanel(null)
+      setPlayerMethods(null)
+    }
+  }, [interactive, setHoveredPanel, setPlayerMethods])
 
   // Handle I/O shortcuts locally on this element (not global useHotkeys)
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const hadFocusRef = useRef(false);
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!interactive) return;
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    const { currentSourceFrame, setInPoint, setOutPoint, clearInOutPoints } = useSourcePlayerStore.getState();
-    if (e.key === 'i' || e.key === 'I') {
-      e.preventDefault();
-      e.stopPropagation();
-      setInPoint(currentSourceFrame);
-    } else if (e.key === 'o' || e.key === 'O') {
-      e.preventDefault();
-      e.stopPropagation();
-      setOutPoint(getExclusiveSourceOutPoint(currentSourceFrame, durationInFrames));
-    } else if (e.altKey && (e.key === 'x' || e.key === 'X')) {
-      e.preventDefault();
-      e.stopPropagation();
-      clearInOutPoints();
-    }
-  }, [durationInFrames, interactive]);
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const hadFocusRef = useRef(false)
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!interactive) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      const { currentSourceFrame, setInPoint, setOutPoint, clearInOutPoints } =
+        useSourcePlayerStore.getState()
+      if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault()
+        e.stopPropagation()
+        setInPoint(currentSourceFrame)
+      } else if (e.key === 'o' || e.key === 'O') {
+        e.preventDefault()
+        e.stopPropagation()
+        setOutPoint(getExclusiveSourceOutPoint(currentSourceFrame, durationInFrames))
+      } else if (e.altKey && (e.key === 'x' || e.key === 'X')) {
+        e.preventDefault()
+        e.stopPropagation()
+        clearInOutPoints()
+      }
+    },
+    [durationInFrames, interactive],
+  )
 
   const handleMouseEnter = useCallback(() => {
-    if (!interactive) return;
-    setHoveredPanel('source');
+    if (!interactive) return
+    setHoveredPanel('source')
     // Only grab focus if nothing meaningful is focused (avoid stealing from inputs)
-    const active = document.activeElement;
+    const active = document.activeElement
     if (active === document.body || wrapperRef.current?.contains(active)) {
-      wrapperRef.current?.focus();
-      hadFocusRef.current = true;
+      wrapperRef.current?.focus()
+      hadFocusRef.current = true
     }
-  }, [interactive, setHoveredPanel]);
+  }, [interactive, setHoveredPanel])
 
   const handleMouseLeave = useCallback(() => {
-    if (!interactive) return;
-    setHoveredPanel(null);
+    if (!interactive) return
+    setHoveredPanel(null)
     if (hadFocusRef.current) {
-      wrapperRef.current?.blur();
-      hadFocusRef.current = false;
+      wrapperRef.current?.blur()
+      hadFocusRef.current = false
     }
-  }, [interactive, setHoveredPanel]);
+  }, [interactive, setHoveredPanel])
 
   return (
     <div
@@ -449,13 +480,11 @@ function SourceMonitorInner({
           className="border-b border-border flex items-center px-3 justify-between shrink-0"
           style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewSplitHeaderHeight }}
         >
-          <span className="text-xs text-muted-foreground truncate">
-            源：{fileName}
-          </span>
+          <span className="text-xs text-muted-foreground truncate">Source: {fileName}</span>
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-muted transition-colors shrink-0"
-            aria-label="关闭源监视器"
+            aria-label="Close source monitor"
           >
             <X className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
@@ -477,10 +506,7 @@ function SourceMonitorInner({
               overflow: 'hidden',
             }}
           >
-            <div
-              ref={contentScaleRef}
-              style={{ transformOrigin: 'top left' }}
-            >
+            <div ref={contentScaleRef} style={{ transformOrigin: 'top left' }}>
               <SourceComposition
                 mediaId={mediaId}
                 src={src}
@@ -491,7 +517,7 @@ function SourceMonitorInner({
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            正在加载媒体...
+            Loading media...
           </div>
         )}
       </div>
@@ -506,7 +532,7 @@ function SourceMonitorInner({
         seekFrame={seekFrame}
       />
     </div>
-  );
+  )
 }
 
 // -- Playback controls for the source monitor --
@@ -519,515 +545,544 @@ function SourcePlaybackControls({
   interactive,
   seekFrame,
 }: {
-  durationInFrames: number;
-  fps: number;
-  mediaType: 'video' | 'audio' | 'image';
-  hasAudio: boolean;
-  interactive: boolean;
-  seekFrame: number | null;
+  durationInFrames: number
+  fps: number
+  mediaType: 'video' | 'audio' | 'image'
+  hasAudio: boolean
+  interactive: boolean
+  seekFrame: number | null
 }) {
-  const clock = useClock();
-  const player = usePlayer(durationInFrames);
-  const playing = useClockIsPlaying();
-  const lastFrame = Math.max(0, durationInFrames - 1);
-  const tracks = useItemsStore((s) => s.tracks);
-  const activeTrackId = useSelectionStore((s) => s.activeTrackId);
-  const sourcePatchVideoEnabled = useEditorStore((s) => s.sourcePatchVideoEnabled);
-  const sourcePatchAudioEnabled = useEditorStore((s) => s.sourcePatchAudioEnabled);
-  const sourcePatchVideoTrackId = useEditorStore((s) => s.sourcePatchVideoTrackId);
-  const sourcePatchAudioTrackId = useEditorStore((s) => s.sourcePatchAudioTrackId);
-  const setSourcePatchVideoTrackId = useEditorStore((s) => s.setSourcePatchVideoTrackId);
-  const setSourcePatchAudioTrackId = useEditorStore((s) => s.setSourcePatchAudioTrackId);
-  const toggleSourcePatchVideoEnabled = useEditorStore((s) => s.toggleSourcePatchVideoEnabled);
-  const toggleSourcePatchAudioEnabled = useEditorStore((s) => s.toggleSourcePatchAudioEnabled);
-  const currentFrameRef = useRef(clock.currentFrame);
-  const progressRef = useRef<HTMLDivElement>(null);
-  const currentTimeRef = useRef<HTMLSpanElement>(null);
-  const outPointRef = useRef<number | null>(useSourcePlayerStore.getState().outPoint);
-  const [showFrames, setShowFrames] = useState(false);
-  const showFramesRef = useRef(showFrames);
-  showFramesRef.current = showFrames;
+  const clock = useClock()
+  const player = usePlayer(durationInFrames)
+  const playing = useClockIsPlaying()
+  const lastFrame = Math.max(0, durationInFrames - 1)
+  const tracks = useItemsStore((s) => s.tracks)
+  const activeTrackId = useSelectionStore((s) => s.activeTrackId)
+  const sourcePatchVideoEnabled = useEditorStore((s) => s.sourcePatchVideoEnabled)
+  const sourcePatchAudioEnabled = useEditorStore((s) => s.sourcePatchAudioEnabled)
+  const sourcePatchVideoTrackId = useEditorStore((s) => s.sourcePatchVideoTrackId)
+  const sourcePatchAudioTrackId = useEditorStore((s) => s.sourcePatchAudioTrackId)
+  const setSourcePatchVideoTrackId = useEditorStore((s) => s.setSourcePatchVideoTrackId)
+  const setSourcePatchAudioTrackId = useEditorStore((s) => s.setSourcePatchAudioTrackId)
+  const toggleSourcePatchVideoEnabled = useEditorStore((s) => s.toggleSourcePatchVideoEnabled)
+  const toggleSourcePatchAudioEnabled = useEditorStore((s) => s.toggleSourcePatchAudioEnabled)
+  const currentFrameRef = useRef(clock.currentFrame)
+  const progressRef = useRef<HTMLDivElement>(null)
+  const currentTimeRef = useRef<HTMLSpanElement>(null)
+  const outPointRef = useRef<number | null>(useSourcePlayerStore.getState().outPoint)
+  const [showFrames, setShowFrames] = useState(false)
+  const showFramesRef = useRef(showFrames)
+  showFramesRef.current = showFrames
 
-  const frameDigits = Math.max(durationInFrames.toString().length, 1);
+  const frameDigits = Math.max(durationInFrames.toString().length, 1)
 
   const formatFrameNumber = useCallback(
     (f: number) => f.toString().padStart(frameDigits, '0'),
     [frameDigits],
-  );
+  )
 
   const formatTime = useCallback(
     (f: number) => (showFramesRef.current ? formatFrameNumber(f) : formatTimecodeCompact(f, fps)),
     [fps, formatFrameNumber],
-  );
+  )
 
   const clearPreviewSourceFrame = useCallback(() => {
     if (interactive) {
-      useSourcePlayerStore.getState().setPreviewSourceFrame(null);
+      useSourcePlayerStore.getState().setPreviewSourceFrame(null)
     }
-  }, [interactive]);
+  }, [interactive])
 
-  const updateFrameDisplay = useCallback((frame: number) => {
-    currentFrameRef.current = frame;
-    if (interactive) {
-      useSourcePlayerStore.getState().setCurrentSourceFrame(frame);
-    }
-    if (progressRef.current) {
-      const progress = lastFrame > 0 ? (frame / lastFrame) * 100 : 0;
-      progressRef.current.style.width = `${progress}%`;
-    }
-    if (currentTimeRef.current) {
-      currentTimeRef.current.textContent = showFramesRef.current
-        ? formatFrameNumber(frame)
-        : formatTimecodeCompact(frame, fps);
-    }
-  }, [fps, formatFrameNumber, interactive, lastFrame]);
+  const updateFrameDisplay = useCallback(
+    (frame: number) => {
+      currentFrameRef.current = frame
+      if (interactive) {
+        useSourcePlayerStore.getState().setCurrentSourceFrame(frame)
+      }
+      if (progressRef.current) {
+        const progress = lastFrame > 0 ? (frame / lastFrame) * 100 : 0
+        progressRef.current.style.width = `${progress}%`
+      }
+      if (currentTimeRef.current) {
+        currentTimeRef.current.textContent = showFramesRef.current
+          ? formatFrameNumber(frame)
+          : formatTimecodeCompact(frame, fps)
+      }
+    },
+    [fps, formatFrameNumber, interactive, lastFrame],
+  )
 
-  const commitSourceSeek = useCallback((frame: number) => {
-    clearPreviewSourceFrame();
-    updateFrameDisplay(frame);
-    player.seek(frame);
-  }, [clearPreviewSourceFrame, player, updateFrameDisplay]);
+  const commitSourceSeek = useCallback(
+    (frame: number) => {
+      clearPreviewSourceFrame()
+      updateFrameDisplay(frame)
+      player.seek(frame)
+    },
+    [clearPreviewSourceFrame, player, updateFrameDisplay],
+  )
 
   // Bridge player methods into the source player store for keyboard shortcuts
   useEffect(() => {
-    if (!interactive) return;
-    const setPlayerMethods = useSourcePlayerStore.getState().setPlayerMethods;
+    if (!interactive) return
+    const setPlayerMethods = useSourcePlayerStore.getState().setPlayerMethods
     setPlayerMethods({
       toggle: () => {
-        const previewFrame = useSourcePlayerStore.getState().previewSourceFrame;
+        const previewFrame = useSourcePlayerStore.getState().previewSourceFrame
         if (previewFrame !== null) {
-          commitSourceSeek(previewFrame);
+          commitSourceSeek(previewFrame)
         }
-        player.toggle();
+        player.toggle()
       },
       pause: () => {
-        player.pause();
+        player.pause()
       },
       seek: (frame) => {
-        commitSourceSeek(frame);
+        commitSourceSeek(frame)
       },
       frameBack: (frames) => {
-        clearPreviewSourceFrame();
-        player.frameBack(frames);
+        clearPreviewSourceFrame()
+        player.frameBack(frames)
       },
       frameForward: (frames) => {
-        clearPreviewSourceFrame();
-        player.frameForward(frames);
+        clearPreviewSourceFrame()
+        player.frameForward(frames)
       },
       getDurationInFrames: () => durationInFrames,
-    });
+    })
     return () => {
-      useSourcePlayerStore.getState().setPlayerMethods(null);
-    };
-  }, [clearPreviewSourceFrame, commitSourceSeek, durationInFrames, interactive, player]);
+      useSourcePlayerStore.getState().setPlayerMethods(null)
+    }
+  }, [clearPreviewSourceFrame, commitSourceSeek, durationInFrames, interactive, player])
 
   useEffect(() => {
-    updateFrameDisplay(clock.currentFrame);
+    updateFrameDisplay(clock.currentFrame)
     return clock.onFrameChange((frame) => {
-      updateFrameDisplay(frame);
+      updateFrameDisplay(frame)
 
-      if (replayingRef.current && clock.isPlaying && outPointRef.current !== null && frame >= outPointRef.current) {
-        player.pause();
-        replayingRef.current = false;
+      if (
+        replayingRef.current &&
+        clock.isPlaying &&
+        outPointRef.current !== null &&
+        frame >= outPointRef.current
+      ) {
+        player.pause()
+        replayingRef.current = false
       }
-    });
-  }, [clock, player, updateFrameDisplay]);
+    })
+  }, [clock, player, updateFrameDisplay])
 
   // Consume pending seek. Always pause → seek → (optionally) play so
   // switching scenes lands a clean transition: no `player.play()` short-
   // circuiting because the previous scene was still playing (the ref
   // `imperativePlaying.current` blocks a second play), and the video
   // element isn't decoding the old frame while the seek is in flight.
-  const pendingSeekFrame = useSourcePlayerStore((s) => s.pendingSeekFrame);
+  const pendingSeekFrame = useSourcePlayerStore((s) => s.pendingSeekFrame)
   useEffect(() => {
-    if (!interactive) return;
+    if (!interactive) return
     if (pendingSeekFrame !== null) {
-      player.pause();
-      commitSourceSeek(pendingSeekFrame);
-      const store = useSourcePlayerStore.getState();
-      store.setPendingSeekFrame(null);
-      const shouldPlay = store.pendingPlay;
-      store.setPendingPlay(false);
-      if (shouldPlay) player.play();
+      player.pause()
+      commitSourceSeek(pendingSeekFrame)
+      const store = useSourcePlayerStore.getState()
+      store.setPendingSeekFrame(null)
+      const shouldPlay = store.pendingPlay
+      store.setPendingPlay(false)
+      if (shouldPlay) player.play()
     }
-  }, [commitSourceSeek, interactive, pendingSeekFrame, player]);
+  }, [commitSourceSeek, interactive, pendingSeekFrame, player])
 
   useEffect(() => {
-    if (seekFrame === null) return;
-    commitSourceSeek(seekFrame);
-  }, [commitSourceSeek, seekFrame]);
+    if (seekFrame === null) return
+    commitSourceSeek(seekFrame)
+  }, [commitSourceSeek, seekFrame])
 
   // Read I/O points from store
-  const inPoint = useSourcePlayerStore((s) => s.inPoint);
-  const outPoint = useSourcePlayerStore((s) => s.outPoint);
+  const inPoint = useSourcePlayerStore((s) => s.inPoint)
+  const outPoint = useSourcePlayerStore((s) => s.outPoint)
   useEffect(() => {
-    outPointRef.current = outPoint;
-  }, [outPoint]);
+    outPointRef.current = outPoint
+  }, [outPoint])
 
   // Progress bar with drag support
-  const barRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef(false);
-  const onMoveRef = useRef<((ev: MouseEvent) => void) | null>(null);
-  const onUpRef = useRef<(() => void) | null>(null);
-  const pendingBarSeekFrameRef = useRef<number | null>(null);
-  const pendingBarPointerXRef = useRef<number | null>(null);
-  const barSeekRafRef = useRef<number | null>(null);
-  const lastIssuedBarSeekFrameRef = useRef<number | null>(null);
-  const scrubThrottleStateRef = useRef(createScrubThrottleState({
-    frame: clock.currentFrame,
-    nowMs: performance.now(),
-  }));
+  const barRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef(false)
+  const onMoveRef = useRef<((ev: MouseEvent) => void) | null>(null)
+  const onUpRef = useRef<(() => void) | null>(null)
+  const pendingBarSeekFrameRef = useRef<number | null>(null)
+  const pendingBarPointerXRef = useRef<number | null>(null)
+  const barSeekRafRef = useRef<number | null>(null)
+  const lastIssuedBarSeekFrameRef = useRef<number | null>(null)
+  const scrubThrottleStateRef = useRef(
+    createScrubThrottleState({
+      frame: clock.currentFrame,
+      nowMs: performance.now(),
+    }),
+  )
 
   const frameFromBarX = useCallback(
     (clientX: number) => {
-      const bar = barRef.current;
-      if (!bar) return null;
-      const rect = bar.getBoundingClientRect();
+      const bar = barRef.current
+      if (!bar) return null
+      const rect = bar.getBoundingClientRect()
       if (rect.width <= 0) {
-        return 0;
+        return 0
       }
-      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return Math.round(pct * lastFrame);
+      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+      return Math.round(pct * lastFrame)
     },
     [lastFrame],
-  );
+  )
 
-  const flushBarSeekFrame = useCallback((frame: number) => {
-    lastIssuedBarSeekFrameRef.current = frame;
-    commitSourceSeek(frame);
-  }, [commitSourceSeek]);
+  const flushBarSeekFrame = useCallback(
+    (frame: number) => {
+      lastIssuedBarSeekFrameRef.current = frame
+      commitSourceSeek(frame)
+    },
+    [commitSourceSeek],
+  )
 
   const getBarPixelsPerSecond = useCallback(() => {
-    const bar = barRef.current;
+    const bar = barRef.current
     if (!bar || durationInFrames <= 0 || fps <= 0) {
-      return 0;
+      return 0
     }
 
-    return (bar.clientWidth * fps) / durationInFrames;
-  }, [durationInFrames, fps]);
+    return (bar.clientWidth * fps) / durationInFrames
+  }, [durationInFrames, fps])
 
-  const previewBarSeekFrame = useCallback((frame: number) => {
-    pendingBarSeekFrameRef.current = frame;
+  const previewBarSeekFrame = useCallback(
+    (frame: number) => {
+      pendingBarSeekFrameRef.current = frame
 
-    if (interactive) {
-      useSourcePlayerStore.getState().setPreviewSourceFrame(frame);
-    }
-    if (currentFrameRef.current !== frame) {
-      updateFrameDisplay(frame);
-    }
-  }, [interactive, updateFrameDisplay]);
+      if (interactive) {
+        useSourcePlayerStore.getState().setPreviewSourceFrame(frame)
+      }
+      if (currentFrameRef.current !== frame) {
+        updateFrameDisplay(frame)
+      }
+    },
+    [interactive, updateFrameDisplay],
+  )
 
-  const scheduleBarSeekFrame = useCallback((frame: number, pointerX: number, force = false) => {
-    pendingBarSeekFrameRef.current = frame;
-    pendingBarPointerXRef.current = pointerX;
+  const scheduleBarSeekFrame = useCallback(
+    (frame: number, pointerX: number, force = false) => {
+      pendingBarSeekFrameRef.current = frame
+      pendingBarPointerXRef.current = pointerX
 
-    if (force) {
-      previewBarSeekFrame(frame);
-      return;
-    }
-
-    if (barSeekRafRef.current !== null) {
-      return;
-    }
-
-    barSeekRafRef.current = requestAnimationFrame(() => {
-      barSeekRafRef.current = null;
-      const pendingFrame = pendingBarSeekFrameRef.current;
-      const pendingPointerX = pendingBarPointerXRef.current;
-      if (pendingFrame === null || pendingPointerX === null) {
-        return;
+      if (force) {
+        previewBarSeekFrame(frame)
+        return
       }
 
-      if (shouldCommitScrubFrame({
-        state: scrubThrottleStateRef.current,
-        pointerX: pendingPointerX,
-        targetFrame: pendingFrame,
-        pixelsPerSecond: getBarPixelsPerSecond(),
-        nowMs: performance.now(),
-      })) {
-        previewBarSeekFrame(pendingFrame);
+      if (barSeekRafRef.current !== null) {
+        return
       }
-    });
-  }, [getBarPixelsPerSecond, previewBarSeekFrame]);
+
+      barSeekRafRef.current = requestAnimationFrame(() => {
+        barSeekRafRef.current = null
+        const pendingFrame = pendingBarSeekFrameRef.current
+        const pendingPointerX = pendingBarPointerXRef.current
+        if (pendingFrame === null || pendingPointerX === null) {
+          return
+        }
+
+        if (
+          shouldCommitScrubFrame({
+            state: scrubThrottleStateRef.current,
+            pointerX: pendingPointerX,
+            targetFrame: pendingFrame,
+            pixelsPerSecond: getBarPixelsPerSecond(),
+            nowMs: performance.now(),
+          })
+        ) {
+          previewBarSeekFrame(pendingFrame)
+        }
+      })
+    },
+    [getBarPixelsPerSecond, previewBarSeekFrame],
+  )
 
   const handleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      draggingRef.current = true;
+      e.preventDefault()
+      e.stopPropagation()
+      draggingRef.current = true
       if (playing) {
-        player.pause();
-        replayingRef.current = false;
+        player.pause()
+        replayingRef.current = false
       }
-      const initialFrame = frameFromBarX(e.clientX);
+      const initialFrame = frameFromBarX(e.clientX)
       if (initialFrame !== null) {
         scrubThrottleStateRef.current = createScrubThrottleState({
           pointerX: e.clientX,
           frame: initialFrame,
           nowMs: performance.now(),
-        });
-        scheduleBarSeekFrame(initialFrame, e.clientX, true);
+        })
+        scheduleBarSeekFrame(initialFrame, e.clientX, true)
       }
       const onMove = (ev: MouseEvent) => {
-        if (!draggingRef.current) return;
-        const nextFrame = frameFromBarX(ev.clientX);
+        if (!draggingRef.current) return
+        const nextFrame = frameFromBarX(ev.clientX)
         if (nextFrame !== null) {
-          scheduleBarSeekFrame(nextFrame, ev.clientX);
+          scheduleBarSeekFrame(nextFrame, ev.clientX)
         }
-      };
+      }
       const onUp = () => {
-        const pendingFrame = pendingBarSeekFrameRef.current;
-        draggingRef.current = false;
-        pendingBarSeekFrameRef.current = null;
-        pendingBarPointerXRef.current = null;
+        const pendingFrame = pendingBarSeekFrameRef.current
+        draggingRef.current = false
+        pendingBarSeekFrameRef.current = null
+        pendingBarPointerXRef.current = null
         if (barSeekRafRef.current !== null) {
-          cancelAnimationFrame(barSeekRafRef.current);
-          barSeekRafRef.current = null;
+          cancelAnimationFrame(barSeekRafRef.current)
+          barSeekRafRef.current = null
         }
         if (pendingFrame !== null) {
-          flushBarSeekFrame(pendingFrame);
+          flushBarSeekFrame(pendingFrame)
         }
         if (onMoveRef.current) {
-          document.removeEventListener('mousemove', onMoveRef.current);
-          onMoveRef.current = null;
+          document.removeEventListener('mousemove', onMoveRef.current)
+          onMoveRef.current = null
         }
         if (onUpRef.current) {
-          document.removeEventListener('mouseup', onUpRef.current);
-          onUpRef.current = null;
+          document.removeEventListener('mouseup', onUpRef.current)
+          onUpRef.current = null
         }
-      };
-      onMoveRef.current = onMove;
-      onUpRef.current = onUp;
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      }
+      onMoveRef.current = onMove
+      onUpRef.current = onUp
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
     },
     [flushBarSeekFrame, frameFromBarX, player, playing, scheduleBarSeekFrame],
-  );
+  )
 
   // Clean up document listeners on unmount
   useEffect(() => {
     return () => {
-      pendingBarSeekFrameRef.current = null;
-      pendingBarPointerXRef.current = null;
-      lastIssuedBarSeekFrameRef.current = null;
+      pendingBarSeekFrameRef.current = null
+      pendingBarPointerXRef.current = null
+      lastIssuedBarSeekFrameRef.current = null
       if (barSeekRafRef.current !== null) {
-        cancelAnimationFrame(barSeekRafRef.current);
-        barSeekRafRef.current = null;
+        cancelAnimationFrame(barSeekRafRef.current)
+        barSeekRafRef.current = null
       }
       if (onMoveRef.current) {
-        document.removeEventListener('mousemove', onMoveRef.current);
-        onMoveRef.current = null;
+        document.removeEventListener('mousemove', onMoveRef.current)
+        onMoveRef.current = null
       }
       if (onUpRef.current) {
-        document.removeEventListener('mouseup', onUpRef.current);
-        onUpRef.current = null;
+        document.removeEventListener('mouseup', onUpRef.current)
+        onUpRef.current = null
       }
-      draggingRef.current = false;
-    };
-  }, []);
+      draggingRef.current = false
+    }
+  }, [])
 
   // I/O marker positions as percentages
-  const inPct = interactive ? getSourcePointPercent(inPoint, durationInFrames) : null;
-  const outPct = interactive ? getSourcePointPercent(outPoint, durationInFrames) : null;
+  const inPct = interactive ? getSourcePointPercent(inPoint, durationInFrames) : null
+  const outPct = interactive ? getSourcePointPercent(outPoint, durationInFrames) : null
 
   // Draggable I/O handles + range
-  const ioStripRef = useRef<HTMLDivElement>(null);
-  const ioDragCleanupRef = useRef<(() => void) | null>(null);
+  const ioStripRef = useRef<HTMLDivElement>(null)
+  const ioDragCleanupRef = useRef<(() => void) | null>(null)
 
   const pointFromStripX = useCallback(
     (clientX: number) => {
-      const strip = ioStripRef.current;
-      if (!strip) return 0;
-      const rect = strip.getBoundingClientRect();
-      if (rect.width <= 0) return 0;
-      return getSourceStripPointFromRatio((clientX - rect.left) / rect.width, durationInFrames);
+      const strip = ioStripRef.current
+      if (!strip) return 0
+      const rect = strip.getBoundingClientRect()
+      if (rect.width <= 0) return 0
+      return getSourceStripPointFromRatio((clientX - rect.left) / rect.width, durationInFrames)
     },
     [durationInFrames],
-  );
+  )
 
   const handleIODragStart = useCallback(
     (e: React.MouseEvent, type: 'in' | 'out') => {
-      e.preventDefault();
-      e.stopPropagation();
-      const originalCursor = document.body.style.cursor;
-      document.body.style.cursor = 'col-resize';
+      e.preventDefault()
+      e.stopPropagation()
+      const originalCursor = document.body.style.cursor
+      document.body.style.cursor = 'col-resize'
 
-      const store = useSourcePlayerStore.getState;
+      const store = useSourcePlayerStore.getState
       const onMove = (ev: MouseEvent) => {
-        const point = pointFromStripX(ev.clientX);
+        const point = pointFromStripX(ev.clientX)
         if (type === 'in') {
-          const out = store().outPoint;
-          store().setInPoint(clampDraggedSourceInPoint(point, out, lastFrame));
+          const out = store().outPoint
+          store().setInPoint(clampDraggedSourceInPoint(point, out, lastFrame))
         } else {
-          const inp = store().inPoint;
-          store().setOutPoint(clampDraggedSourceOutPoint(point, inp, durationInFrames));
+          const inp = store().inPoint
+          store().setOutPoint(clampDraggedSourceOutPoint(point, inp, durationInFrames))
         }
-      };
+      }
       const onUp = () => {
-        document.body.style.cursor = originalCursor;
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        ioDragCleanupRef.current = null;
-      };
-      ioDragCleanupRef.current = onUp;
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+        document.body.style.cursor = originalCursor
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        ioDragCleanupRef.current = null
+      }
+      ioDragCleanupRef.current = onUp
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
     },
     [durationInFrames, lastFrame, pointFromStripX],
-  );
+  )
 
   const handleIORangeDragStart = useCallback(
     (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const store = useSourcePlayerStore.getState;
-      const startIn = store().inPoint;
-      const startOut = store().outPoint;
-      if (startIn === null || startOut === null) return;
-      const startPoint = pointFromStripX(e.clientX);
-      const originalCursor = document.body.style.cursor;
-      document.body.style.cursor = 'grabbing';
+      e.preventDefault()
+      e.stopPropagation()
+      const store = useSourcePlayerStore.getState
+      const startIn = store().inPoint
+      const startOut = store().outPoint
+      if (startIn === null || startOut === null) return
+      const startPoint = pointFromStripX(e.clientX)
+      const originalCursor = document.body.style.cursor
+      document.body.style.cursor = 'grabbing'
 
       const onMove = (ev: MouseEvent) => {
-        const nowPoint = pointFromStripX(ev.clientX);
-        const delta = nowPoint - startPoint;
-        const nextRange = shiftSourceIoRange(startIn, startOut, delta, durationInFrames);
-        store().setInPoint(nextRange.inPoint);
-        store().setOutPoint(nextRange.outPoint);
-      };
+        const nowPoint = pointFromStripX(ev.clientX)
+        const delta = nowPoint - startPoint
+        const nextRange = shiftSourceIoRange(startIn, startOut, delta, durationInFrames)
+        store().setInPoint(nextRange.inPoint)
+        store().setOutPoint(nextRange.outPoint)
+      }
       const onUp = () => {
-        document.body.style.cursor = originalCursor;
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        ioDragCleanupRef.current = null;
-      };
-      ioDragCleanupRef.current = onUp;
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+        document.body.style.cursor = originalCursor
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        ioDragCleanupRef.current = null
+      }
+      ioDragCleanupRef.current = onUp
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
     },
     [durationInFrames, pointFromStripX],
-  );
+  )
 
   useEffect(() => {
-    return () => ioDragCleanupRef.current?.();
-  }, []);
+    return () => ioDragCleanupRef.current?.()
+  }, [])
 
   // Duration display when both I/O are set
-  const ioDuration = interactive && inPoint !== null && outPoint !== null
-    ? formatTime(outPoint - inPoint)
-    : null;
+  const ioDuration =
+    interactive && inPoint !== null && outPoint !== null ? formatTime(outPoint - inPoint) : null
 
   const handleMarkIn = useCallback(() => {
-    useSourcePlayerStore.getState().setInPoint(currentFrameRef.current);
-  }, []);
+    useSourcePlayerStore.getState().setInPoint(currentFrameRef.current)
+  }, [])
 
   const handleMarkOut = useCallback(() => {
-    useSourcePlayerStore.getState().setOutPoint(
-      getExclusiveSourceOutPoint(currentFrameRef.current, durationInFrames),
-    );
-  }, [durationInFrames]);
+    useSourcePlayerStore
+      .getState()
+      .setOutPoint(getExclusiveSourceOutPoint(currentFrameRef.current, durationInFrames))
+  }, [durationInFrames])
 
   const handleClearIO = useCallback(() => {
-    useSourcePlayerStore.getState().clearInOutPoints();
-  }, []);
+    useSourcePlayerStore.getState().clearInOutPoints()
+  }, [])
 
   // Auto-stop playback at out point
-  const replayingRef = useRef(false);
+  const replayingRef = useRef(false)
 
   useEffect(() => {
     if (!playing) {
-      replayingRef.current = false;
+      replayingRef.current = false
     }
-  }, [playing]);
+  }, [playing])
 
   const handleReplaySegment = useCallback(() => {
-    const { inPoint: ip, outPoint: op } = useSourcePlayerStore.getState();
-    if (ip === null && op === null) return;
-    replayingRef.current = true;
-    commitSourceSeek(ip ?? 0);
-    player.play();
-  }, [commitSourceSeek, player]);
+    const { inPoint: ip, outPoint: op } = useSourcePlayerStore.getState()
+    if (ip === null && op === null) return
+    replayingRef.current = true
+    commitSourceSeek(ip ?? 0)
+    player.play()
+  }, [commitSourceSeek, player])
 
   const handleGoToStart = useCallback(() => {
-    commitSourceSeek(0);
-  }, [commitSourceSeek]);
+    commitSourceSeek(0)
+  }, [commitSourceSeek])
 
   const handleStepBack = useCallback(() => {
-    clearPreviewSourceFrame();
-    player.frameBack(1);
-  }, [clearPreviewSourceFrame, player]);
+    clearPreviewSourceFrame()
+    player.frameBack(1)
+  }, [clearPreviewSourceFrame, player])
 
   const handleTogglePlayback = useCallback(() => {
-    const previewFrame = useSourcePlayerStore.getState().previewSourceFrame;
+    const previewFrame = useSourcePlayerStore.getState().previewSourceFrame
     if (previewFrame !== null) {
-      commitSourceSeek(previewFrame);
+      commitSourceSeek(previewFrame)
     }
-    player.toggle();
-  }, [commitSourceSeek, player]);
+    player.toggle()
+  }, [commitSourceSeek, player])
 
   const handleStepForward = useCallback(() => {
-    clearPreviewSourceFrame();
-    player.frameForward(1);
-  }, [clearPreviewSourceFrame, player]);
+    clearPreviewSourceFrame()
+    player.frameForward(1)
+  }, [clearPreviewSourceFrame, player])
 
   const handleGoToEnd = useCallback(() => {
-    commitSourceSeek(lastFrame);
-  }, [commitSourceSeek, lastFrame]);
+    commitSourceSeek(lastFrame)
+  }, [commitSourceSeek, lastFrame])
 
   const activeTrack = useMemo(
-    () => (activeTrackId ? tracks.find((track) => track.id === activeTrackId) ?? null : null),
+    () => (activeTrackId ? (tracks.find((track) => track.id === activeTrackId) ?? null) : null),
     [activeTrackId, tracks],
-  );
+  )
   const selectedVideoTrack = useMemo(
-    () => (sourcePatchVideoTrackId ? tracks.find((track) => track.id === sourcePatchVideoTrackId) ?? null : null),
+    () =>
+      sourcePatchVideoTrackId
+        ? (tracks.find((track) => track.id === sourcePatchVideoTrackId) ?? null)
+        : null,
     [sourcePatchVideoTrackId, tracks],
-  );
+  )
   const selectedAudioTrack = useMemo(
-    () => (sourcePatchAudioTrackId ? tracks.find((track) => track.id === sourcePatchAudioTrackId) ?? null : null),
+    () =>
+      sourcePatchAudioTrackId
+        ? (tracks.find((track) => track.id === sourcePatchAudioTrackId) ?? null)
+        : null,
     [sourcePatchAudioTrackId, tracks],
-  );
+  )
   const videoDestinationOptions = useMemo(
     () => getPatchDestinationOptions(tracks, 'video'),
     [tracks],
-  );
+  )
   const audioDestinationOptions = useMemo(
     () => getPatchDestinationOptions(tracks, 'audio'),
     [tracks],
-  );
+  )
 
   useEffect(() => {
     if (!interactive || !activeTrackId || !activeTrack || activeTrack.locked) {
-      return;
+      return
     }
 
-    const currentState = useEditorStore.getState();
+    const currentState = useEditorStore.getState()
     const hasVideoDestination = isPatchDestinationTrack(
       tracks.find((track) => track.id === currentState.sourcePatchVideoTrackId) ?? null,
       'video',
-    );
+    )
     const hasAudioDestination = isPatchDestinationTrack(
       tracks.find((track) => track.id === currentState.sourcePatchAudioTrackId) ?? null,
       'audio',
-    );
-    const activeTrackKind = getTrackKind(activeTrack);
+    )
+    const activeTrackKind = getTrackKind(activeTrack)
     if (activeTrackKind === 'audio') {
       if (!hasAudioDestination) {
-        setSourcePatchAudioTrackId(activeTrackId);
+        setSourcePatchAudioTrackId(activeTrackId)
       }
-      return;
+      return
     }
 
     if (activeTrackKind === 'video') {
       if (!hasVideoDestination) {
-        setSourcePatchVideoTrackId(activeTrackId);
+        setSourcePatchVideoTrackId(activeTrackId)
       }
-      return;
+      return
     }
 
     if (mediaType === 'audio' && !hasAudioDestination) {
-      setSourcePatchAudioTrackId(activeTrackId);
+      setSourcePatchAudioTrackId(activeTrackId)
     } else if (mediaType !== 'audio' && !hasVideoDestination) {
-      setSourcePatchVideoTrackId(activeTrackId);
+      setSourcePatchVideoTrackId(activeTrackId)
     }
   }, [
     activeTrack,
@@ -1037,7 +1092,7 @@ function SourcePlaybackControls({
     setSourcePatchAudioTrackId,
     setSourcePatchVideoTrackId,
     tracks,
-  ]);
+  ])
 
   const patchTargetPreview = useMemo(() => {
     const resolvedTargets = resolveSourceEditTrackTargets({
@@ -1049,27 +1104,32 @@ function SourcePlaybackControls({
       hasAudio,
       patchVideo: sourcePatchVideoEnabled,
       patchAudio: sourcePatchAudioEnabled,
-      preferredTrackHeight: activeTrack?.height ?? selectedVideoTrack?.height ?? selectedAudioTrack?.height ?? tracks[0]?.height ?? 64,
-    });
+      preferredTrackHeight:
+        activeTrack?.height ??
+        selectedVideoTrack?.height ??
+        selectedAudioTrack?.height ??
+        tracks[0]?.height ??
+        64,
+    })
 
     if (!resolvedTargets) {
       return {
         videoTargetName: null,
         audioTargetName: null,
         status: null,
-      };
+      }
     }
 
-    const resolvedTracks = resolvedTargets.tracks;
+    const resolvedTracks = resolvedTargets.tracks
     return {
       videoTargetName: resolvedTargets.videoTrackId
-        ? resolvedTracks.find((track) => track.id === resolvedTargets.videoTrackId)?.name ?? null
+        ? (resolvedTracks.find((track) => track.id === resolvedTargets.videoTrackId)?.name ?? null)
         : null,
       audioTargetName: resolvedTargets.audioTrackId
-        ? resolvedTracks.find((track) => track.id === resolvedTargets.audioTrackId)?.name ?? null
+        ? (resolvedTracks.find((track) => track.id === resolvedTargets.audioTrackId)?.name ?? null)
         : null,
       status: null,
-    };
+    }
   }, [
     activeTrack,
     activeTrackId,
@@ -1082,21 +1142,23 @@ function SourcePlaybackControls({
     sourcePatchVideoEnabled,
     sourcePatchVideoTrackId,
     tracks,
-  ]);
+  ])
 
-  const videoDestinationLabel = selectedVideoTrack?.name ?? patchTargetPreview.videoTargetName ?? '自动';
-  const audioDestinationLabel = selectedAudioTrack?.name ?? patchTargetPreview.audioTargetName ?? '自动';
+  const videoDestinationLabel =
+    selectedVideoTrack?.name ?? patchTargetPreview.videoTargetName ?? 'Auto'
+  const audioDestinationLabel =
+    selectedAudioTrack?.name ?? patchTargetPreview.audioTargetName ?? 'Auto'
 
   const videoPatchTooltip = patchTargetPreview.videoTargetName
-    ? `视频源补丁：开 -> ${patchTargetPreview.videoTargetName}`
+    ? `Video Source Patch On -> ${patchTargetPreview.videoTargetName}`
     : sourcePatchVideoEnabled
-      ? '视频源补丁：开'
-      : '视频源补丁：关';
+      ? 'Video Source Patch On'
+      : 'Video Source Patch Off'
   const audioPatchTooltip = patchTargetPreview.audioTargetName
-    ? `音频源补丁：开 -> ${patchTargetPreview.audioTargetName}`
+    ? `Audio Source Patch On -> ${patchTargetPreview.audioTargetName}`
     : sourcePatchAudioEnabled
-      ? '音频源补丁：开'
-      : '音频源补丁：关';
+      ? 'Audio Source Patch On'
+      : 'Audio Source Patch Off'
 
   return (
     <div className="@container flex flex-col shrink-0">
@@ -1206,38 +1268,65 @@ function SourcePlaybackControls({
                 <Button
                   variant="ghost"
                   size="icon"
-                  style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }}
+                  style={{
+                    width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                    height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  }}
                   disabled={inPoint === null && outPoint === null}
                   onClick={handleReplaySegment}
                 >
                   <Repeat className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">播放入点到出点</TooltipContent>
+              <TooltipContent side="top">Play In to Out</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleMarkIn}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  style={{
+                    width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                    height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  }}
+                  onClick={handleMarkIn}
+                >
                   <ArrowLeftToLine className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">标记入点（I）</TooltipContent>
+              <TooltipContent side="top">Mark In (I)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleMarkOut}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  style={{
+                    width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                    height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  }}
+                  onClick={handleMarkOut}
+                >
                   <ArrowRightToLine className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">标记出点（O）</TooltipContent>
+              <TooltipContent side="top">Mark Out (O)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleClearIO}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  style={{
+                    width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                    height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  }}
+                  onClick={handleClearIO}
+                >
                   <XCircle className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">清除入/出点（Alt+X）</TooltipContent>
+              <TooltipContent side="top">Clear In/Out (Alt+X)</TooltipContent>
             </Tooltip>
           </div>
         )}
@@ -1266,43 +1355,86 @@ function SourcePlaybackControls({
         <div className="flex items-center gap-0.5 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleGoToStart}>
+              <Button
+                variant="ghost"
+                size="icon"
+                style={{
+                  width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                }}
+                onClick={handleGoToStart}
+              >
                 <SkipBack className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">跳到开头（Home）</TooltipContent>
+            <TooltipContent side="top">Go to start (Home)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleStepBack}>
+              <Button
+                variant="ghost"
+                size="icon"
+                style={{
+                  width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                }}
+                onClick={handleStepBack}
+              >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">上一帧（左箭头）</TooltipContent>
+            <TooltipContent side="top">Previous frame (Left Arrow)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleTogglePlayback}>
-                {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+              <Button
+                size="icon"
+                style={{
+                  width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                }}
+                onClick={handleTogglePlayback}
+              >
+                {playing ? (
+                  <Pause className="w-3.5 h-3.5" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 ml-0.5" />
+                )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">{playing ? '暂停' : '播放'}（空格）</TooltipContent>
+            <TooltipContent side="top">{playing ? 'Pause' : 'Play'} (Space)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleStepForward}>
+              <Button
+                variant="ghost"
+                size="icon"
+                style={{
+                  width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                }}
+                onClick={handleStepForward}
+              >
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">下一帧（右箭头）</TooltipContent>
+            <TooltipContent side="top">Next frame (Right Arrow)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleGoToEnd}>
+              <Button
+                variant="ghost"
+                size="icon"
+                style={{
+                  width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                }}
+                onClick={handleGoToEnd}
+              >
                 <SkipForward className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">跳到末尾（End）</TooltipContent>
+            <TooltipContent side="top">Go to end (End)</TooltipContent>
           </Tooltip>
         </div>
 
@@ -1316,10 +1448,16 @@ function SourcePlaybackControls({
                       variant="ghost"
                       size="sm"
                       className={`h-6 min-w-6 px-1.5 font-mono text-[11px] ${
-                        sourcePatchVideoEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+                        sourcePatchVideoEnabled
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : ''
                       }`}
                       onClick={toggleSourcePatchVideoEnabled}
-                      aria-label={sourcePatchVideoEnabled ? '关闭视频源补丁目标' : '开启视频源补丁目标'}
+                      aria-label={
+                        sourcePatchVideoEnabled
+                          ? 'Disable video source patch target'
+                          : 'Enable video source patch target'
+                      }
                       aria-pressed={sourcePatchVideoEnabled}
                     >
                       V
@@ -1340,10 +1478,16 @@ function SourcePlaybackControls({
                       variant="ghost"
                       size="sm"
                       className={`h-6 min-w-6 px-1.5 font-mono text-[11px] ${
-                        sourcePatchAudioEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+                        sourcePatchAudioEnabled
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : ''
                       }`}
                       onClick={toggleSourcePatchAudioEnabled}
-                      aria-label={sourcePatchAudioEnabled ? '关闭音频源补丁目标' : '开启音频源补丁目标'}
+                      aria-label={
+                        sourcePatchAudioEnabled
+                          ? 'Disable audio source patch target'
+                          : 'Enable audio source patch target'
+                      }
                       aria-pressed={sourcePatchAudioEnabled}
                     >
                       A
@@ -1364,12 +1508,14 @@ function SourcePlaybackControls({
                 <div className="hidden @min-[560px]:flex items-center gap-1 text-[10px] font-mono text-muted-foreground whitespace-nowrap">
                   {patchTargetPreview.videoTargetName ? (
                     <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
-                      {'V->'}{patchTargetPreview.videoTargetName}
+                      {'V->'}
+                      {patchTargetPreview.videoTargetName}
                     </span>
                   ) : null}
                   {patchTargetPreview.audioTargetName ? (
                     <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
-                      {'A->'}{patchTargetPreview.audioTargetName}
+                      {'A->'}
+                      {patchTargetPreview.audioTargetName}
                     </span>
                   ) : null}
                 </div>
@@ -1378,19 +1524,35 @@ function SourcePlaybackControls({
             <div className="w-px h-4 bg-border mx-0.5" />
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => performInsertEdit()}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  style={{
+                    width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                    height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  }}
+                  onClick={() => performInsertEdit()}
+                >
                   <ArrowDownToLine className="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">插入（,）</TooltipContent>
+              <TooltipContent side="top">Insert (,)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => performOverwriteEdit()}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  style={{
+                    width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                    height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
+                  }}
+                  onClick={() => performOverwriteEdit()}
+                >
                   <Replace className="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">覆盖（.）</TooltipContent>
+              <TooltipContent side="top">Overwrite (.)</TooltipContent>
             </Tooltip>
           </div>
         ) : (
@@ -1398,5 +1560,5 @@ function SourcePlaybackControls({
         )}
       </div>
     </div>
-  );
+  )
 }

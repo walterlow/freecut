@@ -1,10 +1,10 @@
-import { SCALE_UV_WGSL } from '../common';
-import type { GpuTransitionDefinition } from '../types';
+import { SCALE_UV_WGSL } from '../common'
+import type { GpuTransitionDefinition } from '../types'
 
 export const iris: GpuTransitionDefinition = {
   id: 'iris',
   name: 'Iris',
-  category: 'mask',
+  category: 'iris',
   hasDirection: false,
   entryPoint: 'irisFragment',
   uniformSize: 16,
@@ -67,7 +67,7 @@ fn irisFragment(input: VertexOutput) -> @location(0) vec4f {
   return mix(outgoingColor, incomingColor, inside);
 }`,
   packUniforms: (progress, width, height, _direction, properties) => {
-    const edgeSoftness = (properties?.edgeSoftness as number) ?? 6.0;
-    return new Float32Array([progress, width, height, edgeSoftness]);
+    const edgeSoftness = (properties?.edgeSoftness as number) ?? 6.0
+    return new Float32Array([progress, width, height, edgeSoftness])
   },
-};
+}

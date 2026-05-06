@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test'
 
-import { constrainSelectedKeyframeDelta } from './frame-move-constraints';
+import { constrainSelectedKeyframeDelta } from './frame-move-constraints'
 
 describe('constrainSelectedKeyframeDelta', () => {
   it('clamps a selected keyframe before the next unselected keyframe', () => {
@@ -15,9 +15,9 @@ describe('constrainSelectedKeyframeDelta', () => {
         selectedKeyframeIds: new Set(['kf-1']),
         totalFrames: 100,
         deltaFrames: 20,
-      })
-    ).toBe(9);
-  });
+      }),
+    ).toBe(9)
+  })
 
   it('treats non-selected gaps as barriers for multi-selection moves', () => {
     expect(
@@ -32,9 +32,9 @@ describe('constrainSelectedKeyframeDelta', () => {
         selectedKeyframeIds: new Set(['kf-1', 'kf-3']),
         totalFrames: 100,
         deltaFrames: 10,
-      })
-    ).toBe(4);
-  });
+      }),
+    ).toBe(4)
+  })
 
   it('allows contiguous selected keyframes to move together until the next fixed keyframe', () => {
     expect(
@@ -50,9 +50,9 @@ describe('constrainSelectedKeyframeDelta', () => {
         selectedKeyframeIds: new Set(['kf-2', 'kf-3']),
         totalFrames: 100,
         deltaFrames: 10,
-      })
-    ).toBe(3);
-  });
+      }),
+    ).toBe(3)
+  })
 
   it('clamps movement to frame zero and the last valid frame', () => {
     expect(
@@ -63,8 +63,8 @@ describe('constrainSelectedKeyframeDelta', () => {
         selectedKeyframeIds: new Set(['kf-1']),
         totalFrames: 6,
         deltaFrames: -10,
-      })
-    ).toBe(-2);
+      }),
+    ).toBe(-2)
 
     expect(
       constrainSelectedKeyframeDelta({
@@ -74,7 +74,7 @@ describe('constrainSelectedKeyframeDelta', () => {
         selectedKeyframeIds: new Set(['kf-1']),
         totalFrames: 6,
         deltaFrames: 10,
-      })
-    ).toBe(3);
-  });
-});
+      }),
+    ).toBe(3)
+  })
+})

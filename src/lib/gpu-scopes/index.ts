@@ -1,1 +1,1 @@
-export { ScopeRenderer } from './scope-renderer';
+export { ScopeRenderer } from './scope-renderer'

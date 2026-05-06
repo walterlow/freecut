@@ -1,15 +1,15 @@
-import { memo } from 'react';
+import { memo } from 'react'
 
 // Waveform dimensions
-const WAVEFORM_HEIGHT = 32;
+const WAVEFORM_HEIGHT = 32
 
 interface WaveformSkeletonProps {
   /** Width of the clip in pixels */
-  clipWidth: number;
+  clipWidth: number
   /** Height of the skeleton (default: 32px) */
-  height?: number;
+  height?: number
   /** Optional className for positioning */
-  className?: string;
+  className?: string
 }
 
 /**
@@ -40,5 +40,5 @@ export const WaveformSkeleton = memo(function WaveformSkeleton({
         animation: 'filmstrip-shimmer 1.5s ease-in-out infinite',
       }}
     />
-  );
-});
+  )
+})

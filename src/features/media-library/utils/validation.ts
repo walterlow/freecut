@@ -10,7 +10,7 @@ const SUPPORTED_VIDEO_TYPES = [
   'video/x-matroska', // .mkv files
   'video/matroska', // .mkv files (alternate browser MIME)
   'video/x-msvideo', // .avi files
-];
+]
 
 const SUPPORTED_AUDIO_TYPES = [
   'audio/mp3',
@@ -20,7 +20,7 @@ const SUPPORTED_AUDIO_TYPES = [
   'audio/x-m4a', // .m4a files
   'audio/mp4', // .m4a also reported as audio/mp4
   'audio/ogg', // Opus codec in Ogg container
-];
+]
 
 const SUPPORTED_IMAGE_TYPES = [
   'image/jpeg',
@@ -29,17 +29,10 @@ const SUPPORTED_IMAGE_TYPES = [
   'image/gif',
   'image/webp',
   'image/svg+xml', // .svg files
-];
+]
 
-const GENERIC_BROWSER_MIME_TYPES = new Set([
-  '',
-  'application/octet-stream',
-  'binary/octet-stream',
-]);
-const EXTENSION_PREFERRED_MIME_TYPES = new Set([
-  '.mkv',
-  '.m4a',
-]);
+const GENERIC_BROWSER_MIME_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream'])
+const EXTENSION_PREFERRED_MIME_TYPES = new Set(['.mkv', '.m4a'])
 
 // Extension to MIME type mapping for fallback when browser doesn't provide MIME type
 const EXTENSION_TO_MIME: Record<string, string> = {
@@ -63,31 +56,31 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
-};
+}
 
 /**
  * Get MIME type from file, falling back to extension-based detection
  */
 export function getMimeType(file: File): string {
-  const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
-  const extensionMimeType = ext ? EXTENSION_TO_MIME[ext] : undefined;
+  const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
+  const extensionMimeType = ext ? EXTENSION_TO_MIME[ext] : undefined
 
   // Prefer the extension for formats whose browser-reported MIME commonly
   // varies despite the media kind staying the same (for example .mkv, .m4a).
   if (ext && extensionMimeType && EXTENSION_PREFERRED_MIME_TYPES.has(ext)) {
-    return extensionMimeType;
+    return extensionMimeType
   }
 
   if (!GENERIC_BROWSER_MIME_TYPES.has(file.type)) {
-    return file.type;
+    return file.type
   }
 
-  return extensionMimeType || '';
+  return extensionMimeType || ''
 }
 
 interface ValidationResult {
-  valid: boolean;
-  error?: string;
+  valid: boolean
+  error?: string
 }
 
 /**
@@ -96,7 +89,7 @@ interface ValidationResult {
 export function validateMediaFile(file: File): ValidationResult {
   // Check file size
   if (file.size === 0) {
-    return { valid: false, error: 'File is empty' };
+    return { valid: false, error: 'File is empty' }
   }
 
   // Check MIME type (with extension-based fallback for files like .mkv where browser doesn't provide MIME)
@@ -109,14 +102,14 @@ export function validateMediaFile(file: File): ValidationResult {
     ...SUPPORTED_VIDEO_TYPES,
     ...SUPPORTED_AUDIO_TYPES,
     ...SUPPORTED_IMAGE_TYPES,
-  ];
+  ]
 
-  const mimeType = getMimeType(file);
+  const mimeType = getMimeType(file)
   if (!allSupportedTypes.includes(mimeType)) {
     return {
       valid: false,
       error: `Unsupported file type: ${mimeType || file.name.split('.').pop()}. Supported types: video (mp4, webm, mov, mkv, avi), audio (mp3, wav, aac, m4a, ogg/opus), image (jpg/jpeg, png, gif, webp, svg)`,
-    };
+    }
   }
 
   // Check filename
@@ -124,28 +117,26 @@ export function validateMediaFile(file: File): ValidationResult {
     return {
       valid: false,
       error: 'Filename too long (max 255 characters)',
-    };
+    }
   }
 
-  return { valid: true };
+  return { valid: true }
 }
 
 /**
  * Get media type from MIME type
  */
-export function getMediaType(
-  mimeType: string
-): 'video' | 'audio' | 'image' | 'unknown' {
+export function getMediaType(mimeType: string): 'video' | 'audio' | 'image' | 'unknown' {
   if (SUPPORTED_VIDEO_TYPES.includes(mimeType)) {
-    return 'video';
+    return 'video'
   }
   if (SUPPORTED_AUDIO_TYPES.includes(mimeType)) {
-    return 'audio';
+    return 'audio'
   }
   if (SUPPORTED_IMAGE_TYPES.includes(mimeType)) {
-    return 'image';
+    return 'image'
   }
-  return 'unknown';
+  return 'unknown'
 }
 
 /**
@@ -153,16 +144,16 @@ export function getMediaType(
  */
 export function formatDuration(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) {
-    return '0:00';
+    return '0:00'
   }
 
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
 
   if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
   }
 
-  return `${minutes}:${String(secs).padStart(2, '0')}`;
+  return `${minutes}:${String(secs).padStart(2, '0')}`
 }

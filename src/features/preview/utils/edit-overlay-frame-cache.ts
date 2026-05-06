@@ -1,30 +1,30 @@
-const DEFAULT_EDIT_OVERLAY_CACHE_MAX = 180;
+const DEFAULT_EDIT_OVERLAY_CACHE_MAX = 180
 
-const cache = new Map<string, ImageBitmap>();
+const cache = new Map<string, ImageBitmap>()
 
 export function getEditOverlayFrameCacheKey(
   src: string,
   sourceTime: number,
   quantumSeconds: number,
 ): string {
-  const quantized = Math.round(sourceTime / quantumSeconds) * quantumSeconds;
-  return `${src}::${quantized.toFixed(6)}`;
+  const quantized = Math.round(sourceTime / quantumSeconds) * quantumSeconds
+  return `${src}::${quantized.toFixed(6)}`
 }
 
 export function getCachedEditOverlayFrame(key: string): ImageBitmap | undefined {
-  const bitmap = cache.get(key);
+  const bitmap = cache.get(key)
   if (!bitmap) {
-    return undefined;
+    return undefined
   }
 
   // Touch entry to preserve recent frames during drag reversals.
-  cache.delete(key);
-  cache.set(key, bitmap);
-  return bitmap;
+  cache.delete(key)
+  cache.set(key, bitmap)
+  return bitmap
 }
 
 export function hasCachedEditOverlayFrame(key: string): boolean {
-  return cache.has(key);
+  return cache.has(key)
 }
 
 export function putCachedEditOverlayFrame(
@@ -32,33 +32,33 @@ export function putCachedEditOverlayFrame(
   bitmap: ImageBitmap,
   maxEntries: number = DEFAULT_EDIT_OVERLAY_CACHE_MAX,
 ): void {
-  const existing = cache.get(key);
+  const existing = cache.get(key)
   if (existing) {
-    cache.delete(key);
-    cache.set(key, existing);
-    bitmap.close();
-    return;
+    cache.delete(key)
+    cache.set(key, existing)
+    bitmap.close()
+    return
   }
 
-  cache.set(key, bitmap);
+  cache.set(key, bitmap)
   while (cache.size > Math.max(1, maxEntries)) {
-    const oldest = cache.entries().next().value as [string, ImageBitmap] | undefined;
+    const oldest = cache.entries().next().value as [string, ImageBitmap] | undefined
     if (!oldest) {
-      break;
+      break
     }
-    const [oldestKey, oldestBitmap] = oldest;
-    cache.delete(oldestKey);
-    oldestBitmap.close();
+    const [oldestKey, oldestBitmap] = oldest
+    cache.delete(oldestKey)
+    oldestBitmap.close()
   }
 }
 
 export function clearEditOverlayFrameCache(): void {
   for (const bitmap of cache.values()) {
-    bitmap.close();
+    bitmap.close()
   }
-  cache.clear();
+  cache.clear()
 }
 
 export function getEditOverlayFrameCacheSize(): number {
-  return cache.size;
+  return cache.size
 }

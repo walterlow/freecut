@@ -8,9 +8,6 @@ export {
   getGpuEffect,
   getGpuEffectDefaultParams,
   EffectsPipeline,
-} from '@/lib/gpu-effects';
+} from '@/lib/gpu-effects'
 
-export type {
-  GpuEffectInstance,
-  GpuEffectDefinition,
-} from '@/lib/gpu-effects/types';
+export type { GpuEffectInstance, GpuEffectDefinition } from '@/lib/gpu-effects/types'

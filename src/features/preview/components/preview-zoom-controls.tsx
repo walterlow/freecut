@@ -1,31 +1,32 @@
-import { useCallback, useRef } from 'react';
-import { ZoomIn } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useCallback, useRef } from 'react'
+import { ZoomIn } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
-import { usePreviewZoom } from '../hooks/use-preview-zoom';
+} from '@/components/ui/dropdown-menu'
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
+import { usePreviewZoom } from '../hooks/use-preview-zoom'
 
 export function PreviewZoomControls() {
-  const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom();
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom()
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
-  const currentLabel = zoom === -1
-    ? '自适应'
-    : zoomPresets.find((p) => p.value === zoom)?.label || `${Math.round(zoom * 100)}%`;
+  const currentLabel =
+    zoom === -1
+      ? 'Auto'
+      : zoomPresets.find((p) => p.value === zoom)?.label || `${Math.round(zoom * 100)}%`
 
   const blurTrigger = useCallback(() => {
-    triggerRef.current?.blur();
-  }, []);
+    triggerRef.current?.blur()
+  }, [])
 
   return (
     <DropdownMenu
       onOpenChange={(open) => {
-        if (!open) requestAnimationFrame(blurTrigger);
+        if (!open) requestAnimationFrame(blurTrigger)
       }}
     >
       <DropdownMenuTrigger asChild>
@@ -34,11 +35,11 @@ export function PreviewZoomControls() {
           variant="ghost"
           className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1 px-1.5"
           style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize }}
-          data-tooltip={`缩放：${currentLabel}`}
-          aria-label={`预览缩放：${currentLabel}`}
+          data-tooltip={`Zoom: ${currentLabel}`}
+          aria-label={`Preview zoom: ${currentLabel}`}
           onKeyDown={(e) => {
             // Space is reserved for global play/pause
-            if (e.key === ' ' || e.code === 'Space') e.preventDefault();
+            if (e.key === ' ' || e.code === 'Space') e.preventDefault()
           }}
         >
           <ZoomIn className="w-3.5 h-3.5" />
@@ -48,8 +49,8 @@ export function PreviewZoomControls() {
       <DropdownMenuContent
         align="end"
         onCloseAutoFocus={(e) => {
-          e.preventDefault();
-          requestAnimationFrame(blurTrigger);
+          e.preventDefault()
+          requestAnimationFrame(blurTrigger)
         }}
       >
         {zoomPresets.map((preset) => (
@@ -58,12 +59,18 @@ export function PreviewZoomControls() {
             className="text-xs"
             onSelect={() => handlePresetZoom(preset)}
           >
-            <span className={zoom === preset.value || (preset.value === 'fit' && zoom === -1) ? 'font-semibold' : ''}>
+            <span
+              className={
+                zoom === preset.value || (preset.value === 'fit' && zoom === -1)
+                  ? 'font-semibold'
+                  : ''
+              }
+            >
               {preset.label}
             </span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }

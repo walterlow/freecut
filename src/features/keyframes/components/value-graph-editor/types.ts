@@ -2,8 +2,8 @@
  * Types for the value graph editor.
  */
 
-import type { Keyframe, AnimatableProperty } from '@/types/keyframe';
-import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges';
+import type { Keyframe, AnimatableProperty } from '@/types/keyframe'
+import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges'
 
 /**
  * Viewport configuration for the graph.
@@ -11,17 +11,17 @@ import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-range
  */
 export interface GraphViewport {
   /** Width of the SVG canvas in pixels */
-  width: number;
+  width: number
   /** Height of the SVG canvas in pixels */
-  height: number;
+  height: number
   /** First visible frame */
-  startFrame: number;
+  startFrame: number
   /** Last visible frame */
-  endFrame: number;
+  endFrame: number
   /** Minimum value on Y axis */
-  minValue: number;
+  minValue: number
   /** Maximum value on Y axis */
-  maxValue: number;
+  maxValue: number
 }
 
 /**
@@ -29,19 +29,19 @@ export interface GraphViewport {
  */
 export interface GraphKeyframePoint {
   /** Original keyframe data */
-  keyframe: Keyframe;
+  keyframe: Keyframe
   /** Item ID this keyframe belongs to */
-  itemId: string;
+  itemId: string
   /** Property this keyframe animates */
-  property: AnimatableProperty;
+  property: AnimatableProperty
   /** Screen X coordinate */
-  x: number;
+  x: number
   /** Screen Y coordinate */
-  y: number;
+  y: number
   /** Whether this point is currently selected */
-  isSelected: boolean;
+  isSelected: boolean
   /** Whether this point is being dragged */
-  isDragging: boolean;
+  isDragging: boolean
 }
 
 /**
@@ -49,15 +49,15 @@ export interface GraphKeyframePoint {
  */
 export interface GraphBezierHandle {
   /** The keyframe this handle belongs to */
-  keyframeId: string;
+  keyframeId: string
   /** Whether this is the incoming (in) or outgoing (out) handle */
-  type: 'in' | 'out';
+  type: 'in' | 'out'
   /** Handle position (screen coordinates) */
-  x: number;
-  y: number;
+  x: number
+  y: number
   /** Anchor point (keyframe position) */
-  anchorX: number;
-  anchorY: number;
+  anchorX: number
+  anchorY: number
 }
 
 /**
@@ -65,37 +65,37 @@ export interface GraphBezierHandle {
  */
 export interface GraphDragState {
   /** Type of element being dragged */
-  type: 'keyframe' | 'bezier-handle';
+  type: 'keyframe' | 'bezier-handle'
   /** Keyframe ID being dragged */
-  keyframeId: string;
+  keyframeId: string
   /** All keyframe IDs participating in the drag */
-  draggedKeyframeIds?: string[];
+  draggedKeyframeIds?: string[]
   /** Item ID of the keyframe */
-  itemId: string;
+  itemId: string
   /** Property of the keyframe */
-  property: AnimatableProperty;
+  property: AnimatableProperty
   /** For bezier handles, which handle type */
-  handleType?: 'in' | 'out';
+  handleType?: 'in' | 'out'
   /** Starting mouse X */
-  startMouseX: number;
+  startMouseX: number
   /** Starting mouse Y */
-  startMouseY: number;
+  startMouseY: number
   /** Initial frame value */
-  initialFrame: number;
+  initialFrame: number
   /** Initial keyframe value */
-  initialValue: number;
+  initialValue: number
   /** For bezier handles, initial control point */
-  initialControlPoint?: { x: number; y: number };
+  initialControlPoint?: { x: number; y: number }
 }
 
 /**
  * Padding configuration for the graph.
  */
 export interface GraphPadding {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
+  top: number
+  right: number
+  bottom: number
+  left: number
 }
 
 /**
@@ -107,6 +107,6 @@ export const DEFAULT_GRAPH_PADDING: GraphPadding = {
   right: 10,
   bottom: 40,
   left: 10,
-};
+}
 
-export { PROPERTY_VALUE_RANGES };
+export { PROPERTY_VALUE_RANGES }

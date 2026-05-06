@@ -11,15 +11,15 @@
  * Split into domain-specific modules under ./actions/ for maintainability.
  */
 
-export * from './actions/track-actions';
-export * from './actions/item-actions';
-export * from './actions/transform-actions';
-export * from './actions/effect-actions';
-export * from './actions/transition-actions';
-export * from './actions/keyframe-actions';
-export * from './actions/marker-actions';
-export * from './actions/settings-actions';
-export * from './actions/source-edit-actions';
-export * from './actions/composition-actions';
-export * from './actions/project-item-actions';
-export * from './actions/legacy-av-actions';
+export * from './actions/track-actions'
+export * from './actions/item-actions'
+export * from './actions/transform-actions'
+export * from './actions/effect-actions'
+export * from './actions/transition-actions'
+export * from './actions/keyframe-actions'
+export * from './actions/marker-actions'
+export * from './actions/settings-actions'
+export * from './actions/source-edit-actions'
+export * from './actions/composition-actions'
+export * from './actions/project-item-actions'
+export * from './actions/legacy-av-actions'

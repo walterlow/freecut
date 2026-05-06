@@ -6,12 +6,8 @@ export type {
   CaptionsPayload,
   ScenesPayload,
   SceneCutPayload,
-} from './types';
-export {
-  AI_OUTPUT_SCHEMA_VERSION,
-  transcriptFromLegacy,
-  transcriptToLegacy,
-} from './types';
+} from './types'
+export { AI_OUTPUT_SCHEMA_VERSION, transcriptFromLegacy, transcriptToLegacy } from './types'
 export {
   readAiOutput,
   readAiOutputAt,
@@ -21,4 +17,4 @@ export {
   deleteAiOutputAt,
   listAiOutputs,
   getMediaIdsWithAiOutput,
-} from './io';
+} from './io'

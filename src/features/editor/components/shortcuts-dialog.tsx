@@ -4,12 +4,12 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { HotkeyEditor } from '@/features/editor/deps/settings';
+} from '@/components/ui/dialog'
+import { HotkeyEditor } from '@/features/editor/deps/settings'
 
 interface ShortcutsDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
 export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
@@ -30,5 +30,5 @@ export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
         </div>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

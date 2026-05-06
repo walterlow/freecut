@@ -1,9 +1,9 @@
 export interface NamedProvider {
-  id: string;
+  id: string
 }
 
 export class ProviderRegistry<TProvider extends NamedProvider> {
-  private readonly providers = new Map<string, TProvider>();
+  private readonly providers = new Map<string, TProvider>()
 
   constructor(
     providers: readonly TProvider[],
@@ -11,30 +11,30 @@ export class ProviderRegistry<TProvider extends NamedProvider> {
   ) {
     for (const provider of providers) {
       if (this.providers.has(provider.id)) {
-        throw new Error(`Duplicate provider ID: "${provider.id}"`);
+        throw new Error(`Duplicate provider ID: "${provider.id}"`)
       }
-      this.providers.set(provider.id, provider);
+      this.providers.set(provider.id, provider)
     }
 
     if (!this.providers.has(defaultProviderId)) {
-      throw new Error(`Default provider ID "${defaultProviderId}" not found in providers`);
+      throw new Error(`Default provider ID "${defaultProviderId}" not found in providers`)
     }
   }
 
   get(id: string): TProvider {
-    const provider = this.providers.get(id);
+    const provider = this.providers.get(id)
     if (!provider) {
-      throw new Error(`Unknown provider: ${id}`);
+      throw new Error(`Unknown provider: ${id}`)
     }
 
-    return provider;
+    return provider
   }
 
   getDefault(): TProvider {
-    return this.get(this.defaultProviderId);
+    return this.get(this.defaultProviderId)
   }
 
   list(): readonly TProvider[] {
-    return [...this.providers.values()];
+    return [...this.providers.values()]
   }
 }

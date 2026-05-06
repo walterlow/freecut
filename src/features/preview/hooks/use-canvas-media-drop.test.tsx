@@ -1,6 +1,6 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MediaMetadata } from '@/types/storage';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
+import type { MediaMetadata } from '@/types/storage'
 
 const mocks = vi.hoisted(() => ({
   addItem: vi.fn(),
@@ -8,34 +8,36 @@ const mocks = vi.hoisted(() => ({
   selectItems: vi.fn(),
   findBestCanvasDropPlacement: vi.fn(() => ({ trackId: 'track-1', from: 24 })),
   getDroppedMediaDurationInFrames: vi.fn(() => 120),
-  buildDroppedMediaTimelineItem: vi.fn((params: {
-    canvasWidth: number;
-    canvasHeight: number;
-    placement: { trackId: string; from: number; durationInFrames: number };
-  }) => ({
-    id: 'item-1',
-    type: 'video' as const,
-    trackId: params.placement.trackId,
-    from: params.placement.from,
-    durationInFrames: params.placement.durationInFrames,
-    label: 'clip.mp4',
-    mediaId: 'media-1',
-    originId: 'origin-1',
-    sourceStart: 0,
-    sourceEnd: params.placement.durationInFrames,
-    sourceDuration: params.placement.durationInFrames,
-    sourceFps: 30,
-    trimStart: 0,
-    trimEnd: 0,
-    src: 'blob:test',
-    transform: {
-      x: 0,
-      y: 0,
-      width: params.canvasWidth,
-      height: params.canvasHeight,
-      rotation: 0,
-    },
-  })),
+  buildDroppedMediaTimelineItem: vi.fn(
+    (params: {
+      canvasWidth: number
+      canvasHeight: number
+      placement: { trackId: string; from: number; durationInFrames: number }
+    }) => ({
+      id: 'item-1',
+      type: 'video' as const,
+      trackId: params.placement.trackId,
+      from: params.placement.from,
+      durationInFrames: params.placement.durationInFrames,
+      label: 'clip.mp4',
+      mediaId: 'media-1',
+      originId: 'origin-1',
+      sourceStart: 0,
+      sourceEnd: params.placement.durationInFrames,
+      sourceDuration: params.placement.durationInFrames,
+      sourceFps: 30,
+      trimStart: 0,
+      trimEnd: 0,
+      src: 'blob:test',
+      transform: {
+        x: 0,
+        y: 0,
+        width: params.canvasWidth,
+        height: params.canvasHeight,
+        rotation: 0,
+      },
+    }),
+  ),
   extractValidMediaFileEntriesFromDataTransfer: vi.fn(),
   getMimeType: vi.fn(() => 'video/mp4'),
   processMedia: vi.fn(),
@@ -46,14 +48,14 @@ const mocks = vi.hoisted(() => ({
   screenToCanvas: vi.fn(() => ({ x: 320, y: 240 })),
   toastWarning: vi.fn(),
   toastError: vi.fn(),
-}));
+}))
 
 let mediaStoreState: {
-  currentProjectId: string | null;
-  mediaItems: MediaMetadata[];
-  mediaById: Record<string, MediaMetadata>;
-  importHandlesForPlacement: typeof mocks.importHandlesForPlacement;
-};
+  currentProjectId: string | null
+  mediaItems: MediaMetadata[]
+  mediaById: Record<string, MediaMetadata>
+  importHandlesForPlacement: typeof mocks.importHandlesForPlacement
+}
 
 vi.mock('@/shared/state/selection', () => ({
   useSelectionStore: Object.assign(() => undefined, {
@@ -63,7 +65,7 @@ vi.mock('@/shared/state/selection', () => ({
       selectItems: mocks.selectItems,
     }),
   }),
-}));
+}))
 
 vi.mock('@/shared/state/playback', () => ({
   usePlaybackStore: Object.assign(() => undefined, {
@@ -71,7 +73,7 @@ vi.mock('@/shared/state/playback', () => ({
       currentFrame: 48,
     }),
   }),
-}));
+}))
 
 vi.mock('@/features/preview/deps/timeline-store', () => ({
   useTimelineStore: Object.assign(() => undefined, {
@@ -82,13 +84,13 @@ vi.mock('@/features/preview/deps/timeline-store', () => ({
       addItem: mocks.addItem,
     }),
   }),
-}));
+}))
 
 vi.mock('@/features/preview/deps/timeline-utils', () => ({
   findBestCanvasDropPlacement: mocks.findBestCanvasDropPlacement,
   getDroppedMediaDurationInFrames: mocks.getDroppedMediaDurationInFrames,
   buildDroppedMediaTimelineItem: mocks.buildDroppedMediaTimelineItem,
-}));
+}))
 
 vi.mock('@/features/preview/deps/media-library', () => ({
   extractValidMediaFileEntriesFromDataTransfer: mocks.extractValidMediaFileEntriesFromDataTransfer,
@@ -106,13 +108,13 @@ vi.mock('@/features/preview/deps/media-library', () => ({
     (selector: (state: typeof mediaStoreState) => unknown) => selector(mediaStoreState),
     {
       getState: () => mediaStoreState,
-    }
+    },
   ),
-}));
+}))
 
 vi.mock('../utils/coordinate-transform', () => ({
   screenToCanvas: mocks.screenToCanvas,
-}));
+}))
 
 vi.mock('@/app/state/project-media-match-dialog', () => ({
   useProjectMediaMatchDialogStore: {
@@ -120,16 +122,16 @@ vi.mock('@/app/state/project-media-match-dialog', () => ({
       requestProjectMediaMatch: mocks.requestProjectMediaMatch,
     }),
   },
-}));
+}))
 
 vi.mock('sonner', () => ({
   toast: {
     warning: mocks.toastWarning,
     error: mocks.toastError,
   },
-}));
+}))
 
-import { useCanvasMediaDrop } from './use-canvas-media-drop';
+import { useCanvasMediaDrop } from './use-canvas-media-drop'
 
 function makeImportedVideo(): MediaMetadata {
   return {
@@ -149,28 +151,28 @@ function makeImportedVideo(): MediaMetadata {
     tags: [],
     createdAt: 1,
     updatedAt: 1,
-  };
+  }
 }
 
 function DropProbe() {
   const { handleDrop } = useCanvasMediaDrop({
     coordParams: {} as never,
     projectSize: { width: 1280, height: 720 },
-  });
+  })
 
-  return <div data-testid="drop-target" onDrop={handleDrop} />;
+  return <div data-testid="drop-target" onDrop={handleDrop} />
 }
 
 describe('useCanvasMediaDrop', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.clearAllMocks()
 
     mediaStoreState = {
       currentProjectId: 'project-1',
       mediaItems: [],
       mediaById: {},
       importHandlesForPlacement: mocks.importHandlesForPlacement,
-    };
+    }
 
     mocks.extractValidMediaFileEntriesFromDataTransfer.mockResolvedValue({
       supported: true,
@@ -182,7 +184,7 @@ describe('useCanvasMediaDrop', () => {
         },
       ],
       errors: [],
-    });
+    })
     mocks.processMedia.mockResolvedValue({
       metadata: {
         type: 'video',
@@ -190,13 +192,13 @@ describe('useCanvasMediaDrop', () => {
         height: 1079,
         fps: 59.94,
       },
-    });
-    mocks.requestProjectMediaMatch.mockResolvedValue('size-only');
-    mocks.importHandlesForPlacement.mockResolvedValue([makeImportedVideo()]);
-  });
+    })
+    mocks.requestProjectMediaMatch.mockResolvedValue('size-only')
+    mocks.importHandlesForPlacement.mockResolvedValue([makeImportedVideo()])
+  })
 
   it('keeps matched preview drops centered and sized to the matched project', async () => {
-    render(<DropProbe />);
+    render(<DropProbe />)
 
     await act(async () => {
       fireEvent.drop(screen.getByTestId('drop-target'), {
@@ -206,24 +208,24 @@ describe('useCanvasMediaDrop', () => {
           types: ['Files'],
           items: [{ kind: 'file' }],
         },
-      });
-    });
+      })
+    })
 
-    await waitFor(() => expect(mocks.addItem).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.addItem).toHaveBeenCalledTimes(1))
 
     expect(mocks.requestProjectMediaMatch).toHaveBeenCalledWith('project-1', {
       fileName: 'clip.mp4',
       width: 1919,
       height: 1079,
       fps: 59.94,
-    });
+    })
     expect(mocks.buildDroppedMediaTimelineItem).toHaveBeenCalledWith(
       expect.objectContaining({
         canvasWidth: 1920,
         canvasHeight: 1080,
-      })
-    );
-    expect(mocks.screenToCanvas).not.toHaveBeenCalled();
+      }),
+    )
+    expect(mocks.screenToCanvas).not.toHaveBeenCalled()
     expect(mocks.addItem).toHaveBeenCalledWith(
       expect.objectContaining({
         transform: expect.objectContaining({
@@ -232,7 +234,7 @@ describe('useCanvasMediaDrop', () => {
           width: 1920,
           height: 1080,
         }),
-      })
-    );
-  });
-});
+      }),
+    )
+  })
+})

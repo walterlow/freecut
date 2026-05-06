@@ -1,104 +1,117 @@
-import { fireEvent, render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClipFilmstrip } from './index';
+import { fireEvent, render, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
+import { ClipFilmstrip } from './index'
 
 type FilmstripResult = {
-  frames: Array<{ index: number; timestamp: number; url: string }> | null;
-  isLoading: boolean;
-  isComplete: boolean;
-  progress: number;
-  error: string | null;
-};
+  frames: Array<{ index: number; timestamp: number; url: string }> | null
+  isLoading: boolean
+  isComplete: boolean
+  progress: number
+  error: string | null
+}
 type FilmstripOptions = {
-  mediaId?: string;
-  blobUrl?: string;
-  enabled?: boolean;
-  targetFrameCount?: number;
-  targetFrameIndices?: number[];
-  priorityWindow?: { startTime: number; endTime: number };
-};
+  mediaId?: string
+  blobUrl?: string
+  enabled?: boolean
+  targetFrameCount?: number
+  targetFrameIndices?: number[]
+  priorityWindow?: { startTime: number; endTime: number }
+}
 
-const useFilmstripMock = vi.hoisted(() => vi.fn((_options: FilmstripOptions): FilmstripResult => {
-  void _options;
-  return {
-  frames: null,
-  isLoading: false,
-  isComplete: false,
-  progress: 0,
-  error: null,
-  };
-}));
+const useFilmstripMock = vi.hoisted(() =>
+  vi.fn((_options: FilmstripOptions): FilmstripResult => {
+    void _options
+    return {
+      frames: null,
+      isLoading: false,
+      isComplete: false,
+      progress: 0,
+      error: null,
+    }
+  }),
+)
 
-const useMediaBlobUrlMock = vi.hoisted(() => vi.fn(() => ({
-  blobUrl: 'blob:original',
-  setBlobUrl: vi.fn(),
-  hasStartedLoadingRef: { current: true },
-  blobUrlVersion: 0,
-})));
+const useMediaBlobUrlMock = vi.hoisted(() =>
+  vi.fn(() => ({
+    blobUrl: 'blob:original',
+    setBlobUrl: vi.fn(),
+    hasStartedLoadingRef: { current: true },
+    blobUrlVersion: 0,
+  })),
+)
 
 const mediaResolverMocks = vi.hoisted(() => ({
   resolveMediaUrl: vi.fn(),
   resolveProxyUrl: vi.fn((): string | null => null),
-}));
+}))
 
-const useMediaLibraryStoreMock = vi.hoisted(() => vi.fn((selector: (state: {
-  proxyStatus: Map<string, string>;
-}) => unknown) => selector({
-  proxyStatus: new Map<string, string>(),
-})));
+const useMediaLibraryStoreMock = vi.hoisted(() =>
+  vi.fn((selector: (state: { proxyStatus: Map<string, string> }) => unknown) =>
+    selector({
+      proxyStatus: new Map<string, string>(),
+    }),
+  ),
+)
 
 const filmstripCacheMocks = vi.hoisted(() => ({
   refreshFrames: vi.fn(() => Promise.resolve()),
-}));
+}))
 
 vi.mock('../../hooks/use-filmstrip', () => ({
   useFilmstrip: useFilmstripMock,
-}));
+}))
 
 vi.mock('../../hooks/use-media-blob-url', () => ({
   useMediaBlobUrl: useMediaBlobUrlMock,
-}));
+}))
 
 vi.mock('@/features/timeline/deps/media-library-resolver', () => ({
   resolveMediaUrl: mediaResolverMocks.resolveMediaUrl,
   resolveProxyUrl: mediaResolverMocks.resolveProxyUrl,
-}));
+}))
 
 vi.mock('@/features/timeline/deps/media-library-store', () => ({
   useMediaLibraryStore: useMediaLibraryStoreMock,
-}));
+}))
 
 vi.mock('../../services/filmstrip-cache', () => ({
   THUMBNAIL_WIDTH: 80,
   filmstripCache: filmstripCacheMocks,
-}));
+}))
 
 describe('ClipFilmstrip', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.stubGlobal('ResizeObserver', class {
-      observe(): void {}
-      disconnect(): void {}
-    });
-    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(60);
+    vi.clearAllMocks()
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(): void {}
+        disconnect(): void {}
+      },
+    )
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(60)
 
     useMediaBlobUrlMock.mockReturnValue({
       blobUrl: 'blob:original',
       setBlobUrl: vi.fn(),
       hasStartedLoadingRef: { current: true },
       blobUrlVersion: 0,
-    });
-    useMediaLibraryStoreMock.mockImplementation((selector) => selector({
-      proxyStatus: new Map<string, string>(),
-    }));
-    mediaResolverMocks.resolveProxyUrl.mockReturnValue(null);
-  });
+    })
+    useMediaLibraryStoreMock.mockImplementation((selector) =>
+      selector({
+        proxyStatus: new Map<string, string>(),
+      }),
+    )
+    mediaResolverMocks.resolveProxyUrl.mockReturnValue(null)
+  })
 
   it('prefers a ready proxy as the filmstrip source', () => {
-    useMediaLibraryStoreMock.mockImplementation((selector) => selector({
-      proxyStatus: new Map([['media-1', 'ready']]),
-    }));
-    mediaResolverMocks.resolveProxyUrl.mockReturnValue('blob:proxy');
+    useMediaLibraryStoreMock.mockImplementation((selector) =>
+      selector({
+        proxyStatus: new Map([['media-1', 'ready']]),
+      }),
+    )
+    mediaResolverMocks.resolveProxyUrl.mockReturnValue('blob:proxy')
 
     render(
       <ClipFilmstrip
@@ -112,17 +125,19 @@ describe('ClipFilmstrip', () => {
         isVisible
         pixelsPerSecond={120}
       />,
-    );
+    )
 
-    const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0];
-    expect(latestCall).toEqual(expect.objectContaining({
-      mediaId: 'media-1',
-      blobUrl: 'blob:proxy',
-      enabled: true,
-      targetFrameCount: expect.any(Number),
-      targetFrameIndices: expect.any(Array),
-    }));
-  });
+    const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0]
+    expect(latestCall).toEqual(
+      expect.objectContaining({
+        mediaId: 'media-1',
+        blobUrl: 'blob:proxy',
+        enabled: true,
+        targetFrameCount: expect.any(Number),
+        targetFrameIndices: expect.any(Array),
+      }),
+    )
+  })
 
   it('falls back to the original media blob when no proxy is ready', () => {
     render(
@@ -137,17 +152,19 @@ describe('ClipFilmstrip', () => {
         isVisible
         pixelsPerSecond={120}
       />,
-    );
+    )
 
-    const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0];
-    expect(latestCall).toEqual(expect.objectContaining({
-      mediaId: 'media-1',
-      blobUrl: 'blob:original',
-      enabled: true,
-      targetFrameCount: expect.any(Number),
-      targetFrameIndices: expect.any(Array),
-    }));
-  });
+    const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0]
+    expect(latestCall).toEqual(
+      expect.objectContaining({
+        mediaId: 'media-1',
+        blobUrl: 'blob:original',
+        enabled: true,
+        targetFrameCount: expect.any(Number),
+        targetFrameIndices: expect.any(Array),
+      }),
+    )
+  })
 
   it('prioritizes the visible source slice instead of the clip start', () => {
     render(
@@ -164,30 +181,30 @@ describe('ClipFilmstrip', () => {
         visibleEndRatio={0.75}
         pixelsPerSecond={100}
       />,
-    );
+    )
 
-    const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0];
-    const priorityWindow = latestCall?.priorityWindow;
-    expect(priorityWindow).toBeDefined();
-    expect(latestCall?.priorityWindow).toEqual(expect.objectContaining({
-      startTime: expect.any(Number),
-      endTime: expect.any(Number),
-    }));
-    expect(priorityWindow!.startTime).toBeGreaterThan(0);
-    expect(priorityWindow!.endTime).toBeGreaterThan(priorityWindow!.startTime);
-    expect(latestCall?.targetFrameIndices).toEqual(expect.arrayContaining([expect.any(Number)]));
-  });
+    const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0]
+    const priorityWindow = latestCall?.priorityWindow
+    expect(priorityWindow).toBeDefined()
+    expect(latestCall?.priorityWindow).toEqual(
+      expect.objectContaining({
+        startTime: expect.any(Number),
+        endTime: expect.any(Number),
+      }),
+    )
+    expect(priorityWindow!.startTime).toBeGreaterThan(0)
+    expect(priorityWindow!.endTime).toBeGreaterThan(priorityWindow!.startTime)
+    expect(latestCall?.targetFrameIndices).toEqual(expect.arrayContaining([expect.any(Number)]))
+  })
 
   it('refreshes a stale frame URL when a tile source errors', async () => {
     useFilmstripMock.mockReturnValue({
-      frames: [
-        { index: 0, timestamp: 0, url: 'blob:stale' },
-      ],
+      frames: [{ index: 0, timestamp: 0, url: 'blob:stale' }],
       isLoading: false,
       isComplete: true,
       progress: 100,
       error: null,
-    });
+    })
 
     const { container } = render(
       <ClipFilmstrip
@@ -201,14 +218,14 @@ describe('ClipFilmstrip', () => {
         isVisible
         pixelsPerSecond={120}
       />,
-    );
+    )
 
-    const img = container.querySelector('img[src="blob:stale"]');
-    expect(img).not.toBeNull();
-    fireEvent.error(img!);
+    const img = container.querySelector('img[src="blob:stale"]')
+    expect(img).not.toBeNull()
+    fireEvent.error(img!)
 
     await waitFor(() => {
-      expect(filmstripCacheMocks.refreshFrames).toHaveBeenCalledWith('media-1', [0]);
-    });
-  });
-});
+      expect(filmstripCacheMocks.refreshFrames).toHaveBeenCalledWith('media-1', [0])
+    })
+  })
+})

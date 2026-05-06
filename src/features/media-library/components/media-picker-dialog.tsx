@@ -1,24 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Video, FileAudio, Image as ImageIcon, Search, Loader2 } from 'lucide-react';
-import type { MediaMetadata } from '@/types/storage';
-import { useMediaLibraryStore } from '../stores/media-library-store';
-import { mediaLibraryService } from '../services/media-library-service';
-import { getMediaType, formatDuration } from '../utils/validation';
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Video, FileAudio, Image as ImageIcon, Search, Loader2 } from 'lucide-react'
+import type { MediaMetadata } from '@/types/storage'
+import { useMediaLibraryStore } from '../stores/media-library-store'
+import { mediaLibraryService } from '../services/media-library-service'
+import { getMediaType, formatDuration } from '../utils/validation'
 
 interface MediaPickerDialogProps {
-  open: boolean;
-  onClose: () => void;
-  onSelect: (mediaId: string) => void;
-  filterType?: 'video' | 'audio' | 'image';
-  title?: string;
+  open: boolean
+  onClose: () => void
+  onSelect: (mediaId: string) => void
+  filterType?: 'video' | 'audio' | 'image'
+  title?: string
 }
 
 const typeIcons: Record<string, typeof Video> = {
@@ -26,35 +26,29 @@ const typeIcons: Record<string, typeof Video> = {
   audio: FileAudio,
   image: ImageIcon,
   unknown: Video, // Fallback
-};
+}
 
-function MediaPickerItem({
-  media,
-  onSelect,
-}: {
-  media: MediaMetadata;
-  onSelect: () => void;
-}) {
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const mediaType = getMediaType(media.mimeType);
-  const IconComponent = typeIcons[mediaType] || Video;
+function MediaPickerItem({ media, onSelect }: { media: MediaMetadata; onSelect: () => void }) {
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
+  const mediaType = getMediaType(media.mimeType)
+  const IconComponent = typeIcons[mediaType] || Video
 
   useEffect(() => {
-    let mounted = true;
+    let mounted = true
 
     const loadThumbnail = async () => {
-      const url = await mediaLibraryService.getThumbnailBlobUrl(media.id);
+      const url = await mediaLibraryService.getThumbnailBlobUrl(media.id)
       if (mounted) {
-        setThumbnailUrl(url);
+        setThumbnailUrl(url)
       }
-    };
+    }
 
-    loadThumbnail();
+    loadThumbnail()
 
     return () => {
-      mounted = false;
-    };
-  }, [media.id]);
+      mounted = false
+    }
+  }, [media.id])
 
   return (
     <button
@@ -64,11 +58,7 @@ function MediaPickerItem({
       {/* Thumbnail */}
       <div className="relative w-12 h-12 rounded overflow-hidden bg-secondary flex-shrink-0">
         {thumbnailUrl ? (
-          <img
-            src={thumbnailUrl}
-            alt={media.fileName}
-            className="w-full h-full object-cover"
-          />
+          <img src={thumbnailUrl} alt={media.fileName} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <IconComponent className="w-5 h-5 text-muted-foreground" />
@@ -89,7 +79,7 @@ function MediaPickerItem({
       {/* Type icon */}
       <IconComponent className="w-4 h-4 text-muted-foreground flex-shrink-0" />
     </button>
-  );
+  )
 }
 
 export function MediaPickerDialog({
@@ -100,9 +90,9 @@ export function MediaPickerDialog({
   title = 'Select Media',
 }: MediaPickerDialogProps) {
   const handleSelect = (mediaId: string) => {
-    onSelect(mediaId);
-    onClose();
-  };
+    onSelect(mediaId)
+    onClose()
+  }
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -120,35 +110,35 @@ export function MediaPickerDialog({
         />
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 function MediaPickerDialogBody({
   filterType,
   onSelect,
 }: {
-  filterType?: 'video' | 'audio' | 'image';
-  onSelect: (mediaId: string) => void;
+  filterType?: 'video' | 'audio' | 'image'
+  onSelect: (mediaId: string) => void
 }) {
-  const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
-  const isLoading = useMediaLibraryStore((s) => s.isLoading);
-  const [searchQuery, setSearchQuery] = useState('');
+  const mediaItems = useMediaLibraryStore((s) => s.mediaItems)
+  const isLoading = useMediaLibraryStore((s) => s.isLoading)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const filteredItems = useMemo(() => {
-    let items = mediaItems;
+    let items = mediaItems
 
     if (filterType) {
-      const mimePrefix = `${filterType}/`;
-      items = items.filter((m) => m.mimeType.startsWith(mimePrefix));
+      const mimePrefix = `${filterType}/`
+      items = items.filter((m) => m.mimeType.startsWith(mimePrefix))
     }
 
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      items = items.filter((m) => m.fileName.toLowerCase().includes(query));
+      const query = searchQuery.toLowerCase()
+      items = items.filter((m) => m.fileName.toLowerCase().includes(query))
     }
 
-    return items;
-  }, [mediaItems, filterType, searchQuery]);
+    return items
+  }, [mediaItems, filterType, searchQuery])
 
   return (
     <div className="space-y-4">
@@ -172,19 +162,15 @@ function MediaPickerDialogBody({
             {searchQuery
               ? 'No media found matching your search.'
               : filterType
-              ? `No ${filterType} files in library.`
-              : 'No media in library.'}
+                ? `No ${filterType} files in library.`
+                : 'No media in library.'}
           </div>
         ) : (
           filteredItems.map((media) => (
-            <MediaPickerItem
-              key={media.id}
-              media={media}
-              onSelect={() => onSelect(media.id)}
-            />
+            <MediaPickerItem key={media.id} media={media} onSelect={() => onSelect(media.id)} />
           ))
         )}
       </div>
     </div>
-  );
+  )
 }

@@ -102,7 +102,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     if (wB > 0u) { atomicAdd(&accumL[idx + x1], wB); }
   }
 }
-`;
+`
 
 const WAVEFORM_RENDER = /* wgsl */ `
 struct VertexOutput {
@@ -276,34 +276,52 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
 
   return vec4f(color, 1.0);
 }
-`;
+`
 
-export const OUT_W = 1024;
-export const OUT_H = 512;
+export const OUT_W = 1024
+export const OUT_H = 512
 
 export class WaveformScope {
-  private device: GPUDevice;
-  private computePipeline: GPUComputePipeline;
-  private renderPipeline: GPURenderPipeline;
-  private computeBGL: GPUBindGroupLayout;
-  private renderBGL: GPUBindGroupLayout;
-  private accumR: GPUBuffer;
-  private accumG: GPUBuffer;
-  private accumB: GPUBuffer;
-  private accumL: GPUBuffer;
-  private computeParams: GPUBuffer;
-  private renderParams: GPUBuffer;
+  private device: GPUDevice
+  private computePipeline: GPUComputePipeline
+  private renderPipeline: GPURenderPipeline
+  private computeBGL: GPUBindGroupLayout
+  private renderBGL: GPUBindGroupLayout
+  private accumR: GPUBuffer
+  private accumG: GPUBuffer
+  private accumB: GPUBuffer
+  private accumL: GPUBuffer
+  private computeParams: GPUBuffer
+  private renderParams: GPUBuffer
 
   constructor(device: GPUDevice, format: GPUTextureFormat) {
-    this.device = device;
+    this.device = device
 
-    const bufSize = OUT_W * OUT_H * 4;
-    this.accumR = device.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.accumG = device.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.accumB = device.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.accumL = device.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.computeParams = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.renderParams = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const bufSize = OUT_W * OUT_H * 4
+    this.accumR = device.createBuffer({
+      size: bufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.accumG = device.createBuffer({
+      size: bufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.accumB = device.createBuffer({
+      size: bufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.accumL = device.createBuffer({
+      size: bufSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+    this.computeParams = device.createBuffer({
+      size: 32,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
+    this.renderParams = device.createBuffer({
+      size: 32,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    })
 
     this.computeBGL = device.createBindGroupLayout({
       entries: [
@@ -314,12 +332,15 @@ export class WaveformScope {
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
       ],
-    });
+    })
 
     this.computePipeline = device.createComputePipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.computeBGL] }),
-      compute: { module: device.createShaderModule({ code: WAVEFORM_COMPUTE }), entryPoint: 'main' },
-    });
+      compute: {
+        module: device.createShaderModule({ code: WAVEFORM_COMPUTE }),
+        entryPoint: 'main',
+      },
+    })
 
     this.renderBGL = device.createBindGroupLayout({
       entries: [
@@ -329,14 +350,14 @@ export class WaveformScope {
         { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
         { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
       ],
-    });
+    })
 
-    const renderModule = device.createShaderModule({ code: WAVEFORM_RENDER });
+    const renderModule = device.createShaderModule({ code: WAVEFORM_RENDER })
     this.renderPipeline = device.createRenderPipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.renderBGL] }),
       vertex: { module: renderModule, entryPoint: 'vs' },
       fragment: { module: renderModule, entryPoint: 'fs', targets: [{ format }] },
-    });
+    })
   }
 
   private accumulate(
@@ -346,20 +367,20 @@ export class WaveformScope {
     rangeMin: number,
     rangeMax: number,
   ): number {
-    const d = this.device;
-    const srcW = sourceTexture.width;
-    const srcH = sourceTexture.height;
+    const d = this.device
+    const srcW = sourceTexture.width
+    const srcH = sourceTexture.height
 
-    const cpData = new ArrayBuffer(32);
-    new Uint32Array(cpData, 0, 4).set([OUT_W, OUT_H, srcW, srcH]);
-    new Float32Array(cpData, 16, 4).set([kr, kb, rangeMin, rangeMax]);
-    d.queue.writeBuffer(this.computeParams, 0, cpData);
+    const cpData = new ArrayBuffer(32)
+    new Uint32Array(cpData, 0, 4).set([OUT_W, OUT_H, srcW, srcH])
+    new Float32Array(cpData, 16, 4).set([kr, kb, rangeMin, rangeMax])
+    d.queue.writeBuffer(this.computeParams, 0, cpData)
 
-    const encoder = d.createCommandEncoder();
-    encoder.clearBuffer(this.accumR);
-    encoder.clearBuffer(this.accumG);
-    encoder.clearBuffer(this.accumB);
-    encoder.clearBuffer(this.accumL);
+    const encoder = d.createCommandEncoder()
+    encoder.clearBuffer(this.accumR)
+    encoder.clearBuffer(this.accumG)
+    encoder.clearBuffer(this.accumB)
+    encoder.clearBuffer(this.accumL)
 
     const computeBG = d.createBindGroup({
       layout: this.computeBGL,
@@ -371,25 +392,25 @@ export class WaveformScope {
         { binding: 4, resource: { buffer: this.computeParams } },
         { binding: 5, resource: { buffer: this.accumL } },
       ],
-    });
+    })
 
-    const cp = encoder.beginComputePass();
-    cp.setPipeline(this.computePipeline);
-    cp.setBindGroup(0, computeBG);
-    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16));
-    cp.end();
+    const cp = encoder.beginComputePass()
+    cp.setPipeline(this.computePipeline)
+    cp.setBindGroup(0, computeBG)
+    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16))
+    cp.end()
 
-    d.queue.submit([encoder.finish()]);
-    return srcH;
+    d.queue.submit([encoder.finish()])
+    return srcH
   }
 
   private renderAccumulated(ctx: GPUCanvasContext, mode: number, srcH: number) {
-    const d = this.device;
-    const refValue = Math.sqrt(srcH / OUT_H) * 40.0;
-    const rpData = new ArrayBuffer(32);
-    new Float32Array(rpData, 0, 4).set([OUT_W, OUT_H, refValue, 0.9]);
-    new Uint32Array(rpData, 16, 4).set([mode, 0, 0, 0]);
-    d.queue.writeBuffer(this.renderParams, 0, rpData);
+    const d = this.device
+    const refValue = Math.sqrt(srcH / OUT_H) * 40.0
+    const rpData = new ArrayBuffer(32)
+    new Float32Array(rpData, 0, 4).set([OUT_W, OUT_H, refValue, 0.9])
+    new Uint32Array(rpData, 16, 4).set([mode, 0, 0, 0])
+    d.queue.writeBuffer(this.renderParams, 0, rpData)
 
     const renderBG = d.createBindGroup({
       layout: this.renderBGL,
@@ -400,23 +421,25 @@ export class WaveformScope {
         { binding: 3, resource: { buffer: this.renderParams } },
         { binding: 4, resource: { buffer: this.accumL } },
       ],
-    });
+    })
 
-    const encoder = d.createCommandEncoder();
+    const encoder = d.createCommandEncoder()
     const rp = encoder.beginRenderPass({
-      colorAttachments: [{
-        view: ctx.getCurrentTexture().createView(),
-        loadOp: 'clear',
-        storeOp: 'store',
-        clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
-      }],
-    });
-    rp.setPipeline(this.renderPipeline);
-    rp.setBindGroup(0, renderBG);
-    rp.draw(3);
-    rp.end();
+      colorAttachments: [
+        {
+          view: ctx.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
+        },
+      ],
+    })
+    rp.setPipeline(this.renderPipeline)
+    rp.setBindGroup(0, renderBG)
+    rp.draw(3)
+    rp.end()
 
-    d.queue.submit([encoder.finish()]);
+    d.queue.submit([encoder.finish()])
   }
 
   render(
@@ -428,7 +451,7 @@ export class WaveformScope {
     rangeMin: number,
     rangeMax: number,
   ) {
-    this.renderBatch(sourceTexture, [{ ctx, mode }], kr, kb, rangeMin, rangeMax);
+    this.renderBatch(sourceTexture, [{ ctx, mode }], kr, kb, rangeMin, rangeMax)
   }
 
   renderBatch(
@@ -439,16 +462,23 @@ export class WaveformScope {
     rangeMin: number,
     rangeMax: number,
   ) {
-    if (requests.length === 0) return;
-    const srcH = this.accumulate(sourceTexture, kr, kb, rangeMin, rangeMax);
+    if (requests.length === 0) return
+    const srcH = this.accumulate(sourceTexture, kr, kb, rangeMin, rangeMax)
     for (const { ctx, mode } of requests) {
-      this.renderAccumulated(ctx, mode, srcH);
+      this.renderAccumulated(ctx, mode, srcH)
     }
   }
 
   destroy() {
-    for (const b of [this.accumR, this.accumG, this.accumB, this.accumL, this.computeParams, this.renderParams]) {
-      b?.destroy();
+    for (const b of [
+      this.accumR,
+      this.accumG,
+      this.accumB,
+      this.accumL,
+      this.computeParams,
+      this.renderParams,
+    ]) {
+      b?.destroy()
     }
   }
 }

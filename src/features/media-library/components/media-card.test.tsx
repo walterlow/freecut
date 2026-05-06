@@ -1,14 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { MouseEvent, ReactNode } from 'react';
-import type { MediaMetadata } from '@/types/storage';
+import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { MouseEvent, ReactNode } from 'react'
+import type { MediaMetadata } from '@/types/storage'
 
 const mediaLibraryServiceMocks = vi.hoisted(() => ({
   getThumbnailBlobUrl: vi.fn(),
   getMediaFile: vi.fn(),
   getMediaBlobUrl: vi.fn(),
   updateMediaCaptions: vi.fn(),
-}));
+}))
 
 const proxyServiceMocks = vi.hoisted(() => ({
   canGenerateProxy: vi.fn(),
@@ -17,13 +17,38 @@ const proxyServiceMocks = vi.hoisted(() => ({
   cancelProxy: vi.fn(),
   deleteProxy: vi.fn(),
   clearProxyKey: vi.fn(),
-}));
+}))
 
 const mediaTranscriptionServiceMocks = vi.hoisted(() => ({
   transcribeMedia: vi.fn(),
   deleteTranscript: vi.fn(),
   cancelTranscription: vi.fn(),
-}));
+}))
+
+const subtitleSidecarServiceMocks = vi.hoisted(() => ({
+  scanEmbeddedSubtitleTracks: vi.fn(),
+  insertEmbeddedSubtitleTrack: vi.fn(),
+}))
+
+const embeddedSubtitlePickerStoreMocks = vi.hoisted(() => ({
+  open: vi.fn(),
+  close: vi.fn(),
+  setError: vi.fn(),
+}))
+
+const subtitleScanProgressStoreMocks = vi.hoisted(() => ({
+  start: vi.fn(),
+  setCurrentIndex: vi.fn(),
+  updateProgress: vi.fn(),
+  markEntryStatus: vi.fn(),
+  finish: vi.fn(),
+  close: vi.fn(),
+  open: false,
+  entries: [] as unknown[],
+  currentIndex: 0,
+  summary: null as string | null,
+  abort: null as null | (() => void),
+}))
 
 const mediaStoreState = vi.hoisted(() => ({
   selectedMediaIds: [] as string[],
@@ -42,28 +67,30 @@ const mediaStoreState = vi.hoisted(() => ({
   setTaggingMedia: vi.fn(),
   updateMediaCaptions: vi.fn(),
   showNotification: vi.fn(),
+  markMediaBroken: vi.fn(),
+  openMissingMediaDialog: vi.fn(),
   analysisProgress: null as null | { total: number; completed: number; cancelRequested: boolean },
   beginAnalysisRun: vi.fn(),
   incrementAnalysisCompleted: vi.fn(),
   requestAnalysisCancel: vi.fn(),
   endAnalysisRun: vi.fn(),
-}));
+}))
 
 const analysisMocks = vi.hoisted(() => ({
   captionVideo: vi.fn(),
   captionImage: vi.fn(),
-}));
+}))
 
 const editorStoreState = vi.hoisted(() => ({
   setSourcePreviewMediaId: vi.fn(),
   setMediaSkimPreview: vi.fn(),
   clearMediaSkimPreview: vi.fn(),
   mediaSkimPreviewMediaId: null as string | null,
-}));
+}))
 
 const playbackStoreState = vi.hoisted(() => ({
   pause: vi.fn(),
-}));
+}))
 
 const sourcePlayerStoreState = vi.hoisted(() => ({
   setCurrentMediaId: vi.fn(),
@@ -71,7 +98,7 @@ const sourcePlayerStoreState = vi.hoisted(() => ({
   setInPoint: vi.fn(),
   setOutPoint: vi.fn(),
   setPendingSeekFrame: vi.fn(),
-}));
+}))
 
 vi.mock('@/components/ui/context-menu', () => ({
   ContextMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -82,13 +109,17 @@ vi.mock('@/components/ui/context-menu', () => ({
     onClick,
     disabled,
   }: {
-    children: ReactNode;
-    onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
-    disabled?: boolean;
-  }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
+    children: ReactNode
+    onClick?: (event: MouseEvent<HTMLButtonElement>) => void
+    disabled?: boolean
+  }) => (
+    <button disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+  ),
   ContextMenuLabel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   ContextMenuSeparator: () => <hr />,
-}));
+}))
 
 vi.mock('./transcribe-dialog', () => ({
   TranscribeDialog: ({
@@ -96,13 +127,9 @@ vi.mock('./transcribe-dialog', () => ({
     onStart,
     onCancel,
   }: {
-    open: boolean;
-    onStart: (values: {
-      model: string;
-      quantization: string;
-      language: string;
-    }) => void;
-    onCancel: () => void;
+    open: boolean
+    onStart: (values: { model: string; quantization: string; language: string }) => void
+    onCancel: () => void
   }) =>
     open ? (
       <div data-testid="transcribe-dialog">
@@ -123,7 +150,7 @@ vi.mock('./transcribe-dialog', () => ({
         </button>
       </div>
     ) : null,
-}));
+}))
 
 vi.mock('./media-info-popover', () => ({
   MediaInfoPopover: ({ onSeekToCaption }: { onSeekToCaption?: (timeSec: number) => void }) => (
@@ -131,88 +158,123 @@ vi.mock('./media-info-popover', () => ({
       Open media info
     </button>
   ),
-}));
+}))
 
 vi.mock('../services/media-library-service', () => ({
   mediaLibraryService: mediaLibraryServiceMocks,
-}));
+  FileAccessError: class FileAccessError extends Error {
+    constructor(
+      message: string,
+      public readonly type: 'permission_denied' | 'file_missing' | 'unknown',
+    ) {
+      super(message)
+      this.name = 'FileAccessError'
+    }
+  },
+}))
 
 vi.mock('../services/proxy-service', () => ({
   proxyService: proxyServiceMocks,
-}));
+}))
 
 vi.mock('../services/media-transcription-service', () => ({
   mediaTranscriptionService: mediaTranscriptionServiceMocks,
-}));
+}))
+
+vi.mock('../services/subtitle-sidecar-service', () => ({
+  subtitleSidecarService: subtitleSidecarServiceMocks,
+  chooseEmbeddedSubtitleTrackForMedia: (
+    tracks: ReadonlyArray<{ trackNumber: number; default?: boolean; forced?: boolean }>,
+  ) => tracks.find((t) => t.forced) ?? tracks.find((t) => t.default) ?? tracks[0] ?? null,
+  getEmbeddedSubtitleTrackLabel: (track: { language?: string; name?: string }) =>
+    track.name ?? track.language ?? 'Track',
+}))
+
+vi.mock('../stores/embedded-subtitle-picker-store', () => {
+  const useEmbeddedSubtitlePickerStore = Object.assign(
+    (selector: (state: typeof embeddedSubtitlePickerStoreMocks) => unknown) =>
+      selector(embeddedSubtitlePickerStoreMocks),
+    { getState: () => embeddedSubtitlePickerStoreMocks },
+  )
+  return { useEmbeddedSubtitlePickerStore }
+})
+
+vi.mock('../stores/subtitle-scan-progress-store', () => {
+  const useSubtitleScanProgressStore = Object.assign(
+    (selector: (state: typeof subtitleScanProgressStoreMocks) => unknown) =>
+      selector(subtitleScanProgressStoreMocks),
+    { getState: () => subtitleScanProgressStoreMocks },
+  )
+  return { useSubtitleScanProgressStore }
+})
 
 vi.mock('../stores/media-library-store', () => {
   const useMediaLibraryStore = Object.assign(
     (selector: (state: typeof mediaStoreState) => unknown) => selector(mediaStoreState),
     {
       getState: () => mediaStoreState,
-    }
-  );
+    },
+  )
 
-  return { useMediaLibraryStore };
-});
+  return { useMediaLibraryStore }
+})
 
 vi.mock('@/app/state/editor', () => {
   const useEditorStore = Object.assign(
     (selector: (state: typeof editorStoreState) => unknown) => selector(editorStoreState),
     {
       getState: () => editorStoreState,
-    }
-  );
+    },
+  )
 
-  return { useEditorStore };
-});
+  return { useEditorStore }
+})
 
 vi.mock('@/shared/state/playback', () => {
   const usePlaybackStore = Object.assign(
     (selector: (state: typeof playbackStoreState) => unknown) => selector(playbackStoreState),
     {
       getState: () => playbackStoreState,
-    }
-  );
+    },
+  )
 
-  return { usePlaybackStore };
-});
+  return { usePlaybackStore }
+})
 
 vi.mock('@/shared/state/source-player', () => ({
   useSourcePlayerStore: {
     getState: () => sourcePlayerStoreState,
   },
-}));
+}))
 
 vi.mock('../utils/proxy-key', () => ({
   getSharedProxyKey: vi.fn((media: { id: string }) => `proxy-${media.id}`),
-}));
+}))
 
 vi.mock('../utils/drag-data-cache', () => ({
   setMediaDragData: vi.fn(),
   clearMediaDragData: vi.fn(),
-}));
+}))
 
 vi.mock('@/shared/state/local-inference', () => ({
   isLocalInferenceCancellationError: vi.fn(() => false),
-}));
+}))
 
-vi.mock('../deps/analysis', () => analysisMocks);
+vi.mock('../deps/analysis', () => analysisMocks)
 
 const settingsStoreState = vi.hoisted(() => ({
   captioningIntervalUnit: 'seconds' as const,
   captioningIntervalValue: 3,
-}));
+}))
 
 vi.mock('../deps/settings-contract', () => ({
   useSettingsStore: {
     getState: () => settingsStoreState,
   },
-  resolveCaptioningIntervalSec: (unit: 'seconds' | 'frames', value: number, fps: number) => (
-    unit === 'seconds' ? value : value / (fps > 0 ? fps : 30)
-  ),
+  resolveCaptioningIntervalSec: (unit: 'seconds' | 'frames', value: number, fps: number) =>
+    unit === 'seconds' ? value : value / (fps > 0 ? fps : 30),
   DEFAULT_CAPTIONING_INTERVAL_SECONDS: 3,
-}));
+}))
 
 vi.mock('@/infrastructure/storage', () => ({
   saveCaptionThumbnail: vi.fn(async () => undefined),
@@ -222,13 +284,13 @@ vi.mock('@/infrastructure/storage', () => ({
   saveCaptionImageEmbeddings: vi.fn(async () => undefined),
   getCaptionThumbnailBlob: vi.fn(async () => null),
   getTranscript: vi.fn(async () => null),
-}));
+}))
 
 vi.mock('../deps/scene-browser', () => ({
   invalidateMediaCaptionThumbnails: vi.fn(),
-}));
+}))
 
-import { MediaCard } from './media-card';
+import { MediaCard } from './media-card'
 
 function makeMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
   return {
@@ -247,63 +309,97 @@ function makeMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
-  };
+  }
 }
 
 describe('MediaCard', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.useRealTimers();
-    mediaStoreState.selectedMediaIds = [];
-    mediaStoreState.mediaItems = [makeMedia()];
-    mediaStoreState.importingIds = [];
-    mediaStoreState.proxyStatus = new Map();
-    mediaStoreState.proxyProgress = new Map();
-    mediaStoreState.transcriptStatus = new Map();
-    mediaStoreState.transcriptProgress = new Map();
-    mediaStoreState.taggingMediaIds = new Set();
-    editorStoreState.mediaSkimPreviewMediaId = null;
-    playbackStoreState.pause.mockReset();
+    vi.clearAllMocks()
+    vi.useRealTimers()
+    mediaStoreState.selectedMediaIds = []
+    mediaStoreState.mediaItems = [makeMedia()]
+    mediaStoreState.importingIds = []
+    mediaStoreState.proxyStatus = new Map()
+    mediaStoreState.proxyProgress = new Map()
+    mediaStoreState.transcriptStatus = new Map()
+    mediaStoreState.transcriptProgress = new Map()
+    mediaStoreState.taggingMediaIds = new Set()
+    mediaStoreState.markMediaBroken.mockReset()
+    mediaStoreState.openMissingMediaDialog.mockReset()
+    embeddedSubtitlePickerStoreMocks.open.mockReset()
+    embeddedSubtitlePickerStoreMocks.close.mockReset()
+    embeddedSubtitlePickerStoreMocks.setError.mockReset()
+    subtitleScanProgressStoreMocks.start.mockReset()
+    subtitleScanProgressStoreMocks.setCurrentIndex.mockReset()
+    subtitleScanProgressStoreMocks.updateProgress.mockReset()
+    subtitleScanProgressStoreMocks.markEntryStatus.mockReset()
+    subtitleScanProgressStoreMocks.finish.mockReset()
+    subtitleScanProgressStoreMocks.close.mockReset()
+    editorStoreState.mediaSkimPreviewMediaId = null
+    playbackStoreState.pause.mockReset()
 
-    mediaLibraryServiceMocks.getThumbnailBlobUrl.mockResolvedValue(null);
-    mediaLibraryServiceMocks.getMediaFile.mockResolvedValue(new Blob(['video-data']));
-    mediaLibraryServiceMocks.getMediaBlobUrl.mockResolvedValue('blob:media-1');
-    proxyServiceMocks.canGenerateProxy.mockReturnValue(true);
-    proxyServiceMocks.deleteProxy.mockResolvedValue(undefined);
-    mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined);
-  });
+    mediaLibraryServiceMocks.getThumbnailBlobUrl.mockResolvedValue(null)
+    mediaLibraryServiceMocks.getMediaFile.mockResolvedValue(new Blob(['video-data']))
+    mediaLibraryServiceMocks.getMediaBlobUrl.mockResolvedValue('blob:media-1')
+    proxyServiceMocks.canGenerateProxy.mockReturnValue(true)
+    proxyServiceMocks.deleteProxy.mockResolvedValue(undefined)
+    mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined)
+    subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks.mockResolvedValue({
+      tracks: [
+        {
+          trackNumber: 1,
+          codecId: 'S_TEXT/UTF8',
+          language: 'eng',
+          name: 'English',
+          default: true,
+          forced: false,
+          cues: [
+            { id: 'cue-1', startSeconds: 1, endSeconds: 2, text: 'Hello' },
+            { id: 'cue-2', startSeconds: 3, endSeconds: 4, text: 'World' },
+          ],
+        },
+      ],
+      scannedAt: 1,
+      fromCache: false,
+    })
+    subtitleSidecarServiceMocks.insertEmbeddedSubtitleTrack.mockReturnValue({
+      insertedItemCount: 2,
+      cueCount: 2,
+      trackLabel: 'English',
+    })
+  })
 
   it('uses the shared action menu to generate a proxy', async () => {
-    const media = makeMedia();
-    render(<MediaCard media={media} viewMode="list" />);
+    const media = makeMedia()
+    render(<MediaCard media={media} viewMode="list" />)
 
-    fireEvent.click(screen.getByText('Generate Proxy'));
+    fireEvent.click(screen.getByText('Generate Proxy'))
 
     await waitFor(() => {
-      expect(proxyServiceMocks.generateProxy).toHaveBeenCalledTimes(1);
-    });
-    expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('media-1', 'proxy-media-1');
-    const generateProxyCall = proxyServiceMocks.generateProxy.mock.calls[0];
-    expect(generateProxyCall?.[0]).toBe('media-1');
-    expect(generateProxyCall?.[2]).toBe(3840);
-    expect(generateProxyCall?.[3]).toBe(2160);
-    expect(generateProxyCall?.[4]).toBe('proxy-media-1');
-    expect(typeof generateProxyCall?.[1]).toBe('function');
-  });
+      expect(proxyServiceMocks.generateProxy).toHaveBeenCalledTimes(1)
+    })
+    expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('media-1', 'proxy-media-1')
+    const generateProxyCall = proxyServiceMocks.generateProxy.mock.calls[0]
+    expect(generateProxyCall?.[0]).toBe('media-1')
+    expect(generateProxyCall?.[2]).toBe(3840)
+    expect(generateProxyCall?.[3]).toBe(2160)
+    expect(generateProxyCall?.[4]).toBe('proxy-media-1')
+    expect(typeof generateProxyCall?.[1]).toBe('function')
+  })
 
   it('opens the transcribe dialog and defers work until the user confirms', async () => {
-    const media = makeMedia();
-    mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined);
+    const media = makeMedia()
+    mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined)
 
-    render(<MediaCard media={media} viewMode="list" />);
+    render(<MediaCard media={media} viewMode="list" />)
 
-    fireEvent.click(screen.getByText('Generate Transcript'));
+    fireEvent.click(screen.getByText('Generate Transcript'))
 
     // Clicking the menu item opens the dialog; transcription has NOT started.
-    expect(screen.getByTestId('transcribe-dialog')).toBeInTheDocument();
-    expect(mediaTranscriptionServiceMocks.transcribeMedia).not.toHaveBeenCalled();
+    expect(screen.getByTestId('transcribe-dialog')).toBeInTheDocument()
+    expect(mediaTranscriptionServiceMocks.transcribeMedia).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByText('Start Transcription'));
+    fireEvent.click(screen.getByText('Start Transcription'))
 
     await waitFor(() => {
       expect(mediaTranscriptionServiceMocks.transcribeMedia).toHaveBeenCalledWith(
@@ -313,94 +409,210 @@ describe('MediaCard', () => {
           quantization: 'hybrid',
           onProgress: expect.any(Function),
         }),
-      );
-    });
-  });
+      )
+    })
+  })
 
   it('uses transcript wording in the media action menu', () => {
-    const { rerender } = render(<MediaCard media={makeMedia()} viewMode="list" />);
-    expect(screen.getByText('Generate Transcript')).toBeInTheDocument();
+    const { rerender } = render(<MediaCard media={makeMedia()} viewMode="list" />)
+    expect(screen.getByText('Generate Transcript')).toBeInTheDocument()
 
-    mediaStoreState.transcriptStatus = new Map([['media-1', 'ready']]);
-    rerender(<MediaCard media={makeMedia()} viewMode="list" />);
-    expect(screen.getByText('Refresh Transcript')).toBeInTheDocument();
-    expect(screen.getByText('Delete Transcript')).toBeInTheDocument();
-  });
+    mediaStoreState.transcriptStatus = new Map([['media-1', 'ready']])
+    rerender(<MediaCard media={makeMedia()} viewMode="list" />)
+    expect(screen.getByText('Refresh Transcript')).toBeInTheDocument()
+    expect(screen.getByText('Delete Transcript')).toBeInTheDocument()
+  })
 
   it('shows the inline transcript progress bar while transcribing', () => {
-    mediaStoreState.transcriptStatus = new Map([['media-1', 'queued']]);
-    mediaStoreState.transcriptProgress = new Map([
-      ['media-1', { stage: 'queued', progress: 0 }],
-    ]);
+    mediaStoreState.transcriptStatus = new Map([['media-1', 'queued']])
+    mediaStoreState.transcriptProgress = new Map([['media-1', { stage: 'queued', progress: 0 }]])
 
-    render(<MediaCard media={makeMedia()} viewMode="list" />);
+    render(<MediaCard media={makeMedia()} viewMode="list" />)
 
-    expect(screen.getByRole('progressbar', { name: 'Transcript progress' }))
-      .toHaveAttribute('aria-valuenow', '0');
-  });
+    expect(screen.getByRole('progressbar', { name: 'Transcript progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '0',
+    )
+  })
 
   it('deletes a transcript from the media action menu', async () => {
-    mediaStoreState.transcriptStatus = new Map([['media-1', 'ready']]);
-    mediaTranscriptionServiceMocks.deleteTranscript.mockResolvedValue(undefined);
+    mediaStoreState.transcriptStatus = new Map([['media-1', 'ready']])
+    mediaTranscriptionServiceMocks.deleteTranscript.mockResolvedValue(undefined)
 
-    render(<MediaCard media={makeMedia()} viewMode="list" />);
+    render(<MediaCard media={makeMedia()} viewMode="list" />)
 
-    fireEvent.click(screen.getByText('Delete Transcript'));
+    fireEvent.click(screen.getByText('Delete Transcript'))
 
     await waitFor(() => {
-      expect(mediaTranscriptionServiceMocks.deleteTranscript).toHaveBeenCalledWith('media-1');
-    });
-    expect(mediaStoreState.setTranscriptStatus).toHaveBeenCalledWith('media-1', 'idle');
-    expect(mediaStoreState.clearTranscriptProgress).toHaveBeenCalledWith('media-1');
+      expect(mediaTranscriptionServiceMocks.deleteTranscript).toHaveBeenCalledWith('media-1')
+    })
+    expect(mediaStoreState.setTranscriptStatus).toHaveBeenCalledWith('media-1', 'idle')
+    expect(mediaStoreState.clearTranscriptProgress).toHaveBeenCalledWith('media-1')
     expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
       type: 'success',
       message: 'Transcript deleted for "clip.mp4"',
-    });
-  });
+    })
+  })
+
+  it('runs a scan-only cache extract from the media library and never opens the track picker', async () => {
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
+        media,
+        expect.any(Blob),
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      )
+    })
+    expect(subtitleScanProgressStoreMocks.start).toHaveBeenCalled()
+    // Picker stays closed — the media-library entry point is cache-only.
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
+  })
+
+  it('passes the live file handle into the cache scan', async () => {
+    const file = new File(['video-data'], 'movie.mkv', { type: 'video/x-matroska' })
+    const requestPermission = vi.fn(async () => 'granted' as PermissionState)
+    const getFile = vi.fn(async () => file)
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+        getFile,
+      } as unknown as FileSystemFileHandle,
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).toHaveBeenCalledWith(
+        media,
+        file,
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      )
+    })
+    expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
+    expect(getFile).toHaveBeenCalledTimes(1)
+    expect(mediaLibraryServiceMocks.getMediaFile).not.toHaveBeenCalled()
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
+  })
+
+  it('requests file permission before extracting embedded subtitles', async () => {
+    const requestPermission = vi.fn(async () => 'denied' as PermissionState)
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+      } as unknown as FileSystemFileHandle,
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(requestPermission).toHaveBeenCalledWith({ mode: 'read' })
+    })
+    expect(subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks).not.toHaveBeenCalled()
+    expect(mediaStoreState.markMediaBroken).toHaveBeenCalledWith('media-1', {
+      mediaId: 'media-1',
+      fileName: 'movie.mkv',
+      errorType: 'permission_denied',
+    })
+    expect(mediaStoreState.openMissingMediaDialog).toHaveBeenCalledTimes(1)
+    expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+      type: 'error',
+      message: 'FreeCut needs permission to read "movie.mkv" before extracting subtitles.',
+    })
+  })
+
+  it('surfaces NotReadableError from blob open without marking the media missing', async () => {
+    const requestPermission = vi.fn(async () => 'granted' as PermissionState)
+    const notReadable = Object.assign(new Error('blob unreadable'), { name: 'NotReadableError' })
+    const getFile = vi.fn(async () => {
+      throw notReadable
+    })
+    const media = makeMedia({
+      fileName: 'movie.mkv',
+      mimeType: 'video/x-matroska',
+      storageType: 'handle',
+      fileHandle: {
+        requestPermission,
+        getFile,
+      } as unknown as FileSystemFileHandle,
+    })
+
+    render(<MediaCard media={media} viewMode="list" />)
+
+    fireEvent.click(screen.getByText('Extract Embedded Subtitles'))
+
+    await waitFor(() => {
+      expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+        type: 'error',
+        message:
+          'FreeCut could not read "movie.mkv" right now. Close any app using it and try again.',
+      })
+    })
+    expect(embeddedSubtitlePickerStoreMocks.open).not.toHaveBeenCalled()
+    expect(mediaStoreState.markMediaBroken).not.toHaveBeenCalled()
+    expect(mediaStoreState.openMissingMediaDialog).not.toHaveBeenCalled()
+  })
 
   it('uses the shared action menu to relink broken media in grid view', () => {
-    const onRelink = vi.fn();
-    render(<MediaCard media={makeMedia()} isBroken onRelink={onRelink} viewMode="grid" />);
+    const onRelink = vi.fn()
+    render(<MediaCard media={makeMedia()} isBroken onRelink={onRelink} viewMode="grid" />)
 
-    fireEvent.click(screen.getByText('Relink File...'));
+    fireEvent.click(screen.getByText('Relink File...'))
 
-    expect(onRelink).toHaveBeenCalledTimes(1);
-  });
+    expect(onRelink).toHaveBeenCalledTimes(1)
+  })
 
   it('shows an active AI analysis badge in list view while analysis is running', () => {
-    mediaStoreState.taggingMediaIds = new Set(['media-1']);
+    mediaStoreState.taggingMediaIds = new Set(['media-1'])
 
-    const { container } = render(<MediaCard media={makeMedia()} viewMode="list" />);
+    const { container } = render(<MediaCard media={makeMedia()} viewMode="list" />)
 
-    expect(container.querySelector('[title="Analyzing with AI"]')).toBeTruthy();
-  });
+    expect(container.querySelector('[title="Analyzing with AI"]')).toBeTruthy()
+  })
 
   it('shows an active AI analysis badge in grid view while analysis is running', () => {
-    mediaStoreState.taggingMediaIds = new Set(['media-1']);
+    mediaStoreState.taggingMediaIds = new Set(['media-1'])
 
-    const { container } = render(<MediaCard media={makeMedia()} viewMode="grid" />);
+    const { container } = render(<MediaCard media={makeMedia()} viewMode="grid" />)
 
-    expect(container.querySelector('[title="Analyzing with AI"]')).toBeTruthy();
-  });
+    expect(container.querySelector('[title="Analyzing with AI"]')).toBeTruthy()
+  })
 
   it('opens a caption in the source monitor with a default three-second I/O range', () => {
-    render(<MediaCard media={makeMedia()} viewMode="list" />);
+    render(<MediaCard media={makeMedia()} viewMode="list" />)
 
-    fireEvent.click(screen.getByTestId('media-info-popover'));
+    fireEvent.click(screen.getByTestId('media-info-popover'))
 
-    expect(sourcePlayerStoreState.setCurrentMediaId).toHaveBeenCalledWith('media-1');
-    expect(sourcePlayerStoreState.clearInOutPoints).toHaveBeenCalledTimes(1);
-    expect(sourcePlayerStoreState.setInPoint).toHaveBeenCalledWith(75);
-    expect(sourcePlayerStoreState.setOutPoint).toHaveBeenCalledWith(150);
-    expect(sourcePlayerStoreState.setPendingSeekFrame).toHaveBeenCalledWith(75);
-    expect(editorStoreState.setSourcePreviewMediaId).toHaveBeenCalledWith('media-1');
-  });
+    expect(sourcePlayerStoreState.setCurrentMediaId).toHaveBeenCalledWith('media-1')
+    expect(sourcePlayerStoreState.clearInOutPoints).toHaveBeenCalledTimes(1)
+    expect(sourcePlayerStoreState.setInPoint).toHaveBeenCalledWith(75)
+    expect(sourcePlayerStoreState.setOutPoint).toHaveBeenCalledWith(150)
+    expect(sourcePlayerStoreState.setPendingSeekFrame).toHaveBeenCalledWith(75)
+    expect(editorStoreState.setSourcePreviewMediaId).toHaveBeenCalledWith('media-1')
+  })
 
   it('pauses timeline playback and updates skim preview while hovering a video thumbnail', () => {
-    const { container } = render(<MediaCard media={makeMedia()} viewMode="list" />);
+    const { container } = render(<MediaCard media={makeMedia()} viewMode="list" />)
 
-    const thumbnail = container.querySelector('.w-12.h-9') as HTMLDivElement;
-    expect(thumbnail).toBeTruthy();
+    const thumbnail = container.querySelector('.w-12.h-9') as HTMLDivElement
+    expect(thumbnail).toBeTruthy()
     vi.spyOn(thumbnail, 'getBoundingClientRect').mockReturnValue({
       x: 0,
       y: 0,
@@ -411,25 +623,25 @@ describe('MediaCard', () => {
       width: 100,
       height: 36,
       toJSON: () => ({}),
-    });
+    })
 
     fireEvent.pointerEnter(thumbnail, {
       clientX: 20,
       pointerType: 'mouse',
-    });
+    })
 
-    expect(playbackStoreState.pause).toHaveBeenCalledTimes(1);
-    expect(editorStoreState.setMediaSkimPreview).toHaveBeenCalledWith('media-1', 30);
+    expect(playbackStoreState.pause).toHaveBeenCalledTimes(1)
+    expect(editorStoreState.setMediaSkimPreview).toHaveBeenCalledWith('media-1', 30)
 
     fireEvent.pointerMove(thumbnail, {
       clientX: 50,
       pointerType: 'mouse',
-    });
+    })
 
-    fireEvent.pointerLeave(thumbnail);
+    fireEvent.pointerLeave(thumbnail)
 
-    expect(editorStoreState.clearMediaSkimPreview).toHaveBeenCalledTimes(1);
-  });
+    expect(editorStoreState.clearMediaSkimPreview).toHaveBeenCalledTimes(1)
+  })
 
   it('stores AI analysis on the media item without inserting timeline captions', async () => {
     const media = makeMedia({
@@ -438,10 +650,10 @@ describe('MediaCard', () => {
       duration: 0,
       fps: 0,
       codec: '',
-    });
+    })
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       blob: async () => new Blob(['image-data']),
-    } as Response);
+    } as Response)
     analysisMocks.captionImage.mockResolvedValue([
       {
         timeSec: 1.25,
@@ -454,11 +666,11 @@ describe('MediaCard', () => {
         },
       },
       { timeSec: 2.5, text: 'Second line' },
-    ]);
+    ])
 
-    render(<MediaCard media={media} viewMode="list" />);
+    render(<MediaCard media={media} viewMode="list" />)
 
-    fireEvent.click(screen.getByText('Analyze with AI'));
+    fireEvent.click(screen.getByText('Analyze with AI'))
 
     await waitFor(() => {
       expect(mediaLibraryServiceMocks.updateMediaCaptions).toHaveBeenCalledWith(
@@ -477,8 +689,8 @@ describe('MediaCard', () => {
           { timeSec: 2.5, text: 'Second line' },
         ],
         expect.objectContaining({ sampleIntervalSec: expect.any(Number) }),
-      );
-    });
+      )
+    })
 
     expect(mediaStoreState.updateMediaCaptions).toHaveBeenCalledWith('media-1', [
       {
@@ -492,11 +704,11 @@ describe('MediaCard', () => {
         },
       },
       { timeSec: 2.5, text: 'Second line' },
-    ]);
+    ])
     expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
       type: 'success',
       message: 'Generated 2 scene captions for "frame.png"',
-    });
-    fetchMock.mockRestore();
-  });
-});
+    })
+    fetchMock.mockRestore()
+  })
+})

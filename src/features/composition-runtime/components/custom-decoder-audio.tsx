@@ -1,43 +1,44 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
-import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
-import { NativePitchCorrectedAudio } from './pitch-corrected-audio';
-import type { AudioPlaybackProps } from './audio-playback-props';
-import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache';
-import { audioBufferToWavBlob } from '../utils/audio-buffer-wav';
-import { createLogger } from '@/shared/logging/logger';
-import { getAudioTargetTimeSeconds } from '../utils/video-timing';
-import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
-import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio'
+import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio'
+import { NativePitchCorrectedAudio } from './pitch-corrected-audio'
+import type { AudioPlaybackProps } from './audio-playback-props'
+import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache'
+import { audioBufferToWavBlob } from '../utils/audio-buffer-wav'
+import { createReversedAudioBuffer } from '../utils/audio-buffer-utils'
+import { createLogger } from '@/shared/logging/logger'
+import { getAudioTargetTimeSeconds } from '../utils/video-timing'
+import { useAudioPlaybackState } from './hooks/use-audio-playback-state'
+import { useGizmoStore } from '@/features/composition-runtime/deps/stores'
 import {
   hasAudioPitchOverride,
   isAudioPitchShiftActive,
   resolvePreviewAudioPitchShiftSemitones,
-} from '@/shared/utils/audio-pitch';
+} from '@/shared/utils/audio-pitch'
 
-const log = createLogger('CustomDecoderAudio');
-const PARTIAL_WAV_READY_SECONDS = 2;
-const PARTIAL_WAV_WAIT_TIMEOUT_MS = 6000;
-const PARTIAL_WAV_EXTENSION_TRIGGER_SECONDS = 1.25;
-const PARTIAL_WAV_EXTENSION_READY_SECONDS = 3;
-const BACKGROUND_FULL_DECODE_DELAY_MS = 1500;
-const BACKGROUND_FULL_DECODE_BACKSTOP_MS = 4000;
+const log = createLogger('CustomDecoderAudio')
+const PARTIAL_WAV_READY_SECONDS = 2
+const PARTIAL_WAV_WAIT_TIMEOUT_MS = 6000
+const PARTIAL_WAV_EXTENSION_TRIGGER_SECONDS = 1.25
+const PARTIAL_WAV_EXTENSION_READY_SECONDS = 3
+const BACKGROUND_FULL_DECODE_DELAY_MS = 1500
+const BACKGROUND_FULL_DECODE_BACKSTOP_MS = 4000
 
 interface CustomDecoderAudioProps extends AudioPlaybackProps {
-  src: string;
-  mediaId: string;
+  src: string
+  mediaId: string
 }
 
 interface DecodedPitchSource {
-  buffer: AudioBuffer;
-  sourceStartOffsetSec: number;
-  coverageEndSec: number;
-  isComplete: boolean;
+  buffer: AudioBuffer
+  sourceStartOffsetSec: number
+  coverageEndSec: number
+  isComplete: boolean
 }
 
 interface DecodedPitchFallbackAudioProps extends AudioPlaybackProps {
-  audioBuffer: AudioBuffer;
-  sourceStartOffsetSec: number;
+  audioBuffer: AudioBuffer
+  sourceStartOffsetSec: number
 }
 
 const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
@@ -49,6 +50,8 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
   sourceFps,
   volume,
   playbackRate,
+  isReversed,
+  reverseSourceEnd,
   muted,
   durationInFrames,
   audioFadeIn,
@@ -70,18 +73,18 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
   crossfadeFadeOut,
   volumeMultiplier,
 }) => {
-  const [decodedSrc, setDecodedSrc] = useState<string | null>(null);
+  const [decodedSrc, setDecodedSrc] = useState<string | null>(null)
 
   useEffect(() => {
-    const url = URL.createObjectURL(audioBufferToWavBlob(audioBuffer));
-    setDecodedSrc(url);
+    const url = URL.createObjectURL(audioBufferToWavBlob(audioBuffer))
+    setDecodedSrc(url)
     return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [audioBuffer]);
+      URL.revokeObjectURL(url)
+    }
+  }, [audioBuffer])
 
   if (!decodedSrc) {
-    return null;
+    return null
   }
 
   return (
@@ -94,6 +97,8 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
       sourceStartOffsetSec={sourceStartOffsetSec}
       volume={volume}
       playbackRate={playbackRate}
+      isReversed={isReversed}
+      reverseSourceEnd={reverseSourceEnd}
       audioPitchSemitones={audioPitchSemitones}
       audioPitchCents={audioPitchCents}
       audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -115,35 +120,34 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
       crossfadeFadeOut={crossfadeFadeOut}
       volumeMultiplier={volumeMultiplier}
     />
-  );
-};
+  )
+}
 
 function shouldReplaceDecodedPitchSource(
   current: DecodedPitchSource | null,
   next: DecodedPitchSource,
 ): boolean {
   if (!current) {
-    return true;
+    return true
   }
   if (current.isComplete) {
-    return next.isComplete
-      && (
-        current.buffer.length !== next.buffer.length
-        || current.buffer.sampleRate !== next.buffer.sampleRate
-      );
+    return (
+      next.isComplete &&
+      (current.buffer.length !== next.buffer.length ||
+        current.buffer.sampleRate !== next.buffer.sampleRate)
+    )
   }
   if (next.isComplete) {
-    return true;
+    return true
   }
   if (next.coverageEndSec > current.coverageEndSec + 0.05) {
-    return true;
+    return true
   }
   if (next.sourceStartOffsetSec < current.sourceStartOffsetSec - 0.05) {
-    return true;
+    return true
   }
-  return false;
+  return false
 }
-
 
 const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   src,
@@ -154,6 +158,8 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   sourceFps,
   volume = 0,
   playbackRate = 1,
+  isReversed,
+  reverseSourceEnd,
   muted = false,
   durationInFrames,
   audioFadeIn = 0,
@@ -199,64 +205,66 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
     crossfadeFadeIn,
     crossfadeFadeOut,
     volumeMultiplier,
-  });
-  const [decodedSource, setDecodedSource] = useState<DecodedPitchSource | null>(null);
-  const pendingExtensionKeyRef = useRef<string | null>(null);
+  })
+  const [decodedSource, setDecodedSource] = useState<DecodedPitchSource | null>(null)
+  const pendingExtensionKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!mediaId || !src) return;
+    if (!mediaId || !src) return
 
-    let cancelled = false;
-    let fullDecodeStarted = false;
-    let scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
-    let fullDecodeTimer: ReturnType<typeof setTimeout> | null = null;
-    const effectiveSourceFps = sourceFps ?? 30;
-    const clipStartTime = Math.max(0, trimBefore / effectiveSourceFps);
+    let cancelled = false
+    let fullDecodeStarted = false
+    let scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY
+    let fullDecodeTimer: ReturnType<typeof setTimeout> | null = null
+    const effectiveSourceFps = sourceFps ?? 30
+    const seedSourceFrames =
+      isReversed && reverseSourceEnd !== undefined ? reverseSourceEnd : trimBefore
+    const clipStartTime = Math.max(0, seedSourceFrames / effectiveSourceFps)
     const clearScheduledFullDecode = () => {
-      scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
+      scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY
       if (fullDecodeTimer !== null) {
-        clearTimeout(fullDecodeTimer);
-        fullDecodeTimer = null;
+        clearTimeout(fullDecodeTimer)
+        fullDecodeTimer = null
       }
-    };
+    }
     const startFullDecode = () => {
-      if (cancelled || fullDecodeStarted) return;
-      clearScheduledFullDecode();
-      fullDecodeStarted = true;
+      if (cancelled || fullDecodeStarted) return
+      clearScheduledFullDecode()
+      fullDecodeStarted = true
       getOrDecodeAudio(mediaId, src)
         .then((buffer) => {
-          if (cancelled) return;
+          if (cancelled) return
           setDecodedSource({
             buffer,
             sourceStartOffsetSec: 0,
             coverageEndSec: Number.POSITIVE_INFINITY,
             isComplete: true,
-          });
-          log.info('Decoded pitch source ready', { mediaId });
+          })
+          log.info('Decoded pitch source ready', { mediaId })
         })
         .catch((err) => {
-          if (cancelled) return;
-          log.error('Failed to prepare decoded pitch source', { mediaId, err });
-        });
-    };
+          if (cancelled) return
+          log.error('Failed to prepare decoded pitch source', { mediaId, err })
+        })
+    }
     const scheduleFullDecode = (delayMs: number) => {
-      if (cancelled || fullDecodeStarted) return;
-      const safeDelayMs = Math.max(0, delayMs);
-      const dueAtMs = Date.now() + safeDelayMs;
+      if (cancelled || fullDecodeStarted) return
+      const safeDelayMs = Math.max(0, delayMs)
+      const dueAtMs = Date.now() + safeDelayMs
       if (fullDecodeTimer !== null && dueAtMs >= scheduledFullDecodeAtMs - 1) {
-        return;
+        return
       }
-      clearScheduledFullDecode();
-      scheduledFullDecodeAtMs = dueAtMs;
+      clearScheduledFullDecode()
+      scheduledFullDecodeAtMs = dueAtMs
       fullDecodeTimer = setTimeout(() => {
-        fullDecodeTimer = null;
-        scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
-        startFullDecode();
-      }, safeDelayMs);
-    };
-    setDecodedSource(null);
-    pendingExtensionKeyRef.current = null;
-    scheduleFullDecode(BACKGROUND_FULL_DECODE_BACKSTOP_MS);
+        fullDecodeTimer = null
+        scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY
+        startFullDecode()
+      }, safeDelayMs)
+    }
+    setDecodedSource(null)
+    pendingExtensionKeyRef.current = null
+    scheduleFullDecode(BACKGROUND_FULL_DECODE_BACKSTOP_MS)
 
     getOrDecodeAudioSliceForPlayback(mediaId, src, {
       minReadySeconds: PARTIAL_WAV_READY_SECONDS,
@@ -264,83 +272,92 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       targetTimeSeconds: clipStartTime,
     })
       .then((slice) => {
-        if (cancelled) return;
+        if (cancelled) return
         const nextSource: DecodedPitchSource = {
           buffer: slice.buffer,
           sourceStartOffsetSec: slice.startTime,
           coverageEndSec: slice.startTime + slice.buffer.duration,
           isComplete: slice.isComplete,
-        };
+        }
         setDecodedSource((current) => {
           if (!shouldReplaceDecodedPitchSource(current, nextSource)) {
-            return current;
+            return current
           }
-          return nextSource;
-        });
+          return nextSource
+        })
         if (slice.isComplete) {
-          clearScheduledFullDecode();
+          clearScheduledFullDecode()
         } else {
-          scheduleFullDecode(BACKGROUND_FULL_DECODE_DELAY_MS);
+          scheduleFullDecode(BACKGROUND_FULL_DECODE_DELAY_MS)
         }
         log.info('Partial decoded pitch source ready', {
           mediaId,
           duration: slice.buffer.duration.toFixed(2),
-        });
+        })
       })
       .catch((err) => {
-        if (cancelled) return;
-        log.error('Failed to prepare partial decoded pitch source', { mediaId, err });
-        startFullDecode();
-      });
+        if (cancelled) return
+        log.error('Failed to prepare partial decoded pitch source', { mediaId, err })
+        startFullDecode()
+      })
 
     return () => {
-      cancelled = true;
-      clearScheduledFullDecode();
-    };
-  }, [mediaId, src, trimBefore, sourceFps]);
+      cancelled = true
+      clearScheduledFullDecode()
+    }
+  }, [isReversed, mediaId, reverseSourceEnd, sourceFps, src, trimBefore])
 
   useEffect(() => {
-    const currentSource = decodedSource;
+    const currentSource = decodedSource
     if (!currentSource || currentSource.isComplete || !playing) {
-      pendingExtensionKeyRef.current = null;
-      return;
+      pendingExtensionKeyRef.current = null
+      return
     }
 
-    const effectiveSourceFps = sourceFps ?? fps;
-    const targetTime = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
-    const remainingCoverage = currentSource.coverageEndSec - targetTime;
-    const targetOutsideSource = targetTime < currentSource.sourceStartOffsetSec || targetTime >= currentSource.coverageEndSec;
+    const effectiveSourceFps = sourceFps ?? fps
+    const targetTime = getAudioTargetTimeSeconds(
+      trimBefore,
+      effectiveSourceFps,
+      frame,
+      playbackRate,
+      fps,
+      isReversed,
+      reverseSourceEnd,
+    )
+    const remainingCoverage = currentSource.coverageEndSec - targetTime
+    const targetOutsideSource =
+      targetTime < currentSource.sourceStartOffsetSec || targetTime >= currentSource.coverageEndSec
 
     if (!targetOutsideSource && remainingCoverage > PARTIAL_WAV_EXTENSION_TRIGGER_SECONDS) {
-      return;
+      return
     }
 
-    const requestKey = `${mediaId}:${src}:${playbackRate}:${targetTime.toFixed(3)}`;
+    const requestKey = `${mediaId}:${src}:${playbackRate}:${targetTime.toFixed(3)}`
     if (pendingExtensionKeyRef.current === requestKey) {
-      return;
+      return
     }
-    pendingExtensionKeyRef.current = requestKey;
+    pendingExtensionKeyRef.current = requestKey
 
-    let cancelled = false;
+    let cancelled = false
     getOrDecodeAudioSliceForPlayback(mediaId, src, {
       minReadySeconds: PARTIAL_WAV_EXTENSION_READY_SECONDS,
       waitTimeoutMs: PARTIAL_WAV_WAIT_TIMEOUT_MS,
       targetTimeSeconds: Math.max(0, targetTime),
     })
       .then((slice) => {
-        if (cancelled) return;
+        if (cancelled) return
         const nextSource: DecodedPitchSource = {
           buffer: slice.buffer,
           sourceStartOffsetSec: slice.startTime,
           coverageEndSec: slice.startTime + slice.buffer.duration,
           isComplete: slice.isComplete,
-        };
+        }
         setDecodedSource((current) => {
           if (!shouldReplaceDecodedPitchSource(current, nextSource)) {
-            return current;
+            return current
           }
-          return nextSource;
-        });
+          return nextSource
+        })
       })
       .catch((err) => {
         if (!cancelled) {
@@ -348,35 +365,69 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
             mediaId,
             targetTime,
             err,
-          });
+          })
         }
       })
       .finally(() => {
         if (!cancelled && pendingExtensionKeyRef.current === requestKey) {
-          pendingExtensionKeyRef.current = null;
+          pendingExtensionKeyRef.current = null
         }
-      });
+      })
 
     return () => {
-      cancelled = true;
+      cancelled = true
       if (pendingExtensionKeyRef.current === requestKey) {
-        pendingExtensionKeyRef.current = null;
+        pendingExtensionKeyRef.current = null
       }
-    };
-  }, [decodedSource, fps, frame, mediaId, playbackRate, playing, sourceFps, src, trimBefore]);
+    }
+  }, [
+    decodedSource,
+    fps,
+    frame,
+    isReversed,
+    mediaId,
+    playbackRate,
+    playing,
+    reverseSourceEnd,
+    sourceFps,
+    src,
+    trimBefore,
+  ])
 
-  if (!decodedSource) return null;
+  const reversedPlayback = React.useMemo(() => {
+    if (!decodedSource || !isReversed || !decodedSource.isComplete) {
+      return null
+    }
+    const effectiveSourceFps = sourceFps ?? fps
+    const sourceEndSeconds = (reverseSourceEnd ?? trimBefore) / effectiveSourceFps
+    const reversedTrimBefore = Math.max(
+      0,
+      Math.round((decodedSource.buffer.duration - sourceEndSeconds) * effectiveSourceFps),
+    )
+    return {
+      buffer: createReversedAudioBuffer(decodedSource.buffer),
+      trimBefore: reversedTrimBefore,
+    }
+  }, [decodedSource, fps, isReversed, reverseSourceEnd, sourceFps, trimBefore])
+
+  if (!decodedSource) return null
+
+  const playbackBuffer = reversedPlayback?.buffer ?? decodedSource.buffer
+  const playbackTrimBefore = reversedPlayback?.trimBefore ?? trimBefore
+  const playbackSourceStartOffsetSec = reversedPlayback ? 0 : decodedSource.sourceStartOffsetSec
 
   const fallback = (
     <DecodedPitchFallbackAudio
-      audioBuffer={decodedSource.buffer}
-      sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}
+      audioBuffer={playbackBuffer}
+      sourceStartOffsetSec={playbackSourceStartOffsetSec}
       itemId={itemId}
       liveGainItemIds={liveGainItemIds}
-      trimBefore={trimBefore}
+      trimBefore={playbackTrimBefore}
       sourceFps={sourceFps}
       volume={volume}
       playbackRate={playbackRate}
+      isReversed={isReversed && !reversedPlayback}
+      reverseSourceEnd={reversedPlayback ? undefined : reverseSourceEnd}
       audioPitchSemitones={audioPitchSemitones}
       audioPitchCents={audioPitchCents}
       audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -398,20 +449,22 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       crossfadeFadeOut={crossfadeFadeOut}
       volumeMultiplier={volumeMultiplier}
     />
-  );
+  )
 
   return (
     <SoundTouchWorkletAudio
-      audioBuffer={decodedSource.buffer}
+      audioBuffer={playbackBuffer}
       fallback={fallback}
       itemId={itemId}
       liveGainItemIds={liveGainItemIds}
-      trimBefore={trimBefore}
+      trimBefore={playbackTrimBefore}
       sourceFps={sourceFps}
-      sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}
+      sourceStartOffsetSec={playbackSourceStartOffsetSec}
       isComplete={decodedSource.isComplete}
       volume={volume}
       playbackRate={playbackRate}
+      isReversed={isReversed && !reversedPlayback}
+      reverseSourceEnd={reversedPlayback ? undefined : reverseSourceEnd}
       audioPitchSemitones={audioPitchSemitones}
       audioPitchCents={audioPitchCents}
       audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -433,8 +486,8 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       crossfadeFadeOut={crossfadeFadeOut}
       volumeMultiplier={volumeMultiplier}
     />
-  );
-};
+  )
+}
 
 /**
  * Custom decoder adapter for codecs that native media elements cannot decode
@@ -446,10 +499,10 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
  *   decoded AudioBuffers, avoiding WAV/object-URL round-trips before preview.
  */
 export const CustomDecoderAudio: React.FC<CustomDecoderAudioProps> = React.memo((props) => {
-  const playbackRate = props.playbackRate ?? 1;
+  const playbackRate = props.playbackRate ?? 1
   const itemPreview = useGizmoStore(
     useCallback((state) => state.preview?.[props.itemId], [props.itemId]),
-  );
+  )
   const resolvedPitchShiftSemitones = resolvePreviewAudioPitchShiftSemitones({
     base: {
       audioPitchSemitones: props.audioPitchSemitones,
@@ -457,17 +510,19 @@ export const CustomDecoderAudio: React.FC<CustomDecoderAudioProps> = React.memo(
     },
     preview: itemPreview?.properties,
     additionalSemitones: props.audioPitchShiftSemitones,
-  });
+  })
   // Stay on the SoundTouch path while a pitch preview is active so crossing the
   // zero boundary mid-drag doesn't remount between buffered and pitch-preserved.
-  const hasActivePitchPreview = hasAudioPitchOverride(itemPreview?.properties);
-  const shouldUseBufferedPlayback = Math.abs(playbackRate - 1) <= 0.0001
-    && !hasActivePitchPreview
-    && !isAudioPitchShiftActive(resolvedPitchShiftSemitones);
+  const hasActivePitchPreview = hasAudioPitchOverride(itemPreview?.properties)
+  const shouldUseBufferedPlayback =
+    props.isReversed !== true &&
+    Math.abs(playbackRate - 1) <= 0.0001 &&
+    !hasActivePitchPreview &&
+    !isAudioPitchShiftActive(resolvedPitchShiftSemitones)
 
   if (shouldUseBufferedPlayback) {
-    return <CustomDecoderBufferedAudio {...props} playbackRate={playbackRate} />;
+    return <CustomDecoderBufferedAudio {...props} playbackRate={playbackRate} />
   }
 
-  return <CustomDecoderPitchPreservedAudio {...props} playbackRate={playbackRate} />;
-});
+  return <CustomDecoderPitchPreservedAudio {...props} playbackRate={playbackRate} />
+})

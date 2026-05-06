@@ -1,9 +1,9 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @plugin "tailwindcss-animate";
 
 /* Feature-specific theme extensions */
-@import "./features/timeline/theme.css";
+@import './features/timeline/theme.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -13,45 +13,45 @@
     /* Inspired by Premiere Pro & DaVinci Resolve */
 
     /* Base - Very dark, reduced eye strain */
-    --background: oklch(0.15 0 0);              /* #262626 - Main canvas */
-    --foreground: oklch(0.95 0 0);              /* #f2f2f2 - Primary text */
+    --background: oklch(0.15 0 0); /* #262626 - Main canvas */
+    --foreground: oklch(0.95 0 0); /* #f2f2f2 - Primary text */
 
     /* Panels - Layered depth */
-    --card: oklch(0.18 0 0);                    /* #2e2e2e - Panel backgrounds */
-    --card-foreground: oklch(0.92 0 0);         /* #ebebeb - Panel text */
+    --card: oklch(0.18 0 0); /* #2e2e2e - Panel backgrounds */
+    --card-foreground: oklch(0.92 0 0); /* #ebebeb - Panel text */
 
-    --popover: oklch(0.16 0 0);                 /* #292929 - Dropdowns */
+    --popover: oklch(0.16 0 0); /* #292929 - Dropdowns */
     --popover-foreground: oklch(0.92 0 0);
 
     /* Primary - Orange accent (playback, active states) */
-    --primary: oklch(0.68 0.19 45);             /* #FF8C3A - Vibrant orange */
-    --primary-foreground: oklch(0.12 0 0);      /* Dark text on primary */
+    --primary: oklch(0.68 0.19 45); /* #FF8C3A - Vibrant orange */
+    --primary-foreground: oklch(0.12 0 0); /* Dark text on primary */
 
     /* Secondary - Subtle panel variation */
-    --secondary: oklch(0.22 0 0);               /* #383838 - Secondary surfaces */
+    --secondary: oklch(0.22 0 0); /* #383838 - Secondary surfaces */
     --secondary-foreground: oklch(0.88 0 0);
 
     /* Muted - Backgrounds and disabled states */
-    --muted: oklch(0.20 0 0);                   /* #333333 - Muted backgrounds */
-    --muted-foreground: oklch(0.60 0 0);        /* #999999 - Muted text */
+    --muted: oklch(0.2 0 0); /* #333333 - Muted backgrounds */
+    --muted-foreground: oklch(0.6 0 0); /* #999999 - Muted text */
 
     /* Accent - Hover states and highlights */
-    --accent: oklch(0.24 0 0);                  /* #3d3d3d - Hover backgrounds */
+    --accent: oklch(0.24 0 0); /* #3d3d3d - Hover backgrounds */
     --accent-foreground: oklch(0.95 0 0);
 
     /* Destructive - Red for delete/errors */
-    --destructive: oklch(0.58 0.22 25);         /* #E53E3E - Error red */
+    --destructive: oklch(0.58 0.22 25); /* #E53E3E - Error red */
     --destructive-foreground: oklch(0.98 0 0);
 
     /* Borders - Subtle separators */
-    --border: oklch(0.25 0 0);                  /* #404040 - Borders */
-    --input: oklch(0.24 0 0);                   /* #3d3d3d - Input borders */
-    --ring: oklch(0.68 0.19 45);                /* Orange focus ring */
+    --border: oklch(0.25 0 0); /* #404040 - Borders */
+    --input: oklch(0.24 0 0); /* #3d3d3d - Input borders */
+    --ring: oklch(0.68 0.19 45); /* Orange focus ring */
 
     /* Panel system - Layered depth */
-    --panel-bg: oklch(0.18 0 0);                /* #2e2e2e - Panels */
-    --panel-header: oklch(0.14 0 0);            /* #242424 - Panel headers */
-    --timeline-bg: oklch(0.12 0 0);             /* #1f1f1f - Timeline darker */
+    --panel-bg: oklch(0.18 0 0); /* #2e2e2e - Panels */
+    --panel-header: oklch(0.14 0 0); /* #242424 - Panel headers */
+    --timeline-bg: oklch(0.12 0 0); /* #1f1f1f - Timeline darker */
 
     /* Sidebar */
     --sidebar: oklch(0.18 0 0);
@@ -80,7 +80,12 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family:
+      'IBM Plex Sans',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     user-select: none;
@@ -118,7 +123,7 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: oklch(0.30 0 0);
+    background: oklch(0.3 0 0);
     border-radius: 6px;
     border: 2px solid oklch(0.15 0 0);
   }
@@ -286,7 +291,8 @@
 }
 
 @keyframes pulse-subtle {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {

@@ -1,16 +1,16 @@
-import { createRef, type ReactNode } from 'react';
-import { act, fireEvent, render, waitFor } from '@testing-library/react';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRef, type ReactNode } from 'react'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 
-import { useEditorStore } from '@/app/state/editor';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
-import { useSelectionStore } from '@/shared/state/selection';
-import type { TimelineTrack, VideoItem } from '@/types/timeline';
+import { useEditorStore } from '@/app/state/editor'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
+import { useSelectionStore } from '@/shared/state/selection'
+import type { TimelineTrack, VideoItem } from '@/types/timeline'
 
-import { _resetViewportThrottle, useTimelineViewportStore } from '../stores/timeline-viewport-store';
-import { useTimelineStore } from '../stores/timeline-store';
-import { TimelineContent } from './timeline-content';
+import { _resetViewportThrottle, useTimelineViewportStore } from '../stores/timeline-viewport-store'
+import { useTimelineStore } from '../stores/timeline-store'
+import { TimelineContent } from './timeline-content'
 
 vi.mock('../hooks/use-timeline-zoom', () => ({
   useTimelineZoom: () => ({
@@ -21,10 +21,10 @@ vi.mock('../hooks/use-timeline-zoom', () => ({
     setZoomImmediate: vi.fn(),
     zoomLevel: 1,
   }),
-}));
+}))
 
 vi.mock('@/hooks/use-marquee-selection', () => {
-  const INACTIVE = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0 };
+  const INACTIVE = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0 }
   return {
     useMarqueeSelection: () => ({
       isActive: false,
@@ -34,50 +34,47 @@ vi.mock('@/hooks/use-marquee-selection', () => {
       },
       selectedIds: [],
     }),
-  };
-});
+  }
+})
 
 vi.mock('../hooks/use-waveform-prefetch', () => ({
   useWaveformPrefetch: () => {},
-}));
+}))
 
 vi.mock('./timeline-markers', () => ({
   TimelineMarkers: () => null,
-}));
+}))
 
 vi.mock('./timeline-playhead', () => ({
   TimelinePlayhead: () => null,
-}));
+}))
 
 vi.mock('./timeline-preview-scrubber', () => ({
   TimelinePreviewScrubber: () => null,
-}));
+}))
 
 vi.mock('./timeline-track', () => ({
   TimelineTrack: ({ track }: { track: { id: string; height: number } }) => (
-    <div
-      data-track-id={track.id}
-      style={{ height: `${track.height}px` }}
-    />
+    <div data-track-id={track.id} style={{ height: `${track.height}px` }} />
   ),
-}));
+}))
 
 vi.mock('./timeline-guidelines', () => ({
   TimelineGuidelines: () => null,
-}));
+}))
 
 vi.mock('./timeline-media-drop-zone', () => ({
   TimelineMediaDropZone: () => null,
-}));
+}))
 
 vi.mock('./track-row-frame', () => ({
   TrackRowFrame: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   TrackSectionDivider: () => null,
-}));
+}))
 
 vi.mock('@/components/marquee-overlay', () => ({
   MarqueeOverlay: () => null,
-}));
+}))
 
 const VIDEO_TRACK: TimelineTrack = {
   id: 'track-video-1',
@@ -90,7 +87,7 @@ const VIDEO_TRACK: TimelineTrack = {
   solo: false,
   order: 0,
   items: [],
-};
+}
 
 const VIDEO_ITEM: VideoItem = {
   id: 'clip-video-1',
@@ -101,7 +98,7 @@ const VIDEO_ITEM: VideoItem = {
   label: 'clip.mp4',
   src: 'blob:clip-video-1',
   mediaId: 'media-video-1',
-};
+}
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -109,7 +106,7 @@ beforeAll(() => {
       observe() {}
       unobserve() {}
       disconnect() {}
-    } as typeof ResizeObserver;
+    } as typeof ResizeObserver
   }
 
   if (!globalThis.requestIdleCallback) {
@@ -118,23 +115,23 @@ beforeAll(() => {
         callback({
           didTimeout: false,
           timeRemaining: () => 0,
-        });
-      }, 0);
-    }) as typeof requestIdleCallback;
+        })
+      }, 0)
+    }) as typeof requestIdleCallback
   }
 
   if (!globalThis.cancelIdleCallback) {
     globalThis.cancelIdleCallback = ((id: number) => {
-      window.clearTimeout(id);
-    }) as typeof cancelIdleCallback;
+      window.clearTimeout(id)
+    }) as typeof cancelIdleCallback
   }
-});
+})
 
 function resetStores() {
   useEditorStore.setState({
     linkedSelectionEnabled: true,
     transcriptionDialogDepth: 0,
-  });
+  })
 
   useSelectionStore.setState({
     selectedItemIds: [],
@@ -147,7 +144,7 @@ function resetStores() {
     activeTool: 'select',
     dragState: null,
     expandedKeyframeLanes: new Set<string>(),
-  });
+  })
 
   usePlaybackStore.setState({
     currentFrame: 0,
@@ -164,13 +161,13 @@ function resetStores() {
     previewItemId: null,
     useProxy: true,
     previewQuality: 1,
-  });
+  })
   usePreviewBridgeStore.setState({
     displayedFrame: null,
     captureFrame: null,
     captureFrameImageData: null,
     captureCanvasSource: null,
-  });
+  })
 
   useTimelineStore.setState({
     fps: 30,
@@ -184,47 +181,49 @@ function resetStores() {
     scrollPosition: 0,
     snapEnabled: true,
     isDirty: false,
-  });
+  })
 
-  _resetViewportThrottle();
+  _resetViewportThrottle()
   useTimelineViewportStore.setState({
     scrollLeft: 0,
     scrollTop: 0,
     viewportWidth: 0,
     viewportHeight: 0,
-  });
+  })
 }
 
 describe('TimelineContent playback selection behavior', () => {
   beforeEach(() => {
-    resetStores();
-  });
+    resetStores()
+  })
 
   it('keeps the selected clip selected after the playhead moves past it', async () => {
-    render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />);
+    render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />)
 
     act(() => {
-      useSelectionStore.getState().selectItems([VIDEO_ITEM.id]);
-      usePlaybackStore.getState().setCurrentFrame(30);
-    });
+      useSelectionStore.getState().selectItems([VIDEO_ITEM.id])
+      usePlaybackStore.getState().setCurrentFrame(30)
+    })
 
-    expect(useSelectionStore.getState().selectedItemIds).toEqual([VIDEO_ITEM.id]);
+    expect(useSelectionStore.getState().selectedItemIds).toEqual([VIDEO_ITEM.id])
 
     act(() => {
-      usePlaybackStore.getState().setCurrentFrame(VIDEO_ITEM.from + VIDEO_ITEM.durationInFrames + 15);
-    });
+      usePlaybackStore
+        .getState()
+        .setCurrentFrame(VIDEO_ITEM.from + VIDEO_ITEM.durationInFrames + 15)
+    })
 
     await waitFor(() => {
-      expect(useSelectionStore.getState().selectedItemIds).toEqual([VIDEO_ITEM.id]);
-    });
-  });
+      expect(useSelectionStore.getState().selectedItemIds).toEqual([VIDEO_ITEM.id])
+    })
+  })
 
   it('does not update the hover scrub preview while the transcription dialog is open', async () => {
-    const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />);
-    const scrollContainer = container.querySelector('[data-timeline-scroll-container]');
+    const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />)
+    const scrollContainer = container.querySelector('[data-timeline-scroll-container]')
 
     if (!(scrollContainer instanceof HTMLDivElement)) {
-      throw new Error('Expected timeline scroll container');
+      throw new Error('Expected timeline scroll container')
     }
 
     Object.defineProperty(scrollContainer, 'getBoundingClientRect', {
@@ -240,50 +239,51 @@ describe('TimelineContent playback selection behavior', () => {
         y: 0,
         toJSON: () => ({}),
       }),
-    });
+    })
 
     act(() => {
-      useEditorStore.setState({ transcriptionDialogDepth: 1 });
-      usePlaybackStore.getState().setPreviewFrame(12);
-    });
+      useEditorStore.setState({ transcriptionDialogDepth: 1 })
+      usePlaybackStore.getState().setPreviewFrame(12)
+    })
 
-    fireEvent.mouseMove(scrollContainer, { clientX: 180, clientY: 48 });
+    fireEvent.mouseMove(scrollContainer, { clientX: 180, clientY: 48 })
 
-    expect(usePlaybackStore.getState().previewFrame).toBeNull();
-  });
+    expect(usePlaybackStore.getState().previewFrame).toBeNull()
+  })
 
   it('reveals the active track when selection moves to an offscreen lane', async () => {
     const videoTracks: TimelineTrack[] = [
       { ...VIDEO_TRACK, id: 'track-video-1', name: 'V1', order: 0 },
       { ...VIDEO_TRACK, id: 'track-video-2', name: 'V2', order: 1 },
       { ...VIDEO_TRACK, id: 'track-video-3', name: 'V3', order: 2 },
-    ];
+    ]
 
     useTimelineStore.setState({
       tracks: videoTracks,
       items: [],
-    });
+    })
 
-    const allTracksScrollRef = createRef<HTMLDivElement>();
+    const allTracksScrollRef = createRef<HTMLDivElement>()
     const { container } = render(
       <TimelineContent
         duration={10}
         tracks={videoTracks}
         allTracksScrollRef={allTracksScrollRef}
-      />
-    );
-    const scrollContainer = allTracksScrollRef.current
-      ?? container.querySelector('[data-track-section-scroll="video"]') as HTMLDivElement | null;
-    expect(scrollContainer).toBeTruthy();
+      />,
+    )
+    const scrollContainer =
+      allTracksScrollRef.current ??
+      (container.querySelector('[data-track-section-scroll="video"]') as HTMLDivElement | null)
+    expect(scrollContainer).toBeTruthy()
 
-    const trackElements = Array.from(container.querySelectorAll<HTMLElement>('[data-track-id]'));
-    expect(trackElements).toHaveLength(3);
+    const trackElements = Array.from(container.querySelectorAll<HTMLElement>('[data-track-id]'))
+    expect(trackElements).toHaveLength(3)
 
     Object.defineProperty(scrollContainer!, 'clientHeight', {
       configurable: true,
       value: 100,
-    });
-    scrollContainer!.scrollTop = 120;
+    })
+    scrollContainer!.scrollTop = 120
     vi.spyOn(scrollContainer!, 'getBoundingClientRect').mockReturnValue({
       x: 0,
       y: 0,
@@ -294,35 +294,68 @@ describe('TimelineContent playback selection behavior', () => {
       width: 200,
       height: 100,
       toJSON: () => ({}),
-    } as DOMRect);
+    } as DOMRect)
 
     const trackRects = new Map<string, DOMRect>([
-      ['track-video-1', {
-        x: 0, y: -120, left: 0, top: -120, right: 200, bottom: -48, width: 200, height: 72, toJSON: () => ({})
-      } as DOMRect],
-      ['track-video-2', {
-        x: 0, y: -48, left: 0, top: -48, right: 200, bottom: 24, width: 200, height: 72, toJSON: () => ({})
-      } as DOMRect],
-      ['track-video-3', {
-        x: 0, y: 24, left: 0, top: 24, right: 200, bottom: 96, width: 200, height: 72, toJSON: () => ({})
-      } as DOMRect],
-    ]);
+      [
+        'track-video-1',
+        {
+          x: 0,
+          y: -120,
+          left: 0,
+          top: -120,
+          right: 200,
+          bottom: -48,
+          width: 200,
+          height: 72,
+          toJSON: () => ({}),
+        } as DOMRect,
+      ],
+      [
+        'track-video-2',
+        {
+          x: 0,
+          y: -48,
+          left: 0,
+          top: -48,
+          right: 200,
+          bottom: 24,
+          width: 200,
+          height: 72,
+          toJSON: () => ({}),
+        } as DOMRect,
+      ],
+      [
+        'track-video-3',
+        {
+          x: 0,
+          y: 24,
+          left: 0,
+          top: 24,
+          right: 200,
+          bottom: 96,
+          width: 200,
+          height: 72,
+          toJSON: () => ({}),
+        } as DOMRect,
+      ],
+    ])
 
     for (const element of trackElements) {
-      const trackId = element.getAttribute('data-track-id');
-      const rect = trackId ? trackRects.get(trackId) : null;
-      expect(rect).toBeTruthy();
-      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(rect!);
+      const trackId = element.getAttribute('data-track-id')
+      const rect = trackId ? trackRects.get(trackId) : null
+      expect(rect).toBeTruthy()
+      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(rect!)
     }
 
     act(() => {
-      useSelectionStore.getState().setActiveTrack('track-video-1');
-    });
+      useSelectionStore.getState().setActiveTrack('track-video-1')
+    })
 
     await waitFor(() => {
-      expect(scrollContainer!.scrollTop).toBe(0);
-    });
-  });
+      expect(scrollContainer!.scrollTop).toBe(0)
+    })
+  })
 
   it('reveals the active track through the split-pane video scroll ref', async () => {
     const tracks: TimelineTrack[] = [
@@ -336,41 +369,43 @@ describe('TimelineContent playback selection behavior', () => {
         kind: 'audio',
         order: 3,
       },
-    ];
+    ]
 
     useTimelineStore.setState({
       tracks,
       items: [],
-    });
+    })
 
-    const videoTracksScrollRef = createRef<HTMLDivElement>();
-    const audioTracksScrollRef = createRef<HTMLDivElement>();
+    const videoTracksScrollRef = createRef<HTMLDivElement>()
+    const audioTracksScrollRef = createRef<HTMLDivElement>()
     const { container } = render(
       <TimelineContent
         duration={10}
         tracks={tracks}
         videoTracksScrollRef={videoTracksScrollRef}
         audioTracksScrollRef={audioTracksScrollRef}
-      />
-    );
-    const videoScrollContainer = videoTracksScrollRef.current
-      ?? container.querySelector('[data-track-section-scroll="video"]') as HTMLDivElement | null;
-    const audioScrollContainer = audioTracksScrollRef.current
-      ?? container.querySelector('[data-track-section-scroll="audio"]') as HTMLDivElement | null;
-    expect(videoScrollContainer).toBeTruthy();
-    expect(audioScrollContainer).toBeTruthy();
+      />,
+    )
+    const videoScrollContainer =
+      videoTracksScrollRef.current ??
+      (container.querySelector('[data-track-section-scroll="video"]') as HTMLDivElement | null)
+    const audioScrollContainer =
+      audioTracksScrollRef.current ??
+      (container.querySelector('[data-track-section-scroll="audio"]') as HTMLDivElement | null)
+    expect(videoScrollContainer).toBeTruthy()
+    expect(audioScrollContainer).toBeTruthy()
 
     const videoTrackElements = Array.from(
-      videoScrollContainer!.querySelectorAll<HTMLElement>('[data-track-id]')
-    );
-    expect(videoTrackElements).toHaveLength(3);
+      videoScrollContainer!.querySelectorAll<HTMLElement>('[data-track-id]'),
+    )
+    expect(videoTrackElements).toHaveLength(3)
 
     Object.defineProperty(videoScrollContainer!, 'clientHeight', {
       configurable: true,
       value: 100,
-    });
-    videoScrollContainer!.scrollTop = 120;
-    audioScrollContainer!.scrollTop = 55;
+    })
+    videoScrollContainer!.scrollTop = 120
+    audioScrollContainer!.scrollTop = 55
     vi.spyOn(videoScrollContainer!, 'getBoundingClientRect').mockReturnValue({
       x: 0,
       y: 0,
@@ -381,49 +416,82 @@ describe('TimelineContent playback selection behavior', () => {
       width: 200,
       height: 100,
       toJSON: () => ({}),
-    } as DOMRect);
+    } as DOMRect)
 
     const trackRects = new Map<string, DOMRect>([
-      ['track-video-1', {
-        x: 0, y: -120, left: 0, top: -120, right: 200, bottom: -48, width: 200, height: 72, toJSON: () => ({})
-      } as DOMRect],
-      ['track-video-2', {
-        x: 0, y: -48, left: 0, top: -48, right: 200, bottom: 24, width: 200, height: 72, toJSON: () => ({})
-      } as DOMRect],
-      ['track-video-3', {
-        x: 0, y: 24, left: 0, top: 24, right: 200, bottom: 96, width: 200, height: 72, toJSON: () => ({})
-      } as DOMRect],
-    ]);
+      [
+        'track-video-1',
+        {
+          x: 0,
+          y: -120,
+          left: 0,
+          top: -120,
+          right: 200,
+          bottom: -48,
+          width: 200,
+          height: 72,
+          toJSON: () => ({}),
+        } as DOMRect,
+      ],
+      [
+        'track-video-2',
+        {
+          x: 0,
+          y: -48,
+          left: 0,
+          top: -48,
+          right: 200,
+          bottom: 24,
+          width: 200,
+          height: 72,
+          toJSON: () => ({}),
+        } as DOMRect,
+      ],
+      [
+        'track-video-3',
+        {
+          x: 0,
+          y: 24,
+          left: 0,
+          top: 24,
+          right: 200,
+          bottom: 96,
+          width: 200,
+          height: 72,
+          toJSON: () => ({}),
+        } as DOMRect,
+      ],
+    ])
 
     for (const element of videoTrackElements) {
-      const trackId = element.getAttribute('data-track-id');
-      const rect = trackId ? trackRects.get(trackId) : null;
-      expect(rect).toBeTruthy();
-      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(rect!);
+      const trackId = element.getAttribute('data-track-id')
+      const rect = trackId ? trackRects.get(trackId) : null
+      expect(rect).toBeTruthy()
+      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(rect!)
     }
 
     act(() => {
-      useSelectionStore.getState().setActiveTrack('track-video-1');
-    });
+      useSelectionStore.getState().setActiveTrack('track-video-1')
+    })
 
     await waitFor(() => {
-      expect(videoScrollContainer!.scrollTop).toBe(0);
-    });
-    expect(audioScrollContainer!.scrollTop).toBe(55);
-  });
+      expect(videoScrollContainer!.scrollTop).toBe(0)
+    })
+    expect(audioScrollContainer!.scrollTop).toBe(55)
+  })
 
   it('does not clear previewFrame on ruler mousedown before the ruler handler runs', () => {
-    const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />);
+    const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />)
 
     act(() => {
-      usePlaybackStore.getState().setPreviewFrame(24);
-    });
+      usePlaybackStore.getState().setPreviewFrame(24)
+    })
 
-    const ruler = container.querySelector('.timeline-ruler') as HTMLDivElement | null;
-    expect(ruler).toBeTruthy();
+    const ruler = container.querySelector('.timeline-ruler') as HTMLDivElement | null
+    expect(ruler).toBeTruthy()
 
-    fireEvent.mouseDown(ruler!, { button: 0 });
+    fireEvent.mouseDown(ruler!, { button: 0 })
 
-    expect(usePlaybackStore.getState().previewFrame).toBe(24);
-  });
-});
+    expect(usePlaybackStore.getState().previewFrame).toBe(24)
+  })
+})

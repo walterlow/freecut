@@ -1,9 +1,9 @@
-import type { TextItem, TextSpan } from '@/types/timeline';
-import type { CanvasSettings } from '@/types/transform';
-import { buildTextItemLabelFromText } from '@/shared/utils/text-item-spans';
-import { TEXT_STYLE_PRESET_IDS, type TextStylePresetId } from './text-style-preset-ids';
+import type { TextItem, TextSpan } from '@/types/timeline'
+import type { CanvasSettings } from '@/types/transform'
+import { buildTextItemLabelFromText } from '@/shared/utils/text-item-spans'
+import { TEXT_STYLE_PRESET_IDS, type TextStylePresetId } from './text-style-preset-ids'
 
-export { TEXT_STYLE_PRESET_IDS, type TextStylePresetId };
+export { TEXT_STYLE_PRESET_IDS, type TextStylePresetId }
 
 export type TextStylePresetPreviewKind =
   | 'clean'
@@ -18,68 +18,71 @@ export type TextStylePresetPreviewKind =
   | 'breaking'
   | 'launch'
   | 'event'
-  | 'badge';
+  | 'badge'
 
-export type TextStylePresetLayout = 'single' | 'two' | 'three';
+export type TextStylePresetLayout = 'single' | 'two' | 'three'
 
 export interface TextStylePreset {
-  id: TextStylePresetId;
-  label: string;
-  previewKind: TextStylePresetPreviewKind;
-  layout: TextStylePresetLayout;
+  id: TextStylePresetId
+  label: string
+  previewKind: TextStylePresetPreviewKind
+  layout: TextStylePresetLayout
   sample: {
-    eyebrow?: string;
-    title: string;
-    subtitle?: string;
-  };
+    eyebrow?: string
+    title: string
+    subtitle?: string
+  }
 }
 
-type TextSizeToken = 'badge' | 'title' | 'display';
-type TextSpacingToken = 'sm' | 'badge' | 'md' | 'lg' | 'xl' | 'quote';
-type TextRadiusToken = 'none' | 'sm' | 'md' | 'lg' | 'pill';
-type TextTrackingToken = 'tight' | 'normal' | 'wide' | 'badge' | 'cinematic';
-type TextShadowToken = 'sm' | 'md' | 'lg' | 'xl' | 'glow';
+type TextSizeToken = 'badge' | 'title' | 'display'
+type TextSpacingToken = 'sm' | 'badge' | 'md' | 'lg' | 'xl' | 'quote'
+type TextRadiusToken = 'none' | 'sm' | 'md' | 'lg' | 'pill'
+type TextTrackingToken = 'tight' | 'normal' | 'wide' | 'badge' | 'cinematic'
+type TextShadowToken = 'sm' | 'md' | 'lg' | 'xl' | 'glow'
 
 interface TextStyleRecipe extends TextStylePreset {
   style: {
-    fontFamily: string;
-    fontWeight: NonNullable<TextItem['fontWeight']>;
-    fontStyle: NonNullable<TextItem['fontStyle']>;
-    underline: boolean;
+    fontFamily: string
+    fontWeight: NonNullable<TextItem['fontWeight']>
+    fontStyle: NonNullable<TextItem['fontStyle']>
+    underline: boolean
     size: {
-      token: TextSizeToken;
-      multiplier?: number;
-    };
-    color: string;
-    backgroundColor?: string;
-    backgroundRadius: TextRadiusToken;
-    textAlign: NonNullable<TextItem['textAlign']>;
-    verticalAlign: NonNullable<TextItem['verticalAlign']>;
-    lineHeight: number;
-    letterSpacing: number | TextTrackingToken;
-    textPadding: TextSpacingToken;
+      token: TextSizeToken
+      multiplier?: number
+    }
+    color: string
+    backgroundColor?: string
+    backgroundRadius: TextRadiusToken
+    textAlign: NonNullable<TextItem['textAlign']>
+    verticalAlign: NonNullable<TextItem['verticalAlign']>
+    lineHeight: number
+    letterSpacing: number | TextTrackingToken
+    textPadding: TextSpacingToken
     textShadow?: {
-      token: TextShadowToken;
-      color: string;
-    };
-    stroke?: TextItem['stroke'];
-  };
+      token: TextShadowToken
+      color: string
+    }
+    stroke?: TextItem['stroke']
+  }
 }
 
 export interface TextScale {
   sizes: {
-    badge: number;
-    title: number;
-    display: number;
-  };
-  spacing: Record<TextSpacingToken, number>;
-  radius: Record<TextRadiusToken, number>;
-  tracking: Record<TextTrackingToken, number>;
-  shadows: Record<TextShadowToken, {
-    offsetX: number;
-    offsetY: number;
-    blur: number;
-  }>;
+    badge: number
+    title: number
+    display: number
+  }
+  spacing: Record<TextSpacingToken, number>
+  radius: Record<TextRadiusToken, number>
+  tracking: Record<TextTrackingToken, number>
+  shadows: Record<
+    TextShadowToken,
+    {
+      offsetX: number
+      offsetY: number
+      blur: number
+    }
+  >
 }
 
 const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
@@ -452,7 +455,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
       },
     },
   },
-};
+}
 
 export const TEXT_STYLE_PRESETS: readonly TextStylePreset[] = Object.values(TEXT_STYLE_RECIPES).map(
   ({ id, label, previewKind, layout, sample }) => ({
@@ -462,10 +465,10 @@ export const TEXT_STYLE_PRESETS: readonly TextStylePreset[] = Object.values(TEXT
     layout,
     sample,
   }),
-);
+)
 
 function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+  return Math.min(max, Math.max(min, value))
 }
 
 function sizeFromCanvas(
@@ -474,7 +477,7 @@ function sizeFromCanvas(
   min: number,
   max: number,
 ): number {
-  return clamp(Math.round(canvas.height * multiplier), min, max);
+  return clamp(Math.round(canvas.height * multiplier), min, max)
 }
 
 function spacingFromCanvas(
@@ -483,30 +486,30 @@ function spacingFromCanvas(
   min: number,
   max: number,
 ): number {
-  const basis = Math.min(canvas.width, canvas.height);
-  return clamp(Math.round(basis * multiplier), min, max);
+  const basis = Math.min(canvas.width, canvas.height)
+  return clamp(Math.round(basis * multiplier), min, max)
 }
 
 function buildTemplateTextFromSpans(spans: TextSpan[]): string {
-  return spans.map((span) => span.text).join('\n');
+  return spans.map((span) => span.text).join('\n')
 }
 
 function getPresetById(presetId: TextStylePresetId): TextStyleRecipe {
-  const preset = TEXT_STYLE_RECIPES[presetId];
+  const preset = TEXT_STYLE_RECIPES[presetId]
   if (!preset) {
-    throw new Error(`Unknown text style preset: ${presetId}`);
+    throw new Error(`Unknown text style preset: ${presetId}`)
   }
 
-  return preset;
+  return preset
 }
 
 function resolveSize(scale: TextScale, config: TextStyleRecipe['style']['size']): number {
-  const baseSize = scale.sizes[config.token];
-  return Math.round(baseSize * (config.multiplier ?? 1));
+  const baseSize = scale.sizes[config.token]
+  return Math.round(baseSize * (config.multiplier ?? 1))
 }
 
 function resolveTracking(scale: TextScale, value: number | TextTrackingToken): number {
-  return typeof value === 'number' ? value : scale.tracking[value];
+  return typeof value === 'number' ? value : scale.tracking[value]
 }
 
 export function buildTextScale(canvas: CanvasSettings): TextScale {
@@ -545,7 +548,7 @@ export function buildTextScale(canvas: CanvasSettings): TextScale {
       xl: { offsetX: 0, offsetY: 10, blur: 24 },
       glow: { offsetX: 0, offsetY: 0, blur: 22 },
     },
-  };
+  }
 }
 
 function buildResolvedPresetStyle(
@@ -553,11 +556,11 @@ function buildResolvedPresetStyle(
   canvas: CanvasSettings,
   styleScale = 1,
 ): Partial<TextItem> {
-  const preset = getPresetById(presetId);
-  const scale = buildTextScale(canvas);
+  const preset = getPresetById(presetId)
+  const scale = buildTextScale(canvas)
   const shadowScale = preset.style.textShadow
     ? scale.shadows[preset.style.textShadow.token]
-    : undefined;
+    : undefined
 
   return {
     fontFamily: preset.style.fontFamily,
@@ -567,9 +570,10 @@ function buildResolvedPresetStyle(
     fontSize: Math.round(resolveSize(scale, preset.style.size) * styleScale),
     color: preset.style.color,
     backgroundColor: preset.style.backgroundColor,
-    backgroundRadius: preset.style.backgroundRadius === 'pill'
-      ? scale.radius[preset.style.backgroundRadius]
-      : Math.round(scale.radius[preset.style.backgroundRadius] * styleScale),
+    backgroundRadius:
+      preset.style.backgroundRadius === 'pill'
+        ? scale.radius[preset.style.backgroundRadius]
+        : Math.round(scale.radius[preset.style.backgroundRadius] * styleScale),
     textAlign: preset.style.textAlign,
     verticalAlign: preset.style.verticalAlign,
     lineHeight: preset.style.lineHeight,
@@ -591,7 +595,7 @@ function buildResolvedPresetStyle(
       : undefined,
     textStylePresetId: presetId,
     textStyleScale: styleScale,
-  };
+  }
 }
 
 export function buildTextStylePresetUpdates(
@@ -599,7 +603,7 @@ export function buildTextStylePresetUpdates(
   canvas: CanvasSettings,
   styleScale = 1,
 ): Partial<TextItem> {
-  return buildResolvedPresetStyle(presetId, canvas, styleScale);
+  return buildResolvedPresetStyle(presetId, canvas, styleScale)
 }
 
 export function buildTextStylePresetTemplate(
@@ -607,9 +611,9 @@ export function buildTextStylePresetTemplate(
   canvas: CanvasSettings,
   styleScale = 1,
 ): Partial<TextItem> {
-  const preset = getPresetById(presetId);
-  const styles = buildResolvedPresetStyle(presetId, canvas, styleScale);
-  const baseFontSize = styles.fontSize ?? 60;
+  const preset = getPresetById(presetId)
+  const styles = buildResolvedPresetStyle(presetId, canvas, styleScale)
+  const baseFontSize = styles.fontSize ?? 60
 
   switch (presetId) {
     case 'speaker-card': {
@@ -624,14 +628,14 @@ export function buildTextStylePresetTemplate(
           fontWeight: 'medium',
           color: '#cbd5e1',
         },
-      ];
+      ]
 
       return {
         ...styles,
         label: preset.label,
         text: buildTemplateTextFromSpans(spans),
         textSpans: spans,
-      };
+      }
     }
     case 'lower-third': {
       const spans: TextSpan[] = [
@@ -645,14 +649,14 @@ export function buildTextStylePresetTemplate(
           fontWeight: 'medium',
           color: '#cbd5e1',
         },
-      ];
+      ]
 
       return {
         ...styles,
         label: preset.label,
         text: buildTemplateTextFromSpans(spans),
         textSpans: spans,
-      };
+      }
     }
     case 'quote': {
       const spans: TextSpan[] = [
@@ -668,14 +672,14 @@ export function buildTextStylePresetTemplate(
           color: '#cbd5e1',
           letterSpacing: 1,
         },
-      ];
+      ]
 
       return {
         ...styles,
         label: preset.label,
         text: buildTemplateTextFromSpans(spans),
         textSpans: spans,
-      };
+      }
     }
     case 'breaking-update': {
       const spans: TextSpan[] = [
@@ -695,14 +699,14 @@ export function buildTextStylePresetTemplate(
           fontWeight: 'semibold',
           color: '#fde68a',
         },
-      ];
+      ]
 
       return {
         ...styles,
         label: preset.label,
         text: buildTemplateTextFromSpans(spans),
         textSpans: spans,
-      };
+      }
     }
     case 'headline-stack': {
       const spans: TextSpan[] = [
@@ -722,14 +726,14 @@ export function buildTextStylePresetTemplate(
           fontWeight: 'medium',
           color: '#cbd5e1',
         },
-      ];
+      ]
 
       return {
         ...styles,
         label: preset.label,
         text: buildTemplateTextFromSpans(spans),
         textSpans: spans,
-      };
+      }
     }
     case 'launch-stack': {
       const spans: TextSpan[] = [
@@ -749,14 +753,14 @@ export function buildTextStylePresetTemplate(
           fontWeight: 'medium',
           color: '#bfdbfe',
         },
-      ];
+      ]
 
       return {
         ...styles,
         label: preset.label,
         text: buildTemplateTextFromSpans(spans),
         textSpans: spans,
-      };
+      }
     }
     case 'event-card': {
       const spans: TextSpan[] = [
@@ -777,14 +781,14 @@ export function buildTextStylePresetTemplate(
           color: '#bfdbfe',
           letterSpacing: 1,
         },
-      ];
+      ]
 
       return {
         ...styles,
         label: preset.label,
         text: buildTemplateTextFromSpans(spans),
         textSpans: spans,
-      };
+      }
     }
     case 'badge':
       return {
@@ -797,25 +801,25 @@ export function buildTextStylePresetTemplate(
             letterSpacing: 2,
           },
         ],
-      };
+      }
     default:
       return {
         ...styles,
         label: preset.label,
         text: preset.sample.title,
         textSpans: undefined,
-      };
+      }
   }
 }
 
 function getSpanStyle(span?: TextSpan): Omit<TextSpan, 'text'> {
   if (!span) {
-    return {};
+    return {}
   }
 
-  const style: Partial<TextSpan> = { ...span };
-  delete style.text;
-  return style;
+  const style: Partial<TextSpan> = { ...span }
+  delete style.text
+  return style
 }
 
 export function applyTextStylePresetToItem(
@@ -824,31 +828,30 @@ export function applyTextStylePresetToItem(
   canvas: CanvasSettings,
   styleScale = 1,
 ): Partial<TextItem> {
-  const template = buildTextStylePresetTemplate(presetId, canvas, styleScale);
-  const currentSpans = Array.isArray(item.textSpans) && item.textSpans.length > 0
-    ? item.textSpans
-    : undefined;
-  const templateSpans = Array.isArray(template.textSpans) && template.textSpans.length > 0
-    ? template.textSpans
-    : undefined;
+  const template = buildTextStylePresetTemplate(presetId, canvas, styleScale)
+  const currentSpans =
+    Array.isArray(item.textSpans) && item.textSpans.length > 0 ? item.textSpans : undefined
+  const templateSpans =
+    Array.isArray(template.textSpans) && template.textSpans.length > 0
+      ? template.textSpans
+      : undefined
   const nextSpans = currentSpans
     ? currentSpans.map((span, index) => {
-        const templateSpan = templateSpans?.[Math.min(index, Math.max(0, (templateSpans?.length ?? 1) - 1))];
+        const templateSpan =
+          templateSpans?.[Math.min(index, Math.max(0, (templateSpans?.length ?? 1) - 1))]
         return {
           ...span,
           ...getSpanStyle(templateSpan),
           text: span.text,
-        };
+        }
       })
-    : undefined;
-  const nextText = nextSpans
-    ? nextSpans.map((span) => span.text).join('\n')
-    : item.text;
+    : undefined
+  const nextText = nextSpans ? nextSpans.map((span) => span.text).join('\n') : item.text
 
   return {
     ...template,
     text: nextText,
     textSpans: nextSpans,
     label: buildTextItemLabelFromText(nextText),
-  };
+  }
 }

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import type { Keyframe } from '@/types/keyframe';
-import { applyEasingConfig } from './easing';
-import { interpolatePropertyValue } from './interpolation';
+import { describe, expect, it } from 'vite-plus/test'
+import type { Keyframe } from '@/types/keyframe'
+import { applyEasingConfig } from './easing'
+import { interpolatePropertyValue } from './interpolation'
 
 describe('interpolatePropertyValue', () => {
   it('uses advanced easing configuration when present', () => {
@@ -22,12 +22,12 @@ describe('interpolatePropertyValue', () => {
         value: 100,
         easing: 'linear',
       },
-    ];
+    ]
 
-    const expected = applyEasingConfig(0.5, bezierKeyframes[0]!.easingConfig!) * 100;
-    const interpolated = interpolatePropertyValue(bezierKeyframes, 5, 0);
+    const expected = applyEasingConfig(0.5, bezierKeyframes[0]!.easingConfig!) * 100
+    const interpolated = interpolatePropertyValue(bezierKeyframes, 5, 0)
 
-    expect(interpolated).toBeCloseTo(expected, 6);
-    expect(interpolated).not.toBeCloseTo(50, 2);
-  });
-});
+    expect(interpolated).toBeCloseTo(expected, 6)
+    expect(interpolated).not.toBeCloseTo(50, 2)
+  })
+})

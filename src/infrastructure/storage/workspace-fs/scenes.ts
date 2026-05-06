@@ -10,28 +10,28 @@
  * when the requested parameters match, and re-run when they don't.
  */
 
-import type { SceneCut } from '@/infrastructure/analysis';
-import { createLogger } from '@/shared/logging/logger';
+import type { SceneCut } from '@/infrastructure/analysis'
+import { createLogger } from '@/shared/logging/logger'
 
-import { readAiOutput, writeAiOutput, deleteAiOutput } from './ai-outputs';
-import type { ScenesPayload, SceneCutPayload } from './ai-outputs';
+import { readAiOutput, writeAiOutput, deleteAiOutput } from './ai-outputs'
+import type { ScenesPayload, SceneCutPayload } from './ai-outputs'
 
-const logger = createLogger('WorkspaceFS:Scenes');
+const logger = createLogger('WorkspaceFS:Scenes')
 
 export interface SavedScenes {
-  method: 'histogram' | 'optical-flow';
-  sampleIntervalMs: number;
-  verificationModel?: string;
-  fps: number;
-  cuts: SceneCut[];
+  method: 'histogram' | 'optical-flow'
+  sampleIntervalMs: number
+  verificationModel?: string
+  fps: number
+  cuts: SceneCut[]
 }
 
 interface SaveScenesInput extends SavedScenes {
-  mediaId: string;
+  mediaId: string
   /** Stable provider id (e.g. `"scene-detect-histogram"`, `"scene-detect-optical-flow"`). */
-  service: string;
+  service: string
   /** Detector/model identifier — for histogram this is just `"histogram"`. */
-  model: string;
+  model: string
 }
 
 function cutsToPayload(cuts: SceneCut[]): SceneCutPayload[] {
@@ -40,28 +40,28 @@ function cutsToPayload(cuts: SceneCut[]): SceneCutPayload[] {
     time: cut.time,
     motion: cut.motion,
     verified: cut.verified,
-  }));
+  }))
 }
 
 function payloadToCuts(cuts: SceneCutPayload[]): SceneCut[] {
-  return cuts as unknown as SceneCut[];
+  return cuts as unknown as SceneCut[]
 }
 
 export async function getScenes(mediaId: string): Promise<SavedScenes | undefined> {
   try {
-    const envelope = await readAiOutput(mediaId, 'scenes');
-    if (!envelope) return undefined;
-    const data: ScenesPayload = envelope.data;
+    const envelope = await readAiOutput(mediaId, 'scenes')
+    if (!envelope) return undefined
+    const data: ScenesPayload = envelope.data
     return {
       method: data.method,
       sampleIntervalMs: data.sampleIntervalMs,
       verificationModel: data.verificationModel,
       fps: data.fps,
       cuts: payloadToCuts(data.cuts),
-    };
+    }
   } catch (error) {
-    logger.error(`getScenes(${mediaId}) failed`, error);
-    throw new Error(`Failed to load scenes: ${mediaId}`);
+    logger.error(`getScenes(${mediaId}) failed`, error)
+    throw new Error(`Failed to load scenes: ${mediaId}`)
   }
 }
 
@@ -73,7 +73,7 @@ export async function saveScenes(input: SaveScenesInput): Promise<SavedScenes> {
       verificationModel: input.verificationModel,
       fps: input.fps,
       cuts: cutsToPayload(input.cuts),
-    };
+    }
     await writeAiOutput({
       mediaId: input.mediaId,
       kind: 'scenes',
@@ -85,25 +85,25 @@ export async function saveScenes(input: SaveScenesInput): Promise<SavedScenes> {
         verificationModel: input.verificationModel ?? null,
       },
       data: payload,
-    });
+    })
     return {
       method: input.method,
       sampleIntervalMs: input.sampleIntervalMs,
       verificationModel: input.verificationModel,
       fps: input.fps,
       cuts: input.cuts,
-    };
+    }
   } catch (error) {
-    logger.error(`saveScenes(${input.mediaId}) failed`, error);
-    throw new Error(`Failed to save scenes: ${input.mediaId}`);
+    logger.error(`saveScenes(${input.mediaId}) failed`, error)
+    throw new Error(`Failed to save scenes: ${input.mediaId}`)
   }
 }
 
 export async function deleteScenes(mediaId: string): Promise<void> {
   try {
-    await deleteAiOutput(mediaId, 'scenes');
+    await deleteAiOutput(mediaId, 'scenes')
   } catch (error) {
-    logger.error(`deleteScenes(${mediaId}) failed`, error);
-    throw new Error(`Failed to delete scenes: ${mediaId}`);
+    logger.error(`deleteScenes(${mediaId}) failed`, error)
+    throw new Error(`Failed to delete scenes: ${mediaId}`)
   }
 }

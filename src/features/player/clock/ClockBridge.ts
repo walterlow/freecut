@@ -1,4 +1,4 @@
-export { ClockBridgeProvider } from './ClockBridgeProvider';
+export { ClockBridgeProvider } from './ClockBridgeProvider'
 export {
   useBridgedTimelineContext,
   useBridgedSetTimelineContext,
@@ -7,4 +7,4 @@ export {
   useBridgedSetTimelineFrame,
   useBridgedActualFirstFrame,
   useBridgedActualLastFrame,
-} from './clock-bridge-context';
+} from './clock-bridge-context'

@@ -1,74 +1,75 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { cn } from '@/shared/ui/cn';
+import { cn } from '@/shared/ui/cn'
 
 import {
   getKeyframeNavigatorThumbMetrics,
   type KeyframeNavigatorViewport,
-} from './compact-navigator-utils';
+} from './compact-navigator-utils'
 
-const DRAG_THRESHOLD_PX = 2;
-type MarqueeMode = 'replace' | 'add' | 'toggle';
+const DRAG_THRESHOLD_PX = 2
+type MarqueeMode = 'replace' | 'add' | 'toggle'
 
 interface KeyframeTimingStripMarker {
-  id: string;
-  frame: number;
-  selected: boolean;
-  draggable: boolean;
+  id: string
+  frame: number
+  selected: boolean
+  draggable: boolean
 }
 
 interface KeyframeTimingStripProps {
-  viewport: KeyframeNavigatorViewport;
-  contentFrameMax: number;
-  markers: KeyframeTimingStripMarker[];
-  previewFrames?: Record<string, number> | null;
-  disabled?: boolean;
-  onSelectionChange?: (selectedIds: Set<string>) => void;
-  onSlideStart?: (selectedIds: string[]) => void;
-  onSlideChange?: (deltaFrames: number, selectedIds: string[]) => void;
-  onSlideEnd?: (selectedIds: string[]) => void;
+  viewport: KeyframeNavigatorViewport
+  contentFrameMax: number
+  markers: KeyframeTimingStripMarker[]
+  previewFrames?: Record<string, number> | null
+  disabled?: boolean
+  onSelectionChange?: (selectedIds: Set<string>) => void
+  onSlideStart?: (selectedIds: string[]) => void
+  onSlideChange?: (deltaFrames: number, selectedIds: string[]) => void
+  onSlideEnd?: (selectedIds: string[]) => void
 }
 
 interface DragState {
-  pointerId: number;
-  startClientX: number;
-  started: boolean;
-  selectedIds: string[];
+  pointerId: number
+  startClientX: number
+  started: boolean
+  selectedIds: string[]
 }
 
 interface MarqueeState {
-  pointerId: number;
-  startClientX: number;
-  currentClientX: number;
-  started: boolean;
-  mode: MarqueeMode;
-  baseSelection: Set<string>;
+  pointerId: number
+  startClientX: number
+  currentClientX: number
+  started: boolean
+  mode: MarqueeMode
+  baseSelection: Set<string>
 }
 
 function getMarkerLabel(marker: KeyframeTimingStripMarker, frame: number): string {
   if (marker.selected && marker.draggable) {
-    return `Slide selected keyframe at frame ${frame}`;
+    return `Slide selected keyframe at frame ${frame}`
   }
 
   if (marker.selected) {
-    return `Selected keyframe at frame ${frame}`;
+    return `Selected keyframe at frame ${frame}`
   }
 
-  return `Select keyframe at frame ${frame}`;
+  return `Select keyframe at frame ${frame}`
 }
 
 function getMarkerLeft(
   frame: number,
-  metrics: ReturnType<typeof getKeyframeNavigatorThumbMetrics>
+  metrics: ReturnType<typeof getKeyframeNavigatorThumbMetrics>,
 ): number {
-  const maxFrame = Math.max(1, metrics.contentFrameMax - 1);
+  const maxFrame = Math.max(1, metrics.contentFrameMax - 1)
   return Math.max(
     metrics.edgeInset,
     Math.min(
       metrics.edgeInset + metrics.usableTrackWidth,
-      metrics.edgeInset + (Math.max(0, Math.min(maxFrame, frame)) / maxFrame) * metrics.usableTrackWidth
-    )
-  );
+      metrics.edgeInset +
+        (Math.max(0, Math.min(maxFrame, frame)) / maxFrame) * metrics.usableTrackWidth,
+    ),
+  )
 }
 
 export function KeyframeTimingStrip({
@@ -82,18 +83,18 @@ export function KeyframeTimingStrip({
   onSlideChange,
   onSlideEnd,
 }: KeyframeTimingStripProps) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const dragStateRef = useRef<DragState | null>(null);
-  const marqueeStateRef = useRef<MarqueeState | null>(null);
-  const [trackWidth, setTrackWidth] = useState(0);
-  const [marqueeRange, setMarqueeRange] = useState<{ left: number; width: number } | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null)
+  const dragStateRef = useRef<DragState | null>(null)
+  const marqueeStateRef = useRef<MarqueeState | null>(null)
+  const [trackWidth, setTrackWidth] = useState(0)
+  const [marqueeRange, setMarqueeRange] = useState<{ left: number; width: number } | null>(null)
 
   const metrics = getKeyframeNavigatorThumbMetrics({
     viewport,
     contentFrameMax,
     trackWidth,
     minThumbWidth: 0,
-  });
+  })
 
   const renderedMarkers = useMemo(
     () =>
@@ -101,201 +102,211 @@ export function KeyframeTimingStrip({
         ...marker,
         frame: previewFrames?.[marker.id] ?? marker.frame,
       })),
-    [markers, previewFrames]
-  );
+    [markers, previewFrames],
+  )
   const getMarqueeModeFromPointerEvent = useCallback(
     (event: Pick<React.PointerEvent, 'shiftKey' | 'ctrlKey' | 'metaKey'>): MarqueeMode =>
-      event.shiftKey ? 'add' : (event.ctrlKey || event.metaKey) ? 'toggle' : 'replace',
-    []
-  );
+      event.shiftKey ? 'add' : event.ctrlKey || event.metaKey ? 'toggle' : 'replace',
+    [],
+  )
   const updateMarqueeSelection = useCallback(
     (state: MarqueeState) => {
-      const track = trackRef.current;
+      const track = trackRef.current
       if (!track) {
-        return;
+        return
       }
 
-      const rect = track.getBoundingClientRect();
-      const startX = state.startClientX - rect.left;
-      const currentX = state.currentClientX - rect.left;
-      const minX = Math.min(startX, currentX);
-      const maxX = Math.max(startX, currentX);
+      const rect = track.getBoundingClientRect()
+      const startX = state.startClientX - rect.left
+      const currentX = state.currentClientX - rect.left
+      const minX = Math.min(startX, currentX)
+      const maxX = Math.max(startX, currentX)
       const hitIds = new Set(
         renderedMarkers
           .filter((marker) => {
-            const left = getMarkerLeft(marker.frame, metrics);
-            return left >= minX && left <= maxX;
+            const left = getMarkerLeft(marker.frame, metrics)
+            return left >= minX && left <= maxX
           })
-          .map((marker) => marker.id)
-      );
+          .map((marker) => marker.id),
+      )
 
-      let nextSelection = new Set<string>();
+      let nextSelection = new Set<string>()
       if (state.mode === 'replace') {
-        nextSelection = hitIds;
+        nextSelection = hitIds
       } else if (state.mode === 'add') {
-        nextSelection = new Set([...state.baseSelection, ...hitIds]);
+        nextSelection = new Set([...state.baseSelection, ...hitIds])
       } else {
-        nextSelection = new Set(state.baseSelection);
+        nextSelection = new Set(state.baseSelection)
         for (const id of hitIds) {
           if (nextSelection.has(id)) {
-            nextSelection.delete(id);
+            nextSelection.delete(id)
           } else {
-            nextSelection.add(id);
+            nextSelection.add(id)
           }
         }
       }
 
-      onSelectionChange?.(nextSelection);
+      onSelectionChange?.(nextSelection)
       setMarqueeRange({
         left: Math.max(0, minX),
         width: Math.max(1, maxX - minX),
-      });
+      })
     },
-    [metrics, onSelectionChange, renderedMarkers]
-  );
+    [metrics, onSelectionChange, renderedMarkers],
+  )
 
   const handleMarkerPointerDown = useCallback(
     (markerId: string, isSelected: boolean) => (event: React.PointerEvent<HTMLButtonElement>) => {
       if (disabled) {
-        return;
+        return
       }
 
-      event.preventDefault();
-      event.stopPropagation();
+      event.preventDefault()
+      event.stopPropagation()
 
       const selectedIds = isSelected
         ? markers.filter((marker) => marker.selected).map((marker) => marker.id)
-        : [markerId];
+        : [markerId]
 
-      onSelectionChange?.(new Set(selectedIds));
+      onSelectionChange?.(new Set(selectedIds))
       dragStateRef.current = {
         pointerId: event.pointerId,
         startClientX: event.clientX,
         started: false,
         selectedIds,
-      };
+      }
     },
-    [disabled, markers, onSelectionChange]
-  );
+    [disabled, markers, onSelectionChange],
+  )
   const handleTrackPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (disabled || event.button !== 0) {
-        return;
+        return
       }
 
-      event.preventDefault();
+      event.preventDefault()
       marqueeStateRef.current = {
         pointerId: event.pointerId,
         startClientX: event.clientX,
         currentClientX: event.clientX,
         started: false,
         mode: getMarqueeModeFromPointerEvent(event),
-        baseSelection: new Set(markers.filter((marker) => marker.selected).map((marker) => marker.id)),
-      };
-      setMarqueeRange(null);
+        baseSelection: new Set(
+          markers.filter((marker) => marker.selected).map((marker) => marker.id),
+        ),
+      }
+      setMarqueeRange(null)
     },
-    [disabled, getMarqueeModeFromPointerEvent, markers]
-  );
+    [disabled, getMarqueeModeFromPointerEvent, markers],
+  )
 
   useEffect(() => {
-    const track = trackRef.current;
+    const track = trackRef.current
     if (!track) {
-      return;
+      return
     }
 
     const updateWidth = () => {
-      setTrackWidth(track.clientWidth);
-    };
-
-    updateWidth();
-
-    if (typeof ResizeObserver === 'undefined') {
-      return;
+      setTrackWidth(track.clientWidth)
     }
 
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(track);
-    return () => observer.disconnect();
-  }, []);
+    updateWidth()
+
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(track)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
-      const dragState = dragStateRef.current;
+      const dragState = dragStateRef.current
       if (dragState && dragState.pointerId === event.pointerId && metrics.usableTrackWidth > 0) {
-        const deltaX = event.clientX - dragState.startClientX;
+        const deltaX = event.clientX - dragState.startClientX
         if (!dragState.started && Math.abs(deltaX) > DRAG_THRESHOLD_PX) {
-          dragState.started = true;
-          onSlideStart?.(dragState.selectedIds);
+          dragState.started = true
+          onSlideStart?.(dragState.selectedIds)
         }
 
         if (!dragState.started) {
-          return;
+          return
         }
 
-        const maxFrame = Math.max(1, metrics.contentFrameMax - 1);
-        const deltaFrames = Math.round((deltaX / metrics.usableTrackWidth) * maxFrame);
-        onSlideChange?.(deltaFrames, dragState.selectedIds);
-        return;
+        const maxFrame = Math.max(1, metrics.contentFrameMax - 1)
+        const deltaFrames = Math.round((deltaX / metrics.usableTrackWidth) * maxFrame)
+        onSlideChange?.(deltaFrames, dragState.selectedIds)
+        return
       }
 
-      const marqueeState = marqueeStateRef.current;
+      const marqueeState = marqueeStateRef.current
       if (!marqueeState || marqueeState.pointerId !== event.pointerId) {
-        return;
+        return
       }
 
-      marqueeState.currentClientX = event.clientX;
-      if (!marqueeState.started && Math.abs(event.clientX - marqueeState.startClientX) > DRAG_THRESHOLD_PX) {
-        marqueeState.started = true;
+      marqueeState.currentClientX = event.clientX
+      if (
+        !marqueeState.started &&
+        Math.abs(event.clientX - marqueeState.startClientX) > DRAG_THRESHOLD_PX
+      ) {
+        marqueeState.started = true
       }
 
       if (!marqueeState.started) {
-        return;
+        return
       }
 
-      updateMarqueeSelection(marqueeState);
-    };
+      updateMarqueeSelection(marqueeState)
+    }
 
     const handlePointerUp = (event: PointerEvent) => {
-      const dragState = dragStateRef.current;
+      const dragState = dragStateRef.current
       if (dragState && dragState.pointerId === event.pointerId) {
-        dragStateRef.current = null;
+        dragStateRef.current = null
         if (dragState.started) {
-          onSlideEnd?.(dragState.selectedIds);
+          onSlideEnd?.(dragState.selectedIds)
         }
-        return;
+        return
       }
 
-      const marqueeState = marqueeStateRef.current;
+      const marqueeState = marqueeStateRef.current
       if (!marqueeState || marqueeState.pointerId !== event.pointerId) {
-        return;
+        return
       }
 
       if (!marqueeState.started && marqueeState.mode === 'replace') {
-        onSelectionChange?.(new Set());
+        onSelectionChange?.(new Set())
       }
 
-      marqueeStateRef.current = null;
-      setMarqueeRange(null);
-    };
+      marqueeStateRef.current = null
+      setMarqueeRange(null)
+    }
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
 
     return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [metrics.contentFrameMax, metrics.usableTrackWidth, onSlideChange, onSlideEnd, onSlideStart]);
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [
+    metrics.contentFrameMax,
+    metrics.usableTrackWidth,
+    onSelectionChange,
+    onSlideChange,
+    onSlideEnd,
+    onSlideStart,
+    updateMarqueeSelection,
+  ])
 
   return (
     <div className="h-4 border-t border-border/60 bg-background/90 px-2 py-0.5">
       <div
         ref={trackRef}
         data-testid="keyframe-timing-strip-track"
-        className={cn(
-          'relative h-full rounded-sm bg-secondary/35',
-          disabled && 'opacity-50'
-        )}
+        className={cn('relative h-full rounded-sm bg-secondary/35', disabled && 'opacity-50')}
         onPointerDown={handleTrackPointerDown}
       >
         <div
@@ -316,12 +327,12 @@ export function KeyframeTimingStrip({
         ) : null}
 
         {renderedMarkers.map((marker) => {
-          const left = getMarkerLeft(marker.frame, metrics);
-          const label = getMarkerLabel(marker, marker.frame);
+          const left = getMarkerLeft(marker.frame, metrics)
+          const label = getMarkerLabel(marker, marker.frame)
           const markerStyle = {
             left,
             top: '50%',
-          } as const;
+          } as const
 
           return (
             <button
@@ -337,7 +348,7 @@ export function KeyframeTimingStrip({
                     : 'cursor-pointer',
                 marker.selected
                   ? 'h-3 w-3 rounded-[2px] border border-orange-200/70 bg-orange-500 rotate-45'
-                  : 'h-2 w-2 rounded-full border border-muted-foreground/60 bg-muted-foreground/70'
+                  : 'h-2 w-2 rounded-full border border-muted-foreground/60 bg-muted-foreground/70',
               )}
               style={markerStyle}
               onPointerDown={handleMarkerPointerDown(marker.id, marker.selected)}
@@ -346,9 +357,9 @@ export function KeyframeTimingStrip({
             >
               <span className="sr-only">{label}</span>
             </button>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }

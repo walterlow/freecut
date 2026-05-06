@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { TextItem } from '@/types/timeline';
-import type { ItemRenderContext, ItemTransform } from './canvas-item-renderer';
-import { renderItem } from './canvas-item-renderer';
+import { describe, expect, it, vi } from 'vite-plus/test'
+import type { TextItem } from '@/types/timeline'
+import type { ItemRenderContext, ItemTransform } from './canvas-item-renderer'
+import { renderItem } from './canvas-item-renderer'
 
 function createMockCtx(): OffscreenCanvasRenderingContext2D {
   return {
@@ -36,7 +36,7 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
     shadowOffsetY: 0,
     globalAlpha: 1,
     globalCompositeOperation: 'source-over',
-  } as unknown as OffscreenCanvasRenderingContext2D;
+  } as unknown as OffscreenCanvasRenderingContext2D
 }
 
 describe('canvas-item-renderer text backgrounds', () => {
@@ -64,18 +64,20 @@ describe('canvas-item-renderer text backgrounds', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
-    const ctx = createMockCtx();
+    const ctx = createMockCtx()
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1280, height: 720, fps: 30 },
       canvasPool: {} as ItemRenderContext['canvasPool'],
       textMeasureCache: {
-        measure: vi.fn((_: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) => {
-          const width = text.length * 10;
-          return width + Math.max(0, text.length - 1) * letterSpacing;
-        }),
+        measure: vi.fn(
+          (_: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) => {
+            const width = text.length * 10
+            return width + Math.max(0, text.length - 1) * letterSpacing
+          },
+        ),
       } as unknown as ItemRenderContext['textMeasureCache'],
       renderMode: 'export',
       videoExtractors: new Map(),
@@ -88,7 +90,7 @@ describe('canvas-item-renderer text backgrounds', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
     const transform: ItemTransform = {
       x: 0,
       y: 0,
@@ -99,20 +101,20 @@ describe('canvas-item-renderer text backgrounds', () => {
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
-    };
+    }
 
-    await renderItem(ctx, item, transform, 0, rctx);
+    await renderItem(ctx, item, transform, 0, rctx)
 
-    expect(ctx.roundRect).toHaveBeenCalled();
-    const [x, y, width, height, radius] = vi.mocked(ctx.roundRect).mock.calls[0]!;
-    expect(x).toBe(480);
-    expect(y).toBeLessThan(300);
-    expect(width).toBe(320);
-    expect(height).toBeGreaterThan(120);
-    expect(radius).toBe(18);
-    expect(ctx.fill).toHaveBeenCalled();
-    expect(ctx.fillText).toHaveBeenCalled();
-  });
+    expect(ctx.roundRect).toHaveBeenCalled()
+    const [x, y, width, height, radius] = vi.mocked(ctx.roundRect).mock.calls[0]!
+    expect(x).toBe(561)
+    expect(y).toBeCloseTo(307.2)
+    expect(width).toBe(158)
+    expect(height).toBeCloseTo(105.6)
+    expect(radius).toBe(18)
+    expect(ctx.fill).toHaveBeenCalled()
+    expect(ctx.fillText).toHaveBeenCalled()
+  })
 
   it('renders each text span as its own stacked line during export', async () => {
     const item: TextItem = {
@@ -141,18 +143,20 @@ describe('canvas-item-renderer text backgrounds', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
-    const ctx = createMockCtx();
+    const ctx = createMockCtx()
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1280, height: 720, fps: 30 },
       canvasPool: {} as ItemRenderContext['canvasPool'],
       textMeasureCache: {
-        measure: vi.fn((_: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) => {
-          const width = text.length * 10;
-          return width + Math.max(0, text.length - 1) * letterSpacing;
-        }),
+        measure: vi.fn(
+          (_: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) => {
+            const width = text.length * 10
+            return width + Math.max(0, text.length - 1) * letterSpacing
+          },
+        ),
       } as unknown as ItemRenderContext['textMeasureCache'],
       renderMode: 'export',
       videoExtractors: new Map(),
@@ -165,7 +169,7 @@ describe('canvas-item-renderer text backgrounds', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
     const transform: ItemTransform = {
       x: 0,
       y: 0,
@@ -176,10 +180,10 @@ describe('canvas-item-renderer text backgrounds', () => {
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
-    };
+    }
 
-    await renderItem(ctx, item, transform, 0, rctx);
+    await renderItem(ctx, item, transform, 0, rctx)
 
-    expect(ctx.fillText).toHaveBeenCalledTimes(3);
-  });
-});
+    expect(ctx.fillText).toHaveBeenCalledTimes(3)
+  })
+})

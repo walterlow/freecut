@@ -1,18 +1,18 @@
-import { useSyncExternalStore } from 'react';
-import { createLogger } from '@/shared/logging/logger';
+import { useSyncExternalStore } from 'react'
+import { createLogger } from '@/shared/logging/logger'
 import {
   registerObjectUrl,
   unregisterObjectUrl,
   type ObjectUrlSourceMetadata,
-} from './object-url-registry';
+} from './object-url-registry'
 
-const logger = createLogger('BlobUrlManager');
+const logger = createLogger('BlobUrlManager')
 
 interface BlobUrlEntry {
-  url: string;
-  refCount: number;
-  blob: Blob;
-  metadata?: ObjectUrlSourceMetadata;
+  url: string
+  refCount: number
+  blob: Blob
+  metadata?: ObjectUrlSourceMetadata
 }
 
 /**
@@ -24,26 +24,26 @@ interface BlobUrlEntry {
  * - Providing releaseAll() for project-level cleanup
  */
 class BlobUrlManager {
-  private entries = new Map<string, BlobUrlEntry>();
-  private version = 0;
-  private listeners = new Set<() => void>();
+  private entries = new Map<string, BlobUrlEntry>()
+  private version = 0
+  private listeners = new Set<() => void>()
 
   /** Notify React subscribers that blob URLs have changed */
   private notify(): void {
-    this.version++;
+    this.version++
     for (const listener of this.listeners) {
-      listener();
+      listener()
     }
   }
 
   /** Subscribe to changes (for useSyncExternalStore) */
   subscribe = (listener: () => void): (() => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
 
   /** Get current version snapshot (for useSyncExternalStore) */
-  getSnapshot = (): number => this.version;
+  getSnapshot = (): number => this.version
 
   /**
    * Acquire a blob URL for a media item.
@@ -51,21 +51,21 @@ class BlobUrlManager {
    * Otherwise, creates a new blob URL from the provided blob.
    */
   acquire(mediaId: string, blob: Blob, metadata?: ObjectUrlSourceMetadata): string {
-    const existing = this.entries.get(mediaId);
+    const existing = this.entries.get(mediaId)
     if (existing) {
-      existing.refCount++;
+      existing.refCount++
       if (metadata) {
-        existing.metadata = metadata;
-        registerObjectUrl(existing.url, existing.blob, metadata);
+        existing.metadata = metadata
+        registerObjectUrl(existing.url, existing.blob, metadata)
       }
-      return existing.url;
+      return existing.url
     }
 
-    const url = URL.createObjectURL(blob);
-    registerObjectUrl(url, blob, metadata);
-    this.entries.set(mediaId, { url, refCount: 1, blob, metadata });
-    this.notify();
-    return url;
+    const url = URL.createObjectURL(blob)
+    registerObjectUrl(url, blob, metadata)
+    this.entries.set(mediaId, { url, refCount: 1, blob, metadata })
+    this.notify()
+    return url
   }
 
   /**
@@ -73,14 +73,14 @@ class BlobUrlManager {
    * Returns null if no URL exists for this mediaId.
    */
   get(mediaId: string): string | null {
-    return this.entries.get(mediaId)?.url ?? null;
+    return this.entries.get(mediaId)?.url ?? null
   }
 
   /**
    * Check if a blob URL exists for a media item.
    */
   has(mediaId: string): boolean {
-    return this.entries.has(mediaId);
+    return this.entries.has(mediaId)
   }
 
   /**
@@ -89,9 +89,9 @@ class BlobUrlManager {
    */
   getMediaIdByUrl(url: string): string | null {
     for (const [mediaId, entry] of this.entries) {
-      if (entry.url === url) return mediaId;
+      if (entry.url === url) return mediaId
     }
-    return null;
+    return null
   }
 
   /**
@@ -99,12 +99,12 @@ class BlobUrlManager {
    * Used when the underlying media file has changed (e.g., after relinking).
    */
   invalidate(mediaId: string): void {
-    const entry = this.entries.get(mediaId);
-    if (!entry) return;
-    unregisterObjectUrl(entry.url);
-    URL.revokeObjectURL(entry.url);
-    this.entries.delete(mediaId);
-    this.notify();
+    const entry = this.entries.get(mediaId)
+    if (!entry) return
+    unregisterObjectUrl(entry.url)
+    URL.revokeObjectURL(entry.url)
+    this.entries.delete(mediaId)
+    this.notify()
   }
 
   /**
@@ -112,16 +112,16 @@ class BlobUrlManager {
    * Revokes the URL when the reference count reaches zero.
    */
   release(mediaId: string): void {
-    const entry = this.entries.get(mediaId);
-    if (!entry) return;
+    const entry = this.entries.get(mediaId)
+    if (!entry) return
 
-    entry.refCount--;
+    entry.refCount--
     if (entry.refCount <= 0) {
-      unregisterObjectUrl(entry.url);
-      URL.revokeObjectURL(entry.url);
-      this.entries.delete(mediaId);
-      this.notify();
-      logger.debug(`Revoked blob URL for media ${mediaId}`);
+      unregisterObjectUrl(entry.url)
+      URL.revokeObjectURL(entry.url)
+      this.entries.delete(mediaId)
+      this.notify()
+      logger.debug(`Revoked blob URL for media ${mediaId}`)
     }
   }
 
@@ -132,11 +132,11 @@ class BlobUrlManager {
    */
   invalidateAll(): void {
     for (const entry of this.entries.values()) {
-      unregisterObjectUrl(entry.url);
-      URL.revokeObjectURL(entry.url);
+      unregisterObjectUrl(entry.url)
+      URL.revokeObjectURL(entry.url)
     }
-    this.entries.clear();
-    this.notify();
+    this.entries.clear()
+    this.notify()
   }
 
   /**
@@ -144,29 +144,29 @@ class BlobUrlManager {
    */
   releaseAll(): void {
     for (const [mediaId, entry] of this.entries) {
-      unregisterObjectUrl(entry.url);
-      URL.revokeObjectURL(entry.url);
-      logger.debug(`Revoked blob URL for media ${mediaId}`);
+      unregisterObjectUrl(entry.url)
+      URL.revokeObjectURL(entry.url)
+      logger.debug(`Revoked blob URL for media ${mediaId}`)
     }
-    this.entries.clear();
-    this.notify();
+    this.entries.clear()
+    this.notify()
   }
 
   /**
    * Get the number of tracked blob URLs (for debugging).
    */
   get size(): number {
-    return this.entries.size;
+    return this.entries.size
   }
 }
 
 /** Singleton instance for media blob URLs */
-export const blobUrlManager = new BlobUrlManager();
+export const blobUrlManager = new BlobUrlManager()
 
 /**
  * React hook that re-renders when blob URLs are acquired or released.
  * Use as a dependency in useMemo to react to URL availability changes.
  */
 export function useBlobUrlVersion(): number {
-  return useSyncExternalStore(blobUrlManager.subscribe, blobUrlManager.getSnapshot);
+  return useSyncExternalStore(blobUrlManager.subscribe, blobUrlManager.getSnapshot)
 }

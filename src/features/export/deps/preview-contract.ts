@@ -3,6 +3,6 @@
  * Export modules should import preview utilities from here.
  */
 
-export { ScrubbingCache } from '@/features/preview/utils/scrubbing-cache';
-export { getCachedPredecodedBitmap } from '@/features/preview/utils/decoder-prewarm';
-export { waitForInflightPredecodedBitmap } from '@/features/preview/utils/decoder-prewarm';
+export { ScrubbingCache } from '@/features/preview/utils/scrubbing-cache'
+export { getCachedPredecodedBitmap } from '@/features/preview/utils/decoder-prewarm'
+export { waitForInflightPredecodedBitmap } from '@/features/preview/utils/decoder-prewarm'

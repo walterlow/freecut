@@ -1,25 +1,25 @@
-import { create } from 'zustand';
+import { create } from 'zustand'
 import type {
   TransitionPresentation,
   TransitionTiming,
   WipeDirection,
   SlideDirection,
   FlipDirection,
-} from '@/types/transition';
-import type { TimelineItem } from '@/types/timeline';
+} from '@/types/transition'
+import type { TimelineItem } from '@/types/timeline'
 
 /**
  * Clipboard data for a copied transition
  */
 interface TransitionClipboard {
   /** Visual presentation style */
-  presentation: TransitionPresentation;
+  presentation: TransitionPresentation
   /** Direction for wipe/slide/flip transitions */
-  direction?: WipeDirection | SlideDirection | FlipDirection;
+  direction?: WipeDirection | SlideDirection | FlipDirection
   /** Timing function */
-  timing: TransitionTiming;
+  timing: TransitionTiming
   /** Duration in frames */
-  durationInFrames: number;
+  durationInFrames: number
 }
 
 /**
@@ -27,38 +27,38 @@ interface TransitionClipboard {
  */
 interface ItemsClipboard {
   /** Serialized items (without IDs - IDs will be generated on paste) */
-  items: Omit<TimelineItem, 'id'>[];
+  items: Omit<TimelineItem, 'id'>[]
   /** Reference frame (playhead position at copy time) */
-  referenceFrame: number;
+  referenceFrame: number
   /** Copy type - cut removes originals on paste, copy keeps them */
-  copyType: 'cut' | 'copy';
+  copyType: 'cut' | 'copy'
   /** Original item IDs (for cut operation) */
-  originalIds: string[];
+  originalIds: string[]
 }
 
 interface ClipboardState {
   /** Copied transition properties (null if none copied) */
-  transitionClipboard: TransitionClipboard | null;
+  transitionClipboard: TransitionClipboard | null
   /** Copied timeline items (null if none copied) */
-  itemsClipboard: ItemsClipboard | null;
+  itemsClipboard: ItemsClipboard | null
 }
 
 interface ClipboardActions {
   /** Copy transition properties to clipboard */
-  copyTransition: (data: TransitionClipboard) => void;
+  copyTransition: (data: TransitionClipboard) => void
   /** Clear the transition clipboard */
-  clearTransitionClipboard: () => void;
+  clearTransitionClipboard: () => void
   /** Check if transition clipboard has content */
-  hasTransitionClipboard: () => boolean;
+  hasTransitionClipboard: () => boolean
   /** Copy timeline items to clipboard */
-  copyItems: (items: TimelineItem[], referenceFrame: number, copyType: 'cut' | 'copy') => void;
+  copyItems: (items: TimelineItem[], referenceFrame: number, copyType: 'cut' | 'copy') => void
   /** Clear the items clipboard */
-  clearItemsClipboard: () => void;
+  clearItemsClipboard: () => void
   /** Check if items clipboard has content */
-  hasItemsClipboard: () => boolean;
+  hasItemsClipboard: () => boolean
 }
 
-type ClipboardStore = ClipboardState & ClipboardActions;
+type ClipboardStore = ClipboardState & ClipboardActions
 
 /**
  * Clipboard store for copy/paste operations.
@@ -80,34 +80,34 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
 
   // Transition actions
   copyTransition: (data) => {
-    set({ transitionClipboard: data });
+    set({ transitionClipboard: data })
   },
 
   clearTransitionClipboard: () => {
-    set({ transitionClipboard: null });
+    set({ transitionClipboard: null })
   },
 
   hasTransitionClipboard: () => {
-    return get().transitionClipboard !== null;
+    return get().transitionClipboard !== null
   },
 
   // Items actions
   copyItems: (items, referenceFrame, copyType) => {
-    if (items.length === 0) return;
+    if (items.length === 0) return
 
     // Find the earliest item to use as reference point
-    const minFrom = Math.min(...items.map((item) => item.from));
+    const minFrom = Math.min(...items.map((item) => item.from))
 
     // Serialize items without IDs, storing relative positions
     const serializedItems = items.map((item) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, ...rest } = item;
+      const { id, ...rest } = item
       return {
         ...rest,
         // Store relative offset from the earliest item
         from: item.from - minFrom,
-      };
-    });
+      }
+    })
 
     set({
       itemsClipboard: {
@@ -116,14 +116,14 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
         copyType,
         originalIds: items.map((item) => item.id),
       },
-    });
+    })
   },
 
   clearItemsClipboard: () => {
-    set({ itemsClipboard: null });
+    set({ itemsClipboard: null })
   },
 
   hasItemsClipboard: () => {
-    return get().itemsClipboard !== null;
+    return get().itemsClipboard !== null
   },
-}));
+}))

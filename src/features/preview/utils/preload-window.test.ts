@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { getPreloadWindowRange } from './preload-window';
+import { describe, expect, it } from 'vite-plus/test'
+import { getPreloadWindowRange } from './preload-window'
 
 describe('getPreloadWindowRange', () => {
   it('uses forward window for paused mode', () => {
@@ -10,9 +10,9 @@ describe('getPreloadWindowRange', () => {
         scrubDirection: 0,
         fps: 30,
         aheadSeconds: 5,
-      })
-    ).toEqual({ startFrame: 100, endFrame: 250 });
-  });
+      }),
+    ).toEqual({ startFrame: 100, endFrame: 250 })
+  })
 
   it('uses forward window when scrubbing forward', () => {
     expect(
@@ -22,9 +22,9 @@ describe('getPreloadWindowRange', () => {
         scrubDirection: 1,
         fps: 30,
         aheadSeconds: 5,
-      })
-    ).toEqual({ startFrame: 100, endFrame: 250 });
-  });
+      }),
+    ).toEqual({ startFrame: 100, endFrame: 250 })
+  })
 
   it('uses backward window when scrubbing backward', () => {
     expect(
@@ -34,9 +34,9 @@ describe('getPreloadWindowRange', () => {
         scrubDirection: -1,
         fps: 30,
         aheadSeconds: 5,
-      })
-    ).toEqual({ startFrame: -50, endFrame: 100 });
-  });
+      }),
+    ).toEqual({ startFrame: -50, endFrame: 100 })
+  })
 
   it('uses centered window when scrub direction is neutral', () => {
     expect(
@@ -46,9 +46,9 @@ describe('getPreloadWindowRange', () => {
         scrubDirection: 0,
         fps: 30,
         aheadSeconds: 5,
-      })
-    ).toEqual({ startFrame: 25, endFrame: 175 });
-  });
+      }),
+    ).toEqual({ startFrame: 25, endFrame: 175 })
+  })
 
   it('keeps range width stable when centered', () => {
     const range = getPreloadWindowRange({
@@ -57,8 +57,8 @@ describe('getPreloadWindowRange', () => {
       scrubDirection: 0,
       fps: 24,
       aheadSeconds: 5,
-    });
+    })
 
-    expect(range.endFrame - range.startFrame).toBe(120);
-  });
-});
+    expect(range.endFrame - range.startFrame).toBe(120)
+  })
+})

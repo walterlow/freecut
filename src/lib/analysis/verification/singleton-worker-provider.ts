@@ -1,9 +1,9 @@
-import type { SceneVerificationProvider } from './types';
+import type { SceneVerificationProvider } from './types'
 
 interface CreateSingletonSceneVerificationProviderOptions<TId extends string> {
-  id: TId;
-  label: string;
-  createWorker: () => Worker;
+  id: TId
+  label: string
+  createWorker: () => Worker
 }
 
 export function createSingletonSceneVerificationProvider<TId extends string>({
@@ -11,30 +11,30 @@ export function createSingletonSceneVerificationProvider<TId extends string>({
   label,
   createWorker,
 }: CreateSingletonSceneVerificationProviderOptions<TId>): SceneVerificationProvider & { id: TId } {
-  let worker: Worker | null = null;
+  let worker: Worker | null = null
 
   const resetWorker = () => {
-    if (!worker) return;
-    worker.terminate();
-    worker = null;
-  };
+    if (!worker) return
+    worker.terminate()
+    worker = null
+  }
 
   return {
     id,
     label,
     getWorker() {
       if (!worker) {
-        worker = createWorker();
+        worker = createWorker()
       }
-      return worker;
+      return worker
     },
     resetWorker,
     disposeWorker() {
-      if (!worker) return;
-      worker.postMessage({ type: 'dispose' });
-      const currentWorker = worker;
-      worker = null;
-      setTimeout(() => currentWorker.terminate(), 500);
+      if (!worker) return
+      worker.postMessage({ type: 'dispose' })
+      const currentWorker = worker
+      worker = null
+      setTimeout(() => currentWorker.terminate(), 500)
     },
-  };
+  }
 }

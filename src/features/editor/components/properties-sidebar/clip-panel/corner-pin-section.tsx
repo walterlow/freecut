@@ -1,131 +1,127 @@
-import { useCallback, useMemo, memo } from 'react';
-import { Maximize2, RotateCcw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import type { TimelineItem } from '@/types/timeline';
+import { useCallback, useMemo, memo } from 'react'
+import { Maximize2, RotateCcw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import type { TimelineItem } from '@/types/timeline'
 import {
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
   withCornerPinReferenceSize,
-} from '@/features/editor/deps/composition-runtime';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
-import { useCornerPinStore } from '@/features/editor/deps/preview';
-import {
-  PropertySection,
-  PropertyRow,
-  NumberInput,
-} from '../components';
+} from '@/features/editor/deps/composition-runtime'
+import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { useCornerPinStore } from '@/features/editor/deps/preview'
+import { PropertySection, PropertyRow, NumberInput } from '../components'
 
 interface CornerPinSectionProps {
-  items: TimelineItem[];
+  items: TimelineItem[]
 }
 
-type CornerKey = 'topLeft' | 'topRight' | 'bottomRight' | 'bottomLeft';
+type CornerKey = 'topLeft' | 'topRight' | 'bottomRight' | 'bottomLeft'
 
 const DEFAULT_PIN: NonNullable<TimelineItem['cornerPin']> = {
   topLeft: [0, 0] as [number, number],
   topRight: [0, 0] as [number, number],
   bottomRight: [0, 0] as [number, number],
   bottomLeft: [0, 0] as [number, number],
-};
+}
 
 const CORNER_LABELS: Record<CornerKey, string> = {
   topLeft: 'TL',
   topRight: 'TR',
   bottomRight: 'BR',
   bottomLeft: 'BL',
-};
+}
 
 /**
  * Corner Pin section — perspective warp via 4 corner offsets.
  * Only shown for single-item selection.
  */
-export const CornerPinSection = memo(function CornerPinSection({
-  items,
-}: CornerPinSectionProps) {
-  const updateItem = useTimelineStore((s) => s.updateItem);
+export const CornerPinSection = memo(function CornerPinSection({ items }: CornerPinSectionProps) {
+  const updateItem = useTimelineStore((s) => s.updateItem)
   const {
     isEditing: isCornerPinEditing,
     editingItemId,
     startEditing,
     stopEditing,
-  } = useCornerPinStore();
+  } = useCornerPinStore()
 
-  const item = items.length === 1 ? items[0]! : null;
+  const item = items.length === 1 ? items[0]! : null
   const cornerPin = useMemo(() => {
-    if (!item) return DEFAULT_PIN;
+    if (!item) return DEFAULT_PIN
     const targetRect = resolveCornerPinTargetRect(
       item.transform?.width ?? item.cornerPin?.referenceWidth ?? 0,
       item.transform?.height ?? item.cornerPin?.referenceHeight ?? 0,
       item.type === 'video' || item.type === 'image'
         ? {
-          sourceWidth: item.sourceWidth,
-          sourceHeight: item.sourceHeight,
-          crop: item.crop,
-        }
+            sourceWidth: item.sourceWidth,
+            sourceHeight: item.sourceHeight,
+            crop: item.crop,
+          }
         : undefined,
-    );
-    return resolveCornerPinForSize(
-      item.cornerPin,
-      targetRect.width,
-      targetRect.height,
-    ) ?? DEFAULT_PIN;
-  }, [item]);
-  const isEditingThisItem = isCornerPinEditing && editingItemId === item?.id;
+    )
+    return (
+      resolveCornerPinForSize(item.cornerPin, targetRect.width, targetRect.height) ?? DEFAULT_PIN
+    )
+  }, [item])
+  const isEditingThisItem = isCornerPinEditing && editingItemId === item?.id
 
   const hasAnyOffset = useMemo(() => {
     return (
-      cornerPin.topLeft[0] !== 0 || cornerPin.topLeft[1] !== 0 ||
-      cornerPin.topRight[0] !== 0 || cornerPin.topRight[1] !== 0 ||
-      cornerPin.bottomRight[0] !== 0 || cornerPin.bottomRight[1] !== 0 ||
-      cornerPin.bottomLeft[0] !== 0 || cornerPin.bottomLeft[1] !== 0
-    );
-  }, [cornerPin]);
+      cornerPin.topLeft[0] !== 0 ||
+      cornerPin.topLeft[1] !== 0 ||
+      cornerPin.topRight[0] !== 0 ||
+      cornerPin.topRight[1] !== 0 ||
+      cornerPin.bottomRight[0] !== 0 ||
+      cornerPin.bottomRight[1] !== 0 ||
+      cornerPin.bottomLeft[0] !== 0 ||
+      cornerPin.bottomLeft[1] !== 0
+    )
+  }, [cornerPin])
 
   // Update a single corner's X or Y value
   const handleCornerChange = useCallback(
     (corner: CornerKey, axis: 0 | 1, value: number) => {
-      if (!item) return;
-      const current = item.cornerPin ?? DEFAULT_PIN;
-      const newCorner: [number, number] = [...current[corner]];
-      newCorner[axis] = value;
+      if (!item) return
+      const current = item.cornerPin ?? DEFAULT_PIN
+      const newCorner: [number, number] = [...current[corner]]
+      newCorner[axis] = value
       const targetRect = resolveCornerPinTargetRect(
         item.transform?.width ?? current.referenceWidth ?? 0,
         item.transform?.height ?? current.referenceHeight ?? 0,
         item.type === 'video' || item.type === 'image'
           ? {
-            sourceWidth: item.sourceWidth,
-            sourceHeight: item.sourceHeight,
-            crop: item.crop,
-          }
+              sourceWidth: item.sourceWidth,
+              sourceHeight: item.sourceHeight,
+              crop: item.crop,
+            }
           : undefined,
-      );
+      )
       updateItem(item.id, {
         cornerPin: withCornerPinReferenceSize(
           { ...current, [corner]: newCorner },
           targetRect.width,
           targetRect.height,
         ),
-      });
+      })
     },
     [item, updateItem],
-  );
+  )
 
   // Reset all corners to [0, 0]
   const handleReset = useCallback(() => {
-    if (!item) return;
-    updateItem(item.id, { cornerPin: undefined });
-  }, [item, updateItem]);
+    if (!item) return
+    updateItem(item.id, { cornerPin: undefined })
+  }, [item, updateItem])
 
   // Toggle interactive editing
   const toggleEditMode = useCallback(() => {
     if (isEditingThisItem) {
-      stopEditing();
+      stopEditing()
     } else if (item) {
-      startEditing(item.id);
+      startEditing(item.id)
     }
-  }, [isEditingThisItem, item, startEditing, stopEditing]);
+  }, [isEditingThisItem, item, startEditing, stopEditing])
 
-  if (!item || items.length > 1) return null;
+  if (!item || items.length > 1) return null
 
   return (
     <PropertySection title="角点定位" icon={Maximize2} defaultOpen={false}>
@@ -180,5 +176,5 @@ export const CornerPinSection = memo(function CornerPinSection({
         </PropertyRow>
       ))}
     </PropertySection>
-  );
-});
+  )
+})

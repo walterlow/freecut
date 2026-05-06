@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Waveform Cache Service
  *
  * Manages waveform data caching with:
@@ -10,21 +10,21 @@
  * - Auto-migration from legacy IndexedDB storage
  */
 
-import { createLogger } from '@/shared/logging/logger';
-import { createManagedWorker } from '@/shared/utils/managed-worker';
+import { createLogger } from '@/shared/logging/logger'
+import { createManagedWorker } from '@/shared/utils/managed-worker'
 import {
   getObjectUrlBlob,
   getObjectUrlDirectFileMetadata,
-} from '@/infrastructure/browser/object-url-registry';
+} from '@/infrastructure/browser/object-url-registry'
 import {
   waveformOPFSStorage,
   WAVEFORM_LEVELS,
   chooseLevelForZoom,
   type MultiResolutionWaveform,
-} from './waveform-opfs-storage';
-import { SizedAccessedMemoryCache } from './sized-accessed-memory-cache';
-import type { WaveformWorkerResponse } from './waveform-worker';
-import type { WaveformBin } from '@/types/storage';
+} from './waveform-opfs-storage'
+import { SizedAccessedMemoryCache } from './sized-accessed-memory-cache'
+import type { WaveformWorkerResponse } from './waveform-worker'
+import type { WaveformBin } from '@/types/storage'
 import {
   getWaveform as getLegacyWaveformFromIndexedDB,
   getWaveformRecord as getWaveformRecordFromIndexedDB,
@@ -33,103 +33,101 @@ import {
   saveWaveformBin as saveWaveformBinToIndexedDB,
   saveWaveformMeta as saveWaveformMetaToIndexedDB,
   deleteWaveform as deleteWaveformFromIndexedDB,
-} from '@/infrastructure/storage';
+} from '@/infrastructure/storage'
 
-const logger = createLogger('WaveformCache');
+const logger = createLogger('WaveformCache')
 
 // Memory cache configuration
-const MAX_CACHE_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
-const MAX_CONCURRENT_WAVEFORM_GENERATIONS = 1;
-const WAVEFORM_PROGRESS_NOTIFY_INTERVAL_MS = 120;
-const WAVEFORM_PROGRESS_NOTIFY_STEP = 2;
-const WAVEFORM_NOTIFY_INTERVAL_MS = 180;
+const MAX_CACHE_SIZE_BYTES = 20 * 1024 * 1024 // 20MB
+const MAX_CONCURRENT_WAVEFORM_GENERATIONS = 1
+const WAVEFORM_PROGRESS_NOTIFY_INTERVAL_MS = 120
+const WAVEFORM_PROGRESS_NOTIFY_STEP = 2
+const WAVEFORM_NOTIFY_INTERVAL_MS = 180
 
 // Samples per second for waveform generation (highest resolution)
-const SAMPLES_PER_SECOND = WAVEFORM_LEVELS[0]; // 1000 samples/sec
-const WAVEFORM_BIN_DURATION_SEC = 30;
-const WAVEFORM_BIN_SAMPLES = SAMPLES_PER_SECOND * WAVEFORM_BIN_DURATION_SEC;
+const SAMPLES_PER_SECOND = WAVEFORM_LEVELS[0] // 1000 samples/sec
+const WAVEFORM_BIN_DURATION_SEC = 30
+const WAVEFORM_BIN_SAMPLES = SAMPLES_PER_SECOND * WAVEFORM_BIN_DURATION_SEC
 
 export interface CachedWaveform {
-  peaks: Float32Array;
-  duration: number;
-  sampleRate: number;
-  channels: number;
-  stereo: boolean;
-  maxPeak: number;
-  loadedSamples: number;
-  sizeBytes: number;
-  lastAccessed: number;
-  isComplete: boolean;
+  peaks: Float32Array
+  duration: number
+  sampleRate: number
+  channels: number
+  stereo: boolean
+  maxPeak: number
+  loadedSamples: number
+  sizeBytes: number
+  lastAccessed: number
+  isComplete: boolean
 }
 
 export class AbortError extends Error {
   constructor(message = 'Aborted') {
-    super(message);
-    this.name = 'AbortError';
+    super(message)
+    this.name = 'AbortError'
   }
 }
 
 interface PendingRequest {
-  promise: Promise<CachedWaveform>;
-  requestId: string;
-  status: 'queued' | 'running';
-  reject: (error: Error) => void;
+  promise: Promise<CachedWaveform>
+  requestId: string
+  status: 'queued' | 'running'
+  reject: (error: Error) => void
 }
 
 interface QueuedGeneration {
-  mediaId: string;
-  blobUrl: string;
-  requestId: string;
-  onProgress?: (progress: number) => void;
-  resolve: (waveform: CachedWaveform) => void;
-  reject: (error: Error) => void;
+  mediaId: string
+  blobUrl: string
+  requestId: string
+  onProgress?: (progress: number) => void
+  resolve: (waveform: CachedWaveform) => void
+  reject: (error: Error) => void
 }
 
-type WaveformUpdateCallback = (waveform: CachedWaveform) => void;
+type WaveformUpdateCallback = (waveform: CachedWaveform) => void
 
 class WaveformCacheService {
-  private memoryCache = new SizedAccessedMemoryCache<CachedWaveform>(MAX_CACHE_SIZE_BYTES);
-  private pendingRequests = new Map<string, PendingRequest>();
-  private updateCallbacks = new Map<string, Set<WaveformUpdateCallback>>();
-  private workerRequestId = 0;
-  private generationQueue: QueuedGeneration[] = [];
-  private activeGenerations = new Set<string>();
-  private workerRejectors = new Map<string, (error: Error) => void>();
-  private fallbackAbortControllers = new Map<string, AbortController>();
+  private memoryCache = new SizedAccessedMemoryCache<CachedWaveform>(MAX_CACHE_SIZE_BYTES)
+  private pendingRequests = new Map<string, PendingRequest>()
+  private updateCallbacks = new Map<string, Set<WaveformUpdateCallback>>()
+  private workerRequestId = 0
+  private generationQueue: QueuedGeneration[] = []
+  private activeGenerations = new Set<string>()
+  private workerRejectors = new Map<string, (error: Error) => void>()
+  private fallbackAbortControllers = new Map<string, AbortController>()
   private readonly workerManager = createManagedWorker({
-    createWorker: () => new Worker(
-      new URL('./waveform-worker.ts', import.meta.url),
-      { type: 'module' }
-    ),
-  });
+    createWorker: () =>
+      new Worker(new URL('./waveform-worker.ts', import.meta.url), { type: 'module' }),
+  })
 
   /**
    * Get or create the waveform worker (lazy initialization)
    */
   private getWorker(): Worker {
-    return this.workerManager.getWorker();
+    return this.workerManager.getWorker()
   }
 
   private enqueueGeneration(
     mediaId: string,
     blobUrl: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
   ): Promise<CachedWaveform> {
-    const requestId = `waveform-${++this.workerRequestId}`;
+    const requestId = `waveform-${++this.workerRequestId}`
 
-    let resolvePromise!: (waveform: CachedWaveform) => void;
-    let rejectPromise!: (error: Error) => void;
+    let resolvePromise!: (waveform: CachedWaveform) => void
+    let rejectPromise!: (error: Error) => void
     const promise = new Promise<CachedWaveform>((resolve, reject) => {
-      resolvePromise = resolve;
-      rejectPromise = reject;
-    });
+      resolvePromise = resolve
+      rejectPromise = reject
+    })
 
     this.pendingRequests.set(mediaId, {
       promise,
       requestId,
       status: 'queued',
       reject: rejectPromise,
-    });
+    })
 
     this.generationQueue.push({
       mediaId,
@@ -138,10 +136,10 @@ class WaveformCacheService {
       onProgress,
       resolve: resolvePromise,
       reject: rejectPromise,
-    });
+    })
 
-    this.processGenerationQueue();
-    return promise;
+    this.processGenerationQueue()
+    return promise
   }
 
   private processGenerationQueue(): void {
@@ -149,18 +147,18 @@ class WaveformCacheService {
       this.activeGenerations.size < MAX_CONCURRENT_WAVEFORM_GENERATIONS &&
       this.generationQueue.length > 0
     ) {
-      const queued = this.generationQueue.shift();
-      if (!queued) return;
+      const queued = this.generationQueue.shift()
+      if (!queued) return
 
-      const pending = this.pendingRequests.get(queued.mediaId);
+      const pending = this.pendingRequests.get(queued.mediaId)
       if (!pending || pending.requestId !== queued.requestId) {
-        queued.reject(new Error('Superseded'));
-        continue;
+        queued.reject(new Error('Superseded'))
+        continue
       }
 
-      pending.status = 'running';
-      this.activeGenerations.add(queued.mediaId);
-      void this.startQueuedGeneration(queued);
+      pending.status = 'running'
+      this.activeGenerations.add(queued.mediaId)
+      void this.startQueuedGeneration(queued)
     }
   }
 
@@ -170,21 +168,21 @@ class WaveformCacheService {
         queued.mediaId,
         queued.blobUrl,
         queued.requestId,
-        queued.onProgress
-      );
-      queued.resolve(waveform);
+        queued.onProgress,
+      )
+      queued.resolve(waveform)
     } catch (error) {
-      queued.reject(error instanceof Error ? error : new Error(String(error)));
+      queued.reject(error instanceof Error ? error : new Error(String(error)))
     } finally {
       // Guard both deletes with requestId so a stale finally from an aborted
       // run doesn't stomp a newer generation's tracking entries.
-      const pending = this.pendingRequests.get(queued.mediaId);
-      const isStale = pending && pending.requestId !== queued.requestId;
+      const pending = this.pendingRequests.get(queued.mediaId)
+      const isStale = pending && pending.requestId !== queued.requestId
       if (!isStale) {
-        this.activeGenerations.delete(queued.mediaId);
-        this.pendingRequests.delete(queued.mediaId);
+        this.activeGenerations.delete(queued.mediaId)
+        this.pendingRequests.delete(queued.mediaId)
       }
-      this.processGenerationQueue();
+      this.processGenerationQueue()
     }
   }
 
@@ -193,28 +191,28 @@ class WaveformCacheService {
    */
   subscribe(mediaId: string, callback: WaveformUpdateCallback): () => void {
     if (!this.updateCallbacks.has(mediaId)) {
-      this.updateCallbacks.set(mediaId, new Set());
+      this.updateCallbacks.set(mediaId, new Set())
     }
-    this.updateCallbacks.get(mediaId)!.add(callback);
+    this.updateCallbacks.get(mediaId)!.add(callback)
     return () => {
-      const callbacks = this.updateCallbacks.get(mediaId);
+      const callbacks = this.updateCallbacks.get(mediaId)
       if (callbacks) {
-        callbacks.delete(callback);
+        callbacks.delete(callback)
         if (callbacks.size === 0) {
-          this.updateCallbacks.delete(mediaId);
+          this.updateCallbacks.delete(mediaId)
         }
       }
-    };
+    }
   }
 
   /**
    * Notify subscribers of waveform updates
    */
   private notifyUpdate(mediaId: string, waveform: CachedWaveform): void {
-    const callbacks = this.updateCallbacks.get(mediaId);
+    const callbacks = this.updateCallbacks.get(mediaId)
     if (callbacks) {
       for (const callback of callbacks) {
-        callback(waveform);
+        callback(waveform)
       }
     }
   }
@@ -223,7 +221,7 @@ class WaveformCacheService {
    * Get waveform from memory cache (private)
    */
   private getFromMemoryCache(mediaId: string): CachedWaveform | null {
-    return this.memoryCache.get(mediaId);
+    return this.memoryCache.get(mediaId)
   }
 
   /**
@@ -231,14 +229,14 @@ class WaveformCacheService {
    * Used to avoid skeleton flash when component remounts
    */
   getFromMemoryCacheSync(mediaId: string): CachedWaveform | null {
-    return this.getFromMemoryCache(mediaId);
+    return this.getFromMemoryCache(mediaId)
   }
 
   /**
    * Add waveform to memory cache with LRU eviction
    */
   private addToMemoryCache(mediaId: string, data: CachedWaveform): void {
-    this.memoryCache.add(mediaId, data);
+    this.memoryCache.add(mediaId, data)
   }
 
   private makeCachedWaveform(
@@ -248,7 +246,7 @@ class WaveformCacheService {
     isComplete: boolean,
     stereo = false,
     maxPeak = 1,
-    loadedSamples = peaks.length
+    loadedSamples = peaks.length,
   ): CachedWaveform {
     return {
       peaks,
@@ -261,43 +259,43 @@ class WaveformCacheService {
       sizeBytes: peaks.byteLength,
       lastAccessed: Date.now(),
       isComplete,
-    };
+    }
   }
 
   private computeMaxPeak(peaks: Float32Array): number {
-    let maxPeak = 0;
+    let maxPeak = 0
     for (let i = 0; i < peaks.length; i++) {
-      const value = peaks[i] ?? 0;
+      const value = peaks[i] ?? 0
       if (value > maxPeak) {
-        maxPeak = value;
+        maxPeak = value
       }
     }
-    return maxPeak > 0 ? maxPeak : 1;
+    return maxPeak > 0 ? maxPeak : 1
   }
 
   private async persistToOPFS(
     mediaId: string,
     peaks: Float32Array,
     duration: number,
-    channels: number
+    channels: number,
   ): Promise<void> {
     try {
       const levels = waveformOPFSStorage.generateMultiResolution(
         peaks,
         SAMPLES_PER_SECOND,
         duration,
-        channels >= 2 ? 2 : 1
-      );
+        channels >= 2 ? 2 : 1,
+      )
 
       const multiRes: MultiResolutionWaveform = {
         duration,
         channels,
         levels,
-      };
+      }
 
-      await waveformOPFSStorage.save(mediaId, multiRes);
+      await waveformOPFSStorage.save(mediaId, multiRes)
     } catch (saveError) {
-      logger.warn('Failed to persist waveform to OPFS:', saveError);
+      logger.warn('Failed to persist waveform to OPFS:', saveError)
     }
   }
 
@@ -305,18 +303,18 @@ class WaveformCacheService {
     mediaId: string,
     peaks: Float32Array,
     duration: number,
-    channels: number
+    channels: number,
   ): Promise<void> {
     await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
-      logger.debug('Failed to clear waveform before persist:', mediaId, e);
-    });
+      logger.debug('Failed to clear waveform before persist:', mediaId, e)
+    })
 
-    const binCount = Math.ceil(peaks.length / WAVEFORM_BIN_SAMPLES);
-    const now = Date.now();
+    const binCount = Math.ceil(peaks.length / WAVEFORM_BIN_SAMPLES)
+    const now = Date.now()
     for (let binIndex = 0; binIndex < binCount; binIndex++) {
-      const start = binIndex * WAVEFORM_BIN_SAMPLES;
-      const end = Math.min(start + WAVEFORM_BIN_SAMPLES, peaks.length);
-      const chunk = peaks.slice(start, end);
+      const start = binIndex * WAVEFORM_BIN_SAMPLES
+      const end = Math.min(start + WAVEFORM_BIN_SAMPLES, peaks.length)
+      const chunk = peaks.slice(start, end)
       const bin: WaveformBin = {
         id: `${mediaId}:bin:${binIndex}`,
         mediaId,
@@ -325,8 +323,8 @@ class WaveformCacheService {
         peaks: chunk.buffer,
         samples: chunk.length,
         createdAt: now,
-      };
-      await saveWaveformBinToIndexedDB(bin);
+      }
+      await saveWaveformBinToIndexedDB(bin)
     }
 
     await saveWaveformMetaToIndexedDB({
@@ -341,7 +339,7 @@ class WaveformCacheService {
       channels,
       stereo: channels >= 2 || undefined,
       createdAt: now,
-    });
+    })
   }
 
   /**
@@ -353,40 +351,42 @@ class WaveformCacheService {
   private async loadFromStorage(mediaId: string): Promise<CachedWaveform | null> {
     // Try binned IndexedDB first (new progressive format).
     try {
-      const meta = await getWaveformMetaFromIndexedDB(mediaId);
+      const meta = await getWaveformMetaFromIndexedDB(mediaId)
       if (meta) {
         // Reject old mono data for multi-channel sources — force regeneration as stereo
         if (meta.channels >= 2 && !meta.stereo) {
-          logger.debug(`Stale mono waveform for stereo source ${mediaId}; clearing and regenerating`);
+          logger.debug(
+            `Stale mono waveform for stereo source ${mediaId}; clearing and regenerating`,
+          )
           await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
-            logger.debug('Failed to clear stale mono waveform:', mediaId, e);
-          });
-          return null;
+            logger.debug('Failed to clear stale mono waveform:', mediaId, e)
+          })
+          return null
         }
 
-        const bins = await getWaveformBinsFromIndexedDB(mediaId, meta.binCount);
+        const bins = await getWaveformBinsFromIndexedDB(mediaId, meta.binCount)
         if (bins.length === meta.binCount) {
-          const peaks = new Float32Array(meta.totalSamples);
-          let writeOffset = 0;
-          let valid = true;
+          const peaks = new Float32Array(meta.totalSamples)
+          let writeOffset = 0
+          let valid = true
 
           for (let i = 0; i < bins.length; i++) {
-            const bin = bins[i];
+            const bin = bins[i]
             if (!bin || bin.binIndex !== i || !bin.peaks) {
-              valid = false;
-              break;
+              valid = false
+              break
             }
 
-            const binPeaks = new Float32Array(bin.peaks);
-            const expectedSamples = Math.max(0, bin.samples ?? binPeaks.length);
-            const available = Math.min(expectedSamples, binPeaks.length, peaks.length - writeOffset);
+            const binPeaks = new Float32Array(bin.peaks)
+            const expectedSamples = Math.max(0, bin.samples ?? binPeaks.length)
+            const available = Math.min(expectedSamples, binPeaks.length, peaks.length - writeOffset)
             if (available <= 0) {
-              valid = false;
-              break;
+              valid = false
+              break
             }
 
-            peaks.set(binPeaks.subarray(0, available), writeOffset);
-            writeOffset += available;
+            peaks.set(binPeaks.subarray(0, available), writeOffset)
+            writeOffset += available
           }
 
           if (valid && writeOffset === meta.totalSamples) {
@@ -401,40 +401,40 @@ class WaveformCacheService {
               sizeBytes: peaks.byteLength,
               lastAccessed: Date.now(),
               isComplete: true,
-            };
+            }
 
-            this.addToMemoryCache(mediaId, cached);
-            this.notifyUpdate(mediaId, cached);
-            return cached;
+            this.addToMemoryCache(mediaId, cached)
+            this.notifyUpdate(mediaId, cached)
+            return cached
           }
         }
 
-        logger.warn(`Invalid waveform bins for ${mediaId}; clearing and regenerating`);
+        logger.warn(`Invalid waveform bins for ${mediaId}; clearing and regenerating`)
         await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
-          logger.debug('Failed to clear invalid waveform bins:', mediaId, e);
-        });
-        return null;
+          logger.debug('Failed to clear invalid waveform bins:', mediaId, e)
+        })
+        return null
       }
 
       // If bins exist but meta completion marker is missing, treat as interrupted decode.
       // Do not fall back to potentially stale legacy/OPFS data for this media.
-      const firstBin = await getWaveformRecordFromIndexedDB(`${mediaId}:bin:0`);
+      const firstBin = await getWaveformRecordFromIndexedDB(`${mediaId}:bin:0`)
       if (firstBin && 'kind' in firstBin && firstBin.kind === 'bin') {
-        logger.warn(`Partial waveform bins detected without meta for ${mediaId}; regenerating`);
+        logger.warn(`Partial waveform bins detected without meta for ${mediaId}; regenerating`)
         await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
-          logger.debug('Failed to clear partial waveform:', mediaId, e);
-        });
-        return null;
+          logger.debug('Failed to clear partial waveform:', mediaId, e)
+        })
+        return null
       }
     } catch (error) {
-      logger.warn(`Failed to load binned waveform from IndexedDB: ${mediaId}`, error);
+      logger.warn(`Failed to load binned waveform from IndexedDB: ${mediaId}`, error)
     }
 
     // Fallback: try OPFS.
     try {
-      const level = await waveformOPFSStorage.getLevel(mediaId, 0);
+      const level = await waveformOPFSStorage.getLevel(mediaId, 0)
       if (level) {
-        const floatsPerSample = level.channels >= 2 ? 2 : 1;
+        const floatsPerSample = level.channels >= 2 ? 2 : 1
         const cached: CachedWaveform = {
           peaks: level.peaks,
           duration: level.peaks.length / floatsPerSample / level.sampleRate,
@@ -446,25 +446,25 @@ class WaveformCacheService {
           sizeBytes: level.peaks.byteLength,
           lastAccessed: Date.now(),
           isComplete: true,
-        };
+        }
 
-        this.addToMemoryCache(mediaId, cached);
-        this.notifyUpdate(mediaId, cached);
-        return cached;
+        this.addToMemoryCache(mediaId, cached)
+        this.notifyUpdate(mediaId, cached)
+        return cached
       }
     } catch (err) {
-      logger.warn('Failed to load waveform from OPFS, deleting corrupted data:', err);
+      logger.warn('Failed to load waveform from OPFS, deleting corrupted data:', err)
       await waveformOPFSStorage.delete(mediaId).catch((e) => {
-        logger.debug('Failed to delete corrupted OPFS waveform:', mediaId, e);
-      });
+        logger.debug('Failed to delete corrupted OPFS waveform:', mediaId, e)
+      })
     }
 
     // Fallback: Try legacy IndexedDB and migrate.
     try {
-      const stored = await getLegacyWaveformFromIndexedDB(mediaId);
+      const stored = await getLegacyWaveformFromIndexedDB(mediaId)
 
       if (stored && stored.peaks) {
-        const peaks = new Float32Array(stored.peaks);
+        const peaks = new Float32Array(stored.peaks)
 
         const cached: CachedWaveform = {
           peaks,
@@ -477,21 +477,21 @@ class WaveformCacheService {
           sizeBytes: stored.peaks.byteLength,
           lastAccessed: Date.now(),
           isComplete: true,
-        };
+        }
 
-        this.addToMemoryCache(mediaId, cached);
-        this.notifyUpdate(mediaId, cached);
+        this.addToMemoryCache(mediaId, cached)
+        this.notifyUpdate(mediaId, cached)
         this.migrateToOPFS(mediaId, peaks, stored.duration, stored.channels).catch((e) => {
-          logger.debug('Waveform OPFS migration failed:', mediaId, e);
-        });
+          logger.debug('Waveform OPFS migration failed:', mediaId, e)
+        })
 
-        return cached;
+        return cached
       }
     } catch (error) {
-      logger.warn(`Failed to load legacy waveform from IndexedDB: ${mediaId}`, error);
+      logger.warn(`Failed to load legacy waveform from IndexedDB: ${mediaId}`, error)
     }
 
-    return null;
+    return null
   }
 
   /**
@@ -501,29 +501,29 @@ class WaveformCacheService {
     mediaId: string,
     peaks: Float32Array,
     duration: number,
-    channels: number
+    channels: number,
   ): Promise<void> {
     try {
       // Generate multi-resolution levels from source peaks
       const levels = waveformOPFSStorage.generateMultiResolution(
         peaks,
         100, // Legacy IndexedDB stored at 100 samples/sec
-        duration
-      );
+        duration,
+      )
 
       const multiRes: MultiResolutionWaveform = {
         duration,
         channels,
         levels,
-      };
+      }
 
-      await waveformOPFSStorage.save(mediaId, multiRes);
+      await waveformOPFSStorage.save(mediaId, multiRes)
 
       // Delete from IndexedDB after successful migration
-      await deleteWaveformFromIndexedDB(mediaId);
-      logger.debug(`Migrated waveform ${mediaId} from IndexedDB to OPFS`);
+      await deleteWaveformFromIndexedDB(mediaId)
+      logger.debug(`Migrated waveform ${mediaId} from IndexedDB to OPFS`)
     } catch (err) {
-      logger.warn(`Failed to migrate waveform ${mediaId}:`, err);
+      logger.warn(`Failed to migrate waveform ${mediaId}:`, err)
     }
   }
 
@@ -534,83 +534,79 @@ class WaveformCacheService {
     mediaId: string,
     blobUrl: string,
     requestId: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
   ): Promise<CachedWaveform> {
-    const worker = this.getWorker();
+    const worker = this.getWorker()
 
     return new Promise((resolve, reject) => {
-      const pendingBinWrites: Promise<void>[] = [];
-      let duration = 0;
-      let channels = 1;
-      let stereo = false;
-      let peaks: Float32Array | null = null;
-      let loadedSamples = 0;
-      let maxPeak = 0;
-      let settled = false;
-      let lastReportedProgress = -1;
-      let lastProgressReportAt = 0;
-      let lastWaveformNotifyAt = 0;
-      let lastNotifiedLoadedSamples = 0;
+      const pendingBinWrites: Promise<void>[] = []
+      let duration = 0
+      let channels = 1
+      let stereo = false
+      let peaks: Float32Array | null = null
+      let loadedSamples = 0
+      let maxPeak = 0
+      let settled = false
+      let lastReportedProgress = -1
+      let lastProgressReportAt = 0
+      let lastWaveformNotifyAt = 0
+      let lastNotifiedLoadedSamples = 0
 
       const cleanup = () => {
-        clearTimeout(timeout);
-        worker.removeEventListener('message', handleMessage);
-        worker.removeEventListener('error', handleError);
-        this.workerRejectors.delete(requestId);
-      };
+        clearTimeout(timeout)
+        worker.removeEventListener('message', handleMessage)
+        worker.removeEventListener('error', handleError)
+        this.workerRejectors.delete(requestId)
+      }
 
       const rejectOnce = (error: Error) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(error);
-      };
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(error)
+      }
 
       const resolveOnce = (waveform: CachedWaveform) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(waveform);
-      };
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve(waveform)
+      }
 
       const reportProgress = (nextProgress: number, force = false) => {
-        if (!onProgress) return;
-        const clamped = Math.max(0, Math.min(100, Math.round(nextProgress)));
-        const now = Date.now();
+        if (!onProgress) return
+        const clamped = Math.max(0, Math.min(100, Math.round(nextProgress)))
+        const now = Date.now()
         if (
-          force
-          || clamped === 100
-          || lastReportedProgress < 0
-          || clamped - lastReportedProgress >= WAVEFORM_PROGRESS_NOTIFY_STEP
-          || now - lastProgressReportAt >= WAVEFORM_PROGRESS_NOTIFY_INTERVAL_MS
+          force ||
+          clamped === 100 ||
+          lastReportedProgress < 0 ||
+          clamped - lastReportedProgress >= WAVEFORM_PROGRESS_NOTIFY_STEP ||
+          now - lastProgressReportAt >= WAVEFORM_PROGRESS_NOTIFY_INTERVAL_MS
         ) {
-          lastReportedProgress = clamped;
-          lastProgressReportAt = now;
-          onProgress(clamped);
+          lastReportedProgress = clamped
+          lastProgressReportAt = now
+          onProgress(clamped)
         }
-      };
+      }
 
       const notifyWaveformUpdate = (force = false) => {
-        if (!peaks) return;
-        const now = Date.now();
-        if (
-          !force
-          && loadedSamples < peaks.length
-          && loadedSamples === lastNotifiedLoadedSamples
-        ) {
-          return;
+        if (!peaks) return
+        const now = Date.now()
+        if (!force && loadedSamples < peaks.length && loadedSamples === lastNotifiedLoadedSamples) {
+          return
         }
 
         if (
-          !force
-          && now - lastWaveformNotifyAt < WAVEFORM_NOTIFY_INTERVAL_MS
-          && loadedSamples < peaks.length
+          !force &&
+          now - lastWaveformNotifyAt < WAVEFORM_NOTIFY_INTERVAL_MS &&
+          loadedSamples < peaks.length
         ) {
-          return;
+          return
         }
 
-        lastWaveformNotifyAt = now;
-        lastNotifiedLoadedSamples = loadedSamples;
+        lastWaveformNotifyAt = now
+        lastNotifiedLoadedSamples = loadedSamples
         const cached = this.makeCachedWaveform(
           peaks,
           duration,
@@ -619,52 +615,52 @@ class WaveformCacheService {
           stereo,
           maxPeak,
           loadedSamples,
-        );
-        this.addToMemoryCache(mediaId, cached);
-        this.notifyUpdate(mediaId, cached);
-      };
+        )
+        this.addToMemoryCache(mediaId, cached)
+        this.notifyUpdate(mediaId, cached)
+      }
 
       // Add timeout - long clips (e.g. 10+ minutes) need more processing time.
       const timeout = setTimeout(() => {
         try {
-          worker.postMessage({ type: 'abort', requestId });
+          worker.postMessage({ type: 'abort', requestId })
         } catch {
           // Ignore timeout abort post errors
         }
         if (this.workerManager.peekWorker() === worker) {
-          this.workerManager.terminate();
+          this.workerManager.terminate()
         }
-        rejectOnce(new Error('Worker timeout'));
-      }, 90000);
+        rejectOnce(new Error('Worker timeout'))
+      }, 90000)
 
       const handleMessage = async (event: MessageEvent<WaveformWorkerResponse>) => {
-        if (event.data.requestId !== requestId) return;
+        if (event.data.requestId !== requestId) return
         try {
           switch (event.data.type) {
             case 'progress':
-              reportProgress(event.data.progress);
-              break;
+              reportProgress(event.data.progress)
+              break
 
             case 'init': {
-              duration = event.data.duration;
-              channels = event.data.channels;
-              stereo = event.data.stereo;
-              peaks = new Float32Array(event.data.totalSamples);
-              break;
+              duration = event.data.duration
+              channels = event.data.channels
+              stereo = event.data.stereo
+              peaks = new Float32Array(event.data.totalSamples)
+              break
             }
 
             case 'chunk': {
-              if (!peaks) break;
-              const { startIndex, peaks: chunkPeaks } = event.data;
-              peaks.set(chunkPeaks, startIndex);
-              loadedSamples = Math.max(loadedSamples, startIndex + chunkPeaks.length);
+              if (!peaks) break
+              const { startIndex, peaks: chunkPeaks } = event.data
+              peaks.set(chunkPeaks, startIndex)
+              loadedSamples = Math.max(loadedSamples, startIndex + chunkPeaks.length)
 
-              const effectiveBinSamples = WAVEFORM_BIN_SAMPLES * (stereo ? 2 : 1);
-              const binIndex = Math.floor(startIndex / effectiveBinSamples);
+              const effectiveBinSamples = WAVEFORM_BIN_SAMPLES * (stereo ? 2 : 1)
+              const binIndex = Math.floor(startIndex / effectiveBinSamples)
               for (let i = 0; i < chunkPeaks.length; i++) {
-                const value = chunkPeaks[i] ?? 0;
+                const value = chunkPeaks[i] ?? 0
                 if (value > maxPeak) {
-                  maxPeak = value;
+                  maxPeak = value
                 }
               }
               const bin: WaveformBin = {
@@ -675,27 +671,27 @@ class WaveformCacheService {
                 peaks: chunkPeaks.buffer as ArrayBuffer,
                 samples: chunkPeaks.length,
                 createdAt: Date.now(),
-              };
+              }
               pendingBinWrites.push(
                 saveWaveformBinToIndexedDB(bin).catch((saveError) => {
-                  logger.warn(`Failed to persist waveform bin ${mediaId}:${binIndex}`, saveError);
-                })
-              );
-              notifyWaveformUpdate();
-              break;
+                  logger.warn(`Failed to persist waveform bin ${mediaId}:${binIndex}`, saveError)
+                }),
+              )
+              notifyWaveformUpdate()
+              break
             }
 
             case 'complete': {
               if (!peaks) {
-                rejectOnce(new Error('Worker completed without waveform init'));
-                break;
+                rejectOnce(new Error('Worker completed without waveform init'))
+                break
               }
 
-              await Promise.all(pendingBinWrites);
+              await Promise.all(pendingBinWrites)
               if (settled) {
-                break;
+                break
               }
-              const metaBinSamples = WAVEFORM_BIN_SAMPLES * (stereo ? 2 : 1);
+              const metaBinSamples = WAVEFORM_BIN_SAMPLES * (stereo ? 2 : 1)
               await saveWaveformMetaToIndexedDB({
                 id: mediaId,
                 mediaId,
@@ -708,11 +704,11 @@ class WaveformCacheService {
                 channels,
                 stereo: stereo || undefined,
                 createdAt: Date.now(),
-              });
+              })
 
-              loadedSamples = peaks.length;
-              maxPeak = event.data.maxPeak > 0 ? event.data.maxPeak : Math.max(maxPeak, 1);
-              notifyWaveformUpdate(true);
+              loadedSamples = peaks.length
+              maxPeak = event.data.maxPeak > 0 ? event.data.maxPeak : Math.max(maxPeak, 1)
+              notifyWaveformUpdate(true)
               const cached = this.makeCachedWaveform(
                 peaks,
                 duration,
@@ -721,52 +717,54 @@ class WaveformCacheService {
                 stereo,
                 maxPeak,
                 loadedSamples,
-              );
-              void this.persistToOPFS(mediaId, peaks, duration, channels);
+              )
+              void this.persistToOPFS(mediaId, peaks, duration, channels)
 
-              reportProgress(100, true);
-              resolveOnce(cached);
-              break;
+              reportProgress(100, true)
+              resolveOnce(cached)
+              break
             }
 
             case 'error':
-              rejectOnce(new Error(event.data.error));
-              break;
+              rejectOnce(new Error(event.data.error))
+              break
           }
         } catch (handlerError) {
-          rejectOnce(handlerError instanceof Error ? handlerError : new Error(String(handlerError)));
+          rejectOnce(handlerError instanceof Error ? handlerError : new Error(String(handlerError)))
         }
-      };
+      }
 
       const handleError = (event: ErrorEvent) => {
-        logger.error('Waveform worker error:', event.message);
-        rejectOnce(new Error(event.message || 'Worker error'));
-      };
+        logger.error('Waveform worker error:', event.message)
+        rejectOnce(new Error(event.message || 'Worker error'))
+      }
 
-      this.workerRejectors.set(requestId, rejectOnce);
+      this.workerRejectors.set(requestId, rejectOnce)
       const startWorker = async () => {
         await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
-          logger.debug('Failed to clear waveform before worker gen:', mediaId, e);
-        });
-        if (settled) return;
+          logger.debug('Failed to clear waveform before worker gen:', mediaId, e)
+        })
+        if (settled) return
 
-        worker.addEventListener('message', handleMessage);
-        worker.addEventListener('error', handleError);
+        worker.addEventListener('message', handleMessage)
+        worker.addEventListener('error', handleError)
 
         worker.postMessage({
           type: 'generate',
           requestId,
           blobUrl,
-          blob: getObjectUrlDirectFileMetadata(blobUrl) ? undefined : (getObjectUrlBlob(blobUrl) ?? undefined),
+          blob: getObjectUrlDirectFileMetadata(blobUrl)
+            ? undefined
+            : (getObjectUrlBlob(blobUrl) ?? undefined),
           sourceMetadata: getObjectUrlDirectFileMetadata(blobUrl) ?? undefined,
           samplesPerSecond: SAMPLES_PER_SECOND,
           binDurationSec: WAVEFORM_BIN_DURATION_SEC,
-        });
-      };
+        })
+      }
       void startWorker().catch((startError) => {
-        rejectOnce(startError instanceof Error ? startError : new Error(String(startError)));
-      });
-    });
+        rejectOnce(startError instanceof Error ? startError : new Error(String(startError)))
+      })
+    })
   }
 
   /**
@@ -779,45 +777,45 @@ class WaveformCacheService {
     samplesPerOutput: number,
     duration: number,
     throwIfAborted: () => void,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
   ): CachedWaveform {
-    const ch0 = audioBuffer.getChannelData(0);
-    const ch1 = audioBuffer.getChannelData(Math.min(1, channels - 1));
-    const peaks = new Float32Array(numOutputSamples * 2);
+    const ch0 = audioBuffer.getChannelData(0)
+    const ch1 = audioBuffer.getChannelData(Math.min(1, channels - 1))
+    const peaks = new Float32Array(numOutputSamples * 2)
 
     for (let i = 0; i < numOutputSamples; i++) {
-      const startIdx = i * samplesPerOutput;
-      const endIdx = Math.min(startIdx + samplesPerOutput, audioBuffer.length);
+      const startIdx = i * samplesPerOutput
+      const endIdx = Math.min(startIdx + samplesPerOutput, audioBuffer.length)
 
-      let maxL = 0;
-      let maxR = 0;
+      let maxL = 0
+      let maxR = 0
       for (let j = startIdx; j < endIdx; j++) {
-        const lVal = Math.abs(ch0[j] ?? 0);
-        const rVal = Math.abs(ch1[j] ?? 0);
-        if (lVal > maxL) maxL = lVal;
-        if (rVal > maxR) maxR = rVal;
+        const lVal = Math.abs(ch0[j] ?? 0)
+        const rVal = Math.abs(ch1[j] ?? 0)
+        if (lVal > maxL) maxL = lVal
+        if (rVal > maxR) maxR = rVal
       }
-      peaks[i * 2] = maxL;
-      peaks[i * 2 + 1] = maxR;
+      peaks[i * 2] = maxL
+      peaks[i * 2 + 1] = maxR
       if ((i & 255) === 0) {
-        throwIfAborted();
+        throwIfAborted()
       }
     }
-    onProgress?.(85);
-    throwIfAborted();
+    onProgress?.(85)
+    throwIfAborted()
 
     // Normalize to 0-1 range
-    let maxPeak = 0;
+    let maxPeak = 0
     for (let i = 0; i < peaks.length; i++) {
-      if (peaks[i]! > maxPeak) maxPeak = peaks[i]!;
+      if (peaks[i]! > maxPeak) maxPeak = peaks[i]!
     }
     if (maxPeak > 0) {
       for (let i = 0; i < peaks.length; i++) {
-        peaks[i] = peaks[i]! / maxPeak;
+        peaks[i] = peaks[i]! / maxPeak
       }
     }
 
-    return this.makeCachedWaveform(peaks, duration, channels, true, true);
+    return this.makeCachedWaveform(peaks, duration, channels, true, true)
   }
 
   /**
@@ -830,53 +828,53 @@ class WaveformCacheService {
     samplesPerOutput: number,
     duration: number,
     throwIfAborted: () => void,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
   ): CachedWaveform {
     // Mix channels to mono
-    const monoSamples = new Float32Array(audioBuffer.length);
+    const monoSamples = new Float32Array(audioBuffer.length)
     for (let c = 0; c < channels; c++) {
-      const channelData = audioBuffer.getChannelData(c);
+      const channelData = audioBuffer.getChannelData(c)
       for (let i = 0; i < audioBuffer.length; i++) {
-        monoSamples[i]! += channelData[i]! / channels;
+        monoSamples[i]! += channelData[i]! / channels
         if ((i & 4095) === 0) {
-          throwIfAborted();
+          throwIfAborted()
         }
       }
     }
-    onProgress?.(70);
-    throwIfAborted();
+    onProgress?.(70)
+    throwIfAborted()
 
-    const peaks = new Float32Array(numOutputSamples);
+    const peaks = new Float32Array(numOutputSamples)
 
     for (let i = 0; i < numOutputSamples; i++) {
-      const startIdx = i * samplesPerOutput;
-      const endIdx = Math.min(startIdx + samplesPerOutput, audioBuffer.length);
+      const startIdx = i * samplesPerOutput
+      const endIdx = Math.min(startIdx + samplesPerOutput, audioBuffer.length)
 
-      let maxVal = 0;
+      let maxVal = 0
       for (let j = startIdx; j < endIdx; j++) {
-        const val = Math.abs(monoSamples[j] ?? 0);
-        if (val > maxVal) maxVal = val;
+        const val = Math.abs(monoSamples[j] ?? 0)
+        if (val > maxVal) maxVal = val
       }
-      peaks[i] = maxVal;
+      peaks[i] = maxVal
       if ((i & 255) === 0) {
-        throwIfAborted();
+        throwIfAborted()
       }
     }
-    onProgress?.(85);
-    throwIfAborted();
+    onProgress?.(85)
+    throwIfAborted()
 
     // Normalize to 0-1 range
-    let maxPeak = 0;
+    let maxPeak = 0
     for (let i = 0; i < peaks.length; i++) {
-      if (peaks[i]! > maxPeak) maxPeak = peaks[i]!;
+      if (peaks[i]! > maxPeak) maxPeak = peaks[i]!
     }
     if (maxPeak > 0) {
       for (let i = 0; i < peaks.length; i++) {
-        peaks[i] = peaks[i]! / maxPeak;
+        peaks[i] = peaks[i]! / maxPeak
       }
     }
 
-    return this.makeCachedWaveform(peaks, duration, channels, true, false);
+    return this.makeCachedWaveform(peaks, duration, channels, true, false)
   }
 
   /**
@@ -887,82 +885,100 @@ class WaveformCacheService {
     mediaId: string,
     blobUrl: string,
     onProgress?: (progress: number) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<CachedWaveform> {
     if (signal?.aborted) {
-      throw new AbortError();
+      throw new AbortError()
     }
-    onProgress?.(10);
+    onProgress?.(10)
 
     const throwIfAborted = () => {
       if (signal?.aborted) {
-        throw new AbortError();
+        throw new AbortError()
       }
-    };
+    }
 
     try {
       // Fetch the audio file
-      const response = await fetch(blobUrl, signal ? { signal } : undefined);
-      throwIfAborted();
+      const response = await fetch(blobUrl, signal ? { signal } : undefined)
+      throwIfAborted()
 
-      const arrayBuffer = await response.arrayBuffer();
-      onProgress?.(30);
-      throwIfAborted();
+      const arrayBuffer = await response.arrayBuffer()
+      onProgress?.(30)
+      throwIfAborted()
 
       // Decode with AudioContext
-      const audioContext = new AudioContext();
+      const audioContext = new AudioContext()
       const closeContext = () => {
         void audioContext.close().catch((e) => {
-          logger.debug('Failed to close AudioContext during abort:', e);
-        });
-      };
-      signal?.addEventListener('abort', closeContext, { once: true });
+          logger.debug('Failed to close AudioContext during abort:', e)
+        })
+      }
+      signal?.addEventListener('abort', closeContext, { once: true })
 
       try {
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        onProgress?.(60);
-        throwIfAborted();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+        onProgress?.(60)
+        throwIfAborted()
 
-        const duration = audioBuffer.duration;
-        const channels = audioBuffer.numberOfChannels;
-        const stereo = channels >= 2;
+        const duration = audioBuffer.duration
+        const channels = audioBuffer.numberOfChannels
+        const stereo = channels >= 2
 
         // Downsample to target samples per second
-        const numOutputSamples = Math.ceil(duration * SAMPLES_PER_SECOND);
-        const samplesPerOutput = Math.floor(audioBuffer.length / numOutputSamples);
+        const numOutputSamples = Math.ceil(duration * SAMPLES_PER_SECOND)
+        const samplesPerOutput = Math.floor(audioBuffer.length / numOutputSamples)
 
         const cached = stereo
-          ? this.generateStereoPeaksFallback(audioBuffer, channels, numOutputSamples, samplesPerOutput, duration, throwIfAborted, onProgress)
-          : this.generateMonoPeaksFallback(audioBuffer, channels, numOutputSamples, samplesPerOutput, duration, throwIfAborted, onProgress);
+          ? this.generateStereoPeaksFallback(
+              audioBuffer,
+              channels,
+              numOutputSamples,
+              samplesPerOutput,
+              duration,
+              throwIfAborted,
+              onProgress,
+            )
+          : this.generateMonoPeaksFallback(
+              audioBuffer,
+              channels,
+              numOutputSamples,
+              samplesPerOutput,
+              duration,
+              throwIfAborted,
+              onProgress,
+            )
 
         // Add to memory cache
-        this.addToMemoryCache(mediaId, cached);
-        this.notifyUpdate(mediaId, cached);
+        this.addToMemoryCache(mediaId, cached)
+        this.notifyUpdate(mediaId, cached)
 
-        await this.persistBinnedWaveform(mediaId, cached.peaks, duration, channels).catch((saveError) => {
-          logger.warn('Failed to persist waveform bins to IndexedDB:', saveError);
-        });
-        void this.persistToOPFS(mediaId, cached.peaks, duration, channels);
+        await this.persistBinnedWaveform(mediaId, cached.peaks, duration, channels).catch(
+          (saveError) => {
+            logger.warn('Failed to persist waveform bins to IndexedDB:', saveError)
+          },
+        )
+        void this.persistToOPFS(mediaId, cached.peaks, duration, channels)
 
-        onProgress?.(100);
-        return cached;
+        onProgress?.(100)
+        return cached
       } finally {
-        signal?.removeEventListener('abort', closeContext);
+        signal?.removeEventListener('abort', closeContext)
         await audioContext.close().catch((e) => {
-          logger.debug('Failed to close AudioContext:', e);
-        });
+          logger.debug('Failed to close AudioContext:', e)
+        })
       }
     } catch (error) {
       if (error instanceof AbortError) {
-        throw error;
+        throw error
       }
       if (signal?.aborted) {
-        throw new AbortError();
+        throw new AbortError()
       }
       if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new AbortError();
+        throw new AbortError()
       }
-      throw error;
+      throw error
     }
   }
 
@@ -973,35 +989,35 @@ class WaveformCacheService {
     mediaId: string,
     blobUrl: string,
     requestId: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
   ): Promise<CachedWaveform> {
     try {
-      return await this.generateWaveformWithWorker(mediaId, blobUrl, requestId, onProgress);
+      return await this.generateWaveformWithWorker(mediaId, blobUrl, requestId, onProgress)
     } catch (err) {
       if (err instanceof AbortError) {
-        throw err;
+        throw err
       }
-      logger.warn(`Waveform worker failed for ${mediaId}, falling back to AudioContext`, err);
+      logger.warn(`Waveform worker failed for ${mediaId}, falling back to AudioContext`, err)
       // Worker may fail in some environments - fallback to AudioContext
-      const controller = new AbortController();
+      const controller = new AbortController()
       // Fallback stores an abort trigger (not a direct Promise rejector): callers may invoke
       // `workerRejectors.get(requestId)?.(new AbortError())`, but that argument is ignored and
       // we abort via signal instead. `generateWaveformFallback` observes `controller.signal`
       // (fetch/decode) and throws AbortError from there. This differs from the worker path,
       // where the stored rejector directly rejects the pending Promise.
-      const fallbackRejector = () => controller.abort();
-      this.fallbackAbortControllers.set(requestId, controller);
-      this.workerRejectors.set(requestId, fallbackRejector);
+      const fallbackRejector = () => controller.abort()
+      this.fallbackAbortControllers.set(requestId, controller)
+      this.workerRejectors.set(requestId, fallbackRejector)
       try {
-        return await this.generateWaveformFallback(mediaId, blobUrl, onProgress, controller.signal);
+        return await this.generateWaveformFallback(mediaId, blobUrl, onProgress, controller.signal)
       } finally {
-        const activeRejector = this.workerRejectors.get(requestId);
+        const activeRejector = this.workerRejectors.get(requestId)
         if (activeRejector === fallbackRejector) {
-          this.workerRejectors.delete(requestId);
+          this.workerRejectors.delete(requestId)
         }
-        const activeController = this.fallbackAbortControllers.get(requestId);
+        const activeController = this.fallbackAbortControllers.get(requestId)
         if (activeController === controller) {
-          this.fallbackAbortControllers.delete(requestId);
+          this.fallbackAbortControllers.delete(requestId)
         }
       }
     }
@@ -1014,39 +1030,39 @@ class WaveformCacheService {
   async getWaveform(
     mediaId: string,
     blobUrl: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
   ): Promise<CachedWaveform> {
     // Prefer complete cached waveforms, but keep in-flight generations attached
     // to their running promise so callers do not accidentally "complete" on a
     // partial progressive snapshot.
-    const memoryCached = this.getFromMemoryCache(mediaId);
+    const memoryCached = this.getFromMemoryCache(mediaId)
     if (memoryCached?.isComplete) {
-      return memoryCached;
+      return memoryCached
     }
 
     // Check for pending request
-    const pending = this.pendingRequests.get(mediaId);
+    const pending = this.pendingRequests.get(mediaId)
     if (pending) {
-      return pending.promise;
+      return pending.promise
     }
 
     if (memoryCached) {
-      return memoryCached;
+      return memoryCached
     }
 
     // Check OPFS/IndexedDB for persisted waveform
-    const storedCached = await this.loadFromStorage(mediaId);
+    const storedCached = await this.loadFromStorage(mediaId)
     if (storedCached) {
-      return storedCached;
+      return storedCached
     }
 
     // Re-check after storage load to avoid duplicate generation races.
-    const pendingAfterStorage = this.pendingRequests.get(mediaId);
+    const pendingAfterStorage = this.pendingRequests.get(mediaId)
     if (pendingAfterStorage) {
-      return pendingAfterStorage.promise;
+      return pendingAfterStorage.promise
     }
 
-    return this.enqueueGeneration(mediaId, blobUrl, onProgress);
+    return this.enqueueGeneration(mediaId, blobUrl, onProgress)
   }
 
   /**
@@ -1055,62 +1071,64 @@ class WaveformCacheService {
   prefetch(mediaId: string, blobUrl: string): void {
     // Skip if already cached or pending
     if (this.getFromMemoryCache(mediaId) || this.pendingRequests.has(mediaId)) {
-      return;
+      return
     }
 
     // Check storage asynchronously and generate if needed
-    this.loadFromStorage(mediaId).then((cached) => {
-      if (!cached && !this.pendingRequests.has(mediaId)) {
-        // Generate in background (no progress callback)
-        this.getWaveform(mediaId, blobUrl).catch((error) => {
-          if (error instanceof AbortError) return;
-          logger.warn('Waveform prefetch failed:', error);
-        });
-      }
-    }).catch((error) => {
-      logger.warn('Waveform storage load failed during prefetch:', error);
-    });
+    this.loadFromStorage(mediaId)
+      .then((cached) => {
+        if (!cached && !this.pendingRequests.has(mediaId)) {
+          // Generate in background (no progress callback)
+          this.getWaveform(mediaId, blobUrl).catch((error) => {
+            if (error instanceof AbortError) return
+            logger.warn('Waveform prefetch failed:', error)
+          })
+        }
+      })
+      .catch((error) => {
+        logger.warn('Waveform storage load failed during prefetch:', error)
+      })
   }
 
   /**
    * Abort pending generation for a media item
    */
   abort(mediaId: string): void {
-    const pending = this.pendingRequests.get(mediaId);
-    if (!pending) return;
+    const pending = this.pendingRequests.get(mediaId)
+    if (!pending) return
 
     if (pending.status === 'queued') {
       this.generationQueue = this.generationQueue.filter(
-        (queued) => !(queued.mediaId === mediaId && queued.requestId === pending.requestId)
-      );
-      this.pendingRequests.delete(mediaId);
-      pending.reject(new AbortError());
-      this.processGenerationQueue();
-      return;
+        (queued) => !(queued.mediaId === mediaId && queued.requestId === pending.requestId),
+      )
+      this.pendingRequests.delete(mediaId)
+      pending.reject(new AbortError())
+      this.processGenerationQueue()
+      return
     }
 
     // Running request — clean up tracking state synchronously so that a
     // subsequent getWaveform() call (e.g. React StrictMode remount) doesn't
     // receive the stale, already-rejected promise.
-    this.pendingRequests.delete(mediaId);
-    this.activeGenerations.delete(mediaId);
+    this.pendingRequests.delete(mediaId)
+    this.activeGenerations.delete(mediaId)
 
-    const activeWorker = this.workerManager.peekWorker();
+    const activeWorker = this.workerManager.peekWorker()
     if (activeWorker) {
       activeWorker.postMessage({
         type: 'abort',
         requestId: pending.requestId,
-      });
+      })
     }
-    const fallbackController = this.fallbackAbortControllers.get(pending.requestId);
-    fallbackController?.abort();
+    const fallbackController = this.fallbackAbortControllers.get(pending.requestId)
+    fallbackController?.abort()
 
-    const rejector = this.workerRejectors.get(pending.requestId);
+    const rejector = this.workerRejectors.get(pending.requestId)
     if (rejector) {
-      rejector(new AbortError());
+      rejector(new AbortError())
     }
 
-    this.processGenerationQueue();
+    this.processGenerationQueue()
   }
 
   /**
@@ -1118,45 +1136,45 @@ class WaveformCacheService {
    */
   async clearMedia(mediaId: string): Promise<void> {
     // Clear from memory cache
-    this.memoryCache.delete(mediaId);
+    this.memoryCache.delete(mediaId)
 
     // Clear from OPFS
-    await waveformOPFSStorage.delete(mediaId);
+    await waveformOPFSStorage.delete(mediaId)
     // Also clear IndexedDB waveform bins/meta (and legacy single record).
     await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
-      logger.debug('Failed to clear waveform from IndexedDB during cache clear:', mediaId, e);
-    });
+      logger.debug('Failed to clear waveform from IndexedDB during cache clear:', mediaId, e)
+    })
   }
 
   /**
    * Clear all cached waveforms
    */
   clearAll(): void {
-    this.memoryCache.clear();
+    this.memoryCache.clear()
   }
 
   /**
    * Cleanup
    */
   dispose(): void {
-    this.clearAll();
+    this.clearAll()
     // Clear queue first so abort-triggered processGenerationQueue cannot start
     // new work while we're disposing.
-    this.generationQueue = [];
-    const pendingIds = Array.from(this.pendingRequests.keys());
+    this.generationQueue = []
+    const pendingIds = Array.from(this.pendingRequests.keys())
     for (const mediaId of pendingIds) {
-      this.abort(mediaId);
+      this.abort(mediaId)
     }
     for (const controller of this.fallbackAbortControllers.values()) {
-      controller.abort();
+      controller.abort()
     }
-    this.fallbackAbortControllers.clear();
-    this.activeGenerations.clear();
-    this.workerRejectors.clear();
-    this.pendingRequests.clear();
-    this.updateCallbacks.clear();
+    this.fallbackAbortControllers.clear()
+    this.activeGenerations.clear()
+    this.workerRejectors.clear()
+    this.pendingRequests.clear()
+    this.updateCallbacks.clear()
     // Terminate worker
-    this.workerManager.terminate();
+    this.workerManager.terminate()
   }
 
   /**
@@ -1167,14 +1185,14 @@ class WaveformCacheService {
     mediaId: string,
     startTime: number,
     endTime: number,
-    pixelsPerSecond: number
+    pixelsPerSecond: number,
   ): Promise<{
-    peaks: Float32Array;
-    sampleRate: number;
-    startSample: number;
+    peaks: Float32Array
+    sampleRate: number
+    startSample: number
   } | null> {
-    const levelIndex = chooseLevelForZoom(pixelsPerSecond);
-    return waveformOPFSStorage.getLevelRange(mediaId, levelIndex, startTime, endTime);
+    const levelIndex = chooseLevelForZoom(pixelsPerSecond)
+    return waveformOPFSStorage.getLevelRange(mediaId, levelIndex, startTime, endTime)
   }
 
   /**
@@ -1183,46 +1201,46 @@ class WaveformCacheService {
    */
   async getWaveformLevel(
     mediaId: string,
-    pixelsPerSecond: number
+    pixelsPerSecond: number,
   ): Promise<{
-    peaks: Float32Array;
-    sampleRate: number;
-    channels: number;
+    peaks: Float32Array
+    sampleRate: number
+    channels: number
   } | null> {
-    const levelIndex = chooseLevelForZoom(pixelsPerSecond);
-    return waveformOPFSStorage.getLevel(mediaId, levelIndex);
+    const levelIndex = chooseLevelForZoom(pixelsPerSecond)
+    return waveformOPFSStorage.getLevel(mediaId, levelIndex)
   }
 }
 
 // Singleton instance
-export const waveformCache = new WaveformCacheService();
+export const waveformCache = new WaveformCacheService()
 
 /**
  * Downmix stereo interleaved peaks to mono by taking max(L, R) per sample.
  * Returns the original peaks array unchanged for mono waveforms.
  * Results are cached via WeakMap keyed on the source Float32Array.
  */
-const monoPeaksCache = new WeakMap<Float32Array, Float32Array>();
+const monoPeaksCache = new WeakMap<Float32Array, Float32Array>()
 
 export function getMonoPeaks(waveform: CachedWaveform): Float32Array {
-  if (!waveform.stereo) return waveform.peaks;
+  if (!waveform.stereo) return waveform.peaks
 
   // Only use cache for complete waveforms — progressive loading mutates the
   // peaks Float32Array in-place, so a cached derivation would be stale.
   if (waveform.isComplete) {
-    const cached = monoPeaksCache.get(waveform.peaks);
-    if (cached) return cached;
+    const cached = monoPeaksCache.get(waveform.peaks)
+    if (cached) return cached
   }
 
-  const perChannel = waveform.peaks.length / 2;
-  const mono = new Float32Array(perChannel);
+  const perChannel = waveform.peaks.length / 2
+  const mono = new Float32Array(perChannel)
   for (let i = 0; i < perChannel; i++) {
-    mono[i] = Math.max(waveform.peaks[i * 2] ?? 0, waveform.peaks[i * 2 + 1] ?? 0);
+    mono[i] = Math.max(waveform.peaks[i * 2] ?? 0, waveform.peaks[i * 2 + 1] ?? 0)
   }
 
   if (waveform.isComplete) {
-    monoPeaksCache.set(waveform.peaks, mono);
+    monoPeaksCache.set(waveform.peaks, mono)
   }
 
-  return mono;
+  return mono
 }

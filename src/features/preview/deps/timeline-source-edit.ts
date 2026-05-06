@@ -8,4 +8,4 @@ export {
   performInsertEdit,
   performOverwriteEdit,
   resolveSourceEditTrackTargets,
-} from './timeline-contract';
+} from './timeline-contract'

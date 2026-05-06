@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const sparkles: GpuTransitionDefinition = {
   id: 'sparkles',
@@ -227,13 +227,10 @@ fn sparklesFragment(input: VertexOutput) -> @location(0) vec4f {
   );
 }`,
   packUniforms: (progress, width, height, _direction, properties) => {
-    const sparkleScale = (properties?.sparkleScale as number) ?? 1.0;
-    const intensity = (properties?.intensity as number) ?? 1.0;
-    const density = (properties?.density as number) ?? 1.0;
-    const glow = (properties?.glow as number) ?? 1.0;
-    return new Float32Array([
-      progress, width, height, sparkleScale,
-      intensity, density, glow, 0,
-    ]);
+    const sparkleScale = (properties?.sparkleScale as number) ?? 1.0
+    const intensity = (properties?.intensity as number) ?? 1.0
+    const density = (properties?.density as number) ?? 1.0
+    const glow = (properties?.glow as number) ?? 1.0
+    return new Float32Array([progress, width, height, sparkleScale, intensity, density, glow, 0])
   },
-};
+}

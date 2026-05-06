@@ -1,5 +1,5 @@
-import { SCALE_UV_WGSL } from '../common';
-import type { GpuTransitionDefinition } from '../types';
+import { SCALE_UV_WGSL } from '../common'
+import type { GpuTransitionDefinition } from '../types'
 
 export const clockWipe: GpuTransitionDefinition = {
   id: 'clockWipe',
@@ -71,7 +71,7 @@ fn clockWipeFragment(input: VertexOutput) -> @location(0) vec4f {
   return mix(outgoingColor, incomingColor, swept);
 }`,
   packUniforms: (progress, width, height, _direction, properties) => {
-    const edgeSoftness = (properties?.edgeSoftness as number) ?? 8.0;
-    return new Float32Array([progress, width, height, edgeSoftness]);
+    const edgeSoftness = (properties?.edgeSoftness as number) ?? 8.0
+    return new Float32Array([progress, width, height, edgeSoftness])
   },
-};
+}

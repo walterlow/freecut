@@ -1,35 +1,32 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import {
-  SharedVideoExtractorPool,
-  type VideoFrameSource,
-} from '@/features/preview/deps/export';
-import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { SharedVideoExtractorPool, type VideoFrameSource } from '@/features/preview/deps/export'
+import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool'
 import {
   backgroundBatchPreseek,
   backgroundPreseek,
   getCachedPredecodedBitmap,
   waitForInflightPredecodedBitmap,
-} from '@/features/preview/utils/decoder-prewarm';
+} from '@/features/preview/utils/decoder-prewarm'
 import {
   getCachedEditOverlayFrame,
   getEditOverlayFrameCacheKey,
   hasCachedEditOverlayFrame,
   putCachedEditOverlayFrame,
-} from '@/features/preview/utils/edit-overlay-frame-cache';
-import { collectEditOverlayDirectionalPrewarmTimes } from '@/features/preview/utils/edit-overlay-prewarm-plan';
+} from '@/features/preview/utils/edit-overlay-frame-cache'
+import { collectEditOverlayDirectionalPrewarmTimes } from '@/features/preview/utils/edit-overlay-prewarm-plan'
 import {
   getActivePreviewScrubbingCache,
   getActivePreviewVideoFrameEntry,
-} from '@/features/preview/utils/preview-scrubbing-cache-bridge';
-import type { TimelineItem } from '@/types/timeline';
-import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
+} from '@/features/preview/utils/preview-scrubbing-cache-bridge'
+import type { TimelineItem } from '@/types/timeline'
+import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver'
 import {
   computeFittedMediaSize,
   getItemAspectRatio,
   renderPanelMedia,
-} from './edit-panel-media-utils';
-import { useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
-import { useEditOverlayPanelPrewarm } from './use-edit-overlay-panel-prewarm';
+} from './edit-panel-media-utils'
+import { useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager'
+import { useEditOverlayPanelPrewarm } from './use-edit-overlay-panel-prewarm'
 
 const TYPE_PLACEHOLDER_COLORS: Record<string, string> = {
   image: '#22c55e',
@@ -39,121 +36,125 @@ const TYPE_PLACEHOLDER_COLORS: Record<string, string> = {
   composition: '#3b82f6',
   audio: '#ec4899',
   gap: '#111827',
-};
+}
 
-const TEXT_SPACE = 56;
-const GAP = 8;
-const FALLBACK_CANVAS_WIDTH = 280;
-const FALLBACK_CANVAS_HEIGHT = 158;
-const STRICT_DECODE_FALLBACK_FAILURES = 2;
-const CACHE_TIME_QUANTUM = 1 / 60;
-const STRICT_DECODE_SHARED_CACHE_WAIT_MS = 6;
-const EDIT_OVERLAY_PREWARM_MAX_TIMESTAMPS = 6;
-const SCRUBBING_CACHE_TOLERANCE_FACTOR = 0.9;
-const EDIT_OVERLAY_LEGACY_SEEK_SPEED_EPSILON = 0.01;
-let previewVideoInstanceCounter = 0;
-let strictDecodeInstanceCounter = 0;
-let globalEditOverlayDecoderPool: SharedVideoExtractorPool | null = null;
+const TEXT_SPACE = 56
+const GAP = 8
+const FALLBACK_CANVAS_WIDTH = 280
+const FALLBACK_CANVAS_HEIGHT = 158
+const STRICT_DECODE_FALLBACK_FAILURES = 2
+const CACHE_TIME_QUANTUM = 1 / 60
+const STRICT_DECODE_SHARED_CACHE_WAIT_MS = 6
+const EDIT_OVERLAY_PREWARM_MAX_TIMESTAMPS = 6
+const SCRUBBING_CACHE_TOLERANCE_FACTOR = 0.9
+const EDIT_OVERLAY_LEGACY_SEEK_SPEED_EPSILON = 0.01
+let previewVideoInstanceCounter = 0
+let strictDecodeInstanceCounter = 0
+let globalEditOverlayDecoderPool: SharedVideoExtractorPool | null = null
 
 function getEditOverlayDecoderPool(): SharedVideoExtractorPool {
   if (!globalEditOverlayDecoderPool) {
-    globalEditOverlayDecoderPool = new SharedVideoExtractorPool();
+    globalEditOverlayDecoderPool = new SharedVideoExtractorPool()
   }
-  return globalEditOverlayDecoderPool;
+  return globalEditOverlayDecoderPool
 }
 
 function quantizeOverlayCacheTime(sourceTime: number): number {
-  return Math.round(sourceTime / CACHE_TIME_QUANTUM) * CACHE_TIME_QUANTUM;
+  return Math.round(sourceTime / CACHE_TIME_QUANTUM) * CACHE_TIME_QUANTUM
 }
 
 function useResolvedVideoBlobUrl(mediaId: string | undefined): string | null {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const blobUrlVersion = useBlobUrlVersion();
-  const requestKeyRef = useRef<string | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const blobUrlVersion = useBlobUrlVersion()
+  const requestKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    let cancelled = false;
-    const requestKey = `${mediaId ?? 'none'}:proxy-first`;
+    let cancelled = false
+    const requestKey = `${mediaId ?? 'none'}:proxy-first`
     if (requestKeyRef.current !== requestKey) {
-      requestKeyRef.current = requestKey;
-      setBlobUrl(null);
+      requestKeyRef.current = requestKey
+      setBlobUrl(null)
     }
 
     if (!mediaId) {
       return () => {
-        cancelled = true;
-      };
+        cancelled = true
+      }
     }
 
-    const proxyUrl = resolveProxyUrl(mediaId);
+    const proxyUrl = resolveProxyUrl(mediaId)
     if (proxyUrl) {
-      setBlobUrl(proxyUrl);
+      setBlobUrl(proxyUrl)
       return () => {
-        cancelled = true;
-      };
+        cancelled = true
+      }
     }
 
     resolveMediaUrl(mediaId)
       .then((url) => {
-        if (cancelled) return;
-        setBlobUrl(url || null);
+        if (cancelled) return
+        setBlobUrl(url || null)
       })
       .catch(() => {
-        if (cancelled) return;
-        setBlobUrl(null);
-      });
+        if (cancelled) return
+        setBlobUrl(null)
+      })
 
     return () => {
-      cancelled = true;
-    };
-  }, [mediaId, blobUrlVersion]);
+      cancelled = true
+    }
+  }, [mediaId, blobUrlVersion])
 
-  return blobUrl;
+  return blobUrl
 }
 
 export interface EditTwoUpPanelData {
-  item: TimelineItem | null;
-  sourceTime?: number;
-  timecode: string;
-  label: string;
-  placeholderText?: string;
+  item: TimelineItem | null
+  sourceTime?: number
+  timecode: string
+  label: string
+  placeholderText?: string
 }
 
 interface EditTwoUpPanelsProps {
-  leftPanel: EditTwoUpPanelData;
-  rightPanel: EditTwoUpPanelData;
+  leftPanel: EditTwoUpPanelData
+  rightPanel: EditTwoUpPanelData
 }
 
 export function EditTwoUpPanels({ leftPanel, rightPanel }: EditTwoUpPanelsProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  useEditOverlayPanelPrewarm([leftPanel, rightPanel]);
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+  useEditOverlayPanelPrewarm([leftPanel, rightPanel])
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const el = containerRef.current
+    if (!el) return
 
     const ro = new ResizeObserver(([entry]) => {
-      if (!entry) return;
-      const { width, height } = entry.contentRect;
+      if (!entry) return
+      const { width, height } = entry.contentRect
       setContainerSize((prev) =>
         prev.width === width && prev.height === height ? prev : { width, height },
-      );
-    });
+      )
+    })
 
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
-  const panelWidth = Math.max((containerSize.width - GAP) / 2, 1);
-  const maxAreaHeight = containerSize.height - TEXT_SPACE;
+  const panelWidth = Math.max((containerSize.width - GAP) / 2, 1)
+  const maxAreaHeight = containerSize.height - TEXT_SPACE
 
-  const leftNatural = panelWidth / getItemAspectRatio(leftPanel.item);
-  const rightNatural = panelWidth / getItemAspectRatio(rightPanel.item);
-  const sharedAreaHeight = Math.max(1, Math.min(Math.max(leftNatural, rightNatural), maxAreaHeight));
+  const leftNatural = panelWidth / getItemAspectRatio(leftPanel.item)
+  const rightNatural = panelWidth / getItemAspectRatio(rightPanel.item)
+  const sharedAreaHeight = Math.max(1, Math.min(Math.max(leftNatural, rightNatural), maxAreaHeight))
 
   return (
-    <div ref={containerRef} className="absolute inset-0 z-30 bg-black flex items-center" style={{ gap: GAP }}>
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-30 bg-black flex items-center"
+      style={{ gap: GAP }}
+    >
       <FramePanel
         item={leftPanel.item}
         sourceTime={leftPanel.sourceTime}
@@ -173,17 +174,17 @@ export function EditTwoUpPanels({ leftPanel, rightPanel }: EditTwoUpPanelsProps)
         placeholderText={rightPanel.placeholderText}
       />
     </div>
-  );
+  )
 }
 
 interface FramePanelProps {
-  item: TimelineItem | null;
-  sourceTime?: number;
-  timecode: string;
-  label: string;
-  areaHeight: number;
-  panelWidth: number;
-  placeholderText?: string;
+  item: TimelineItem | null
+  sourceTime?: number
+  timecode: string
+  label: string
+  areaHeight: number
+  panelWidth: number
+  placeholderText?: string
 }
 
 function FramePanel({
@@ -195,8 +196,8 @@ function FramePanel({
   panelWidth,
   placeholderText,
 }: FramePanelProps) {
-  const ar = getItemAspectRatio(item);
-  const { mediaWidth, mediaHeight } = computeFittedMediaSize(panelWidth, areaHeight, ar);
+  const ar = getItemAspectRatio(item)
+  const { mediaWidth, mediaHeight } = computeFittedMediaSize(panelWidth, areaHeight, ar)
 
   return (
     <div className="flex-1 min-w-0 flex flex-col items-center justify-center">
@@ -224,43 +225,43 @@ function FramePanel({
           })}
         </div>
       </div>
-      <span className="text-lg font-mono text-white/90 tabular-nums pt-1">
-        {timecode}
-      </span>
+      <span className="text-lg font-mono text-white/90 tabular-nums pt-1">{timecode}</span>
     </div>
-  );
+  )
 }
 
 interface VideoFrameProps {
-  item: TimelineItem;
-  sourceTime: number;
+  item: TimelineItem
+  sourceTime: number
 }
 
 function VideoFrameImpl({ item, sourceTime }: VideoFrameProps) {
-  const [useLegacyFallback, setUseLegacyFallback] = useState(false);
-  const [legacyFailed, setLegacyFailed] = useState(false);
-  const prefersLegacySeek = Math.abs((item.speed ?? 1) - 1) < EDIT_OVERLAY_LEGACY_SEEK_SPEED_EPSILON;
-  const canUseLegacySeek = !legacyFailed;
+  const [useLegacyFallback, setUseLegacyFallback] = useState(false)
+  const [legacyFailed, setLegacyFailed] = useState(false)
+  const prefersLegacySeek = Math.abs((item.speed ?? 1) - 1) < EDIT_OVERLAY_LEGACY_SEEK_SPEED_EPSILON
+  const canUseLegacySeek = !legacyFailed
 
   useEffect(() => {
-    setUseLegacyFallback(false);
-    setLegacyFailed(false);
-  }, [item.id, item.mediaId, prefersLegacySeek]);
+    setUseLegacyFallback(false)
+    setLegacyFailed(false)
+  }, [item.id, item.mediaId, prefersLegacySeek])
 
   const handleStrictDecodeFailure = useCallback(() => {
-    if (!canUseLegacySeek) return;
-    setUseLegacyFallback((prev) => (prev ? prev : true));
-  }, [canUseLegacySeek]);
+    if (!canUseLegacySeek) return
+    setUseLegacyFallback((prev) => (prev ? prev : true))
+  }, [canUseLegacySeek])
 
-  const shouldUseLegacySeek = canUseLegacySeek && (prefersLegacySeek || useLegacyFallback);
+  const shouldUseLegacySeek = canUseLegacySeek && (prefersLegacySeek || useLegacyFallback)
 
   const handleLegacyFailure = useCallback(() => {
-    setLegacyFailed(true);
-    setUseLegacyFallback(false);
-  }, []);
+    setLegacyFailed(true)
+    setUseLegacyFallback(false)
+  }, [])
 
   if (shouldUseLegacySeek) {
-    return <LegacySeekVideoFrame item={item} sourceTime={sourceTime} onFailure={handleLegacyFailure} />;
+    return (
+      <LegacySeekVideoFrame item={item} sourceTime={sourceTime} onFailure={handleLegacyFailure} />
+    )
   }
 
   return (
@@ -269,11 +270,11 @@ function VideoFrameImpl({ item, sourceTime }: VideoFrameProps) {
       sourceTime={sourceTime}
       onDecodeFailure={handleStrictDecodeFailure}
     />
-  );
+  )
 }
 
 interface StrictDecodedVideoFrameProps extends VideoFrameProps {
-  onDecodeFailure: () => void;
+  onDecodeFailure: () => void
 }
 
 function StrictDecodedVideoFrame({
@@ -281,322 +282,325 @@ function StrictDecodedVideoFrame({
   sourceTime,
   onDecodeFailure,
 }: StrictDecodedVideoFrameProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const decoderPoolRef = useRef(getEditOverlayDecoderPool());
-  const decodeLaneRef = useRef<string>(`edit-preview-strict-${++strictDecodeInstanceCounter}`);
-  const prewarmFps = Math.max(1, Math.round(item.sourceFps ?? 60));
-  const extractorRef = useRef<VideoFrameSource | null>(null);
-  const mountedRef = useRef(true);
-  const decoderReadyRef = useRef(false);
-  const renderInFlightRef = useRef(false);
-  const pendingTimeRef = useRef<number | null>(null);
-  const consecutiveDecodeFailuresRef = useRef(0);
-  const latestTargetTimeRef = useRef(Math.max(0, sourceTime));
-  const blobUrl = useResolvedVideoBlobUrl(item.mediaId);
-  const contextRef = useRef<CanvasRenderingContext2D | null>(null);
-  const decoderItemId = `${item.id}:${decodeLaneRef.current}`;
-  const prewarmInFlightRef = useRef(false);
-  const queuedPrewarmTimesRef = useRef<number[]>([]);
-  const prewarmAnchorFrameRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const decoderPoolRef = useRef(getEditOverlayDecoderPool())
+  const decodeLaneRef = useRef<string>(`edit-preview-strict-${++strictDecodeInstanceCounter}`)
+  const prewarmFps = Math.max(1, Math.round(item.sourceFps ?? 60))
+  const extractorRef = useRef<VideoFrameSource | null>(null)
+  const mountedRef = useRef(true)
+  const decoderReadyRef = useRef(false)
+  const renderInFlightRef = useRef(false)
+  const pendingTimeRef = useRef<number | null>(null)
+  const consecutiveDecodeFailuresRef = useRef(0)
+  const latestTargetTimeRef = useRef(Math.max(0, sourceTime))
+  const blobUrl = useResolvedVideoBlobUrl(item.mediaId)
+  const contextRef = useRef<CanvasRenderingContext2D | null>(null)
+  const decoderItemId = `${item.id}:${decodeLaneRef.current}`
+  const prewarmInFlightRef = useRef(false)
+  const queuedPrewarmTimesRef = useRef<number[]>([])
+  const prewarmAnchorFrameRef = useRef<number | null>(null)
 
   useEffect(() => {
-    mountedRef.current = true;
+    mountedRef.current = true
     return () => {
-      mountedRef.current = false;
-      prewarmInFlightRef.current = false;
-      queuedPrewarmTimesRef.current = [];
-      prewarmAnchorFrameRef.current = null;
-    };
-  }, []);
+      mountedRef.current = false
+      prewarmInFlightRef.current = false
+      queuedPrewarmTimesRef.current = []
+      prewarmAnchorFrameRef.current = null
+    }
+  }, [])
 
   const pumpDirectionalPrewarm = useCallback(() => {
     if (
-      prewarmInFlightRef.current
-      || !decoderReadyRef.current
-      || !mountedRef.current
-      || pendingTimeRef.current !== null
+      prewarmInFlightRef.current ||
+      !decoderReadyRef.current ||
+      !mountedRef.current ||
+      pendingTimeRef.current !== null
     ) {
-      return;
+      return
     }
 
     if (!blobUrl) {
-      queuedPrewarmTimesRef.current = [];
-      return;
+      queuedPrewarmTimesRef.current = []
+      return
     }
 
-    const timestamps = queuedPrewarmTimesRef.current;
+    const timestamps = queuedPrewarmTimesRef.current
     if (timestamps.length === 0) {
-      return;
+      return
     }
 
-    prewarmInFlightRef.current = true;
-    queuedPrewarmTimesRef.current = [];
+    prewarmInFlightRef.current = true
+    queuedPrewarmTimesRef.current = []
 
     const run = async () => {
       try {
-        await backgroundBatchPreseek(blobUrl, timestamps);
+        await backgroundBatchPreseek(blobUrl, timestamps)
       } finally {
-        prewarmInFlightRef.current = false;
+        prewarmInFlightRef.current = false
         if (
-          mountedRef.current
-          && pendingTimeRef.current === null
-          && queuedPrewarmTimesRef.current.length > 0
+          mountedRef.current &&
+          pendingTimeRef.current === null &&
+          queuedPrewarmTimesRef.current.length > 0
         ) {
           queueMicrotask(() => {
-            if (!mountedRef.current) return;
-            pumpDirectionalPrewarm();
-          });
+            if (!mountedRef.current) return
+            pumpDirectionalPrewarm()
+          })
         }
       }
-    };
-
-    void run();
-  }, [blobUrl]);
-
-  const queueDirectionalPrewarm = useCallback((targetTime: number) => {
-    const extractor = extractorRef.current;
-    if (
-      !extractor
-      || !decoderReadyRef.current
-      || pendingTimeRef.current !== null
-      || !blobUrl
-    ) {
-      return;
     }
 
-    const result = collectEditOverlayDirectionalPrewarmTimes({
-      targetTime,
-      duration: extractor.getDuration(),
-      fps: prewarmFps,
-      previousAnchorFrame: prewarmAnchorFrameRef.current,
-      quantumSeconds: CACHE_TIME_QUANTUM,
-      maxTimestamps: EDIT_OVERLAY_PREWARM_MAX_TIMESTAMPS,
-      isCached: (time) => {
-        const overlayCacheKey = getEditOverlayFrameCacheKey(blobUrl, time, CACHE_TIME_QUANTUM);
-        return hasCachedEditOverlayFrame(overlayCacheKey)
-          || getCachedPredecodedBitmap(blobUrl, time, CACHE_TIME_QUANTUM) !== null;
-      },
-    });
+    void run()
+  }, [blobUrl])
 
-    prewarmAnchorFrameRef.current = result.targetFrame;
-    queuedPrewarmTimesRef.current = result.times;
-    pumpDirectionalPrewarm();
-  }, [blobUrl, prewarmFps, pumpDirectionalPrewarm]);
-
-  const drawFrame = useCallback(async (targetTime: number) => {
-    const extractor = extractorRef.current;
-    const canvas = canvasRef.current;
-    if (!extractor || !canvas) return false;
-
-    let ctx = contextRef.current;
-    if (!ctx) {
-      ctx = canvas.getContext('2d');
-      if (!ctx) return false;
-      contextRef.current = ctx;
-    }
-
-    const { width: decodedWidth, height: decodedHeight } = extractor.getDimensions();
-    const targetWidth = Math.max(1, Math.round(decodedWidth || FALLBACK_CANVAS_WIDTH));
-    const targetHeight = Math.max(1, Math.round(decodedHeight || FALLBACK_CANVAS_HEIGHT));
-
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-    }
-
-    const cacheKey = blobUrl
-      ? getEditOverlayFrameCacheKey(blobUrl, targetTime, CACHE_TIME_QUANTUM)
-      : null;
-    const quantizedTargetTime = quantizeOverlayCacheTime(targetTime);
-    const drawBitmap = (bitmap: CanvasImageSource) => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    };
-    const populateSharedScrubCache = (source: ImageBitmap, resolvedSourceTime: number) => {
-      const scrubbingCache = getActivePreviewScrubbingCache();
-      if (!scrubbingCache) {
-        return;
-      }
-      void createImageBitmap(source)
-        .then((bitmap) => {
-          scrubbingCache.putVideoFrame(item.id, bitmap, quantizeOverlayCacheTime(resolvedSourceTime));
-        })
-        .catch(() => {
-          // Shared scrub cache population is best-effort only.
-        });
-    };
-
-    if (cacheKey) {
-      const sharedCachedFrame = getCachedEditOverlayFrame(cacheKey);
-      if (sharedCachedFrame) {
-        drawBitmap(sharedCachedFrame);
-        populateSharedScrubCache(sharedCachedFrame, targetTime);
-        return true;
-      }
-    }
-
-    const scrubbingCacheTolerance = Math.max(
-      CACHE_TIME_QUANTUM / 2,
-      (SCRUBBING_CACHE_TOLERANCE_FACTOR / prewarmFps) / 2,
-    );
-    const scrubCachedFrame = getActivePreviewVideoFrameEntry(
-      item.id,
-      quantizedTargetTime,
-      scrubbingCacheTolerance,
-    );
-    if (scrubCachedFrame) {
-      drawBitmap(scrubCachedFrame.frame);
-      return true;
-    }
-
-    if (blobUrl) {
-      const predecodedBitmap = getCachedPredecodedBitmap(blobUrl, targetTime, CACHE_TIME_QUANTUM);
-      if (predecodedBitmap) {
-        drawBitmap(predecodedBitmap);
-        populateSharedScrubCache(predecodedBitmap, targetTime);
-        return true;
+  const queueDirectionalPrewarm = useCallback(
+    (targetTime: number) => {
+      const extractor = extractorRef.current
+      if (!extractor || !decoderReadyRef.current || pendingTimeRef.current !== null || !blobUrl) {
+        return
       }
 
-      const inflightBitmap = await waitForInflightPredecodedBitmap(
-        blobUrl,
+      const result = collectEditOverlayDirectionalPrewarmTimes({
         targetTime,
-        CACHE_TIME_QUANTUM,
-        STRICT_DECODE_SHARED_CACHE_WAIT_MS,
-      ).catch(() => null);
-      if (inflightBitmap) {
-        drawBitmap(inflightBitmap);
-        populateSharedScrubCache(inflightBitmap, targetTime);
-        return true;
+        duration: extractor.getDuration(),
+        fps: prewarmFps,
+        previousAnchorFrame: prewarmAnchorFrameRef.current,
+        quantumSeconds: CACHE_TIME_QUANTUM,
+        maxTimestamps: EDIT_OVERLAY_PREWARM_MAX_TIMESTAMPS,
+        isCached: (time) => {
+          const overlayCacheKey = getEditOverlayFrameCacheKey(blobUrl, time, CACHE_TIME_QUANTUM)
+          return (
+            hasCachedEditOverlayFrame(overlayCacheKey) ||
+            getCachedPredecodedBitmap(blobUrl, time, CACHE_TIME_QUANTUM) !== null
+          )
+        },
+      })
+
+      prewarmAnchorFrameRef.current = result.targetFrame
+      queuedPrewarmTimesRef.current = result.times
+      pumpDirectionalPrewarm()
+    },
+    [blobUrl, prewarmFps, pumpDirectionalPrewarm],
+  )
+
+  const drawFrame = useCallback(
+    async (targetTime: number) => {
+      const extractor = extractorRef.current
+      const canvas = canvasRef.current
+      if (!extractor || !canvas) return false
+
+      let ctx = contextRef.current
+      if (!ctx) {
+        ctx = canvas.getContext('2d')
+        if (!ctx) return false
+        contextRef.current = ctx
       }
-    }
 
-    const drawResult = await extractor.drawFrameWithCapture(
-      ctx,
-      Math.max(0, targetTime),
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
-    if (!drawResult.success) return false;
+      const { width: decodedWidth, height: decodedHeight } = extractor.getDimensions()
+      const targetWidth = Math.max(1, Math.round(decodedWidth || FALLBACK_CANVAS_WIDTH))
+      const targetHeight = Math.max(1, Math.round(decodedHeight || FALLBACK_CANVAS_HEIGHT))
 
-    const scrubbingCache = getActivePreviewScrubbingCache();
-    if (scrubbingCache && drawResult.capturedFrame) {
-      scrubbingCache.putVideoFrame(
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth
+        canvas.height = targetHeight
+      }
+
+      const cacheKey = blobUrl
+        ? getEditOverlayFrameCacheKey(blobUrl, targetTime, CACHE_TIME_QUANTUM)
+        : null
+      const quantizedTargetTime = quantizeOverlayCacheTime(targetTime)
+      const drawBitmap = (bitmap: CanvasImageSource) => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      }
+      const populateSharedScrubCache = (source: ImageBitmap, resolvedSourceTime: number) => {
+        const scrubbingCache = getActivePreviewScrubbingCache()
+        if (!scrubbingCache) {
+          return
+        }
+        void createImageBitmap(source)
+          .then((bitmap) => {
+            scrubbingCache.putVideoFrame(
+              item.id,
+              bitmap,
+              quantizeOverlayCacheTime(resolvedSourceTime),
+            )
+          })
+          .catch(() => {
+            // Shared scrub cache population is best-effort only.
+          })
+      }
+
+      if (cacheKey) {
+        const sharedCachedFrame = getCachedEditOverlayFrame(cacheKey)
+        if (sharedCachedFrame) {
+          drawBitmap(sharedCachedFrame)
+          populateSharedScrubCache(sharedCachedFrame, targetTime)
+          return true
+        }
+      }
+
+      const scrubbingCacheTolerance = Math.max(
+        CACHE_TIME_QUANTUM / 2,
+        SCRUBBING_CACHE_TOLERANCE_FACTOR / prewarmFps / 2,
+      )
+      const scrubCachedFrame = getActivePreviewVideoFrameEntry(
         item.id,
-        drawResult.capturedFrame,
         quantizedTargetTime,
-      );
-    }
-
-    if (cacheKey) {
-      try {
-        const bitmap = await createImageBitmap(canvas);
-        putCachedEditOverlayFrame(cacheKey, bitmap);
-      } catch {
-        // Shared overlay cache population is best-effort only.
+        scrubbingCacheTolerance,
+      )
+      if (scrubCachedFrame) {
+        drawBitmap(scrubCachedFrame.frame)
+        return true
       }
-    }
 
-    return true;
-  }, [blobUrl]);
+      if (blobUrl) {
+        const predecodedBitmap = getCachedPredecodedBitmap(blobUrl, targetTime, CACHE_TIME_QUANTUM)
+        if (predecodedBitmap) {
+          drawBitmap(predecodedBitmap)
+          populateSharedScrubCache(predecodedBitmap, targetTime)
+          return true
+        }
+
+        const inflightBitmap = await waitForInflightPredecodedBitmap(
+          blobUrl,
+          targetTime,
+          CACHE_TIME_QUANTUM,
+          STRICT_DECODE_SHARED_CACHE_WAIT_MS,
+        ).catch(() => null)
+        if (inflightBitmap) {
+          drawBitmap(inflightBitmap)
+          populateSharedScrubCache(inflightBitmap, targetTime)
+          return true
+        }
+      }
+
+      const drawResult = await extractor.drawFrameWithCapture(
+        ctx,
+        Math.max(0, targetTime),
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      )
+      if (!drawResult.success) return false
+
+      const scrubbingCache = getActivePreviewScrubbingCache()
+      if (scrubbingCache && drawResult.capturedFrame) {
+        scrubbingCache.putVideoFrame(item.id, drawResult.capturedFrame, quantizedTargetTime)
+      }
+
+      if (cacheKey) {
+        try {
+          const bitmap = await createImageBitmap(canvas)
+          putCachedEditOverlayFrame(cacheKey, bitmap)
+        } catch {
+          // Shared overlay cache population is best-effort only.
+        }
+      }
+
+      return true
+    },
+    [blobUrl, item.id, prewarmFps],
+  )
 
   const pumpLatestFrame = useCallback(() => {
-    if (renderInFlightRef.current) return;
-    renderInFlightRef.current = true;
+    if (renderInFlightRef.current) return
+    renderInFlightRef.current = true
 
     const run = async () => {
       try {
         while (decoderReadyRef.current && pendingTimeRef.current !== null && mountedRef.current) {
-          const targetTime = pendingTimeRef.current;
-          pendingTimeRef.current = null;
+          const targetTime = pendingTimeRef.current
+          pendingTimeRef.current = null
 
-          const didDraw = await drawFrame(targetTime).catch(() => false);
+          const didDraw = await drawFrame(targetTime).catch(() => false)
           if (didDraw) {
-            consecutiveDecodeFailuresRef.current = 0;
-            queueDirectionalPrewarm(targetTime);
-            continue;
+            consecutiveDecodeFailuresRef.current = 0
+            queueDirectionalPrewarm(targetTime)
+            continue
           }
 
-          const failureKind = extractorRef.current?.getLastFailureKind() ?? 'decode-error';
+          const failureKind = extractorRef.current?.getLastFailureKind() ?? 'decode-error'
           if (failureKind === 'decode-error') {
-            consecutiveDecodeFailuresRef.current += 1;
+            consecutiveDecodeFailuresRef.current += 1
             if (consecutiveDecodeFailuresRef.current >= STRICT_DECODE_FALLBACK_FAILURES) {
-              onDecodeFailure();
-              return;
+              onDecodeFailure()
+              return
             }
           }
         }
       } finally {
-        renderInFlightRef.current = false;
+        renderInFlightRef.current = false
         if (decoderReadyRef.current && pendingTimeRef.current !== null && mountedRef.current) {
           queueMicrotask(() => {
-            if (!mountedRef.current) return;
-            pumpLatestFrame();
-          });
+            if (!mountedRef.current) return
+            pumpLatestFrame()
+          })
         }
       }
-    };
+    }
 
-    void run();
-  }, [drawFrame, onDecodeFailure, queueDirectionalPrewarm]);
+    void run()
+  }, [drawFrame, onDecodeFailure, queueDirectionalPrewarm])
 
   useEffect(() => {
-    decoderReadyRef.current = false;
-    extractorRef.current = null;
-    pendingTimeRef.current = null;
-    consecutiveDecodeFailuresRef.current = 0;
-    contextRef.current = null;
-    prewarmInFlightRef.current = false;
-    queuedPrewarmTimesRef.current = [];
-    prewarmAnchorFrameRef.current = null;
+    decoderReadyRef.current = false
+    extractorRef.current = null
+    pendingTimeRef.current = null
+    consecutiveDecodeFailuresRef.current = 0
+    contextRef.current = null
+    prewarmInFlightRef.current = false
+    queuedPrewarmTimesRef.current = []
+    prewarmAnchorFrameRef.current = null
 
-    if (!blobUrl) return;
+    if (!blobUrl) return
 
-    const pool = decoderPoolRef.current;
-    const extractor = pool.getOrCreateItemExtractor(decoderItemId, blobUrl);
-    extractorRef.current = extractor;
+    const pool = decoderPoolRef.current
+    const extractor = pool.getOrCreateItemExtractor(decoderItemId, blobUrl)
+    extractorRef.current = extractor
 
-    let cancelled = false;
+    let cancelled = false
     void extractor
       .init()
       .then((ready) => {
-        if (cancelled || !mountedRef.current) return;
+        if (cancelled || !mountedRef.current) return
         if (!ready) {
-          onDecodeFailure();
-          return;
+          onDecodeFailure()
+          return
         }
-        decoderReadyRef.current = true;
-        pendingTimeRef.current = latestTargetTimeRef.current;
-        pumpLatestFrame();
+        decoderReadyRef.current = true
+        pendingTimeRef.current = latestTargetTimeRef.current
+        pumpLatestFrame()
       })
       .catch(() => {
-        if (cancelled || !mountedRef.current) return;
-        onDecodeFailure();
-      });
+        if (cancelled || !mountedRef.current) return
+        onDecodeFailure()
+      })
 
     return () => {
-      cancelled = true;
-      decoderReadyRef.current = false;
-      extractorRef.current = null;
-      pendingTimeRef.current = null;
-      pool.releaseItem(decoderItemId);
-    };
-  }, [blobUrl, decoderItemId, onDecodeFailure, pumpLatestFrame]);
+      cancelled = true
+      decoderReadyRef.current = false
+      extractorRef.current = null
+      pendingTimeRef.current = null
+      pool.releaseItem(decoderItemId)
+    }
+  }, [blobUrl, decoderItemId, onDecodeFailure, pumpLatestFrame])
 
   useEffect(() => {
-    const targetTime = Math.max(0, sourceTime);
-    latestTargetTimeRef.current = targetTime;
-    pendingTimeRef.current = targetTime;
+    const targetTime = Math.max(0, sourceTime)
+    latestTargetTimeRef.current = targetTime
+    pendingTimeRef.current = targetTime
 
     if (blobUrl) {
-      void backgroundPreseek(blobUrl, targetTime).catch(() => null);
+      void backgroundPreseek(blobUrl, targetTime).catch(() => null)
     }
 
     if (decoderReadyRef.current) {
-      pumpLatestFrame();
+      pumpLatestFrame()
     }
-  }, [blobUrl, sourceTime, pumpLatestFrame]);
+  }, [blobUrl, sourceTime, pumpLatestFrame])
 
   return (
     <canvas
@@ -604,128 +608,131 @@ function StrictDecodedVideoFrame({
       className="w-full h-full object-contain"
       style={{ imageRendering: 'auto' }}
     />
-  );
+  )
 }
 
 interface LegacySeekVideoFrameProps extends VideoFrameProps {
-  onFailure: () => void;
+  onFailure: () => void
 }
 
 function LegacySeekVideoFrame({ item, sourceTime, onFailure }: LegacySeekVideoFrameProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const poolRef = useRef(getGlobalVideoSourcePool());
-  const poolClipIdRef = useRef<string>(`edit-preview-${++previewVideoInstanceCounter}`);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const blobUrl = useResolvedVideoBlobUrl(item.mediaId);
-  const contextRef = useRef<CanvasRenderingContext2D | null>(null);
-  const seekingRef = useRef(false);
-  const pendingTimeRef = useRef<number | null>(null);
-  const latestTargetTimeRef = useRef(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const poolRef = useRef(getGlobalVideoSourcePool())
+  const poolClipIdRef = useRef<string>(`edit-preview-${++previewVideoInstanceCounter}`)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const blobUrl = useResolvedVideoBlobUrl(item.mediaId)
+  const contextRef = useRef<CanvasRenderingContext2D | null>(null)
+  const seekingRef = useRef(false)
+  const pendingTimeRef = useRef<number | null>(null)
+  const latestTargetTimeRef = useRef(0)
 
   const drawFrame = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas || video.readyState < 2) return;
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || video.readyState < 2) return
 
-    let ctx = contextRef.current;
+    let ctx = contextRef.current
     if (!ctx) {
-      ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      contextRef.current = ctx;
+      ctx = canvas.getContext('2d')
+      if (!ctx) return
+      contextRef.current = ctx
     }
 
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth || FALLBACK_CANVAS_WIDTH;
-      canvas.height = video.videoHeight || FALLBACK_CANVAS_HEIGHT;
+      canvas.width = video.videoWidth || FALLBACK_CANVAS_WIDTH
+      canvas.height = video.videoHeight || FALLBACK_CANVAS_HEIGHT
     }
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  }, []);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+  }, [])
 
-  const requestSeek = useCallback((targetTime: number) => {
-    const video = videoRef.current;
-    if (!video) return;
+  const requestSeek = useCallback(
+    (targetTime: number) => {
+      const video = videoRef.current
+      if (!video) return
 
-    const tolerance = 0.001;
-    if (seekingRef.current) {
-      pendingTimeRef.current = targetTime;
-      return;
-    }
+      const tolerance = 0.001
+      if (seekingRef.current) {
+        pendingTimeRef.current = targetTime
+        return
+      }
 
-    if (Math.abs(video.currentTime - targetTime) < tolerance) {
-      drawFrame();
-      return;
-    }
+      if (Math.abs(video.currentTime - targetTime) < tolerance) {
+        drawFrame()
+        return
+      }
 
-    seekingRef.current = true;
-    video.currentTime = targetTime;
-  }, [drawFrame]);
+      seekingRef.current = true
+      video.currentTime = targetTime
+    },
+    [drawFrame],
+  )
 
   useEffect(() => {
-    if (!blobUrl) return;
+    if (!blobUrl) return
 
-    const pool = poolRef.current;
-    const clipId = poolClipIdRef.current;
-    seekingRef.current = false;
-    pendingTimeRef.current = null;
+    const pool = poolRef.current
+    const clipId = poolClipIdRef.current
+    seekingRef.current = false
+    pendingTimeRef.current = null
 
-    pool.preloadSource(blobUrl).catch(() => {});
+    pool.preloadSource(blobUrl).catch(() => {})
 
-    const video = pool.acquireForClip(clipId, blobUrl);
-    if (!video) return;
+    const video = pool.acquireForClip(clipId, blobUrl)
+    if (!video) return
 
-    video.preload = 'auto';
-    video.muted = true;
-    video.playsInline = true;
-    videoRef.current = video;
+    video.preload = 'auto'
+    video.muted = true
+    video.playsInline = true
+    videoRef.current = video
 
     const handleError = () => {
-      onFailure();
-    };
+      onFailure()
+    }
 
     const handleSeeked = () => {
-      seekingRef.current = false;
-      drawFrame();
+      seekingRef.current = false
+      drawFrame()
 
       if (pendingTimeRef.current !== null) {
-        const next = pendingTimeRef.current;
-        pendingTimeRef.current = null;
-        requestSeek(next);
+        const next = pendingTimeRef.current
+        pendingTimeRef.current = null
+        requestSeek(next)
       }
-    };
+    }
 
     // Fallback for seeking to time 0 on a new video: currentTime is already 0,
     // so browsers may not dispatch "seeked". Draw once data is available.
     const handleLoadedData = () => {
       if (Math.abs(video.currentTime - latestTargetTimeRef.current) < 0.001) {
-        drawFrame();
+        drawFrame()
       }
-    };
+    }
 
-    video.addEventListener('error', handleError);
-    video.addEventListener('seeked', handleSeeked);
-    video.addEventListener('loadeddata', handleLoadedData);
+    video.addEventListener('error', handleError)
+    video.addEventListener('seeked', handleSeeked)
+    video.addEventListener('loadeddata', handleLoadedData)
 
     return () => {
-      video.removeEventListener('error', handleError);
-      video.removeEventListener('seeked', handleSeeked);
-      video.removeEventListener('loadeddata', handleLoadedData);
-      video.pause();
-      videoRef.current = null;
-      seekingRef.current = false;
-      pendingTimeRef.current = null;
-      pool.releaseClip(clipId);
-    };
-  }, [blobUrl, drawFrame, onFailure, requestSeek]);
+      video.removeEventListener('error', handleError)
+      video.removeEventListener('seeked', handleSeeked)
+      video.removeEventListener('loadeddata', handleLoadedData)
+      video.pause()
+      videoRef.current = null
+      seekingRef.current = false
+      pendingTimeRef.current = null
+      pool.releaseClip(clipId)
+    }
+  }, [blobUrl, drawFrame, onFailure, requestSeek])
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !blobUrl) return;
+    const video = videoRef.current
+    if (!video || !blobUrl) return
 
-    const targetTime = Math.max(0, sourceTime);
-    latestTargetTimeRef.current = targetTime;
-    requestSeek(targetTime);
-  }, [sourceTime, blobUrl, requestSeek]);
+    const targetTime = Math.max(0, sourceTime)
+    latestTargetTimeRef.current = targetTime
+    requestSeek(targetTime)
+  }, [sourceTime, blobUrl, requestSeek])
 
   return (
     <canvas
@@ -733,82 +740,72 @@ function LegacySeekVideoFrame({ item, sourceTime, onFailure }: LegacySeekVideoFr
       className="w-full h-full object-contain"
       style={{ imageRendering: 'auto' }}
     />
-  );
+  )
 }
 
-const areVideoFramePropsEqual = (prev: VideoFrameProps, next: VideoFrameProps) => (
-  prev.sourceTime === next.sourceTime
-  && prev.item.id === next.item.id
-  && prev.item.mediaId === next.item.mediaId
-);
+const areVideoFramePropsEqual = (prev: VideoFrameProps, next: VideoFrameProps) =>
+  prev.sourceTime === next.sourceTime &&
+  prev.item.id === next.item.id &&
+  prev.item.mediaId === next.item.mediaId
 
-export const VideoFrame = memo(VideoFrameImpl, areVideoFramePropsEqual);
+export const VideoFrame = memo(VideoFrameImpl, areVideoFramePropsEqual)
 
 interface ImageFrameProps {
-  item: TimelineItem;
+  item: TimelineItem
 }
 
 function ImageFrameImpl({ item }: ImageFrameProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    let cancelled = false;
-    if (!item.mediaId) return;
+    let cancelled = false
+    if (!item.mediaId) return
 
     resolveMediaUrl(item.mediaId).then((url) => {
-      if (!cancelled && url) setBlobUrl(url);
-    });
+      if (!cancelled && url) setBlobUrl(url)
+    })
 
     return () => {
-      cancelled = true;
-    };
-  }, [item.mediaId]);
+      cancelled = true
+    }
+  }, [item.mediaId])
 
   useEffect(() => {
-    if (!blobUrl) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!blobUrl) return
+    const canvas = canvasRef.current
+    if (!canvas) return
 
-    const img = new Image();
+    const img = new Image()
     img.onload = () => {
-      canvas.width = img.naturalWidth || 280;
-      canvas.height = img.naturalHeight || 158;
-      const ctx = canvas.getContext('2d');
-      if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    };
-    img.src = blobUrl;
+      canvas.width = img.naturalWidth || 280
+      canvas.height = img.naturalHeight || 158
+      const ctx = canvas.getContext('2d')
+      if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    }
+    img.src = blobUrl
 
     return () => {
-      img.onload = null;
-    };
-  }, [blobUrl]);
+      img.onload = null
+    }
+  }, [blobUrl])
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full object-contain"
-    />
-  );
+  return <canvas ref={canvasRef} className="w-full h-full object-contain" />
 }
 
-const areImageFramePropsEqual = (prev: ImageFrameProps, next: ImageFrameProps) => (
-  prev.item.id === next.item.id
-  && prev.item.mediaId === next.item.mediaId
-);
+const areImageFramePropsEqual = (prev: ImageFrameProps, next: ImageFrameProps) =>
+  prev.item.id === next.item.id && prev.item.mediaId === next.item.mediaId
 
-export const ImageFrame = memo(ImageFrameImpl, areImageFramePropsEqual);
+export const ImageFrame = memo(ImageFrameImpl, areImageFramePropsEqual)
 
 export function TypePlaceholder({ type, text }: { type: string; text: string }) {
-  const color = TYPE_PLACEHOLDER_COLORS[type] ?? '#6b7280';
+  const color = TYPE_PLACEHOLDER_COLORS[type] ?? '#6b7280'
   return (
     <div
       className="w-full h-full flex items-center justify-center"
       style={{ backgroundColor: color }}
     >
-      <span className="text-sm font-medium text-white/90 uppercase tracking-wide">
-        {text}
-      </span>
+      <span className="text-sm font-medium text-white/90 uppercase tracking-wide">{text}</span>
     </div>
-  );
+  )
 }

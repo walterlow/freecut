@@ -13,17 +13,24 @@
  * when a renderer is registered, falling back to built-in fade for unknown types.
  */
 
-import type { Transition, TransitionTiming, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing';
-import type { TransitionRenderer } from './registry';
+import type {
+  Transition,
+  TransitionTiming,
+  WipeDirection,
+  SlideDirection,
+  FlipDirection,
+} from '@/types/transition'
+import { easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
+import type { TransitionRenderer } from './registry'
 
 // Lazy registry reference to avoid circular dependency at import time.
 // The registry module imports from renderers which import engine types.
-let _registryGetter: (() => { getRenderer(id: string): TransitionRenderer | undefined }) | null = null;
+let _registryGetter: (() => { getRenderer(id: string): TransitionRenderer | undefined }) | null =
+  null
 
 /** Called by index.ts after registration to provide the registry reference */
 export function _setRegistryGetter(getter: typeof _registryGetter): void {
-  _registryGetter = getter;
+  _registryGetter = getter
 }
 
 // ============================================================================
@@ -31,23 +38,23 @@ export function _setRegistryGetter(getter: typeof _registryGetter): void {
 // ============================================================================
 
 interface TransitionTimingConfig {
-  timing: TransitionTiming;
-  fps: number;
-  durationInFrames: number;
-  bezierPoints?: { x1: number; y1: number; x2: number; y2: number };
+  timing: TransitionTiming
+  fps: number
+  durationInFrames: number
+  bezierPoints?: { x1: number; y1: number; x2: number; y2: number }
 }
 
 export interface TransitionStyleCalculation {
-  opacity?: number;
-  transform?: string;
-  clipPath?: string;
-  maskImage?: string;
-  webkitClipPath?: string;
-  webkitMaskImage?: string;
-  maskSize?: string;
-  webkitMaskSize?: string;
-  maskPosition?: string;
-  webkitMaskPosition?: string;
+  opacity?: number
+  transform?: string
+  clipPath?: string
+  maskImage?: string
+  webkitClipPath?: string
+  webkitMaskImage?: string
+  maskSize?: string
+  webkitMaskSize?: string
+  maskPosition?: string
+  webkitMaskPosition?: string
 }
 
 // ============================================================================
@@ -58,15 +65,15 @@ export interface TransitionStyleCalculation {
  * Pre-calculated easing lookup table for common frame counts.
  * Avoids recalculating easing functions repeatedly.
  */
-const easingCache = new Map<string, number[]>();
+const easingCache = new Map<string, number[]>()
 
 function getEasingCacheKey(config: TransitionTimingConfig): string {
-  let key = `${config.timing}-${config.fps}-${config.durationInFrames}`;
+  let key = `${config.timing}-${config.fps}-${config.durationInFrames}`
   if (config.timing === 'cubic-bezier' && config.bezierPoints) {
-    const b = config.bezierPoints;
-    key += `-${b.x1}-${b.y1}-${b.x2}-${b.y2}`;
+    const b = config.bezierPoints
+    key += `-${b.x1}-${b.y1}-${b.x2}-${b.y2}`
   }
-  return key;
+  return key
 }
 
 /**
@@ -74,46 +81,43 @@ function getEasingCacheKey(config: TransitionTimingConfig): string {
  * Results are cached for reuse.
  */
 export function calculateEasingCurve(config: TransitionTimingConfig): number[] {
-  const cacheKey = getEasingCacheKey(config);
+  const cacheKey = getEasingCacheKey(config)
 
   if (easingCache.has(cacheKey)) {
-    return easingCache.get(cacheKey)!;
+    return easingCache.get(cacheKey)!
   }
 
-  const { timing, durationInFrames, bezierPoints } = config;
-  const curve: number[] = [];
+  const { timing, durationInFrames, bezierPoints } = config
+  const curve: number[] = []
 
   for (let frame = 0; frame < durationInFrames; frame++) {
-    const linearProgress = frame / Math.max(1, durationInFrames - 1);
+    const linearProgress = frame / Math.max(1, durationInFrames - 1)
 
     switch (timing) {
-      case 'spring':
-        curve.push(springEasing(linearProgress, { tension: 180, friction: 12, mass: 1 }));
-        break;
       case 'ease-in':
-        curve.push(easeIn(linearProgress));
-        break;
+        curve.push(easeIn(linearProgress))
+        break
       case 'ease-out':
-        curve.push(easeOut(linearProgress));
-        break;
+        curve.push(easeOut(linearProgress))
+        break
       case 'ease-in-out':
-        curve.push(easeInOut(linearProgress));
-        break;
+        curve.push(easeInOut(linearProgress))
+        break
       case 'cubic-bezier':
         if (bezierPoints) {
-          curve.push(cubicBezier(linearProgress, bezierPoints));
+          curve.push(cubicBezier(linearProgress, bezierPoints))
         } else {
-          curve.push(linearProgress);
+          curve.push(linearProgress)
         }
-        break;
+        break
       default: // 'linear'
-        curve.push(linearProgress);
-        break;
+        curve.push(linearProgress)
+        break
     }
   }
 
-  easingCache.set(cacheKey, curve);
-  return curve;
+  easingCache.set(cacheKey, curve)
+  return curve
 }
 
 // ============================================================================
@@ -121,14 +125,13 @@ export function calculateEasingCurve(config: TransitionTimingConfig): number[] {
 // ============================================================================
 
 /**
- * Calculate fade opacity using equal-power crossfade.
+ * Calculate fade opacity as a dip through black.
  */
 function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
-  if (isOutgoing) {
-    return Math.cos((progress * Math.PI) / 2);
-  } else {
-    return Math.sin((progress * Math.PI) / 2);
+  if (progress < 0.5) {
+    return isOutgoing ? Math.max(0, Math.cos(progress * Math.PI)) : 0
   }
+  return isOutgoing ? 0 : Math.max(0, -Math.cos(progress * Math.PI))
 }
 
 /**
@@ -137,30 +140,22 @@ function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
 export function calculateWipeClipPath(
   progress: number,
   direction: WipeDirection,
-  isOutgoing: boolean
+  isOutgoing: boolean,
 ): string {
-  const p = Math.max(0, Math.min(1, progress));
-  const inverse = 1 - p;
+  const p = Math.max(0, Math.min(1, progress))
+  const inverse = 1 - p
 
   switch (direction) {
     case 'from-left':
-      return isOutgoing
-        ? `inset(0 0 0 ${p * 100}%)`
-        : `inset(0 ${inverse * 100}% 0 0)`;
+      return isOutgoing ? `inset(0 0 0 ${p * 100}%)` : `inset(0 ${inverse * 100}% 0 0)`
     case 'from-right':
-      return isOutgoing
-        ? `inset(0 ${p * 100}% 0 0)`
-        : `inset(0 0 0 ${inverse * 100}%)`;
+      return isOutgoing ? `inset(0 ${p * 100}% 0 0)` : `inset(0 0 0 ${inverse * 100}%)`
     case 'from-top':
-      return isOutgoing
-        ? `inset(${p * 100}% 0 0 0)`
-        : `inset(0 0 ${inverse * 100}% 0)`;
+      return isOutgoing ? `inset(${p * 100}% 0 0 0)` : `inset(0 0 ${inverse * 100}% 0)`
     case 'from-bottom':
-      return isOutgoing
-        ? `inset(0 0 ${p * 100}% 0)`
-        : `inset(${inverse * 100}% 0 0 0)`;
+      return isOutgoing ? `inset(0 0 ${p * 100}% 0)` : `inset(${inverse * 100}% 0 0 0)`
     default:
-      return 'none';
+      return 'none'
   }
 }
 
@@ -172,21 +167,21 @@ function calculateSlideTransform(
   direction: SlideDirection,
   isOutgoing: boolean,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ): string {
-  const slideProgress = isOutgoing ? progress : progress - 1;
+  const slideProgress = isOutgoing ? progress : progress - 1
 
   switch (direction) {
     case 'from-left':
-      return `translateX(${slideProgress * canvasWidth}px)`;
+      return `translateX(${slideProgress * canvasWidth}px)`
     case 'from-right':
-      return `translateX(${-slideProgress * canvasWidth}px)`;
+      return `translateX(${-slideProgress * canvasWidth}px)`
     case 'from-top':
-      return `translateY(${slideProgress * canvasHeight}px)`;
+      return `translateY(${slideProgress * canvasHeight}px)`
     case 'from-bottom':
-      return `translateY(${-slideProgress * canvasHeight}px)`;
+      return `translateY(${-slideProgress * canvasHeight}px)`
     default:
-      return 'none';
+      return 'none'
   }
 }
 
@@ -196,20 +191,20 @@ function calculateSlideTransform(
 function calculateFlipTransform(
   progress: number,
   direction: FlipDirection,
-  isOutgoing: boolean
+  isOutgoing: boolean,
 ): string {
-  const axis = direction === 'from-left' || direction === 'from-right' ? 'Y' : 'X';
-  const sign = direction === 'from-right' || direction === 'from-bottom' ? -1 : 1;
-  const midpoint = 0.5;
+  const axis = direction === 'from-left' || direction === 'from-right' ? 'Y' : 'X'
+  const sign = direction === 'from-right' || direction === 'from-bottom' ? -1 : 1
+  const midpoint = 0.5
 
   if (isOutgoing) {
-    const flipProgress = Math.min(progress / midpoint, 1);
-    const flipDegrees = flipProgress * 90;
-    return `perspective(1000px) rotate${axis}(${sign * flipDegrees}deg)`;
+    const flipProgress = Math.min(progress / midpoint, 1)
+    const flipDegrees = flipProgress * 90
+    return `perspective(1000px) rotate${axis}(${sign * flipDegrees}deg)`
   } else {
-    const flipProgress = Math.max((progress - midpoint) / midpoint, 0);
-    const flipDegrees = -90 + flipProgress * 90;
-    return `perspective(1000px) rotate${axis}(${sign * flipDegrees}deg)`;
+    const flipProgress = Math.max((progress - midpoint) / midpoint, 0)
+    const flipDegrees = -90 + flipProgress * 90
+    return `perspective(1000px) rotate${axis}(${sign * flipDegrees}deg)`
   }
 }
 
@@ -217,17 +212,17 @@ function calculateFlipTransform(
  * Calculate clock wipe mask.
  */
 function calculateClockWipeMask(progress: number): string {
-  const degrees = progress * 360;
-  return `conic-gradient(from 0deg, transparent ${degrees}deg, black ${degrees}deg)`;
+  const degrees = progress * 360
+  return `conic-gradient(from 0deg, transparent ${degrees}deg, black ${degrees}deg)`
 }
 
 /**
  * Calculate iris mask.
  */
 function calculateIrisMask(progress: number): string {
-  const maxRadius = 120;
-  const radius = progress * maxRadius;
-  return `radial-gradient(circle, transparent ${radius}%, black ${radius}%)`;
+  const maxRadius = 120
+  const radius = progress * maxRadius
+  return `radial-gradient(circle, transparent ${radius}%, black ${radius}%)`
 }
 
 // ============================================================================
@@ -244,15 +239,15 @@ export function calculateTransitionStyles(
   progress: number,
   isOutgoing: boolean,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ): TransitionStyleCalculation {
-  const { presentation, direction, properties } = transition;
-  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const { presentation, direction, properties } = transition
+  const clampedProgress = Math.max(0, Math.min(1, progress))
 
   // Try registry first (lazy getter to avoid circular deps at import time)
   if (_registryGetter) {
-    const registry = _registryGetter();
-    const renderer = registry.getRenderer(presentation);
+    const registry = _registryGetter()
+    const renderer = registry.getRenderer(presentation)
     if (renderer) {
       return renderer.calculateStyles(
         clampedProgress,
@@ -260,8 +255,8 @@ export function calculateTransitionStyles(
         canvasWidth,
         canvasHeight,
         direction,
-        properties
-      );
+        properties,
+      )
     }
   }
 
@@ -272,8 +267,8 @@ export function calculateTransitionStyles(
     isOutgoing,
     canvasWidth,
     canvasHeight,
-    direction
-  );
+    direction,
+  )
 }
 
 /**
@@ -286,58 +281,74 @@ function calculateBuiltinTransitionStyles(
   isOutgoing: boolean,
   canvasWidth: number,
   canvasHeight: number,
-  direction?: WipeDirection | SlideDirection | FlipDirection
+  direction?: WipeDirection | SlideDirection | FlipDirection,
 ): TransitionStyleCalculation {
-  const midpoint = 0.5;
+  const midpoint = 0.5
 
   switch (presentation) {
     case 'fade': {
-      return { opacity: calculateFadeOpacity(progress, isOutgoing) };
+      return { opacity: calculateFadeOpacity(progress, isOutgoing) }
     }
     case 'wipe': {
       const clipPath = calculateWipeClipPath(
         progress,
         (direction as WipeDirection) || 'from-left',
-        isOutgoing
-      );
-      return { clipPath, webkitClipPath: clipPath };
+        isOutgoing,
+      )
+      return { clipPath, webkitClipPath: clipPath }
     }
     case 'slide': {
       return {
-        transform: calculateSlideTransform(progress, (direction as SlideDirection) || 'from-left', isOutgoing, canvasWidth, canvasHeight),
-      };
+        transform: calculateSlideTransform(
+          progress,
+          (direction as SlideDirection) || 'from-left',
+          isOutgoing,
+          canvasWidth,
+          canvasHeight,
+        ),
+      }
     }
     case 'flip': {
-      const flipOpacity = isOutgoing
-        ? progress < midpoint ? 1 : 0
-        : progress >= midpoint ? 1 : 0;
+      const flipOpacity = isOutgoing ? (progress < midpoint ? 1 : 0) : progress >= midpoint ? 1 : 0
       return {
-        transform: calculateFlipTransform(progress, (direction as FlipDirection) || 'from-left', isOutgoing),
+        transform: calculateFlipTransform(
+          progress,
+          (direction as FlipDirection) || 'from-left',
+          isOutgoing,
+        ),
         opacity: flipOpacity,
-      };
+      }
     }
     case 'clockWipe': {
       if (isOutgoing) {
-        const maskImage = calculateClockWipeMask(progress);
-        return { maskImage, webkitMaskImage: maskImage, maskSize: '100% 100%', webkitMaskSize: '100% 100%' };
+        const maskImage = calculateClockWipeMask(progress)
+        return {
+          maskImage,
+          webkitMaskImage: maskImage,
+          maskSize: '100% 100%',
+          webkitMaskSize: '100% 100%',
+        }
       }
-      return {};
+      return {}
     }
     case 'iris': {
       if (isOutgoing) {
-        const maskImage = calculateIrisMask(progress);
-        return { maskImage, webkitMaskImage: maskImage, maskSize: '100% 100%', webkitMaskSize: '100% 100%' };
+        const maskImage = calculateIrisMask(progress)
+        return {
+          maskImage,
+          webkitMaskImage: maskImage,
+          maskSize: '100% 100%',
+          webkitMaskSize: '100% 100%',
+        }
       }
-      return {};
+      return {}
     }
     case 'none': {
       return {
-        opacity: isOutgoing
-          ? progress < midpoint ? 1 : 0
-          : progress >= midpoint ? 1 : 0,
-      };
+        opacity: isOutgoing ? (progress < midpoint ? 1 : 0) : progress >= midpoint ? 1 : 0,
+      }
     }
     default:
-      return { opacity: calculateFadeOpacity(progress, isOutgoing) };
+      return { opacity: calculateFadeOpacity(progress, isOutgoing) }
   }
 }

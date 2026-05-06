@@ -1,4 +1,4 @@
-import type { TimelineItem } from '@/types/timeline';
+import type { TimelineItem } from '@/types/timeline'
 import {
   buildSynchronizedLinkedMoveUpdates,
   expandItemIdsWithAttachedCaptions,
@@ -7,11 +7,11 @@ import {
   getMatchingSynchronizedLinkedCounterpart,
   getSynchronizedLinkedCounterpartPair,
   getSynchronizedLinkedItems,
-} from '@/features/timeline/utils/linked-items';
+} from '@/features/timeline/utils/linked-items'
 
 function getAnchorItem(items: TimelineItem[], itemId: string): TimelineItem[] {
-  const anchor = items.find((item) => item.id === itemId);
-  return anchor ? [anchor] : [];
+  const anchor = items.find((item) => item.id === itemId)
+  return anchor ? [anchor] : []
 }
 
 export function expandIdsWithLinkedItems(
@@ -20,10 +20,10 @@ export function expandIdsWithLinkedItems(
   linkedSelectionEnabled: boolean,
 ): string[] {
   if (!linkedSelectionEnabled) {
-    return expandItemIdsWithAttachedCaptions(items, Array.from(new Set(ids)));
+    return expandItemIdsWithAttachedCaptions(items, Array.from(new Set(ids)))
   }
 
-  return expandItemIdsWithAttachedCaptions(items, expandSelectionWithLinkedItems(items, ids));
+  return expandItemIdsWithAttachedCaptions(items, expandSelectionWithLinkedItems(items, ids))
 }
 
 export function getLinkedItemsForEdit(
@@ -31,9 +31,7 @@ export function getLinkedItemsForEdit(
   itemId: string,
   linkedSelectionEnabled: boolean,
 ): TimelineItem[] {
-  return linkedSelectionEnabled
-    ? getLinkedItems(items, itemId)
-    : getAnchorItem(items, itemId);
+  return linkedSelectionEnabled ? getLinkedItems(items, itemId) : getAnchorItem(items, itemId)
 }
 
 export function getSynchronizedLinkedItemsForEdit(
@@ -43,7 +41,7 @@ export function getSynchronizedLinkedItemsForEdit(
 ): TimelineItem[] {
   return linkedSelectionEnabled
     ? getSynchronizedLinkedItems(items, itemId)
-    : getAnchorItem(items, itemId);
+    : getAnchorItem(items, itemId)
 }
 
 export function getSynchronizedLinkedCounterpartPairForEdit(
@@ -53,10 +51,10 @@ export function getSynchronizedLinkedCounterpartPairForEdit(
   linkedSelectionEnabled: boolean,
 ): { leftCounterpart: TimelineItem; rightCounterpart: TimelineItem } | null {
   if (!linkedSelectionEnabled) {
-    return null;
+    return null
   }
 
-  return getSynchronizedLinkedCounterpartPair(items, leftId, rightId);
+  return getSynchronizedLinkedCounterpartPair(items, leftId, rightId)
 }
 
 export function getMatchingSynchronizedLinkedCounterpartForEdit(
@@ -67,10 +65,10 @@ export function getMatchingSynchronizedLinkedCounterpartForEdit(
   linkedSelectionEnabled: boolean,
 ): TimelineItem | null {
   if (!linkedSelectionEnabled) {
-    return null;
+    return null
   }
 
-  return getMatchingSynchronizedLinkedCounterpart(items, itemId, trackId, type);
+  return getMatchingSynchronizedLinkedCounterpart(items, itemId, trackId, type)
 }
 
 export function buildLinkedLeftShiftUpdates(
@@ -79,60 +77,56 @@ export function buildLinkedLeftShiftUpdates(
   linkedSelectionEnabled: boolean,
 ): Array<{ id: string; from: number }> {
   if (!linkedSelectionEnabled) {
-    const shiftByItemId = new Map(baseShiftByItemId);
+    const shiftByItemId = new Map(baseShiftByItemId)
     for (const [itemId, shiftAmount] of baseShiftByItemId) {
-      if (shiftAmount <= 0) continue;
+      if (shiftAmount <= 0) continue
       for (const attachedId of expandItemIdsWithAttachedCaptions(items, [itemId])) {
-        shiftByItemId.set(attachedId, Math.max(shiftByItemId.get(attachedId) ?? 0, shiftAmount));
+        shiftByItemId.set(attachedId, Math.max(shiftByItemId.get(attachedId) ?? 0, shiftAmount))
       }
     }
 
     return items.flatMap((item) => {
-      const shiftAmount = shiftByItemId.get(item.id) ?? 0;
-      return shiftAmount > 0
-        ? [{ id: item.id, from: item.from - shiftAmount }]
-        : [];
-    });
+      const shiftAmount = shiftByItemId.get(item.id) ?? 0
+      return shiftAmount > 0 ? [{ id: item.id, from: item.from - shiftAmount }] : []
+    })
   }
 
-  const shiftByItemId = new Map(baseShiftByItemId);
-  const visited = new Set<string>();
+  const shiftByItemId = new Map(baseShiftByItemId)
+  const visited = new Set<string>()
 
   for (const item of items) {
-    if (visited.has(item.id)) continue;
+    if (visited.has(item.id)) continue
 
-    const linkedItems = getLinkedItems(items, item.id);
+    const linkedItems = getLinkedItems(items, item.id)
     for (const linkedItem of linkedItems) {
-      visited.add(linkedItem.id);
+      visited.add(linkedItem.id)
     }
 
-    if (linkedItems.length <= 1) continue;
+    if (linkedItems.length <= 1) continue
 
-    let groupShift = 0;
+    let groupShift = 0
     for (const linkedItem of linkedItems) {
-      groupShift = Math.max(groupShift, baseShiftByItemId.get(linkedItem.id) ?? 0);
+      groupShift = Math.max(groupShift, baseShiftByItemId.get(linkedItem.id) ?? 0)
     }
 
-    if (groupShift <= 0) continue;
+    if (groupShift <= 0) continue
 
     for (const linkedItem of linkedItems) {
-      shiftByItemId.set(linkedItem.id, groupShift);
+      shiftByItemId.set(linkedItem.id, groupShift)
     }
   }
 
   for (const [itemId, shiftAmount] of shiftByItemId) {
-    if (shiftAmount <= 0) continue;
+    if (shiftAmount <= 0) continue
     for (const attachedId of expandItemIdsWithAttachedCaptions(items, [itemId])) {
-      shiftByItemId.set(attachedId, Math.max(shiftByItemId.get(attachedId) ?? 0, shiftAmount));
+      shiftByItemId.set(attachedId, Math.max(shiftByItemId.get(attachedId) ?? 0, shiftAmount))
     }
   }
 
   return items.flatMap((item) => {
-    const shiftAmount = shiftByItemId.get(item.id) ?? 0;
-    return shiftAmount > 0
-      ? [{ id: item.id, from: item.from - shiftAmount }]
-      : [];
-  });
+    const shiftAmount = shiftByItemId.get(item.id) ?? 0
+    return shiftAmount > 0 ? [{ id: item.id, from: item.from - shiftAmount }] : []
+  })
 }
 
 export function buildSynchronizedLinkedMoveUpdatesForEdit(
@@ -142,12 +136,10 @@ export function buildSynchronizedLinkedMoveUpdatesForEdit(
 ): Array<{ id: string; from: number }> {
   if (!linkedSelectionEnabled) {
     return items.flatMap((item) => {
-      const delta = baseDeltaByItemId.get(item.id) ?? 0;
-      return delta !== 0
-        ? [{ id: item.id, from: item.from + delta }]
-        : [];
-    });
+      const delta = baseDeltaByItemId.get(item.id) ?? 0
+      return delta !== 0 ? [{ id: item.id, from: item.from + delta }] : []
+    })
   }
 
-  return buildSynchronizedLinkedMoveUpdates(items, baseDeltaByItemId);
+  return buildSynchronizedLinkedMoveUpdates(items, baseDeltaByItemId)
 }

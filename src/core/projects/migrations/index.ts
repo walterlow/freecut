@@ -16,21 +16,21 @@
  *   }
  */
 
-import type { Project } from '@/types/project';
-import type { MigrationResult } from './types';
-import { CURRENT_SCHEMA_VERSION } from './types';
-import { getMigrationsToApply } from './migrations';
-import { normalizeProject, didNormalizationChange } from './normalize';
+import type { Project } from '@/types/project'
+import type { MigrationResult } from './types'
+import { CURRENT_SCHEMA_VERSION } from './types'
+import { getMigrationsToApply } from './migrations'
+import { normalizeProject, didNormalizationChange } from './normalize'
 
 // Re-export types and constants
-export { CURRENT_SCHEMA_VERSION } from './types';
+export { CURRENT_SCHEMA_VERSION } from './types'
 
 /**
  * Get the schema version from a project.
  * Projects without a schemaVersion are assumed to be version 1.
  */
 function getSchemaVersion(project: Project): number {
-  return (project as Project & { schemaVersion?: number }).schemaVersion ?? 1;
+  return (project as Project & { schemaVersion?: number }).schemaVersion ?? 1
 }
 
 /**
@@ -40,48 +40,48 @@ function setSchemaVersion(project: Project, version: number): Project {
   return {
     ...project,
     schemaVersion: version,
-  } as Project & { schemaVersion: number };
+  } as Project & { schemaVersion: number }
 }
 
 /**
  * Run version-based migrations on a project.
  */
 function runMigrations(project: Project): {
-  project: Project;
-  appliedMigrations: number[];
-  fromVersion: number;
+  project: Project
+  appliedMigrations: number[]
+  fromVersion: number
 } {
-  const fromVersion = getSchemaVersion(project);
-  const appliedMigrations: number[] = [];
+  const fromVersion = getSchemaVersion(project)
+  const appliedMigrations: number[] = []
 
   // Already at current version
   if (fromVersion >= CURRENT_SCHEMA_VERSION) {
-    return { project, appliedMigrations, fromVersion };
+    return { project, appliedMigrations, fromVersion }
   }
 
   // Get and apply migrations in order
-  const migrationsToApply = getMigrationsToApply(fromVersion, CURRENT_SCHEMA_VERSION);
-  let migratedProject = project;
+  const migrationsToApply = getMigrationsToApply(fromVersion, CURRENT_SCHEMA_VERSION)
+  let migratedProject = project
 
   for (const migration of migrationsToApply) {
     if (import.meta.env.DEV) {
-      console.warn(`[Migrations] Running migration v${migration.version}: ${migration.description}`);
+      console.warn(`[Migrations] Running migration v${migration.version}: ${migration.description}`)
     }
     try {
-      migratedProject = migration.migrate(migratedProject);
-      appliedMigrations.push(migration.version);
+      migratedProject = migration.migrate(migratedProject)
+      appliedMigrations.push(migration.version)
     } catch (error) {
-      console.error(`[Migrations] Migration v${migration.version} failed:`, error);
+      console.error(`[Migrations] Migration v${migration.version} failed:`, error)
       throw new Error(
-        `Failed to migrate project from v${fromVersion} to v${migration.version}: ${error}`
-      );
+        `Failed to migrate project from v${fromVersion} to v${migration.version}: ${error}`,
+      )
     }
   }
 
   // Update schema version
-  migratedProject = setSchemaVersion(migratedProject, CURRENT_SCHEMA_VERSION);
+  migratedProject = setSchemaVersion(migratedProject, CURRENT_SCHEMA_VERSION)
 
-  return { project: migratedProject, appliedMigrations, fromVersion };
+  return { project: migratedProject, appliedMigrations, fromVersion }
 }
 
 /**
@@ -95,14 +95,14 @@ function runMigrations(project: Project): {
  */
 export function migrateProject(project: Project): MigrationResult {
   // Step 1: Run version-based migrations
-  const { project: migrated, appliedMigrations, fromVersion } = runMigrations(project);
+  const { project: migrated, appliedMigrations, fromVersion } = runMigrations(project)
 
   // Step 2: Normalize to apply current defaults
-  const normalized = normalizeProject(migrated);
+  const normalized = normalizeProject(migrated)
 
   // Check if anything changed (migrations or normalization)
-  const migratedByVersion = appliedMigrations.length > 0;
-  const migratedByNormalization = !migratedByVersion && didNormalizationChange(project, normalized);
+  const migratedByVersion = appliedMigrations.length > 0
+  const migratedByNormalization = !migratedByVersion && didNormalizationChange(project, normalized)
 
   return {
     project: normalized,
@@ -110,5 +110,5 @@ export function migrateProject(project: Project): MigrationResult {
     appliedMigrations,
     fromVersion,
     toVersion: CURRENT_SCHEMA_VERSION,
-  };
+  }
 }

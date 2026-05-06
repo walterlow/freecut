@@ -13,26 +13,23 @@
  * @param keyframeTimestamps - Sorted array of keyframe timestamps (seconds)
  * @param target - Target timestamp (seconds)
  */
-export function nearestKeyframeBefore(
-  keyframeTimestamps: number[],
-  target: number,
-): number | null {
-  if (keyframeTimestamps.length === 0) return null;
+export function nearestKeyframeBefore(keyframeTimestamps: number[], target: number): number | null {
+  if (keyframeTimestamps.length === 0) return null
 
   // All keyframes are after target
-  if (keyframeTimestamps[0]! > target) return null;
+  if (keyframeTimestamps[0]! > target) return null
 
-  let lo = 0;
-  let hi = keyframeTimestamps.length - 1;
+  let lo = 0
+  let hi = keyframeTimestamps.length - 1
 
   while (lo < hi) {
-    const mid = (lo + hi + 1) >>> 1; // ceil to avoid infinite loop
+    const mid = (lo + hi + 1) >>> 1 // ceil to avoid infinite loop
     if (keyframeTimestamps[mid]! <= target) {
-      lo = mid;
+      lo = mid
     } else {
-      hi = mid - 1;
+      hi = mid - 1
     }
   }
 
-  return keyframeTimestamps[lo]!;
+  return keyframeTimestamps[lo]!
 }

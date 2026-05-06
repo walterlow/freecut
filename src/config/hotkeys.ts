@@ -88,62 +88,64 @@ export const HOTKEYS = {
   CLEAR_IN_OUT: 'alt+x',
   INSERT_EDIT: 'comma',
   OVERWRITE_EDIT: 'period',
-} as const;
+} as const
 
-export type HotkeyKey = keyof typeof HOTKEYS;
-export type HotkeyBindingMap = Record<HotkeyKey, string>;
-export type HotkeyOverrideMap = Partial<Record<HotkeyKey, string>>;
-export type HotkeyPlatform = 'mac' | 'windows';
+export type HotkeyKey = keyof typeof HOTKEYS
+export type HotkeyBindingMap = Record<HotkeyKey, string>
+export type HotkeyOverrideMap = Partial<Record<HotkeyKey, string>>
+export type HotkeyPlatform = 'mac' | 'windows'
 
-export const HOTKEY_EXPORT_SCHEMA = 'freecut-hotkeys';
-export const HOTKEY_EXPORT_VERSION = 1;
+export const HOTKEY_EXPORT_SCHEMA = 'freecut-hotkeys'
+export const HOTKEY_EXPORT_VERSION = 1
 
 export interface HotkeyExportCommand {
-  id: HotkeyKey;
-  label: string;
-  binding: string;
-  defaultBinding: string;
-  isCustom: boolean;
+  id: HotkeyKey
+  label: string
+  binding: string
+  defaultBinding: string
+  isCustom: boolean
 }
 
 export interface HotkeyExportDocument {
-  schema: typeof HOTKEY_EXPORT_SCHEMA;
-  version: typeof HOTKEY_EXPORT_VERSION;
-  exportedAt: string;
-  commands: HotkeyExportCommand[];
-  overrides: HotkeyOverrideMap;
+  schema: typeof HOTKEY_EXPORT_SCHEMA
+  version: typeof HOTKEY_EXPORT_VERSION
+  exportedAt: string
+  commands: HotkeyExportCommand[]
+  overrides: HotkeyOverrideMap
 }
 
 export interface HotkeyImportCommand {
-  id?: string;
-  key?: string;
-  label?: string;
-  binding?: string;
-  shortcut?: string;
-  defaultBinding?: string;
+  id?: string
+  key?: string
+  label?: string
+  binding?: string
+  shortcut?: string
+  defaultBinding?: string
 }
 
 export interface HotkeyImportResult {
-  overrides: HotkeyOverrideMap;
-  importedCommandCount: number;
-  ignoredCommandCount: number;
-  remappedCommandCount: number;
-  sourceVersion: number | null;
+  overrides: HotkeyOverrideMap
+  importedCommandCount: number
+  ignoredCommandCount: number
+  remappedCommandCount: number
+  sourceVersion: number | null
 }
 
 export interface BrowserHostileHotkey {
-  binding: string;
-  browserAction: string;
+  binding: string
+  browserAction: string
 }
 
 interface HotkeyCommandLookup {
-  byLabel: Map<string, HotkeyKey>;
-  byDefaultBinding: Map<string, HotkeyKey>;
+  byLabel: Map<string, HotkeyKey>
+  byDefaultBinding: Map<string, HotkeyKey>
 }
 
-const HOTKEY_MODIFIERS = ['mod', 'alt', 'shift'] as const;
-const HOTKEY_MODIFIER_SET = new Set<string>(HOTKEY_MODIFIERS);
-const HOTKEY_MODIFIER_ORDER = new Map<string, number>(HOTKEY_MODIFIERS.map((token, index) => [token, index]));
+const HOTKEY_MODIFIERS = ['mod', 'alt', 'shift'] as const
+const HOTKEY_MODIFIER_SET = new Set<string>(HOTKEY_MODIFIERS)
+const HOTKEY_MODIFIER_ORDER = new Map<string, number>(
+  HOTKEY_MODIFIERS.map((token, index) => [token, index]),
+)
 
 const HOTKEY_TOKEN_ALIASES: Record<string, string> = {
   cmd: 'mod',
@@ -161,7 +163,7 @@ const HOTKEY_TOKEN_ALIASES: Record<string, string> = {
   arrowright: 'right',
   arrowup: 'up',
   arrowdown: 'down',
-};
+}
 
 const HOTKEY_KEY_LABELS: Record<string, string> = {
   space: 'Space',
@@ -187,7 +189,7 @@ const HOTKEY_KEY_LABELS: Record<string, string> = {
   escape: 'Esc',
   tab: 'Tab',
   enter: 'Enter',
-};
+}
 
 const HOTKEY_CODE_TOKEN_MAP: Record<string, string> = {
   Space: 'space',
@@ -213,9 +215,9 @@ const HOTKEY_CODE_TOKEN_MAP: Record<string, string> = {
   Escape: 'escape',
   Tab: 'tab',
   Enter: 'enter',
-};
+}
 
-const HOTKEY_COMMAND_ALIASES: Partial<Record<string, HotkeyKey>> = {};
+const HOTKEY_COMMAND_ALIASES: Partial<Record<string, HotkeyKey>> = {}
 
 const BROWSER_HOSTILE_HOTKEYS: readonly BrowserHostileHotkey[] = [
   { binding: 'alt+left', browserAction: 'Back navigation' },
@@ -246,19 +248,19 @@ const BROWSER_HOSTILE_HOTKEYS: readonly BrowserHostileHotkey[] = [
   { binding: 'mod+7', browserAction: 'Switch to tab 7' },
   { binding: 'mod+8', browserAction: 'Switch to tab 8' },
   { binding: 'mod+9', browserAction: 'Switch to last tab' },
-] as const;
+] as const
 
 const BROWSER_HOSTILE_HOTKEY_MAP = new Map(
-  BROWSER_HOSTILE_HOTKEYS.map((entry) => [entry.binding, entry])
-);
+  BROWSER_HOSTILE_HOTKEYS.map((entry) => [entry.binding, entry]),
+)
 
 export interface HotkeyEventData {
-  key?: string;
-  code?: string;
-  ctrlKey?: boolean;
-  metaKey?: boolean;
-  altKey?: boolean;
-  shiftKey?: boolean;
+  key?: string
+  code?: string
+  ctrlKey?: boolean
+  metaKey?: boolean
+  altKey?: boolean
+  shiftKey?: boolean
 }
 
 /**
@@ -348,314 +350,323 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   CLEAR_IN_OUT: 'Clear In/Out points',
   INSERT_EDIT: 'Insert edit',
   OVERWRITE_EDIT: 'Overwrite edit',
-};
+}
 
-const HOTKEY_COMMAND_LOOKUP = createHotkeyCommandLookup();
+const HOTKEY_COMMAND_LOOKUP = createHotkeyCommandLookup()
 
 function getNavigatorPlatform(): string {
-  if (typeof navigator === 'undefined') return 'Windows';
+  if (typeof navigator === 'undefined') return 'Windows'
 
-  const userAgentData = (navigator as Navigator & {
-    userAgentData?: { platform?: string };
-  }).userAgentData;
+  const userAgentData = (
+    navigator as Navigator & {
+      userAgentData?: { platform?: string }
+    }
+  ).userAgentData
 
   if (typeof userAgentData?.platform === 'string') {
-    return userAgentData.platform;
+    return userAgentData.platform
   }
 
-  return navigator.platform || navigator.userAgent || 'Windows';
+  return navigator.platform || navigator.userAgent || 'Windows'
 }
 
 export function getHotkeyPlatform(platformValue?: string): HotkeyPlatform {
-  const platform = (platformValue ?? getNavigatorPlatform()).toLowerCase();
-  return platform.includes('mac') || platform.includes('iphone') || platform.includes('ipad') ? 'mac' : 'windows';
+  const platform = (platformValue ?? getNavigatorPlatform()).toLowerCase()
+  return platform.includes('mac') || platform.includes('iphone') || platform.includes('ipad')
+    ? 'mac'
+    : 'windows'
 }
 
 export function resolveHotkeys(overrides: HotkeyOverrideMap = {}): HotkeyBindingMap {
   return {
     ...HOTKEYS,
     ...sanitizeHotkeyOverrides(overrides),
-  };
+  }
 }
 
 export function isHotkeyKey(value: string): value is HotkeyKey {
-  return value in HOTKEYS;
+  return value in HOTKEYS
 }
 
 export function resolveHotkeyKey(value: string): HotkeyKey | null {
   if (isHotkeyKey(value)) {
-    return value;
+    return value
   }
 
-  return HOTKEY_COMMAND_ALIASES[value] ?? null;
+  return HOTKEY_COMMAND_ALIASES[value] ?? null
 }
 
 function normalizeHotkeyCommandLabel(label: string): string {
-  return label.trim().toLowerCase();
+  return label.trim().toLowerCase()
 }
 
 function createHotkeyCommandLookup(): HotkeyCommandLookup {
-  const byLabel = new Map<string, HotkeyKey>();
-  const byDefaultBinding = new Map<string, HotkeyKey>();
+  const byLabel = new Map<string, HotkeyKey>()
+  const byDefaultBinding = new Map<string, HotkeyKey>()
 
   for (const key of Object.keys(HOTKEYS) as HotkeyKey[]) {
-    byLabel.set(normalizeHotkeyCommandLabel(HOTKEY_DESCRIPTIONS[key]), key);
-    byDefaultBinding.set(normalizeHotkeyBinding(HOTKEYS[key]), key);
+    byLabel.set(normalizeHotkeyCommandLabel(HOTKEY_DESCRIPTIONS[key]), key)
+    byDefaultBinding.set(normalizeHotkeyBinding(HOTKEYS[key]), key)
   }
 
   return {
     byLabel,
     byDefaultBinding,
-  };
+  }
 }
 
 function resolveHotkeyImportCommand(command: HotkeyImportCommand): {
-  key: HotkeyKey | null;
-  wasRemapped: boolean;
+  key: HotkeyKey | null
+  wasRemapped: boolean
 } {
-  const rawKey = typeof command.id === 'string'
-    ? command.id
-    : typeof command.key === 'string'
-      ? command.key
-      : null;
+  const rawKey =
+    typeof command.id === 'string'
+      ? command.id
+      : typeof command.key === 'string'
+        ? command.key
+        : null
 
   if (rawKey) {
-    const directKey = resolveHotkeyKey(rawKey);
+    const directKey = resolveHotkeyKey(rawKey)
     if (directKey) {
       return {
         key: directKey,
         wasRemapped: directKey !== rawKey,
-      };
+      }
     }
   }
 
   if (typeof command.label === 'string') {
-    const labelMatch = HOTKEY_COMMAND_LOOKUP.byLabel.get(normalizeHotkeyCommandLabel(command.label));
+    const labelMatch = HOTKEY_COMMAND_LOOKUP.byLabel.get(normalizeHotkeyCommandLabel(command.label))
     if (labelMatch) {
       return {
         key: labelMatch,
         wasRemapped: true,
-      };
+      }
     }
   }
 
   if (typeof command.defaultBinding === 'string') {
-    const normalizedDefaultBinding = normalizeHotkeyBinding(command.defaultBinding);
-    const bindingMatch = HOTKEY_COMMAND_LOOKUP.byDefaultBinding.get(normalizedDefaultBinding);
+    const normalizedDefaultBinding = normalizeHotkeyBinding(command.defaultBinding)
+    const bindingMatch = HOTKEY_COMMAND_LOOKUP.byDefaultBinding.get(normalizedDefaultBinding)
     if (bindingMatch) {
       return {
         key: bindingMatch,
         wasRemapped: true,
-      };
+      }
     }
   }
 
   return {
     key: null,
     wasRemapped: false,
-  };
+  }
 }
 
 export function normalizeHotkeyToken(token: string): string {
-  const normalized = token.trim().toLowerCase();
-  if (!normalized) return '';
-  return HOTKEY_TOKEN_ALIASES[normalized] ?? normalized;
+  const normalized = token.trim().toLowerCase()
+  if (!normalized) return ''
+  return HOTKEY_TOKEN_ALIASES[normalized] ?? normalized
 }
 
 export function splitHotkeyBinding(binding: string): string[] {
   return binding
     .split('+')
     .map((token) => normalizeHotkeyToken(token))
-    .filter(Boolean);
+    .filter(Boolean)
 }
 
 export function normalizeHotkeyBinding(binding: string): string {
-  const modifiers = new Set<string>();
-  const keys: string[] = [];
+  const modifiers = new Set<string>()
+  const keys: string[] = []
 
   for (const token of splitHotkeyBinding(binding)) {
     if (HOTKEY_MODIFIER_SET.has(token)) {
-      modifiers.add(token);
-      continue;
+      modifiers.add(token)
+      continue
     }
 
     if (!keys.includes(token)) {
-      keys.push(token);
+      keys.push(token)
     }
   }
 
   const orderedModifiers = Array.from(modifiers).sort((left, right) => {
-    return (HOTKEY_MODIFIER_ORDER.get(left) ?? 99) - (HOTKEY_MODIFIER_ORDER.get(right) ?? 99);
-  });
+    return (HOTKEY_MODIFIER_ORDER.get(left) ?? 99) - (HOTKEY_MODIFIER_ORDER.get(right) ?? 99)
+  })
 
-  return [...orderedModifiers, ...keys].join('+');
+  return [...orderedModifiers, ...keys].join('+')
 }
 
 export function sanitizeHotkeyOverrides(overrides: unknown): HotkeyOverrideMap {
   if (!overrides || typeof overrides !== 'object') {
-    return {};
+    return {}
   }
 
-  const normalizedOverrides: HotkeyOverrideMap = {};
+  const normalizedOverrides: HotkeyOverrideMap = {}
 
   for (const [rawKey, rawBinding] of Object.entries(overrides)) {
     if (!isHotkeyKey(rawKey) || typeof rawBinding !== 'string') {
-      continue;
+      continue
     }
 
-    const normalizedBinding = normalizeHotkeyBinding(rawBinding);
+    const normalizedBinding = normalizeHotkeyBinding(rawBinding)
     if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
-      continue;
+      continue
     }
 
     if (normalizedBinding === HOTKEYS[rawKey]) {
-      continue;
+      continue
     }
 
-    normalizedOverrides[rawKey] = normalizedBinding;
+    normalizedOverrides[rawKey] = normalizedBinding
   }
 
-  return normalizedOverrides;
+  return normalizedOverrides
 }
 
 export function hasHotkeyPrimaryToken(binding: string): boolean {
-  return splitHotkeyBinding(binding).some((token) => !HOTKEY_MODIFIER_SET.has(token));
+  return splitHotkeyBinding(binding).some((token) => !HOTKEY_MODIFIER_SET.has(token))
 }
 
 function formatHotkeyToken(token: string, platform: HotkeyPlatform): string {
   if (token === 'mod') {
-    return platform === 'mac' ? 'Cmd' : 'Ctrl';
+    return platform === 'mac' ? 'Cmd' : 'Ctrl'
   }
 
   if (token === 'alt') {
-    return platform === 'mac' ? 'Option' : 'Alt';
+    return platform === 'mac' ? 'Option' : 'Alt'
   }
 
   if (token === 'shift') {
-    return 'Shift';
+    return 'Shift'
   }
 
   if (HOTKEY_KEY_LABELS[token]) {
-    return HOTKEY_KEY_LABELS[token];
+    return HOTKEY_KEY_LABELS[token]
   }
 
   if (/^[a-z]$/.test(token)) {
-    return token.toUpperCase();
+    return token.toUpperCase()
   }
 
-  return token;
+  return token
 }
 
 export function formatHotkeyBinding(binding: string, platformValue?: string): string {
-  const normalizedBinding = normalizeHotkeyBinding(binding);
-  if (!normalizedBinding) return '';
+  const normalizedBinding = normalizeHotkeyBinding(binding)
+  if (!normalizedBinding) return ''
 
-  const platform = getHotkeyPlatform(platformValue);
+  const platform = getHotkeyPlatform(platformValue)
   return normalizedBinding
     .split('+')
     .map((token) => formatHotkeyToken(token, platform))
-    .join(' + ');
+    .join(' + ')
 }
 
 export function getBrowserHostileHotkey(binding: string): BrowserHostileHotkey | null {
-  const normalizedBinding = normalizeHotkeyBinding(binding);
+  const normalizedBinding = normalizeHotkeyBinding(binding)
   if (!normalizedBinding) {
-    return null;
+    return null
   }
 
-  return BROWSER_HOSTILE_HOTKEY_MAP.get(normalizedBinding) ?? null;
+  return BROWSER_HOSTILE_HOTKEY_MAP.get(normalizedBinding) ?? null
 }
 
 export function getHotkeyPrimaryTokenFromEventData(eventData: HotkeyEventData): string | null {
-  const code = eventData.code ?? '';
+  const code = eventData.code ?? ''
   if (HOTKEY_CODE_TOKEN_MAP[code]) {
-    return HOTKEY_CODE_TOKEN_MAP[code];
+    return HOTKEY_CODE_TOKEN_MAP[code]
   }
 
   if (code.startsWith('Key') && code.length === 4) {
-    return code.slice(3).toLowerCase();
+    return code.slice(3).toLowerCase()
   }
 
   if (code.startsWith('Digit') && code.length === 6) {
-    return code.slice(5);
+    return code.slice(5)
   }
 
   if (code.startsWith('Numpad') && code.length === 7) {
-    return code.slice(6);
+    return code.slice(6)
   }
 
-  const key = normalizeHotkeyToken(eventData.key ?? '');
+  const key = normalizeHotkeyToken(eventData.key ?? '')
   if (!key || HOTKEY_MODIFIER_SET.has(key)) {
-    return null;
+    return null
   }
 
   if (key.length === 1 && /^[a-z0-9]$/.test(key)) {
-    return key;
+    return key
   }
 
-  return HOTKEY_KEY_LABELS[key] ? key : null;
+  return HOTKEY_KEY_LABELS[key] ? key : null
 }
 
 export function getHotkeyBindingFromEventData(eventData: HotkeyEventData): string | null {
-  const tokens: string[] = [];
+  const tokens: string[] = []
 
   if (eventData.ctrlKey || eventData.metaKey) {
-    tokens.push('mod');
+    tokens.push('mod')
   }
 
   if (eventData.altKey) {
-    tokens.push('alt');
+    tokens.push('alt')
   }
 
   if (eventData.shiftKey) {
-    tokens.push('shift');
+    tokens.push('shift')
   }
 
-  const primaryToken = getHotkeyPrimaryTokenFromEventData(eventData);
+  const primaryToken = getHotkeyPrimaryTokenFromEventData(eventData)
   if (primaryToken) {
-    tokens.push(primaryToken);
+    tokens.push(primaryToken)
   }
 
   if (tokens.length === 0) {
-    return null;
+    return null
   }
 
-  return normalizeHotkeyBinding(tokens.join('+'));
+  return normalizeHotkeyBinding(tokens.join('+'))
 }
 
 export function getHotkeyConflictMap(bindings: HotkeyBindingMap): Record<string, HotkeyKey[]> {
-  const conflicts: Record<string, HotkeyKey[]> = {};
+  const conflicts: Record<string, HotkeyKey[]> = {}
 
   for (const [key, binding] of Object.entries(bindings) as [HotkeyKey, string][]) {
-    const normalizedBinding = normalizeHotkeyBinding(binding);
+    const normalizedBinding = normalizeHotkeyBinding(binding)
     if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
-      continue;
+      continue
     }
 
-    conflicts[normalizedBinding] ??= [];
-    conflicts[normalizedBinding].push(key);
+    conflicts[normalizedBinding] ??= []
+    conflicts[normalizedBinding].push(key)
   }
 
-  return conflicts;
+  return conflicts
 }
 
 export function findHotkeyConflicts(
   bindings: HotkeyBindingMap,
   binding: string,
-  currentKey?: HotkeyKey
+  currentKey?: HotkeyKey,
 ): HotkeyKey[] {
-  const normalizedBinding = normalizeHotkeyBinding(binding);
+  const normalizedBinding = normalizeHotkeyBinding(binding)
   if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
-    return [];
+    return []
   }
 
-  return (getHotkeyConflictMap(bindings)[normalizedBinding] ?? []).filter((key) => key !== currentKey);
+  return (getHotkeyConflictMap(bindings)[normalizedBinding] ?? []).filter(
+    (key) => key !== currentKey,
+  )
 }
 
-export function createHotkeyExportDocument(overrides: HotkeyOverrideMap = {}): HotkeyExportDocument {
-  const normalizedOverrides = sanitizeHotkeyOverrides(overrides);
-  const bindings = resolveHotkeys(normalizedOverrides);
-  const commandKeys = Object.keys(HOTKEYS) as HotkeyKey[];
+export function createHotkeyExportDocument(
+  overrides: HotkeyOverrideMap = {},
+): HotkeyExportDocument {
+  const normalizedOverrides = sanitizeHotkeyOverrides(overrides)
+  const bindings = resolveHotkeys(normalizedOverrides)
+  const commandKeys = Object.keys(HOTKEYS) as HotkeyKey[]
 
   return {
     schema: HOTKEY_EXPORT_SCHEMA,
@@ -669,23 +680,23 @@ export function createHotkeyExportDocument(overrides: HotkeyOverrideMap = {}): H
       isCustom: key in normalizedOverrides,
     })),
     overrides: normalizedOverrides,
-  };
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object';
+  return Boolean(value) && typeof value === 'object'
 }
 
 function getImportBinding(command: HotkeyImportCommand): string | null {
   if (typeof command.binding === 'string') {
-    return command.binding;
+    return command.binding
   }
 
   if (typeof command.shortcut === 'string') {
-    return command.shortcut;
+    return command.shortcut
   }
 
-  return null;
+  return null
 }
 
 function collectImportedOverrides(source: unknown): HotkeyImportResult {
@@ -696,34 +707,34 @@ function collectImportedOverrides(source: unknown): HotkeyImportResult {
       ignoredCommandCount: 0,
       remappedCommandCount: 0,
       sourceVersion: null,
-    };
+    }
   }
 
-  const normalizedOverrides: HotkeyOverrideMap = {};
-  let importedCommandCount = 0;
-  let ignoredCommandCount = 0;
-  let remappedCommandCount = 0;
+  const normalizedOverrides: HotkeyOverrideMap = {}
+  let importedCommandCount = 0
+  let ignoredCommandCount = 0
+  let remappedCommandCount = 0
 
   for (const [rawKey, rawBinding] of Object.entries(source)) {
-    const resolvedKey = resolveHotkeyKey(rawKey);
+    const resolvedKey = resolveHotkeyKey(rawKey)
     if (!resolvedKey || typeof rawBinding !== 'string') {
-      ignoredCommandCount += 1;
-      continue;
+      ignoredCommandCount += 1
+      continue
     }
 
-    const normalizedBinding = normalizeHotkeyBinding(rawBinding);
+    const normalizedBinding = normalizeHotkeyBinding(rawBinding)
     if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
-      ignoredCommandCount += 1;
-      continue;
+      ignoredCommandCount += 1
+      continue
     }
 
-    importedCommandCount += 1;
+    importedCommandCount += 1
     if (resolvedKey !== rawKey) {
-      remappedCommandCount += 1;
+      remappedCommandCount += 1
     }
 
     if (normalizedBinding !== HOTKEYS[resolvedKey]) {
-      normalizedOverrides[resolvedKey] = normalizedBinding;
+      normalizedOverrides[resolvedKey] = normalizedBinding
     }
   }
 
@@ -733,63 +744,63 @@ function collectImportedOverrides(source: unknown): HotkeyImportResult {
     ignoredCommandCount,
     remappedCommandCount,
     sourceVersion: null,
-  };
+  }
 }
 
 export function parseHotkeyImportDocument(source: unknown): HotkeyImportResult {
   if (!isRecord(source)) {
-    throw new Error('Invalid hotkey preset format');
+    throw new Error('Invalid hotkey preset format')
   }
 
   if (source.schema !== HOTKEY_EXPORT_SCHEMA) {
-    return collectImportedOverrides(source);
+    return collectImportedOverrides(source)
   }
 
-  const sourceVersion = typeof source.version === 'number' ? source.version : null;
+  const sourceVersion = typeof source.version === 'number' ? source.version : null
 
-  const overridesSource = isRecord(source.overrides) ? source.overrides : null;
-  const commandsSource = Array.isArray(source.commands) ? source.commands : [];
+  const overridesSource = isRecord(source.overrides) ? source.overrides : null
+  const commandsSource = Array.isArray(source.commands) ? source.commands : []
 
-  let importedCommandCount = 0;
-  let ignoredCommandCount = 0;
-  let remappedCommandCount = 0;
-  const importedOverrides: HotkeyOverrideMap = {};
+  let importedCommandCount = 0
+  let ignoredCommandCount = 0
+  let remappedCommandCount = 0
+  const importedOverrides: HotkeyOverrideMap = {}
 
   if (overridesSource) {
-    const overrideImport = collectImportedOverrides(overridesSource);
-    importedCommandCount += overrideImport.importedCommandCount;
-    ignoredCommandCount += overrideImport.ignoredCommandCount;
-    remappedCommandCount += overrideImport.remappedCommandCount;
-    Object.assign(importedOverrides, overrideImport.overrides);
+    const overrideImport = collectImportedOverrides(overridesSource)
+    importedCommandCount += overrideImport.importedCommandCount
+    ignoredCommandCount += overrideImport.ignoredCommandCount
+    remappedCommandCount += overrideImport.remappedCommandCount
+    Object.assign(importedOverrides, overrideImport.overrides)
   } else {
     for (const command of commandsSource) {
       if (!isRecord(command)) {
-        ignoredCommandCount += 1;
-        continue;
+        ignoredCommandCount += 1
+        continue
       }
 
-      const importCommand = command as HotkeyImportCommand;
-      const rawBinding = getImportBinding(importCommand);
-      const resolvedCommand = resolveHotkeyImportCommand(importCommand);
+      const importCommand = command as HotkeyImportCommand
+      const rawBinding = getImportBinding(importCommand)
+      const resolvedCommand = resolveHotkeyImportCommand(importCommand)
 
       if (!resolvedCommand.key || !rawBinding) {
-        ignoredCommandCount += 1;
-        continue;
+        ignoredCommandCount += 1
+        continue
       }
 
-      const normalizedBinding = normalizeHotkeyBinding(rawBinding);
+      const normalizedBinding = normalizeHotkeyBinding(rawBinding)
       if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
-        ignoredCommandCount += 1;
-        continue;
+        ignoredCommandCount += 1
+        continue
       }
 
-      importedCommandCount += 1;
+      importedCommandCount += 1
       if (resolvedCommand.wasRemapped) {
-        remappedCommandCount += 1;
+        remappedCommandCount += 1
       }
 
       if (normalizedBinding !== HOTKEYS[resolvedCommand.key]) {
-        importedOverrides[resolvedCommand.key] = normalizedBinding;
+        importedOverrides[resolvedCommand.key] = normalizedBinding
       }
     }
   }
@@ -800,7 +811,7 @@ export function parseHotkeyImportDocument(source: unknown): HotkeyImportResult {
     ignoredCommandCount,
     remappedCommandCount,
     sourceVersion,
-  };
+  }
 }
 
 /**
@@ -810,4 +821,4 @@ export function parseHotkeyImportDocument(source: unknown): HotkeyImportResult {
 export const HOTKEY_OPTIONS = {
   enableOnFormTags: false,
   preventDefault: true,
-} as const;
+} as const

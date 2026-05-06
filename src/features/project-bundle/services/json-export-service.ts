@@ -1,46 +1,46 @@
-﻿/**
+/**
  * Lightweight JSON Export Service
  *
  * Exports project data as JSON for debugging, testing, and sharing
  * project structure without media files.
  */
 
-import type { Project } from '@/types/project';
-import type { MediaMetadata } from '@/types/storage';
+import type { Project } from '@/types/project'
+import type { MediaMetadata } from '@/types/storage'
 import {
   ProjectSnapshot,
   SnapshotExportOptions,
   SnapshotMediaReference,
   SNAPSHOT_VERSION,
   mediaToSnapshotReference,
-} from '../types/snapshot';
-import { getProject, getProjectMediaIds } from '@/infrastructure/storage';
-import { mediaLibraryService } from '@/features/project-bundle/deps/media-library';
+} from '../types/snapshot'
+import { getProject, getProjectMediaIds } from '@/infrastructure/storage'
+import { mediaLibraryService } from '@/features/project-bundle/deps/media-library'
 
 // App version - should be imported from a config
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.0'
 
 /**
  * Export a project as a lightweight JSON snapshot
  */
 export async function exportProjectJson(
   projectId: string,
-  options: SnapshotExportOptions = {}
+  options: SnapshotExportOptions = {},
 ): Promise<ProjectSnapshot> {
   const {
     includeMediaReferences = true,
     stripVolatileFields = false,
     includeChecksum = true,
-  } = options;
+  } = options
 
   // Get project data
-  const project = await getProject(projectId);
+  const project = await getProject(projectId)
   if (!project) {
-    throw new Error(`Project not found: ${projectId}`);
+    throw new Error(`Project not found: ${projectId}`)
   }
 
   // Prepare project data
-  let projectData: Project = { ...project };
+  let projectData: Project = { ...project }
 
   // Strip volatile fields if requested
   if (stripVolatileFields && projectData.timeline) {
@@ -52,17 +52,17 @@ export async function exportProjectJson(
         zoomLevel: undefined,
         scrollPosition: undefined,
       },
-    };
+    }
   }
 
   // Collect media references if requested
-  const mediaReferences: SnapshotMediaReference[] = [];
+  const mediaReferences: SnapshotMediaReference[] = []
   if (includeMediaReferences) {
-    const mediaIds = await getProjectMediaIds(projectId);
+    const mediaIds = await getProjectMediaIds(projectId)
     for (const mediaId of mediaIds) {
-      const media = await mediaLibraryService.getMedia(mediaId);
+      const media = await mediaLibraryService.getMedia(mediaId)
       if (media) {
-        mediaReferences.push(mediaToSnapshotReference(media));
+        mediaReferences.push(mediaToSnapshotReference(media))
       }
     }
   }
@@ -74,14 +74,14 @@ export async function exportProjectJson(
     editorVersion: APP_VERSION,
     project: projectData,
     mediaReferences,
-  };
+  }
 
   // Compute checksum if requested
   if (includeChecksum) {
-    snapshot.checksum = await computeSnapshotChecksum(snapshot);
+    snapshot.checksum = await computeSnapshotChecksum(snapshot)
   }
 
-  return snapshot;
+  return snapshot
 }
 
 /**
@@ -89,11 +89,11 @@ export async function exportProjectJson(
  */
 export async function exportProjectJsonString(
   projectId: string,
-  options: SnapshotExportOptions = {}
+  options: SnapshotExportOptions = {},
 ): Promise<string> {
-  const { prettyPrint = true, ...restOptions } = options;
-  const snapshot = await exportProjectJson(projectId, restOptions);
-  return JSON.stringify(snapshot, null, prettyPrint ? 2 : 0);
+  const { prettyPrint = true, ...restOptions } = options
+  const snapshot = await exportProjectJson(projectId, restOptions)
+  return JSON.stringify(snapshot, null, prettyPrint ? 2 : 0)
 }
 
 /**
@@ -103,11 +103,11 @@ export async function exportProjectJsonString(
 export function createSnapshotFromProject(
   project: Project,
   mediaMetadata: MediaMetadata[] = [],
-  options: SnapshotExportOptions = {}
+  options: SnapshotExportOptions = {},
 ): ProjectSnapshot {
-  const { stripVolatileFields = false } = options;
+  const { stripVolatileFields = false } = options
 
-  let projectData: Project = { ...project };
+  let projectData: Project = { ...project }
 
   if (stripVolatileFields && projectData.timeline) {
     projectData = {
@@ -118,7 +118,7 @@ export function createSnapshotFromProject(
         zoomLevel: undefined,
         scrollPosition: undefined,
       },
-    };
+    }
   }
 
   return {
@@ -127,25 +127,25 @@ export function createSnapshotFromProject(
     editorVersion: APP_VERSION,
     project: projectData,
     mediaReferences: mediaMetadata.map(mediaToSnapshotReference),
-  };
+  }
 }
 
 /**
  * Download snapshot as a JSON file
  */
 export function downloadSnapshotJson(snapshot: ProjectSnapshot, filename?: string): void {
-  const json = JSON.stringify(snapshot, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
+  const json = JSON.stringify(snapshot, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
 
-  const safeName = sanitizeFilename(filename || snapshot.project.name);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${safeName}.freecut.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const safeName = sanitizeFilename(filename || snapshot.project.name)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${safeName}.freecut.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 /**
@@ -153,18 +153,18 @@ export function downloadSnapshotJson(snapshot: ProjectSnapshot, filename?: strin
  */
 export async function downloadProjectJson(
   projectId: string,
-  options: SnapshotExportOptions = {}
+  options: SnapshotExportOptions = {},
 ): Promise<void> {
-  const snapshot = await exportProjectJson(projectId, options);
-  downloadSnapshotJson(snapshot);
+  const snapshot = await exportProjectJson(projectId, options)
+  downloadSnapshotJson(snapshot)
 }
 
 /**
  * Copy snapshot to clipboard as JSON
  */
 async function copySnapshotToClipboard(snapshot: ProjectSnapshot): Promise<void> {
-  const json = JSON.stringify(snapshot, null, 2);
-  await navigator.clipboard.writeText(json);
+  const json = JSON.stringify(snapshot, null, 2)
+  await navigator.clipboard.writeText(json)
 }
 
 /**
@@ -172,10 +172,10 @@ async function copySnapshotToClipboard(snapshot: ProjectSnapshot): Promise<void>
  */
 export async function copyProjectToClipboard(
   projectId: string,
-  options: SnapshotExportOptions = {}
+  options: SnapshotExportOptions = {},
 ): Promise<void> {
-  const snapshot = await exportProjectJson(projectId, options);
-  await copySnapshotToClipboard(snapshot);
+  const snapshot = await exportProjectJson(projectId, options)
+  await copySnapshotToClipboard(snapshot)
 }
 
 /**
@@ -183,13 +183,13 @@ export async function copyProjectToClipboard(
  */
 async function computeSnapshotChecksum(snapshot: ProjectSnapshot): Promise<string> {
   // Create a copy without the checksum field for hashing
-  const dataForHash = { ...snapshot, checksum: undefined };
-  const json = JSON.stringify(dataForHash);
-  const buffer = new TextEncoder().encode(json);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const dataForHash = { ...snapshot, checksum: undefined }
+  const json = JSON.stringify(dataForHash)
+  const buffer = new TextEncoder().encode(json)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+    .join('')
 }
 
 /**
@@ -197,12 +197,12 @@ async function computeSnapshotChecksum(snapshot: ProjectSnapshot): Promise<strin
  */
 export async function verifySnapshotChecksum(snapshot: ProjectSnapshot): Promise<boolean> {
   if (!snapshot.checksum) {
-    return true; // No checksum to verify
+    return true // No checksum to verify
   }
 
-  const expectedChecksum = snapshot.checksum;
-  const actualChecksum = await computeSnapshotChecksum(snapshot);
-  return expectedChecksum === actualChecksum;
+  const expectedChecksum = snapshot.checksum
+  const actualChecksum = await computeSnapshotChecksum(snapshot)
+  return expectedChecksum === actualChecksum
 }
 
 /**
@@ -212,34 +212,34 @@ function sanitizeFilename(name: string): string {
   return name
     .replace(/[<>:"/\\|?*]/g, '_')
     .replace(/\s+/g, '_')
-    .substring(0, 100);
+    .substring(0, 100)
 }
 
 /**
  * Get snapshot statistics for display
  */
 export function getSnapshotStats(snapshot: ProjectSnapshot): {
-  trackCount: number;
-  itemCount: number;
-  mediaCount: number;
-  markerCount: number;
-  transitionCount: number;
-  keyframeCount: number;
-  totalDuration: number;
+  trackCount: number
+  itemCount: number
+  mediaCount: number
+  markerCount: number
+  transitionCount: number
+  keyframeCount: number
+  totalDuration: number
 } {
-  const timeline = snapshot.project.timeline;
+  const timeline = snapshot.project.timeline
   return {
     trackCount: timeline?.tracks.length ?? 0,
     itemCount: timeline?.items.length ?? 0,
     mediaCount: snapshot.mediaReferences.length,
     markerCount: timeline?.markers?.length ?? 0,
     transitionCount: timeline?.transitions?.length ?? 0,
-    keyframeCount: timeline?.keyframes?.reduce(
-      (sum, item) => sum + item.properties.reduce(
-        (pSum, prop) => pSum + prop.keyframes.length, 0
-      ), 0
-    ) ?? 0,
+    keyframeCount:
+      timeline?.keyframes?.reduce(
+        (sum, item) =>
+          sum + item.properties.reduce((pSum, prop) => pSum + prop.keyframes.length, 0),
+        0,
+      ) ?? 0,
     totalDuration: snapshot.project.duration,
-  };
+  }
 }
-

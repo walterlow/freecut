@@ -1,18 +1,18 @@
 export function scheduleAfterPaint(task: () => void): () => void {
   if (typeof window === 'undefined') {
-    const timeoutId = setTimeout(task, 0);
-    return () => clearTimeout(timeoutId);
+    const timeoutId = setTimeout(task, 0)
+    return () => clearTimeout(timeoutId)
   }
 
-  let timeoutId: number | null = null;
+  let timeoutId: number | null = null
   const rafId = window.requestAnimationFrame(() => {
-    timeoutId = window.setTimeout(task, 0);
-  });
+    timeoutId = window.setTimeout(task, 0)
+  })
 
   return () => {
-    window.cancelAnimationFrame(rafId);
+    window.cancelAnimationFrame(rafId)
     if (timeoutId !== null) {
-      window.clearTimeout(timeoutId);
+      window.clearTimeout(timeoutId)
     }
-  };
+  }
 }

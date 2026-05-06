@@ -1,6 +1,6 @@
 /**
  * Player.tsx - Main Player Component for FreeCut
- * 
+ *
  * A customizable video player component inspired by Composition Player
  * with support for:
  * - Frame-accurate playback
@@ -16,88 +16,89 @@ import React, {
   useState,
   useCallback,
   useEffect,
-} from 'react';
+} from 'react'
 import {
   PlayerEmitterProvider,
   usePlayerEmitter,
   type PlayerEventTypes,
   type CallbackListener,
-} from './event-emitter';
-import {
-  ClockBridgeProvider,
-  useBridgedTimelineContext,
-} from './clock';
-import { usePlayer } from './use-player';
-import { VideoConfigProvider } from './video-config-context';
+} from './event-emitter'
+import { ClockBridgeProvider, useBridgedTimelineContext } from './clock'
+import { usePlayer } from './use-player'
+import { VideoConfigProvider } from './video-config-context'
+import { calculatePlayerContentLayout } from './player-layout'
 
 // Types
 interface PlayerProps {
   /** The component to render as video content */
-  children: React.ReactNode;
-  
+  children: React.ReactNode
+
   /** Duration in frames */
-  durationInFrames: number;
-  
+  durationInFrames: number
+
   /** Frames per second */
-  fps: number;
-  
+  fps: number
+
   /** Initial frame to start at */
-  initialFrame?: number;
-  
+  initialFrame?: number
+
   /** Whether to loop playback */
-  loop?: boolean;
-  
+  loop?: boolean
+
   /** Whether to show controls */
-  controls?: boolean;
-  
+  controls?: boolean
+
   /** Whether to auto-play on mount */
-  autoPlay?: boolean;
-  
+  autoPlay?: boolean
+
   /** Whether to start muted */
-  initiallyMuted?: boolean;
-  
+  initiallyMuted?: boolean
+
   /** Playback rate (0.25 - 4) */
-  playbackRate?: number;
-  
+  playbackRate?: number
+
   /** Custom class name */
-  className?: string;
-  
+  className?: string
+
   /** Custom styles */
-  style?: React.CSSProperties;
-  
-  /** Width of the player */
-  width?: number;
-  
-  /** Height of the player */
-  height?: number;
-  
+  style?: React.CSSProperties
+
+  /** Width of the rendered composition */
+  width?: number
+
+  /** Height of the rendered composition */
+  height?: number
+
+  /** Explicit CSS layout rectangle to scale the composition into. */
+  layoutSize?: { width: number; height: number }
+
   /** Callback when playback ends */
-  onEnded?: () => void;
-  
+  onEnded?: () => void
+
   /** Callback when frame changes */
-  onFrameChange?: (frame: number) => void;
-  
+  onFrameChange?: (frame: number) => void
+
   /** Callback when play state changes */
-  onPlayStateChange?: (isPlaying: boolean) => void;
+  onPlayStateChange?: (isPlaying: boolean) => void
 }
 
 export interface PlayerRef {
-  play: () => void;
-  pause: () => void;
-  toggle: () => void;
-  seekTo: (frame: number) => void;
-  getCurrentFrame: () => number;
-  isPlaying: () => boolean;
-  addEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
-  removeEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
+  play: () => void
+  pause: () => void
+  toggle: () => void
+  seekTo: (frame: number) => void
+  getCurrentFrame: () => number
+  isPlaying: () => boolean
+  addEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void
+  removeEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void
 }
 
 /**
  * Default Play/Pause Button Component
  */
 const DefaultPlayPauseButton: React.FC<{
-  isPlaying: boolean;
-  onToggle: () => void;
+  isPlaying: boolean
+  onToggle: () => void
 }> = ({ isPlaying, onToggle }) => {
   return (
     <button
@@ -116,83 +117,83 @@ const DefaultPlayPauseButton: React.FC<{
         </svg>
       )}
     </button>
-  );
-};
+  )
+}
 
 /**
  * Default Progress Bar Component
  */
 const DefaultProgressBar: React.FC<{
-  currentFrame: number;
-  durationInFrames: number;
-  seek: (frame: number) => void;
+  currentFrame: number
+  durationInFrames: number
+  seek: (frame: number) => void
 }> = ({ currentFrame, durationInFrames, seek }) => {
-  const progress = durationInFrames > 0 ? (currentFrame / durationInFrames) * 100 : 0;
-  const barRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef(false);
-  const mouseMoveRef = useRef<((ev: MouseEvent) => void) | null>(null);
-  const mouseUpRef = useRef<(() => void) | null>(null);
+  const progress = durationInFrames > 0 ? (currentFrame / durationInFrames) * 100 : 0
+  const barRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef(false)
+  const mouseMoveRef = useRef<((ev: MouseEvent) => void) | null>(null)
+  const mouseUpRef = useRef<(() => void) | null>(null)
 
   const seekFromEvent = useCallback(
     (clientX: number) => {
-      const bar = barRef.current;
-      if (!bar) return;
-      const rect = bar.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const percentage = Math.max(0, Math.min(1, x / rect.width));
-      const frame = Math.round(percentage * durationInFrames);
-      seek(Math.max(0, Math.min(frame, durationInFrames - 1)));
+      const bar = barRef.current
+      if (!bar) return
+      const rect = bar.getBoundingClientRect()
+      const x = clientX - rect.left
+      const percentage = Math.max(0, Math.min(1, x / rect.width))
+      const frame = Math.round(percentage * durationInFrames)
+      seek(Math.max(0, Math.min(frame, durationInFrames - 1)))
     },
     [durationInFrames, seek],
-  );
+  )
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      draggingRef.current = true;
-      seekFromEvent(e.clientX);
+      e.preventDefault()
+      e.stopPropagation()
+      draggingRef.current = true
+      seekFromEvent(e.clientX)
 
       const handleMouseMove = (ev: MouseEvent) => {
         if (draggingRef.current) {
-          seekFromEvent(ev.clientX);
+          seekFromEvent(ev.clientX)
         }
-      };
+      }
 
       const handleMouseUp = () => {
-        draggingRef.current = false;
+        draggingRef.current = false
         if (mouseMoveRef.current) {
-          document.removeEventListener('mousemove', mouseMoveRef.current);
-          mouseMoveRef.current = null;
+          document.removeEventListener('mousemove', mouseMoveRef.current)
+          mouseMoveRef.current = null
         }
         if (mouseUpRef.current) {
-          document.removeEventListener('mouseup', mouseUpRef.current);
-          mouseUpRef.current = null;
+          document.removeEventListener('mouseup', mouseUpRef.current)
+          mouseUpRef.current = null
         }
-      };
+      }
 
-      mouseMoveRef.current = handleMouseMove;
-      mouseUpRef.current = handleMouseUp;
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      mouseMoveRef.current = handleMouseMove
+      mouseUpRef.current = handleMouseUp
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
     },
     [seekFromEvent],
-  );
+  )
 
   // Clean up document listeners on unmount
   useEffect(() => {
     return () => {
       if (mouseMoveRef.current) {
-        document.removeEventListener('mousemove', mouseMoveRef.current);
-        mouseMoveRef.current = null;
+        document.removeEventListener('mousemove', mouseMoveRef.current)
+        mouseMoveRef.current = null
       }
       if (mouseUpRef.current) {
-        document.removeEventListener('mouseup', mouseUpRef.current);
-        mouseUpRef.current = null;
+        document.removeEventListener('mouseup', mouseUpRef.current)
+        mouseUpRef.current = null
       }
-      draggingRef.current = false;
-    };
-  }, []);
+      draggingRef.current = false
+    }
+  }, [])
 
   return (
     <div
@@ -205,23 +206,23 @@ const DefaultProgressBar: React.FC<{
         style={{ width: `${progress}%` }}
       />
     </div>
-  );
-};
+  )
+}
 
 /**
  * Default Controls Component
  */
 const DefaultControls: React.FC<{
-  isPlaying: boolean;
-  currentFrame: number;
-  durationInFrames: number;
-  fps: number;
-  playbackRate: number;
-  isFullscreen: boolean;
-  onTogglePlay: () => void;
-  onSeek: (frame: number) => void;
-  onPlaybackRateChange: (rate: number) => void;
-  onToggleFullscreen: () => void;
+  isPlaying: boolean
+  currentFrame: number
+  durationInFrames: number
+  fps: number
+  playbackRate: number
+  isFullscreen: boolean
+  onTogglePlay: () => void
+  onSeek: (frame: number) => void
+  onPlaybackRateChange: (rate: number) => void
+  onToggleFullscreen: () => void
 }> = ({
   isPlaying,
   currentFrame,
@@ -235,12 +236,12 @@ const DefaultControls: React.FC<{
   onToggleFullscreen,
 }) => {
   const formatTime = (frame: number) => {
-    const seconds = frame / fps;
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-  
+    const seconds = frame / fps
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
   return (
     <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
       <div className="mb-3">
@@ -250,24 +251,21 @@ const DefaultControls: React.FC<{
           seek={onSeek}
         />
       </div>
-      
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <DefaultPlayPauseButton
-            isPlaying={isPlaying}
-            onToggle={onTogglePlay}
-          />
-          
+          <DefaultPlayPauseButton isPlaying={isPlaying} onToggle={onTogglePlay} />
+
           <span className="text-sm text-white ml-2">
             {formatTime(currentFrame)} / {formatTime(durationInFrames - 1)}
           </span>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <select
             value={playbackRate}
             onChange={(event) => {
-              onPlaybackRateChange(Number(event.target.value));
+              onPlaybackRateChange(Number(event.target.value))
             }}
             className="bg-transparent text-sm text-white border border-white/30 rounded px-2 py-1"
             aria-label="播放速度"
@@ -277,7 +275,7 @@ const DefaultControls: React.FC<{
             <option value="1.5">1.5x</option>
             <option value="2">2x</option>
           </select>
-          
+
           <button
             onClick={onToggleFullscreen}
             className="p-2 rounded-full hover:bg-white/20 transition-colors"
@@ -296,8 +294,8 @@ const DefaultControls: React.FC<{
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
 /**
  * Inner Player Component
@@ -318,6 +316,7 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
       style,
       width = 1280,
       height = 720,
+      layoutSize,
       onEnded,
       onFrameChange,
       onPlayStateChange,
@@ -325,129 +324,127 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
     ref,
   ) => {
     // Consume unused props to avoid lint warnings
-    void initiallyMuted;
-    void initialPlaybackRate;
-    void onEnded;
+    void initiallyMuted
+    void initialPlaybackRate
+    void onEnded
 
     // State
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const contentHostRef = useRef<HTMLDivElement>(null);
-    const contentScaleRef = useRef<HTMLDivElement>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const containerRef = useRef<HTMLDivElement>(null)
+    const contentHostRef = useRef<HTMLDivElement>(null)
+    const contentScaleRef = useRef<HTMLDivElement>(null)
 
     // Measure container size for scaling. Apply layout imperatively to avoid
     // re-rendering the entire composition tree on every resize step.
     const updateScaledLayout = useCallback(() => {
-      const container = containerRef.current;
-      const contentHost = contentHostRef.current;
-      const contentScale = contentScaleRef.current;
-      if (!container || !contentHost || !contentScale) return;
+      const container = containerRef.current
+      const contentHost = contentHostRef.current
+      const contentScale = contentScaleRef.current
+      if (!container || !contentHost || !contentScale) return
 
-      const containerWidth = container.clientWidth;
-      const containerHeight = container.clientHeight;
-      const scale = containerWidth > 0 && containerHeight > 0
-        ? Math.min(containerWidth / width, containerHeight / height)
-        : 1;
+      const containerRect = container.getBoundingClientRect()
+      const measuredWidth = containerRect.width || container.clientWidth
+      const measuredHeight = containerRect.height || container.clientHeight
+      const containerWidth = layoutSize?.width ?? measuredWidth
+      const containerHeight = layoutSize?.height ?? measuredHeight
+      const layout = calculatePlayerContentLayout(containerWidth, containerHeight, width, height)
 
-      const scaledWidth = width * scale;
-      const scaledHeight = height * scale;
+      contentHost.style.width = `${layout.width}px`
+      contentHost.style.height = `${layout.height}px`
+      contentHost.style.marginLeft = `${-layout.width / 2}px`
+      contentHost.style.marginTop = `${-layout.height / 2}px`
 
-      contentHost.style.width = `${scaledWidth}px`;
-      contentHost.style.height = `${scaledHeight}px`;
-      contentHost.style.marginLeft = `${-scaledWidth / 2}px`;
-      contentHost.style.marginTop = `${-scaledHeight / 2}px`;
-
-      contentScale.style.width = `${width}px`;
-      contentScale.style.height = `${height}px`;
-      contentScale.style.transform = `scale(${scale})`;
-    }, [height, width]);
+      contentScale.style.width = `${width}px`
+      contentScale.style.height = `${height}px`
+      contentScale.style.transform = `scale(${layout.scaleX}, ${layout.scaleY})`
+    }, [height, layoutSize?.height, layoutSize?.width, width])
 
     useEffect(() => {
-      const container = containerRef.current;
-      if (!container) return;
+      const container = containerRef.current
+      if (!container) return
 
-      let rafId: number | null = null;
+      let rafId: number | null = null
       const scheduleUpdate = () => {
-        if (rafId !== null) return;
+        if (rafId !== null) return
         rafId = requestAnimationFrame(() => {
-          rafId = null;
-          updateScaledLayout();
-        });
-      };
+          rafId = null
+          updateScaledLayout()
+        })
+      }
 
-      const observer = new ResizeObserver(scheduleUpdate);
-      observer.observe(container);
+      const observer = new ResizeObserver(scheduleUpdate)
+      observer.observe(container)
 
       // Initial measurement
-      updateScaledLayout();
+      updateScaledLayout()
 
       return () => {
-        observer.disconnect();
+        observer.disconnect()
         if (rafId !== null) {
-          cancelAnimationFrame(rafId);
+          cancelAnimationFrame(rafId)
         }
-      };
-    }, [updateScaledLayout]);
-    
+      }
+    }, [updateScaledLayout])
+
     // Get player methods
-    const player = usePlayer(durationInFrames, { loop, onEnded });
-    
+    const player = usePlayer(durationInFrames, { loop, onEnded })
+
     // Get context values
     const {
       frame: currentFrame,
       playing,
       playbackRate,
       setPlaybackRate,
-    } = useBridgedTimelineContext();
-    const emitter = usePlayerEmitter();
-    
+    } = useBridgedTimelineContext()
+    const emitter = usePlayerEmitter()
+
     // Sync initial frame
     useEffect(() => {
       if (initialFrame > 0 && currentFrame === 0) {
-        player.seek(initialFrame);
+        player.seek(initialFrame)
       }
-    }, [initialFrame, currentFrame, player]);
-    
+    }, [initialFrame, currentFrame, player])
+
     // Sync autoPlay
     useEffect(() => {
       if (autoPlay && !playing) {
-        player.play();
+        player.play()
       }
-    }, [autoPlay, playing, player]);
-    
+    }, [autoPlay, playing, player])
+
     // Handle frame changes
     useEffect(() => {
-      onFrameChange?.(currentFrame);
-    }, [currentFrame, onFrameChange]);
-    
+      onFrameChange?.(currentFrame)
+    }, [currentFrame, onFrameChange])
+
     // Handle play state changes
     useEffect(() => {
-      onPlayStateChange?.(playing);
-    }, [playing, onPlayStateChange]);
-    
+      onPlayStateChange?.(playing)
+    }, [playing, onPlayStateChange])
+
     // Fullscreen handling
     const toggleFullscreen = useCallback(async () => {
-      if (!containerRef.current) return;
-      
+      if (!containerRef.current) return
+
       if (!document.fullscreenElement) {
-        await containerRef.current.requestFullscreen();
+        await containerRef.current.requestFullscreen()
       } else {
-        await document.exitFullscreen();
+        await document.exitFullscreen()
       }
-    }, []);
-    
+    }, [])
+
     // Listen for fullscreen changes
     useEffect(() => {
       const handleFullscreenChange = () => {
-        setIsFullscreen(!!document.fullscreenElement);
-      };
-      
-      document.addEventListener('fullscreenchange', handleFullscreenChange);
+        setIsFullscreen(!!document.fullscreenElement)
+      }
+
+      document.addEventListener('fullscreenchange', handleFullscreenChange)
       return () => {
-        document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      };
-    }, []);
-    
+        document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      }
+    }, [])
+
     // Expose imperative API
     useImperativeHandle(
       ref,
@@ -459,15 +456,15 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
         getCurrentFrame: () => player.getCurrentFrame(),
         isPlaying: () => player.isPlaying(),
         addEventListener: (event, callback) => {
-          emitter.addEventListener(event, callback);
+          emitter.addEventListener(event, callback)
         },
         removeEventListener: (event, callback) => {
-          emitter.removeEventListener(event, callback);
+          emitter.removeEventListener(event, callback)
         },
       }),
       [player, emitter],
-    );
-    
+    )
+
     return (
       <div
         ref={containerRef}
@@ -504,15 +501,12 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
             {children}
           </div>
         </div>
-        
+
         {/* Controls overlay */}
         {controls && (
           <>
             {/* Click to play/pause overlay - behind controls */}
-            <div
-              className="absolute inset-0 cursor-pointer"
-              onClick={() => player.toggle()}
-            />
+            <div className="absolute inset-0 cursor-pointer" onClick={() => player.toggle()} />
 
             {/* Controls - on top so scrubber/buttons receive clicks */}
             <DefaultControls
@@ -530,9 +524,9 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
           </>
         )}
       </div>
-    );
+    )
   },
-);
+)
 
 /**
  * Player Component - Main export
@@ -541,42 +535,32 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
  * The ClockBridgeProvider maintains backwards compatibility with
  * existing code that uses useTimelineContext().
  */
-export const Player = forwardRef<PlayerRef, PlayerProps>(
-  (props, ref) => {
-    const {
-      durationInFrames,
-      fps,
-      initialFrame,
-      initiallyMuted,
-      playbackRate,
-      loop,
-      onEnded,
-    } = props;
+export const Player = forwardRef<PlayerRef, PlayerProps>((props, ref) => {
+  const { durationInFrames, fps, initialFrame, initiallyMuted, playbackRate, loop, onEnded } = props
 
-    return (
-      <PlayerEmitterProvider>
-        <ClockBridgeProvider
+  return (
+    <PlayerEmitterProvider>
+      <ClockBridgeProvider
+        fps={fps}
+        durationInFrames={durationInFrames}
+        initialFrame={initialFrame}
+        initiallyMuted={initiallyMuted}
+        initialPlaybackRate={playbackRate}
+        loop={loop}
+        onEnded={onEnded}
+        onVolumeChange={() => {}}
+      >
+        <VideoConfigProvider
           fps={fps}
+          width={props.width ?? 1280}
+          height={props.height ?? 720}
           durationInFrames={durationInFrames}
-          initialFrame={initialFrame}
-          initiallyMuted={initiallyMuted}
-          initialPlaybackRate={playbackRate}
-          loop={loop}
-          onEnded={onEnded}
-          onVolumeChange={() => {}}
         >
-          <VideoConfigProvider
-            fps={fps}
-            width={props.width ?? 1280}
-            height={props.height ?? 720}
-            durationInFrames={durationInFrames}
-          >
-            <PlayerInner {...props} ref={ref} />
-          </VideoConfigProvider>
-        </ClockBridgeProvider>
-      </PlayerEmitterProvider>
-    );
-  },
-);
+          <PlayerInner {...props} ref={ref} />
+        </VideoConfigProvider>
+      </ClockBridgeProvider>
+    </PlayerEmitterProvider>
+  )
+})
 
-Player.displayName = 'Player';
+Player.displayName = 'Player'

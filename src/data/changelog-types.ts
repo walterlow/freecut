@@ -1,19 +1,17 @@
-export type ChangelogGroup = 'added' | 'fixed' | 'improved';
+export type ChangelogGroup = 'added' | 'fixed' | 'improved'
 
 export type ChangelogItem = {
-  title: string;
-  scope?: string;
-};
+  title: string
+}
 
 export type ChangelogEntry = {
-  version: string;
-  date: string;
-  subtitle?: string;
-  highlights?: string[];
-  groups: Partial<Record<ChangelogGroup, ChangelogItem[]>>;
-};
+  version: string
+  date: string
+  subtitle?: string
+  groups: Partial<Record<ChangelogGroup, ChangelogItem[]>>
+}
 
 export type ChangelogFile = {
-  current: ChangelogEntry | null;
-  releases: ChangelogEntry[];
-};
+  current: ChangelogEntry | null
+  releases: ChangelogEntry[]
+}

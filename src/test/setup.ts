@@ -1,37 +1,33 @@
-import '@testing-library/jest-dom';
-import { afterEach } from 'vitest';
-import { resetAutoKeyframeStore } from '@/features/keyframes/stores/auto-keyframe-store';
+import '@testing-library/jest-dom'
+import { afterEach } from 'vite-plus/test'
+import { resetAutoKeyframeStore } from '@/features/keyframes/stores/auto-keyframe-store'
 
 // Mock ImageData for Canvas operations
-type TestGlobalWithImageData = typeof globalThis & { ImageData?: typeof ImageData };
-const testGlobal = globalThis as TestGlobalWithImageData;
+type TestGlobalWithImageData = typeof globalThis & { ImageData?: typeof ImageData }
+const testGlobal = globalThis as TestGlobalWithImageData
 
 if (typeof testGlobal.ImageData === 'undefined') {
   class MockImageData {
-    width: number;
-    height: number;
-    data: Uint8ClampedArray;
+    width: number
+    height: number
+    data: Uint8ClampedArray
 
-    constructor(
-      dataOrWidth: Uint8ClampedArray | number,
-      widthOrHeight: number,
-      height?: number
-    ) {
+    constructor(dataOrWidth: Uint8ClampedArray | number, widthOrHeight: number, height?: number) {
       if (typeof dataOrWidth === 'number') {
-        this.width = dataOrWidth;
-        this.height = widthOrHeight;
-        this.data = new Uint8ClampedArray(this.width * this.height * 4);
+        this.width = dataOrWidth
+        this.height = widthOrHeight
+        this.data = new Uint8ClampedArray(this.width * this.height * 4)
       } else {
-        this.data = dataOrWidth;
-        this.width = widthOrHeight;
-        this.height = height ?? Math.floor(dataOrWidth.length / (widthOrHeight * 4));
+        this.data = dataOrWidth
+        this.width = widthOrHeight
+        this.height = height ?? Math.floor(dataOrWidth.length / (widthOrHeight * 4))
       }
     }
   }
 
-  testGlobal.ImageData = MockImageData as unknown as typeof ImageData;
+  testGlobal.ImageData = MockImageData as unknown as typeof ImageData
 }
 
 afterEach(() => {
-  resetAutoKeyframeStore();
-});
+  resetAutoKeyframeStore()
+})

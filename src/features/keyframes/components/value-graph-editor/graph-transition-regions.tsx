@@ -4,17 +4,17 @@
  * to indicate frame ranges where keyframes cannot be placed (transition regions).
  */
 
-import { memo, useMemo } from 'react';
-import type { GraphViewport } from './types';
-import type { BlockedFrameRange } from '../../utils/transition-region';
+import { memo, useMemo } from 'react'
+import type { GraphViewport } from './types'
+import type { BlockedFrameRange } from '../../utils/transition-region'
 
 interface GraphTransitionRegionsProps {
   /** Viewport dimensions and range */
-  viewport: GraphViewport;
+  viewport: GraphViewport
   /** Padding inside the graph area */
-  padding: { top: number; right: number; bottom: number; left: number };
+  padding: { top: number; right: number; bottom: number; left: number }
   /** Blocked frame ranges (from transitions) */
-  blockedRanges: BlockedFrameRange[];
+  blockedRanges: BlockedFrameRange[]
 }
 
 /**
@@ -26,44 +26,46 @@ export const GraphTransitionRegions = memo(function GraphTransitionRegions({
   padding,
   blockedRanges,
 }: GraphTransitionRegionsProps) {
-  const { width, height, startFrame, endFrame } = viewport;
+  const { width, height, startFrame, endFrame } = viewport
 
   // Calculate usable area
-  const graphLeft = padding.left;
-  const graphTop = padding.top;
-  const graphWidth = width - padding.left - padding.right;
-  const graphHeight = height - padding.top - padding.bottom;
-  const frameRange = endFrame - startFrame;
+  const graphLeft = padding.left
+  const graphTop = padding.top
+  const graphWidth = width - padding.left - padding.right
+  const graphHeight = height - padding.top - padding.bottom
+  const frameRange = endFrame - startFrame
 
   // Convert frame ranges to pixel coordinates
   const regions = useMemo(() => {
-    if (blockedRanges.length === 0 || frameRange <= 0) return [];
+    if (blockedRanges.length === 0 || frameRange <= 0) return []
 
-    return blockedRanges.map((range, index) => {
-      // Clamp range to visible area
-      const visibleStart = Math.max(range.start, startFrame);
-      const visibleEnd = Math.min(range.end, endFrame);
+    return blockedRanges
+      .map((range, index) => {
+        // Clamp range to visible area
+        const visibleStart = Math.max(range.start, startFrame)
+        const visibleEnd = Math.min(range.end, endFrame)
 
-      // Skip if completely outside viewport
-      if (visibleStart >= visibleEnd) return null;
+        // Skip if completely outside viewport
+        if (visibleStart >= visibleEnd) return null
 
-      // Convert to pixel coordinates
-      const x = graphLeft + ((visibleStart - startFrame) / frameRange) * graphWidth;
-      const regionWidth = ((visibleEnd - visibleStart) / frameRange) * graphWidth;
+        // Convert to pixel coordinates
+        const x = graphLeft + ((visibleStart - startFrame) / frameRange) * graphWidth
+        const regionWidth = ((visibleEnd - visibleStart) / frameRange) * graphWidth
 
-      return {
-        key: `${range.transition.id}-${range.role}-${index}`,
-        x,
-        width: regionWidth,
-        role: range.role,
-      };
-    }).filter(Boolean);
-  }, [blockedRanges, startFrame, endFrame, frameRange, graphLeft, graphWidth]);
+        return {
+          key: `${range.transition.id}-${range.role}-${index}`,
+          x,
+          width: regionWidth,
+          role: range.role,
+        }
+      })
+      .filter(Boolean)
+  }, [blockedRanges, startFrame, endFrame, frameRange, graphLeft, graphWidth])
 
-  if (regions.length === 0) return null;
+  if (regions.length === 0) return null
 
   // Unique pattern ID for defs
-  const patternId = 'transition-blocked-stripes';
+  const patternId = 'transition-blocked-stripes'
 
   return (
     <g className="graph-transition-regions" style={{ pointerEvents: 'none' }}>
@@ -83,11 +85,11 @@ export const GraphTransitionRegions = memo(function GraphTransitionRegions({
       </defs>
 
       {regions.map((region) => {
-        if (!region) return null;
+        if (!region) return null
 
         // Calculate label position
-        const labelX = region.x + region.width / 2;
-        const labelY = graphTop + 16;
+        const labelX = region.x + region.width / 2
+        const labelY = graphTop + 16
 
         return (
           <g key={region.key}>
@@ -138,8 +140,8 @@ export const GraphTransitionRegions = memo(function GraphTransitionRegions({
               </text>
             )}
           </g>
-        );
+        )
       })}
     </g>
-  );
-});
+  )
+})

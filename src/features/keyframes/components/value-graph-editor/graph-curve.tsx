@@ -3,26 +3,26 @@
  * Renders interpolation curves between keyframes on the value graph.
  */
 
-import { memo, useMemo } from 'react';
-import type { GraphKeyframePoint, GraphViewport, GraphPadding } from './types';
-import type { EasingConfig } from '@/types/keyframe';
-import { applyEasingConfig } from '../../utils/easing';
+import { memo, useMemo } from 'react'
+import type { GraphKeyframePoint, GraphViewport, GraphPadding } from './types'
+import type { EasingConfig } from '@/types/keyframe'
+import { applyEasingConfig } from '../../utils/easing'
 
 interface GraphCurveProps {
   /** Start keyframe point */
-  startPoint: GraphKeyframePoint;
+  startPoint: GraphKeyframePoint
   /** End keyframe point */
-  endPoint: GraphKeyframePoint;
+  endPoint: GraphKeyframePoint
   /** Easing configuration for this segment */
-  easingConfig?: EasingConfig;
+  easingConfig?: EasingConfig
   /** Whether this segment is selected */
-  isSelected?: boolean;
+  isSelected?: boolean
   /** Stroke color override */
-  strokeColor?: string;
+  strokeColor?: string
 }
 
 /** Number of sample points for curve */
-const CURVE_SAMPLES = 50;
+const CURVE_SAMPLES = 50
 
 /**
  * A single interpolation curve between two keyframes.
@@ -36,25 +36,25 @@ const GraphCurve = memo(function GraphCurve({
 }: GraphCurveProps) {
   // Generate path by sampling the easing function
   const path = useMemo(() => {
-    const points: string[] = [];
-    const config = easingConfig || { type: 'linear' as const };
+    const points: string[] = []
+    const config = easingConfig || { type: 'linear' as const }
 
     for (let i = 0; i <= CURVE_SAMPLES; i++) {
-      const t = i / CURVE_SAMPLES;
-      const easedT = applyEasingConfig(t, config);
+      const t = i / CURVE_SAMPLES
+      const easedT = applyEasingConfig(t, config)
 
       // Interpolate x linearly (time), y with easing (value)
-      const x = startPoint.x + t * (endPoint.x - startPoint.x);
-      const y = startPoint.y + easedT * (endPoint.y - startPoint.y);
+      const x = startPoint.x + t * (endPoint.x - startPoint.x)
+      const y = startPoint.y + easedT * (endPoint.y - startPoint.y)
 
-      points.push(`${i === 0 ? 'M' : 'L'} ${x.toFixed(2)},${y.toFixed(2)}`);
+      points.push(`${i === 0 ? 'M' : 'L'} ${x.toFixed(2)},${y.toFixed(2)}`)
     }
 
-    return points.join(' ');
-  }, [startPoint, endPoint, easingConfig]);
+    return points.join(' ')
+  }, [startPoint, endPoint, easingConfig])
 
   // Always use orange for curves (blue glow added when selected)
-  const color = strokeColor || '#f97316';
+  const color = strokeColor || '#f97316'
 
   return (
     <g className="graph-curve" style={{ pointerEvents: 'none' }}>
@@ -81,8 +81,8 @@ const GraphCurve = memo(function GraphCurve({
         strokeOpacity={1}
       />
     </g>
-  );
-});
+  )
+})
 
 /**
  * All curves for a set of keyframes.
@@ -93,28 +93,28 @@ export const GraphCurves = memo(function GraphCurves({
   previewBezierConfigs,
   strokeColor,
 }: {
-  points: GraphKeyframePoint[];
-  selectedKeyframeIds?: Set<string>;
-  previewBezierConfigs?: Record<string, { x1: number; y1: number; x2: number; y2: number }> | null;
-  strokeColor?: string;
+  points: GraphKeyframePoint[]
+  selectedKeyframeIds?: Set<string>
+  previewBezierConfigs?: Record<string, { x1: number; y1: number; x2: number; y2: number }> | null
+  strokeColor?: string
 }) {
   // Sort points by frame (toSorted for immutability)
   const sortedPoints = useMemo(
     () => points.toSorted((a, b) => a.keyframe.frame - b.keyframe.frame),
-    [points]
-  );
+    [points],
+  )
 
-  if (sortedPoints.length < 2) return null;
+  if (sortedPoints.length < 2) return null
 
   return (
     <g className="graph-curves" style={{ pointerEvents: 'none' }}>
       {sortedPoints.slice(0, -1).map((startPoint, index) => {
-        const endPoint = sortedPoints[index + 1];
-        if (!endPoint) return null;
+        const endPoint = sortedPoints[index + 1]
+        if (!endPoint) return null
 
         const isSelected =
           selectedKeyframeIds?.has(startPoint.keyframe.id) ||
-          selectedKeyframeIds?.has(endPoint.keyframe.id);
+          selectedKeyframeIds?.has(endPoint.keyframe.id)
 
         return (
           <GraphCurve
@@ -123,17 +123,20 @@ export const GraphCurves = memo(function GraphCurves({
             endPoint={endPoint}
             easingConfig={
               previewBezierConfigs?.[startPoint.keyframe.id]
-                ? { type: 'cubic-bezier' as const, bezier: previewBezierConfigs[startPoint.keyframe.id] }
-                : (startPoint.keyframe.easingConfig || { type: startPoint.keyframe.easing })
+                ? {
+                    type: 'cubic-bezier' as const,
+                    bezier: previewBezierConfigs[startPoint.keyframe.id],
+                  }
+                : startPoint.keyframe.easingConfig || { type: startPoint.keyframe.easing }
             }
             isSelected={isSelected}
             strokeColor={strokeColor}
           />
-        );
+        )
       })}
     </g>
-  );
-});
+  )
+})
 
 /**
  * Extension lines showing value beyond keyframe range.
@@ -144,21 +147,21 @@ export const GraphExtensionLines = memo(function GraphExtensionLines({
   viewport,
   padding,
 }: {
-  points: GraphKeyframePoint[];
-  viewport: GraphViewport;
-  padding: GraphPadding;
+  points: GraphKeyframePoint[]
+  viewport: GraphViewport
+  padding: GraphPadding
 }) {
-  if (points.length === 0) return null;
+  if (points.length === 0) return null
 
   // Sort points by frame (toSorted for immutability)
-  const sortedPoints = points.toSorted((a, b) => a.keyframe.frame - b.keyframe.frame);
-  const firstPoint = sortedPoints[0];
-  const lastPoint = sortedPoints[sortedPoints.length - 1];
+  const sortedPoints = points.toSorted((a, b) => a.keyframe.frame - b.keyframe.frame)
+  const firstPoint = sortedPoints[0]
+  const lastPoint = sortedPoints[sortedPoints.length - 1]
 
-  if (!firstPoint || !lastPoint) return null;
+  if (!firstPoint || !lastPoint) return null
 
-  const graphLeft = padding.left;
-  const graphRight = viewport.width - padding.right;
+  const graphLeft = padding.left
+  const graphRight = viewport.width - padding.right
 
   return (
     <g className="graph-extension-lines" style={{ pointerEvents: 'none' }}>
@@ -189,25 +192,25 @@ export const GraphExtensionLines = memo(function GraphExtensionLines({
         />
       )}
     </g>
-  );
-});
+  )
+})
 
 interface GraphPlayheadProps {
-  frame: number;
-  viewport: GraphViewport;
-  padding: GraphPadding;
+  frame: number
+  viewport: GraphViewport
+  padding: GraphPadding
   /** Total frames in the clip (for display) */
-  totalFrames?: number;
+  totalFrames?: number
   /** Callback when playhead is scrubbed (dragged) */
-  onScrub?: (frame: number) => void;
+  onScrub?: (frame: number) => void
   /** Callback when scrubbing starts */
-  onScrubStart?: () => void;
+  onScrubStart?: () => void
   /** Callback when scrubbing ends */
-  onScrubEnd?: () => void;
+  onScrubEnd?: () => void
   /** Whether scrubbing is disabled */
-  disabled?: boolean;
+  disabled?: boolean
   /** Whether to render the visible playhead line/marker */
-  showVisuals?: boolean;
+  showVisuals?: boolean
 }
 
 /**
@@ -226,79 +229,79 @@ export const GraphPlayhead = memo(function GraphPlayhead({
   disabled = false,
   showVisuals = true,
 }: GraphPlayheadProps) {
-  const { startFrame, endFrame, width, height } = viewport;
+  const { startFrame, endFrame, width, height } = viewport
 
-  const graphLeft = padding.left;
-  const graphTop = padding.top;
-  const graphWidth = width - padding.left - padding.right;
-  const graphHeight = height - padding.top - padding.bottom;
+  const graphLeft = padding.left
+  const graphTop = padding.top
+  const graphWidth = width - padding.left - padding.right
+  const graphHeight = height - padding.top - padding.bottom
 
   // Clamp playhead to visible graph area so it's always visible at the edges
-  const rawX = graphLeft + ((frame - startFrame) / (endFrame - startFrame)) * graphWidth;
-  const x = Math.max(graphLeft, Math.min(graphLeft + graphWidth, rawX));
+  const rawX = graphLeft + ((frame - startFrame) / (endFrame - startFrame)) * graphWidth
+  const x = Math.max(graphLeft, Math.min(graphLeft + graphWidth, rawX))
 
   // Convert screen X to frame (clamped to valid range)
   const screenXToFrame = (screenX: number): number => {
-    const relativeX = screenX - graphLeft;
-    const normalizedX = Math.max(0, Math.min(1, relativeX / graphWidth));
-    const calculatedFrame = Math.round(startFrame + normalizedX * (endFrame - startFrame));
+    const relativeX = screenX - graphLeft
+    const normalizedX = Math.max(0, Math.min(1, relativeX / graphWidth))
+    const calculatedFrame = Math.round(startFrame + normalizedX * (endFrame - startFrame))
     // Clamp to valid frame range [0, totalFrames - 1] (last valid frame is totalFrames - 1)
     // This prevents scrubbing past the clip boundary which would deselect the clip
-    const maxValidFrame = totalFrames ? totalFrames - 1 : endFrame - 1;
-    return Math.max(0, Math.min(maxValidFrame, calculatedFrame));
-  };
+    const maxValidFrame = totalFrames ? totalFrames - 1 : endFrame - 1
+    return Math.max(0, Math.min(maxValidFrame, calculatedFrame))
+  }
 
   // Handle pointer down on playhead
   const handlePointerDown = (event: React.PointerEvent) => {
-    if (disabled || !onScrub) return;
-    
-    event.preventDefault();
-    event.stopPropagation();
-    
-    const svg = (event.target as SVGElement).ownerSVGElement;
-    if (!svg) return;
+    if (disabled || !onScrub) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const svg = (event.target as SVGElement).ownerSVGElement
+    if (!svg) return
 
     // Notify scrub start
-    onScrubStart?.();
+    onScrubStart?.()
 
     // Capture pointer for drag
-    svg.setPointerCapture(event.pointerId);
-    let lastScrubbedFrame: number | null = null;
+    svg.setPointerCapture(event.pointerId)
+    let lastScrubbedFrame: number | null = null
 
     const handlePointerMove = (e: PointerEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const rect = svg.getBoundingClientRect();
-      const localX = e.clientX - rect.left;
-      const newFrame = screenXToFrame(localX);
+      e.preventDefault()
+      e.stopPropagation()
+      const rect = svg.getBoundingClientRect()
+      const localX = e.clientX - rect.left
+      const newFrame = screenXToFrame(localX)
       if (newFrame === lastScrubbedFrame) {
-        return;
+        return
       }
-      lastScrubbedFrame = newFrame;
-      onScrub(newFrame);
-    };
+      lastScrubbedFrame = newFrame
+      onScrub(newFrame)
+    }
 
     const handlePointerUp = (e: PointerEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      svg.releasePointerCapture(event.pointerId);
-      svg.removeEventListener('pointermove', handlePointerMove);
-      svg.removeEventListener('pointerup', handlePointerUp);
-      
+      e.preventDefault()
+      e.stopPropagation()
+      svg.releasePointerCapture(event.pointerId)
+      svg.removeEventListener('pointermove', handlePointerMove)
+      svg.removeEventListener('pointerup', handlePointerUp)
+
       // Notify scrub end
-      onScrubEnd?.();
-    };
+      onScrubEnd?.()
+    }
 
-    svg.addEventListener('pointermove', handlePointerMove);
-    svg.addEventListener('pointerup', handlePointerUp);
-  };
+    svg.addEventListener('pointermove', handlePointerMove)
+    svg.addEventListener('pointerup', handlePointerUp)
+  }
 
-  const isInteractive = !disabled && !!onScrub;
+  const isInteractive = !disabled && !!onScrub
 
   return (
-    <g 
-      className="graph-playhead" 
-      style={{ 
+    <g
+      className="graph-playhead"
+      style={{
         pointerEvents: isInteractive ? 'auto' : 'none',
         cursor: isInteractive ? 'ew-resize' : 'default',
       }}
@@ -350,5 +353,5 @@ export const GraphPlayhead = memo(function GraphPlayhead({
         </>
       )}
     </g>
-  );
-});
+  )
+})

@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import type { TimelineTrack } from '@/types/timeline';
+import { describe, expect, it } from 'vite-plus/test'
+import type { TimelineTrack } from '@/types/timeline'
 import {
   resolveCreateNewDragTrackTargets,
   resolveLinkedDragTrackTargets,
-} from './linked-drag-targeting';
+} from './linked-drag-targeting'
 
 function makeTrack(overrides: Partial<TimelineTrack> = {}): TimelineTrack {
   return {
@@ -18,7 +18,7 @@ function makeTrack(overrides: Partial<TimelineTrack> = {}): TimelineTrack {
     order: 0,
     items: [],
     ...overrides,
-  };
+  }
 }
 
 describe('resolveLinkedDragTrackTargets', () => {
@@ -31,10 +31,10 @@ describe('resolveLinkedDragTrackTargets', () => {
       hoveredTrackId: 'v1',
       zone: 'video',
       preferredTrackHeight: 80,
-    });
+    })
 
-    expect(result).toMatchObject({ videoTrackId: 'v1', audioTrackId: 'a1' });
-  });
+    expect(result).toMatchObject({ videoTrackId: 'v1', audioTrackId: 'a1' })
+  })
 
   it('creates a new video lane above an audio lane when dropping into the video zone', () => {
     const result = resolveLinkedDragTrackTargets({
@@ -42,11 +42,14 @@ describe('resolveLinkedDragTrackTargets', () => {
       hoveredTrackId: 'a1',
       zone: 'video',
       preferredTrackHeight: 72,
-    });
+    })
 
-    expect(result?.tracks.find((track) => track.id === result.videoTrackId)).toMatchObject({ kind: 'video', name: 'V1' });
-    expect(result?.audioTrackId).toBe('a1');
-  });
+    expect(result?.tracks.find((track) => track.id === result.videoTrackId)).toMatchObject({
+      kind: 'video',
+      name: 'V1',
+    })
+    expect(result?.audioTrackId).toBe('a1')
+  })
 
   it('creates a new audio lane below a video lane when dropping into the audio zone', () => {
     const result = resolveLinkedDragTrackTargets({
@@ -54,11 +57,14 @@ describe('resolveLinkedDragTrackTargets', () => {
       hoveredTrackId: 'v1',
       zone: 'audio',
       preferredTrackHeight: 72,
-    });
+    })
 
-    expect(result?.videoTrackId).toBe('v1');
-    expect(result?.tracks.find((track) => track.id === result.audioTrackId)).toMatchObject({ kind: 'audio', name: 'A1' });
-  });
+    expect(result?.videoTrackId).toBe('v1')
+    expect(result?.tracks.find((track) => track.id === result.audioTrackId)).toMatchObject({
+      kind: 'audio',
+      name: 'A1',
+    })
+  })
 
   it('maps linked pairs by matching section index across video and audio lanes', () => {
     const result = resolveLinkedDragTrackTargets({
@@ -70,11 +76,14 @@ describe('resolveLinkedDragTrackTargets', () => {
       hoveredTrackId: 'v2',
       zone: 'audio',
       preferredTrackHeight: 72,
-    });
+    })
 
-    expect(result?.videoTrackId).toBe('v2');
-    expect(result?.tracks.find((track) => track.id === result.audioTrackId)).toMatchObject({ kind: 'audio', name: 'A2' });
-  });
+    expect(result?.videoTrackId).toBe('v2')
+    expect(result?.tracks.find((track) => track.id === result.audioTrackId)).toMatchObject({
+      kind: 'audio',
+      name: 'A2',
+    })
+  })
 
   it('creates a fresh top video lane and bottom audio lane for new-track drop zones', () => {
     const result = resolveLinkedDragTrackTargets({
@@ -86,12 +95,18 @@ describe('resolveLinkedDragTrackTargets', () => {
       zone: 'video',
       createNew: true,
       preferredTrackHeight: 72,
-    });
+    })
 
-    expect(result?.tracks.find((track) => track.id === result.videoTrackId)).toMatchObject({ kind: 'video', name: 'V2' });
-    expect(result?.tracks.find((track) => track.id === result.audioTrackId)).toMatchObject({ kind: 'audio', name: 'A2' });
-  });
-});
+    expect(result?.tracks.find((track) => track.id === result.videoTrackId)).toMatchObject({
+      kind: 'video',
+      name: 'V2',
+    })
+    expect(result?.tracks.find((track) => track.id === result.audioTrackId)).toMatchObject({
+      kind: 'audio',
+      name: 'A2',
+    })
+  })
+})
 
 describe('resolveCreateNewDragTrackTargets', () => {
   it('creates a new top video lane for a visual item drag', () => {
@@ -103,11 +118,14 @@ describe('resolveCreateNewDragTrackTargets', () => {
       draggedItems: [{ id: 'image-1', initialTrackId: 'v1', type: 'image' }],
       zone: 'video',
       preferredTrackHeight: 72,
-    });
+    })
 
-    const assignedTrackId = result?.trackAssignments.get('image-1');
-    expect(result?.tracks.find((track) => track.id === assignedTrackId)).toMatchObject({ kind: 'video', name: 'V2' });
-  });
+    const assignedTrackId = result?.trackAssignments.get('image-1')
+    expect(result?.tracks.find((track) => track.id === assignedTrackId)).toMatchObject({
+      kind: 'video',
+      name: 'V2',
+    })
+  })
 
   it('creates a new bottom audio lane for an audio drag', () => {
     const result = resolveCreateNewDragTrackTargets({
@@ -118,11 +136,14 @@ describe('resolveCreateNewDragTrackTargets', () => {
       draggedItems: [{ id: 'audio-1', initialTrackId: 'a1', type: 'audio' }],
       zone: 'audio',
       preferredTrackHeight: 72,
-    });
+    })
 
-    const assignedTrackId = result?.trackAssignments.get('audio-1');
-    expect(result?.tracks.find((track) => track.id === assignedTrackId)).toMatchObject({ kind: 'audio', name: 'A2' });
-  });
+    const assignedTrackId = result?.trackAssignments.get('audio-1')
+    expect(result?.tracks.find((track) => track.id === assignedTrackId)).toMatchObject({
+      kind: 'audio',
+      name: 'A2',
+    })
+  })
 
   it('preserves video lane gaps when moving a multi-track visual selection into the new-track zone', () => {
     const result = resolveCreateNewDragTrackTargets({
@@ -138,13 +159,17 @@ describe('resolveCreateNewDragTrackTargets', () => {
       ],
       zone: 'video',
       preferredTrackHeight: 72,
-    });
+    })
 
-    const textTrack = result?.tracks.find((track) => track.id === result.trackAssignments.get('text-1'));
-    const shapeTrack = result?.tracks.find((track) => track.id === result.trackAssignments.get('shape-1'));
-    expect(textTrack).toMatchObject({ kind: 'video', name: 'V4' });
-    expect(shapeTrack).toMatchObject({ kind: 'video', name: 'V2' });
-  });
+    const textTrack = result?.tracks.find(
+      (track) => track.id === result.trackAssignments.get('text-1'),
+    )
+    const shapeTrack = result?.tracks.find(
+      (track) => track.id === result.trackAssignments.get('shape-1'),
+    )
+    expect(textTrack).toMatchObject({ kind: 'video', name: 'V4' })
+    expect(shapeTrack).toMatchObject({ kind: 'video', name: 'V2' })
+  })
 
   it('ignores mismatched create-new zones for non-linked items', () => {
     const result = resolveCreateNewDragTrackTargets({
@@ -155,8 +180,8 @@ describe('resolveCreateNewDragTrackTargets', () => {
       draggedItems: [{ id: 'video-1', initialTrackId: 'v1', type: 'video' }],
       zone: 'audio',
       preferredTrackHeight: 72,
-    });
+    })
 
-    expect(result).toBeNull();
-  });
-});
+    expect(result).toBeNull()
+  })
+})

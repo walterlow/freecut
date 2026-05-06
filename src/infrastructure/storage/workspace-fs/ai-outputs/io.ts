@@ -5,31 +5,26 @@
  * the on-disk layout, envelope shape, and error handling stay uniform.
  */
 
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger } from '@/shared/logging/logger'
 
-import { requireWorkspaceRoot } from '../root';
-import {
-  readJson,
-  removeEntry,
-  writeJsonAtomic,
-  listDirectory,
-} from '../fs-primitives';
-import { aiOutputPath, aiOutputsDir } from '../paths';
+import { requireWorkspaceRoot } from '../root'
+import { readJson, removeEntry, writeJsonAtomic, listDirectory } from '../fs-primitives'
+import { aiOutputPath, aiOutputsDir } from '../paths'
 
 import {
   AI_OUTPUT_SCHEMA_VERSION,
   type AiOutput,
   type AiOutputKind,
   type AiOutputPayloads,
-} from './types';
+} from './types'
 
-const logger = createLogger('WorkspaceFS:AiOutputs');
+const logger = createLogger('WorkspaceFS:AiOutputs')
 
 export async function readAiOutput<K extends AiOutputKind>(
   mediaId: string,
   kind: K,
 ): Promise<AiOutput<K> | undefined> {
-  return readAiOutputAt(aiOutputPath(mediaId, kind), kind, `readAiOutput(${mediaId}, ${kind})`);
+  return readAiOutputAt(aiOutputPath(mediaId, kind), kind, `readAiOutput(${mediaId}, ${kind})`)
 }
 
 /**
@@ -42,23 +37,23 @@ export async function readAiOutputAt<K extends AiOutputKind>(
   kind: K,
   context = `readAiOutputAt(${segments.join('/')}, ${kind})`,
 ): Promise<AiOutput<K> | undefined> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    const result = await readJson<AiOutput<K>>(root, segments);
-    return result ?? undefined;
+    const result = await readJson<AiOutput<K>>(root, segments)
+    return result ?? undefined
   } catch (error) {
-    logger.error(`${context} failed`, error);
-    throw new Error(`Failed to load AI output ${kind}`);
+    logger.error(`${context} failed`, error)
+    throw new Error(`Failed to load AI output ${kind}`)
   }
 }
 
 interface WriteInput<K extends AiOutputKind> {
-  mediaId: string;
-  kind: K;
-  service: string;
-  model: string;
-  params?: Record<string, unknown>;
-  data: AiOutputPayloads[K];
+  mediaId: string
+  kind: K
+  service: string
+  model: string
+  params?: Record<string, unknown>
+  data: AiOutputPayloads[K]
 }
 
 /**
@@ -68,7 +63,7 @@ interface WriteInput<K extends AiOutputKind> {
 export async function writeAiOutput<K extends AiOutputKind>(
   input: WriteInput<K>,
 ): Promise<AiOutput<K>> {
-  return writeAiOutputAt(aiOutputPath(input.mediaId, input.kind), input);
+  return writeAiOutputAt(aiOutputPath(input.mediaId, input.kind), input)
 }
 
 /**
@@ -80,9 +75,9 @@ export async function writeAiOutputAt<K extends AiOutputKind>(
   segments: string[],
   input: WriteInput<K>,
 ): Promise<AiOutput<K>> {
-  const root = requireWorkspaceRoot();
-  const now = Date.now();
-  const existing = await readJson<AiOutput<K>>(root, segments);
+  const root = requireWorkspaceRoot()
+  const now = Date.now()
+  const existing = await readJson<AiOutput<K>>(root, segments)
 
   const envelope: AiOutput<K> = {
     schemaVersion: AI_OUTPUT_SCHEMA_VERSION,
@@ -94,34 +89,31 @@ export async function writeAiOutputAt<K extends AiOutputKind>(
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     data: input.data,
-  };
+  }
 
   try {
-    await writeJsonAtomic(root, segments, envelope);
-    return envelope;
+    await writeJsonAtomic(root, segments, envelope)
+    return envelope
   } catch (error) {
-    logger.error(`writeAiOutputAt(${segments.join('/')}, ${input.kind}) failed`, error);
-    throw new Error(`Failed to save AI output ${input.kind}`);
+    logger.error(`writeAiOutputAt(${segments.join('/')}, ${input.kind}) failed`, error)
+    throw new Error(`Failed to save AI output ${input.kind}`)
   }
 }
 
-export async function deleteAiOutput(
-  mediaId: string,
-  kind: AiOutputKind,
-): Promise<void> {
-  return deleteAiOutputAt(aiOutputPath(mediaId, kind), `deleteAiOutput(${mediaId}, ${kind})`);
+export async function deleteAiOutput(mediaId: string, kind: AiOutputKind): Promise<void> {
+  return deleteAiOutputAt(aiOutputPath(mediaId, kind), `deleteAiOutput(${mediaId}, ${kind})`)
 }
 
 export async function deleteAiOutputAt(
   segments: string[],
   context = `deleteAiOutputAt(${segments.join('/')})`,
 ): Promise<void> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    await removeEntry(root, segments);
+    await removeEntry(root, segments)
   } catch (error) {
-    logger.error(`${context} failed`, error);
-    throw new Error(`Failed to delete AI output`);
+    logger.error(`${context} failed`, error)
+    throw new Error(`Failed to delete AI output`)
   }
 }
 
@@ -130,15 +122,15 @@ export async function deleteAiOutputAt(
  * (no extension). Used by cleanup sweeps and debug UIs.
  */
 export async function listAiOutputs(mediaId: string): Promise<AiOutputKind[]> {
-  const root = requireWorkspaceRoot();
+  const root = requireWorkspaceRoot()
   try {
-    const entries = await listDirectory(root, aiOutputsDir(mediaId));
+    const entries = await listDirectory(root, aiOutputsDir(mediaId))
     return entries
       .filter((entry) => entry.kind === 'file' && entry.name.endsWith('.json'))
-      .map((entry) => entry.name.slice(0, -'.json'.length) as AiOutputKind);
+      .map((entry) => entry.name.slice(0, -'.json'.length) as AiOutputKind)
   } catch (error) {
-    logger.warn(`listAiOutputs(${mediaId}) failed`, error);
-    return [];
+    logger.warn(`listAiOutputs(${mediaId}) failed`, error)
+    return []
   }
 }
 
@@ -150,17 +142,17 @@ export async function getMediaIdsWithAiOutput(
   mediaIds: string[],
   kind: AiOutputKind,
 ): Promise<Set<string>> {
-  if (mediaIds.length === 0) return new Set();
-  const root = requireWorkspaceRoot();
-  const ready = new Set<string>();
+  if (mediaIds.length === 0) return new Set()
+  const root = requireWorkspaceRoot()
+  const ready = new Set<string>()
   const results = await Promise.all(
     mediaIds.map(async (id) => {
-      const env = await readJson<AiOutput<typeof kind>>(root, aiOutputPath(id, kind));
-      return env ? id : null;
+      const env = await readJson<AiOutput<typeof kind>>(root, aiOutputPath(id, kind))
+      return env ? id : null
     }),
-  );
+  )
   for (const id of results) {
-    if (id) ready.add(id);
+    if (id) ready.add(id)
   }
-  return ready;
+  return ready
 }

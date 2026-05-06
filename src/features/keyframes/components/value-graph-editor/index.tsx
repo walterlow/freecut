@@ -1,112 +1,130 @@
-﻿/**
+/**
  * Value Graph Editor - Main container component.
  * Interactive graph for editing keyframe values and timing.
  */
 
-import { memo, useState, useCallback, useMemo, useEffect, useRef, useId } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, RotateCcw, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import { cn } from '@/shared/ui/cn';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { memo, useState, useCallback, useMemo, useEffect, useRef, useId } from 'react'
+import {
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Trash2,
+} from 'lucide-react'
+import { cn } from '@/shared/ui/cn'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import type { Keyframe, AnimatableProperty, KeyframeRef, BezierControlPoints } from '@/types/keyframe';
-import { PROPERTY_LABELS } from '@/types/keyframe';
-import type { GraphViewport, GraphKeyframePoint } from './types';
-import { DEFAULT_GRAPH_PADDING, PROPERTY_VALUE_RANGES } from './types';
-import { GraphGrid } from './graph-grid';
-import { GraphKeyframes } from './graph-keyframe';
-import { GraphCurves, GraphExtensionLines, GraphPlayhead } from './graph-curve';
-import { GraphHandles } from './graph-handles';
-import { GraphTransitionRegions } from './graph-transition-regions';
-import { useGraphInteraction } from './use-graph-interaction';
-import { KeyframeSvgMarquee } from '../keyframe-marquee';
-import type { BlockedFrameRange } from '../../utils/transition-region';
-import { getCombinedGraphValueRange } from './value-range-utils';
+} from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type {
+  Keyframe,
+  AnimatableProperty,
+  KeyframeRef,
+  BezierControlPoints,
+} from '@/types/keyframe'
+import { PROPERTY_LABELS } from '@/types/keyframe'
+import type { GraphViewport, GraphKeyframePoint } from './types'
+import { DEFAULT_GRAPH_PADDING, PROPERTY_VALUE_RANGES } from './types'
+import { GraphGrid } from './graph-grid'
+import { GraphKeyframes } from './graph-keyframe'
+import { GraphCurves, GraphExtensionLines, GraphPlayhead } from './graph-curve'
+import { GraphHandles } from './graph-handles'
+import { GraphTransitionRegions } from './graph-transition-regions'
+import { useGraphInteraction } from './use-graph-interaction'
+import { KeyframeSvgMarquee } from '../keyframe-marquee'
+import type { BlockedFrameRange } from '../../utils/transition-region'
+import { getCombinedGraphValueRange } from './value-range-utils'
+
+const OVERLAY_COLORS = ['#6366f1', '#22d3ee', '#a3e635', '#f472b6', '#fb923c', '#a78bfa', '#34d399']
 
 interface ValueGraphEditorProps {
   /** Shared time viewport when split mode needs synchronized frame zoom/pan */
-  frameViewport?: { startFrame: number; endFrame: number };
+  frameViewport?: { startFrame: number; endFrame: number }
   /** Callback when the shared time viewport changes */
-  onFrameViewportChange?: (viewport: { startFrame: number; endFrame: number }) => void;
+  onFrameViewportChange?: (viewport: { startFrame: number; endFrame: number }) => void
   /** Item ID to show keyframes for */
-  itemId: string;
+  itemId: string
   /** Keyframes organized by property */
-  keyframesByProperty: Partial<Record<AnimatableProperty, Keyframe[]>>;
+  keyframesByProperty: Partial<Record<AnimatableProperty, Keyframe[]>>
   /** Currently selected property (or null to show all) */
-  selectedProperty?: AnimatableProperty | null;
+  selectedProperty?: AnimatableProperty | null
   /** Additional properties to render as overlay curves (visual only, no interaction) */
-  overlayProperties?: AnimatableProperty[];
+  overlayProperties?: AnimatableProperty[]
   /** Selected keyframe IDs */
-  selectedKeyframeIds?: Set<string>;
+  selectedKeyframeIds?: Set<string>
   /** Current playhead frame */
-  currentFrame?: number;
+  currentFrame?: number
   /** Total duration in frames */
-  totalFrames?: number;
+  totalFrames?: number
   /** Timeline FPS for time ruler formatting */
-  fps?: number;
+  fps?: number
   /** Width of the editor */
-  width?: number;
+  width?: number
   /** Height of the editor */
-  height?: number;
+  height?: number
   /** Callback when keyframe is moved */
-  onKeyframeMove?: (ref: KeyframeRef, newFrame: number, newValue: number) => void;
+  onKeyframeMove?: (ref: KeyframeRef, newFrame: number, newValue: number) => void
   /** Callback when keyframes are duplicated to explicit targets */
-  onDuplicateKeyframes?: (entries: Array<{ ref: KeyframeRef; frame: number; value: number }>) => void;
+  onDuplicateKeyframes?: (
+    entries: Array<{ ref: KeyframeRef; frame: number; value: number }>,
+  ) => void
   /** Optional frame preview override for external X-axis scrubbing */
-  previewFramesById?: Record<string, number> | null;
+  previewFramesById?: Record<string, number> | null
   /** Optional frame-delta constraint for horizontal drags */
-  constrainFrameDelta?: (deltaFrames: number, draggedKeyframeIds: string[]) => number;
+  constrainFrameDelta?: (deltaFrames: number, draggedKeyframeIds: string[]) => number
   /** Callback when bezier handles are moved */
-  onBezierHandleMove?: (ref: KeyframeRef, bezier: BezierControlPoints) => void;
+  onBezierHandleMove?: (ref: KeyframeRef, bezier: BezierControlPoints) => void
   /** Callback when selection changes */
-  onSelectionChange?: (keyframeIds: Set<string>) => void;
+  onSelectionChange?: (keyframeIds: Set<string>) => void
   /** Callback when property selection changes */
-  onPropertyChange?: (property: AnimatableProperty | null) => void;
+  onPropertyChange?: (property: AnimatableProperty | null) => void
   /** Callback when playhead is scrubbed (frame is clip-relative) */
-  onScrub?: (frame: number) => void;
+  onScrub?: (frame: number) => void
   /** Callback when scrubbing ends */
-  onScrubEnd?: () => void;
+  onScrubEnd?: () => void
   /** Callback when drag starts (for undo batching) */
-  onDragStart?: () => void;
+  onDragStart?: () => void
   /** Callback when drag ends (for undo batching) */
-  onDragEnd?: () => void;
+  onDragEnd?: () => void
   /** Callback to add a keyframe at the current frame */
-  onAddKeyframe?: (property: AnimatableProperty, frame: number) => void;
+  onAddKeyframe?: (property: AnimatableProperty, frame: number) => void
   /** Callback to remove selected keyframes */
-  onRemoveKeyframes?: (refs: KeyframeRef[]) => void;
+  onRemoveKeyframes?: (refs: KeyframeRef[]) => void
   /** Callback to navigate to a keyframe (sets playhead to that frame) */
-  onNavigateToKeyframe?: (frame: number) => void;
+  onNavigateToKeyframe?: (frame: number) => void
   /** Transition-blocked frame ranges (keyframes cannot be placed here) */
-  transitionBlockedRanges?: BlockedFrameRange[];
+  transitionBlockedRanges?: BlockedFrameRange[]
   /** Controls whether snapping is enabled */
-  snapEnabled?: boolean;
+  snapEnabled?: boolean
   /** Whether to render the internal toolbar */
-  showToolbar?: boolean;
+  showToolbar?: boolean
   /** Whether to render the drag hint footer */
-  showKeyboardHints?: boolean;
+  showKeyboardHints?: boolean
   /** Whether to remove the default graph border/radius */
-  borderless?: boolean;
+  borderless?: boolean
   /** Whether handles for all visible segments should be shown */
-  showAllHandles?: boolean;
+  showAllHandles?: boolean
   /** How to render the time ruler */
-  rulerUnit?: 'frames' | 'seconds';
+  rulerUnit?: 'frames' | 'seconds'
   /** Automatically fit the Y range to the active curve values */
-  autoZoomGraphHeight?: boolean;
+  autoZoomGraphHeight?: boolean
   /** Optional externally controlled Y zoom level (0-100) */
-  externalValueZoomLevel?: number;
+  externalValueZoomLevel?: number
   /** Hide X-axis labels when an external ruler provides them */
-  hideXLabels?: boolean;
+  hideXLabels?: boolean
   /** Whether the editor is disabled */
-  disabled?: boolean;
+  disabled?: boolean
   /** Additional class name */
-  className?: string;
+  className?: string
 }
 
 /**
@@ -154,72 +172,68 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   className,
 }: ValueGraphEditorProps) {
   const padding = useMemo(
-    () => hideXLabels
-      ? { ...DEFAULT_GRAPH_PADDING, bottom: 8 }
-      : DEFAULT_GRAPH_PADDING,
-    [hideXLabels]
-  );
-  const svgRef = useRef<SVGSVGElement>(null);
-  const graphClipPathId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  
+    () => (hideXLabels ? { ...DEFAULT_GRAPH_PADDING, bottom: 8 } : DEFAULT_GRAPH_PADDING),
+    [hideXLabels],
+  )
+  const svgRef = useRef<SVGSVGElement>(null)
+  const graphClipPathId = useId().replace(/[^a-zA-Z0-9_-]/g, '')
+
   // Track if playhead is being scrubbed (to prevent background click deselection)
-  const isScrrubbingRef = useRef(false);
-  
+  const isScrrubbingRef = useRef(false)
+
   // Calculate heights for layout
   // Toolbar: ~28px (min-h-7), gaps: ~4px (gap-1)
-  const toolbarHeight = showToolbar ? 28 : 0;
-  const gaps = showToolbar ? 4 : 0;
-  const totalFixedHeight = toolbarHeight + gaps;
-  const graphHeight = Math.max(60, height - totalFixedHeight);
-  const graphAreaWidth = width - padding.left - padding.right;
-  const graphAreaHeight = graphHeight - padding.top - padding.bottom;
+  const toolbarHeight = showToolbar ? 28 : 0
+  const gaps = showToolbar ? 4 : 0
+  const totalFixedHeight = toolbarHeight + gaps
+  const graphHeight = Math.max(60, height - totalFixedHeight)
+  const graphAreaWidth = width - padding.left - padding.right
+  const graphAreaHeight = graphHeight - padding.top - padding.bottom
 
   // Get available properties
   const availableProperties = useMemo(
     () => Object.keys(keyframesByProperty) as AnimatableProperty[],
-    [keyframesByProperty]
-  );
+    [keyframesByProperty],
+  )
   const visibleProperties = useMemo(
-    () => (overlayProperties && overlayProperties.length > 0
-      ? overlayProperties.filter((property) => availableProperties.includes(property))
-      : availableProperties),
-    [availableProperties, overlayProperties]
-  );
+    () =>
+      overlayProperties && overlayProperties.length > 0
+        ? overlayProperties.filter((property) => availableProperties.includes(property))
+        : availableProperties,
+    [availableProperties, overlayProperties],
+  )
 
   // Determine which property is active vs just visible
-  const displayProperty = selectedProperty && visibleProperties.includes(selectedProperty)
-    ? selectedProperty
-    : null;
-  const viewportProperty = displayProperty ?? visibleProperties[0] ?? null;
+  const displayProperty =
+    selectedProperty && visibleProperties.includes(selectedProperty) ? selectedProperty : null
+  const viewportProperty = displayProperty ?? visibleProperties[0] ?? null
 
   // Get keyframes for the selected property
   const keyframes = useMemo(
     () => (displayProperty ? keyframesByProperty[displayProperty] || [] : []),
-    [displayProperty, keyframesByProperty]
-  );
+    [displayProperty, keyframesByProperty],
+  )
 
   // Get property value range for fixed viewport bounds
-  const propertyRange = viewportProperty ? PROPERTY_VALUE_RANGES[viewportProperty] : null;
+  const propertyRange = viewportProperty ? PROPERTY_VALUE_RANGES[viewportProperty] : null
   const viewportValueRange = useMemo(
-    () => getCombinedGraphValueRange(
-      visibleProperties.map((property) => PROPERTY_VALUE_RANGES[property] ?? null),
-      visibleProperties.map((property) => keyframesByProperty[property] || []),
-      autoZoomGraphHeight
-    ),
-    [autoZoomGraphHeight, keyframesByProperty, visibleProperties]
-  );
+    () =>
+      getCombinedGraphValueRange(
+        visibleProperties.map((property) => PROPERTY_VALUE_RANGES[property] ?? null),
+        visibleProperties.map((property) => keyframesByProperty[property] || []),
+        autoZoomGraphHeight,
+      ),
+    [autoZoomGraphHeight, keyframesByProperty, visibleProperties],
+  )
   const baseValueSpan = useMemo(
     () => Math.max(0.0001, viewportValueRange.max - viewportValueRange.min),
-    [viewportValueRange]
-  );
-  const minZoomValueSpan = useMemo(
-    () => Math.max(baseValueSpan * 0.02, 0.0001),
-    [baseValueSpan]
-  );
+    [viewportValueRange],
+  )
+  const minZoomValueSpan = useMemo(() => Math.max(baseValueSpan * 0.02, 0.0001), [baseValueSpan])
   const valueZoomRatioBase = useMemo(
     () => Math.max(1, baseValueSpan / minZoomValueSpan),
-    [baseValueSpan, minZoomValueSpan]
-  );
+    [baseValueSpan, minZoomValueSpan],
+  )
 
   // Calculate viewport with fixed bounds based on property range and clip duration
   const calculateFittedViewport = useCallback((): GraphViewport => {
@@ -230,31 +244,31 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       endFrame: Math.max(totalFrames, 60),
       minValue: viewportValueRange.min,
       maxValue: viewportValueRange.max,
-    };
-  }, [totalFrames, width, graphHeight, viewportValueRange]);
+    }
+  }, [totalFrames, width, graphHeight, viewportValueRange])
 
-  const [viewport, setViewport] = useState<GraphViewport>(() => calculateFittedViewport());
+  const [viewport, setViewport] = useState<GraphViewport>(() => calculateFittedViewport())
   const updateViewport = useCallback(
     (next: GraphViewport | ((prev: GraphViewport) => GraphViewport)) => {
       setViewport((prev) => {
-        const resolved = typeof next === 'function' ? next(prev) : next;
+        const resolved = typeof next === 'function' ? next(prev) : next
         if (resolved.startFrame !== prev.startFrame || resolved.endFrame !== prev.endFrame) {
           onFrameViewportChange?.({
             startFrame: resolved.startFrame,
             endFrame: resolved.endFrame,
-          });
+          })
         }
-        return resolved;
-      });
+        return resolved
+      })
     },
-    [onFrameViewportChange]
-  );
-  
-  const snapEnabled = controlledSnapEnabled ?? true;
+    [onFrameViewportChange],
+  )
+
+  const snapEnabled = controlledSnapEnabled ?? true
 
   // Update viewport when keyframes or property changes
   useEffect(() => {
-    const next = calculateFittedViewport();
+    const next = calculateFittedViewport()
     setViewport(
       frameViewport
         ? {
@@ -262,99 +276,99 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
             startFrame: frameViewport.startFrame,
             endFrame: frameViewport.endFrame,
           }
-        : next
-    );
-  }, [calculateFittedViewport, displayProperty, frameViewport]);
+        : next,
+    )
+  }, [calculateFittedViewport, displayProperty, frameViewport])
 
   useEffect(() => {
-    if (!frameViewport) return;
+    if (!frameViewport) return
     setViewport((prev) => {
       if (
         prev.startFrame === frameViewport.startFrame &&
         prev.endFrame === frameViewport.endFrame
       ) {
-        return prev;
+        return prev
       }
       return {
         ...prev,
         startFrame: frameViewport.startFrame,
         endFrame: frameViewport.endFrame,
-      };
-    });
-  }, [frameViewport]);
+      }
+    })
+  }, [frameViewport])
 
   useEffect(() => {
     if (externalValueZoomLevel === undefined) {
-      return;
+      return
     }
 
     setViewport((prev) => {
       if (valueZoomRatioBase <= 1 || externalValueZoomLevel <= 0) {
         if (prev.minValue === viewportValueRange.min && prev.maxValue === viewportValueRange.max) {
-          return prev;
+          return prev
         }
 
         return {
           ...prev,
           minValue: viewportValueRange.min,
           maxValue: viewportValueRange.max,
-        };
+        }
       }
 
-      const normalized = Math.max(0, Math.min(1, externalValueZoomLevel / 100));
+      const normalized = Math.max(0, Math.min(1, externalValueZoomLevel / 100))
       const nextSpan = Math.max(
         minZoomValueSpan,
-        baseValueSpan / Math.pow(valueZoomRatioBase, normalized)
-      );
-      const baseCenter = (viewportValueRange.min + viewportValueRange.max) / 2;
-      let center = (prev.minValue + prev.maxValue) / 2;
+        baseValueSpan / Math.pow(valueZoomRatioBase, normalized),
+      )
+      const baseCenter = (viewportValueRange.min + viewportValueRange.max) / 2
+      let center = (prev.minValue + prev.maxValue) / 2
 
       if (!Number.isFinite(center)) {
-        center = baseCenter;
+        center = baseCenter
       }
 
-      let nextMin = center - nextSpan / 2;
-      let nextMax = center + nextSpan / 2;
+      let nextMin = center - nextSpan / 2
+      let nextMax = center + nextSpan / 2
 
       if (nextMin < viewportValueRange.min) {
-        nextMax += viewportValueRange.min - nextMin;
-        nextMin = viewportValueRange.min;
+        nextMax += viewportValueRange.min - nextMin
+        nextMin = viewportValueRange.min
       }
       if (nextMax > viewportValueRange.max) {
-        nextMin -= nextMax - viewportValueRange.max;
-        nextMax = viewportValueRange.max;
+        nextMin -= nextMax - viewportValueRange.max
+        nextMax = viewportValueRange.max
       }
 
-      nextMin = Math.max(viewportValueRange.min, nextMin);
-      nextMax = Math.min(viewportValueRange.max, nextMax);
+      nextMin = Math.max(viewportValueRange.min, nextMin)
+      nextMax = Math.min(viewportValueRange.max, nextMax)
 
       if (prev.minValue === nextMin && prev.maxValue === nextMax) {
-        return prev;
+        return prev
       }
 
       return {
         ...prev,
         minValue: nextMin,
         maxValue: nextMax,
-      };
-    });
+      }
+    })
   }, [
     baseValueSpan,
     externalValueZoomLevel,
     minZoomValueSpan,
     valueZoomRatioBase,
     viewportValueRange,
-  ]);
+  ])
 
   const createPointsForProperty = useCallback(
     (property: AnimatableProperty): GraphKeyframePoint[] => {
-      const propertyKeyframes = keyframesByProperty[property] || [];
-      const graphLeft = padding.left;
-      const graphTop = padding.top;
-      const graphWidth = viewport.width - padding.left - padding.right;
-      const graphHeight = viewport.height - padding.top - padding.bottom;
-      const frameRange = viewport.endFrame - viewport.startFrame;
-      const valueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue);
+      const propertyKeyframes = keyframesByProperty[property] || []
+      const graphLeft = padding.left
+      const graphTop = padding.top
+      const graphWidth = viewport.width - padding.left - padding.right
+      const graphHeight = viewport.height - padding.top - padding.bottom
+      const frameRange = viewport.endFrame - viewport.startFrame
+      const valueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue)
 
       return propertyKeyframes.map((keyframe) => ({
         keyframe,
@@ -364,69 +378,70 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
         y: graphTop + (1 - (keyframe.value - viewport.minValue) / valueRange) * graphHeight,
         isSelected: selectedKeyframeIds.has(keyframe.id),
         isDragging: false,
-      }));
+      }))
     },
-    [itemId, keyframesByProperty, padding, selectedKeyframeIds, viewport]
-  );
+    [itemId, keyframesByProperty, padding, selectedKeyframeIds, viewport],
+  )
 
   // Convert keyframes to graph points
   const points = useMemo((): GraphKeyframePoint[] => {
-    if (!displayProperty) return [];
-    return createPointsForProperty(displayProperty);
-  }, [createPointsForProperty, displayProperty]);
-
-  // Overlay curve colors (muted, distinct)
-  const OVERLAY_COLORS = ['#6366f1', '#22d3ee', '#a3e635', '#f472b6', '#fb923c', '#a78bfa', '#34d399'];
+    if (!displayProperty) return []
+    return createPointsForProperty(displayProperty)
+  }, [createPointsForProperty, displayProperty])
 
   // Generate overlay points for additional properties (visual-only curves)
-  const overlayPointSets = useMemo((): Array<{ property: AnimatableProperty; points: GraphKeyframePoint[]; color: string }> => {
-    if (!overlayProperties || overlayProperties.length === 0) return [];
+  const overlayPointSets = useMemo((): Array<{
+    property: AnimatableProperty
+    points: GraphKeyframePoint[]
+    color: string
+  }> => {
+    if (!overlayProperties || overlayProperties.length === 0) return []
 
     return overlayProperties
       .filter((prop) => prop !== displayProperty) // skip the primary property
       .map((prop, index) => {
-        const points = createPointsForProperty(prop);
-        if (points.length === 0) return null;
+        const points = createPointsForProperty(prop)
+        if (points.length === 0) return null
 
-        return { property: prop, points, color: OVERLAY_COLORS[index % OVERLAY_COLORS.length]! };
+        return { property: prop, points, color: OVERLAY_COLORS[index % OVERLAY_COLORS.length]! }
       })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-  }, [OVERLAY_COLORS, createPointsForProperty, displayProperty, overlayProperties]);
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+  }, [createPointsForProperty, displayProperty, overlayProperties])
   const interactivePoints = useMemo(
     () => [...points, ...overlayPointSets.flatMap((overlaySet) => overlaySet.points)],
-    [overlayPointSets, points]
-  );
+    [overlayPointSets, points],
+  )
 
   // Calculate snap targets for keyframe dragging
   const snapTargets = useMemo(() => {
     // Frame targets: other keyframe frames, playhead position
-    const frameTargets: number[] = [];
+    const frameTargets: number[] = []
     // Value targets: 0, min, max, and other keyframe values
-    const valueTargets: number[] = [];
+    const valueTargets: number[] = []
 
     // Add special frame targets
-    frameTargets.push(0); // Start of clip
-    frameTargets.push(currentFrame); // Playhead position
+    frameTargets.push(0) // Start of clip
+    frameTargets.push(currentFrame) // Playhead position
 
     // Add special value targets based on property range
     if (propertyRange) {
-      valueTargets.push(propertyRange.min);
-      valueTargets.push(propertyRange.max);
+      valueTargets.push(propertyRange.min)
+      valueTargets.push(propertyRange.max)
       // Add 0 if it's within range
       if (propertyRange.min <= 0 && propertyRange.max >= 0) {
-        valueTargets.push(0);
+        valueTargets.push(0)
       }
       // Add 1 for normalized properties (opacity, scale)
       if (propertyRange.min <= 1 && propertyRange.max >= 1) {
-        valueTargets.push(1);
+        valueTargets.push(1)
       }
     }
 
     // Add other keyframes' positions (excluding currently selected ones)
     for (const kf of keyframes) {
       if (!selectedKeyframeIds.has(kf.id)) {
-        frameTargets.push(kf.frame);
-        valueTargets.push(kf.value);
+        frameTargets.push(kf.frame)
+        valueTargets.push(kf.value)
       }
     }
 
@@ -434,8 +449,8 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
     return {
       frameTargets: [...new Set(frameTargets)],
       valueTargets: [...new Set(valueTargets)],
-    };
-  }, [keyframes, selectedKeyframeIds, currentFrame, propertyRange]);
+    }
+  }, [keyframes, selectedKeyframeIds, currentFrame, propertyRange])
 
   // Interaction handlers
   const {
@@ -479,569 +494,611 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
     snapValueTargets: snapTargets.valueTargets,
     blockedFrameRanges: transitionBlockedRanges,
     disabled,
-  });
+  })
 
   // Update points with drag state and preview positions
   const pointsWithDragState = useMemo(() => {
     // If we're dragging and have preview values, update every dragged point's position
     if (isDragging && dragState?.type === 'keyframe' && previewValues) {
-      const graphLeft = padding.left;
-      const graphTop = padding.top;
-      const graphWidth = viewport.width - padding.left - padding.right;
-      const graphHeight = viewport.height - padding.top - padding.bottom;
-      const frameRange = viewport.endFrame - viewport.startFrame;
+      const graphLeft = padding.left
+      const graphTop = padding.top
+      const graphWidth = viewport.width - padding.left - padding.right
+      const graphHeight = viewport.height - padding.top - padding.bottom
+      const frameRange = viewport.endFrame - viewport.startFrame
 
       return interactivePoints.map((point) => {
-        const previewValue = previewValues[point.keyframe.id];
+        const previewValue = previewValues[point.keyframe.id]
         if (previewValue) {
-          const pointValueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue);
+          const pointValueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue)
           // Calculate new screen position from preview values
-          const newX = graphLeft + ((previewValue.frame - viewport.startFrame) / frameRange) * graphWidth;
-          const newY = graphTop + (1 - (previewValue.value - viewport.minValue) / pointValueRange) * graphHeight;
+          const newX =
+            graphLeft + ((previewValue.frame - viewport.startFrame) / frameRange) * graphWidth
+          const newY =
+            graphTop +
+            (1 - (previewValue.value - viewport.minValue) / pointValueRange) * graphHeight
           return {
             ...point,
             x: newX,
             y: newY,
             isDragging: true,
-          };
+          }
         }
         return {
           ...point,
           isDragging: false,
-        };
-      });
+        }
+      })
     }
 
     if (previewFramesById) {
-      const graphLeft = padding.left;
-      const graphWidth = viewport.width - padding.left - padding.right;
-      const frameRange = viewport.endFrame - viewport.startFrame;
+      const graphLeft = padding.left
+      const graphWidth = viewport.width - padding.left - padding.right
+      const frameRange = viewport.endFrame - viewport.startFrame
 
       return interactivePoints.map((point) => {
-        const previewFrame = previewFramesById[point.keyframe.id];
+        const previewFrame = previewFramesById[point.keyframe.id]
         if (previewFrame === undefined) {
           return {
             ...point,
             isDragging: false,
-          };
+          }
         }
 
         return {
           ...point,
           x: graphLeft + ((previewFrame - viewport.startFrame) / frameRange) * graphWidth,
           isDragging: true,
-        };
-      });
+        }
+      })
     }
 
     // Not dragging - just update isDragging flag
     return interactivePoints.map((point) => ({
       ...point,
       isDragging: dragState?.draggedKeyframeIds?.includes(point.keyframe.id) ?? false,
-    }));
-  }, [interactivePoints, dragState, isDragging, previewValues, previewFramesById, viewport, padding]);
+    }))
+  }, [
+    interactivePoints,
+    dragState,
+    isDragging,
+    previewValues,
+    previewFramesById,
+    viewport,
+    padding,
+  ])
   const primaryPointsWithDragState = useMemo(
     () => pointsWithDragState.filter((point) => point.property === displayProperty),
-    [displayProperty, pointsWithDragState]
-  );
+    [displayProperty, pointsWithDragState],
+  )
   const combinedPreviewValues = useMemo(() => {
     if (!previewFramesById) {
-      return previewValues;
+      return previewValues
     }
 
-    const mergedPreviewValues = previewValues ? { ...previewValues } : {};
-    let hasPreviewValue = previewValues !== null;
+    const mergedPreviewValues = previewValues ? { ...previewValues } : {}
+    let hasPreviewValue = previewValues !== null
 
     for (const point of interactivePoints) {
-      const previewFrame = previewFramesById[point.keyframe.id];
+      const previewFrame = previewFramesById[point.keyframe.id]
       if (previewFrame === undefined) {
-        continue;
+        continue
       }
 
       mergedPreviewValues[point.keyframe.id] = {
         frame: previewFrame,
         value: previewValues?.[point.keyframe.id]?.value ?? point.keyframe.value,
-      };
-      hasPreviewValue = true;
+      }
+      hasPreviewValue = true
     }
 
-    return hasPreviewValue ? mergedPreviewValues : null;
-  }, [interactivePoints, previewFramesById, previewValues]);
+    return hasPreviewValue ? mergedPreviewValues : null
+  }, [interactivePoints, previewFramesById, previewValues])
   const overlayPointSetsWithDragState = useMemo(() => {
-    const pointById = new Map(pointsWithDragState.map((point) => [point.keyframe.id, point]));
+    const pointById = new Map(pointsWithDragState.map((point) => [point.keyframe.id, point]))
     return overlayPointSets.map((overlaySet) => ({
       ...overlaySet,
       points: overlaySet.points.map((point) => pointById.get(point.keyframe.id) ?? point),
-    }));
-  }, [overlayPointSets, pointsWithDragState]);
+    }))
+  }, [overlayPointSets, pointsWithDragState])
   const handleVisibleKeyframePointerDown = useCallback(
     (point: GraphKeyframePoint, event: React.PointerEvent) => {
       if (point.property !== displayProperty) {
-        onPropertyChange?.(point.property);
+        onPropertyChange?.(point.property)
       }
-      handleKeyframePointerDown(point, event);
+      handleKeyframePointerDown(point, event)
     },
-    [displayProperty, handleKeyframePointerDown, onPropertyChange]
-  );
+    [displayProperty, handleKeyframePointerDown, onPropertyChange],
+  )
   const handleVisibleKeyframeClick = useCallback(
     (point: GraphKeyframePoint, event: React.MouseEvent) => {
       if (point.property !== displayProperty) {
-        onPropertyChange?.(point.property);
+        onPropertyChange?.(point.property)
       }
-      handleKeyframeClick(point, event);
+      handleKeyframeClick(point, event)
     },
-    [displayProperty, handleKeyframeClick, onPropertyChange]
-  );
+    [displayProperty, handleKeyframeClick, onPropertyChange],
+  )
 
   // Reset viewport (fit to content)
   const resetViewport = useCallback(() => {
-    updateViewport(calculateFittedViewport());
-  }, [calculateFittedViewport, updateViewport]);
+    updateViewport(calculateFittedViewport())
+  }, [calculateFittedViewport, updateViewport])
 
   // Handle property change
   const handlePropertySelect = useCallback(
     (value: string) => {
-      const newProperty = value === 'all' ? null : (value as AnimatableProperty);
-      onPropertyChange?.(newProperty);
+      const newProperty = value === 'all' ? null : (value as AnimatableProperty)
+      onPropertyChange?.(newProperty)
     },
-    [onPropertyChange]
-  );
+    [onPropertyChange],
+  )
 
   // Get sorted keyframe frames for navigation
   const sortedKeyframeFrames = useMemo(() => {
-    return keyframes.map(kf => kf.frame).toSorted((a, b) => a - b);
-  }, [keyframes]);
+    return keyframes.map((kf) => kf.frame).toSorted((a, b) => a - b)
+  }, [keyframes])
 
   // Find previous keyframe frame
   const prevKeyframeFrame = useMemo(() => {
     for (let i = sortedKeyframeFrames.length - 1; i >= 0; i--) {
       if (sortedKeyframeFrames[i]! < currentFrame) {
-        return sortedKeyframeFrames[i];
+        return sortedKeyframeFrames[i]
       }
     }
-    return null;
-  }, [sortedKeyframeFrames, currentFrame]);
+    return null
+  }, [sortedKeyframeFrames, currentFrame])
 
   // Find next keyframe frame
   const nextKeyframeFrame = useMemo(() => {
     for (const frame of sortedKeyframeFrames) {
       if (frame > currentFrame) {
-        return frame;
+        return frame
       }
     }
-    return null;
-  }, [sortedKeyframeFrames, currentFrame]);
+    return null
+  }, [sortedKeyframeFrames, currentFrame])
 
   // Check if there's a keyframe at the current frame
   const hasKeyframeAtCurrentFrame = useMemo(() => {
-    return keyframes.some(kf => kf.frame === currentFrame);
-  }, [keyframes, currentFrame]);
+    return keyframes.some((kf) => kf.frame === currentFrame)
+  }, [keyframes, currentFrame])
 
   // Get selected keyframe (only when exactly one is selected)
   const selectedKeyframe = useMemo(() => {
-    if (selectedKeyframeIds.size !== 1) return null;
-    const selectedId = [...selectedKeyframeIds][0];
-    return keyframes.find(kf => kf.id === selectedId) ?? null;
-  }, [selectedKeyframeIds, keyframes]);
+    if (selectedKeyframeIds.size !== 1) return null
+    const selectedId = [...selectedKeyframeIds][0]
+    return keyframes.find((kf) => kf.id === selectedId) ?? null
+  }, [selectedKeyframeIds, keyframes])
 
   // Local state for input fields (commit on Enter/blur)
-  const [frameInputValue, setFrameInputValue] = useState<string>('');
-  const [valueInputValue, setValueInputValue] = useState<string>('');
+  const [frameInputValue, setFrameInputValue] = useState<string>('')
+  const [valueInputValue, setValueInputValue] = useState<string>('')
 
   // Get decimal places for current property
-  const valueDecimals = propertyRange?.decimals ?? 2;
+  const valueDecimals = propertyRange?.decimals ?? 2
 
   // Format value based on property's decimal setting
-  const formatValue = useCallback((value: number) => {
-    return valueDecimals === 0 ? String(Math.round(value)) : value.toFixed(valueDecimals);
-  }, [valueDecimals]);
+  const formatValue = useCallback(
+    (value: number) => {
+      return valueDecimals === 0 ? String(Math.round(value)) : value.toFixed(valueDecimals)
+    },
+    [valueDecimals],
+  )
 
   // Sync local input state when selected keyframe changes
   useEffect(() => {
     if (selectedKeyframe) {
-      setFrameInputValue(String(selectedKeyframe.frame));
-      setValueInputValue(formatValue(selectedKeyframe.value));
+      setFrameInputValue(String(selectedKeyframe.frame))
+      setValueInputValue(formatValue(selectedKeyframe.value))
     }
-  }, [selectedKeyframe?.id, selectedKeyframe?.frame, selectedKeyframe?.value, formatValue]);
+  }, [formatValue, selectedKeyframe])
 
   // Commit frame value
   const commitFrameValue = useCallback(() => {
-    if (!selectedKeyframe || !displayProperty || !onKeyframeMove) return;
-    
-    const newFrame = Math.round(Number(frameInputValue));
+    if (!selectedKeyframe || !displayProperty || !onKeyframeMove) return
+
+    const newFrame = Math.round(Number(frameInputValue))
     if (isNaN(newFrame)) {
       // Reset to current value if invalid
-      setFrameInputValue(String(selectedKeyframe.frame));
-      return;
+      setFrameInputValue(String(selectedKeyframe.frame))
+      return
     }
-    
+
     // Clamp to valid range
-    const clampedFrame = Math.max(0, Math.min(totalFrames - 1, newFrame));
-    
+    const clampedFrame = Math.max(0, Math.min(totalFrames - 1, newFrame))
+
     // Skip if no change
     if (clampedFrame === selectedKeyframe.frame) {
-      setFrameInputValue(String(selectedKeyframe.frame));
-      return;
+      setFrameInputValue(String(selectedKeyframe.frame))
+      return
     }
-    
+
     // Wrap in undo batch
-    onDragStart?.();
+    onDragStart?.()
     onKeyframeMove(
       { itemId, property: displayProperty, keyframeId: selectedKeyframe.id },
       clampedFrame,
-      selectedKeyframe.value
-    );
-    onDragEnd?.();
-    
+      selectedKeyframe.value,
+    )
+    onDragEnd?.()
+
     // Move playhead to the new frame
-    onNavigateToKeyframe?.(clampedFrame);
-  }, [selectedKeyframe, displayProperty, itemId, totalFrames, frameInputValue, onKeyframeMove, onDragStart, onDragEnd, onNavigateToKeyframe]);
+    onNavigateToKeyframe?.(clampedFrame)
+  }, [
+    selectedKeyframe,
+    displayProperty,
+    itemId,
+    totalFrames,
+    frameInputValue,
+    onKeyframeMove,
+    onDragStart,
+    onDragEnd,
+    onNavigateToKeyframe,
+  ])
 
   // Commit value
   const commitValueInput = useCallback(() => {
-    if (!selectedKeyframe || !displayProperty || !onKeyframeMove) return;
-    
-    const newValue = Number(valueInputValue);
+    if (!selectedKeyframe || !displayProperty || !onKeyframeMove) return
+
+    const newValue = Number(valueInputValue)
     if (isNaN(newValue)) {
       // Reset to current value if invalid
-      setValueInputValue(formatValue(selectedKeyframe.value));
-      return;
+      setValueInputValue(formatValue(selectedKeyframe.value))
+      return
     }
-    
+
     // Clamp to property range
-    const range = PROPERTY_VALUE_RANGES[displayProperty];
-    const clampedValue = range 
-      ? Math.max(range.min, Math.min(range.max, newValue))
-      : newValue;
-    
+    const range = PROPERTY_VALUE_RANGES[displayProperty]
+    const clampedValue = range ? Math.max(range.min, Math.min(range.max, newValue)) : newValue
+
     // Skip if no change (with small epsilon for floating point)
     if (Math.abs(clampedValue - selectedKeyframe.value) < 0.0001) {
-      setValueInputValue(formatValue(selectedKeyframe.value));
-      return;
+      setValueInputValue(formatValue(selectedKeyframe.value))
+      return
     }
-    
+
     // Wrap in undo batch
-    onDragStart?.();
+    onDragStart?.()
     onKeyframeMove(
       { itemId, property: displayProperty, keyframeId: selectedKeyframe.id },
       selectedKeyframe.frame,
-      clampedValue
-    );
-    onDragEnd?.();
-  }, [selectedKeyframe, displayProperty, itemId, valueInputValue, onKeyframeMove, onDragStart, onDragEnd, formatValue]);
+      clampedValue,
+    )
+    onDragEnd?.()
+  }, [
+    selectedKeyframe,
+    displayProperty,
+    itemId,
+    valueInputValue,
+    onKeyframeMove,
+    onDragStart,
+    onDragEnd,
+    formatValue,
+  ])
 
   // Handle key down for Enter to commit
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, commitFn: () => void) => {
-    if (e.key === 'Enter') {
-      e.currentTarget.blur();
-      commitFn();
-    } else if (e.key === 'Escape') {
-      // Reset on escape
-      if (selectedKeyframe) {
-        setFrameInputValue(String(selectedKeyframe.frame));
-        setValueInputValue(formatValue(selectedKeyframe.value));
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>, commitFn: () => void) => {
+      if (e.key === 'Enter') {
+        e.currentTarget.blur()
+        commitFn()
+      } else if (e.key === 'Escape') {
+        // Reset on escape
+        if (selectedKeyframe) {
+          setFrameInputValue(String(selectedKeyframe.frame))
+          setValueInputValue(formatValue(selectedKeyframe.value))
+        }
+        e.currentTarget.blur()
       }
-      e.currentTarget.blur();
-    }
-  }, [selectedKeyframe, formatValue]);
+    },
+    [selectedKeyframe, formatValue],
+  )
 
   // Navigate to previous keyframe and select it
   const goToPrevKeyframe = useCallback(() => {
     if (prevKeyframeFrame !== null && prevKeyframeFrame !== undefined && onNavigateToKeyframe) {
-      onNavigateToKeyframe(prevKeyframeFrame);
+      onNavigateToKeyframe(prevKeyframeFrame)
       // Select the keyframe at that frame
-      const keyframeAtFrame = keyframes.find(kf => kf.frame === prevKeyframeFrame);
+      const keyframeAtFrame = keyframes.find((kf) => kf.frame === prevKeyframeFrame)
       if (keyframeAtFrame && onSelectionChange) {
-        onSelectionChange(new Set([keyframeAtFrame.id]));
+        onSelectionChange(new Set([keyframeAtFrame.id]))
       }
     }
-  }, [prevKeyframeFrame, onNavigateToKeyframe, keyframes, onSelectionChange]);
+  }, [prevKeyframeFrame, onNavigateToKeyframe, keyframes, onSelectionChange])
 
   // Navigate to next keyframe and select it
   const goToNextKeyframe = useCallback(() => {
     if (nextKeyframeFrame !== null && onNavigateToKeyframe) {
-      onNavigateToKeyframe(nextKeyframeFrame);
+      onNavigateToKeyframe(nextKeyframeFrame)
       // Select the keyframe at that frame
-      const keyframeAtFrame = keyframes.find(kf => kf.frame === nextKeyframeFrame);
+      const keyframeAtFrame = keyframes.find((kf) => kf.frame === nextKeyframeFrame)
       if (keyframeAtFrame && onSelectionChange) {
-        onSelectionChange(new Set([keyframeAtFrame.id]));
+        onSelectionChange(new Set([keyframeAtFrame.id]))
       }
     }
-  }, [nextKeyframeFrame, onNavigateToKeyframe, keyframes, onSelectionChange]);
+  }, [nextKeyframeFrame, onNavigateToKeyframe, keyframes, onSelectionChange])
 
   // Add keyframe at current frame
   const handleAddKeyframe = useCallback(() => {
     if (displayProperty && onAddKeyframe) {
-      onAddKeyframe(displayProperty, currentFrame);
+      onAddKeyframe(displayProperty, currentFrame)
     }
-  }, [displayProperty, currentFrame, onAddKeyframe]);
+  }, [displayProperty, currentFrame, onAddKeyframe])
 
   // Remove selected keyframes
   const handleRemoveKeyframes = useCallback(() => {
-    if (!displayProperty || !onRemoveKeyframes) return;
-    
-    const refs: KeyframeRef[] = [];
+    if (!displayProperty || !onRemoveKeyframes) return
+
+    const refs: KeyframeRef[] = []
     for (const kfId of selectedKeyframeIds) {
       refs.push({
         itemId,
         property: displayProperty,
         keyframeId: kfId,
-      });
+      })
     }
-    
+
     if (refs.length > 0) {
-      onRemoveKeyframes(refs);
+      onRemoveKeyframes(refs)
     }
-  }, [displayProperty, selectedKeyframeIds, itemId, onRemoveKeyframes]);
+  }, [displayProperty, selectedKeyframeIds, itemId, onRemoveKeyframes])
 
   // Wrapped scrub handler that tracks scrubbing state
   const handlePlayheadScrubStart = useCallback(() => {
-    isScrrubbingRef.current = true;
-  }, []);
+    isScrrubbingRef.current = true
+  }, [])
 
   const handlePlayheadScrubEnd = useCallback(() => {
-    onScrubEnd?.();
+    onScrubEnd?.()
     // Delay clearing the flag to prevent click event from deselecting
     setTimeout(() => {
-      isScrrubbingRef.current = false;
-    }, 100);
-  }, [onScrubEnd]);
+      isScrrubbingRef.current = false
+    }, 100)
+  }, [onScrubEnd])
 
   const handleGraphCanvasClick = useCallback(
     (event: React.MouseEvent<SVGSVGElement>) => {
-      if (isScrrubbingRef.current) return;
+      if (isScrrubbingRef.current) return
 
-      const target = event.target as Element | null;
+      const target = event.target as Element | null
       if (target?.closest('.graph-keyframe, .bezier-handle, .graph-playhead')) {
-        return;
+        return
       }
 
-      handleBackgroundClick(event as unknown as React.MouseEvent<SVGElement>);
+      handleBackgroundClick(event as unknown as React.MouseEvent<SVGElement>)
     },
-    [handleBackgroundClick]
-  );
+    [handleBackgroundClick],
+  )
 
   // Attach native wheel event listener with passive: false to prevent page scroll
   useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
+    const svg = svgRef.current
+    if (!svg) return
 
     const handleNativeWheel = (e: WheelEvent) => {
-      e.preventDefault();
-    };
+      e.preventDefault()
+    }
 
-    svg.addEventListener('wheel', handleNativeWheel, { passive: false });
+    svg.addEventListener('wheel', handleNativeWheel, { passive: false })
     return () => {
-      svg.removeEventListener('wheel', handleNativeWheel);
-    };
-  }, []);
+      svg.removeEventListener('wheel', handleNativeWheel)
+    }
+  }, [])
 
   return (
     <div
-      className={cn('flex h-full flex-col overflow-hidden', showToolbar ? 'gap-1' : 'gap-0', className)}
+      className={cn(
+        'flex h-full flex-col overflow-hidden',
+        showToolbar ? 'gap-1' : 'gap-0',
+        className,
+      )}
       style={{ height }}
     >
       {/* Toolbar */}
       {showToolbar && (
         <div className="flex items-center justify-between px-2 flex-shrink-0 min-h-7">
-        <div className="flex items-center gap-2">
-          {/* Property selector */}
-          <Select
-            value={displayProperty || 'all'}
-            onValueChange={handlePropertySelect}
-            disabled={disabled || availableProperties.length === 0}
-          >
-            <SelectTrigger className="w-[140px] h-7 text-xs focus:ring-0 focus:ring-offset-0">
-              <SelectValue placeholder="选择属性" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableProperties.map((prop) => (
-                <SelectItem key={prop} value={prop} className="text-xs">
-                  {PROPERTY_LABELS[prop]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            {/* Property selector */}
+            <Select
+              value={displayProperty || 'all'}
+              onValueChange={handlePropertySelect}
+              disabled={disabled || availableProperties.length === 0}
+            >
+              <SelectTrigger className="w-[140px] h-7 text-xs focus:ring-0 focus:ring-offset-0">
+                <SelectValue placeholder="Select property" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableProperties.map((prop) => (
+                  <SelectItem key={prop} value={prop} className="text-xs">
+                    {PROPERTY_LABELS[prop]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          {/* Keyframe count */}
-          <span className="text-xs text-muted-foreground">
-            {keyframes.length} 个关键帧
-          </span>
-        </div>
-
-        {/* Keyframe controls */}
-        <div className="flex items-center gap-1">
-          {/* Navigation */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={goToPrevKeyframe}
-                disabled={disabled || prevKeyframeFrame === null || !onNavigateToKeyframe}
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">上一个关键帧</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={goToNextKeyframe}
-                disabled={disabled || nextKeyframeFrame === null || !onNavigateToKeyframe}
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">下一个关键帧</TooltipContent>
-          </Tooltip>
-
-          {/* Separator */}
-          <div className="w-px h-4 bg-border mx-1" />
-
-          {/* Add/Remove */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={hasKeyframeAtCurrentFrame ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={handleAddKeyframe}
-                disabled={disabled || !displayProperty || !onAddKeyframe || hasKeyframeAtCurrentFrame}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {hasKeyframeAtCurrentFrame ? '当前帧已存在关键帧' : '在当前帧添加关键帧'}
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                onClick={handleRemoveKeyframes}
-                disabled={disabled || selectedKeyframeIds.size === 0 || !onRemoveKeyframes}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {selectedKeyframeIds.size > 0 
-                ? `删除已选 ${selectedKeyframeIds.size} 个关键帧`
-                : '删除所选关键帧'}
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Separator */}
-          <div className="w-px h-4 bg-border mx-1" />
-
-          {/* Precise value inputs (always reserve space to prevent layout shift) */}
-          <div className="flex items-center gap-0.5">
-            <span className="text-[10px] text-muted-foreground">F:</span>
-            <Input
-              type="number"
-              value={selectedKeyframe ? frameInputValue : ''}
-              onChange={(e) => setFrameInputValue(e.target.value)}
-              onBlur={commitFrameValue}
-              onKeyDown={(e) => handleInputKeyDown(e, commitFrameValue)}
-              placeholder="-"
-              className="w-12 h-5 text-[10px] px-1 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              min={0}
-              max={totalFrames - 1}
-              disabled={disabled || !onKeyframeMove || !selectedKeyframe}
-            />
+            {/* Keyframe count */}
+            <span className="text-xs text-muted-foreground">
+              {keyframes.length} keyframe{keyframes.length !== 1 ? 's' : ''}
+            </span>
           </div>
-          <div className="flex items-center gap-0.5">
-            <span className="text-[10px] text-muted-foreground">V:</span>
-            <Input
-              type="number"
-              value={selectedKeyframe ? valueInputValue : ''}
-              onChange={(e) => setValueInputValue(e.target.value)}
-              onBlur={commitValueInput}
-              onKeyDown={(e) => handleInputKeyDown(e, commitValueInput)}
-              step={0.01}
-              placeholder="-"
-              className="w-14 h-5 text-[10px] px-1 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              min={propertyRange?.min}
-              max={propertyRange?.max}
-              disabled={disabled || !onKeyframeMove || !selectedKeyframe}
-            />
+
+          {/* Keyframe controls */}
+          <div className="flex items-center gap-1">
+            {/* Navigation */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={goToPrevKeyframe}
+                  disabled={disabled || prevKeyframeFrame === null || !onNavigateToKeyframe}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Previous keyframe</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={goToNextKeyframe}
+                  disabled={disabled || nextKeyframeFrame === null || !onNavigateToKeyframe}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Next keyframe</TooltipContent>
+            </Tooltip>
+
+            {/* Separator */}
+            <div className="w-px h-4 bg-border mx-1" />
+
+            {/* Add/Remove */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={hasKeyframeAtCurrentFrame ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={handleAddKeyframe}
+                  disabled={
+                    disabled || !displayProperty || !onAddKeyframe || hasKeyframeAtCurrentFrame
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {hasKeyframeAtCurrentFrame
+                  ? 'Keyframe exists at current frame'
+                  : 'Add keyframe at current frame'}
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                  onClick={handleRemoveKeyframes}
+                  disabled={disabled || selectedKeyframeIds.size === 0 || !onRemoveKeyframes}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {selectedKeyframeIds.size > 0
+                  ? `Remove ${selectedKeyframeIds.size} selected keyframe${selectedKeyframeIds.size !== 1 ? 's' : ''}`
+                  : 'Remove selected keyframes'}
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Separator */}
+            <div className="w-px h-4 bg-border mx-1" />
+
+            {/* Precise value inputs (always reserve space to prevent layout shift) */}
+            <div className="flex items-center gap-0.5">
+              <span className="text-[10px] text-muted-foreground">F:</span>
+              <Input
+                type="number"
+                value={selectedKeyframe ? frameInputValue : ''}
+                onChange={(e) => setFrameInputValue(e.target.value)}
+                onBlur={commitFrameValue}
+                onKeyDown={(e) => handleInputKeyDown(e, commitFrameValue)}
+                placeholder="-"
+                className="w-12 h-5 text-[10px] px-1 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                min={0}
+                max={totalFrames - 1}
+                disabled={disabled || !onKeyframeMove || !selectedKeyframe}
+              />
+            </div>
+            <div className="flex items-center gap-0.5">
+              <span className="text-[10px] text-muted-foreground">V:</span>
+              <Input
+                type="number"
+                value={selectedKeyframe ? valueInputValue : ''}
+                onChange={(e) => setValueInputValue(e.target.value)}
+                onBlur={commitValueInput}
+                onKeyDown={(e) => handleInputKeyDown(e, commitValueInput)}
+                step={0.01}
+                placeholder="-"
+                className="w-14 h-5 text-[10px] px-1 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                min={propertyRange?.min}
+                max={propertyRange?.max}
+                disabled={disabled || !onKeyframeMove || !selectedKeyframe}
+              />
+            </div>
+            <div className="w-px h-4 bg-border mx-1" />
           </div>
-          <div className="w-px h-4 bg-border mx-1" />
-        </div>
 
-        {/* Zoom controls */}
-        <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={zoomOut}
-                disabled={disabled}
-              >
-                <ZoomOut className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">缩小</TooltipContent>
-          </Tooltip>
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={zoomOut}
+                  disabled={disabled}
+                >
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Zoom out</TooltipContent>
+            </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={zoomIn}
-                disabled={disabled}
-              >
-                <ZoomIn className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">放大</TooltipContent>
-          </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={zoomIn}
+                  disabled={disabled}
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Zoom in</TooltipContent>
+            </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={fitToContent}
-                disabled={disabled || keyframes.length === 0}
-              >
-                <Maximize2 className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">适配内容</TooltipContent>
-          </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={fitToContent}
+                  disabled={disabled || keyframes.length === 0}
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Fit to content</TooltipContent>
+            </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={resetViewport}
-                disabled={disabled}
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">重置视图</TooltipContent>
-          </Tooltip>
-        </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={resetViewport}
+                  disabled={disabled}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Reset view</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       )}
 
@@ -1053,14 +1110,14 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
         className={cn(
           'flex-shrink-0',
           !borderless && 'border border-border rounded-md',
-          disabled && 'opacity-50 pointer-events-none'
+          disabled && 'opacity-50 pointer-events-none',
         )}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         onWheel={handleWheel}
         onClick={handleGraphCanvasClick}
-        style={{ 
+        style={{
           touchAction: 'none',
           cursor: isDragging && dragState?.type === 'keyframe' ? 'pointer' : undefined,
         }}
@@ -1078,7 +1135,13 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
         </defs>
 
         {/* Grid background */}
-        <GraphGrid viewport={viewport} padding={padding} rulerUnit={rulerUnit} fps={fps} showXLabels={!hideXLabels} />
+        <GraphGrid
+          viewport={viewport}
+          padding={padding}
+          rulerUnit={rulerUnit}
+          fps={fps}
+          showXLabels={!hideXLabels}
+        />
 
         {/* Dedicated hit target for empty graph-space interactions */}
         <rect
@@ -1102,7 +1165,11 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           )}
 
           {/* Extension lines (before/after keyframes) */}
-          <GraphExtensionLines points={primaryPointsWithDragState} viewport={viewport} padding={padding} />
+          <GraphExtensionLines
+            points={primaryPointsWithDragState}
+            viewport={viewport}
+            padding={padding}
+          />
 
           {/* Overlay curves for additional properties (rendered first, behind primary) */}
           {overlayPointSetsWithDragState.map(({ property: prop, points: overlayPts, color }) => (
@@ -1112,12 +1179,16 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           ))}
 
           {/* Primary interpolation curves */}
-          <GraphCurves points={primaryPointsWithDragState} selectedKeyframeIds={selectedKeyframeIds} previewBezierConfigs={previewBezierConfigs} />
+          <GraphCurves
+            points={primaryPointsWithDragState}
+            selectedKeyframeIds={selectedKeyframeIds}
+            previewBezierConfigs={previewBezierConfigs}
+          />
 
           {/* Playhead (rendered before keyframes so keyframes get click priority) */}
-          <GraphPlayhead 
-            frame={currentFrame} 
-            viewport={viewport} 
+          <GraphPlayhead
+            frame={currentFrame}
+            viewport={viewport}
             padding={padding}
             totalFrames={totalFrames}
             onScrub={onScrub}
@@ -1153,53 +1224,62 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           <KeyframeSvgMarquee rect={marqueeRect} />
 
           {/* Constraint guide line when Shift is held during drag */}
-          {isDragging && constraintAxis && dragState?.type === 'keyframe' && (() => {
-            const draggingPoint = pointsWithDragState.find(p => p.keyframe.id === dragState.keyframeId);
-            if (!draggingPoint) return null;
-            
-            const graphLeft = padding.left;
-            const graphRight = viewport.width - padding.right;
-            const graphTop = padding.top;
-            const graphBottom = viewport.height - padding.bottom;
-            
-            return constraintAxis === 'x' ? (
-              // Horizontal constraint line (frame only movement)
-              <line
-                x1={graphLeft}
-                y1={draggingPoint.y}
-                x2={graphRight}
-                y2={draggingPoint.y}
-                stroke="#f97316"
-                strokeWidth={1.5}
-                strokeDasharray="6 3"
-                opacity={0.8}
-                pointerEvents="none"
-              />
-            ) : (
-              // Vertical constraint line (value only movement)
-              <line
-                x1={draggingPoint.x}
-                y1={graphTop}
-                x2={draggingPoint.x}
-                y2={graphBottom}
-                stroke="#f97316"
-                strokeWidth={1.5}
-                strokeDasharray="6 3"
-                opacity={0.8}
-                pointerEvents="none"
-              />
-            );
-          })()}
+          {isDragging &&
+            constraintAxis &&
+            dragState?.type === 'keyframe' &&
+            (() => {
+              const draggingPoint = pointsWithDragState.find(
+                (p) => p.keyframe.id === dragState.keyframeId,
+              )
+              if (!draggingPoint) return null
+
+              const graphLeft = padding.left
+              const graphRight = viewport.width - padding.right
+              const graphTop = padding.top
+              const graphBottom = viewport.height - padding.bottom
+
+              return constraintAxis === 'x' ? (
+                // Horizontal constraint line (frame only movement)
+                <line
+                  x1={graphLeft}
+                  y1={draggingPoint.y}
+                  x2={graphRight}
+                  y2={draggingPoint.y}
+                  stroke="#f97316"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 3"
+                  opacity={0.8}
+                  pointerEvents="none"
+                />
+              ) : (
+                // Vertical constraint line (value only movement)
+                <line
+                  x1={draggingPoint.x}
+                  y1={graphTop}
+                  x2={draggingPoint.x}
+                  y2={graphBottom}
+                  stroke="#f97316"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 3"
+                  opacity={0.8}
+                  pointerEvents="none"
+                />
+              )
+            })()}
         </g>
       </svg>
 
       {/* Keyboard hints (shows when dragging) */}
       {showKeyboardHints && isDragging && dragState?.type === 'keyframe' && (
         <div className="text-xs text-muted-foreground text-center space-x-3">
-          <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Shift</kbd> 约束轴向</span>
-          <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Alt</kbd> 精细调整</span>
+          <span>
+            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Shift</kbd> constrain axis
+          </span>
+          <span>
+            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Alt</kbd> fine adjust
+          </span>
         </div>
       )}
     </div>
-  );
-});
+  )
+})

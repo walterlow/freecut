@@ -14,44 +14,44 @@
  */
 export function scalePath(path: string, scaleX: number, scaleY: number = scaleX): string {
   // Parse and transform the path
-  const commands = path.match(/[MLHVCSQTAZ][^MLHVCSQTAZ]*/gi) || [];
-  const result: string[] = [];
+  const commands = path.match(/[MLHVCSQTAZ][^MLHVCSQTAZ]*/gi) || []
+  const result: string[] = []
 
   for (const cmd of commands) {
-    const type = cmd[0]!;
-    const typeUpper = type.toUpperCase();
+    const type = cmd[0]!
+    const typeUpper = type.toUpperCase()
     const args = cmd
       .slice(1)
       .trim()
       .split(/[\s,]+/)
       .map(Number)
-      .filter((n) => !isNaN(n));
+      .filter((n) => !isNaN(n))
 
     switch (typeUpper) {
       case 'M':
       case 'L':
       case 'T': {
         // Move/Line/Smooth quadratic: x y
-        const scaled: number[] = [];
+        const scaled: number[] = []
         for (let i = 0; i < args.length; i += 2) {
-          scaled.push(args[i]! * scaleX, args[i + 1]! * scaleY);
+          scaled.push(args[i]! * scaleX, args[i + 1]! * scaleY)
         }
-        result.push(`${type} ${scaled.join(' ')}`);
-        break;
+        result.push(`${type} ${scaled.join(' ')}`)
+        break
       }
       case 'H': {
         // Horizontal line: x
-        result.push(`${type} ${args.map((x) => x * scaleX).join(' ')}`);
-        break;
+        result.push(`${type} ${args.map((x) => x * scaleX).join(' ')}`)
+        break
       }
       case 'V': {
         // Vertical line: y
-        result.push(`${type} ${args.map((y) => y * scaleY).join(' ')}`);
-        break;
+        result.push(`${type} ${args.map((y) => y * scaleY).join(' ')}`)
+        break
       }
       case 'C': {
         // Cubic bezier: x1 y1 x2 y2 x y
-        const scaled: number[] = [];
+        const scaled: number[] = []
         for (let i = 0; i < args.length; i += 6) {
           scaled.push(
             args[i]! * scaleX,
@@ -59,43 +59,43 @@ export function scalePath(path: string, scaleX: number, scaleY: number = scaleX)
             args[i + 2]! * scaleX,
             args[i + 3]! * scaleY,
             args[i + 4]! * scaleX,
-            args[i + 5]! * scaleY
-          );
+            args[i + 5]! * scaleY,
+          )
         }
-        result.push(`${type} ${scaled.join(' ')}`);
-        break;
+        result.push(`${type} ${scaled.join(' ')}`)
+        break
       }
       case 'S': {
         // Smooth cubic: x2 y2 x y
-        const scaled: number[] = [];
+        const scaled: number[] = []
         for (let i = 0; i < args.length; i += 4) {
           scaled.push(
             args[i]! * scaleX,
             args[i + 1]! * scaleY,
             args[i + 2]! * scaleX,
-            args[i + 3]! * scaleY
-          );
+            args[i + 3]! * scaleY,
+          )
         }
-        result.push(`${type} ${scaled.join(' ')}`);
-        break;
+        result.push(`${type} ${scaled.join(' ')}`)
+        break
       }
       case 'Q': {
         // Quadratic bezier: x1 y1 x y
-        const scaled: number[] = [];
+        const scaled: number[] = []
         for (let i = 0; i < args.length; i += 4) {
           scaled.push(
             args[i]! * scaleX,
             args[i + 1]! * scaleY,
             args[i + 2]! * scaleX,
-            args[i + 3]! * scaleY
-          );
+            args[i + 3]! * scaleY,
+          )
         }
-        result.push(`${type} ${scaled.join(' ')}`);
-        break;
+        result.push(`${type} ${scaled.join(' ')}`)
+        break
       }
       case 'A': {
         // Arc: rx ry x-axis-rotation large-arc sweep x y
-        const scaled: number[] = [];
+        const scaled: number[] = []
         for (let i = 0; i < args.length; i += 7) {
           scaled.push(
             args[i]! * scaleX, // rx
@@ -104,24 +104,24 @@ export function scalePath(path: string, scaleX: number, scaleY: number = scaleX)
             args[i + 3]!, // large-arc flag (unchanged)
             args[i + 4]!, // sweep flag (unchanged)
             args[i + 5]! * scaleX, // x
-            args[i + 6]! * scaleY // y
-          );
+            args[i + 6]! * scaleY, // y
+          )
         }
-        result.push(`${type} ${scaled.join(' ')}`);
-        break;
+        result.push(`${type} ${scaled.join(' ')}`)
+        break
       }
       case 'Z': {
-        result.push(type);
-        break;
+        result.push(type)
+        break
       }
       default: {
         // Pass through unknown commands
-        result.push(cmd);
+        result.push(cmd)
       }
     }
   }
 
-  return result.join(' ');
+  return result.join(' ')
 }
 
 /**
@@ -133,24 +133,24 @@ export function scalePath(path: string, scaleX: number, scaleY: number = scaleX)
  * @returns The translated path string
  */
 export function translatePath(path: string, dx: number, dy: number): string {
-  const commands = path.match(/[MLHVCSQTAZ][^MLHVCSQTAZ]*/gi) || [];
-  const result: string[] = [];
+  const commands = path.match(/[MLHVCSQTAZ][^MLHVCSQTAZ]*/gi) || []
+  const result: string[] = []
 
   for (const cmd of commands) {
-    const type = cmd[0]!;
-    const isRelative = type === type.toLowerCase();
-    const typeUpper = type.toUpperCase();
+    const type = cmd[0]!
+    const isRelative = type === type.toLowerCase()
+    const typeUpper = type.toUpperCase()
     const args = cmd
       .slice(1)
       .trim()
       .split(/[\s,]+/)
       .map(Number)
-      .filter((n) => !isNaN(n));
+      .filter((n) => !isNaN(n))
 
     // Relative commands don't need translation (they're relative to current point)
     if (isRelative && typeUpper !== 'M') {
-      result.push(cmd);
-      continue;
+      result.push(cmd)
+      continue
     }
 
     switch (typeUpper) {
@@ -158,26 +158,26 @@ export function translatePath(path: string, dx: number, dy: number): string {
       case 'L':
       case 'T': {
         // Move/Line/Smooth quadratic: x y
-        const translated: number[] = [];
+        const translated: number[] = []
         for (let i = 0; i < args.length; i += 2) {
-          translated.push(args[i]! + dx, args[i + 1]! + dy);
+          translated.push(args[i]! + dx, args[i + 1]! + dy)
         }
-        result.push(`${type} ${translated.join(' ')}`);
-        break;
+        result.push(`${type} ${translated.join(' ')}`)
+        break
       }
       case 'H': {
         // Horizontal line: x
-        result.push(`${type} ${args.map((x) => x + dx).join(' ')}`);
-        break;
+        result.push(`${type} ${args.map((x) => x + dx).join(' ')}`)
+        break
       }
       case 'V': {
         // Vertical line: y
-        result.push(`${type} ${args.map((y) => y + dy).join(' ')}`);
-        break;
+        result.push(`${type} ${args.map((y) => y + dy).join(' ')}`)
+        break
       }
       case 'C': {
         // Cubic bezier: x1 y1 x2 y2 x y
-        const translated: number[] = [];
+        const translated: number[] = []
         for (let i = 0; i < args.length; i += 6) {
           translated.push(
             args[i]! + dx,
@@ -185,43 +185,33 @@ export function translatePath(path: string, dx: number, dy: number): string {
             args[i + 2]! + dx,
             args[i + 3]! + dy,
             args[i + 4]! + dx,
-            args[i + 5]! + dy
-          );
+            args[i + 5]! + dy,
+          )
         }
-        result.push(`${type} ${translated.join(' ')}`);
-        break;
+        result.push(`${type} ${translated.join(' ')}`)
+        break
       }
       case 'S': {
         // Smooth cubic: x2 y2 x y
-        const translated: number[] = [];
+        const translated: number[] = []
         for (let i = 0; i < args.length; i += 4) {
-          translated.push(
-            args[i]! + dx,
-            args[i + 1]! + dy,
-            args[i + 2]! + dx,
-            args[i + 3]! + dy
-          );
+          translated.push(args[i]! + dx, args[i + 1]! + dy, args[i + 2]! + dx, args[i + 3]! + dy)
         }
-        result.push(`${type} ${translated.join(' ')}`);
-        break;
+        result.push(`${type} ${translated.join(' ')}`)
+        break
       }
       case 'Q': {
         // Quadratic bezier: x1 y1 x y
-        const translated: number[] = [];
+        const translated: number[] = []
         for (let i = 0; i < args.length; i += 4) {
-          translated.push(
-            args[i]! + dx,
-            args[i + 1]! + dy,
-            args[i + 2]! + dx,
-            args[i + 3]! + dy
-          );
+          translated.push(args[i]! + dx, args[i + 1]! + dy, args[i + 2]! + dx, args[i + 3]! + dy)
         }
-        result.push(`${type} ${translated.join(' ')}`);
-        break;
+        result.push(`${type} ${translated.join(' ')}`)
+        break
       }
       case 'A': {
         // Arc: rx ry x-axis-rotation large-arc sweep x y
-        const translated: number[] = [];
+        const translated: number[] = []
         for (let i = 0; i < args.length; i += 7) {
           translated.push(
             args[i]!, // rx (unchanged)
@@ -230,21 +220,21 @@ export function translatePath(path: string, dx: number, dy: number): string {
             args[i + 3]!, // large-arc flag (unchanged)
             args[i + 4]!, // sweep flag (unchanged)
             args[i + 5]! + dx, // x
-            args[i + 6]! + dy // y
-          );
+            args[i + 6]! + dy, // y
+          )
         }
-        result.push(`${type} ${translated.join(' ')}`);
-        break;
+        result.push(`${type} ${translated.join(' ')}`)
+        break
       }
       case 'Z': {
-        result.push(type);
-        break;
+        result.push(type)
+        break
       }
       default: {
-        result.push(cmd);
+        result.push(cmd)
       }
     }
   }
 
-  return result.join(' ');
+  return result.join(' ')
 }
