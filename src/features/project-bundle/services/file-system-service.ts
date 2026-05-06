@@ -5,6 +5,8 @@
  * and file writing during bundle import.
  */
 
+import { sanitizeBundleDirectoryName, sanitizeBundleFileName } from './pure-utils'
+
 interface FileSystemServiceError {
   type: 'permission_denied' | 'user_cancelled' | 'write_failed' | 'unknown'
   message: string
@@ -42,7 +44,7 @@ async function getOrCreateSubdirectory(
   name: string,
 ): Promise<FileSystemDirectoryHandle> {
   try {
-    return await parent.getDirectoryHandle(sanitizeDirectoryName(name), {
+    return await parent.getDirectoryHandle(sanitizeBundleDirectoryName(name), {
       create: true,
     })
   } catch (error) {
@@ -62,7 +64,7 @@ async function writeFile(
   content: Blob | ArrayBuffer | Uint8Array,
 ): Promise<FileSystemFileHandle> {
   try {
-    const fileHandle = await directory.getFileHandle(sanitizeFileName(fileName), {
+    const fileHandle = await directory.getFileHandle(sanitizeBundleFileName(fileName), {
       create: true,
     })
 
@@ -144,31 +146,6 @@ function createError(
   originalError?: unknown,
 ): FileSystemServiceError {
   return { type, message, originalError }
-}
-
-/**
- * Sanitize a directory name for safe filesystem usage
- */
-function sanitizeDirectoryName(name: string): string {
-  return (
-    name
-      .replace(/[<>:"/\\|?*]/g, '_')
-      .replace(/\s+/g, '_')
-      .substring(0, 100)
-      .trim() || 'untitled'
-  )
-}
-
-/**
- * Sanitize a file name for safe filesystem usage
- */
-function sanitizeFileName(name: string): string {
-  return (
-    name
-      .replace(/[<>:"/\\|?*]/g, '_')
-      .substring(0, 200)
-      .trim() || 'unnamed'
-  )
 }
 
 /**
