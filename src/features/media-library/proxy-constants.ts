@@ -3,7 +3,7 @@ export const PROXY_FILE_NAME = 'proxy.mp4'
 export const PROXY_META_FILE_NAME = 'meta.json'
 export const PROXY_SCHEMA_VERSION = 4
 
-export function proxyOpfsDir(proxyKey: string): string {
+function proxyOpfsDir(proxyKey: string): string {
   return `${PROXY_DIR}/${proxyKey}`
 }
 
