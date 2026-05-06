@@ -19,12 +19,18 @@ const indexedDbMocks = vi.hoisted(() => ({
   getMediaForProject: vi.fn(),
   deleteTranscript: vi.fn(),
   readAiOutput: vi.fn(),
-}))
-
-const captionsStorageMocks = vi.hoisted(() => ({
   saveCaptions: vi.fn(async () => []),
   deleteCaptions: vi.fn(async () => undefined),
+  deleteScenes: vi.fn(async () => undefined),
+  hasMediaSource: vi.fn(async () => false),
+  readMediaSource: vi.fn(async () => null),
+  writeMediaSource: vi.fn(async () => undefined),
 }))
+
+const captionsStorageMocks = {
+  saveCaptions: indexedDbMocks.saveCaptions,
+  deleteCaptions: indexedDbMocks.deleteCaptions,
+}
 
 const opfsMocks = vi.hoisted(() => ({
   saveFile: vi.fn(),
@@ -78,8 +84,6 @@ const backgroundMediaWorkMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/infrastructure/storage', () => indexedDbMocks)
-
-vi.mock('@/infrastructure/storage/workspace-fs/captions', () => captionsStorageMocks)
 
 vi.mock('./opfs-service', () => ({
   opfsService: opfsMocks,

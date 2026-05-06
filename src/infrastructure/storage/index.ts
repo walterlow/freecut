@@ -109,6 +109,24 @@ export {
   getCaptionImageEmbeddings,
 } from '@/infrastructure/storage/workspace-fs/captions'
 
+// Media source files
+export {
+  hasMediaSource,
+  readMediaSource,
+  writeMediaSource,
+} from '@/infrastructure/storage/workspace-fs/media-source'
+
+// Workspace cache mirror helpers
+export {
+  mirrorBlobToWorkspace,
+  mirrorJsonToWorkspace,
+  readWorkspaceBlob,
+  removeWorkspaceCacheEntry,
+} from '@/infrastructure/storage/workspace-fs/cache-mirror'
+
+// Workspace cache path helpers
+export { proxyDir, proxyFilePath, proxyMetaPath } from '@/infrastructure/storage/workspace-fs/paths'
+
 // Embedded text-subtitle track cache (parsed once per source fingerprint)
 export {
   getEmbeddedSubtitleSidecar,

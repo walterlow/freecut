@@ -6,9 +6,9 @@ import {
   deleteMedia as deleteMediaDB,
   deleteThumbnailsByMediaId,
   saveThumbnail as saveThumbnailDB,
-} from '@/infrastructure/storage'
+  writeMediaSource,
+} from '@/features/media-library/deps/storage'
 import { opfsService } from '@/features/media-library/services/opfs-service'
-import { writeMediaSource } from '@/infrastructure/storage/workspace-fs/media-source'
 
 const logger = createLogger('MediaAssetHelpers')
 

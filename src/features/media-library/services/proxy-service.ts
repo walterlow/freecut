@@ -25,10 +25,12 @@ import { isVideoProxyCandidate } from '@/config/proxy-generation'
 import {
   mirrorBlobToWorkspace,
   mirrorJsonToWorkspace,
+  proxyDir,
+  proxyFilePath,
+  proxyMetaPath,
   readWorkspaceBlob,
   removeWorkspaceCacheEntry,
-} from '@/infrastructure/storage/workspace-fs/cache-mirror'
-import { proxyDir, proxyFilePath, proxyMetaPath } from '@/infrastructure/storage/workspace-fs/paths'
+} from '@/features/media-library/deps/storage'
 import {
   PROXY_DIR,
   PROXY_FILE_NAME,

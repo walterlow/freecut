@@ -56,9 +56,13 @@ import {
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
   readAiOutput,
-} from '@/infrastructure/storage'
-import { saveCaptions, deleteCaptions } from '@/infrastructure/storage/workspace-fs/captions'
-import { deleteScenes } from '@/infrastructure/storage/workspace-fs/scenes'
+  saveCaptions,
+  deleteCaptions,
+  deleteScenes,
+  hasMediaSource,
+  readMediaSource,
+  writeMediaSource,
+} from '@/features/media-library/deps/storage'
 import {
   filmstripCache,
   gifFrameCache,
@@ -68,11 +72,6 @@ import { opfsService } from './opfs-service'
 import { proxyService } from './proxy-service'
 import { ensureFileHandlePermission, FileAccessError } from './file-access'
 import { enqueueBackgroundMediaWork } from './background-media-work'
-import {
-  hasMediaSource,
-  readMediaSource,
-  writeMediaSource,
-} from '@/infrastructure/storage/workspace-fs/media-source'
 import {
   buildGeneratedMediaOpfsPath,
   getGeneratedImageDimensions,
