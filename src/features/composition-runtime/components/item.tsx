@@ -10,6 +10,7 @@ import { PitchCorrectedAudio } from './pitch-corrected-audio'
 import { GifPlayer } from './gif-player'
 import { ItemVisualWrapper } from './item-visual-wrapper'
 import { TextContent } from './text-content'
+import { SubtitleSegmentContent } from './subtitle-segment-content'
 import { ShapeContent } from './shape-content'
 import { VideoContent } from './video-content'
 import { CompositionContent } from './composition-content'
@@ -32,6 +33,8 @@ import {
   resolvePreviewAudioPitchShiftSemitones,
 } from '@/shared/utils/audio-pitch'
 import { needsCustomAudioDecoder } from '../utils/audio-codec-detection'
+import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
+import { useNestedMediaResolutionMode } from '../contexts/nested-media-resolution-context'
 
 function getLogger() {
   return createLogger('CompositionItem')
@@ -95,6 +98,7 @@ export const Item = React.memo<ItemProps>(
     // Debug overlay toggle (always false in production via store)
     const showDebugOverlay = useDebugStore((s) => s.showVideoDebugOverlay)
     const { fps: timelineFps } = useVideoConfig()
+    const nestedMediaResolutionMode = useNestedMediaResolutionMode()
     const mediaItem = useMediaLibraryStore((s) =>
       item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId) : undefined,
     )
@@ -123,6 +127,9 @@ export const Item = React.memo<ItemProps>(
     )
 
     if (item.type === 'video') {
+      item = resolveReverseConformedVideoItem(item, timelineFps, {
+        useProxy: nestedMediaResolutionMode === 'proxy',
+      })
       const mediaSource = getSourceDimensions(item)
       // Guard against missing src (media resolution failed)
       if (!item.src) {
@@ -154,6 +161,7 @@ export const Item = React.memo<ItemProps>(
         sourceFps,
       )
       const sourceEndPosition = trimBefore + sourceFramesNeeded
+      const reverseSourceEnd = item.sourceEnd ?? sourceEndPosition
       const sourceDuration = item.sourceDuration || 0
 
       // Calculate the effective source segment this clip represents
@@ -252,6 +260,7 @@ export const Item = React.memo<ItemProps>(
       const trackVolumeDb =
         'trackVolumeDb' in item && typeof item.trackVolumeDb === 'number' ? item.trackVolumeDb : 0
       const videoAudioSrc = item.audioSrc ?? item.src
+      const isReversed = item.isReversed === true
       const requiresPitchShiftedVideoAudio = isAudioPitchShiftActive(
         audioPitchShiftSemitones + itemLocalPitchShiftSemitones,
       )
@@ -260,7 +269,7 @@ export const Item = React.memo<ItemProps>(
       const shouldRenderExternalVideoAudio =
         !muted &&
         !!videoAudioSrc &&
-        (requiresPitchShiftedVideoAudio || shouldUseCustomDecodedVideoAudio)
+        (isReversed || requiresPitchShiftedVideoAudio || shouldUseCustomDecodedVideoAudio)
       const externalVideoAudio = shouldRenderExternalVideoAudio ? (
         shouldUseCustomDecodedVideoAudio ? (
           <CustomDecoderAudio
@@ -270,6 +279,8 @@ export const Item = React.memo<ItemProps>(
             trimBefore={safeTrimBefore}
             volume={(item.volume ?? 0) + trackVolumeDb}
             playbackRate={playbackRate}
+            isReversed={isReversed}
+            reverseSourceEnd={reverseSourceEnd}
             audioPitchSemitones={item.audioPitchSemitones}
             audioPitchCents={item.audioPitchCents}
             audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -294,6 +305,8 @@ export const Item = React.memo<ItemProps>(
             trimBefore={safeTrimBefore}
             volume={(item.volume ?? 0) + trackVolumeDb}
             playbackRate={playbackRate}
+            isReversed={isReversed}
+            reverseSourceEnd={reverseSourceEnd}
             audioPitchSemitones={item.audioPitchSemitones}
             audioPitchCents={item.audioPitchCents}
             audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -321,6 +334,8 @@ export const Item = React.memo<ItemProps>(
             safeTrimBefore={safeTrimBefore}
             playbackRate={playbackRate}
             sourceFps={sourceFps}
+            isReversed={isReversed}
+            reverseSourceEnd={reverseSourceEnd}
             audioEqStages={itemAudioEqStages}
             forceCssComposite={masks.length > 0}
           />
@@ -393,6 +408,13 @@ export const Item = React.memo<ItemProps>(
       const sourceFps = item.sourceFps ?? mediaSourceFps ?? timelineFps
       // Get playback rate from speed property
       const playbackRate = item.speed ?? DEFAULT_SPEED
+      const sourceFramesNeeded = timelineToSourceFrames(
+        item.durationInFrames,
+        playbackRate,
+        timelineFps,
+        sourceFps,
+      )
+      const reverseSourceEnd = item.sourceEnd ?? trimBefore + sourceFramesNeeded
 
       const trackVolumeDb =
         'trackVolumeDb' in item && typeof item.trackVolumeDb === 'number' ? item.trackVolumeDb : 0
@@ -407,6 +429,8 @@ export const Item = React.memo<ItemProps>(
           trimBefore={trimBefore}
           volume={(item.volume ?? 0) + trackVolumeDb}
           playbackRate={playbackRate}
+          isReversed={item.isReversed === true}
+          reverseSourceEnd={reverseSourceEnd}
           audioPitchSemitones={item.audioPitchSemitones}
           audioPitchCents={item.audioPitchCents}
           audioPitchShiftSemitones={audioPitchShiftSemitones}
@@ -557,6 +581,14 @@ export const Item = React.memo<ItemProps>(
     // adjustment items render nothing visually (they apply effects to other items)
     if (item.type === 'adjustment') {
       return null
+    }
+
+    if (item.type === 'subtitle') {
+      return (
+        <ItemVisualWrapper item={item} masks={masks}>
+          <SubtitleSegmentContent item={item} />
+        </ItemVisualWrapper>
+      )
     }
 
     throw new Error(`Unknown item type: ${JSON.stringify(item)}`)

@@ -147,6 +147,13 @@ export function registerTrackDropGhostOverlay(
   }
 }
 
+export function hasTrackDropGhostPreviews(): boolean {
+  const ghostPreviewsByTrackId = useTrackDropPreviewStore.getState().ghostPreviewsByTrackId
+  return Object.values(ghostPreviewsByTrackId).some(
+    (value) => Array.isArray(value) && value.length > 0,
+  )
+}
+
 export const useTrackDropPreviewStore = create<TrackDropPreviewState>((set) => ({
   ghostPreviewsByTrackId: {},
   setGhostPreviews: (ghostPreviews) =>

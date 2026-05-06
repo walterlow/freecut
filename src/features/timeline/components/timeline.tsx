@@ -34,6 +34,14 @@ import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
 import { useZoomStore } from '../stores/zoom-store'
 import { computeWheelZoomStep } from '../constants'
 import { clampSectionDividerPosition, getTrackSectionLayout } from '../utils/track-resize'
+import { clearMediaDragData } from '@/features/timeline/deps/media-library-resolver'
+import { useNewTrackZonePreviewStore } from '../stores/new-track-zone-preview-store'
+import { useTrackDropPreviewStore } from '../stores/track-drop-preview-store'
+import { clearAllTimelineDropPreviewOwners } from '../utils/drop-preview-owner'
+import {
+  isDragEventOverTimelineDropTarget,
+  isExternalTimelineDragEvent,
+} from '../utils/timeline-external-drag'
 
 const logger = createLogger('Timeline')
 
@@ -133,6 +141,49 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
   const toggleColorScopesOpen = useEditorStore((s) => s.toggleColorScopesOpen)
   const toggleKeyframeEditorOpen = useEditorStore((s) => s.toggleKeyframeEditorOpen)
   const setTimelineTracks = useTimelineStore((s) => s.setTracks)
+
+  useEffect(() => {
+    const clearExternalDropPreviews = () => {
+      clearAllTimelineDropPreviewOwners()
+      useTrackDropPreviewStore.getState().clearGhostPreviews()
+      useNewTrackZonePreviewStore.getState().clearGhostPreviews()
+    }
+
+    const handleDragEnd = () => {
+      clearExternalDropPreviews()
+      clearMediaDragData()
+    }
+    const handleDragOver = (event: DragEvent) => {
+      if (!isExternalTimelineDragEvent(event) || isDragEventOverTimelineDropTarget(event)) {
+        return
+      }
+
+      clearExternalDropPreviews()
+    }
+    const handleDrop = () => {
+      window.setTimeout(() => {
+        clearExternalDropPreviews()
+        clearMediaDragData()
+      }, 0)
+    }
+    const handleBlur = () => {
+      clearExternalDropPreviews()
+      clearMediaDragData()
+    }
+
+    document.addEventListener('dragenter', handleDragOver, true)
+    document.addEventListener('dragover', handleDragOver, true)
+    window.addEventListener('dragend', handleDragEnd, true)
+    document.addEventListener('drop', handleDrop, true)
+    window.addEventListener('blur', handleBlur)
+    return () => {
+      document.removeEventListener('dragenter', handleDragOver, true)
+      document.removeEventListener('dragover', handleDragOver, true)
+      window.removeEventListener('dragend', handleDragEnd, true)
+      document.removeEventListener('drop', handleDrop, true)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [])
 
   // Keyboard shortcut: Ctrl/Cmd+Shift+A to toggle keyframe editor
   useHotkeys(

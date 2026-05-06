@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDebugStore } from '../deps/editor-debug'
 import {
   PREVIEW_PERF_PANEL_QUERY_KEY,
   PREVIEW_PERF_PANEL_STORAGE_KEY,
@@ -9,8 +10,11 @@ import {
 const POLL_INTERVAL_MS = 250
 
 export function usePreviewPerfPanel() {
-  const [showPerfPanel, setShowPerfPanel] = useState(false)
+  const showPerfPanel = useDebugStore((s) => s.showPreviewPerfPanel)
+  const setShowPerfPanel = useDebugStore((s) => s.setShowPreviewPerfPanel)
   const [perfPanelSnapshot, setPerfPanelSnapshot] = useState<PreviewPerfSnapshot | null>(null)
+  const initializedRef = useRef(false)
+  const hasSyncedRef = useRef(false)
 
   useEffect(() => {
     if (!import.meta.env.DEV) return
@@ -38,6 +42,7 @@ export function usePreviewPerfPanel() {
     }
 
     window.__PREVIEW_PERF_PANEL__ = panelEnabled
+    initializedRef.current = true
     setShowPerfPanel(panelEnabled)
     setPerfPanelSnapshot(panelEnabled ? (window.__PREVIEW_PERF__ ?? null) : null)
 
@@ -45,16 +50,7 @@ export function usePreviewPerfPanel() {
       if (!(event.altKey && event.shiftKey && event.key.toLowerCase() === 'p')) return
       event.preventDefault()
       const nextEnabled = !(window.__PREVIEW_PERF_PANEL__ === true)
-      window.__PREVIEW_PERF_PANEL__ = nextEnabled
-      try {
-        window.localStorage.setItem(PREVIEW_PERF_PANEL_STORAGE_KEY, nextEnabled ? '1' : '0')
-      } catch {
-        // Ignore storage failures (private mode / quota / disabled storage).
-      }
       setShowPerfPanel(nextEnabled)
-      if (!nextEnabled) {
-        setPerfPanelSnapshot(null)
-      }
     }
 
     const intervalId = setInterval(() => {
@@ -67,7 +63,24 @@ export function usePreviewPerfPanel() {
       window.removeEventListener('keydown', handleKeyDown)
       clearInterval(intervalId)
     }
-  }, [])
+  }, [setShowPerfPanel])
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !initializedRef.current) return
+    if (!hasSyncedRef.current) {
+      hasSyncedRef.current = true
+      return
+    }
+
+    window.__PREVIEW_PERF_PANEL__ = showPerfPanel
+    try {
+      window.localStorage.setItem(PREVIEW_PERF_PANEL_STORAGE_KEY, showPerfPanel ? '1' : '0')
+    } catch {
+      // Ignore storage failures (private mode / quota / disabled storage).
+    }
+
+    setPerfPanelSnapshot(showPerfPanel ? (window.__PREVIEW_PERF__ ?? null) : null)
+  }, [showPerfPanel])
 
   const latestRenderSourceSwitch = useMemo(
     () =>

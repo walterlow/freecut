@@ -32,12 +32,16 @@ interface ClipWaveformProps {
   renderWidth?: number
   /** Source start time in seconds (for trimmed clips) */
   sourceStart: number
+  /** Source end time in seconds (for trimmed clips) */
+  sourceEnd?: number
   /** Total source duration in seconds */
   sourceDuration: number
   /** Trim start in seconds (how much trimmed from beginning) */
   trimStart: number
   /** Playback speed multiplier */
   speed: number
+  /** Whether the clip plays source media in reverse */
+  isReversed?: boolean
   /** Frames per second */
   fps: number
   /** Whether the clip is visible (from IntersectionObserver) */
@@ -60,9 +64,11 @@ export const ClipWaveform = memo(function ClipWaveform({
   clipWidth,
   renderWidth,
   sourceStart,
+  sourceEnd,
   sourceDuration,
   trimStart,
   speed,
+  isReversed = false,
   fps,
   isVisible,
   visibleStartRatio = 0,
@@ -208,6 +214,13 @@ export const ClipWaveform = memo(function ClipWaveform({
 
       const effectiveStart = sourceStart + trimStart
       const currentPps = Math.max(1, pixelsPerSecondRef.current)
+      const effectiveEnd = Math.min(
+        sourceDuration,
+        Math.max(
+          effectiveStart,
+          sourceEnd ?? effectiveStart + (clipWidth / Math.max(1, currentPps)) * speed,
+        ),
+      )
       const centerY = height / 2
       const maxWaveHeight = Math.max(1, height / 2 - WAVEFORM_VERTICAL_PADDING_PX)
       const amplitudeCount = tileWidth + 1
@@ -222,13 +235,14 @@ export const ClipWaveform = memo(function ClipWaveform({
 
       for (let x = 0; x < amplitudeCount; x++) {
         const timelinePosition = (tileOffset + x) / currentPps
-        const sourceTime = effectiveStart + timelinePosition * speed
+        const sourceOffset = timelinePosition * speed
+        const sourceTime = isReversed ? effectiveEnd - sourceOffset : effectiveStart + sourceOffset
 
         if (sourceTime < 0 || sourceTime > sourceDuration || sampleRate <= 0) {
           continue
         }
 
-        const peakIndex = Math.floor(sourceTime * sampleRate)
+        const peakIndex = Math.min(peakSampleCount - 1, Math.floor(sourceTime * sampleRate))
         if (peakIndex < 0 || peakIndex >= peakSampleCount) {
           continue
         }
@@ -293,9 +307,12 @@ export const ClipWaveform = memo(function ClipWaveform({
       duration,
       sampleRate,
       sourceStart,
+      sourceEnd,
       trimStart,
       speed,
+      isReversed,
       sourceDuration,
+      clipWidth,
       height,
       normalizationPeak,
       stereo,

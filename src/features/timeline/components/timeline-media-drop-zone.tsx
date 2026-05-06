@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import type { TimelineItem as TimelineItemType } from '@/types/timeline'
 import type { MediaMetadata } from '@/types/storage'
@@ -56,8 +56,6 @@ import {
 import { prewarmDroppedTimelineAudio } from '../utils/drop-audio-prewarm'
 import {
   type ExternalDragPreviewEntry,
-  getGhostHighlightClasses,
-  getGhostPreviewItemClasses,
   isDroppableMediaType,
   isValidDragMediaItem,
 } from '../utils/drag-drop-preview'
@@ -68,6 +66,11 @@ import {
   releaseTimelineDropPreviewOwner,
 } from '../utils/drop-preview-owner'
 import { isDragPointInsideElement } from '../utils/effect-drop'
+import { shouldIgnoreNewTrackZonePreviewForDrag } from '../utils/timeline-external-drag'
+import {
+  TimelineDropGhostPreviews,
+  type TimelineDropGhostPreviewsHandle,
+} from './timeline-drop-ghost-previews'
 
 const logger = createLogger('TimelineMediaDropZone')
 
@@ -95,125 +98,24 @@ const MULTI_DROP_METADATA_CONCURRENCY = 3
 
 const NewTrackZoneGhostOverlay = memo(function NewTrackZoneGhostOverlay({
   zone,
-  showEmptyOverlay,
 }: {
   zone: 'video' | 'audio'
-  showEmptyOverlay: boolean
 }) {
-  const emptyOverlayRef = useRef<HTMLDivElement>(null)
-  const highlightOverlayRef = useRef<HTMLDivElement>(null)
-  const previewLayerRef = useRef<HTMLDivElement>(null)
-  const previewNodesRef = useRef<Array<{ root: HTMLDivElement; label: HTMLSpanElement }>>([])
-  const previewCountRef = useRef(0)
-  const showEmptyOverlayRef = useRef(showEmptyOverlay)
-
-  const syncEmptyOverlayVisibility = useCallback(() => {
-    if (!emptyOverlayRef.current) {
-      return
-    }
-
-    emptyOverlayRef.current.style.display =
-      showEmptyOverlayRef.current && previewCountRef.current === 0 ? '' : 'none'
-  }, [])
-
-  const clearGhostPreviews = useCallback(() => {
-    previewCountRef.current = 0
-    showEmptyOverlayRef.current = false
-
-    if (highlightOverlayRef.current) {
-      highlightOverlayRef.current.style.display = 'none'
-    }
-
-    if (previewLayerRef.current) {
-      previewLayerRef.current.replaceChildren()
-    }
-
-    previewNodesRef.current = []
-    syncEmptyOverlayVisibility()
-  }, [syncEmptyOverlayVisibility])
-
-  const syncGhostPreviews = useCallback(
-    (ghostPreviews: NewTrackZoneGhostPreview[]) => {
-      previewCountRef.current = ghostPreviews.length
-
-      if (highlightOverlayRef.current) {
-        if (ghostPreviews.length === 0) {
-          highlightOverlayRef.current.style.display = 'none'
-        } else {
-          highlightOverlayRef.current.className = `absolute inset-0 pointer-events-none z-10 rounded border border-dashed ${getGhostHighlightClasses(ghostPreviews)}`
-          highlightOverlayRef.current.style.display = ''
-        }
-      }
-
-      const previewLayer = previewLayerRef.current
-      if (!previewLayer) {
-        syncEmptyOverlayVisibility()
-        return
-      }
-
-      const previewNodes = previewNodesRef.current
-      while (previewNodes.length > ghostPreviews.length) {
-        const removedNode = previewNodes.pop()
-        removedNode?.root.remove()
-      }
-
-      for (let index = 0; index < ghostPreviews.length; index += 1) {
-        const ghostPreview = ghostPreviews[index]!
-        let previewNode = previewNodes[index]
-
-        if (!previewNode) {
-          const root = document.createElement('div')
-          root.className =
-            'absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2'
-          const label = document.createElement('span')
-          label.className = 'truncate text-[10px] font-medium text-foreground/80'
-          root.appendChild(label)
-          previewLayer.appendChild(root)
-          previewNode = { root, label }
-          previewNodes[index] = previewNode
-        }
-
-        previewNode.root.className = `absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 ${getGhostPreviewItemClasses(ghostPreview.type)}`
-        previewNode.root.style.left = `${ghostPreview.left}px`
-        previewNode.root.style.width = `${ghostPreview.width}px`
-        previewNode.root.style.top = '0'
-        previewNode.root.style.height = '100%'
-        previewNode.label.textContent = ghostPreview.label
-      }
-
-      syncEmptyOverlayVisibility()
-    },
-    [syncEmptyOverlayVisibility],
-  )
-
-  useLayoutEffect(() => {
-    showEmptyOverlayRef.current = showEmptyOverlay
-    syncEmptyOverlayVisibility()
-  }, [showEmptyOverlay, syncEmptyOverlayVisibility])
+  const previewsRef = useRef<TimelineDropGhostPreviewsHandle>(null)
 
   useEffect(() => {
     const unregister = registerNewTrackZoneGhostOverlay(zone, {
-      sync: syncGhostPreviews,
-      clear: clearGhostPreviews,
+      sync: (ghostPreviews) => previewsRef.current?.sync(ghostPreviews),
+      clear: () => previewsRef.current?.clear(),
     })
 
     return () => {
       unregister()
-      clearGhostPreviews()
+      previewsRef.current?.clear()
     }
-  }, [clearGhostPreviews, syncGhostPreviews, zone])
+  }, [zone])
 
-  return (
-    <>
-      <div
-        ref={emptyOverlayRef}
-        className="absolute inset-0 pointer-events-none z-10 rounded border border-dashed border-primary/50 bg-primary/10"
-        style={{ display: 'none' }}
-      />
-      <div ref={highlightOverlayRef} style={{ display: 'none' }} />
-      <div ref={previewLayerRef} />
-    </>
-  )
+  return <TimelineDropGhostPreviews ref={previewsRef} variant="zone" />
 })
 
 export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
@@ -222,8 +124,6 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
   anchorTrackId,
 }: TimelineMediaDropZoneProps) {
   const previewOwnerId = `zone:${zone}`
-  const [isDragOver, setIsDragOver] = useState(false)
-  const [isExternalDragOver, setIsExternalDragOver] = useState(false)
   const zoneRef = useRef<HTMLDivElement>(null)
   const dragPreviewCacheRef = useRef<{
     dropFrame: number | null
@@ -342,13 +242,9 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
 
   const updateDragOverFlags = useCallback(
     (nextIsDragOver: boolean, nextIsExternalDragOver: boolean) => {
-      if (dragOverFlagsRef.current.isDragOver !== nextIsDragOver) {
-        dragOverFlagsRef.current.isDragOver = nextIsDragOver
-        setIsDragOver(nextIsDragOver)
-      }
-      if (dragOverFlagsRef.current.isExternalDragOver !== nextIsExternalDragOver) {
-        dragOverFlagsRef.current.isExternalDragOver = nextIsExternalDragOver
-        setIsExternalDragOver(nextIsExternalDragOver)
+      dragOverFlagsRef.current = {
+        isDragOver: nextIsDragOver,
+        isExternalDragOver: nextIsExternalDragOver,
       }
     },
     [],
@@ -736,6 +632,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         if (previews.length === 0) {
           setDropEffectNone()
           updateDragOverFlags(false, false)
+          clearZoneGhostPreviews()
           resetDragPreviewCache()
           return
         }
@@ -876,11 +773,23 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     zone,
   ])
 
+  const clearOwnedPreview = useCallback(() => {
+    clearPendingDragPreview()
+    updateDragOverFlags(false, false)
+    clearZoneGhostPreviews()
+    resetDragPreviewCache()
+  }, [clearPendingDragPreview, clearZoneGhostPreviews, resetDragPreviewCache, updateDragOverFlags])
+
   const claimPreviewOwnership = useCallback(
     (dataTransfer: DataTransfer | null) => {
       const data = getMediaDragData()
       const hasExternalFiles = !!dataTransfer && !data && dataTransfer.types.includes('Files')
       if (!data && !hasExternalFiles) {
+        return
+      }
+
+      if (shouldIgnoreNewTrackZonePreviewForDrag(data, zone)) {
+        clearOwnedPreview()
         return
       }
 
@@ -890,15 +799,8 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       }
       updateDragOverFlags(true, hasExternalFiles)
     },
-    [clearZoneGhostPreviews, previewOwnerId, updateDragOverFlags],
+    [clearOwnedPreview, clearZoneGhostPreviews, previewOwnerId, updateDragOverFlags],
   )
-
-  const clearOwnedPreview = useCallback(() => {
-    clearPendingDragPreview()
-    updateDragOverFlags(false, false)
-    clearZoneGhostPreviews()
-    resetDragPreviewCache()
-  }, [clearPendingDragPreview, clearZoneGhostPreviews, resetDragPreviewCache, updateDragOverFlags])
 
   const handleDragEnterCapture = useCallback(
     (e: React.DragEvent) => {
@@ -920,6 +822,11 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         updateDragOverFlags(false, false)
         clearZoneGhostPreviews()
         resetDragPreviewCache()
+        return
+      }
+
+      if (shouldIgnoreNewTrackZonePreviewForDrag(data, zone)) {
+        clearOwnedPreview()
         return
       }
 
@@ -1181,6 +1088,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
   return (
     <div
       ref={zoneRef}
+      data-timeline-drop-target="true"
       className="relative"
       style={{ height: `${height}px` }}
       onDragEnterCapture={handleDragEnterCapture}
@@ -1189,7 +1097,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <NewTrackZoneGhostOverlay zone={zone} showEmptyOverlay={isDragOver && !isExternalDragOver} />
+      <NewTrackZoneGhostOverlay zone={zone} />
     </div>
   )
 })

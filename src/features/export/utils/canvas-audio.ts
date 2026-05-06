@@ -100,6 +100,7 @@ interface AudioSegment {
   crossfadeFadeInFrames?: number
   crossfadeFadeOutFrames?: number
   speed: number // Playback rate
+  isReversed: boolean
   muted: boolean
   type: 'video' | 'audio'
   audioCodec?: string // Audio codec for lazy AC-3 decoder registration
@@ -453,6 +454,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
       crossfadeFadeInFrames,
       crossfadeFadeOutFrames,
       speed,
+      isReversed: item.isReversed === true,
       muted: entry.muted,
       type: entry.type,
       audioCodec: entry.audioCodec,
@@ -483,6 +485,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
     if (!isContinuousAudioTransition(left.clip, right.clip, fps)) return false
     if (left.src !== right.src) return false
     if (Math.abs(left.speed - right.speed) > 0.0001) return false
+    if (left.isReversed !== right.isReversed) return false
     if (Math.abs(left.volume - right.volume) > 0.0001) return false
     if (left.muted !== right.muted) return false
     if (!areAudioEqStagesEqual(left.audioEqStages, right.audioEqStages)) return false
@@ -517,6 +520,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
     crossfadeFadeInFrames: segment.crossfadeFadeInFrames,
     crossfadeFadeOutFrames: segment.crossfadeFadeOutFrames,
     speed: segment.speed,
+    isReversed: segment.isReversed,
     muted: segment.muted,
     type: segment.type,
     audioCodec: segment.audioCodec,
@@ -774,6 +778,7 @@ function appendCompositionAudioSegments(params: {
         }),
       ],
       speed,
+      isReversed: subItem.isReversed === true,
       muted: trackMuted || subTrackMuted,
       type: subItem.type as 'video' | 'audio',
       audioCodec: getMediaAudioCodecById(subItem.mediaId),
@@ -941,6 +946,7 @@ export function extractAudioSegments(
             }),
           ],
           speed: audioItem.speed ?? 1,
+          isReversed: audioItem.isReversed === true,
           muted: track.muted ?? false,
           type: 'audio',
           audioCodec: audioEntry.audioCodec,
@@ -1589,6 +1595,112 @@ async function resample(
 }
 
 /**
+ * Downmix a multi-channel decoded source to the target channel count using
+ * the ITU-R BS.775 / Dolby Pro Logic II coefficients. Standard channel
+ * order from mediabunny (and the FFmpeg-backed AC-3/E-AC-3 decoder) is
+ * `L, R, C, LFE, Ls, Rs` for 5.1 and `L, R, C, LFE, Ls, Rs, Lr, Rr` for
+ * 7.1.
+ *
+ * Without this, a 5.1 EAC3 source going to a stereo export was dropping
+ * the center channel — meaning all the dialogue was missing from the
+ * exported audio while music + effects on L/R sounded thin.
+ *
+ * If the source already has the same channel count as the output, samples
+ * are returned untouched. If the source has fewer channels (e.g. mono into
+ * stereo) the lone channel is duplicated.
+ */
+export function downmixToOutputChannels(
+  source: readonly Float32Array[],
+  outputChannels: number,
+): Float32Array[] {
+  if (source.length === 0) return []
+  if (source.length === outputChannels) return source.map((c) => c)
+
+  // Mono source going into multi-channel output: duplicate.
+  if (source.length === 1) {
+    const mono = source[0]!
+    const out: Float32Array[] = []
+    for (let c = 0; c < outputChannels; c++) out.push(mono)
+    return out
+  }
+
+  // Stereo output is the common case for export — handle it directly.
+  if (outputChannels === 2) {
+    return downmixToStereo(source)
+  }
+
+  // Mono output: average all source channels with center/LFE attenuation.
+  if (outputChannels === 1) {
+    const stereo = downmixToStereo(source)
+    const length = stereo[0]!.length
+    const merged = new Float32Array(length)
+    const left = stereo[0]!
+    const right = stereo[1]!
+    for (let i = 0; i < length; i++) {
+      merged[i] = (left[i]! + right[i]!) * 0.5
+    }
+    return [merged]
+  }
+
+  // Unrecognised target — slice to the requested channels and pad with
+  // silence; the prior behavior. Real broadcast targets stop at stereo
+  // here, so this branch is just defensive.
+  const out: Float32Array[] = []
+  for (let c = 0; c < outputChannels; c++) {
+    out.push(source[c] ?? new Float32Array(source[0]!.length))
+  }
+  return out
+}
+
+const SQRT_HALF = Math.SQRT1_2 // ≈ 0.7071068
+
+function downmixToStereo(source: readonly Float32Array[]): Float32Array[] {
+  // Mediabunny 5.1 / 7.1 channel order (FFmpeg standard):
+  //   0 L, 1 R, 2 C, 3 LFE, 4 Ls, 5 Rs, [6 Lr, 7 Rr]
+  // Stereo downmix coefficients (ITU-R BS.775 / Dolby):
+  //   Lo = L + sqrt(0.5)·C + sqrt(0.5)·Ls (+ surround back if 7.1)
+  //   Ro = R + sqrt(0.5)·C + sqrt(0.5)·Rs
+  // LFE is dropped — re-mixing it into stereo without bandlimiting causes
+  // muddy bass. Matches Dolby's recommended Lo/Ro downmix.
+  const [L, R, C, _LFE, Ls, Rs, Lr, Rr] = source
+  const length = L?.length ?? R?.length ?? 0
+  if (length === 0) return [new Float32Array(0), new Float32Array(0)]
+
+  const left = new Float32Array(length)
+  const right = new Float32Array(length)
+  for (let i = 0; i < length; i++) {
+    let lo = L?.[i] ?? 0
+    let ro = R?.[i] ?? 0
+    const c = C?.[i]
+    if (c !== undefined) {
+      lo += SQRT_HALF * c
+      ro += SQRT_HALF * c
+    }
+    const ls = Ls?.[i]
+    if (ls !== undefined) lo += SQRT_HALF * ls
+    const rs = Rs?.[i]
+    if (rs !== undefined) ro += SQRT_HALF * rs
+    const lr = Lr?.[i]
+    if (lr !== undefined) lo += SQRT_HALF * lr
+    const rr = Rr?.[i]
+    if (rr !== undefined) ro += SQRT_HALF * rr
+    left[i] = lo
+    right[i] = ro
+  }
+  return [left, right]
+}
+
+function reverseAudioChannels(channels: Float32Array[]): Float32Array[] {
+  return channels.map((samples) => {
+    const reversed = new Float32Array(samples.length)
+    for (let i = 0; i < samples.length; i++) {
+      reversed[i] = samples[samples.length - 1 - i] ?? 0
+    }
+    return reversed
+  })
+}
+
+/**
  * Mix multiple audio tracks together.
  *
  * @param segments - Processed audio segments with timing
@@ -1612,12 +1724,14 @@ function mixAudioTracks(
     output.push(new Float32Array(totalSamples))
   }
 
-  // Mix each segment
+  // Mix each segment, downmixing source channels to the output layout.
   for (const segment of segments) {
     if (segment.muted) continue
 
+    const downmixed = downmixToOutputChannels(segment.samples, channels)
+
     for (let c = 0; c < channels; c++) {
-      const channelSamples = segment.samples[c % segment.samples.length]
+      const channelSamples = downmixed[c]
       if (!channelSamples) continue
 
       const outputChannel = output[c]!
@@ -1626,7 +1740,6 @@ function mixAudioTracks(
         const outputIndex = segment.startSample + i
         if (outputIndex < 0 || outputIndex >= totalSamples) continue
 
-        // Simple additive mixing
         const sample = channelSamples[i]
         const currentValue = outputChannel[outputIndex]
         if (sample !== undefined && currentValue !== undefined) {
@@ -1769,6 +1882,9 @@ export async function processAudio(
       // Apply speed across ALL channels at once to maintain phase coherence
       // between L/R (the WSOLA pipeline finds shared overlap windows).
       let processedChannels = decoded.samples
+      if (segment.isReversed) {
+        processedChannels = reverseAudioChannels(processedChannels)
+      }
       if (
         Math.abs(segment.speed - 1) > 0.0001 ||
         isAudioPitchShiftActive(segment.pitchShiftSemitones)

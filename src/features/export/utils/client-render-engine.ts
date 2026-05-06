@@ -79,11 +79,13 @@ import {
   type PreviewPathVerticesOverride,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
+  getVideoTargetTimeSeconds,
   resolveFrameRenderScene,
-  snapSourceTime,
 } from '@/features/export/deps/composition-runtime'
 import {
   renderItem,
+  renderItemGpuEffectsToTexture,
+  renderPreviewVideoGpuEffectsToCanvas,
   renderTransitionToCanvas,
   renderTransitionToGpuTexture,
   type CanvasSettings,
@@ -95,6 +97,8 @@ import {
 } from './canvas-item-renderer'
 import { ScrubbingCache } from '@/features/export/deps/preview'
 import { resolveFrameRenderOptimization } from './render-path-optimizer'
+import { ReverseVideoFrameCache } from './reverse-video-frame-cache'
+import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
 
 // Re-export orchestration functions so existing import sites keep working
 export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator'
@@ -106,6 +110,64 @@ function getLog() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function hasEnabledGpuEffect(effects: TimelineItem['effects']): boolean {
+  return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
+}
+
+function itemHasEnabledGpuEffect(
+  item: TimelineItem,
+  getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined,
+): boolean {
+  const previewEffects = getPreviewEffectsOverride?.(item.id)
+  return hasEnabledGpuEffect(previewEffects ?? item.effects)
+}
+
+export function subCompositionRenderDataHasGpuEffects(
+  compositionId: string,
+  subCompRenderData: ReadonlyMap<string, SubCompRenderData>,
+  options: {
+    getCurrentItem?: <TItem extends TimelineItem>(item: TItem) => TItem
+    getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined
+    visited?: Set<string>
+  } = {},
+): boolean {
+  const { getPreviewEffectsOverride } = options
+  const getCurrentItem =
+    options.getCurrentItem ?? (<TItem extends TimelineItem>(item: TItem) => item)
+  const visited = options.visited ?? new Set<string>()
+  if (visited.has(compositionId)) return false
+  visited.add(compositionId)
+
+  const subData = subCompRenderData.get(compositionId)
+  if (!subData) return false
+
+  for (const entry of subData.adjustmentLayers ?? []) {
+    if (itemHasEnabledGpuEffect(getCurrentItem(entry.layer), getPreviewEffectsOverride)) {
+      return true
+    }
+  }
+
+  for (const track of subData.sortedTracks) {
+    if (!track.visible) continue
+    for (const subItem of track.items) {
+      const currentSubItem = getCurrentItem(subItem)
+      if (itemHasEnabledGpuEffect(currentSubItem, getPreviewEffectsOverride)) return true
+      if (
+        currentSubItem.type === 'composition' &&
+        subCompositionRenderDataHasGpuEffects(currentSubItem.compositionId, subCompRenderData, {
+          getCurrentItem,
+          getPreviewEffectsOverride,
+          visited,
+        })
+      ) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
 
 /**
  * Check if an image item is a potentially animated image (GIF or WebP).
@@ -151,16 +213,23 @@ export async function createCompositionRenderer(
     getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined
     getLiveKeyframes?: (itemId: string) => ItemKeyframes | undefined
     domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null
+    useProxyMedia?: boolean
   } = {},
 ) {
-  const {
-    fps,
-    tracks = [],
-    transitions = [],
-    backgroundColor = '#000000',
-    keyframes = [],
-  } = composition
+  const { fps, transitions = [], backgroundColor = '#000000', keyframes = [] } = composition
   const renderMode = options.mode ?? 'export'
+  const tracks =
+    composition.tracks?.map((track) => ({
+      ...track,
+      items: (track.items ?? []).map((item) =>
+        item.type === 'video'
+          ? resolveReverseConformedVideoItem(item, fps, {
+              mode: renderMode,
+              useProxy: options.useProxyMedia,
+            })
+          : item,
+      ),
+    })) ?? []
   const getPreviewTransformOverride = options.getPreviewTransformOverride
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride
   const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride
@@ -359,7 +428,17 @@ export async function createCompositionRenderer(
     getLiveKeyframes?.(itemId) ?? keyframesMap.get(itemId)
   const getCurrentItem = <TItem extends TimelineItem>(item: TItem): TItem => {
     const liveItem = getLiveItemSnapshot?.(item.id)
-    return liveItem && liveItem.type === item.type ? (liveItem as TItem) : item
+    const current = liveItem && liveItem.type === item.type ? (liveItem as TItem) : item
+    if (current.type !== 'video') {
+      return current
+    }
+
+    const resolvedVideoItem = resolveReverseConformedVideoItem(current, fps, {
+      mode: renderMode,
+      useProxy: options.useProxyMedia,
+    })
+    syncVideoItemRegistration(resolvedVideoItem)
+    return resolvedVideoItem as TItem
   }
   const getLiveMaskItem = getLiveItemSnapshot
     ? (itemId: string) => {
@@ -542,6 +621,25 @@ export async function createCompositionRenderer(
   const inFlightInitByItem = new Map<string, Promise<boolean>>()
   let isDisposed = false
 
+  function syncVideoItemRegistration(videoItem: VideoItem): void {
+    if (!videoItem.src) return
+
+    const prevSrc = videoSourceByItemId.get(videoItem.id)
+    if (prevSrc !== videoItem.src) {
+      useMediabunny.delete(videoItem.id)
+      mediabunnyDisabledItems.delete(videoItem.id)
+      mediabunnyFailureCountByItem.delete(videoItem.id)
+      mediabunnyInitFailureCountByItem.delete(videoItem.id)
+      inFlightInitByItem.delete(videoItem.id)
+      registerVideoItem(videoItem.id, videoItem.src)
+      if (hasDom && !previewStrictDecode) {
+        bindFallbackVideoElement(videoItem.id, videoItem.src)
+      }
+    }
+
+    videoItemsById.set(videoItem.id, videoItem)
+  }
+
   // Pre-computed sub-composition render data. Populated synchronously at
   // renderer creation (so the first renderFrame sees compound-clip structure
   // even before preload finishes) and refreshed during preload.
@@ -582,6 +680,7 @@ export async function createCompositionRenderer(
   let prewarmCanvas: OffscreenCanvas | HTMLCanvasElement | null = null
   let prewarmCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null
   let prewarmAttempted = false
+  const reverseVideoFrameCache = renderMode === 'export' ? new ReverseVideoFrameCache() : undefined
 
   // Build the shared ItemRenderContext used by canvas-item-renderer functions
   const itemRenderContext: ItemRenderContext = {
@@ -601,6 +700,7 @@ export async function createCompositionRenderer(
     useMediabunny,
     mediabunnyDisabledItems,
     mediabunnyFailureCountByItem,
+    reverseVideoFrameCache,
     imageElements,
     gifFramesMap,
     keyframesMap,
@@ -730,8 +830,9 @@ export async function createCompositionRenderer(
         const start = item.from
         const end = item.from + item.durationInFrames
         if (end < minFrame || start > maxFrame) continue
-        if (videoExtractors.has(item.id)) {
-          ids.push(item.id)
+        const currentItem = getCurrentItem(item)
+        if (videoExtractors.has(currentItem.id)) {
+          ids.push(currentItem.id)
         }
       }
     }
@@ -1334,15 +1435,19 @@ export async function createCompositionRenderer(
         })
       }
 
-      const hasGpuEffects = (effects: TimelineItem['effects']): boolean =>
-        effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false
+      const hasGpuEffectsForItem = (item: TimelineItem): boolean => {
+        return itemHasEnabledGpuEffect(
+          item,
+          renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
+        )
+      }
       let hasAnyGpuEffects = false
       for (const track of sortedTracks) {
         if (!visibleTrackIds.has(track.id)) continue
         for (const baseItem of track.items ?? []) {
           const item = getCurrentItem(baseItem)
           if (frame < item.from || frame >= item.from + item.durationInFrames) continue
-          if (hasGpuEffects(item.effects)) {
+          if (hasGpuEffectsForItem(item)) {
             hasAnyGpuEffects = true
             break
           }
@@ -1350,15 +1455,13 @@ export async function createCompositionRenderer(
           // adjustment layers so the pipeline is initialized before
           // renderCompositionItem needs it.
           if (item.type === 'composition') {
-            const subData = subCompRenderData.get(item.compositionId)
-            if (!subData) continue
-            const trackItemWithGpu = subData.sortedTracks.some((t) =>
-              t.items.some((subItem) => hasGpuEffects(subItem.effects)),
-            )
-            const adjustmentWithGpu = (subData.adjustmentLayers ?? []).some((entry) =>
-              hasGpuEffects(entry.layer.effects),
-            )
-            if (trackItemWithGpu || adjustmentWithGpu) {
+            if (
+              subCompositionRenderDataHasGpuEffects(item.compositionId, subCompRenderData, {
+                getCurrentItem,
+                getPreviewEffectsOverride:
+                  renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
+              })
+            ) {
               hasAnyGpuEffects = true
               break
             }
@@ -1372,6 +1475,10 @@ export async function createCompositionRenderer(
         }
         if (itemRenderContext.gpuPipeline) {
           // Initialize GPU transition pipeline (shares device with effects pipeline)
+          if (hasAnyGpuEffects) {
+            if (!itemRenderContext.gpuMediaPipeline) ensureGpuMediaPipeline()
+            itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
+          }
           if (activeTransitions.length > 0) {
             if (!itemRenderContext.gpuTransitionPipeline) ensureGpuTransitionPipeline()
             if (!itemRenderContext.gpuMediaPipeline) ensureGpuMediaPipeline()
@@ -1400,7 +1507,13 @@ export async function createCompositionRenderer(
         deferred: boolean,
         targetCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
         bakeMasks = true,
-      ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null> => {
+        preferGpuTextureOutput = false,
+        allowDirectGpu = true,
+      ): Promise<{
+        source?: OffscreenCanvas
+        gpuTexture?: GPUTexture
+        poolCanvases: OffscreenCanvas[]
+      } | null> => {
         const item = getCurrentItem(baseItem)
         // Get animated transform
         const itemKeyframes = getCurrentKeyframes(item.id)
@@ -1448,12 +1561,64 @@ export async function createCompositionRenderer(
         )
         const renderMasks = bakeMasks ? applicableMasks : []
 
-        // NOTE: The importExternalTexture zero-copy path is disabled because
+        // NOTE: The HTMLVideoElement importExternalTexture path stays disabled because
         // textureSampleBaseClampToEdge produces subtly different edge pixel values
         // compared to canvas 2D's drawImage (different YUV→RGB conversion at
         // chroma subsampling boundaries). Spatial effects like halftone amplify
         // this into a visible bright edge. The standard canvas 2D → GPU path
         // below handles video correctly with negligible extra cost (~1-2ms).
+
+        const canRenderDirectGpuEffects =
+          allowDirectGpu &&
+          preferGpuTextureOutput &&
+          gpuTexturePool &&
+          itemRenderContext.gpuPipeline &&
+          itemRenderContext.gpuMediaPipeline &&
+          renderMasks.length === 0 &&
+          combinedEffects.length > 0 &&
+          combinedEffects.every(
+            (effect) => effect.enabled && effect.effect.type === 'gpu-effect',
+          ) &&
+          (effectiveItem.type === 'video' || effectiveItem.type === 'image')
+        if (canRenderDirectGpuEffects && gpuTexturePool) {
+          const outputTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
+          let renderedDirect = false
+          try {
+            renderedDirect = await renderItemGpuEffectsToTexture(
+              effectiveItem,
+              transform,
+              combinedEffects,
+              frame,
+              itemRenderContext,
+              outputTexture,
+              gpuTexturePool,
+            )
+            if (renderedDirect) {
+              return { gpuTexture: outputTexture, poolCanvases: [] }
+            }
+          } finally {
+            if (!renderedDirect) {
+              gpuTexturePool.release(outputTexture)
+            }
+          }
+        }
+
+        if (renderMasks.length === 0 && combinedEffects.length > 0) {
+          const directGpuCanvas = renderPreviewVideoGpuEffectsToCanvas(
+            effectiveItem,
+            transform,
+            combinedEffects,
+            frame,
+            itemRenderContext,
+          )
+          if (directGpuCanvas) {
+            if (deferred) {
+              return { source: directGpuCanvas, poolCanvases: [] }
+            }
+            targetCtx.drawImage(directGpuCanvas, 0, 0)
+            return null
+          }
+        }
 
         // === PERFORMANCE: Use pooled canvas instead of creating new one ===
         const { canvas: itemCanvas, ctx: itemCtx } = canvasPool.acquire()
@@ -1792,58 +1957,68 @@ export async function createCompositionRenderer(
           }
         }
 
-        // Fire all item renders in parallel (video decodes run concurrently)
-        const results = await Promise.all(
-          renderTasks.map(async (task) => {
-            if (task.type === 'item') {
-              const item = getCurrentItem(task.item)
-              const canSeparateMasks =
-                useGpuCompositor && gpuTexturePool && !hasCornerPin(item.cornerPin)
-              return renderItemWithEffects(
-                task.item,
-                task.trackOrder,
-                true,
-                contentCtx,
-                !canSeparateMasks,
-              )
-            }
-            const transitionMasks = activeMasks.filter((mask) =>
-              doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
+        const renderTask = async (
+          task: (typeof renderTasks)[number],
+        ): Promise<RenderedTaskResult | null> => {
+          if (task.type === 'item') {
+            const item = getCurrentItem(task.item)
+            const canSeparateMasks =
+              useGpuCompositor && gpuTexturePool && !hasCornerPin(item.cornerPin)
+            return renderItemWithEffects(
+              task.item,
+              task.trackOrder,
+              true,
+              contentCtx,
+              !canSeparateMasks,
+              false,
             )
-            if (
-              useGpuCompositor &&
-              gpuTexturePool &&
-              transitionMasks.length === 0 &&
-              itemRenderContext.gpuTransitionPipeline
-            ) {
-              const transitionTexture = gpuTexturePool.acquire(
-                canvasSettings.width,
-                canvasSettings.height,
-              )
-              const renderedToTexture = await renderTransitionToGpuTexture(
-                transitionTexture,
-                task.transition,
-                frame,
-                itemRenderContext,
-                task.trackOrder,
-                gpuTexturePool,
-              )
-              if (renderedToTexture) {
-                return {
-                  gpuTexture: transitionTexture,
-                  poolCanvases: [],
-                } satisfies RenderedTaskResult
-              }
-              gpuTexturePool.release(transitionTexture)
+          }
+          const transitionMasks = activeMasks.filter((mask) =>
+            doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
+          )
+          if (
+            useGpuCompositor &&
+            gpuTexturePool &&
+            transitionMasks.length === 0 &&
+            itemRenderContext.gpuTransitionPipeline
+          ) {
+            const transitionTexture = gpuTexturePool.acquire(
+              canvasSettings.width,
+              canvasSettings.height,
+            )
+            const renderedToTexture = await renderTransitionToGpuTexture(
+              transitionTexture,
+              task.transition,
+              frame,
+              itemRenderContext,
+              task.trackOrder,
+              gpuTexturePool,
+            )
+            if (renderedToTexture) {
+              return {
+                gpuTexture: transitionTexture,
+                poolCanvases: [],
+              } satisfies RenderedTaskResult
             }
-            // Transitions: render to a dedicated canvas
-            return renderTransitionFallbackCanvas(task)
-          }),
-        )
+            gpuTexturePool.release(transitionTexture)
+          }
+          // Transitions: render to a dedicated canvas
+          return renderTransitionFallbackCanvas(task)
+        }
 
-        // End GPU pool mode before compositing
+        let results: Array<RenderedTaskResult | null>
+        try {
+          // Fire all item renders in parallel (video decodes run concurrently).
+          results = await Promise.all(renderTasks.map((task) => renderTask(task)))
+        } finally {
+          // End GPU pool mode before compositing, even if one task fails.
+          if (shouldUseDeferredGpuBatch && itemRenderContext.gpuPipeline) {
+            itemRenderContext.gpuPipeline.endBatch()
+          }
+        }
+
         if (shouldUseDeferredGpuBatch && itemRenderContext.gpuPipeline) {
-          itemRenderContext.gpuPipeline.endBatch()
+          await itemRenderContext.gpuPipeline.waitForSubmittedWork()
         }
 
         // Composite all results in z-order (preserved by renderTasks ordering)
@@ -1947,6 +2122,7 @@ export async function createCompositionRenderer(
           }
 
           if (compositedToGpuCanvas) {
+            await itemRenderContext.gpuPipeline?.waitForSubmittedWork()
             finalCompositeSource = gpuCompositeOutput.canvas
           } else {
             // Fall back to the established Canvas2D compositor if the GPU target
@@ -1956,6 +2132,19 @@ export async function createCompositionRenderer(
               let fallbackResult = result
               if (!fallbackResult.source && task.type === 'transition') {
                 fallbackResult = await renderTransitionFallbackCanvas(task)
+              }
+              if (!fallbackResult.source && task.type === 'item') {
+                const rerenderedFallback = await renderItemWithEffects(
+                  task.item,
+                  task.trackOrder,
+                  true,
+                  contentCtx,
+                  true,
+                  false,
+                  false,
+                )
+                if (!rerenderedFallback) continue
+                fallbackResult = rerenderedFallback
               }
               let fallbackSource = fallbackResult.source
               if (!fallbackSource) continue
@@ -2054,7 +2243,7 @@ export async function createCompositionRenderer(
         minFrame,
         maxFrame,
         maxItems: PREWARM_DECODE_MAX_ITEMS,
-      })
+      }).map((item) => getCurrentItem(item))
 
       const missingCandidateItemIds = candidates
         .map((item) => item.id)
@@ -2072,9 +2261,17 @@ export async function createCompositionRenderer(
         const sourceStart = item.sourceStart ?? item.trimStart ?? 0
         const sourceFps = item.sourceFps ?? fps
         const speed = item.speed ?? 1
-        const sourceTime = snapSourceTime(
-          sourceStart / sourceFps + (localFrame / fps) * speed,
+        const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+        const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+        const sourceTime = getVideoTargetTimeSeconds(
+          sourceStart,
           sourceFps,
+          localFrame,
+          speed,
+          fps,
+          0,
+          item.isReversed === true,
+          reverseSourceEnd,
         )
         const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
 
@@ -2138,7 +2335,7 @@ export async function createCompositionRenderer(
           minFrame,
           maxFrame,
           maxItems: PREWARM_DECODE_MAX_ITEMS,
-        })
+        }).map((item) => getCurrentItem(item))
 
         for (const item of candidates) {
           if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue
@@ -2155,9 +2352,17 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0
           const sourceFps = item.sourceFps ?? fps
           const speed = item.speed ?? 1
-          const sourceTime = snapSourceTime(
-            sourceStart / sourceFps + (localFrame / fps) * speed,
+          const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+          const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+          const sourceTime = getVideoTargetTimeSeconds(
+            sourceStart,
             sourceFps,
+            localFrame,
+            speed,
+            fps,
+            0,
+            item.isReversed === true,
+            reverseSourceEnd,
           )
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
 
@@ -2203,7 +2408,7 @@ export async function createCompositionRenderer(
           minFrame,
           maxFrame,
           maxItems: PREWARM_DECODE_MAX_ITEMS,
-        })
+        }).map((item) => getCurrentItem(item))
         for (const item of candidates) {
           if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue
           const extractor = videoExtractors.get(item.id)
@@ -2212,9 +2417,17 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0
           const sourceFps = item.sourceFps ?? fps
           const speed = item.speed ?? 1
-          const sourceTime = snapSourceTime(
-            sourceStart / sourceFps + (localFrame / fps) * speed,
+          const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+          const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+          const sourceTime = getVideoTargetTimeSeconds(
+            sourceStart,
             sourceFps,
+            localFrame,
+            speed,
+            fps,
+            0,
+            item.isReversed === true,
+            reverseSourceEnd,
           )
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
           try {
@@ -2272,9 +2485,17 @@ export async function createCompositionRenderer(
             const sourceStart = item.sourceStart ?? item.trimStart ?? 0
             const sourceFps = item.sourceFps ?? fps
             const speed = item.speed ?? 1
-            const baseSourceTime = snapSourceTime(
-              sourceStart / sourceFps + (localFrame / fps) * speed,
+            const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+            const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+            const baseSourceTime = getVideoTargetTimeSeconds(
+              sourceStart,
               sourceFps,
+              localFrame,
+              speed,
+              fps,
+              0,
+              item.isReversed === true,
+              reverseSourceEnd,
             )
             try {
               await extractor.drawFrame(ctx2d, Math.max(0, baseSourceTime), 0, 0, 1, 1)
@@ -2372,6 +2593,7 @@ export async function createCompositionRenderer(
 
       // === PERFORMANCE: Clean up optimization resources ===
       scrubbingCache?.dispose()
+      reverseVideoFrameCache?.dispose()
 
       gpuCompositor?.destroy()
       gpuCompositor = null

@@ -19,7 +19,7 @@ export interface ResolvedTransitionTarget {
 type TransitionEdge = 'left' | 'right'
 
 function isTransitionableItem(item: TimelineItem): boolean {
-  return item.type === 'video' || item.type === 'image'
+  return item.type === 'video' || item.type === 'image' || item.type === 'composition'
 }
 
 function buildExistingTransitionByPair(transitions: Transition[]): Map<string, Transition> {
@@ -37,6 +37,7 @@ function resolveTargetForPair(
   transitions: Transition[],
   preferredDurationInFrames: number,
   alignment = 0.5,
+  allowDurationClamp = true,
 ): ResolvedTransitionTarget | null {
   if (!isTransitionableItem(leftClip) || !isTransitionableItem(rightClip)) return null
   if (leftClip.trackId !== rightClip.trackId) return null
@@ -77,6 +78,20 @@ function resolveTargetForPair(
       reason: 'Not enough source handle for a transition at this cut',
     }
   }
+  if (!allowDurationClamp && maxDurationInFrames < preferredDurationInFrames) {
+    return {
+      leftClipId: leftClip.id,
+      rightClipId: rightClip.id,
+      leftClip,
+      rightClip,
+      hasExisting: false,
+      canApply: false,
+      maxDurationInFrames,
+      suggestedDurationInFrames: preferredDurationInFrames,
+      alignment,
+      reason: 'Not enough source handle for this transition placement and duration',
+    }
+  }
 
   return {
     leftClipId: leftClip.id,
@@ -101,6 +116,7 @@ export function resolveTransitionTargetForEdge(params: {
   transitions: Transition[]
   preferredDurationInFrames?: number
   alignment?: number
+  allowDurationClamp?: boolean
 }): ResolvedTransitionTarget | null {
   const {
     itemId,
@@ -109,6 +125,7 @@ export function resolveTransitionTargetForEdge(params: {
     transitions,
     preferredDurationInFrames = TRANSITION_CONFIGS.crossfade.defaultDuration,
     alignment = 0.5,
+    allowDurationClamp = true,
   } = params
 
   const item = items.find((candidate) => candidate.id === itemId)
@@ -125,7 +142,14 @@ export function resolveTransitionTargetForEdge(params: {
         areFramesAligned(item.from + item.durationInFrames, candidate.from),
     )
     return rightClip
-      ? resolveTargetForPair(item, rightClip, transitions, preferredDurationInFrames, alignment)
+      ? resolveTargetForPair(
+          item,
+          rightClip,
+          transitions,
+          preferredDurationInFrames,
+          alignment,
+          allowDurationClamp,
+        )
       : null
   }
 
@@ -135,7 +159,14 @@ export function resolveTransitionTargetForEdge(params: {
       areFramesAligned(candidate.from + candidate.durationInFrames, item.from),
   )
   return leftClip
-    ? resolveTargetForPair(leftClip, item, transitions, preferredDurationInFrames, alignment)
+    ? resolveTargetForPair(
+        leftClip,
+        item,
+        transitions,
+        preferredDurationInFrames,
+        alignment,
+        allowDurationClamp,
+      )
     : null
 }
 
@@ -145,6 +176,7 @@ export function resolveTransitionTargetFromSelection(params: {
   transitions: Transition[]
   preferredDurationInFrames?: number
   alignment?: number
+  allowDurationClamp?: boolean
 }): ResolvedTransitionTarget | null {
   const {
     selectedItemIds,
@@ -152,6 +184,7 @@ export function resolveTransitionTargetFromSelection(params: {
     transitions,
     preferredDurationInFrames = TRANSITION_CONFIGS.crossfade.defaultDuration,
     alignment = 0.5,
+    allowDurationClamp = true,
   } = params
 
   if (selectedItemIds.length !== 1) return null
@@ -164,6 +197,7 @@ export function resolveTransitionTargetFromSelection(params: {
     transitions,
     preferredDurationInFrames,
     alignment,
+    allowDurationClamp,
   })
   if (rightTarget && (rightTarget.hasExisting || rightTarget.canApply)) {
     return rightTarget
@@ -176,6 +210,7 @@ export function resolveTransitionTargetFromSelection(params: {
     transitions,
     preferredDurationInFrames,
     alignment,
+    allowDurationClamp,
   })
   if (leftTarget && (leftTarget.hasExisting || leftTarget.canApply)) {
     return leftTarget

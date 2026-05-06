@@ -1,6 +1,6 @@
 import type { TimelineItem } from '@/types/timeline'
 import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner'
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
+import { easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
 
 export interface ActiveTransition<TItem extends TimelineItem = TimelineItem> {
   transition: ResolvedTransitionWindow<TItem>['transition']
@@ -53,8 +53,6 @@ export function calculateTransitionProgress(
   const linearProgress = Math.max(0, Math.min(1, localFrame / maxFrame))
 
   switch (timing) {
-    case 'spring':
-      return springEasing(linearProgress, { tension: 180, friction: 12, mass: 1 })
     case 'ease-in':
       return easeIn(linearProgress)
     case 'ease-out':

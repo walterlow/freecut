@@ -36,6 +36,7 @@ interface CompositionFilmstripSegmentProps {
   fps: number
   pixelsPerSecond: number
   preferImmediateRendering: boolean
+  isReversed?: boolean
 }
 
 function CompositionFilmstripSegment({
@@ -49,6 +50,7 @@ function CompositionFilmstripSegment({
   fps,
   pixelsPerSecond,
   preferImmediateRendering,
+  isReversed = false,
 }: CompositionFilmstripSegmentProps) {
   const mediaId = segment.mediaId
   const mediaFps = useMediaLibraryStore(
@@ -73,6 +75,8 @@ function CompositionFilmstripSegment({
     mediaDuration > 0 && segment.sourceDurationFrames > 0
       ? (segment.sourceStart / segment.sourceDurationFrames) * mediaDuration
       : segment.sourceStart / Math.max(1, mediaFps)
+  const sourceEndSeconds =
+    sourceStartSeconds + (segment.durationInFrames / Math.max(1, fps)) * segment.speed
 
   const segmentEndFraction = leftFraction + widthFraction
   const overlapStart = Math.max(wrapperVisibleStartRatio, leftFraction)
@@ -101,9 +105,11 @@ function CompositionFilmstripSegment({
         clipWidth={segmentClipWidth}
         renderWidth={segmentRenderWidth}
         sourceStart={sourceStartSeconds}
+        sourceEnd={sourceEndSeconds}
         sourceDuration={sourceDurationSeconds}
         trimStart={0}
         speed={segment.speed}
+        isReversed={isReversed}
         fps={fps}
         isVisible={segmentIsVisible}
         visibleStartRatio={segmentVisibleStartRatio}
@@ -305,9 +311,17 @@ export const ClipContent = memo(function ClipContent({
     mediaDuration > 0
       ? (sourceStartFrames / sourceDurationFrames) * mediaDuration
       : sourceStartFrames / sourceFps
+  const sourceEndFrames = item.sourceEnd
+  const sourceEnd =
+    sourceEndFrames === undefined
+      ? undefined
+      : mediaDuration > 0
+        ? (sourceEndFrames / sourceDurationFrames) * mediaDuration
+        : sourceEndFrames / sourceFps
 
   const trimStart = (item.trimStart ?? 0) / fps
   const speed = item.speed ?? 1
+  const isReversed = item.isReversed === true
   const compoundClipTimelineFps = composition?.fps ?? fps
   const compoundClipSourceDuration = compositionSourceDurationFrames / compoundClipTimelineFps
   const compoundClipSourceStart = compositionSourceStartFrames / compoundClipTimelineFps
@@ -355,9 +369,11 @@ export const ClipContent = memo(function ClipContent({
                 clipWidth={clipWidth}
                 renderWidth={renderWidth}
                 sourceStart={sourceStart}
+                sourceEnd={sourceEnd}
                 sourceDuration={sourceDuration}
                 trimStart={trimStart}
                 speed={speed}
+                isReversed={isReversed}
                 fps={fps}
                 isVisible={clipVisibility.isVisible}
                 visibleStartRatio={clipVisibility.visibleStartRatio}
@@ -401,9 +417,11 @@ export const ClipContent = memo(function ClipContent({
                 clipWidth={clipWidth}
                 renderWidth={renderWidth}
                 sourceStart={sourceStart}
+                sourceEnd={sourceEnd}
                 sourceDuration={sourceDuration}
                 trimStart={trimStart}
                 speed={speed}
+                isReversed={isReversed}
                 fps={fps}
                 isVisible={clipVisibility.isVisible}
                 visibleStartRatio={clipVisibility.visibleStartRatio}
@@ -476,6 +494,7 @@ export const ClipContent = memo(function ClipContent({
                       fps={fps}
                       pixelsPerSecond={pixelsPerSecond}
                       preferImmediateRendering={preferImmediateRendering}
+                      isReversed={isReversed}
                     />
                   ))}
               </div>
@@ -528,6 +547,23 @@ export const ClipContent = memo(function ClipContent({
     return (
       <div className="absolute inset-0 flex flex-col overflow-hidden">
         {renderCompoundClipLabel(item.label || 'Compound Clip')}
+      </div>
+    )
+  }
+
+  // Subtitle segment - label + cue count + first-cue snippet so the strip is
+  // skimmable without expanding into a full-text preview that won't fit.
+  if (item.type === 'subtitle') {
+    const cueCount = item.cues.length
+    const firstCueText = item.cues[0]?.text ?? ''
+    return (
+      <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
+        <div className="text-[10px] text-muted-foreground truncate">
+          {`Subtitles · ${cueCount} cue${cueCount === 1 ? '' : 's'}`}
+        </div>
+        <div className="text-xs font-medium truncate flex-1">
+          {firstCueText || item.label || 'Subtitles'}
+        </div>
       </div>
     )
   }

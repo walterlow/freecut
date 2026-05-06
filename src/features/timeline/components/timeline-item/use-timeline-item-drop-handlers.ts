@@ -12,13 +12,18 @@ import { useTimelineStore } from '../../stores/timeline-store'
 import { useItemsStore } from '../../stores/items-store'
 import { useTransitionsStore } from '../../stores/transitions-store'
 import { useEffectDropPreviewStore } from '../../stores/effect-drop-preview-store'
-import { useTrackDropPreviewStore } from '../../stores/track-drop-preview-store'
+import {
+  hasTrackDropGhostPreviews,
+  useTrackDropPreviewStore,
+} from '../../stores/track-drop-preview-store'
 import { resolveTransitionTargetForEdge } from '@/features/timeline/utils/transition-targets'
 import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils'
 import { isDragPointInsideElement, resolveEffectDropTargetIds } from '../../utils/effect-drop'
 import { getTemplateEffectsForDirectApplication } from '../../utils/generated-layer-items'
 
 type AddEffects = ReturnType<typeof useTimelineStore.getState>['addEffects']
+const CUT_DROP_LEFT_PLACEMENT_THRESHOLD = 1 / 3
+const CUT_DROP_RIGHT_PLACEMENT_THRESHOLD = 2 / 3
 
 interface UseTimelineItemDropHandlersParams {
   item: TimelineItemType
@@ -54,6 +59,16 @@ function readDraggedTransitionDescriptor(
   }
 }
 
+function resolveTransitionDropAlignment(event: React.DragEvent<HTMLDivElement>): number {
+  const rect = event.currentTarget.getBoundingClientRect()
+  if (rect.width <= 0) return 0.5
+
+  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+  if (ratio < CUT_DROP_LEFT_PLACEMENT_THRESHOLD) return 1
+  if (ratio > CUT_DROP_RIGHT_PLACEMENT_THRESHOLD) return 0
+  return 0.5
+}
+
 export function useTimelineItemDropHandlers({
   item,
   trackLocked,
@@ -67,11 +82,14 @@ export function useTimelineItemDropHandlers({
       }
 
       const dragState = useTransitionDragStore.getState()
+      const alignment = resolveTransitionDropAlignment(e)
       const target = resolveTransitionTargetForEdge({
         itemId: item.id,
         edge,
         items: useItemsStore.getState().items,
         transitions: useTransitionsStore.getState().transitions,
+        alignment,
+        allowDurationClamp: false,
       })
 
       if (!target) {
@@ -143,6 +161,8 @@ export function useTimelineItemDropHandlers({
         edge,
         items: useItemsStore.getState().items,
         transitions: useTransitionsStore.getState().transitions,
+        alignment: resolveTransitionDropAlignment(e),
+        allowDurationClamp: false,
       })
 
       if (!target || target.hasExisting || !target.canApply) {
@@ -162,6 +182,7 @@ export function useTimelineItemDropHandlers({
           target.suggestedDurationInFrames,
           dragDescriptor.presentation,
           dragDescriptor.direction,
+          target.alignment,
         )
       useTransitionDragStore.getState().clearDrag()
     },
@@ -280,6 +301,10 @@ export function useTimelineItemDropHandlers({
       const effects = resolveDirectEffectDropTemplate(parsedPayload)
       const targetItemIds = resolveEffectDropTargets(parsedPayload)
       useEffectDropPreviewStore.getState().clearPreview()
+
+      if (effects && hasTrackDropGhostPreviews()) {
+        return
+      }
 
       if (!effects || targetItemIds.length === 0) {
         return

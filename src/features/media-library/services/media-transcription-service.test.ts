@@ -211,6 +211,16 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
     expect(insertedItems).toHaveLength(1)
     expect(insertedItems[0]?.trackId).toBe(captionTrack?.id)
+    expect(insertedItems[0]).toMatchObject({
+      type: 'subtitle',
+      label: 'Transcript',
+      source: {
+        type: 'transcript',
+        mediaId: 'media-1',
+        clipId: 'clip-1',
+      },
+      cues: [{ text: 'Hello there', startSeconds: 0, endSeconds: 2 }],
+    })
     expect(removeItems).not.toHaveBeenCalled()
   })
 
@@ -298,7 +308,97 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
     expect(insertedItems[0]?.trackId).toBe(captionTrack?.id)
     expect(insertedItems[0]?.trackId).not.toBe('track-audio')
+    expect(insertedItems[0]?.type).toBe('subtitle')
     expect(removeItems).toHaveBeenCalledWith(['caption-old'])
+  })
+
+  it('replaces an existing transcript subtitle segment with a single refreshed segment', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 150,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 150,
+      sourceDuration: 150,
+      sourceFps: 30,
+      speed: 1,
+    }
+    const captionTrack = { ...makeTrack('track-captions', 0), kind: 'video' as const }
+    const videoTrack = { ...makeTrack('track-video', 1), kind: 'video' as const }
+    const existingTranscript: TimelineItem = {
+      id: 'transcript-old',
+      type: 'subtitle',
+      trackId: 'track-captions',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Transcript',
+      mediaId: 'media-1',
+      source: {
+        type: 'transcript',
+        mediaId: 'media-1',
+        clipId: 'clip-1',
+      },
+      cues: [{ id: 'old-cue', startSeconds: 0, endSeconds: 2, text: 'Old text' }],
+      color: '#fff',
+    }
+    const setTracks = vi.fn()
+    const removeItems = vi.fn()
+    const addItems = vi.fn()
+
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [captionTrack, videoTrack],
+      items: [clip, existingTranscript],
+      setTracks,
+      removeItems,
+      addItems,
+    })
+
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: 'Fresh one Fresh two',
+      segments: [
+        { text: 'Fresh one', start: 0, end: 1 },
+        { text: 'Fresh two', start: 1, end: 3 },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsCaptions('media-1', {
+      clipIds: ['clip-1'],
+      replaceExisting: true,
+    })
+
+    expect(result).toEqual({
+      insertedItemCount: 1,
+      removedItemCount: 1,
+    })
+    expect(setTracks).not.toHaveBeenCalled()
+    expect(removeItems).toHaveBeenCalledWith(['transcript-old'])
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    expect(insertedItems).toHaveLength(1)
+    expect(insertedItems[0]).toMatchObject({
+      type: 'subtitle',
+      trackId: 'track-captions',
+      source: {
+        type: 'transcript',
+        mediaId: 'media-1',
+        clipId: 'clip-1',
+      },
+    })
+    if (insertedItems[0]?.type === 'subtitle') {
+      expect(insertedItems[0].cues.map((cue) => cue.text)).toEqual(['Fresh one', 'Fresh two'])
+    }
   })
 })
 
@@ -330,6 +430,54 @@ describe('mediaTranscriptionService.transcribeMedia', () => {
     expect(transcribeMock).toHaveBeenCalledTimes(1)
     expect(transcribeMock.mock.calls[0]?.[0]).toBe(sourceFile)
     expect(saveTranscriptMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('splits word-timestamped Whisper chunks into readable caption segments', async () => {
+    const sourceFile = new File(['audio'], 'clip.mp3', { type: 'audio/mpeg' })
+    getMediaMock.mockResolvedValue({
+      id: 'media-1',
+      fileName: 'clip.mp3',
+      mimeType: 'audio/mpeg',
+      codec: 'mp3',
+      fileLastModified: 123,
+    })
+    getMediaFileMock.mockResolvedValue(sourceFile)
+    transcribeCollectMock.mockResolvedValue([
+      {
+        text: " my sentences. So once again, I'm going to talk about the Netherlands in this video.",
+        start: 0,
+        end: 5,
+        words: [
+          { text: 'my', start: 0, end: 0.2 },
+          { text: 'sentences.', start: 0.22, end: 0.7 },
+          { text: 'So', start: 1.4, end: 1.6 },
+          { text: 'once', start: 1.62, end: 1.9 },
+          { text: 'again,', start: 1.92, end: 2.2 },
+          { text: "I'm", start: 2.22, end: 2.4 },
+          { text: 'going', start: 2.42, end: 2.7 },
+          { text: 'to', start: 2.72, end: 2.84 },
+          { text: 'talk', start: 2.86, end: 3.1 },
+          { text: 'about', start: 3.12, end: 3.38 },
+          { text: 'the', start: 3.4, end: 3.52 },
+          { text: 'Netherlands', start: 3.54, end: 4.1 },
+          { text: 'in', start: 4.12, end: 4.25 },
+          { text: 'this', start: 4.27, end: 4.42 },
+          { text: 'video.', start: 4.44, end: 4.8 },
+        ],
+      },
+    ])
+
+    await mediaTranscriptionService.transcribeMedia('media-1')
+
+    const saved = saveTranscriptMock.mock.calls[0]?.[0] as MediaTranscript
+    expect(saved.segments.length).toBeGreaterThan(1)
+    expect(saved.segments.every((segment) => segment.text.length <= 72)).toBe(true)
+    expect(saved.segments.every((segment) => (segment.words?.length ?? 0) > 0)).toBe(true)
+    expect(saved.segments.map((segment) => segment.text)).toEqual([
+      'my sentences.',
+      "So once again, I'm going to talk about the Netherlands in this",
+      'video.',
+    ])
   })
 
   it('transcribes a conformed wav for custom-decoded codecs like pcm-s16be', async () => {

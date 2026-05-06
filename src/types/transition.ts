@@ -13,10 +13,14 @@ export type TransitionType = 'crossfade'
  */
 export type TransitionCategory =
   | 'basic'
+  | 'dissolve'
+  | 'motion'
   | 'wipe'
   | 'slide'
   | 'flip'
   | 'mask'
+  | 'iris'
+  | 'shape'
   | 'light'
   | 'chromatic'
   | 'custom'
@@ -27,15 +31,21 @@ export type TransitionCategory =
  */
 export type BuiltinTransitionPresentation =
   | 'fade'
+  | 'barnDoor'
   | 'wipe'
   | 'slide'
+  | 'split'
   | 'flip'
   | 'clockWipe'
   | 'iris'
   | 'dissolve'
+  | 'additiveDissolve'
+  | 'blurDissolve'
+  | 'dipToColorDissolve'
+  | 'nonAdditiveDissolve'
+  | 'smoothCut'
   | 'sparkles'
   | 'glitch'
-  | 'lightLeak'
   | 'pixelate'
   | 'chromatic'
   | 'radialBlur'
@@ -43,6 +53,27 @@ export type BuiltinTransitionPresentation =
   | 'lensWarpZoom'
   | 'lightLeakBurn'
   | 'filmGateSlip'
+  | 'arrowIris'
+  | 'crossIris'
+  | 'diamondIris'
+  | 'eyeIris'
+  | 'hexagonIris'
+  | 'ovalIris'
+  | 'pentagonIris'
+  | 'squareIris'
+  | 'triangleIris'
+  | 'boxShape'
+  | 'heartShape'
+  | 'starShape'
+  | 'triangleLeftShape'
+  | 'triangleRightShape'
+  | 'bandWipe'
+  | 'centerWipe'
+  | 'edgeWipe'
+  | 'radialWipe'
+  | 'spiralWipe'
+  | 'venetianBlindWipe'
+  | 'xWipe'
 
 /**
  * Visual presentation styles for transitions.
@@ -70,13 +101,7 @@ export type FlipDirection = 'from-left' | 'from-right' | 'from-top' | 'from-bott
  * Timing function for transitions.
  * Extended with standard CSS easing names.
  */
-export type TransitionTiming =
-  | 'linear'
-  | 'spring'
-  | 'ease-in'
-  | 'ease-out'
-  | 'ease-in-out'
-  | 'cubic-bezier'
+export type TransitionTiming = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'cubic-bezier'
 
 /**
  * Bezier control points for cubic-bezier timing
@@ -237,6 +262,31 @@ export interface TransitionDefinition {
   maxDuration: number
   /** Whether this transition benefits from WebGL acceleration */
   requiresWebGL?: boolean
+  /** User-editable parameters supported by the renderer */
+  parameters?: TransitionParameterDefinition[]
+}
+
+export type TransitionParameterType = 'number' | 'color'
+
+export interface TransitionParameterDefinition {
+  /** Property key stored on Transition.properties */
+  key: string
+  /** Display label */
+  label: string
+  /** Control type */
+  type: TransitionParameterType
+  /** Default value written when the property is unset */
+  defaultValue: number | [number, number, number]
+  /** Numeric slider bounds */
+  min?: number
+  max?: number
+  step?: number
+  /** Optional display suffix */
+  unit?: string
+  /** Short tooltip for the property row */
+  description?: string
+  /** Color values are stored as normalized RGB arrays */
+  valueFormat?: 'rgb-array'
 }
 
 /**
@@ -250,6 +300,8 @@ export interface PresentationConfig {
   icon: string // Icon name from lucide-react
   category: TransitionCategory
   direction?: WipeDirection | SlideDirection | FlipDirection
+  directions?: Array<WipeDirection | SlideDirection | FlipDirection>
+  defaultDirection?: WipeDirection | SlideDirection | FlipDirection
 }
 
 /**

@@ -10,14 +10,17 @@ import { useSelectionStore } from '@/shared/state/selection'
 import {
   closeAllGapsOnTrack,
   closeGapAtPosition,
+  commitPreparedReverseItems,
   linkItems,
   removeItems,
+  reverseItems,
   rippleDeleteItems,
   splitItem,
   splitItemAtFrames,
   unlinkItems,
 } from './item-actions'
 import { getLinkedSyncOffsetFrames } from '../../utils/linked-items'
+import { useReverseConformDialogStore } from '../reverse-conform-dialog-store'
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   return {
@@ -92,6 +95,7 @@ describe('linked timeline items', () => {
     useTransitionsStore.getState().setTransitions([])
     useKeyframesStore.getState().setKeyframes([])
     useSelectionStore.getState().clearSelection()
+    useReverseConformDialogStore.setState({ request: null })
   })
 
   it('splits linked video/audio items together and preserves pairing per segment', () => {
@@ -114,6 +118,64 @@ describe('linked timeline items', () => {
     expect(rightVideo?.linkedGroupId).toBe(rightAudio?.linkedGroupId)
     expect(leftVideo?.linkedGroupId).not.toBe(rightVideo?.linkedGroupId)
     expect(useSelectionStore.getState().selectedItemIds).toEqual(['video-1', 'audio-1'])
+  })
+
+  it('reverses synchronized video/audio items together even when linked selection is disabled', () => {
+    useEditorStore.setState({ linkedSelectionEnabled: false })
+    useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()])
+
+    reverseItems(['video-1'])
+
+    const request = useReverseConformDialogStore.getState().request
+    expect(request?.items.map((item) => item.id)).toEqual(['video-1', 'audio-1'])
+    expect(request?.videoItems.map((item) => item.id)).toEqual(['video-1'])
+    expect(useItemsStore.getState().itemById['video-1']?.isReversed).toBeUndefined()
+    expect(useItemsStore.getState().itemById['audio-1']?.isReversed).toBeUndefined()
+
+    commitPreparedReverseItems(request?.items ?? [], [
+      {
+        itemId: 'video-1',
+        src: 'blob:reverse',
+        path: 'reverse/video.mp4',
+        key: 'reverse-key',
+        quality: 'preview',
+        usesProxy: true,
+      },
+    ])
+
+    expect(useItemsStore.getState().itemById['video-1']?.isReversed).toBe(true)
+    expect(useItemsStore.getState().itemById['audio-1']?.isReversed).toBe(true)
+    expect(useItemsStore.getState().itemById['video-1']?.reverseConformPreviewSrc).toBe(
+      'blob:reverse',
+    )
+
+    reverseItems(['video-1'])
+
+    expect(useItemsStore.getState().itemById['video-1']?.isReversed).toBeUndefined()
+    expect(useItemsStore.getState().itemById['audio-1']?.isReversed).toBeUndefined()
+  })
+
+  it('repairs mixed reverse state across synchronized video/audio items', () => {
+    useItemsStore
+      .getState()
+      .setItems([makeVideoItem({ isReversed: true }), makeAudioItem({ isReversed: undefined })])
+
+    reverseItems(['video-1'])
+
+    const request = useReverseConformDialogStore.getState().request
+    commitPreparedReverseItems(request?.items ?? [], [
+      {
+        itemId: 'video-1',
+        src: 'blob:reverse',
+        path: 'reverse/video.mp4',
+        key: 'reverse-key',
+        quality: 'preview',
+        usesProxy: true,
+      },
+    ])
+
+    expect(useItemsStore.getState().itemById['video-1']?.isReversed).toBe(true)
+    expect(useItemsStore.getState().itemById['audio-1']?.isReversed).toBe(true)
   })
 
   it('multi-splits linked video/audio items together without creating sync drift badges', () => {

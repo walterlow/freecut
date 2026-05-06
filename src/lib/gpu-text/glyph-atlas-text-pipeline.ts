@@ -42,6 +42,7 @@ interface PackedGlyph {
 
 interface TextLayoutLine {
   text: string
+  width: number
   font: string
   fontSize: number
   lineHeightPx: number
@@ -333,18 +334,31 @@ export class GlyphAtlasTextPipeline {
           : padding + (availableHeight - totalHeight) / 2
 
     const glyphs: PackedGlyph[] = []
-    if (item.backgroundColor) {
+    if (item.backgroundColor && lines.length > 0) {
       const backgroundColor = parseGpuTextColor(item.backgroundColor)
       const backgroundGlyph = this.ensureSolidGlyph()
       if (!backgroundColor || !backgroundGlyph) return null
+      const maxLineWidth = Math.max(...lines.map((line) => line.width))
+      const backgroundWidth = Math.min(width, maxLineWidth + padding * 2)
+      const backgroundHeight = totalHeight + padding * 2
+      const textAlign = item.textAlign ?? 'center'
+      const backgroundX =
+        textAlign === 'left'
+          ? 0
+          : textAlign === 'right'
+            ? width - backgroundWidth
+            : (width - backgroundWidth) / 2
       glyphs.push({
         metrics: backgroundGlyph,
-        x: 0,
-        y: 0,
-        width,
-        height,
+        x: backgroundX,
+        y: currentTop - padding,
+        width: backgroundWidth,
+        height: backgroundHeight,
         color: backgroundColor,
-        solidRadius: Math.max(0, Math.min(item.backgroundRadius ?? 0, width / 2, height / 2)),
+        solidRadius: Math.max(
+          0,
+          Math.min(item.backgroundRadius ?? 0, backgroundWidth / 2, backgroundHeight / 2),
+        ),
       })
     }
 
@@ -452,6 +466,7 @@ export class GlyphAtlasTextPipeline {
       for (const line of this.wrapText(span.text ?? '', font, availableWidth, letterSpacing)) {
         lines.push({
           text: line,
+          width: this.measureText(line, font, letterSpacing),
           font,
           fontSize,
           lineHeightPx,

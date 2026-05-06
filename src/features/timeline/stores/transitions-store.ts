@@ -38,6 +38,7 @@ interface TransitionsActions {
     durationInFrames?: number,
     presentation?: TransitionPresentation,
     direction?: WipeDirection | SlideDirection | FlipDirection,
+    alignment?: number,
   ) => string
   _updateTransition: (
     id: string,
@@ -66,11 +67,20 @@ function normalizeTransitionDuration(durationInFrames: number): number {
   return Math.max(1, Math.round(durationInFrames))
 }
 
+function normalizeTransitionAlignment(alignment: number | undefined): number {
+  if (typeof alignment !== 'number' || !Number.isFinite(alignment)) return 0.5
+  return Math.max(0, Math.min(1, alignment))
+}
+
 function normalizeTransition(transition: Transition): Transition {
+  const timing =
+    (transition.timing as string | undefined) === 'spring' ? 'linear' : transition.timing
+
   return {
     ...transition,
     durationInFrames: normalizeTransitionDuration(transition.durationInFrames),
-    timing: transition.timing ?? 'linear',
+    alignment: normalizeTransitionAlignment(transition.alignment),
+    timing: timing ?? 'linear',
   }
 }
 
@@ -174,6 +184,7 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
     durationInFrames,
     presentation = 'fade',
     direction,
+    alignment = 0.5,
   ) => {
     const config = TRANSITION_CONFIGS[type]
     const duration = normalizeTransitionDuration(durationInFrames ?? config.defaultDuration)
@@ -190,6 +201,7 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
       presentation,
       timing: 'linear',
       direction,
+      alignment: normalizeTransitionAlignment(alignment),
     }
 
     set((state) => {
@@ -205,13 +217,13 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
     set((state) => {
       const nextTransitions = state.transitions.map((t) => {
         if (t.id !== id) return t
-        const normalizedUpdates =
-          updates.durationInFrames === undefined
-            ? updates
-            : {
-                ...updates,
-                durationInFrames: normalizeTransitionDuration(updates.durationInFrames),
-              }
+        const normalizedUpdates = { ...updates }
+        if (updates.durationInFrames !== undefined) {
+          normalizedUpdates.durationInFrames = normalizeTransitionDuration(updates.durationInFrames)
+        }
+        if (updates.alignment !== undefined) {
+          normalizedUpdates.alignment = normalizeTransitionAlignment(updates.alignment)
+        }
         return normalizeTransition({ ...t, ...normalizedUpdates })
       })
       return withTransitionIndexes(nextTransitions, state)

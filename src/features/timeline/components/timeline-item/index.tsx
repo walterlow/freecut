@@ -23,8 +23,24 @@ import { useEditorStore } from '@/app/state/editor'
 import { useSourcePlayerStore } from '@/shared/state/source-player'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useTransitionDragStore } from '@/shared/state/transition-drag'
+import { TRANSITION_CONFIGS } from '@/types/transition'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service'
+import {
+  mediaLibraryService as mediaLibraryServiceForSubtitles,
+  useEmbeddedSubtitlePickerStore,
+} from '@/features/timeline/deps/media-library-service'
+
+function isEmbeddedSubtitleContainer(fileName: string, mimeType: string): boolean {
+  const name = fileName.toLowerCase()
+  return (
+    mimeType === 'video/x-matroska' ||
+    mimeType === 'video/matroska' ||
+    mimeType === 'video/webm' ||
+    name.endsWith('.mkv') ||
+    name.endsWith('.webm')
+  )
+}
 import {
   TranscribeDialog,
   type TranscribeDialogValues,
@@ -158,6 +174,8 @@ const TRACK_PUSH_ZOOM_THRESHOLD = 120
 const COMPACT_CLIP_MAX_WIDTH_PX = 36
 const JOIN_INDICATOR_MIN_ZOOM_PPS = 30
 const SPEED_BADGE_EPSILON = 0.005
+const TRANSITION_DROP_HIT_MIN_WIDTH_PX = 72
+const TRANSITION_DROP_HIT_MAX_WIDTH_PX = 240
 
 function getPixelsPerSecondNow(): number {
   return useZoomStore.getState().pixelsPerSecond
@@ -373,10 +391,116 @@ export const TimelineItem = memo(
         ) ?? null
       )
     }, [item.id, item.mediaId, item.type, linkedItemsForCaptionOwnership])
+    const reverseMenuShowsUnreverse = useMemo(() => {
+      if (item.type !== 'video' && item.type !== 'audio') {
+        return false
+      }
+
+      const linkedItems =
+        linkedItemsForCaptionOwnership.length > 0 ? linkedItemsForCaptionOwnership : [item]
+      const reversibleItems = linkedItems.filter(
+        (candidate) => candidate.type === 'video' || candidate.type === 'audio',
+      )
+      return (
+        reversibleItems.length > 0 &&
+        reversibleItems.every((candidate) => candidate.isReversed === true)
+      )
+    }, [item, linkedItemsForCaptionOwnership])
     const canManageCaptions =
       !!item.mediaId &&
       !isBroken &&
       (item.type === 'video' || (item.type === 'audio' && linkedVideoCaptionOwner === null))
+
+    const mediaForItem = useMediaLibraryStore(
+      useCallback(
+        (s) => (item.mediaId ? (s.mediaItems.find((m) => m.id === item.mediaId) ?? null) : null),
+        [item.mediaId],
+      ),
+    )
+    const canExtractEmbeddedSubtitles = !!(
+      mediaForItem &&
+      !isBroken &&
+      isEmbeddedSubtitleContainer(mediaForItem.fileName, mediaForItem.mimeType)
+    )
+    const handleExtractEmbeddedSubtitles = useCallback(async () => {
+      if (!mediaForItem) return
+      const mediaStore = useMediaLibraryStore.getState()
+      try {
+        const handle = mediaForItem.fileHandle
+        if (mediaForItem.storageType === 'handle' && handle) {
+          const granted =
+            (await handle.requestPermission({ mode: 'read' }).catch(() => 'denied' as const)) ===
+            'granted'
+          if (!granted) {
+            mediaStore.showNotification?.({
+              type: 'error',
+              message: `FreeCut needs permission to read "${mediaForItem.fileName}" before extracting subtitles.`,
+            })
+            return
+          }
+          const blob = await handle.getFile()
+          useEmbeddedSubtitlePickerStore.getState().open(mediaForItem, blob)
+          return
+        }
+        // Non-handle storage: fall back to the workspace blob lookup.
+        const blob = await mediaLibraryServiceForSubtitles.getMediaFile(mediaForItem.id)
+        if (!blob) {
+          mediaStore.showNotification?.({
+            type: 'error',
+            message: `FreeCut could not load "${mediaForItem.fileName}".`,
+          })
+          return
+        }
+        useEmbeddedSubtitlePickerStore.getState().open(mediaForItem, blob)
+      } catch (error) {
+        mediaStore.showNotification?.({
+          type: 'error',
+          message:
+            error instanceof Error
+              ? error.message
+              : `Failed to open "${mediaForItem.fileName}" for subtitle extraction.`,
+        })
+      }
+    }, [mediaForItem])
+
+    // Per-cue caption consolidation — only meaningful when this clip has at
+    // least one generated caption text item linked to it.
+    const hasConsolidatablePerCueCaptions = useTimelineStore(
+      useCallback(
+        (s) =>
+          s.items.some(
+            (other) =>
+              other.type === 'text' &&
+              (other.captionSource?.type === 'embedded-subtitles' ||
+                other.captionSource?.type === 'subtitle-import') &&
+              other.captionSource.clipId === item.id,
+          ),
+        [item.id],
+      ),
+    )
+    const handleConsolidateCaptionsToSegment = useCallback(async () => {
+      const mediaStore = useMediaLibraryStore.getState()
+      try {
+        const { subtitleSidecarService } =
+          await import('@/features/timeline/deps/subtitle-sidecar-service')
+        const result = subtitleSidecarService.consolidatePerCueCaptionsToSegments({
+          clipId: item.id,
+        })
+        mediaStore.showNotification?.({
+          type: 'success',
+          message:
+            result.segmentsCreated > 0
+              ? `Consolidated ${result.cuesConsolidated} caption${result.cuesConsolidated === 1 ? '' : 's'} into ${result.segmentsCreated} segment${result.segmentsCreated === 1 ? '' : 's'}.`
+              : 'No per-cue captions found for this clip.',
+        })
+      } catch (error) {
+        mediaStore.showNotification?.({
+          type: 'error',
+          message:
+            error instanceof Error ? error.message : 'Failed to consolidate captions to segment.',
+        })
+      }
+    }, [item.id])
 
     // Use refs for actions to avoid selector re-renders - read from store in callbacks
     const activeTool = useSelectionStore((s) => s.activeTool)
@@ -1135,6 +1259,14 @@ export const TimelineItem = memo(
     ])
     const visualLeft = Math.round(frameToPixelsNow(visualLeftFrame))
     const visualWidth = Math.round(frameToPixelsNow(visualWidthFrames))
+    const transitionDropHitWidth = Math.min(
+      TRANSITION_DROP_HIT_MAX_WIDTH_PX,
+      Math.max(
+        TRANSITION_DROP_HIT_MIN_WIDTH_PX,
+        Math.round(frameToPixelsNow(TRANSITION_CONFIGS.crossfade.defaultDuration) * 2),
+      ),
+    )
+    const transitionDropHalfHitWidth = transitionDropHitWidth / 2
     // Early width check ââ‚¬” used to short-circuit expensive computations below.
     // The full useCompactClipShell (which also checks interaction/badge state) is computed later for JSX gating.
     const isCompactWidth = visualWidth > 0 && visualWidth <= COMPACT_CLIP_MAX_WIDTH_PX
@@ -1759,6 +1891,7 @@ export const TimelineItem = memo(
       handleRippleDelete,
       handleLinkSelected,
       handleUnlinkSelected,
+      handleReverseSelected,
       handleClearAllKeyframes,
       handleClearPropertyKeyframes,
       handleBentoLayout,
@@ -1770,6 +1903,10 @@ export const TimelineItem = memo(
       handleEnterComposition,
       handleDissolveComposition,
       handleDetectScenes,
+      handleRemoveSilence,
+      handleRemoveFillers,
+      isRemovingSilence,
+      isRemovingFillers,
     } = useTimelineItemActions({
       item,
       isBroken,
@@ -3099,6 +3236,9 @@ export const TimelineItem = memo(
           onClearAllKeyframes={handleClearAllKeyframes}
           onClearPropertyKeyframes={handleClearPropertyKeyframes}
           onBentoLayout={handleBentoLayout}
+          canReverse={item.type === 'video' || item.type === 'audio'}
+          isReversed={reverseMenuShowsUnreverse}
+          onReverse={handleReverseSelected}
           isVideoItem={item.type === 'video'}
           playheadInBounds={(() => {
             const frame = usePlaybackStore.getState().currentFrame
@@ -3119,6 +3259,14 @@ export const TimelineItem = memo(
             setCaptionDialogOpen(true)
           }}
           onApplyCaptionsFromTranscript={handleApplyCaptionsFromTranscript}
+          canExtractEmbeddedSubtitles={canExtractEmbeddedSubtitles}
+          onExtractEmbeddedSubtitles={
+            canExtractEmbeddedSubtitles ? handleExtractEmbeddedSubtitles : undefined
+          }
+          canConsolidateCaptionsToSegment={hasConsolidatablePerCueCaptions}
+          onConsolidateCaptionsToSegment={
+            hasConsolidatablePerCueCaptions ? handleConsolidateCaptionsToSegment : undefined
+          }
           isCompositionItem={isCompositionItem}
           onEnterComposition={handleEnterComposition}
           onDissolveComposition={handleDissolveComposition}
@@ -3127,6 +3275,16 @@ export const TimelineItem = memo(
           canDetectScenes={item.type === 'video' && !!item.mediaId && !isBroken}
           isDetectingScenes={isSceneDetectionActive}
           onDetectScenes={handleDetectScenes}
+          canRemoveSilence={
+            (item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken
+          }
+          isRemovingSilence={isRemovingSilence}
+          onRemoveSilence={handleRemoveSilence}
+          canRemoveFillers={
+            (item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken
+          }
+          isRemovingFillers={isRemovingFillers}
+          onRemoveFillers={handleRemoveFillers}
         >
           <div
             ref={transformRef}
@@ -3273,6 +3431,8 @@ export const TimelineItem = memo(
                 <ClipIndicators
                   hasKeyframes={hasKeyframes}
                   currentSpeed={currentSpeed}
+                  isReversed={item.isReversed === true}
+                  reverseConformStatus={item.reverseConformStatus}
                   isStretching={isStretching}
                   stretchFeedback={stretchFeedback}
                   isBroken={isBroken}
@@ -3433,16 +3593,24 @@ export const TimelineItem = memo(
             {!useCompactClipShell &&
               draggedTransition &&
               !trackLocked &&
-              (item.type === 'video' || item.type === 'image') && (
+              (item.type === 'video' || item.type === 'image' || item.type === 'composition') && (
                 <>
                   <div
-                    className="absolute inset-y-0 -left-2 z-40 w-4"
+                    className="absolute inset-y-0 z-40"
+                    style={{
+                      left: `${-transitionDropHalfHitWidth}px`,
+                      width: `${transitionDropHitWidth}px`,
+                    }}
                     onDragOver={handleTransitionCutDragOver('left')}
                     onDragLeave={handleTransitionCutDragLeave}
                     onDrop={handleTransitionCutDrop('left')}
                   />
                   <div
-                    className="absolute inset-y-0 -right-2 z-40 w-4"
+                    className="absolute inset-y-0 z-40"
+                    style={{
+                      left: `calc(100% - ${transitionDropHalfHitWidth}px)`,
+                      width: `${transitionDropHitWidth}px`,
+                    }}
                     onDragOver={handleTransitionCutDragOver('right')}
                     onDragLeave={handleTransitionCutDragLeave}
                     onDrop={handleTransitionCutDrop('right')}
@@ -3639,6 +3807,8 @@ export const TimelineItem = memo(
       prevItem.sourceFps === nextItem.sourceFps &&
       prevItem.trimStart === nextItem.trimStart &&
       prevItem.speed === nextItem.speed &&
+      prevItem.isReversed === nextItem.isReversed &&
+      prevItem.reverseConformStatus === nextItem.reverseConformStatus &&
       prevItem.volume === nextItem.volume &&
       prevItem.effects === nextItem.effects &&
       prevItem.audioFadeIn === nextItem.audioFadeIn &&

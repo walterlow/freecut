@@ -18,6 +18,10 @@ import { createOutputFormat, getDefaultAudioCodec, getMimeType } from './client-
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
 import { createLogger } from '@/shared/logging/logger'
 import { hasMediaCrop } from '@/shared/utils/media-crop'
+import {
+  buildTranscriptSubtitleWebVtt,
+  omitTranscriptSubtitleItemsForSoftSubtitleExport,
+} from './embedded-subtitle-export'
 
 // Subsystems
 import { createCompositionRenderer } from './client-render-engine'
@@ -119,6 +123,7 @@ function getPacketRemuxPlan(
 
   const videoItem = item as VideoItem
   if (!videoItem.src) return null
+  if (videoItem.isReversed === true) return null
   if (videoItem.from !== 0) return null
   if (videoItem.durationInFrames !== composition.durationInFrames) return null
   if ((videoItem.effects?.length ?? 0) > 0) return null
@@ -377,7 +382,14 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
   // Dynamically import mediabunny (AC-3 decoder is loaded lazily by canvas-audio when needed)
   const mediabunny: MediabunnyModule = await import('mediabunny')
-  const { Output, BufferTarget, VideoSampleSource, VideoSample, AudioBufferSource } = mediabunny
+  const {
+    Output,
+    BufferTarget,
+    VideoSampleSource,
+    VideoSample,
+    AudioBufferSource,
+    TextSubtitleSource,
+  } = mediabunny
 
   onProgress({
     phase: 'preparing',
@@ -420,9 +432,40 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     target,
   })
 
+  const transcriptSubtitleVtt = settings.embedSubtitles
+    ? buildTranscriptSubtitleWebVtt(composition)
+    : null
+  const supportsWebVttSubtitles = format.getSupportedSubtitleCodecs().includes('webvtt')
+  const embedTranscriptSubtitles = transcriptSubtitleVtt !== null && supportsWebVttSubtitles
+  const renderCompositionInput = embedTranscriptSubtitles
+    ? omitTranscriptSubtitleItemsForSoftSubtitleExport(composition)
+    : composition
+
+  if (transcriptSubtitleVtt !== null && !supportsWebVttSubtitles) {
+    throw new Error(
+      `${settings.container.toUpperCase()} export does not support embedded transcript subtitles. ` +
+        'Use MP4, WebM, or MKV for embedded subtitles.',
+    )
+  }
+
+  let transcriptSubtitleSource: InstanceType<typeof TextSubtitleSource> | null = null
+  if (embedTranscriptSubtitles) {
+    transcriptSubtitleSource = new TextSubtitleSource('webvtt')
+    output.addSubtitleTrack(transcriptSubtitleSource, {
+      languageCode: 'eng',
+      name: 'Transcript',
+      disposition: {
+        default: true,
+      },
+    })
+    getLog().info('Transcript subtitles will be embedded as WebVTT track', {
+      container: settings.container,
+    })
+  }
+
   // Get composition (project) resolution – this is what we render at
-  const compositionWidth = composition.width ?? settings.resolution.width
-  const compositionHeight = composition.height ?? settings.resolution.height
+  const compositionWidth = renderCompositionInput.width ?? settings.resolution.width
+  const compositionHeight = renderCompositionInput.height ?? settings.resolution.height
 
   // Export resolution – this is what we output (may be different from composition)
   const exportWidth = settings.resolution.width
@@ -516,6 +559,11 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   // Start the output
   await output.start()
 
+  if (transcriptSubtitleSource && transcriptSubtitleVtt) {
+    await transcriptSubtitleSource.add(transcriptSubtitleVtt)
+    transcriptSubtitleSource.close()
+  }
+
   // Feed audio buffer after output has started
   // AudioBufferSource.add() must be called after output.start()
   if (audioSource && audioBuffer) {
@@ -539,7 +587,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   })
 
   // Create a composition renderer
-  const frameRenderer = await createCompositionRenderer(composition, renderCanvas, ctx)
+  const frameRenderer = await createCompositionRenderer(renderCompositionInput, renderCanvas, ctx)
 
   try {
     // Preload media

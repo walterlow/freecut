@@ -107,22 +107,29 @@ export const TextContent: React.FC<{ item: TextItem & { _sequenceFrameOffset?: n
         display: 'flex',
         alignItems,
         justifyContent,
-        padding: `${textPadding * scale}px`,
-        backgroundColor,
-        borderRadius: `${backgroundRadius * scale}px`,
+        padding: backgroundColor ? 0 : `${textPadding * scale}px`,
         boxSizing: 'border-box',
       }}
     >
       <div
         style={{
+          backgroundColor,
+          borderRadius: `${backgroundRadius * scale}px`,
+          padding: backgroundColor ? `${textPadding * scale}px` : 0,
           textAlign: resolvedItem.textAlign ?? 'center',
           textShadow: cssTextShadow,
           WebkitTextStrokeWidth: strokeWidth,
           WebkitTextStrokeColor: stroke?.color,
+          // Paint stroke first, then fill on top — without this, a thick
+          // stroke covers the fill entirely (text becomes solid stroke
+          // color, e.g. illegible black-on-black for the TikTok preset).
+          paintOrder: 'stroke fill',
           display: 'flex',
           flexDirection: 'column',
           gap: 0,
-          width: '100%',
+          width: 'fit-content',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
         {spans.map((span, index) => {

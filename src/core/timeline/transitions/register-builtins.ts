@@ -8,10 +8,13 @@
 import { transitionRegistry } from './registry'
 import {
   registerBasicTransitions,
+  registerMotionTransitions,
   registerWipeTransitions,
   registerSlideTransitions,
   registerFlipTransitions,
   registerMaskTransitions,
+  registerIrisTransitions,
+  registerShapeTransitions,
   registerGpuTransitions,
 } from './renderers'
 
@@ -22,9 +25,12 @@ export function registerBuiltinTransitions(): void {
   registered = true
 
   registerBasicTransitions(transitionRegistry)
+  registerMotionTransitions(transitionRegistry)
   registerWipeTransitions(transitionRegistry)
   registerSlideTransitions(transitionRegistry)
   registerFlipTransitions(transitionRegistry)
   registerMaskTransitions(transitionRegistry)
+  registerIrisTransitions(transitionRegistry)
+  registerShapeTransitions(transitionRegistry)
   registerGpuTransitions(transitionRegistry)
 }

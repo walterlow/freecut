@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
-import type { ShapeItem } from '@/types/timeline'
+import type { ShapeItem, TextItem } from '@/types/timeline'
 import type { ItemRenderContext, ItemTransform } from './canvas-item-renderer'
+import { TextMeasurementCache } from './canvas-pool'
 
 const mockFns = vi.hoisted(() => ({
   drawCornerPinImageMock: vi.fn(),
@@ -29,15 +30,35 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
     restore: vi.fn(),
     drawImage: vi.fn(),
     beginPath: vi.fn(),
+    rect: vi.fn(),
     roundRect: vi.fn(),
     clip: vi.fn(),
     translate: vi.fn(),
     rotate: vi.fn(),
     scale: vi.fn(),
     fill: vi.fn(),
+    fillRect: vi.fn(),
+    fillText: vi.fn(),
+    strokeText: vi.fn(),
     clearRect: vi.fn(),
+    measureText: vi.fn((text: string) => ({
+      width: text.length * 10,
+      fontBoundingBoxAscent: 8,
+      fontBoundingBoxDescent: 2,
+    })),
     globalAlpha: 1,
     globalCompositeOperation: 'source-over',
+    font: '',
+    fillStyle: '#000000',
+    strokeStyle: '#000000',
+    lineWidth: 1,
+    lineJoin: 'miter',
+    textAlign: 'start',
+    textBaseline: 'alphabetic',
+    shadowColor: 'transparent',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
   } as unknown as OffscreenCanvasRenderingContext2D
 }
 
@@ -127,6 +148,71 @@ describe('canvas-item-renderer corner pin export path', () => {
 
     expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1)
     expect(mockFns.drawCornerPinImageMock.mock.calls[0]?.length).toBe(7)
+  })
+
+  it('uses projective corner pin rendering for text to avoid mesh wireframe seams', async () => {
+    const item: TextItem = {
+      id: 'text-1',
+      type: 'text',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Pinned title',
+      text: 'Headline',
+      color: '#ffffff',
+      fontSize: 72,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      cornerPin: {
+        topLeft: [0, 0],
+        topRight: [24, -12],
+        bottomRight: [10, 16],
+        bottomLeft: [-18, 8],
+      },
+      transform: {
+        x: 0,
+        y: 0,
+        width: 420,
+        height: 160,
+        rotation: 0,
+        opacity: 1,
+      },
+    }
+
+    const ctx = createMockCtx()
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1280, height: 720, fps: 30 },
+      canvasPool: {} as ItemRenderContext['canvasPool'],
+      textMeasureCache: new TextMeasurementCache(),
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+    }
+    const transform: ItemTransform = {
+      x: 0,
+      y: 0,
+      width: 420,
+      height: 160,
+      anchorX: 210,
+      anchorY: 80,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    }
+
+    await renderItem(ctx, item, transform, 0, rctx)
+
+    expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1)
+    expect(mockFns.drawCornerPinImageMock.mock.calls[0]?.[8]).toBe('projective')
   })
 
   it('flattens faded corner pin output before applying opacity', async () => {

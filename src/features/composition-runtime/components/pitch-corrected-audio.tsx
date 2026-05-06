@@ -3,6 +3,8 @@ import { createLogger } from '@/shared/logging/logger'
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores'
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores'
 import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache'
+import { audioBufferToWavBlob } from '../utils/audio-buffer-wav'
+import { createReversedAudioBuffer } from '../utils/audio-buffer-utils'
 import { getAudioTargetTimeSeconds } from '../utils/video-timing'
 import {
   acquirePreviewAudioElement,
@@ -45,6 +47,11 @@ interface DecodedPitchSource {
   isComplete: boolean
 }
 
+type DecodedPitchFallbackAudioProps = PitchCorrectedAudioProps & {
+  audioBuffer: AudioBuffer
+  sourceStartOffsetSec: number
+}
+
 function shouldReplaceDecodedPitchSource(
   current: DecodedPitchSource | null,
   next: DecodedPitchSource,
@@ -71,12 +78,42 @@ function shouldReplaceDecodedPitchSource(
   return false
 }
 
+const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
+  audioBuffer,
+  sourceStartOffsetSec,
+  ...props
+}) => {
+  const [decodedSrc, setDecodedSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    const url = URL.createObjectURL(audioBufferToWavBlob(audioBuffer))
+    setDecodedSrc(url)
+    return () => {
+      URL.revokeObjectURL(url)
+    }
+  }, [audioBuffer])
+
+  if (!decodedSrc) {
+    return null
+  }
+
+  return (
+    <NativePitchCorrectedAudio
+      {...props}
+      src={decodedSrc}
+      sourceStartOffsetSec={sourceStartOffsetSec}
+    />
+  )
+}
+
 export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.memo(
   ({
     src,
     itemId,
     volume = 0,
     playbackRate = 1,
+    isReversed = false,
+    reverseSourceEnd,
     trimBefore = 0,
     sourceFps,
     sourceStartOffsetSec = 0,
@@ -206,8 +243,15 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
       if (!audio) return
       const effectiveSourceFps = sourceFps ?? fps
       const sourceTimeSeconds =
-        getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps) -
-        sourceStartOffsetSec
+        getAudioTargetTimeSeconds(
+          trimBefore,
+          effectiveSourceFps,
+          frame,
+          playbackRate,
+          fps,
+          isReversed,
+          reverseSourceEnd,
+        ) - sourceStartOffsetSec
       const clipStartTimeSeconds = Math.max(
         0,
         trimBefore / effectiveSourceFps - sourceStartOffsetSec,
@@ -238,6 +282,20 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
         if (preWarmTimerRef.current !== null) {
           clearTimeout(preWarmTimerRef.current)
           preWarmTimerRef.current = null
+        }
+
+        if (isReversed) {
+          if (!audio.paused) {
+            audio.pause()
+          }
+          if (canSeek && Math.abs(audio.currentTime - targetTimeSeconds) > 0.01) {
+            try {
+              audio.currentTime = targetTimeSeconds
+            } catch {
+              // Audio is not ready to seek yet.
+            }
+          }
+          return
         }
 
         const currentTime = audio.currentTime
@@ -343,7 +401,17 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
           }, 50)
         }
       }
-    }, [frame, fps, sourceFps, sourceStartOffsetSec, playing, playbackRate, trimBefore])
+    }, [
+      frame,
+      fps,
+      isReversed,
+      playbackRate,
+      playing,
+      reverseSourceEnd,
+      sourceFps,
+      sourceStartOffsetSec,
+      trimBefore,
+    ])
 
     return null
   },
@@ -364,6 +432,8 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
       sourceStartOffsetSec = 0,
       volume = 0,
       playbackRate = 1,
+      isReversed = false,
+      reverseSourceEnd,
       muted = false,
       durationInFrames,
       audioFadeIn = 0,
@@ -416,7 +486,12 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
 
       let cancelled = false
       const effectiveSourceFps = sourceFps ?? fps
-      const clipStartTime = Math.max(0, trimBefore / effectiveSourceFps - sourceStartOffsetSec)
+      const seedSourceFrames =
+        isReversed && reverseSourceEnd !== undefined ? reverseSourceEnd : trimBefore
+      const clipStartTime = Math.max(
+        0,
+        seedSourceFrames / effectiveSourceFps - sourceStartOffsetSec,
+      )
       setDecodedSource(null)
       pendingExtensionKeyRef.current = null
 
@@ -471,7 +546,16 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
       return () => {
         cancelled = true
       }
-    }, [fps, mediaId, sourceFps, sourceStartOffsetSec, src, trimBefore])
+    }, [
+      fps,
+      isReversed,
+      mediaId,
+      reverseSourceEnd,
+      sourceFps,
+      sourceStartOffsetSec,
+      src,
+      trimBefore,
+    ])
 
     useEffect(() => {
       const currentSource = decodedSource
@@ -483,8 +567,15 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
       const effectiveSourceFps = sourceFps ?? fps
       const targetTime = Math.max(
         0,
-        getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps) -
-          sourceStartOffsetSec,
+        getAudioTargetTimeSeconds(
+          trimBefore,
+          effectiveSourceFps,
+          frame,
+          playbackRate,
+          fps,
+          isReversed,
+          reverseSourceEnd,
+        ) - sourceStartOffsetSec,
       )
       const remainingCoverage = currentSource.coverageEndSec - targetTime
       const targetOutsideSource =
@@ -549,6 +640,8 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
       frame,
       mediaId,
       playbackRate,
+      isReversed,
+      reverseSourceEnd,
       playing,
       sourceFps,
       sourceStartOffsetSec,
@@ -556,21 +649,56 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
       trimBefore,
     ])
 
+    const reversedPlayback = React.useMemo(() => {
+      if (!decodedSource || !isReversed || !decodedSource.isComplete) {
+        return null
+      }
+      const effectiveSourceFps = sourceFps ?? fps
+      const sourceEndSeconds = (reverseSourceEnd ?? trimBefore) / effectiveSourceFps
+      const reversedTrimBefore = Math.max(
+        0,
+        Math.round((decodedSource.buffer.duration - sourceEndSeconds) * effectiveSourceFps),
+      )
+      return {
+        buffer: createReversedAudioBuffer(decodedSource.buffer),
+        trimBefore: reversedTrimBefore,
+      }
+    }, [decodedSource, fps, isReversed, reverseSourceEnd, sourceFps, trimBefore])
+
     if (!decodedSource) {
       return nativeFallback
     }
 
+    const playbackBuffer = reversedPlayback?.buffer ?? decodedSource.buffer
+    const playbackTrimBefore = reversedPlayback?.trimBefore ?? trimBefore
+    const playbackSourceStartOffsetSec = reversedPlayback
+      ? 0
+      : sourceStartOffsetSec + decodedSource.sourceStartOffsetSec
+    const decodedFallback = (
+      <DecodedPitchFallbackAudio
+        {...props}
+        src={src}
+        audioBuffer={playbackBuffer}
+        trimBefore={playbackTrimBefore}
+        sourceStartOffsetSec={playbackSourceStartOffsetSec}
+        isReversed={isReversed && !reversedPlayback}
+        reverseSourceEnd={reversedPlayback ? undefined : reverseSourceEnd}
+      />
+    )
+
     return (
       <SoundTouchWorkletAudio
-        audioBuffer={decodedSource.buffer}
-        fallback={nativeFallback}
+        audioBuffer={playbackBuffer}
+        fallback={decodedFallback}
         itemId={itemId}
-        trimBefore={trimBefore}
+        trimBefore={playbackTrimBefore}
         sourceFps={sourceFps}
-        sourceStartOffsetSec={sourceStartOffsetSec + decodedSource.sourceStartOffsetSec}
+        sourceStartOffsetSec={playbackSourceStartOffsetSec}
         isComplete={decodedSource.isComplete}
         volume={volume}
         playbackRate={playbackRate}
+        isReversed={isReversed && !reversedPlayback}
+        reverseSourceEnd={reversedPlayback ? undefined : reverseSourceEnd}
         audioPitchSemitones={props.audioPitchSemitones}
         audioPitchCents={props.audioPitchCents}
         audioPitchShiftSemitones={props.audioPitchShiftSemitones}
@@ -618,7 +746,11 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     hasActivePitchPreview || isAudioPitchShiftActive(resolvedPitchShiftSemitones)
   const decodeMediaId = props.mediaId ?? `legacy-src:${props.src}`
 
-  if (!requiresPitchCorrection && Math.abs(playbackRate - 1) <= PLAYBACK_RATE_TOLERANCE) {
+  if (
+    props.isReversed !== true &&
+    !requiresPitchCorrection &&
+    Math.abs(playbackRate - 1) <= PLAYBACK_RATE_TOLERANCE
+  ) {
     return <NativePitchCorrectedAudio {...props} playbackRate={playbackRate} />
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "freecut",
-  "version": "2026.04.06",
+  "version": "2026.04.20",
   "private": true,
   "type": "module",
   "scripts": {
@@ -60,6 +60,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-router": "^1.91.6",
+    "@tanstack/react-virtual": "^3.13.24",
     "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

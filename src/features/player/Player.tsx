@@ -26,6 +26,7 @@ import {
 import { ClockBridgeProvider, useBridgedTimelineContext } from './clock'
 import { usePlayer } from './use-player'
 import { VideoConfigProvider } from './video-config-context'
+import { calculatePlayerContentLayout } from './player-layout'
 
 // Types
 interface PlayerProps {
@@ -62,11 +63,14 @@ interface PlayerProps {
   /** Custom styles */
   style?: React.CSSProperties
 
-  /** Width of the player */
+  /** Width of the rendered composition */
   width?: number
 
-  /** Height of the player */
+  /** Height of the rendered composition */
   height?: number
+
+  /** Explicit CSS layout rectangle to scale the composition into. */
+  layoutSize?: { width: number; height: number }
 
   /** Callback when playback ends */
   onEnded?: () => void
@@ -312,6 +316,7 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
       style,
       width = 1280,
       height = 720,
+      layoutSize,
       onEnded,
       onFrameChange,
       onPlayStateChange,
@@ -337,25 +342,22 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
       const contentScale = contentScaleRef.current
       if (!container || !contentHost || !contentScale) return
 
-      const containerWidth = container.clientWidth
-      const containerHeight = container.clientHeight
-      const scale =
-        containerWidth > 0 && containerHeight > 0
-          ? Math.min(containerWidth / width, containerHeight / height)
-          : 1
+      const containerRect = container.getBoundingClientRect()
+      const measuredWidth = containerRect.width || container.clientWidth
+      const measuredHeight = containerRect.height || container.clientHeight
+      const containerWidth = layoutSize?.width ?? measuredWidth
+      const containerHeight = layoutSize?.height ?? measuredHeight
+      const layout = calculatePlayerContentLayout(containerWidth, containerHeight, width, height)
 
-      const scaledWidth = width * scale
-      const scaledHeight = height * scale
-
-      contentHost.style.width = `${scaledWidth}px`
-      contentHost.style.height = `${scaledHeight}px`
-      contentHost.style.marginLeft = `${-scaledWidth / 2}px`
-      contentHost.style.marginTop = `${-scaledHeight / 2}px`
+      contentHost.style.width = `${layout.width}px`
+      contentHost.style.height = `${layout.height}px`
+      contentHost.style.marginLeft = `${-layout.width / 2}px`
+      contentHost.style.marginTop = `${-layout.height / 2}px`
 
       contentScale.style.width = `${width}px`
       contentScale.style.height = `${height}px`
-      contentScale.style.transform = `scale(${scale})`
-    }, [height, width])
+      contentScale.style.transform = `scale(${layout.scaleX}, ${layout.scaleY})`
+    }, [height, layoutSize?.height, layoutSize?.width, width])
 
     useEffect(() => {
       const container = containerRef.current

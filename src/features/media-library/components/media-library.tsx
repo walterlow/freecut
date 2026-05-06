@@ -212,7 +212,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const [showImportUrlDialog, setShowImportUrlDialog] = useState(false)
   const [importUrlValue, setImportUrlValue] = useState('')
   const [isImportUrlSubmitting, setIsImportUrlSubmitting] = useState(false)
-
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId)
   const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject)

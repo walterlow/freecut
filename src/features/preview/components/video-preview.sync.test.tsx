@@ -374,6 +374,24 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>
   },
   getBestDomVideoElementForItem: vi.fn(() => null),
+  hasCornerPin: vi.fn(
+    (
+      pin:
+        | {
+            topLeft: [number, number]
+            topRight: [number, number]
+            bottomRight: [number, number]
+            bottomLeft: [number, number]
+          }
+        | undefined,
+    ) =>
+      Boolean(
+        pin &&
+        [...pin.topLeft, ...pin.topRight, ...pin.bottomRight, ...pin.bottomLeft].some(
+          (value) => value !== 0,
+        ),
+      ),
+  ),
 }))
 
 vi.mock('./gizmo-overlay', () => ({
@@ -1694,6 +1712,167 @@ describe('VideoPreview sync behavior', () => {
     })
   })
 
+  it('keeps corner-pinned text on the rendered overlay even when Player is already at the frame', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-title',
+        name: 'Titles',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ])
+    useItemsStore.getState().setItems([
+      {
+        id: 'title-corner-pin',
+        type: 'text',
+        trackId: 'track-title',
+        from: 20,
+        durationInFrames: 100,
+        text: 'Headline',
+        fontSize: 96,
+        color: '#ffffff',
+        cornerPin: {
+          topLeft: [0, 0],
+          topRight: [24, -8],
+          bottomRight: [0, 0],
+          bottomLeft: [-18, 12],
+        },
+      } as unknown as TimelineItem,
+    ])
+
+    mockedPlayerFrame = 24
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled()
+    })
+    seekToMock.mockClear()
+    expect(scrubCanvas.style.visibility).toBe('hidden')
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24)
+    })
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1)
+      expect(rendererMockState.instances.length).toBe(1)
+      return rendererMockState.instances[0]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24)
+      expect(getDisplayedFrame()).toBe(24)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
+  it('keeps the rendered overlay visible between stale corner-pin skim renders', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-title',
+        name: 'Titles',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ])
+    useItemsStore.getState().setItems([
+      {
+        id: 'title-corner-pin',
+        type: 'text',
+        trackId: 'track-title',
+        from: 20,
+        durationInFrames: 100,
+        text: 'Headline',
+        fontSize: 96,
+        color: '#ffffff',
+        cornerPin: {
+          topLeft: [0, 0],
+          topRight: [24, -8],
+          bottomRight: [0, 0],
+          bottomLeft: [-18, 12],
+        },
+      } as unknown as TimelineItem,
+    ])
+
+    let resolveFrame24: (() => void) | null = null
+    const createDeferredRenderer = async () => {
+      const renderFrame = vi.fn(
+        (frame: number) =>
+          new Promise<void>((resolve) => {
+            if (frame === 24) {
+              resolveFrame24 = resolve
+              return
+            }
+            resolve()
+          }),
+      )
+      const renderer = createRendererDouble({ renderFrame })
+      rendererMockState.instances.push(renderer)
+      return renderer
+    }
+    createCompositionRendererMock
+      .mockImplementationOnce(createDeferredRenderer)
+      .mockImplementationOnce(createDeferredRenderer)
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled()
+    })
+    seekToMock.mockClear()
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24)
+    })
+
+    await waitFor(() => {
+      const instance = rendererMockState.instances.find((candidate) =>
+        candidate.renderFrame.mock.calls.some(([frame]) => frame === 24),
+      )
+      expect(instance).toBeDefined()
+      expect(instance!.renderFrame).toHaveBeenCalledWith(24)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(25)
+    })
+
+    await act(async () => {
+      resolveFrame24?.()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).not.toBeNull()
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
   it('keeps the fast-scrub overlay active after scrub release on a gpu-effect clip', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -1795,13 +1974,15 @@ describe('VideoPreview sync behavior', () => {
     })
   })
 
-  it('hands off scrub preview back to current frame when previewFrame is cleared', async () => {
-    render(
+  it('keeps scrub preview on the rendered path when previewFrame is cleared while paused', async () => {
+    const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
         containerSize={{ width: 1280, height: 720 }}
       />,
     )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
 
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled()
@@ -1825,11 +2006,12 @@ describe('VideoPreview sync behavior', () => {
     })
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48)
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
     })
   })
 
-  it('keeps ruler drag on fast-scrub presentation until previewFrame is cleared', async () => {
+  it('keeps paused ruler scrub on the fast-scrub presentation after previewFrame is cleared', async () => {
     const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -1864,9 +2046,263 @@ describe('VideoPreview sync behavior', () => {
     })
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48)
-      expect(getDisplayedFrame()).toBeNull()
-      expect(scrubCanvas.style.visibility).toBe('hidden')
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
+  it('keeps paused scrub presentation when an in-flight render finishes after release', async () => {
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBe(1)
+      return rendererMockState.instances[0]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(0)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(47)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(47)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    renderer.renderFrame.mockClear()
+    let resolveFrame48: (() => void) | null = null
+    renderer.renderFrame.mockImplementation(async (frame: number) => {
+      if (frame === 48) {
+        await new Promise<void>((resolve) => {
+          resolveFrame48 = resolve
+        })
+      }
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(null)
+    })
+
+    expect(usePlaybackStore.getState().previewFrame).toBeNull()
+    expect(usePlaybackStore.getState().currentFrame).toBe(48)
+    expect(getDisplayedFrame()).toBe(47)
+    expect(scrubCanvas.style.visibility).toBe('visible')
+
+    await act(async () => {
+      resolveFrame48?.()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().previewFrame).toBeNull()
+      expect(usePlaybackStore.getState().currentFrame).toBe(48)
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
+  it('keeps settled skim presentation across preview effect refreshes', async () => {
+    const { container, rerender } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled()
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(null)
+    })
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().previewFrame).toBeNull()
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    rerender(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1281, height: 720 }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().previewFrame).toBeNull()
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+  })
+
+  it('does not enter scrub mode or repaint when clicking the already displayed settled frame', async () => {
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBe(1)
+      return rendererMockState.instances[0]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(0)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(null)
+    })
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().previewFrame).toBeNull()
+      expect(usePlaybackStore.getState().currentFrame).toBe(48)
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    renderer.renderFrame.mockClear()
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(usePlaybackStore.getState().previewFrame).toBeNull()
+    expect(usePlaybackStore.getState().currentFrame).toBe(48)
+    expect(getDisplayedFrame()).toBe(48)
+    expect(scrubCanvas.style.visibility).toBe('visible')
+    expect(renderer.renderFrame).not.toHaveBeenCalled()
+  })
+
+  it('keeps active skim presentation when a stale in-flight render finishes', async () => {
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBe(1)
+      return rendererMockState.instances[0]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(0)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(47)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(47)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    renderer.renderFrame.mockClear()
+    let resolveFrame48: (() => void) | null = null
+    let resolveFrame49: (() => void) | null = null
+    renderer.renderFrame.mockImplementation(async (frame: number) => {
+      if (frame === 48) {
+        await new Promise<void>((resolve) => {
+          resolveFrame48 = resolve
+        })
+      }
+      if (frame === 49) {
+        await new Promise<void>((resolve) => {
+          resolveFrame49 = resolve
+        })
+      }
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48)
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48)
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(49)
+    })
+
+    expect(usePlaybackStore.getState().previewFrame).toBe(49)
+    expect(getDisplayedFrame()).toBe(47)
+    expect(scrubCanvas.style.visibility).toBe('visible')
+
+    await act(async () => {
+      resolveFrame48?.()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(49)
+    })
+    expect(usePlaybackStore.getState().previewFrame).toBe(49)
+    expect(getDisplayedFrame()).toBe(47)
+    expect(scrubCanvas.style.visibility).toBe('visible')
+
+    await act(async () => {
+      resolveFrame49?.()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(49)
+      expect(scrubCanvas.style.visibility).toBe('visible')
     })
   })
 
@@ -2270,8 +2706,8 @@ describe('VideoPreview sync behavior', () => {
     })
 
     await waitFor(() => {
-      expect(getDisplayedFrame()).toBeNull()
-      expect(scrubCanvas.style.visibility).toBe('hidden')
+      expect(getDisplayedFrame()).toBe(48)
+      expect(scrubCanvas.style.visibility).toBe('visible')
     })
   })
 
@@ -2471,8 +2907,8 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(40)
-      expect(renderer.prewarmFrame).toHaveBeenCalledWith(41)
-      expect(renderer.prewarmFrame).toHaveBeenCalledWith(42)
+      expect(renderer.renderFrame).toHaveBeenCalledWith(41)
+      expect(renderer.renderFrame).toHaveBeenCalledWith(42)
       expect(scrubCanvas.style.visibility).toBe('hidden')
       expect(getDisplayedFrame()).toBeNull()
     })
@@ -2492,6 +2928,99 @@ describe('VideoPreview sync behavior', () => {
 
     expect(renderer.renderFrame.mock.calls.filter(([frame]) => frame === 40).length).toBe(
       prerenderedStartFrameCalls,
+    )
+  })
+
+  it('reuses prerendered transition runway frames when playback enters after the start frame', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ])
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as unknown as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as unknown as TimelineItem,
+    ])
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ])
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />,
+    )
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled()
+    })
+    seekToMock.mockClear()
+
+    act(() => {
+      usePlaybackStore.getState().play()
+      usePlaybackStore.getState().setCurrentFrame(35)
+    })
+
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0)
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(43)
+    })
+
+    const prerenderedFrameCalls = renderer.renderFrame.mock.calls.filter(
+      ([frame]) => frame === 43,
+    ).length
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(43)
+    })
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(43)
+      expect(scrubCanvas.style.visibility).toBe('visible')
+    })
+
+    expect(renderer.renderFrame.mock.calls.filter(([frame]) => frame === 43).length).toBe(
+      prerenderedFrameCalls,
     )
   })
 

@@ -2,6 +2,45 @@ import { describe, expect, it } from 'vite-plus/test'
 import { getGpuTransition, getGpuTransitionIds } from './index'
 
 describe('GPU transition registry', () => {
+  it('registers the Resolve-style dissolve family', () => {
+    const ids = getGpuTransitionIds()
+
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'dissolve',
+        'additiveDissolve',
+        'blurDissolve',
+        'dipToColorDissolve',
+        'nonAdditiveDissolve',
+        'smoothCut',
+      ]),
+    )
+    expect(getGpuTransition('dissolve')).toMatchObject({
+      id: 'dissolve',
+      name: 'Cross Dissolve',
+      category: 'dissolve',
+      entryPoint: 'dissolveFragment',
+      uniformSize: 16,
+    })
+  })
+
+  it('packs dissolve variant uniforms within their declared buffer sizes', () => {
+    const cases = [
+      ['additiveDissolve', {}],
+      ['blurDissolve', { strength: 8 }],
+      ['dipToColorDissolve', { color: [1, 0.9, 0.7] }],
+      ['nonAdditiveDissolve', {}],
+      ['smoothCut', { strength: 1.2 }],
+    ] as const
+
+    for (const [id, properties] of cases) {
+      const def = getGpuTransition(id)
+      expect(def, id).toBeDefined()
+      const uniforms = def!.packUniforms(0.4, 1920, 1080, 0, properties)
+      expect(uniforms.byteLength).toBeLessThanOrEqual(def!.uniformSize)
+    }
+  })
+
   it('registers liquid distort as a directional GPU transition', () => {
     const def = getGpuTransition('liquidDistort')
 
@@ -101,7 +140,7 @@ describe('GPU transition registry', () => {
     expect(def).toMatchObject({
       id: 'lightLeakBurn',
       name: 'Light Leak Burn',
-      category: 'light',
+      category: 'custom',
       entryPoint: 'lightLeakBurnFragment',
       hasDirection: true,
       directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],

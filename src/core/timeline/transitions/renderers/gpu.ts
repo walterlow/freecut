@@ -12,14 +12,7 @@ import type { TransitionRegistry, TransitionRenderer } from '../registry'
 import type { TransitionStyleCalculation } from '../engine'
 import type { TransitionDefinition, WipeDirection } from '@/types/transition'
 
-const ALL_TIMINGS = [
-  'linear',
-  'spring',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'cubic-bezier',
-] as const
+const ALL_TIMINGS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
@@ -50,6 +43,60 @@ function seededRandom(seed: number): number {
 
 function fadeOpacity(progress: number, isOutgoing: boolean): number {
   return isOutgoing ? Math.cos((progress * Math.PI) / 2) : Math.sin((progress * Math.PI) / 2)
+}
+
+function crossDissolveT(progress: number): number {
+  return 0.5 - 0.5 * Math.cos(clamp01(progress) * Math.PI)
+}
+
+function renderCrossDissolveCanvas(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  canvas?: { width: number; height: number },
+): void {
+  const t = crossDissolveT(progress)
+  const w = canvas?.width ?? leftCanvas.width
+  const h = canvas?.height ?? leftCanvas.height
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'copy'
+  ctx.globalAlpha = 1
+  ctx.drawImage(leftCanvas, 0, 0, w, h)
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.globalAlpha = t
+  ctx.drawImage(rightCanvas, 0, 0, w, h)
+  ctx.restore()
+}
+
+function renderDipToColorCanvas(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  canvas?: { width: number; height: number },
+  properties?: Record<string, unknown>,
+): void {
+  const p = clamp01(progress)
+  const w = canvas?.width ?? leftCanvas.width
+  const h = canvas?.height ?? leftCanvas.height
+  const colorWeight = p < 0.5 ? smoothStep(0, 0.5, p) : 1 - smoothStep(0.5, 1, p)
+  const color = properties?.color
+  const rgb = Array.isArray(color) ? color : [0, 0, 0]
+  const r = Math.round(clamp01(typeof rgb[0] === 'number' ? rgb[0] : 0) * 255)
+  const g = Math.round(clamp01(typeof rgb[1] === 'number' ? rgb[1] : 0) * 255)
+  const b = Math.round(clamp01(typeof rgb[2] === 'number' ? rgb[2] : 0) * 255)
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'copy'
+  ctx.globalAlpha = 1
+  ctx.drawImage(p < 0.5 ? leftCanvas : rightCanvas, 0, 0, w, h)
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.globalAlpha = colorWeight
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+  ctx.fillRect(0, 0, w, h)
+  ctx.restore()
 }
 
 function traceSparklePath(
@@ -283,35 +330,244 @@ function renderSparklesCanvas(
 const dissolveRenderer: TransitionRenderer = {
   gpuTransitionId: 'dissolve',
   calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
-    // CSS approximation: equal-power crossfade (GPU version uses noise pattern)
-    return { opacity: fadeOpacity(clamp01(progress), isOutgoing) }
+    const t = crossDissolveT(progress)
+    return { opacity: isOutgoing ? 1 - t : t }
   },
-  renderCanvas(ctx, leftCanvas, rightCanvas, progress) {
-    // Canvas 2D fallback: simple crossfade
-    const p = clamp01(progress)
-    ctx.save()
-    ctx.globalAlpha = fadeOpacity(p, false)
-    ctx.drawImage(rightCanvas, 0, 0)
-    ctx.restore()
-
-    ctx.save()
-    ctx.globalAlpha = fadeOpacity(p, true)
-    ctx.drawImage(leftCanvas, 0, 0)
-    ctx.restore()
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    renderCrossDissolveCanvas(ctx, leftCanvas, rightCanvas, progress, canvas)
   },
 }
 
 const dissolveDef: TransitionDefinition = {
   id: 'dissolve',
-  label: 'Dissolve',
-  description: 'Noise-based organic dissolve between clips',
-  category: 'basic',
-  icon: 'Sparkles',
+  label: 'Cross Dissolve',
+  description: 'Smooth opacity blend between clips',
+  category: 'dissolve',
+  icon: 'Blend',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+}
+
+const additiveDissolveRenderer: TransitionRenderer = {
+  gpuTransitionId: 'additiveDissolve',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    return { opacity: isOutgoing ? 1 - p : p }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    const p = clamp01(progress)
+    const w = canvas?.width ?? leftCanvas.width
+    const h = canvas?.height ?? leftCanvas.height
+    ctx.save()
+    ctx.globalCompositeOperation = 'copy'
+    ctx.globalAlpha = 1 - p
+    ctx.drawImage(leftCanvas, 0, 0, w, h)
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = p
+    ctx.drawImage(rightCanvas, 0, 0, w, h)
+    ctx.restore()
+  },
+}
+
+const additiveDissolveDef: TransitionDefinition = {
+  id: 'additiveDissolve',
+  label: 'Additive Dissolve',
+  description: 'Bright additive blend that flashes through overlapping highlights',
+  category: 'dissolve',
+  icon: 'Layers',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 30,
+  minDuration: 10,
+  maxDuration: 90,
+}
+
+const blurDissolveRenderer: TransitionRenderer = {
+  gpuTransitionId: 'blurDissolve',
+  calculateStyles(
+    progress,
+    isOutgoing,
+    _canvasWidth,
+    _canvasHeight,
+    _direction,
+    properties,
+  ): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    const strength = getNumericProperty(properties, 'strength', 9) / 9
+    return {
+      opacity: isOutgoing ? 1 - p : p,
+      transform: envelope > 0.05 ? `scale(${1 + envelope * 0.006 * strength})` : undefined,
+    }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas, properties) {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    const strength = getNumericProperty(properties, 'strength', 9)
+    ctx.save()
+    ctx.filter = `blur(${(envelope * strength).toFixed(2)}px)`
+    renderCrossDissolveCanvas(ctx, leftCanvas, rightCanvas, p, canvas)
+    ctx.restore()
+  },
+}
+
+const blurDissolveDef: TransitionDefinition = {
+  id: 'blurDissolve',
+  label: 'Blur Dissolve',
+  description: 'Cross dissolve with a soft midpoint blur',
+  category: 'dissolve',
+  icon: 'Droplet',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 30,
+  minDuration: 10,
+  maxDuration: 90,
+  parameters: [
+    {
+      key: 'strength',
+      label: 'Blur',
+      type: 'number',
+      defaultValue: 9,
+      min: 0,
+      max: 24,
+      step: 0.5,
+      unit: 'px',
+      description: 'Maximum midpoint blur',
+    },
+  ],
+}
+
+const dipToColorDissolveRenderer: TransitionRenderer = {
+  gpuTransitionId: 'dipToColorDissolve',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    if (p < 0.5) return { opacity: isOutgoing ? 1 - smoothStep(0, 0.5, p) : 0 }
+    return { opacity: isOutgoing ? 0 : smoothStep(0.5, 1, p) }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas, properties) {
+    renderDipToColorCanvas(ctx, leftCanvas, rightCanvas, progress, canvas, properties)
+  },
+}
+
+const dipToColorDissolveDef: TransitionDefinition = {
+  id: 'dipToColorDissolve',
+  label: 'Dip To Color Dissolve',
+  description: 'Dissolve through a solid color, defaulting to black',
+  category: 'dissolve',
+  icon: 'Circle',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 30,
+  minDuration: 10,
+  maxDuration: 90,
+  parameters: [
+    {
+      key: 'color',
+      label: 'Color',
+      type: 'color',
+      defaultValue: [0, 0, 0],
+      description: 'Color used at the midpoint of the dissolve',
+      valueFormat: 'rgb-array',
+    },
+  ],
+}
+
+const nonAdditiveDissolveRenderer: TransitionRenderer = {
+  gpuTransitionId: 'nonAdditiveDissolve',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    return { opacity: isOutgoing ? 1 - p : p }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    renderCrossDissolveCanvas(ctx, leftCanvas, rightCanvas, progress, canvas)
+  },
+}
+
+const nonAdditiveDissolveDef: TransitionDefinition = {
+  id: 'nonAdditiveDissolve',
+  label: 'Non-Additive Dissolve',
+  description: 'Neutral dissolve that avoids the bright overlap of additive blends',
+  category: 'dissolve',
+  icon: 'Columns2',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 30,
+  minDuration: 10,
+  maxDuration: 90,
+}
+
+const smoothCutRenderer: TransitionRenderer = {
+  gpuTransitionId: 'smoothCut',
+  calculateStyles(
+    progress,
+    isOutgoing,
+    _canvasWidth,
+    _canvasHeight,
+    _direction,
+    properties,
+  ): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    const t = smoothStep(0.22, 0.78, p)
+    const envelope = Math.sin(p * Math.PI)
+    const strength = getNumericProperty(properties, 'strength', 0.9)
+    return {
+      opacity: isOutgoing ? 1 - t : t,
+      transform:
+        envelope > 0.05
+          ? `translateX(${((isOutgoing ? -1 : 1) * envelope * 4 * strength).toFixed(2)}px) skewX(${((isOutgoing ? -1 : 1) * envelope * 0.7 * strength).toFixed(2)}deg)`
+          : undefined,
+    }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas, properties) {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    const t = smoothStep(0.22, 0.78, p)
+    const w = canvas?.width ?? leftCanvas.width
+    const h = canvas?.height ?? leftCanvas.height
+    const strength = getNumericProperty(properties, 'strength', 0.9)
+    const drift = envelope * 4 * strength
+    const skew = 0.012 * envelope * strength
+    const driftPx = Math.round(drift)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'copy'
+    ctx.globalAlpha = 1
+    ctx.setTransform(1, 0, -skew, 1, -driftPx, 0)
+    ctx.drawImage(leftCanvas, 0, 0, w, h)
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = t
+    ctx.setTransform(1, 0, skew, 1, driftPx, 0)
+    ctx.drawImage(rightCanvas, 0, 0, w, h)
+    ctx.restore()
+  },
+}
+
+const smoothCutDef: TransitionDefinition = {
+  id: 'smoothCut',
+  label: 'Smooth Cut',
+  description: 'Subtle liquid-warp blend for jump-cut style edits',
+  category: 'dissolve',
+  icon: 'Waves',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 18,
+  minDuration: 6,
+  maxDuration: 45,
+  parameters: [
+    {
+      key: 'strength',
+      label: 'Warp',
+      type: 'number',
+      defaultValue: 0.9,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Horizontal liquid warp strength',
+    },
+  ],
 }
 
 // ============================================================================
@@ -355,6 +611,48 @@ const sparklesDef: TransitionDefinition = {
   defaultDuration: 24,
   minDuration: 8,
   maxDuration: 72,
+  parameters: [
+    {
+      key: 'sparkleScale',
+      label: 'Size',
+      type: 'number',
+      defaultValue: 1,
+      min: 0.25,
+      max: 3,
+      step: 0.05,
+      description: 'Sparkle particle size',
+    },
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Overall sparkle brightness',
+    },
+    {
+      key: 'density',
+      label: 'Density',
+      type: 'number',
+      defaultValue: 1,
+      min: 0.2,
+      max: 3,
+      step: 0.05,
+      description: 'Amount of sparkle particles',
+    },
+    {
+      key: 'glow',
+      label: 'Glow',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Soft sparkle bloom',
+    },
+  ],
 }
 
 // ============================================================================
@@ -403,87 +701,39 @@ const glitchDef: TransitionDefinition = {
   defaultDuration: 20,
   minDuration: 5,
   maxDuration: 60,
-}
-
-// ============================================================================
-// Light Leak
-// ============================================================================
-
-const lightLeakRenderer: TransitionRenderer = {
-  gpuTransitionId: 'lightLeak',
-  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
-    // CSS approximation: crossfade (GPU version adds warm light sweep)
-    return { opacity: fadeOpacity(clamp01(progress), isOutgoing) }
-  },
-  renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas) {
-    // Canvas 2D fallback: directional crossfade
-    const p = clamp01(progress)
-    const w = canvas?.width ?? leftCanvas.width
-    const h = canvas?.height ?? leftCanvas.height
-    const dir = (direction as WipeDirection) || 'from-left'
-
-    // Draw incoming
-    ctx.save()
-    ctx.globalAlpha = fadeOpacity(p, false)
-    ctx.drawImage(rightCanvas, 0, 0, w, h)
-    ctx.restore()
-
-    // Draw outgoing
-    ctx.save()
-    ctx.globalAlpha = fadeOpacity(p, true)
-    ctx.drawImage(leftCanvas, 0, 0, w, h)
-    ctx.restore()
-
-    // Add warm glow overlay
-    const envelope = Math.sin(p * Math.PI)
-    if (envelope > 0.1) {
-      ctx.save()
-      let gx: number, gy: number
-      switch (dir) {
-        case 'from-left':
-          gx = p * w
-          gy = h / 2
-          break
-        case 'from-right':
-          gx = (1 - p) * w
-          gy = h / 2
-          break
-        case 'from-top':
-          gx = w / 2
-          gy = p * h
-          break
-        case 'from-bottom':
-          gx = w / 2
-          gy = (1 - p) * h
-          break
-        default:
-          gx = p * w
-          gy = h / 2
-      }
-      const radius = Math.max(w, h) * 0.4
-      const gradient = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius)
-      gradient.addColorStop(0, `rgba(255, 230, 180, ${0.3 * envelope})`)
-      gradient.addColorStop(1, 'rgba(255, 230, 180, 0)')
-      ctx.globalCompositeOperation = 'lighter'
-      ctx.fillStyle = gradient
-      ctx.fillRect(0, 0, w, h)
-      ctx.restore()
-    }
-  },
-}
-
-const lightLeakDef: TransitionDefinition = {
-  id: 'lightLeak',
-  label: 'Light Leak',
-  description: 'Warm light sweep revealing the next clip',
-  category: 'light',
-  icon: 'Sun',
-  hasDirection: true,
-  directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
-  supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 30,
-  minDuration: 10,
-  maxDuration: 90,
+  parameters: [
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Overall glitch displacement',
+    },
+    {
+      key: 'blockSize',
+      label: 'Blocks',
+      type: 'number',
+      defaultValue: 30,
+      min: 6,
+      max: 96,
+      step: 1,
+      unit: 'px',
+      description: 'Digital block size',
+    },
+    {
+      key: 'rgbSplit',
+      label: 'RGB Split',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Color channel offset',
+    },
+  ],
 }
 
 // ============================================================================
@@ -518,6 +768,19 @@ const pixelateDef: TransitionDefinition = {
   defaultDuration: 20,
   minDuration: 8,
   maxDuration: 60,
+  parameters: [
+    {
+      key: 'maxBlockSize',
+      label: 'Block Size',
+      type: 'number',
+      defaultValue: 48,
+      min: 4,
+      max: 160,
+      step: 1,
+      unit: 'px',
+      description: 'Largest mosaic block size',
+    },
+  ],
 }
 
 // ============================================================================
@@ -552,7 +815,7 @@ const chromaticDef: TransitionDefinition = {
   id: 'chromatic',
   label: 'Chromatic',
   description: 'RGB channel split with directional sweep',
-  category: 'chromatic',
+  category: 'custom',
   icon: 'Aperture',
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
@@ -560,6 +823,28 @@ const chromaticDef: TransitionDefinition = {
   defaultDuration: 25,
   minDuration: 10,
   maxDuration: 60,
+  parameters: [
+    {
+      key: 'spread',
+      label: 'Spread',
+      type: 'number',
+      defaultValue: 1.5,
+      min: 0,
+      max: 5,
+      step: 0.05,
+      description: 'Channel separation distance',
+    },
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Chromatic sweep strength',
+    },
+  ],
 }
 
 // ============================================================================
@@ -604,6 +889,28 @@ const radialBlurDef: TransitionDefinition = {
   defaultDuration: 25,
   minDuration: 10,
   maxDuration: 60,
+  parameters: [
+    {
+      key: 'blurStrength',
+      label: 'Blur',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Radial blur amount',
+    },
+    {
+      key: 'spin',
+      label: 'Spin',
+      type: 'number',
+      defaultValue: 0.3,
+      min: -1.5,
+      max: 1.5,
+      step: 0.05,
+      description: 'Rotational blur twist',
+    },
+  ],
 }
 
 // ============================================================================
@@ -666,6 +973,68 @@ const liquidDistortDef: TransitionDefinition = {
   defaultDuration: 28,
   minDuration: 10,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Overall distortion strength',
+    },
+    {
+      key: 'scale',
+      label: 'Scale',
+      type: 'number',
+      defaultValue: 4.5,
+      min: 1,
+      max: 12,
+      step: 0.1,
+      description: 'Noise pattern scale',
+    },
+    {
+      key: 'turbulence',
+      label: 'Turbulence',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Fluid noise turbulence',
+    },
+    {
+      key: 'chroma',
+      label: 'Chroma',
+      type: 'number',
+      defaultValue: 0.75,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Color separation around distortion',
+    },
+    {
+      key: 'swirl',
+      label: 'Swirl',
+      type: 'number',
+      defaultValue: 0.8,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Curling warp motion',
+    },
+    {
+      key: 'shine',
+      label: 'Shine',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Specular highlight strength',
+    },
+  ],
 }
 
 // ============================================================================
@@ -727,6 +1096,68 @@ const lensWarpZoomDef: TransitionDefinition = {
   defaultDuration: 24,
   minDuration: 8,
   maxDuration: 72,
+  parameters: [
+    {
+      key: 'zoomStrength',
+      label: 'Zoom',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Zoom punch amount',
+    },
+    {
+      key: 'warpStrength',
+      label: 'Warp',
+      type: 'number',
+      defaultValue: 0.75,
+      min: 0,
+      max: 2.5,
+      step: 0.05,
+      description: 'Barrel warp strength',
+    },
+    {
+      key: 'blurStrength',
+      label: 'Blur',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Lens blur amount',
+    },
+    {
+      key: 'chroma',
+      label: 'Chroma',
+      type: 'number',
+      defaultValue: 0.65,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Chromatic lens edge',
+    },
+    {
+      key: 'vignette',
+      label: 'Vignette',
+      type: 'number',
+      defaultValue: 0.7,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Edge darkening',
+    },
+    {
+      key: 'glow',
+      label: 'Glow',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Center glow intensity',
+    },
+  ],
 }
 
 // ============================================================================
@@ -786,7 +1217,7 @@ const lightLeakBurnDef: TransitionDefinition = {
   id: 'lightLeakBurn',
   label: 'Light Leak Burn',
   description: 'Hot overexposed burn sweep with organic warm bloom',
-  category: 'light',
+  category: 'custom',
   icon: 'Flame',
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
@@ -794,6 +1225,58 @@ const lightLeakBurnDef: TransitionDefinition = {
   defaultDuration: 26,
   minDuration: 8,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'intensity',
+      label: 'Intensity',
+      type: 'number',
+      defaultValue: 1.25,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Overall burn strength',
+    },
+    {
+      key: 'spread',
+      label: 'Spread',
+      type: 'number',
+      defaultValue: 1,
+      min: 0.2,
+      max: 3,
+      step: 0.05,
+      description: 'Leak bloom width',
+    },
+    {
+      key: 'warmth',
+      label: 'Warmth',
+      type: 'number',
+      defaultValue: 0.75,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Orange heat tint',
+    },
+    {
+      key: 'burn',
+      label: 'Burn',
+      type: 'number',
+      defaultValue: 1.1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Overexposed hotspot',
+    },
+    {
+      key: 'grain',
+      label: 'Grain',
+      type: 'number',
+      defaultValue: 0.5,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Analog grain amount',
+    },
+  ],
 }
 
 // ============================================================================
@@ -856,6 +1339,78 @@ const filmGateSlipDef: TransitionDefinition = {
   defaultDuration: 22,
   minDuration: 8,
   maxDuration: 72,
+  parameters: [
+    {
+      key: 'slip',
+      label: 'Slip',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Vertical frame slip',
+    },
+    {
+      key: 'shake',
+      label: 'Shake',
+      type: 'number',
+      defaultValue: 1,
+      min: 0,
+      max: 3,
+      step: 0.05,
+      description: 'Gate jitter amount',
+    },
+    {
+      key: 'exposure',
+      label: 'Exposure',
+      type: 'number',
+      defaultValue: 0.85,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Exposure flicker',
+    },
+    {
+      key: 'gateWidth',
+      label: 'Gate Width',
+      type: 'number',
+      defaultValue: 0.075,
+      min: 0,
+      max: 0.2,
+      step: 0.005,
+      description: 'Film gate edge width',
+    },
+    {
+      key: 'grain',
+      label: 'Grain',
+      type: 'number',
+      defaultValue: 0.6,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Film grain amount',
+    },
+    {
+      key: 'chroma',
+      label: 'Chroma',
+      type: 'number',
+      defaultValue: 0.55,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Analog color offset',
+    },
+    {
+      key: 'roll',
+      label: 'Roll',
+      type: 'number',
+      defaultValue: 0.75,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      description: 'Rolling frame drift',
+    },
+  ],
 }
 
 // ============================================================================
@@ -864,9 +1419,13 @@ const filmGateSlipDef: TransitionDefinition = {
 
 export function registerGpuTransitions(registry: TransitionRegistry): void {
   registry.register('dissolve', dissolveDef, dissolveRenderer)
+  registry.register('additiveDissolve', additiveDissolveDef, additiveDissolveRenderer)
+  registry.register('blurDissolve', blurDissolveDef, blurDissolveRenderer)
+  registry.register('dipToColorDissolve', dipToColorDissolveDef, dipToColorDissolveRenderer)
+  registry.register('nonAdditiveDissolve', nonAdditiveDissolveDef, nonAdditiveDissolveRenderer)
+  registry.register('smoothCut', smoothCutDef, smoothCutRenderer)
   registry.register('sparkles', sparklesDef, sparklesRenderer)
   registry.register('glitch', glitchDef, glitchRenderer)
-  registry.register('lightLeak', lightLeakDef, lightLeakRenderer)
   registry.register('pixelate', pixelateDef, pixelateRenderer)
   registry.register('chromatic', chromaticDef, chromaticRenderer)
   registry.register('radialBlur', radialBlurDef, radialBlurRenderer)

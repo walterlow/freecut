@@ -239,16 +239,22 @@ describe('MediaLibraryService', () => {
       )
     })
 
-    it('returns existing media with isDuplicate flag when file already in project', async () => {
+    it('refreshes legacy project duplicate source when file already in project', async () => {
       const existingMedia = makeMediaMetadata({
         id: 'existing-1',
         fileName: 'video.mp4',
         fileSize: 4,
       })
+      const refreshedMedia = {
+        ...existingMedia,
+        fileHandle: {} as FileSystemFileHandle,
+        fileLastModified: 1234,
+      }
       indexedDbMocks.getAllMedia.mockResolvedValue([])
       indexedDbMocks.getMediaForProject.mockResolvedValue([existingMedia])
+      indexedDbMocks.updateMedia.mockResolvedValue(refreshedMedia)
 
-      const mockFile = new File(['data'], 'video.mp4', { type: 'video/mp4' })
+      const mockFile = new File(['data'], 'video.mp4', { type: 'video/mp4', lastModified: 1234 })
       const mockHandle = {
         name: 'video.mp4',
         getFile: vi.fn().mockResolvedValue(mockFile),
@@ -258,6 +264,16 @@ describe('MediaLibraryService', () => {
 
       const result = await mediaLibraryService.importMediaWithHandle(mockHandle, 'project-1')
 
+      expect(indexedDbMocks.updateMedia).toHaveBeenCalledWith(
+        'existing-1',
+        expect.objectContaining({
+          storageType: 'handle',
+          fileHandle: mockHandle,
+          fileName: 'video.mp4',
+          fileSize: 4,
+          fileLastModified: 1234,
+        }),
+      )
       expect(result.isDuplicate).toBe(true)
       expect(result.id).toBe('existing-1')
       expect(indexedDbMocks.createMedia).not.toHaveBeenCalled()

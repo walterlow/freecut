@@ -329,11 +329,14 @@ function normalizeItem(item: ProjectTimeline['items'][number]): ProjectTimeline[
 function normalizeTransition(
   transition: NonNullable<ProjectTimeline['transitions']>[number],
 ): NonNullable<ProjectTimeline['transitions']>[number] {
+  const timing =
+    (transition.timing as string | undefined) === 'spring' ? 'linear' : transition.timing
+
   return {
     ...transition,
     // Ensure duration is at least 1 frame
     durationInFrames: Math.max(1, Math.round(transition.durationInFrames)),
-    timing: transition.timing ?? 'linear',
+    timing: timing ?? 'linear',
   }
 }
 

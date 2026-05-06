@@ -32,12 +32,16 @@ export function getVideoTargetTimeSeconds(
   playbackRate: number,
   timelineFps: number,
   sequenceFrameOffset: number = 0,
+  isReversed: boolean = false,
+  reverseSourceEnd?: number,
 ): number {
   const relativeFrame = sequenceLocalFrame - sequenceFrameOffset
-  return snapSourceTime(
-    safeTrimBefore / sourceFps + (relativeFrame * playbackRate) / timelineFps,
-    sourceFps,
-  )
+  const sourceFrameOffset = (relativeFrame * playbackRate * sourceFps) / timelineFps
+  if (isReversed) {
+    const sourceEnd = reverseSourceEnd ?? safeTrimBefore
+    return snapSourceTime(Math.max(0, sourceEnd - sourceFrameOffset - 1) / sourceFps, sourceFps)
+  }
+  return snapSourceTime(safeTrimBefore / sourceFps + sourceFrameOffset / sourceFps, sourceFps)
 }
 
 /**
@@ -56,9 +60,13 @@ export function getAudioTargetTimeSeconds(
   sequenceLocalFrame: number,
   playbackRate: number,
   timelineFps: number,
+  isReversed: boolean = false,
+  reverseSourceEnd?: number,
 ): number {
-  return snapSourceTime(
-    trimBefore / sourceFps + (sequenceLocalFrame * playbackRate) / timelineFps,
-    sourceFps,
-  )
+  const sourceFrameOffset = (sequenceLocalFrame * playbackRate * sourceFps) / timelineFps
+  if (isReversed) {
+    const sourceEnd = reverseSourceEnd ?? trimBefore
+    return snapSourceTime(Math.max(0, sourceEnd - sourceFrameOffset - 1) / sourceFps, sourceFps)
+  }
+  return snapSourceTime(trimBefore / sourceFps + sourceFrameOffset / sourceFps, sourceFps)
 }

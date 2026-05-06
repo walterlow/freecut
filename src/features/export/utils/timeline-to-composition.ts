@@ -9,6 +9,7 @@ import {
   timelineToSourceFrames,
 } from '@/features/export/deps/timeline'
 import { createLogger } from '@/shared/logging/logger'
+import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
 
 const log = createLogger('TimelineToComposition')
 
@@ -40,6 +41,10 @@ export function convertTimelineToComposition(
   busAudioEq?: AudioEqSettings,
   masterBusDb?: number,
 ): CompositionInputProps {
+  items = items.map((item) =>
+    item.type === 'video' ? resolveReverseConformedVideoItem(item, fps, { mode: 'export' }) : item,
+  )
+
   // Resolve group gate behavior: parent group mute/hide propagates to children.
   // Also filters out group container tracks (which hold no items).
   tracks = resolveEffectiveTrackStates(tracks)
@@ -122,7 +127,25 @@ export function convertTimelineToComposition(
           const mediaItem = adjustedItem as typeof item
           mediaItem.trimStart = currentTrimStart + sourceTrimStart
           mediaItem.trimEnd = currentTrimEnd + sourceTrimEnd
-          mediaItem.sourceStart = currentSourceStart + sourceTrimStart
+          if (item.isReversed === true) {
+            const currentSourceEnd =
+              item.sourceEnd ??
+              currentSourceStart +
+                timelineToSourceFrames(item.durationInFrames, speed, fps, sourceFps)
+            mediaItem.sourceStart = currentSourceStart + sourceTrimEnd
+            mediaItem.sourceEnd = Math.max(
+              mediaItem.sourceStart + 1,
+              currentSourceEnd - sourceTrimStart,
+            )
+          } else {
+            mediaItem.sourceStart = currentSourceStart + sourceTrimStart
+            if (item.sourceEnd !== undefined && sourceTrimEnd > 0) {
+              mediaItem.sourceEnd = Math.max(
+                mediaItem.sourceStart + 1,
+                item.sourceEnd - sourceTrimEnd,
+              )
+            }
+          }
           mediaItem.offset = mediaItem.trimStart
         }
 
@@ -131,6 +154,19 @@ export function convertTimelineToComposition(
         // where in the sub-comp to start playing (in timeline frames, same fps).
         if (item.type === 'composition' && additionalTrimStart > 0) {
           adjustedItem.sourceStart = (item.sourceStart || 0) + additionalTrimStart
+        }
+
+        if (item.type === 'subtitle' && (additionalTrimStart > 0 || additionalTrimEnd > 0)) {
+          const trimStartSeconds = additionalTrimStart / fps
+          const trimmedDurationSeconds = newDuration / fps
+          const subtitleItem = adjustedItem as typeof item
+          subtitleItem.cues = item.cues
+            .map((cue) => ({
+              ...cue,
+              startSeconds: Math.max(0, cue.startSeconds - trimStartSeconds),
+              endSeconds: Math.min(trimmedDurationSeconds, cue.endSeconds - trimStartSeconds),
+            }))
+            .filter((cue) => cue.text.trim().length > 0 && cue.endSeconds > cue.startSeconds)
         }
 
         return adjustedItem

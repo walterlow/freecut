@@ -105,6 +105,39 @@ describe('audio scene', () => {
     )
   })
 
+  it('preserves reverse timing on standalone audio segments', () => {
+    const segments = buildStandaloneAudioSegments(
+      [
+        {
+          id: 'audio-1',
+          type: 'audio',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 30,
+          src: 'audio.mp3',
+          label: 'Audio 1',
+          sourceStart: 10,
+          sourceEnd: 40,
+          sourceFps: 30,
+          isReversed: true,
+          muted: false,
+          trackVolumeDb: 0,
+          trackVisible: true,
+        },
+      ],
+      30,
+    )
+
+    expect(segments[0]).toEqual(
+      expect.objectContaining({
+        itemId: 'audio-1',
+        trimBefore: 10,
+        isReversed: true,
+        reverseSourceEnd: 40,
+      }),
+    )
+  })
+
   it('includes track and clip EQ stages on standalone audio segments', () => {
     const segments = buildStandaloneAudioSegments(
       [
@@ -229,6 +262,41 @@ describe('audio scene', () => {
         src: 'blob://video-1',
       }),
     ])
+  })
+
+  it('preserves reverse timing on video-backed audio segments', () => {
+    const segments = buildTransitionVideoAudioSegments(
+      [
+        {
+          id: 'video-1',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 30,
+          src: 'video.mp4',
+          label: 'Video 1',
+          mediaId: 'media-1',
+          sourceStart: 15,
+          sourceEnd: 45,
+          sourceFps: 30,
+          isReversed: true,
+          muted: false,
+          trackVolumeDb: 0,
+          trackVisible: true,
+        },
+      ],
+      [],
+      30,
+    )
+
+    expect(segments[0]).toEqual(
+      expect.objectContaining({
+        itemId: 'video-1',
+        trimBefore: 15,
+        isReversed: true,
+        reverseSourceEnd: 45,
+      }),
+    )
   })
 
   it('expands synchronized linked audio companions around a cut-centered transition', () => {

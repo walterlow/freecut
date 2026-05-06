@@ -8,6 +8,9 @@ interface ClipIndicatorsProps {
   hasKeyframes: boolean
   /** Current playback speed (1 = normal) */
   currentSpeed: number
+  /** Whether media playback is reversed */
+  isReversed: boolean
+  reverseConformStatus?: 'pending' | 'ready' | 'error'
   /** Whether the item is currently being rate stretched */
   isStretching: boolean
   /** Visual feedback during stretch (speed preview) */
@@ -32,6 +35,8 @@ interface ClipIndicatorsProps {
 export const ClipIndicators = memo(function ClipIndicators({
   hasKeyframes,
   currentSpeed,
+  isReversed,
+  reverseConformStatus,
   isStretching,
   stretchFeedback,
   isBroken,
@@ -44,7 +49,12 @@ export const ClipIndicators = memo(function ClipIndicators({
   return (
     <>
       {/* Label-row badges ââ‚¬” single container to prevent overlap */}
-      {(hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
+      {(hasKeyframes ||
+        (isShape && isMask) ||
+        showSpeedBadge ||
+        isReversed ||
+        reverseConformStatus === 'pending' ||
+        reverseConformStatus === 'error') && (
         <div
           className="absolute right-1 z-10 pointer-events-none flex items-center gap-1"
           style={{ top: 0, height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
@@ -68,6 +78,38 @@ export const ClipIndicators = memo(function ClipIndicators({
               title={`Speed: ${currentSpeed.toFixed(2)}x`}
             >
               {currentSpeed.toFixed(2)}x
+            </span>
+          )}
+          {isReversed && (
+            <span
+              className="px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono"
+              title={
+                reverseConformStatus === 'ready'
+                  ? 'Reversed playback prepared'
+                  : reverseConformStatus === 'pending'
+                    ? 'Preparing reversed clip'
+                    : reverseConformStatus === 'error'
+                      ? 'Reversed playback; preparation failed'
+                      : 'Reversed playback'
+              }
+            >
+              REV
+            </span>
+          )}
+          {reverseConformStatus === 'pending' && (
+            <span
+              className="px-1 py-0.5 text-[10px] font-bold bg-sky-600/80 text-white rounded font-mono"
+              title="Preparing reversed clip"
+            >
+              PREP
+            </span>
+          )}
+          {reverseConformStatus === 'error' && (
+            <span
+              className="px-1 py-0.5 text-[10px] font-bold bg-red-600/80 text-white rounded font-mono"
+              title="Reverse preparation failed"
+            >
+              ERR
             </span>
           )}
         </div>

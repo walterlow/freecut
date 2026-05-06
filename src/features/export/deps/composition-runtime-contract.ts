@@ -48,4 +48,7 @@ export {
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
 } from '@/features/composition-runtime/utils/corner-pin'
-export { snapSourceTime } from '@/features/composition-runtime/utils/video-timing'
+export {
+  getVideoTargetTimeSeconds,
+  snapSourceTime,
+} from '@/features/composition-runtime/utils/video-timing'

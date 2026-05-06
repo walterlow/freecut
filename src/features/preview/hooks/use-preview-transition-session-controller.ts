@@ -525,14 +525,16 @@ export function usePreviewTransitionSessionController({
           }
 
           const isComplexTransitionStart = playbackTransitionComplexStartFrames.has(targetFrame)
-          const shouldRenderFullTargetFrame = forceFastScrubOverlay || isComplexTransitionStart
+          const shouldCachePlaybackRunway = usePlaybackStore.getState().isPlaying
+          const shouldRenderFullTargetFrame =
+            forceFastScrubOverlay || isComplexTransitionStart || shouldCachePlaybackRunway
           if (shouldRenderFullTargetFrame) {
             await renderer.renderFrame(targetFrame)
             cacheTransitionSessionFrame(targetFrame)
           }
           for (let offset = 1; offset < playbackTransitionPrerenderRunwayFrames; offset += 1) {
             const runwayFrame = targetFrame + offset
-            if (forceFastScrubOverlay && !isComplexTransitionStart) {
+            if (shouldCachePlaybackRunway || (forceFastScrubOverlay && !isComplexTransitionStart)) {
               await renderer.renderFrame(runwayFrame)
               cacheTransitionSessionFrame(runwayFrame)
             } else {

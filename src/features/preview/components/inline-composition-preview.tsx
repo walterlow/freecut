@@ -164,6 +164,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
       try {
         const renderer = await createCompositionRenderer(rendererInput, offscreen, ctx, {
           mode: 'preview',
+          useProxyMedia: useProxy,
         })
         if (cancelled) {
           renderer.dispose()
@@ -204,7 +205,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
         offscreenRef.current = null
       }
     }
-  }, [rendererInput, compositionWidth, compositionHeight])
+  }, [rendererInput, compositionWidth, compositionHeight, useProxy])
 
   useEffect(() => {
     if (!rendererReady) return

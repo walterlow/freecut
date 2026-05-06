@@ -8,14 +8,7 @@ import type { TransitionRegistry, TransitionRenderer } from '../registry'
 import type { TransitionStyleCalculation } from '../engine'
 import type { TransitionDefinition } from '@/types/transition'
 
-const ALL_TIMINGS = [
-  'linear',
-  'spring',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'cubic-bezier',
-] as const
+const ALL_TIMINGS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
@@ -84,7 +77,7 @@ export function getIrisMaskState(
 
 // The CSS preview mirrors mask geometry and opacity only. The production WebGPU
 // shaders also apply a subtle UV zoom envelope that is intentionally shader-only.
-const clockWipeRenderer: TransitionRenderer = {
+export const clockWipeRenderer: TransitionRenderer = {
   gpuTransitionId: 'clockWipe',
   calculateStyles(progress, isOutgoing, _cw, _ch, _dir, properties): TransitionStyleCalculation {
     const p = clamp01(progress)
@@ -143,17 +136,30 @@ const clockWipeRenderer: TransitionRenderer = {
   },
 }
 
-const clockWipeDef: TransitionDefinition = {
+export const clockWipeDef: TransitionDefinition = {
   id: 'clockWipe',
   label: 'Clock Wipe',
   description: 'Circular wipe like a clock hand',
-  category: 'mask',
+  category: 'wipe',
   icon: 'Clock',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'edgeSoftness',
+      label: 'Softness',
+      type: 'number',
+      defaultValue: 8,
+      min: 0,
+      max: 32,
+      step: 0.5,
+      unit: 'px',
+      description: 'Clock hand edge feather',
+    },
+  ],
 }
 
 // ============================================================================
@@ -232,13 +238,26 @@ const irisDef: TransitionDefinition = {
   id: 'iris',
   label: 'Iris',
   description: 'Circular iris expanding/contracting',
-  category: 'mask',
+  category: 'iris',
   icon: 'Circle',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+  parameters: [
+    {
+      key: 'edgeSoftness',
+      label: 'Softness',
+      type: 'number',
+      defaultValue: 6,
+      min: 0,
+      max: 32,
+      step: 0.5,
+      unit: 'px',
+      description: 'Iris edge feather',
+    },
+  ],
 }
 
 // ============================================================================
@@ -246,6 +265,8 @@ const irisDef: TransitionDefinition = {
 // ============================================================================
 
 export function registerMaskTransitions(registry: TransitionRegistry): void {
-  registry.register('clockWipe', clockWipeDef, clockWipeRenderer)
+  if (!registry.has('clockWipe')) {
+    registry.register('clockWipe', clockWipeDef, clockWipeRenderer)
+  }
   registry.register('iris', irisDef, irisRenderer)
 }

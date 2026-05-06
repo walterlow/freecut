@@ -56,6 +56,7 @@ export interface TimelineActions {
   updateItem: (id: string, updates: Partial<TimelineItem>) => void
   removeItems: (ids: string[]) => void
   rippleDeleteItems: (ids: string[]) => void
+  reverseItems: (ids: string[]) => void
   closeGapAtPosition: (trackId: string, frame: number) => void
   closeAllGapsOnTrack: (trackId: string) => void
   toggleSnap: () => void
@@ -78,6 +79,14 @@ export interface TimelineActions {
   rippleTrimItem: (id: string, handle: 'start' | 'end', trimDelta: number) => void
   splitItem: (id: string, splitFrame: number) => void
   splitItemAtFrames: (id: string, splitFrames: number[]) => number
+  removeSilenceFromItems: (
+    itemIds: string[],
+    silenceRangesByMediaId: Record<string, Array<{ start: number; end: number }>>,
+  ) => { analyzedItemCount: number; removedItemCount: number; splitCount: number }
+  removeFillerWordsFromItems: (
+    itemIds: string[],
+    fillerRangesByMediaId: Record<string, Array<{ start: number; end: number }>>,
+  ) => { analyzedItemCount: number; removedItemCount: number; splitCount: number }
   joinItems: (itemIds: string[]) => void
   rateStretchItem: (id: string, newFrom: number, newDuration: number, newSpeed: number) => void
   resetSpeedWithRipple: (itemIds: string[]) => void
@@ -132,13 +141,20 @@ export interface TimelineActions {
     durationInFrames?: number,
     presentation?: TransitionPresentation,
     direction?: WipeDirection | SlideDirection | FlipDirection,
+    alignment?: number,
   ) => boolean
   updateTransition: (
     id: string,
     updates: Partial<
       Pick<
         Transition,
-        'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'properties'
+        | 'durationInFrames'
+        | 'type'
+        | 'presentation'
+        | 'direction'
+        | 'timing'
+        | 'alignment'
+        | 'properties'
       >
     >,
   ) => void
@@ -148,7 +164,13 @@ export interface TimelineActions {
       updates: Partial<
         Pick<
           Transition,
-          'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'properties'
+          | 'durationInFrames'
+          | 'type'
+          | 'presentation'
+          | 'direction'
+          | 'timing'
+          | 'alignment'
+          | 'properties'
         >
       >
     }>,

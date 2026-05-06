@@ -651,7 +651,7 @@ describe('linked edit tools', () => {
     expect(itemById['audio-2']).toMatchObject({ sourceStart: 2, sourceEnd: 62 })
     expect(itemById['video-2']).toMatchObject({ sourceStart: 2, sourceEnd: 62 })
     expect(useTransitionsStore.getState().transitions).toEqual([
-      expect.objectContaining({ durationInFrames: 4 }),
+      expect.objectContaining({ durationInFrames: 5 }),
     ])
   })
 

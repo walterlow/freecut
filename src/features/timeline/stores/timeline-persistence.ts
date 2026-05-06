@@ -46,6 +46,7 @@ import {
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media'
 import { getEffectiveTimelineMaxFrame, sanitizeInOutPoints } from '../utils/in-out-points'
+import { reverseConformService } from '../services/reverse-conform-service'
 
 const logger = createLogger('TimelineStore')
 
@@ -931,8 +932,11 @@ export async function loadTimeline(
         outPoint: t.outPoint ?? null,
         maxFrame: getEffectiveTimelineMaxFrame((t.items || []) as TimelineItem[], projectFps),
       })
+      const hydratedItems = await reverseConformService.hydrateItems(
+        (t.items || []) as TimelineItem[],
+      )
       useItemsStore.getState().setTracks(sortedTracks as TimelineTrack[])
-      useItemsStore.getState().setItems((t.items || []) as TimelineItem[])
+      useItemsStore.getState().setItems(hydratedItems)
       useTransitionsStore.getState().setTransitions((t.transitions || []) as Transition[])
       useKeyframesStore.getState().setKeyframes((t.keyframes || []) as ItemKeyframes[])
       useMarkersStore.getState().setMarkers(t.markers || [])
@@ -944,11 +948,11 @@ export async function loadTimeline(
 
       // Restore sub-compositions
       if (t.compositions && t.compositions.length > 0) {
-        useCompositionsStore.getState().setCompositions(
-          t.compositions.map((c) => ({
+        const hydratedCompositions = await Promise.all(
+          t.compositions.map(async (c) => ({
             id: c.id,
             name: c.name,
-            items: c.items as TimelineItem[],
+            items: await reverseConformService.hydrateItems(c.items as TimelineItem[]),
             tracks: c.tracks as TimelineTrack[],
             transitions: (c.transitions ?? []) as Transition[],
             keyframes: (c.keyframes ?? []) as ItemKeyframes[],
@@ -960,6 +964,7 @@ export async function loadTimeline(
             ...(c.busAudioEq && { busAudioEq: c.busAudioEq }),
           })),
         )
+        useCompositionsStore.getState().setCompositions(hydratedCompositions)
       } else {
         useCompositionsStore.getState().setCompositions([])
       }

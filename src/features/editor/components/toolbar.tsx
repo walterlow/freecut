@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
@@ -33,6 +33,8 @@ import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
 import { cn } from '@/shared/ui/cn'
 import { useDebugStore } from '@/features/editor/stores/debug-store'
 
+const SAVE_ANIMATION_MIN_MS = 1800
+
 interface ToolbarProps {
   projectId: string
   project: {
@@ -62,9 +64,20 @@ export const Toolbar = memo(function Toolbar({
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [showWhatsNewDialog, setShowWhatsNewDialog] = useState(false)
   const [hasUnseenWhatsNew, setHasUnseenWhatsNew] = useState(false)
+  const [isSaveAnimating, setIsSaveAnimating] = useState(false)
+  const [saveAnimationKey, setSaveAnimationKey] = useState(0)
+  const saveAnimationTimeoutRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     setHasUnseenWhatsNew(hasUnseenChangelog())
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (saveAnimationTimeoutRef.current !== undefined) {
+        window.clearTimeout(saveAnimationTimeoutRef.current)
+      }
+    }
   }, [])
 
   const openWhatsNew = () => {
@@ -81,8 +94,31 @@ export const Toolbar = memo(function Toolbar({
   }
 
   const handleSave = async () => {
+    const startedAt = performance.now()
+    const finishSaveAnimation = () => {
+      const remainingMs = Math.max(0, SAVE_ANIMATION_MIN_MS - (performance.now() - startedAt))
+
+      saveAnimationTimeoutRef.current = window.setTimeout(() => {
+        setIsSaveAnimating(false)
+        saveAnimationTimeoutRef.current = undefined
+      }, remainingMs)
+    }
+
+    if (saveAnimationTimeoutRef.current !== undefined) {
+      window.clearTimeout(saveAnimationTimeoutRef.current)
+    }
+
+    setSaveAnimationKey((key) => key + 1)
+    setIsSaveAnimating(true)
+
     if (onSave) {
-      await onSave()
+      try {
+        await onSave()
+      } finally {
+        finishSaveAnimation()
+      }
+    } else {
+      finishSaveAnimation()
     }
   }
 
@@ -198,7 +234,11 @@ export const Toolbar = memo(function Toolbar({
           aria-label="Save project"
         >
           <div className="relative">
-            <Save className="h-4 w-4" />
+            {isSaveAnimating ? (
+              <SaveAnimationIcon key={saveAnimationKey} className="h-5 w-5" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
             {isDirty && (
               <span className="absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-orange-500" />
             )}
@@ -229,6 +269,48 @@ export const Toolbar = memo(function Toolbar({
     </div>
   )
 })
+
+function SaveAnimationIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      version="1.1"
+      id="L6"
+      xmlns="http://www.w3.org/2000/svg"
+      x="0px"
+      y="0px"
+      viewBox="12 12 76 76"
+      enableBackground="new 12 12 76 76"
+      xmlSpace="preserve"
+      aria-hidden="true"
+    >
+      <rect fill="none" stroke="currentColor" strokeWidth="4" x="25" y="25" width="50" height="50">
+        <animateTransform
+          attributeName="transform"
+          dur="0.5s"
+          from="0 50 50"
+          to="180 50 50"
+          type="rotate"
+          id="strokeBox"
+          attributeType="XML"
+          begin="rectBox.end"
+        />
+      </rect>
+      <rect x="27" y="27" fill="currentColor" width="46" height="50">
+        <animate
+          attributeName="height"
+          dur="1.3s"
+          attributeType="XML"
+          from="50"
+          to="0"
+          id="rectBox"
+          fill="freeze"
+          begin="0s;strokeBox.end"
+        />
+      </rect>
+    </svg>
+  )
+}
 
 function DebugPopover({ projectId }: { projectId: string }) {
   const debugPanelOpen = useDebugStore((s) => s.debugPanelOpen)

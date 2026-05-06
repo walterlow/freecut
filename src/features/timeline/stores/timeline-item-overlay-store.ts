@@ -7,6 +7,10 @@ export interface TimelineItemOverlay {
   label: string
   progress?: number
   tone?: TimelineItemOverlayTone
+  ranges?: Array<{
+    startRatio: number
+    endRatio: number
+  }>
 }
 
 interface TimelineItemOverlayState {

@@ -140,6 +140,14 @@ export interface MediaTranscriptSegment {
   text: string
   start: number
   end: number
+  words?: MediaTranscriptWord[]
+}
+
+export interface MediaTranscriptWord {
+  text: string
+  start: number
+  end: number
+  confidence?: number
 }
 
 export interface MediaTranscript {

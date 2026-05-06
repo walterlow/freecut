@@ -9,14 +9,7 @@ import type { TransitionStyleCalculation } from '../engine'
 import type { TransitionDefinition, SlideDirection } from '@/types/transition'
 
 const ALL_DIRECTIONS: SlideDirection[] = ['from-left', 'from-right', 'from-top', 'from-bottom']
-const ALL_TIMINGS = [
-  'linear',
-  'spring',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'cubic-bezier',
-] as const
+const ALL_TIMINGS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const
 
 function getSlideOffset(
   progress: number,
@@ -92,9 +85,9 @@ const slideRenderer: TransitionRenderer = {
 
 const slideDef: TransitionDefinition = {
   id: 'slide',
-  label: 'Slide',
-  description: 'Slide in from a direction',
-  category: 'slide',
+  label: 'Push',
+  description: 'Push between clips from a direction',
+  category: 'motion',
   icon: 'MoveRight',
   hasDirection: true,
   directions: ALL_DIRECTIONS,
