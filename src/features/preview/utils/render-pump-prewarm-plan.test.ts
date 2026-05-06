@@ -34,14 +34,30 @@ describe('render pump prewarm planner helpers', () => {
     expect(resolvePrewarmFrameQueueAfterEnqueue({ ...base, frame: 12 }).enqueued).toBe(false)
   })
 
+  it('preserves frame queue references when rejecting duplicate prewarm frames', () => {
+    const queue = [10]
+    const queuedFrames = new Set([10])
+    const plan = resolvePrewarmFrameQueueAfterEnqueue({
+      frame: 10,
+      queue,
+      queuedFrames,
+      prewarmedFrames: new Set<number>(),
+      maxQueueSize: 3,
+    })
+
+    expect(plan.enqueued).toBe(false)
+    expect(plan.queue).toBe(queue)
+    expect(plan.queuedFrames).toBe(queuedFrames)
+  })
+
   it('touches boundary sources with LRU ordering and reports source evictions', () => {
     const next = resolveBoundarySourcePrewarmCacheUpdate({
       src: 'new.mp4',
       currentFrame: 120,
-      touchFrameEntries: [
+      touchFrameMap: new Map([
         ['old-a.mp4', 20],
         ['old-b.mp4', 30],
-      ],
+      ]),
       prewarmedSources: new Set(['old-a.mp4', 'old-b.mp4']),
       prewarmedSourceOrder: ['old-a.mp4', 'old-b.mp4'],
       cooldownFrames: 6,
@@ -52,10 +68,10 @@ describe('render pump prewarm planner helpers', () => {
       touched: true,
       wasAlreadyPrewarmed: false,
       evictedSources: ['old-a.mp4'],
-      touchFrameEntries: [
+      touchFrameMap: new Map([
         ['old-b.mp4', 30],
         ['new.mp4', 120],
-      ],
+      ]),
       prewarmedSources: new Set(['old-b.mp4', 'new.mp4']),
       prewarmedSourceOrder: ['old-b.mp4', 'new.mp4'],
     })
@@ -65,7 +81,7 @@ describe('render pump prewarm planner helpers', () => {
     const next = resolveBoundarySourcePrewarmCacheUpdate({
       src: 'clip.mp4',
       currentFrame: 24,
-      touchFrameEntries: [['clip.mp4', 20]],
+      touchFrameMap: new Map([['clip.mp4', 20]]),
       prewarmedSources: new Set(['clip.mp4']),
       prewarmedSourceOrder: ['clip.mp4'],
       cooldownFrames: 6,

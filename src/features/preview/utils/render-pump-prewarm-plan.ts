@@ -15,7 +15,7 @@ type ScrubPrewarmFrameQueuePlan = {
 type BoundarySourcePrewarmCacheInput = {
   src: string
   currentFrame: number
-  touchFrameEntries: Array<[string, number]>
+  touchFrameMap: Map<string, number>
   prewarmedSources: Set<string>
   prewarmedSourceOrder: string[]
   cooldownFrames: number
@@ -26,7 +26,7 @@ type BoundarySourcePrewarmCachePlan = {
   touched: boolean
   wasAlreadyPrewarmed: boolean
   evictedSources: string[]
-  touchFrameEntries: Array<[string, number]>
+  touchFrameMap: Map<string, number>
   prewarmedSources: Set<string>
   prewarmedSourceOrder: string[]
 }
@@ -38,16 +38,16 @@ export function resolvePrewarmFrameQueueAfterEnqueue({
   prewarmedFrames,
   maxQueueSize,
 }: ScrubPrewarmFrameQueueInput): ScrubPrewarmFrameQueuePlan {
-  const nextQueue = [...queue]
-  const nextQueuedFrames = new Set(queuedFrames)
-
-  if (frame < 0 || nextQueuedFrames.has(frame) || prewarmedFrames.has(frame)) {
+  if (frame < 0 || queuedFrames.has(frame) || prewarmedFrames.has(frame)) {
     return {
       enqueued: false,
-      queue: nextQueue,
-      queuedFrames: nextQueuedFrames,
+      queue,
+      queuedFrames,
     }
   }
+
+  const nextQueue = [...queue]
+  const nextQueuedFrames = new Set(queuedFrames)
 
   nextQueuedFrames.add(frame)
   nextQueue.push(frame)
@@ -69,18 +69,15 @@ export function resolvePrewarmFrameQueueAfterEnqueue({
 export function resolveBoundarySourcePrewarmCacheUpdate({
   src,
   currentFrame,
-  touchFrameEntries,
+  touchFrameMap,
   prewarmedSources,
   prewarmedSourceOrder,
   cooldownFrames,
   maxSources,
 }: BoundarySourcePrewarmCacheInput): BoundarySourcePrewarmCachePlan {
-  const nextTouchFrameMap = new Map(touchFrameEntries)
-  const nextPrewarmedSources = new Set(prewarmedSources)
-  const nextPrewarmedSourceOrder = [...prewarmedSourceOrder]
-  const wasAlreadyPrewarmed = nextPrewarmedSources.has(src)
+  const wasAlreadyPrewarmed = prewarmedSources.has(src)
 
-  const lastTouchedFrame = nextTouchFrameMap.get(src)
+  const lastTouchedFrame = touchFrameMap.get(src)
   if (
     lastTouchedFrame !== undefined &&
     Math.abs(currentFrame - lastTouchedFrame) < cooldownFrames
@@ -89,11 +86,15 @@ export function resolveBoundarySourcePrewarmCacheUpdate({
       touched: false,
       wasAlreadyPrewarmed,
       evictedSources: [],
-      touchFrameEntries: Array.from(nextTouchFrameMap.entries()),
-      prewarmedSources: nextPrewarmedSources,
-      prewarmedSourceOrder: nextPrewarmedSourceOrder,
+      touchFrameMap,
+      prewarmedSources,
+      prewarmedSourceOrder,
     }
   }
+
+  const nextTouchFrameMap = new Map(touchFrameMap)
+  const nextPrewarmedSources = new Set(prewarmedSources)
+  const nextPrewarmedSourceOrder = [...prewarmedSourceOrder]
 
   nextTouchFrameMap.set(src, currentFrame)
   const existingIndex = nextPrewarmedSourceOrder.indexOf(src)
@@ -118,7 +119,7 @@ export function resolveBoundarySourcePrewarmCacheUpdate({
     touched: true,
     wasAlreadyPrewarmed,
     evictedSources,
-    touchFrameEntries: Array.from(nextTouchFrameMap.entries()),
+    touchFrameMap: nextTouchFrameMap,
     prewarmedSources: nextPrewarmedSources,
     prewarmedSourceOrder: nextPrewarmedSourceOrder,
   }

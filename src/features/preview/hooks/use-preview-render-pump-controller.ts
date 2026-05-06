@@ -465,7 +465,7 @@ export function usePreviewRenderPump({
             const plan = resolveBoundarySourcePrewarmCacheUpdate({
               src,
               currentFrame,
-              touchFrameEntries: Array.from(scrubPrewarmedSourceTouchFrameRef.current.entries()),
+              touchFrameMap: scrubPrewarmedSourceTouchFrameRef.current,
               prewarmedSources: scrubPrewarmedSourcesRef.current,
               prewarmedSourceOrder: scrubPrewarmedSourceOrderRef.current,
               cooldownFrames: FAST_SCRUB_SOURCE_TOUCH_COOLDOWN_FRAMES,
@@ -476,12 +476,12 @@ export function usePreviewRenderPump({
               return false
             }
 
-            scrubPrewarmedSourceTouchFrameRef.current = new Map(plan.touchFrameEntries)
+            scrubPrewarmedSourceTouchFrameRef.current = plan.touchFrameMap
             scrubPrewarmedSourcesRef.current = plan.prewarmedSources
             scrubPrewarmedSourceOrderRef.current = plan.prewarmedSourceOrder
             previewPerfRef.current.fastScrubPrewarmSourceEvictions += plan.evictedSources.length
             previewPerfRef.current.fastScrubPrewarmedSources = plan.prewarmedSources.size
-            return plan.touched
+            return true
           }
           const selectedSources = selectBoundarySourcePrewarmSources({
             boundarySources: fastScrubBoundarySources,
