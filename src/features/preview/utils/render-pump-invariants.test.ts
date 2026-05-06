@@ -231,6 +231,20 @@ describe('render pump invariants', () => {
     expect(sim.renderedFrames).toContain(100)
   })
 
+  it('stale generation suppresses background prewarm after a priority frame', async () => {
+    sim.renderDelayMs = 10
+    sim.setRequestedFrame(100)
+    const p = sim.pump()
+
+    sim.bumpGeneration()
+    sim.setRequestedFrame(101)
+    await p
+
+    expect(sim.renderedFrames).toEqual([100])
+    expect(sim.inFlight).toBe(true)
+    expect(sim.staleFinallyReleases).toBe(1)
+  })
+
   it('lock is released after pump completes with matching generation', async () => {
     sim.setRequestedFrame(100)
     await sim.pump()

@@ -41,6 +41,26 @@ describe('render pump frame plan', () => {
     expect(target).toBe(100)
   })
 
+  it('uses current frame for paused transition overlay requests', () => {
+    const target = resolveRenderPumpTargetFrame({
+      state: makeState({ previewFrame: null, currentFrame: 142 }),
+      forceFastScrubOverlay: false,
+      isPausedInsideTransition: true,
+    })
+
+    expect(target).toBe(142)
+  })
+
+  it('keeps preview frame ahead of paused transition fallback', () => {
+    const target = resolveRenderPumpTargetFrame({
+      state: makeState({ previewFrame: 151, currentFrame: 142 }),
+      forceFastScrubOverlay: false,
+      isPausedInsideTransition: true,
+    })
+
+    expect(target).toBe(151)
+  })
+
   it('detects atomic preview targets', () => {
     expect(
       isAtomicPreviewTarget(
@@ -165,6 +185,17 @@ describe('render pump frame plan', () => {
     expect(frames).toEqual([100, 101, 102, 107, 108, 109])
   })
 
+  it('falls back to nearest boundary frames when direction has no candidates', () => {
+    const frames = selectBoundaryPrewarmFrames({
+      boundaryFrames: [91, 94, 96],
+      targetFrame: 100,
+      direction: 1,
+      fps: 30,
+    })
+
+    expect(frames).toEqual([95, 96, 97, 93, 94])
+  })
+
   it('selects nearby boundary sources and caps total sources', () => {
     const sources = selectBoundarySourcePrewarmSources({
       boundarySources: [
@@ -178,5 +209,19 @@ describe('render pump frame plan', () => {
     })
 
     expect(sources).toEqual(['d', 'e', 'f', 'g', 'h', 'i'])
+  })
+
+  it('uses directional boundary source fallback and preserves selected entry ordering', () => {
+    const sources = selectBoundarySourcePrewarmSources({
+      boundarySources: [
+        { frame: 94, srcs: ['a'] },
+        { frame: 96, srcs: ['b', 'c'] },
+      ],
+      targetFrame: 100,
+      direction: 1,
+      fps: 30,
+    })
+
+    expect(sources).toEqual(['b', 'c', 'a'])
   })
 })

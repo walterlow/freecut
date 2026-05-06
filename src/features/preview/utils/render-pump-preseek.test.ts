@@ -267,6 +267,79 @@ describe('render pump preseek helpers', () => {
     })
   })
 
+  it('uses the earliest visibility frame across paused variable-speed candidates', () => {
+    const tracks = [
+      {
+        ...makeTrack([
+          makeVideoItem({
+            id: 'top-occluder',
+            from: 90,
+            durationInFrames: 25,
+            speed: 1,
+          }),
+        ]),
+        id: 'top',
+        order: 0,
+      },
+      {
+        ...makeTrack([
+          makeVideoItem({
+            id: 'middle-candidate',
+            from: 112,
+            durationInFrames: 30,
+            speed: 1.25,
+            src: 'middle.mp4',
+          }),
+        ]),
+        id: 'middle',
+        order: 1,
+      },
+      {
+        ...makeTrack([
+          makeVideoItem({
+            id: 'bottom-candidate',
+            from: 118,
+            durationInFrames: 30,
+            speed: 1.5,
+            src: 'bottom.mp4',
+          }),
+        ]),
+        id: 'bottom',
+        order: 2,
+      },
+    ]
+
+    expect(resolvePausedVariableSpeedPrewarmPlan(tracks, 100, 30)).toEqual({
+      itemIds: ['middle-candidate', 'bottom-candidate'],
+      visibilityFrame: 115,
+      preseekFrame: 114,
+    })
+  })
+
+  it('keeps paused variable-speed preseek at the current frame when already visible', () => {
+    const tracks = [
+      {
+        ...makeTrack([
+          makeVideoItem({
+            id: 'visible-soon',
+            from: 104,
+            durationInFrames: 30,
+            speed: 1.5,
+            src: 'visible.mp4',
+          }),
+        ]),
+        id: 'top',
+        order: 0,
+      },
+    ]
+
+    expect(resolvePausedVariableSpeedPrewarmPlan(tracks, 100, 30)).toEqual({
+      itemIds: ['visible-soon'],
+      visibilityFrame: 100,
+      preseekFrame: 100,
+    })
+  })
+
   it('returns null when there are no paused variable-speed candidates', () => {
     const tracks = [
       makeTrack([
