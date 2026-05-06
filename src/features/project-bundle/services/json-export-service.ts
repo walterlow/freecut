@@ -16,6 +16,7 @@ import {
 } from '../types/snapshot'
 import { getProject, getProjectMediaIds } from '@/infrastructure/storage'
 import { mediaLibraryService } from '@/features/project-bundle/deps/media-library'
+import { computeSnapshotChecksum, sanitizeDownloadFilename } from './pure-utils'
 
 // App version - should be imported from a config
 const APP_VERSION = '1.0.0'
@@ -138,7 +139,7 @@ export function downloadSnapshotJson(snapshot: ProjectSnapshot, filename?: strin
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
 
-  const safeName = sanitizeFilename(filename || snapshot.project.name)
+  const safeName = sanitizeDownloadFilename(filename || snapshot.project.name)
   const a = document.createElement('a')
   a.href = url
   a.download = `${safeName}.freecut.json`
@@ -179,20 +180,6 @@ export async function copyProjectToClipboard(
 }
 
 /**
- * Compute SHA-256 checksum for snapshot integrity
- */
-async function computeSnapshotChecksum(snapshot: ProjectSnapshot): Promise<string> {
-  // Create a copy without the checksum field for hashing
-  const dataForHash = { ...snapshot, checksum: undefined }
-  const json = JSON.stringify(dataForHash)
-  const buffer = new TextEncoder().encode(json)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-/**
  * Verify snapshot checksum
  */
 export async function verifySnapshotChecksum(snapshot: ProjectSnapshot): Promise<boolean> {
@@ -203,16 +190,6 @@ export async function verifySnapshotChecksum(snapshot: ProjectSnapshot): Promise
   const expectedChecksum = snapshot.checksum
   const actualChecksum = await computeSnapshotChecksum(snapshot)
   return expectedChecksum === actualChecksum
-}
-
-/**
- * Sanitize filename for safe download
- */
-function sanitizeFilename(name: string): string {
-  return name
-    .replace(/[<>:"/\\|?*]/g, '_')
-    .replace(/\s+/g, '_')
-    .substring(0, 100)
 }
 
 /**

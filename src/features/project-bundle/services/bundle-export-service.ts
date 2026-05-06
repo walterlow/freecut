@@ -22,6 +22,11 @@ import {
 
 import { createLogger } from '@/shared/logging/logger'
 import { convertTimelineForBundle } from './bundle-timeline'
+import {
+  computeBundleManifestChecksum,
+  getUniqueBundleFileName,
+  sanitizeDownloadFilename,
+} from './pure-utils'
 
 const logger = createLogger('BundleExportService')
 
@@ -113,17 +118,7 @@ export async function exportProjectBundle(
     const hash = media.contentHash || (await computeContentHashFromBuffer(buffer))
 
     // Ensure unique filename within bundle
-    let bundleFileName = media.fileName
-    let counter = 1
-    while (usedFilenames.has(`${hash}/${bundleFileName}`)) {
-      const ext = media.fileName.lastIndexOf('.')
-      if (ext > 0) {
-        bundleFileName = `${media.fileName.substring(0, ext)}_${counter}${media.fileName.substring(ext)}`
-      } else {
-        bundleFileName = `${media.fileName}_${counter}`
-      }
-      counter++
-    }
+    const bundleFileName = getUniqueBundleFileName(usedFilenames, hash, media.fileName)
     usedFilenames.add(`${hash}/${bundleFileName}`)
 
     const relativePath = `media/${hash}/${bundleFileName}`
@@ -183,14 +178,7 @@ export async function exportProjectBundle(
   }
 
   // Step 8: Compute manifest checksum and add manifest.json
-  const manifestForHash = { ...manifest, checksum: '' }
-  const manifestHashBuffer = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(JSON.stringify(manifestForHash)),
-  )
-  manifest.checksum = Array.from(new Uint8Array(manifestHashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  manifest.checksum = await computeBundleManifestChecksum(manifest)
 
   const manifestFile = new ZipDeflate('manifest.json')
   zip.add(manifestFile)
@@ -213,7 +201,8 @@ export async function exportProjectBundle(
   }
 
   const blob = new Blob([result], { type: 'application/zip' })
-  const filename = sanitizeFilename(project.name) + BUNDLE_EXTENSION
+  const filename =
+    sanitizeDownloadFilename(project.name, { fallback: 'untitled' }) + BUNDLE_EXTENSION
 
   return {
     blob,
@@ -311,17 +300,7 @@ export async function exportProjectBundleStreaming(
       const buffer = await blob.arrayBuffer()
       const hash = media.contentHash || (await computeContentHashFromBuffer(buffer))
 
-      let bundleFileName = media.fileName
-      let counter = 1
-      while (usedFilenames.has(`${hash}/${bundleFileName}`)) {
-        const ext = media.fileName.lastIndexOf('.')
-        if (ext > 0) {
-          bundleFileName = `${media.fileName.substring(0, ext)}_${counter}${media.fileName.substring(ext)}`
-        } else {
-          bundleFileName = `${media.fileName}_${counter}`
-        }
-        counter++
-      }
+      const bundleFileName = getUniqueBundleFileName(usedFilenames, hash, media.fileName)
       usedFilenames.add(`${hash}/${bundleFileName}`)
 
       const relativePath = `media/${hash}/${bundleFileName}`
@@ -381,14 +360,7 @@ export async function exportProjectBundleStreaming(
     }
 
     // Step 8: Compute manifest checksum and add manifest.json
-    const manifestForHash = { ...manifest, checksum: '' }
-    const manifestHashBuffer = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(JSON.stringify(manifestForHash)),
-    )
-    manifest.checksum = Array.from(new Uint8Array(manifestHashBuffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
+    manifest.checksum = await computeBundleManifestChecksum(manifest)
 
     const manifestFile = new ZipDeflate('manifest.json')
     zip.add(manifestFile)
@@ -405,7 +377,8 @@ export async function exportProjectBundleStreaming(
 
     onProgress?.({ percent: 100, stage: 'complete' })
 
-    const filename = sanitizeFilename(project.name) + BUNDLE_EXTENSION
+    const filename =
+      sanitizeDownloadFilename(project.name, { fallback: 'untitled' }) + BUNDLE_EXTENSION
 
     return {
       filename,
@@ -441,15 +414,4 @@ export function downloadBundle(result: ExportResult): void {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
-}
-
-/**
- * Sanitize filename for safe download
- */
-function sanitizeFilename(name: string): string {
-  const sanitized = name
-    .replace(/[<>:"/\\|?*]/g, '_')
-    .replace(/\s+/g, '_')
-    .substring(0, 100)
-  return sanitized || 'untitled'
 }
