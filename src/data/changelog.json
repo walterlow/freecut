@@ -1,7 +1,12 @@
 {
   "current": {
     "version": "current",
-    "date": "2026-05-02",
+    "date": "2026-04-28",
+    "highlights": [
+      "Projects now live on disk in a workspace folder you choose",
+      "Per-clip pitch shift in semitones and cents",
+      "Floating six-band clip EQ panels"
+    ],
     "groups": {
       "added": [
         {

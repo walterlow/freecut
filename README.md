@@ -4,6 +4,8 @@
 
 **Edit videos. In your browser.**
 
+中文文档（开发与维护）: [docs/README.zh-CN.md](docs/README.zh-CN.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ![FreeCut Timeline Editor](./public/assets/landing/timeline.png)
