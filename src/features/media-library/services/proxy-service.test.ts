@@ -335,6 +335,62 @@ describe('proxyService.loadExistingProxies', () => {
     expect(removeEntry).toHaveBeenCalledWith('proxy-video-3', { recursive: true })
   })
 
+  it('registers loaded OPFS proxy object URLs with byte-for-byte persisted metadata paths', async () => {
+    const proxyDirectory = createDirectoryHandle({
+      files: {
+        'meta.json': createJsonFile({
+          version: 4,
+          width: 960,
+          height: 540,
+          sourceWidth: 3840,
+          sourceHeight: 2160,
+          status: 'ready',
+          createdAt: 1,
+        }),
+        'proxy.mp4': createBinaryFile(2048),
+      },
+    })
+    const proxyRoot = createDirectoryHandle({
+      directories: {
+        'f-abc123-10485760-1700000000': proxyDirectory,
+      },
+    })
+    const root = createDirectoryHandle({
+      directories: {
+        proxies: proxyRoot,
+      },
+    })
+
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        getDirectory: vi.fn().mockResolvedValue(root),
+      },
+    })
+
+    const { proxyService } = await import('./proxy-service')
+    proxyService.setProxyKey('video-golden', 'f-abc123-10485760-1700000000')
+
+    await expect(proxyService.loadExistingProxies(['video-golden'])).resolves.toEqual([])
+
+    expect(objectUrlRegistryMocks.registerObjectUrl).toHaveBeenCalledWith(
+      'blob:proxy',
+      expect.objectContaining({ size: 2048 }),
+      {
+        storageType: 'opfs',
+        opfsPath: 'proxies/f-abc123-10485760-1700000000/proxy.mp4',
+        fileSize: 2048,
+      },
+    )
+  })
+
+  it('exposes centralized OPFS proxy path strings byte-for-byte', async () => {
+    const { proxyOpfsFilePath, proxyOpfsMetaPath } = await import('../proxy-constants')
+
+    expect(proxyOpfsFilePath('h-deadbeef')).toBe('proxies/h-deadbeef/proxy.mp4')
+    expect(proxyOpfsMetaPath('h-deadbeef')).toBe('proxies/h-deadbeef/meta.json')
+  })
+
   it('prewarms the first filmstrip window when a proxy finishes loading', async () => {
     const proxyDirectory = createDirectoryHandle({
       files: {
