@@ -46,6 +46,10 @@ import {
   getVideoItemSourceTimeSeconds,
   resolvePausedVariableSpeedPrewarmPlan,
 } from '../utils/render-pump-preseek'
+import {
+  resolveBoundarySourcePrewarmCacheUpdate,
+  resolvePrewarmFrameQueueAfterEnqueue,
+} from '../utils/render-pump-prewarm-plan'
 import type { TransitionPreviewSessionTrace } from './use-preview-transition-session-controller'
 import { createLogger } from '@/shared/logging/logger'
 
@@ -417,17 +421,15 @@ export function usePreviewRenderPump({
 
       try {
         const enqueuePrewarmFrame = (frame: number) => {
-          if (frame < 0) return
-          if (scrubPrewarmQueuedSetRef.current.has(frame)) return
-          if (scrubPrewarmedFrameSetRef.current.has(frame)) return
-          scrubPrewarmQueuedSetRef.current.add(frame)
-          scrubPrewarmQueueRef.current.push(frame)
-          while (scrubPrewarmQueueRef.current.length > FAST_SCRUB_PREWARM_QUEUE_MAX) {
-            const dropped = scrubPrewarmQueueRef.current.shift()
-            if (dropped !== undefined) {
-              scrubPrewarmQueuedSetRef.current.delete(dropped)
-            }
-          }
+          const plan = resolvePrewarmFrameQueueAfterEnqueue({
+            frame,
+            queue: scrubPrewarmQueueRef.current,
+            queuedFrames: scrubPrewarmQueuedSetRef.current,
+            prewarmedFrames: scrubPrewarmedFrameSetRef.current,
+            maxQueueSize: FAST_SCRUB_PREWARM_QUEUE_MAX,
+          })
+          scrubPrewarmQueueRef.current = plan.queue
+          scrubPrewarmQueuedSetRef.current = plan.queuedFrames
         }
 
         const markPrewarmed = (frame: number) => {
@@ -459,37 +461,27 @@ export function usePreviewRenderPump({
           if (fastScrubBoundarySources.length === 0) return
 
           const pool = getGlobalVideoSourcePool()
-          const touchFrameMap = scrubPrewarmedSourceTouchFrameRef.current
           const markBoundarySourcePrewarmed = (src: string, currentFrame: number): boolean => {
-            const lastTouchedFrame = touchFrameMap.get(src)
-            if (
-              lastTouchedFrame !== undefined &&
-              Math.abs(currentFrame - lastTouchedFrame) < FAST_SCRUB_SOURCE_TOUCH_COOLDOWN_FRAMES
-            ) {
+            const plan = resolveBoundarySourcePrewarmCacheUpdate({
+              src,
+              currentFrame,
+              touchFrameEntries: Array.from(scrubPrewarmedSourceTouchFrameRef.current.entries()),
+              prewarmedSources: scrubPrewarmedSourcesRef.current,
+              prewarmedSourceOrder: scrubPrewarmedSourceOrderRef.current,
+              cooldownFrames: FAST_SCRUB_SOURCE_TOUCH_COOLDOWN_FRAMES,
+              maxSources: FAST_SCRUB_MAX_PREWARM_SOURCES,
+            })
+
+            if (!plan.touched) {
               return false
             }
-            touchFrameMap.set(src, currentFrame)
-            const prewarmedSet = scrubPrewarmedSourcesRef.current
-            const prewarmedOrder = scrubPrewarmedSourceOrderRef.current
-            const existingIndex = prewarmedOrder.indexOf(src)
-            if (existingIndex >= 0) {
-              prewarmedOrder.splice(existingIndex, 1)
-            } else {
-              prewarmedSet.add(src)
-            }
-            prewarmedOrder.push(src)
 
-            while (prewarmedOrder.length > FAST_SCRUB_MAX_PREWARM_SOURCES) {
-              const evicted = prewarmedOrder.shift()
-              if (evicted === undefined) break
-              if (prewarmedSet.delete(evicted)) {
-                touchFrameMap.delete(evicted)
-                previewPerfRef.current.fastScrubPrewarmSourceEvictions += 1
-              }
-            }
-
-            previewPerfRef.current.fastScrubPrewarmedSources = prewarmedSet.size
-            return true
+            scrubPrewarmedSourceTouchFrameRef.current = new Map(plan.touchFrameEntries)
+            scrubPrewarmedSourcesRef.current = plan.prewarmedSources
+            scrubPrewarmedSourceOrderRef.current = plan.prewarmedSourceOrder
+            previewPerfRef.current.fastScrubPrewarmSourceEvictions += plan.evictedSources.length
+            previewPerfRef.current.fastScrubPrewarmedSources = plan.prewarmedSources.size
+            return plan.touched
           }
           const selectedSources = selectBoundarySourcePrewarmSources({
             boundarySources: fastScrubBoundarySources,
