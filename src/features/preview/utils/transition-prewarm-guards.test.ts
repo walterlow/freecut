@@ -130,6 +130,25 @@ describe('resolveTransitionPrerenderPlan', () => {
     })
   })
 
+  it('prewarms forced-overlay runway frames for complex transition starts', () => {
+    expect(
+      resolveTransitionPrerenderPlan({
+        targetFrame: 100,
+        runwayFrames: 3,
+        forceFastScrubOverlay: true,
+        isComplexTransitionStart: true,
+        isPlaying: false,
+      }),
+    ).toEqual({
+      targetFrame: { action: 'render-and-cache', frame: 100 },
+      runwayFrames: [
+        { action: 'prewarm', frame: 101 },
+        { action: 'prewarm', frame: 102 },
+      ],
+      renderTargetAfterRunway: false,
+    })
+  })
+
   it('prewarms runway before rendering a complex target when not forced or playing', () => {
     expect(
       resolveTransitionPrerenderPlan({

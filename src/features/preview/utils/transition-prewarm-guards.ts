@@ -15,19 +15,22 @@ export interface TransitionPrerenderPlan {
   renderTargetAfterRunway: boolean
 }
 
+type SelectUpcomingTransitionStartFrameParams = {
+  frame: number
+  maxLookaheadFrames: number
+  windows: readonly TransitionStartWindow[]
+} & (
+  | { complexOnly?: false; complexStartFrames?: ReadonlySet<number> }
+  | { complexOnly: true; complexStartFrames: ReadonlySet<number> }
+)
+
 export function selectUpcomingTransitionStartFrame({
   frame,
   maxLookaheadFrames,
   windows,
   complexStartFrames,
   complexOnly = false,
-}: {
-  frame: number
-  maxLookaheadFrames: number
-  windows: readonly TransitionStartWindow[]
-  complexStartFrames?: ReadonlySet<number>
-  complexOnly?: boolean
-}): number | null {
+}: SelectUpcomingTransitionStartFrameParams): number | null {
   const nextWindow = windows.find((window) => {
     if (frame > window.startFrame) {
       return false
