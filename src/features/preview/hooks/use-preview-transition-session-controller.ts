@@ -8,6 +8,11 @@ import {
   snapSourceTime,
 } from '@/features/preview/deps/composition-runtime'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
+import {
+  resolveTransitionPrerenderPlan,
+  selectUpcomingTransitionStartFrame,
+  shouldUsePausedTransitionOverlay,
+} from '../utils/transition-prewarm-guards'
 
 const logger = createLogger('VideoPreview')
 
@@ -390,22 +395,14 @@ export function usePreviewTransitionSessionController({
   )
 
   const getUpcomingTransitionStartFrame = useCallback(
-    (frame: number, maxLookaheadFrames: number, options?: { complexOnly?: boolean }) => {
-      const nextWindow = playbackTransitionWindows.find((window) => {
-        if (frame > window.startFrame) {
-          return false
-        }
-        if (options?.complexOnly && !playbackTransitionComplexStartFrames.has(window.startFrame)) {
-          return false
-        }
-        return true
-      })
-      if (!nextWindow) return null
-      if (nextWindow.startFrame - frame > maxLookaheadFrames) {
-        return null
-      }
-      return nextWindow.startFrame
-    },
+    (frame: number, maxLookaheadFrames: number, options?: { complexOnly?: boolean }) =>
+      selectUpcomingTransitionStartFrame({
+        frame,
+        maxLookaheadFrames,
+        windows: playbackTransitionWindows,
+        complexStartFrames: playbackTransitionComplexStartFrames,
+        complexOnly: options?.complexOnly,
+      }),
     [playbackTransitionComplexStartFrames, playbackTransitionWindows],
   )
 
@@ -425,12 +422,12 @@ export function usePreviewTransitionSessionController({
 
   const isPausedTransitionOverlayActive = useCallback(
     (frame: number, playbackState: { isPlaying: boolean; previewFrame: number | null }) => {
-      return (
-        !playbackState.isPlaying &&
-        playbackState.previewFrame === null &&
-        !forceFastScrubOverlay &&
-        getActiveTransitionWindowForFrame(frame) !== null
-      )
+      return shouldUsePausedTransitionOverlay({
+        isPlaying: playbackState.isPlaying,
+        previewFrame: playbackState.previewFrame,
+        forceFastScrubOverlay,
+        hasActiveTransition: getActiveTransitionWindowForFrame(frame) !== null,
+      })
     },
     [forceFastScrubOverlay, getActiveTransitionWindowForFrame],
   )
@@ -525,25 +522,28 @@ export function usePreviewTransitionSessionController({
           }
 
           const isComplexTransitionStart = playbackTransitionComplexStartFrames.has(targetFrame)
-          const shouldCachePlaybackRunway = usePlaybackStore.getState().isPlaying
-          const shouldRenderFullTargetFrame =
-            forceFastScrubOverlay || isComplexTransitionStart || shouldCachePlaybackRunway
-          if (shouldRenderFullTargetFrame) {
-            await renderer.renderFrame(targetFrame)
-            cacheTransitionSessionFrame(targetFrame)
+          const prerenderPlan = resolveTransitionPrerenderPlan({
+            targetFrame,
+            runwayFrames: playbackTransitionPrerenderRunwayFrames,
+            forceFastScrubOverlay,
+            isComplexTransitionStart,
+            isPlaying: usePlaybackStore.getState().isPlaying,
+          })
+          if (!prerenderPlan.renderTargetAfterRunway) {
+            await renderer.renderFrame(prerenderPlan.targetFrame.frame)
+            cacheTransitionSessionFrame(prerenderPlan.targetFrame.frame)
           }
-          for (let offset = 1; offset < playbackTransitionPrerenderRunwayFrames; offset += 1) {
-            const runwayFrame = targetFrame + offset
-            if (shouldCachePlaybackRunway || (forceFastScrubOverlay && !isComplexTransitionStart)) {
-              await renderer.renderFrame(runwayFrame)
-              cacheTransitionSessionFrame(runwayFrame)
+          for (const runwayFrame of prerenderPlan.runwayFrames) {
+            if (runwayFrame.action === 'render-and-cache') {
+              await renderer.renderFrame(runwayFrame.frame)
+              cacheTransitionSessionFrame(runwayFrame.frame)
             } else {
-              await renderer.prewarmFrame(runwayFrame)
+              await renderer.prewarmFrame(runwayFrame.frame)
             }
           }
-          if (!shouldRenderFullTargetFrame) {
-            await renderer.renderFrame(targetFrame)
-            cacheTransitionSessionFrame(targetFrame)
+          if (prerenderPlan.renderTargetAfterRunway) {
+            await renderer.renderFrame(prerenderPlan.targetFrame.frame)
+            cacheTransitionSessionFrame(prerenderPlan.targetFrame.frame)
           }
           if (!scrubMountedRef.current) return false
           scrubOffscreenRenderedFrameRef.current = targetFrame
