@@ -2,6 +2,14 @@ import type { TimelineItem } from '@/types/timeline'
 import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner'
 import { easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
 
+interface TransitionSceneItem {
+  id: string
+  from: number
+  _sequenceFrameOffset?: number
+  _poolClipId?: string
+  _sharedTransitionSync?: boolean
+}
+
 export interface ActiveTransition<TItem extends TimelineItem = TimelineItem> {
   transition: ResolvedTransitionWindow<TItem>['transition']
   leftClip: TItem
@@ -103,4 +111,76 @@ export function resolveTransitionFrameState<TItem extends TimelineItem>({
   }
 
   return { activeTransitions, transitionClipIds }
+}
+
+export function resolveSameOriginTransitionActiveIndex<TItem extends { id: string }>({
+  rawActiveItemIndex,
+  items,
+  transitionWindows,
+  frame,
+}: {
+  rawActiveItemIndex: number
+  items: TItem[]
+  transitionWindows: ResolvedTransitionWindow<TimelineItem>[]
+  frame: number
+}): number {
+  if (rawActiveItemIndex < 0 || items.length <= 1) return rawActiveItemIndex
+
+  for (const window of transitionWindows) {
+    if (frame < window.startFrame || frame >= window.endFrame) continue
+
+    const leftIdx = items.findIndex((item) => item.id === window.leftClip.id)
+    const rightIdx = items.findIndex((item) => item.id === window.rightClip.id)
+    if (leftIdx >= 0 && rightIdx >= 0 && rawActiveItemIndex === rightIdx) {
+      return leftIdx
+    }
+  }
+
+  return rawActiveItemIndex
+}
+
+export function resolveTransitionParticipantIndexKey<TItem extends { id: string }>({
+  items,
+  activeItemIndex,
+  transitionClipIds,
+}: {
+  items: TItem[]
+  activeItemIndex: number
+  transitionClipIds: Set<string>
+}): string {
+  return items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item, index }) => index !== activeItemIndex && transitionClipIds.has(item.id))
+    .map(({ index }) => index)
+    .join(',')
+}
+
+export function resolveTransitionParticipantItems<TItem>({
+  items,
+  indexKey,
+}: {
+  items: TItem[]
+  indexKey: string
+}): TItem[] {
+  if (!indexKey) return []
+  return indexKey.split(',').map((idx) => items[Number(idx)]!)
+}
+
+export function buildTransitionShadowItems<TItem extends TransitionSceneItem>({
+  items,
+  indexKey,
+  groupMinFrom,
+  activeTransitionClipIds,
+}: {
+  items: TItem[]
+  indexKey: string
+  groupMinFrom: number
+  activeTransitionClipIds: Set<string>
+}): TItem[] {
+  return resolveTransitionParticipantItems({ items, indexKey }).map((item) => ({
+    ...item,
+    _sequenceFrameOffset: item.from - groupMinFrom,
+    _poolClipId: `shadow-${item.id}`,
+    _sharedTransitionSync: activeTransitionClipIds.has(item.id),
+  }))
 }
