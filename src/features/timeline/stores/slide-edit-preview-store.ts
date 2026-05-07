@@ -1,3 +1,4 @@
+import { withPreviewDefaults } from './edit-preview-defaults'
 import { createEditPreviewStore } from './edit-preview-store-factory'
 
 interface SlideEditPreviewState {
@@ -48,11 +49,7 @@ export const useSlideEditPreviewStore = createEditPreviewStore<
   Pick<SlideEditPreviewActions, 'setSlideDelta' | 'setSlideRange'>
 >({
   initialState: createInitialState,
-  normalizePreview: (params) => ({
-    ...params,
-    minDelta: params.minDelta ?? 0,
-    maxDelta: params.maxDelta ?? 0,
-  }),
+  normalizePreview: (params) => withPreviewDefaults(params, { minDelta: 0, maxDelta: 0 }),
   createActions: (set) => ({
     setSlideDelta: (slideDelta) => set({ slideDelta }),
     setSlideRange: (minDelta, maxDelta) => set({ minDelta, maxDelta }),

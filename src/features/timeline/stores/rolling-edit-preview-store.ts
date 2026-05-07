@@ -1,3 +1,4 @@
+import { withPreviewDefaults } from './edit-preview-defaults'
 import { createEditPreviewStore } from './edit-preview-store-factory'
 
 interface RollingEditPreviewState {
@@ -39,7 +40,7 @@ export const useRollingEditPreviewStore = createEditPreviewStore<
   Pick<RollingEditPreviewActions, 'setNeighborDelta'>
 >({
   initialState: createInitialState,
-  normalizePreview: (params) => ({ ...params, constrained: params.constrained ?? false }),
+  normalizePreview: (params) => withPreviewDefaults(params, { constrained: false }),
   createActions: (set) => ({
     setNeighborDelta: (neighborDelta, constrained) =>
       set({ neighborDelta, constrained: constrained ?? false }),
