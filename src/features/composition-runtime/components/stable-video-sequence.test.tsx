@@ -19,10 +19,18 @@ vi.mock('../hooks/use-transition-participant-sync', () => ({
   useTransitionParticipantSync: vi.fn(),
 }))
 
+type MediaLibraryMockState = { mediaItems: Array<{ id: string; fps: number }> }
+const mediaLibraryMock = vi.hoisted(() => {
+  const state: MediaLibraryMockState = { mediaItems: [] }
+  const store = Object.assign(
+    (selector: (state: MediaLibraryMockState) => unknown) => selector(state),
+    { getState: () => state },
+  )
+  return { state, store }
+})
+
 vi.mock('@/features/composition-runtime/deps/stores', () => ({
-  useMediaLibraryStore: (
-    selector: (state: { mediaItems: Array<{ id: string; fps: number }> }) => unknown,
-  ) => selector({ mediaItems: [] }),
+  useMediaLibraryStore: mediaLibraryMock.store,
 }))
 
 vi.mock('./video-content', () => ({
@@ -37,6 +45,7 @@ import {
   areGroupPropsEqual,
   getStableVideoRenderSignature,
 } from './stable-video-sequence-comparator'
+import { useTransitionParticipantSync } from '../hooks/use-transition-participant-sync'
 import type { StableVideoGroup } from '../utils/video-scene'
 
 const renderComparatorItem = (
@@ -264,6 +273,8 @@ describe('areGroupPropsEqual', () => {
 describe('StableVideoSequence', () => {
   beforeEach(() => {
     ensureReadyLanesMock.mockClear()
+    vi.mocked(useTransitionParticipantSync).mockClear()
+    mediaLibraryMock.state.mediaItems = []
     sequenceContextValue.localFrame = 28
   })
 
@@ -530,5 +541,70 @@ describe('StableVideoSequence', () => {
 
     expect(screen.getByTestId('render-left')).toHaveAttribute('data-softness', '0.25')
     expect(screen.getByTestId('shadow-video-right')).toHaveAttribute('data-softness', '0.25')
+  })
+
+  it('keeps the left participant rendered after the cut while syncing the right shadow', () => {
+    sequenceContextValue.localFrame = 42
+    mediaLibraryMock.state.mediaItems = [{ id: 'media-1', fps: 24 }]
+    const renderItem = vi.fn((item: { id: string; _sharedTransitionSync?: boolean }) => (
+      <div
+        data-testid={`render-${item.id}`}
+        data-transition-sync={String(item._sharedTransitionSync)}
+      >
+        {item.id}
+      </div>
+    ))
+
+    render(
+      <StableVideoSequence
+        items={[
+          renderComparatorItem({ id: 'left', from: 0, durationInFrames: 60, sourceStart: 48 }),
+          renderComparatorItem({ id: 'right', from: 30, durationInFrames: 60, sourceStart: 96 }),
+        ]}
+        transitionWindows={[
+          {
+            startFrame: 30,
+            endFrame: 50,
+            durationInFrames: 20,
+            leftClip: { id: 'left' },
+            rightClip: { id: 'right' },
+            leftPortion: 0.5,
+            rightPortion: 0.5,
+            cutPoint: 40,
+            transition: {
+              id: 'transition-1',
+              leftClipId: 'left',
+              rightClipId: 'right',
+              timing: 'linear',
+            },
+          } as never,
+        ]}
+        renderItem={renderItem}
+      />,
+    )
+
+    expect(screen.getByTestId('render-left')).toHaveAttribute('data-transition-sync', 'true')
+    expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument()
+    expect(screen.queryByTestId('render-right')).not.toBeInTheDocument()
+    expect(useTransitionParticipantSync).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          poolClipId: 'group-media-1-origin-1-left',
+          safeTrimBefore: 48,
+          sourceFps: 30,
+          sequenceFrameOffset: 0,
+          role: 'leader',
+        }),
+        expect.objectContaining({
+          poolClipId: 'shadow-right',
+          safeTrimBefore: 60,
+          sourceFps: 30,
+          sequenceFrameOffset: 30,
+          role: 'follower',
+        }),
+      ],
+      0,
+      30,
+    )
   })
 })
