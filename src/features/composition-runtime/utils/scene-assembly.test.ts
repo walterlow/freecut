@@ -138,6 +138,9 @@ describe('scene assembly', () => {
       durationInFrames: 30,
       src: 'source.wav',
       label: 'Source audio',
+      muted: false,
+      trackVolumeDb: 0,
+      trackVisible: true,
     } as const
     const managedLeft = {
       id: 'managed-left',
@@ -147,6 +150,9 @@ describe('scene assembly', () => {
       durationInFrames: 30,
       src: 'left.wav',
       label: 'Managed left',
+      muted: false,
+      trackVolumeDb: 0,
+      trackVisible: true,
     } as const
     const managedRight = {
       id: 'managed-right',
@@ -156,6 +162,9 @@ describe('scene assembly', () => {
       durationInFrames: 30,
       src: 'right.wav',
       label: 'Managed right',
+      muted: false,
+      trackVolumeDb: 0,
+      trackVisible: true,
     } as const
     const standaloneCompound = {
       id: 'standalone-compound',
@@ -165,6 +174,9 @@ describe('scene assembly', () => {
       durationInFrames: 30,
       src: 'compound.wav',
       label: 'Standalone compound',
+      muted: false,
+      trackVolumeDb: 0,
+      trackVisible: true,
       compositionId: 'composition-a',
     } as const
     const managedCompoundLeft = {
@@ -175,6 +187,9 @@ describe('scene assembly', () => {
       durationInFrames: 30,
       src: 'compound-left.wav',
       label: 'Managed compound left',
+      muted: false,
+      trackVolumeDb: 0,
+      trackVisible: true,
       compositionId: 'composition-b',
     } as const
     const managedCompoundRight = {
@@ -185,6 +200,9 @@ describe('scene assembly', () => {
       durationInFrames: 30,
       src: 'compound-right.wav',
       label: 'Managed compound right',
+      muted: false,
+      trackVolumeDb: 0,
+      trackVisible: true,
       compositionId: 'composition-b',
     } as const
     const audioItems = [
@@ -194,7 +212,7 @@ describe('scene assembly', () => {
       standaloneCompound,
       managedCompoundLeft,
       managedCompoundRight,
-    ] as AudioTrackItem[]
+    ] satisfies AudioTrackItem[]
     const transition = {
       id: 'transition-direct',
       type: 'crossfade',

@@ -58,15 +58,9 @@ export type AudioTrackItem = AudioItem & {
 
 export type CompoundAudioTrackItem = AudioTrackItem & { compositionId: string }
 
-export type ManagedAudioTransitionDef = Transition & {
-  leftClipId: string
-  rightClipId: string
-  trackId: string
-}
+export type ManagedAudioTransitionDef = Transition
 
 export interface CompositionAudioScene {
-  directSourceAudioItems: AudioTrackItem[]
-  compoundAudioItems: CompoundAudioTrackItem[]
   managedLinkedAudioItems: AudioTrackItem[]
   standaloneAudioItems: AudioTrackItem[]
   managedCompoundAudioItems: CompoundAudioTrackItem[]
@@ -340,8 +334,6 @@ export function deriveCompositionAudioScene({
   )
 
   return {
-    directSourceAudioItems,
-    compoundAudioItems,
     managedLinkedAudioItems,
     standaloneAudioItems,
     managedCompoundAudioItems,
