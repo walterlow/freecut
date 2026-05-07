@@ -25,8 +25,16 @@ import {
   type TransitionSyncParticipant,
 } from './use-transition-participant-sync'
 
-function SyncHarness({ participants }: { participants: TransitionSyncParticipant[] }) {
-  useTransitionParticipantSync(participants, 10, 30)
+function SyncHarness({
+  participants,
+  groupMinFrom,
+  timelineFps,
+}: {
+  participants: TransitionSyncParticipant[]
+  groupMinFrom: number
+  timelineFps: number
+}) {
+  useTransitionParticipantSync(participants, groupMinFrom, timelineFps)
   return null
 }
 
@@ -102,6 +110,8 @@ describe('useTransitionParticipantSync', () => {
             role: 'follower',
           },
         ],
+        groupMinFrom: 10,
+        timelineFps: 30,
       }),
     )
 
@@ -139,6 +149,8 @@ describe('useTransitionParticipantSync', () => {
             role: 'follower',
           },
         ],
+        groupMinFrom: 10,
+        timelineFps: 30,
       }),
     )
 

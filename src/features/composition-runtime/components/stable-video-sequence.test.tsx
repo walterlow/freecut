@@ -545,7 +545,6 @@ describe('StableVideoSequence', () => {
 
   it('keeps the left participant rendered after the cut while syncing the right shadow', () => {
     sequenceContextValue.localFrame = 42
-    mediaLibraryMock.state.mediaItems = [{ id: 'media-1', fps: 24 }]
     const renderItem = vi.fn((item: { id: string; _sharedTransitionSync?: boolean }) => (
       <div
         data-testid={`render-${item.id}`}
