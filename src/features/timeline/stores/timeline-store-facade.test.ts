@@ -1091,7 +1091,7 @@ describe('TimelineStoreFacade', () => {
     })
 
     it('marks timeline hydration as loading for the requested project before state is restored', async () => {
-      useTimelineSettingsStore.getState().completeTimelineHydration('old-project')
+      useTimelineSettingsStore.getState().completeTimelineHydration('old-project', 0)
       useItemsStore.getState().setTracks([
         {
           id: 'old-track',
@@ -1129,6 +1129,110 @@ describe('TimelineStoreFacade', () => {
         timeline: null,
       })
       await loadPromise
+    })
+
+    it('ignores stale concurrent loadTimeline completions when a newer project finishes first', async () => {
+      let resolveProjectA!: (project: unknown) => void
+      let resolveProjectB!: (project: unknown) => void
+      indexedDbMocks.getProject.mockImplementation((projectId: string) => {
+        if (projectId === 'project-a') {
+          return new Promise((resolve) => {
+            resolveProjectA = resolve
+          })
+        }
+        if (projectId === 'project-b') {
+          return new Promise((resolve) => {
+            resolveProjectB = resolve
+          })
+        }
+        return Promise.resolve(null)
+      })
+      mediaValidationMocks.validateProjectMediaReferences.mockResolvedValue([])
+
+      const loadProjectA = useTimelineStore.getState().loadTimeline('project-a')
+      const loadProjectB = useTimelineStore.getState().loadTimeline('project-b')
+
+      resolveProjectB({
+        id: 'project-b',
+        metadata: { fps: 30 },
+        timeline: {
+          tracks: [
+            {
+              id: 'track-b',
+              name: 'Project B Track',
+              order: 0,
+              height: 80,
+              locked: false,
+              visible: true,
+              muted: false,
+              solo: false,
+            },
+          ],
+          items: [
+            {
+              id: 'item-b',
+              type: 'video',
+              trackId: 'track-b',
+              from: 0,
+              durationInFrames: 100,
+              label: 'project-b.mp4',
+            },
+          ],
+          keyframes: [],
+          transitions: [],
+          markers: [],
+        },
+      })
+      await loadProjectB
+
+      expect(useTimelineSettingsStore.getState()).toMatchObject({
+        isTimelineLoading: false,
+        loadingProjectId: null,
+        loadedProjectId: 'project-b',
+      })
+      expect(useItemsStore.getState().tracks.map((track) => track.id)).toEqual(['track-b'])
+      expect(useItemsStore.getState().items.map((item) => item.id)).toEqual(['item-b'])
+
+      resolveProjectA({
+        id: 'project-a',
+        metadata: { fps: 30 },
+        timeline: {
+          tracks: [
+            {
+              id: 'track-a',
+              name: 'Project A Track',
+              order: 0,
+              height: 80,
+              locked: false,
+              visible: true,
+              muted: false,
+              solo: false,
+            },
+          ],
+          items: [
+            {
+              id: 'item-a',
+              type: 'video',
+              trackId: 'track-a',
+              from: 0,
+              durationInFrames: 100,
+              label: 'project-a.mp4',
+            },
+          ],
+          keyframes: [],
+          transitions: [],
+          markers: [],
+        },
+      })
+      await loadProjectA
+
+      expect(useTimelineSettingsStore.getState()).toMatchObject({
+        isTimelineLoading: false,
+        loadingProjectId: null,
+        loadedProjectId: 'project-b',
+      })
+      expect(useItemsStore.getState().tracks.map((track) => track.id)).toEqual(['track-b'])
+      expect(useItemsStore.getState().items.map((item) => item.id)).toEqual(['item-b'])
     })
 
     it('marks timeline as loaded for the project after completion', async () => {

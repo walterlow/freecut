@@ -853,7 +853,9 @@ export async function loadTimeline(
 ): Promise<void> {
   // Mark loading before any UI-visible state swap, then clear stale timeline
   // content so old-project clips cannot flash while the new project hydrates.
-  useTimelineSettingsStore.getState().beginTimelineHydration(projectId)
+  const hydrationRequestId = useTimelineSettingsStore.getState().beginTimelineHydration(projectId)
+  const isCurrentHydration = () =>
+    useTimelineSettingsStore.getState().isTimelineHydrationCurrent(projectId, hydrationRequestId)
   useItemsStore.getState().setTracks([])
   useItemsStore.getState().setItems([])
   useTransitionsStore.getState().setTransitions([])
@@ -866,6 +868,7 @@ export async function loadTimeline(
 
   try {
     const rawProject = await getProject(projectId)
+    if (!isCurrentHydration()) return
     if (!rawProject) {
       throw new Error(`Project not found: ${projectId}`)
     }
@@ -881,6 +884,7 @@ export async function loadTimeline(
     // Run migrations and normalization
     const migrationResult = migrateProject(rawProject)
     const repairedLegacyLayouts = await repairLegacyProjectAvLayouts(migrationResult.project)
+    if (!isCurrentHydration()) return
     const sanitizedTimeline = repairedLegacyLayouts.project.timeline
       ? sanitizeTimelineEphemeralFields(repairedLegacyLayouts.project.timeline)
       : { timeline: repairedLegacyLayouts.project.timeline, cleaned: false }
@@ -911,6 +915,7 @@ export async function loadTimeline(
         ...project,
         schemaVersion: CURRENT_SCHEMA_VERSION,
       })
+      if (!isCurrentHydration()) return
       logger.debug('Saved migrated project to storage')
     }
 
@@ -945,6 +950,7 @@ export async function loadTimeline(
       const hydratedItems = await reverseConformService.hydrateItems(
         (t.items || []) as TimelineItem[],
       )
+      if (!isCurrentHydration()) return
       useItemsStore.getState().setTracks(sortedTracks as TimelineTrack[])
       useItemsStore.getState().setItems(hydratedItems)
       useTransitionsStore.getState().setTransitions((t.transitions || []) as Transition[])
@@ -974,6 +980,7 @@ export async function loadTimeline(
             ...(c.busAudioEq && { busAudioEq: c.busAudioEq }),
           })),
         )
+        if (!isCurrentHydration()) return
         useCompositionsStore.getState().setCompositions(hydratedCompositions)
       } else {
         useCompositionsStore.getState().setCompositions([])
@@ -1029,6 +1036,7 @@ export async function loadTimeline(
       compositions: useCompositionsStore.getState().compositions,
       projectId,
     })
+    if (!isCurrentHydration()) return
     if (orphans.length > 0) {
       logger.warn(`Found ${orphans.length} orphaned clip(s) referencing deleted media`)
       useMediaLibraryStore.getState().setOrphanedClips(orphans)
@@ -1039,12 +1047,12 @@ export async function loadTimeline(
     }
 
     // Mark loading complete only after all stores are restored and media references validated.
-    useTimelineSettingsStore.getState().completeTimelineHydration(projectId)
+    useTimelineSettingsStore.getState().completeTimelineHydration(projectId, hydrationRequestId)
   } catch (error) {
     logger.error('Failed to load timeline:', error)
     // Still mark loading complete on error so UI isn't stuck; keep loadedProjectId
     // null so project-specific gates do not show stale clips as current.
-    useTimelineSettingsStore.getState().failTimelineHydration(projectId)
+    useTimelineSettingsStore.getState().failTimelineHydration(projectId, hydrationRequestId)
     throw error
   }
 }
