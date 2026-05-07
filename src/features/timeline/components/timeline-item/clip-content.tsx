@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo } from 'react'
 import { Link2 } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import type { TimelineItem } from '@/types/timeline'
 import { ClipFilmstrip } from '../clip-filmstrip'
 import { ImageFilmstrip } from '../clip-filmstrip/image-filmstrip'
@@ -9,6 +10,7 @@ import { useSettingsStore } from '@/features/timeline/deps/settings'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useCompositionsStore } from '../../stores/compositions-store'
 import { useItemsStore } from '../../stores/items-store'
+import { useTimelineSettingsStore } from '../../stores/timeline-settings-store'
 import { useClipVisibility } from '../../hooks/use-clip-visibility'
 import { useZoomStore } from '../../stores/zoom-store'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
@@ -53,14 +55,19 @@ function CompositionFilmstripSegment({
   isReversed = false,
 }: CompositionFilmstripSegmentProps) {
   const mediaId = segment.mediaId
-  const mediaFps = useMediaLibraryStore(
-    useCallback(
-      (s) => s.mediaById[mediaId]?.fps || segment.sourceFps,
-      [mediaId, segment.sourceFps],
+  const mediaStats = useMediaLibraryStore(
+    useShallow(
+      useCallback(
+        (s) => {
+          const media = s.mediaById[mediaId]
+          return {
+            fps: media?.fps || segment.sourceFps,
+            duration: media?.duration || 0,
+          }
+        },
+        [mediaId, segment.sourceFps],
+      ),
     ),
-  )
-  const mediaDuration = useMediaLibraryStore(
-    useCallback((s) => s.mediaById[mediaId]?.duration || 0, [mediaId]),
   )
 
   const wrapperSpan = Math.max(1, wrapperDurationFrames)
@@ -70,11 +77,13 @@ function CompositionFilmstripSegment({
   const segmentRenderWidth = Math.max(0, widthFraction * wrapperRenderWidthPx)
 
   const sourceDurationSeconds =
-    mediaDuration > 0 ? mediaDuration : segment.sourceDurationFrames / Math.max(1, mediaFps)
+    mediaStats.duration > 0
+      ? mediaStats.duration
+      : segment.sourceDurationFrames / Math.max(1, mediaStats.fps)
   const sourceStartSeconds =
-    mediaDuration > 0 && segment.sourceDurationFrames > 0
-      ? (segment.sourceStart / segment.sourceDurationFrames) * mediaDuration
-      : segment.sourceStart / Math.max(1, mediaFps)
+    mediaStats.duration > 0 && segment.sourceDurationFrames > 0
+      ? (segment.sourceStart / segment.sourceDurationFrames) * mediaStats.duration
+      : segment.sourceStart / Math.max(1, mediaStats.fps)
   const sourceEndSeconds =
     sourceStartSeconds + (segment.durationInFrames / Math.max(1, fps)) * segment.speed
 
@@ -166,6 +175,11 @@ export const ClipContent = memo(function ClipContent({
   const pixelsPerSecond = useZoomStore((s) => s.pixelsPerSecond)
   const showWaveforms = useSettingsStore((s) => s.showWaveforms)
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips)
+  const timelineVisualsSettled = useTimelineSettingsStore(
+    useCallback((s) => !s.isTimelineLoading, []),
+  )
+  const mediaVisualsSettled = useMediaLibraryStore(useCallback((s) => !s.isLoading, []))
+  const shouldRenderHeavyVisuals = timelineVisualsSettled && mediaVisualsSettled
   const clipLeftPx = useMemo(
     () => (fps > 0 ? (clipLeftFrames / fps) * pixelsPerSecond : 0),
     [clipLeftFrames, fps, pixelsPerSecond],
@@ -270,24 +284,21 @@ export const ClipContent = memo(function ClipContent({
 
   // sourceStart/sourceDuration are stored in source-frame units. Prefer duration-ratio
   // mapping so rendering remains stable even if media FPS metadata changes after drop.
-  const sourceFps = useMediaLibraryStore(
-    useCallback(
-      (s) => {
-        if (!effectiveMediaId) return fps
-        const media = s.mediaById[effectiveMediaId]
-        return media?.fps || fps
-      },
-      [effectiveMediaId, fps],
-    ),
-  )
-  const mediaDuration = useMediaLibraryStore(
-    useCallback(
-      (s) => {
-        if (!effectiveMediaId) return 0
-        const media = s.mediaById[effectiveMediaId]
-        return media?.duration || 0
-      },
-      [effectiveMediaId],
+  const mediaStats = useMediaLibraryStore(
+    useShallow(
+      useCallback(
+        (s) => {
+          if (!effectiveMediaId) {
+            return { fps, duration: 0 }
+          }
+          const media = s.mediaById[effectiveMediaId]
+          return {
+            fps: media?.fps || fps,
+            duration: media?.duration || 0,
+          }
+        },
+        [effectiveMediaId, fps],
+      ),
     ),
   )
 
@@ -306,18 +317,19 @@ export const ClipContent = memo(function ClipContent({
       : sourceStartFrames,
   )
 
-  const sourceDuration = mediaDuration > 0 ? mediaDuration : sourceDurationFrames / sourceFps
+  const sourceDuration =
+    mediaStats.duration > 0 ? mediaStats.duration : sourceDurationFrames / mediaStats.fps
   const sourceStart =
-    mediaDuration > 0
-      ? (sourceStartFrames / sourceDurationFrames) * mediaDuration
-      : sourceStartFrames / sourceFps
+    mediaStats.duration > 0
+      ? (sourceStartFrames / sourceDurationFrames) * mediaStats.duration
+      : sourceStartFrames / mediaStats.fps
   const sourceEndFrames = item.sourceEnd
   const sourceEnd =
     sourceEndFrames === undefined
       ? undefined
-      : mediaDuration > 0
-        ? (sourceEndFrames / sourceDurationFrames) * mediaDuration
-        : sourceEndFrames / sourceFps
+      : mediaStats.duration > 0
+        ? (sourceEndFrames / sourceDurationFrames) * mediaStats.duration
+        : sourceEndFrames / mediaStats.fps
 
   const trimStart = (item.trimStart ?? 0) / fps
   const speed = item.speed ?? 1
@@ -363,7 +375,7 @@ export const ClipContent = memo(function ClipContent({
         {/* Row 2: Filmstrip - flex-1 to fill remaining space */}
         {showVisualContent && (
           <div className="relative overflow-hidden flex-1 min-h-0">
-            {showFilmstrips && (
+            {shouldRenderHeavyVisuals && showFilmstrips && (
               <ClipFilmstrip
                 mediaId={item.mediaId}
                 clipWidth={clipWidth}
@@ -403,7 +415,7 @@ export const ClipContent = memo(function ClipContent({
           {renderTitleText(item.label)}
         </div>
         {/* Row 2: Waveform - fills remaining space */}
-        {showVisualContent && showWaveforms && (
+        {showVisualContent && shouldRenderHeavyVisuals && showWaveforms && (
           <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
             <div
               className="absolute inset-0"
@@ -439,7 +451,7 @@ export const ClipContent = memo(function ClipContent({
     return (
       <div className="absolute inset-0 flex flex-col">
         {renderCompoundClipLabel(item.label || 'Compound Clip')}
-        {showVisualContent && showWaveforms && (
+        {showVisualContent && shouldRenderHeavyVisuals && showWaveforms && (
           <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
             <CompoundClipWaveform
               composition={composition}
@@ -480,7 +492,8 @@ export const ClipContent = memo(function ClipContent({
             <>
               {/* Row 2: Filmstrip stack - flex-1 */}
               <div className="relative overflow-hidden flex-1 min-h-0">
-                {showFilmstrips &&
+                {shouldRenderHeavyVisuals &&
+                  showFilmstrips &&
                   visualSegments.map((segment) => (
                     <CompositionFilmstripSegment
                       key={segment.itemId}
@@ -499,7 +512,7 @@ export const ClipContent = memo(function ClipContent({
                   ))}
               </div>
               {/* Row 3: Waveform */}
-              {showCompositionWaveform && composition && (
+              {shouldRenderHeavyVisuals && showCompositionWaveform && composition && (
                 <div
                   className="relative overflow-hidden bg-waveform-gradient"
                   style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineWaveformRowHeight }}
@@ -526,7 +539,7 @@ export const ClipContent = memo(function ClipContent({
       return (
         <div className="absolute inset-0 flex flex-col">
           {renderCompoundClipLabel(item.label || 'Compound Clip')}
-          {showVisualContent && showWaveforms && (
+          {showVisualContent && shouldRenderHeavyVisuals && showWaveforms && (
             <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
               <CompoundClipWaveform
                 composition={composition}
@@ -604,7 +617,7 @@ export const ClipContent = memo(function ClipContent({
         </div>
         {showVisualContent && (
           <div className="relative overflow-hidden flex-1 min-h-0">
-            {showFilmstrips && (
+            {shouldRenderHeavyVisuals && showFilmstrips && (
               <ImageFilmstrip
                 mediaId={item.mediaId}
                 isAnimated={isAnimated}
