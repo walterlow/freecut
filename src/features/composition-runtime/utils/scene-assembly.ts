@@ -11,6 +11,7 @@ import type {
 } from '@/types/timeline'
 import type { AudioEqSettings } from '@/types/audio'
 import type { Transition } from '@/types/transition'
+import type { ManagedLinkedAudioTransition } from '@/shared/utils/linked-media'
 import {
   resolveTransitionWindows,
   type ResolvedTransitionWindow,
@@ -53,6 +54,25 @@ export type AudioTrackItem = AudioItem & {
   trackVolumeDb: number
   trackAudioEq?: AudioEqSettings
   trackVisible: boolean
+}
+
+export type CompoundAudioTrackItem = AudioTrackItem & { compositionId: string }
+
+export type ManagedAudioTransitionDef = Transition & {
+  leftClipId: string
+  rightClipId: string
+  trackId: string
+}
+
+export interface CompositionAudioScene {
+  directSourceAudioItems: AudioTrackItem[]
+  compoundAudioItems: CompoundAudioTrackItem[]
+  managedLinkedAudioItems: AudioTrackItem[]
+  standaloneAudioItems: AudioTrackItem[]
+  managedCompoundAudioItems: CompoundAudioTrackItem[]
+  standaloneCompoundAudioItems: CompoundAudioTrackItem[]
+  managedLinkedAudioTransitionDefs: ManagedAudioTransitionDef[]
+  managedCompoundAudioTransitionDefs: ManagedAudioTransitionDef[]
 }
 
 export type StableDomTrack = TimelineTrack & {
@@ -248,6 +268,93 @@ export function collectAudioTrackItems({
         trackVisible: visibleTrackIds.has(track.id),
       })),
   )
+}
+
+function hasCompositionAudioId(item: AudioTrackItem): boolean {
+  return (
+    'compositionId' in item &&
+    typeof item.compositionId === 'string' &&
+    item.compositionId.length > 0
+  )
+}
+
+function isCompoundAudioTrackItem(item: AudioTrackItem): item is CompoundAudioTrackItem {
+  return hasCompositionAudioId(item)
+}
+
+function buildManagedAudioTransitionDefs<TItem extends AudioTrackItem>({
+  managedAudioItems,
+  managedLinkedAudioTransitions,
+}: {
+  managedAudioItems: TItem[]
+  managedLinkedAudioTransitions: ManagedLinkedAudioTransition[]
+}): ManagedAudioTransitionDef[] {
+  const itemsById = new Map<string, TItem>()
+  for (const item of managedAudioItems) {
+    itemsById.set(item.id, item)
+  }
+
+  return managedLinkedAudioTransitions.flatMap(({ transition, leftAudio, rightAudio }) => {
+    const left = itemsById.get(leftAudio.id)
+    const right = itemsById.get(rightAudio.id)
+    if (!left || !right) return []
+
+    return [
+      {
+        ...transition,
+        leftClipId: left.id,
+        rightClipId: right.id,
+        trackId: left.trackId,
+      },
+    ]
+  })
+}
+
+export function deriveCompositionAudioScene({
+  audioItems,
+  managedLinkedAudioTransitions,
+}: {
+  audioItems: AudioTrackItem[]
+  managedLinkedAudioTransitions: ManagedLinkedAudioTransition[]
+}): CompositionAudioScene {
+  const compoundAudioItems = audioItems.filter(isCompoundAudioTrackItem)
+  const directSourceAudioItems = audioItems.filter((item) => !hasCompositionAudioId(item))
+  const managedLinkedAudioIds = new Set<string>()
+
+  for (const managed of managedLinkedAudioTransitions) {
+    managedLinkedAudioIds.add(managed.leftAudio.id)
+    managedLinkedAudioIds.add(managed.rightAudio.id)
+  }
+
+  const managedLinkedAudioItems = directSourceAudioItems.filter((item) =>
+    managedLinkedAudioIds.has(item.id),
+  )
+  const standaloneAudioItems = directSourceAudioItems.filter(
+    (item) => !managedLinkedAudioIds.has(item.id),
+  )
+  const managedCompoundAudioItems = compoundAudioItems.filter((item) =>
+    managedLinkedAudioIds.has(item.id),
+  )
+  const standaloneCompoundAudioItems = compoundAudioItems.filter(
+    (item) => !managedLinkedAudioIds.has(item.id),
+  )
+
+  return {
+    directSourceAudioItems,
+    compoundAudioItems,
+    managedLinkedAudioItems,
+    standaloneAudioItems,
+    managedCompoundAudioItems,
+    standaloneCompoundAudioItems,
+    managedLinkedAudioTransitionDefs: buildManagedAudioTransitionDefs({
+      managedAudioItems: managedLinkedAudioItems,
+      managedLinkedAudioTransitions,
+    }),
+    managedCompoundAudioTransitionDefs: buildManagedAudioTransitionDefs({
+      managedAudioItems: managedCompoundAudioItems,
+      managedLinkedAudioTransitions,
+    }),
+  }
 }
 
 export function buildStableDomTracks({

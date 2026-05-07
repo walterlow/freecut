@@ -33,6 +33,7 @@ import {
   type VideoAudioSegment,
 } from '../utils/audio-scene'
 import {
+  deriveCompositionAudioScene,
   resolveCompositionRenderPlan,
   type AudioTrackItem,
   type ShapeMaskWithTrackOrder,
@@ -48,7 +49,6 @@ import {
 import {
   getManagedLinkedAudioTransitions,
   hasLinkedAudioCompanion,
-  isCompositionAudioItem,
 } from '@/shared/utils/linked-media'
 import {
   appendResolvedAudioEqSources,
@@ -190,17 +190,6 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
   // This prevents audio from being affected by visual layer changes (mask add/delete, item moves)
   // Use ALL tracks for stable DOM structure, with trackVisible for conditional playback
   const audioItems: EnrichedAudioItem[] = renderPlan.audioItems
-  const compoundAudioItems = useMemo(
-    () =>
-      audioItems.filter((item): item is EnrichedAudioItem & { compositionId: string } =>
-        isCompositionAudioItem(item),
-      ),
-    [audioItems],
-  )
-  const directSourceAudioItems = useMemo(
-    () => audioItems.filter((item) => !isCompositionAudioItem(item)),
-    [audioItems],
-  )
 
   const managedLinkedAudioTransitions = useMemo(
     () =>
@@ -210,73 +199,25 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
       ),
     [tracks, transitions],
   )
-  const managedLinkedAudioIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const managed of managedLinkedAudioTransitions) {
-      ids.add(managed.leftAudio.id)
-      ids.add(managed.rightAudio.id)
-    }
-    return ids
-  }, [managedLinkedAudioTransitions])
-  const managedLinkedAudioItems = useMemo(
-    () => directSourceAudioItems.filter((item) => managedLinkedAudioIds.has(item.id)),
-    [directSourceAudioItems, managedLinkedAudioIds],
-  )
-  const standaloneAudioItems = useMemo(
-    () => directSourceAudioItems.filter((item) => !managedLinkedAudioIds.has(item.id)),
-    [directSourceAudioItems, managedLinkedAudioIds],
-  )
-  const managedCompoundAudioItems = useMemo(
-    () => compoundAudioItems.filter((item) => managedLinkedAudioIds.has(item.id)),
-    [compoundAudioItems, managedLinkedAudioIds],
-  )
-  const standaloneCompoundAudioItems = useMemo(
-    () => compoundAudioItems.filter((item) => !managedLinkedAudioIds.has(item.id)),
-    [compoundAudioItems, managedLinkedAudioIds],
-  )
-  const managedLinkedAudioItemsById = useMemo(
-    () => new Map(managedLinkedAudioItems.map((item) => [item.id, item])),
-    [managedLinkedAudioItems],
-  )
-  const managedLinkedAudioTransitionDefs = useMemo(
+  const audioScene = useMemo(
     () =>
-      managedLinkedAudioTransitions.flatMap(({ transition, leftAudio, rightAudio }) => {
-        const left = managedLinkedAudioItemsById.get(leftAudio.id)
-        const right = managedLinkedAudioItemsById.get(rightAudio.id)
-        if (!left || !right) return []
-
-        return [
-          {
-            ...transition,
-            leftClipId: left.id,
-            rightClipId: right.id,
-            trackId: left.trackId,
-          },
-        ]
+      deriveCompositionAudioScene({
+        audioItems,
+        managedLinkedAudioTransitions,
       }),
-    [managedLinkedAudioItemsById, managedLinkedAudioTransitions],
+    [audioItems, managedLinkedAudioTransitions],
   )
+  const {
+    managedLinkedAudioItems,
+    standaloneAudioItems,
+    managedCompoundAudioItems,
+    standaloneCompoundAudioItems,
+    managedLinkedAudioTransitionDefs,
+    managedCompoundAudioTransitionDefs,
+  } = audioScene
   const managedCompoundAudioItemsById = useMemo(
     () => new Map(managedCompoundAudioItems.map((item) => [item.id, item])),
     [managedCompoundAudioItems],
-  )
-  const managedCompoundAudioTransitionDefs = useMemo(
-    () =>
-      managedLinkedAudioTransitions.flatMap(({ transition, leftAudio, rightAudio }) => {
-        const left = managedCompoundAudioItemsById.get(leftAudio.id)
-        const right = managedCompoundAudioItemsById.get(rightAudio.id)
-        if (!left || !right) return []
-
-        return [
-          {
-            ...transition,
-            leftClipId: left.id,
-            rightClipId: right.id,
-            trackId: left.trackId,
-          },
-        ]
-      }),
-    [managedCompoundAudioItemsById, managedLinkedAudioTransitions],
   )
 
   // Merge continuous split audio clips into single segments to prevent

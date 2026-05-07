@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vite-plus/test'
 import type { TimelineTrack } from '@/types/timeline'
+import type { Transition } from '@/types/transition'
 import {
   buildStableDomTracks,
   buildItemIdMap,
   buildFrameRenderTasks,
   collectAudioTrackItems,
+  type AudioTrackItem,
   collectFrameVideoCandidates,
   collectTransitionClipItems,
   collectVisualTrackItems,
@@ -12,6 +14,7 @@ import {
   collectVisibleShapeMasks,
   collectVisibleTextFontFamilies,
   groupTransitionsByTrackOrder,
+  deriveCompositionAudioScene,
   resolveCompositionRenderPlan,
   resolveTransitionWindowsForItems,
   resolveFrameRenderScene,
@@ -124,6 +127,135 @@ describe('scene assembly', () => {
     expect(
       collectVisibleAdjustmentLayers(visibleState.visibleTracks).map(({ layer }) => layer.id),
     ).toEqual(['adj-visible'])
+  })
+
+  it('derives direct and compound audio scene partitions with managed transition defs', () => {
+    const sourceAudio = {
+      id: 'source-audio',
+      type: 'audio',
+      trackId: 'audio-track',
+      from: 0,
+      durationInFrames: 30,
+      src: 'source.wav',
+      label: 'Source audio',
+    } as const
+    const managedLeft = {
+      id: 'managed-left',
+      type: 'audio',
+      trackId: 'audio-track',
+      from: 0,
+      durationInFrames: 30,
+      src: 'left.wav',
+      label: 'Managed left',
+    } as const
+    const managedRight = {
+      id: 'managed-right',
+      type: 'audio',
+      trackId: 'audio-track',
+      from: 24,
+      durationInFrames: 30,
+      src: 'right.wav',
+      label: 'Managed right',
+    } as const
+    const standaloneCompound = {
+      id: 'standalone-compound',
+      type: 'audio',
+      trackId: 'audio-track',
+      from: 60,
+      durationInFrames: 30,
+      src: 'compound.wav',
+      label: 'Standalone compound',
+      compositionId: 'composition-a',
+    } as const
+    const managedCompoundLeft = {
+      id: 'managed-compound-left',
+      type: 'audio',
+      trackId: 'audio-track',
+      from: 90,
+      durationInFrames: 30,
+      src: 'compound-left.wav',
+      label: 'Managed compound left',
+      compositionId: 'composition-b',
+    } as const
+    const managedCompoundRight = {
+      id: 'managed-compound-right',
+      type: 'audio',
+      trackId: 'audio-track',
+      from: 114,
+      durationInFrames: 30,
+      src: 'compound-right.wav',
+      label: 'Managed compound right',
+      compositionId: 'composition-b',
+    } as const
+    const audioItems = [
+      sourceAudio,
+      managedLeft,
+      managedRight,
+      standaloneCompound,
+      managedCompoundLeft,
+      managedCompoundRight,
+    ] as AudioTrackItem[]
+    const transition = {
+      id: 'transition-direct',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'video-left',
+      rightClipId: 'video-right',
+      trackId: 'video-track',
+      durationInFrames: 6,
+    } satisfies Transition
+    const compoundTransition = {
+      id: 'transition-compound',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'composition-left',
+      rightClipId: 'composition-right',
+      trackId: 'composition-track',
+      durationInFrames: 6,
+    } satisfies Transition
+
+    const scene = deriveCompositionAudioScene({
+      audioItems,
+      managedLinkedAudioTransitions: [
+        { transition, leftAudio: managedLeft, rightAudio: managedRight },
+        {
+          transition: compoundTransition,
+          leftAudio: managedCompoundLeft,
+          rightAudio: managedCompoundRight,
+        },
+      ],
+    })
+
+    expect(scene.standaloneAudioItems.map((item) => item.id)).toEqual(['source-audio'])
+    expect(scene.managedLinkedAudioItems.map((item) => item.id)).toEqual([
+      'managed-left',
+      'managed-right',
+    ])
+    expect(scene.standaloneCompoundAudioItems.map((item) => item.id)).toEqual([
+      'standalone-compound',
+    ])
+    expect(scene.managedCompoundAudioItems.map((item) => item.id)).toEqual([
+      'managed-compound-left',
+      'managed-compound-right',
+    ])
+    expect(scene.managedLinkedAudioTransitionDefs).toEqual([
+      {
+        ...transition,
+        leftClipId: 'managed-left',
+        rightClipId: 'managed-right',
+        trackId: 'audio-track',
+      },
+    ])
+    expect(scene.managedCompoundAudioTransitionDefs).toEqual([
+      {
+        ...compoundTransition,
+        leftClipId: 'managed-compound-left',
+        rightClipId: 'managed-compound-right',
+        trackId: 'audio-track',
+      },
+    ])
   })
 
   it('collects stable-dom visual and audio items with track metadata', () => {
