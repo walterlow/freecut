@@ -75,9 +75,9 @@ describe('filmstripStorage', () => {
     fsMocks.readBlob.mockResolvedValue(new Blob(['frame'], { type: 'image/jpeg' }))
   })
 
-  it('does not revoke unrequested frame URLs during partial loads', async () => {
+  it('does not revoke unrequested frame URLs during single-frame loads', async () => {
     await filmstripStorage.load('media-1')
-    await filmstripStorage.load('media-1', { frameIndices: [1] })
+    await filmstripStorage.loadSingleFrame('media-1', 1)
 
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:frame-1')
     expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:frame-0')
