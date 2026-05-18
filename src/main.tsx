@@ -9,6 +9,7 @@ import './index.css'
 
 const log = createLogger('App')
 const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000
+const ACCEPTED_APP_UPDATE_SIGNATURE_KEY = 'freecut-accepted-app-update-signature'
 
 let updateToastVisible = false
 let currentBuildAssetSignature: string | null = null
@@ -35,7 +36,16 @@ async function saveCurrentProjectBeforeReload() {
   }
 }
 
-function showUpdateAvailableToast(applyUpdate: () => void = () => window.location.reload()) {
+function rememberAcceptedAppUpdate(signature?: string) {
+  if (signature) {
+    window.localStorage.setItem(ACCEPTED_APP_UPDATE_SIGNATURE_KEY, signature)
+  }
+}
+
+function showUpdateAvailableToast(
+  applyUpdate: () => void = () => window.location.reload(),
+  updateSignature?: string,
+) {
   if (updateToastVisible) {
     return
   }
@@ -46,15 +56,20 @@ function showUpdateAvailableToast(applyUpdate: () => void = () => window.locatio
     action: {
       label: i18n.t('appShell.saveAndReload'),
       onClick: async () => {
+        rememberAcceptedAppUpdate(updateSignature)
         await saveCurrentProjectBeforeReload()
         applyUpdate()
       },
     },
     cancel: {
       label: i18n.t('appShell.reloadWithoutSaving'),
-      onClick: applyUpdate,
+      onClick: () => {
+        rememberAcceptedAppUpdate(updateSignature)
+        applyUpdate()
+      },
     },
     onDismiss: () => {
+      rememberAcceptedAppUpdate(updateSignature)
       updateToastVisible = false
     },
     onAutoClose: () => {
@@ -96,9 +111,16 @@ async function checkForAppShellUpdate() {
     const html = await response.text()
     const nextDocument = new DOMParser().parseFromString(html, 'text/html')
     const nextBuildAssetSignature = getBuildAssetSignature(nextDocument)
+    const acceptedUpdateSignature = window.localStorage.getItem(ACCEPTED_APP_UPDATE_SIGNATURE_KEY)
 
-    if (nextBuildAssetSignature && nextBuildAssetSignature !== currentBuildAssetSignature) {
-      showUpdateAvailableToast()
+    if (
+      nextBuildAssetSignature &&
+      nextBuildAssetSignature !== currentBuildAssetSignature &&
+      nextBuildAssetSignature !== acceptedUpdateSignature
+    ) {
+      showUpdateAvailableToast(() => {
+        window.location.assign(`/?__freecut_updated=${Date.now()}`)
+      }, nextBuildAssetSignature)
     }
   } catch (error) {
     log.warn('App update check failed:', error)
