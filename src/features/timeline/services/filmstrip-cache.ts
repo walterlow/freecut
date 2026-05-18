@@ -339,13 +339,67 @@ class FilmstripCacheService {
     if (!this.cache.has(mediaId)) return
 
     this.memoryState.scheduleIdleTimer(mediaId, CACHE_EVICT_IDLE_MS, () => {
-      this.tryEvictMedia(mediaId, 'idle-timeout')
+      // Idle eviction: close decoded bitmaps to free GPU/heap memory but keep
+      // the cache entry + object URLs alive. Re-display will hit the cache
+      // (no OPFS read) and render as <img src> instead of bitmap-canvas.
+      this.softEvictMedia(mediaId, 'idle-timeout')
     })
   }
 
   private hasSubscribers(mediaId: string): boolean {
     const callbacks = this.updateCallbacks.get(mediaId)
     return !!callbacks && callbacks.size > 0
+  }
+
+  /**
+   * Soft eviction: close decoded bitmaps but keep frames + object URLs in the
+   * in-memory cache. Memory cost drops from ~14MB/clip (bitmaps) to ~300KB/clip
+   * (JPEG blobs referenced by object URLs). Re-display reuses the cached URLs
+   * with no OPFS round-trip.
+   */
+  private softEvictMedia(mediaId: string, reason: string): boolean {
+    if (this.pendingExtractions.has(mediaId)) return false
+    const cached = this.cache.get(mediaId)
+    if (!cached) return false
+    if (!cached.frames.some((frame) => frame.bitmap)) {
+      // Nothing to free — entry is already bitmap-less.
+      this.clearIdleEvictionTimer(mediaId)
+      return false
+    }
+
+    // Build a new frames array with bitmaps removed. Frames that have a
+    // bitmap but no URL are unrenderable without the bitmap, so leave those
+    // untouched (extraction is still in flight or never persisted JPEGs).
+    const bitmapsToClose: ImageBitmap[] = []
+    const downgradedFrames = cached.frames.map((frame) => {
+      if (!frame.bitmap) return frame
+      if (!frame.url) return frame
+      bitmapsToClose.push(frame.bitmap)
+      const { bitmap: _bitmap, ...rest } = frame
+      void _bitmap
+      return rest
+    })
+
+    const downgraded: Filmstrip = { ...cached, frames: downgradedFrames }
+    this.cache.set(mediaId, downgraded)
+    this.updateCacheMeta(mediaId, downgraded)
+    for (const bitmap of bitmapsToClose) {
+      this.closeBitmap(bitmap)
+    }
+    this.clearIdleEvictionTimer(mediaId)
+
+    // Notify mounted subscribers so any visible <canvas> tiles re-render as
+    // <img>. In practice idle eviction only fires after subscribers have
+    // dropped, but this is safe either way.
+    const callbacks = this.updateCallbacks.get(mediaId)
+    if (callbacks) {
+      for (const callback of callbacks) {
+        callback(downgraded)
+      }
+    }
+
+    logger.debug(`Soft-evicted in-memory filmstrip bitmaps ${mediaId} (${reason})`)
+    return true
   }
 
   private tryEvictMedia(mediaId: string, reason: string): boolean {

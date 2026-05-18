@@ -323,22 +323,24 @@ class FilmstripStorage {
     const metadata = await this.ensureWorkspaceFilmstrip(mediaId)
     if (!metadata) return []
 
-    const entries = await listDirectory(requireWorkspaceRoot(), filmstripDir(mediaId))
+    // Resolve the dir once and read matching files concurrently — was a
+    // sequential await loop that re-walked the four-segment path per frame.
+    const files = await readDirectoryFiles(
+      requireWorkspaceRoot(),
+      filmstripDir(mediaId),
+      (entry) => {
+        const index = parseFrameFileName(entry.name)
+        if (index === null) return false
+        if (typeof startIndex === 'number' && index < startIndex) return false
+        if (typeof endIndex === 'number' && index >= endIndex) return false
+        return true
+      },
+    )
+
     const indices = new Set<number>()
-
-    for (const entry of entries) {
-      if (entry.kind !== 'file') continue
-      const index = parseFrameFileName(entry.name)
+    for (const { name, blob } of files) {
+      const index = parseFrameFileName(name)
       if (index === null) continue
-      if (typeof startIndex === 'number' && index < startIndex) continue
-      if (typeof endIndex === 'number' && index >= endIndex) continue
-
-      const parsed = parseFrameFileNameParts(entry.name)
-      if (!parsed) continue
-      const blob = await readBlob(
-        requireWorkspaceRoot(),
-        filmstripFramePath(mediaId, parsed.index, parsed.ext),
-      )
       if (blob && blob.size > 0) {
         indices.add(index)
       }

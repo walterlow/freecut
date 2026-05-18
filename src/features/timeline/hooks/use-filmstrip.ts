@@ -148,19 +148,19 @@ export function useFilmstrip({
     return unsubscribe
   }, [mediaId, enabled, duration])
 
-  // Hydrate from persisted storage as soon as the clip is visible — does not
-  // wait for the source blob URL. For warm-disk / cold-memory clips this is
-  // typically all we need; the extraction effect below will then no-op when
-  // it finds a complete cache.
+  // Hydrate from persisted storage as soon as we know the clip exists — does
+  // not wait for the source blob URL or for visibility. Disk reads are cheap
+  // and parallel, so prefetching off-viewport clips lets them paint instantly
+  // when scrolled into view. The extraction effect below still no-ops when it
+  // finds a complete cache.
   useEffect(() => {
     if (!enabled || !duration || duration <= 0) return
-    if (!isVisible) return
     if (filmstrip?.isComplete) return
 
     void filmstripCache.loadFromDisk(mediaId, duration).catch(() => {
       // Swallow: extraction path below is the fallback once blobUrl arrives.
     })
-  }, [mediaId, enabled, duration, isVisible, filmstrip?.isComplete])
+  }, [mediaId, enabled, duration, filmstrip?.isComplete])
 
   // Once a clip leaves the active workset, stop spending background decode time on it.
   useEffect(() => {
