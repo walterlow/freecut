@@ -292,6 +292,42 @@ class FilmstripCacheService {
     this.memoryState.clearEntry(mediaId)
   }
 
+  private closeBitmap(bitmap: ImageBitmap): void {
+    try {
+      bitmap.close()
+    } catch {
+      // Already closed or detached.
+    }
+  }
+
+  private closeBitmapFrames(frames: Iterable<FilmstripFrame>): void {
+    for (const frame of frames) {
+      if (frame.bitmap) {
+        this.closeBitmap(frame.bitmap)
+      }
+    }
+  }
+
+  private closeReplacedBitmapFrames(
+    previous: Filmstrip | null | undefined,
+    next: Filmstrip | null | undefined,
+  ): void {
+    if (!previous?.frames?.length) return
+
+    const retainedBitmaps = new Set<ImageBitmap>()
+    for (const frame of next?.frames ?? []) {
+      if (frame.bitmap) {
+        retainedBitmaps.add(frame.bitmap)
+      }
+    }
+
+    for (const frame of previous.frames) {
+      if (frame.bitmap && !retainedBitmaps.has(frame.bitmap)) {
+        this.closeBitmap(frame.bitmap)
+      }
+    }
+  }
+
   private clearIdleEvictionTimer(mediaId: string): void {
     this.memoryState.clearIdleTimer(mediaId)
   }
@@ -315,9 +351,11 @@ class FilmstripCacheService {
   private tryEvictMedia(mediaId: string, reason: string): boolean {
     if (this.pendingExtractions.has(mediaId)) return false
     if (this.hasSubscribers(mediaId)) return false
-    if (!this.cache.has(mediaId)) return false
+    const cached = this.cache.get(mediaId)
+    if (!cached) return false
 
     this.cache.delete(mediaId)
+    this.closeBitmapFrames(cached.frames)
     this.clearCacheMeta(mediaId)
     filmstripStorage.revokeUrls(mediaId)
     this.clearIdleEvictionTimer(mediaId)
@@ -913,6 +951,7 @@ class FilmstripCacheService {
 
   private notifyUpdate(mediaId: string, filmstrip: Filmstrip): void {
     this.clearIdleEvictionTimer(mediaId)
+    this.closeReplacedBitmapFrames(this.cache.get(mediaId), filmstrip)
     this.cache.set(mediaId, filmstrip)
     this.updateCacheMeta(mediaId, filmstrip)
     this.enforceMemoryBudget()
@@ -2406,6 +2445,7 @@ class FilmstripCacheService {
   async clearMedia(mediaId: string): Promise<void> {
     this.abort(mediaId)
     this.clearIdleEvictionTimer(mediaId)
+    this.closeBitmapFrames(this.cache.get(mediaId)?.frames ?? [])
     this.cache.delete(mediaId)
     this.clearCacheMeta(mediaId)
     filmstripStorage.revokeUrls(mediaId)
@@ -2418,6 +2458,9 @@ class FilmstripCacheService {
   async clearAll(): Promise<void> {
     for (const mediaId of this.pendingExtractions.keys()) {
       this.abort(mediaId)
+    }
+    for (const filmstrip of this.cache.values()) {
+      this.closeBitmapFrames(filmstrip.frames)
     }
     this.cache.clear()
     this.memoryState.clear()
@@ -2441,6 +2484,9 @@ class FilmstripCacheService {
     // Revoke in-memory object URLs only; keep persisted filmstrip files.
     for (const mediaId of this.cache.keys()) {
       filmstripStorage.revokeUrls(mediaId)
+    }
+    for (const filmstrip of this.cache.values()) {
+      this.closeBitmapFrames(filmstrip.frames)
     }
     this.cache.clear()
     this.memoryState.clear()

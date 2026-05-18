@@ -39,6 +39,14 @@ vi.mock('./filmstrip-storage', () => ({
 
 import { filmstripCache } from './filmstrip-cache'
 
+function makeBitmap(): ImageBitmap {
+  return {
+    width: 80,
+    height: 45,
+    close: vi.fn(),
+  } as unknown as ImageBitmap
+}
+
 describe('filmstripCache completion semantics', () => {
   afterEach(async () => {
     vi.clearAllMocks()
@@ -142,5 +150,99 @@ describe('filmstripCache completion semantics', () => {
 
     expect(result.isComplete).toBe(true)
     expect(result.progress).toBe(100)
+  })
+})
+
+describe('filmstripCache bitmap lifecycle', () => {
+  afterEach(async () => {
+    vi.clearAllMocks()
+    await filmstripCache.dispose()
+  })
+
+  it('closes bitmap-only frames when cached frames are replaced by persisted URLs', () => {
+    const bitmap = makeBitmap()
+    const service = filmstripCache as unknown as {
+      notifyUpdate: (
+        mediaId: string,
+        filmstrip: {
+          frames: Array<{ index: number; timestamp: number; url: string; bitmap?: ImageBitmap }>
+          isComplete: boolean
+          isExtracting: boolean
+          progress: number
+        },
+      ) => void
+    }
+
+    service.notifyUpdate('media-1', {
+      frames: [{ index: 0, timestamp: 0, url: '', bitmap }],
+      isComplete: false,
+      isExtracting: true,
+      progress: 1,
+    })
+    service.notifyUpdate('media-1', {
+      frames: [{ index: 0, timestamp: 0, url: 'blob:0' }],
+      isComplete: true,
+      isExtracting: false,
+      progress: 100,
+    })
+
+    expect(bitmap.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps retained bitmaps open across cache updates', () => {
+    const bitmap = makeBitmap()
+    const service = filmstripCache as unknown as {
+      notifyUpdate: (
+        mediaId: string,
+        filmstrip: {
+          frames: Array<{ index: number; timestamp: number; url: string; bitmap?: ImageBitmap }>
+          isComplete: boolean
+          isExtracting: boolean
+          progress: number
+        },
+      ) => void
+    }
+    const frame = { index: 0, timestamp: 0, url: '', bitmap }
+
+    service.notifyUpdate('media-1', {
+      frames: [frame],
+      isComplete: false,
+      isExtracting: true,
+      progress: 1,
+    })
+    service.notifyUpdate('media-1', {
+      frames: [frame, { index: 1, timestamp: 1, url: 'blob:1' }],
+      isComplete: false,
+      isExtracting: true,
+      progress: 50,
+    })
+
+    expect(bitmap.close).not.toHaveBeenCalled()
+  })
+
+  it('closes cached bitmaps when clearing all filmstrips', async () => {
+    const bitmap = makeBitmap()
+    const service = filmstripCache as unknown as {
+      notifyUpdate: (
+        mediaId: string,
+        filmstrip: {
+          frames: Array<{ index: number; timestamp: number; url: string; bitmap?: ImageBitmap }>
+          isComplete: boolean
+          isExtracting: boolean
+          progress: number
+        },
+      ) => void
+    }
+
+    service.notifyUpdate('media-1', {
+      frames: [{ index: 0, timestamp: 0, url: '', bitmap }],
+      isComplete: false,
+      isExtracting: false,
+      progress: 25,
+    })
+
+    await filmstripCache.clearAll()
+
+    expect(bitmap.close).toHaveBeenCalledTimes(1)
   })
 })
