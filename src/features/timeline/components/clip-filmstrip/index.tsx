@@ -5,23 +5,9 @@ import { resolveMediaUrl, resolveProxyUrl } from '@/features/timeline/deps/media
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url'
 import { filmstripCache, THUMBNAIL_WIDTH } from '../../services/filmstrip-cache'
 import { createLogger } from '@/shared/logging/logger'
-import { computeFilmstripRenderWindow } from './render-window'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 
 const logger = createLogger('ClipFilmstrip')
-
-const ZOOM_SETTLE_MS = 80
-const PRIORITY_PAD_SECONDS = 0.75
-const MAX_PRIORITY_WINDOW_SECONDS = 60
-const MAX_TILES_DURING_ZOOM = 32
-const MAX_TILES_DURING_ZOOM_MID = 24
-const MAX_TILES_DURING_ZOOM_HIGH = 16
-const MAX_TILES_IDLE = 260
-const VIEWPORT_PAD_TILES = 2
-const VIEWPORT_PAD_TILES_INTERACTION = 1
-const VIEWPORT_PAD_PX = 600
-const MID_INTERACTION_PPS = 120
-const HIGH_INTERACTION_PPS = 170
 
 interface ClipFilmstripProps {
   /** Media ID from the timeline item */
@@ -53,17 +39,6 @@ interface ClipFilmstripProps {
   pixelsPerSecond: number
   /** Disable deferred width/zoom while active edit previews are running */
   preferImmediateRendering?: boolean
-}
-
-function getTileStep(tileCount: number, maxTiles: number): number {
-  if (tileCount <= maxTiles) return 1
-  return Math.ceil(tileCount / maxTiles)
-}
-
-function getInteractionMaxTiles(pixelsPerSecond: number): number {
-  if (pixelsPerSecond >= HIGH_INTERACTION_PPS) return MAX_TILES_DURING_ZOOM_HIGH
-  if (pixelsPerSecond >= MID_INTERACTION_PPS) return MAX_TILES_DURING_ZOOM_MID
-  return MAX_TILES_DURING_ZOOM
 }
 
 /**
@@ -98,16 +73,26 @@ const FilmstripTile = memo(function FilmstripTile({
   const canvasRefCallback: RefCallback<HTMLCanvasElement> = useCallback(
     (canvas: HTMLCanvasElement | null) => {
       if (!canvas || !bitmap || bitmap.width === 0 || bitmap.height === 0) return
-      if (canvas.width !== bitmap.width) canvas.width = bitmap.width
-      if (canvas.height !== bitmap.height) canvas.height = bitmap.height
+      const targetWidth = Math.max(1, Math.round(sourceWidth))
+      const targetHeight = Math.max(1, Math.round(height))
+      if (canvas.width !== targetWidth) canvas.width = targetWidth
+      if (canvas.height !== targetHeight) canvas.height = targetHeight
       const ctx = canvas.getContext('2d')
       try {
-        if (ctx) ctx.drawImage(bitmap, 0, 0)
+        if (ctx) {
+          const scale = Math.max(targetWidth / bitmap.width, targetHeight / bitmap.height)
+          const drawWidth = bitmap.width * scale
+          const drawHeight = bitmap.height * scale
+          const drawX = (targetWidth - drawWidth) * 0.5
+          const drawY = (targetHeight - drawHeight) * 0.5
+          ctx.clearRect(0, 0, targetWidth, targetHeight)
+          ctx.drawImage(bitmap, drawX, drawY, drawWidth, drawHeight)
+        }
       } catch {
         // Bitmap may have been closed/detached by the time React renders
       }
     },
-    [bitmap],
+    [bitmap, height, sourceWidth],
   )
 
   const handleError = useCallback(() => {
@@ -118,16 +103,25 @@ const FilmstripTile = memo(function FilmstripTile({
   // Bitmap path: render to canvas (instant, no JPEG decode)
   if (bitmap) {
     return (
-      <canvas
-        ref={canvasRefCallback}
+      <div
+        aria-hidden
         className="absolute top-0"
         style={{
           left: x,
           width,
           height,
-          objectFit: 'cover',
+          overflow: 'hidden',
         }}
-      />
+      >
+        <canvas
+          ref={canvasRefCallback}
+          className="absolute top-0 left-0"
+          style={{
+            width: sourceWidth,
+            height,
+          }}
+        />
+      </div>
     )
   }
 
@@ -165,20 +159,30 @@ const FilmstripTile = memo(function FilmstripTile({
   }
 
   return (
-    <img
-      src={src}
-      alt=""
-      loading="lazy"
-      decoding="async"
+    <div
+      aria-hidden
       className="absolute top-0"
-      onError={handleError}
       style={{
         left: x,
         width,
         height,
-        objectFit: 'cover',
+        overflow: 'hidden',
       }}
-    />
+    >
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="absolute top-0 left-0"
+        onError={handleError}
+        style={{
+          width: sourceWidth,
+          height,
+          objectFit: 'cover',
+        }}
+      />
+    </div>
   )
 })
 
@@ -201,16 +205,11 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   speed,
   isReversed = false,
   isVisible,
-  visibleStartRatio = 0,
-  visibleEndRatio = 1,
   pixelsPerSecond,
-  preferImmediateRendering = false,
 }: ClipFilmstripProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState(0)
   const { blobUrl, setBlobUrl, hasStartedLoadingRef, blobUrlVersion } = useMediaBlobUrl(mediaId)
-  const [isZooming, setIsZooming] = useState(false)
-  const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshingFrameIndicesRef = useRef<Set<number>>(new Set())
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus.get(mediaId) ?? null)
 
@@ -258,162 +257,15 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
       sourceEnd ?? effectiveStart + (visibleClipWidth / Math.max(1, renderPixelsPerSecond)) * speed,
     ),
   )
-  const getSourceTimeForX = useCallback(
-    (x: number) => {
-      const timelineSeconds = (x / Math.max(1, renderPixelsPerSecond)) * speed
-      return isReversed
-        ? Math.min(sourceDuration, Math.max(0, effectiveEnd - timelineSeconds))
-        : Math.min(sourceDuration, Math.max(0, effectiveStart + timelineSeconds))
-    },
-    [effectiveEnd, effectiveStart, isReversed, renderPixelsPerSecond, sourceDuration, speed],
-  )
-  const isInteractionLod = !preferImmediateRendering && isZooming
-  const viewportPadTiles = isInteractionLod ? VIEWPORT_PAD_TILES_INTERACTION : VIEWPORT_PAD_TILES
-
-  // Track active zoom interaction from pps changes. While active, keep
-  // extraction density conservative without decoupling visible tile geometry
-  // from the clip itself.
-  const lastPpsRef = useRef(pixelsPerSecond)
-  useEffect(() => {
-    if (preferImmediateRendering) return
-    if (lastPpsRef.current === pixelsPerSecond) return
-    lastPpsRef.current = pixelsPerSecond
-
-    setIsZooming(true)
-    if (zoomSettleTimeoutRef.current) {
-      clearTimeout(zoomSettleTimeoutRef.current)
-    }
-    zoomSettleTimeoutRef.current = setTimeout(() => {
-      setIsZooming(false)
-      zoomSettleTimeoutRef.current = null
-    }, ZOOM_SETTLE_MS)
-  }, [pixelsPerSecond, preferImmediateRendering])
-
-  // Keep unmount cleanup separate: the zoom-tracking effect above intentionally
-  // handles dependency-change behavior (including early returns), and returning
-  // cleanup there would run on every change. This effect only clears a pending
-  // timeout on unmount so it cannot leak during a settle window.
-  useEffect(() => {
-    return () => {
-      if (zoomSettleTimeoutRef.current) {
-        clearTimeout(zoomSettleTimeoutRef.current)
-      }
-    }
-  }, [])
-
-  const renderWindow = useMemo(
-    () =>
-      computeFilmstripRenderWindow({
-        renderWidth: renderClipWidth,
-        visibleWidth: visibleClipWidth,
-        tileWidth: thumbnailWidth,
-        visibleStartRatio,
-        visibleEndRatio,
-        minimumPadTiles: viewportPadTiles,
-        minimumPadPx: VIEWPORT_PAD_PX,
-      }),
-    [
-      renderClipWidth,
-      visibleClipWidth,
-      thumbnailWidth,
-      visibleStartRatio,
-      visibleEndRatio,
-      viewportPadTiles,
-    ],
-  )
-
-  // During active edit previews, prioritize the source window that actually
-  // maps to the current padded render window, not always the clip's left edge.
-  const priorityWindow = useMemo(() => {
-    if (isInteractionLod) {
-      return null
-    }
-    if (sourceDuration <= 0 || renderPixelsPerSecond <= 0 || renderClipWidth <= 0) {
-      return null
-    }
-    if (renderWindow.paddedEndX <= renderWindow.paddedStartX) {
-      return null
-    }
-
-    const windowStartTime = getSourceTimeForX(renderWindow.paddedStartX)
-    const windowEndTime = getSourceTimeForX(renderWindow.paddedEndX)
-    const unclampedStartTime = Math.max(
-      0,
-      Math.min(windowStartTime, windowEndTime) - PRIORITY_PAD_SECONDS,
-    )
-    const unclampedEndTime = Math.min(
-      sourceDuration,
-      Math.max(windowStartTime, windowEndTime) + PRIORITY_PAD_SECONDS,
-    )
-    if (unclampedEndTime <= unclampedStartTime) {
-      return null
-    }
-
-    const unclampedSpan = unclampedEndTime - unclampedStartTime
-    if (unclampedSpan <= MAX_PRIORITY_WINDOW_SECONDS) {
-      return { startTime: unclampedStartTime, endTime: unclampedEndTime }
-    }
-
-    const halfWindow = MAX_PRIORITY_WINDOW_SECONDS * 0.5
-    const centerTime = (unclampedStartTime + unclampedEndTime) * 0.5
-    const maxStartTime = Math.max(0, sourceDuration - MAX_PRIORITY_WINDOW_SECONDS)
-    const startTime = Math.min(maxStartTime, Math.max(0, centerTime - halfWindow))
-    const endTime = Math.min(sourceDuration, startTime + MAX_PRIORITY_WINDOW_SECONDS)
-    return endTime > startTime ? { startTime, endTime } : null
-  }, [
-    sourceDuration,
-    renderPixelsPerSecond,
-    renderClipWidth,
-    getSourceTimeForX,
-    isInteractionLod,
-    renderWindow,
-  ])
-
-  const targetFrameIndices = useMemo(() => {
-    if (thumbnailWidth === 0 || renderPixelsPerSecond <= 0) {
-      return undefined
-    }
-
-    const { startTile, endTile, paddedEndX } = renderWindow
-    const visibleTileCount = Math.max(0, endTile - startTile)
-    if (visibleTileCount <= 0) {
-      return undefined
-    }
-
-    const maxTiles = isInteractionLod
-      ? getInteractionMaxTiles(renderPixelsPerSecond)
-      : MAX_TILES_IDLE
-    const tileStep = getTileStep(visibleTileCount, maxTiles)
-    const indices = new Set<number>()
-
-    for (let tile = startTile; tile < endTile; tile += tileStep) {
-      const tileX = tile * thumbnailWidth
-      if (tileX >= paddedEndX) {
-        break
-      }
-
-      const tileWidth = Math.max(
-        1,
-        Math.min(renderClipWidth, Math.min((tile + tileStep) * thumbnailWidth, paddedEndX)) - tileX,
-      )
-      const tileCenterX = tileX + tileWidth * 0.5
-      const tileTime = getSourceTimeForX(tileCenterX)
-
-      indices.add(Math.max(0, Math.round(tileTime)))
-    }
-
-    const normalized = Array.from(indices).sort((a, b) => a - b)
-    return normalized.length > 0 ? normalized : undefined
-  }, [
-    thumbnailWidth,
-    renderPixelsPerSecond,
-    renderWindow,
-    isInteractionLod,
-    renderClipWidth,
-    getSourceTimeForX,
-  ])
-
-  const targetFrameCount = targetFrameIndices?.length
+  // No zoom-driven extraction targeting. Earlier we passed a priorityWindow +
+  // targetFrameIndices that flipped on every pps change, which made the cache
+  // mark frames as re-extracting and the tiles momentarily showed a "broken
+  // thumbnail" while the cache published refining state. Letting the cache
+  // extract its default 1fps coverage once per clip and never re-targeting on
+  // zoom keeps already-loaded thumbnails stable across every zoom step.
+  const priorityWindow = null
+  const targetFrameCount = undefined
+  const targetFrameIndices = undefined
 
   // Load blob URL lazily when visible, and retry after global invalidation.
   useEffect(() => {
@@ -477,28 +329,24 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   // Pixel-aligned slot grid. Slots are at x = 0, thumbnailWidth, 2*thumbnailWidth, …
   // up to the clip's right edge. Each slot's content is the closest available
   // extracted frame for the source time at that slot's center — so extraction
-  // gaps (e.g. background-stride misses) are silently filled with the nearest
-  // frame instead of producing an alternating-size visual.
+  // gaps are silently filled with the nearest frame instead of producing an
+  // alternating-size visual.
   //
   // - Tile width is exactly thumbnailWidth — never stretched, squashed, or
-  //   merged. Every rendered tile is identical in size.
+  //   merged. Segment boundaries are handled by overflow clipping outside the
+  //   tile, so a short segment only reveals less of the full-size tile.
   // - key=slot is the integer slot index on the pixel grid. At fixed zoom the
   //   slot set never changes; scrolling can't refresh tiles, and a slot's
   //   frame prop updating as extraction lands doesn't remount its DOM.
-  // - Zoom changes the slot count (clip width grew/shrunk), which mounts or
-  //   unmounts tiles only at the clip's right edge — the visible portion's
-  //   slots stay stable.
   const tiles = useMemo(() => {
     if (!frames || frames.length === 0 || renderPixelsPerSecond <= 0) return []
     if (effectiveEnd <= effectiveStart) return []
 
     const pixelsPerSourceSecond = renderPixelsPerSecond / Math.max(0.0001, speed)
     const tileWidth = thumbnailWidth
-    const slotCount = Math.floor(renderClipWidth / tileWidth)
+    const slotCount = Math.ceil(renderClipWidth / tileWidth)
     if (slotCount === 0) return []
 
-    // frames is sorted by index in the cache; binary-search for the closest
-    // available frame to a target source time.
     const findClosestFrame = (targetTime: number): FilmstripFrame | null => {
       if (frames.length === 0) return null
       let lo = 0

@@ -133,8 +133,6 @@ describe('ClipFilmstrip', () => {
         mediaId: 'media-1',
         blobUrl: 'blob:proxy',
         enabled: true,
-        targetFrameCount: expect.any(Number),
-        targetFrameIndices: expect.any(Array),
       }),
     )
   })
@@ -160,13 +158,16 @@ describe('ClipFilmstrip', () => {
         mediaId: 'media-1',
         blobUrl: 'blob:original',
         enabled: true,
-        targetFrameCount: expect.any(Number),
-        targetFrameIndices: expect.any(Array),
       }),
     )
   })
 
-  it('prioritizes the visible source slice instead of the clip start', () => {
+  it('does not vary extraction targeting with zoom-derived inputs', () => {
+    // Filmstrip used to recompute targetFrameCount/targetFrameIndices/priorityWindow
+    // from clipWidth + pixelsPerSecond + visibility ratios on every zoom step.
+    // That caused the cache to re-extract on zoom and briefly show "broken"
+    // tiles. The contract is now: those request fields are all stable
+    // (undefined / null) so the cache extracts default coverage once.
     render(
       <ClipFilmstrip
         mediaId="media-1"
@@ -184,17 +185,39 @@ describe('ClipFilmstrip', () => {
     )
 
     const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0]
-    const priorityWindow = latestCall?.priorityWindow
-    expect(priorityWindow).toBeDefined()
-    expect(latestCall?.priorityWindow).toEqual(
-      expect.objectContaining({
-        startTime: expect.any(Number),
-        endTime: expect.any(Number),
-      }),
+    expect(latestCall?.priorityWindow).toBeNull()
+    expect(latestCall?.targetFrameCount).toBeUndefined()
+    expect(latestCall?.targetFrameIndices).toBeUndefined()
+  })
+
+  it('keeps tile media full width when the segment window is narrower than a thumbnail', async () => {
+    useFilmstripMock.mockReturnValue({
+      frames: [{ index: 0, timestamp: 0, url: 'blob:frame-0' }],
+      isLoading: false,
+      isComplete: true,
+      progress: 100,
+      error: null,
+    })
+
+    const { container } = render(
+      <ClipFilmstrip
+        mediaId="media-1"
+        clipWidth={40}
+        sourceStart={0}
+        sourceDuration={10}
+        trimStart={0}
+        speed={1}
+        fps={30}
+        isVisible
+        pixelsPerSecond={120}
+      />,
     )
-    expect(priorityWindow!.startTime).toBeGreaterThan(0)
-    expect(priorityWindow!.endTime).toBeGreaterThan(priorityWindow!.startTime)
-    expect(latestCall?.targetFrameIndices).toEqual(expect.arrayContaining([expect.any(Number)]))
+
+    await waitFor(() => {
+      const img = container.querySelector('img[src="blob:frame-0"]') as HTMLImageElement | null
+      expect(img).not.toBeNull()
+      expect(img!.style.width).toBe('107px')
+    })
   })
 
   it('refreshes a stale frame URL when a tile source errors', async () => {
