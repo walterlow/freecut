@@ -155,7 +155,6 @@ function VideoSource({
   const [strictDecodeReady, setStrictDecodeReady] = useState(false)
   const [hasDecodedFrame, setHasDecodedFrame] = useState(false)
   const [decodedFrameKey, setDecodedFrameKey] = useState<number | null>(null)
-  const [pausedRenderTargetKey, setPausedRenderTargetKey] = useState<number | null>(null)
   const shouldUseDecodedScrubFrame = forceFastScrub && strictDecodeReady && !useLegacyPausedSeek
 
   useEffect(() => {
@@ -208,7 +207,6 @@ function VideoSource({
     setUseLegacyPausedSeek(false)
     setHasDecodedFrame(false)
     setDecodedFrameKey(null)
-    setPausedRenderTargetKey(null)
     pausedRenderTargetKeyRef.current = null
     prewarmInFlightRef.current = false
     queuedPrewarmTimesRef.current = []
@@ -587,7 +585,6 @@ function VideoSource({
       ) {
         if (pausedRenderTargetKeyRef.current !== targetCacheKey) {
           pausedRenderTargetKeyRef.current = targetCacheKey
-          setPausedRenderTargetKey(targetCacheKey)
         }
         pendingTimeRef.current = targetTime
         if (decoderReadyRef.current) {
@@ -756,10 +753,7 @@ function VideoSource({
     strictDecodeReady &&
     hasDecodedFrame &&
     !useLegacyPausedSeek &&
-    decodedFrameKey !== null &&
-    decodedFrameKey === pausedRenderTargetKey
-  const hideNativeVideoForPendingDecodedScrub =
-    shouldUseDecodedScrubFrame && pausedRenderTargetKey !== decodedFrameKey
+    decodedFrameKey !== null
 
   return (
     <AbsoluteFill>
@@ -769,7 +763,7 @@ function VideoSource({
           width: '100%',
           height: '100%',
           position: 'relative',
-          display: showDecodedCanvas || hideNativeVideoForPendingDecodedScrub ? 'none' : 'block',
+          display: showDecodedCanvas ? 'none' : 'block',
         }}
       />
       <canvas

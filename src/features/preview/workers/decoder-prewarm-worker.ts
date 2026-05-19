@@ -311,76 +311,59 @@ function currentSampleCoversTimestamp(state: ExtractorState, timestamp: number):
   return sample.timestamp + sample.duration >= timestamp - TIMESTAMP_EPSILON
 }
 
-function getOrCreateCurrentVideoFrame(state: ExtractorState): VideoFrame | null {
+function getSampleDisplaySize(sample: WorkerSample): { width: number; height: number } | null {
+  const width = Number(sample?.displayWidth ?? 0)
+  const height = Number(sample?.displayHeight ?? 0)
+  if (Number.isFinite(width) && Number.isFinite(height) && width >= 1 && height >= 1) {
+    return { width: Math.round(width), height: Math.round(height) }
+  }
+
+  const videoFrame =
+    typeof sample?.toVideoFrame === 'function' ? sample.toVideoFrame() : (sample?.frame ?? null)
+  if (!videoFrame) {
+    return null
+  }
+
+  try {
+    const fallbackWidth = Number(videoFrame.displayWidth ?? videoFrame.width ?? 0)
+    const fallbackHeight = Number(videoFrame.displayHeight ?? videoFrame.height ?? 0)
+    if (
+      Number.isFinite(fallbackWidth) &&
+      Number.isFinite(fallbackHeight) &&
+      fallbackWidth >= 1 &&
+      fallbackHeight >= 1
+    ) {
+      return { width: Math.round(fallbackWidth), height: Math.round(fallbackHeight) }
+    }
+    return null
+  } finally {
+    try {
+      videoFrame.close?.()
+    } catch {
+      // Ignore close errors.
+    }
+  }
+}
+
+function renderSampleToBitmap(state: ExtractorState, sample: WorkerSample): ImageBitmap | null {
+  const size = getSampleDisplaySize(sample)
+  if (!size || typeof sample?.draw !== 'function') {
+    return null
+  }
+
+  state.canvas.width = size.width
+  state.canvas.height = size.height
+  sample.draw(state.ctx, 0, 0, size.width, size.height)
+  return state.canvas.transferToImageBitmap()
+}
+
+function renderCurrentSampleToBitmap(state: ExtractorState): ImageBitmap | null {
   const sample = state.currentSample
   if (!sample) {
     return null
   }
 
-  let videoFrame = state.cachedVideoFrame
-  if (!videoFrame || state.cachedVideoFrameSample !== sample) {
-    closeCachedVideoFrame(state)
-    if (typeof sample.toVideoFrame === 'function') {
-      videoFrame = sample.toVideoFrame()
-    } else {
-      videoFrame = sample.frame ?? null
-    }
-    if (!videoFrame) {
-      return null
-    }
-    state.cachedVideoFrame = videoFrame
-    state.cachedVideoFrameSample = sample
-  }
-
-  return videoFrame
-}
-
-function renderCurrentSampleToBitmap(state: ExtractorState): ImageBitmap | null {
-  const videoFrame = getOrCreateCurrentVideoFrame(state)
-  if (!videoFrame) {
-    return null
-  }
-
-  const visibleRect = (
-    videoFrame as VideoFrame & {
-      visibleRect?: { x: number; y: number; width: number; height: number }
-    }
-  ).visibleRect
-
-  const width =
-    visibleRect?.width && visibleRect.width > 0 ? visibleRect.width : videoFrame.displayWidth
-  const height =
-    visibleRect?.height && visibleRect.height > 0 ? visibleRect.height : videoFrame.displayHeight
-  if (width < 1 || height < 1) {
-    return null
-  }
-
-  state.canvas.width = width
-  state.canvas.height = height
-
-  if (
-    visibleRect &&
-    Number.isFinite(visibleRect.width) &&
-    Number.isFinite(visibleRect.height) &&
-    visibleRect.width > 0 &&
-    visibleRect.height > 0
-  ) {
-    state.ctx.drawImage(
-      videoFrame,
-      visibleRect.x,
-      visibleRect.y,
-      visibleRect.width,
-      visibleRect.height,
-      0,
-      0,
-      width,
-      height,
-    )
-  } else {
-    state.ctx.drawImage(videoFrame, 0, 0, width, height)
-  }
-
-  return state.canvas.transferToImageBitmap()
+  return renderSampleToBitmap(state, sample)
 }
 
 async function recoverAndPrime(
@@ -477,57 +460,8 @@ async function batchPreseek(
         i++
 
         try {
-          const videoFrame: VideoFrame | null =
-            typeof sample.toVideoFrame === 'function'
-              ? sample.toVideoFrame()
-              : (sample.frame ?? null)
-          if (!videoFrame) {
-            sample.close?.()
-            continue
-          }
-
-          const visibleRect = (
-            videoFrame as VideoFrame & {
-              visibleRect?: { x: number; y: number; width: number; height: number }
-            }
-          ).visibleRect
-
-          const width =
-            visibleRect?.width && visibleRect.width > 0
-              ? visibleRect.width
-              : videoFrame.displayWidth
-          const height =
-            visibleRect?.height && visibleRect.height > 0
-              ? visibleRect.height
-              : videoFrame.displayHeight
-          if (width < 1 || height < 1) {
-            videoFrame.close()
-            sample.close?.()
-            continue
-          }
-
-          state.canvas.width = width
-          state.canvas.height = height
-
-          if (visibleRect && visibleRect.width > 0 && visibleRect.height > 0) {
-            state.ctx.drawImage(
-              videoFrame,
-              visibleRect.x,
-              visibleRect.y,
-              visibleRect.width,
-              visibleRect.height,
-              0,
-              0,
-              width,
-              height,
-            )
-          } else {
-            state.ctx.drawImage(videoFrame, 0, 0, width, height)
-          }
-
-          videoFrame.close()
-          const bitmap = state.canvas.transferToImageBitmap()
-          results.set(ts, bitmap)
+          const bitmap = renderSampleToBitmap(state, sample)
+          if (bitmap) results.set(ts, bitmap)
         } finally {
           sample.close?.()
         }
