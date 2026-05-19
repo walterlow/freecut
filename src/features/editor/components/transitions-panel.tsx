@@ -1,7 +1,6 @@
 import { memo, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Blend, Info } from 'lucide-react'
-import { i18n } from '@/i18n'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
 import { resolveTransitionTargetFromSelection } from '@/features/editor/deps/timeline-utils'
@@ -97,8 +96,9 @@ const CategorySection = memo(function CategorySection({
   onDragStart,
   onDragEnd,
 }: CategorySectionProps) {
+  const { t } = useTranslation()
   const info = TRANSITION_CATEGORY_INFO[category]
-  const title = info ? i18n.t(info.titleKey) : category
+  const title = info ? t(info.titleKey) : category
 
   if (configs.length === 0) return null
 

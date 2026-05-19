@@ -1,4 +1,5 @@
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Film, Palette, Search } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { formatDuration } from '../deps/media-library'
@@ -33,6 +34,7 @@ export const SceneCard = memo(function SceneCard({
   isTop,
   showSignals,
 }: SceneCardProps) {
+  const { t } = useTranslation()
   const captionIndex = parseCaptionIndex(scene.id)
   const thumbUrl = useCaptionThumbnail(
     scene.thumbRelPath,
@@ -113,7 +115,7 @@ export const SceneCard = memo(function SceneCard({
         'focus-visible:border-primary/60 focus-visible:bg-primary/10',
         showSignals && isTop && 'border-primary/40 bg-primary/5',
       )}
-      title="Click to preview in source monitor — drag to add to the timeline"
+      title={t('sceneBrowser.scene.previewAndDragHint')}
     >
       <div className="relative aspect-video max-h-32 w-full shrink-0 overflow-hidden rounded-md bg-secondary">
         {thumbUrl ? (
@@ -139,8 +141,8 @@ export const SceneCard = memo(function SceneCard({
           <span
             role="button"
             tabIndex={-1}
-            aria-label="Find scenes with a similar palette"
-            title="Find scenes with a similar palette"
+            aria-label={t('sceneBrowser.palette.findSimilar')}
+            title={t('sceneBrowser.palette.findSimilar')}
             className="absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white/90 opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
             onClick={handleFindSimilarPalette}
           >

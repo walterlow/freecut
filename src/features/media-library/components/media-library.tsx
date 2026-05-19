@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useMemo, memo, useCallback } from 'react'
 import {
   Search,
   Filter,
@@ -198,11 +198,18 @@ interface PendingLibraryDeletion {
   compositionIds: string[]
 }
 
+const MEDIA_HEADER_MAX_COMPACT_LEVEL = 4
+const MEDIA_HEADER_OVERFLOW_TOLERANCE_PX = 1
+const MEDIA_HEADER_RELAX_WIDTH_DELTA_PX = 8
+
 export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaLibraryProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
+  const headerToolbarRef = useRef<HTMLDivElement>(null)
+  const headerToolbarWidthRef = useRef(0)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isFocusedRef = useRef(false)
+  const [headerCompactLevel, setHeaderCompactLevel] = useState(0)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [pendingDeletion, setPendingDeletion] = useState<PendingLibraryDeletion>({
     mediaIds: [],
@@ -326,6 +333,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
   const selectedAssetCount = selectedMediaIds.length + selectedCompositionIds.length
   const deleteAssetCount = pendingDeletion.mediaIds.length + pendingDeletion.compositionIds.length
+  const isMediaOnlyDeletion =
+    pendingDeletion.mediaIds.length > 0 && pendingDeletion.compositionIds.length === 0
   const previewAssetIdsRef = useRef<string[]>([])
 
   const setPreviewAssetIds = useCallback((ids: string[]) => {
@@ -741,6 +750,56 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }).length
   }, [selectedMediaIds, mediaById, proxyStatus])
 
+  useLayoutEffect(() => {
+    const toolbar = headerToolbarRef.current
+    if (!toolbar) return
+
+    let frame: number | undefined
+    const measure = () => {
+      if (frame !== undefined) {
+        window.cancelAnimationFrame(frame)
+      }
+
+      frame = window.requestAnimationFrame(() => {
+        frame = undefined
+        const nextWidth = toolbar.clientWidth
+        const previousWidth = headerToolbarWidthRef.current
+        headerToolbarWidthRef.current = nextWidth
+
+        if (previousWidth > 0 && nextWidth > previousWidth + MEDIA_HEADER_RELAX_WIDTH_DELTA_PX) {
+          setHeaderCompactLevel(0)
+          return
+        }
+
+        const overflowing =
+          toolbar.scrollWidth - toolbar.clientWidth > MEDIA_HEADER_OVERFLOW_TOLERANCE_PX
+        if (!overflowing) return
+
+        setHeaderCompactLevel((level) => Math.min(MEDIA_HEADER_MAX_COMPACT_LEVEL, level + 1))
+      })
+    }
+
+    const ResizeObserverCtor = typeof ResizeObserver === 'undefined' ? null : ResizeObserver
+    const observer = ResizeObserverCtor ? new ResizeObserverCtor(measure) : null
+    observer?.observe(toolbar)
+    window.addEventListener('resize', measure)
+    measure()
+
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+      if (frame !== undefined) {
+        window.cancelAnimationFrame(frame)
+      }
+    }
+  }, [
+    currentProjectBrokenMediaIds.length,
+    currentProjectId,
+    selectedAssetCount,
+    selectedProxyEligibleCount,
+    t,
+  ])
+
   const deleteSummary = useMemo(() => {
     const parts: string[] = []
     if (pendingDeletion.mediaIds.length > 0) {
@@ -822,7 +881,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {/* Header toolbar */}
       <div className="@container px-3 py-2 border-b border-border flex-shrink-0">
         <TooltipProvider>
-          <div className="flex flex-nowrap items-center gap-2 text-xs min-w-0 overflow-hidden">
+          <div
+            ref={headerToolbarRef}
+            className="flex flex-nowrap items-center gap-2 text-xs min-w-0 overflow-hidden"
+          >
             {/* Import action */}
             <HeaderActionTooltip label={t('media.library.importMediaFiles')}>
               <button
@@ -835,7 +897,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   transition-colors duration-150"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
-                <span className="hidden @[260px]:inline">{t('media.library.import')}</span>
+                <span className={headerCompactLevel >= 4 ? 'hidden' : 'hidden @[260px]:inline'}>
+                  {t('media.library.import')}
+                </span>
               </button>
             </HeaderActionTooltip>
 
@@ -850,7 +914,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   transition-colors duration-150"
               >
                 <Link className="w-3.5 h-3.5" />
-                <span className="hidden @[360px]:inline">{t('media.library.url')}</span>
+                <span className={headerCompactLevel >= 2 ? 'hidden' : 'hidden @[360px]:inline'}>
+                  {t('media.library.url')}
+                </span>
               </button>
             </HeaderActionTooltip>
 
@@ -869,7 +935,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                     transition-colors duration-150"
                 >
                   <Link2Off className="w-3.5 h-3.5" />
-                  <span className="hidden @[340px]:inline">
+                  <span className={headerCompactLevel >= 3 ? 'hidden' : 'hidden @[340px]:inline'}>
                     {t('media.library.missingCount', {
                       count: currentProjectBrokenMediaIds.length,
                     })}
@@ -884,10 +950,23 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 <div className="h-4 w-px bg-border hidden @[300px]:block" />
 
                 {/* Selection badge */}
-                <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border min-w-0 max-w-full">
-                  <span className="tabular-nums shrink-0">{selectedAssetCount}</span>
-                  <span className="text-muted-foreground hidden @[360px]:inline">
-                    {t('media.library.selected')}
+                <div className="flex shrink-0 items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border min-w-0 max-w-full overflow-hidden">
+                  <span
+                    className={cn(
+                      'tabular-nums shrink-0 whitespace-nowrap',
+                      headerCompactLevel >= 4 && 'hidden',
+                    )}
+                  >
+                    {t('media.library.selectedCount', { count: selectedAssetCount })}
+                  </span>
+                  <span
+                    className={cn(
+                      'hidden tabular-nums shrink-0 whitespace-nowrap',
+                      headerCompactLevel >= 4 && 'inline',
+                    )}
+                    aria-label={t('media.library.selectedCount', { count: selectedAssetCount })}
+                  >
+                    {selectedAssetCount}
                   </span>
                   <HeaderActionTooltip label={t('media.library.clearSelection')}>
                     <button
@@ -914,7 +993,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                         transition-colors duration-150"
                     >
                       <Zap className="w-3.5 h-3.5" />
-                      <span className="hidden @[440px]:inline">
+                      <span
+                        className={headerCompactLevel >= 2 ? 'hidden' : 'hidden @[440px]:inline'}
+                      >
                         {t('media.library.proxyCount', { count: selectedProxyEligibleCount })}
                       </span>
                     </button>
@@ -931,7 +1012,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                       transition-colors duration-150"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span className="hidden @[400px]:inline">{t('common.delete')}</span>
+                    <span className={headerCompactLevel >= 1 ? 'hidden' : 'hidden @[400px]:inline'}>
+                      {t('common.delete')}
+                    </span>
                   </button>
                 </HeaderActionTooltip>
               </>
@@ -1487,25 +1570,49 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('media.library.deleteAssetsTitle')}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {isMediaOnlyDeletion
+                ? pendingDeletion.mediaIds.length > 1
+                  ? t('media.deleteDialog.titleMultiple', {
+                      count: pendingDeletion.mediaIds.length,
+                    })
+                  : t('media.deleteDialog.titleSingle')
+                : t('media.library.deleteAssetsTitle')}
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  {t('media.library.deleteAssetsBody', {
-                    summary:
-                      deleteSummary ||
-                      t('media.library.selectedAssetsCount', { count: deleteAssetCount }),
-                  })}
+                  {isMediaOnlyDeletion
+                    ? pendingDeletion.mediaIds.length > 1
+                      ? t('media.deleteDialog.bodyMultiple', {
+                          count: pendingDeletion.mediaIds.length,
+                        })
+                      : t('media.deleteDialog.bodySingle', {
+                          name: mediaById[pendingDeletion.mediaIds[0] ?? '']?.fileName ?? '',
+                        })
+                    : t('media.library.deleteAssetsBody', {
+                        summary:
+                          deleteSummary ||
+                          t('media.library.selectedAssetsCount', { count: deleteAssetCount }),
+                      })}
                 </p>
                 {affectedAssetInstanceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">{t('media.library.linkedInstancesTitle')}</p>
+                      <p className="font-medium">
+                        {isMediaOnlyDeletion
+                          ? t('media.deleteDialog.timelineClipsRemoved')
+                          : t('media.library.linkedInstancesTitle')}
+                      </p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {t('media.library.linkedInstancesDetail', {
-                          count: affectedAssetInstanceCount,
-                        })}
+                        {isMediaOnlyDeletion
+                          ? t('media.deleteDialog.timelineClipsDetail', {
+                              count: affectedAssetInstanceCount,
+                            })
+                          : t('media.library.linkedInstancesDetail', {
+                              count: affectedAssetInstanceCount,
+                            })}
                       </p>
                     </div>
                   </div>
@@ -1519,16 +1626,24 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               onClick={handleConfirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {affectedAssetInstanceCount > 0
-                ? t('media.library.deleteWithClips', {
-                    summary:
-                      deleteSummary || t('media.library.assetsCount', { count: deleteAssetCount }),
-                    count: affectedAssetInstanceCount,
-                  })
-                : t('media.library.deleteSummary', {
-                    summary:
-                      deleteSummary || t('media.library.assetsCount', { count: deleteAssetCount }),
-                  })}
+              {isMediaOnlyDeletion
+                ? affectedAssetInstanceCount > 0
+                  ? t('media.deleteDialog.confirmWithClips', {
+                      count: affectedAssetInstanceCount,
+                    })
+                  : t('common.delete')
+                : affectedAssetInstanceCount > 0
+                  ? t('media.library.deleteWithClips', {
+                      summary:
+                        deleteSummary ||
+                        t('media.library.assetsCount', { count: deleteAssetCount }),
+                      count: affectedAssetInstanceCount,
+                    })
+                  : t('media.library.deleteSummary', {
+                      summary:
+                        deleteSummary ||
+                        t('media.library.assetsCount', { count: deleteAssetCount }),
+                    })}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

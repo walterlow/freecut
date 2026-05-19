@@ -24,6 +24,69 @@
         "blankAdjustmentLayer": "Blank adjustment layer",
         "presets": "Presets"
       },
+      "textSection": {
+        "sectionTitle": "Text",
+        "content": "Content",
+        "single": "Single",
+        "twoSpans": "2 Spans",
+        "threeSpans": "3 Spans",
+        "mixedNone": "Mixed / None",
+        "selectPreset": "Select preset",
+        "span": "Span {{count}}",
+        "spanText": "Span {{count}} text",
+        "eyebrow": "Eyebrow",
+        "eyebrowText": "Eyebrow text",
+        "title": "Title",
+        "titleText": "Title text",
+        "subtitle": "Subtitle",
+        "subtitleText": "Subtitle text",
+        "text": "Text",
+        "enterText": "Enter text...",
+        "defaultText": "Your Text Here",
+        "selectFont": "Select font",
+        "size": "Size",
+        "spacing": "Spacing",
+        "scale": "Scale",
+        "font": "Font",
+        "weight": "Weight",
+        "style": "Style",
+        "align": "Align",
+        "color": "Color",
+        "background": "Background",
+        "clear": "Clear",
+        "clearBackground": "Clear background",
+        "lineHeightShort": "Line H.",
+        "padding": "Padding",
+        "radius": "Radius",
+        "mixed": "Mixed",
+        "selectWeight": "Select weight",
+        "bold": "Bold",
+        "boldUnavailable": "Bold is not available for this font",
+        "italic": "Italic",
+        "underline": "Underline",
+        "italicSpan": "Italic {{label}}",
+        "underlineSpan": "Underline {{label}}",
+        "alignLeft": "Align Left",
+        "alignCenter": "Align Center",
+        "alignRight": "Align Right",
+        "alignTop": "Align Top",
+        "alignMiddle": "Align Middle",
+        "alignBottom": "Align Bottom",
+        "effects": "Effects",
+        "presets": "Presets",
+        "fontWeights": {
+          "regular": "Regular",
+          "medium": "Medium",
+          "semibold": "Semibold",
+          "bold": "Bold"
+        },
+        "effectPresets": {
+          "none": "None",
+          "shadow": "Shadow",
+          "outline": "Outline",
+          "glow": "Glow"
+        }
+      },
       "tts": {
         "seek": "Seek",
         "dialogTitle": "Generate audio from text",
@@ -211,6 +274,106 @@
           "unloadedToast": "Unloaded {{count}} local runtime(s)."
         }
       }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "{{count}} clip",
+        "clip_other": "{{count}} clips",
+        "scene_one": "{{count}} scene",
+        "scene_other": "{{count}} scenes",
+        "match_one": "{{count}} match",
+        "match_other": "{{count}} matches"
+      },
+      "sort": {
+        "label": "Sort",
+        "relevance": "Relevance",
+        "time": "Timestamp",
+        "name": "Media name"
+      },
+      "scope": {
+        "placeholder": "Scope",
+        "allMedia": "All media",
+        "scopedTo": "Scope: {{name}}",
+        "scopedToAll": "Scope: All media"
+      },
+      "banners": {
+        "downloadingSemanticModel": "Downloading semantic model (~22 MB, first run only)...",
+        "indexingCaptions": "Indexing captions for semantic search - {{current}}/{{total}} clips",
+        "reanalyzingPrefix": "Re-analyzing",
+        "reanalyzingSuffix": "- scenes will refresh when done."
+      },
+      "analyze": {
+        "title": "Analyze media with AI",
+        "button": "Analyze",
+        "scope": "Analyze \"{{name}}\"",
+        "newMedia": "Analyze new media",
+        "reanalyzeAll": "Re-analyze all"
+      },
+      "view": {
+        "list": "List view",
+        "grid": "Grid view"
+      },
+      "empty": {
+        "noCaptionsTitle": "No AI captions yet.",
+        "noCaptionsPrefix": "Run",
+        "noCaptionsSuffix": "on a clip from the media library to generate searchable scene captions.",
+        "noMatchesTitle": "No scenes match your search.",
+        "noMatchesPrefix": "Try a shorter query or switch scope to"
+      },
+      "search": {
+        "exitColorMode": "Exit color mode",
+        "colorTitle": "Search by color",
+        "color": "Color",
+        "semanticTitle": "Semantic search (by meaning)",
+        "keywordTitle": "Keyword search (exact match)",
+        "semanticLabel": "Semantic search",
+        "keywordLabel": "Keyword search",
+        "semantic": "Semantic",
+        "keyword": "Keyword",
+        "keywordDescription": "Exact word matches",
+        "semanticDescription": "Match by meaning",
+        "clearReference": "Clear reference and pick another color",
+        "findingSimilarPalette": "Finding scenes with a similar palette...",
+        "semanticPlaceholder": "Search by meaning - \"sunset over water\", \"people laughing\"...",
+        "keywordPlaceholder": "Search scenes by what you see...",
+        "clearSearch": "Clear search",
+        "similarPaletteTo": "Similar palette to {{label}} - click to clear"
+      },
+      "matchTiers": {
+        "strong": "Strong",
+        "good": "Good",
+        "fair": "Fair"
+      },
+      "match": {
+        "keyword": "Keyword",
+        "keywordHint": "Keyword match ? cosine {{score}}",
+        "meaningWithTier": "Meaning ? {{tier}}",
+        "textEmbeddingHint": "Text-embedding cosine: {{score}}",
+        "visualWithTier": "Visual ? {{tier}}",
+        "clipHint": "CLIP cosine: {{score}}",
+        "colorWithName": "Color ? {{color}}",
+        "paletteColorHint": "Palette match on {{color}} (?E 2000)",
+        "paletteDistance": "Palette ? ?E {{distance}}",
+        "paletteDistanceHint": "Weighted-mean ?E 2000 to the reference palette",
+        "belowThreshold": "Below threshold",
+        "cosineHint": "cosine {{score}}",
+        "top": "Top",
+        "topHint": "Highest-scoring match"
+      },
+      "palette": {
+        "libraryColor": "Library color",
+        "empty": "No palettes indexed yet - run AI captioning to populate.",
+        "moreColors_one": "{{count}} more color",
+        "moreColors_other": "{{count}} more colors",
+        "showMoreColors_one": "Show {{count}} more color",
+        "showMoreColors_other": "Show {{count}} more colors",
+        "moreColorsTitle": "More colors",
+        "findColor": "Find scenes in this color ({{percent}}% of the library)",
+        "findSimilar": "Find scenes with a similar palette"
+      },
+      "scene": {
+        "previewAndDragHint": "Click to preview in source monitor - drag to add to the timeline"
+      }
     }
   },
   "es": {
@@ -237,6 +400,69 @@
         "adjustmentLayer": "Capa de ajuste",
         "blankAdjustmentLayer": "Capa de ajuste en blanco",
         "presets": "Preajustes"
+      },
+      "textSection": {
+        "sectionTitle": "Texto",
+        "content": "Contenido",
+        "single": "Simple",
+        "twoSpans": "2 fragmentos",
+        "threeSpans": "3 fragmentos",
+        "mixedNone": "Mixto / Ninguno",
+        "selectPreset": "Seleccionar preajuste",
+        "span": "Fragmento {{count}}",
+        "spanText": "Texto del fragmento {{count}}",
+        "eyebrow": "Antetítulo",
+        "eyebrowText": "Texto del antetítulo",
+        "title": "Título",
+        "titleText": "Texto del título",
+        "subtitle": "Subtítulo",
+        "subtitleText": "Texto del subtítulo",
+        "text": "Texto",
+        "enterText": "Introduce texto...",
+        "defaultText": "Tu texto aquí",
+        "selectFont": "Seleccionar fuente",
+        "size": "Tamaño",
+        "spacing": "Espaciado",
+        "scale": "Escala",
+        "font": "Fuente",
+        "weight": "Peso",
+        "style": "Estilo",
+        "align": "Alinear",
+        "color": "Color",
+        "background": "Fondo",
+        "clear": "Quitar",
+        "clearBackground": "Quitar fondo",
+        "lineHeightShort": "Alt. línea",
+        "padding": "Relleno",
+        "radius": "Radio",
+        "mixed": "Mixto",
+        "selectWeight": "Seleccionar peso",
+        "bold": "Negrita",
+        "boldUnavailable": "La negrita no está disponible para esta fuente",
+        "italic": "Cursiva",
+        "underline": "Subrayado",
+        "italicSpan": "Cursiva en {{label}}",
+        "underlineSpan": "Subrayar {{label}}",
+        "alignLeft": "Alinear a la izquierda",
+        "alignCenter": "Alinear al centro",
+        "alignRight": "Alinear a la derecha",
+        "alignTop": "Alinear arriba",
+        "alignMiddle": "Alinear al medio",
+        "alignBottom": "Alinear abajo",
+        "effects": "Efectos",
+        "presets": "Preajustes",
+        "fontWeights": {
+          "regular": "Regular",
+          "medium": "Medio",
+          "semibold": "Seminegrita",
+          "bold": "Negrita"
+        },
+        "effectPresets": {
+          "none": "Ninguno",
+          "shadow": "Sombra",
+          "outline": "Contorno",
+          "glow": "Brillo"
+        }
       },
       "tts": {
         "seek": "Buscar",
@@ -425,6 +651,106 @@
           "unloadedToast": "Se descargaron {{count}} runtime(s) locales."
         }
       }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "{{count}} clip",
+        "clip_other": "{{count}} clips",
+        "scene_one": "{{count}} escena",
+        "scene_other": "{{count}} escenas",
+        "match_one": "{{count}} coincidencia",
+        "match_other": "{{count}} coincidencias"
+      },
+      "sort": {
+        "label": "Ordenar",
+        "relevance": "Relevancia",
+        "time": "Marca de tiempo",
+        "name": "Nombre del medio"
+      },
+      "scope": {
+        "placeholder": "Alcance",
+        "allMedia": "Todos los medios",
+        "scopedTo": "Alcance: {{name}}",
+        "scopedToAll": "Alcance: todos los medios"
+      },
+      "banners": {
+        "downloadingSemanticModel": "Descargando modelo sem?ntico (~22 MB, solo la primera vez)...",
+        "indexingCaptions": "Indexando subt?tulos para b?squeda sem?ntica - {{current}}/{{total}} clips",
+        "reanalyzingPrefix": "Reanalizando",
+        "reanalyzingSuffix": "- las escenas se actualizar?n al terminar."
+      },
+      "analyze": {
+        "title": "Analizar medios con IA",
+        "button": "Analizar",
+        "scope": "Analizar \"{{name}}\"",
+        "newMedia": "Analizar medios nuevos",
+        "reanalyzeAll": "Reanalizar todo"
+      },
+      "view": {
+        "list": "Vista de lista",
+        "grid": "Vista de cuadr?cula"
+      },
+      "empty": {
+        "noCaptionsTitle": "A?n no hay subt?tulos de IA.",
+        "noCaptionsPrefix": "Ejecuta",
+        "noCaptionsSuffix": "en un clip de la biblioteca de medios para generar subt?tulos de escenas buscables.",
+        "noMatchesTitle": "Ninguna escena coincide con tu b?squeda.",
+        "noMatchesPrefix": "Prueba una consulta m?s corta o cambia el alcance a"
+      },
+      "search": {
+        "exitColorMode": "Salir del modo de color",
+        "colorTitle": "Buscar por color",
+        "color": "Color",
+        "semanticTitle": "B?squeda sem?ntica (por significado)",
+        "keywordTitle": "B?squeda por palabra clave (coincidencia exacta)",
+        "semanticLabel": "B?squeda sem?ntica",
+        "keywordLabel": "B?squeda por palabra clave",
+        "semantic": "Sem?ntica",
+        "keyword": "Palabra clave",
+        "keywordDescription": "Coincidencias exactas de palabras",
+        "semanticDescription": "Coincidir por significado",
+        "clearReference": "Borrar referencia y elegir otro color",
+        "findingSimilarPalette": "Buscando escenas con una paleta similar...",
+        "semanticPlaceholder": "Buscar por significado - \"atardecer sobre el agua\", \"personas riendo\"...",
+        "keywordPlaceholder": "Buscar escenas por lo que ves...",
+        "clearSearch": "Borrar b?squeda",
+        "similarPaletteTo": "Paleta similar a {{label}} - haz clic para borrar"
+      },
+      "matchTiers": {
+        "strong": "Fuerte",
+        "good": "Bueno",
+        "fair": "Aceptable"
+      },
+      "match": {
+        "keyword": "Palabra clave",
+        "keywordHint": "Coincidencia de palabra clave ? coseno {{score}}",
+        "meaningWithTier": "Significado ? {{tier}}",
+        "textEmbeddingHint": "Coseno de embedding de texto: {{score}}",
+        "visualWithTier": "Visual ? {{tier}}",
+        "clipHint": "Coseno CLIP: {{score}}",
+        "colorWithName": "Color ? {{color}}",
+        "paletteColorHint": "Coincidencia de paleta en {{color}} (?E 2000)",
+        "paletteDistance": "Paleta ? ?E {{distance}}",
+        "paletteDistanceHint": "Media ponderada ?E 2000 frente a la paleta de referencia",
+        "belowThreshold": "Por debajo del umbral",
+        "cosineHint": "coseno {{score}}",
+        "top": "Principal",
+        "topHint": "Coincidencia con mayor puntuaci?n"
+      },
+      "palette": {
+        "libraryColor": "Color de biblioteca",
+        "empty": "A?n no hay paletas indexadas; ejecuta subt?tulos de IA para llenarlas.",
+        "moreColors_one": "{{count}} color m?s",
+        "moreColors_other": "{{count}} colores m?s",
+        "showMoreColors_one": "Mostrar {{count}} color m?s",
+        "showMoreColors_other": "Mostrar {{count}} colores m?s",
+        "moreColorsTitle": "M?s colores",
+        "findColor": "Buscar escenas en este color ({{percent}}% de la biblioteca)",
+        "findSimilar": "Buscar escenas con una paleta similar"
+      },
+      "scene": {
+        "previewAndDragHint": "Haz clic para previsualizar en el monitor de origen - arrastra para a?adir a la l?nea de tiempo"
+      }
     }
   },
   "fr": {
@@ -451,6 +777,69 @@
         "adjustmentLayer": "Calque d'ajustement",
         "blankAdjustmentLayer": "Calque d'ajustement vide",
         "presets": "Préréglages"
+      },
+      "textSection": {
+        "sectionTitle": "Texte",
+        "content": "Contenu",
+        "single": "Simple",
+        "twoSpans": "2 segments",
+        "threeSpans": "3 segments",
+        "mixedNone": "Mixte / Aucun",
+        "selectPreset": "Sélectionner un préréglage",
+        "span": "Segment {{count}}",
+        "spanText": "Texte du segment {{count}}",
+        "eyebrow": "Accroche",
+        "eyebrowText": "Texte de l'accroche",
+        "title": "Titre",
+        "titleText": "Texte du titre",
+        "subtitle": "Sous-titre",
+        "subtitleText": "Texte du sous-titre",
+        "text": "Texte",
+        "enterText": "Saisir du texte...",
+        "defaultText": "Votre texte ici",
+        "selectFont": "Sélectionner une police",
+        "size": "Taille",
+        "spacing": "Espacement",
+        "scale": "Échelle",
+        "font": "Police",
+        "weight": "Graisse",
+        "style": "Style",
+        "align": "Aligner",
+        "color": "Couleur",
+        "background": "Arrière-plan",
+        "clear": "Effacer",
+        "clearBackground": "Effacer l'arrière-plan",
+        "lineHeightShort": "Interligne",
+        "padding": "Marge",
+        "radius": "Rayon",
+        "mixed": "Mixte",
+        "selectWeight": "Sélectionner une graisse",
+        "bold": "Gras",
+        "boldUnavailable": "Le gras n'est pas disponible pour cette police",
+        "italic": "Italique",
+        "underline": "Souligné",
+        "italicSpan": "Italique {{label}}",
+        "underlineSpan": "Souligner {{label}}",
+        "alignLeft": "Aligner à gauche",
+        "alignCenter": "Aligner au centre",
+        "alignRight": "Aligner à droite",
+        "alignTop": "Aligner en haut",
+        "alignMiddle": "Aligner au milieu",
+        "alignBottom": "Aligner en bas",
+        "effects": "Effets",
+        "presets": "Préréglages",
+        "fontWeights": {
+          "regular": "Normal",
+          "medium": "Moyen",
+          "semibold": "Demi-gras",
+          "bold": "Gras"
+        },
+        "effectPresets": {
+          "none": "Aucun",
+          "shadow": "Ombre",
+          "outline": "Contour",
+          "glow": "Lueur"
+        }
       },
       "tts": {
         "seek": "Parcourir",
@@ -639,6 +1028,106 @@
           "unloadedToast": "{{count}} runtime(s) locaux d?charg?s."
         }
       }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "{{count}} clip",
+        "clip_other": "{{count}} clips",
+        "scene_one": "{{count}} sc?ne",
+        "scene_other": "{{count}} sc?nes",
+        "match_one": "{{count}} r?sultat",
+        "match_other": "{{count}} r?sultats"
+      },
+      "sort": {
+        "label": "Trier",
+        "relevance": "Pertinence",
+        "time": "Horodatage",
+        "name": "Nom du m?dia"
+      },
+      "scope": {
+        "placeholder": "Port?e",
+        "allMedia": "Tous les m?dias",
+        "scopedTo": "Port?e : {{name}}",
+        "scopedToAll": "Port?e : tous les m?dias"
+      },
+      "banners": {
+        "downloadingSemanticModel": "T?l?chargement du mod?le s?mantique (~22 Mo, premi?re ex?cution seulement)...",
+        "indexingCaptions": "Indexation des l?gendes pour la recherche s?mantique - {{current}}/{{total}} clips",
+        "reanalyzingPrefix": "Nouvelle analyse de",
+        "reanalyzingSuffix": "- les sc?nes seront actualis?es ? la fin."
+      },
+      "analyze": {
+        "title": "Analyser les m?dias avec l?IA",
+        "button": "Analyser",
+        "scope": "Analyser \"{{name}}\"",
+        "newMedia": "Analyser les nouveaux m?dias",
+        "reanalyzeAll": "Tout r?analyser"
+      },
+      "view": {
+        "list": "Vue liste",
+        "grid": "Vue grille"
+      },
+      "empty": {
+        "noCaptionsTitle": "Aucune l?gende IA pour le moment.",
+        "noCaptionsPrefix": "Lancez",
+        "noCaptionsSuffix": "sur un clip de la m?diath?que pour g?n?rer des l?gendes de sc?nes consultables.",
+        "noMatchesTitle": "Aucune sc?ne ne correspond ? votre recherche.",
+        "noMatchesPrefix": "Essayez une requ?te plus courte ou passez la port?e ?"
+      },
+      "search": {
+        "exitColorMode": "Quitter le mode couleur",
+        "colorTitle": "Rechercher par couleur",
+        "color": "Couleur",
+        "semanticTitle": "Recherche s?mantique (par sens)",
+        "keywordTitle": "Recherche par mot-cl? (correspondance exacte)",
+        "semanticLabel": "Recherche s?mantique",
+        "keywordLabel": "Recherche par mot-cl?",
+        "semantic": "S?mantique",
+        "keyword": "Mot-cl?",
+        "keywordDescription": "Correspondances exactes",
+        "semanticDescription": "Correspondance par sens",
+        "clearReference": "Effacer la r?f?rence et choisir une autre couleur",
+        "findingSimilarPalette": "Recherche de sc?nes avec une palette similaire...",
+        "semanticPlaceholder": "Rechercher par sens - \"coucher de soleil sur l?eau\", \"personnes qui rient\"...",
+        "keywordPlaceholder": "Rechercher des sc?nes par ce que vous voyez...",
+        "clearSearch": "Effacer la recherche",
+        "similarPaletteTo": "Palette similaire ? {{label}} - cliquez pour effacer"
+      },
+      "matchTiers": {
+        "strong": "Fort",
+        "good": "Bon",
+        "fair": "Correct"
+      },
+      "match": {
+        "keyword": "Mot-cl?",
+        "keywordHint": "Correspondance mot-cl? ? cosinus {{score}}",
+        "meaningWithTier": "Sens ? {{tier}}",
+        "textEmbeddingHint": "Cosinus de l?embedding texte : {{score}}",
+        "visualWithTier": "Visuel ? {{tier}}",
+        "clipHint": "Cosinus CLIP : {{score}}",
+        "colorWithName": "Couleur ? {{color}}",
+        "paletteColorHint": "Correspondance de palette sur {{color}} (?E 2000)",
+        "paletteDistance": "Palette ? ?E {{distance}}",
+        "paletteDistanceHint": "Moyenne pond?r?e ?E 2000 par rapport ? la palette de r?f?rence",
+        "belowThreshold": "Sous le seuil",
+        "cosineHint": "cosinus {{score}}",
+        "top": "Top",
+        "topHint": "Correspondance au meilleur score"
+      },
+      "palette": {
+        "libraryColor": "Couleur de la m?diath?que",
+        "empty": "Aucune palette index?e pour le moment - lancez les l?gendes IA pour les remplir.",
+        "moreColors_one": "{{count}} couleur de plus",
+        "moreColors_other": "{{count}} couleurs de plus",
+        "showMoreColors_one": "Afficher {{count}} couleur de plus",
+        "showMoreColors_other": "Afficher {{count}} couleurs de plus",
+        "moreColorsTitle": "Plus de couleurs",
+        "findColor": "Trouver des sc?nes dans cette couleur ({{percent}} % de la m?diath?que)",
+        "findSimilar": "Trouver des sc?nes avec une palette similaire"
+      },
+      "scene": {
+        "previewAndDragHint": "Cliquez pour pr?visualiser dans le moniteur source - faites glisser pour ajouter ? la timeline"
+      }
     }
   },
   "de": {
@@ -665,6 +1154,69 @@
         "adjustmentLayer": "Einstellungsebene",
         "blankAdjustmentLayer": "Leere Einstellungsebene",
         "presets": "Vorgaben"
+      },
+      "textSection": {
+        "sectionTitle": "Text",
+        "content": "Inhalt",
+        "single": "Einzeln",
+        "twoSpans": "2 Abschnitte",
+        "threeSpans": "3 Abschnitte",
+        "mixedNone": "Gemischt / Keine",
+        "selectPreset": "Vorgabe auswählen",
+        "span": "Abschnitt {{count}}",
+        "spanText": "Text für Abschnitt {{count}}",
+        "eyebrow": "Kicker",
+        "eyebrowText": "Kicker-Text",
+        "title": "Titel",
+        "titleText": "Titeltext",
+        "subtitle": "Untertitel",
+        "subtitleText": "Untertiteltext",
+        "text": "Text",
+        "enterText": "Text eingeben...",
+        "defaultText": "Dein Text hier",
+        "selectFont": "Schrift auswählen",
+        "size": "Größe",
+        "spacing": "Abstand",
+        "scale": "Skalierung",
+        "font": "Schrift",
+        "weight": "Stärke",
+        "style": "Stil",
+        "align": "Ausrichten",
+        "color": "Farbe",
+        "background": "Hintergrund",
+        "clear": "Leeren",
+        "clearBackground": "Hintergrund entfernen",
+        "lineHeightShort": "Zeilenh.",
+        "padding": "Innenabstand",
+        "radius": "Radius",
+        "mixed": "Gemischt",
+        "selectWeight": "Stärke auswählen",
+        "bold": "Fett",
+        "boldUnavailable": "Fett ist für diese Schrift nicht verfügbar",
+        "italic": "Kursiv",
+        "underline": "Unterstrichen",
+        "italicSpan": "{{label}} kursiv",
+        "underlineSpan": "{{label}} unterstreichen",
+        "alignLeft": "Links ausrichten",
+        "alignCenter": "Zentrieren",
+        "alignRight": "Rechts ausrichten",
+        "alignTop": "Oben ausrichten",
+        "alignMiddle": "Mittig ausrichten",
+        "alignBottom": "Unten ausrichten",
+        "effects": "Effekte",
+        "presets": "Vorgaben",
+        "fontWeights": {
+          "regular": "Normal",
+          "medium": "Mittel",
+          "semibold": "Halbfett",
+          "bold": "Fett"
+        },
+        "effectPresets": {
+          "none": "Keine",
+          "shadow": "Schatten",
+          "outline": "Kontur",
+          "glow": "Leuchten"
+        }
       },
       "tts": {
         "seek": "Suchen",
@@ -853,6 +1405,106 @@
           "unloadedToast": "{{count}} lokale Runtime(s) entladen."
         }
       }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "{{count}} Clip",
+        "clip_other": "{{count}} Clips",
+        "scene_one": "{{count}} Szene",
+        "scene_other": "{{count}} Szenen",
+        "match_one": "{{count}} Treffer",
+        "match_other": "{{count}} Treffer"
+      },
+      "sort": {
+        "label": "Sortieren",
+        "relevance": "Relevanz",
+        "time": "Zeitstempel",
+        "name": "Medienname"
+      },
+      "scope": {
+        "placeholder": "Bereich",
+        "allMedia": "Alle Medien",
+        "scopedTo": "Bereich: {{name}}",
+        "scopedToAll": "Bereich: Alle Medien"
+      },
+      "banners": {
+        "downloadingSemanticModel": "Semantisches Modell wird heruntergeladen (~22 MB, nur beim ersten Mal)...",
+        "indexingCaptions": "Untertitel f?r semantische Suche werden indexiert - {{current}}/{{total}} Clips",
+        "reanalyzingPrefix": "Analysiere erneut",
+        "reanalyzingSuffix": "- Szenen werden danach aktualisiert."
+      },
+      "analyze": {
+        "title": "Medien mit KI analysieren",
+        "button": "Analysieren",
+        "scope": "\"{{name}}\" analysieren",
+        "newMedia": "Neue Medien analysieren",
+        "reanalyzeAll": "Alles erneut analysieren"
+      },
+      "view": {
+        "list": "Listenansicht",
+        "grid": "Rasteransicht"
+      },
+      "empty": {
+        "noCaptionsTitle": "Noch keine KI-Untertitel.",
+        "noCaptionsPrefix": "F?hre",
+        "noCaptionsSuffix": "f?r einen Clip aus der Medienbibliothek aus, um durchsuchbare Szenenuntertitel zu erzeugen.",
+        "noMatchesTitle": "Keine Szenen passen zu deiner Suche.",
+        "noMatchesPrefix": "Versuche eine k?rzere Suche oder wechsle den Bereich zu"
+      },
+      "search": {
+        "exitColorMode": "Farbmodus beenden",
+        "colorTitle": "Nach Farbe suchen",
+        "color": "Farbe",
+        "semanticTitle": "Semantische Suche (nach Bedeutung)",
+        "keywordTitle": "Schlagwortsuche (exakte ?bereinstimmung)",
+        "semanticLabel": "Semantische Suche",
+        "keywordLabel": "Schlagwortsuche",
+        "semantic": "Semantisch",
+        "keyword": "Schlagwort",
+        "keywordDescription": "Exakte Worttreffer",
+        "semanticDescription": "Nach Bedeutung abgleichen",
+        "clearReference": "Referenz l?schen und andere Farbe w?hlen",
+        "findingSimilarPalette": "Suche Szenen mit ?hnlicher Palette...",
+        "semanticPlaceholder": "Nach Bedeutung suchen - \"Sonnenuntergang ?ber Wasser\", \"lachende Menschen\"...",
+        "keywordPlaceholder": "Szenen nach sichtbarem Inhalt suchen...",
+        "clearSearch": "Suche l?schen",
+        "similarPaletteTo": "?hnliche Palette wie {{label}} - zum L?schen klicken"
+      },
+      "matchTiers": {
+        "strong": "Stark",
+        "good": "Gut",
+        "fair": "Okay"
+      },
+      "match": {
+        "keyword": "Schlagwort",
+        "keywordHint": "Schlagworttreffer ? Kosinus {{score}}",
+        "meaningWithTier": "Bedeutung ? {{tier}}",
+        "textEmbeddingHint": "Text-Embedding-Kosinus: {{score}}",
+        "visualWithTier": "Visuell ? {{tier}}",
+        "clipHint": "CLIP-Kosinus: {{score}}",
+        "colorWithName": "Farbe ? {{color}}",
+        "paletteColorHint": "Palettentreffer f?r {{color}} (?E 2000)",
+        "paletteDistance": "Palette ? ?E {{distance}}",
+        "paletteDistanceHint": "Gewichteter Mittelwert ?E 2000 zur Referenzpalette",
+        "belowThreshold": "Unter Schwellenwert",
+        "cosineHint": "Kosinus {{score}}",
+        "top": "Top",
+        "topHint": "Treffer mit h?chster Bewertung"
+      },
+      "palette": {
+        "libraryColor": "Bibliotheksfarbe",
+        "empty": "Noch keine Paletten indexiert - f?hre KI-Untertitel aus, um sie zu f?llen.",
+        "moreColors_one": "{{count}} weitere Farbe",
+        "moreColors_other": "{{count}} weitere Farben",
+        "showMoreColors_one": "{{count}} weitere Farbe anzeigen",
+        "showMoreColors_other": "{{count}} weitere Farben anzeigen",
+        "moreColorsTitle": "Weitere Farben",
+        "findColor": "Szenen in dieser Farbe finden ({{percent}} % der Bibliothek)",
+        "findSimilar": "Szenen mit ?hnlicher Palette finden"
+      },
+      "scene": {
+        "previewAndDragHint": "Klicken zum Anzeigen im Quellmonitor - ziehen, um zur Timeline hinzuzuf?gen"
+      }
     }
   },
   "pt-BR": {
@@ -879,6 +1531,69 @@
         "adjustmentLayer": "Camada de ajuste",
         "blankAdjustmentLayer": "Camada de ajuste em branco",
         "presets": "Predefinições"
+      },
+      "textSection": {
+        "sectionTitle": "Texto",
+        "content": "Conteúdo",
+        "single": "Único",
+        "twoSpans": "2 trechos",
+        "threeSpans": "3 trechos",
+        "mixedNone": "Misto / Nenhum",
+        "selectPreset": "Selecionar predefinição",
+        "span": "Trecho {{count}}",
+        "spanText": "Texto do trecho {{count}}",
+        "eyebrow": "Chamada",
+        "eyebrowText": "Texto da chamada",
+        "title": "Título",
+        "titleText": "Texto do título",
+        "subtitle": "Subtítulo",
+        "subtitleText": "Texto do subtítulo",
+        "text": "Texto",
+        "enterText": "Digite o texto...",
+        "defaultText": "Seu texto aqui",
+        "selectFont": "Selecionar fonte",
+        "size": "Tamanho",
+        "spacing": "Espaçamento",
+        "scale": "Escala",
+        "font": "Fonte",
+        "weight": "Peso",
+        "style": "Estilo",
+        "align": "Alinhar",
+        "color": "Cor",
+        "background": "Fundo",
+        "clear": "Limpar",
+        "clearBackground": "Limpar fundo",
+        "lineHeightShort": "Alt. linha",
+        "padding": "Margem",
+        "radius": "Raio",
+        "mixed": "Misto",
+        "selectWeight": "Selecionar peso",
+        "bold": "Negrito",
+        "boldUnavailable": "Negrito não está disponível para esta fonte",
+        "italic": "Itálico",
+        "underline": "Sublinhado",
+        "italicSpan": "Itálico em {{label}}",
+        "underlineSpan": "Sublinhar {{label}}",
+        "alignLeft": "Alinhar à esquerda",
+        "alignCenter": "Alinhar ao centro",
+        "alignRight": "Alinhar à direita",
+        "alignTop": "Alinhar ao topo",
+        "alignMiddle": "Alinhar ao meio",
+        "alignBottom": "Alinhar à base",
+        "effects": "Efeitos",
+        "presets": "Predefinições",
+        "fontWeights": {
+          "regular": "Regular",
+          "medium": "Médio",
+          "semibold": "Seminegrito",
+          "bold": "Negrito"
+        },
+        "effectPresets": {
+          "none": "Nenhum",
+          "shadow": "Sombra",
+          "outline": "Contorno",
+          "glow": "Brilho"
+        }
       },
       "tts": {
         "seek": "Buscar",
@@ -1071,6 +1786,106 @@
           "unloadedToast": "{{count}} runtime(s) locais descarregados."
         }
       }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "{{count}} clipe",
+        "clip_other": "{{count}} clipes",
+        "scene_one": "{{count}} cena",
+        "scene_other": "{{count}} cenas",
+        "match_one": "{{count}} resultado",
+        "match_other": "{{count}} resultados"
+      },
+      "sort": {
+        "label": "Ordenar",
+        "relevance": "Relev?ncia",
+        "time": "Timestamp",
+        "name": "Nome da m?dia"
+      },
+      "scope": {
+        "placeholder": "Escopo",
+        "allMedia": "Todas as m?dias",
+        "scopedTo": "Escopo: {{name}}",
+        "scopedToAll": "Escopo: todas as m?dias"
+      },
+      "banners": {
+        "downloadingSemanticModel": "Baixando modelo sem?ntico (~22 MB, s? na primeira execu??o)...",
+        "indexingCaptions": "Indexando legendas para busca sem?ntica - {{current}}/{{total}} clipes",
+        "reanalyzingPrefix": "Reanalisando",
+        "reanalyzingSuffix": "- as cenas ser?o atualizadas ao terminar."
+      },
+      "analyze": {
+        "title": "Analisar m?dia com IA",
+        "button": "Analisar",
+        "scope": "Analisar \"{{name}}\"",
+        "newMedia": "Analisar novas m?dias",
+        "reanalyzeAll": "Reanalisar tudo"
+      },
+      "view": {
+        "list": "Visualiza??o em lista",
+        "grid": "Visualiza??o em grade"
+      },
+      "empty": {
+        "noCaptionsTitle": "Ainda n?o h? legendas de IA.",
+        "noCaptionsPrefix": "Execute",
+        "noCaptionsSuffix": "em um clipe da biblioteca de m?dia para gerar legendas de cenas pesquis?veis.",
+        "noMatchesTitle": "Nenhuma cena corresponde ? sua busca.",
+        "noMatchesPrefix": "Tente uma busca mais curta ou altere o escopo para"
+      },
+      "search": {
+        "exitColorMode": "Sair do modo de cor",
+        "colorTitle": "Buscar por cor",
+        "color": "Cor",
+        "semanticTitle": "Busca sem?ntica (por significado)",
+        "keywordTitle": "Busca por palavra-chave (correspond?ncia exata)",
+        "semanticLabel": "Busca sem?ntica",
+        "keywordLabel": "Busca por palavra-chave",
+        "semantic": "Sem?ntica",
+        "keyword": "Palavra-chave",
+        "keywordDescription": "Correspond?ncias exatas de palavras",
+        "semanticDescription": "Combinar por significado",
+        "clearReference": "Limpar refer?ncia e escolher outra cor",
+        "findingSimilarPalette": "Procurando cenas com paleta semelhante...",
+        "semanticPlaceholder": "Buscar por significado - \"p?r do sol sobre a ?gua\", \"pessoas rindo\"...",
+        "keywordPlaceholder": "Buscar cenas pelo que voc? v?...",
+        "clearSearch": "Limpar busca",
+        "similarPaletteTo": "Paleta semelhante a {{label}} - clique para limpar"
+      },
+      "matchTiers": {
+        "strong": "Forte",
+        "good": "Bom",
+        "fair": "Razo?vel"
+      },
+      "match": {
+        "keyword": "Palavra-chave",
+        "keywordHint": "Correspond?ncia de palavra-chave ? cosseno {{score}}",
+        "meaningWithTier": "Significado ? {{tier}}",
+        "textEmbeddingHint": "Cosseno do embedding de texto: {{score}}",
+        "visualWithTier": "Visual ? {{tier}}",
+        "clipHint": "Cosseno CLIP: {{score}}",
+        "colorWithName": "Cor ? {{color}}",
+        "paletteColorHint": "Correspond?ncia de paleta em {{color}} (?E 2000)",
+        "paletteDistance": "Paleta ? ?E {{distance}}",
+        "paletteDistanceHint": "M?dia ponderada ?E 2000 para a paleta de refer?ncia",
+        "belowThreshold": "Abaixo do limite",
+        "cosineHint": "cosseno {{score}}",
+        "top": "Principal",
+        "topHint": "Correspond?ncia com maior pontua??o"
+      },
+      "palette": {
+        "libraryColor": "Cor da biblioteca",
+        "empty": "Ainda n?o h? paletas indexadas - execute legendas de IA para preencher.",
+        "moreColors_one": "{{count}} cor a mais",
+        "moreColors_other": "{{count}} cores a mais",
+        "showMoreColors_one": "Mostrar mais {{count}} cor",
+        "showMoreColors_other": "Mostrar mais {{count}} cores",
+        "moreColorsTitle": "Mais cores",
+        "findColor": "Encontrar cenas nesta cor ({{percent}}% da biblioteca)",
+        "findSimilar": "Encontrar cenas com uma paleta semelhante"
+      },
+      "scene": {
+        "previewAndDragHint": "Clique para pr?-visualizar no monitor de origem - arraste para adicionar ? linha do tempo"
+      }
     }
   },
   "ja": {
@@ -1097,6 +1912,69 @@
         "adjustmentLayer": "調整レイヤー",
         "blankAdjustmentLayer": "空の調整レイヤー",
         "presets": "プリセット"
+      },
+      "textSection": {
+        "sectionTitle": "テキスト",
+        "content": "内容",
+        "single": "単一",
+        "twoSpans": "2スパン",
+        "threeSpans": "3スパン",
+        "mixedNone": "混在 / なし",
+        "selectPreset": "プリセットを選択",
+        "span": "スパン {{count}}",
+        "spanText": "スパン {{count}} のテキスト",
+        "eyebrow": "アイブロウ",
+        "eyebrowText": "アイブロウのテキスト",
+        "title": "タイトル",
+        "titleText": "タイトルのテキスト",
+        "subtitle": "サブタイトル",
+        "subtitleText": "サブタイトルのテキスト",
+        "text": "テキスト",
+        "enterText": "テキストを入力...",
+        "defaultText": "ここにテキスト",
+        "selectFont": "フォントを選択",
+        "size": "サイズ",
+        "spacing": "間隔",
+        "scale": "スケール",
+        "font": "フォント",
+        "weight": "太さ",
+        "style": "スタイル",
+        "align": "整列",
+        "color": "色",
+        "background": "背景",
+        "clear": "クリア",
+        "clearBackground": "背景をクリア",
+        "lineHeightShort": "行の高さ",
+        "padding": "余白",
+        "radius": "角丸",
+        "mixed": "混在",
+        "selectWeight": "太さを選択",
+        "bold": "太字",
+        "boldUnavailable": "このフォントでは太字を使用できません",
+        "italic": "斜体",
+        "underline": "下線",
+        "italicSpan": "{{label}} を斜体",
+        "underlineSpan": "{{label}} に下線",
+        "alignLeft": "左揃え",
+        "alignCenter": "中央揃え",
+        "alignRight": "右揃え",
+        "alignTop": "上揃え",
+        "alignMiddle": "中央揃え（縦）",
+        "alignBottom": "下揃え",
+        "effects": "エフェクト",
+        "presets": "プリセット",
+        "fontWeights": {
+          "regular": "標準",
+          "medium": "中",
+          "semibold": "セミボールド",
+          "bold": "太字"
+        },
+        "effectPresets": {
+          "none": "なし",
+          "shadow": "影",
+          "outline": "アウトライン",
+          "glow": "発光"
+        }
       },
       "tts": {
         "seek": "シーク",
@@ -1285,6 +2163,106 @@
           "unloadedToast": "{{count}} ??????????????????????"
         }
       }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "{{count}} ??????",
+        "clip_other": "{{count}} ??????",
+        "scene_one": "{{count}} ?????",
+        "scene_other": "{{count}} ?????",
+        "match_one": "{{count}} ????",
+        "match_other": "{{count}} ????"
+      },
+      "sort": {
+        "label": "????",
+        "relevance": "???",
+        "time": "???????",
+        "name": "?????"
+      },
+      "scope": {
+        "placeholder": "??",
+        "allMedia": "????????",
+        "scopedTo": "??: {{name}}",
+        "scopedToAll": "??: ????????"
+      },
+      "banners": {
+        "downloadingSemanticModel": "????????????????????22 MB??????...",
+        "indexingCaptions": "????????????????????????? - {{current}}/{{total}} ????",
+        "reanalyzingPrefix": "????",
+        "reanalyzingSuffix": "- ????????????????"
+      },
+      "analyze": {
+        "title": "AI ????????",
+        "button": "??",
+        "scope": "?{{name}}????",
+        "newMedia": "??????????",
+        "reanalyzeAll": "??????"
+      },
+      "view": {
+        "list": "?????",
+        "grid": "??????"
+      },
+      "empty": {
+        "noCaptionsTitle": "AI ???????????????",
+        "noCaptionsPrefix": "???????????????",
+        "noCaptionsSuffix": "?????????????????????????????",
+        "noMatchesTitle": "?????????????????",
+        "noMatchesPrefix": "????????????????????????:"
+      },
+      "search": {
+        "exitColorMode": "?????????",
+        "colorTitle": "????",
+        "color": "???",
+        "semanticTitle": "????????????????",
+        "keywordTitle": "?????????????",
+        "semanticLabel": "?????????",
+        "keywordLabel": "???????",
+        "semantic": "???????",
+        "keyword": "?????",
+        "keywordDescription": "???????",
+        "semanticDescription": "?????",
+        "clearReference": "??????????????",
+        "findingSimilarPalette": "??????????????...",
+        "semanticPlaceholder": "????? - ?????????????????...",
+        "keywordPlaceholder": "??????????????...",
+        "clearSearch": "??????",
+        "similarPaletteTo": "{{label}} ??????? - ?????????"
+      },
+      "matchTiers": {
+        "strong": "??",
+        "good": "??",
+        "fair": "??"
+      },
+      "match": {
+        "keyword": "?????",
+        "keywordHint": "??????? ? ???? {{score}}",
+        "meaningWithTier": "?? ? {{tier}}",
+        "textEmbeddingHint": "????????????: {{score}}",
+        "visualWithTier": "????? ? {{tier}}",
+        "clipHint": "CLIP ????: {{score}}",
+        "colorWithName": "??? ? {{color}}",
+        "paletteColorHint": "{{color}} ??????? (?E 2000)",
+        "paletteDistance": "???? ? ?E {{distance}}",
+        "paletteDistanceHint": "?????????????? ?E 2000",
+        "belowThreshold": "??????",
+        "cosineHint": "???? {{score}}",
+        "top": "???",
+        "topHint": "????????"
+      },
+      "palette": {
+        "libraryColor": "????????",
+        "empty": "???????????????????? - AI ????????????????????",
+        "moreColors_one": "? {{count}} ?",
+        "moreColors_other": "? {{count}} ?",
+        "showMoreColors_one": "? {{count}} ????",
+        "showMoreColors_other": "? {{count}} ????",
+        "moreColorsTitle": "?????",
+        "findColor": "????????????????? {{percent}}%?",
+        "findSimilar": "?????????????"
+      },
+      "scene": {
+        "previewAndDragHint": "??????????????????? - ???????????????"
+      }
     }
   },
   "ko": {
@@ -1311,6 +2289,69 @@
         "adjustmentLayer": "조정 레이어",
         "blankAdjustmentLayer": "빈 조정 레이어",
         "presets": "프리셋"
+      },
+      "textSection": {
+        "sectionTitle": "텍스트",
+        "content": "내용",
+        "single": "단일",
+        "twoSpans": "2개 구간",
+        "threeSpans": "3개 구간",
+        "mixedNone": "혼합 / 없음",
+        "selectPreset": "프리셋 선택",
+        "span": "구간 {{count}}",
+        "spanText": "구간 {{count}} 텍스트",
+        "eyebrow": "보조 제목",
+        "eyebrowText": "보조 제목 텍스트",
+        "title": "제목",
+        "titleText": "제목 텍스트",
+        "subtitle": "부제목",
+        "subtitleText": "부제목 텍스트",
+        "text": "텍스트",
+        "enterText": "텍스트 입력...",
+        "defaultText": "여기에 텍스트 입력",
+        "selectFont": "글꼴 선택",
+        "size": "크기",
+        "spacing": "간격",
+        "scale": "배율",
+        "font": "글꼴",
+        "weight": "두께",
+        "style": "스타일",
+        "align": "정렬",
+        "color": "색상",
+        "background": "배경",
+        "clear": "지우기",
+        "clearBackground": "배경 지우기",
+        "lineHeightShort": "줄 높이",
+        "padding": "여백",
+        "radius": "반경",
+        "mixed": "혼합",
+        "selectWeight": "두께 선택",
+        "bold": "굵게",
+        "boldUnavailable": "이 글꼴에서는 굵게를 사용할 수 없습니다",
+        "italic": "기울임",
+        "underline": "밑줄",
+        "italicSpan": "{{label}} 기울임",
+        "underlineSpan": "{{label}} 밑줄",
+        "alignLeft": "왼쪽 정렬",
+        "alignCenter": "가운데 정렬",
+        "alignRight": "오른쪽 정렬",
+        "alignTop": "위쪽 정렬",
+        "alignMiddle": "세로 가운데 정렬",
+        "alignBottom": "아래쪽 정렬",
+        "effects": "효과",
+        "presets": "프리셋",
+        "fontWeights": {
+          "regular": "일반",
+          "medium": "중간",
+          "semibold": "세미볼드",
+          "bold": "굵게"
+        },
+        "effectPresets": {
+          "none": "없음",
+          "shadow": "그림자",
+          "outline": "외곽선",
+          "glow": "광선"
+        }
       },
       "tts": {
         "seek": "탐색",
@@ -1499,6 +2540,106 @@
           "unloadedToast": "{{count}}? ?? ???? ???????."
         }
       }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "?? {{count}}?",
+        "clip_other": "?? {{count}}?",
+        "scene_one": "?? {{count}}?",
+        "scene_other": "?? {{count}}?",
+        "match_one": "?? {{count}}?",
+        "match_other": "?? {{count}}?"
+      },
+      "sort": {
+        "label": "??",
+        "relevance": "???",
+        "time": "?????",
+        "name": "??? ??"
+      },
+      "scope": {
+        "placeholder": "??",
+        "allMedia": "?? ???",
+        "scopedTo": "??: {{name}}",
+        "scopedToAll": "??: ?? ???"
+      },
+      "banners": {
+        "downloadingSemanticModel": "??? ?? ???? ?(~22MB, ?? 1?)...",
+        "indexingCaptions": "??? ??? ?? ??? ? - {{current}}/{{total}}? ??",
+        "reanalyzingPrefix": "?? ?? ?",
+        "reanalyzingSuffix": "- ???? ??? ???????."
+      },
+      "analyze": {
+        "title": "AI? ??? ??",
+        "button": "??",
+        "scope": "\"{{name}}\" ??",
+        "newMedia": "? ??? ??",
+        "reanalyzeAll": "?? ?? ??"
+      },
+      "view": {
+        "list": "?? ??",
+        "grid": "??? ??"
+      },
+      "empty": {
+        "noCaptionsTitle": "?? AI ??? ????.",
+        "noCaptionsPrefix": "??? ?????? ????",
+        "noCaptionsSuffix": "? ??? ?? ??? ?? ??? ?????.",
+        "noMatchesTitle": "??? ???? ??? ????.",
+        "noMatchesPrefix": "? ?? ????? ??? ???? ?????:"
+      },
+      "search": {
+        "exitColorMode": "?? ?? ??",
+        "colorTitle": "???? ??",
+        "color": "??",
+        "semanticTitle": "??? ??(?? ??)",
+        "keywordTitle": "??? ??(??? ??)",
+        "semanticLabel": "??? ??",
+        "keywordLabel": "??? ??",
+        "semantic": "???",
+        "keyword": "???",
+        "keywordDescription": "??? ?? ??",
+        "semanticDescription": "??? ??",
+        "clearReference": "??? ??? ?? ?? ??",
+        "findingSimilarPalette": "??? ???? ?? ?? ?...",
+        "semanticPlaceholder": "??? ?? - \"? ?? ??\", \"?? ???\"...",
+        "keywordPlaceholder": "??? ???? ?? ??...",
+        "clearSearch": "?? ???",
+        "similarPaletteTo": "{{label}}? ??? ??? - ???? ???"
+      },
+      "matchTiers": {
+        "strong": "??",
+        "good": "??",
+        "fair": "??"
+      },
+      "match": {
+        "keyword": "???",
+        "keywordHint": "??? ?? ? ??? {{score}}",
+        "meaningWithTier": "?? ? {{tier}}",
+        "textEmbeddingHint": "??? ??? ???: {{score}}",
+        "visualWithTier": "??? ? {{tier}}",
+        "clipHint": "CLIP ???: {{score}}",
+        "colorWithName": "?? ? {{color}}",
+        "paletteColorHint": "{{color}} ??? ??(?E 2000)",
+        "paletteDistance": "??? ? ?E {{distance}}",
+        "paletteDistanceHint": "?? ???? ?? ?? ?? ?E 2000",
+        "belowThreshold": "??? ??",
+        "cosineHint": "??? {{score}}",
+        "top": "??",
+        "topHint": "?? ?? ??? ??"
+      },
+      "palette": {
+        "libraryColor": "????? ??",
+        "empty": "?? ???? ???? ???? - AI ??? ??? ????.",
+        "moreColors_one": "?? {{count}}? ?",
+        "moreColors_other": "?? {{count}}? ?",
+        "showMoreColors_one": "?? {{count}}? ? ??",
+        "showMoreColors_other": "?? {{count}}? ? ??",
+        "moreColorsTitle": "? ?? ??",
+        "findColor": "? ??? ?? ??(?????? {{percent}}%)",
+        "findSimilar": "??? ???? ?? ??"
+      },
+      "scene": {
+        "previewAndDragHint": "???? ?? ????? ???? - ????? ????? ??"
+      }
     }
   },
   "zh": {
@@ -1525,6 +2666,69 @@
         "adjustmentLayer": "调整图层",
         "blankAdjustmentLayer": "空白调整图层",
         "presets": "预设"
+      },
+      "textSection": {
+        "sectionTitle": "文本",
+        "content": "内容",
+        "single": "单段",
+        "twoSpans": "2 段",
+        "threeSpans": "3 段",
+        "mixedNone": "混合 / 无",
+        "selectPreset": "选择预设",
+        "span": "段 {{count}}",
+        "spanText": "段 {{count}} 文本",
+        "eyebrow": "眉题",
+        "eyebrowText": "眉题文本",
+        "title": "标题",
+        "titleText": "标题文本",
+        "subtitle": "副标题",
+        "subtitleText": "副标题文本",
+        "text": "文本",
+        "enterText": "输入文本...",
+        "defaultText": "在此输入文本",
+        "selectFont": "选择字体",
+        "size": "大小",
+        "spacing": "间距",
+        "scale": "缩放",
+        "font": "字体",
+        "weight": "字重",
+        "style": "样式",
+        "align": "对齐",
+        "color": "颜色",
+        "background": "背景",
+        "clear": "清除",
+        "clearBackground": "清除背景",
+        "lineHeightShort": "行高",
+        "padding": "内边距",
+        "radius": "圆角",
+        "mixed": "混合",
+        "selectWeight": "选择字重",
+        "bold": "加粗",
+        "boldUnavailable": "此字体不支持加粗",
+        "italic": "斜体",
+        "underline": "下划线",
+        "italicSpan": "{{label}} 斜体",
+        "underlineSpan": "{{label}} 下划线",
+        "alignLeft": "左对齐",
+        "alignCenter": "居中对齐",
+        "alignRight": "右对齐",
+        "alignTop": "顶部对齐",
+        "alignMiddle": "垂直居中",
+        "alignBottom": "底部对齐",
+        "effects": "效果",
+        "presets": "预设",
+        "fontWeights": {
+          "regular": "常规",
+          "medium": "中等",
+          "semibold": "半粗",
+          "bold": "加粗"
+        },
+        "effectPresets": {
+          "none": "无",
+          "shadow": "阴影",
+          "outline": "描边",
+          "glow": "发光"
+        }
       },
       "tts": {
         "seek": "定位",
@@ -1713,6 +2917,106 @@
           "unloadedToast": "??? {{count}} ???????"
         }
       }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "{{count}} ???",
+        "clip_other": "{{count}} ???",
+        "scene_one": "{{count}} ???",
+        "scene_other": "{{count}} ???",
+        "match_one": "{{count}} ????",
+        "match_other": "{{count}} ????"
+      },
+      "sort": {
+        "label": "??",
+        "relevance": "???",
+        "time": "???",
+        "name": "????"
+      },
+      "scope": {
+        "placeholder": "??",
+        "allMedia": "????",
+        "scopedTo": "???{{name}}",
+        "scopedToAll": "???????"
+      },
+      "banners": {
+        "downloadingSemanticModel": "?????????? 22 MB???????...",
+        "indexingCaptions": "??????????? - {{current}}/{{total}} ???",
+        "reanalyzingPrefix": "??????",
+        "reanalyzingSuffix": "- ?????????"
+      },
+      "analyze": {
+        "title": "? AI ????",
+        "button": "??",
+        "scope": "???{{name}}?",
+        "newMedia": "?????",
+        "reanalyzeAll": "??????"
+      },
+      "view": {
+        "list": "????",
+        "grid": "????"
+      },
+      "empty": {
+        "noCaptionsTitle": "??? AI ???",
+        "noCaptionsPrefix": "???????????",
+        "noCaptionsSuffix": "?????????????",
+        "noMatchesTitle": "???????????",
+        "noMatchesPrefix": "???????????????"
+      },
+      "search": {
+        "exitColorMode": "??????",
+        "colorTitle": "?????",
+        "color": "??",
+        "semanticTitle": "?????????",
+        "keywordTitle": "???????????",
+        "semanticLabel": "????",
+        "keywordLabel": "?????",
+        "semantic": "??",
+        "keyword": "???",
+        "keywordDescription": "??????",
+        "semanticDescription": "?????",
+        "clearReference": "???????????",
+        "findingSimilarPalette": "????????????...",
+        "semanticPlaceholder": "????? - ?????????????...",
+        "keywordPlaceholder": "?????????...",
+        "clearSearch": "????",
+        "similarPaletteTo": "? {{label}} ?????? - ????"
+      },
+      "matchTiers": {
+        "strong": "?",
+        "good": "??",
+        "fair": "??"
+      },
+      "match": {
+        "keyword": "???",
+        "keywordHint": "????? ? ?? {{score}}",
+        "meaningWithTier": "?? ? {{tier}}",
+        "textEmbeddingHint": "????????{{score}}",
+        "visualWithTier": "?? ? {{tier}}",
+        "clipHint": "CLIP ????{{score}}",
+        "colorWithName": "?? ? {{color}}",
+        "paletteColorHint": "{{color}} ????????E 2000?",
+        "paletteDistance": "??? ? ?E {{distance}}",
+        "paletteDistanceHint": "??????????? ?E 2000",
+        "belowThreshold": "????",
+        "cosineHint": "?? {{score}}",
+        "top": "??",
+        "topHint": "????????"
+      },
+      "palette": {
+        "libraryColor": "?????",
+        "empty": "?????????? - ?? AI ????????",
+        "moreColors_one": "?? {{count}} ???",
+        "moreColors_other": "?? {{count}} ???",
+        "showMoreColors_one": "???? {{count}} ???",
+        "showMoreColors_other": "???? {{count}} ???",
+        "moreColorsTitle": "????",
+        "findColor": "????????????? {{percent}}%?",
+        "findSimilar": "??????????"
+      },
+      "scene": {
+        "previewAndDragHint": "??????????? - ?????????"
+      }
     }
   },
   "tr": {
@@ -1739,6 +3043,69 @@
         "adjustmentLayer": "Ayar katmanı",
         "blankAdjustmentLayer": "Boş ayar katmanı",
         "presets": "Ön Ayarlar"
+      },
+      "textSection": {
+        "sectionTitle": "Metin",
+        "content": "İçerik",
+        "single": "Tek",
+        "twoSpans": "2 aralık",
+        "threeSpans": "3 aralık",
+        "mixedNone": "Karışık / Yok",
+        "selectPreset": "Ön ayar seç",
+        "span": "Aralık {{count}}",
+        "spanText": "Aralık {{count}} metni",
+        "eyebrow": "Üst başlık",
+        "eyebrowText": "Üst başlık metni",
+        "title": "Başlık",
+        "titleText": "Başlık metni",
+        "subtitle": "Alt başlık",
+        "subtitleText": "Alt başlık metni",
+        "text": "Metin",
+        "enterText": "Metin gir...",
+        "defaultText": "Metninizi buraya yazın",
+        "selectFont": "Yazı tipi seç",
+        "size": "Boyut",
+        "spacing": "Aralık",
+        "scale": "Ölçek",
+        "font": "Yazı tipi",
+        "weight": "Ağırlık",
+        "style": "Stil",
+        "align": "Hizala",
+        "color": "Renk",
+        "background": "Arka plan",
+        "clear": "Temizle",
+        "clearBackground": "Arka planı temizle",
+        "lineHeightShort": "Satır y.",
+        "padding": "Dolgu",
+        "radius": "Yarıçap",
+        "mixed": "Karışık",
+        "selectWeight": "Ağırlık seç",
+        "bold": "Kalın",
+        "boldUnavailable": "Bu yazı tipinde kalın kullanılamaz",
+        "italic": "İtalik",
+        "underline": "Altı çizili",
+        "italicSpan": "{{label}} italik",
+        "underlineSpan": "{{label}} altı çizili",
+        "alignLeft": "Sola hizala",
+        "alignCenter": "Ortala",
+        "alignRight": "Sağa hizala",
+        "alignTop": "Üste hizala",
+        "alignMiddle": "Ortaya hizala",
+        "alignBottom": "Alta hizala",
+        "effects": "Efektler",
+        "presets": "Ön Ayarlar",
+        "fontWeights": {
+          "regular": "Normal",
+          "medium": "Orta",
+          "semibold": "Yarı kalın",
+          "bold": "Kalın"
+        },
+        "effectPresets": {
+          "none": "Yok",
+          "shadow": "Gölge",
+          "outline": "Kontur",
+          "glow": "Parıltı"
+        }
       },
       "tts": {
         "seek": "Git",
@@ -1926,6 +3293,106 @@
           "activeJobs": "{{count}} etkin iş",
           "unloadedToast": "{{count}} yerel çalışma zamanı boşaltıldı."
         }
+      }
+    },
+    "sceneBrowser": {
+      "counts": {
+        "clip_one": "{{count}} klip",
+        "clip_other": "{{count}} klip",
+        "scene_one": "{{count}} sahne",
+        "scene_other": "{{count}} sahne",
+        "match_one": "{{count}} e?le?me",
+        "match_other": "{{count}} e?le?me"
+      },
+      "sort": {
+        "label": "S?rala",
+        "relevance": "Alaka d?zeyi",
+        "time": "Zaman damgas?",
+        "name": "Medya ad?"
+      },
+      "scope": {
+        "placeholder": "Kapsam",
+        "allMedia": "T?m medya",
+        "scopedTo": "Kapsam: {{name}}",
+        "scopedToAll": "Kapsam: t?m medya"
+      },
+      "banners": {
+        "downloadingSemanticModel": "Semantik model indiriliyor (~22 MB, yaln?zca ilk ?al??t?rma)...",
+        "indexingCaptions": "Semantik arama i?in altyaz?lar indeksleniyor - {{current}}/{{total}} klip",
+        "reanalyzingPrefix": "Yeniden analiz ediliyor",
+        "reanalyzingSuffix": "- tamamlan?nca sahneler yenilenecek."
+      },
+      "analyze": {
+        "title": "Medyay? AI ile analiz et",
+        "button": "Analiz et",
+        "scope": "\"{{name}}\" analiz et",
+        "newMedia": "Yeni medyay? analiz et",
+        "reanalyzeAll": "T?m?n? yeniden analiz et"
+      },
+      "view": {
+        "list": "Liste g?r?n?m?",
+        "grid": "Izgara g?r?n?m?"
+      },
+      "empty": {
+        "noCaptionsTitle": "Hen?z AI altyaz?s? yok.",
+        "noCaptionsPrefix": "Aranabilir sahne altyaz?lar? olu?turmak i?in medya kitapl???ndaki bir klipte",
+        "noCaptionsSuffix": "?al??t?r?n.",
+        "noMatchesTitle": "Araman?zla e?le?en sahne yok.",
+        "noMatchesPrefix": "Daha k?sa bir sorgu deneyin veya kapsam? ?una de?i?tirin:"
+      },
+      "search": {
+        "exitColorMode": "Renk modundan ??k",
+        "colorTitle": "Renge g?re ara",
+        "color": "Renk",
+        "semanticTitle": "Semantik arama (anlama g?re)",
+        "keywordTitle": "Anahtar kelime aramas? (tam e?le?me)",
+        "semanticLabel": "Semantik arama",
+        "keywordLabel": "Anahtar kelime aramas?",
+        "semantic": "Semantik",
+        "keyword": "Anahtar kelime",
+        "keywordDescription": "Tam kelime e?le?meleri",
+        "semanticDescription": "Anlama g?re e?le?tir",
+        "clearReference": "Referans? temizle ve ba?ka renk se?",
+        "findingSimilarPalette": "Benzer palete sahip sahneler aran?yor...",
+        "semanticPlaceholder": "Anlama g?re ara - \"suyun ?st?nde g?n bat?m?\", \"g?len insanlar\"...",
+        "keywordPlaceholder": "Sahneleri g?rd???n?z ?eye g?re aray?n...",
+        "clearSearch": "Aramay? temizle",
+        "similarPaletteTo": "{{label}} benzeri palet - temizlemek i?in t?klay?n"
+      },
+      "matchTiers": {
+        "strong": "G??l?",
+        "good": "?yi",
+        "fair": "Orta"
+      },
+      "match": {
+        "keyword": "Anahtar kelime",
+        "keywordHint": "Anahtar kelime e?le?mesi ? kosin?s {{score}}",
+        "meaningWithTier": "Anlam ? {{tier}}",
+        "textEmbeddingHint": "Metin g?mme kosin?s?: {{score}}",
+        "visualWithTier": "G?rsel ? {{tier}}",
+        "clipHint": "CLIP kosin?s?: {{score}}",
+        "colorWithName": "Renk ? {{color}}",
+        "paletteColorHint": "{{color}} ?zerinde palet e?le?mesi (?E 2000)",
+        "paletteDistance": "Palet ? ?E {{distance}}",
+        "paletteDistanceHint": "Referans palete a??rl?kl? ortalama ?E 2000",
+        "belowThreshold": "E?i?in alt?nda",
+        "cosineHint": "kosin?s {{score}}",
+        "top": "En iyi",
+        "topHint": "En y?ksek puanl? e?le?me"
+      },
+      "palette": {
+        "libraryColor": "Kitapl?k rengi",
+        "empty": "Hen?z indekslenmi? palet yok - doldurmak i?in AI altyaz?lar?n? ?al??t?r?n.",
+        "moreColors_one": "{{count}} renk daha",
+        "moreColors_other": "{{count}} renk daha",
+        "showMoreColors_one": "{{count}} renk daha g?ster",
+        "showMoreColors_other": "{{count}} renk daha g?ster",
+        "moreColorsTitle": "Daha fazla renk",
+        "findColor": "Bu renkte sahneler bul (kitapl???n %{{percent}} kadar?)",
+        "findSimilar": "Benzer palete sahip sahneleri bul"
+      },
+      "scene": {
+        "previewAndDragHint": "Kaynak monit?rde ?nizlemek i?in t?klay?n - zaman ?izelgesine eklemek i?in s?r?kleyin"
       }
     }
   }

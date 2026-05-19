@@ -1,4 +1,5 @@
 import { memo, useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MoreHorizontal, Palette } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/shared/ui/cn'
@@ -38,6 +39,7 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
   scope,
   className,
 }: LibraryPaletteGridProps) {
+  const { t } = useTranslation()
   const clusters = useLibraryPalette(scope)
   const setReference = useSceneBrowserStore((s) => s.setReference)
   const setQuery = useSceneBrowserStore((s) => s.setQuery)
@@ -67,11 +69,11 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
       setQuery('')
       setReference({
         sceneId: `library-color-${Math.round(cluster.l)}-${Math.round(cluster.a)}-${Math.round(cluster.b)}`,
-        label: 'Library color',
+        label: t('sceneBrowser.palette.libraryColor'),
         palette: [{ l: cluster.l, a: cluster.a, b: cluster.b, weight: 1 }],
       })
     },
-    [setQuery, setReference],
+    [setQuery, setReference, t],
   )
 
   if (clusters.length === 0) {
@@ -83,7 +85,7 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
         )}
       >
         <Palette className="h-3.5 w-3.5" />
-        <span>No palettes indexed yet — run AI captioning to populate.</span>
+        <span>{t('sceneBrowser.palette.empty')}</span>
       </div>
     )
   }
@@ -110,9 +112,11 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
         <SwatchButton
           key={`v-${i}`}
           cluster={cluster}
-          totalWeight={totalWeight}
           active={isActiveRef(cluster, currentRef)}
           onPick={handlePick}
+          label={t('sceneBrowser.palette.findColor', {
+            percent: Math.round((cluster.weight / totalWeight) * 100),
+          })}
         />
       ))}
       {overflow && (
@@ -126,15 +130,15 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
                 'hover:-translate-y-0.5 hover:text-foreground hover:shadow-md',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
               )}
-              title={`${hidden.length} more color${hidden.length === 1 ? '' : 's'}`}
-              aria-label={`Show ${hidden.length} more colors`}
+              title={t('sceneBrowser.palette.moreColors', { count: hidden.length })}
+              aria-label={t('sceneBrowser.palette.showMoreColors', { count: hidden.length })}
             >
               <MoreHorizontal className="h-3 w-3" />
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 p-2">
             <div className="mb-1.5 flex items-center justify-between px-1 text-[10.5px] uppercase tracking-wide text-muted-foreground">
-              <span>More colors</span>
+              <span>{t('sceneBrowser.palette.moreColorsTitle')}</span>
               <span>{hidden.length}</span>
             </div>
             <div
@@ -148,9 +152,11 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
                 <SwatchButton
                   key={`h-${i}`}
                   cluster={cluster}
-                  totalWeight={totalWeight}
                   active={isActiveRef(cluster, currentRef)}
                   onPick={handlePick}
+                  label={t('sceneBrowser.palette.findColor', {
+                    percent: Math.round((cluster.weight / totalWeight) * 100),
+                  })}
                 />
               ))}
             </div>
@@ -163,18 +169,16 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
 
 function SwatchButton({
   cluster,
-  totalWeight,
   active,
   onPick,
+  label,
 }: {
   cluster: Cluster
-  totalWeight: number
   active: boolean
   onPick: (cluster: Cluster) => void
+  label: string
 }) {
   const [r, g, b] = labToRgb(cluster.l, cluster.a, cluster.b)
-  const share = cluster.weight / totalWeight
-  const label = `Find scenes in this color (${Math.round(share * 100)}% of the library)`
   return (
     <button
       type="button"

@@ -20,8 +20,8 @@ export const SUPPORTED_LANGUAGES: readonly AppLanguage[] = [
   { code: 'de', nativeName: 'Deutsch', englishName: 'German', dir: 'ltr' },
   {
     code: 'pt-BR',
-    nativeName: 'Português (Brasil)',
-    englishName: 'Portuguese (Brazil)',
+    nativeName: 'Português',
+    englishName: 'Portuguese',
     dir: 'ltr',
   },
   { code: 'tr', nativeName: 'Türkçe', englishName: 'Turkish', dir: 'ltr' },

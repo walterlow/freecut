@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Check, ChevronDown, Palette, Search, Sparkles, Type, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
@@ -20,6 +21,7 @@ import { LibraryPaletteGrid } from './library-palette-grid'
  * actual input surface to a second row.
  */
 export function SceneSearchModeButtons({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation()
   const colorMode = useSceneBrowserStore((s) => s.colorMode)
   const setColorMode = useSceneBrowserStore((s) => s.setColorMode)
   const captionSearchMode = useSettingsStore((s) => s.captionSearchMode)
@@ -38,12 +40,16 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
             ? 'border-primary/60 bg-primary/10 text-primary'
             : 'border-border bg-secondary text-muted-foreground hover:text-foreground',
         )}
-        title={colorMode ? 'Exit color mode' : 'Search by color'}
-        aria-label={colorMode ? 'Exit color mode' : 'Search by color'}
+        title={
+          colorMode ? t('sceneBrowser.search.exitColorMode') : t('sceneBrowser.search.colorTitle')
+        }
+        aria-label={
+          colorMode ? t('sceneBrowser.search.exitColorMode') : t('sceneBrowser.search.colorTitle')
+        }
         aria-pressed={colorMode}
       >
         <Palette className="h-3 w-3" />
-        {!compact && 'Color'}
+        {!compact && t('sceneBrowser.search.color')}
       </button>
       {!colorMode && (
         <DropdownMenu>
@@ -57,12 +63,21 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
                   : 'border-border bg-secondary text-muted-foreground hover:text-foreground',
               )}
               title={
-                semanticActive ? 'Semantic search (by meaning)' : 'Keyword search (exact match)'
+                semanticActive
+                  ? t('sceneBrowser.search.semanticTitle')
+                  : t('sceneBrowser.search.keywordTitle')
               }
-              aria-label={semanticActive ? 'Semantic search' : 'Keyword search'}
+              aria-label={
+                semanticActive
+                  ? t('sceneBrowser.search.semanticLabel')
+                  : t('sceneBrowser.search.keywordLabel')
+              }
             >
               {semanticActive ? <Sparkles className="h-3 w-3" /> : <Type className="h-3 w-3" />}
-              {!compact && (semanticActive ? 'Semantic' : 'Keyword')}
+              {!compact &&
+                (semanticActive
+                  ? t('sceneBrowser.search.semantic')
+                  : t('sceneBrowser.search.keyword'))}
               <ChevronDown className="h-3 w-3 opacity-70" />
             </button>
           </DropdownMenuTrigger>
@@ -72,8 +87,10 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
             >
               <Type className="mr-2 h-3 w-3" />
               <div className="flex flex-col">
-                <span>Keyword</span>
-                <span className="text-[10px] text-muted-foreground">Exact word matches</span>
+                <span>{t('sceneBrowser.search.keyword')}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {t('sceneBrowser.search.keywordDescription')}
+                </span>
               </div>
               {!semanticActive && <Check className="ml-auto h-3 w-3" />}
             </DropdownMenuItem>
@@ -84,8 +101,10 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
             >
               <Sparkles className="mr-2 h-3 w-3" />
               <div className="flex flex-col">
-                <span>Semantic</span>
-                <span className="text-[10px] text-muted-foreground">Match by meaning</span>
+                <span>{t('sceneBrowser.search.semantic')}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {t('sceneBrowser.search.semanticDescription')}
+                </span>
               </div>
               {semanticActive && <Check className="ml-auto h-3 w-3" />}
             </DropdownMenuItem>
@@ -102,6 +121,7 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
  * row on its own.
  */
 export function SceneSearchField() {
+  const { t } = useTranslation()
   const query = useSceneBrowserStore((s) => s.query)
   const setQuery = useSceneBrowserStore((s) => s.setQuery)
   const focusNonce = useSceneBrowserStore((s) => s.focusNonce)
@@ -129,7 +149,7 @@ export function SceneSearchField() {
             type="button"
             onClick={() => setReference(null)}
             className="flex h-6 max-w-[220px] items-center gap-1 rounded-md border border-primary/60 bg-primary/10 px-2 text-[11px] text-primary transition-colors hover:bg-primary/20"
-            title="Clear reference and pick another color"
+            title={t('sceneBrowser.search.clearReference')}
           >
             <Palette className="h-3 w-3 shrink-0" />
             <span className="truncate">{reference.label}</span>
@@ -152,10 +172,10 @@ export function SceneSearchField() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
             reference
-              ? 'Finding scenes with a similar palette…'
+              ? t('sceneBrowser.search.findingSimilarPalette')
               : semanticActive
-                ? 'Search by meaning — "sunset over water", "people laughing"…'
-                : 'Search scenes by what you see…'
+                ? t('sceneBrowser.search.semanticPlaceholder')
+                : t('sceneBrowser.search.keywordPlaceholder')
           }
           disabled={!!reference}
           className="h-8 pl-8 pr-7 text-[12px] disabled:opacity-60"
@@ -167,7 +187,7 @@ export function SceneSearchField() {
             type="button"
             onClick={() => setQuery('')}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
-            aria-label="Clear search"
+            aria-label={t('sceneBrowser.search.clearSearch')}
           >
             <X className="h-3 w-3" />
           </button>
@@ -178,7 +198,7 @@ export function SceneSearchField() {
           type="button"
           onClick={() => setReference(null)}
           className="flex h-8 max-w-[220px] items-center gap-1 rounded-md border border-primary/60 bg-primary/10 px-2 text-[11px] text-primary transition-colors hover:bg-primary/20"
-          title={`Similar palette to ${reference.label} — click to clear`}
+          title={t('sceneBrowser.search.similarPaletteTo', { label: reference.label })}
         >
           <Palette className="h-3 w-3 shrink-0" />
           <span className="truncate">{reference.label}</span>

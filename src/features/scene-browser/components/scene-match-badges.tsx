@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Eye, MessageSquareText, Palette, Sparkles, Type } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import type { SceneMatchSignals } from '../utils/rank'
@@ -34,14 +35,14 @@ function scoreTier(
   return null
 }
 
-function tierLabel(tier: Tier): string {
+function tierLabel(tier: Tier, t: (key: string) => string): string {
   switch (tier) {
     case 'strong':
-      return 'Strong'
+      return t('sceneBrowser.matchTiers.strong')
     case 'good':
-      return 'Good'
+      return t('sceneBrowser.matchTiers.good')
     case 'fair':
-      return 'Fair'
+      return t('sceneBrowser.matchTiers.fair')
   }
 }
 
@@ -96,6 +97,7 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
   isTop,
   className,
 }: SceneMatchBadgesProps) {
+  const { t } = useTranslation()
   const chips: React.ReactNode[] = []
 
   if (signals.ranker === 'keyword' && signals.keywordMatched) {
@@ -104,8 +106,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
         key="keyword"
         tone="keyword"
         icon={<Type className="h-2.5 w-2.5" />}
-        label="Keyword"
-        hint={`Keyword match · cosine ${score.toFixed(2)}`}
+        label={t('sceneBrowser.match.keyword')}
+        hint={t('sceneBrowser.match.keywordHint', { score: score.toFixed(2) })}
       />,
     )
   }
@@ -136,8 +138,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-text"
           tone="text"
           icon={<MessageSquareText className="h-2.5 w-2.5" />}
-          label={`Meaning · ${tierLabel(textTier)}`}
-          hint={`Text-embedding cosine: ${(textScore ?? 0).toFixed(3)}`}
+          label={t('sceneBrowser.match.meaningWithTier', { tier: tierLabel(textTier, t) })}
+          hint={t('sceneBrowser.match.textEmbeddingHint', { score: (textScore ?? 0).toFixed(3) })}
         />,
       )
     }
@@ -147,8 +149,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-image"
           tone="visual"
           icon={<Eye className="h-2.5 w-2.5" />}
-          label={`Visual · ${tierLabel(imageTier)}`}
-          hint={`CLIP cosine: ${(imageScore ?? 0).toFixed(3)}`}
+          label={t('sceneBrowser.match.visualWithTier', { tier: tierLabel(imageTier, t) })}
+          hint={t('sceneBrowser.match.clipHint', { score: (imageScore ?? 0).toFixed(3) })}
         />,
       )
     }
@@ -158,8 +160,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-color"
           tone="palette"
           icon={<Palette className="h-2.5 w-2.5" />}
-          label={`Color · ${signals.colorMatch}`}
-          hint={`Palette match on ${signals.colorMatch} (∆E 2000)`}
+          label={t('sceneBrowser.match.colorWithName', { color: signals.colorMatch })}
+          hint={t('sceneBrowser.match.paletteColorHint', { color: signals.colorMatch })}
         />,
       )
     }
@@ -169,8 +171,10 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="palette-similar"
           tone="palette"
           icon={<Palette className="h-2.5 w-2.5" />}
-          label={`Palette · ∆E ${signals.paletteDistance.toFixed(1)}`}
-          hint="Weighted-mean ∆E 2000 to the reference palette"
+          label={t('sceneBrowser.match.paletteDistance', {
+            distance: signals.paletteDistance.toFixed(1),
+          })}
+          hint={t('sceneBrowser.match.paletteDistanceHint')}
         />,
       )
     }
@@ -183,8 +187,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-weak"
           tone="text"
           icon={<Sparkles className="h-2.5 w-2.5" />}
-          label="Below threshold"
-          hint={`cosine ${score.toFixed(3)}`}
+          label={t('sceneBrowser.match.belowThreshold')}
+          hint={t('sceneBrowser.match.cosineHint', { score: score.toFixed(3) })}
         />,
       )
     }
@@ -198,8 +202,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
         <Chip
           tone="top"
           icon={<Sparkles className="h-2.5 w-2.5" />}
-          label="Top"
-          hint="Highest-scoring match"
+          label={t('sceneBrowser.match.top')}
+          hint={t('sceneBrowser.match.topHint')}
         />
       )}
       {chips}

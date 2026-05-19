@@ -82,8 +82,10 @@ export function getTemplateEffectsForDirectApplication(template: unknown): Visua
   return template.effects
 }
 
-export function createDefaultTextItem(params: VisualLayerPlacement): TextItem {
-  const { trackId, from, durationInFrames, canvasWidth, canvasHeight } = params
+export function createDefaultTextItem(
+  params: VisualLayerPlacement & { text?: string; label?: string },
+): TextItem {
+  const { trackId, from, durationInFrames, canvasWidth, canvasHeight, text, label } = params
 
   return {
     id: crypto.randomUUID(),
@@ -91,8 +93,8 @@ export function createDefaultTextItem(params: VisualLayerPlacement): TextItem {
     trackId,
     from,
     durationInFrames,
-    label: 'Text',
-    text: 'Your Text Here',
+    label: label ?? 'Text',
+    text: text ?? 'Your Text Here',
     fontSize: 60,
     fontFamily: 'Inter',
     fontWeight: 'normal',
@@ -116,10 +118,11 @@ export function createDefaultTextItem(params: VisualLayerPlacement): TextItem {
 export function createTextTemplateItem(params: {
   placement: VisualLayerPlacement
   label?: string
+  text?: string
   textStylePresetId?: TextStylePresetId
 }): TextItem {
-  const { placement, label, textStylePresetId } = params
-  const baseTextItem = createDefaultTextItem(placement)
+  const { placement, label, text, textStylePresetId } = params
+  const baseTextItem = createDefaultTextItem({ ...placement, label, text })
 
   if (!textStylePresetId) {
     return {

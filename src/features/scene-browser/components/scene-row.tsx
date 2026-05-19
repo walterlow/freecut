@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Clock, Film, Palette, Search } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { formatDuration } from '../deps/media-library'
@@ -38,6 +39,7 @@ export const SceneRow = memo(function SceneRow({
   isTop,
   showSignals,
 }: SceneRowProps) {
+  const { t } = useTranslation()
   const captionIndex = parseCaptionIndex(scene.id)
   const thumbUrl = useCaptionThumbnail(
     scene.thumbRelPath,
@@ -119,7 +121,7 @@ export const SceneRow = memo(function SceneRow({
         // stealing focus from lower-scoring but still-relevant rows.
         showSignals && isTop && 'bg-primary/5',
       )}
-      title="Click to preview in source monitor — drag to add to the timeline"
+      title={t('sceneBrowser.scene.previewAndDragHint')}
     >
       <div className="relative h-[54px] w-24 shrink-0 overflow-hidden rounded-md bg-secondary">
         {thumbUrl ? (
@@ -168,8 +170,8 @@ export const SceneRow = memo(function SceneRow({
                 <span
                   role="button"
                   tabIndex={-1}
-                  aria-label="Find scenes with a similar palette"
-                  title="Find scenes with a similar palette"
+                  aria-label={t('sceneBrowser.palette.findSimilar')}
+                  title={t('sceneBrowser.palette.findSimilar')}
                   className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100"
                   onClick={handleFindSimilarPalette}
                 >
@@ -191,8 +193,8 @@ export const SceneRow = memo(function SceneRow({
                 <span
                   role="button"
                   tabIndex={-1}
-                  aria-label="Find scenes with a similar palette"
-                  title="Find scenes with a similar palette"
+                  aria-label={t('sceneBrowser.palette.findSimilar')}
+                  title={t('sceneBrowser.palette.findSimilar')}
                   className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-opacity hover:bg-foreground/10 hover:text-foreground"
                   onClick={handleFindSimilarPalette}
                 >

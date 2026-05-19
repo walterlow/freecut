@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Type,
   Bold,
@@ -58,10 +59,10 @@ import {
 } from '@/shared/utils/text-layout-drafts'
 
 const FONT_WEIGHT_OPTIONS = [
-  { value: 'normal', label: 'Regular' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'semibold', label: 'Semibold' },
-  { value: 'bold', label: 'Bold' },
+  { value: 'normal', labelKey: 'regular' },
+  { value: 'medium', labelKey: 'medium' },
+  { value: 'semibold', labelKey: 'semibold' },
+  { value: 'bold', labelKey: 'bold' },
 ] as const
 
 const FONT_WEIGHT_VALUES = FONT_WEIGHT_MAP as Record<NonNullable<TextItem['fontWeight']>, number>
@@ -79,7 +80,7 @@ const EMPTY_TEXT_STROKE: NonNullable<TextItem['stroke']> = {
 const TEXT_EFFECT_PRESETS = [
   {
     id: 'none',
-    label: 'None',
+    labelKey: 'none',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: undefined,
       stroke: undefined,
@@ -87,7 +88,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'shadow',
-    label: 'Shadow',
+    labelKey: 'shadow',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: {
         offsetX: 4,
@@ -100,7 +101,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'outline',
-    label: 'Outline',
+    labelKey: 'outline',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: undefined,
       stroke: {
@@ -111,7 +112,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'glow',
-    label: 'Glow',
+    labelKey: 'glow',
     getUpdates: (color: string): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: {
         offsetX: 0,
@@ -219,24 +220,27 @@ interface SpanEditorConfig {
   allowItalic: boolean
 }
 
-function getSpanEditorConfigs(spanCount: number): SpanEditorConfig[] {
+function getSpanEditorConfigs(
+  spanCount: number,
+  t: ReturnType<typeof useTranslation>['t'],
+): SpanEditorConfig[] {
   if (spanCount >= 3) {
     return [
       {
-        label: 'Eyebrow',
-        placeholder: 'Eyebrow text',
+        label: t('editor.textSection.eyebrow'),
+        placeholder: t('editor.textSection.eyebrowText'),
         rows: 1,
         allowItalic: false,
       },
       {
-        label: 'Title',
-        placeholder: 'Title text',
+        label: t('editor.textSection.title'),
+        placeholder: t('editor.textSection.titleText'),
         rows: 2,
         allowItalic: true,
       },
       {
-        label: 'Subtitle',
-        placeholder: 'Subtitle text',
+        label: t('editor.textSection.subtitle'),
+        placeholder: t('editor.textSection.subtitleText'),
         rows: 2,
         allowItalic: true,
       },
@@ -246,14 +250,14 @@ function getSpanEditorConfigs(spanCount: number): SpanEditorConfig[] {
   if (spanCount === 2) {
     return [
       {
-        label: 'Title',
-        placeholder: 'Title text',
+        label: t('editor.textSection.title'),
+        placeholder: t('editor.textSection.titleText'),
         rows: 2,
         allowItalic: true,
       },
       {
-        label: 'Subtitle',
-        placeholder: 'Subtitle text',
+        label: t('editor.textSection.subtitle'),
+        placeholder: t('editor.textSection.subtitleText'),
         rows: 2,
         allowItalic: true,
       },
@@ -262,8 +266,8 @@ function getSpanEditorConfigs(spanCount: number): SpanEditorConfig[] {
 
   return [
     {
-      label: 'Text',
-      placeholder: 'Enter text...',
+      label: t('editor.textSection.text'),
+      placeholder: t('editor.textSection.enterText'),
       rows: 3,
       allowItalic: true,
     },
@@ -280,6 +284,7 @@ export function TextSection({
   showEffectSection = true,
   showAnimationSection = true,
 }: TextSectionProps) {
+  const { t } = useTranslation()
   const updateItem = useTimelineStore((s) => s.updateItem)
   const addKeyframes = useTimelineStore((s) => s.addKeyframes)
 
@@ -1144,14 +1149,18 @@ export function TextSection({
   const hasAnyBackground = textItems.some((item) => item.backgroundColor !== undefined)
   const textPadding = sharedValues.textPadding
   const backgroundRadius = sharedValues.backgroundRadius
-  const spanEditorConfigs = getSpanEditorConfigs(activeEditorSpans.length)
+  const spanEditorConfigs = getSpanEditorConfigs(activeEditorSpans.length, t)
 
   return (
     <>
       {showContentSection && (
-        <PropertySection title="Text" icon={Type} defaultOpen={true}>
+        <PropertySection
+          title={t('editor.textSection.sectionTitle')}
+          icon={Type}
+          defaultOpen={true}
+        >
           {/* Text Content */}
-          <PropertyRow label="Content">
+          <PropertyRow label={t('editor.textSection.content')}>
             <div className="flex flex-1 min-w-0 flex-col gap-2">
               <div className="grid w-full grid-cols-3 gap-1.5">
                 <Button
@@ -1160,7 +1169,7 @@ export function TextSection({
                   className="h-7 text-[11px]"
                   onClick={() => handleApplySpanLayout('single')}
                 >
-                  Single
+                  {t('editor.textSection.single')}
                 </Button>
                 <Button
                   variant={activeEditorSpans.length === 2 ? 'secondary' : 'outline'}
@@ -1168,7 +1177,7 @@ export function TextSection({
                   className="h-7 text-[11px]"
                   onClick={() => handleApplySpanLayout('two')}
                 >
-                  2 Spans
+                  {t('editor.textSection.twoSpans')}
                 </Button>
                 <Button
                   variant={activeEditorSpans.length >= 3 ? 'secondary' : 'outline'}
@@ -1176,7 +1185,7 @@ export function TextSection({
                   className="h-7 text-[11px]"
                   onClick={() => handleApplySpanLayout('three')}
                 >
-                  3 Spans
+                  {t('editor.textSection.threeSpans')}
                 </Button>
               </div>
               <Select
@@ -1187,8 +1196,8 @@ export function TextSection({
                   <SelectValue
                     placeholder={
                       sharedValues.textStylePresetId === undefined
-                        ? 'Mixed / None'
-                        : 'Select preset'
+                        ? t('editor.textSection.mixedNone')
+                        : t('editor.textSection.selectPreset')
                     }
                   />
                 </SelectTrigger>
@@ -1209,8 +1218,8 @@ export function TextSection({
                     >
                       {(() => {
                         const config = spanEditorConfigs[index] ?? {
-                          label: `Span ${index + 1}`,
-                          placeholder: `Span ${index + 1} text`,
+                          label: t('editor.textSection.span', { count: index + 1 }),
+                          placeholder: t('editor.textSection.spanText', { count: index + 1 }),
                           rows: 2,
                           allowItalic: true,
                         }
@@ -1230,14 +1239,14 @@ export function TextSection({
                             <div className="mt-2">
                               <FontPicker
                                 value={span.fontFamily ?? firstTextItem.fontFamily}
-                                placeholder="Select font"
+                                placeholder={t('editor.textSection.selectFont')}
                                 previewText={span.text || config.label}
                                 onValueChange={(value) => handleSpanFontFamilyChange(index, value)}
                               />
                             </div>
                             <div className="mt-2 grid grid-cols-2 gap-2">
                               <NumberInput
-                                label="Size"
+                                label={t('editor.textSection.size')}
                                 value={span.fontSize ?? firstTextItem.fontSize ?? 60}
                                 onChange={(value) => handleSpanFontSizeChange(index, value)}
                                 onLiveChange={(value) => handleSpanFontSizeLiveChange(index, value)}
@@ -1261,7 +1270,7 @@ export function TextSection({
                                       value={weight.value}
                                       className="text-xs"
                                     >
-                                      {weight.label}
+                                      {t(`editor.textSection.fontWeights.${weight.labelKey}`)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1269,7 +1278,7 @@ export function TextSection({
                             </div>
                             <div className="mt-2">
                               <NumberInput
-                                label="Spacing"
+                                label={t('editor.textSection.spacing')}
                                 value={span.letterSpacing ?? firstTextItem.letterSpacing ?? 0}
                                 onChange={(value) => handleSpanLetterSpacingChange(index, value)}
                                 onLiveChange={(value) =>
@@ -1300,7 +1309,9 @@ export function TextSection({
                                   size="icon"
                                   className="h-7 w-7"
                                   onClick={() => handleSpanItalicToggle(index)}
-                                  title={`Italic ${config.label.toLowerCase()}`}
+                                  title={t('editor.textSection.italicSpan', {
+                                    label: config.label.toLowerCase(),
+                                  })}
                                 >
                                   <Italic className="w-3.5 h-3.5" />
                                 </Button>
@@ -1314,7 +1325,9 @@ export function TextSection({
                                 size="icon"
                                 className="h-7 w-7"
                                 onClick={() => handleSpanUnderlineToggle(index)}
-                                title={`Underline ${config.label.toLowerCase()}`}
+                                title={t('editor.textSection.underlineSpan', {
+                                  label: config.label.toLowerCase(),
+                                })}
                               >
                                 <Underline className="w-3.5 h-3.5" />
                               </Button>
@@ -1329,7 +1342,11 @@ export function TextSection({
                 <Textarea
                   value={sharedValues.text ?? ''}
                   onChange={handleTextChange}
-                  placeholder={sharedValues.text === undefined ? 'Mixed' : 'Enter text...'}
+                  placeholder={
+                    sharedValues.text === undefined
+                      ? t('editor.textSection.mixed')
+                      : t('editor.textSection.enterText')
+                  }
                   className="min-h-[60px] text-xs flex-1 min-w-0"
                   rows={3}
                 />
@@ -1338,7 +1355,7 @@ export function TextSection({
           </PropertyRow>
 
           {sharedValues.textStylePresetId && (
-            <PropertyRow label="Scale">
+            <PropertyRow label={t('editor.textSection.scale')}>
               <div className="flex items-center gap-1 min-w-0 w-full">
                 <SliderInput
                   value={sharedValues.textStyleScale}
@@ -1360,10 +1377,14 @@ export function TextSection({
           )}
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Font" className="items-start">
+            <PropertyRow label={t('editor.textSection.font')} className="items-start">
               <FontPicker
                 value={sharedValues.fontFamily}
-                placeholder={sharedValues.fontFamily === undefined ? 'Mixed' : 'Select font'}
+                placeholder={
+                  sharedValues.fontFamily === undefined
+                    ? t('editor.textSection.mixed')
+                    : t('editor.textSection.selectFont')
+                }
                 previewText={fontPreviewText}
                 onValueChange={handleFontFamilyChange}
               />
@@ -1371,7 +1392,7 @@ export function TextSection({
           )}
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Size">
+            <PropertyRow label={t('editor.textSection.size')}>
               <div className="flex items-center gap-1 min-w-0 w-full">
                 <NumberInput
                   value={sharedValues.fontSize}
@@ -1393,17 +1414,21 @@ export function TextSection({
           )}
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Weight">
+            <PropertyRow label={t('editor.textSection.weight')}>
               <Select value={sharedValues.fontWeight} onValueChange={handleFontWeightChange}>
                 <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
                   <SelectValue
-                    placeholder={sharedValues.fontWeight === undefined ? 'Mixed' : 'Select weight'}
+                    placeholder={
+                      sharedValues.fontWeight === undefined
+                        ? t('editor.textSection.mixed')
+                        : t('editor.textSection.selectWeight')
+                    }
                   />
                 </SelectTrigger>
                 <SelectContent>
                   {supportedFontWeightOptions.map((weight) => (
                     <SelectItem key={weight.value} value={weight.value} className="text-xs">
-                      {weight.label}
+                      {t(`editor.textSection.fontWeights.${weight.labelKey}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1412,15 +1437,19 @@ export function TextSection({
           )}
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Style">
+            <PropertyRow label={t('editor.textSection.style')}>
               <div className="flex gap-1">
                 <Button
                   variant={isBoldActive ? 'secondary' : 'ghost'}
                   size="icon"
                   className="h-7 w-7"
                   onClick={handleBoldToggle}
-                  title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
-                  aria-label="Bold"
+                  title={
+                    canUseBold
+                      ? t('editor.textSection.bold')
+                      : t('editor.textSection.boldUnavailable')
+                  }
+                  aria-label={t('editor.textSection.bold')}
                   aria-pressed={isBoldActive}
                   disabled={!canUseBold}
                 >
@@ -1431,8 +1460,8 @@ export function TextSection({
                   size="icon"
                   className="h-7 w-7"
                   onClick={handleItalicToggle}
-                  title="Italic"
-                  aria-label="Italic"
+                  title={t('editor.textSection.italic')}
+                  aria-label={t('editor.textSection.italic')}
                   aria-pressed={isItalicActive}
                 >
                   <Italic className="w-3.5 h-3.5" />
@@ -1442,8 +1471,8 @@ export function TextSection({
                   size="icon"
                   className="h-7 w-7"
                   onClick={handleUnderlineToggle}
-                  title="Underline"
-                  aria-label="Underline"
+                  title={t('editor.textSection.underline')}
+                  aria-label={t('editor.textSection.underline')}
                   aria-pressed={isUnderlineActive}
                 >
                   <Underline className="w-3.5 h-3.5" />
@@ -1453,14 +1482,14 @@ export function TextSection({
           )}
 
           {/* Text Align */}
-          <PropertyRow label="Align">
+          <PropertyRow label={t('editor.textSection.align')}>
             <div className="flex gap-1">
               <Button
                 variant={sharedValues.textAlign === 'left' ? 'secondary' : 'ghost'}
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('left')}
-                title="Align Left"
+                title={t('editor.textSection.alignLeft')}
               >
                 <AlignLeft className="w-3.5 h-3.5" />
               </Button>
@@ -1469,7 +1498,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('center')}
-                title="Align Center"
+                title={t('editor.textSection.alignCenter')}
               >
                 <AlignCenter className="w-3.5 h-3.5" />
               </Button>
@@ -1478,7 +1507,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('right')}
-                title="Align Right"
+                title={t('editor.textSection.alignRight')}
               >
                 <AlignRight className="w-3.5 h-3.5" />
               </Button>
@@ -1488,7 +1517,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('top')}
-                title="Align Top"
+                title={t('editor.textSection.alignTop')}
               >
                 <AlignStartHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -1497,7 +1526,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('middle')}
-                title="Align Middle"
+                title={t('editor.textSection.alignMiddle')}
               >
                 <AlignCenterHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -1506,7 +1535,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('bottom')}
-                title="Align Bottom"
+                title={t('editor.textSection.alignBottom')}
               >
                 <AlignEndHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -1515,7 +1544,7 @@ export function TextSection({
 
           {!hasStructuredSpanEditor && (
             <ColorPicker
-              label="Color"
+              label={t('editor.textSection.color')}
               color={sharedValues.color ?? '#ffffff'}
               onChange={handleColorChange}
               onLiveChange={handleColorLiveChange}
@@ -1524,7 +1553,7 @@ export function TextSection({
             />
           )}
 
-          <PropertyRow label="Background">
+          <PropertyRow label={t('editor.textSection.background')}>
             <div className="flex flex-1 min-w-0 gap-1">
               <div className="flex-1 min-w-0">
                 <ColorPicker
@@ -1539,15 +1568,15 @@ export function TextSection({
                 className="h-7 px-2 text-[11px]"
                 onClick={handleBackgroundColorClear}
                 disabled={!hasAnyBackground}
-                title="Clear background"
+                title={t('editor.textSection.clearBackground')}
               >
-                Clear
+                {t('editor.textSection.clear')}
               </Button>
             </div>
           </PropertyRow>
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Spacing">
+            <PropertyRow label={t('editor.textSection.spacing')}>
               <NumberInput
                 value={sharedValues.letterSpacing}
                 onChange={handleLetterSpacingChange}
@@ -1562,7 +1591,7 @@ export function TextSection({
           )}
 
           {/* Line Height */}
-          <PropertyRow label="Line H.">
+          <PropertyRow label={t('editor.textSection.lineHeightShort')}>
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={sharedValues.lineHeight}
@@ -1582,7 +1611,7 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Padding">
+          <PropertyRow label={t('editor.textSection.padding')}>
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={textPadding}
@@ -1602,7 +1631,7 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Radius">
+          <PropertyRow label={t('editor.textSection.radius')}>
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={backgroundRadius}
@@ -1625,8 +1654,8 @@ export function TextSection({
       )}
 
       {showEffectSection && (
-        <PropertySection title="Effects" icon={Sparkles} defaultOpen={true}>
-          <PropertyRow label="Presets" className="items-start">
+        <PropertySection title={t('editor.textSection.effects')} icon={Sparkles} defaultOpen={true}>
+          <PropertyRow label={t('editor.textSection.presets')} className="items-start">
             <div className="grid w-full grid-cols-2 gap-1.5">
               {TEXT_EFFECT_PRESETS.map((preset) => (
                 <Button
@@ -1636,7 +1665,7 @@ export function TextSection({
                   className="h-7 text-[11px]"
                   onClick={() => handleApplyTextEffectPreset(preset.id)}
                 >
-                  {preset.label}
+                  {t(`editor.textSection.effectPresets.${preset.labelKey}`)}
                 </Button>
               ))}
             </div>
