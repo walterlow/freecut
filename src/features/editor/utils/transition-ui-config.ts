@@ -49,7 +49,7 @@ import {
   CircleDot,
   type LucideIcon,
 } from 'lucide-react'
-import { transitionRegistry } from '@/core/timeline/transitions'
+import { transitionRegistry } from '@/shared/timeline/transitions'
 import type { PresentationConfig, TransitionCategory } from '@/types/transition'
 
 /** Lucide icon lookup by name string */

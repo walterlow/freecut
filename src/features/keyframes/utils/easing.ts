@@ -6,4 +6,4 @@ export {
   springEasing,
   applyEasing,
   applyEasingConfig,
-} from '@/core/animation/easing'
+} from '@/shared/animation/easing'

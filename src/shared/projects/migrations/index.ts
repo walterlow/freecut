@@ -8,7 +8,7 @@
  * 2. Normalization - Applied every load to ensure current defaults
  *
  * Usage:
- *   import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations';
+ *   import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/shared/projects/migrations';
  *
  *   const result = migrateProject(loadedProject);
  *   if (result.migrated) {

@@ -10,7 +10,7 @@ import { useGizmoStore } from '@/features/preview/stores/gizmo-store'
 import type { ItemEffect } from '@/types/effects'
 import type { TimelineItem } from '@/types/timeline'
 import type { Transition } from '@/types/transition'
-import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner'
+import { resolveTransitionWindows } from '@/shared/timeline/transitions/transition-planner'
 import { hasCornerPin } from '@/features/preview/deps/composition-runtime'
 
 function hasEnabledGpuEffect(effects: ItemEffect[] | undefined): boolean {

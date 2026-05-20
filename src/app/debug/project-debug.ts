@@ -367,7 +367,7 @@ function createDebugAPI(): ProjectDebugAPI {
         import('@/features/timeline/stores/timeline-store'),
       ])
       const { resolveTransitionWindows } =
-        await import('@/core/timeline/transitions/transition-planner')
+        await import('@/shared/timeline/transitions/transition-planner')
       const transitions = useTransitionsStore.getState().transitions
       const itemsByTrackId = useItemsStore.getState().itemsByTrackId
       const tracks = useTimelineStore.getState().tracks

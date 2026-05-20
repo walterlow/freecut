@@ -22,7 +22,7 @@ import {
   sourceToTimelineFrames,
   getAvailableSourceFrames,
 } from './source-calculations'
-import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner'
+import { calculateTransitionPortions } from '@/shared/timeline/transitions/transition-planner'
 import { calculateTrimSourceUpdate, type TrimHandle } from './trim-utils'
 import { computeSlideContinuitySourceDelta } from './slide-utils'
 import {

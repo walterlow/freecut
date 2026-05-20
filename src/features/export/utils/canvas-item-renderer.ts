@@ -37,7 +37,7 @@ import {
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects'
 import { renderTransition, type ActiveTransition } from './canvas-transitions'
-import { transitionRegistry } from '@/core/timeline/transitions/registry'
+import { transitionRegistry } from '@/shared/timeline/transitions/registry'
 import type { ResolvedTransform } from '@/types/transform'
 import { applyMasks, buildPreparedMask, type MaskCanvasSettings } from './canvas-masks'
 import { renderShape } from './canvas-shapes'

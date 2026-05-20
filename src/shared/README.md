@@ -2,46 +2,64 @@
 
 Reusable building blocks shared across the app.
 
-This includes generic utilities and primitives that do not depend on feature
-modules or route modules.
+This is the single home for framework-agnostic logic and cross-feature
+primitives. Most modules avoid React/routing entirely; UI primitives that
+do use React (e.g. `state/`, `ui/`, `hooks/`, `components/`) stay
+independent of any specific feature.
 
-## UI Modules
+A few subpaths are held to a stricter "framework-agnostic" standard —
+`animation/`, `timeline/`, `projects/` — enforced via `.oxlintrc.json`.
+Those modules must not import React, routing, or app/features/runtime
+code. Other shared subpaths may use React when the primitive needs it
+(e.g. `state/` Zustand stores, `ui/property-controls/`).
 
-- `ui/property-controls/*`: shared property panel controls (`PropertySection`,
-  `PropertyRow`, `NumberInput`, `ColorPicker`) used by multiple features.
-- `ui/cn.ts`: shared className merge utility (`cn`).
+## Domain modules (framework-agnostic, enforced)
 
-## Logging Modules
+- `animation/easing.ts` — easing math primitives.
+- `timeline/defaults.ts` — canonical timeline defaults (track height, fps).
+- `timeline/transitions/*` — transition engine, registry, planner, and
+  per-style renderers (Canvas 2D fallbacks).
+- `projects/migrations/*` — versioned project schema migrations and
+  normalization.
 
-- `logging/logger.ts`: shared logger entry point for app/features.
+## State
 
-## Media Modules
+- `state/selection/*` — cross-feature selection state (items/tracks/tools/drag)
+- `state/clipboard/*` — timeline copy/paste clipboard state
+- `state/playback/*` — shared transport/playhead state
+- `state/preview-bridge/*` — shared preview presentation state
+- `state/source-player/*` — source monitor/player interaction state
+- `state/editor/*` — editor shell UI state (panel sizing, source monitor)
+- `state/clear-keyframes-dialog/*`, `state/project-media-match-dialog/*`,
+  `state/tts-generate-dialog/*` — cross-feature workflow stores for
+  dialogs opened by one feature and rendered by another
+- `state/local-inference/*`, `state/mixer-live-gain.ts`,
+  `state/transition-drag.ts` — misc shared state
 
-- `media/ac3-decoder.ts`: shared AC-3 codec detection and lazy decoder
-  registration utilities for mediabunny integrations.
+## UI primitives
 
-## Typography Modules
+- `ui/property-controls/*` — shared property panel controls
+  (`PropertySection`, `PropertyRow`, `NumberInput`, `ColorPicker`).
+- `ui/cn.ts` — shared className merge utility.
 
-- `typography/fonts.ts`: shared font loading/catalog entry point.
+## Hooks
 
-## Graphics Modules
+- `hooks/use-marquee-selection.ts` — reusable marquee-selection
+  controller used across timeline/preview/media-library.
 
-- `graphics/shapes/*`: shared shape generators, path helpers, and components.
+## Typography & graphics
 
-## Async Modules
+- `typography/*` — font loading, font catalog, text style presets.
+- `graphics/shapes/*` — shape generators, path helpers, components.
 
-- `async/async-utils.ts`: shared async concurrency helpers.
+## Utilities
 
-## Utility Modules
-
-- `utils/time-utils.ts`: frame/time formatting and conversion helpers.
-- `utils/format-utils.ts`: human-readable number and byte formatting helpers.
-- `utils/media-utils.ts`: generic media URL/type helpers.
-
-## State Modules
-
-- `state/selection/*`: cross-feature selection state (items/tracks/tools/drag)
-- `state/clipboard/*`: timeline copy/paste clipboard state
-- `state/playback/*`: shared transport/playhead state (frame, play/pause, zoom, quality)
-- `state/preview-bridge/*`: shared preview presentation state
-- `state/source-player/*`: shared source monitor state (in/out points, source frame, player methods)
+- `utils/*` — managed worker pools/sessions, time/format helpers, color
+  math, curve/spline math, mask/audio DSP, transcription cancellation,
+  and so on.
+- `async/async-utils.ts` — async concurrency helpers.
+- `logging/logger.ts` — structured logger entry point.
+- `media/ac3-decoder.ts` — AC-3 codec detection and lazy decoder
+  registration for mediabunny.
+- `events/domain-events.ts` — shared event bus types.
+- `components/color-scopes-view.tsx` — shared color scope visualization.

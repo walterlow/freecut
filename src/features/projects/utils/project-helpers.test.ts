@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vite-plus/test'
-import { CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations'
+import { CURRENT_SCHEMA_VERSION } from '@/shared/projects/migrations'
 import {
   createProjectObject,
   formatProjectUpgradeBackupName,

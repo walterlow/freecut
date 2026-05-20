@@ -15,7 +15,7 @@ import type { ManagedLinkedAudioTransition } from '@/shared/utils/linked-media'
 import {
   resolveTransitionWindows,
   type ResolvedTransitionWindow,
-} from '@/core/timeline/transitions/transition-planner'
+} from '@/shared/timeline/transitions/transition-planner'
 
 export interface TrackRenderState<TTrack extends TimelineTrack = TimelineTrack> {
   hasSoloTracks: boolean

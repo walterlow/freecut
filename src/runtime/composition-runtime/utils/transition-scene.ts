@@ -1,6 +1,6 @@
 import type { TimelineItem } from '@/types/timeline'
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner'
-import { easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
+import type { ResolvedTransitionWindow } from '@/shared/timeline/transitions/transition-planner'
+import { easeIn, easeOut, easeInOut, cubicBezier } from '@/shared/animation/easing'
 
 interface TransitionSceneItem {
   id: string

@@ -22,7 +22,7 @@ import { useVideoConfig } from '../hooks/use-player-compat'
 import { useTransitionParticipantSync } from '../hooks/use-transition-participant-sync'
 import type { TimelineItem, VideoItem } from '@/types/timeline'
 import type { AudioEqSettings } from '@/types/audio'
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner'
+import type { ResolvedTransitionWindow } from '@/shared/timeline/transitions/transition-planner'
 import { VideoContent } from './video-content'
 import {
   findActiveVideoItemIndex,

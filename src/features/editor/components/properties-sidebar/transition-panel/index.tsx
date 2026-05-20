@@ -23,7 +23,7 @@ import {
   type TransitionParameterDefinition,
 } from '@/types/transition'
 import { cn } from '@/shared/ui/cn'
-import { transitionRegistry } from '@/core/timeline/transitions'
+import { transitionRegistry } from '@/shared/timeline/transitions'
 import {
   TRANSITION_CATEGORY_INFO,
   getTransitionConfigsByCategory,

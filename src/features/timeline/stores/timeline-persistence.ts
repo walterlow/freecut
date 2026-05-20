@@ -35,7 +35,7 @@ import { mediaLibraryService } from '@/features/timeline/deps/media-library-serv
 import { validateProjectMediaReferences } from '@/features/timeline/utils/media-validation'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useSettingsStore } from '@/features/timeline/deps/settings-contract'
-import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations'
+import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/shared/projects/migrations'
 import {
   needsLegacyAvTrackLayoutRepair,
   repairLegacyAvTrackLayout,

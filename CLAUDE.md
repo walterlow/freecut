@@ -35,10 +35,6 @@ src/
 ├── runtime/               # Playback and rendering engines (not user-facing UI features)
 │   ├── composition-runtime/ # Composition rendering (sequences, items, audio, transitions)
 │   └── player/            # Clock, video source pools, composition playback
-├── core/                  # Framework-agnostic domain rules and migrations
-│   ├── animation/         # Easing math primitives
-│   ├── projects/          # Schema migrations and normalization
-│   └── timeline/          # Transition engine/registry/renderers, defaults
 ├── infrastructure/        # Platform adapters — browser, storage, GPU, ML
 │   ├── gpu-effects/       # WebGPU effect pipeline + shader definitions
 │   ├── gpu-transitions/   # WebGPU transition pipeline + shaders
@@ -54,15 +50,22 @@ src/
 │   ├── browser/           # Blob URLs, OPFS, mediabunny adapter
 │   ├── storage/           # Workspace FS persistence + legacy IDB migration
 │   └── thumbnails/        # GPU thumbnail renderer + sampling strategy
-├── shared/                # Shared UI/state/utilities across layers
+├── shared/                # Framework-agnostic primitives + cross-feature state
+│   ├── animation/         # Easing math primitives
+│   ├── timeline/          # Transition engine/registry/renderers, defaults
+│   ├── projects/          # Schema migrations and normalization
+│   ├── state/             # Zustand stores (playback, selection, dialogs, editor)
 │   ├── logging/           # Structured logger, frame jitter monitor
-│   ├── state/             # Zustand stores (playback, editor, selection)
-│   └── utils/             # Managed workers, media utilities
-├── components/ui/         # shadcn/ui components
+│   ├── ui/                # cn helper, property controls
+│   ├── typography/        # Font loading, text style presets
+│   ├── graphics/          # Shape generators and path helpers
+│   ├── hooks/             # Cross-feature React hooks
+│   └── utils/             # Managed workers, media utilities, color math, etc.
+├── components/            # App-level shared components + shadcn/ui
 ├── app/                   # App bootstrap, providers, debug utilities
+├── config/                # Hotkeys + editor layout config
 ├── i18n/                  # i18next setup, supported languages, locale JSON + per-feature partials
 ├── routes/                # TanStack Router (file-based, auto-generated routeTree)
-├── config/hotkeys.ts      # Keyboard shortcut definitions
 └── types/                 # Shared TypeScript types
 ```
 
@@ -74,7 +77,7 @@ src/
 - **Timeline item types**: `TimelineItem` is a discriminated union on `type`: `video | audio | text | image | shape | adjustment | composition` — GIFs use `image` type, no separate gif type. Types in `src/types/timeline.ts`
 - **Item positioning**: Remotion convention — `from` (start frame in project FPS) + `durationInFrames`
 - **Compositions**: Pre-compositions (sub-comps) have dedicated stores (`compositions-store.ts`, `composition-navigation-store.ts`). 1-level nesting only. Actions in `composition-actions.ts`
-- **Migrations**: `src/core/projects/migrations/` — versioned migrations + normalization run on every project load. Increment `CURRENT_SCHEMA_VERSION` in `types.ts` when adding new migrations
+- **Migrations**: `src/shared/projects/migrations/` — versioned migrations + normalization run on every project load. Increment `CURRENT_SCHEMA_VERSION` in `types.ts` when adding new migrations
 - **Routing**: TanStack Router — run `npm run routes` after adding/changing route files
 - **Path alias**: `@/*` → `src/*`
 - **i18n**: i18next + react-i18next, initialized in `src/i18n/index.ts` (imported once from `main.tsx`). 8 languages (`en`, `es`, `fr`, `de`, `pt-BR`, `ja`, `ko`, `zh`) in `src/i18n/languages.ts`. Base strings in `src/i18n/locales/<lang>.json`; per-feature strings live in `src/i18n/locales/partials/<name>.json` (shape `{ "<lang>": { ...tree slice... } }`, deep-merged over base at startup). In components use `const { t } = useTranslation()`; outside React use `import { i18n } from '@/i18n'` then `i18n.t()` (`@/i18n` is allowed by the boundary checks — it's not `@/features/*`). For strings with inline markup use `<Trans i18nKey=... components={{ strong: <strong/> }} />`. Resources are deliberately untyped (`i18next.d.ts`) so `t()` accepts any key. Language selector lives in the editor Settings dialog (General); persisted to `localStorage` key `freecut-language` by the language detector. When adding new partials, translate all 8 languages and keep identical key structure; never put a bare ASCII `"` inside a JSON string value.
@@ -123,7 +126,7 @@ src/
 - `_splitItem()` returns `{ leftItem, rightItem } | null` — capture the return for correct IDs; the original item ID is stale after split
 - Timeline has its own `keydown` listener in `timeline.tsx` — new keyboard handlers on child panels must `stopPropagation()` and timeline checks `e.defaultPrevented`
 - **Effects are GPU-only** — all visual effects use WebGPU shaders (`type: 'gpu-effect'`). Legacy CSS filter, glitch, halftone, vignette, LUT types were removed in v6 migration. Effect definitions in `src/infrastructure/gpu-effects/effects/`, pipeline in `effects-pipeline.ts`. Specialized UI panels exist for `gpu-curves` and `gpu-color-wheels`; all others use the generic `GpuEffectPanel`
-- **Transitions are GPU-only** — all 13 transitions (fade, wipe, slide, flip, clockWipe, iris, dissolve, sparkles, glitch, lightLeak, pixelate, chromatic, radialBlur) render via WebGPU shaders in `infrastructure/gpu-transitions/`. Each renderer in `core/timeline/transitions/renderers/` has `gpuTransitionId` linking to its shader, plus a `renderCanvas()` Canvas 2D fallback for non-WebGPU environments. `calculateStyles()` is dead code (CSS/DOM transition rendering was removed). Canvas `drawImage` offsets must use `Math.round()` to avoid sub-pixel interpolation artifacts
+- **Transitions are GPU-only** — all 13 transitions (fade, wipe, slide, flip, clockWipe, iris, dissolve, sparkles, glitch, lightLeak, pixelate, chromatic, radialBlur) render via WebGPU shaders in `infrastructure/gpu-transitions/`. Each renderer in `shared/timeline/transitions/renderers/` has `gpuTransitionId` linking to its shader, plus a `renderCanvas()` Canvas 2D fallback for non-WebGPU environments. `calculateStyles()` is dead code (CSS/DOM transition rendering was removed). Canvas `drawImage` offsets must use `Math.round()` to avoid sub-pixel interpolation artifacts
 - After clip edits that change position/duration, call `applyTransitionRepairs(changedClipIds)` from `shared.ts` — transitions auto-heal or report breakages
 - `shared/logging/logger.ts` uses only `function` declarations (no `class`/`const` at module scope) to avoid temporal dead zone errors in production chunk ordering — maintain this pattern
 - Fast scrub render loop: prewarm frames use WASM decode (40-80ms) and block the loop from processing priority frames. During playback, skip prewarm entirely (`isPlaying` check) — priority frames render fast via DOM video zero-copy (~1ms) and the loop must stay responsive. Background worker preseek (`backgroundPreseek` in `decoder-prewarm.ts`) also fires on large timeline jumps (>3s) for all visible clips — the worker decodes off-thread and the render engine picks up the cached bitmap

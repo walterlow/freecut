@@ -22,7 +22,7 @@ import {
 } from '../schemas/project-schema'
 import { verifySnapshotChecksum } from './json-export-service'
 import { createProject, getAllMedia, associateMediaWithProject } from '@/infrastructure/storage'
-import { migrateProject } from '@/core/projects/migrations'
+import { migrateProject } from '@/shared/projects/migrations'
 
 /**
  * Validate a snapshot without importing

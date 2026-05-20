@@ -8,7 +8,7 @@
 
 import type { Transition } from '@/types/transition'
 import type { TimelineItem } from '@/types/timeline'
-import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner'
+import { calculateTransitionPortions } from '@/shared/timeline/transitions/transition-planner'
 
 /**
  * Frame range representing a blocked region (inclusive start, exclusive end)

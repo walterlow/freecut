@@ -1,4 +1,4 @@
-import { CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations'
+import { CURRENT_SCHEMA_VERSION } from '@/shared/projects/migrations'
 import { i18n } from '@/i18n'
 import type { Project } from '@/types/project'
 

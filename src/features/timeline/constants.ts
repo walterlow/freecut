@@ -5,7 +5,7 @@
 import {
   DEFAULT_TRACK_HEIGHT as SHARED_DEFAULT_TRACK_HEIGHT,
   DEFAULT_FPS as SHARED_DEFAULT_FPS,
-} from '@/core/timeline/defaults'
+} from '@/shared/timeline/defaults'
 import { EDITOR_LAYOUT } from '@/config/editor-layout'
 
 export const DEFAULT_TRACK_HEIGHT = SHARED_DEFAULT_TRACK_HEIGHT

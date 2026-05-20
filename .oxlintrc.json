@@ -14,17 +14,27 @@
   },
   "overrides": [
     {
-      "files": ["src/core/**/*.{ts,tsx}"],
+      "files": [
+        "src/shared/animation/**/*.{ts,tsx}",
+        "src/shared/timeline/**/*.{ts,tsx}",
+        "src/shared/projects/**/*.{ts,tsx}"
+      ],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "paths": [
-              { "name": "react", "message": "core/ must stay framework-agnostic." },
-              { "name": "react-dom", "message": "core/ must stay framework-agnostic." },
+              {
+                "name": "react",
+                "message": "shared domain modules must stay framework-agnostic."
+              },
+              {
+                "name": "react-dom",
+                "message": "shared domain modules must stay framework-agnostic."
+              },
               {
                 "name": "@tanstack/react-router",
-                "message": "core/ must not depend on routing frameworks."
+                "message": "shared domain modules must not depend on routing frameworks."
               }
             ],
             "patterns": [
@@ -36,7 +46,7 @@
                   "@/routes/**",
                   "@/components/**"
                 ],
-                "message": "core/ must not depend on app/routes/features/runtime/components."
+                "message": "shared domain modules must not depend on app/routes/features/runtime/components."
               }
             ]
           }

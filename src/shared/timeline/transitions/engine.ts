@@ -20,7 +20,7 @@ import type {
   SlideDirection,
   FlipDirection,
 } from '@/types/transition'
-import { easeIn, easeOut, easeInOut, cubicBezier } from '@/core/animation/easing'
+import { easeIn, easeOut, easeInOut, cubicBezier } from '@/shared/animation/easing'
 import type { TransitionRenderer } from './registry'
 
 // Lazy registry reference to avoid circular dependency at import time.

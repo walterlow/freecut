@@ -7,8 +7,8 @@
 
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition'
 import type { TimelineItem } from '@/types/timeline'
-import { transitionRegistry } from '@/core/timeline/transitions/registry'
-import { resolveTransitionWindows } from '@/core/timeline/transitions/transition-planner'
+import { transitionRegistry } from '@/shared/timeline/transitions/registry'
+import { resolveTransitionWindows } from '@/shared/timeline/transitions/transition-planner'
 import { resolveTransitionFrameState } from '@/features/export/deps/composition-runtime'
 import { createLogger } from '@/shared/logging/logger'
 import type { TransitionPipeline } from '@/infrastructure/gpu-transitions'
@@ -46,7 +46,7 @@ export interface ActiveTransition {
  */
 export interface TransitionFrameIndex {
   windows: ReturnType<
-    typeof import('@/core/timeline/transitions/transition-planner').resolveTransitionWindows
+    typeof import('@/shared/timeline/transitions/transition-planner').resolveTransitionWindows
   >
 }
 

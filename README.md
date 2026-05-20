@@ -255,9 +255,6 @@ src/
 |- app/                     # App-level providers and shared app state
 |- components/              # Shared app components and shadcn-style UI
 |- config/                  # Hotkeys and editor configuration
-|- core/                    # Framework-agnostic domain rules and migrations
-|  |- projects/              # Project schema migrations and normalization
-|  \- timeline/              # Timeline defaults and transition engine/registry
 |- data/                    # Generated app data, including changelog JSON
 |- features/                # User-facing UI modules
 |  |- editor/                # Editor shell, toolbar, panels, dialogs, deps adapters
@@ -303,8 +300,8 @@ layer.
 
 Layer notes:
 
-- [src/core/README.md](src/core/README.md)
 - [src/infrastructure/README.md](src/infrastructure/README.md)
+- [src/shared/README.md](src/shared/README.md)
 - Feature `deps/README.md` files inside individual feature folders
 
 ## Contributing

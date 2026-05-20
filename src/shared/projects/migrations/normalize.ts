@@ -17,7 +17,7 @@
  */
 
 import type { Project, ProjectTimeline } from '@/types/project'
-import { DEFAULT_TRACK_HEIGHT, DEFAULT_FPS } from '@/core/timeline/defaults'
+import { DEFAULT_TRACK_HEIGHT, DEFAULT_FPS } from '@/shared/timeline/defaults'
 import {
   AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
   AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,

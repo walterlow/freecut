@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { TimelineItem, VideoItem } from '@/types/timeline'
 import type { AudioEqSettings } from '@/types/audio'
-import type { ResolvedTransitionWindow } from '@/core/timeline/transitions/transition-planner'
+import type { ResolvedTransitionWindow } from '@/shared/timeline/transitions/transition-planner'
 import {
   appendResolvedAudioEqSources,
   areAudioEqStagesEqual,
