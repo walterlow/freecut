@@ -40,6 +40,7 @@ type StableVideoRenderBaseSignature = {
   reverseConformSrc: string | undefined
   reverseConformPreviewSrc: string | undefined
   reverseConformStatus: StableVideoSequenceComparatorItem['reverseConformStatus']
+  reverseConformLocalStart: number | undefined
   audioPitchSemitones: number
   audioPitchCents: number
 }
@@ -72,6 +73,7 @@ function getStableVideoRenderBaseSignature(
     reverseConformSrc: item.reverseConformSrc,
     reverseConformPreviewSrc: item.reverseConformPreviewSrc,
     reverseConformStatus: item.reverseConformStatus,
+    reverseConformLocalStart: item.reverseConformLocalStart,
     audioPitchSemitones: item.audioPitchSemitones ?? 0,
     audioPitchCents: item.audioPitchCents ?? 0,
   }
@@ -115,6 +117,7 @@ function areStableVideoRenderBaseSignaturesEqual(
     prevSignature.reverseConformSrc === nextSignature.reverseConformSrc &&
     prevSignature.reverseConformPreviewSrc === nextSignature.reverseConformPreviewSrc &&
     prevSignature.reverseConformStatus === nextSignature.reverseConformStatus &&
+    prevSignature.reverseConformLocalStart === nextSignature.reverseConformLocalStart &&
     prevSignature.audioPitchSemitones === nextSignature.audioPitchSemitones &&
     prevSignature.audioPitchCents === nextSignature.audioPitchCents
   )

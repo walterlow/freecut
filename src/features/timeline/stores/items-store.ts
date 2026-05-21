@@ -1351,20 +1351,47 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
         effectiveSourceFps,
       )
 
-      // Explicitly set sourceStart on left item so it has full explicit bounds.
-      // Without this, the left item inherits undefined sourceStart from the original,
-      // breaking hasExplicitSourceBounds detection in _rateStretchItem and causing
-      // rate stretch to use the wrong source duration (full media instead of clip portion).
-      ;(leftItem as typeof item).sourceStart = sourceStart
-      ;(leftItem as typeof item).sourceEnd = boundaries.left.sourceEnd
-      ;(rightItem as typeof item).sourceStart = boundaries.right.sourceStart
-      ;(rightItem as typeof item).sourceEnd = boundaries.right.sourceEnd
+      if (item.isReversed === true) {
+        // Reversed playback runs sourceEnd → sourceStart. The first-played
+        // (timeline-left) half therefore covers the END of the source range,
+        // and the second-played (timeline-right) half covers the START.
+        // The split point in source coords is `sourceEnd - leftSourceFrames`,
+        // i.e. `sourceStart + rightSourceFrames` — NOT the forward split point
+        // (`sourceStart + leftSourceFrames`). They only coincide for 50/50
+        // splits; asymmetric splits need the size of the second-played half
+        // to position the cut correctly.
+        const totalSourceFrames = boundaries.right.sourceEnd - sourceStart
+        const leftSourceFrames = boundaries.left.sourceEnd - sourceStart
+        const rightSourceFrames = totalSourceFrames - leftSourceFrames
+        const splitSourcePoint = sourceStart + rightSourceFrames
+        ;(leftItem as typeof item).sourceStart = splitSourcePoint
+        ;(leftItem as typeof item).sourceEnd = boundaries.right.sourceEnd
+        ;(rightItem as typeof item).sourceStart = sourceStart
+        ;(rightItem as typeof item).sourceEnd = splitSourcePoint
+
+        // Keep both halves pointed at the parent's reverse-conform so that
+        // playback stays on the smooth forward-through-conform path across
+        // the cut (same as forward-split clips reuse one source). Track each
+        // half's offset into the conform so the runtime reads the right slice.
+        const parentConformOffset = item.reverseConformLocalStart ?? 0
+        leftItem.reverseConformLocalStart = parentConformOffset
+        rightItem.reverseConformLocalStart = parentConformOffset + leftDuration
+      } else {
+        // Explicitly set sourceStart on left item so it has full explicit bounds.
+        // Without this, the left item inherits undefined sourceStart from the original,
+        // breaking hasExplicitSourceBounds detection in _rateStretchItem and causing
+        // rate stretch to use the wrong source duration (full media instead of clip portion).
+        ;(leftItem as typeof item).sourceStart = sourceStart
+        ;(leftItem as typeof item).sourceEnd = boundaries.left.sourceEnd
+        ;(rightItem as typeof item).sourceStart = boundaries.right.sourceStart
+        ;(rightItem as typeof item).sourceEnd = boundaries.right.sourceEnd
+      }
 
       getLog().debug(
-        `_splitItem: Original sourceStart:${sourceStart} speed:${speed} leftDuration:${leftDuration} rightDuration:${rightDuration}`,
+        `_splitItem: Original sourceStart:${sourceStart} speed:${speed} leftDuration:${leftDuration} rightDuration:${rightDuration} reversed:${item.isReversed === true}`,
       )
       getLog().debug(
-        `_splitItem: boundaries.right.sourceStart:${boundaries.right.sourceStart} rightItem.sourceStart:${(rightItem as typeof item).sourceStart}`,
+        `_splitItem: leftItem.sourceStart:${(leftItem as typeof item).sourceStart} leftItem.sourceEnd:${(leftItem as typeof item).sourceEnd} rightItem.sourceStart:${(rightItem as typeof item).sourceStart} rightItem.sourceEnd:${(rightItem as typeof item).sourceEnd}`,
       )
     }
 

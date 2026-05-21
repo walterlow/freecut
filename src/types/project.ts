@@ -89,6 +89,7 @@ export interface ProjectTimeline {
     reverseConformPreviewKey?: string
     reverseConformPreviewUsesProxy?: boolean
     reverseConformStatus?: 'pending' | 'ready' | 'error'
+    reverseConformLocalStart?: number
     text?: string
     textRole?: 'caption'
     captionSource?: {

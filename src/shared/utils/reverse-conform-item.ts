@@ -47,17 +47,23 @@ export function resolveReverseConformedVideoItem<TItem extends VideoItem>(
     return item
   }
 
+  // When a conformed reversed clip is split, both halves keep the same
+  // conform reference but read different ranges of it. `reverseConformLocalStart`
+  // is the timeline-frame offset where this clip starts in the conformed media.
+  const conformLocalStart = item.reverseConformLocalStart ?? 0
+  const conformLocalEnd = conformLocalStart + item.durationInFrames
+
   return {
     ...item,
     src: conformSrc,
     audioSrc: conformSrc,
     isReversed: undefined,
     speed: 1,
-    sourceStart: 0,
-    trimStart: 0,
-    offset: 0,
-    sourceEnd: item.durationInFrames,
-    sourceDuration: item.durationInFrames,
+    sourceStart: conformLocalStart,
+    trimStart: conformLocalStart,
+    offset: conformLocalStart,
+    sourceEnd: conformLocalEnd,
+    sourceDuration: conformLocalEnd,
     sourceFps: timelineFps,
   }
 }

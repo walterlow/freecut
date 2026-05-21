@@ -174,6 +174,137 @@ describe('items-store rate stretch', () => {
     expect(right.sourceEnd).toBe(300)
   })
 
+  it('splitItem flips source boundaries for reversed clips so playback stays continuous', () => {
+    // Reversed clip: at t=0 plays sourceEnd-1, at t=durationInFrames-1 plays sourceStart.
+    // After splitting in half, the left (first-played) piece must cover the END of the
+    // source range and the right (second-played) piece must cover the START — otherwise
+    // the two halves play the same content in the wrong order.
+    const clip = makeVideoItem({
+      id: 'reversed-clip',
+      from: 0,
+      durationInFrames: 300,
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      isReversed: true,
+      reverseConformSrc: 'blob:cached-conform',
+      reverseConformPath: 'reverse-conform/cached.mp4',
+      reverseConformKey: 'cached-key',
+      reverseConformStatus: 'ready',
+    })
+
+    useItemsStore.getState().setItems([clip])
+    const result = useItemsStore.getState()._splitItem('reversed-clip', 150)
+
+    expect(result).not.toBeNull()
+    const left = useItemsStore.getState().items.find((i) => i.id === 'reversed-clip') as VideoItem
+    const right = useItemsStore
+      .getState()
+      .items.find((i) => i.id !== 'reversed-clip' && i.type === 'video') as VideoItem
+
+    // Left half (timeline t=0..149) should cover the END of the original source range,
+    // so its reversed playback yields source frames 299, 298, ..., 150.
+    expect(left.sourceStart).toBe(150)
+    expect(left.sourceEnd).toBe(300)
+
+    // Right half (timeline t=150..299) should cover the START of the original source
+    // range, so its reversed playback continues with source frames 149, 148, ..., 0.
+    expect(right.sourceStart).toBe(0)
+    expect(right.sourceEnd).toBe(150)
+
+    // Both halves keep the parent's reverse-conform reference so playback stays
+    // on the smooth forward-through-conform path across the cut. Each half
+    // tracks its own offset into the conformed media.
+    expect(left.reverseConformSrc).toBe('blob:cached-conform')
+    expect(left.reverseConformPath).toBe('reverse-conform/cached.mp4')
+    expect(left.reverseConformStatus).toBe('ready')
+    expect(left.reverseConformLocalStart ?? 0).toBe(0)
+    expect(right.reverseConformSrc).toBe('blob:cached-conform')
+    expect(right.reverseConformPath).toBe('reverse-conform/cached.mp4')
+    expect(right.reverseConformStatus).toBe('ready')
+    expect(right.reverseConformLocalStart).toBe(150)
+
+    expect(left.isReversed).toBe(true)
+    expect(right.isReversed).toBe(true)
+  })
+
+  it('splitItem propagates reverseConformLocalStart through multiple splits', () => {
+    // Splitting an already-split right half should preserve the cumulative
+    // conform offset so each piece reads the correct slice of the parent's conform.
+    const clip = makeVideoItem({
+      id: 'reversed-multi',
+      from: 0,
+      durationInFrames: 300,
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      isReversed: true,
+      reverseConformSrc: 'blob:cached',
+      reverseConformPath: 'p',
+      reverseConformStatus: 'ready',
+    })
+
+    useItemsStore.getState().setItems([clip])
+    useItemsStore.getState()._splitItem('reversed-multi', 100)
+    const rightAfterFirst = useItemsStore
+      .getState()
+      .items.find((i) => i.id !== 'reversed-multi' && i.type === 'video') as VideoItem
+    expect(rightAfterFirst.reverseConformLocalStart).toBe(100)
+
+    // Split the right (timeline 100..299) at frame 200 → leftDur=100, rightDur=100.
+    useItemsStore.getState()._splitItem(rightAfterFirst.id, 200)
+    const allRights = useItemsStore
+      .getState()
+      .items.filter((i) => i.id !== 'reversed-multi' && i.type === 'video') as VideoItem[]
+
+    // Three pieces total: original-id (timeline 0..99), middle (100..199), new (200..299).
+    const middle = allRights.find((i) => i.id === rightAfterFirst.id)!
+    const tail = allRights.find((i) => i.id !== rightAfterFirst.id)!
+    expect(middle.reverseConformLocalStart).toBe(100)
+    expect(tail.reverseConformLocalStart).toBe(200)
+  })
+
+  it('splitItem keeps reversed-clip source spans aligned with timeline durations for asymmetric splits', () => {
+    // Asymmetric split: 200 timeline frames left, 100 right, on a 300-frame reversed clip.
+    // The split point in source coords for reversed playback is sourceEnd - leftSourceFrames,
+    // NOT sourceStart + leftSourceFrames (those coincide only for 50/50 splits).
+    // If we use the wrong point, the left half's source span (100) won't match its
+    // timeline duration (200), and playback runs off the source range.
+    const clip = makeVideoItem({
+      id: 'reversed-asym',
+      from: 0,
+      durationInFrames: 300,
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      isReversed: true,
+    })
+
+    useItemsStore.getState().setItems([clip])
+    const result = useItemsStore.getState()._splitItem('reversed-asym', 200)
+
+    expect(result).not.toBeNull()
+    const left = useItemsStore.getState().items.find((i) => i.id === 'reversed-asym') as VideoItem
+    const right = useItemsStore
+      .getState()
+      .items.find((i) => i.id !== 'reversed-asym' && i.type === 'video') as VideoItem
+
+    // Left (timeline t=0..199) plays original source 299..100 reversed → range [100, 300].
+    expect(left.durationInFrames).toBe(200)
+    expect(left.sourceStart).toBe(100)
+    expect(left.sourceEnd).toBe(300)
+    expect((left.sourceEnd ?? 0) - (left.sourceStart ?? 0)).toBe(200)
+
+    // Right (timeline t=200..299) plays original source 99..0 reversed → range [0, 100].
+    expect(right.durationInFrames).toBe(100)
+    expect(right.sourceStart).toBe(0)
+    expect(right.sourceEnd).toBe(100)
+    expect((right.sourceEnd ?? 0) - (right.sourceStart ?? 0)).toBe(100)
+  })
+
   it('trimItemStart re-anchors cues and drops those before the new boundary', () => {
     useTimelineSettingsStore.getState().setFps(30)
     const segment: import('@/types/timeline').SubtitleSegmentItem = {

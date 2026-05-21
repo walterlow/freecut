@@ -41,6 +41,10 @@ type BaseTimelineItem = {
   reverseConformPreviewKey?: string // Cache key describing the preview reversed source range
   reverseConformPreviewUsesProxy?: boolean // Whether the preview reversed media was generated from a proxy
   reverseConformStatus?: 'pending' | 'ready' | 'error'
+  // Timeline-frame offset into reverseConform{Src,PreviewSrc} where this clip starts
+  // playing. Set on split halves so they share the parent's conform but read
+  // different ranges. Omit/0 = play from the start of the conform.
+  reverseConformLocalStart?: number
   // Transform properties (optional - defaults computed at render time)
   transform?: TransformProperties
   // Source-relative media crop (normalized edge ratios)
