@@ -12,17 +12,17 @@ import type { TransitionDefinition, WipeDirection } from '@/types/transition'
 
 const ALL_TIMINGS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const
 
-function clamp01(v: number): number {
+export function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
 
-function smoothStep(edge0: number, edge1: number, x: number): number {
+export function smoothStep(edge0: number, edge1: number, x: number): number {
   const width = Math.max(edge1 - edge0, Number.EPSILON)
   const t = clamp01((x - edge0) / width)
   return t * t * (3 - 2 * t)
 }
 
-function getNumericProperty(
+export function getNumericProperty(
   properties: Record<string, unknown> | undefined,
   key: string,
   fallback: number,
@@ -34,16 +34,16 @@ function getNumericProperty(
   return value
 }
 
-function seededRandom(seed: number): number {
+export function seededRandom(seed: number): number {
   const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453123
   return x - Math.floor(x)
 }
 
-function fadeOpacity(progress: number, isOutgoing: boolean): number {
+export function fadeOpacity(progress: number, isOutgoing: boolean): number {
   return isOutgoing ? Math.cos((progress * Math.PI) / 2) : Math.sin((progress * Math.PI) / 2)
 }
 
-function crossDissolveT(progress: number): number {
+export function crossDissolveT(progress: number): number {
   return 0.5 - 0.5 * Math.cos(clamp01(progress) * Math.PI)
 }
 
