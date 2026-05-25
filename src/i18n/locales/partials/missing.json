@@ -201,16 +201,16 @@
         "badgeAutoPick": "Auto",
         "badgeDefault": "Default",
         "badgeForced": "Forced",
-        "cuesCount": "Cues Count",
-        "desc": "Description",
-        "descForFile": "Description For File",
-        "empty": "Empty",
+        "cuesCount": "{{count}} cues",
+        "desc": "Select a subtitle track to insert it into the timeline.",
+        "descForFile": "Subtitles available in \"{{name}}\".",
+        "empty": "No subtitle tracks found in this file.",
         "insert": "Insert",
-        "insertWithCues": "Insert With Cues",
-        "loadedFromCache": "Loaded From Cache",
-        "scanning": "Scanning",
+        "insertWithCues": "Insert ({{count}} cues)",
+        "loadedFromCache": "Subtitles loaded from cache.",
+        "scanning": "Scanning…",
         "title": "Embedded subtitles",
-        "trackInfo": "Track Info"
+        "trackInfo": "Track {{n}} · {{lang}} · {{codec}}"
       },
       "grid": {
         "emptyHint": "Drop files here or click Import to add media.",
@@ -348,28 +348,28 @@
         "title": "Missing media"
       },
       "picker": {
-        "descAll": "Description All",
+        "descAll": "Choose a file from the project library.",
         "noFiles": "No media in this project yet.",
-        "noSearchResults": "No Search Results",
+        "noSearchResults": "No results found.",
         "title": "Choose media"
       },
-      "searchMedia": "Search Media",
+      "searchMedia": "Search media",
       "subtitleScan": {
         "cached": "Cached",
         "cancelBatch": "Cancel all",
-        "descComplete": "Description Complete",
-        "descScanning": "Description Scanning",
+        "descComplete": "Subtitle scan completed.",
+        "descScanning": "Scanning your media for subtitles…",
         "failed": "Failed",
         "titleComplete": "Subtitle scan complete",
         "titleScanning": "Scanning for subtitles…"
       },
       "transcribe": {
-        "autoDetect": "Auto Detect",
+        "autoDetect": "Auto detect",
         "generateTitle": "Generate transcript",
         "language": "Language",
         "model": "Model",
-        "noLanguages": "No Languages",
-        "progressAria": "Progress ARIA",
+        "noLanguages": "No languages available.",
+        "progressAria": "Transcription progress",
         "quantization": "Quantization",
         "refreshTitle": "Refresh transcript",
         "searchLanguages": "Search Languages",
@@ -453,8 +453,8 @@
       }
     },
     "timeline": {
-      "addAudioTrackHint": "Add Audio Track Hint",
-      "addVideoTrackHint": "Add Video Track Hint",
+      "addAudioTrackHint": "Add audio track",
+      "addVideoTrackHint": "Add video track",
       "bento": {
         "apply": "Apply",
         "description": "Arrange {{count}} selected clips into a grid.",
