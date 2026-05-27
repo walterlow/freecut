@@ -27,7 +27,7 @@ interface DropNotifications {
 
 interface ResolveDroppedMediaEntriesFromExternalFilesOptions {
   dataTransfer: DataTransfer
-  importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>
+  importHandlesForPlacement: (files: File[]) => Promise<MediaMetadata[]>
   notify: DropNotifications
 }
 
@@ -171,7 +171,7 @@ export async function resolveDroppedMediaEntriesFromExternalFiles({
 
   let importedMedia: Awaited<ReturnType<typeof importHandlesForPlacement>>
   try {
-    importedMedia = await importHandlesForPlacement(entries.map((entry) => entry.handle))
+    importedMedia = await importHandlesForPlacement(entries.map((entry) => entry.file))
   } catch (error) {
     notify.error('Unable to import dropped files.', {
       description: error instanceof Error ? error.message : 'Please try again.',

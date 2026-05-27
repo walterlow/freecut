@@ -4,7 +4,7 @@ import { mediaLibraryService } from '../services/media-library-service'
 import { proxyService } from '../services/proxy-service'
 import { getMimeType } from '../utils/validation'
 import { getSharedProxyKey } from '../utils/proxy-key'
-import { hasMediaFilePickerSupport, showMediaFilePicker } from '../utils/media-file-picker'
+import { showMediaFilePicker } from '../utils/media-file-picker'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaImport')
@@ -19,7 +19,6 @@ type Get = () => MediaLibraryState & MediaLibraryActions
 type ImportedMetadata = MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }
 
 interface ImportTask {
-  handle: FileSystemFileHandle
   tempId: string
   file: File
 }
@@ -28,17 +27,12 @@ interface CompletedImportTask extends ImportTask {
   metadata: ImportedMetadata
 }
 
-function buildOptimisticMediaItem(
-  handle: FileSystemFileHandle,
-  file: File,
-  tempId: string,
-): MediaMetadata {
+function buildOptimisticMediaItem(file: File, tempId: string): MediaMetadata {
   const now = Date.now()
 
   return {
     id: tempId,
-    storageType: 'handle',
-    fileHandle: handle,
+    storageType: 'opfs',
     fileName: file.name,
     fileSize: file.size,
     fileLastModified: file.lastModified,
@@ -110,7 +104,7 @@ function processImportResults(
     }
 
     if (result.status === 'fulfilled') {
-      const { metadata, tempId, file, handle } = result.value
+      const { metadata, tempId, file } = result.value
 
       if (metadata.isDuplicate) {
         removeImportPlaceholder(set, tempId)
@@ -129,14 +123,13 @@ function processImportResults(
           unsupportedCodecFiles.push({
             fileName: file.name,
             audioCodec: metadata.audioCodec,
-            handle,
           })
         }
       }
     } else {
       failedCount++
       removeImportPlaceholder(set, importTask.tempId)
-      logger.error(`Failed to import ${importTask.file.name}`, result.reason)
+      logger.error(`Failed to import ${importTask.file.name}`, importResults[index])
     }
   })
 
@@ -172,26 +165,13 @@ export function createImportActions(
   MediaLibraryActions,
   'importMedia' | 'importMediaFromUrl' | 'importHandles' | 'importHandlesForPlacement'
 > {
-  const createOptimisticImportTasks = async (
-    handles: FileSystemFileHandle[],
-  ): Promise<ImportTask[]> => {
+  const createOptimisticImportTasks = (files: File[]): ImportTask[] => {
     const importTasks: ImportTask[] = []
 
-    for (const handle of handles) {
-      if (!handle) continue
+    for (const file of files) {
+      if (!file) continue
       const tempId = crypto.randomUUID()
-
-      let file: File
-      try {
-        file = await handle.getFile()
-      } catch (error) {
-        // getFile() can fail if permission is denied or file is missing —
-        // remove the placeholder that was about to be inserted and skip.
-        logger.error(`Failed to read file from handle "${handle.name}":`, error)
-        continue
-      }
-
-      const tempItem = buildOptimisticMediaItem(handle, file, tempId)
+      const tempItem = buildOptimisticMediaItem(file, tempId)
 
       set((state) => ({
         mediaItems: [tempItem, ...state.mediaItems],
@@ -199,7 +179,7 @@ export function createImportActions(
         error: null,
       }))
 
-      importTasks.push({ handle, tempId, file })
+      importTasks.push({ tempId, file })
     }
 
     return importTasks
@@ -210,14 +190,14 @@ export function createImportActions(
     projectId: string,
   ): Promise<PromiseSettledResult<CompletedImportTask>[]> =>
     Promise.allSettled(
-      importTasks.map(async ({ handle, tempId, file }) => {
-        const metadata = await mediaLibraryService.importMediaWithHandle(handle, projectId)
-        return { metadata, tempId, file, handle }
+      importTasks.map(async ({ tempId, file }) => {
+        const metadata = await mediaLibraryService.importMediaFile(file, projectId)
+        return { metadata, tempId, file }
       }),
     )
 
-  const importHandlesInternal = async (
-    handles: FileSystemFileHandle[],
+  const importFilesInternal = async (
+    files: File[],
     options?: { includeDuplicatesInResults?: boolean },
   ): Promise<MediaMetadata[]> => {
     const { currentProjectId } = get()
@@ -232,10 +212,10 @@ export function createImportActions(
     event.merge({
       source: 'drag-drop',
       projectId: currentProjectId,
-      fileCount: handles.length,
+      fileCount: files.length,
     })
 
-    const importTasks = await createOptimisticImportTasks(handles)
+    const importTasks = createOptimisticImportTasks(files)
     const importResults = await runImportTasks(importTasks, currentProjectId)
 
     const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
@@ -262,31 +242,22 @@ export function createImportActions(
         return []
       }
 
-      // Check if File System Access API is supported
-      if (!hasMediaFilePickerSupport()) {
-        const isBrave = 'brave' in navigator
-        set({
-          error: isBrave
-            ? 'File System Access API is disabled in Brave. Copy the URL below, paste it in your address bar, set the flag to Enabled, and relaunch.'
-            : 'File picker not supported in this browser. Use Chrome or Edge.',
-          errorLink: isBrave ? 'brave://flags/#file-system-access-api' : null,
-        })
-        return []
-      }
-
       const opId = createOperationId()
       const event = logger.startEvent('import', opId)
       event.set('source', 'picker')
       event.set('projectId', currentProjectId)
 
       try {
-        // Open file picker
-        const handles = await showMediaFilePicker({ multiple: true })
+        const files = await showMediaFilePicker({ multiple: true })
 
-        event.set('fileCount', handles.length)
+        if (files.length === 0) {
+          event.success({ outcome: 'cancelled', imported: 0, duplicates: 0, failed: 0, unsupportedCodecs: 0 })
+          return []
+        }
 
-        // Create optimistic placeholders for all files immediately
-        const importTasks = await createOptimisticImportTasks(handles)
+        event.set('fileCount', files.length)
+
+        const importTasks = createOptimisticImportTasks(files)
         const importResults = await runImportTasks(importTasks, currentProjectId)
 
         const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
@@ -303,18 +274,11 @@ export function createImportActions(
 
         return results
       } catch (error) {
-        // User cancelled or error
         if (error instanceof Error && error.name !== 'AbortError') {
-          set({ error: error.message })
+          set({ error: (error as Error).message })
           event.failure(error)
         } else {
-          event.success({
-            outcome: 'cancelled',
-            imported: 0,
-            duplicates: 0,
-            failed: 0,
-            unsupportedCodecs: 0,
-          })
+          event.success({ outcome: 'cancelled', imported: 0, duplicates: 0, failed: 0, unsupportedCodecs: 0 })
         }
         return []
       }
@@ -386,11 +350,11 @@ export function createImportActions(
       }
     },
 
-    importHandles: async (handles: FileSystemFileHandle[]) => {
-      return importHandlesInternal(handles)
+    importHandles: async (files: File[]) => {
+      return importFilesInternal(files)
     },
 
-    importHandlesForPlacement: async (handles: FileSystemFileHandle[]) =>
-      importHandlesInternal(handles, { includeDuplicatesInResults: true }),
+    importHandlesForPlacement: async (files: File[]) =>
+      importFilesInternal(files, { includeDuplicatesInResults: true }),
   }
 }

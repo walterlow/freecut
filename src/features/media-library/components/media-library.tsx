@@ -534,11 +534,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     [importMediaFromUrl, importUrlValue, isImportUrlSubmitting],
   )
 
-  // Import files from drag-drop handles - memoized to prevent MediaGrid re-renders
+  // Import files from drag-drop - memoized to prevent MediaGrid re-renders
   const handleImportHandles = useCallback(
-    async (handles: FileSystemFileHandle[]) => {
+    async (files: File[]) => {
       try {
-        await importHandles(handles)
+        await importHandles(files)
       } catch (error) {
         logger.error('Import failed:', error)
       }
@@ -617,7 +617,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         })
       }
       if (entries.length > 0) {
-        await handleImportHandles(entries.map((entry) => entry.handle))
+        await handleImportHandles(entries.map((entry) => entry.file))
       }
     },
     [showNotification, handleImportHandles, t],

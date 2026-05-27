@@ -115,26 +115,20 @@ export interface MediaLibraryActions {
 
   // CRUD Operations (project-scoped in v3)
   loadMediaItems: () => Promise<void>
-  /**
-   * Import media using file picker (instant, no copy - local-first)
-   * Uses FileSystemFileHandle to reference files directly on user's disk
-   */
+  /** Open the browser file picker and import selected files into OPFS. */
   importMedia: () => Promise<MediaMetadata[]>
   /**
    * Import media from a direct URL into OPFS-backed storage.
    * Best for CORS-enabled direct media files (mp4, mp3, png, etc.).
    */
   importMediaFromUrl: (url: string) => Promise<MediaMetadata[]>
-  /**
-   * Import media from file handles (for drag-drop)
-   * Uses FileSystemFileHandle directly without file picker
-   */
-  importHandles: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>
+  /** Import media from File objects (e.g. drag-drop) into OPFS. */
+  importHandles: (files: File[]) => Promise<MediaMetadata[]>
   /**
    * Import media for direct placement flows.
    * Existing media are returned too so drop targets can place duplicates without re-importing.
    */
-  importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>
+  importHandlesForPlacement: (files: File[]) => Promise<MediaMetadata[]>
   deleteMedia: (id: string) => Promise<void>
   deleteMediaBatch: (ids: string[]) => Promise<void>
   /**

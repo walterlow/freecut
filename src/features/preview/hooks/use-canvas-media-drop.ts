@@ -409,7 +409,7 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
 
       const importedMedia = await useMediaLibraryStore
         .getState()
-        .importHandlesForPlacement([entry.handle])
+        .importHandlesForPlacement([entry.file])
       const imported = importedMedia[0]
       if (!imported) {
         toast.error(i18n.t('preview.canvasDrop.unableToImportFile'))

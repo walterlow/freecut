@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/alert-dialog'
 
 import { GRID_MIN_SIZE_PX, GRID_GAP_BY_SIZE } from './media-grid-constants'
-import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker'
+import { showFileHandlePicker } from '@/features/media-library/utils/media-file-picker'
 
 interface MediaGridProps {
   onMediaSelect?: (mediaId: string) => void
@@ -158,7 +158,7 @@ export const MediaGrid = memo(function MediaGrid({
   const handleRelink = useCallback(
     async (mediaId: string) => {
       try {
-        const handles = await showMediaFilePicker({ multiple: false })
+        const handles = await showFileHandlePicker({ multiple: false })
 
         const handle = handles[0]
         if (!handle) return

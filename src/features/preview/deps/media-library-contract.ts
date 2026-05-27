@@ -20,7 +20,6 @@ export {
 } from '@/features/media-library/services/media-library-service'
 export {
   extractValidMediaFileEntriesFromDataTransfer,
-  supportsFileSystemDragDrop,
 } from '@/features/media-library/utils/file-drop'
 export {
   getMediaDragData,

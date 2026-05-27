@@ -6,7 +6,6 @@ export {
   mediaProcessorService,
   getMediaDragData,
   extractValidMediaFileEntriesFromDataTransfer,
-  supportsFileSystemDragDrop,
   setMediaDragData,
   clearMediaDragData,
   type CompositionDragData,

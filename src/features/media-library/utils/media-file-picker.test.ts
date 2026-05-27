@@ -1,41 +1,55 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
-import {
-  hasMediaFilePickerSupport,
-  MEDIA_FILE_PICKER_TYPES,
-  showMediaFilePicker,
-} from './media-file-picker'
+import { hasMediaFilePickerSupport, showMediaFilePicker } from './media-file-picker'
 
 describe('media-file-picker', () => {
-  it('detects file picker support from window.showOpenFilePicker', () => {
-    const originalWindow = globalThis.window
-
-    vi.stubGlobal('window', {} as Window & typeof globalThis)
-    expect(hasMediaFilePickerSupport()).toBe(false)
-
-    vi.stubGlobal('window', {
-      showOpenFilePicker: vi.fn(),
-    } as unknown as Window & typeof globalThis)
+  it('always reports support since input[type=file] is universal', () => {
     expect(hasMediaFilePickerSupport()).toBe(true)
-
-    vi.stubGlobal('window', originalWindow)
   })
 
-  it('passes the shared media picker types to the browser file picker', async () => {
-    const showOpenFilePicker = vi.fn().mockResolvedValue(['handle-1'])
-    const originalWindow = globalThis.window
+  it('resolves with selected files when the user picks files', async () => {
+    const file = new File(['data'], 'clip.mp4', { type: 'video/mp4' })
 
-    vi.stubGlobal('window', {
-      showOpenFilePicker,
-    } as unknown as Window & typeof globalThis)
-
-    const result = await showMediaFilePicker({ multiple: false })
-
-    expect(result).toEqual(['handle-1'])
-    expect(showOpenFilePicker).toHaveBeenCalledWith({
+    // Intercept createElement to return a fake input
+    const fakeInput = {
+      type: '',
       multiple: false,
-      types: MEDIA_FILE_PICKER_TYPES,
+      accept: '',
+      files: { 0: file, length: 1, [Symbol.iterator]: [file][Symbol.iterator].bind([file]) },
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        if (event === 'change') setTimeout(cb, 0)
+      }),
+      click: vi.fn(),
+    }
+
+    const origCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementationOnce((tag: string) => {
+      if (tag === 'input') return fakeInput as unknown as HTMLElement
+      return origCreate(tag)
     })
 
-    vi.stubGlobal('window', originalWindow)
+    const result = await showMediaFilePicker({ multiple: true })
+    expect(result).toHaveLength(1)
+    expect(result[0]?.name).toBe('clip.mp4')
+  })
+
+  it('resolves with empty array when the user cancels', async () => {
+    const fakeInput = {
+      type: '',
+      multiple: false,
+      accept: '',
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        if (event === 'cancel') setTimeout(cb, 0)
+      }),
+      click: vi.fn(),
+    }
+
+    const origCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementationOnce((tag: string) => {
+      if (tag === 'input') return fakeInput as unknown as HTMLElement
+      return origCreate(tag)
+    })
+
+    const result = await showMediaFilePicker()
+    expect(result).toEqual([])
   })
 })
