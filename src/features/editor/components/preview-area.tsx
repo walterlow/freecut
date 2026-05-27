@@ -11,7 +11,6 @@ import {
   InlineCompositionPreview,
   ColorScopesMonitor,
 } from '@/features/editor/deps/preview'
-import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useProjectStore } from '@/features/editor/deps/projects'
 import { useSettingsStore } from '@/features/editor/deps/settings'
 import { useMaskEditorStore, useItemsStore } from '@/features/editor/deps/preview'
@@ -178,20 +177,9 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   const fps = projectFps ?? project.fps
   const backgroundColor = projectBgColor ?? '#000000'
 
-  // Derive timeline end frame directly from store state to avoid recreating selector functions.
-  const timelineEndFrame = useTimelineStore((s) => {
-    if (s.items.length === 0) return null
-    let maxFrame = 0
-    for (const item of s.items) {
-      const itemEnd = item.from + item.durationInFrames
-      if (itemEnd > maxFrame) {
-        maxFrame = itemEnd
-      }
-    }
-    return maxFrame
-  })
-
-  const totalFrames = timelineEndFrame ?? fps * DEFAULT_EMPTY_TIMELINE_SECONDS
+  // Use the precomputed index from items-store; returns 0 when there are no items.
+  const maxItemEndFrame = useItemsStore((s) => s.maxItemEndFrame)
+  const totalFrames = maxItemEndFrame > 0 ? maxItemEndFrame : fps * DEFAULT_EMPTY_TIMELINE_SECONDS
   const isPathEditModeActive = isMaskEditingActive && !isPenModeActive
   const canFinishPenPath = isShapePenModeActive && penVertexCount >= 3
   const selectedVertexCount = selectedVertexIndices.length

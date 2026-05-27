@@ -419,7 +419,7 @@ export const MediaCard = memo(function MediaCard({
     const selectedIds = store.selectedMediaIds
     if (selectedIds.length > 1 && selectedIds.includes(media.id)) {
       return selectedIds
-        .map((id) => store.mediaItems.find((m) => m.id === id))
+        .map((id) => store.mediaById[id])
         .filter((m): m is MediaMetadata => m !== undefined)
     }
     return [media]
@@ -830,7 +830,7 @@ export const MediaCard = memo(function MediaCard({
       e.dataTransfer.effectAllowed = 'copy'
       const mediaStore = useMediaLibraryStore.getState()
       const selectedMediaIds = mediaStore.selectedMediaIds
-      const mediaItems = mediaStore.mediaItems
+      const mediaById = mediaStore.mediaById
 
       // If this item is selected and there are multiple selected items, drag all of them
       const isPartOfSelection = selectedMediaIds.includes(media.id)
@@ -839,7 +839,7 @@ export const MediaCard = memo(function MediaCard({
       if (isPartOfSelection && hasMultipleSelected) {
         // Build array of all selected media items in their current order
         const selectedItems = selectedMediaIds
-          .map((id) => mediaItems.find((m) => m.id === id))
+          .map((id) => mediaById[id])
           .filter((m): m is MediaMetadata => m !== undefined)
           .map((m) => ({
             mediaId: m.id,

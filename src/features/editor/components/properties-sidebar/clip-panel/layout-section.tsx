@@ -563,7 +563,7 @@ export const LayoutSection = memo(function LayoutSection({
   )
 
   // Get media items for fallback source dimensions lookup
-  const mediaItems = useMediaLibraryStore((s) => s.mediaItems)
+  const mediaById = useMediaLibraryStore((s) => s.mediaById)
 
   // Reset scale to source dimensions (1:1 scale)
   // For shapes: reset to 1:1 aspect ratio (square based on smaller dimension)
@@ -599,7 +599,7 @@ export const LayoutSection = memo(function LayoutSection({
 
       // Fallback: look up dimensions from media library if item has mediaId
       if (!source && item.mediaId) {
-        const media = mediaItems.find((m) => m.id === item.mediaId)
+        const media = mediaById[item.mediaId]
         if (media && media.width && media.height) {
           source = { width: media.width, height: media.height }
         }
@@ -622,7 +622,7 @@ export const LayoutSection = memo(function LayoutSection({
       onTransformChange([item.id], updates)
     })
     queueMicrotask(clearTransformUiState)
-  }, [items, onTransformChange, mediaItems, canvas, clearTransformUiState])
+  }, [items, onTransformChange, mediaById, canvas, clearTransformUiState])
 
   // Reset position to center (x=0, y=0)
   const handleResetPosition = useCallback(() => {

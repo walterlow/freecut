@@ -71,10 +71,7 @@ export function useCaptionDialogState({
     ),
   )
   const mediaForItem = useMediaLibraryStore(
-    useCallback(
-      (s) => (item.mediaId ? (s.mediaItems.find((m) => m.id === item.mediaId) ?? null) : null),
-      [item.mediaId],
-    ),
+    useCallback((s) => (item.mediaId ? (s.mediaById[item.mediaId] ?? null) : null), [item.mediaId]),
   )
   const mediaFileName = mediaForItem?.fileName ?? ''
   const [dialogOpen, setDialogOpen] = useState(false)

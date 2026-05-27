@@ -98,7 +98,7 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
     useProxy: nestedMediaResolutionMode === 'proxy',
   })
   const mediaSourceFps = useMediaLibraryStore((s) =>
-    item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId)?.fps : undefined,
+    item.mediaId ? s.mediaById[item.mediaId]?.fps : undefined,
   )
 
   const audioEqStages = useMemo(
@@ -314,12 +314,10 @@ const GroupRenderer: React.FC<{
       return []
     }
 
-    const mediaItems = useMediaLibraryStore.getState().mediaItems
+    const mediaById = useMediaLibraryStore.getState().mediaById
     const toParticipant = (item: StableVideoSequenceItem, role: 'leader' | 'follower') => {
       const trimBefore = item.sourceStart ?? item.trimStart ?? item.offset ?? 0
-      const mediaSourceFps = item.mediaId
-        ? mediaItems.find((media) => media.id === item.mediaId)?.fps
-        : undefined
+      const mediaSourceFps = item.mediaId ? mediaById[item.mediaId]?.fps : undefined
       const sourceFps = item.sourceFps ?? mediaSourceFps ?? fps
       const playbackRate = item.speed ?? DEFAULT_SPEED
       const safeTrimBefore = getSafeTrimBefore(

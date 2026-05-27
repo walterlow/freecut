@@ -19,15 +19,23 @@ vi.mock('../hooks/use-transition-participant-sync', () => ({
   useTransitionParticipantSync: vi.fn(),
 }))
 
-type MediaLibraryMockState = { mediaItems: Array<{ id: string; fps: number }> }
+type MediaLibraryMockState = {
+  mediaItems: Array<{ id: string; fps: number }>
+  mediaById: Record<string, { id: string; fps: number }>
+}
 const mediaLibraryMock = vi.hoisted(() => {
-  const state: MediaLibraryMockState = { mediaItems: [] }
+  const state: MediaLibraryMockState = { mediaItems: [], mediaById: {} }
   const store = Object.assign(
     (selector: (state: MediaLibraryMockState) => unknown) => selector(state),
     { getState: () => state },
   )
   return { state, store }
 })
+
+function setMediaLibraryItems(items: Array<{ id: string; fps: number }>) {
+  mediaLibraryMock.state.mediaItems = items
+  mediaLibraryMock.state.mediaById = Object.fromEntries(items.map((m) => [m.id, m]))
+}
 
 vi.mock('@/runtime/composition-runtime/deps/stores', () => ({
   useMediaLibraryStore: mediaLibraryMock.store,
@@ -274,7 +282,7 @@ describe('StableVideoSequence', () => {
   beforeEach(() => {
     ensureReadyLanesMock.mockClear()
     vi.mocked(useTransitionParticipantSync).mockClear()
-    mediaLibraryMock.state.mediaItems = []
+    setMediaLibraryItems([])
     sequenceContextValue.localFrame = 28
   })
 

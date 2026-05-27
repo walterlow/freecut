@@ -72,8 +72,7 @@ class MediaAnalysisService {
    */
   async analyzeMedia(mediaOrId: string | MediaMetadata): Promise<boolean> {
     const store = useMediaLibraryStore.getState()
-    const media =
-      typeof mediaOrId === 'string' ? store.mediaItems.find((m) => m.id === mediaOrId) : mediaOrId
+    const media = typeof mediaOrId === 'string' ? store.mediaById[mediaOrId] : mediaOrId
     if (!media) return false
 
     const ownsRun = !this.batchInFlight && !store.analysisProgress

@@ -325,9 +325,7 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
         return
       }
 
-      const media =
-        useMediaLibraryStore.getState().mediaById[mediaId] ??
-        useMediaLibraryStore.getState().mediaItems.find((item) => item.id === mediaId)
+      const media = useMediaLibraryStore.getState().mediaById[mediaId]
       if (!media) {
         toast.error(i18n.t('preview.canvasDrop.mediaNoLongerAvailable'))
         return

@@ -73,8 +73,7 @@ async function resolveSourceEditContext(): Promise<SourceEditContext | null> {
     : null
   const referenceTrack = activeTrack ?? preferredVideoTrack ?? preferredAudioTrack ?? null
 
-  const mediaItems = useMediaLibraryStore.getState().mediaItems
-  const media = mediaItems.find((m) => m.id === sourceMediaId)
+  const media = useMediaLibraryStore.getState().mediaById[sourceMediaId]
   if (!media) {
     getLogger().warn('Source edit: Source media not found')
     return null

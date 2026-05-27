@@ -77,13 +77,14 @@ export function usePreviewViewModel({
   const useProxy = usePlaybackStore((s) => s.useProxy)
   const busAudioEq = usePlaybackStore((s) => s.busAudioEq)
   const blobUrlVersion = useBlobUrlVersion()
-  const proxyReadyCount = useMediaLibraryStore((s) => {
+  const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus)
+  const proxyReadyCount = useMemo(() => {
     let count = 0
-    for (const status of s.proxyStatus.values()) {
+    for (const status of proxyStatus.values()) {
       if (status === 'ready') count++
     }
     return count
-  })
+  }, [proxyStatus])
 
   const activeGizmoItemType = useMemo(
     () =>

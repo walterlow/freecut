@@ -44,8 +44,7 @@ export async function insertFreezeFrame(itemId: string, playheadFrame: number): 
   const sourceFrame = sourceStart + timelineToSourceFrames(timelineOffset, speed, fps, sourceFps)
 
   // Get media metadata for resolution and fps info
-  const mediaItems = useMediaLibraryStore.getState().mediaItems
-  const media = mediaItems.find((m) => m.id === item.mediaId)
+  const media = item.mediaId ? useMediaLibraryStore.getState().mediaById[item.mediaId] : undefined
   if (!media) {
     getLogger().error('[insertFreezeFrame] Media not found for item:', item.mediaId)
     return false

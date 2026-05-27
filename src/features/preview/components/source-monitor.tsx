@@ -192,7 +192,7 @@ const SourceMonitorContent = memo(function SourceMonitorContent({
   seekFrame = null,
 }: SourceMonitorProps) {
   const [blobUrl, setBlobUrl] = useState<string>('')
-  const media = useMediaLibraryStore((s) => s.mediaItems.find((m) => m.id === mediaId))
+  const media = useMediaLibraryStore((s) => s.mediaById[mediaId])
 
   // Sync current media ID into source player store for I/O points
   useEffect(() => {

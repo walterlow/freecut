@@ -55,7 +55,6 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
   containerSize,
 }: InlineCompositionPreviewProps) {
   const composition = useCompositionsStore((s) => s.compositionById[compositionId])
-  const compositionById = useCompositionsStore((s) => s.compositionById)
   const zoom = usePlaybackStore((s) => s.zoom)
   const useProxy = usePlaybackStore((s) => s.useProxy)
   const [resolvedTracks, setResolvedTracks] = useState<CompositionInputProps['tracks'] | null>(null)
@@ -66,7 +65,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
   )
 
   useEffect(() => {
-    if (!composition || !compositionInput) {
+    if (!compositionInput) {
       setResolvedTracks(null)
       return
     }
@@ -75,7 +74,11 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
     setResolvedTracks(null)
 
     const loadResolvedTracks = async () => {
-      const mediaIds = collectSubCompositionMediaIds(compositionId, compositionById)
+      // Read compositionById lazily so unrelated composition edits don't retrigger this effect.
+      const mediaIds = collectSubCompositionMediaIds(
+        compositionId,
+        useCompositionsStore.getState().compositionById,
+      )
       await Promise.all(mediaIds.map((mediaId) => resolveMediaUrl(mediaId)))
 
       const nextResolvedTracks = await resolveMediaUrls(compositionInput.tracks, { useProxy })
@@ -93,7 +96,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
     return () => {
       cancelled = true
     }
-  }, [composition, compositionById, compositionId, compositionInput, useProxy])
+  }, [compositionId, compositionInput, useProxy])
 
   const compositionWidth = composition?.width || 640
   const compositionHeight = composition?.height || 360

@@ -27,20 +27,22 @@ const sourcePlayerStoreState = vi.hoisted(() => ({
   setPendingSeekFrame: vi.fn(),
 }))
 
-const mediaStoreState = vi.hoisted(() => ({
-  mediaItems: [
-    {
-      id: 'media-1',
-      fileName: 'clip.mp4',
-      mimeType: 'video/mp4',
-      duration: 5,
-      width: 1920,
-      height: 1080,
-      fps: 30,
-      audioCodec: 'aac',
-    },
-  ],
-}))
+const mediaStoreState = vi.hoisted(() => {
+  const media1 = {
+    id: 'media-1',
+    fileName: 'clip.mp4',
+    mimeType: 'video/mp4',
+    duration: 5,
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    audioCodec: 'aac',
+  }
+  return {
+    mediaItems: [media1],
+    mediaById: { 'media-1': media1 } as Record<string, typeof media1>,
+  }
+})
 
 const itemsStoreState = vi.hoisted(() => ({
   tracks: [],

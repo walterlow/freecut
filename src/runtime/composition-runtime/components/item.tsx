@@ -100,7 +100,7 @@ export const Item = React.memo<ItemProps>(
     const { fps: timelineFps } = useVideoConfig()
     const nestedMediaResolutionMode = useNestedMediaResolutionMode()
     const mediaItem = useMediaLibraryStore((s) =>
-      item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId) : undefined,
+      item.mediaId ? s.mediaById[item.mediaId] : undefined,
     )
     const mediaSourceFps = mediaItem?.fps
     const itemAudioEqStages = React.useMemo(

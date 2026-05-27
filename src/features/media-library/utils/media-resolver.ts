@@ -180,7 +180,7 @@ export async function resolveMediaUrls(
   const signal = options?.signal
 
   // Deep clone tracks to avoid mutating original
-  const resolvedTracks: TimelineTrack[] = JSON.parse(JSON.stringify(tracks))
+  const resolvedTracks: TimelineTrack[] = structuredClone(tracks)
 
   // Resolve all media URLs in parallel
   const resolutionPromises: Promise<void>[] = []
