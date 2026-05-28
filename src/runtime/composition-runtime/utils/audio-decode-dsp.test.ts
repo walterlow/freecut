@@ -101,6 +101,6 @@ describe('audio-decode-dsp', () => {
     expect(bin.left).toBeInstanceOf(Int16Array)
     expect(bin.left.length).toBe(2)
     expect(bin.right.length).toBe(2)
-    expect(bin.left[0]).toBe(Math.trunc(0.5 * 0x7fff))
+    expect(bin.left[0]).toBe(new Int16Array([0.5 * 0x7fff])[0])
   })
 })

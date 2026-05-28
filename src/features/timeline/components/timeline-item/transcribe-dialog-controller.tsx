@@ -73,13 +73,18 @@ export const TranscribeDialogController = memo(function TranscribeDialogControll
       onStart={(values: TranscribeDialogValues) => {
         markCaptionStarted()
         setDialogError(null)
-        onGenerate(values, hasGeneratedCaptions, (error) => {
+        const handleError = (error: unknown) => {
           markCaptionEnded()
           const baseMessage = error instanceof Error ? error.message : 'Failed to generate captions'
           setDialogError(
             isTranscriptionOutOfMemoryError(error) ? TRANSCRIPTION_OOM_HINT : baseMessage,
           )
-        })
+        }
+        try {
+          onGenerate(values, hasGeneratedCaptions, handleError)
+        } catch (error) {
+          handleError(error)
+        }
       }}
       onCancel={() => {
         markCaptionStopRequested()

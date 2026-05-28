@@ -60,10 +60,13 @@ export function perfMeasure(name: string, startMark: string, endMark?: string): 
  * `perfMarkRender`) keeps normal use zero-overhead; enable before profiling:
  * `window.__TL_PERF__ = true`.
  */
+let perfMeasureCounter = 0
+
 export function withPerfMeasure<T>(name: string, fn: () => T): T {
   if (!HAS_PERF || !(globalThis as { __TL_PERF__?: boolean }).__TL_PERF__) return fn()
-  const startMark = `${name}:s`
-  const endMark = `${name}:e`
+  const unique = ++perfMeasureCounter
+  const startMark = `${name}:s:${unique}`
+  const endMark = `${name}:e:${unique}`
   try {
     performance.mark(startMark)
   } catch {

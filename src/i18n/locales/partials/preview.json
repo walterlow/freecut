@@ -276,7 +276,7 @@
         "enableProxyPlayback": "Proxy-Wiedergabe aktivieren",
         "frameDownloadedNoProject": "Bild heruntergeladen — öffne ein Projekt, um es zur Mediathek hinzuzufügen.",
         "frameDownloadedNotSaved": "Bild heruntergeladen, konnte aber nicht zur Mediathek hinzugefügt werden: {{message}}",
-        "frameSaved": "„{{name}}\" zur Mediathek hinzugefügt.",
+        "frameSaved": "„{{name}}“ zur Mediathek hinzugefügt.",
         "goToEnd": "Zum Ende",
         "goToEndTooltip": "Zum Ende",
         "goToStart": "Zum Anfang",

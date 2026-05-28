@@ -24,7 +24,7 @@ export function useContextMenuState(item: TimelineItemType): ContextMenuState {
       const items = useTimelineStore.getState().items
       const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled
       const targetIds = linkedSelectionEnabled ? getLinkedItemIds(items, item.id) : [item.id]
-      const isCurrentSelection = targetIds.some((id) => selectedItemIds.includes(id))
+      const isCurrentSelection = targetIds.every((id) => selectedItemIds.includes(id))
 
       if (!isCurrentSelection) {
         if (
