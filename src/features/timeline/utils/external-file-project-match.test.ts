@@ -58,7 +58,6 @@ function makeVideoMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
 
 function makeEntry(overrides: Partial<ExtractedMediaFileEntry> = {}): ExtractedMediaFileEntry {
   return {
-    handle: {} as FileSystemFileHandle,
     file: new File(['video'], 'drop.mp4', { type: 'video/mp4' }),
     mediaType: 'video',
     ...overrides,

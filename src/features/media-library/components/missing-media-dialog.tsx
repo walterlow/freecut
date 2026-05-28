@@ -17,7 +17,7 @@ import { Link2Off, RefreshCw, FolderOpen, X, AlertTriangle, Search, Folder } fro
 import { useMediaLibraryStore } from '../stores/media-library-store'
 import { mediaLibraryService } from '../services/media-library-service'
 import { useProjectStore } from '@/features/media-library/deps/projects'
-import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker'
+import { showFileHandlePicker } from '@/features/media-library/utils/media-file-picker'
 import { getProjectBrokenMediaInfo } from '@/features/media-library/utils/broken-media'
 
 export function MissingMediaDialog() {
@@ -148,7 +148,7 @@ export function MissingMediaDialog() {
         return
       }
 
-      const handles = await showMediaFilePicker({ multiple: false })
+      const handles = await showFileHandlePicker({ multiple: false })
 
       const handle = handles[0]
       if (!handle) return

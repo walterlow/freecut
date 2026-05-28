@@ -4,7 +4,7 @@ import type { MediaLibraryActions, MediaLibraryState } from '../types'
 import { createImportActions } from './media-import-actions'
 
 const mediaLibraryServiceMocks = vi.hoisted(() => ({
-  importMediaWithHandle: vi.fn(),
+  importMediaFile: vi.fn(),
   importMediaFromUrl: vi.fn(),
   getMediaFile: vi.fn(),
 }))
@@ -73,7 +73,7 @@ type ImportUpdater =
 function makeMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
   return {
     id: 'media-1',
-    storageType: 'handle',
+    storageType: 'opfs',
     fileName: 'clip.mp4',
     fileSize: 1024,
     mimeType: 'video/mp4',
@@ -102,13 +102,6 @@ function applyStateUpdate(state: ImportState, updater: ImportUpdater): ImportSta
     ...state,
     ...updater,
   }
-}
-
-function createHandle(file: File): FileSystemFileHandle {
-  return {
-    name: file.name,
-    getFile: vi.fn().mockResolvedValue(file),
-  } as unknown as FileSystemFileHandle
 }
 
 function createMockState(overrides: ImportState = {}): MediaLibraryState & MediaLibraryActions {
@@ -156,9 +149,8 @@ describe('createImportActions', () => {
 
   it('replaces optimistic placeholders with imported media', async () => {
     const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
-    const handle = createHandle(file)
     const imported = makeMedia({ id: 'imported-1', fileName: 'clip.mp4' })
-    mediaLibraryServiceMocks.importMediaWithHandle.mockResolvedValue(imported)
+    mediaLibraryServiceMocks.importMediaFile.mockResolvedValue(imported)
 
     let currentState = createMockState()
     const set = vi.fn((updater: ImportUpdater) => {
@@ -168,7 +160,7 @@ describe('createImportActions', () => {
     const get = vi.fn(() => currentState)
 
     const actions = createImportActions(set, get)
-    const result = await actions.importHandles([handle])
+    const result = await actions.importHandles([file])
 
     expect(result).toEqual([imported])
     expect(currentState.mediaItems).toEqual([imported])
@@ -229,9 +221,8 @@ describe('createImportActions', () => {
 
   it('removes duplicate placeholders and shows an info notification', async () => {
     const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
-    const handle = createHandle(file)
     const duplicate = makeMedia({ id: 'existing-1', fileName: 'clip.mp4' })
-    mediaLibraryServiceMocks.importMediaWithHandle.mockResolvedValue({
+    mediaLibraryServiceMocks.importMediaFile.mockResolvedValue({
       ...duplicate,
       isDuplicate: true,
     })
@@ -244,7 +235,7 @@ describe('createImportActions', () => {
     const get = vi.fn(() => currentState)
 
     const actions = createImportActions(set, get)
-    const result = await actions.importHandles([handle])
+    const result = await actions.importHandles([file])
 
     expect(result).toEqual([])
     expect(currentState.mediaItems).toEqual([])
@@ -258,9 +249,8 @@ describe('createImportActions', () => {
 
   it('returns duplicates for placement flows while still removing placeholders', async () => {
     const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
-    const handle = createHandle(file)
     const duplicate = makeMedia({ id: 'existing-1', fileName: 'clip.mp4' })
-    mediaLibraryServiceMocks.importMediaWithHandle.mockResolvedValue({
+    mediaLibraryServiceMocks.importMediaFile.mockResolvedValue({
       ...duplicate,
       isDuplicate: true,
     })
@@ -273,7 +263,7 @@ describe('createImportActions', () => {
     const get = vi.fn(() => currentState)
 
     const actions = createImportActions(set, get)
-    const result = await actions.importHandlesForPlacement([handle])
+    const result = await actions.importHandlesForPlacement([file])
 
     expect(result).toEqual([{ ...duplicate, isDuplicate: true }])
     expect(currentState.mediaItems).toEqual([])
@@ -282,8 +272,7 @@ describe('createImportActions', () => {
 
   it('cleans up failed placeholders and reports import errors', async () => {
     const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
-    const handle = createHandle(file)
-    mediaLibraryServiceMocks.importMediaWithHandle.mockRejectedValue(new Error('Import failed'))
+    mediaLibraryServiceMocks.importMediaFile.mockRejectedValue(new Error('Import failed'))
 
     let currentState = createMockState()
     const set = vi.fn((updater: ImportUpdater) => {
@@ -293,42 +282,11 @@ describe('createImportActions', () => {
     const get = vi.fn(() => currentState)
 
     const actions = createImportActions(set, get)
-    const result = await actions.importHandles([handle])
+    const result = await actions.importHandles([file])
 
     expect(result).toEqual([])
     expect(currentState.mediaItems).toEqual([])
     expect(currentState.importingIds).toEqual([])
-    expect(loggerMocks.error).toHaveBeenCalledWith('Failed to import clip.mp4', expect.any(Error))
-  })
-
-  it('sets a browser support error when the picker API is unavailable', async () => {
-    const originalWindow = globalThis.window
-    const originalNavigator = globalThis.navigator
-    const mockWindow = {} as Window & typeof globalThis
-    const mockNavigator = {} as Navigator
-
-    vi.stubGlobal('window', mockWindow)
-    vi.stubGlobal('navigator', mockNavigator)
-
-    try {
-      let currentState = createMockState()
-      const set = vi.fn((updater: ImportUpdater) => {
-        currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
-          MediaLibraryActions
-      })
-      const get = vi.fn(() => currentState)
-
-      const actions = createImportActions(set, get)
-      const result = await actions.importMedia()
-
-      expect(result).toEqual([])
-      expect(currentState.error).toBe(
-        'File picker not supported in this browser. Use Chrome or Edge.',
-      )
-      expect(currentState.errorLink).toBeNull()
-    } finally {
-      vi.stubGlobal('window', originalWindow)
-      vi.stubGlobal('navigator', originalNavigator)
-    }
+    expect(loggerMocks.error).toHaveBeenCalledWith('Failed to import clip.mp4', expect.anything())
   })
 })

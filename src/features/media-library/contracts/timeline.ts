@@ -29,7 +29,6 @@ export {
 } from '../utils/drag-data-cache'
 export {
   extractValidMediaFileEntriesFromDataTransfer,
-  supportsFileSystemDragDrop,
 } from '../utils/file-drop'
 export type { OrphanedClipInfo } from '../types'
 export type { ExtractedMediaFileEntry } from '../utils/file-drop'

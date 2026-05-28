@@ -852,6 +852,17 @@ class MediaLibraryService {
     return this.importMediaFileToOpfs(file, projectId)
   }
 
+  /** Import a File object directly into OPFS-backed storage (browser file picker / drag-drop). */
+  async importMediaFile(
+    file: File,
+    projectId: string,
+  ): Promise<MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }> {
+    if (!projectId) {
+      throw new Error('No project selected')
+    }
+    return this.importMediaFileToOpfs(file, projectId)
+  }
+
   /**
    * Save a generated still image into a project-backed media library entry.
    *
