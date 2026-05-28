@@ -148,19 +148,24 @@ function rememberPlaybackSlice(mediaId: string, slice: PlaybackAudioSlice): void
 // ---------------------------------------------------------------------------
 
 function float32ToInt16(float32: Float32Array): Int16Array {
-  const int16 = new Int16Array(float32.length)
-  for (let i = 0; i < float32.length; i++) {
+  const n = float32.length
+  const int16 = new Int16Array(n)
+  for (let i = 0; i < n; i++) {
     const s = Math.max(-1, Math.min(1, float32[i]!))
     int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
   }
   return int16
 }
 
+const INT16_NEG_SCALE = 1 / 0x8000
+const INT16_POS_SCALE = 1 / 0x7fff
+
 function int16ToFloat32(int16: Int16Array): Float32Array {
-  const float32 = new Float32Array(int16.length)
-  for (let i = 0; i < int16.length; i++) {
+  const n = int16.length
+  const float32 = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
     const s = int16[i]!
-    float32[i] = s / (s < 0 ? 0x8000 : 0x7fff)
+    float32[i] = s < 0 ? s * INT16_NEG_SCALE : s * INT16_POS_SCALE
   }
   return float32
 }
