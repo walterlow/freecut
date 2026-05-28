@@ -21,10 +21,12 @@ import {
   findCompatibleCaptionTrackForRanges,
   isCaptionTrackCandidate,
   getCaptionTextItemTemplate,
+  getCaptionStyleTemplateFromPreset,
   getCaptionRangeForClip,
 } from '../utils/caption-items'
 import { useProjectStore } from '@/features/media-library/deps/projects'
 import { useTimelineStore } from '@/features/media-library/deps/timeline-stores'
+import { useSettingsStore } from '@/features/media-library/deps/settings-contract'
 
 const logger = createLogger('MediaCaptioningService')
 
@@ -96,6 +98,11 @@ class MediaCaptioningService {
 
     const canvasWidth = project?.metadata.width ?? DEFAULT_PROJECT_WIDTH
     const canvasHeight = project?.metadata.height ?? DEFAULT_PROJECT_HEIGHT
+    const defaultCaptionTemplate = getCaptionStyleTemplateFromPreset(
+      useSettingsStore.getState().defaultCaptionStylePresetId,
+      canvasWidth,
+      canvasHeight,
+    )
     const newTracks: TimelineTrack[] = [...timeline.tracks]
     const generatedCaptionIdsToRemove = options.replaceExisting
       ? new Set(
@@ -165,7 +172,7 @@ class MediaCaptioningService {
         sourceType: 'ai-captions',
         styleTemplate: existingGeneratedCaptions[0]
           ? getCaptionTextItemTemplate(existingGeneratedCaptions[0])
-          : undefined,
+          : defaultCaptionTemplate,
       })
       logger.info('buildCaptionTextItems produced items', {
         clipId: clip.id,

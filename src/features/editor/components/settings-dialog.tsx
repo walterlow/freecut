@@ -56,6 +56,7 @@ import {
   importWaveformCache,
 } from '@/features/editor/deps/timeline-cache'
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime'
+import { CAPTION_STYLE_PRESETS } from '@/shared/typography/caption-style-presets'
 import { createLogger } from '@/shared/logging/logger'
 import { cn } from '@/shared/ui/cn'
 
@@ -360,6 +361,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory)
   const captioningIntervalUnit = useSettingsStore((s) => s.captioningIntervalUnit)
   const captioningIntervalValue = useSettingsStore((s) => s.captioningIntervalValue)
+  const defaultCaptionStylePresetId = useSettingsStore((s) => s.defaultCaptionStylePresetId)
   const setSetting = useSettingsStore((s) => s.setSetting)
   const resetToDefaults = useSettingsStore((s) => s.resetToDefaults)
 
@@ -683,6 +685,33 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                         ),
                       })}
                     </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">{t('settings.ai.defaultCaptionStyle')}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.ai.defaultCaptionStyleDescription')}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CAPTION_STYLE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          title={t(preset.hintKey)}
+                          onClick={() => setSetting('defaultCaptionStylePresetId', preset.id)}
+                          className={cn(
+                            'rounded-md border px-2.5 py-1 text-xs transition-colors',
+                            defaultCaptionStylePresetId === preset.id
+                              ? 'border-primary bg-primary/15 text-primary'
+                              : 'border-border text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

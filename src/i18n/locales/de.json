@@ -86,7 +86,9 @@
       "captionEstimate": "~{{sceneCount}} {{scenes}} pro 1-Minuten-Clip bei {{fps}} fps",
       "scene_one": "Szene",
       "scene_other": "Szenen",
-      "captionIntervalHint": "{{estimate}}. Kleinere Intervalle erzeugen dichtere Szenen, brauchen aber länger zur Generierung."
+      "captionIntervalHint": "{{estimate}}. Kleinere Intervalle erzeugen dichtere Szenen, brauchen aber länger zur Generierung.",
+      "defaultCaptionStyle": "Standard-Untertitelstil",
+      "defaultCaptionStyleDescription": "Stil für Untertitel, die aus Transkripten oder KI-Untertitelung erzeugt werden."
     },
     "timeline": {
       "snapByDefault": "Standardmäßig einrasten",

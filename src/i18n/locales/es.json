@@ -86,7 +86,9 @@
       "captionEstimate": "~{{sceneCount}} {{scenes}} por clip de 1 min a {{fps}} fps",
       "scene_one": "escena",
       "scene_other": "escenas",
-      "captionIntervalHint": "{{estimate}}. Los intervalos más pequeños producen escenas más densas pero tardan más en generarse."
+      "captionIntervalHint": "{{estimate}}. Los intervalos más pequeños producen escenas más densas pero tardan más en generarse.",
+      "defaultCaptionStyle": "Estilo de subtítulos predeterminado",
+      "defaultCaptionStyleDescription": "Estilo aplicado a los subtítulos generados a partir de transcripciones o subtitulado con IA."
     },
     "timeline": {
       "snapByDefault": "Ajuste por defecto",

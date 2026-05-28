@@ -24,6 +24,7 @@ import {
 import { mediaLibraryService } from './media-library-service'
 import {
   buildSubtitleSegmentForClip,
+  getCaptionStyleTemplateFromPreset,
   buildCaptionTrackAbove,
   findReplaceableCaptionItemsForClip,
   findCompatibleCaptionTrackForRanges,
@@ -497,6 +498,11 @@ class MediaTranscriptionService {
 
     const canvasWidth = project?.metadata.width ?? DEFAULT_PROJECT_WIDTH
     const canvasHeight = project?.metadata.height ?? DEFAULT_PROJECT_HEIGHT
+    const defaultCaptionTemplate = getCaptionStyleTemplateFromPreset(
+      useSettingsStore.getState().defaultCaptionStylePresetId,
+      canvasWidth,
+      canvasHeight,
+    )
     const newTracks: TimelineTrack[] = [...timeline.tracks]
     const generatedCaptionIdsToRemove = options.replaceExisting
       ? new Set(
@@ -561,7 +567,7 @@ class MediaTranscriptionService {
         },
         styleTemplate: existingGeneratedCaptions[0]
           ? getCaptionTextItemTemplate(existingGeneratedCaptions[0])
-          : undefined,
+          : defaultCaptionTemplate,
       })
 
       if (!clipCaptionItem) {

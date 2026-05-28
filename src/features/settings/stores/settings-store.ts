@@ -16,6 +16,7 @@ import {
   type HotkeyKey,
   type HotkeyOverrideMap,
 } from '@/config/hotkeys'
+import { CAPTION_STYLE_PRESETS } from '@/shared/typography/caption-style-presets'
 
 /**
  * App-wide settings stored in localStorage
@@ -50,6 +51,10 @@ interface AppSettings {
   // substring + fuzzy-prefix matching on caption text.
   captionSearchMode: CaptionSearchMode
 
+  // Caption style preset id applied automatically to captions generated from
+  // transcripts / AI captioning (when not inheriting an existing caption's style).
+  defaultCaptionStylePresetId: string
+
   // Keyboard shortcuts
   hotkeyOverrides: HotkeyOverrideMap
 }
@@ -58,6 +63,14 @@ export type CaptionSearchMode = 'keyword' | 'semantic'
 
 function normalizeCaptionSearchMode(value: unknown): CaptionSearchMode {
   return value === 'semantic' ? 'semantic' : 'keyword'
+}
+
+export const DEFAULT_CAPTION_STYLE_PRESET_ID = CAPTION_STYLE_PRESETS[0]?.id ?? 'netflix'
+
+function normalizeCaptionStylePresetId(value: unknown): string {
+  return typeof value === 'string' && CAPTION_STYLE_PRESETS.some((preset) => preset.id === value)
+    ? value
+    : DEFAULT_CAPTION_STYLE_PRESET_ID
 }
 
 export type CaptioningIntervalUnit = 'seconds' | 'frames'
@@ -143,6 +156,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   // Scene Browser defaults
   captionSearchMode: 'keyword',
 
+  // Caption styling default
+  defaultCaptionStylePresetId: DEFAULT_CAPTION_STYLE_PRESET_ID,
+
   // Keyboard shortcuts
   hotkeyOverrides: {},
 }
@@ -185,6 +201,9 @@ export const useSettingsStore = create<SettingsStore>()(
           }
           if (key === 'editorDensity') {
             return { editorDensity: normalizeEditorDensityPreset(value) }
+          }
+          if (key === 'defaultCaptionStylePresetId') {
+            return { defaultCaptionStylePresetId: normalizeCaptionStylePresetId(value) }
           }
           return { [key]: value }
         }),
@@ -267,6 +286,9 @@ export const useSettingsStore = create<SettingsStore>()(
             captioningIntervalUnit,
           ),
           captionSearchMode: normalizeCaptionSearchMode(typedState.captionSearchMode),
+          defaultCaptionStylePresetId: normalizeCaptionStylePresetId(
+            typedState.defaultCaptionStylePresetId,
+          ),
         }
       },
     },

@@ -690,6 +690,37 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return null
   }, [transcriptStatus, transcriptProgress, transcribingCount])
 
+  // Per-item breakdowns shown when the aggregate progress bar is expanded.
+  const proxyItemRows = useMemo(() => {
+    const rows: Array<{ id: string; name: string; percent: number }> = []
+    for (const [id, status] of proxyStatus.entries()) {
+      if (status === 'generating') {
+        rows.push({
+          id,
+          name: mediaById[id]?.fileName ?? id,
+          percent: Math.round((proxyProgress.get(id) ?? 0) * 100),
+        })
+      }
+    }
+    return rows
+  }, [proxyStatus, proxyProgress, mediaById])
+
+  const transcriptionItemRows = useMemo(() => {
+    const rows: Array<{ id: string; name: string; percent: number; stage: string | null }> = []
+    for (const [id, status] of transcriptStatus.entries()) {
+      if (status === 'queued' || status === 'transcribing') {
+        const progress = transcriptProgress.get(id)
+        rows.push({
+          id,
+          name: mediaById[id]?.fileName ?? id,
+          percent: progress ? Math.round(getTranscriptionOverallProgress(progress) * 100) : 0,
+          stage: progress ? getTranscriptionStageLabel(progress.stage) : null,
+        })
+      }
+    }
+    return rows
+  }, [transcriptStatus, transcriptProgress, mediaById])
+
   const handleGenerateSelectedProxies = async () => {
     const selectedItems = selectedMediaIds
       .map((id) => mediaById[id])
@@ -1498,7 +1529,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   onClick={() => mediaAnalysisService.requestCancel()}
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {t('common.cancel')}
+                  {analysisProgress.total > 1 ? t('media.library.cancelAll') : t('common.cancel')}
                 </button>
               ) : (
                 <span className="text-muted-foreground/80">{t('media.library.cancelling')}</span>
@@ -1517,6 +1548,23 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           label={t('media.library.generatingTranscripts', { count: transcribingCount })}
           progressAriaLabel={t('media.library.transcriptGenerationProgress')}
           progressPercent={transcribingAvgProgress * 100}
+          detailsToggleAriaLabel={t('media.library.perItemProgress')}
+          details={
+            transcriptionItemRows.length > 1
+              ? transcriptionItemRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                  >
+                    <span className="truncate">{row.name}</span>
+                    <span className="flex flex-shrink-0 items-center gap-2">
+                      {row.stage && <span className="hidden sm:inline">{row.stage}</span>}
+                      <span className="tabular-nums">{row.percent}%</span>
+                    </span>
+                  </div>
+                ))
+              : undefined
+          }
           meta={
             <>
               {singleTranscriptionStageLabel && (
@@ -1543,6 +1591,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           label={t('media.library.generatingProxies', { count: generatingCount })}
           progressAriaLabel={t('media.library.proxyGenerationProgress')}
           progressPercent={generatingAvgProgress * 100}
+          detailsToggleAriaLabel={t('media.library.perItemProgress')}
+          details={
+            proxyItemRows.length > 1
+              ? proxyItemRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                  >
+                    <span className="truncate">{row.name}</span>
+                    <span className="tabular-nums flex-shrink-0">{row.percent}%</span>
+                  </div>
+                ))
+              : undefined
+          }
           meta={
             <>
               <span className="tabular-nums">{Math.round(generatingAvgProgress * 100)}%</span>

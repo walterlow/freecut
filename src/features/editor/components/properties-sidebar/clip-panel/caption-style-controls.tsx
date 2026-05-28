@@ -12,7 +12,7 @@ import {
   type CaptionStylePreset,
   detectActiveCaptionPreset,
   resolveCaptionStylePatch,
-} from './caption-style-presets'
+} from '@/shared/typography/caption-style-presets'
 
 type CaptionStylableItem = SubtitleSegmentItem | TextItem
 

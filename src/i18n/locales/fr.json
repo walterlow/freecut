@@ -86,7 +86,9 @@
       "captionEstimate": "~{{sceneCount}} {{scenes}} par clip d'1 min à {{fps}} ips",
       "scene_one": "scène",
       "scene_other": "scènes",
-      "captionIntervalHint": "{{estimate}}. Des intervalles plus petits produisent des scènes plus denses mais prennent plus de temps à générer."
+      "captionIntervalHint": "{{estimate}}. Des intervalles plus petits produisent des scènes plus denses mais prennent plus de temps à générer.",
+      "defaultCaptionStyle": "Style de sous-titres par défaut",
+      "defaultCaptionStyleDescription": "Style appliqué aux sous-titres générés à partir de transcriptions ou du sous-titrage par IA."
     },
     "timeline": {
       "snapByDefault": "Aimantation par défaut",

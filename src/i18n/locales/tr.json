@@ -86,7 +86,9 @@
       "captionEstimate": "{{fps}}fps hızında 1 dakikalık klip başına yaklaşık {{sceneCount}} {{scenes}}",
       "scene_one": "sahne",
       "scene_other": "sahne",
-      "captionIntervalHint": "{{estimate}}. Daha küçük aralıklar daha yoğun sahneler üretir ancak oluşturma daha uzun sürer."
+      "captionIntervalHint": "{{estimate}}. Daha küçük aralıklar daha yoğun sahneler üretir ancak oluşturma daha uzun sürer.",
+      "defaultCaptionStyle": "Varsayılan altyazı stili",
+      "defaultCaptionStyleDescription": "Transkripsiyonlardan veya yapay zekâ altyazısından oluşturulan altyazılara uygulanan stil."
     },
     "timeline": {
       "snapByDefault": "Varsayılan olarak yapıştır",

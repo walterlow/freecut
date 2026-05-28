@@ -86,7 +86,9 @@
       "captionEstimate": "~{{sceneCount}} {{scenes}} per 1-min clip at {{fps}}fps",
       "scene_one": "scene",
       "scene_other": "scenes",
-      "captionIntervalHint": "{{estimate}}. Smaller intervals produce denser scenes but take longer to generate."
+      "captionIntervalHint": "{{estimate}}. Smaller intervals produce denser scenes but take longer to generate.",
+      "defaultCaptionStyle": "Default caption style",
+      "defaultCaptionStyleDescription": "Style applied to captions generated from transcripts or AI captioning."
     },
     "timeline": {
       "snapByDefault": "Snap by Default",

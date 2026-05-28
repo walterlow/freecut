@@ -86,7 +86,9 @@
       "captionEstimate": "在 {{fps}} fps 下每 1 分钟片段约 {{sceneCount}} 个{{scenes}}",
       "scene_one": "场景",
       "scene_other": "场景",
-      "captionIntervalHint": "{{estimate}}。间隔越小场景越密集，但生成耗时越长。"
+      "captionIntervalHint": "{{estimate}}。间隔越小场景越密集，但生成耗时越长。",
+      "defaultCaptionStyle": "默认字幕样式",
+      "defaultCaptionStyleDescription": "应用于由转录或 AI 字幕生成的字幕的样式。"
     },
     "timeline": {
       "snapByDefault": "默认吸附",

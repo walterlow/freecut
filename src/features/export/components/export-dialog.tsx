@@ -356,7 +356,10 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
       mode: exportMode,
       videoContainer: exportMode === 'video' ? videoContainer : undefined,
       audioContainer: exportMode === 'audio' ? audioContainer : undefined,
-      embedSubtitles: exportMode === 'video' && hasTranscriptSubtitles ? embedSubtitles : false,
+      embedSubtitles:
+        exportMode === 'video' && hasTranscriptSubtitles && containerSupportsEmbeddedSubtitles
+          ? embedSubtitles
+          : false,
       renderWholeProject,
     }
     await startExport(extendedSettings)
@@ -462,12 +465,6 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
   const hasCapabilityData = supportedVideoCodecs !== null && !videoSupportError
   const hasSupportedVideoPath = videoContainerOptions.some((option) => option.supported)
-  const hasSubtitleExportConflict =
-    exportMode === 'video' &&
-    embedSubtitles &&
-    hasTranscriptSubtitles &&
-    !containerSupportsEmbeddedSubtitles
-
   useEffect(() => {
     if (exportMode !== 'video' || !hasCapabilityData) return
 
@@ -821,20 +818,21 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                       <p className="text-xs text-muted-foreground">
                         {t('export.settings.embedSubtitlesDescription')}
                       </p>
-                      {embedSubtitles &&
-                        hasTranscriptSubtitles &&
-                        !containerSupportsEmbeddedSubtitles && (
-                          <p className="text-xs text-destructive">
-                            {t('export.settings.embedSubtitlesUnsupported', {
-                              container: videoContainer.toUpperCase(),
-                            })}
-                          </p>
-                        )}
-                      {embedSubtitles && hasTranscriptSubtitles && videoContainer === 'mp4' && (
+                      {hasTranscriptSubtitles && !containerSupportsEmbeddedSubtitles && (
                         <p className="text-xs text-muted-foreground">
-                          {t('export.settings.embedSubtitlesMp4Note')}
+                          {t('export.settings.embedSubtitlesUnsupported', {
+                            container: videoContainer.toUpperCase(),
+                          })}
                         </p>
                       )}
+                      {embedSubtitles &&
+                        hasTranscriptSubtitles &&
+                        containerSupportsEmbeddedSubtitles &&
+                        videoContainer === 'mp4' && (
+                          <p className="text-xs text-muted-foreground">
+                            {t('export.settings.embedSubtitlesMp4Note')}
+                          </p>
+                        )}
                       {!hasTranscriptSubtitles && (
                         <p className="text-xs text-muted-foreground">
                           {t('export.settings.noTranscriptSegments')}
@@ -843,8 +841,8 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                     </div>
                     <Switch
                       id="embed-subtitles"
-                      checked={embedSubtitles}
-                      disabled={!hasTranscriptSubtitles}
+                      checked={embedSubtitles && containerSupportsEmbeddedSubtitles}
+                      disabled={!hasTranscriptSubtitles || !containerSupportsEmbeddedSubtitles}
                       onCheckedChange={setEmbedSubtitles}
                     />
                   </div>
@@ -915,8 +913,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
               <Button
                 onClick={handleStartExport}
                 disabled={
-                  exportMode === 'video' &&
-                  (!hasSupportedVideoPath || isCheckingVideoSupport || hasSubtitleExportConflict)
+                  exportMode === 'video' && (!hasSupportedVideoPath || isCheckingVideoSupport)
                 }
               >
                 {exportMode === 'audio'

@@ -86,7 +86,9 @@
       "captionEstimate": "{{fps}} fps の 1 分間のクリップあたり約 {{sceneCount}} {{scenes}}",
       "scene_one": "シーン",
       "scene_other": "シーン",
-      "captionIntervalHint": "{{estimate}}。間隔が小さいほどシーンは密になりますが、生成に時間がかかります。"
+      "captionIntervalHint": "{{estimate}}。間隔が小さいほどシーンは密になりますが、生成に時間がかかります。",
+      "defaultCaptionStyle": "デフォルトの字幕スタイル",
+      "defaultCaptionStyleDescription": "文字起こしまたはAI字幕から生成された字幕に適用されるスタイル。"
     },
     "timeline": {
       "snapByDefault": "デフォルトでスナップ",

@@ -86,7 +86,9 @@
       "captionEstimate": "~{{sceneCount}} {{scenes}} por clipe de 1 min a {{fps}} fps",
       "scene_one": "cena",
       "scene_other": "cenas",
-      "captionIntervalHint": "{{estimate}}. Intervalos menores produzem cenas mais densas, mas levam mais tempo para gerar."
+      "captionIntervalHint": "{{estimate}}. Intervalos menores produzem cenas mais densas, mas levam mais tempo para gerar.",
+      "defaultCaptionStyle": "Estilo de legenda padrão",
+      "defaultCaptionStyleDescription": "Estilo aplicado a legendas geradas a partir de transcrições ou legendagem por IA."
     },
     "timeline": {
       "snapByDefault": "Encaixe por padrão",

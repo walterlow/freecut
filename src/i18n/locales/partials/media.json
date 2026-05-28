@@ -179,7 +179,8 @@
         "generateProxiesForSelected_one": "Generate proxy for {{count}} selected item",
         "generateProxiesForSelected_other": "Generate proxies for {{count}} selected items",
         "proxyCount_one": "{{count}} proxy",
-        "proxyCount_other": "{{count}} proxies"
+        "proxyCount_other": "{{count}} proxies",
+        "perItemProgress": "Show per-item progress"
       },
       "missingMedia": {
         "title": "Missing Media",
@@ -434,7 +435,8 @@
         "generateProxiesForSelected_one": "Generar proxy para {{count}} elemento seleccionado",
         "generateProxiesForSelected_other": "Generar proxies para {{count}} elementos seleccionados",
         "proxyCount_one": "{{count}} proxy",
-        "proxyCount_other": "{{count}} proxies"
+        "proxyCount_other": "{{count}} proxies",
+        "perItemProgress": "Mostrar progreso por elemento"
       },
       "missingMedia": {
         "title": "Medios faltantes",
@@ -689,7 +691,8 @@
         "generateProxiesForSelected_one": "Générer un proxy pour {{count}} élément sélectionné",
         "generateProxiesForSelected_other": "Générer des proxies pour {{count}} éléments sélectionnés",
         "proxyCount_one": "{{count}} proxy",
-        "proxyCount_other": "{{count}} proxys"
+        "proxyCount_other": "{{count}} proxys",
+        "perItemProgress": "Afficher la progression par élément"
       },
       "missingMedia": {
         "title": "Médias manquants",
@@ -944,7 +947,8 @@
         "generateProxiesForSelected_one": "Proxy für {{count}} ausgewähltes Element erzeugen",
         "generateProxiesForSelected_other": "Proxys für {{count}} ausgewählte Elemente erzeugen",
         "proxyCount_one": "{{count}} Proxy",
-        "proxyCount_other": "{{count}} Proxys"
+        "proxyCount_other": "{{count}} Proxys",
+        "perItemProgress": "Fortschritt pro Element anzeigen"
       },
       "missingMedia": {
         "title": "Fehlende Medien",
@@ -1199,7 +1203,8 @@
         "generateProxiesForSelected_one": "Gerar proxy para {{count}} item selecionado",
         "generateProxiesForSelected_other": "Gerar proxies para {{count}} itens selecionados",
         "proxyCount_one": "{{count}} proxy",
-        "proxyCount_other": "{{count}} proxies"
+        "proxyCount_other": "{{count}} proxies",
+        "perItemProgress": "Mostrar progresso por item"
       },
       "missingMedia": {
         "title": "Mídia ausente",
@@ -1454,7 +1459,8 @@
         "generateProxiesForSelected_one": "{{count}} seçili öğe için proxy oluştur",
         "generateProxiesForSelected_other": "{{count}} seçili öğe için proxy oluştur",
         "proxyCount_one": "{{count}} proxy",
-        "proxyCount_other": "{{count}} proxy"
+        "proxyCount_other": "{{count}} proxy",
+        "perItemProgress": "Öğe başına ilerlemeyi göster"
       },
       "missingMedia": {
         "title": "Eksik medya",
@@ -1709,7 +1715,8 @@
         "generateProxiesForSelected_one": "選択した {{count}} 個の項目のプロキシを生成",
         "generateProxiesForSelected_other": "選択した {{count}} 個の項目のプロキシを生成",
         "proxyCount_one": "{{count}} 個のプロキシ",
-        "proxyCount_other": "{{count}} 個のプロキシ"
+        "proxyCount_other": "{{count}} 個のプロキシ",
+        "perItemProgress": "項目ごとの進捗を表示"
       },
       "missingMedia": {
         "title": "メディアが見つかりません",
@@ -1964,7 +1971,8 @@
         "generateProxiesForSelected_one": "선택한 항목 {{count}}개의 프록시 생성",
         "generateProxiesForSelected_other": "선택한 항목 {{count}}개의 프록시 생성",
         "proxyCount_one": "프록시 {{count}}개",
-        "proxyCount_other": "프록시 {{count}}개"
+        "proxyCount_other": "프록시 {{count}}개",
+        "perItemProgress": "항목별 진행률 표시"
       },
       "missingMedia": {
         "title": "누락된 미디어",
@@ -2219,7 +2227,8 @@
         "generateProxiesForSelected_one": "为 {{count}} 个所选项生成代理",
         "generateProxiesForSelected_other": "为 {{count}} 个所选项生成代理",
         "proxyCount_one": "{{count}} 个代理",
-        "proxyCount_other": "{{count}} 个代理"
+        "proxyCount_other": "{{count}} 个代理",
+        "perItemProgress": "显示各项进度"
       },
       "missingMedia": {
         "title": "缺失媒体",
