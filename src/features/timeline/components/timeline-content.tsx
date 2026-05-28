@@ -836,16 +836,23 @@ export const TimelineContent = memo(function TimelineContent({
   // refreshes this cache; we fall back to a live read until it has measured once.
   const viewportDimsRef = useRef<{ width: number; height: number } | null>(null)
 
-  const syncViewportFromContainer = useCallback(() => {
+  const syncViewportFromContainer = useCallback((knownScrollLeft?: number) => {
     const container = containerRef.current
     if (!container) return
     const dims = viewportDimsRef.current
     const viewportWidth = dims?.width ?? container.clientWidth
     const viewportHeight =
       dims?.height ?? tracksContainerRef.current?.clientHeight ?? container.clientHeight
+    // When the caller just wrote scrollLeft it passes that value so we can skip
+    // the read-back. Reading scrollLeft/scrollTop after a write forces a
+    // synchronous reflow — negligible normally, but ~16ms/frame at extreme zoom
+    // widths (>1M px). The main scroll container is overflow-y-hidden, so its
+    // scrollTop is always 0 in the known-value path.
+    const scrollLeft = knownScrollLeft ?? container.scrollLeft
+    const scrollTop = knownScrollLeft !== undefined ? 0 : container.scrollTop
     useTimelineViewportStore.getState().setViewport({
-      scrollLeft: container.scrollLeft,
-      scrollTop: container.scrollTop,
+      scrollLeft,
+      scrollTop,
       viewportWidth,
       viewportHeight,
     })
@@ -987,10 +994,15 @@ export const TimelineContent = memo(function TimelineContent({
   // Apply pending scroll AFTER render when DOM has updated width
   // This ensures zoom anchor works correctly even when timeline extends beyond content
   useLayoutEffect(() => {
-    if (pendingScrollRef.current !== null && containerRef.current) {
-      containerRef.current.scrollLeft = pendingScrollRef.current
+    const container = containerRef.current
+    if (pendingScrollRef.current !== null && container) {
+      const next = pendingScrollRef.current
+      container.scrollLeft = next
       pendingScrollRef.current = null
-      syncViewportFromContainer()
+      // Keep scrollLeftRef fresh so the clamp effect below can decide without a
+      // forced scrollLeft read, and pass the known value to skip the read-back.
+      scrollLeftRef.current = next
+      syncViewportFromContainer(next)
     }
   })
 
@@ -1324,8 +1336,19 @@ export const TimelineContent = memo(function TimelineContent({
       return
     }
 
-    const maxScrollLeft = Math.max(0, timelineWidth - container.clientWidth)
-    if (container.scrollLeft <= maxScrollLeft + 1) {
+    // Use the cached viewport width and tracked scrollLeft instead of reading
+    // container.clientWidth / container.scrollLeft. Both are layout reads that,
+    // after this render's width write, force a synchronous reflow every frame —
+    // ~16ms at extreme zoom widths. clientWidth is invariant under horizontal
+    // zoom, and scrollLeftRef is kept fresh by the scroll handler and the
+    // pending-scroll effect above. Fall back to a live read only before the
+    // ResizeObserver has measured (mount).
+    const cachedWidth = viewportDimsRef.current?.width
+    const viewportWidthForClamp = cachedWidth ?? container.clientWidth
+    const maxScrollLeft = Math.max(0, timelineWidth - viewportWidthForClamp)
+    const currentScrollLeft =
+      cachedWidth !== undefined ? scrollLeftRef.current : container.scrollLeft
+    if (currentScrollLeft <= maxScrollLeft + 1) {
       return
     }
 
@@ -1333,7 +1356,7 @@ export const TimelineContent = memo(function TimelineContent({
     // without subscribing broad UI surfaces to item-array churn.
     container.scrollLeft = maxScrollLeft
     scrollLeftRef.current = maxScrollLeft
-    syncViewportFromContainer()
+    syncViewportFromContainer(maxScrollLeft)
   }, [timelineWidth, syncViewportFromContainer])
 
   // NOTE: itemsByTrack removed - TimelineTrack now fetches its own items
