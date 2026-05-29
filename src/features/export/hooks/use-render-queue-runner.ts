@@ -84,7 +84,7 @@ async function renderQueuedJob(job: RenderJob): Promise<void> {
     })
     if (fallbackReason) event.set('workerFallbackReason', fallbackReason)
 
-    const saved = await saveExportFile(job.fileName, result.blob)
+    const saved = await saveExportFile(job.projectId, job.fileName, result.blob)
     useRenderQueueStore.getState().markCompleted(job.id, {
       savedPath: saved.relPath,
       fileSize: result.fileSize,

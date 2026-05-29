@@ -139,6 +139,16 @@ export function projectRenderQueuePath(id: string): string[] {
   return [...projectDir(id), PROJECT_RENDER_QUEUE_FILENAME]
 }
 
+/** Segments for `projects/{id}/exports/` — a project's rendered output files. */
+export function projectExportsDir(id: string): string[] {
+  return [...projectDir(id), EXPORTS_DIR]
+}
+
+/** Segments for `projects/{id}/exports/{sanitizedName}`. */
+export function projectExportFilePath(id: string, fileName: string): string[] {
+  return [...projectExportsDir(id), sanitizeWorkspaceFileName(fileName)]
+}
+
 /** Segments for `projects/{id}/.freecut-trashed.json`. */
 export function projectTrashedMarkerPath(id: string): string[] {
   return [...projectDir(id), PROJECT_TRASHED_MARKER_FILENAME]

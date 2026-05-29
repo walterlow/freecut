@@ -1,15 +1,24 @@
 /**
  * Final render outputs from the export queue.
  *
- * Writes rendered video/audio files to `{workspace}/exports/` so they're
- * discoverable when browsing the workspace folder on disk. Picks a
- * non-clobbering filename (appends ` (2)`, ` (3)`, …) so re-rendering the same
- * segment doesn't overwrite a previous result.
+ * Writes rendered video/audio files to the project's own
+ * `projects/{id}/exports/` folder so they sit alongside the project and are
+ * discoverable when browsing the workspace on disk. (Falls back to a top-level
+ * `exports/` only if a job has no project id, which shouldn't happen in the
+ * editor.) Picks a non-clobbering filename (appends ` (2)`, ` (3)`, …) so
+ * re-rendering the same segment doesn't overwrite a previous result.
  */
 
-import { requireWorkspaceRoot } from './root'
+import { getWorkspaceRoot, requireWorkspaceRoot } from './root'
 import { exists, readBlob, readDirectoryFiles, removeEntry, writeBlob } from './fs-primitives'
-import { EXPORTS_DIR, exportFilePath, exportsDir, sanitizeWorkspaceFileName } from './paths'
+import {
+  EXPORTS_DIR,
+  PROJECTS_DIR,
+  exportFilePath,
+  projectExportFilePath,
+  projectExportsDir,
+  sanitizeWorkspaceFileName,
+} from './paths'
 
 export interface SavedExport {
   /** The on-disk filename actually used (after de-duplication). */
@@ -34,34 +43,44 @@ function suffixFileName(fileName: string, n: number): string {
   return `${stem} (${n})${ext}`
 }
 
-async function uniqueExportFileName(
+async function uniqueFileName(
   root: FileSystemDirectoryHandle,
+  pathOf: (name: string) => string[],
   fileName: string,
 ): Promise<string> {
   const safe = sanitizeWorkspaceFileName(fileName)
-  if (!(await exists(root, exportFilePath(safe)))) return safe
+  if (!(await exists(root, pathOf(safe)))) return safe
   for (let n = 2; n < 1000; n++) {
     const candidate = suffixFileName(safe, n)
-    if (!(await exists(root, exportFilePath(candidate)))) return candidate
+    if (!(await exists(root, pathOf(candidate)))) return candidate
   }
   // Pathological fallback — guaranteed unique enough.
   return suffixFileName(safe, Date.now())
 }
 
 /**
- * Save a rendered blob to `{workspace}/exports/`, returning the final filename
- * and workspace-relative path. Throws if no workspace root is set.
+ * Save a rendered blob to the project's `exports/` folder, returning the final
+ * filename and workspace-relative path. Throws if no workspace root is set.
  */
-export async function saveExportFile(fileName: string, data: Blob): Promise<SavedExport> {
+export async function saveExportFile(
+  projectId: string | undefined,
+  fileName: string,
+  data: Blob,
+): Promise<SavedExport> {
   const root = requireWorkspaceRoot()
-  const name = await uniqueExportFileName(root, fileName)
-  await writeBlob(root, exportFilePath(name), data)
-  return { fileName: name, relPath: `${EXPORTS_DIR}/${name}` }
+  const pathOf = projectId
+    ? (name: string) => projectExportFilePath(projectId, name)
+    : (name: string) => exportFilePath(name)
+  const relBase = projectId ? `${PROJECTS_DIR}/${projectId}/${EXPORTS_DIR}` : EXPORTS_DIR
+
+  const name = await uniqueFileName(root, pathOf, fileName)
+  await writeBlob(root, pathOf(name), data)
+  return { fileName: name, relPath: `${relBase}/${name}` }
 }
 
-/** List files saved under `exports/`, newest first. Empty when the dir is absent. */
-export async function listExportFiles(): Promise<ExportFileEntry[]> {
-  const files = await readDirectoryFiles(requireWorkspaceRoot(), exportsDir())
+/** List a project's saved export files, newest first. Empty when none. */
+export async function listExportFiles(projectId: string): Promise<ExportFileEntry[]> {
+  const files = await readDirectoryFiles(requireWorkspaceRoot(), projectExportsDir(projectId))
   return files
     .map(({ name, blob }) => ({
       name,
@@ -74,11 +93,16 @@ export async function listExportFiles(): Promise<ExportFileEntry[]> {
 }
 
 /** Read a saved export's bytes (for download). Null when missing. */
-export function readExportFile(name: string): Promise<Blob | null> {
-  return readBlob(requireWorkspaceRoot(), exportFilePath(name))
+export function readExportFile(projectId: string, name: string): Promise<Blob | null> {
+  return readBlob(requireWorkspaceRoot(), projectExportFilePath(projectId, name))
 }
 
 /** Delete a saved export. No-op when missing. */
-export function deleteExportFile(name: string): Promise<void> {
-  return removeEntry(requireWorkspaceRoot(), exportFilePath(name))
+export function deleteExportFile(projectId: string, name: string): Promise<void> {
+  return removeEntry(requireWorkspaceRoot(), projectExportFilePath(projectId, name))
+}
+
+/** The user-picked workspace folder's name (for telling users where files land). */
+export function workspaceFolderName(): string | null {
+  return getWorkspaceRoot()?.name ?? null
 }

@@ -169,6 +169,7 @@ export {
   listExportFiles,
   readExportFile,
   deleteExportFile,
+  workspaceFolderName,
   type SavedExport,
   type ExportFileEntry,
 } from '@/infrastructure/storage/workspace-fs/exports'

@@ -600,7 +600,11 @@ export const LoadedEditor = memo(function LoadedEditor({
 
         {/* Exports + render queue dialog */}
         {renderQueueOpen && (
-          <LazyExportsDialog open={renderQueueOpen} onClose={() => setRenderQueueOpen(false)} />
+          <LazyExportsDialog
+            open={renderQueueOpen}
+            onClose={() => setRenderQueueOpen(false)}
+            projectId={projectId}
+          />
         )}
 
         {/* Bundle Export Dialog */}

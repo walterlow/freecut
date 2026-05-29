@@ -16,6 +16,7 @@ import {
   deleteExportFile,
   listExportFiles,
   readExportFile,
+  workspaceFolderName,
   type ExportFileEntry,
 } from '@/infrastructure/storage'
 import { formatBytes } from '../utils/client-renderer'
@@ -27,6 +28,8 @@ const log = createLogger('Export')
 export interface ExportsDialogProps {
   open: boolean
   onClose: () => void
+  /** Active project — exports live in `projects/<id>/exports/`. */
+  projectId: string
 }
 
 const AUDIO_EXTENSIONS = ['.mp3', '.aac', '.wav', '.m4a', '.opus']
@@ -36,14 +39,22 @@ function isAudioFile(name: string): boolean {
   return AUDIO_EXTENSIONS.some((ext) => lower.endsWith(ext))
 }
 
-function ExportFileRow({ entry, onChanged }: { entry: ExportFileEntry; onChanged: () => void }) {
+function ExportFileRow({
+  entry,
+  projectId,
+  onChanged,
+}: {
+  entry: ExportFileEntry
+  projectId: string
+  onChanged: () => void
+}) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
 
   const handleDownload = async () => {
     setBusy(true)
     try {
-      const blob = await readExportFile(entry.name)
+      const blob = await readExportFile(projectId, entry.name)
       if (!blob) {
         toast.error(t('export.renderQueue.missingFile'))
         onChanged()
@@ -68,7 +79,7 @@ function ExportFileRow({ entry, onChanged }: { entry: ExportFileEntry; onChanged
   const handleDelete = async () => {
     setBusy(true)
     try {
-      await deleteExportFile(entry.name)
+      await deleteExportFile(projectId, entry.name)
       toast.success(t('export.renderQueue.deleted', { name: entry.name }))
       onChanged()
     } catch (err) {
@@ -118,7 +129,7 @@ function ExportFileRow({ entry, onChanged }: { entry: ExportFileEntry; onChanged
   )
 }
 
-function ExportsList() {
+function ExportsList({ projectId }: { projectId: string }) {
   const { t } = useTranslation()
   const [entries, setEntries] = useState<ExportFileEntry[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -126,18 +137,19 @@ function ExportsList() {
   const completedCount = useRenderQueueStore(
     (s) => s.jobs.filter((j) => j.status === 'completed').length,
   )
+  const folder = workspaceFolderName()
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setEntries(await listExportFiles())
+      setEntries(await listExportFiles(projectId))
     } catch (err) {
       log.error('Failed to list exports', err)
       setEntries([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [projectId])
 
   useEffect(() => {
     void load()
@@ -145,6 +157,16 @@ function ExportsList() {
 
   return (
     <div className="space-y-3">
+      {/* Tell users where the files actually live (browsers can't open the OS folder). */}
+      <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <FolderOpen className="mt-0.5 h-4 w-4 flex-shrink-0" />
+        <span>
+          {folder
+            ? t('export.renderQueue.exportsLocation', { folder })
+            : t('export.renderQueue.exportsLocationGeneric')}
+        </span>
+      </div>
+
       <div className="flex items-center justify-end">
         <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => void load()}>
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -152,7 +174,7 @@ function ExportsList() {
         </Button>
       </div>
 
-      <div className="max-h-[55vh] overflow-y-auto pr-1">
+      <div className="max-h-[50vh] overflow-y-auto pr-1">
         {entries === null ? (
           <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -166,7 +188,12 @@ function ExportsList() {
         ) : (
           <div className="space-y-2">
             {entries.map((entry) => (
-              <ExportFileRow key={entry.name} entry={entry} onChanged={() => void load()} />
+              <ExportFileRow
+                key={entry.name}
+                entry={entry}
+                projectId={projectId}
+                onChanged={() => void load()}
+              />
             ))}
           </div>
         )}
@@ -177,10 +204,10 @@ function ExportsList() {
 
 /**
  * Dedicated dialog for the render queue and the saved export files. The Queue
- * tab shows this session's jobs; the Exports tab browses the persistent
- * `exports/` folder in the workspace (download / delete past renders).
+ * tab shows this session's jobs; the Exports tab browses the project's
+ * `projects/<id>/exports/` folder (download / delete past renders).
  */
-export function ExportsDialog({ open, onClose }: ExportsDialogProps) {
+export function ExportsDialog({ open, onClose, projectId }: ExportsDialogProps) {
   const { t } = useTranslation()
   const activeCount = useRenderQueueStore(
     (s) => s.jobs.filter((j) => j.status === 'queued' || j.status === 'rendering').length,
@@ -211,7 +238,7 @@ export function ExportsDialog({ open, onClose }: ExportsDialogProps) {
             <RenderQueueList />
           </TabsContent>
           <TabsContent value="exports" className="mt-4">
-            <ExportsList />
+            <ExportsList projectId={projectId} />
           </TabsContent>
         </Tabs>
       </DialogContent>
