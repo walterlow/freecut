@@ -52,6 +52,7 @@ import {
 } from '../utils/render-pump-prewarm-plan'
 import type { TransitionPreviewSessionTrace } from './use-preview-transition-session-controller'
 import { createLogger } from '@/shared/logging/logger'
+import { isPreviewTraceEnabled, recordPumpTrace } from '@/shared/logging/preview-trace'
 
 const logger = createLogger('VideoPreview')
 
@@ -698,7 +699,25 @@ export function usePreviewRenderPump({
               (playbackTransitionState.hasActiveTransition ||
                 playbackTransitionState.shouldHoldOverlay) &&
               !forceFastScrubOverlay
+            // DEV diagnostics: record which overlay path the pump chose per
+            // priority frame. Tree-shaken from prod; no-op unless a trace runs.
+            const tracePump = (
+              act: 'transition-overlay' | 'fast-scrub' | 'hide' | 'fallback-hide',
+            ) => {
+              if (import.meta.env.DEV && isPreviewTraceEnabled()) {
+                recordPumpTrace({
+                  f: frameToRender,
+                  act,
+                  shouldShow: shouldShowPlaybackTransitionOverlay,
+                  hasActive: playbackTransitionState.hasActiveTransition,
+                  hold: playbackTransitionState.shouldHoldOverlay,
+                  forceFast: forceFastScrubOverlay,
+                  fallback: fallbackToPlayerScrubRef.current,
+                })
+              }
+            }
             if (fallbackToPlayerScrubRef.current) {
+              tracePump('fallback-hide')
               hideAllOverlays()
               continue
             }
@@ -757,14 +776,17 @@ export function usePreviewRenderPump({
                 showFastScrubOverlayForFrame()
                 continue
               }
+              tracePump('hide')
               hideAllOverlays()
               continue
             }
 
             drawToDisplay(frameToRender)
             if (shouldShowPlaybackTransitionOverlay) {
+              tracePump('transition-overlay')
               showPlaybackTransitionOverlayForFrame()
             } else {
+              tracePump('fast-scrub')
               showFastScrubOverlayForFrame()
             }
             if (
