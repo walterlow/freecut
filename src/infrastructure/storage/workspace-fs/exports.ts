@@ -1,12 +1,12 @@
 /**
  * Final render outputs from the export queue.
  *
- * Writes rendered video/audio files to the project's own
- * `projects/{id}/exports/` folder so they sit alongside the project and are
- * discoverable when browsing the workspace on disk. (Falls back to a top-level
- * `exports/` only if a job has no project id, which shouldn't happen in the
- * editor.) Picks a non-clobbering filename (appends ` (2)`, ` (3)`, …) so
- * re-rendering the same segment doesn't overwrite a previous result.
+ * Saves to the project's own `projects/{id}/exports/` folder so outputs are
+ * grouped with the project and removed with it. `listExportFiles` also surfaces
+ * any loose files in the legacy top-level `exports/` folder so older renders
+ * (made before per-project exports) stay visible. Read/delete are addressed by
+ * full path, so they work for both locations. Filenames are de-duplicated
+ * (` (2)`, ` (3)`, …) so re-rendering a segment doesn't overwrite a result.
  */
 
 import { getWorkspaceRoot, requireWorkspaceRoot } from './root'
@@ -15,6 +15,7 @@ import {
   EXPORTS_DIR,
   PROJECTS_DIR,
   exportFilePath,
+  exportsDir,
   projectExportFilePath,
   projectExportsDir,
   sanitizeWorkspaceFileName,
@@ -32,6 +33,10 @@ export interface ExportFileEntry {
   size: number
   /** Epoch ms of the file's last modification (0 when unavailable). */
   lastModified: number
+  /** Workspace-relative path segments — used to read/delete the file. */
+  path: string[]
+  /** True for loose files in the top-level `exports/` folder (no project). */
+  legacy: boolean
 }
 
 /** Insert a ` (n)` suffix before the extension: `clip.mp4` → `clip (2).mp4`. */
@@ -60,7 +65,8 @@ async function uniqueFileName(
 
 /**
  * Save a rendered blob to the project's `exports/` folder, returning the final
- * filename and workspace-relative path. Throws if no workspace root is set.
+ * filename and workspace-relative path. Falls back to a top-level `exports/`
+ * only when no project id is given. Throws if no workspace root is set.
  */
 export async function saveExportFile(
   projectId: string | undefined,
@@ -78,28 +84,50 @@ export async function saveExportFile(
   return { fileName: name, relPath: `${relBase}/${name}` }
 }
 
-/** List a project's saved export files, newest first. Empty when none. */
+async function listDir(
+  root: FileSystemDirectoryHandle,
+  dir: string[],
+  pathOf: (name: string) => string[],
+  legacy: boolean,
+): Promise<ExportFileEntry[]> {
+  const files = await readDirectoryFiles(root, dir)
+  return files.map(({ name, blob }) => ({
+    name,
+    size: blob.size,
+    // readDirectoryFiles hands back File handles, so lastModified is available
+    // without reading the bytes.
+    lastModified: (blob as File).lastModified ?? 0,
+    path: pathOf(name),
+    legacy,
+  }))
+}
+
+/**
+ * List a project's saved exports plus any loose files in the legacy top-level
+ * `exports/` folder, newest first.
+ */
 export async function listExportFiles(projectId: string): Promise<ExportFileEntry[]> {
-  const files = await readDirectoryFiles(requireWorkspaceRoot(), projectExportsDir(projectId))
-  return files
-    .map(({ name, blob }) => ({
-      name,
-      size: blob.size,
-      // readDirectoryFiles hands back File handles (getFile()), so lastModified
-      // is available without reading the bytes.
-      lastModified: (blob as File).lastModified ?? 0,
-    }))
-    .sort((a, b) => b.lastModified - a.lastModified)
+  const root = requireWorkspaceRoot()
+  const [projectFiles, legacyFiles] = await Promise.all([
+    listDir(
+      root,
+      projectExportsDir(projectId),
+      (name) => projectExportFilePath(projectId, name),
+      false,
+    ),
+    listDir(root, exportsDir(), (name) => exportFilePath(name), true),
+  ])
+  return [...projectFiles, ...legacyFiles].sort((a, b) => b.lastModified - a.lastModified)
 }
 
-/** Read a saved export's bytes (for download). Null when missing. */
-export function readExportFile(projectId: string, name: string): Promise<Blob | null> {
-  return readBlob(requireWorkspaceRoot(), projectExportFilePath(projectId, name))
+/** Read an export's bytes (for download). Null when missing. */
+export function readExportFile(path: string[]): Promise<Blob | null> {
+  return readBlob(requireWorkspaceRoot(), path)
 }
 
-/** Delete a saved export. No-op when missing. */
-export function deleteExportFile(projectId: string, name: string): Promise<void> {
-  return removeEntry(requireWorkspaceRoot(), projectExportFilePath(projectId, name))
+/** Delete an export by path. No-op when missing. */
+export function deleteExportFile(path: string[]): Promise<void> {
+  return removeEntry(requireWorkspaceRoot(), path)
 }
 
 /** The user-picked workspace folder's name (for telling users where files land). */

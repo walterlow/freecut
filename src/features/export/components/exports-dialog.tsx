@@ -28,7 +28,7 @@ const log = createLogger('Export')
 export interface ExportsDialogProps {
   open: boolean
   onClose: () => void
-  /** Active project — exports live in `projects/<id>/exports/`. */
+  /** Active project — new renders save to `projects/<id>/exports/`. */
   projectId: string
 }
 
@@ -39,22 +39,14 @@ function isAudioFile(name: string): boolean {
   return AUDIO_EXTENSIONS.some((ext) => lower.endsWith(ext))
 }
 
-function ExportFileRow({
-  entry,
-  projectId,
-  onChanged,
-}: {
-  entry: ExportFileEntry
-  projectId: string
-  onChanged: () => void
-}) {
+function ExportFileRow({ entry, onChanged }: { entry: ExportFileEntry; onChanged: () => void }) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
 
   const handleDownload = async () => {
     setBusy(true)
     try {
-      const blob = await readExportFile(projectId, entry.name)
+      const blob = await readExportFile(entry.path)
       if (!blob) {
         toast.error(t('export.renderQueue.missingFile'))
         onChanged()
@@ -79,7 +71,7 @@ function ExportFileRow({
   const handleDelete = async () => {
     setBusy(true)
     try {
-      await deleteExportFile(projectId, entry.name)
+      await deleteExportFile(entry.path)
       toast.success(t('export.renderQueue.deleted', { name: entry.name }))
       onChanged()
     } catch (err) {
@@ -189,9 +181,8 @@ function ExportsList({ projectId }: { projectId: string }) {
           <div className="space-y-2">
             {entries.map((entry) => (
               <ExportFileRow
-                key={entry.name}
+                key={entry.path.join('/')}
                 entry={entry}
-                projectId={projectId}
                 onChanged={() => void load()}
               />
             ))}
@@ -205,7 +196,8 @@ function ExportsList({ projectId }: { projectId: string }) {
 /**
  * Dedicated dialog for the render queue and the saved export files. The Queue
  * tab shows this session's jobs; the Exports tab browses the project's
- * `projects/<id>/exports/` folder (download / delete past renders).
+ * `projects/<id>/exports/` folder (plus any loose files in the legacy top-level
+ * `exports/` folder) and lets you download / delete them.
  */
 export function ExportsDialog({ open, onClose, projectId }: ExportsDialogProps) {
   const { t } = useTranslation()
