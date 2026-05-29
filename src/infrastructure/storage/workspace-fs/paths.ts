@@ -509,11 +509,6 @@ export function proxyDir(proxyKey: string): string[] {
 
 /* ---------------- Render outputs (export queue) ---------------- */
 
-/** Segments for `exports/`. */
-export function exportsDir(): string[] {
-  return [EXPORTS_DIR]
-}
-
 /** Segments for `exports/{sanitizedName}` — a final rendered file. */
 export function exportFilePath(fileName: string): string[] {
   return [EXPORTS_DIR, sanitizeWorkspaceFileName(fileName)]

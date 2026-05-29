@@ -108,6 +108,12 @@ export function readMediaMetadata(workspaceDir, mediaId) {
   }
 }
 
+/** Collect `{ mediaId, metadata }` for media referenced by addClip ops (deduped). */
+export function collectAddClipMedia(workspaceDir, ops) {
+  const ids = [...new Set(ops.filter((o) => o.op === 'addClip' && o.mediaId).map((o) => o.mediaId))]
+  return ids.map((mediaId) => ({ mediaId, metadata: readMediaMetadata(workspaceDir, mediaId) ?? undefined }))
+}
+
 /** Resolve a media id to its source file path under media/{id}/ (first non-reserved file). */
 export function resolveMediaFile(workspaceDir, mediaId) {
   const mediaDir = path.join(workspaceDir, 'media', mediaId)

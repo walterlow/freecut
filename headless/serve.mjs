@@ -24,8 +24,9 @@ import os from 'node:os'
 import fs from 'node:fs'
 import path from 'node:path'
 import { chromium } from 'playwright'
-import { loadProject, listProjects, readMediaMetadata } from './lib/workspace.mjs'
-import { chromeLaunchArgs, prepareJob, renderJob, startHarness } from './lib/render-core.mjs'
+import { loadProject, listProjects, collectAddClipMedia } from './lib/workspace.mjs'
+import { parseArgs, chromeLaunchArgs } from './lib/cli.mjs'
+import { prepareJob, renderJob, startHarness } from './lib/render-core.mjs'
 
 const CONTAINER_MIME = {
   mp4: 'video/mp4',
@@ -35,21 +36,6 @@ const CONTAINER_MIME = {
   mp3: 'audio/mpeg',
   wav: 'audio/wav',
   m4a: 'audio/mp4',
-}
-
-function parseArgs(argv) {
-  const args = {}
-  for (let i = 0; i < argv.length; i++) {
-    if (!argv[i].startsWith('--')) continue
-    const key = argv[i].slice(2)
-    const next = argv[i + 1]
-    if (next === undefined || next.startsWith('--')) args[key] = true
-    else {
-      args[key] = next
-      i++
-    }
-  }
-  return args
 }
 
 function readJsonBody(req) {
@@ -189,11 +175,7 @@ async function main() {
     const body = await readJsonBody(req)
     const project = body.projectObject ?? loadProject(workspace, body.project).project
     const ops = Array.isArray(body.ops) ? body.ops : []
-    const addClipIds = [...new Set(ops.filter((o) => o.op === 'addClip' && o.mediaId).map((o) => o.mediaId))]
-    const media = addClipIds.map((mediaId) => ({
-      mediaId,
-      metadata: readMediaMetadata(workspace, mediaId) ?? undefined,
-    }))
+    const media = collectAddClipMedia(workspace, ops)
     const result = await enqueue(() =>
       page.evaluate((payload) => window.freecut.editProject(payload), { project, ops, media }),
     )

@@ -29,33 +29,11 @@
 //   trimEnd      { id, amount }
 //   addTransition{ leftClipId, rightClipId, type?, durationInFrames? }
 import { chromium } from 'playwright'
-import { execSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
-import { loadProject, readMediaMetadata } from './lib/workspace.mjs'
-import { createHarnessServer } from './server.mjs'
-
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-
-function parseArgs(argv) {
-  const args = { _: [] }
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i]
-    if (token.startsWith('--')) {
-      const key = token.slice(2)
-      const next = argv[i + 1]
-      if (next === undefined || next.startsWith('--')) args[key] = true
-      else {
-        args[key] = next
-        i++
-      }
-    } else {
-      args._.push(token)
-    }
-  }
-  return args
-}
+import { loadProject, collectAddClipMedia } from './lib/workspace.mjs'
+import { parseArgs } from './lib/cli.mjs'
+import { startHarness } from './lib/render-core.mjs'
 
 function loadOps(args) {
   if (!args.ops) throw new Error('Missing --ops <file.json>')
@@ -65,34 +43,6 @@ function loadOps(args) {
   const ops = Array.isArray(parsed) ? parsed : [parsed]
   if (ops.length === 0) throw new Error('Ops file is empty')
   return ops
-}
-
-async function startHarness(args) {
-  const devUrl = args['harness-url']
-  if (devUrl) {
-    try {
-      const res = await fetch(devUrl, { method: 'HEAD' })
-      if (!res.ok) throw new Error()
-    } catch {
-      throw new Error(`Dev harness not reachable at ${devUrl}. Start it with: npm run dev`)
-    }
-    return { harnessUrl: devUrl, close: async () => {} }
-  }
-
-  const distDir = path.join(REPO_ROOT, 'dist')
-  if (!fs.existsSync(path.join(distDir, 'headless.html'))) {
-    if (args.build) {
-      console.log('Building dist/ (npm run build)...')
-      execSync('npm run build', { cwd: REPO_ROOT, stdio: 'inherit' })
-    } else {
-      throw new Error(
-        'Harness not built: dist/headless.html is missing.\n' +
-          'Run `npm run build` once (or pass --build), or use --harness-url with `npm run dev`.',
-      )
-    }
-  }
-  const server = await createHarnessServer({ distDir })
-  return { harnessUrl: server.harnessUrl, close: () => server.close() }
 }
 
 async function main() {
@@ -106,19 +56,17 @@ async function main() {
   console.log(`Ops: ${ops.length}`)
 
   // Collect metadata for media referenced by addClip ops (for duration/fps/codec).
-  const addClipMediaIds = [
-    ...new Set(ops.filter((o) => o.op === 'addClip' && o.mediaId).map((o) => o.mediaId)),
-  ]
-  const media = addClipMediaIds.map((mediaId) => ({
-    mediaId,
-    metadata: readMediaMetadata(args.workspace, mediaId) ?? undefined,
-  }))
+  const media = collectAddClipMedia(args.workspace, ops)
   const missingMeta = media.filter((m) => !m.metadata).map((m) => m.mediaId)
   if (missingMeta.length > 0) {
     throw new Error(`addClip media not found in workspace: ${missingMeta.join(', ')}`)
   }
 
-  const { harnessUrl, close } = await startHarness(args)
+  // Edit needs no media serving (no rendering) — omit workspace.
+  const { harnessUrl, closeServers } = await startHarness({
+    devUrl: args['harness-url'],
+    build: args.build,
+  })
   const browser = await chromium.launch({ channel: 'chrome', headless: !args.head })
   let result
   try {
@@ -138,7 +86,7 @@ async function main() {
     })
   } finally {
     await browser.close()
-    await close()
+    await closeServers()
   }
 
   console.log('\nApplied ops:')

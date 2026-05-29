@@ -11,29 +11,6 @@ import { createHarnessServer } from '../server.mjs'
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
-/**
- * Chrome launch args for headless WebGPU, per platform. The ANGLE backend is
- * platform-specific (d3d11 on Windows, metal on macOS, vulkan on Linux). Extra
- * args can be appended via FREECUT_CHROME_ARGS (space-separated) — e.g. in
- * Docker: "--no-sandbox --use-vulkan=swiftshader" for software WebGPU.
- */
-export function chromeLaunchArgs() {
-  // Full override (space-separated) — for tuning the GPU/WebGPU backend, esp.
-  // in containers (e.g. SwiftShader). Replaces ALL args including the defaults.
-  const replace = process.env.FREECUT_CHROME_ARGS_REPLACE
-  if (replace) return replace.split(/\s+/).filter(Boolean)
-
-  const angle =
-    process.platform === 'win32'
-      ? '--use-angle=d3d11'
-      : process.platform === 'darwin'
-        ? '--use-angle=metal'
-        : '--use-angle=vulkan'
-  const base = ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--ignore-gpu-blocklist', angle]
-  const extra = (process.env.FREECUT_CHROME_ARGS ?? '').split(/\s+/).filter(Boolean)
-  return [...base, ...extra]
-}
-
 const CODEC_MAP = { h264: 'avc', avc: 'avc', h265: 'hevc', hevc: 'hevc', vp9: 'vp9', vp8: 'vp8', av1: 'av1' }
 const DEFAULT_CONTAINER = { avc: 'mp4', hevc: 'mp4', vp9: 'webm', vp8: 'webm', av1: 'webm' }
 const VIDEO_BITRATE_BY_QUALITY = { low: 2_500_000, medium: 5_000_000, high: 10_000_000, ultra: 20_000_000 }
@@ -112,12 +89,15 @@ async function ensureHarnessReachable(url) {
 /**
  * Start the harness + media servers (media resolved dynamically from the
  * workspace). Default: standalone server over built dist/. devUrl: drive a
- * running Vite dev server + cross-origin media server.
+ * running Vite dev server + cross-origin media server. Omit `workspace` for the
+ * edit path (no rendering): no media server is started and `mediaUrlOf` is a
+ * no-op.
  */
 export async function startHarness({ workspace, devUrl, build }) {
-  const resolveMedia = (mediaId) => resolveMediaFile(workspace, mediaId)
+  const resolveMedia = workspace ? (mediaId) => resolveMediaFile(workspace, mediaId) : undefined
   if (devUrl) {
     await ensureHarnessReachable(devUrl)
+    if (!resolveMedia) return { harnessUrl: devUrl, mediaUrlOf: () => undefined, closeServers: async () => {} }
     const mediaServer = await createMediaServer(resolveMedia)
     return { harnessUrl: devUrl, mediaUrlOf: (id) => mediaServer.url(id), closeServers: () => mediaServer.close() }
   }

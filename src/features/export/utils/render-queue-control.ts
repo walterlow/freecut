@@ -18,10 +18,7 @@ export function unregisterJobController(jobId: string): void {
   controllers.delete(jobId)
 }
 
-/** Abort the in-flight render for `jobId`. Returns true if one was running. */
-export function abortJob(jobId: string): boolean {
-  const controller = controllers.get(jobId)
-  if (!controller) return false
-  controller.abort()
-  return true
+/** Abort the in-flight render for `jobId` (no-op if none is running). */
+export function abortJob(jobId: string): void {
+  controllers.get(jobId)?.abort()
 }

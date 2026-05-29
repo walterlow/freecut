@@ -178,7 +178,6 @@ export {
 export {
   loadRenderQueue,
   saveRenderQueue,
-  deleteRenderQueue,
 } from '@/infrastructure/storage/workspace-fs/render-queue'
 
 // Soft-delete / trash for projects

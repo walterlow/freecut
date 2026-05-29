@@ -9,18 +9,12 @@ import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createMediaServer } from './media-server.mjs'
+import { chromeLaunchArgs } from './lib/cli.mjs'
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
 const HEADED = process.argv.includes('--head')
 const HARNESS_URL = 'http://localhost:5173/headless.html'
 const CLIP = path.join(ROOT, 'assets', 'testclip.mp4')
-
-const GPU_ARGS = [
-  '--enable-unsafe-webgpu',
-  '--enable-features=Vulkan',
-  '--ignore-gpu-blocklist',
-  '--use-angle=d3d11',
-]
 
 const MEDIA_ID = 'testclip'
 const FPS = 30
@@ -134,7 +128,7 @@ const main = async () => {
   const mediaUrl = mediaServer.url(MEDIA_ID)
   console.log(`Media server: ${mediaUrl}`)
 
-  const browser = await chromium.launch({ channel: 'chrome', headless: !HEADED, args: GPU_ARGS })
+  const browser = await chromium.launch({ channel: 'chrome', headless: !HEADED, args: chromeLaunchArgs() })
   try {
     const context = await browser.newContext({ acceptDownloads: true })
     const page = await context.newPage()

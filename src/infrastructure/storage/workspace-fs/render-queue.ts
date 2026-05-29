@@ -8,7 +8,7 @@
  */
 
 import { requireWorkspaceRoot } from './root'
-import { readJson, removeEntry, writeJsonAtomic } from './fs-primitives'
+import { readJson, writeJsonAtomic } from './fs-primitives'
 import { projectRenderQueuePath } from './paths'
 
 export function loadRenderQueue<T>(projectId: string): Promise<T | null> {
@@ -17,8 +17,4 @@ export function loadRenderQueue<T>(projectId: string): Promise<T | null> {
 
 export async function saveRenderQueue(projectId: string, data: unknown): Promise<void> {
   await writeJsonAtomic(requireWorkspaceRoot(), projectRenderQueuePath(projectId), data)
-}
-
-export function deleteRenderQueue(projectId: string): Promise<void> {
-  return removeEntry(requireWorkspaceRoot(), projectRenderQueuePath(projectId))
 }

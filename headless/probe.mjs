@@ -2,15 +2,9 @@
 // Run: node headless/probe.mjs        (headless)
 //      node headless/probe.mjs --head (headed, for comparison)
 import { chromium } from 'playwright'
+import { chromeLaunchArgs } from './lib/cli.mjs'
 
 const HEADED = process.argv.includes('--head')
-
-const GPU_ARGS = [
-  '--enable-unsafe-webgpu',
-  '--enable-features=Vulkan',
-  '--ignore-gpu-blocklist',
-  '--use-angle=d3d11',
-]
 
 const probeInPage = async () => {
   const out = {}
@@ -99,7 +93,7 @@ const main = async () => {
   const browser = await chromium.launch({
     channel: 'chrome',
     headless: !HEADED,
-    args: GPU_ARGS,
+    args: chromeLaunchArgs(),
   })
   try {
     const page = await browser.newPage()

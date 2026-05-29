@@ -31,6 +31,7 @@ import { useItemsStore } from '@/features/timeline/stores/items-store'
 import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store'
 import { createClassicTrack } from '@/features/timeline/utils/classic-tracks'
+import { seedMediaLibrary } from './seed-media'
 import {
   addItem,
   updateItem,
@@ -75,18 +76,6 @@ const asNumber = (value: unknown, fallback?: number): number | undefined =>
 
 function tracks(): TimelineTrack[] {
   return useItemsStore.getState().tracks
-}
-
-/** Seed the media-library store so addClip can read media duration/fps/dimensions. */
-function seedMediaLibrary(media: HeadlessEditInput['media']): void {
-  const metadatas = (media ?? [])
-    .map((m) => m.metadata)
-    .filter((m): m is MediaMetadata => Boolean(m))
-  if (metadatas.length === 0) return
-  const existing = useMediaLibraryStore.getState()
-  const mediaById = { ...existing.mediaById }
-  for (const meta of metadatas) mediaById[meta.id] = meta
-  useMediaLibraryStore.setState({ mediaItems: Object.values(mediaById), mediaById })
 }
 
 /** Resolve a usable trackId: the requested one if it exists, else the first non-group video track. */

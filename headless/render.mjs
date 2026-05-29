@@ -31,26 +31,8 @@
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import { listProjects } from './lib/workspace.mjs'
-import { chromeLaunchArgs, prepareJob, renderJob, startHarness } from './lib/render-core.mjs'
-
-function parseArgs(argv) {
-  const args = { _: [] }
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i]
-    if (token.startsWith('--')) {
-      const key = token.slice(2)
-      const next = argv[i + 1]
-      if (next === undefined || next.startsWith('--')) args[key] = true
-      else {
-        args[key] = next
-        i++
-      }
-    } else {
-      args._.push(token)
-    }
-  }
-  return args
-}
+import { parseArgs, chromeLaunchArgs } from './lib/cli.mjs'
+import { prepareJob, renderJob, startHarness } from './lib/render-core.mjs'
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))

@@ -11,7 +11,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { createHarnessServer } from './server.mjs'
-import { chromeLaunchArgs } from './lib/render-core.mjs'
+import { chromeLaunchArgs } from './lib/cli.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 

@@ -7,19 +7,13 @@
 import { chromium } from 'playwright'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { chromeLaunchArgs } from './lib/cli.mjs'
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
 const HEADED = process.argv.includes('--head')
 const urlArg = process.argv.indexOf('--url')
 const HARNESS_URL =
   urlArg !== -1 ? process.argv[urlArg + 1] : 'http://localhost:5173/headless.html'
-
-const GPU_ARGS = [
-  '--enable-unsafe-webgpu',
-  '--enable-features=Vulkan',
-  '--ignore-gpu-blocklist',
-  '--use-angle=d3d11',
-]
 
 const input = {
   tracks: [
@@ -74,7 +68,7 @@ const input = {
 const main = async () => {
   const outPath = path.join(ROOT, 'output', 'smoke.webm')
   console.log(`Launching Chrome (headless=${!HEADED}) -> ${HARNESS_URL}`)
-  const browser = await chromium.launch({ channel: 'chrome', headless: !HEADED, args: GPU_ARGS })
+  const browser = await chromium.launch({ channel: 'chrome', headless: !HEADED, args: chromeLaunchArgs() })
   try {
     const context = await browser.newContext({ acceptDownloads: true })
     const page = await context.newPage()
