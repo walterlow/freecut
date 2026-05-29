@@ -172,6 +172,7 @@ export default defineConfig({
       'mediabunny',
       '@mediabunny/ac3',
       '@mediabunny/mp3-encoder',
+      '@mediabunny/aac-encoder',
       '@huggingface/transformers',
     ],
     // Pre-bundle lucide-react for faster dev startup (avoids analyzing 1500+ icons on each reload)

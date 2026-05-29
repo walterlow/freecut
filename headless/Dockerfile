@@ -41,10 +41,11 @@ RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
-# Route Vulkan through lavapipe (software) so WebGPU works without a GPU, and
-# run Chrome with --no-sandbox (required as root). On a GPU host with
-# passthrough, drop VK_ICD_FILENAMES to use the real GPU.
-ENV VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+# Vulkan ICDs are auto-discovered: on a Linux GPU host (run with
+# `--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all`) the NVIDIA Vulkan ICD is
+# mounted and WebGPU uses the real GPU; otherwise the bundled Mesa lavapipe
+# provides software WebGPU. --no-sandbox is required running Chrome as root.
+# (To force software even on a GPU host: -e VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json)
 ENV FREECUT_CHROME_ARGS="--no-sandbox"
 ENV FREECUT_WORKSPACE=/workspace
 

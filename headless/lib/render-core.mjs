@@ -18,6 +18,11 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
  * Docker: "--no-sandbox --use-vulkan=swiftshader" for software WebGPU.
  */
 export function chromeLaunchArgs() {
+  // Full override (space-separated) — for tuning the GPU/WebGPU backend, esp.
+  // in containers (e.g. SwiftShader). Replaces ALL args including the defaults.
+  const replace = process.env.FREECUT_CHROME_ARGS_REPLACE
+  if (replace) return replace.split(/\s+/).filter(Boolean)
+
   const angle =
     process.platform === 'win32'
       ? '--use-angle=d3d11'

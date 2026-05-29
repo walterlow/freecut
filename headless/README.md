@@ -206,25 +206,37 @@ curl -X POST localhost:8787/render -H 'content-type: application/json' \
   -d '{"project":"<id>","duration":5}' -o out.mp4
 ```
 
-### Docker: what works (tested) and what to know
+### Docker: what works, and GPU effects
 
 Verified in-container against a real workspace:
 
-- **Builds and serves**; `/health` reports `"gpu":true` (software WebGPU via lavapipe).
-- **Renders work** for video, **text (gpu-text), and transitions** — all GPU-via-lavapipe.
-- **Use VP9/WebM (Opus) or audio-only MP3 for audio.** Linux Google Chrome has
-  **no WebCodecs AAC encoder**, so MP4/AAC output renders **video only** (audio
-  omitted). The render now prints a clear warning and sets an `X-Freecut-Warnings`
-  response header instead of silently dropping it. AAC works on Windows/macOS hosts.
-- **Heavy GPU effects can fail** under software WebGPU (lavapipe) with a Dawn
-  device-loss error — the render returns a clear error (not a silent bad output).
-  For reliable, full-speed effects use a **GPU host**: install the NVIDIA Container
-  Toolkit, drop `VK_ICD_FILENAMES` (so the real GPU is used), and run with
-  `--gpus all`.
+- **Builds and serves**; `/health` reports `"gpu":true`.
+- **Renders work** for video, **text, and transitions** (WebGPU via Mesa lavapipe).
+- **Audio works** — including **AAC** (the `@mediabunny/aac-encoder` WASM polyfill
+  is registered automatically because Linux Chrome has no native AAC encoder), plus
+  Opus (webm) and MP3.
+- **Heavy GPU effects need a real GPU.** Software WebGPU (both lavapipe and
+  SwiftShader) hits a Dawn device-loss on the effects pipeline. The render returns
+  a clear error (never a silent bad output).
 
-So: containerized rendering is solid for cuts/text/transitions with WebM/Opus
-audio; for AAC and heavy GPU effects, render on a host with the OS AAC encoder
-and/or a real GPU.
+**Using a real GPU:**
+
+- **On Windows/macOS, run the service natively** (`npm run headless:serve`) — Chrome
+  uses your GPU directly and effects render at full speed. **Docker Desktop on
+  Windows (WSL2) cannot pass the GPU's Vulkan through** to a container (it exposes
+  CUDA/NVENC and `/dev/dxg`, but no Vulkan ICD — `vulkaninfo` finds no GPU driver),
+  so containerized rendering there is software-only.
+- **On a Linux host with an NVIDIA GPU**, the NVIDIA Container Toolkit mounts the
+  GPU's Vulkan ICD, so the container uses the real GPU:
+
+  ```bash
+  docker run --rm -p 8787:8787 --gpus all -e NVIDIA_DRIVER_CAPABILITIES=all \
+    -v /path/to/FreeCutProjects:/workspace:ro freecut-headless
+  ```
+
+So: **for GPU effects, render natively (Windows/macOS) or on a Linux GPU host.**
+Docker on Windows is great for cuts/text/transitions with full audio, but not
+heavy effects.
 
 ## Dev/regression scripts
 

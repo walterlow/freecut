@@ -106,28 +106,28 @@ export interface HeadlessRenderSummary {
 }
 
 /**
- * Whether this browser can encode the given audio codec. mp3 (mediabunny WASM)
- * and PCM need no WebCodecs encoder; aac/opus go through AudioEncoder — and
- * Linux Chrome notably lacks an AAC encoder, which would otherwise silently
- * drop audio from mp4 output.
+ * Ensure AAC can be encoded. Linux Chrome has no native WebCodecs AAC encoder,
+ * so register the @mediabunny/aac-encoder WASM polyfill when native support is
+ * absent — mediabunny then uses it automatically. (mp3/PCM are handled by the
+ * export pipeline / need no encoder; opus is native in Chrome.)
  */
-async function audioEncodable(
-  audioCodec: string | undefined,
-  sampleRate = 48000,
-): Promise<boolean> {
-  if (!audioCodec || audioCodec === 'mp3' || audioCodec.startsWith('pcm')) return true
-  if (typeof AudioEncoder === 'undefined') return false
-  const codec = audioCodec === 'aac' ? 'mp4a.40.2' : audioCodec
+async function ensureAudioEncoder(audioCodec: string | undefined): Promise<void> {
+  if (audioCodec !== 'aac') return
+  const { canEncodeAudio } = await import('mediabunny')
+  if (await canEncodeAudio('aac')) return
+  const { registerAacEncoder } = await import('@mediabunny/aac-encoder')
+  registerAacEncoder()
+  log.info('Registered @mediabunny/aac-encoder (no native AAC encoder in this environment)')
+}
+
+/** True if the audio codec can't be encoded here (after any polyfill registration). */
+async function audioCodecUnsupported(audioCodec: string | undefined): Promise<boolean> {
+  if (!audioCodec || audioCodec === 'mp3' || audioCodec.startsWith('pcm')) return false
+  const { canEncodeAudio } = await import('mediabunny')
   try {
-    const support = await AudioEncoder.isConfigSupported({
-      codec,
-      sampleRate,
-      numberOfChannels: 2,
-      bitrate: 192_000,
-    })
-    return Boolean(support.supported)
+    return !(await canEncodeAudio(audioCodec as Parameters<typeof canEncodeAudio>[0]))
   } catch {
-    return false
+    return true
   }
 }
 
@@ -313,16 +313,14 @@ async function renderTimeline(input: HeadlessTimelineInput): Promise<HeadlessRen
   seedMediaLibrary(media)
 
   await adaptVideoSettings(settings)
+  // Register the WASM AAC encoder if this environment lacks a native one.
+  await ensureAudioEncoder(settings.audioCodec)
 
   const warnings: string[] = []
-  if (
-    settings.mode === 'video' &&
-    !(await audioEncodable(settings.audioCodec, settings.sampleRate))
-  ) {
+  if (settings.mode === 'video' && (await audioCodecUnsupported(settings.audioCodec))) {
     const msg =
       `Audio codec "${settings.audioCodec}" cannot be encoded in this environment; any audio will be omitted. ` +
-      `Use vp9/webm (Opus) for audio here, or render on a platform with an ${(settings.audioCodec ?? '').toUpperCase()} encoder ` +
-      `(Linux Chrome has no AAC encoder).`
+      `Use vp9/webm (Opus) for audio.`
     warnings.push(msg)
     log.warn(msg)
   }
