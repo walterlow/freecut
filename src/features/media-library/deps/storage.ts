@@ -28,6 +28,7 @@ export {
   readAiOutput,
   readMediaSource,
   readWorkspaceBlob,
+  removeMediaBatchFromProject,
   removeMediaFromProject,
   removeWorkspaceCacheEntry,
   saveCaptions,

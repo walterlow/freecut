@@ -13,6 +13,7 @@ const indexedDbMocks = vi.hoisted(() => ({
   decrementContentRef: vi.fn(),
   deleteContent: vi.fn(),
   associateMediaWithProject: vi.fn(),
+  removeMediaBatchFromProject: vi.fn(),
   removeMediaFromProject: vi.fn(),
   getProjectMediaIds: vi.fn(),
   getProjectsUsingMedia: vi.fn(),
@@ -239,7 +240,7 @@ describe('MediaLibraryService', () => {
         result.id,
         mockFile,
         10,
-        { startTime: 0, endTime: 10 },
+        { startTime: 0, endTime: 4 },
       )
     })
 

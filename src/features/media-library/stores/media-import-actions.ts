@@ -18,6 +18,8 @@ type Get = () => MediaLibraryState & MediaLibraryActions
 
 type ImportedMetadata = MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }
 
+const IMPORT_PROCESSING_CONCURRENCY = 1
+
 interface ImportTask {
   handle: FileSystemFileHandle
   tempId: string
@@ -235,16 +237,37 @@ export function createImportActions(
     return importTasks
   }
 
-  const runImportTasks = (
+  const runImportTasks = async (
     importTasks: ImportTask[],
     projectId: string,
-  ): Promise<PromiseSettledResult<CompletedImportTask>[]> =>
-    Promise.allSettled(
-      importTasks.map(async ({ handle, tempId, file }) => {
-        const metadata = await mediaLibraryService.importMediaWithHandle(handle, projectId)
-        return { metadata, tempId, file, handle }
-      }),
-    )
+  ): Promise<PromiseSettledResult<CompletedImportTask>[]> => {
+    const results: PromiseSettledResult<CompletedImportTask>[] = new Array(importTasks.length)
+    let nextIndex = 0
+
+    const runNext = async (): Promise<void> => {
+      while (nextIndex < importTasks.length) {
+        const index = nextIndex++
+        const task = importTasks[index]
+        if (!task) {
+          continue
+        }
+
+        try {
+          const metadata = await mediaLibraryService.importMediaWithHandle(task.handle, projectId)
+          results[index] = {
+            status: 'fulfilled',
+            value: { metadata, tempId: task.tempId, file: task.file, handle: task.handle },
+          }
+        } catch (reason) {
+          results[index] = { status: 'rejected', reason }
+        }
+      }
+    }
+
+    const workerCount = Math.min(IMPORT_PROCESSING_CONCURRENCY, importTasks.length)
+    await Promise.all(Array.from({ length: workerCount }, runNext))
+    return results
+  }
 
   const importHandlesInternal = async (
     handles: FileSystemFileHandle[],

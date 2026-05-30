@@ -10,6 +10,7 @@ import type { MediaMetadata } from '@/types/storage'
 import {
   getMediaDeletionImpact,
   removeProjectItems,
+  useTimelineStore,
 } from '@/features/media-library/deps/timeline-stores'
 import { useEditorStore } from '@/shared/state/editor'
 import {
@@ -132,7 +133,11 @@ export const MediaGrid = memo(function MediaGrid({
     try {
       // First remove timeline items that reference this media
       if (affectedMediaImpact.itemIds.length > 0) {
-        removeProjectItems(affectedMediaImpact.itemIds)
+        const removedTimelineReferences = removeProjectItems(affectedMediaImpact.itemIds)
+        const currentProjectId = useMediaLibraryStore.getState().currentProjectId
+        if (removedTimelineReferences && currentProjectId) {
+          await useTimelineStore.getState().saveTimeline(currentProjectId)
+        }
       }
 
       // Then delete the media from the library

@@ -111,6 +111,12 @@ function createHandle(file: File): FileSystemFileHandle {
   } as unknown as FileSystemFileHandle
 }
 
+async function flushMicrotasks(times = 5): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await Promise.resolve()
+  }
+}
+
 function createMockState(overrides: ImportState = {}): MediaLibraryState & MediaLibraryActions {
   return {
     currentProjectId: 'project-1',
@@ -148,6 +154,9 @@ function createMockState(overrides: ImportState = {}): MediaLibraryState & Media
 describe('createImportActions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mediaLibraryServiceMocks.importMediaWithHandle.mockReset()
+    mediaLibraryServiceMocks.importMediaFromUrl.mockReset()
+    mediaLibraryServiceMocks.getMediaFile.mockReset()
     proxyServiceMocks.canGenerateProxy.mockImplementation((mimeType: string) =>
       mimeType.startsWith('video/'),
     )
@@ -174,6 +183,52 @@ describe('createImportActions', () => {
     expect(currentState.mediaItems).toEqual([imported])
     expect(currentState.importingIds).toEqual([])
     expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('imported-1', 'proxy-imported-1')
+  })
+
+  it('processes dropped files one at a time to avoid import decode bursts', async () => {
+    const firstFile = new File(['video-1'], 'first.mp4', { type: 'video/mp4' })
+    const secondFile = new File(['video-2'], 'second.mp4', { type: 'video/mp4' })
+    const handles = [createHandle(firstFile), createHandle(secondFile)]
+    const imported = [
+      makeMedia({ id: 'first-imported', fileName: 'first.mp4' }),
+      makeMedia({ id: 'second-imported', fileName: 'second.mp4' }),
+    ]
+    let firstResolve!: (metadata: MediaMetadata) => void
+    const firstImport = new Promise<MediaMetadata>((resolve) => {
+      firstResolve = resolve
+    })
+
+    mediaLibraryServiceMocks.importMediaWithHandle
+      .mockReturnValueOnce(firstImport)
+      .mockResolvedValueOnce(imported[1])
+
+    let currentState = createMockState()
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
+        MediaLibraryActions
+    })
+    const get = vi.fn(() => currentState)
+
+    const actions = createImportActions(set, get)
+    const importPromise = actions.importHandles(handles)
+
+    await flushMicrotasks()
+    expect(mediaLibraryServiceMocks.importMediaWithHandle).toHaveBeenCalledTimes(1)
+
+    firstResolve(imported[0]!)
+    const result = await importPromise
+
+    expect(result.map((item) => item.id)).toEqual(['first-imported', 'second-imported'])
+    expect(mediaLibraryServiceMocks.importMediaWithHandle).toHaveBeenNthCalledWith(
+      1,
+      handles[0],
+      'project-1',
+    )
+    expect(mediaLibraryServiceMocks.importMediaWithHandle).toHaveBeenNthCalledWith(
+      2,
+      handles[1],
+      'project-1',
+    )
   })
 
   it('still lands imported media when a concurrent reload wipes the placeholder', async () => {

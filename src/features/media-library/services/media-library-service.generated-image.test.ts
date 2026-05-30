@@ -66,6 +66,7 @@ vi.mock('@/infrastructure/storage', () => ({
   decrementContentRef: vi.fn(),
   deleteContent: vi.fn(),
   associateMediaWithProject: indexedDbMocks.associateMediaWithProject,
+  removeMediaBatchFromProject: vi.fn(),
   removeMediaFromProject: vi.fn(),
   getProjectMediaIds: vi.fn(),
   getProjectsUsingMedia: vi.fn(),

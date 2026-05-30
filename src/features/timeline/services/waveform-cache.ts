@@ -1190,22 +1190,16 @@ class WaveformCacheService {
    * Prefetch waveform in background
    */
   prefetch(mediaId: string, blobUrl?: string | null): void {
+    void blobUrl
     // Skip if already cached or pending
     if (this.getFromMemoryCache(mediaId) || this.pendingRequests.has(mediaId)) {
       return
     }
 
-    // Check storage asynchronously and generate if needed
+    // Only hydrate persisted peaks. A fresh waveform requires a full-source
+    // audio decode, which stays demand-driven from visible clips so scroll
+    // prefetch cannot queue long decodes ahead of immediate import/drop work.
     this.loadFromStorage(mediaId)
-      .then((cached) => {
-        if (!cached && blobUrl && !this.pendingRequests.has(mediaId)) {
-          // Generate in background (no progress callback)
-          this.getWaveform(mediaId, blobUrl).catch((error) => {
-            if (error instanceof AbortError) return
-            logger.warn('Waveform prefetch failed:', error)
-          })
-        }
-      })
       .catch((error) => {
         logger.warn('Waveform storage load failed during prefetch:', error)
       })

@@ -50,6 +50,7 @@ import {
   deleteContent,
   // v3: Project-media associations
   associateMediaWithProject,
+  removeMediaBatchFromProject as removeMediaBatchFromProjectDB,
   removeMediaFromProject as removeMediaFromProjectDB,
   getProjectMediaIds,
   getProjectsUsingMedia,
@@ -91,7 +92,7 @@ import {
 export { FileAccessError } from './file-access'
 
 const IMPORT_FILMSTRIP_COVER_PREWARM_SECONDS = 1
-const IMPORT_FILMSTRIP_PREWARM_SECONDS = 12
+const IMPORT_FILMSTRIP_PREWARM_SECONDS = 4
 const IMPORT_BACKGROUND_COVER_WARM_DELAY_MS = 0
 const IMPORT_BACKGROUND_WARM_DELAY_MS = 600
 const IMPORT_BACKGROUND_HEAVY_DELAY_MS = 2200
@@ -350,6 +351,27 @@ class MediaLibraryService {
     } catch (error) {
       logger.warn('Failed to delete content record:', error)
     }
+  }
+
+  private async cleanupMediaIfUnreferenced(media: MediaMetadata): Promise<void> {
+    const remainingProjects = await getProjectsUsingMedia(media.id)
+
+    if (remainingProjects.length > 0) {
+      return
+    }
+
+    await deleteMediaDB(media.id)
+
+    await this.deleteTranscriptSafely(media.id)
+    await this.deleteCaptionsSafely(media.id)
+    await this.deleteScenesSafely(media.id)
+    await this.deleteThumbnailsSafely(media.id)
+    await this.clearGifFrameCacheSafely(media.id)
+    await this.clearFilmstripCacheSafely(media.id)
+    await this.clearWaveformCacheSafely(media.id)
+    await deletePreviewAudioConform(media, { clearMetadata: false })
+    await this.deleteProxySafely(media, { preserveSharedAliases: true })
+    await this.deleteOpfsContentIfUnreferenced(media)
   }
 
   private schedulePostImportWork(
@@ -1037,54 +1059,67 @@ class MediaLibraryService {
     // Remove project-media association
     await removeMediaFromProjectDB(projectId, mediaId)
 
-    // Check if any other projects still use this media
-    const remainingProjects = await getProjectsUsingMedia(mediaId)
-
-    if (remainingProjects.length === 0) {
-      // No other projects use this media - safe to fully delete metadata
-
-      // Delete media metadata
-      await deleteMediaDB(mediaId)
-
-      await this.deleteTranscriptSafely(mediaId)
-      await this.deleteCaptionsSafely(mediaId)
-      await this.deleteScenesSafely(mediaId)
-      await this.deleteThumbnailsSafely(mediaId)
-      await this.clearGifFrameCacheSafely(mediaId)
-      await this.clearFilmstripCacheSafely(mediaId)
-      await this.clearWaveformCacheSafely(mediaId)
-      await deletePreviewAudioConform(media, { clearMetadata: false })
-      await this.deleteProxySafely(media, { preserveSharedAliases: true })
-      await this.deleteOpfsContentIfUnreferenced(media)
-      // For handle storage: File stays on user's disk - nothing to delete
-    }
+    await this.cleanupMediaIfUnreferenced(media)
   }
 
   /**
    * Delete multiple media items from a project in batch.
-   * Uses parallel deletion for better performance.
+   * Unlinks the whole batch from the project in one write, then cleans up any
+   * media no longer referenced by another project.
    */
   async deleteMediaBatchFromProject(projectId: string, mediaIds: string[]): Promise<void> {
-    // Serialize deletions to avoid races on shared state (proxy aliases,
-    // content ref counts, OPFS files) that concurrent deletes would cause.
-    const errors: Array<{ id: string; error: unknown }> = []
+    const uniqueMediaIds = Array.from(new Set(mediaIds.filter(Boolean)))
+    if (uniqueMediaIds.length === 0) {
+      return
+    }
 
-    for (const mediaId of mediaIds) {
+    // Snapshot metadata first so missing-media failures preserve old behavior.
+    const mediaById = new Map<string, MediaMetadata>()
+    const errors: Array<{ id: string; error: unknown }> = []
+    for (const mediaId of uniqueMediaIds) {
       try {
-        await this.deleteMediaFromProject(projectId, mediaId)
+        const media = await getMediaDB(mediaId)
+        if (!media) {
+          throw new Error(`Media not found: ${mediaId}`)
+        }
+        mediaById.set(mediaId, media)
+      } catch (error) {
+        logger.error(`Failed to load media ${mediaId} for project delete:`, error)
+        errors.push({ id: mediaId, error })
+      }
+    }
+
+    if (errors.length === uniqueMediaIds.length) {
+      throw new Error(
+        `Failed to delete all ${uniqueMediaIds.length} items. Check console for details.`,
+      )
+    }
+
+    const unlinkIds = uniqueMediaIds.filter((id) => mediaById.has(id))
+    await removeMediaBatchFromProjectDB(projectId, unlinkIds)
+
+    // After the atomic unlink, slow cleanup can stay serialized to avoid races
+    // on shared proxy aliases, content ref-counts, and OPFS deletes.
+    for (const mediaId of unlinkIds) {
+      try {
+        const media = mediaById.get(mediaId)
+        if (!media) continue
+        await this.cleanupMediaIfUnreferenced(media)
       } catch (error) {
         logger.error(`Failed to delete media ${mediaId}:`, error)
         errors.push({ id: mediaId, error })
       }
     }
 
-    if (errors.length === mediaIds.length) {
-      throw new Error(`Failed to delete all ${mediaIds.length} items. Check console for details.`)
+    if (errors.length === uniqueMediaIds.length) {
+      throw new Error(
+        `Failed to delete all ${uniqueMediaIds.length} items. Check console for details.`,
+      )
     }
 
     if (errors.length > 0) {
       logger.warn(
-        `Partially deleted: ${mediaIds.length - errors.length}/${mediaIds.length} items deleted successfully.`,
+        `Partially deleted: ${uniqueMediaIds.length - errors.length}/${uniqueMediaIds.length} items deleted successfully.`,
       )
     }
   }

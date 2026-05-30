@@ -49,6 +49,7 @@ export {
 export {
   associateMediaWithProject,
   removeMediaFromProject,
+  removeMediaBatchFromProject,
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject,

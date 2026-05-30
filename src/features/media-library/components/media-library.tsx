@@ -76,6 +76,7 @@ import {
   getCompoundClipDeletionImpact,
   getMediaDeletionImpact,
   removeProjectItems,
+  useTimelineStore,
   useCompositionsStore,
   useCompositionNavigationStore,
 } from '@/features/media-library/deps/timeline-stores'
@@ -877,7 +878,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     try {
       // First remove timeline items that reference selected library assets
       if (affectedMediaImpact.itemIds.length > 0) {
-        removeProjectItems(affectedMediaImpact.itemIds)
+        const removedTimelineReferences = removeProjectItems(affectedMediaImpact.itemIds)
+        if (removedTimelineReferences && currentProjectId) {
+          await useTimelineStore.getState().saveTimeline(currentProjectId)
+        }
       }
 
       if (pendingDeletion.mediaIds.length > 0) {
