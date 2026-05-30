@@ -97,9 +97,11 @@ vi.mock('@/features/preview/deps/media-library', () => ({
   getMediaDragData: () => null,
   getMediaType: (mimeType: string) => (mimeType.startsWith('video/') ? 'video' : 'image'),
   getMimeType: mocks.getMimeType,
-  mediaLibraryService: {
-    getThumbnailBlobUrl: mocks.getThumbnailBlobUrl,
-  },
+  importMediaLibraryService: vi.fn(async () => ({
+    mediaLibraryService: {
+      getThumbnailBlobUrl: mocks.getThumbnailBlobUrl,
+    },
+  })),
   mediaProcessorService: {
     processMedia: mocks.processMedia,
   },

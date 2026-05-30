@@ -1176,29 +1176,26 @@ export function dbMarkToPercent(mark: number): number {
   return linearLevelToPercent(Math.pow(10, mark / 20))
 }
 
-export function isAudioMixerTrack(
-  track: TimelineTrack,
-  timelineItems: readonly TimelineItem[] = track.items,
-): boolean {
+export function isAudioMixerTrack(track: TimelineTrack): boolean {
   if (track.isGroup) {
     return false
   }
 
-  if (track.items.some((item) => item.type === 'audio')) {
-    return true
+  const trackKind = getTrackKind(track)
+
+  // Audio and video live on separate tracks by design: a video track never gets
+  // a mixer channel strip, even if a clip on it still carries un-split embedded
+  // audio. The mixer is audio-track-only.
+  if (trackKind === 'video') {
+    return false
   }
 
-  const trackKind = getTrackKind(track)
   if (trackKind === 'audio') {
     return true
   }
 
-  return track.items.some(
-    (item) =>
-      (item.type === 'video' || item.type === 'composition') &&
-      !(item.type === 'video' && item.embeddedAudioMuted) &&
-      !hasLinkedAudioCompanion(timelineItems as TimelineItem[], item),
-  )
+  // Untyped/legacy tracks (kind === null) qualify only when they actually hold audio.
+  return track.items.some((item) => item.type === 'audio')
 }
 
 export function estimatePerTrackLevels(params: {

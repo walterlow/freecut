@@ -27,12 +27,26 @@ export {
 export { removeItems as removeItemsFromItemsActions } from '../stores/actions/item-actions'
 
 export { autoMatchOrphanedClips } from '../utils/media-validation'
-export { gifFrameCache } from '../services/gif-frame-cache'
-export { filmstripCache } from '../services/filmstrip-cache'
-export { waveformCache } from '../services/waveform-cache'
+export const importGifFrameCache = () => import('../services/gif-frame-cache')
+export const importFilmstripCache = () => import('../services/filmstrip-cache')
+export {
+  IMPORT_FILMSTRIP_HUGE_FILE_BYTES,
+  IMPORT_FILMSTRIP_LARGE_FILE_BYTES,
+  IMPORT_FILMSTRIP_LARGE_TARGET_FRAMES,
+  IMPORT_FILMSTRIP_LONG_DURATION_SEC,
+  IMPORT_FILMSTRIP_MEDIUM_TARGET_FRAMES,
+  IMPORT_FILMSTRIP_NORMAL_TARGET_FRAMES,
+  IMPORT_FILMSTRIP_PREP_TIMEOUT_MS,
+  IMPORT_FILMSTRIP_SLOW_CONTAINER_MIME_TYPES,
+  IMPORT_FILMSTRIP_SLOW_PREP_TIMEOUT_MS,
+  IMPORT_FILMSTRIP_TINY_TARGET_FRAMES,
+  IMPORT_FILMSTRIP_VERY_LONG_DURATION_SEC,
+  MAX_FILMSTRIP_TARGET_FRAMES,
+} from '../services/filmstrip-cache-config'
+export const importWaveformCache = () => import('../services/waveform-cache')
 export { schedulePreviewWork } from '../hooks/preview-work-budget'
-export { resolveMediaUrl, resolveMediaUrls } from '../deps/media-library-contract'
-export { renderSingleFrame } from '../deps/export-contract'
+export { resolveMediaUrl, resolveMediaUrls } from '../deps/media-library-resolver'
+export { importCanvasRenderOrchestrator } from '../deps/export-contract'
 export {
   buildSubCompositionInput,
   buildSubCompositionPreviewSignature,

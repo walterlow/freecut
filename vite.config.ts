@@ -70,14 +70,44 @@ export default defineConfig({
     // Keep warnings focused on unexpected growth rather than this known outlier.
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
+      // Multi-entry: the editor app (index.html) plus the headless render
+      // harness (headless.html), a UI-less entry that exposes window.freecut
+      // for the Node/Playwright headless render+edit CLI.
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        headless: fileURLToPath(new URL('./headless.html', import.meta.url)),
+      },
       output: {
         manualChunks: (id) => {
+          const normalizedId = id.replaceAll('\\', '/')
+          const isWorkspaceGateShell =
+            normalizedId.endsWith('/src/features/workspace-gate/workspace-gate.tsx') ||
+            normalizedId.endsWith('/src/features/workspace-gate/workspace-gate-splash.tsx') ||
+            normalizedId.endsWith('/src/features/workspace-gate/use-pathname.ts')
+          const isAppShellComponent =
+            normalizedId.endsWith('/src/components/brand/freecut-logo.tsx') ||
+            normalizedId.endsWith('/src/components/ui/accordion.tsx') ||
+            normalizedId.endsWith('/src/components/ui/button.tsx') ||
+            normalizedId.endsWith('/src/components/ui/button-variants.ts') ||
+            normalizedId.endsWith('/src/components/ui/global-tooltip.tsx')
+
           // Logger must be in its own chunk to avoid circular chunk TDZ errors.
           // Without this, Rollup places it in composition-runtime which has a
           // circular import with media-library, causing "Cannot access before
           // initialization" in production builds.
           if (id.endsWith('src/shared/logging/logger.ts')) {
             return 'core-logger'
+          }
+
+          if (
+            isAppShellComponent ||
+            (normalizedId.includes('/src/routes/') && !normalizedId.includes('.lazy.')) ||
+            normalizedId.includes('/src/app/error-boundary') ||
+            normalizedId.includes('/src/app/pwa-install-prompt') ||
+            isWorkspaceGateShell ||
+            normalizedId.includes('/src/i18n/')
+          ) {
+            return 'app-shell'
           }
 
           // Timeline bridge modules that re-export UI must live with the UI
@@ -91,6 +121,52 @@ export default defineConfig({
           }
 
           // Application feature chunks
+          if (normalizedId.includes('/src/infrastructure/gpu-effects/')) {
+            return 'gpu-effects'
+          }
+          if (
+            normalizedId.includes('/src/features/media-library/services/media-library-service') ||
+            normalizedId.includes('/src/features/media-library/services/file-access')
+          ) {
+            return 'media-library-service'
+          }
+          if (
+            normalizedId.includes('/src/features/media-library/services/media-analysis-service') ||
+            normalizedId.includes('/src/features/media-library/deps/analysis')
+          ) {
+            return 'media-analysis'
+          }
+          if (
+            normalizedId.includes('/src/features/timeline/components/clip-filmstrip') ||
+            normalizedId.includes('/src/features/timeline/components/clip-waveform') ||
+            normalizedId.includes('/src/features/timeline/hooks/use-filmstrip') ||
+            normalizedId.includes('/src/features/timeline/hooks/use-gif-frames') ||
+            normalizedId.includes('/src/features/timeline/hooks/use-waveform') ||
+            normalizedId.includes('/src/features/timeline/services/filmstrip-cache') ||
+            normalizedId.includes('/src/features/timeline/services/filmstrip-storage') ||
+            normalizedId.includes('/src/features/timeline/services/waveform-cache') ||
+            normalizedId.includes('/src/features/timeline/services/waveform-opfs-storage') ||
+            normalizedId.includes('/src/features/timeline/services/gif-frame-cache') ||
+            normalizedId.includes('/src/features/timeline/utils/compound-clip-waveform')
+          ) {
+            return 'timeline-media-visuals'
+          }
+          if (
+            normalizedId.includes('/src/features/timeline/components/keyframe-graph-panel') ||
+            normalizedId.includes('/src/features/timeline/deps/keyframe-editors') ||
+            normalizedId.includes('/src/features/keyframes/components/dopesheet-editor') ||
+            normalizedId.includes('/src/features/keyframes/components/value-graph-editor')
+          ) {
+            return 'timeline-keyframe-graph'
+          }
+          if (
+            id.includes('/src/features/timeline/components/bento-layout-dialog') ||
+            id.includes('/src/features/timeline/components/reverse-conform-dialog') ||
+            id.includes('/src/features/timeline/components/silence-removal-dialog') ||
+            id.includes('/src/features/timeline/components/filler-removal-dialog')
+          ) {
+            return 'timeline-dialogs'
+          }
           if (
             id.includes('/src/features/timeline/') ||
             id.includes('/src/features/media-library/')
@@ -122,6 +198,9 @@ export default defineConfig({
           // Router framework
           if (id.includes('@tanstack/react-router')) {
             return 'router-vendor'
+          }
+          if (normalizedId.includes('sonner')) {
+            return 'toast-vendor'
           }
           // State management
           if (id.includes('/node_modules/zustand/') || id.includes('/node_modules/zundo/')) {
@@ -165,6 +244,7 @@ export default defineConfig({
       'mediabunny',
       '@mediabunny/ac3',
       '@mediabunny/mp3-encoder',
+      '@mediabunny/aac-encoder',
       '@huggingface/transformers',
     ],
     // Pre-bundle lucide-react for faster dev startup (avoids analyzing 1500+ icons on each reload)

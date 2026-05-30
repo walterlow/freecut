@@ -1,5 +1,7 @@
 import {
+  lazy,
   memo,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -49,8 +51,7 @@ import {
   type AudioMeterEstimate,
   type AudioMeterWaveform,
 } from './audio-meter-utils'
-import { AudioMixerView, type AudioMixerTrack } from './audio-mixer-view'
-import { AudioEqPanelContent } from './properties-sidebar/clip-panel/audio-eq-panel-content'
+import type { AudioMixerTrack } from './audio-mixer-view'
 import { type AudioEqPatch } from './properties-sidebar/clip-panel/audio-eq-curve-editor'
 import { getSparseAudioEqSettings } from '@/shared/utils/audio-eq'
 import { type AudioEqSettings } from '@/types/audio'
@@ -122,6 +123,14 @@ const DETACHED_EQ_DEFAULT_BOUNDS = {
   width: 780,
   height: 660,
 }
+const LazyAudioMixerView = lazy(() =>
+  import('./audio-mixer-view').then((module) => ({ default: module.AudioMixerView })),
+)
+const LazyAudioEqPanelContent = lazy(() =>
+  import('./properties-sidebar/clip-panel/audio-eq-panel-content').then((module) => ({
+    default: module.AudioEqPanelContent,
+  })),
+)
 
 interface AudioEqPanelSurfaceProps {
   targetLabel: string
@@ -148,15 +157,17 @@ const AudioEqPanelSurface = memo(function AudioEqPanelSurface({
 
   return (
     <div ref={handleRootRef} className="bg-background text-foreground">
-      <AudioEqPanelContent
-        targetLabel={targetLabel}
-        trackEq={trackEq}
-        enabled={enabled}
-        onTrackEqChange={onTrackEqChange}
-        onEnabledChange={onEnabledChange}
-        portalContainer={portalContainer}
-        layoutMode={layoutMode}
-      />
+      <Suspense fallback={null}>
+        <LazyAudioEqPanelContent
+          targetLabel={targetLabel}
+          trackEq={trackEq}
+          enabled={enabled}
+          onTrackEqChange={onTrackEqChange}
+          onEnabledChange={onEnabledChange}
+          portalContainer={portalContainer}
+          layoutMode={layoutMode}
+        />
+      </Suspense>
     </div>
   )
 })
@@ -225,10 +236,6 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         items: itemsByTrackId[track.id] ?? [],
       }))
   }, [itemsByTrackId, trackSnapshotVersion, tracks])
-  const combinedTimelineItems = useMemo(
-    () => combinedTracks.flatMap((track) => track.items),
-    [combinedTracks],
-  )
   const combinedCompositionsById = useMemo<AudioMeterCompositionLookup>(() => {
     const next: AudioMeterCompositionLookup = {}
 
@@ -503,8 +510,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   // ---------------------------------------------------------------------------
 
   const mixerSourceTracks = useMemo(() => {
-    return combinedTracks.filter((track) => isAudioMixerTrack(track, combinedTimelineItems))
-  }, [combinedTimelineItems, combinedTracks])
+    return combinedTracks.filter((track) => isAudioMixerTrack(track))
+  }, [combinedTracks])
 
   const mixerTracks = useMemo<AudioMixerTrack[]>(() => {
     return mixerSourceTracks.map((track) => ({
@@ -736,14 +743,13 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const applyMuteSoloLiveGains = useCallback(() => {
     const currentTracks = useItemsStore.getState().tracks
     const currentItemsByTrackId = useItemsStore.getState().itemsByTrackId
-    const currentTimelineItems = Object.values(currentItemsByTrackId).flat()
     const audioTracks = currentTracks
       .filter((t) => !t.isGroup)
       .map((track) => ({
         ...track,
         items: currentItemsByTrackId[track.id] ?? [],
       }))
-      .filter((track) => isAudioMixerTrack(track, currentTimelineItems))
+      .filter((track) => isAudioMixerTrack(track))
     if (audioTracks.length === 0) {
       clearMixerLiveGainLayer(MUTE_SOLO_LIVE_GAIN_LAYER_ID)
       return
@@ -955,23 +961,25 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       headerExtra={modeDropdown}
       autoWidth
     >
-      <AudioMixerView
-        tracks={mixerTracks}
-        perTrackLevels={perTrackLevels}
-        masterEstimate={estimate}
-        isPlaying={isPlaying}
-        masterVolumeDb={masterVolumeDb}
-        masterMuted={muted}
-        onMasterVolumeChange={handleMasterVolumeChange}
-        onMasterMuteToggle={toggleMute}
-        onTrackVolumeChange={handleTrackVolumeChange}
-        onTrackMuteToggle={handleTrackMuteToggle}
-        onTrackSoloToggle={handleTrackSoloToggle}
-        onTrackEqToggle={handleTrackEqToggle}
-        onBusEqToggle={handleBusEqToggle}
-        busEqEnabled={!!busAudioEq && busAudioEq.enabled !== false}
-        expanded
-      />
+      <Suspense fallback={null}>
+        <LazyAudioMixerView
+          tracks={mixerTracks}
+          perTrackLevels={perTrackLevels}
+          masterEstimate={estimate}
+          isPlaying={isPlaying}
+          masterVolumeDb={masterVolumeDb}
+          masterMuted={muted}
+          onMasterVolumeChange={handleMasterVolumeChange}
+          onMasterMuteToggle={toggleMute}
+          onTrackVolumeChange={handleTrackVolumeChange}
+          onTrackMuteToggle={handleTrackMuteToggle}
+          onTrackSoloToggle={handleTrackSoloToggle}
+          onTrackEqToggle={handleTrackEqToggle}
+          onBusEqToggle={handleBusEqToggle}
+          busEqEnabled={!!busAudioEq && busAudioEq.enabled !== false}
+          expanded
+        />
+      </Suspense>
     </FloatingPanel>
   ) : null
 
@@ -1005,23 +1013,25 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     return (
       <>
         {detachedEqPanel}
-        <AudioMixerView
-          tracks={mixerTracks}
-          perTrackLevels={perTrackLevels}
-          masterEstimate={estimate}
-          isPlaying={isPlaying}
-          masterVolumeDb={masterVolumeDb}
-          masterMuted={muted}
-          onMasterVolumeChange={handleMasterVolumeChange}
-          onMasterMuteToggle={toggleMute}
-          onTrackVolumeChange={handleTrackVolumeChange}
-          onTrackMuteToggle={handleTrackMuteToggle}
-          onTrackSoloToggle={handleTrackSoloToggle}
-          onTrackEqToggle={handleTrackEqToggle}
-          onBusEqToggle={handleBusEqToggle}
-          busEqEnabled={!!busAudioEq && busAudioEq.enabled !== false}
-          headerExtra={modeDropdown}
-        />
+        <Suspense fallback={null}>
+          <LazyAudioMixerView
+            tracks={mixerTracks}
+            perTrackLevels={perTrackLevels}
+            masterEstimate={estimate}
+            isPlaying={isPlaying}
+            masterVolumeDb={masterVolumeDb}
+            masterMuted={muted}
+            onMasterVolumeChange={handleMasterVolumeChange}
+            onMasterMuteToggle={toggleMute}
+            onTrackVolumeChange={handleTrackVolumeChange}
+            onTrackMuteToggle={handleTrackMuteToggle}
+            onTrackSoloToggle={handleTrackSoloToggle}
+            onTrackEqToggle={handleTrackEqToggle}
+            onBusEqToggle={handleBusEqToggle}
+            busEqEnabled={!!busAudioEq && busAudioEq.enabled !== false}
+            headerExtra={modeDropdown}
+          />
+        </Suspense>
       </>
     )
   }

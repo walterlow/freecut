@@ -1,7 +1,3 @@
-import {
-  mediaLibraryService,
-  FileAccessError,
-} from '@/features/media-library/services/media-library-service'
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store'
 import { proxyService } from '@/features/media-library/services/proxy-service'
 import { getSharedProxyKey } from '@/features/media-library/utils/proxy-key'
@@ -9,8 +5,6 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
 import { registerKeyframeIndex } from '@/shared/utils/keyframe-index-registry'
 import type { TimelineTrack } from '@/types/timeline'
 import { createLogger } from '@/shared/logging/logger'
-import { validateMediaHandle } from '@/infrastructure/storage'
-import type { MediaErrorType } from '@/features/media-library/types'
 
 const logger = createLogger('MediaResolver')
 
@@ -19,31 +13,6 @@ const logger = createLogger('MediaResolver')
  * This prevents multiple sync access handle creation for the same OPFS file
  */
 const pendingRequests = new Map<string, Promise<string>>()
-
-/**
- * Map a `validateMediaHandle` outcome to a `BrokenMediaInfo.errorType`.
- * Returns null for outcomes that don't indicate breakage (`ok`, `no-handle`).
- *
- * `changed` (size or mtime differ from what we recorded at import) is
- * treated as `file_missing` because the UX is identical: user must
- * re-pick the file so downstream caches can rebuild against the new
- * bytes. A dedicated `file_changed` type would be a wider UI change —
- * revisit if we want distinct copy in the relink dialog.
- */
-function mapValidationToErrorType(
-  kind: 'ok' | 'no-handle' | 'permission' | 'missing' | 'changed',
-): MediaErrorType | null {
-  switch (kind) {
-    case 'ok':
-    case 'no-handle':
-      return null
-    case 'permission':
-      return 'permission_denied'
-    case 'missing':
-    case 'changed':
-      return 'file_missing'
-  }
-}
 
 /**
  * Resolves a mediaId to a blob URL for use in Composition Player
@@ -65,6 +34,10 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
 
   // Create the request promise
   const requestPromise = (async () => {
+    const { mediaLibraryService, FileAccessError } = await import(
+      '@/features/media-library/services/media-library-service'
+    )
+
     try {
       // Get media metadata from library
       const media = await mediaLibraryService.getMedia(mediaId)
@@ -74,31 +47,9 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
         return '' // Fallback: empty string (Composition will skip)
       }
 
-      // For handle-backed media, validate the saved FileSystemFileHandle
-      // against the last-seen size+mtime BEFORE attempting decode. This
-      // catches externally renamed/deleted/overwritten files with a clean
-      // signal instead of a mysterious decode-stage failure — the UI
-      // "relink required" dialog can then surface with accurate context.
-      //
-      // We only validate `storageType === 'handle'` because OPFS and
-      // content-addressable media are self-contained and can't be
-      // mutated out-of-band.
-      if (media.storageType === 'handle') {
-        const validation = await validateMediaHandle(mediaId)
-        const mapped = mapValidationToErrorType(validation.kind)
-        if (mapped) {
-          logger.warn(`Handle validation failed for ${mediaId}: ${validation.kind}`, validation)
-          useMediaLibraryStore.getState().markMediaBroken(mediaId, {
-            mediaId,
-            fileName: media.fileName,
-            errorType: mapped,
-          })
-          return ''
-        }
-      }
-
-      // Get blob from OPFS (returns Blob to prevent access handle leaks)
-      const blob = await mediaLibraryService.getMediaFile(mediaId)
+      // Get the source blob without an extra validation pass; getMediaFile
+      // surfaces permission/missing-file errors with the same relink UI.
+      const blob = await mediaLibraryService.getMediaFile(media)
 
       if (!blob) {
         logger.warn(`Media blob not found: ${mediaId}`)

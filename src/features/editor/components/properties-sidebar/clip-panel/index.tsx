@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, memo } from 'react'
+import { useMemo, useCallback, useEffect, memo, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Film, Sparkles, Volume2 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
@@ -23,12 +23,23 @@ import { LayoutSection } from './layout-section'
 import { FillSection } from './fill-section'
 import { VideoSection } from './video-section'
 import { GifSection } from './gif-section'
-import { AudioSection } from './audio-section'
-import { TextSection } from './text-section'
-import { SubtitleSection } from './subtitle-section'
 import { ShapeSection } from './shape-section'
 import { CornerPinSection } from './corner-pin-section'
-import { EffectsSection } from '@/features/editor/deps/effects-contract'
+
+const LazyAudioSection = lazy(() =>
+  import('./audio-section').then((module) => ({ default: module.AudioSection })),
+)
+const LazyEffectsSection = lazy(() =>
+  import('@/features/editor/deps/effects-contract').then((module) => ({
+    default: module.EffectsSection,
+  })),
+)
+const LazySubtitleSection = lazy(() =>
+  import('./subtitle-section').then((module) => ({ default: module.SubtitleSection })),
+)
+const LazyTextSection = lazy(() =>
+  import('./text-section').then((module) => ({ default: module.TextSection })),
+)
 
 /**
  * Check if an item is a GIF (image with .gif extension)
@@ -267,15 +278,21 @@ export const ClipPanel = memo(function ClipPanel() {
               )}
               {showVideoTab && <CornerPinSection items={layoutFillItems} />}
               {hasTextItems && (
-                <TextSection
-                  items={selectedItems}
-                  canvas={canvas}
-                  showEffectSection={false}
-                  showAnimationSection={false}
-                />
+                <Suspense fallback={null}>
+                  <LazyTextSection
+                    items={selectedItems}
+                    canvas={canvas}
+                    showEffectSection={false}
+                    showAnimationSection={false}
+                  />
+                </Suspense>
               )}
               {hasShapeItems && <ShapeSection items={selectedItems} />}
-              {hasSubtitleItems && <SubtitleSection items={selectedItems} canvas={canvas} />}
+              {hasSubtitleItems && (
+                <Suspense fallback={null}>
+                  <LazySubtitleSection items={selectedItems} canvas={canvas} />
+                </Suspense>
+              )}
               {hasGifItems && <GifSection items={selectedItems} />}
             </div>
           )}
@@ -283,7 +300,11 @@ export const ClipPanel = memo(function ClipPanel() {
 
         {/* Audio Tab - gain and fades */}
         <TabsContent value="audio" className="space-y-4 mt-3">
-          {hasAudioItems && <AudioSection items={selectedItems} />}
+          {hasAudioItems && activeTab === 'audio' && (
+            <Suspense fallback={null}>
+              <LazyAudioSection items={selectedItems} />
+            </Suspense>
+          )}
         </TabsContent>
 
         {/* Effects Tab - clip effects plus text styling and animation */}
@@ -296,10 +317,18 @@ export const ClipPanel = memo(function ClipPanel() {
                   {t('editor.clipPanel.adjustmentLayerHint')}
                 </div>
               )}
-              <EffectsSection items={visualItems} />
+              <Suspense fallback={null}>
+                <LazyEffectsSection items={visualItems} />
+              </Suspense>
               {hasTextItems && <Separator />}
               {hasTextItems && (
-                <TextSection items={selectedItems} canvas={canvas} showContentSection={false} />
+                <Suspense fallback={null}>
+                  <LazyTextSection
+                    items={selectedItems}
+                    canvas={canvas}
+                    showContentSection={false}
+                  />
+                </Suspense>
               )}
             </>
           )}

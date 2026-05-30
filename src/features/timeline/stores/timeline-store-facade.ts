@@ -106,6 +106,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       setTracks: timelineActions.setTracks,
       addItem: timelineActions.addItem,
       addItems: timelineActions.addItems,
+      addItemWithLinkedAudio: timelineActions.addItemWithLinkedAudio,
       updateItem: timelineActions.updateItem,
       removeItems: timelineActions.removeItems,
       rippleDeleteItems: timelineActions.rippleDeleteItems,

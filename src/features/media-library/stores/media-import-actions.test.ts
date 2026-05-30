@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { MediaMetadata } from '@/types/storage'
 import type { MediaLibraryActions, MediaLibraryState } from '../types'
 import { createImportActions } from './media-import-actions'
+import { useMediaPreparationStore } from './media-preparation-store'
 
 const mediaLibraryServiceMocks = vi.hoisted(() => ({
   importMediaWithHandle: vi.fn(),
   importMediaFromUrl: vi.fn(),
+  waitForMediaPreparation: vi.fn(),
   getMediaFile: vi.fn(),
 }))
 
@@ -44,6 +46,12 @@ const backgroundMediaWorkMocks = vi.hoisted(() => ({
 
 vi.mock('../services/media-library-service', () => ({
   mediaLibraryService: mediaLibraryServiceMocks,
+}))
+
+vi.mock('../services/media-library-service-loader', () => ({
+  importMediaLibraryService: vi.fn(async () => ({
+    mediaLibraryService: mediaLibraryServiceMocks,
+  })),
 }))
 
 vi.mock('../services/proxy-service', () => ({
@@ -111,6 +119,12 @@ function createHandle(file: File): FileSystemFileHandle {
   } as unknown as FileSystemFileHandle
 }
 
+async function flushMicrotasks(times = 5): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await Promise.resolve()
+  }
+}
+
 function createMockState(overrides: ImportState = {}): MediaLibraryState & MediaLibraryActions {
   return {
     currentProjectId: 'project-1',
@@ -148,6 +162,12 @@ function createMockState(overrides: ImportState = {}): MediaLibraryState & Media
 describe('createImportActions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useMediaPreparationStore.getState().clearAll()
+    mediaLibraryServiceMocks.importMediaWithHandle.mockReset()
+    mediaLibraryServiceMocks.importMediaFromUrl.mockReset()
+    mediaLibraryServiceMocks.waitForMediaPreparation.mockReset()
+    mediaLibraryServiceMocks.waitForMediaPreparation.mockResolvedValue(undefined)
+    mediaLibraryServiceMocks.getMediaFile.mockReset()
     proxyServiceMocks.canGenerateProxy.mockImplementation((mimeType: string) =>
       mimeType.startsWith('video/'),
     )
@@ -174,6 +194,153 @@ describe('createImportActions', () => {
     expect(currentState.mediaItems).toEqual([imported])
     expect(currentState.importingIds).toEqual([])
     expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('imported-1', 'proxy-imported-1')
+  })
+
+  it('tracks optimistic imports in the unified preparation queue', async () => {
+    const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
+    const handle = createHandle(file)
+    const imported = makeMedia({ id: 'imported-1', fileName: 'clip.mp4' })
+    let resolveImport!: (metadata: MediaMetadata) => void
+    mediaLibraryServiceMocks.importMediaWithHandle.mockReturnValue(
+      new Promise<MediaMetadata>((resolve) => {
+        resolveImport = resolve
+      }),
+    )
+
+    let currentState = createMockState()
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
+        MediaLibraryActions
+    })
+    const get = vi.fn(() => currentState)
+
+    const actions = createImportActions(set, get)
+    const importPromise = actions.importHandles([handle])
+
+    await flushMicrotasks()
+    const placeholderId = currentState.importingIds[0]
+    expect([...useMediaPreparationStore.getState().tasks.values()]).toEqual([
+      expect.objectContaining({
+        mediaId: placeholderId,
+        type: 'import',
+        status: 'running',
+      }),
+    ])
+
+    resolveImport(imported)
+    await importPromise
+
+    expect([...useMediaPreparationStore.getState().tasks.values()]).toEqual([])
+  })
+
+  it('processes dropped files with bounded parallelism while preserving result order', async () => {
+    const firstFile = new File(['video-1'], 'first.mp4', { type: 'video/mp4' })
+    const secondFile = new File(['video-2'], 'second.mp4', { type: 'video/mp4' })
+    const handles = [createHandle(firstFile), createHandle(secondFile)]
+    const imported = [
+      makeMedia({ id: 'first-imported', fileName: 'first.mp4' }),
+      makeMedia({ id: 'second-imported', fileName: 'second.mp4' }),
+    ]
+    let firstResolve!: (metadata: MediaMetadata) => void
+    const firstImport = new Promise<MediaMetadata>((resolve) => {
+      firstResolve = resolve
+    })
+
+    mediaLibraryServiceMocks.importMediaWithHandle
+      .mockReturnValueOnce(firstImport)
+      .mockResolvedValueOnce(imported[1])
+
+    let currentState = createMockState()
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
+        MediaLibraryActions
+    })
+    const get = vi.fn(() => currentState)
+
+    const actions = createImportActions(set, get)
+    const importPromise = actions.importHandles(handles)
+
+    await flushMicrotasks()
+    expect(mediaLibraryServiceMocks.importMediaWithHandle).toHaveBeenCalledTimes(2)
+
+    firstResolve(imported[0]!)
+    const result = await importPromise
+
+    expect(result.map((item) => item.id)).toEqual(['first-imported', 'second-imported'])
+    expect(mediaLibraryServiceMocks.importMediaWithHandle).toHaveBeenNthCalledWith(
+      1,
+      handles[0],
+      'project-1',
+    )
+    expect(mediaLibraryServiceMocks.importMediaWithHandle).toHaveBeenNthCalledWith(
+      2,
+      handles[1],
+      'project-1',
+    )
+  })
+
+  it('still lands imported media when a concurrent reload wipes the placeholder', async () => {
+    // Regression: removing all media then re-importing can trigger a
+    // `loadMediaItems()` that replaces `mediaItems` from disk mid-import,
+    // wiping the optimistic placeholder. A `.map`-only swap would match
+    // nothing and silently drop the import (vanishes until full reload).
+    const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
+    const handle = createHandle(file)
+    const imported = makeMedia({ id: 'imported-1', fileName: 'clip.mp4' })
+
+    let currentState = createMockState()
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
+        MediaLibraryActions
+    })
+    const get = vi.fn(() => currentState)
+
+    // Simulate the concurrent reload landing while the import is in flight.
+    mediaLibraryServiceMocks.importMediaWithHandle.mockImplementation(async () => {
+      currentState = applyStateUpdate(currentState, {
+        mediaItems: [],
+        importingIds: [],
+      }) as MediaLibraryState & MediaLibraryActions
+      return imported
+    })
+
+    const actions = createImportActions(set, get)
+    const result = await actions.importHandles([handle])
+
+    expect(result).toEqual([imported])
+    expect(currentState.mediaItems).toEqual([imported])
+    expect(currentState.importingIds).toEqual([])
+  })
+
+  it('does not duplicate when the reload already re-added the imported media', async () => {
+    // If the concurrent reload re-reads the freshly-associated media from
+    // disk before the placeholder swap runs, the swap must refresh in place
+    // rather than prepend a second copy.
+    const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
+    const handle = createHandle(file)
+    const imported = makeMedia({ id: 'imported-1', fileName: 'clip.mp4' })
+
+    let currentState = createMockState()
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
+        MediaLibraryActions
+    })
+    const get = vi.fn(() => currentState)
+
+    mediaLibraryServiceMocks.importMediaWithHandle.mockImplementation(async () => {
+      currentState = applyStateUpdate(currentState, {
+        mediaItems: [imported],
+        importingIds: [],
+      }) as MediaLibraryState & MediaLibraryActions
+      return imported
+    })
+
+    const actions = createImportActions(set, get)
+    const result = await actions.importHandles([handle])
+
+    expect(result).toEqual([imported])
+    expect(currentState.mediaItems).toEqual([imported])
+    expect(currentState.mediaItems.filter((m) => m.id === 'imported-1')).toHaveLength(1)
   })
 
   it('imports media from a direct URL and prepends it to the library', async () => {
@@ -227,7 +394,12 @@ describe('createImportActions', () => {
     expect(proxyServiceMocks.setProxyKey).not.toHaveBeenCalled()
   })
 
-  it('removes duplicate placeholders and shows an info notification', async () => {
+  it('re-adds a removed-but-associated file with no "already exists" banner', async () => {
+    // Regression: re-importing a file you removed from the library view (but
+    // whose media-links.json association lingered / was re-backfilled) is the
+    // by-design cross-workspace dedup re-associating it. That is a normal
+    // (re-)add — it must surface in the library WITHOUT the "already exists"
+    // banner, not be stranded behind it.
     const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
     const handle = createHandle(file)
     const duplicate = makeMedia({ id: 'existing-1', fileName: 'clip.mp4' })
@@ -236,7 +408,33 @@ describe('createImportActions', () => {
       isDuplicate: true,
     })
 
-    let currentState = createMockState()
+    let currentState = createMockState() // library empty — file not visible here
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
+        MediaLibraryActions
+    })
+    const get = vi.fn(() => currentState)
+
+    const actions = createImportActions(set, get)
+    const result = await actions.importHandles([handle])
+
+    expect(result).toEqual([{ ...duplicate, isDuplicate: true }])
+    expect(currentState.mediaItems).toEqual([{ ...duplicate, isDuplicate: true }])
+    expect(currentState.importingIds).toEqual([])
+    expect(currentState.showNotification).not.toHaveBeenCalled()
+    expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('existing-1', 'proxy-existing-1')
+  })
+
+  it('shows "already exists" only for a file already visible in the library', async () => {
+    const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
+    const handle = createHandle(file)
+    const duplicate = makeMedia({ id: 'existing-1', fileName: 'clip.mp4' })
+    mediaLibraryServiceMocks.importMediaWithHandle.mockResolvedValue({
+      ...duplicate,
+      isDuplicate: true,
+    })
+
+    let currentState = createMockState({ mediaItems: [duplicate] })
     const set = vi.fn((updater: ImportUpdater) => {
       currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
         MediaLibraryActions
@@ -247,7 +445,8 @@ describe('createImportActions', () => {
     const result = await actions.importHandles([handle])
 
     expect(result).toEqual([])
-    expect(currentState.mediaItems).toEqual([])
+    expect(currentState.mediaItems).toHaveLength(1)
+    expect(currentState.mediaItems[0]?.id).toBe('existing-1')
     expect(currentState.importingIds).toEqual([])
     expect(currentState.showNotification).toHaveBeenCalledWith({
       type: 'info',
@@ -256,7 +455,7 @@ describe('createImportActions', () => {
     expect(proxyServiceMocks.setProxyKey).not.toHaveBeenCalled()
   })
 
-  it('returns duplicates for placement flows while still removing placeholders', async () => {
+  it('returns duplicates for placement flows and surfaces them in the library', async () => {
     const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
     const handle = createHandle(file)
     const duplicate = makeMedia({ id: 'existing-1', fileName: 'clip.mp4' })
@@ -276,8 +475,45 @@ describe('createImportActions', () => {
     const result = await actions.importHandlesForPlacement([handle])
 
     expect(result).toEqual([{ ...duplicate, isDuplicate: true }])
-    expect(currentState.mediaItems).toEqual([])
+    expect(currentState.mediaItems).toEqual([{ ...duplicate, isDuplicate: true }])
     expect(currentState.importingIds).toEqual([])
+    expect(mediaLibraryServiceMocks.waitForMediaPreparation).toHaveBeenCalledWith(['existing-1'])
+  })
+
+  it('waits for media preparation before resolving placement imports', async () => {
+    const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' })
+    const handle = createHandle(file)
+    const imported = makeMedia({ id: 'imported-1', fileName: 'clip.mp4' })
+    let resolvePreparation!: () => void
+    mediaLibraryServiceMocks.importMediaWithHandle.mockResolvedValue(imported)
+    mediaLibraryServiceMocks.waitForMediaPreparation.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolvePreparation = resolve
+      }),
+    )
+
+    let currentState = createMockState()
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
+        MediaLibraryActions
+    })
+    const get = vi.fn(() => currentState)
+
+    const actions = createImportActions(set, get)
+    const resultPromise = actions.importHandlesForPlacement([handle])
+
+    await flushMicrotasks()
+    let didResolve = false
+    resultPromise.then(() => {
+      didResolve = true
+    })
+    await flushMicrotasks()
+
+    expect(didResolve).toBe(false)
+    expect(mediaLibraryServiceMocks.waitForMediaPreparation).toHaveBeenCalledWith(['imported-1'])
+
+    resolvePreparation()
+    await expect(resultPromise).resolves.toEqual([imported])
   })
 
   it('cleans up failed placeholders and reports import errors', async () => {

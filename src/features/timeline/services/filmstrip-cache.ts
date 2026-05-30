@@ -109,6 +109,7 @@ interface PendingExtraction {
   targetIndices: number[]
   targetFrameCount: number | null
   requestedFrameIndices: number[] | null
+  unavailableTargetIndices: Set<number>
   priorityOnly: boolean
   persistCompleteToStorage: boolean
   completedWorkers: number
@@ -341,6 +342,10 @@ class FilmstripCacheService {
   private hasSubscribers(mediaId: string): boolean {
     const callbacks = this.updateCallbacks.get(mediaId)
     return !!callbacks && callbacks.size > 0
+  }
+
+  hasPendingExtraction(mediaId: string): boolean {
+    return this.pendingExtractions.has(mediaId) || this.loadingPromises.has(mediaId)
   }
 
   /**
@@ -738,16 +743,27 @@ class FilmstripCacheService {
   private buildSettledFilmstrip(pending: PendingExtraction, frames: FilmstripFrame[]): Filmstrip {
     const completionTargetIndices = this.getCompletionTargetIndices(pending)
     const completionTargetSet = new Set(completionTargetIndices)
+    const unavailableTargetIndices = pending.unavailableTargetIndices ?? new Set<number>()
     const extractedTargetCount = frames.reduce(
       (count, frame) => (completionTargetSet.has(frame.index) ? count + 1 : count),
       0,
     )
+    let unavailableTargetCount = 0
+    for (const index of unavailableTargetIndices) {
+      if (completionTargetSet.has(index)) {
+        unavailableTargetCount += 1
+      }
+    }
+    const satisfiedTargetCount = Math.min(
+      completionTargetIndices.length,
+      extractedTargetCount + unavailableTargetCount,
+    )
     const isComplete =
       completionTargetIndices.length === 0 ||
-      extractedTargetCount === completionTargetIndices.length
+      satisfiedTargetCount === completionTargetIndices.length
     const progress =
       completionTargetIndices.length > 0
-        ? Math.round((extractedTargetCount / completionTargetIndices.length) * 100)
+        ? Math.round((satisfiedTargetCount / completionTargetIndices.length) * 100)
         : 0
 
     return {
@@ -756,6 +772,33 @@ class FilmstripCacheService {
       isExtracting: false,
       progress: isComplete ? 100 : Math.min(99, progress),
     }
+  }
+
+  private waitForSettledFilmstrip(mediaId: string): Promise<Filmstrip> {
+    const current = this.cache.get(mediaId)
+    if (current && !current.isExtracting) {
+      this.touchCacheEntry(mediaId)
+      return Promise.resolve(current)
+    }
+
+    return new Promise((resolve) => {
+      let unsubscribe: (() => void) | null = null
+      let shouldUnsubscribe = false
+      unsubscribe = this.subscribe(mediaId, (filmstrip) => {
+        if (filmstrip.isExtracting) {
+          return
+        }
+        if (unsubscribe) {
+          unsubscribe()
+        } else {
+          shouldUnsubscribe = true
+        }
+        resolve(filmstrip)
+      })
+      if (shouldUnsubscribe) {
+        unsubscribe()
+      }
+    })
   }
 
   needsPriorityRefinement(
@@ -1021,24 +1064,23 @@ class FilmstripCacheService {
         nextTotalFrames,
         options?.targetFrameIndices,
       )
-      const nextTargetIndices = pending.priorityOnly
-        ? this.buildPriorityTargetIndices(
-            nextTotalFrames,
-            nextPriorityRange,
-            nextTargetFrameIndices,
-          )
-        : this.buildTargetIndices(
-            nextTotalFrames,
-            nextPriorityRange,
-            nextTargetFrameCount,
-            nextTargetFrameIndices,
-          )
+      // Public getFilmstrip() requests are full preparation requests. If they
+      // arrive while an import-time priority warmup is pending, promote the
+      // work to the full target instead of resolving on the warm subset.
+      const nextPriorityOnly = false
+      const nextTargetIndices = this.buildTargetIndices(
+        nextTotalFrames,
+        nextPriorityRange,
+        nextTargetFrameCount,
+        nextTargetFrameIndices,
+      )
       const nextOnProgress = onProgress ?? pending.onProgress
       const targetCountChanged =
         nextTargetFrameIndices.length === 0 && pending.targetFrameCount !== nextTargetFrameCount
       const needsRestart =
         pending.blobUrl !== blobUrl ||
         pending.totalFrames !== nextTotalFrames ||
+        pending.priorityOnly !== nextPriorityOnly ||
         targetCountChanged ||
         !this.isExactTargetMatch(pending.requestedFrameIndices ?? [], nextTargetFrameIndices) ||
         !this.isExactTargetMatch(pending.targetIndices, nextTargetIndices)
@@ -1051,7 +1093,6 @@ class FilmstripCacheService {
           new Set([...pending.skipIndices, ...currentFrames.map((frame) => frame.index)]),
         )
         const forceSingleWorker = pending.forceSingleWorker
-        const priorityOnly = pending.priorityOnly
         const pendingOnProgress = nextOnProgress
 
         this.finalizeExtractionMetrics(pending.metrics, 'aborted', currentFrames.length)
@@ -1066,7 +1107,7 @@ class FilmstripCacheService {
           forceSingleWorker,
           nextPriorityRange ?? undefined,
           {
-            priorityOnly,
+            priorityOnly: nextPriorityOnly,
             targetFrameCount: nextTargetFrameCount ?? undefined,
             targetFrameIndices: nextTargetFrameIndices,
           },
@@ -1076,10 +1117,12 @@ class FilmstripCacheService {
       }
 
       const current = this.cache.get(mediaId)
-      if (current) {
+      if (current && !current.isExtracting) {
         this.touchCacheEntry(mediaId)
         return current
       }
+
+      return this.waitForSettledFilmstrip(mediaId)
     }
 
     // Check for pending load
@@ -1194,7 +1237,7 @@ class FilmstripCacheService {
       },
     )
 
-    return initialFilmstrip
+    return this.waitForSettledFilmstrip(mediaId)
   }
 
   private startExtraction(
@@ -1271,6 +1314,7 @@ class FilmstripCacheService {
       targetFrameCount: normalizedTargetFrameCount,
       requestedFrameIndices:
         normalizedTargetFrameIndices.length > 0 ? normalizedTargetFrameIndices : null,
+      unavailableTargetIndices: new Set(),
       priorityOnly: requestedPriorityOnly,
       persistCompleteToStorage,
       completedWorkers: 0,
@@ -1647,6 +1691,9 @@ class FilmstripCacheService {
         } else if (response.type === 'complete') {
           workerState.completed = true
           workerState.frameCount = response.frameCount
+          for (const index of response.unavailableIndices ?? []) {
+            pending.unavailableTargetIndices.add(index)
+          }
           pending.completedWorkers++
 
           logger.debug(`Worker ${i} complete: ${response.frameCount} frames`)
@@ -1934,6 +1981,7 @@ class FilmstripCacheService {
       targetFrameCount: normalizedTargetFrameCount,
       requestedFrameIndices:
         normalizedTargetFrameIndices.length > 0 ? normalizedTargetFrameIndices : null,
+      unavailableTargetIndices: new Set(),
       priorityOnly: requestedPriorityOnly,
       persistCompleteToStorage,
       completedWorkers: 0,

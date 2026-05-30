@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, memo, useMemo, lazy, Suspense } from 'react'
 import { Columns2 } from 'lucide-react'
 import {
   VideoPreview,
@@ -6,10 +6,10 @@ import {
   AlignmentToolbar,
   TimecodeDisplay,
   PreviewZoomControls,
-  SourceMonitor,
-  InlineSourcePreview,
-  InlineCompositionPreview,
-  ColorScopesMonitor,
+  importSourceMonitor,
+  importInlineSourcePreview,
+  importInlineCompositionPreview,
+  importColorScopesMonitor,
 } from '@/features/editor/deps/preview'
 import { useProjectStore } from '@/features/editor/deps/projects'
 import { useSettingsStore } from '@/features/editor/deps/settings'
@@ -35,6 +35,20 @@ const PREVIEW_SOURCE_SPLIT_DEFAULT_PERCENT = 50
 const PREVIEW_SCOPES_SPLIT_DEFAULT_PERCENT = 32
 const PREVIEW_SIDE_PANEL_MIN_PERCENT = 22
 const PREVIEW_SIDE_PANEL_MAX_PERCENT = 55
+const LazySourceMonitor = lazy(() =>
+  importSourceMonitor().then((module) => ({ default: module.SourceMonitor })),
+)
+const LazyInlineSourcePreview = lazy(() =>
+  importInlineSourcePreview().then((module) => ({ default: module.InlineSourcePreview })),
+)
+const LazyInlineCompositionPreview = lazy(() =>
+  importInlineCompositionPreview().then((module) => ({
+    default: module.InlineCompositionPreview,
+  })),
+)
+const LazyColorScopesMonitor = lazy(() =>
+  importColorScopesMonitor().then((module) => ({ default: module.ColorScopesMonitor })),
+)
 
 function PreviewSplitHandle({
   onMouseDown,
@@ -93,17 +107,21 @@ const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
   )
   const compoundClipSkimPreviewFrame = useEditorStore((s) => s.compoundClipSkimPreviewFrame)
   const skimPreviewOverlay = compoundClipSkimPreviewCompositionId ? (
-    <InlineCompositionPreview
-      compositionId={compoundClipSkimPreviewCompositionId}
-      seekFrame={compoundClipSkimPreviewFrame}
-      containerSize={containerSize}
-    />
+    <Suspense fallback={null}>
+      <LazyInlineCompositionPreview
+        compositionId={compoundClipSkimPreviewCompositionId}
+        seekFrame={compoundClipSkimPreviewFrame}
+        containerSize={containerSize}
+      />
+    </Suspense>
   ) : mediaSkimPreviewMediaId ? (
-    <InlineSourcePreview
-      mediaId={mediaSkimPreviewMediaId}
-      seekFrame={mediaSkimPreviewFrame}
-      containerSize={containerSize}
-    />
+    <Suspense fallback={null}>
+      <LazyInlineSourcePreview
+        mediaId={mediaSkimPreviewMediaId}
+        seekFrame={mediaSkimPreviewFrame}
+        containerSize={containerSize}
+      />
+    </Suspense>
   ) : null
 
   return (
@@ -472,11 +490,13 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
             style={{ width: `${displayedSourceSplitPercent}%` }}
           >
             <div className="flex h-full flex-col min-w-0">
-              <SourceMonitor
-                key={sourcePreviewMediaId}
-                mediaId={sourcePreviewMediaId}
-                onClose={handleCloseSourceMonitor}
-              />
+              <Suspense fallback={null}>
+                <LazySourceMonitor
+                  key={sourcePreviewMediaId}
+                  mediaId={sourcePreviewMediaId}
+                  onClose={handleCloseSourceMonitor}
+                />
+              </Suspense>
             </div>
           </InteractionLockRegion>
           <InteractionLockRegion locked={isMaskEditingActive} overlayClassName="rounded-none">
@@ -677,7 +697,9 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
             style={{ width: `${displayedScopesSplitPercent}%` }}
           >
             <div className="flex h-full flex-col min-w-0">
-              <ColorScopesMonitor onClose={handleCloseColorScopes} />
+              <Suspense fallback={null}>
+                <LazyColorScopesMonitor onClose={handleCloseColorScopes} />
+              </Suspense>
             </div>
           </InteractionLockRegion>
         </>

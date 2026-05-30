@@ -6,7 +6,7 @@ import type {
 } from '../types'
 import type { TimelineItem } from '@/types/timeline'
 import type { MediaMetadata } from '@/types/storage'
-import { mediaLibraryService } from '../services/media-library-service'
+import { importMediaLibraryService } from '../services/media-library-service-loader'
 import {
   getSynchronizedLinkedItems,
   useItemsStore,
@@ -153,6 +153,7 @@ export function createRelinkingActions(
     relinkMedia: async (mediaId: string, newHandle: FileSystemFileHandle) => {
       try {
         // Update in service/DB
+        const { mediaLibraryService } = await importMediaLibraryService()
         const updated = await mediaLibraryService.relinkMediaHandle(mediaId, newHandle)
         applySuccessfulRelink(set, get, mediaId, updated)
         get().showNotification({
@@ -174,6 +175,7 @@ export function createRelinkingActions(
     relinkMediaBatch: async (relinks) => {
       const success: string[] = []
       const failed: string[] = []
+      const { mediaLibraryService } = await importMediaLibraryService()
 
       for (const { mediaId, handle } of relinks) {
         try {
@@ -214,6 +216,7 @@ export function createRelinkingActions(
     relinkOrphanedClip: async (itemId: string, newMediaId: string) => {
       try {
         // Get the new media metadata
+        const { mediaLibraryService } = await importMediaLibraryService()
         const newMedia = await mediaLibraryService.getMedia(newMediaId)
         if (!newMedia) {
           logger.error(`[relinkOrphanedClip] Media not found: ${newMediaId}`)

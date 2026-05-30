@@ -3,8 +3,6 @@
  * Supports animating transform properties over time with easing.
  */
 
-import { getGpuEffect } from '@/infrastructure/gpu-effects'
-
 /** Properties that can be animated via keyframes */
 export type BuiltInAnimatableProperty =
   | 'x'
@@ -261,12 +259,6 @@ export function getAnimatablePropertyLabel(property: AnimatableProperty): string
   const parsed = parseEffectAnimatableProperty(property)
   if (!parsed) {
     return property
-  }
-
-  const definition = getGpuEffect(parsed.gpuEffectType)
-  const param = definition?.params[parsed.paramKey]
-  if (definition && param) {
-    return `${definition.name}: ${param.label}`
   }
 
   return parsed.paramKey

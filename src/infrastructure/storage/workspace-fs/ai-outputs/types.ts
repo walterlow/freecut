@@ -7,7 +7,7 @@
  * works uniformly. Service-specific data goes inside `data`.
  */
 
-import type { MediaCaption } from '@/infrastructure/analysis'
+import type { MediaCaption } from '@/infrastructure/analysis/media-tagger'
 import type {
   MediaTranscript,
   MediaTranscriptModel,

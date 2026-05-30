@@ -22,7 +22,7 @@ import {
   extractDominantColors,
 } from '../deps/analysis'
 import {
-  mediaLibraryService,
+  importMediaLibraryService,
   useMediaLibraryStore,
   type MediaMetadata,
 } from '../deps/media-library'
@@ -244,6 +244,7 @@ export function indexMediaCaptions(mediaId: string): Promise<void> {
       if (palette && palette.length > 0) next.palette = [...palette]
       return next
     })
+    const { mediaLibraryService } = await importMediaLibraryService()
     await mediaLibraryService.updateMediaCaptions(mediaId, capturedCaptions, {
       embeddingModel: EMBEDDING_MODEL_ID,
       embeddingDim: EMBEDDING_MODEL_DIM,
@@ -312,6 +313,7 @@ export function indexMediaImageCaptions(mediaId: string): Promise<void> {
     // re-analyze-and-index-at-the-same-time is the exact race we care about).
     const latest = useMediaLibraryStore.getState().mediaById[mediaId]
     if (latest?.aiCaptions) {
+      const { mediaLibraryService } = await importMediaLibraryService()
       await mediaLibraryService.updateMediaCaptions(mediaId, latest.aiCaptions, {
         embeddingModel: EMBEDDING_MODEL_ID,
         embeddingDim: EMBEDDING_MODEL_DIM,

@@ -26,7 +26,11 @@ const timelineServiceMocks = vi.hoisted(() => ({
   filmstripCache: {
     prewarmPriorityWindow: vi.fn(async () => undefined),
   },
+  importFilmstripCache: vi.fn(),
 }))
+timelineServiceMocks.importFilmstripCache.mockResolvedValue({
+  filmstripCache: timelineServiceMocks.filmstripCache,
+})
 
 const mediaLibraryStoreMocks = vi.hoisted(() => ({
   getState: vi.fn(() => ({

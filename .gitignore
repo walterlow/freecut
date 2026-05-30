@@ -59,6 +59,12 @@ crates/*/Cargo.lock
 
 tmp
 
+# Headless render harness: generated outputs, test assets, scratch workspaces.
+# (The harness source — headless/*.mjs, src/headless/ — is committed.)
+headless/output/
+headless/assets/
+tmp-workspace/
+
 .vercel
 
 # FreeCut workspace artifacts, if the repo folder itself is picked as a

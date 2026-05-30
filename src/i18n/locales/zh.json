@@ -94,7 +94,9 @@
       "snapByDefault": "默认吸附",
       "snapByDefaultDescription": "设置打开项目时的初始吸附状态。",
       "showWaveforms": "显示波形",
-      "showFilmstrips": "显示视频缩略图条"
+      "showFilmstrips": "显示视频缩略图条",
+      "enableFilmstripExtraction": "提取缩略图条",
+      "enableFilmstripExtractionDescription": "在导入和时间线显示时生成视频缩略图条。"
     },
     "storage": {
       "generateMissingProxies": "生成缺失的代理",

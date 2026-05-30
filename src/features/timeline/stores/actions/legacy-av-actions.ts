@@ -1,6 +1,6 @@
 import type { ItemKeyframes } from '@/types/keyframe'
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
-import { mediaLibraryService } from '@/features/timeline/deps/media-library-service'
+import { importMediaLibraryService } from '@/features/timeline/deps/media-library-service'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useItemsStore } from '../items-store'
 import { useKeyframesStore } from '../keyframes-store'
@@ -32,6 +32,7 @@ async function buildVideoHasAudioMap(
         return [mediaId, !!cachedMedia.audioCodec] as const
       }
 
+      const { mediaLibraryService } = await importMediaLibraryService()
       const media = await mediaLibraryService.getMedia(mediaId)
       return [mediaId, !!media?.audioCodec] as const
     }),

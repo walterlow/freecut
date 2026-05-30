@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useEffect, memo, forwardRef } from 'react
 
 import { useTimelineStore } from '../stores/timeline-store'
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context'
+import { usePlaybackStore } from '@/shared/state/playback'
 
 const IO_LANE_HEIGHT = 14
 const IO_HIT_AREA_HEIGHT = IO_LANE_HEIGHT + 6
@@ -48,12 +49,19 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
       const onMove = (ev: MouseEvent) => {
         const rect = container.getBoundingClientRect()
         const x = ev.clientX - rect.left
-        setter.current(Math.max(0, pixelsToFrameRef.current(x)))
+        const frame = Math.max(0, pixelsToFrameRef.current(x))
+        setter.current(frame)
+        // Skim the preview to the boundary frame. Out is exclusive, so show the
+        // last included frame (out - 1) rather than the frame just past it.
+        const previewFrame =
+          handle === 'out' ? Math.max(0, Math.round(frame) - 1) : Math.round(frame)
+        usePlaybackStore.getState().setPreviewFrame(previewFrame)
       }
       const cleanup = () => {
         document.removeEventListener('mousemove', onMove)
         document.removeEventListener('mouseup', cleanup)
         document.body.style.cursor = prevCursor
+        usePlaybackStore.getState().setPreviewFrame(null)
         dragCleanupRef.current = null
       }
       document.addEventListener('mousemove', onMove)

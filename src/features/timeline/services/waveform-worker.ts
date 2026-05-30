@@ -18,6 +18,8 @@ export interface WaveformRequest {
   sourceMetadata?: ObjectUrlSourceMetadata
   samplesPerSecond: number
   binDurationSec?: number
+  startTimeSec?: number
+  endTimeSec?: number
 }
 
 export interface WaveformProgressResponse {
@@ -90,6 +92,8 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     sourceMetadata,
     samplesPerSecond,
     binDurationSec = 30,
+    startTimeSec,
+    endTimeSec,
   } = event.data
   const state = { aborted: false }
   activeRequests.set(requestId, state)
@@ -134,6 +138,15 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     const fallbackSampleRate = trackSampleRate > 0 ? trackSampleRate : 48000
     const channels = audioTrack.numberOfChannels || 1
     const duration = await audioTrack.computeDuration()
+    const decodeStartTime = Math.max(
+      0,
+      Math.min(duration, Number.isFinite(startTimeSec) ? (startTimeSec as number) : 0),
+    )
+    const decodeEndTime = Math.max(
+      decodeStartTime,
+      Math.min(duration, Number.isFinite(endTimeSec) ? (endTimeSec as number) : duration),
+    )
+    const decodeDuration = Math.max(0.001, decodeEndTime - decodeStartTime)
 
     if (state.aborted) throw new Error('Aborted')
 
@@ -149,7 +162,16 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
       Math.round(samplesPerSecond * binDurationSec * (stereo ? 2 : 1)),
     )
     let processedEndTimeSec = 0
-    let nextChunkStart = 0
+    const outputChannelCount = stereo ? 2 : 1
+    const rangeOutputStart = Math.max(
+      0,
+      Math.min(peakCount, Math.floor(decodeStartTime * samplesPerSecond) * outputChannelCount),
+    )
+    const rangeOutputEnd = Math.max(
+      rangeOutputStart,
+      Math.min(peakCount, Math.ceil(decodeEndTime * samplesPerSecond) * outputChannelCount),
+    )
+    let nextChunkStart = rangeOutputStart
     let maxPeak = 0
 
     self.postMessage({ type: 'progress', requestId, progress: 20 } as WaveformProgressResponse)
@@ -178,7 +200,7 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     }
 
     // Process samples
-    for await (const sample of sink.samples()) {
+    for await (const sample of sink.samples(decodeStartTime, decodeEndTime)) {
       try {
         if (state.aborted) {
           throw new Error('Aborted')
@@ -203,27 +225,29 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
         const sampleTimestampSec = Number.isFinite(sampleData.timestamp)
           ? Math.max(0, sampleData.timestamp as number)
           : processedEndTimeSec
-        const sampleStartOutputIndex = Math.max(
-          0,
-          Math.floor(sampleTimestampSec * samplesPerSecond),
-        )
+        const channelsToCopy = stereo ? Math.min(2, channelCount) : channelCount
         const channelData: Float32Array[] = []
-        for (let c = 0; c < channelCount; c++) {
+        for (let c = 0; c < channelsToCopy; c++) {
           const ch = new Float32Array(frameCount)
           sample.copyTo(ch, { planeIndex: c, format: 'f32-planar' })
           channelData.push(ch)
         }
 
         for (let i = 0; i < frameCount; i++) {
+          const frameTimeSec = sampleTimestampSec + i / sampleRate
+          if (frameTimeSec < decodeStartTime || frameTimeSec >= decodeEndTime) {
+            continue
+          }
           const outputIndex = Math.min(
             numOutputSamples - 1,
-            sampleStartOutputIndex + Math.floor((i * samplesPerSecond) / sampleRate),
+            Math.floor(frameTimeSec * samplesPerSecond),
           )
 
           if (stereo) {
-            // L = ch0, R = ch1 (or ch0 if mono source somehow)
+            // Timeline stereo display only needs the first two channels. Avoid
+            // copying surround channels for 5.1/7.1 sources during waveform prep.
             const lPeak = Math.abs(channelData[0]![i] ?? 0)
-            const rPeak = Math.abs(channelData[Math.min(1, channelCount - 1)]![i] ?? 0)
+            const rPeak = Math.abs(channelData[Math.min(1, channelsToCopy - 1)]![i] ?? 0)
             const lIdx = outputIndex * 2
             const rIdx = outputIndex * 2 + 1
             if (lPeak > peaks[lIdx]!) {
@@ -252,8 +276,8 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
 
         // Flush full bins that can no longer change.
         const completedOutputExclusive = Math.min(
-          peakCount,
-          Math.floor(processedEndTimeSec * samplesPerSecond) * (stereo ? 2 : 1),
+          rangeOutputEnd,
+          Math.floor(processedEndTimeSec * samplesPerSecond) * outputChannelCount,
         )
         while (nextChunkStart + binSampleCount <= completedOutputExclusive) {
           const end = nextChunkStart + binSampleCount
@@ -263,7 +287,13 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
 
         // Update progress (20-80% range for sample extraction)
         const progress =
-          20 + Math.min(60, Math.round((processedEndTimeSec / Math.max(duration, 0.001)) * 60))
+          20 +
+          Math.min(
+            60,
+            Math.round(
+              ((processedEndTimeSec - decodeStartTime) / Math.max(decodeDuration, 0.001)) * 60,
+            ),
+          )
         self.postMessage({ type: 'progress', requestId, progress } as WaveformProgressResponse)
       } finally {
         // Always close the sample to prevent resource leaks
@@ -276,8 +306,8 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     self.postMessage({ type: 'progress', requestId, progress: 80 } as WaveformProgressResponse)
 
     // Flush remaining tail.
-    if (nextChunkStart < peakCount) {
-      emitChunk(nextChunkStart, peakCount)
+    if (nextChunkStart < rangeOutputEnd) {
+      emitChunk(nextChunkStart, rangeOutputEnd)
     }
 
     self.postMessage({ type: 'progress', requestId, progress: 90 } as WaveformProgressResponse)

@@ -94,7 +94,9 @@
       "snapByDefault": "기본적으로 스냅",
       "snapByDefaultDescription": "프로젝트를 열 때의 초기 스냅 상태를 설정합니다.",
       "showWaveforms": "파형 표시",
-      "showFilmstrips": "동영상 썸네일 표시"
+      "showFilmstrips": "동영상 썸네일 표시",
+      "enableFilmstripExtraction": "필름스트립 추출",
+      "enableFilmstripExtractionDescription": "가져오기와 타임라인 표시 중 동영상 썸네일 스트립을 생성합니다."
     },
     "storage": {
       "generateMissingProxies": "누락된 프록시 생성",

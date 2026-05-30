@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
 import {
+  importMediaLibraryService,
   useMediaLibraryStore,
-  mediaLibraryService,
 } from '@/features/preview/deps/media-library-contract'
 import { PlaybackControls } from './playback-controls'
 
@@ -90,6 +90,7 @@ describe('PlaybackControls frame capture', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }
+    const { mediaLibraryService } = await importMediaLibraryService()
     const importGeneratedImageSpy = vi
       .spyOn(mediaLibraryService, 'importGeneratedImage')
       .mockResolvedValue(savedMedia)

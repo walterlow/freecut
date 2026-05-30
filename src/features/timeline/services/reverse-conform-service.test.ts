@@ -10,7 +10,9 @@ const resolveMediaUrlsMock = vi.fn()
 let mediaByIdMock: Record<string, { duration: number; fps: number }> = {}
 
 vi.mock('../deps/export-contract', () => ({
-  renderComposition: renderCompositionMock,
+  importCanvasRenderOrchestrator: vi.fn(async () => ({
+    renderComposition: renderCompositionMock,
+  })),
 }))
 
 vi.mock('@/infrastructure/storage/workspace-fs/cache-mirror', () => ({

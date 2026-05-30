@@ -23,16 +23,18 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  DopesheetEditor,
-  getEffectPropertyBaseValue,
   getBezierPresetForEasing,
   getCropPropertyValue,
   getTransitionBlockedRanges,
   interpolatePropertyValue,
-  getAnimatablePropertiesForItem,
   getTextAnimatableBaseValue,
   isTextAnimatableProperty,
 } from '@/features/timeline/deps/keyframes'
+import {
+  DopesheetEditor,
+  getAnimatablePropertiesForItem,
+  getEffectPropertyBaseValue,
+} from '@/features/timeline/deps/keyframe-editors'
 import { resolveTransform, getSourceDimensions } from '@/features/timeline/deps/composition-runtime'
 import { useProjectStore } from '@/features/timeline/deps/projects'
 import {

@@ -172,7 +172,7 @@ function findExistingAudioPairs(params: {
   return pairs
 }
 
-function cloneVolumeKeyframes(
+export function cloneVolumeKeyframes(
   source: ItemKeyframes | undefined,
   itemId: string,
 ): ItemKeyframes | null {
@@ -192,7 +192,7 @@ function cloneVolumeKeyframes(
   }
 }
 
-function makeGeneratedAudioItem(
+export function makeGeneratedAudioItem(
   video: VideoItem,
   trackId: string,
   createId: () => string,

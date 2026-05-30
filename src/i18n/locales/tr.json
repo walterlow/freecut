@@ -94,7 +94,9 @@
       "snapByDefault": "Varsayılan olarak yapıştır",
       "snapByDefaultDescription": "Bir proje açıldığında başlangıç yapıştırma durumunu ayarlar.",
       "showWaveforms": "Dalga formlarını göster",
-      "showFilmstrips": "Film şeritlerini göster"
+      "showFilmstrips": "Film şeritlerini göster",
+      "enableFilmstripExtraction": "Film şeritlerini çıkar",
+      "enableFilmstripExtractionDescription": "İçe aktarma ve zaman çizelgesinde görüntüleme sırasında video küçük resim şeritleri oluşturur."
     },
     "storage": {
       "generateMissingProxies": "Eksik Proxy'leri Oluştur",

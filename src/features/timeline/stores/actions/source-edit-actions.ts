@@ -11,7 +11,7 @@ import { useSourcePlayerStore } from '@/shared/state/source-player'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useProjectStore } from '@/features/timeline/deps/projects'
-import { mediaLibraryService } from '@/features/timeline/deps/media-library-service'
+import { importMediaLibraryService } from '@/features/timeline/deps/media-library-service'
 import { getMediaType, resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver'
 import { toast } from 'sonner'
 import { execute, applyTransitionRepairs, getLogger } from './shared'
@@ -151,6 +151,7 @@ async function resolveSourceEditContext(): Promise<SourceEditContext | null> {
     toast.error('Failed to load source media')
     return null
   }
+  const { mediaLibraryService } = await importMediaLibraryService()
   const thumbnailUrl = (await mediaLibraryService.getThumbnailBlobUrl(sourceMediaId)) || undefined
 
   return {

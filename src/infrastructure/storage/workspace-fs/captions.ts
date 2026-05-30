@@ -20,7 +20,7 @@
  * that want dedup at save time pass `contentHash` in the options.
  */
 
-import type { MediaCaption } from '@/infrastructure/analysis'
+import type { MediaCaption } from '@/infrastructure/analysis/media-tagger'
 import { createLogger } from '@/shared/logging/logger'
 
 import { addAiContentRef, deleteAiContent, removeAiContentRef } from './ai-content-refs'

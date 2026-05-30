@@ -1,6 +1,6 @@
 import type { TextItem } from '@/types/timeline'
-import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts'
-import { getTextItemSpans } from '@/shared/utils/text-item-spans'
+import { layoutTextBlock, lineInkWidth } from '@/shared/typography/text-block-layout'
+import { parseFontSizePx, type TextMeasurer } from '@/shared/typography/text-measurer'
 
 export interface GpuTextRenderParams {
   outputWidth: number
@@ -38,20 +38,6 @@ interface PackedGlyph {
   strokeWidth?: number
   solidRadius?: number
   shadowBlur?: number
-}
-
-interface TextLayoutLine {
-  text: string
-  width: number
-  font: string
-  fontSize: number
-  lineHeightPx: number
-  baselineOffset: number
-  letterSpacing: number
-  color: [number, number, number, number]
-  strokeColor?: [number, number, number, number]
-  strokeWidth: number
-  underline: boolean
 }
 
 const ATLAS_SIZE = 2048
@@ -319,75 +305,55 @@ export class GlyphAtlasTextPipeline {
     width: number,
     height: number,
   ): { glyphs: PackedGlyph[] } | null {
-    const padding = Math.max(0, item.textPadding ?? 16)
-    const availableWidth = Math.max(1, width - padding * 2)
-    const lines = this.layoutLines(item, availableWidth)
-    if (!lines) return null
-    const totalHeight = lines.reduce((sum, line) => sum + line.lineHeightPx, 0)
-    const availableHeight = height - padding * 2
-    const verticalAlign = item.verticalAlign ?? 'middle'
-    let currentTop =
-      verticalAlign === 'top'
-        ? padding
-        : verticalAlign === 'bottom'
-          ? height - padding - totalHeight
-          : padding + (availableHeight - totalHeight) / 2
+    const measurer = this.createMeasurer()
+    const layout = layoutTextBlock(item, width, height, measurer)
 
     const glyphs: PackedGlyph[] = []
-    if (item.backgroundColor && lines.length > 0) {
+    if (item.backgroundColor && layout.background) {
       const backgroundColor = parseGpuTextColor(item.backgroundColor)
       const backgroundGlyph = this.ensureSolidGlyph()
       if (!backgroundColor || !backgroundGlyph) return null
-      const maxLineWidth = Math.max(...lines.map((line) => line.width))
-      const backgroundWidth = Math.min(width, maxLineWidth + padding * 2)
-      const backgroundHeight = totalHeight + padding * 2
-      const textAlign = item.textAlign ?? 'center'
-      const backgroundX =
-        textAlign === 'left'
-          ? 0
-          : textAlign === 'right'
-            ? width - backgroundWidth
-            : (width - backgroundWidth) / 2
+      const bg = layout.background
       glyphs.push({
         metrics: backgroundGlyph,
-        x: backgroundX,
-        y: currentTop - padding,
-        width: backgroundWidth,
-        height: backgroundHeight,
+        x: bg.x,
+        y: bg.y,
+        width: bg.width,
+        height: bg.height,
         color: backgroundColor,
-        solidRadius: Math.max(
-          0,
-          Math.min(item.backgroundRadius ?? 0, backgroundWidth / 2, backgroundHeight / 2),
-        ),
+        solidRadius: bg.radius,
       })
     }
 
-    for (const line of lines) {
-      const lineWidth = this.measureText(line.text, line.font, line.letterSpacing)
-      const textAlign = item.textAlign ?? 'center'
-      let currentX =
-        textAlign === 'left'
-          ? padding
-          : textAlign === 'right'
-            ? width - padding - lineWidth
-            : (width - lineWidth) / 2
-      const lineStartX = currentX
-      const baselineY = currentTop + line.baselineOffset
-      const shadowColor = item.textShadow ? parseGpuTextColor(item.textShadow.color) : undefined
-      if (item.textShadow && !shadowColor) return null
+    const shadow = item.textShadow
+    const shadowColor = shadow ? parseGpuTextColor(shadow.color) : undefined
+    if (shadow && !shadowColor) return null
+    const strokeWidth = Math.max(0, item.stroke?.width ?? 0)
+    let strokeColor: [number, number, number, number] | undefined
+    if (strokeWidth > 0) {
+      const parsedStrokeColor = parseGpuTextColor(item.stroke?.color ?? '#000000')
+      if (!parsedStrokeColor) return null
+      strokeColor = parsedStrokeColor
+    }
+
+    for (const line of layout.lines) {
+      const color = parseGpuTextColor(line.color)
+      if (!color) return null
+      const baselineY = line.baselineY
+      let currentX = line.startX
       for (const char of line.text) {
-        const metrics = this.ensureGlyph(char, line.font, line.fontSize)
+        const metrics = this.ensureGlyph(char, line.cssFont, line.fontSize)
         if (!metrics) return null
         if (char !== ' ') {
-          if (item.textShadow && shadowColor) {
+          if (shadow && shadowColor) {
             glyphs.push({
               metrics,
-              x: currentX + metrics.offsetX + item.textShadow.offsetX,
-              y: baselineY + metrics.offsetY + item.textShadow.offsetY,
+              x: currentX + metrics.offsetX + shadow.offsetX,
+              y: baselineY + metrics.offsetY + shadow.offsetY,
               width: metrics.contentWidth,
               height: metrics.contentHeight,
               color: shadowColor,
-              shadowBlur: Math.max(0, item.textShadow.blur),
+              shadowBlur: Math.max(0, shadow.blur),
             })
           }
           glyphs.push({
@@ -396,154 +362,69 @@ export class GlyphAtlasTextPipeline {
             y: baselineY + metrics.offsetY,
             width: metrics.contentWidth,
             height: metrics.contentHeight,
-            color: line.color,
-            strokeColor: line.strokeColor,
-            strokeWidth: line.strokeWidth,
+            color,
+            strokeColor,
+            strokeWidth,
           })
         }
         currentX += metrics.advance + line.letterSpacing
       }
-      if (line.underline && lineWidth > 0) {
+      const underlineWidth = lineInkWidth(line)
+      if (line.underline && underlineWidth > 0) {
         const underlineGlyph = this.ensureSolidGlyph()
         if (!underlineGlyph) return null
-        if (item.textShadow && shadowColor) {
+        const underlineY = baselineY + Math.max(1, line.fontSize * 0.08)
+        const underlineHeight = Math.max(1, line.fontSize * 0.05)
+        if (shadow && shadowColor) {
           glyphs.push({
             metrics: underlineGlyph,
-            x: lineStartX + item.textShadow.offsetX,
-            y: baselineY + Math.max(1, line.fontSize * 0.08) + item.textShadow.offsetY,
-            width: lineWidth,
-            height: Math.max(1, line.fontSize * 0.05),
+            x: line.startX + shadow.offsetX,
+            y: underlineY + shadow.offsetY,
+            width: underlineWidth,
+            height: underlineHeight,
             color: shadowColor,
             solidRadius: 0,
           })
         }
         glyphs.push({
           metrics: underlineGlyph,
-          x: lineStartX,
-          y: baselineY + Math.max(1, line.fontSize * 0.08),
-          width: lineWidth,
-          height: Math.max(1, line.fontSize * 0.05),
-          color: line.color,
+          x: line.startX,
+          y: underlineY,
+          width: underlineWidth,
+          height: underlineHeight,
+          color,
           solidRadius: 0,
         })
       }
-      currentTop += line.lineHeightPx
     }
     return { glyphs }
   }
 
-  private layoutLines(item: TextItem, availableWidth: number): TextLayoutLine[] | null {
-    const itemFontSize = item.fontSize ?? 60
-    const itemFontFamily = item.fontFamily ?? 'Inter'
-    const itemFontStyle = item.fontStyle ?? 'normal'
-    const itemFontWeightName = item.fontWeight ?? 'normal'
-    const itemFontWeight = FONT_WEIGHT_MAP[itemFontWeightName] ?? 400
-    const itemLineHeight = item.lineHeight ?? 1.2
-    const lines: TextLayoutLine[] = []
-
-    for (const span of getTextItemSpans(item)) {
-      const fontSize = span.fontSize ?? itemFontSize
-      const fontFamily = span.fontFamily ?? itemFontFamily
-      const fontStyle = span.fontStyle ?? itemFontStyle
-      const fontWeightName = span.fontWeight ?? itemFontWeightName
-      const fontWeight = FONT_WEIGHT_MAP[fontWeightName] ?? itemFontWeight
-      const font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`
-      const lineHeightPx = fontSize * itemLineHeight
-      const letterSpacing = span.letterSpacing ?? item.letterSpacing ?? 0
-      const color = parseGpuTextColor(span.color ?? item.color ?? '#ffffff')
-      if (!color) return null
-      const strokeWidth = Math.max(0, item.stroke?.width ?? 0)
-      let strokeColor: [number, number, number, number] | undefined
-      if (strokeWidth > 0) {
-        const parsedStrokeColor = parseGpuTextColor(item.stroke?.color ?? '#000000')
-        if (!parsedStrokeColor) return null
-        strokeColor = parsedStrokeColor
-      }
-      const underline = span.underline ?? item.underline ?? false
-      const metrics = this.measureFont(font, fontSize)
-      const halfLeading = (lineHeightPx - metrics.height) / 2
-      const baselineOffset = halfLeading + metrics.ascent
-      for (const line of this.wrapText(span.text ?? '', font, availableWidth, letterSpacing)) {
-        lines.push({
-          text: line,
-          width: this.measureText(line, font, letterSpacing),
-          font,
-          fontSize,
-          lineHeightPx,
-          baselineOffset,
-          letterSpacing,
-          color,
-          strokeColor,
-          strokeWidth,
-          underline,
-        })
-      }
+  /**
+   * Measurer backed by the glyph atlas: widths sum per-glyph advances plus the
+   * trailing letter-spacing (CSS semantics), metrics use the font bounding box
+   * — same line geometry the canvas/DOM paths use.
+   */
+  private createMeasurer(): TextMeasurer {
+    return {
+      measure: (text, cssFont, letterSpacing) => {
+        const fontSize = parseFontSizePx(cssFont)
+        let width = 0
+        for (const char of text) {
+          width += this.ensureGlyph(char, cssFont, fontSize)?.advance ?? 0
+        }
+        return width + text.length * letterSpacing
+      },
+      fontMetrics: (cssFont) => this.measureFont(cssFont, parseFontSizePx(cssFont)),
     }
-    return lines
   }
 
-  private measureFont(font: string, fontSize: number): { ascent: number; height: number } {
+  private measureFont(font: string, fontSize: number): { ascent: number; descent: number } {
     this.scratchCtx.font = font
     const metrics = this.scratchCtx.measureText('Hg')
-    const ascent =
-      metrics.actualBoundingBoxAscent || metrics.fontBoundingBoxAscent || fontSize * 0.8
-    const descent =
-      metrics.actualBoundingBoxDescent || metrics.fontBoundingBoxDescent || fontSize * 0.2
-    return { ascent, height: ascent + descent }
-  }
-
-  private wrapText(text: string, font: string, maxWidth: number, letterSpacing: number): string[] {
-    const lines: string[] = []
-    for (const paragraph of text.split('\n')) {
-      if (paragraph === '') {
-        lines.push('')
-        continue
-      }
-      const words = paragraph.split(' ')
-      let currentLine = ''
-      for (const word of words) {
-        const testLine = currentLine ? `${currentLine} ${word}` : word
-        if (this.measureText(testLine, font, letterSpacing) > maxWidth && currentLine) {
-          lines.push(currentLine)
-          currentLine = word
-          if (this.measureText(word, font, letterSpacing) > maxWidth) {
-            const brokenLines = this.breakWord(word, font, maxWidth, letterSpacing)
-            for (let i = 0; i < brokenLines.length - 1; i++) lines.push(brokenLines[i] ?? '')
-            currentLine = brokenLines[brokenLines.length - 1] ?? ''
-          }
-        } else {
-          currentLine = testLine
-        }
-      }
-      if (currentLine) lines.push(currentLine)
-    }
-    return lines.length > 0 ? lines : ['']
-  }
-
-  private breakWord(word: string, font: string, maxWidth: number, letterSpacing: number): string[] {
-    const lines: string[] = []
-    let current = ''
-    for (const char of word) {
-      const test = current + char
-      if (this.measureText(test, font, letterSpacing) > maxWidth && current) {
-        lines.push(current)
-        current = char
-      } else {
-        current = test
-      }
-    }
-    if (current) lines.push(current)
-    return lines
-  }
-
-  private measureText(text: string, font: string, letterSpacing: number): number {
-    const sizeMatch = /(\d+(?:\.\d+)?)px/.exec(font)
-    const fontSize = sizeMatch ? parseFloat(sizeMatch[1]!) : 16
-    let width = 0
-    for (const char of text) {
-      width += this.ensureGlyph(char, font, fontSize)?.advance ?? 0
-    }
-    return width + Math.max(0, text.length - 1) * letterSpacing
+    const ascent = metrics.fontBoundingBoxAscent || fontSize * 0.8
+    const descent = metrics.fontBoundingBoxDescent || fontSize * 0.2
+    return { ascent, descent }
   }
 
   private ensureGlyph(char: string, font: string, fontSize: number): GlyphMetrics | null {

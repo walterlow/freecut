@@ -19,6 +19,7 @@ export {
 // Media
 export {
   getAllMedia,
+  getAllMediaMetadata,
   getMedia,
   createMedia,
   updateMedia,
@@ -49,6 +50,7 @@ export {
 export {
   associateMediaWithProject,
   removeMediaFromProject,
+  removeMediaBatchFromProject,
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject,
@@ -162,6 +164,23 @@ export {
   type OrphanSweepReport,
   type OrphanSweepOptions,
 } from '@/infrastructure/storage/workspace-fs/orphan-sweep'
+
+// Final render outputs (export queue)
+export {
+  saveExportFile,
+  listExportFiles,
+  readExportFile,
+  deleteExportFile,
+  workspaceFolderName,
+  type SavedExport,
+  type ExportFileEntry,
+} from '@/infrastructure/storage/workspace-fs/exports'
+
+// Per-project render-queue persistence
+export {
+  loadRenderQueue,
+  saveRenderQueue,
+} from '@/infrastructure/storage/workspace-fs/render-queue'
 
 // Soft-delete / trash for projects
 export {

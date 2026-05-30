@@ -14,10 +14,8 @@ export {
   resolveMediaUrls,
   cleanupBlobUrls,
 } from '@/features/media-library/utils/media-resolver'
-export {
-  mediaLibraryService,
-  FileAccessError,
-} from '@/features/media-library/services/media-library-service'
+export { importMediaLibraryService } from '@/features/media-library/services/media-library-service-loader'
+export { FileAccessError } from '@/features/media-library/services/file-access'
 export {
   extractValidMediaFileEntriesFromDataTransfer,
   supportsFileSystemDragDrop,

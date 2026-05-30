@@ -13,6 +13,7 @@ interface TimelineViewportState extends TimelineViewportMeasurements {
 
 interface TimelineViewportActions {
   setViewport: (next: TimelineViewportMeasurements) => void
+  setViewportImmediate: (next: TimelineViewportMeasurements) => void
   /** Request the timeline container to scroll so `frame` is visible. */
   requestScrollToFrame: (frame: number) => void
   clearScrollToFrame: () => void
@@ -73,6 +74,15 @@ export const useTimelineViewportStore = create<TimelineViewportState & TimelineV
     pendingScrollToFrame: null,
     requestScrollToFrame: (frame: number) => set({ pendingScrollToFrame: frame }),
     clearScrollToFrame: () => set({ pendingScrollToFrame: null }),
+    setViewportImmediate: (next) => {
+      lastScrollUpdate = performance.now()
+      pendingViewport = null
+      if (viewportThrottleTimeout) {
+        clearTimeout(viewportThrottleTimeout)
+        viewportThrottleTimeout = null
+      }
+      set(next)
+    },
     setViewport: (next) => {
       const current = get()
       if (!hasMeaningfulChange(current, next)) {

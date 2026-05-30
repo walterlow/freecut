@@ -94,7 +94,9 @@
       "snapByDefault": "Ajuste por defecto",
       "snapByDefaultDescription": "Define el estado inicial del ajuste al abrir un proyecto.",
       "showWaveforms": "Mostrar formas de onda",
-      "showFilmstrips": "Mostrar miniaturas de vídeo"
+      "showFilmstrips": "Mostrar miniaturas de vídeo",
+      "enableFilmstripExtraction": "Extraer tiras de fotogramas",
+      "enableFilmstripExtractionDescription": "Genera tiras de miniaturas de vídeo durante la importación y la visualización en la línea de tiempo."
     },
     "storage": {
       "generateMissingProxies": "Generar proxies faltantes",

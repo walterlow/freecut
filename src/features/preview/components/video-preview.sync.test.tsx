@@ -265,7 +265,9 @@ vi.mock('../utils/media-resolver', () => ({
 }))
 
 vi.mock('@/features/preview/deps/export', () => ({
-  createCompositionRenderer: rendererMockState.create,
+  importCompositionRenderer: vi.fn(async () => ({
+    createCompositionRenderer: rendererMockState.create,
+  })),
 }))
 
 vi.mock('@/features/preview/deps/player-core', async () => {
@@ -3191,8 +3193,16 @@ describe('VideoPreview sync behavior', () => {
       usePlaybackStore.getState().setCurrentFrame(61)
     })
 
+    // Transition entry can cycle through several short-lived renderer instances
+    // (the structure key churns as the session settles), so the cooldown frame
+    // may be drawn by a renderer created after the one captured above. Assert the
+    // frame was rendered by *some* instance rather than pinning to a single handle.
+    const cooldownFrameRendered = () =>
+      rendererMockState.instances.some((instance) =>
+        instance.renderFrame.mock.calls.some((call) => call[0] === 61),
+      )
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(61)
+      expect(cooldownFrameRendered()).toBe(true)
       expect(getDisplayedFrame()).toBe(61)
       expect(scrubCanvas.style.visibility).toBe('visible')
     })

@@ -29,11 +29,9 @@ import {
   saveWorkspaceHandleRecord,
 } from '@/infrastructure/storage/handles-db'
 import { onPermissionLost, setWorkspaceRoot } from '@/infrastructure/storage/workspace-fs/root'
-import { bootstrapWorkspace } from '@/infrastructure/storage/workspace-fs/bootstrap'
 import { createLogger } from '@/shared/logging/logger'
 import { WorkspaceGateSplash } from './workspace-gate-splash'
 import { usePathname } from './use-pathname'
-import { autoPurgeExpiredTrash } from './deps/trash-auto-purge'
 
 /**
  * Routes that read/write the workspace and therefore need the gate to be
@@ -61,6 +59,7 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   const activate = useCallback(async (handle: FileSystemDirectoryHandle) => {
     setWorkspaceRoot(handle)
     try {
+      const { bootstrapWorkspace } = await import('@/infrastructure/storage/workspace-fs/bootstrap')
       await bootstrapWorkspace(handle)
     } catch (error) {
       logger.warn('bootstrapWorkspace failed', error)
@@ -69,9 +68,12 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
     // background — it touches disk and we don't want it to block the
     // app render. Wrapped in setTimeout so it runs after first paint.
     setTimeout(() => {
-      void autoPurgeExpiredTrash()
+      void import('./deps/trash-auto-purge').then(({ autoPurgeExpiredTrash }) =>
+        autoPurgeExpiredTrash(),
+      )
     }, 0)
     setStatus({ kind: 'ready' })
+    window.dispatchEvent(new Event('freecut:ensure-toaster'))
   }, [])
 
   // Initial load: check if we have a saved handle, check its permission.

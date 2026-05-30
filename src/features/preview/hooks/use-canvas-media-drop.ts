@@ -16,7 +16,7 @@ import {
   getMediaDragData,
   getMediaType,
   getMimeType,
-  mediaLibraryService,
+  importMediaLibraryService,
   mediaProcessorService,
   resolveMediaUrl,
   useMediaLibraryStore,
@@ -248,6 +248,7 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
         return
       }
 
+      const { mediaLibraryService } = await importMediaLibraryService()
       const thumbnailUrl = await mediaLibraryService.getThumbnailBlobUrl(media.id)
       const baseItem = buildDroppedMediaTimelineItem({
         media,
@@ -274,7 +275,14 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
             effectiveProjectSize,
           )
 
-      timelineState.addItem(placedItem)
+      // Keep audio and video on separate tracks: a video dropped on the canvas
+      // with embedded audio gets its audio split onto a linked audio track,
+      // just like a timeline drop. Otherwise it's a plain visual placement.
+      if (placedItem.type === 'video' && media.audioCodec) {
+        timelineState.addItemWithLinkedAudio(placedItem)
+      } else {
+        timelineState.addItem(placedItem)
+      }
       selectionState.setActiveTrack(placement.trackId)
       selectionState.selectItems([placedItem.id])
     },

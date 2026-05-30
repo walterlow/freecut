@@ -26,6 +26,18 @@ const mediaLibraryMocks = vi.hoisted(() => ({
   closeOrphanedClipsDialog: vi.fn(),
 }))
 
+const exportMocks = vi.hoisted(() => {
+  const mocks = {
+    renderSingleFrame: vi.fn(),
+    convertTimelineToComposition: vi.fn(),
+    importCanvasRenderOrchestrator: vi.fn(),
+  }
+  mocks.importCanvasRenderOrchestrator.mockResolvedValue({
+    renderSingleFrame: mocks.renderSingleFrame,
+  })
+  return mocks
+})
+
 vi.mock('@/infrastructure/storage', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {
@@ -46,10 +58,7 @@ vi.mock('./zoom-store', () => ({
   },
 }))
 
-vi.mock('@/features/timeline/deps/export-contract', () => ({
-  renderSingleFrame: vi.fn(),
-  convertTimelineToComposition: vi.fn(),
-}))
+vi.mock('@/features/timeline/deps/export-contract', () => exportMocks)
 
 vi.mock('@/features/timeline/deps/media-library-resolver', () => ({
   resolveMediaUrls: vi.fn(),

@@ -93,10 +93,18 @@ vi.mock('./audio-meter-panel', () => ({
 
 vi.mock('@/features/editor/deps/timeline-ui', () => ({
   Timeline: () => <div data-testid="timeline" />,
-  BentoLayoutDialog: () => null,
-  FillerRemovalDialog: () => null,
-  ReverseConformDialog: () => null,
-  SilenceRemovalDialog: () => null,
+  importBentoLayoutDialog: vi.fn().mockResolvedValue({ BentoLayoutDialog: () => null }),
+  importFillerRemovalDialog: vi.fn().mockResolvedValue({ FillerRemovalDialog: () => null }),
+  importReverseConformDialog: vi.fn().mockResolvedValue({ ReverseConformDialog: () => null }),
+  importSilenceRemovalDialog: vi.fn().mockResolvedValue({ SilenceRemovalDialog: () => null }),
+  useBentoLayoutDialogStore: (selector: (state: { isOpen: boolean }) => unknown) =>
+    selector({ isOpen: false }),
+  useFillerRemovalDialogStore: (selector: (state: { isOpen: boolean }) => unknown) =>
+    selector({ isOpen: false }),
+  useReverseConformDialogStore: (selector: (state: { request: null }) => unknown) =>
+    selector({ request: null }),
+  useSilenceRemovalDialogStore: (selector: (state: { isOpen: boolean }) => unknown) =>
+    selector({ isOpen: false }),
 }))
 
 vi.mock('./clear-keyframes-dialog', () => ({
@@ -223,6 +231,13 @@ vi.mock('@/features/editor/deps/projects', () => {
 
 vi.mock('@/features/editor/deps/export-contract', () => ({
   importExportDialog: mocks.importExportDialog,
+  importExportsDialog: vi.fn().mockResolvedValue({
+    ExportsDialog: () => <div data-testid="exports-dialog" />,
+  }),
+  RenderQueuePersistence: () => null,
+  RenderQueueRunner: () => null,
+  useRenderQueueStore: (selector: (state: { jobs: Array<{ status: string }> }) => unknown) =>
+    selector({ jobs: [] }),
 }))
 
 vi.mock('@/config/editor-layout', async (importOriginal) => {

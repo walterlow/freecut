@@ -32,6 +32,7 @@ import {
   associateMediaWithProject,
   getProjectMediaIds,
   getProjectsUsingMedia,
+  removeMediaBatchFromProject,
   removeMediaFromProject,
 } from './project-media'
 import { createProject } from './projects'
@@ -85,6 +86,19 @@ describe('workspace-fs project-media', () => {
     await associateMediaWithProject('p1', 'm1')
     await associateMediaWithProject('p1', 'm2')
     await removeMediaFromProject('p1', 'm1')
+    expect(await getProjectMediaIds('p1')).toEqual(['m2'])
+  })
+
+  it('removeMediaBatchFromProject removes all targets in one project', async () => {
+    const root = createRoot()
+    setWorkspaceRoot(asHandle(root))
+    await createProject(makeProject('p1'))
+    await associateMediaWithProject('p1', 'm1')
+    await associateMediaWithProject('p1', 'm2')
+    await associateMediaWithProject('p1', 'm3')
+
+    await removeMediaBatchFromProject('p1', ['m1', 'm3'])
+
     expect(await getProjectMediaIds('p1')).toEqual(['m2'])
   })
 

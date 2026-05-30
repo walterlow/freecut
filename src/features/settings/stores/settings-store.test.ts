@@ -5,6 +5,7 @@ const DEFAULT_SETTINGS = {
   snapEnabled: true,
   showWaveforms: true,
   showFilmstrips: true,
+  enableFilmstripExtraction: true,
   editorDensity: 'compact' as const,
   maxUndoHistory: 50,
   autoSaveInterval: 0,
@@ -23,6 +24,7 @@ describe('settings-store', () => {
     expect(state.snapEnabled).toBe(true)
     expect(state.showWaveforms).toBe(true)
     expect(state.showFilmstrips).toBe(true)
+    expect(state.enableFilmstripExtraction).toBe(true)
     expect(state.editorDensity).toBe('compact')
     expect(state.maxUndoHistory).toBe(50)
     expect(state.autoSaveInterval).toBe(0)

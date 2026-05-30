@@ -11,6 +11,7 @@ import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants'
 import { getCompositionOwnedAudioSources } from '../../utils/composition-clip-summary'
 import { mixCompoundClipWaveformPeaks } from '../../utils/compound-clip-waveform'
 import { computeWaveformRenderWindow } from './render-window'
+import { computeWaveformAmplitude } from './amplitude'
 import { getPreviewStartupDelayMs, schedulePreviewWork } from '../../hooks/preview-work-budget'
 import {
   getWaveformActiveTileCount,
@@ -252,17 +253,13 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
         const windowStart = Math.max(0, peakIndex - halfWindow)
         const windowEnd = Math.min(peaks.length, peakIndex + halfWindow + 1)
 
-        let max1 = 0
-        let max2 = 0
+        let windowPeak = 0
         let windowSum = 0
         let sampleCount = 0
         for (let i = windowStart; i < windowEnd; i += 1) {
           const value = peaks[i] ?? 0
-          if (value >= max1) {
-            max2 = max1
-            max1 = value
-          } else if (value > max2) {
-            max2 = value
+          if (value > windowPeak) {
+            windowPeak = value
           }
           windowSum += value
           sampleCount += 1
@@ -272,13 +269,9 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
           continue
         }
 
-        const normalizedMax1 = Math.min(1, max1 / normalizationPeak)
-        const normalizedMax2 = Math.min(1, max2 / normalizationPeak)
-        const normalizedMean = Math.min(1, windowSum / sampleCount / normalizationPeak)
-        const needle = Math.max(0, normalizedMax1 - normalizedMax2)
-        const peakValue = Math.min(1, normalizedMean * 0.38 + normalizedMax2 * 0.34 + needle * 2.35)
-        const amp = peakValue <= 0.001 ? 0 : Math.pow(peakValue, 1.05)
-        amplitudes[x] = amp * maxWaveHeight
+        amplitudes[x] =
+          computeWaveformAmplitude(windowPeak, windowSum, sampleCount, normalizationPeak) *
+          maxWaveHeight
       }
 
       for (let x = 0; x < amplitudeCount; x += 1) {
@@ -339,7 +332,6 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
 
   return (
     <div ref={containerRef} className="absolute inset-0">
-      {isLoading && <WaveformSkeleton clipWidth={visibleClipWidth} height={height} />}
       <TiledCanvas
         width={renderClipWidth}
         height={height}

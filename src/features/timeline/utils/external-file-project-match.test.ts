@@ -89,6 +89,7 @@ describe('preflightFirstTimelineVideoProjectMatch', () => {
 
     expect(mocks.processMedia).toHaveBeenCalledWith(expect.any(File), 'video/mp4', {
       generateThumbnail: false,
+      fastMetadata: true,
     })
     expect(mocks.requestProjectMediaMatch).toHaveBeenCalledWith('project-1', {
       fileName: 'drop.mp4',

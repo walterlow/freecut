@@ -94,7 +94,9 @@
       "snapByDefault": "Standardmäßig einrasten",
       "snapByDefaultDescription": "Legt den anfänglichen Einrast-Status beim Öffnen eines Projekts fest.",
       "showWaveforms": "Wellenformen anzeigen",
-      "showFilmstrips": "Video-Vorschaubilder anzeigen"
+      "showFilmstrips": "Video-Vorschaubilder anzeigen",
+      "enableFilmstripExtraction": "Filmstreifen extrahieren",
+      "enableFilmstripExtractionDescription": "Erstellt Video-Miniaturstreifen beim Import und bei der Anzeige in der Timeline."
     },
     "storage": {
       "generateMissingProxies": "Fehlende Proxys generieren",

@@ -103,6 +103,7 @@ export interface ProcessMediaRequest {
     thumbnailQuality?: number
     thumbnailTimestamp?: number
     generateThumbnail?: boolean
+    fastMetadata?: boolean
   }
 }
 
@@ -402,7 +403,10 @@ async function extractKeyframeTimestamps(
 /**
  * Extract video metadata using mediabunny
  */
-async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
+async function extractVideoMetadata(
+  file: File,
+  options: { fastMetadata?: boolean } = {},
+): Promise<VideoMetadata> {
   const mb = await getMediabunny()
 
   const input = new mb.Input({
@@ -429,8 +433,10 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
     // Run sequentially: both helpers create an EncodedPacketSink on the same
     // track, and concurrent iteration would share one packet-read cursor and
     // interleave reads — yielding a wrong FPS or corrupted keyframe index.
-    const fps = await estimateVideoFps(mb, videoTrack)
-    const keyframeTimestamps = await extractKeyframeTimestamps(mb, videoTrack)
+    const fps = options.fastMetadata ? 30 : await estimateVideoFps(mb, videoTrack)
+    const keyframeTimestamps = options.fastMetadata
+      ? undefined
+      : await extractKeyframeTimestamps(mb, videoTrack)
 
     const audioCodec = audioTrack?.codec
     const audioCodecSupported = isAudioCodecSupported(audioCodec)
@@ -690,6 +696,7 @@ async function processMedia(
     thumbnailQuality = 0.6,
     thumbnailTimestamp = 1,
     generateThumbnail = true,
+    fastMetadata = false,
   } = options
 
   let metadata: VideoMetadata | AudioMetadata | ImageMetadata
@@ -697,7 +704,7 @@ async function processMedia(
 
   if (mimeType.startsWith('video/')) {
     // Video: extract metadata and generate thumbnail in parallel after metadata
-    metadata = await extractVideoMetadata(file)
+    metadata = await extractVideoMetadata(file, { fastMetadata })
     if (generateThumbnail) {
       try {
         thumbnail = await withTimeout(

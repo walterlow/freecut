@@ -94,7 +94,9 @@
       "snapByDefault": "Snap by Default",
       "snapByDefaultDescription": "Sets the initial snap state when a project opens.",
       "showWaveforms": "Show Waveforms",
-      "showFilmstrips": "Show Filmstrips"
+      "showFilmstrips": "Show Filmstrips",
+      "enableFilmstripExtraction": "Extract Filmstrips",
+      "enableFilmstripExtractionDescription": "Generate video thumbnail strips during import and timeline display."
     },
     "storage": {
       "generateMissingProxies": "Generate Missing Proxies",

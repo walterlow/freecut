@@ -4,11 +4,36 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 <!-- Entries below are generated via the `changelog` skill. Newest first. -->
 
-## [Current] — week of 2026-05-18
+## [Current] — week of 2026-05-25
+
+### Added
+- In-app render queue — line up several exports and they render one after another, surviving a page refresh
+- One-click quality presets in the export dialog
+- Exports now save to a per-project folder, with a notice showing where files land
+- Automatic caption styling, with per-item progress in the AI panel
+
+### Fixed
+- Waveforms render from true audio peaks and stay sharp when zoomed in
+- Waveforms no longer flash a skeleton when moving a clip to another track
+- Preview no longer jumps when entering pen/path edit mode
+- Preview stays continuous through transitions during playback
+- Remaining placeholder strings are now translated across all 9 languages
+
+### Improved
+- Much smoother timeline zooming and scrolling, especially with many clips on screen
+- The editor stays responsive while audio loads — decoding now runs in the background
+
+## [2026.05.18] — week of 2026-05-18 to 2026-05-24
+
+### Added
+- Hold (stepped) interpolation for keyframes
+- Language switcher on the projects page, with more panels translated (text tools, transitions, scene browser)
 
 ### Fixed
 - Rotated videos display the correct orientation in skim preview and exports
 - Scrub overlay stays aligned and the skim indicator sits flush on clip edges
+- Transitions on same-clip (A-A) splits now render correctly
+- Splitting a reversed clip keeps both halves continuous
 
 ### Improved
 - Filmstrips and waveforms render smoother while zooming the timeline

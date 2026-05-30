@@ -33,6 +33,7 @@ import {
   drawContainedMediaSource,
   hasCropFeather,
 } from './media-draw'
+import { isPreviewTraceEnabled, recordRenderTrace } from '@/shared/logging/preview-trace'
 
 export function getTier2VideoFrameToleranceSeconds(sourceFps: number): number {
   const normalizedSourceFps = Number.isFinite(sourceFps) && sourceFps > 0 ? sourceFps : 30
@@ -228,6 +229,19 @@ export async function renderVideoItem(
     isRenderingTransition: !!rctx.isRenderingTransition,
   })
   const hasDomVideo = domVideoDecision.hasReadyDomVideo
+
+  // DEV diagnostics: record which transition participants the renderer actually
+  // composites per frame. Tree-shaken from prod; no-op unless a trace is running.
+  if (import.meta.env.DEV && rctx.isRenderingTransition && isPreviewTraceEnabled()) {
+    recordRenderTrace({
+      f: frame,
+      id: item.id.slice(0, 8),
+      rev: item.isReversed === true,
+      src: Math.round(sourceTime * 100) / 100,
+      hasDom: !!domVideo,
+      useMb: useMediabunny.has(item.id),
+    })
+  }
 
   // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
   // During playback, the Player's <video> elements are already playing

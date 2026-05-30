@@ -8,11 +8,12 @@ import {
   useCompositionsStore,
 } from '@/features/preview/deps/timeline-contract'
 import { resolveMediaUrl, resolveMediaUrls } from '@/features/preview/deps/media-library-contract'
-import { createCompositionRenderer } from '@/features/preview/deps/export'
+import {
+  importCompositionRenderer,
+  type CompositionRendererInstance,
+} from '@/features/preview/deps/export'
 import { createLogger } from '@/shared/logging/logger'
 import { getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
-
-type CompositionRendererInstance = Awaited<ReturnType<typeof createCompositionRenderer>>
 
 function getLogger() {
   return createLogger('InlineCompositionPreview')
@@ -180,6 +181,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
 
     const boot = async () => {
       try {
+        const { createCompositionRenderer } = await importCompositionRenderer()
         const renderer = await createCompositionRenderer(rendererInput, offscreen, ctx, {
           mode: 'preview',
           useProxyMedia: useProxy,

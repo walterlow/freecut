@@ -275,15 +275,25 @@ describe('useVisibleItems filtering logic', () => {
       useZoomStore.getState().setZoomLevelImmediate(1)
     })
 
-    expect(screen.getByTestId('visible-items')).toHaveTextContent('a,b')
-    expect(onRender).toHaveBeenCalledTimes(2)
+    // Staged: newly-visible clips mount on subsequent animation frames (under a
+    // global per-frame budget) rather than all at once, so the set is unchanged
+    // synchronously.
+    expect(screen.getByTestId('visible-items')).toHaveTextContent('a')
 
+    // Animation frames before the 100ms settle: the staged expansion mounts the
+    // newly-visible clip — so it does NOT wait for settle.
+    act(() => {
+      vi.advanceTimersByTime(50)
+    })
+
+    expect(screen.getByTestId('visible-items')).toHaveTextContent('a,b')
+
+    // Settle recomputes in the committed coordinate space; the set stays 'a,b'.
     act(() => {
       vi.advanceTimersByTime(100)
     })
 
     expect(screen.getByTestId('visible-items')).toHaveTextContent('a,b')
-    expect(onRender).toHaveBeenCalledTimes(3)
 
     vi.useRealTimers()
   })

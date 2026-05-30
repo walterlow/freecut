@@ -1,17 +1,18 @@
 import { describe, expect, it, beforeEach, vi, type Mock } from 'vite-plus/test'
 import { resolveMediaUrl, resolveMediaUrls, cleanupBlobUrls } from './media-resolver'
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
-import { mediaLibraryService, FileAccessError } from '@/features/preview/deps/media-library'
+import { FileAccessError } from '@/features/preview/deps/media-library'
 import type { TimelineTrack, VideoItem } from '@/types/timeline'
 
 const mockMarkMediaBroken = vi.fn()
+const mediaLibraryService = vi.hoisted(() => ({
+  getMedia: vi.fn(),
+  getMediaFile: vi.fn(),
+}))
 
 // Mock dependencies used by the underlying media resolver implementation.
 vi.mock('@/features/media-library/services/media-library-service', () => ({
-  mediaLibraryService: {
-    getMedia: vi.fn(),
-    getMediaFile: vi.fn(),
-  },
+  mediaLibraryService,
   FileAccessError: class FileAccessError extends Error {
     type: string
     constructor(message: string, type: string) {

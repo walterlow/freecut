@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/shared/ui/cn'
-import { useMediaLibraryStore, mediaAnalysisService } from '../deps/media-library'
+import { importMediaAnalysisService, useMediaLibraryStore } from '../deps/media-library'
 import {
   useSceneBrowserStore,
   type SceneBrowserSortMode,
@@ -103,6 +103,7 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
       if (analyzeBusy) return
       setAnalyzeBusy(true)
       try {
+        const { mediaAnalysisService } = await importMediaAnalysisService()
         if (kind === 'scope' && mediaId) {
           await mediaAnalysisService.analyzeMedia(mediaId)
         } else if (kind === 'missing') {

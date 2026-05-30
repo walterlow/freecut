@@ -56,6 +56,14 @@ interface MarqueeRect {
 
 const MARQUEE_DRAG_THRESHOLD = 4
 
+function areSetsEqual(a: Set<string>, b: Set<string>) {
+  if (a.size !== b.size) return false
+  for (const value of a) {
+    if (!b.has(value)) return false
+  }
+  return true
+}
+
 export function ProjectList({ onEditProject }: ProjectListProps) {
   const { t } = useTranslation()
   const [localSearchQuery, setLocalSearchQuery] = useState('')
@@ -66,7 +74,10 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
 
   // Marquee state
   const containerRef = useRef<HTMLDivElement>(null)
+  const searchDebounceRef = useRef<number | null>(null)
+  const selectedIdsRef = useRef(selectedIds)
   const [marquee, setMarquee] = useState<MarqueeRect | null>(null)
+  const marqueeRef = useRef(marquee)
   const marqueeStartRef = useRef<{
     x: number
     y: number
@@ -95,6 +106,23 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
   const uniqueResolutions = useMemo(() => getUniqueResolutions(allProjects), [allProjects])
   const uniqueFps = useMemo(() => getUniqueFps(allProjects), [allProjects])
 
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds
+  }, [selectedIds])
+
+  useEffect(() => {
+    marqueeRef.current = marquee
+  }, [marquee])
+
+  useEffect(
+    () => () => {
+      if (searchDebounceRef.current !== null) {
+        window.clearTimeout(searchDebounceRef.current)
+      }
+    },
+    [],
+  )
+
   // Prune selections that disappear (e.g. after deletion or filtering changes)
   useEffect(() => {
     const visibleIds = new Set(filteredProjects.map((p) => p.id))
@@ -114,10 +142,13 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
 
   const handleSearchChange = (value: string) => {
     setLocalSearchQuery(value)
-    const timeoutId = setTimeout(() => {
+    if (searchDebounceRef.current !== null) {
+      window.clearTimeout(searchDebounceRef.current)
+    }
+    searchDebounceRef.current = window.setTimeout(() => {
       setSearchQuery(value)
+      searchDebounceRef.current = null
     }, 300)
-    return () => clearTimeout(timeoutId)
   }
 
   const handleClearFilters = () => {
@@ -205,7 +236,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
       marqueeStartRef.current = {
         x: e.clientX,
         y: e.clientY,
-        baseSelection: additive ? new Set(selectedIds) : new Set(),
+        baseSelection: additive ? new Set(selectedIdsRef.current) : new Set(),
         additive,
       }
     }
@@ -217,7 +248,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
       const dx = e.clientX - start.x
       const dy = e.clientY - start.y
 
-      if (!marquee && Math.hypot(dx, dy) < MARQUEE_DRAG_THRESHOLD) return
+      if (!marqueeRef.current && Math.hypot(dx, dy) < MARQUEE_DRAG_THRESHOLD) return
 
       // Viewport-space rectangle
       const x = Math.min(start.x, e.clientX)
@@ -244,11 +275,11 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           }
         }
       })
-      setSelectedIds(hits)
+      setSelectedIds((prev) => (areSetsEqual(prev, hits) ? prev : hits))
     }
 
     const handleMouseUp = () => {
-      const wasMarquee = marquee !== null
+      const wasMarquee = marqueeRef.current !== null
       const hadStart = marqueeStartRef.current !== null
       marqueeStartRef.current = null
       setMarquee(null)
@@ -267,7 +298,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [marquee, clearSelection, selectedIds])
+  }, [clearSelection])
 
   // Keyboard: Escape clears, Delete triggers bulk delete, Ctrl/Cmd+A selects all
   useEffect(() => {

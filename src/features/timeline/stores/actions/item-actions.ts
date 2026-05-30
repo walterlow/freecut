@@ -2,7 +2,7 @@
  * Item Actions - Cross-domain operations that affect items, transitions, and keyframes.
  */
 
-import type { TimelineItem, TimelineTrack } from '@/types/timeline'
+import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
 import type { Transition } from '@/types/transition'
 import type { ReverseConformResult } from '../../services/reverse-conform-service'
 import { useItemsStore } from '../items-store'
@@ -23,6 +23,7 @@ import {
 import { isTrackSyncLockEnabled } from '../../utils/track-sync-lock'
 import { placeItemsWithoutTimelineOverlap } from './item-placement'
 import { useReverseConformDialogStore } from '../reverse-conform-dialog-store'
+import { buildLinkedAudioForVideo } from '../../utils/embedded-audio-split'
 
 function isLinkedSelectionEnabled(): boolean {
   return useEditorStore.getState().linkedSelectionEnabled
@@ -91,6 +92,48 @@ export function addItems(items: TimelineItem[]): void {
       useTimelineSettingsStore.getState().markDirty()
     },
     { count: placedItems.length },
+  )
+}
+
+/**
+ * Add a video together with a linked audio companion in one undoable step.
+ *
+ * Used by entry points that place a bare visual item (e.g. the preview canvas
+ * drop): when the video carries embedded audio, its audio is split onto a
+ * separate audio track so video and audio stay on their own tracks. The video
+ * and audio placements are already collision-free (the caller chose the video
+ * slot; the audio lands on a free/created audio track), so they're committed
+ * directly without re-running overlap placement, which would desync the pair.
+ */
+export function addItemWithLinkedAudio(video: VideoItem): void {
+  const itemsState = useItemsStore.getState()
+  const itemsByTrackId = new Map<string, TimelineItem[]>()
+  for (const item of itemsState.items) {
+    const existing = itemsByTrackId.get(item.trackId)
+    if (existing) {
+      existing.push(item)
+    } else {
+      itemsByTrackId.set(item.trackId, [item])
+    }
+  }
+
+  const { updatedVideo, audioItem, newTrack } = buildLinkedAudioForVideo({
+    video,
+    tracks: itemsState.tracks,
+    itemsByTrackId,
+  })
+
+  execute(
+    'ADD_ITEM_WITH_LINKED_AUDIO',
+    () => {
+      const store = useItemsStore.getState()
+      if (newTrack) {
+        store.setTracks([...store.tracks, newTrack])
+      }
+      store._addItems([updatedVideo, audioItem])
+      useTimelineSettingsStore.getState().markDirty()
+    },
+    { itemId: updatedVideo.id, audioId: audioItem.id, trackCreated: !!newTrack },
   )
 }
 

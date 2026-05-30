@@ -41,8 +41,8 @@ import { useFillerRemovalDialogStore } from '../../stores/filler-removal-dialog-
 import { canJoinMultipleItems } from '../../utils/clip-utils'
 import { canLinkSelection, hasLinkedItems } from '../../utils/linked-items'
 import {
-  detectScenes,
   getSceneVerificationModelLabel,
+  importSceneDetection,
   type VerificationModel,
 } from '../../deps/analysis'
 import { resolveMediaUrl } from '../../deps/media-library-resolver'
@@ -479,6 +479,7 @@ export function useTimelineItemActions({
           const currentFps = useTimelineStore.getState().fps
           const media = useMediaLibraryStore.getState().mediaById[mediaId]
           const mediaFps = media?.fps ?? currentFps
+          const { detectScenes } = await importSceneDetection()
           const cuts = await detectScenes(video, currentFps, {
             method,
             verificationModel,

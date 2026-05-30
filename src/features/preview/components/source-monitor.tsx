@@ -907,16 +907,22 @@ function SourcePlaybackControls({
         const point = pointFromStripX(ev.clientX)
         if (type === 'in') {
           const out = store().outPoint
-          store().setInPoint(clampDraggedSourceInPoint(point, out, lastFrame))
+          const nextIn = clampDraggedSourceInPoint(point, out, lastFrame)
+          store().setInPoint(nextIn)
+          store().setPreviewSourceFrame(nextIn)
         } else {
           const inp = store().inPoint
-          store().setOutPoint(clampDraggedSourceOutPoint(point, inp, durationInFrames))
+          const nextOut = clampDraggedSourceOutPoint(point, inp, durationInFrames)
+          store().setOutPoint(nextOut)
+          // Out is exclusive — skim to the last included frame (out - 1).
+          store().setPreviewSourceFrame(Math.max(0, nextOut - 1))
         }
       }
       const onUp = () => {
         document.body.style.cursor = originalCursor
         document.removeEventListener('mousemove', onMove)
         document.removeEventListener('mouseup', onUp)
+        store().setPreviewSourceFrame(null)
         ioDragCleanupRef.current = null
       }
       ioDragCleanupRef.current = onUp
@@ -944,11 +950,14 @@ function SourcePlaybackControls({
         const nextRange = shiftSourceIoRange(startIn, startOut, delta, durationInFrames)
         store().setInPoint(nextRange.inPoint)
         store().setOutPoint(nextRange.outPoint)
+        // Skim the preview to the range's leading (in) edge as it slides.
+        store().setPreviewSourceFrame(nextRange.inPoint)
       }
       const onUp = () => {
         document.body.style.cursor = originalCursor
         document.removeEventListener('mousemove', onMove)
         document.removeEventListener('mouseup', onUp)
+        store().setPreviewSourceFrame(null)
         ioDragCleanupRef.current = null
       }
       ioDragCleanupRef.current = onUp

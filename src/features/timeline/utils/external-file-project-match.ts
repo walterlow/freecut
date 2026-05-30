@@ -29,6 +29,7 @@ export async function preflightFirstTimelineVideoProjectMatch(
   const mimeType = getMimeType(firstVideoEntry.file)
   const { metadata } = await mediaProcessorService.processMedia(firstVideoEntry.file, mimeType, {
     generateThumbnail: false,
+    fastMetadata: true,
   })
 
   if (metadata.type !== 'video') {

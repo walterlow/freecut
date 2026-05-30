@@ -3,7 +3,7 @@ import type { TimelineItem as TimelineItemType } from '@/types/timeline'
 import { useTimelineStore } from '../../stores/timeline-store'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import {
-  mediaLibraryService as mediaLibraryServiceForSubtitles,
+  importMediaLibraryService,
   useEmbeddedSubtitlePickerStore,
 } from '@/features/timeline/deps/media-library-service'
 
@@ -135,7 +135,8 @@ export function useCaptionDialogState({
         useEmbeddedSubtitlePickerStore.getState().open(mediaForItem, blob)
         return
       }
-      const blob = await mediaLibraryServiceForSubtitles.getMediaFile(mediaForItem.id)
+      const { mediaLibraryService } = await importMediaLibraryService()
+      const blob = await mediaLibraryService.getMediaFile(mediaForItem.id)
       if (!blob) {
         mediaStore.showNotification?.({
           type: 'error',

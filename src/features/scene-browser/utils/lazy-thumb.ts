@@ -13,7 +13,7 @@
 
 import { createLogger } from '@/shared/logging/logger'
 import {
-  mediaLibraryService,
+  importMediaLibraryService,
   useMediaLibraryStore,
   type MediaMetadata,
 } from '../deps/media-library'
@@ -42,7 +42,12 @@ function schedulePersist(mediaId: string): void {
     pendingPersists.delete(mediaId)
     const latest = useMediaLibraryStore.getState().mediaById[mediaId]
     if (!latest?.aiCaptions) return
-    void mediaLibraryService.updateMediaCaptions(mediaId, latest.aiCaptions).catch((error) => {
+    const aiCaptions = latest.aiCaptions
+    const persistCaptions = async () => {
+      const { mediaLibraryService } = await importMediaLibraryService()
+      await mediaLibraryService.updateMediaCaptions(mediaId, aiCaptions)
+    }
+    void persistCaptions().catch((error) => {
       log.warn('Persisting caption thumb pointers failed', { mediaId, error })
     })
   }, PERSIST_DEBOUNCE_MS)
@@ -187,6 +192,7 @@ async function generateOne(request: PendingRequest): Promise<string | null> {
   if (state.taggingMediaIds.has(mediaId)) return null
 
   const isImage = media.mimeType.startsWith('image/')
+  const { mediaLibraryService } = await importMediaLibraryService()
   const blobUrl = await mediaLibraryService.getMediaBlobUrl(mediaId)
   if (!blobUrl) return null
 

@@ -121,7 +121,7 @@ describe('ClipFilmstrip', () => {
         sourceDuration={10}
         trimStart={0}
         speed={1}
-        fps={30}
+        fps={31}
         isVisible
         pixelsPerSecond={120}
       />,
@@ -146,7 +146,7 @@ describe('ClipFilmstrip', () => {
         sourceDuration={10}
         trimStart={0}
         speed={1}
-        fps={30}
+        fps={32}
         isVisible
         pixelsPerSecond={120}
       />,
@@ -162,13 +162,8 @@ describe('ClipFilmstrip', () => {
     )
   })
 
-  it('does not vary extraction targeting with zoom-derived inputs', () => {
-    // Filmstrip used to recompute targetFrameCount/targetFrameIndices/priorityWindow
-    // from clipWidth + pixelsPerSecond + visibility ratios on every zoom step.
-    // That caused the cache to re-extract on zoom and briefly show "broken"
-    // tiles. The contract is now: those request fields are all stable
-    // (undefined / null) so the cache extracts default coverage once.
-    render(
+  it('targets the padded visible thumbnail slots for extraction', () => {
+    const { rerender } = render(
       <ClipFilmstrip
         mediaId="media-1"
         clipWidth={2000}
@@ -176,7 +171,7 @@ describe('ClipFilmstrip', () => {
         sourceDuration={120}
         trimStart={0}
         speed={1}
-        fps={30}
+        fps={31}
         isVisible
         visibleStartRatio={0.5}
         visibleEndRatio={0.75}
@@ -184,10 +179,33 @@ describe('ClipFilmstrip', () => {
       />,
     )
 
+    const firstCall = useFilmstripMock.mock.calls.at(-1)?.[0]
+    expect(firstCall?.priorityWindow).toEqual({ startTime: 0, endTime: 20 })
+    expect(firstCall?.targetFrameCount).toBeUndefined()
+    expect(firstCall?.targetFrameIndices).toEqual([
+      3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+    ])
+
+    rerender(
+      <ClipFilmstrip
+        mediaId="media-1"
+        clipWidth={2000}
+        sourceStart={0}
+        sourceDuration={120}
+        trimStart={0}
+        speed={1}
+        fps={31}
+        isVisible
+        visibleStartRatio={0.5}
+        visibleEndRatio={0.75}
+        pixelsPerSecond={200}
+      />,
+    )
+
     const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0]
-    expect(latestCall?.priorityWindow).toBeNull()
+    expect(latestCall?.priorityWindow).toEqual(firstCall?.priorityWindow)
     expect(latestCall?.targetFrameCount).toBeUndefined()
-    expect(latestCall?.targetFrameIndices).toBeUndefined()
+    expect(latestCall?.targetFrameIndices).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
   })
 
   it('keeps tile media full width when the segment window is narrower than a thumbnail', async () => {
@@ -207,7 +225,7 @@ describe('ClipFilmstrip', () => {
         sourceDuration={10}
         trimStart={0}
         speed={1}
-        fps={30}
+        fps={31}
         isVisible
         pixelsPerSecond={120}
       />,
@@ -237,7 +255,7 @@ describe('ClipFilmstrip', () => {
         sourceDuration={10}
         trimStart={0}
         speed={1}
-        fps={30}
+        fps={32}
         isVisible
         pixelsPerSecond={120}
       />,
@@ -249,6 +267,88 @@ describe('ClipFilmstrip', () => {
 
     await waitFor(() => {
       expect(filmstripCacheMocks.refreshFrames).toHaveBeenCalledWith('media-1', [0])
+    })
+  })
+
+  it('keeps the visible filmstrip stable while extraction is still streaming updates', async () => {
+    useFilmstripMock.mockReturnValue({
+      frames: [{ index: 0, timestamp: 0, url: 'blob:initial' }],
+      isLoading: true,
+      isComplete: false,
+      progress: 20,
+      error: null,
+    })
+
+    const { container, rerender } = render(
+      <ClipFilmstrip
+        mediaId="media-1"
+        clipWidth={320}
+        sourceStart={0}
+        sourceDuration={10}
+        trimStart={0}
+        speed={1}
+        fps={32}
+        isVisible
+        pixelsPerSecond={120}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(container.querySelector('img[src="blob:initial"]')).not.toBeNull()
+    })
+
+    useFilmstripMock.mockReturnValue({
+      frames: [
+        { index: 0, timestamp: 0, url: 'blob:initial' },
+        { index: 4, timestamp: 4, url: 'blob:streamed' },
+      ],
+      isLoading: true,
+      isComplete: false,
+      progress: 60,
+      error: null,
+    })
+    rerender(
+      <ClipFilmstrip
+        mediaId="media-1"
+        clipWidth={320}
+        sourceStart={0}
+        sourceDuration={10}
+        trimStart={0}
+        speed={1}
+        fps={31}
+        isVisible
+        pixelsPerSecond={120}
+      />,
+    )
+
+    expect(container.querySelector('img[src="blob:streamed"]')).toBeNull()
+
+    useFilmstripMock.mockReturnValue({
+      frames: [
+        { index: 0, timestamp: 0, url: 'blob:initial' },
+        { index: 4, timestamp: 4, url: 'blob:streamed' },
+      ],
+      isLoading: false,
+      isComplete: true,
+      progress: 100,
+      error: null,
+    })
+    rerender(
+      <ClipFilmstrip
+        mediaId="media-1"
+        clipWidth={320}
+        sourceStart={0}
+        sourceDuration={10}
+        trimStart={0}
+        speed={1}
+        fps={32}
+        isVisible
+        pixelsPerSecond={120}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(container.querySelector('img[src="blob:streamed"]')).not.toBeNull()
     })
   })
 })

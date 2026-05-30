@@ -6,7 +6,6 @@ import { useItemsStore } from '../stores/items-store'
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
 import { useTimelineViewportStore } from '../stores/timeline-viewport-store'
 import { useZoomStore } from '../stores/zoom-store'
-import { waveformCache } from '../services/waveform-cache'
 import {
   isPreviewWorkDeferred,
   schedulePreviewWork,
@@ -26,6 +25,12 @@ const PREFETCH_AHEAD_PX = 800
 const PREFETCH_BEHIND_PX = 200
 const VISIBILITY_MARGIN_PX = 200
 const PREFETCH_DELAY_MS = 90
+let waveformCacheModulePromise: Promise<typeof import('../services/waveform-cache')> | null = null
+
+function loadWaveformCache() {
+  waveformCacheModulePromise ??= import('../services/waveform-cache')
+  return waveformCacheModulePromise
+}
 
 /**
  * Prefetches waveforms for audio/video clips approaching the viewport.
@@ -75,6 +80,8 @@ export function useWaveformPrefetch() {
       const visibleEndFrame = Math.ceil((visibleRightPx / pixelsPerSecond) * fps)
       const allItems = useItemsStore.getState().items
 
+      const prefetchTargets: Array<{ mediaId: string; blobUrl: string | null }> = []
+
       for (const item of allItems) {
         if (item.type !== 'video' && item.type !== 'audio') continue
 
@@ -83,8 +90,21 @@ export function useWaveformPrefetch() {
         if (itemEnd > visibleStartFrame && item.from < visibleEndFrame) continue
         if (!item.mediaId) continue
 
-        waveformCache.prefetch(item.mediaId, blobUrlManager.get(item.mediaId))
+        prefetchTargets.push({
+          mediaId: item.mediaId,
+          blobUrl: blobUrlManager.get(item.mediaId),
+        })
       }
+
+      if (prefetchTargets.length === 0) {
+        return
+      }
+
+      void loadWaveformCache().then(({ waveformCache }) => {
+        for (const { mediaId, blobUrl } of prefetchTargets) {
+          waveformCache.prefetch(mediaId, blobUrl)
+        }
+      })
     }
 
     const schedulePrefetch = () => {

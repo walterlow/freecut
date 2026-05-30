@@ -1,4 +1,4 @@
-import { Activity, memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Activity, lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { i18n } from '@/i18n'
@@ -9,15 +9,22 @@ import { useEditorStore } from '@/shared/state/editor'
 import { useSelectionStore } from '@/shared/state/selection'
 import type { TimelineItem } from '@/types/timeline'
 import { CanvasPanel } from './canvas-panel'
-import { ClipPanel } from './clip-panel'
-import { MarkerPanel } from './marker-panel'
-import { TransitionPanel } from './transition-panel'
 import { useSettingsStore } from '@/features/editor/deps/settings'
 import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampRightEditorSidebarWidth,
   getEditorLayout,
 } from '@/config/editor-layout'
+
+const LazyClipPanel = lazy(() =>
+  import('./clip-panel').then((module) => ({ default: module.ClipPanel })),
+)
+const LazyMarkerPanel = lazy(() =>
+  import('./marker-panel').then((module) => ({ default: module.MarkerPanel })),
+)
+const LazyTransitionPanel = lazy(() =>
+  import('./transition-panel').then((module) => ({ default: module.TransitionPanel })),
+)
 
 type HeaderItem = Pick<TimelineItem, 'id' | 'label' | 'linkedGroupId' | 'type'>
 
@@ -254,11 +261,17 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
             {/* Properties Panel */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 [scrollbar-gutter:stable]">
               {selectedTransitionId ? (
-                <TransitionPanel />
+                <Suspense fallback={null}>
+                  <LazyTransitionPanel />
+                </Suspense>
               ) : selectedMarkerId ? (
-                <MarkerPanel />
+                <Suspense fallback={null}>
+                  <LazyMarkerPanel />
+                </Suspense>
               ) : hasClipSelection ? (
-                <ClipPanel />
+                <Suspense fallback={null}>
+                  <LazyClipPanel />
+                </Suspense>
               ) : (
                 <CanvasPanel />
               )}

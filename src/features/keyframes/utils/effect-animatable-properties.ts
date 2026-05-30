@@ -1,4 +1,3 @@
-import { getGpuEffect } from '@/infrastructure/gpu-effects'
 import { getPropertyKeyframes, interpolatePropertyValue } from './interpolation'
 import {
   buildEffectAnimatableProperty,
@@ -10,40 +9,76 @@ import {
 import type { GpuEffect, ItemEffect } from '@/types/effects'
 import type { TimelineItem } from '@/types/timeline'
 
-function isAnimatableGpuNumberParam(
-  definition: ReturnType<typeof getGpuEffect>,
-  paramKey: string,
-): boolean {
-  const param = definition?.params[paramKey]
-  return Boolean(definition && param?.type === 'number' && param.animatable)
+const NON_ANIMATABLE_GPU_NUMBER_PARAMS: Record<string, ReadonlySet<string>> = {
+  'gpu-gaussian-blur': new Set(['samples']),
+  'gpu-motion-blur': new Set(['samples']),
+  'gpu-radial-blur': new Set(['samples']),
+  'gpu-zoom-blur': new Set(['samples']),
+  'gpu-grain': new Set(['speed']),
+  'gpu-glow': new Set(['rings', 'samplesPerRing']),
+  'gpu-scanlines': new Set(['speed']),
+  'gpu-color-glitch': new Set(['speed']),
 }
 
 function isGpuEffectParamVisible(
-  definition: ReturnType<typeof getGpuEffect>,
+  gpuEffectType: string,
   effectParams: Record<string, number | boolean | string>,
   paramKey: string,
 ): boolean {
-  const param = definition?.params[paramKey]
-  return Boolean(definition && (param?.visibleWhen?.(effectParams) ?? true))
+  switch (gpuEffectType) {
+    case 'gpu-dither':
+      if (paramKey === 'angle') return effectParams.mode === 'linear'
+      if (paramKey === 'scale' || paramKey === 'offsetX' || paramKey === 'offsetY') {
+        return effectParams.mode === 'radial'
+      }
+      return true
+    case 'gpu-ascii':
+      if (paramKey === 'textColor') return effectParams.matchSourceColor !== true
+      if (paramKey === 'colorSaturation') return effectParams.matchSourceColor === true
+      return true
+    default:
+      return true
+  }
 }
 
-function getNumericGpuEffectParamValue(
-  effect: GpuEffect,
-  paramKey: string,
-  definition: ReturnType<typeof getGpuEffect>,
-): number | null {
-  const param = definition?.params[paramKey]
+function isAnimatableGpuNumberParam(effect: GpuEffect, paramKey: string): boolean {
+  return (
+    typeof effect.params[paramKey] === 'number' &&
+    !NON_ANIMATABLE_GPU_NUMBER_PARAMS[effect.gpuEffectType]?.has(paramKey)
+  )
+}
+
+function getNumericGpuEffectParamValue(effect: GpuEffect, paramKey: string): number | null {
   const rawValue = effect.params[paramKey]
 
   if (typeof rawValue === 'number') {
     return rawValue
   }
 
-  if (param?.type === 'number' && typeof param.default === 'number') {
-    return param.default
+  return null
+}
+
+function getKeyframedEffectParamKeys(
+  effectEntry: ItemEffect,
+  itemKeyframes: ItemKeyframes | undefined,
+): string[] {
+  if (effectEntry.effect.type !== 'gpu-effect' || !itemKeyframes) {
+    return []
   }
 
-  return null
+  const keys = new Set<string>()
+  for (const propertyKeyframes of itemKeyframes.properties) {
+    const parsed = parseEffectAnimatableProperty(propertyKeyframes.property)
+    if (
+      parsed &&
+      parsed.effectId === effectEntry.id &&
+      parsed.gpuEffectType === effectEntry.effect.gpuEffectType
+    ) {
+      keys.add(parsed.paramKey)
+    }
+  }
+
+  return [...keys]
 }
 
 export function getAnimatableEffectPropertiesForItem(item: TimelineItem): AnimatableProperty[] {
@@ -59,17 +94,13 @@ export function getAnimatableEffectPropertiesForItem(item: TimelineItem): Animat
     }
 
     const gpuEffect = effectEntry.effect
-    const definition = getGpuEffect(gpuEffect.gpuEffectType)
-    if (!definition) {
-      continue
-    }
 
-    for (const [paramKey, param] of Object.entries(definition.params)) {
-      if (param.type !== 'number' || !param.animatable) {
+    for (const [paramKey, value] of Object.entries(gpuEffect.params)) {
+      if (typeof value !== 'number' || !isAnimatableGpuNumberParam(gpuEffect, paramKey)) {
         continue
       }
 
-      if (!isGpuEffectParamVisible(definition, gpuEffect.params, paramKey)) {
+      if (!isGpuEffectParamVisible(gpuEffect.gpuEffectType, gpuEffect.params, paramKey)) {
         continue
       }
 
@@ -101,12 +132,21 @@ export function getEffectPropertyBaseValue(
     return null
   }
 
-  const definition = getGpuEffect(parsed.gpuEffectType)
-  if (!isAnimatableGpuNumberParam(definition, parsed.paramKey)) {
+  if (!isAnimatableGpuNumberParam(effectEntry.effect, parsed.paramKey)) {
     return null
   }
 
-  return getNumericGpuEffectParamValue(effectEntry.effect, parsed.paramKey, definition)
+  if (
+    !isGpuEffectParamVisible(
+      effectEntry.effect.gpuEffectType,
+      effectEntry.effect.params,
+      parsed.paramKey,
+    )
+  ) {
+    return null
+  }
+
+  return getNumericGpuEffectParamValue(effectEntry.effect, parsed.paramKey)
 }
 
 export function getResolvedAnimatedEffectParamValue(
@@ -120,17 +160,16 @@ export function getResolvedAnimatedEffectParamValue(
   }
 
   const gpuEffect = effectEntry.effect
-  const definition = getGpuEffect(gpuEffect.gpuEffectType)
-  if (!isAnimatableGpuNumberParam(definition, paramKey)) {
-    return getNumericGpuEffectParamValue(gpuEffect, paramKey, definition)
+  if (!isAnimatableGpuNumberParam(gpuEffect, paramKey)) {
+    return getNumericGpuEffectParamValue(gpuEffect, paramKey)
   }
 
-  const baseValue = getNumericGpuEffectParamValue(gpuEffect, paramKey, definition)
+  const baseValue = getNumericGpuEffectParamValue(gpuEffect, paramKey)
   if (baseValue === null) {
     return null
   }
 
-  if (!isGpuEffectParamVisible(definition, gpuEffect.params, paramKey)) {
+  if (!isGpuEffectParamVisible(gpuEffect.gpuEffectType, gpuEffect.params, paramKey)) {
     return baseValue
   }
 
@@ -160,24 +199,24 @@ export function resolveAnimatedGpuEffects(
     }
 
     const gpuEffect = effectEntry.effect
-    const definition = getGpuEffect(gpuEffect.gpuEffectType)
-    if (!definition) {
-      return effectEntry
-    }
-
     let nextParams = gpuEffect.params
     let paramsChanged = false
 
-    for (const [paramKey, param] of Object.entries(definition.params)) {
-      if (param.type !== 'number' || !param.animatable) {
+    const paramKeys = new Set([
+      ...Object.keys(gpuEffect.params),
+      ...getKeyframedEffectParamKeys(effectEntry, itemKeyframes),
+    ])
+
+    for (const paramKey of paramKeys) {
+      if (!isAnimatableGpuNumberParam(gpuEffect, paramKey)) {
         continue
       }
 
-      if (!isGpuEffectParamVisible(definition, nextParams, paramKey)) {
+      if (!isGpuEffectParamVisible(gpuEffect.gpuEffectType, nextParams, paramKey)) {
         continue
       }
 
-      const baseValue = getNumericGpuEffectParamValue(gpuEffect, paramKey, definition)
+      const baseValue = getNumericGpuEffectParamValue(gpuEffect, paramKey)
       if (baseValue === null) {
         continue
       }

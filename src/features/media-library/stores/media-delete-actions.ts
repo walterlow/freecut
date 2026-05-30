@@ -1,8 +1,9 @@
 import type { MediaLibraryState, MediaLibraryActions } from '../types'
-import { mediaLibraryService } from '../services/media-library-service'
+import { importMediaLibraryService } from '../services/media-library-service-loader'
 import { proxyService } from '../services/proxy-service'
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
 import { invalidateMediaCaptionThumbnails } from '../deps/scene-browser'
+import { useMediaPreparationStore } from './media-preparation-store'
 
 type Set = (
   partial:
@@ -27,6 +28,7 @@ function releaseDeletedMediaResources(ids: string[]): void {
     // result memos, and both text + image embedding maps. Disk-side
     // cleanup is already handled by the recursive `media/{id}/` removal.
     invalidateMediaCaptionThumbnails(id)
+    useMediaPreparationStore.getState().clearMedia(id)
   }
 }
 
@@ -64,10 +66,12 @@ export function createDeleteActions(
       const { currentProjectId } = get()
       await deleteMediaInternal(
         [id],
-        () =>
-          currentProjectId
+        async () => {
+          const { mediaLibraryService } = await importMediaLibraryService()
+          return currentProjectId
             ? mediaLibraryService.deleteMediaFromProject(currentProjectId, id)
-            : mediaLibraryService.deleteMedia(id),
+            : mediaLibraryService.deleteMedia(id)
+        },
         'Delete failed',
       )
     },
@@ -77,10 +81,12 @@ export function createDeleteActions(
       const { currentProjectId } = get()
       await deleteMediaInternal(
         ids,
-        () =>
-          currentProjectId
+        async () => {
+          const { mediaLibraryService } = await importMediaLibraryService()
+          return currentProjectId
             ? mediaLibraryService.deleteMediaBatchFromProject(currentProjectId, ids)
-            : mediaLibraryService.deleteMediaBatch(ids),
+            : mediaLibraryService.deleteMediaBatch(ids)
+        },
         'Batch delete failed',
       )
     },

@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Link2Off, RefreshCw, FolderOpen, X, AlertTriangle, Search, Folder } from 'lucide-react'
 import { useMediaLibraryStore } from '../stores/media-library-store'
-import { mediaLibraryService } from '../services/media-library-service'
+import { importMediaLibraryService } from '../services/media-library-service-loader'
 import { useProjectStore } from '@/features/media-library/deps/projects'
 import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker'
 import { getProjectBrokenMediaInfo } from '@/features/media-library/utils/broken-media'
@@ -140,6 +140,7 @@ export function MissingMediaDialog() {
     setRelinking(item.mediaId)
     try {
       if (item.errorType === 'permission_denied') {
+        const { mediaLibraryService } = await importMediaLibraryService()
         const granted = await mediaLibraryService.requestPermission(item.mediaId)
         if (granted) {
           markMediaHealthy(item.mediaId)

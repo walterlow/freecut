@@ -15,10 +15,18 @@ vi.mock('@/features/editor/deps/preview', async () => {
     PlaybackControls: () => <div data-testid="playback-controls" />,
     TimecodeDisplay: () => <div data-testid="timecode-display" />,
     PreviewZoomControls: () => <div data-testid="preview-zoom-controls" />,
-    SourceMonitor: () => <div data-testid="source-monitor" />,
-    InlineSourcePreview: () => <div data-testid="inline-source-preview" />,
-    InlineCompositionPreview: () => <div data-testid="inline-composition-preview" />,
-    ColorScopesMonitor: () => <div data-testid="color-scopes-monitor" />,
+    importSourceMonitor: vi.fn().mockResolvedValue({
+      SourceMonitor: () => <div data-testid="source-monitor" />,
+    }),
+    importInlineSourcePreview: vi.fn().mockResolvedValue({
+      InlineSourcePreview: () => <div data-testid="inline-source-preview" />,
+    }),
+    importInlineCompositionPreview: vi.fn().mockResolvedValue({
+      InlineCompositionPreview: () => <div data-testid="inline-composition-preview" />,
+    }),
+    importColorScopesMonitor: vi.fn().mockResolvedValue({
+      ColorScopesMonitor: () => <div data-testid="color-scopes-monitor" />,
+    }),
   }
 })
 
@@ -95,7 +103,7 @@ describe('PreviewArea mask editor toolbar', () => {
     expect(useMaskEditorStore.getState().isEditing).toBe(false)
   })
 
-  it('locks preview side panels during path edit mode', () => {
+  it('locks preview side panels during path edit mode', async () => {
     useEditorStore.setState({
       sourcePreviewMediaId: 'media-1',
       colorScopesOpen: true,
@@ -131,14 +139,14 @@ describe('PreviewArea mask editor toolbar', () => {
     render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
 
     expect(
-      screen.getByTestId('source-monitor').closest('[data-interaction-locked="true"]'),
+      (await screen.findByTestId('source-monitor')).closest('[data-interaction-locked="true"]'),
     ).toBeTruthy()
     expect(
-      screen.getByTestId('color-scopes-monitor').closest('[data-interaction-locked="true"]'),
+      (await screen.findByTestId('color-scopes-monitor')).closest('[data-interaction-locked="true"]'),
     ).toBeTruthy()
   })
 
-  it('shows the media skim preview in the program monitor while hover preview is active', () => {
+  it('shows the media skim preview in the program monitor while hover preview is active', async () => {
     useEditorStore.setState({
       mediaSkimPreviewMediaId: 'media-1',
       mediaSkimPreviewFrame: 24,
@@ -146,12 +154,12 @@ describe('PreviewArea mask editor toolbar', () => {
 
     render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
 
-    expect(screen.getByTestId('inline-source-preview')).toBeInTheDocument()
+    expect(await screen.findByTestId('inline-source-preview')).toBeInTheDocument()
     expect(screen.getByTestId('video-preview')).toBeInTheDocument()
     expect(screen.getByTestId('playback-controls')).toBeInTheDocument()
   })
 
-  it('shows the compound clip skim preview in the program monitor while hover preview is active', () => {
+  it('shows the compound clip skim preview in the program monitor while hover preview is active', async () => {
     useEditorStore.setState({
       compoundClipSkimPreviewCompositionId: 'composition-1',
       compoundClipSkimPreviewFrame: 42,
@@ -159,7 +167,7 @@ describe('PreviewArea mask editor toolbar', () => {
 
     render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
 
-    expect(screen.getByTestId('inline-composition-preview')).toBeInTheDocument()
+    expect(await screen.findByTestId('inline-composition-preview')).toBeInTheDocument()
     expect(screen.getByTestId('video-preview')).toBeInTheDocument()
     expect(screen.getByTestId('playback-controls')).toBeInTheDocument()
   })

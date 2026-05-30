@@ -20,7 +20,7 @@ import {
   registerObjectUrl,
   unregisterObjectUrl,
 } from '@/infrastructure/browser/object-url-registry'
-import { filmstripCache } from '@/features/media-library/deps/timeline-services'
+import { importFilmstripCache } from '@/features/media-library/deps/timeline-services'
 import {
   mirrorBlobToWorkspace,
   mirrorJsonToWorkspace,
@@ -688,11 +688,13 @@ class ProxyService {
 
       const coverWarmEndTime = Math.min(media.duration, PROXY_FILMSTRIP_COVER_PREWARM_SECONDS)
       enqueueBackgroundMediaWork(
-        () =>
-          filmstripCache.prewarmPriorityWindow(mediaId, proxyFile, media.duration, {
+        async () => {
+          const { filmstripCache } = await importFilmstripCache()
+          return filmstripCache.prewarmPriorityWindow(mediaId, proxyFile, media.duration, {
             startTime: 0,
             endTime: coverWarmEndTime,
-          }),
+          })
+        },
         {
           priority: 'warm',
           delayMs: PROXY_FILMSTRIP_COVER_PREWARM_DELAY_MS,
@@ -701,11 +703,13 @@ class ProxyService {
 
       const warmEndTime = Math.min(media.duration, PROXY_FILMSTRIP_PREWARM_SECONDS)
       enqueueBackgroundMediaWork(
-        () =>
-          filmstripCache.prewarmPriorityWindow(mediaId, proxyFile, media.duration, {
+        async () => {
+          const { filmstripCache } = await importFilmstripCache()
+          return filmstripCache.prewarmPriorityWindow(mediaId, proxyFile, media.duration, {
             startTime: 0,
             endTime: warmEndTime,
-          }),
+          })
+        },
         {
           priority: 'warm',
           delayMs: PROXY_FILMSTRIP_PREWARM_DELAY_MS,

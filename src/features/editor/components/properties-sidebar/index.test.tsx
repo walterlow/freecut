@@ -86,11 +86,11 @@ describe('PropertiesSidebar', () => {
     resetStores([CLIP_A], [CLIP_A.id])
   })
 
-  it('shows the selected clip filename in the header', () => {
+  it('shows the selected clip filename in the header', async () => {
     render(<PropertiesSidebar />)
 
     expect(screen.getByText('clip-a.mp4')).toBeInTheDocument()
-    expect(screen.getByText('Clip Panel')).toBeInTheDocument()
+    expect(await screen.findByText('Clip Panel')).toBeInTheDocument()
   })
 
   it('shows the first filename with a multi-select summary in the header', () => {
@@ -112,7 +112,7 @@ describe('PropertiesSidebar', () => {
     expect(screen.getByTitle('clip-a.mp4, clip-a.wav')).toBeInTheDocument()
   })
 
-  it('hides the clip header when a transition selection takes priority', () => {
+  it('hides the clip header when a transition selection takes priority', async () => {
     resetStores([CLIP_A], [CLIP_A.id])
     useSelectionStore.setState({
       selectedTransitionId: 'transition-1',
@@ -121,11 +121,11 @@ describe('PropertiesSidebar', () => {
 
     render(<PropertiesSidebar />)
 
-    expect(screen.getByText('Transition Panel')).toBeInTheDocument()
+    expect(await screen.findByText('Transition Panel')).toBeInTheDocument()
     expect(screen.queryByText('clip-a.mp4')).not.toBeInTheDocument()
   })
 
-  it('hides the clip header when a marker selection takes priority', () => {
+  it('hides the clip header when a marker selection takes priority', async () => {
     resetStores([CLIP_A], [CLIP_A.id])
     useSelectionStore.setState({
       selectedMarkerId: 'marker-1',
@@ -134,7 +134,7 @@ describe('PropertiesSidebar', () => {
 
     render(<PropertiesSidebar />)
 
-    expect(screen.getByText('Marker Panel')).toBeInTheDocument()
+    expect(await screen.findByText('Marker Panel')).toBeInTheDocument()
     expect(screen.queryByText('clip-a.mp4')).not.toBeInTheDocument()
   })
 })

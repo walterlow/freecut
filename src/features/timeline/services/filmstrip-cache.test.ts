@@ -117,6 +117,36 @@ describe('filmstripCache completion semantics', () => {
     expect(result.progress).toBe(100)
   })
 
+  it('treats decoder-unavailable target frames as settled', () => {
+    const pending = {
+      priorityOnly: false,
+      targetIndices: [0, 1, 2, 3],
+      totalFrames: 4,
+      priorityRange: null,
+      unavailableTargetIndices: new Set([3]),
+    }
+    const frames = [
+      { index: 0, timestamp: 0, url: 'blob:0' },
+      { index: 1, timestamp: 1, url: 'blob:1' },
+      { index: 2, timestamp: 2, url: 'blob:2' },
+    ]
+
+    const result = (
+      filmstripCache as unknown as {
+        buildSettledFilmstrip: (
+          pendingArg: unknown,
+          framesArg: typeof frames,
+        ) => {
+          isComplete: boolean
+          progress: number
+        }
+      }
+    ).buildSettledFilmstrip(pending, frames)
+
+    expect(result.isComplete).toBe(true)
+    expect(result.progress).toBe(100)
+  })
+
   it('keeps a viewport-limited refinement complete when cached frames already cover it', () => {
     const pending = {
       priorityOnly: true,

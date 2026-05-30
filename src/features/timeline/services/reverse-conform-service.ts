@@ -1,7 +1,7 @@
 import type { CompositionInputProps } from '@/types/export'
 import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
 import {
-  renderComposition,
+  importCanvasRenderOrchestrator,
   type ClientExportSettings,
   type RenderProgress,
 } from '../deps/export-contract'
@@ -361,6 +361,7 @@ export const reverseConformService = {
         if (!resolvedItem || resolvedItem.type !== 'video' || !resolvedItem.src) {
           throw new Error('Could not resolve the source media for reverse.')
         }
+        const { renderComposition } = await importCanvasRenderOrchestrator()
         const result = await renderComposition({
           composition,
           settings: buildConformSettings(item, timelineFps, quality),

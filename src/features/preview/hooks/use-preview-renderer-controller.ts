@@ -6,7 +6,10 @@ import {
   type MutableRefObject,
   type RefObject,
 } from 'react'
-import { createCompositionRenderer } from '@/features/preview/deps/export'
+import {
+  importCompositionRenderer,
+  type CompositionRendererInstance,
+} from '@/features/preview/deps/export'
 import type { CompositionInputProps } from '@/types/export'
 import type { ItemEffect } from '@/types/effects'
 import type { ItemKeyframes } from '@/types/keyframe'
@@ -41,7 +44,7 @@ import { usePreviewCaptureBridge } from './use-preview-capture-bridge'
 
 const logger = createLogger('VideoPreview')
 
-export type PreviewCompositionRenderer = Awaited<ReturnType<typeof createCompositionRenderer>>
+export type PreviewCompositionRenderer = CompositionRendererInstance
 
 interface UsePreviewRendererControllerParams {
   fps: number
@@ -297,6 +300,7 @@ export function usePreviewRendererController({
           const canvas = new OffscreenCanvas(renderSize.width, renderSize.height)
           const ctx = canvas.getContext('2d')
           if (!ctx) return null
+          const { createCompositionRenderer } = await importCompositionRenderer()
           const renderer = await createCompositionRenderer(fastScrubInputProps, canvas, ctx, {
             mode: 'preview',
             useProxyMedia: useProxy,
@@ -359,6 +363,7 @@ export function usePreviewRendererController({
           const offscreenCtx = offscreen.getContext('2d')
           if (!offscreenCtx) return null
 
+          const { createCompositionRenderer } = await importCompositionRenderer()
           const renderer = await createCompositionRenderer(
             fastScrubInputProps,
             offscreen,

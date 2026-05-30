@@ -16,7 +16,7 @@ import {
 } from '../types/bundle'
 import { getProject, getProjectMediaIds, loadProjectThumbnail } from '@/infrastructure/storage'
 import {
-  mediaLibraryService,
+  importMediaLibraryService,
   computeContentHashFromBuffer,
 } from '@/features/project-bundle/deps/media-library'
 
@@ -50,6 +50,7 @@ export async function exportProjectBundle(
 
   // Step 2: Get all media IDs for this project
   const mediaIds = await getProjectMediaIds(projectId)
+  const { mediaLibraryService } = await importMediaLibraryService()
   onProgress?.({ percent: 10, stage: 'collecting' })
 
   // Step 3: Collect media metadata
@@ -238,6 +239,7 @@ export async function exportProjectBundleStreaming(
 
     // Step 2: Get all media IDs for this project
     const mediaIds = await getProjectMediaIds(projectId)
+    const { mediaLibraryService } = await importMediaLibraryService()
     onProgress?.({ percent: 10, stage: 'collecting' })
 
     // Step 3: Collect media metadata

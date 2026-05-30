@@ -6,6 +6,7 @@ const filmstripCacheMocks = vi.hoisted(() => ({
   getFromCacheSync: vi.fn(() => null),
   subscribe: vi.fn(() => vi.fn()),
   needsPriorityRefinement: vi.fn(() => false),
+  hasPendingExtraction: vi.fn(() => false),
   getFilmstrip: vi.fn(() => new Promise<never>(() => {})),
   loadFromDisk: vi.fn(() => Promise.resolve(null)),
   abort: vi.fn(),
@@ -45,6 +46,7 @@ describe('useFilmstrip', () => {
     filmstripCacheMocks.getFromCacheSync.mockReturnValue(null)
     filmstripCacheMocks.subscribe.mockReturnValue(vi.fn())
     filmstripCacheMocks.needsPriorityRefinement.mockReturnValue(false)
+    filmstripCacheMocks.hasPendingExtraction.mockReturnValue(false)
     filmstripCacheMocks.getFilmstrip.mockReturnValue(new Promise<never>(() => {}))
     filmstripCacheMocks.loadFromDisk.mockReturnValue(Promise.resolve(null))
   })

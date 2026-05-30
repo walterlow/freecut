@@ -31,9 +31,27 @@ import {
   Music,
   Video,
   Scissors,
+  ListPlus,
+  ChevronDown,
 } from 'lucide-react'
-import type { ExportSettings, ExportMode } from '@/types/export'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { toast } from 'sonner'
+import type { ExportSettings, ExportMode, ExtendedExportSettings } from '@/types/export'
 import { useClientRender } from '../hooks/use-client-render'
+import {
+  buildRenderJob,
+  buildSegmentJobs,
+  rangesFromFixedDuration,
+  rangesFromMarkers,
+} from '../utils/build-render-job'
+import { useRenderQueueStore, type RenderJob } from '../stores/render-queue-store'
 import { useProjectStore } from '@/features/export/deps/projects'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
 import { useTimelineStore } from '@/features/export/deps/timeline'
@@ -51,6 +69,8 @@ import { ExportPreviewPlayer } from './export-preview-player'
 export interface ExportDialogProps {
   open: boolean
   onClose: () => void
+  /** Open the render queue panel (called after jobs are added to the queue). */
+  onOpenRenderQueue?: () => void
 }
 
 type DialogView = 'settings' | 'progress' | 'complete' | 'error' | 'cancelled'
@@ -186,7 +206,7 @@ function getDefaultCodecForFormat(format: 'mp4' | 'webm'): ExportSettings['codec
   return getDefaultVideoCodec(format)
 }
 
-export function ExportDialog({ open, onClose }: ExportDialogProps) {
+export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogProps) {
   const { t } = useTranslation()
   const projectWidth = useProjectStore(
     (s) => s.currentProject?.metadata.width ?? DEFAULT_PROJECT_WIDTH,
@@ -199,6 +219,8 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const items = useTimelineStore((s) => s.items)
   const inPoint = useTimelineStore((s) => s.inPoint)
   const outPoint = useTimelineStore((s) => s.outPoint)
+  const markers = useTimelineStore((s) => s.markers)
+  const enqueueJobs = useRenderQueueStore((s) => s.enqueueJobs)
 
   const [settings, setSettings] = useState<ExportSettings>({
     codec: getDefaultCodecForFormat('mp4'),
@@ -347,22 +369,90 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
     onClose()
   }
 
+  // Assemble the extended settings the render pipeline expects from the dialog
+  // state. Shared by "Export now" and the "Add to queue" actions.
+  const buildExtendedSettings = (): ExtendedExportSettings => ({
+    ...settings,
+    mode: exportMode,
+    videoContainer: exportMode === 'video' ? videoContainer : undefined,
+    audioContainer: exportMode === 'audio' ? audioContainer : undefined,
+    embedSubtitles:
+      exportMode === 'video' && hasTranscriptSubtitles && containerSupportsEmbeddedSubtitles
+        ? embedSubtitles
+        : false,
+    renderWholeProject,
+  })
+
   // Start export
   const handleStartExport = async () => {
     setView('progress')
-    // Create extended settings with export mode and container
-    const extendedSettings = {
-      ...settings,
-      mode: exportMode,
-      videoContainer: exportMode === 'video' ? videoContainer : undefined,
-      audioContainer: exportMode === 'audio' ? audioContainer : undefined,
-      embedSubtitles:
-        exportMode === 'video' && hasTranscriptSubtitles && containerSupportsEmbeddedSubtitles
-          ? embedSubtitles
-          : false,
-      renderWholeProject,
+    await startExport(buildExtendedSettings())
+  }
+
+  // The active render range (whole project unless in/out points are set).
+  const queueRange = (): { inPoint: number | null; outPoint: number | null } =>
+    renderWholeProject || !hasInOutPoints
+      ? { inPoint: null, outPoint: null }
+      : { inPoint, outPoint }
+
+  // The frame window segment generators split over: the active range, or the
+  // whole timeline when no in/out points are set.
+  const segmentWindow = (): { start: number; end: number } => {
+    const range = queueRange()
+    return { start: range.inPoint ?? 0, end: range.outPoint ?? timelineDurationFrames }
+  }
+
+  // Close the export dialog and open the queue panel. Called BEFORE building
+  // jobs so picking an option gives instant feedback while the (single) codec
+  // probe + job assembly run.
+  const revealQueue = () => {
+    onClose()
+    onOpenRenderQueue?.()
+  }
+
+  // Capture settings synchronously (the dialog unmounts on reveal), reveal the
+  // queue, then build + enqueue. One codec probe covers the whole batch.
+  const enqueueAndReveal = async (
+    build: (settings: ExtendedExportSettings) => Promise<RenderJob[]>,
+  ) => {
+    const settings = buildExtendedSettings()
+    revealQueue()
+    try {
+      const jobs = await build(settings)
+      if (jobs.length === 0) return
+      enqueueJobs(jobs)
+      toast.success(t('export.renderQueue.addedToast', { count: jobs.length }))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('export.renderQueue.buildFailed'))
     }
-    await startExport(extendedSettings)
+  }
+
+  const handleAddCurrentRange = () => {
+    void enqueueAndReveal(async (settings) => [await buildRenderJob({ settings, ...queueRange() })])
+  }
+
+  const handleAddMarkerSegments = () => {
+    const { start, end } = segmentWindow()
+    const ranges = rangesFromMarkers(markers, start, end)
+    if (ranges.length <= 1) {
+      toast.info(t('export.renderQueue.noMarkers'))
+      return
+    }
+    void enqueueAndReveal((settings) =>
+      buildSegmentJobs(settings, ranges, (i) => t('export.renderQueue.partLabel', { n: i + 1 })),
+    )
+  }
+
+  const handleSplitChunks = (seconds: number) => {
+    const { start, end } = segmentWindow()
+    const ranges = rangesFromFixedDuration(start, end, Math.max(1, Math.round(seconds * fps)))
+    if (ranges.length === 0) {
+      toast.info(t('export.renderQueue.nothingToRender'))
+      return
+    }
+    void enqueueAndReveal((settings) =>
+      buildSegmentJobs(settings, ranges, (i) => t('export.renderQueue.partLabel', { n: i + 1 })),
+    )
   }
 
   // Reset when dialog closes
@@ -910,6 +1000,42 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
               <Button variant="outline" onClick={handleClose}>
                 {t('common.cancel')}
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={
+                      exportMode === 'video' && (!hasSupportedVideoPath || isCheckingVideoSupport)
+                    }
+                  >
+                    <ListPlus className="h-4 w-4" />
+                    {t('export.renderQueue.addToQueue')}
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleAddCurrentRange}>
+                    {t('export.renderQueue.addCurrentRange')}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    {t('export.renderQueue.segmentsHeading')}
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem onClick={handleAddMarkerSegments}>
+                    {t('export.renderQueue.perMarker')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSplitChunks(10)}>
+                    {t('export.renderQueue.splitChunks', { seconds: 10 })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSplitChunks(30)}>
+                    {t('export.renderQueue.splitChunks', { seconds: 30 })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSplitChunks(60)}>
+                    {t('export.renderQueue.splitChunks', { seconds: 60 })}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 onClick={handleStartExport}
                 disabled={

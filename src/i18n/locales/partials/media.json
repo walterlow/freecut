@@ -12,6 +12,7 @@
         "generateProxy": "Generate Proxy",
         "generateTranscript": "Generate Transcript",
         "importing": "Importing",
+        "preparing": "Preparing",
         "menuAi": "Menu AI",
         "menuCaptions": "Embedded captions",
         "menuFile": "File",
@@ -180,7 +181,15 @@
         "generateProxiesForSelected_other": "Generate proxies for {{count}} selected items",
         "proxyCount_one": "{{count}} proxy",
         "proxyCount_other": "{{count}} proxies",
-        "perItemProgress": "Show per-item progress"
+        "perItemProgress": "Show per-item progress",
+        "preparingMediaWithCount": "Preparing media ({{count}})",
+        "mediaPreparationProgress": "Media preparation progress",
+        "preparationQueued": "Queued",
+        "preparationType": {
+          "import": "Import",
+          "filmstrip": "Filmstrip",
+          "waveform": "Waveform"
+        }
       },
       "missingMedia": {
         "title": "Missing Media",
@@ -268,6 +277,7 @@
         "generateProxy": "Generar proxy",
         "generateTranscript": "Generar transcripción",
         "importing": "Importando",
+        "preparing": "Preparando",
         "menuAi": "IA",
         "menuCaptions": "Subtítulos incrustados",
         "menuFile": "Archivo",
@@ -436,7 +446,15 @@
         "generateProxiesForSelected_other": "Generar proxies para {{count}} elementos seleccionados",
         "proxyCount_one": "{{count}} proxy",
         "proxyCount_other": "{{count}} proxies",
-        "perItemProgress": "Mostrar progreso por elemento"
+        "perItemProgress": "Mostrar progreso por elemento",
+        "preparingMediaWithCount": "Preparando medios ({{count}})",
+        "mediaPreparationProgress": "Progreso de preparación de medios",
+        "preparationQueued": "En cola",
+        "preparationType": {
+          "import": "Importación",
+          "filmstrip": "Tira de fotogramas",
+          "waveform": "Forma de onda"
+        }
       },
       "missingMedia": {
         "title": "Medios faltantes",
@@ -524,6 +542,7 @@
         "generateProxy": "Générer un proxy",
         "generateTranscript": "Générer une transcription",
         "importing": "Importation",
+        "preparing": "Préparation",
         "menuAi": "IA",
         "menuCaptions": "Sous-titres intégrés",
         "menuFile": "Fichier",
@@ -692,7 +711,15 @@
         "generateProxiesForSelected_other": "Générer des proxies pour {{count}} éléments sélectionnés",
         "proxyCount_one": "{{count}} proxy",
         "proxyCount_other": "{{count}} proxys",
-        "perItemProgress": "Afficher la progression par élément"
+        "perItemProgress": "Afficher la progression par élément",
+        "preparingMediaWithCount": "Préparation des médias ({{count}})",
+        "mediaPreparationProgress": "Progression de la préparation des médias",
+        "preparationQueued": "En attente",
+        "preparationType": {
+          "import": "Importation",
+          "filmstrip": "Bande d’images",
+          "waveform": "Forme d’onde"
+        }
       },
       "missingMedia": {
         "title": "Médias manquants",
@@ -780,6 +807,7 @@
         "generateProxy": "Proxy erstellen",
         "generateTranscript": "Transkript erstellen",
         "importing": "Wird importiert",
+        "preparing": "Wird vorbereitet",
         "menuAi": "KI",
         "menuCaptions": "Eingebettete Untertitel",
         "menuFile": "Datei",
@@ -948,7 +976,15 @@
         "generateProxiesForSelected_other": "Proxys für {{count}} ausgewählte Elemente erzeugen",
         "proxyCount_one": "{{count}} Proxy",
         "proxyCount_other": "{{count}} Proxys",
-        "perItemProgress": "Fortschritt pro Element anzeigen"
+        "perItemProgress": "Fortschritt pro Element anzeigen",
+        "preparingMediaWithCount": "Medien werden vorbereitet ({{count}})",
+        "mediaPreparationProgress": "Fortschritt der Medienvorbereitung",
+        "preparationQueued": "In Warteschlange",
+        "preparationType": {
+          "import": "Import",
+          "filmstrip": "Filmstreifen",
+          "waveform": "Wellenform"
+        }
       },
       "missingMedia": {
         "title": "Fehlende Medien",
@@ -1036,6 +1072,7 @@
         "generateProxy": "Gerar proxy",
         "generateTranscript": "Gerar transcricao",
         "importing": "Importando",
+        "preparing": "Preparando",
         "menuAi": "Menu IA",
         "menuCaptions": "Legendas incorporadas",
         "menuFile": "Arquivo",
@@ -1204,7 +1241,15 @@
         "generateProxiesForSelected_other": "Gerar proxies para {{count}} itens selecionados",
         "proxyCount_one": "{{count}} proxy",
         "proxyCount_other": "{{count}} proxies",
-        "perItemProgress": "Mostrar progresso por item"
+        "perItemProgress": "Mostrar progresso por item",
+        "preparingMediaWithCount": "Preparando mídia ({{count}})",
+        "mediaPreparationProgress": "Progresso da preparação de mídia",
+        "preparationQueued": "Na fila",
+        "preparationType": {
+          "import": "Importação",
+          "filmstrip": "Tira de quadros",
+          "waveform": "Forma de onda"
+        }
       },
       "missingMedia": {
         "title": "Mídia ausente",
@@ -1292,6 +1337,7 @@
         "generateProxy": "Proxy oluştur",
         "generateTranscript": "Transkript oluştur",
         "importing": "İçe aktarılıyor",
+        "preparing": "Hazırlanıyor",
         "menuAi": "YZ",
         "menuCaptions": "Gömülü altyazılar",
         "menuFile": "Dosya",
@@ -1460,7 +1506,15 @@
         "generateProxiesForSelected_other": "{{count}} seçili öğe için proxy oluştur",
         "proxyCount_one": "{{count}} proxy",
         "proxyCount_other": "{{count}} proxy",
-        "perItemProgress": "Öğe başına ilerlemeyi göster"
+        "perItemProgress": "Öğe başına ilerlemeyi göster",
+        "preparingMediaWithCount": "Medya hazırlanıyor ({{count}})",
+        "mediaPreparationProgress": "Medya hazırlama ilerlemesi",
+        "preparationQueued": "Sırada",
+        "preparationType": {
+          "import": "İçe aktarma",
+          "filmstrip": "Film şeridi",
+          "waveform": "Dalga biçimi"
+        }
       },
       "missingMedia": {
         "title": "Eksik medya",
@@ -1548,6 +1602,7 @@
         "generateProxy": "プロキシを生成",
         "generateTranscript": "文字起こしを生成",
         "importing": "インポート中",
+        "preparing": "準備中",
         "menuAi": "AI",
         "menuCaptions": "埋め込み字幕",
         "menuFile": "ファイル",
@@ -1716,7 +1771,15 @@
         "generateProxiesForSelected_other": "選択した {{count}} 個の項目のプロキシを生成",
         "proxyCount_one": "{{count}} 個のプロキシ",
         "proxyCount_other": "{{count}} 個のプロキシ",
-        "perItemProgress": "項目ごとの進捗を表示"
+        "perItemProgress": "項目ごとの進捗を表示",
+        "preparingMediaWithCount": "メディアを準備中 ({{count}})",
+        "mediaPreparationProgress": "メディア準備の進捗",
+        "preparationQueued": "待機中",
+        "preparationType": {
+          "import": "インポート",
+          "filmstrip": "フィルムストリップ",
+          "waveform": "波形"
+        }
       },
       "missingMedia": {
         "title": "メディアが見つかりません",
@@ -1804,6 +1867,7 @@
         "generateProxy": "프록시 생성",
         "generateTranscript": "전사 생성",
         "importing": "가져오는 중",
+        "preparing": "준비 중",
         "menuAi": "AI",
         "menuCaptions": "포함된 자막",
         "menuFile": "파일",
@@ -1972,7 +2036,15 @@
         "generateProxiesForSelected_other": "선택한 항목 {{count}}개의 프록시 생성",
         "proxyCount_one": "프록시 {{count}}개",
         "proxyCount_other": "프록시 {{count}}개",
-        "perItemProgress": "항목별 진행률 표시"
+        "perItemProgress": "항목별 진행률 표시",
+        "preparingMediaWithCount": "미디어 준비 중 ({{count}})",
+        "mediaPreparationProgress": "미디어 준비 진행률",
+        "preparationQueued": "대기 중",
+        "preparationType": {
+          "import": "가져오기",
+          "filmstrip": "필름스트립",
+          "waveform": "파형"
+        }
       },
       "missingMedia": {
         "title": "누락된 미디어",
@@ -2060,6 +2132,7 @@
         "generateProxy": "生成代理",
         "generateTranscript": "生成转录",
         "importing": "正在导入",
+        "preparing": "正在准备",
         "menuAi": "AI",
         "menuCaptions": "嵌入字幕",
         "menuFile": "文件",
@@ -2228,7 +2301,15 @@
         "generateProxiesForSelected_other": "为 {{count}} 个所选项生成代理",
         "proxyCount_one": "{{count}} 个代理",
         "proxyCount_other": "{{count}} 个代理",
-        "perItemProgress": "显示各项进度"
+        "perItemProgress": "显示各项进度",
+        "preparingMediaWithCount": "正在准备媒体 ({{count}})",
+        "mediaPreparationProgress": "媒体准备进度",
+        "preparationQueued": "已排队",
+        "preparationType": {
+          "import": "导入",
+          "filmstrip": "缩略图条",
+          "waveform": "波形"
+        }
       },
       "missingMedia": {
         "title": "缺失媒体",

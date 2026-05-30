@@ -903,12 +903,15 @@ export const TimelineMarkers = memo(function TimelineMarkers({
       }
 
       setInOutPointsWithoutHistory(nextIn, nextOut)
+      // Skim the preview to the range's leading (in) edge as it slides.
+      setPreviewFrameRef.current(nextIn)
       rangeDragLastInRef.current = nextIn
       rangeDragLastOutRef.current = nextOut
     }
 
     const handleMouseUp = () => {
       setIsRangeDragging(false)
+      setPreviewFrameRef.current(null)
       markDirtyRef.current()
     }
 

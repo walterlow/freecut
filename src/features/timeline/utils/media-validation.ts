@@ -1,7 +1,7 @@
 import type { TimelineItem } from '@/types/timeline'
 import type { OrphanedClipInfo } from '@/features/timeline/deps/media-library-resolver'
 import type { MediaMetadata } from '@/types/storage'
-import { mediaLibraryService } from '@/features/timeline/deps/media-library-service'
+import { importMediaLibraryService } from '@/features/timeline/deps/media-library-service'
 import { getSynchronizedLinkedItems } from './linked-items'
 
 function isOrphanableMediaItem(item: TimelineItem): item is TimelineItem & { mediaId: string } {
@@ -39,6 +39,7 @@ export async function validateMediaReferences(
   }
 
   // Get all media for this project
+  const { mediaLibraryService } = await importMediaLibraryService()
   const mediaLibrary = await mediaLibraryService.getMediaForProject(projectId)
   const validMediaIds = new Set(mediaLibrary.map((m) => m.id))
 

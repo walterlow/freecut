@@ -133,6 +133,24 @@ export async function getAllMedia(): Promise<MediaMetadata[]> {
   }
 }
 
+export async function getAllMediaMetadata(): Promise<MediaMetadata[]> {
+  const root = requireWorkspaceRoot()
+  try {
+    const dirs = await listDirectory(root, [MEDIA_DIR])
+    const media: MediaMetadata[] = []
+    for (const entry of dirs) {
+      if (entry.kind !== 'directory') continue
+      const serialized = await readJson<SerializedMedia>(root, mediaMetadataPath(entry.name))
+      if (!serialized) continue
+      media.push(serialized as MediaMetadata)
+    }
+    return media
+  } catch (error) {
+    logger.error('getAllMediaMetadata failed', error)
+    throw new Error('Failed to load media metadata from workspace')
+  }
+}
+
 export async function getMedia(id: string): Promise<MediaMetadata | undefined> {
   const root = requireWorkspaceRoot()
   try {

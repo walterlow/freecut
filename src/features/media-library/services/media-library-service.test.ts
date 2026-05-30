@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 
 const indexedDbMocks = vi.hoisted(() => ({
   getAllMedia: vi.fn(),
+  getAllMediaMetadata: vi.fn(),
   getMedia: vi.fn(),
   createMedia: vi.fn(),
   updateMedia: vi.fn(),
@@ -13,6 +14,7 @@ const indexedDbMocks = vi.hoisted(() => ({
   decrementContentRef: vi.fn(),
   deleteContent: vi.fn(),
   associateMediaWithProject: vi.fn(),
+  removeMediaBatchFromProject: vi.fn(),
   removeMediaFromProject: vi.fn(),
   getProjectMediaIds: vi.fn(),
   getProjectsUsingMedia: vi.fn(),
@@ -66,10 +68,14 @@ const gifFrameCacheMocks = vi.hoisted(() => ({
 
 const filmstripCacheMocks = vi.hoisted(() => ({
   prewarmPriorityWindow: vi.fn(async () => undefined),
+  getFilmstrip: vi.fn(async () => undefined),
+  abort: vi.fn(),
   clearMedia: vi.fn(async () => undefined),
 }))
 
 const waveformCacheMocks = vi.hoisted(() => ({
+  getWaveform: vi.fn(async () => undefined),
+  prepareOverviewWaveform: vi.fn(async () => undefined),
   clearMedia: vi.fn(async () => undefined),
 }))
 
@@ -114,8 +120,27 @@ vi.mock('@/runtime/composition-runtime/utils/preview-audio-conform', () => ({
 
 vi.mock('@/features/media-library/deps/timeline-services', () => ({
   gifFrameCache: gifFrameCacheMocks,
+  importGifFrameCache: vi.fn(async () => ({ gifFrameCache: gifFrameCacheMocks })),
   filmstripCache: filmstripCacheMocks,
+  importFilmstripCache: vi.fn(async () => ({ filmstripCache: filmstripCacheMocks })),
+  MAX_FILMSTRIP_TARGET_FRAMES: 72,
+  IMPORT_FILMSTRIP_HUGE_FILE_BYTES: 1000 * 1024 * 1024,
+  IMPORT_FILMSTRIP_LARGE_FILE_BYTES: 500 * 1024 * 1024,
+  IMPORT_FILMSTRIP_LARGE_TARGET_FRAMES: 16,
+  IMPORT_FILMSTRIP_LONG_DURATION_SEC: 900,
+  IMPORT_FILMSTRIP_MEDIUM_TARGET_FRAMES: 32,
+  IMPORT_FILMSTRIP_NORMAL_TARGET_FRAMES: 48,
+  IMPORT_FILMSTRIP_PREP_TIMEOUT_MS: 8000,
+  IMPORT_FILMSTRIP_SLOW_CONTAINER_MIME_TYPES: new Set([
+    'video/webm',
+    'video/x-matroska',
+    'video/matroska',
+  ]),
+  IMPORT_FILMSTRIP_SLOW_PREP_TIMEOUT_MS: 6000,
+  IMPORT_FILMSTRIP_TINY_TARGET_FRAMES: 8,
+  IMPORT_FILMSTRIP_VERY_LONG_DURATION_SEC: 1800,
   waveformCache: waveformCacheMocks,
+  importWaveformCache: vi.fn(async () => ({ waveformCache: waveformCacheMocks })),
 }))
 
 vi.mock('../utils/validation', () => ({
@@ -129,6 +154,7 @@ vi.mock('../utils/proxy-key', () => ({
 
 import { mediaLibraryService, FileAccessError } from './media-library-service'
 import type { MediaMetadata } from '@/types/storage'
+import { useMediaPreparationStore } from '../stores/media-preparation-store'
 
 const fetchMock = vi.fn()
 
@@ -157,9 +183,23 @@ describe('MediaLibraryService', () => {
     vi.clearAllMocks()
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
+    useMediaPreparationStore.getState().clearAll()
     compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(false)
     compositionRuntimeMocks.startPreviewAudioStartupWarm.mockResolvedValue(undefined)
     filmstripCacheMocks.prewarmPriorityWindow.mockResolvedValue(undefined)
+    filmstripCacheMocks.getFilmstrip.mockResolvedValue(undefined)
+    waveformCacheMocks.getWaveform.mockResolvedValue(undefined)
+    waveformCacheMocks.prepareOverviewWaveform.mockResolvedValue(undefined)
+    backgroundMediaWorkMocks.enqueueBackgroundMediaWork.mockImplementation((run: () => unknown) => {
+      const result = run()
+      if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+        void (result as PromiseLike<unknown>)
+      }
+      return vi.fn()
+    })
+    indexedDbMocks.getAllMedia.mockResolvedValue([])
+    indexedDbMocks.getAllMediaMetadata.mockImplementation(() => indexedDbMocks.getAllMedia())
+    indexedDbMocks.getProjectMediaIds.mockResolvedValue([])
     indexedDbMocks.readAiOutput.mockResolvedValue(undefined)
   })
 
@@ -209,7 +249,7 @@ describe('MediaLibraryService', () => {
           height: 1080,
           fps: 30,
           codec: 'avc1',
-          audioCodec: 'aac',
+          audioCodec: undefined,
           audioCodecSupported: true,
           bitrate: 5000,
         },
@@ -227,20 +267,79 @@ describe('MediaLibraryService', () => {
       expect(indexedDbMocks.createMedia).toHaveBeenCalledTimes(1)
       expect(indexedDbMocks.associateMediaWithProject).toHaveBeenCalledWith('project-1', result.id)
       expect(indexedDbMocks.saveThumbnail).toHaveBeenCalledTimes(1)
-      expect(filmstripCacheMocks.prewarmPriorityWindow).toHaveBeenNthCalledWith(
-        1,
-        result.id,
-        mockFile,
-        10,
-        { startTime: 0, endTime: 1 },
-      )
-      expect(filmstripCacheMocks.prewarmPriorityWindow).toHaveBeenNthCalledWith(
-        2,
-        result.id,
-        mockFile,
-        10,
-        { startTime: 0, endTime: 10 },
-      )
+      expect(filmstripCacheMocks.prewarmPriorityWindow).not.toHaveBeenCalled()
+    })
+
+    it('does not queue filmstrip or waveform preparation during import', async () => {
+      const mockFile = new File(['data'], 'video.mp4', { type: 'video/mp4' })
+      const mockHandle = {
+        name: 'video.mp4',
+        getFile: vi.fn().mockResolvedValue(mockFile),
+        queryPermission: vi.fn().mockResolvedValue('granted'),
+        requestPermission: vi.fn().mockResolvedValue('granted'),
+      } as unknown as FileSystemFileHandle
+
+      mediaProcessorMocks.processMedia.mockResolvedValue({
+        metadata: {
+          type: 'video',
+          duration: 10,
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          codec: 'avc1',
+          audioCodec: 'aac',
+          audioCodecSupported: true,
+          bitrate: 5000,
+        },
+        thumbnail: new Blob(['thumb'], { type: 'image/webp' }),
+      })
+      mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false })
+      indexedDbMocks.getAllMedia.mockResolvedValue([])
+      indexedDbMocks.getMediaForProject.mockResolvedValue([])
+
+      const result = await mediaLibraryService.importMediaWithHandle(mockHandle, 'project-1')
+
+      expect(result.id).toBeTruthy()
+      expect(filmstripCacheMocks.prewarmPriorityWindow).not.toHaveBeenCalled()
+      expect(filmstripCacheMocks.getFilmstrip).not.toHaveBeenCalled()
+      expect(waveformCacheMocks.prepareOverviewWaveform).not.toHaveBeenCalled()
+      expect(waveformCacheMocks.getWaveform).not.toHaveBeenCalled()
+      expect([...useMediaPreparationStore.getState().tasks.values()]).toEqual([])
+    })
+
+    it('skips import-time waveform extraction for long media', async () => {
+      const mockFile = new File(['data'], 'long-video.mp4', { type: 'video/mp4' })
+      const mockHandle = {
+        name: 'long-video.mp4',
+        getFile: vi.fn().mockResolvedValue(mockFile),
+        queryPermission: vi.fn().mockResolvedValue('granted'),
+        requestPermission: vi.fn().mockResolvedValue('granted'),
+      } as unknown as FileSystemFileHandle
+
+      mediaProcessorMocks.processMedia.mockResolvedValue({
+        metadata: {
+          type: 'video',
+          duration: 60 * 60,
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          codec: 'avc1',
+          audioCodec: 'aac',
+          audioCodecSupported: true,
+          bitrate: 5000,
+        },
+        thumbnail: new Blob(['thumb'], { type: 'image/webp' }),
+      })
+      mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false })
+      indexedDbMocks.getAllMedia.mockResolvedValue([])
+      indexedDbMocks.getMediaForProject.mockResolvedValue([])
+
+      await mediaLibraryService.importMediaWithHandle(mockHandle, 'project-1')
+      await Promise.resolve()
+
+      expect(waveformCacheMocks.prepareOverviewWaveform).not.toHaveBeenCalled()
+      expect(waveformCacheMocks.getWaveform).not.toHaveBeenCalled()
+      expect([...useMediaPreparationStore.getState().tasks.values()]).toEqual([])
     })
 
     it('refreshes legacy project duplicate source when file already in project', async () => {
@@ -254,8 +353,8 @@ describe('MediaLibraryService', () => {
         fileHandle: {} as FileSystemFileHandle,
         fileLastModified: 1234,
       }
-      indexedDbMocks.getAllMedia.mockResolvedValue([])
-      indexedDbMocks.getMediaForProject.mockResolvedValue([existingMedia])
+      indexedDbMocks.getAllMedia.mockResolvedValue([existingMedia])
+      indexedDbMocks.getProjectMediaIds.mockResolvedValue(['existing-1'])
       indexedDbMocks.updateMedia.mockResolvedValue(refreshedMedia)
 
       const mockFile = new File(['data'], 'video.mp4', { type: 'video/mp4', lastModified: 1234 })
@@ -433,7 +532,7 @@ describe('MediaLibraryService', () => {
         }),
       )
       expect(indexedDbMocks.associateMediaWithProject).toHaveBeenCalledWith('project-1', result.id)
-      expect(filmstripCacheMocks.prewarmPriorityWindow).toHaveBeenCalledTimes(2)
+      expect(filmstripCacheMocks.prewarmPriorityWindow).not.toHaveBeenCalled()
     })
 
     it('returns an existing project media item when the downloaded file matches by name and size', async () => {

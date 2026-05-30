@@ -69,6 +69,7 @@ export function useFilmstrip({
   const [error, setError] = useState<string | null>(null)
 
   const isGeneratingRef = useRef(false)
+  const ownsGenerationRef = useRef(false)
   const hasPendingStartRef = useRef(false)
   const lastMediaIdRef = useRef<string>(mediaId)
 
@@ -77,6 +78,7 @@ export function useFilmstrip({
     if (lastMediaIdRef.current !== mediaId) {
       lastMediaIdRef.current = mediaId
       isGeneratingRef.current = false
+      ownsGenerationRef.current = false
       hasPendingStartRef.current = false
       const cached = filmstripCache.getFromCacheSync(mediaId)
       setFilmstrip(cached)
@@ -93,7 +95,9 @@ export function useFilmstrip({
   // Abort any in-flight extraction when this consumer goes away or switches media.
   useEffect(() => {
     return () => {
-      filmstripCache.abort(mediaId)
+      if (ownsGenerationRef.current) {
+        filmstripCache.abort(mediaId)
+      }
     }
   }, [mediaId])
 
@@ -181,7 +185,10 @@ export function useFilmstrip({
       return
     }
 
-    filmstripCache.abort(mediaId)
+    if (ownsGenerationRef.current) {
+      filmstripCache.abort(mediaId)
+      ownsGenerationRef.current = false
+    }
     isGeneratingRef.current = false
     hasPendingStartRef.current = false
     setIsLoading(false)
@@ -229,6 +236,7 @@ export function useFilmstrip({
 
         hasPendingStartRef.current = false
         isGeneratingRef.current = true
+        ownsGenerationRef.current = !filmstripCache.hasPendingExtraction(mediaId)
 
         filmstripCache
           .getFilmstrip(mediaId, blobUrl, duration, onProgress, priorityRange ?? undefined, {
@@ -255,6 +263,7 @@ export function useFilmstrip({
           .finally(() => {
             if (lastMediaIdRef.current === requestMediaId) {
               isGeneratingRef.current = false
+              ownsGenerationRef.current = false
               hasPendingStartRef.current = false
             }
           })

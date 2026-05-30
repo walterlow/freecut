@@ -117,6 +117,18 @@ describe('expandTextTransformForPreview', () => {
     expect(expanded.height).toBeGreaterThan(64)
   })
 
+  it('grows to the exact content height for a single non-wrapping line', () => {
+    // No wrap (huge width) + no stroke/shadow → height is fully determined:
+    // fontSize·lineHeight + 2·textPadding = 48·1.2 + 2·16 = 89.6. Independent
+    // of the measurer, so this locks the auto-fit height semantics.
+    const expanded = expandTextTransformForPreview(
+      { ...baseItem, text: 'Hi', textPadding: 16 },
+      { ...baseTransform, width: 2000, height: 10 },
+    )
+
+    expect(expanded.height).toBeCloseTo(48 * 1.2 + 16 * 2)
+  })
+
   it('expands height for stacked text spans with their own sizes', () => {
     const expanded = expandTextTransformForPreview(
       {

@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { TiledCanvas } from '../clip-filmstrip/tiled-canvas'
 import { WaveformSkeleton } from './waveform-skeleton'
 import { useWaveform } from '../../hooks/use-waveform'
-import { mediaLibraryService } from '@/features/timeline/deps/media-library-service'
+import { importMediaLibraryService } from '@/features/timeline/deps/media-library-service'
 import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver'
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url'
 import {
@@ -13,6 +13,7 @@ import {
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants'
 import { createLogger } from '@/shared/logging/logger'
 import { computeWaveformRenderWindow } from './render-window'
+import { computeWaveformAmplitude } from './amplitude'
 import {
   getWaveformActiveTileCount,
   useAdaptiveWaveformRenderVersion,
@@ -118,6 +119,39 @@ export const ClipWaveform = memo(function ClipWaveform({
   const [audioCodecSupported, setAudioCodecSupported] = useState(true)
   const visibleClipWidth = clipWidth
   const renderClipWidth = Math.max(visibleClipWidth, renderWidth ?? visibleClipWidth)
+  const visibleSourceWindow = useMemo(() => {
+    const effectiveStart = Math.max(0, sourceStart + trimStart)
+    const effectiveEnd = Math.min(
+      sourceDuration,
+      Math.max(
+        effectiveStart,
+        sourceEnd ?? effectiveStart + (visibleClipWidth / Math.max(1, pixelsPerSecond)) * speed,
+      ),
+    )
+    const visibleStartX = visibleClipWidth * Math.max(0, Math.min(1, visibleStartRatio))
+    const visibleEndX = visibleClipWidth * Math.max(0, Math.min(1, visibleEndRatio))
+    const startOffset = (visibleStartX / Math.max(1, pixelsPerSecond)) * speed
+    const endOffset = (visibleEndX / Math.max(1, pixelsPerSecond)) * speed
+    const sourceA = isReversed ? effectiveEnd - endOffset : effectiveStart + startOffset
+    const sourceB = isReversed ? effectiveEnd - startOffset : effectiveStart + endOffset
+    const padSeconds = Math.max(2, ((visibleEndX - visibleStartX) / Math.max(1, pixelsPerSecond)) * 0.25)
+
+    return {
+      start: Math.max(0, Math.min(sourceA, sourceB) - padSeconds),
+      end: Math.min(sourceDuration, Math.max(sourceA, sourceB) + padSeconds),
+    }
+  }, [
+    sourceStart,
+    trimStart,
+    sourceDuration,
+    sourceEnd,
+    visibleClipWidth,
+    pixelsPerSecond,
+    speed,
+    visibleStartRatio,
+    visibleEndRatio,
+    isReversed,
+  ])
 
   useEffect(() => {
     conformStartedRef.current = false
@@ -141,6 +175,7 @@ export const ClipWaveform = memo(function ClipWaveform({
     const loadBlobUrl = async () => {
       try {
         // First check if audio codec is supported
+        const { mediaLibraryService } = await importMediaLibraryService()
         const media = await mediaLibraryService.getMedia(mediaId)
         if (!mounted) return
 
@@ -197,6 +232,8 @@ export const ClipWaveform = memo(function ClipWaveform({
       enabled: audioCodecSupported,
       deferDurationSec: sourceDuration,
       pixelsPerSecond,
+      visibleSourceStartSec: visibleSourceWindow.start,
+      visibleSourceEndSec: visibleSourceWindow.end,
     })
   const normalizationPeak = maxPeak > 0 ? maxPeak : 1
   const peakSampleCount = useMemo(
@@ -264,19 +301,15 @@ export const ClipWaveform = memo(function ClipWaveform({
         const windowStart = Math.max(0, peakIndex - halfWindow)
         const windowEnd = Math.min(peakSampleCount, peakIndex + halfWindow + 1)
 
-        let max1 = 0
-        let max2 = 0
+        let windowPeak = 0
         let windowSum = 0
         let sampleCount = 0
         for (let i = windowStart; i < windowEnd; i++) {
           const value = stereo
             ? Math.max(peaks[i * 2] ?? 0, peaks[i * 2 + 1] ?? 0)
             : (peaks[i] ?? 0)
-          if (value >= max1) {
-            max2 = max1
-            max1 = value
-          } else if (value > max2) {
-            max2 = value
+          if (value > windowPeak) {
+            windowPeak = value
           }
           windowSum += value
           sampleCount++
@@ -286,13 +319,9 @@ export const ClipWaveform = memo(function ClipWaveform({
           continue
         }
 
-        const normalizedMax1 = Math.min(1, max1 / normalizationPeak)
-        const normalizedMax2 = Math.min(1, max2 / normalizationPeak)
-        const normalizedMean = Math.min(1, windowSum / sampleCount / normalizationPeak)
-        const needle = Math.max(0, normalizedMax1 - normalizedMax2)
-        const peakValue = Math.min(1, normalizedMean * 0.38 + normalizedMax2 * 0.34 + needle * 2.35)
-        const amp = peakValue <= 0.001 ? 0 : Math.pow(peakValue, 1.05)
-        amplitudes[x] = amp * maxWaveHeight
+        amplitudes[x] =
+          computeWaveformAmplitude(windowPeak, windowSum, sampleCount, normalizationPeak) *
+          maxWaveHeight
       }
 
       for (let x = 0; x < amplitudeCount; x++) {
@@ -373,8 +402,6 @@ export const ClipWaveform = memo(function ClipWaveform({
 
   return (
     <div ref={containerRef} className="absolute inset-0">
-      {/* Show shimmer skeleton behind canvas while loading progressively */}
-      {isLoading && <WaveformSkeleton clipWidth={clipWidth} height={height} />}
       <TiledCanvas
         width={renderClipWidth}
         height={height}

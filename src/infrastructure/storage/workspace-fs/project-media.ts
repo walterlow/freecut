@@ -131,6 +131,30 @@ export async function removeMediaFromProject(projectId: string, mediaId: string)
   }
 }
 
+export async function removeMediaBatchFromProject(
+  projectId: string,
+  mediaIds: string[],
+): Promise<void> {
+  const root = requireWorkspaceRoot()
+  const targetIds = new Set(mediaIds.filter(Boolean))
+  if (targetIds.size === 0) {
+    return
+  }
+
+  try {
+    await withKeyLock(linksLockKey(projectId), async () => {
+      const links = await readLinks(root, projectId)
+      const next = links.mediaIds.filter((entry) => !targetIds.has(entry.id))
+      if (next.length !== links.mediaIds.length) {
+        await writeLinks(root, projectId, { version: LINKS_VERSION, mediaIds: next })
+      }
+    })
+  } catch (error) {
+    logger.error(`removeMediaBatchFromProject(${projectId}) failed`, error)
+    throw error
+  }
+}
+
 export async function getProjectMediaIds(projectId: string): Promise<string[]> {
   const root = requireWorkspaceRoot()
   try {

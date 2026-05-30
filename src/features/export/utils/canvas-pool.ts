@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger'
+import { applyCanvasLetterSpacing } from '@/shared/typography/text-measurer'
 
 const log = createLogger('CanvasPool')
 
@@ -110,9 +111,12 @@ export class TextMeasurementCache {
 
     let width = this.cache.get(key)
     if (width === undefined) {
-      const baseWidth = ctx.measureText(text).width
-      const spacingWidth = Math.max(0, text.length - 1) * letterSpacing
-      width = baseWidth + spacingWidth
+      // Use native letter-spacing so the advance includes the trailing spacing
+      // after the last glyph (CSS semantics) and preserves kerning — matching
+      // the DOM preview. Manually adding (n-1)·LS here used to under-measure by
+      // one letter-spacing, shifting centered/right-aligned text.
+      applyCanvasLetterSpacing(ctx, letterSpacing)
+      width = ctx.measureText(text).width
 
       // Evict oldest entries if cache is full
       if (this.cache.size >= this.maxSize) {

@@ -139,7 +139,17 @@ export function useGpuEffectsOverlay(..._args: unknown[]) {
           frame,
           previewEffectsByItemId,
           compositionById,
-          { forceTransitionFrames: playback.previewFrame !== null },
+          // Keep the continuous (fast-scrub) overlay forced across an active
+          // transition window during playback as well as scrubbing — not only
+          // when a participant has GPU effects/blend/corner-pin. Otherwise a
+          // plain transition can drop the continuous overlay mid-window (e.g.
+          // when an unrelated effected/composition item that happened to be
+          // keeping it on ends at the cut), switching to the buffered overlay
+          // path which can leave frames un-rendered and collapse the wipe to
+          // one clip for the rest of the transition. Forcing it for the whole
+          // window keeps every transition on the per-frame render path that
+          // already works for the transitions that look correct today.
+          { forceTransitionFrames: playback.previewFrame !== null || playback.isPlaying },
         )
         return prev === next ? prev : next
       })

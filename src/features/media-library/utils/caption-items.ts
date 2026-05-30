@@ -5,7 +5,7 @@ import {
   type TrackKind,
 } from '../deps/timeline-contract'
 import type { MediaTranscriptSegment } from '@/types/storage'
-import type { MediaCaption } from '@/infrastructure/analysis'
+import type { MediaCaption } from '@/infrastructure/analysis/media-tagger'
 import type { SubtitleCue, SubtitleFormat } from '@/shared/utils/subtitles'
 import type {
   AudioItem,

@@ -10,7 +10,7 @@
  * when the requested parameters match, and re-run when they don't.
  */
 
-import type { SceneCut } from '@/infrastructure/analysis'
+import type { SceneCut } from '@/infrastructure/analysis/scene-detection'
 import { createLogger } from '@/shared/logging/logger'
 
 import { readAiOutput, writeAiOutput, deleteAiOutput } from './ai-outputs'

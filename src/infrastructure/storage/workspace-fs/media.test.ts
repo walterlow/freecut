@@ -27,6 +27,7 @@ import {
   createMedia,
   deleteMedia,
   getAllMedia,
+  getAllMediaMetadata,
   getMedia,
   updateMedia,
   validateMediaHandle,
@@ -94,6 +95,21 @@ describe('workspace-fs media', () => {
     await createMedia(makeMedia('b'))
     const all = await getAllMedia()
     expect(new Set(all.map((m) => m.id))).toEqual(new Set(['a', 'b']))
+  })
+
+  it('getAllMediaMetadata skips handle restoration for import duplicate scans', async () => {
+    const root = createRoot()
+    setWorkspaceRoot(asHandle(root))
+    const fakeHandle = { name: 'clip.mp4' } as FileSystemFileHandle
+    await createMedia(makeMedia('m1', { storageType: 'handle', fileHandle: fakeHandle }))
+
+    handlesMocks.getHandle.mockClear()
+    const all = await getAllMediaMetadata()
+
+    expect(all).toHaveLength(1)
+    expect(all[0]?.id).toBe('m1')
+    expect(all[0]?.fileHandle).toBeUndefined()
+    expect(handlesMocks.getHandle).not.toHaveBeenCalled()
   })
 
   it('updateMedia merges fields', async () => {

@@ -38,7 +38,7 @@ import { computeContentHashFromBuffer } from '../utils/content-hash'
 import { updateMedia as updateMediaDB } from '@/infrastructure/storage'
 import { invalidateMediaCaptionThumbnails } from '../deps/scene-browser'
 import { useMediaLibraryStore } from '../stores/media-library-store'
-import { mediaLibraryService } from './media-library-service'
+import { importMediaLibraryService } from './media-library-service-loader'
 import { getMediaType } from '../utils/validation'
 import { createLogger } from '@/shared/logging/logger'
 
@@ -168,6 +168,7 @@ class MediaAnalysisService {
         return undefined
       }
 
+      const { mediaLibraryService } = await importMediaLibraryService()
       if (mediaType === 'video') {
         const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id)
         if (!blobUrl) throw new Error('Could not load media file')
@@ -446,6 +447,7 @@ class MediaAnalysisService {
   private async resolveContentHash(media: MediaMetadata): Promise<string | undefined> {
     if (media.contentHash) return media.contentHash
     try {
+      const { mediaLibraryService } = await importMediaLibraryService()
       const file = await mediaLibraryService.getMediaFile(media.id)
       if (!file) return undefined
       const buffer = await file.arrayBuffer()

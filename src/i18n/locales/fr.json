@@ -94,7 +94,9 @@
       "snapByDefault": "Aimantation par défaut",
       "snapByDefaultDescription": "Définit l'état initial de l'aimantation à l'ouverture d'un projet.",
       "showWaveforms": "Afficher les formes d'onde",
-      "showFilmstrips": "Afficher les vignettes vidéo"
+      "showFilmstrips": "Afficher les vignettes vidéo",
+      "enableFilmstripExtraction": "Extraire les bandes d’images",
+      "enableFilmstripExtractionDescription": "Génère des bandes de vignettes vidéo pendant l’importation et l’affichage dans la timeline."
     },
     "storage": {
       "generateMissingProxies": "Générer les proxys manquants",

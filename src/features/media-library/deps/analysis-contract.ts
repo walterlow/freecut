@@ -5,8 +5,12 @@
  * future providers) stay in one auditable place for the boundary checker.
  */
 
-export { captionVideo, captionImage } from '@/infrastructure/analysis'
-export type { MediaCaption, CaptioningProgress, CaptioningOptions } from '@/infrastructure/analysis'
+export { captionVideo, captionImage } from '@/infrastructure/analysis/media-tagger'
+export type {
+  MediaCaption,
+  CaptioningProgress,
+  CaptioningOptions,
+} from '@/infrastructure/analysis/media-tagger'
 export {
   embeddingsProvider,
   EMBEDDING_MODEL_ID,
@@ -17,7 +21,7 @@ export {
   buildEmbeddingText,
   extractDominantColors,
   extractDominantColorPhrase,
-} from '@/infrastructure/analysis'
+} from '@/infrastructure/analysis/embeddings'
 export type {
   EmbeddingsOptions,
   EmbeddingsProgress,
@@ -25,4 +29,4 @@ export type {
   BuildEmbeddingTextInput,
   TranscriptSegment,
   PaletteEntry,
-} from '@/infrastructure/analysis'
+} from '@/infrastructure/analysis/embeddings'

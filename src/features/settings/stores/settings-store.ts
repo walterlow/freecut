@@ -28,6 +28,7 @@ interface AppSettings {
   canvasSnapEnabled: boolean
   showWaveforms: boolean
   showFilmstrips: boolean
+  enableFilmstripExtraction: boolean
 
   // Interface
   editorDensity: EditorDensityPresetName
@@ -136,6 +137,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   canvasSnapEnabled: true,
   showWaveforms: true,
   showFilmstrips: true,
+  enableFilmstripExtraction: true,
 
   // Interface
   editorDensity: DEFAULT_EDITOR_DENSITY_PRESET,

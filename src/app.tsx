@@ -1,14 +1,17 @@
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import { GlobalTooltip } from '@/components/ui/global-tooltip'
-import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { ErrorBoundary } from '@/app/error-boundary'
 import { PwaInstallPrompt } from '@/app/pwa-install-prompt'
-import { WorkspaceGate } from '@/features/workspace-gate'
+import { WorkspaceGate } from '@/features/workspace-gate/workspace-gate'
 import { routeTree } from './routeTree.gen'
 
 const router = createRouter({ routeTree })
+const LazyToaster = lazy(async () => {
+  const { Toaster } = await import('@/components/ui/sonner')
+  return { default: Toaster }
+})
 
 declare module '@tanstack/react-router' {
   interface Register {
@@ -17,6 +20,8 @@ declare module '@tanstack/react-router' {
 }
 
 export function App() {
+  const [showToaster, setShowToaster] = useState(false)
+
   // Prevent default browser zoom application-wide
   useEffect(() => {
     const wheelListenerOptions: AddEventListenerOptions = { passive: false, capture: true }
@@ -50,8 +55,16 @@ export function App() {
     }
   }, [])
 
-  // TooltipProvider at app level to prevent re-renders cascading from Editor
-  // GlobalTooltip for performant data-tooltip based tooltips
+  useEffect(() => {
+    const show = () => setShowToaster(true)
+    window.addEventListener('freecut:ensure-toaster', show)
+    return () => {
+      window.removeEventListener('freecut:ensure-toaster', show)
+    }
+  }, [])
+
+  // TooltipProvider is required for Radix tooltip consumers across editor surfaces.
+  // GlobalTooltip handles lightweight data-tooltip attributes without per-item providers.
   // Toaster for toast notifications
   // ErrorBoundary for graceful error recovery
   // WorkspaceGate blocks RouterProvider until a workspace handle is granted.
@@ -65,7 +78,11 @@ export function App() {
         </WorkspaceGate>
         <GlobalTooltip />
         <PwaInstallPrompt />
-        <Toaster />
+        {showToaster && (
+          <Suspense fallback={null}>
+            <LazyToaster />
+          </Suspense>
+        )}
       </TooltipProvider>
     </ErrorBoundary>
   )

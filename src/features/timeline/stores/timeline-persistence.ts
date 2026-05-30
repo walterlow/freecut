@@ -28,11 +28,11 @@ import { useCompositionsStore } from './compositions-store'
 import { useCompositionNavigationStore } from './composition-navigation-store'
 import { getProject, updateProject, saveProjectThumbnail } from '@/infrastructure/storage'
 import {
-  renderSingleFrame,
+  importCanvasRenderOrchestrator,
   convertTimelineToComposition,
 } from '@/features/timeline/deps/export-contract'
 import { resolveMediaUrls } from '@/features/timeline/deps/media-library-resolver'
-import { mediaLibraryService } from '@/features/timeline/deps/media-library-service'
+import { importMediaLibraryService } from '@/features/timeline/deps/media-library-service'
 import { validateProjectMediaReferences } from '@/features/timeline/utils/media-validation'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useSettingsStore } from '@/features/timeline/deps/settings-contract'
@@ -41,6 +41,7 @@ import {
   needsLegacyAvTrackLayoutRepair,
   repairLegacyAvTrackLayout,
 } from '@/features/timeline/utils/legacy-av-track-repair'
+import { splitUnpairedVideoAudio } from '@/features/timeline/utils/embedded-audio-split'
 import { getCompositionOwnedAudioSources } from '@/features/timeline/utils/composition-clip-summary'
 import {
   getLinkedCompositionAudioCompanion,
@@ -180,6 +181,9 @@ async function buildVideoHasAudioMap(
   mediaIds: string[],
 ): Promise<Record<string, boolean | undefined>> {
   const mediaById = useMediaLibraryStore.getState().mediaById
+  const missingMediaIds = mediaIds.filter((mediaId) => !mediaById[mediaId])
+  const mediaLibraryModule =
+    missingMediaIds.length > 0 ? await importMediaLibraryService() : null
   const entries = await Promise.all(
     mediaIds.map(async (mediaId) => {
       const cachedMedia = mediaById[mediaId]
@@ -187,7 +191,7 @@ async function buildVideoHasAudioMap(
         return [mediaId, !!cachedMedia.audioCodec] as const
       }
 
-      const media = await mediaLibraryService.getMedia(mediaId)
+      const media = await mediaLibraryModule?.mediaLibraryService.getMedia(mediaId)
       return [mediaId, !!media?.audioCodec] as const
     }),
   )
@@ -509,6 +513,67 @@ function repairCompoundClipWrappers(project: Project): { project: Project; repai
   }
 }
 
+/**
+ * Surgically split any audible video that lacks a linked audio companion,
+ * across the root timeline and every composition. Preserves track names/order;
+ * only appends generated audio (and audio tracks when needed). This catches
+ * correctly-laid-out projects that {@link repairLegacyAvTrackLayout} skips —
+ * e.g. a video placed via the preview canvas whose audio was never split.
+ */
+function backfillUnpairedVideoAudio(
+  project: Project,
+  videoHasAudioByMediaId: Record<string, boolean | undefined>,
+): { project: Project; changed: boolean } {
+  if (!project.timeline) {
+    return { project, changed: false }
+  }
+
+  const rootResult = splitUnpairedVideoAudio({
+    tracks: (project.timeline.tracks ?? []) as TimelineTrack[],
+    items: (project.timeline.items ?? []) as TimelineItem[],
+    keyframes: (project.timeline.keyframes ?? []) as ItemKeyframes[],
+    videoHasAudioByMediaId,
+  })
+
+  let changed = rootResult.changed
+  const repairedCompositions = (project.timeline.compositions ?? []).map((composition) => {
+    const result = splitUnpairedVideoAudio({
+      tracks: composition.tracks as TimelineTrack[],
+      items: composition.items as TimelineItem[],
+      keyframes: (composition.keyframes ?? []) as ItemKeyframes[],
+      videoHasAudioByMediaId,
+    })
+    if (!result.changed) {
+      return composition
+    }
+    changed = true
+    return {
+      ...composition,
+      tracks: result.tracks as typeof composition.tracks,
+      items: result.items as typeof composition.items,
+      keyframes: result.keyframes as typeof composition.keyframes,
+    }
+  })
+
+  if (!changed) {
+    return { project, changed: false }
+  }
+
+  return {
+    changed: true,
+    project: {
+      ...project,
+      timeline: {
+        ...project.timeline,
+        tracks: rootResult.tracks as typeof project.timeline.tracks,
+        items: rootResult.items as typeof project.timeline.items,
+        keyframes: rootResult.keyframes as typeof project.timeline.keyframes,
+        compositions: repairedCompositions,
+      },
+    },
+  }
+}
+
 async function repairLegacyProjectAvLayouts(
   project: Project,
 ): Promise<{ project: Project; repaired: boolean }> {
@@ -581,7 +646,8 @@ async function repairLegacyProjectAvLayouts(
       compositions: repairedCompositions.map((entry) => entry.composition),
     },
   }
-  const repairedCompoundWrappers = repairCompoundClipWrappers(repairedLayoutProject)
+  const backfilledAudio = backfillUnpairedVideoAudio(repairedLayoutProject, videoHasAudioByMediaId)
+  const repairedCompoundWrappers = repairCompoundClipWrappers(backfilledAudio.project)
   const cleanedEmptyAudioTracks = cleanupRedundantEmptyClassicAudioTracks(
     repairedCompoundWrappers.project,
   )
@@ -589,6 +655,7 @@ async function repairLegacyProjectAvLayouts(
   const repaired =
     rootRepair.changed ||
     repairedCompositions.some((entry) => entry.repair.changed) ||
+    backfilledAudio.changed ||
     repairedCompoundWrappers.repaired ||
     cleanedEmptyAudioTracks.cleaned
   if (!repaired) {
@@ -604,6 +671,92 @@ async function repairLegacyProjectAvLayouts(
 /**
  * Save timeline to project in IndexedDB.
  */
+/**
+ * Serialize the current timeline domain stores into a {@link ProjectTimeline}.
+ *
+ * This is the pure store-serialization half of {@link saveTimeline}, factored
+ * out so callers that don't persist through workspace storage (e.g. the
+ * headless edit harness, which writes project.json itself) can obtain the
+ * timeline shape without the thumbnail-generation / storage-write side
+ * effects. fps lives in project.metadata, not the timeline.
+ */
+export function buildTimelineFromStores(): ProjectTimeline {
+  const itemsState = useItemsStore.getState()
+  const transitionsState = useTransitionsStore.getState()
+  const keyframesState = useKeyframesStore.getState()
+  const markersState = useMarkersStore.getState()
+  const settingsState = useTimelineSettingsStore.getState()
+  const currentFrame = usePlaybackStore.getState().currentFrame
+  const busAudioEq = usePlaybackStore.getState().busAudioEq
+  const masterBusDb = usePlaybackStore.getState().masterBusDb
+  const zoomLevel = useZoomStore.getState().level
+
+  const timeline: ProjectTimeline = {
+    tracks: itemsState.tracks as ProjectTimeline['tracks'],
+    items: itemsState.items as ProjectTimeline['items'],
+    ...(busAudioEq && { busAudioEq }),
+    masterBusDb,
+    currentFrame,
+    zoomLevel,
+    scrollPosition: settingsState.scrollPosition,
+    ...(markersState.inPoint !== null && { inPoint: markersState.inPoint }),
+    ...(markersState.outPoint !== null && { outPoint: markersState.outPoint }),
+    ...(markersState.markers.length > 0 && {
+      markers: markersState.markers.map((m) => ({
+        id: m.id,
+        frame: m.frame,
+        color: m.color,
+        ...(m.label && { label: m.label }),
+      })),
+    }),
+    ...(transitionsState.transitions.length > 0 && {
+      transitions: transitionsState.transitions.map(cloneTransitionForProject),
+    }),
+    ...(keyframesState.keyframes.length > 0 && {
+      keyframes: keyframesState.keyframes.map((ik) => ({
+        itemId: ik.itemId,
+        properties: ik.properties.map((pk) => ({
+          property: pk.property,
+          keyframes: pk.keyframes.map((k) => ({
+            id: k.id,
+            frame: k.frame,
+            value: k.value,
+            easing: k.easing,
+            ...(k.easingConfig && { easingConfig: k.easingConfig }),
+          })),
+        })),
+      })),
+    }),
+    // Sub-compositions (pre-comps)
+    ...(() => {
+      const comps = useCompositionsStore.getState().compositions
+      if (comps.length === 0) return {}
+      return {
+        compositions: comps.map((c) => ({
+          id: c.id,
+          name: c.name,
+          items: c.items as ProjectTimeline['items'],
+          tracks: c.tracks as ProjectTimeline['tracks'],
+          ...(c.transitions?.length && {
+            transitions: c.transitions.map(
+              cloneTransitionForProject,
+            ) as ProjectTimeline['transitions'],
+          }),
+          ...(c.keyframes?.length && { keyframes: c.keyframes as ProjectTimeline['keyframes'] }),
+          fps: c.fps,
+          width: c.width,
+          height: c.height,
+          durationInFrames: c.durationInFrames,
+          ...(c.backgroundColor && { backgroundColor: c.backgroundColor }),
+          ...(c.busAudioEq && { busAudioEq: c.busAudioEq }),
+        })),
+      }
+    })(),
+  }
+
+  return sanitizeTimelineEphemeralFields(timeline).timeline
+}
+
 export async function saveTimeline(projectId: string): Promise<void> {
   const opId = createOperationId()
   const event = logger.startEvent('saveTimeline', opId)
@@ -631,15 +784,12 @@ export async function saveTimeline(projectId: string): Promise<void> {
     }
   }
 
-  // Read directly from domain stores
+  // Read directly from domain stores (for the event log + thumbnail; the
+  // timeline shape itself comes from buildTimelineFromStores()).
   const itemsState = useItemsStore.getState()
   const transitionsState = useTransitionsStore.getState()
   const keyframesState = useKeyframesStore.getState()
-  const markersState = useMarkersStore.getState()
   const currentFrame = usePlaybackStore.getState().currentFrame
-  const busAudioEq = usePlaybackStore.getState().busAudioEq
-  const masterBusDb = usePlaybackStore.getState().masterBusDb
-  const zoomLevel = useZoomStore.getState().level
 
   event.merge({
     itemCount: itemsState.items.length,
@@ -661,72 +811,7 @@ export async function saveTimeline(projectId: string): Promise<void> {
       height: project.metadata?.height,
     })
 
-    const settingsState = useTimelineSettingsStore.getState()
-
-    // Build timeline data (fps is stored in project.metadata, not timeline)
-    const timeline: ProjectTimeline = {
-      tracks: itemsState.tracks as ProjectTimeline['tracks'],
-      items: itemsState.items as ProjectTimeline['items'],
-      ...(busAudioEq && { busAudioEq }),
-      masterBusDb,
-      currentFrame,
-      zoomLevel,
-      scrollPosition: settingsState.scrollPosition,
-      ...(markersState.inPoint !== null && { inPoint: markersState.inPoint }),
-      ...(markersState.outPoint !== null && { outPoint: markersState.outPoint }),
-      ...(markersState.markers.length > 0 && {
-        markers: markersState.markers.map((m) => ({
-          id: m.id,
-          frame: m.frame,
-          color: m.color,
-          ...(m.label && { label: m.label }),
-        })),
-      }),
-      ...(transitionsState.transitions.length > 0 && {
-        transitions: transitionsState.transitions.map(cloneTransitionForProject),
-      }),
-      ...(keyframesState.keyframes.length > 0 && {
-        keyframes: keyframesState.keyframes.map((ik) => ({
-          itemId: ik.itemId,
-          properties: ik.properties.map((pk) => ({
-            property: pk.property,
-            keyframes: pk.keyframes.map((k) => ({
-              id: k.id,
-              frame: k.frame,
-              value: k.value,
-              easing: k.easing,
-              ...(k.easingConfig && { easingConfig: k.easingConfig }),
-            })),
-          })),
-        })),
-      }),
-      // Sub-compositions (pre-comps)
-      ...(() => {
-        const comps = useCompositionsStore.getState().compositions
-        if (comps.length === 0) return {}
-        return {
-          compositions: comps.map((c) => ({
-            id: c.id,
-            name: c.name,
-            items: c.items as ProjectTimeline['items'],
-            tracks: c.tracks as ProjectTimeline['tracks'],
-            ...(c.transitions?.length && {
-              transitions: c.transitions.map(
-                cloneTransitionForProject,
-              ) as ProjectTimeline['transitions'],
-            }),
-            ...(c.keyframes?.length && { keyframes: c.keyframes as ProjectTimeline['keyframes'] }),
-            fps: c.fps,
-            width: c.width,
-            height: c.height,
-            durationInFrames: c.durationInFrames,
-            ...(c.backgroundColor && { backgroundColor: c.backgroundColor }),
-            ...(c.busAudioEq && { busAudioEq: c.busAudioEq }),
-          })),
-        }
-      })(),
-    }
-    const { timeline: sanitizedTimeline } = sanitizeTimelineEphemeralFields(timeline)
+    const sanitizedTimeline = buildTimelineFromStores()
 
     // Generate thumbnail — prefer capturing the existing preview canvas
     // (near-free: reuses the already-initialized scrub renderer with cached
@@ -787,6 +872,7 @@ export async function saveTimeline(projectId: string): Promise<void> {
           )
           const resolvedTracks = await resolveMediaUrls(composition.tracks)
           const resolvedComposition = { ...composition, tracks: resolvedTracks }
+          const { renderSingleFrame } = await importCanvasRenderOrchestrator()
           thumbnailBlob = await renderSingleFrame({
             composition: resolvedComposition,
             frame: currentFrame,
@@ -848,6 +934,126 @@ export async function saveTimeline(projectId: string): Promise<void> {
  * 4. Persists migrated projects back to storage
  * 5. Restores timeline state to stores
  */
+/**
+ * Populate the timeline domain stores from an already-migrated Project object.
+ *
+ * This is the pure store-hydration half of {@link loadTimeline}, factored out
+ * so callers that already hold a Project (e.g. the headless render/edit
+ * harness, which has no workspace storage layer) can hydrate the stores
+ * without the storage read, migrated-project persist, or orphaned-media
+ * dialog side effects. {@link loadTimeline} calls this after reading +
+ * migrating from storage; it then runs media validation on top.
+ */
+export async function hydrateTimelineStoresFromProject(project: Project): Promise<void> {
+  if (project.timeline && project.timeline.tracks?.length > 0) {
+    const t = project.timeline
+
+    logger.debug('hydrateTimelineStoresFromProject: loading existing timeline', {
+      tracksCount: t.tracks?.length ?? 0,
+      itemsCount: t.items?.length ?? 0,
+      keyframesCount: t.keyframes?.length ?? 0,
+      transitionsCount: t.transitions?.length ?? 0,
+      schemaVersion: project.schemaVersion ?? 1,
+    })
+
+    // Restore tracks and items from project
+    // Sort tracks by order property to preserve user's track arrangement
+    const sortedTracks = [...(t.tracks || [])]
+      .map((track, index) => ({ track, originalIndex: index }))
+      .sort((a, b) => (a.track.order ?? a.originalIndex) - (b.track.order ?? b.originalIndex))
+      .map(({ track }) => ({
+        ...track,
+        items: [], // Items are stored separately
+      }))
+
+    // Restore all state to domain stores
+    const projectFps = project.metadata?.fps || 30
+    const sanitizedInOutPoints = sanitizeInOutPoints({
+      inPoint: t.inPoint ?? null,
+      outPoint: t.outPoint ?? null,
+      maxFrame: getEffectiveTimelineMaxFrame((t.items || []) as TimelineItem[], projectFps),
+    })
+    const hydratedItems = await reverseConformService.hydrateItems(
+      (t.items || []) as TimelineItem[],
+    )
+    useItemsStore.getState().setTracks(sortedTracks as TimelineTrack[])
+    useItemsStore.getState().setItems(hydratedItems)
+    useTransitionsStore.getState().setTransitions((t.transitions || []) as Transition[])
+    useKeyframesStore.getState().setKeyframes((t.keyframes || []) as ItemKeyframes[])
+    useMarkersStore.getState().setMarkers(t.markers || [])
+    useMarkersStore.getState().setInPoint(sanitizedInOutPoints.inPoint)
+    useMarkersStore.getState().setOutPoint(sanitizedInOutPoints.outPoint)
+    useTimelineSettingsStore.getState().setScrollPosition(t.scrollPosition || 0)
+    usePlaybackStore.getState().setBusAudioEq(t.busAudioEq)
+    usePlaybackStore.getState().setMasterBusDb(t.masterBusDb ?? 0)
+
+    // Restore sub-compositions
+    if (t.compositions && t.compositions.length > 0) {
+      const hydratedCompositions = await Promise.all(
+        t.compositions.map(async (c) => ({
+          id: c.id,
+          name: c.name,
+          items: await reverseConformService.hydrateItems(c.items as TimelineItem[]),
+          tracks: c.tracks as TimelineTrack[],
+          transitions: (c.transitions ?? []) as Transition[],
+          keyframes: (c.keyframes ?? []) as ItemKeyframes[],
+          fps: c.fps,
+          width: c.width,
+          height: c.height,
+          durationInFrames: c.durationInFrames,
+          ...(c.backgroundColor && { backgroundColor: c.backgroundColor }),
+          ...(c.busAudioEq && { busAudioEq: c.busAudioEq }),
+        })),
+      )
+      useCompositionsStore.getState().setCompositions(hydratedCompositions)
+    } else {
+      useCompositionsStore.getState().setCompositions([])
+    }
+
+    // Reset composition navigation to root on load
+    useCompositionNavigationStore.getState().resetToRoot()
+
+    // Restore zoom and playback
+    if (t.zoomLevel !== undefined) {
+      useZoomStore.getState().setZoomLevel(t.zoomLevel)
+    } else {
+      useZoomStore.getState().setZoomLevel(1)
+    }
+    if (t.currentFrame !== undefined) {
+      usePlaybackStore.getState().setCurrentFrame(t.currentFrame)
+    } else {
+      usePlaybackStore.getState().setCurrentFrame(0)
+    }
+  } else {
+    logger.debug('hydrateTimelineStoresFromProject: initializing new project with default track')
+
+    // Initialize with default tracks for new projects
+    useItemsStore.getState().setTracks(createDefaultClassicTracks(DEFAULT_TRACK_HEIGHT))
+    useItemsStore.getState().setItems([])
+    useTransitionsStore.getState().setTransitions([])
+    useKeyframesStore.getState().setKeyframes([])
+    useMarkersStore.getState().setMarkers([])
+    useMarkersStore.getState().setInPoint(null)
+    useMarkersStore.getState().setOutPoint(null)
+    useCompositionsStore.getState().setCompositions([])
+    useCompositionNavigationStore.getState().resetToRoot()
+    useTimelineSettingsStore.getState().setScrollPosition(0)
+    useZoomStore.getState().setZoomLevel(1)
+    usePlaybackStore.getState().setCurrentFrame(0)
+    usePlaybackStore.getState().setBusAudioEq(undefined)
+  }
+
+  // Common setup for both cases
+  // fps is stored in project.metadata, not timeline
+  useTimelineSettingsStore.getState().setFps(project.metadata?.fps || 30)
+  // snapEnabled is UI state, seeded from the app-level default
+  useTimelineSettingsStore.getState().setSnapEnabled(useSettingsStore.getState().snapEnabled)
+  useTimelineSettingsStore.getState().markClean()
+
+  // Clear undo history when loading
+  useTimelineCommandStore.getState().clearHistory()
+}
+
 export async function loadTimeline(
   projectId: string,
   options: LoadTimelineOptions = {},
@@ -905,113 +1111,7 @@ export async function loadTimeline(
       logger.debug('Saved migrated project to storage')
     }
 
-    if (project.timeline && project.timeline.tracks?.length > 0) {
-      const t = project.timeline
-
-      logger.debug('loadTimeline: loading existing timeline', {
-        tracksCount: t.tracks?.length ?? 0,
-        itemsCount: t.items?.length ?? 0,
-        keyframesCount: t.keyframes?.length ?? 0,
-        transitionsCount: t.transitions?.length ?? 0,
-        schemaVersion: project.schemaVersion ?? 1,
-      })
-
-      // Restore tracks and items from project
-      // Sort tracks by order property to preserve user's track arrangement
-      const sortedTracks = [...(t.tracks || [])]
-        .map((track, index) => ({ track, originalIndex: index }))
-        .sort((a, b) => (a.track.order ?? a.originalIndex) - (b.track.order ?? b.originalIndex))
-        .map(({ track }) => ({
-          ...track,
-          items: [], // Items are stored separately
-        }))
-
-      // Restore all state to domain stores
-      const projectFps = project.metadata?.fps || 30
-      const sanitizedInOutPoints = sanitizeInOutPoints({
-        inPoint: t.inPoint ?? null,
-        outPoint: t.outPoint ?? null,
-        maxFrame: getEffectiveTimelineMaxFrame((t.items || []) as TimelineItem[], projectFps),
-      })
-      const hydratedItems = await reverseConformService.hydrateItems(
-        (t.items || []) as TimelineItem[],
-      )
-      useItemsStore.getState().setTracks(sortedTracks as TimelineTrack[])
-      useItemsStore.getState().setItems(hydratedItems)
-      useTransitionsStore.getState().setTransitions((t.transitions || []) as Transition[])
-      useKeyframesStore.getState().setKeyframes((t.keyframes || []) as ItemKeyframes[])
-      useMarkersStore.getState().setMarkers(t.markers || [])
-      useMarkersStore.getState().setInPoint(sanitizedInOutPoints.inPoint)
-      useMarkersStore.getState().setOutPoint(sanitizedInOutPoints.outPoint)
-      useTimelineSettingsStore.getState().setScrollPosition(t.scrollPosition || 0)
-      usePlaybackStore.getState().setBusAudioEq(t.busAudioEq)
-      usePlaybackStore.getState().setMasterBusDb(t.masterBusDb ?? 0)
-
-      // Restore sub-compositions
-      if (t.compositions && t.compositions.length > 0) {
-        const hydratedCompositions = await Promise.all(
-          t.compositions.map(async (c) => ({
-            id: c.id,
-            name: c.name,
-            items: await reverseConformService.hydrateItems(c.items as TimelineItem[]),
-            tracks: c.tracks as TimelineTrack[],
-            transitions: (c.transitions ?? []) as Transition[],
-            keyframes: (c.keyframes ?? []) as ItemKeyframes[],
-            fps: c.fps,
-            width: c.width,
-            height: c.height,
-            durationInFrames: c.durationInFrames,
-            ...(c.backgroundColor && { backgroundColor: c.backgroundColor }),
-            ...(c.busAudioEq && { busAudioEq: c.busAudioEq }),
-          })),
-        )
-        useCompositionsStore.getState().setCompositions(hydratedCompositions)
-      } else {
-        useCompositionsStore.getState().setCompositions([])
-      }
-
-      // Reset composition navigation to root on load
-      useCompositionNavigationStore.getState().resetToRoot()
-
-      // Restore zoom and playback
-      if (t.zoomLevel !== undefined) {
-        useZoomStore.getState().setZoomLevel(t.zoomLevel)
-      } else {
-        useZoomStore.getState().setZoomLevel(1)
-      }
-      if (t.currentFrame !== undefined) {
-        usePlaybackStore.getState().setCurrentFrame(t.currentFrame)
-      } else {
-        usePlaybackStore.getState().setCurrentFrame(0)
-      }
-    } else {
-      logger.debug('loadTimeline: initializing new project with default track')
-
-      // Initialize with default tracks for new projects
-      useItemsStore.getState().setTracks(createDefaultClassicTracks(DEFAULT_TRACK_HEIGHT))
-      useItemsStore.getState().setItems([])
-      useTransitionsStore.getState().setTransitions([])
-      useKeyframesStore.getState().setKeyframes([])
-      useMarkersStore.getState().setMarkers([])
-      useMarkersStore.getState().setInPoint(null)
-      useMarkersStore.getState().setOutPoint(null)
-      useCompositionsStore.getState().setCompositions([])
-      useCompositionNavigationStore.getState().resetToRoot()
-      useTimelineSettingsStore.getState().setScrollPosition(0)
-      useZoomStore.getState().setZoomLevel(1)
-      usePlaybackStore.getState().setCurrentFrame(0)
-      usePlaybackStore.getState().setBusAudioEq(undefined)
-    }
-
-    // Common setup for both cases
-    // fps is stored in project.metadata, not timeline
-    useTimelineSettingsStore.getState().setFps(project.metadata?.fps || 30)
-    // snapEnabled is UI state, seeded from the app-level default
-    useTimelineSettingsStore.getState().setSnapEnabled(useSettingsStore.getState().snapEnabled)
-    useTimelineSettingsStore.getState().markClean()
-
-    // Clear undo history when loading
-    useTimelineCommandStore.getState().clearHistory()
+    await hydrateTimelineStoresFromProject(project)
 
     // Validate media references after loading timeline
     const loadedItems = useItemsStore.getState().items

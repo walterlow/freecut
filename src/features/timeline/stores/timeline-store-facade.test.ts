@@ -28,10 +28,17 @@ const zoomMocks = vi.hoisted(() => ({
   setZoomLevel: vi.fn(),
 }))
 
-const exportMocks = vi.hoisted(() => ({
-  renderSingleFrame: vi.fn(),
-  convertTimelineToComposition: vi.fn(),
-}))
+const exportMocks = vi.hoisted(() => {
+  const mocks = {
+    renderSingleFrame: vi.fn(),
+    convertTimelineToComposition: vi.fn(),
+    importCanvasRenderOrchestrator: vi.fn(),
+  }
+  mocks.importCanvasRenderOrchestrator.mockResolvedValue({
+    renderSingleFrame: mocks.renderSingleFrame,
+  })
+  return mocks
+})
 
 const mediaResolverMocks = vi.hoisted(() => ({
   resolveMediaUrls: vi.fn(),

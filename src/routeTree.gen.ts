@@ -24,12 +24,14 @@ const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() =>
+  import('./routes/projects/index.lazy').then((d) => d.Route),
+)
 const ProjectsNewRoute = ProjectsNewRouteImport.update({
   id: '/projects/new',
   path: '/projects/new',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/projects/new.lazy').then((d) => d.Route))
 const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
   id: '/projects/$projectId',
   path: '/projects/$projectId',
@@ -39,14 +41,16 @@ const EditorProjectIdRoute = EditorProjectIdRouteImport.update({
   id: '/editor/$projectId',
   path: '/editor/$projectId',
   getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/editor/$projectId.lazy').then((d) => d.Route))
+} as any).lazy(() =>
+  import('./routes/editor/$projectId.lazy').then((d) => d.Route),
+)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/editor/$projectId': typeof EditorProjectIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
-  '/projects': typeof ProjectsIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -65,9 +69,19 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/editor/$projectId' | '/projects/$projectId' | '/projects/new' | '/projects'
+  fullPaths:
+    | '/'
+    | '/editor/$projectId'
+    | '/projects/$projectId'
+    | '/projects/new'
+    | '/projects/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/editor/$projectId' | '/projects/$projectId' | '/projects/new' | '/projects'
+  to:
+    | '/'
+    | '/editor/$projectId'
+    | '/projects/$projectId'
+    | '/projects/new'
+    | '/projects'
   id:
     | '__root__'
     | '/'
@@ -97,7 +111,7 @@ declare module '@tanstack/react-router' {
     '/projects/': {
       id: '/projects/'
       path: '/projects'
-      fullPath: '/projects'
+      fullPath: '/projects/'
       preLoaderRoute: typeof ProjectsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }

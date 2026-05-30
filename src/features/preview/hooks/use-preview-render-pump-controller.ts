@@ -52,6 +52,8 @@ import {
 } from '../utils/render-pump-prewarm-plan'
 import type { TransitionPreviewSessionTrace } from './use-preview-transition-session-controller'
 import { createLogger } from '@/shared/logging/logger'
+import { isPreviewTraceEnabled, recordPumpTrace } from '@/shared/logging/preview-trace'
+import type { CompositionRendererInstance } from '@/features/preview/deps/export'
 
 const logger = createLogger('VideoPreview')
 
@@ -59,9 +61,7 @@ type TransitionWindow = ResolvedTransitionWindow<TimelineItem>
 type PlaybackTransitionOverlayWindows = Parameters<typeof resolvePlaybackTransitionOverlayState>[0]
 type PlaybackStoreSnapshot = ReturnType<typeof usePlaybackStore.getState>
 
-type FastScrubRenderer = Awaited<
-  ReturnType<(typeof import('@/features/preview/deps/export'))['createCompositionRenderer']>
->
+type FastScrubRenderer = CompositionRendererInstance
 
 type PreviewPerfState = {
   fastScrubPrewarmSourceEvictions: number
@@ -698,7 +698,25 @@ export function usePreviewRenderPump({
               (playbackTransitionState.hasActiveTransition ||
                 playbackTransitionState.shouldHoldOverlay) &&
               !forceFastScrubOverlay
+            // DEV diagnostics: record which overlay path the pump chose per
+            // priority frame. Tree-shaken from prod; no-op unless a trace runs.
+            const tracePump = (
+              act: 'transition-overlay' | 'fast-scrub' | 'hide' | 'fallback-hide',
+            ) => {
+              if (import.meta.env.DEV && isPreviewTraceEnabled()) {
+                recordPumpTrace({
+                  f: frameToRender,
+                  act,
+                  shouldShow: shouldShowPlaybackTransitionOverlay,
+                  hasActive: playbackTransitionState.hasActiveTransition,
+                  hold: playbackTransitionState.shouldHoldOverlay,
+                  forceFast: forceFastScrubOverlay,
+                  fallback: fallbackToPlayerScrubRef.current,
+                })
+              }
+            }
             if (fallbackToPlayerScrubRef.current) {
+              tracePump('fallback-hide')
               hideAllOverlays()
               continue
             }
@@ -757,14 +775,17 @@ export function usePreviewRenderPump({
                 showFastScrubOverlayForFrame()
                 continue
               }
+              tracePump('hide')
               hideAllOverlays()
               continue
             }
 
             drawToDisplay(frameToRender)
             if (shouldShowPlaybackTransitionOverlay) {
+              tracePump('transition-overlay')
               showPlaybackTransitionOverlayForFrame()
             } else {
+              tracePump('fast-scrub')
               showFastScrubOverlayForFrame()
             }
             if (

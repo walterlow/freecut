@@ -357,6 +357,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const snapEnabled = useSettingsStore((s) => s.snapEnabled)
   const showWaveforms = useSettingsStore((s) => s.showWaveforms)
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips)
+  const enableFilmstripExtraction = useSettingsStore((s) => s.enableFilmstripExtraction)
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval)
   const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory)
   const captioningIntervalUnit = useSettingsStore((s) => s.captioningIntervalUnit)
@@ -742,6 +743,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     <Switch
                       checked={showFilmstrips}
                       onCheckedChange={(v) => setSetting('showFilmstrips', v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm">
+                        {t('settings.timeline.enableFilmstripExtraction')}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.timeline.enableFilmstripExtractionDescription')}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={enableFilmstripExtraction}
+                      onCheckedChange={(v) => setSetting('enableFilmstripExtraction', v)}
                     />
                   </div>
                 </div>

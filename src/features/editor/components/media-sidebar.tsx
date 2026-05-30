@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useEffect, memo, Activity } from 'react'
+import { useCallback, useMemo, useRef, useEffect, memo, Activity, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronDown,
@@ -16,7 +16,6 @@ import {
   Hexagon,
   Heart,
   Pentagon,
-  Sparkles,
   Blend,
   Pen,
   WandSparkles,
@@ -31,11 +30,10 @@ import { useProjectStore } from '@/features/editor/deps/projects'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
 import {
   clearMediaDragData,
-  MediaLibrary,
+  importMediaLibrary,
   setMediaDragData,
 } from '@/features/editor/deps/media-library'
-import { KeyframeGraphPanel } from '@/features/editor/deps/timeline-ui'
-import { TransitionsPanel } from './transitions-panel'
+import { importKeyframeGraphPanel } from '@/features/editor/deps/timeline-contract'
 import {
   createDefaultAdjustmentItem,
   createDefaultShapeItem,
@@ -46,16 +44,9 @@ import {
 } from '@/features/editor/deps/timeline-utils'
 import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/timeline'
 import { useMaskEditorStore } from '@/features/editor/deps/preview'
-import type { VisualEffect, GpuEffect } from '@/types/effects'
-import { EFFECT_PRESETS } from '@/types/effects'
-import {
-  getGpuCategoriesWithEffects,
-  getGpuEffectDefaultParams,
-} from '@/infrastructure/gpu-effects'
-import { useEffectPreviews } from '@/features/editor/deps/effects-contract'
+import type { VisualEffect } from '@/types/effects'
 import { createLogger } from '@/shared/logging/logger'
 import { useSettingsStore } from '@/features/editor/deps/settings'
-import { AiPanel } from './ai-panel'
 import {
   TEXT_STYLE_PRESETS,
   type TextStylePresetLayout,
@@ -70,6 +61,25 @@ import {
 const logger = createLogger('MediaSidebar')
 const TEXT_TEMPLATE_PREVIEW_SHELL =
   'w-full aspect-video rounded-sm border border-border bg-slate-950'
+const LazyAiPanel = lazy(() => import('./ai-panel').then((module) => ({ default: module.AiPanel })))
+const LazyTransitionsPanel = lazy(() =>
+  import('./transitions-panel').then((module) => ({ default: module.TransitionsPanel })),
+)
+const LazyKeyframeGraphPanel = lazy(() =>
+  importKeyframeGraphPanel().then((module) => ({
+    default: module.KeyframeGraphPanel,
+  })),
+)
+const LazyEffectsTab = lazy(() =>
+  import('./media-sidebar-effects-tab').then((module) => ({
+    default: module.MediaSidebarEffectsTab,
+  })),
+)
+const LazyMediaLibrary = lazy(() =>
+  importMediaLibrary().then((module) => ({
+    default: module.MediaLibrary,
+  })),
+)
 
 function renderTextTemplatePreview(preset?: TextStylePreset) {
   if (!preset) {
@@ -502,61 +512,6 @@ export const MediaSidebar = memo(function MediaSidebar() {
     selectItems([adjustmentItem.id])
   }, [])
 
-  // Create adjustment layer with preset effects
-  const handleAddPreset = useCallback(
-    (presetId: string) => {
-      const preset = EFFECT_PRESETS.find((p) => p.id === presetId)
-      if (!preset) return
-      handleAddAdjustmentLayer(preset.effects, preset.name)
-    },
-    [handleAddAdjustmentLayer],
-  )
-
-  // Add a single GPU effect ââ‚¬” to selected clips, or as adjustment layer if nothing selected
-  const handleAddGpuEffect = useCallback(
-    (gpuEffectId: string) => {
-      const { selectedItemIds } = useSelectionStore.getState()
-      const { items, addEffect } = useTimelineStore.getState()
-
-      // Find selected visual items (not audio)
-      const visualIds = selectedItemIds.filter((id) => {
-        const item = items.find((i) => i.id === id)
-        return item && item.type !== 'audio'
-      })
-
-      if (visualIds.length > 0) {
-        const defaults = getGpuEffectDefaultParams(gpuEffectId)
-        const effect: GpuEffect = {
-          type: 'gpu-effect',
-          gpuEffectType: gpuEffectId,
-          params: defaults,
-        }
-        visualIds.forEach((id) => addEffect(id, effect))
-      } else {
-        // No visual selection ââ‚¬” create adjustment layer with this effect
-        const defaults = getGpuEffectDefaultParams(gpuEffectId)
-        handleAddAdjustmentLayer([
-          { type: 'gpu-effect', gpuEffectType: gpuEffectId, params: defaults },
-        ])
-      }
-    },
-    [handleAddAdjustmentLayer],
-  )
-
-  // GPU effect categories and preview thumbnails (static data, memoize once)
-  const gpuCategories = useMemo(() => getGpuCategoriesWithEffects(), [])
-  const allEffectEntries = useMemo(
-    () =>
-      gpuCategories.flatMap(({ effects: catEffects }) =>
-        catEffects.map((def) => ({ id: def.id, def })),
-      ),
-    [gpuCategories],
-  )
-  const presetIds = useMemo(() => EFFECT_PRESETS.map((p) => p.id), [])
-  const { previews: effectPreviews, trigger: triggerPreviews } = useEffectPreviews(
-    allEffectEntries,
-    presetIds,
-  )
   const textTemplatesByLayout = useMemo(() => {
     const grouped = {
       single: [] as TextStylePreset[],
@@ -664,7 +619,6 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 } else {
                   setActiveTab(id)
                   if (!leftSidebarOpen) toggleLeftSidebar()
-                  if (id === 'effects') triggerPreviews()
                 }
               }}
               className={`
@@ -725,12 +679,16 @@ export const MediaSidebar = memo(function MediaSidebar() {
         {/* Use Activity for React 19 performance optimization - defers updates when hidden */}
         <Activity mode={leftSidebarOpen ? 'visible' : 'hidden'}>
           <div className="h-full min-h-0 flex flex-col" style={{ width: sidebarWidth }}>
-            <KeyframeGraphPanel
-              isOpen={keyframeEditorOpen}
-              onToggle={toggleKeyframeEditorOpen}
-              onClose={() => setKeyframeEditorOpen(false)}
-              placement="top"
-            />
+            {keyframeEditorOpen && (
+              <Suspense fallback={null}>
+                <LazyKeyframeGraphPanel
+                  isOpen={keyframeEditorOpen}
+                  onToggle={toggleKeyframeEditorOpen}
+                  onClose={() => setKeyframeEditorOpen(false)}
+                  placement="top"
+                />
+              </Suspense>
+            )}
 
             {/* Panel Header ââ‚¬” sits with the tab content, below the keyframe editor */}
             <div
@@ -768,7 +726,11 @@ export const MediaSidebar = memo(function MediaSidebar() {
             <div
               className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'media' ? 'block' : 'hidden'}`}
             >
-              <MediaLibrary />
+              {activeTab === 'media' && (
+                <Suspense fallback={null}>
+                  <LazyMediaLibrary />
+                </Suspense>
+              )}
             </div>
 
             {/* Text Tab */}
@@ -1026,135 +988,38 @@ export const MediaSidebar = memo(function MediaSidebar() {
             <div
               className={`min-h-0 flex-1 overflow-y-auto p-3 ${activeTab === 'effects' ? 'block' : 'hidden'}`}
             >
-              <div className="space-y-3">
-                {/* Blank Adjustment Layer */}
-                <button
-                  draggable={true}
-                  onDragStart={handleTemplateDragStart({
-                    itemType: 'adjustment',
-                    label: t('editor.mediaSidebar.adjustmentLayer'),
-                  })}
-                  onDragEnd={handleTemplateDragEnd}
-                  onClick={() => {
-                    if (shouldSuppressGeneratedItemClick()) return
-                    handleAddAdjustmentLayer()
-                  }}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                >
-                  <div className="w-8 h-8 rounded-md border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70 flex-shrink-0">
-                    <Layers className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-                  </div>
-                  <div className="text-left">
-                    <div className="text-xs text-muted-foreground group-hover:text-foreground">
-                      {t('editor.mediaSidebar.blankAdjustmentLayer')}
-                    </div>
-                  </div>
-                </button>
-
-                {/* Presets */}
-                <div>
-                  <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                    {t('editor.mediaSidebar.presets')}
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {EFFECT_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        draggable={true}
-                        onDragStart={handleTemplateDragStart({
-                          itemType: 'adjustment',
-                          label: preset.name,
-                          effects: preset.effects,
-                        })}
-                        onDragEnd={handleTemplateDragEnd}
-                        onClick={() => {
-                          if (shouldSuppressGeneratedItemClick()) return
-                          handleAddPreset(preset.id)
-                        }}
-                        className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                      >
-                        {effectPreviews.has(`preset:${preset.id}`) ? (
-                          <img
-                            src={effectPreviews.get(`preset:${preset.id}`)}
-                            alt=""
-                            draggable={false}
-                            className="w-full aspect-video rounded-sm object-cover"
-                          />
-                        ) : (
-                          <div className="w-full aspect-video rounded-sm bg-muted flex items-center justify-center">
-                            <Sparkles className="w-3 h-3 text-muted-foreground/50" />
-                          </div>
-                        )}
-                        <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
-                          {preset.name}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* GPU Effects by Category */}
-                {gpuCategories.map(({ category, effects: catEffects }) => (
-                  <div key={category}>
-                    <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                      {category}
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {catEffects.map((def) => (
-                        <button
-                          key={def.id}
-                          draggable={true}
-                          onDragStart={handleTemplateDragStart({
-                            itemType: 'adjustment',
-                            label: def.name,
-                            effects: [
-                              {
-                                type: 'gpu-effect',
-                                gpuEffectType: def.id,
-                                params: getGpuEffectDefaultParams(def.id),
-                              },
-                            ],
-                          })}
-                          onDragEnd={handleTemplateDragEnd}
-                          onClick={() => {
-                            if (shouldSuppressGeneratedItemClick()) return
-                            handleAddGpuEffect(def.id)
-                          }}
-                          className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                        >
-                          {effectPreviews.has(def.id) ? (
-                            <img
-                              src={effectPreviews.get(def.id)}
-                              alt=""
-                              draggable={false}
-                              className="w-full aspect-video rounded-sm object-cover"
-                            />
-                          ) : (
-                            <div className="w-full aspect-video rounded-sm bg-muted" />
-                          )}
-                          <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight truncate w-full">
-                            {def.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {activeTab === 'effects' && (
+                <Suspense fallback={null}>
+                  <LazyEffectsTab
+                    onAddAdjustmentLayer={handleAddAdjustmentLayer}
+                    onTemplateDragStart={handleTemplateDragStart}
+                    onTemplateDragEnd={handleTemplateDragEnd}
+                    shouldSuppressGeneratedItemClick={shouldSuppressGeneratedItemClick}
+                  />
+                </Suspense>
+              )}
             </div>
 
             {/* Transitions Tab */}
             <div
               className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'transitions' ? 'block' : 'hidden'}`}
             >
-              <TransitionsPanel />
+              {activeTab === 'transitions' && (
+                <Suspense fallback={null}>
+                  <LazyTransitionsPanel />
+                </Suspense>
+              )}
             </div>
 
             {/* AI Tab */}
             <div
               className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'ai' ? 'block' : 'hidden'}`}
             >
-              <AiPanel />
+              {activeTab === 'ai' && (
+                <Suspense fallback={null}>
+                  <LazyAiPanel />
+                </Suspense>
+              )}
             </div>
           </div>
         </Activity>

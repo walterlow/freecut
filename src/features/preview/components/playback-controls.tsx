@@ -18,8 +18,8 @@ import { usePlaybackStore } from '@/shared/state/playback'
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
 import {
+  importMediaLibraryService,
   useMediaLibraryStore,
-  mediaLibraryService,
 } from '@/features/preview/deps/media-library-contract'
 import { formatTimecode } from '@/shared/utils/time-utils'
 import { toast } from 'sonner'
@@ -192,6 +192,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         lastModified: Date.now(),
       })
 
+      const { mediaLibraryService } = await importMediaLibraryService()
       const savedMedia = await mediaLibraryService.importGeneratedImage(
         frameFile,
         currentProjectId,

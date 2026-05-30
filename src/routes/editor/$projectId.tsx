@@ -1,6 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { CURRENT_SCHEMA_VERSION } from '@/shared/projects/migrations'
-import { getProject } from '@/infrastructure/storage'
 
 export const Route = createFileRoute('/editor/$projectId')({
   // Editor loader data is tiny and migration state must be fresh on reopen.
@@ -8,6 +6,10 @@ export const Route = createFileRoute('/editor/$projectId')({
   gcTime: 0,
   preloadGcTime: 0,
   loader: async ({ params }) => {
+    const [{ CURRENT_SCHEMA_VERSION }, { getProject }] = await Promise.all([
+      import('@/shared/projects/migrations'),
+      import('@/infrastructure/storage'),
+    ])
     // Validate project exists - actual loading happens in Editor via loadTimeline
     const project = await getProject(params.projectId)
 

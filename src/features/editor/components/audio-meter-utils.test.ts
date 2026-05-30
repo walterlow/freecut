@@ -234,33 +234,26 @@ describe('audio meter utils', () => {
     expect(isAudioMixerTrack(track)).toBe(true)
   })
 
-  it('renders standalone video tracks in the mixer when they have audible media', () => {
+  it('excludes video tracks from the mixer even when a clip carries un-split embedded audio', () => {
     const track = makeTrack({
       name: 'V1',
       kind: undefined,
       items: [makeVideoItem()],
     })
 
-    expect(isAudioMixerTrack(track)).toBe(true)
+    // Audio and video are kept separate: a video track is audio-track-only by
+    // design and never gets a mixer channel strip.
+    expect(isAudioMixerTrack(track)).toBe(false)
   })
 
-  it('does not render linked video tracks in the mixer when a companion audio track exists', () => {
-    const videoItem = makeVideoItem({
-      id: 'video-linked',
-      linkedGroupId: 'linked-1',
-    })
-    const audioItem = makeAudioItem({
-      id: 'audio-linked',
-      linkedGroupId: 'linked-1',
-      trackId: 'track-audio',
-    })
+  it('excludes tracks explicitly typed as video', () => {
     const track = makeTrack({
-      name: 'V1',
-      kind: undefined,
-      items: [videoItem],
+      name: 'Track 3',
+      kind: 'video',
+      items: [makeVideoItem()],
     })
 
-    expect(isAudioMixerTrack(track, [videoItem, audioItem])).toBe(false)
+    expect(isAudioMixerTrack(track)).toBe(false)
   })
 
   it('estimates per-track levels for composition-backed audio tracks', () => {

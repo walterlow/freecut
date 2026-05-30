@@ -63,6 +63,101 @@ function mergeVisibleRanges(
   }
 }
 
+/**
+ * Grow `current` toward `target` (a superset) by at most `maxAdd` clips,
+ * choosing the clips nearest the current edges first. Returns `target` (and the
+ * exact count added) when the remaining clips fit within `maxAdd`. Lets a
+ * zoom-out gesture trickle clip mounts a few per frame instead of mounting a
+ * whole cluster in one commit.
+ */
+function expandRangeByClipBudget(
+  items: TimelineItem[] | undefined,
+  current: VisibleFrameRange,
+  target: VisibleFrameRange,
+  maxAdd: number,
+): { range: VisibleFrameRange; added: number } {
+  if (!items || items.length === 0) return { range: target, added: 0 }
+
+  const candidates: { start: number; end: number; distance: number }[] = []
+  for (const item of items) {
+    const itemStart = item.from
+    const itemEnd = item.from + item.durationInFrames
+    const inTarget = itemEnd > target.start && itemStart < target.end
+    if (!inTarget) continue
+    const inCurrent = itemEnd > current.start && itemStart < current.end
+    if (inCurrent) continue
+    const distance = itemStart >= current.end ? itemStart - current.end : current.start - itemEnd
+    candidates.push({ start: itemStart, end: itemEnd, distance })
+  }
+
+  if (candidates.length <= maxAdd) return { range: target, added: candidates.length }
+
+  candidates.sort((a, b) => a.distance - b.distance)
+  let start = current.start
+  let end = current.end
+  for (let index = 0; index < maxAdd; index++) {
+    const candidate = candidates[index]!
+    if (candidate.start < start) start = candidate.start
+    if (candidate.end > end) end = candidate.end
+  }
+  return { range: { start, end }, added: maxAdd }
+}
+
+/**
+ * A track's in-flight staged zoom-out expansion. `advance` mounts up to
+ * `budget` more clips toward its target and returns how many it actually
+ * mounted; it unregisters itself once the target is reached.
+ */
+interface StagedExpander {
+  advance: (budget: number) => number
+}
+
+/**
+ * Global per-frame clip-mount budget shared across ALL track hooks. Each
+ * useVisibleItems instance stages its own zoom-out expansion, but the mount
+ * cost is global (one main thread), so the budget must be global too —
+ * otherwise N tracks each mounting their own quota per frame multiplies the
+ * per-frame work and re-introduces the spike. A single shared rAF hands out the
+ * budget round-robin so no track starves.
+ */
+const GLOBAL_MOUNT_BUDGET_PER_FRAME = 2
+const activeExpanders = new Set<StagedExpander>()
+let sharedExpansionRaf: number | null = null
+let expanderCursor = 0
+
+function ensureSharedExpansionLoop() {
+  if (sharedExpansionRaf === null) {
+    sharedExpansionRaf = requestAnimationFrame(runSharedExpansionFrame)
+  }
+}
+
+function runSharedExpansionFrame() {
+  sharedExpansionRaf = null
+  const expanders = [...activeExpanders]
+  if (expanders.length === 0) return
+
+  let budget = GLOBAL_MOUNT_BUDGET_PER_FRAME
+  // Round-robin one clip at a time so no track starves; safety bounds the loop.
+  let safety = budget + expanders.length
+  while (budget > 0 && activeExpanders.size > 0 && safety-- > 0) {
+    const expander = expanders[expanderCursor % expanders.length]!
+    expanderCursor++
+    if (!activeExpanders.has(expander)) continue
+    budget -= expander.advance(1)
+  }
+
+  if (activeExpanders.size > 0) ensureSharedExpansionLoop()
+}
+
+function registerExpander(expander: StagedExpander) {
+  activeExpanders.add(expander)
+  ensureSharedExpansionLoop()
+}
+
+function unregisterExpander(expander: StagedExpander) {
+  activeExpanders.delete(expander)
+}
+
 function quantizeInteractionPixelsPerSecond(pixelsPerSecond: number): number {
   if (!Number.isFinite(pixelsPerSecond) || pixelsPerSecond <= 0) {
     return 1
@@ -131,6 +226,81 @@ export function useVisibleItems(trackId: string) {
   }>({ pps: 0, fps: 0, itemsRef: undefined, transRef: undefined })
 
   useEffect(() => {
+    // Commit a concrete visible range: filter items/transitions and publish.
+    const commit = (range: VisibleFrameRange) => {
+      const itemsState = useItemsStore.getState()
+      const items = itemsState.itemsByTrackId[trackId]
+      const transitions = getTrackVisibleTransitions(trackId)
+      const { fps } = useTimelineSettingsStore.getState()
+      const cullingPixelsPerSecond = getCullingPixelsPerSecond(useZoomStore.getState())
+
+      const visibleItems = getVisibleItemsForRange(items, range)
+      const visibleTransitions = getVisibleTransitionsForRange(
+        transitions,
+        itemsState.itemById,
+        visibleItems,
+        range,
+      )
+      const next: VisibleItemsSnapshot = { visibleItems, visibleTransitions }
+
+      lastRangeRef.current = range
+      lastVersionRef.current = {
+        pps: cullingPixelsPerSecond,
+        fps,
+        itemsRef: items,
+        transRef: transitions,
+      }
+      setSnapshot((prevSnap) => (areVisibleSnapshotsEqual(prevSnap, next) ? prevSnap : next))
+    }
+
+    // Staged zoom-out expansion. `expansionTarget` is the range we're chasing;
+    // the shared coordinator calls `expander.advance` with a slice of the global
+    // per-frame mount budget until we reach it.
+    let expansionTarget: VisibleFrameRange | null = null
+    const expander: StagedExpander = {
+      advance: (budget) => {
+        const target = expansionTarget
+        if (!target) {
+          unregisterExpander(expander)
+          return 0
+        }
+
+        // Gesture ended between frames: the non-interacting apply() path mounts
+        // the full visible set, so finish at the target now and stop staging.
+        if (!useZoomStore.getState().isZoomInteracting) {
+          commit(target)
+          expansionTarget = null
+          unregisterExpander(expander)
+          return 0
+        }
+
+        const items = useItemsStore.getState().itemsByTrackId[trackId]
+        const current = lastRangeRef.current ?? target
+        const { range, added } = expandRangeByClipBudget(items, current, target, budget)
+        commit(range)
+
+        if (range.start <= target.start && range.end >= target.end) {
+          expansionTarget = null
+          unregisterExpander(expander)
+        }
+        return added
+      },
+    }
+
+    const cancelStagedExpansion = () => {
+      expansionTarget = null
+      unregisterExpander(expander)
+    }
+
+    const scheduleStagedExpansion = (target: VisibleFrameRange) => {
+      expansionTarget = target
+      // Register and let the shared coordinator mount the clips under the global
+      // budget. Mounting synchronously here would bypass that budget: all tracks
+      // schedule within the same store-notify, so N synchronous commits would
+      // land in one frame — the exact spike we're avoiding.
+      registerExpander(expander)
+    }
+
     const apply = () => {
       const zoomState = useZoomStore.getState()
       const cullingPixelsPerSecond = getCullingPixelsPerSecond(zoomState)
@@ -147,6 +317,8 @@ export function useVisibleItems(trackId: string) {
 
       // Keep zoom-in stable, but allow zoom-out to expand the mounted set during
       // the gesture so newly visible clips do not wait for the settle timeout.
+      // The expansion is staged (a clip budget per frame) so a dense cluster of
+      // newly-visible clips does not mount in a single commit and spike the frame.
       if (
         zoomState.isZoomInteracting &&
         prev.fps === fps &&
@@ -157,26 +329,13 @@ export function useVisibleItems(trackId: string) {
           return
         }
 
-        const expandedRange = mergeVisibleRanges(lastRange, newRange)
-        const visibleItems = getVisibleItemsForRange(items, expandedRange)
-        const visibleTransitions = getVisibleTransitionsForRange(
-          transitions,
-          itemsState.itemById,
-          visibleItems,
-          expandedRange,
-        )
-        const next: VisibleItemsSnapshot = { visibleItems, visibleTransitions }
-
-        lastRangeRef.current = expandedRange
-        lastVersionRef.current = {
-          pps: cullingPixelsPerSecond,
-          fps,
-          itemsRef: items,
-          transRef: transitions,
-        }
-        setSnapshot((prevSnap) => (areVisibleSnapshotsEqual(prevSnap, next) ? prevSnap : next))
+        scheduleStagedExpansion(mergeVisibleRanges(lastRange, newRange))
         return
       }
+
+      // Any non-interacting recompute (settle, scroll, data/fps change)
+      // supersedes an in-flight staged expansion.
+      cancelStagedExpansion()
 
       // Fast path: if only scroll changed and the range shift is within
       // hysteresis, the visible item set is guaranteed unchanged.
@@ -198,24 +357,7 @@ export function useVisibleItems(trackId: string) {
         }
       }
 
-      const visibleItems = getVisibleItemsForRange(items, newRange)
-      const visibleTransitions = getVisibleTransitionsForRange(
-        transitions,
-        itemsState.itemById,
-        visibleItems,
-        newRange,
-      )
-      const next: VisibleItemsSnapshot = { visibleItems, visibleTransitions }
-
-      lastRangeRef.current = newRange
-      lastVersionRef.current = {
-        pps: cullingPixelsPerSecond,
-        fps,
-        itemsRef: items,
-        transRef: transitions,
-      }
-
-      setSnapshot((prevSnap) => (areVisibleSnapshotsEqual(prevSnap, next) ? prevSnap : next))
+      commit(newRange)
     }
 
     // Zoom-specific subscriber: skip when the quantized culling pps hasn't
@@ -270,6 +412,7 @@ export function useVisibleItems(trackId: string) {
     ]
 
     return () => {
+      cancelStagedExpansion()
       for (const unsubscribe of unsubscribers) {
         unsubscribe()
       }

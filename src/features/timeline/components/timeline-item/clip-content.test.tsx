@@ -45,6 +45,7 @@ describe('ClipContent', () => {
     })
     useSettingsStore.setState({
       showFilmstrips: false,
+      enableFilmstripExtraction: false,
       showWaveforms: false,
     })
     useMediaLibraryStore.setState({
@@ -105,7 +106,7 @@ describe('ClipContent', () => {
     expect(screen.getByText('Linked clip')).toBeInTheDocument()
   })
 
-  it('uses settled zoom for filmstrip content by default', () => {
+  it('uses settled zoom for filmstrip content by default', async () => {
     // Not interacting: content renders (mid-gesture deferral is covered by its
     // own test below). pixelsPerSecond (180) and contentPixelsPerSecond (100)
     // are set apart purely to verify which one the filmstrip reads.
@@ -118,6 +119,7 @@ describe('ClipContent', () => {
     })
     useSettingsStore.setState({
       showFilmstrips: true,
+      enableFilmstripExtraction: true,
       showWaveforms: false,
     })
 
@@ -137,10 +139,10 @@ describe('ClipContent', () => {
     // Default (no preferImmediateRendering): filmstrip tracks the SETTLED zoom
     // (contentPixelsPerSecond = 100), not the live in-gesture pps (180). This is
     // what keeps the filmstrip tile grid from re-rendering on every zoom frame.
-    expect(screen.getByTestId('clip-filmstrip')).toHaveAttribute('data-pps', '100')
+    expect(await screen.findByTestId('clip-filmstrip')).toHaveAttribute('data-pps', '100')
   })
 
-  it('can opt clip internals into live zoom for immediate edit previews', () => {
+  it('can opt clip internals into live zoom for immediate edit previews', async () => {
     useZoomStore.setState({
       level: 1.8,
       pixelsPerSecond: 180,
@@ -174,7 +176,7 @@ describe('ClipContent', () => {
       />,
     )
 
-    expect(screen.getByTestId('clip-waveform')).toHaveAttribute('data-pps', '180')
+    expect(await screen.findByTestId('clip-waveform')).toHaveAttribute('data-pps', '180')
   })
 
   it('defers filmstrip content for clips that mount during an active zoom gesture', () => {
@@ -188,7 +190,11 @@ describe('ClipContent', () => {
       contentPixelsPerSecond: 100,
       isZoomInteracting: true,
     })
-    useSettingsStore.setState({ showFilmstrips: true, showWaveforms: false })
+    useSettingsStore.setState({
+      showFilmstrips: true,
+      enableFilmstripExtraction: true,
+      showWaveforms: false,
+    })
 
     const item: TimelineItem = {
       id: 'video-defer',

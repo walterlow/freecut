@@ -61,10 +61,18 @@ export const INDEX_FILENAME = 'index.json'
 export const PROJECTS_DIR = 'projects'
 export const MEDIA_DIR = 'media'
 export const CONTENT_DIR = 'content'
+/**
+ * Final render outputs from the export queue land here (`{workspace}/exports/`)
+ * so they're easy to find when browsing the workspace folder on disk. Not part
+ * of the cache layout — never swept by the orphan sweep.
+ */
+export const EXPORTS_DIR = 'exports'
 
 export const PROJECT_FILENAME = 'project.json'
 export const PROJECT_THUMBNAIL_FILENAME = 'thumbnail.jpg'
 export const PROJECT_MEDIA_LINKS_FILENAME = 'media-links.json'
+/** Persisted render-queue jobs for a project (survives refresh). */
+export const PROJECT_RENDER_QUEUE_FILENAME = 'render-queue.json'
 
 /**
  * Marker file present inside a project directory that has been soft-deleted.
@@ -124,6 +132,21 @@ export function projectThumbnailPath(id: string): string[] {
 /** Segments for `projects/{id}/media-links.json`. */
 export function projectMediaLinksPath(id: string): string[] {
   return [...projectDir(id), PROJECT_MEDIA_LINKS_FILENAME]
+}
+
+/** Segments for `projects/{id}/render-queue.json`. */
+export function projectRenderQueuePath(id: string): string[] {
+  return [...projectDir(id), PROJECT_RENDER_QUEUE_FILENAME]
+}
+
+/** Segments for `projects/{id}/exports/` — a project's rendered output files. */
+export function projectExportsDir(id: string): string[] {
+  return [...projectDir(id), EXPORTS_DIR]
+}
+
+/** Segments for `projects/{id}/exports/{sanitizedName}`. */
+export function projectExportFilePath(id: string, fileName: string): string[] {
+  return [...projectExportsDir(id), sanitizeWorkspaceFileName(fileName)]
 }
 
 /** Segments for `projects/{id}/.freecut-trashed.json`. */
@@ -482,4 +505,11 @@ export function proxyMetaPath(proxyKey: string): string[] {
 
 export function proxyDir(proxyKey: string): string[] {
   return [...proxiesRoot(), proxyKey]
+}
+
+/* ---------------- Render outputs (export queue) ---------------- */
+
+/** Segments for `exports/{sanitizedName}` — a final rendered file. */
+export function exportFilePath(fileName: string): string[] {
+  return [EXPORTS_DIR, sanitizeWorkspaceFileName(fileName)]
 }

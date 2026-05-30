@@ -94,7 +94,9 @@
       "snapByDefault": "デフォルトでスナップ",
       "snapByDefaultDescription": "プロジェクトを開いたときの初期スナップ状態を設定します。",
       "showWaveforms": "波形を表示",
-      "showFilmstrips": "動画のサムネイル帯を表示"
+      "showFilmstrips": "動画のサムネイル帯を表示",
+      "enableFilmstripExtraction": "フィルムストリップを抽出",
+      "enableFilmstripExtractionDescription": "インポート時とタイムライン表示時に動画のサムネイル帯を生成します。"
     },
     "storage": {
       "generateMissingProxies": "不足しているプロキシを生成",

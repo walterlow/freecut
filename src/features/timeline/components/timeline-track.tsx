@@ -25,7 +25,6 @@ import { useSelectionStore } from '@/shared/state/selection'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useProjectStore } from '@/features/timeline/deps/projects'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
-import { mediaLibraryService } from '@/features/timeline/deps/media-library-service'
 import {
   resolveMediaUrl,
   getMediaDragData,
@@ -290,23 +289,30 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const pendingDragPreviewRef = useRef<PendingDragPreview | null>(null)
   const dragOverFlagsRef = useRef({ isDragOver: false, isExternalDragOver: false })
 
-  // Resolve whether this track is effectively disabled for rendering or drops.
-  // Direct parent-group lookup keeps this O(1); calling resolveEffectiveTrackStates
-  // here would scan the whole tracks array per row on every store mutation.
-  const trackInteractionState = useTimelineStore((s) => {
+  // Resolve inherited parent-group state through the store, but derive this
+  // row's own state directly from the current `track` prop. The timeline store
+  // facade memoizes selections by snapshot; closing over `track` inside the
+  // selector can return the previous track state for one render after toggles.
+  const parentInteractionState = useTimelineStore((s) => {
     const parentGroup = track.parentTrackId
       ? s.tracks.find((t) => t.id === track.parentTrackId && t.isGroup)
       : undefined
-    const effectiveLocked = track.locked || parentGroup?.locked || false
-    const effectiveMuted = track.muted || parentGroup?.muted || false
-    const effectiveVisible = track.visible !== false && parentGroup?.visible !== false
-    const effective: TimelineTrackType = parentGroup
-      ? { ...track, locked: effectiveLocked, muted: effectiveMuted, visible: effectiveVisible }
-      : track
-    return (effective.locked ? 1 : 0) | (getIsTrackDisabled(effective) ? 2 : 0)
+    if (!parentGroup) return 0
+    return (
+      (parentGroup.locked ? 1 : 0) |
+      (parentGroup.muted ? 2 : 0) |
+      (parentGroup.visible === false ? 4 : 0)
+    )
   })
-  const isTrackLocked = (trackInteractionState & 1) !== 0
-  const isTrackDisabled = (trackInteractionState & 2) !== 0
+  const isParentLocked = (parentInteractionState & 1) !== 0
+  const isParentMuted = (parentInteractionState & 2) !== 0
+  const isParentHidden = (parentInteractionState & 4) !== 0
+  const isTrackLocked = track.locked || isParentLocked
+  const isTrackDisabled = getIsTrackDisabled({
+    ...track,
+    muted: track.muted || isParentMuted,
+    visible: track.visible !== false && !isParentHidden,
+  })
   const isDropDisabled = isTrackLocked
   const trackKind = getTrackKind(track)
 
@@ -411,13 +417,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         async (planned): Promise<TimelineItemType[] | null> => {
           const { entry, placements } = planned
           const droppedEntry = entry.payload
-          const needsThumbnail = entry.mediaType === 'video' || entry.mediaType === 'image'
-          const [blobUrl, thumbnailUrl] = await Promise.all([
-            resolveMediaUrl(droppedEntry.mediaId),
-            needsThumbnail
-              ? mediaLibraryService.getThumbnailBlobUrl(droppedEntry.mediaId)
-              : Promise.resolve(null),
-          ])
+          const blobUrl = await resolveMediaUrl(droppedEntry.mediaId)
 
           if (!blobUrl) {
             logger.error('Failed to get media blob URL for', entry.label)
@@ -438,7 +438,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
             label: entry.label,
             timelineFps: fps,
             blobUrl,
-            thumbnailUrl,
+            thumbnailUrl: null,
             canvasWidth: canvasSize.width,
             canvasHeight: canvasSize.height,
             placement: {

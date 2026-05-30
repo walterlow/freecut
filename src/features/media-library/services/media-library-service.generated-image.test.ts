@@ -53,6 +53,7 @@ const waveformCacheMocks = vi.hoisted(() => ({
 
 vi.mock('@/infrastructure/storage', () => ({
   getAllMedia: vi.fn(),
+  getAllMediaMetadata: vi.fn(),
   getMedia: vi.fn(),
   getTranscript: vi.fn(),
   getTranscriptMediaIds: vi.fn(),
@@ -66,6 +67,7 @@ vi.mock('@/infrastructure/storage', () => ({
   decrementContentRef: vi.fn(),
   deleteContent: vi.fn(),
   associateMediaWithProject: indexedDbMocks.associateMediaWithProject,
+  removeMediaBatchFromProject: vi.fn(),
   removeMediaFromProject: vi.fn(),
   getProjectMediaIds: vi.fn(),
   getProjectsUsingMedia: vi.fn(),
@@ -95,8 +97,27 @@ vi.mock('./media-processor-service', () => ({
 
 vi.mock('@/features/media-library/deps/timeline-services', () => ({
   gifFrameCache: gifFrameCacheMocks,
+  importGifFrameCache: vi.fn(async () => ({ gifFrameCache: gifFrameCacheMocks })),
   filmstripCache: filmstripCacheMocks,
+  importFilmstripCache: vi.fn(async () => ({ filmstripCache: filmstripCacheMocks })),
+  MAX_FILMSTRIP_TARGET_FRAMES: 72,
+  IMPORT_FILMSTRIP_HUGE_FILE_BYTES: 1000 * 1024 * 1024,
+  IMPORT_FILMSTRIP_LARGE_FILE_BYTES: 500 * 1024 * 1024,
+  IMPORT_FILMSTRIP_LARGE_TARGET_FRAMES: 16,
+  IMPORT_FILMSTRIP_LONG_DURATION_SEC: 900,
+  IMPORT_FILMSTRIP_MEDIUM_TARGET_FRAMES: 32,
+  IMPORT_FILMSTRIP_NORMAL_TARGET_FRAMES: 48,
+  IMPORT_FILMSTRIP_PREP_TIMEOUT_MS: 8000,
+  IMPORT_FILMSTRIP_SLOW_CONTAINER_MIME_TYPES: new Set([
+    'video/webm',
+    'video/x-matroska',
+    'video/matroska',
+  ]),
+  IMPORT_FILMSTRIP_SLOW_PREP_TIMEOUT_MS: 6000,
+  IMPORT_FILMSTRIP_TINY_TARGET_FRAMES: 8,
+  IMPORT_FILMSTRIP_VERY_LONG_DURATION_SEC: 1800,
   waveformCache: waveformCacheMocks,
+  importWaveformCache: vi.fn(async () => ({ waveformCache: waveformCacheMocks })),
 }))
 
 import { mediaLibraryService } from './media-library-service'

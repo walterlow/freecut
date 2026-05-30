@@ -109,6 +109,7 @@ class MediaProcessorService {
       thumbnailQuality?: number
       thumbnailTimestamp?: number
       generateThumbnail?: boolean
+      fastMetadata?: boolean
     },
   ): Promise<ProcessMediaResult> {
     const worker = this.ensureWorker()

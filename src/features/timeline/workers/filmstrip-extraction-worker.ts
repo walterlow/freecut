@@ -71,6 +71,7 @@ export interface CompleteResponse {
   type: 'complete'
   requestId: string
   frameCount: number
+  unavailableIndices?: number[]
 }
 
 export interface ErrorResponse {
@@ -204,6 +205,7 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
     let extractedCount = initialCompletedCount
     let frameListIndex = 0
     let savedSinceLastReport: Array<{ index: number; blob: Blob }> = []
+    const unavailableIndices: number[] = []
 
     // Generator for timestamps
     async function* timestampGenerator(): AsyncGenerator<number> {
@@ -237,6 +239,7 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
 
       // Skip if no frame available for this timestamp (mediabunny returns null)
       if (!wrapped) {
+        unavailableIndices.push(frame.index)
         frameListIndex++
         continue
       }
@@ -324,6 +327,7 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
         type: 'complete',
         requestId,
         frameCount: extractedCount,
+        unavailableIndices,
       } as CompleteResponse)
     }
   } finally {

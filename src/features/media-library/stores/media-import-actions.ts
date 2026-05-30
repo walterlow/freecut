@@ -1,11 +1,12 @@
 import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } from '../types'
 import type { MediaMetadata } from '@/types/storage'
-import { mediaLibraryService } from '../services/media-library-service'
+import { importMediaLibraryService } from '../services/media-library-service-loader'
 import { proxyService } from '../services/proxy-service'
 import { getMimeType } from '../utils/validation'
 import { getSharedProxyKey } from '../utils/proxy-key'
 import { hasMediaFilePickerSupport, showMediaFilePicker } from '../utils/media-file-picker'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
+import { useMediaPreparationStore } from './media-preparation-store'
 
 const logger = createLogger('MediaImport')
 
@@ -17,6 +18,8 @@ type Set = (
 type Get = () => MediaLibraryState & MediaLibraryActions
 
 type ImportedMetadata = MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }
+
+const IMPORT_PROCESSING_CONCURRENCY = 2
 
 interface ImportTask {
   handle: FileSystemFileHandle
@@ -56,17 +59,46 @@ function buildOptimisticMediaItem(
 }
 
 function removeImportPlaceholder(set: Set, tempId: string): void {
+  useMediaPreparationStore.getState().clearMedia(tempId)
+
   set((state) => ({
     mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
     importingIds: state.importingIds.filter((id) => id !== tempId),
   }))
 }
 
-function replaceImportPlaceholder(set: Set, tempId: string, metadata: MediaMetadata): void {
-  set((state) => ({
-    mediaItems: state.mediaItems.map((item) => (item.id === tempId ? metadata : item)),
-    importingIds: state.importingIds.filter((id) => id !== tempId),
-  }))
+/**
+ * Drop the optimistic placeholder and guarantee the resolved media record is
+ * visible in the library exactly once.
+ *
+ * Used for BOTH fresh imports and "duplicate" results. A re-imported file is
+ * flagged `isDuplicate` whenever it already has a `media-links.json`
+ * association with the project — but that association can outlive the file's
+ * presence in the in-memory library (the user removed it from the library
+ * view, or the association was re-backfilled from a lingering timeline clip).
+ * The old duplicate path only removed the placeholder, so re-importing such a
+ * file showed "already exists in library" while the file stayed invisible and
+ * un-recoverable without a full reload. Surfacing it here fixes that.
+ *
+ * Also resilient to a concurrent `loadMediaItems()` wiping the placeholder
+ * mid-import: the record is prepended rather than silently dropped.
+ */
+function ensureImportedMediaVisible(set: Set, tempId: string, metadata: MediaMetadata): boolean {
+  let wasAlreadyVisible = false
+  useMediaPreparationStore.getState().clearMedia(tempId)
+
+  set((state) => {
+    const withoutPlaceholder = state.mediaItems.filter((item) => item.id !== tempId)
+    wasAlreadyVisible = withoutPlaceholder.some((item) => item.id === metadata.id)
+
+    return {
+      mediaItems: wasAlreadyVisible
+        ? withoutPlaceholder.map((item) => (item.id === metadata.id ? metadata : item))
+        : [metadata, ...withoutPlaceholder],
+      importingIds: state.importingIds.filter((id) => id !== tempId),
+    }
+  })
+  return wasAlreadyVisible
 }
 
 function prependImportedMedia(set: Set, metadata: MediaMetadata): void {
@@ -83,6 +115,18 @@ function setupImportedVideoProxy(metadata: MediaMetadata): void {
   }
 
   proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata))
+}
+
+function queueImportPreparationTask(tempId: string): void {
+  const preparationStore = useMediaPreparationStore.getState()
+  preparationStore.queueTask(tempId, 'import')
+  preparationStore.updateTask(tempId, 'import', { status: 'queued', progress: 0.05 })
+}
+
+function markImportPreparationRunning(tempId: string): void {
+  useMediaPreparationStore
+    .getState()
+    .updateTask(tempId, 'import', { status: 'running', progress: 0.2 })
 }
 
 function processImportResults(
@@ -112,15 +156,20 @@ function processImportResults(
     if (result.status === 'fulfilled') {
       const { metadata, tempId, file, handle } = result.value
 
-      if (metadata.isDuplicate) {
-        removeImportPlaceholder(set, tempId)
+      const wasAlreadyVisible = ensureImportedMediaVisible(set, tempId, metadata)
+
+      // "already exists in library" should only fire for a genuine no-op:
+      // re-importing a file that is ALREADY visible in this project's library.
+      // A file flagged `isDuplicate` merely has a project↔media association —
+      // which the by-design cross-workspace dedup re-creates when you re-import
+      // a file you'd removed. Surfacing that as "already exists" is wrong; it's
+      // a normal (re-)add, so fall through to the import branch with no banner.
+      if (metadata.isDuplicate && wasAlreadyVisible) {
         duplicateNames.push(file.name)
         if (options?.includeDuplicatesInResults) {
           results.push(metadata)
         }
       } else {
-        replaceImportPlaceholder(set, tempId, metadata)
-
         setupImportedVideoProxy(metadata)
         results.push(metadata)
         importedCount += 1
@@ -198,6 +247,7 @@ export function createImportActions(
         importingIds: [...state.importingIds, tempId],
         error: null,
       }))
+      queueImportPreparationTask(tempId)
 
       importTasks.push({ handle, tempId, file })
     }
@@ -205,20 +255,44 @@ export function createImportActions(
     return importTasks
   }
 
-  const runImportTasks = (
+  const runImportTasks = async (
     importTasks: ImportTask[],
     projectId: string,
-  ): Promise<PromiseSettledResult<CompletedImportTask>[]> =>
-    Promise.allSettled(
-      importTasks.map(async ({ handle, tempId, file }) => {
-        const metadata = await mediaLibraryService.importMediaWithHandle(handle, projectId)
-        return { metadata, tempId, file, handle }
-      }),
-    )
+    serviceModulePromise: ReturnType<typeof importMediaLibraryService>,
+  ): Promise<PromiseSettledResult<CompletedImportTask>[]> => {
+    const results: PromiseSettledResult<CompletedImportTask>[] = new Array(importTasks.length)
+    let nextIndex = 0
+    const { mediaLibraryService } = await serviceModulePromise
+
+    const runNext = async (): Promise<void> => {
+      while (nextIndex < importTasks.length) {
+        const index = nextIndex++
+        const task = importTasks[index]
+        if (!task) {
+          continue
+        }
+
+        try {
+          markImportPreparationRunning(task.tempId)
+          const metadata = await mediaLibraryService.importMediaWithHandle(task.handle, projectId)
+          results[index] = {
+            status: 'fulfilled',
+            value: { metadata, tempId: task.tempId, file: task.file, handle: task.handle },
+          }
+        } catch (reason) {
+          results[index] = { status: 'rejected', reason }
+        }
+      }
+    }
+
+    const workerCount = Math.min(IMPORT_PROCESSING_CONCURRENCY, importTasks.length)
+    await Promise.all(Array.from({ length: workerCount }, runNext))
+    return results
+  }
 
   const importHandlesInternal = async (
     handles: FileSystemFileHandle[],
-    options?: { includeDuplicatesInResults?: boolean },
+    options?: { includeDuplicatesInResults?: boolean; waitForPreparation?: boolean },
   ): Promise<MediaMetadata[]> => {
     const { currentProjectId } = get()
 
@@ -235,13 +309,19 @@ export function createImportActions(
       fileCount: handles.length,
     })
 
+    const serviceModulePromise = importMediaLibraryService()
     const importTasks = await createOptimisticImportTasks(handles)
-    const importResults = await runImportTasks(importTasks, currentProjectId)
+    const importResults = await runImportTasks(importTasks, currentProjectId, serviceModulePromise)
 
     const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
       processImportResults(importResults, importTasks, set, options)
 
     showImportNotifications(duplicateNames, unsupportedCodecFiles, get)
+
+    if (options?.waitForPreparation && results.length > 0) {
+      const { mediaLibraryService } = await serviceModulePromise
+      await mediaLibraryService.waitForMediaPreparation(results.map((media) => media.id))
+    }
 
     event.success({
       imported: importedCount,
@@ -286,8 +366,13 @@ export function createImportActions(
         event.set('fileCount', handles.length)
 
         // Create optimistic placeholders for all files immediately
+        const serviceModulePromise = importMediaLibraryService()
         const importTasks = await createOptimisticImportTasks(handles)
-        const importResults = await runImportTasks(importTasks, currentProjectId)
+        const importResults = await runImportTasks(
+          importTasks,
+          currentProjectId,
+          serviceModulePromise,
+        )
 
         const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
           processImportResults(importResults, importTasks, set)
@@ -349,6 +434,7 @@ export function createImportActions(
       }
 
       try {
+        const { mediaLibraryService } = await importMediaLibraryService()
         const metadata = await mediaLibraryService.importMediaFromUrl(trimmedUrl, currentProjectId)
 
         if (metadata.isDuplicate) {
@@ -391,6 +477,9 @@ export function createImportActions(
     },
 
     importHandlesForPlacement: async (handles: FileSystemFileHandle[]) =>
-      importHandlesInternal(handles, { includeDuplicatesInResults: true }),
+      importHandlesInternal(handles, {
+        includeDuplicatesInResults: true,
+        waitForPreparation: true,
+      }),
   }
 }

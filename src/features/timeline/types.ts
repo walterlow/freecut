@@ -1,4 +1,4 @@
-import type { TimelineTrack, TimelineItem, ProjectMarker } from '@/types/timeline'
+import type { TimelineTrack, TimelineItem, ProjectMarker, VideoItem } from '@/types/timeline'
 import type { TransformProperties } from '@/types/transform'
 import type { VisualEffect } from '@/types/effects'
 import type {
@@ -53,6 +53,7 @@ export interface TimelineActions {
   setTracks: (tracks: TimelineTrack[]) => void
   addItem: (item: TimelineItem) => void
   addItems: (items: TimelineItem[]) => void
+  addItemWithLinkedAudio: (video: VideoItem) => void
   updateItem: (id: string, updates: Partial<TimelineItem>) => void
   removeItems: (ids: string[]) => void
   rippleDeleteItems: (ids: string[]) => void

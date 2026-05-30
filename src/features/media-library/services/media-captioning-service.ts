@@ -11,7 +11,7 @@
 import { useSelectionStore } from '@/shared/state/selection'
 import { createLogger } from '@/shared/logging/logger'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
-import type { MediaCaption } from '@/infrastructure/analysis'
+import type { MediaCaption } from '@/infrastructure/analysis/media-tagger'
 import type { AudioItem, TextItem, TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
 import {
   aiCaptionsToSegments,

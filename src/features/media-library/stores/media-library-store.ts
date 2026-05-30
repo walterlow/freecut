@@ -8,13 +8,14 @@ import type {
   UnsupportedCodecFile,
 } from '../types'
 import type { MediaMetadata } from '@/types/storage'
-import { mediaLibraryService } from '../services/media-library-service'
+import { importMediaLibraryService } from '../services/media-library-service-loader'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 import { proxyService } from '../services/proxy-service'
 import { getSharedProxyKey } from '../utils/proxy-key'
 import { createImportActions } from './media-import-actions'
 import { createDeleteActions } from './media-delete-actions'
 import { createRelinkingActions } from './media-relinking-actions'
+import { useMediaPreparationStore } from './media-preparation-store'
 import { getTranscriptMediaIds } from '@/infrastructure/storage'
 import { mergeTranscriptionProgress } from '@/shared/utils/transcription-progress'
 
@@ -159,6 +160,7 @@ const newStore: MediaLibraryStoreApi =
             taggingMediaIds: new Set(),
             analysisProgress: null,
           })
+          useMediaPreparationStore.getState().clearAll()
           // Note: loadMediaItems is triggered by the component's useEffect
           // Don't call it here to avoid double loading
         },
@@ -181,6 +183,7 @@ const newStore: MediaLibraryStoreApi =
 
           try {
             // v3: Load project-scoped media only
+            const { mediaLibraryService } = await importMediaLibraryService()
             const mediaItems = await mediaLibraryService.getMediaForProject(currentProjectId)
 
             set({

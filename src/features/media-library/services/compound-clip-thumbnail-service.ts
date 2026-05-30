@@ -4,7 +4,7 @@ import {
   buildSubCompositionPreviewSignature,
   collectSubCompositionMediaIds,
   getSubCompositionThumbnailFrame,
-  renderSingleFrame,
+  importCanvasRenderOrchestrator,
   resolveMediaUrl,
   resolveMediaUrls,
   useCompositionsStore,
@@ -72,6 +72,7 @@ class CompoundClipThumbnailService {
         composition.height,
         THUMBNAIL_MAX_SIZE,
       )
+      const { renderSingleFrame } = await importCanvasRenderOrchestrator()
 
       const thumbnailBlob = await renderSingleFrame({
         composition: {

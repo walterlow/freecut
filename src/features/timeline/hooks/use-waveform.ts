@@ -9,6 +9,7 @@ import { getPreviewStartupDelayMs, schedulePreviewWork } from './preview-work-bu
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('useWaveform')
+const RANGE_FIRST_MIN_DURATION_SEC = 5 * 60
 
 interface UseWaveformOptions {
   /** Media ID from the timeline item */
@@ -27,6 +28,9 @@ interface UseWaveformOptions {
    * render the full-resolution peaks (legacy behavior).
    */
   pixelsPerSecond?: number
+  /** Visible source window in seconds, used for range-first generation. */
+  visibleSourceStartSec?: number
+  visibleSourceEndSec?: number
 }
 
 interface UseWaveformResult {
@@ -74,6 +78,8 @@ export function useWaveform({
   enabled = true,
   deferDurationSec = 0,
   pixelsPerSecond,
+  visibleSourceStartSec,
+  visibleSourceEndSec,
 }: UseWaveformOptions): UseWaveformResult {
   // Which downsampled level the current zoom wants. When pixelsPerSecond is
   // omitted, force the full-res path by treating the level as unavailable.
@@ -106,7 +112,9 @@ export function useWaveform({
 
   // Refs to avoid duplicate starts when visibility/layout churns.
   const isGeneratingRef = useRef(false)
+  const ownsGenerationRef = useRef(false)
   const hasPendingStartRef = useRef(false)
+  const rangeRequestKeyRef = useRef<string | null>(null)
   const lastMediaIdRef = useRef<string>(mediaId)
 
   // Reset state when mediaId changes (e.g., after relinking orphaned clip)
@@ -114,7 +122,9 @@ export function useWaveform({
     if (lastMediaIdRef.current !== mediaId) {
       lastMediaIdRef.current = mediaId
       isGeneratingRef.current = false
+      ownsGenerationRef.current = false
       hasPendingStartRef.current = false
+      rangeRequestKeyRef.current = null
       setWaveform(waveformCache.getFromMemoryCacheSync(mediaId))
       setIsLoading(false)
       setProgress(waveformCache.getFromMemoryCacheSync(mediaId)?.isComplete ? 100 : 0)
@@ -195,8 +205,102 @@ export function useWaveform({
   // A clip with a persisted multi-resolution file renders from its level and
   // never reaches this path, so its full-res peaks stay off the heap.
   const needsFullRes = !useLevels || (levelProbed && !displayLevel)
+  const canUseVisibleRange =
+    useLevels &&
+    enabled &&
+    isVisible &&
+    !!blobUrl &&
+    needsFullRes &&
+    deferDurationSec >= RANGE_FIRST_MIN_DURATION_SEC &&
+    typeof visibleSourceStartSec === 'number' &&
+    typeof visibleSourceEndSec === 'number' &&
+    Number.isFinite(visibleSourceStartSec) &&
+    Number.isFinite(visibleSourceEndSec) &&
+    visibleSourceEndSec > visibleSourceStartSec
+
+  useEffect(() => {
+    if (!canUseVisibleRange || !blobUrl) {
+      return
+    }
+
+    if (waveform?.isComplete) {
+      return
+    }
+
+    const requestStart = Math.max(0, visibleSourceStartSec as number)
+    const requestEnd = Math.max(requestStart + 0.25, visibleSourceEndSec as number)
+    const requestKey = `${mediaId}:${levelIndex}:${Math.floor(requestStart * 10)}:${Math.ceil(
+      requestEnd * 10,
+    )}`
+    if (rangeRequestKeyRef.current === requestKey && waveform) {
+      return
+    }
+
+    rangeRequestKeyRef.current = requestKey
+    setIsLoading(true)
+    setError(null)
+
+    let cancelled = false
+    const requestMediaId = mediaId
+    const cancelScheduledStart = schedulePreviewWork(
+      () => {
+        waveformCache
+          .prepareVisibleWaveformRange(
+            mediaId,
+            blobUrl,
+            requestStart,
+            requestEnd,
+            pixelsPerSecond ?? 0,
+            onProgress,
+          )
+          .then((result) => {
+            if (cancelled || lastMediaIdRef.current !== requestMediaId) {
+              return
+            }
+            if (!result) {
+              setIsLoading(false)
+              return
+            }
+            setWaveform(result)
+            setIsLoading(false)
+            setProgress(100)
+          })
+          .catch((err) => {
+            if (cancelled || lastMediaIdRef.current !== requestMediaId) {
+              return
+            }
+            logger.warn(`Visible waveform range failed for ${mediaId}`, err)
+            setError(err.message || 'Failed to generate waveform range')
+            setIsLoading(false)
+          })
+      },
+      {
+        delayMs: getPreviewStartupDelayMs(deferDurationSec),
+      },
+    )
+
+    return () => {
+      cancelled = true
+      cancelScheduledStart()
+    }
+  }, [
+    mediaId,
+    blobUrl,
+    canUseVisibleRange,
+    visibleSourceStartSec,
+    visibleSourceEndSec,
+    pixelsPerSecond,
+    levelIndex,
+    deferDurationSec,
+    waveform,
+  ])
+
   useEffect(() => {
     if (!enabled || !needsFullRes) {
+      return
+    }
+
+    if (canUseVisibleRange) {
       return
     }
 
@@ -227,6 +331,7 @@ export function useWaveform({
 
         hasPendingStartRef.current = false
         isGeneratingRef.current = true
+        ownsGenerationRef.current = false
 
         waveformCache
           .getCachedWaveform(mediaId)
@@ -250,6 +355,7 @@ export function useWaveform({
             }
 
             setProgress(0)
+            ownsGenerationRef.current = !waveformCache.hasPendingGeneration(mediaId)
             return waveformCache.getWaveform(mediaId, blobUrl, onProgress)
           })
           .then((result) => {
@@ -273,6 +379,7 @@ export function useWaveform({
           .finally(() => {
             if (lastMediaIdRef.current === requestMediaId) {
               isGeneratingRef.current = false
+              ownsGenerationRef.current = false
               hasPendingStartRef.current = false
             }
           })
@@ -291,12 +398,23 @@ export function useWaveform({
       }
       cancelScheduledStart()
     }
-  }, [mediaId, blobUrl, isVisible, enabled, waveform?.isComplete, deferDurationSec, needsFullRes])
+  }, [
+    mediaId,
+    blobUrl,
+    isVisible,
+    enabled,
+    waveform?.isComplete,
+    deferDurationSec,
+    needsFullRes,
+    canUseVisibleRange,
+  ])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      waveformCache.abort(mediaId)
+      if (ownsGenerationRef.current) {
+        waveformCache.abort(mediaId)
+      }
     }
   }, [mediaId])
 

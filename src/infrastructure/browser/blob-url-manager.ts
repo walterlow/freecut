@@ -11,8 +11,11 @@ const logger = createLogger('BlobUrlManager')
 interface BlobUrlEntry {
   url: string
   refCount: number
-  blob: Blob
+  /** Absent for external (non-blob) URLs registered via registerUrl(). */
+  blob?: Blob
   metadata?: ObjectUrlSourceMetadata
+  /** True when this entry points at an externally-hosted URL (e.g. HTTP), not an object URL. */
+  external?: boolean
 }
 
 /**
@@ -54,7 +57,7 @@ class BlobUrlManager {
     const existing = this.entries.get(mediaId)
     if (existing) {
       existing.refCount++
-      if (metadata) {
+      if (metadata && existing.blob) {
         existing.metadata = metadata
         registerObjectUrl(existing.url, existing.blob, metadata)
       }
@@ -64,6 +67,26 @@ class BlobUrlManager {
     const url = URL.createObjectURL(blob)
     registerObjectUrl(url, blob, metadata)
     this.entries.set(mediaId, { url, refCount: 1, blob, metadata })
+    this.notify()
+    return url
+  }
+
+  /**
+   * Register an externally-hosted URL (e.g. an HTTP URL served by a headless
+   * render harness) for a media id, WITHOUT loading the bytes into a Blob.
+   *
+   * Because no Blob is registered in the object-url registry, consumers that
+   * build a mediabunny input from this URL fall through to UrlSource — i.e.
+   * the media is range-streamed over HTTP instead of held fully in memory.
+   * Reference-counted like acquire(); never used by the in-app flows.
+   */
+  registerUrl(mediaId: string, url: string): string {
+    const existing = this.entries.get(mediaId)
+    if (existing) {
+      existing.refCount++
+      return existing.url
+    }
+    this.entries.set(mediaId, { url, refCount: 1, external: true })
     this.notify()
     return url
   }
@@ -101,10 +124,16 @@ class BlobUrlManager {
   invalidate(mediaId: string): void {
     const entry = this.entries.get(mediaId)
     if (!entry) return
-    unregisterObjectUrl(entry.url)
-    URL.revokeObjectURL(entry.url)
+    this.revokeEntry(entry)
     this.entries.delete(mediaId)
     this.notify()
+  }
+
+  /** Revoke an entry's underlying object URL (no-op for external URLs). */
+  private revokeEntry(entry: BlobUrlEntry): void {
+    if (entry.external) return
+    unregisterObjectUrl(entry.url)
+    URL.revokeObjectURL(entry.url)
   }
 
   /**
@@ -117,8 +146,7 @@ class BlobUrlManager {
 
     entry.refCount--
     if (entry.refCount <= 0) {
-      unregisterObjectUrl(entry.url)
-      URL.revokeObjectURL(entry.url)
+      this.revokeEntry(entry)
       this.entries.delete(mediaId)
       this.notify()
       logger.debug(`Revoked blob URL for media ${mediaId}`)
@@ -132,8 +160,7 @@ class BlobUrlManager {
    */
   invalidateAll(): void {
     for (const entry of this.entries.values()) {
-      unregisterObjectUrl(entry.url)
-      URL.revokeObjectURL(entry.url)
+      this.revokeEntry(entry)
     }
     this.entries.clear()
     this.notify()
@@ -144,8 +171,7 @@ class BlobUrlManager {
    */
   releaseAll(): void {
     for (const [mediaId, entry] of this.entries) {
-      unregisterObjectUrl(entry.url)
-      URL.revokeObjectURL(entry.url)
+      this.revokeEntry(entry)
       logger.debug(`Revoked blob URL for media ${mediaId}`)
     }
     this.entries.clear()

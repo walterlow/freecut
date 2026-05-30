@@ -15,7 +15,7 @@ import {
   mediaToSnapshotReference,
 } from '../types/snapshot'
 import { getProject, getProjectMediaIds } from '@/infrastructure/storage'
-import { mediaLibraryService } from '@/features/project-bundle/deps/media-library'
+import { importMediaLibraryService } from '@/features/project-bundle/deps/media-library'
 import { computeSnapshotChecksum, sanitizeDownloadFilename } from './pure-utils'
 
 // App version - should be imported from a config
@@ -59,6 +59,7 @@ export async function exportProjectJson(
   // Collect media references if requested
   const mediaReferences: SnapshotMediaReference[] = []
   if (includeMediaReferences) {
+    const { mediaLibraryService } = await importMediaLibraryService()
     const mediaIds = await getProjectMediaIds(projectId)
     for (const mediaId of mediaIds) {
       const media = await mediaLibraryService.getMedia(mediaId)

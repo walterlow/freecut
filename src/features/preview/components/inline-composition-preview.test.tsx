@@ -78,7 +78,9 @@ vi.mock('@/features/preview/deps/media-library-contract', () => ({
 }))
 
 vi.mock('@/features/preview/deps/export', () => ({
-  createCompositionRenderer: createCompositionRendererMock,
+  importCompositionRenderer: vi.fn(async () => ({
+    createCompositionRenderer: createCompositionRendererMock,
+  })),
 }))
 
 import { InlineCompositionPreview } from './inline-composition-preview'

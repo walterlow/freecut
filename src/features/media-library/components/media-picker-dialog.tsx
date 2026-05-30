@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Video, FileAudio, Image as ImageIcon, Search, Loader2 } from 'lucide-react'
 import type { MediaMetadata } from '@/types/storage'
 import { useMediaLibraryStore } from '../stores/media-library-store'
-import { mediaLibraryService } from '../services/media-library-service'
+import { importMediaLibraryService } from '../services/media-library-service-loader'
 import { getMediaType, formatDuration } from '../utils/validation'
 
 interface MediaPickerDialogProps {
@@ -38,6 +38,7 @@ function MediaPickerItem({ media, onSelect }: { media: MediaMetadata; onSelect: 
     let mounted = true
 
     const loadThumbnail = async () => {
+      const { mediaLibraryService } = await importMediaLibraryService()
       const url = await mediaLibraryService.getThumbnailBlobUrl(media.id)
       if (mounted) {
         setThumbnailUrl(url)

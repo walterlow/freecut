@@ -94,7 +94,9 @@
       "snapByDefault": "Encaixe por padrão",
       "snapByDefaultDescription": "Define o estado inicial do encaixe quando um projeto é aberto.",
       "showWaveforms": "Mostrar formas de onda",
-      "showFilmstrips": "Mostrar miniaturas de vídeo"
+      "showFilmstrips": "Mostrar miniaturas de vídeo",
+      "enableFilmstripExtraction": "Extrair tiras de quadros",
+      "enableFilmstripExtractionDescription": "Gera tiras de miniaturas de vídeo durante a importação e a exibição na linha do tempo."
     },
     "storage": {
       "generateMissingProxies": "Gerar proxies ausentes",

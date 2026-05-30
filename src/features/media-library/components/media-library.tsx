@@ -1,4 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState, useMemo, memo, useCallback } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useMemo,
+  memo,
+  useCallback,
+  lazy,
+  Suspense,
+} from 'react'
 import {
   Search,
   Filter,
@@ -28,10 +38,13 @@ import {
   ScanSearch,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { SceneBrowserPanel, useSceneBrowserStore } from '../deps/scene-browser'
+import { importSceneBrowserPanel, useSceneBrowserStore } from '../deps/scene-browser'
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaLibrary')
+const LazySceneBrowserPanel = lazy(() =>
+  importSceneBrowserPanel().then((module) => ({ default: module.SceneBrowserPanel })),
+)
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
@@ -71,19 +84,21 @@ import { MissingMediaDialog } from './missing-media-dialog'
 import { OrphanedClipsDialog } from './orphaned-clips-dialog'
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog'
 import { useFilteredMediaItems, useMediaLibraryStore } from '../stores/media-library-store'
+import { useMediaPreparationStore } from '../stores/media-preparation-store'
 import {
   deleteCompoundClips,
   getCompoundClipDeletionImpact,
   getMediaDeletionImpact,
   removeProjectItems,
+  useTimelineStore,
   useCompositionsStore,
   useCompositionNavigationStore,
 } from '@/features/media-library/deps/timeline-stores'
 import { useProjectStore } from '@/features/media-library/deps/projects'
 import { proxyService } from '../services/proxy-service'
-import { mediaLibraryService } from '../services/media-library-service'
+import { importMediaLibraryService } from '../services/media-library-service-loader'
 import { mediaTranscriptionService } from '../services/media-transcription-service'
-import { mediaAnalysisService } from '../services/media-analysis-service'
+import { importMediaAnalysisService } from '../services/media-analysis-service-loader'
 import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop'
 import { getSharedProxyKey } from '../utils/proxy-key'
 import { getMediaType } from '../utils/validation'
@@ -637,6 +652,15 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     analysisProgress && analysisProgress.total > 0
       ? (analysisProgress.completed / analysisProgress.total) * 100
       : 0
+  const preparationTasks = useMediaPreparationStore((s) => s.tasks)
+  const activePreparationTasks = useMemo(
+    () =>
+      [...preparationTasks.values()].filter(
+        (task) =>
+          task.type !== 'import' && (task.status === 'queued' || task.status === 'running'),
+      ),
+    [preparationTasks],
+  )
 
   const transcribingCount = useMemo(() => {
     let count = 0
@@ -721,6 +745,67 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return rows
   }, [transcriptStatus, transcriptProgress, mediaById])
 
+  const preparationItemRows = useMemo(
+    () => {
+      const groups = new Map<
+        string,
+        {
+          id: string
+          name: string
+          kinds: string[]
+          progress: number
+          status: 'queued' | 'running'
+          taskCount: number
+        }
+      >()
+
+      for (const task of activePreparationTasks) {
+        const kind =
+          task.type === 'import'
+            ? t('media.library.preparationType.import')
+            : task.type === 'filmstrip'
+              ? t('media.library.preparationType.filmstrip')
+              : t('media.library.preparationType.waveform')
+        const existing = groups.get(task.mediaId)
+        if (existing) {
+          existing.kinds.push(kind)
+          existing.progress += task.progress
+          existing.taskCount += 1
+          if (task.status === 'running') {
+            existing.status = 'running'
+          }
+          continue
+        }
+
+        groups.set(task.mediaId, {
+          id: task.mediaId,
+          name: mediaById[task.mediaId]?.fileName ?? task.mediaId,
+          kinds: [kind],
+          progress: task.progress,
+          status: task.status === 'running' ? 'running' : 'queued',
+          taskCount: 1,
+        })
+      }
+
+      return [...groups.values()].map((row) => ({
+        id: row.id,
+        name: row.name,
+        kind: row.kinds.join(' + '),
+        percent: Math.round((row.progress / row.taskCount) * 100),
+        progress: row.progress / row.taskCount,
+        status: row.status,
+      }))
+    },
+    [activePreparationTasks, mediaById, t],
+  )
+  const preparingCount = preparationItemRows.length
+  const preparingAvgProgress = useMemo(() => {
+    if (preparationItemRows.length === 0) return 0
+    const total = preparationItemRows.reduce((sum, row) => sum + row.progress, 0)
+    return total / preparationItemRows.length
+  }, [preparationItemRows])
+  const hasRunningPreparationTasks = preparationItemRows.some((row) => row.status === 'running')
+
   const handleGenerateSelectedProxies = async () => {
     const selectedItems = selectedMediaIds
       .map((id) => mediaById[id])
@@ -739,7 +824,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         item.id,
         item.storageType === 'opfs' && item.opfsPath
           ? { kind: 'opfs', path: item.opfsPath, mimeType: item.mimeType }
-          : () => mediaLibraryService.getMediaFile(item.id),
+          : async () => {
+              const { mediaLibraryService } = await importMediaLibraryService()
+              return mediaLibraryService.getMediaFile(item.id)
+            },
         item.width,
         item.height,
         proxyKey,
@@ -877,7 +965,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     try {
       // First remove timeline items that reference selected library assets
       if (affectedMediaImpact.itemIds.length > 0) {
-        removeProjectItems(affectedMediaImpact.itemIds)
+        const removedTimelineReferences = removeProjectItems(affectedMediaImpact.itemIds)
+        if (removedTimelineReferences && currentProjectId) {
+          await useTimelineStore.getState().saveTimeline(currentProjectId)
+        }
       }
 
       if (pendingDeletion.mediaIds.length > 0) {
@@ -1414,7 +1505,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       {/* Scrollable content: wrapper provides relative context for the drag overlay */}
       <div className="flex-1 relative min-h-0">
-        {sceneBrowserOpen && <SceneBrowserPanel className="absolute inset-0 bg-background" />}
+        {sceneBrowserOpen && (
+          <Suspense fallback={null}>
+            <LazySceneBrowserPanel className="absolute inset-0 bg-background" />
+          </Suspense>
+        )}
         <div
           ref={scrollContainerRef}
           className={cn(
@@ -1526,7 +1621,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               {!analysisProgress.cancelRequested ? (
                 <button
                   type="button"
-                  onClick={() => mediaAnalysisService.requestCancel()}
+                  onClick={() => {
+                    void importMediaAnalysisService().then(({ mediaAnalysisService }) =>
+                      mediaAnalysisService.requestCancel(),
+                    )
+                  }}
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {analysisProgress.total > 1 ? t('media.library.cancelAll') : t('common.cancel')}
@@ -1538,6 +1637,45 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           }
           trailing={<Sparkles className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />}
           fillClassName="bg-purple-500"
+        />
+      )}
+
+      {/* Unified media readiness progress bar */}
+      {preparingCount > 0 && (
+        <BackgroundTaskProgress
+          icon={<Film className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" />}
+          label={t('media.library.preparingMediaWithCount', { count: preparingCount })}
+          progressAriaLabel={t('media.library.mediaPreparationProgress')}
+          progressPercent={preparingAvgProgress * 100}
+          detailsToggleAriaLabel={t('media.library.perItemProgress')}
+          details={
+            preparationItemRows.length > 1
+              ? preparationItemRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                  >
+                    <span className="truncate">{row.name}</span>
+                    <span className="flex flex-shrink-0 items-center gap-2">
+                      <span className="hidden sm:inline">{row.kind}</span>
+                      <span className="tabular-nums">
+                        {row.status === 'queued'
+                          ? t('media.library.preparationQueued')
+                          : `${row.percent}%`}
+                      </span>
+                    </span>
+                  </div>
+                ))
+              : undefined
+          }
+          meta={
+            <span className="tabular-nums">
+              {hasRunningPreparationTasks
+                ? `${Math.round(preparingAvgProgress * 100)}%`
+                : t('media.library.preparationQueued')}
+            </span>
+          }
+          fillClassName="bg-cyan-500"
         />
       )}
 

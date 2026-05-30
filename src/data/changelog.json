@@ -1,27 +1,86 @@
 {
   "current": {
     "version": "current",
-    "date": "2026-05-19",
+    "date": "2026-05-29",
     "groups": {
-      "fixed": [
+      "added": [
         {
-          "title": "Rotated videos display the correct orientation in skim preview and exports"
+          "title": "In-app render queue — line up several exports and they render one after another, surviving a page refresh"
         },
         {
-          "title": "Scrub overlay stays aligned and the skim indicator sits flush on clip edges"
+          "title": "One-click quality presets in the export dialog"
+        },
+        {
+          "title": "Exports now save to a per-project folder, with a notice showing where files land"
+        },
+        {
+          "title": "Automatic caption styling, with per-item progress in the AI panel"
+        }
+      ],
+      "fixed": [
+        {
+          "title": "Waveforms render from true audio peaks and stay sharp when zoomed in"
+        },
+        {
+          "title": "Waveforms no longer flash a skeleton when moving a clip to another track"
+        },
+        {
+          "title": "Preview no longer jumps when entering pen/path edit mode"
+        },
+        {
+          "title": "Preview stays continuous through transitions during playback"
+        },
+        {
+          "title": "Remaining placeholder strings are now translated across all 9 languages"
         }
       ],
       "improved": [
         {
-          "title": "Filmstrips and waveforms render smoother while zooming the timeline"
+          "title": "Much smoother timeline zooming and scrolling, especially with many clips on screen"
         },
         {
-          "title": "Faster filmstrip reload from disk cache when reopening projects"
+          "title": "The editor stays responsive while audio loads — decoding now runs in the background"
         }
       ]
     }
   },
   "releases": [
+    {
+      "version": "2026.05.18",
+      "date": "2026-05-18",
+      "groups": {
+        "added": [
+          {
+            "title": "Hold (stepped) interpolation for keyframes"
+          },
+          {
+            "title": "Language switcher on the projects page, with more panels translated (text tools, transitions, scene browser)"
+          }
+        ],
+        "fixed": [
+          {
+            "title": "Rotated videos display the correct orientation in skim preview and exports"
+          },
+          {
+            "title": "Scrub overlay stays aligned and the skim indicator sits flush on clip edges"
+          },
+          {
+            "title": "Transitions on same-clip (A-A) splits now render correctly"
+          },
+          {
+            "title": "Splitting a reversed clip keeps both halves continuous"
+          }
+        ],
+        "improved": [
+          {
+            "title": "Filmstrips and waveforms render smoother while zooming the timeline"
+          },
+          {
+            "title": "Faster filmstrip reload from disk cache when reopening projects"
+          }
+        ]
+      }
+    },
     {
       "version": "2026.05.11",
       "date": "2026-05-11",

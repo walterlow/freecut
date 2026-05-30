@@ -30,6 +30,13 @@ coverage
 server/temp/media/*
 server/temp/output/*
 
+# Headless scratch / outputs / sample workspace (rebuilt or not needed in image)
+headless/output
+headless/assets
+tmp-workspace
+tmp
+*.mp4
+
 # Git
 .git
 .gitignore

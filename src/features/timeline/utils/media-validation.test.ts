@@ -6,7 +6,9 @@ const mediaLibraryServiceMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/features/timeline/deps/media-library-service', () => ({
-  mediaLibraryService: mediaLibraryServiceMocks,
+  importMediaLibraryService: vi.fn(async () => ({
+    mediaLibraryService: mediaLibraryServiceMocks,
+  })),
 }))
 
 describe('validateProjectMediaReferences', () => {

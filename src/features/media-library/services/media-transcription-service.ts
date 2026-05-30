@@ -21,7 +21,7 @@ import {
   getDefaultMediaTranscriptionAdapter,
   getMediaTranscriptionModelLabel,
 } from '../transcription/registry'
-import { mediaLibraryService } from './media-library-service'
+import { importMediaLibraryService } from './media-library-service-loader'
 import {
   buildSubtitleSegmentForClip,
   getCaptionStyleTemplateFromPreset,
@@ -384,6 +384,7 @@ class MediaTranscriptionService {
 
   private async executeTranscriptionJob(job: QueuedTranscriptionJob): Promise<MediaTranscript> {
     const mediaId = job.mediaId
+    const { mediaLibraryService } = await importMediaLibraryService()
     const media = await mediaLibraryService.getMedia(mediaId)
     if (!media) {
       throw new Error(`Media not found: ${mediaId}`)
