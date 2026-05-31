@@ -42,6 +42,12 @@ function rememberAcceptedAppUpdate(signature?: string) {
   }
 }
 
+function reloadCurrentLocationWithUpdateCacheBust() {
+  const nextUrl = new URL(window.location.href)
+  nextUrl.searchParams.set('__freecut_updated', Date.now().toString())
+  window.location.assign(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`)
+}
+
 async function showUpdateAvailableToast(
   applyUpdate: () => void = () => window.location.reload(),
   updateSignature?: string,
@@ -128,9 +134,10 @@ async function checkForAppShellUpdate() {
       nextBuildAssetSignature !== currentBuildAssetSignature &&
       nextBuildAssetSignature !== acceptedUpdateSignature
     ) {
-      await showUpdateAvailableToast(() => {
-        window.location.assign(`/?__freecut_updated=${Date.now()}`)
-      }, nextBuildAssetSignature)
+      await showUpdateAvailableToast(
+        reloadCurrentLocationWithUpdateCacheBust,
+        nextBuildAssetSignature,
+      )
     }
   } catch (error) {
     log.warn('App update check failed:', error)
