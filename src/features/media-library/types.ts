@@ -70,10 +70,11 @@ export interface MediaLibraryState {
   /** Grid item size (1 = largest / fewer columns, 5 = smallest / more columns) */
   mediaItemSize: number
 
-  // Broken media tracking (lazy detection)
+  // Broken media tracking (lazy/proactive detection)
   brokenMediaIds: string[]
   brokenMediaInfo: Map<string, BrokenMediaInfo>
   showMissingMediaDialog: boolean
+  isScanningMediaHealth: boolean
 
   // Orphaned clips tracking (clips referencing deleted media)
   orphanedClips: OrphanedClipInfo[]
@@ -167,6 +168,7 @@ export interface MediaLibraryActions {
   // Broken media / Relinking
   markMediaBroken: (id: string, info: BrokenMediaInfo) => void
   markMediaHealthy: (id: string) => void
+  scanMediaHealth: () => Promise<void>
   relinkMedia: (mediaId: string, newHandle: FileSystemFileHandle) => Promise<boolean>
   relinkMediaBatch: (
     relinks: Array<{ mediaId: string; handle: FileSystemFileHandle }>,

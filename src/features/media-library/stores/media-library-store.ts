@@ -16,7 +16,8 @@ import { createImportActions } from './media-import-actions'
 import { createDeleteActions } from './media-delete-actions'
 import { createRelinkingActions } from './media-relinking-actions'
 import { useMediaPreparationStore } from './media-preparation-store'
-import { getTranscriptMediaIds } from '@/infrastructure/storage'
+import { getTranscriptMediaIds, validateMediaHandle } from '@/infrastructure/storage'
+import { scanWorkspaceMediaHealth } from '../utils/workspace-health'
 import { mergeTranscriptionProgress } from '@/shared/utils/transcription-progress'
 
 const logger = createLogger('MediaLibraryStore')
@@ -112,10 +113,11 @@ const newStore: MediaLibraryStoreApi =
         viewMode: 'grid',
         mediaItemSize: 1,
 
-        // Broken media tracking (lazy detection)
+        // Broken media tracking (lazy/proactive detection)
         brokenMediaIds: [],
         brokenMediaInfo: new Map<string, BrokenMediaInfo>(),
         showMissingMediaDialog: false,
+        isScanningMediaHealth: false,
 
         // Orphaned clips tracking (clips referencing deleted media)
         orphanedClips: [],
@@ -159,6 +161,7 @@ const newStore: MediaLibraryStoreApi =
             transcriptProgress: new Map(),
             taggingMediaIds: new Set(),
             analysisProgress: null,
+            isScanningMediaHealth: false,
           })
           useMediaPreparationStore.getState().clearAll()
           // Note: loadMediaItems is triggered by the component's useEffect
@@ -193,6 +196,7 @@ const newStore: MediaLibraryStoreApi =
             })
 
             event.set('mediaCount', mediaItems.length)
+            void get().scanMediaHealth()
 
             const transcriptStatus = await loadTranscriptStatusMap(mediaItems)
             set({
@@ -225,6 +229,35 @@ const newStore: MediaLibraryStoreApi =
         ...createImportActions(set, get),
         ...createDeleteActions(set, get),
         ...createRelinkingActions(set, get),
+
+        scanMediaHealth: async () => {
+          const { currentProjectId, mediaItems } = get()
+          if (!currentProjectId || mediaItems.length === 0) {
+            set({ isScanningMediaHealth: false })
+            return
+          }
+
+          set({ isScanningMediaHealth: true })
+          try {
+            const summary = await scanWorkspaceMediaHealth(mediaItems, validateMediaHandle)
+            if (get().currentProjectId !== currentProjectId) {
+              return
+            }
+
+            for (const mediaId of summary.healthyIds) {
+              get().markMediaHealthy(mediaId)
+            }
+            for (const brokenInfo of summary.broken) {
+              get().markMediaBroken(brokenInfo.mediaId, brokenInfo)
+            }
+          } catch (error) {
+            logger.warn('[MediaLibraryStore] Workspace health scan failed:', error)
+          } finally {
+            if (get().currentProjectId === currentProjectId) {
+              set({ isScanningMediaHealth: false })
+            }
+          }
+        },
 
         prependMediaItem: (media) => {
           set((state) => ({ mediaItems: [media, ...state.mediaItems] }))

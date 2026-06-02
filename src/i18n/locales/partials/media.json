@@ -163,6 +163,8 @@
         "transcriptGenerationProgress": "Transcript Generation Progress",
         "url": "URL",
         "viewMissingMedia": "View Missing Media",
+        "checkingWorkspaceHealth": "Checking workspace media health",
+        "checkingWorkspaceHealthShort": "Checking",
         "allShort": "ALL",
         "typeShort": {
           "video": "VIDEO",
@@ -432,6 +434,8 @@
         "transcriptGenerationProgress": "Progreso de la transcripción",
         "url": "URL",
         "viewMissingMedia": "Ver medios faltantes",
+        "checkingWorkspaceHealth": "Comprobando salud de medios del espacio de trabajo",
+        "checkingWorkspaceHealthShort": "Comprobando",
         "allShort": "TODO",
         "typeShort": {
           "video": "VIDEO",
@@ -701,6 +705,8 @@
         "transcriptGenerationProgress": "Progression de la transcription",
         "url": "URL",
         "viewMissingMedia": "Voir les médias manquants",
+        "checkingWorkspaceHealth": "Vérification de l’état des médias de l’espace de travail",
+        "checkingWorkspaceHealthShort": "Vérification",
         "allShort": "TOUT",
         "typeShort": {
           "video": "VIDEO",
@@ -970,6 +976,8 @@
         "transcriptGenerationProgress": "Transkript-Fortschritt",
         "url": "URL",
         "viewMissingMedia": "Fehlende Medien anzeigen",
+        "checkingWorkspaceHealth": "Arbeitsbereich-Medienzustand wird geprüft",
+        "checkingWorkspaceHealthShort": "Prüfen",
         "allShort": "ALLE",
         "typeShort": {
           "video": "VIDEO",
@@ -1239,6 +1247,8 @@
         "transcriptGenerationProgress": "Progresso da geracao de transcricoes",
         "url": "URL",
         "viewMissingMedia": "Ver mídia ausente",
+        "checkingWorkspaceHealth": "Verificando integridade da mídia do espaço de trabalho",
+        "checkingWorkspaceHealthShort": "Verificando",
         "allShort": "TODOS",
         "typeShort": {
           "video": "VIDEO",
@@ -1508,6 +1518,8 @@
         "transcriptGenerationProgress": "Transkript oluşturma ilerlemesi",
         "url": "URL",
         "viewMissingMedia": "Eksik medyayı görüntüle",
+        "checkingWorkspaceHealth": "Çalışma alanı medya sağlığı kontrol ediliyor",
+        "checkingWorkspaceHealthShort": "Kontrol ediliyor",
         "allShort": "TÜMÜ",
         "typeShort": {
           "video": "VİDEO",
@@ -1777,6 +1789,8 @@
         "transcriptGenerationProgress": "文字起こしの進行状況",
         "url": "URL",
         "viewMissingMedia": "見つからないメディアを表示",
+        "checkingWorkspaceHealth": "ワークスペースのメディア状態を確認中",
+        "checkingWorkspaceHealthShort": "確認中",
         "allShort": "すべて",
         "typeShort": {
           "video": "ビデオ",
@@ -2046,6 +2060,8 @@
         "transcriptGenerationProgress": "전사 진행률",
         "url": "URL",
         "viewMissingMedia": "누락된 미디어 보기",
+        "checkingWorkspaceHealth": "작업 공간 미디어 상태 확인 중",
+        "checkingWorkspaceHealthShort": "확인 중",
         "allShort": "전체",
         "typeShort": {
           "video": "비디오",
@@ -2315,6 +2331,8 @@
         "transcriptGenerationProgress": "字幕生成进度",
         "url": "URL",
         "viewMissingMedia": "查看缺失媒体",
+        "checkingWorkspaceHealth": "正在检查工作区媒体状态",
+        "checkingWorkspaceHealthShort": "正在检查",
         "allShort": "全部",
         "typeShort": {
           "video": "视频",

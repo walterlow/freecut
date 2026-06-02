@@ -274,6 +274,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const notification = useMediaLibraryStore((s) => s.notification)
   const clearNotification = useMediaLibraryStore((s) => s.clearNotification)
   const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds)
+  const isScanningMediaHealth = useMediaLibraryStore((s) => s.isScanningMediaHealth)
   const openMissingMediaDialog = useMediaLibraryStore((s) => s.openMissingMediaDialog)
   const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null)
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus)
@@ -1042,6 +1043,22 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 </span>
               </button>
             </HeaderActionTooltip>
+
+            {/* Workspace health scan indicator */}
+            {isScanningMediaHealth && (
+              <HeaderActionTooltip label={t('media.library.checkingWorkspaceHealth')}>
+                <div
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                    bg-secondary border-border text-muted-foreground"
+                  aria-live="polite"
+                >
+                  <ScanSearch className="w-3.5 h-3.5 animate-pulse" />
+                  <span className={headerCompactLevel >= 3 ? 'hidden' : 'hidden @[380px]:inline'}>
+                    {t('media.library.checkingWorkspaceHealthShort')}
+                  </span>
+                </div>
+              </HeaderActionTooltip>
+            )}
 
             {/* Missing media indicator */}
             {currentProjectBrokenMediaIds.length > 0 && (
