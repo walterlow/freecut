@@ -214,6 +214,32 @@ describe('createRelinkingActions', () => {
     })
   })
 
+  describe('dismissMissingMediaWarnings', () => {
+    it('snoozes dialog warnings without marking broken media healthy', () => {
+      let currentState: RelinkingState = {
+        brokenMediaIds: ['media-1', 'media-2'],
+        brokenMediaInfo: new Map([
+          ['media-1', { mediaId: 'media-1', fileName: 'a.mp4', errorType: 'file_missing' }],
+          ['media-2', { mediaId: 'media-2', fileName: 'b.mp4', errorType: 'file_missing' }],
+        ]),
+        dismissedMissingMediaIds: [],
+        showMissingMediaDialog: true,
+      }
+      const set = vi.fn((updater: RelinkingUpdater) => {
+        currentState = applyStateUpdate(currentState, updater)
+      })
+      const get = vi.fn(() => currentState as MediaLibraryState & MediaLibraryActions)
+
+      const actions = createRelinkingActions(set, get)
+      actions.dismissMissingMediaWarnings(['media-1', 'media-2'])
+
+      expect(currentState.brokenMediaIds).toEqual(['media-1', 'media-2'])
+      expect(currentState.brokenMediaInfo!.has('media-1')).toBe(true)
+      expect(currentState.dismissedMissingMediaIds).toEqual(['media-1', 'media-2'])
+      expect(currentState.showMissingMediaDialog).toBe(false)
+    })
+  })
+
   describe('relinkMedia', () => {
     it('invalidates blob URL cache on successful relink', async () => {
       const updatedMedia = { id: 'media-1', fileName: 'relocated.mp4' }

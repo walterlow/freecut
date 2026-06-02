@@ -29,6 +29,7 @@ export function MissingMediaDialog() {
   const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia)
   const relinkMediaBatch = useMediaLibraryStore((s) => s.relinkMediaBatch)
   const markMediaHealthy = useMediaLibraryStore((s) => s.markMediaHealthy)
+  const dismissMissingMediaWarnings = useMediaLibraryStore((s) => s.dismissMissingMediaWarnings)
 
   // Project folder for smart relinking
   const currentProject = useProjectStore((s) => s.currentProject)
@@ -190,10 +191,10 @@ export function MissingMediaDialog() {
   }
 
   const handleDismissAll = () => {
-    // Mark all broken media as healthy (dismiss without relinking)
-    brokenItems.forEach((item) => markMediaHealthy(item.mediaId))
+    // Dismiss the warning only. The media remains broken so export preflight and
+    // health summaries still protect the project until the files are actually relinked.
+    dismissMissingMediaWarnings(brokenItems.map((item) => item.mediaId))
     setRelinkedIds(new Set())
-    closeDialog()
   }
 
   const handleClose = useCallback(() => {

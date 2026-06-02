@@ -73,6 +73,8 @@ export interface MediaLibraryState {
   // Broken media tracking (lazy/proactive detection)
   brokenMediaIds: string[]
   brokenMediaInfo: Map<string, BrokenMediaInfo>
+  /** Missing media IDs whose warning dialog was dismissed without confirming health. */
+  dismissedMissingMediaIds: string[]
   showMissingMediaDialog: boolean
   isScanningMediaHealth: boolean
 
@@ -168,6 +170,7 @@ export interface MediaLibraryActions {
   // Broken media / Relinking
   markMediaBroken: (id: string, info: BrokenMediaInfo) => void
   markMediaHealthy: (id: string) => void
+  dismissMissingMediaWarnings: (ids: string[]) => void
   scanMediaHealth: () => Promise<void>
   relinkMedia: (mediaId: string, newHandle: FileSystemFileHandle) => Promise<boolean>
   relinkMediaBatch: (

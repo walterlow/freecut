@@ -112,6 +112,7 @@ export function createRelinkingActions(
   MediaLibraryActions,
   | 'markMediaBroken'
   | 'markMediaHealthy'
+  | 'dismissMissingMediaWarnings'
   | 'relinkMedia'
   | 'relinkMediaBatch'
   | 'openMissingMediaDialog'
@@ -146,8 +147,20 @@ export function createRelinkingActions(
         return {
           brokenMediaIds: state.brokenMediaIds.filter((bid) => bid !== id),
           brokenMediaInfo: newInfo,
+          dismissedMissingMediaIds: (state.dismissedMissingMediaIds ?? []).filter(
+            (bid) => bid !== id,
+          ),
         }
       })
+    },
+
+    dismissMissingMediaWarnings: (ids: string[]) => {
+      set((state) => ({
+        dismissedMissingMediaIds: Array.from(
+          new Set([...(state.dismissedMissingMediaIds ?? []), ...ids]),
+        ),
+        showMissingMediaDialog: false,
+      }))
     },
 
     relinkMedia: async (mediaId: string, newHandle: FileSystemFileHandle) => {

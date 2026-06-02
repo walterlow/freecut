@@ -116,6 +116,7 @@ const newStore: MediaLibraryStoreApi =
         // Broken media tracking (lazy/proactive detection)
         brokenMediaIds: [],
         brokenMediaInfo: new Map<string, BrokenMediaInfo>(),
+        dismissedMissingMediaIds: [],
         showMissingMediaDialog: false,
         isScanningMediaHealth: false,
 
@@ -161,6 +162,7 @@ const newStore: MediaLibraryStoreApi =
             transcriptProgress: new Map(),
             taggingMediaIds: new Set(),
             analysisProgress: null,
+            dismissedMissingMediaIds: [],
             isScanningMediaHealth: false,
           })
           useMediaPreparationStore.getState().clearAll()
