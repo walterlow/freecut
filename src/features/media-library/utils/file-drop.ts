@@ -17,6 +17,17 @@ export function supportsFileSystemDragDrop(dataTransfer: DataTransfer): boolean 
   return !!firstItem && 'getAsFileSystemHandle' in firstItem
 }
 
+export function formatMediaDropRejectionMessage(errors: string[]): string {
+  const count = errors.length
+  if (count === 0) return ''
+
+  const examples = errors.slice(0, 3).join('; ')
+  const overflow = count > 3 ? `; and ${count - 3} more` : ''
+  const subject =
+    count === 1 ? '1 dropped item was rejected' : `${count} dropped items were rejected`
+  return `${subject}: ${examples}${overflow}.`
+}
+
 export async function extractValidMediaFileEntriesFromDataTransfer(
   dataTransfer: DataTransfer,
 ): Promise<ExtractedMediaFileDropResult> {
@@ -41,7 +52,13 @@ export async function extractValidMediaFileEntriesFromDataTransfer(
   const errors: string[] = []
 
   for (const handle of rawHandles) {
-    if (handle?.kind !== 'file') {
+    if (!handle) {
+      continue
+    }
+
+    if (handle.kind !== 'file') {
+      const name = 'name' in handle ? handle.name : 'Dropped folder'
+      errors.push(`${name}: folders are not supported yet. Drop media files directly.`)
       continue
     }
 

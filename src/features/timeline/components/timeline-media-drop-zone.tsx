@@ -926,14 +926,19 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
 
           if (data.type === 'composition') {
             const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId
+            if (zone !== 'video') {
+              toast.error(t('timeline.track.compositionDropWrongZone'))
+              return
+            }
+
             if (
-              zone !== 'video' ||
               wouldCreateCompositionCycle({
                 parentCompositionId: activeCompositionId,
                 insertedCompositionId: data.compositionId,
                 compositionById: useCompositionsStore.getState().compositionById,
               })
             ) {
+              toast.error(t('timeline.track.compositionDropCycle'))
               return
             }
 
@@ -995,6 +1000,11 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
           }
 
           if (isTimelineTemplateDragData(data)) {
+            if (zone !== 'video') {
+              toast.error(t('timeline.track.templateVideoOnly'))
+              return
+            }
+
             const templateDrop = buildTimelineTemplateItem(data, dropFrame)
             if (!templateDrop) {
               toast.error(t('timeline.track.unableToAddDroppedItem'))
@@ -1012,6 +1022,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
           const entries = resolveDroppedMediaEntriesFromPayload(data, getMedia, logger)
 
           if (entries.length === 0) {
+            toast.error(t('timeline.track.noSupportedMediaInDrop'))
             return
           }
 

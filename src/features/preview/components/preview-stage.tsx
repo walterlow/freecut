@@ -112,6 +112,7 @@ export const PreviewStage = memo(function PreviewStage({
     pixelSnapOffset.x !== 0 || pixelSnapOffset.y !== 0
       ? `translate3d(${pixelSnapOffset.x}px, ${pixelSnapOffset.y}px, 0)`
       : undefined
+  const isTimelineEmpty = inputProps.tracks.every((track) => track.items.length === 0)
 
   return (
     <div
@@ -160,6 +161,15 @@ export const PreviewStage = memo(function PreviewStage({
               {isResolving && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
                   <p className="text-white text-sm">{t('preview.stage.loadingMedia')}</p>
+                </div>
+              )}
+
+              {!isResolving && isTimelineEmpty && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/35 px-6 text-center pointer-events-none">
+                  <div className="max-w-sm rounded-xl border border-white/10 bg-black/50 px-5 py-4 text-white shadow-xl backdrop-blur-sm">
+                    <p className="text-sm font-semibold mb-1">{t('preview.stage.emptyTitle')}</p>
+                    <p className="text-xs text-white/75">{t('preview.stage.emptyDescription')}</p>
+                  </div>
                 </div>
               )}
 

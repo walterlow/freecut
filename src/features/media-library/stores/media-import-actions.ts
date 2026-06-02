@@ -192,26 +192,90 @@ function processImportResults(
   return { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount }
 }
 
-function showImportNotifications(
-  duplicateNames: string[],
-  unsupportedCodecFiles: UnsupportedCodecFile[],
-  get: Get,
-): void {
+function pluralFile(count: number): string {
+  return count === 1 ? 'file' : 'files'
+}
+
+function formatNameList(names: string[]): string {
+  if (names.length === 0) return ''
+  if (names.length <= 3) return names.join(', ')
+  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+}
+
+function buildImportSummaryMessage({
+  importedCount,
+  duplicateNames,
+  unsupportedCodecFiles,
+  failedCount,
+}: {
+  importedCount: number
+  duplicateNames: string[]
+  unsupportedCodecFiles: UnsupportedCodecFile[]
+  failedCount: number
+}): string | null {
+  const hasProblems =
+    duplicateNames.length > 0 || unsupportedCodecFiles.length > 0 || failedCount > 0
+  if (!hasProblems) return null
+
+  const parts: string[] = []
+
+  // Keep clean imports quiet, but include the successful count when the user
+  // also needs to know what was skipped or failed.
+  if (importedCount > 0) {
+    parts.push(`Imported ${importedCount} ${pluralFile(importedCount)}.`)
+  }
+
   if (duplicateNames.length > 0) {
-    const message =
-      duplicateNames.length === 1
-        ? `"${duplicateNames[0]}" already exists in library`
-        : `${duplicateNames.length} files already exist in library`
-    get().showNotification({ type: 'info', message })
+    if (importedCount === 0 && unsupportedCodecFiles.length === 0 && failedCount === 0) {
+      parts.push(
+        duplicateNames.length === 1
+          ? `"${duplicateNames[0]}" already exists in library`
+          : `${duplicateNames.length} files already exist in library`,
+      )
+    } else if (duplicateNames.length === 1) {
+      parts.push(`Skipped 1 duplicate: ${duplicateNames[0]}.`)
+    } else {
+      parts.push(`Skipped ${duplicateNames.length} duplicates: ${formatNameList(duplicateNames)}.`)
+    }
   }
 
   if (unsupportedCodecFiles.length > 0) {
     const codecList = [...new Set(unsupportedCodecFiles.map((f) => f.audioCodec))].join(', ')
-    get().showNotification({
-      type: 'warning',
-      message: `${unsupportedCodecFiles.length} file(s) have unsupported audio codec (${codecList}). Waveforms may not be available.`,
-    })
+    parts.push(
+      `${unsupportedCodecFiles.length} ${pluralFile(
+        unsupportedCodecFiles.length,
+      )} ${unsupportedCodecFiles.length === 1 ? 'has' : 'have'} unsupported audio codec (${codecList}). Waveforms may not be available.`,
+    )
   }
+
+  if (failedCount > 0) {
+    parts.push(
+      failedCount === 1
+        ? '1 file failed to import. Check the file and try again.'
+        : `${failedCount} files failed to import. Check the files and try again.`,
+    )
+  }
+
+  return parts.length > 0 ? parts.join(' ') : null
+}
+
+function showImportNotifications(
+  importedCount: number,
+  duplicateNames: string[],
+  unsupportedCodecFiles: UnsupportedCodecFile[],
+  failedCount: number,
+  get: Get,
+): void {
+  const message = buildImportSummaryMessage({
+    importedCount,
+    duplicateNames,
+    unsupportedCodecFiles,
+    failedCount,
+  })
+  if (!message) return
+
+  const type = failedCount > 0 || unsupportedCodecFiles.length > 0 ? 'warning' : 'info'
+  get().showNotification({ type, message })
 }
 
 export function createImportActions(
@@ -316,7 +380,7 @@ export function createImportActions(
     const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
       processImportResults(importResults, importTasks, set, options)
 
-    showImportNotifications(duplicateNames, unsupportedCodecFiles, get)
+    showImportNotifications(importedCount, duplicateNames, unsupportedCodecFiles, failedCount, get)
 
     if (options?.waitForPreparation && results.length > 0) {
       const { mediaLibraryService } = await serviceModulePromise
@@ -377,7 +441,13 @@ export function createImportActions(
         const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
           processImportResults(importResults, importTasks, set)
 
-        showImportNotifications(duplicateNames, unsupportedCodecFiles, get)
+        showImportNotifications(
+          importedCount,
+          duplicateNames,
+          unsupportedCodecFiles,
+          failedCount,
+          get,
+        )
 
         event.success({
           imported: importedCount,
@@ -438,7 +508,7 @@ export function createImportActions(
         const metadata = await mediaLibraryService.importMediaFromUrl(trimmedUrl, currentProjectId)
 
         if (metadata.isDuplicate) {
-          showImportNotifications([metadata.fileName], [], get)
+          showImportNotifications(0, [metadata.fileName], [], 0, get)
           event.success({
             imported: 0,
             duplicates: 1,
@@ -455,7 +525,7 @@ export function createImportActions(
           metadata.hasUnsupportedCodec && metadata.audioCodec
             ? [{ fileName: metadata.fileName, audioCodec: metadata.audioCodec }]
             : []
-        showImportNotifications([], unsupportedCodecFiles, get)
+        showImportNotifications(1, [], unsupportedCodecFiles, 0, get)
 
         event.success({
           imported: 1,

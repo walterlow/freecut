@@ -20,6 +20,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   ensureKnownWorkspaceForCurrent,
   getWorkspaceHandleRecord,
@@ -53,6 +54,8 @@ type GateStatus =
 
 export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<GateStatus>({ kind: 'initializing' })
+  const [error, setError] = useState<string | null>(null)
+  const { t } = useTranslation()
   const pathname = usePathname()
   const needsWorkspace = isStorageProtectedPath(pathname)
 
@@ -124,6 +127,7 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   }, [])
 
   const handlePick = useCallback(async () => {
+    setError(null)
     try {
       const handle = await window.showDirectoryPicker({
         id: 'freecut-workspace',
@@ -134,6 +138,7 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
       const finalState =
         queryState === 'granted' ? queryState : await requestHandlePermission(handle)
       if (finalState !== 'granted') {
+        setError(t('projects.workspaceGate.folderPermissionDenied'))
         setStatus({ kind: 'reconnect', handleName: handle.name })
         return
       }
@@ -145,10 +150,12 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
         return
       }
       logger.error('Folder pick failed', error)
+      setError(t('projects.workspaceGate.folderPickFailed'))
     }
-  }, [activate])
+  }, [activate, t])
 
   const handleReconnect = useCallback(async () => {
+    setError(null)
     const record = await getWorkspaceHandleRecord()
     if (!record) {
       setStatus({ kind: 'pick' })
@@ -158,8 +165,10 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
     const permission = await requestHandlePermission(handle)
     if (permission === 'granted') {
       await activate(handle)
+      return
     }
-  }, [activate])
+    setError(t('projects.workspaceGate.reconnectPermissionDenied'))
+  }, [activate, t])
 
   // Routes that don't touch storage never wait on the gate — no splash, no
   // flash, even on first load while we're checking handles-db.
@@ -179,6 +188,11 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <WorkspaceGateSplash status={status} onPickFolder={handlePick} onReconnect={handleReconnect} />
+    <WorkspaceGateSplash
+      status={status}
+      error={error}
+      onPickFolder={handlePick}
+      onReconnect={handleReconnect}
+    />
   )
 }

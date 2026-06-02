@@ -80,7 +80,9 @@
         "emptyHint": "Drop files here or click Import to add media.",
         "emptyTitle": "No media yet",
         "loadingSubtitle": "Loading Subtitle",
-        "loadingTitle": "Loading media…"
+        "loadingTitle": "Loading media…",
+        "importButton": "Import media",
+        "folderDropUnsupported": "Folders are not supported yet. Drop media files directly."
       },
       "info": {
         "codec": "Codec",
@@ -189,7 +191,9 @@
           "import": "Import",
           "filmstrip": "Filmstrip",
           "waveform": "Waveform"
-        }
+        },
+        "importFailed_one": "{{count}} file failed to import. Check the file and try again.",
+        "importFailed_other": "{{count}} files failed to import. Check the files and try again."
       },
       "missingMedia": {
         "title": "Missing Media",
@@ -345,7 +349,9 @@
         "emptyHint": "Suelta archivos aquí o haz clic en Importar para añadir medios.",
         "emptyTitle": "Aún no hay medios",
         "loadingSubtitle": "Preparando tus medios…",
-        "loadingTitle": "Cargando medios…"
+        "loadingTitle": "Cargando medios…",
+        "importButton": "Importar medios",
+        "folderDropUnsupported": "Las carpetas aún no son compatibles. Suelta archivos multimedia directamente."
       },
       "info": {
         "codec": "Códec",
@@ -454,7 +460,9 @@
           "import": "Importación",
           "filmstrip": "Tira de fotogramas",
           "waveform": "Forma de onda"
-        }
+        },
+        "importFailed_one": "{{count}} archivo no se pudo importar. Revisa el archivo e inténtalo de nuevo.",
+        "importFailed_other": "{{count}} archivos no se pudieron importar. Revisa los archivos e inténtalo de nuevo."
       },
       "missingMedia": {
         "title": "Medios faltantes",
@@ -610,7 +618,9 @@
         "emptyHint": "Déposez des fichiers ici ou cliquez sur Importer pour ajouter des médias.",
         "emptyTitle": "Aucun média pour l'instant",
         "loadingSubtitle": "Préparation de vos médias…",
-        "loadingTitle": "Chargement des médias…"
+        "loadingTitle": "Chargement des médias…",
+        "importButton": "Importer des médias",
+        "folderDropUnsupported": "Les dossiers ne sont pas encore pris en charge. Déposez directement les fichiers multimédias."
       },
       "info": {
         "codec": "Codec",
@@ -719,7 +729,9 @@
           "import": "Importation",
           "filmstrip": "Bande d’images",
           "waveform": "Forme d’onde"
-        }
+        },
+        "importFailed_one": "{{count}} fichier n’a pas pu être importé. Vérifiez le fichier et réessayez.",
+        "importFailed_other": "{{count}} fichiers n’ont pas pu être importés. Vérifiez les fichiers et réessayez."
       },
       "missingMedia": {
         "title": "Médias manquants",
@@ -875,7 +887,9 @@
         "emptyHint": "Dateien hier ablegen oder auf Importieren klicken, um Medien hinzuzufügen.",
         "emptyTitle": "Noch keine Medien",
         "loadingSubtitle": "Medien werden vorbereitet…",
-        "loadingTitle": "Medien werden geladen…"
+        "loadingTitle": "Medien werden geladen…",
+        "importButton": "Medien importieren",
+        "folderDropUnsupported": "Ordner werden noch nicht unterstützt. Lege Mediendateien direkt ab."
       },
       "info": {
         "codec": "Codec",
@@ -984,7 +998,9 @@
           "import": "Import",
           "filmstrip": "Filmstreifen",
           "waveform": "Wellenform"
-        }
+        },
+        "importFailed_one": "{{count}} Datei konnte nicht importiert werden. Prüfe die Datei und versuche es erneut.",
+        "importFailed_other": "{{count}} Dateien konnten nicht importiert werden. Prüfe die Dateien und versuche es erneut."
       },
       "missingMedia": {
         "title": "Fehlende Medien",
@@ -1140,7 +1156,9 @@
         "emptyHint": "Solte arquivos aqui ou clique em Importar para adicionar mídia.",
         "emptyTitle": "Ainda sem mídia",
         "loadingSubtitle": "Carregando subtitulo",
-        "loadingTitle": "Carregando mídia…"
+        "loadingTitle": "Carregando mídia…",
+        "importButton": "Importar mídia",
+        "folderDropUnsupported": "Pastas ainda não são compatíveis. Solte arquivos de mídia diretamente."
       },
       "info": {
         "codec": "Codificador",
@@ -1249,7 +1267,9 @@
           "import": "Importação",
           "filmstrip": "Tira de quadros",
           "waveform": "Forma de onda"
-        }
+        },
+        "importFailed_one": "Falha ao importar {{count}} arquivo. Verifique o arquivo e tente novamente.",
+        "importFailed_other": "Falha ao importar {{count}} arquivos. Verifique os arquivos e tente novamente."
       },
       "missingMedia": {
         "title": "Mídia ausente",
@@ -1405,7 +1425,9 @@
         "emptyHint": "Dosyaları buraya bırakın veya İçe Aktar'a tıklayın.",
         "emptyTitle": "Henüz medya yok",
         "loadingSubtitle": "Medya kitaplığı hazırlanıyor.",
-        "loadingTitle": "Medya yükleniyor…"
+        "loadingTitle": "Medya yükleniyor…",
+        "importButton": "Medya içe aktar",
+        "folderDropUnsupported": "Klasörler henüz desteklenmiyor. Medya dosyalarını doğrudan bırakın."
       },
       "info": {
         "codec": "Kodek",
@@ -1514,7 +1536,9 @@
           "import": "İçe aktarma",
           "filmstrip": "Film şeridi",
           "waveform": "Dalga biçimi"
-        }
+        },
+        "importFailed_one": "{{count}} dosya içe aktarılamadı. Dosyayı kontrol edip tekrar deneyin.",
+        "importFailed_other": "{{count}} dosya içe aktarılamadı. Dosyaları kontrol edip tekrar deneyin."
       },
       "missingMedia": {
         "title": "Eksik medya",
@@ -1670,7 +1694,9 @@
         "emptyHint": "ここにファイルをドロップするか、インポートをクリックします。",
         "emptyTitle": "メディアはまだありません",
         "loadingSubtitle": "メディアを準備中…",
-        "loadingTitle": "メディアを読み込み中…"
+        "loadingTitle": "メディアを読み込み中…",
+        "importButton": "メディアをインポート",
+        "folderDropUnsupported": "フォルダーはまだサポートされていません。メディアファイルを直接ドロップしてください。"
       },
       "info": {
         "codec": "コーデック",
@@ -1779,7 +1805,9 @@
           "import": "インポート",
           "filmstrip": "フィルムストリップ",
           "waveform": "波形"
-        }
+        },
+        "importFailed_one": "{{count}} 個のファイルをインポートできませんでした。ファイルを確認してもう一度お試しください。",
+        "importFailed_other": "{{count}} 個のファイルをインポートできませんでした。ファイルを確認してもう一度お試しください。"
       },
       "missingMedia": {
         "title": "メディアが見つかりません",
@@ -1935,7 +1963,9 @@
         "emptyHint": "파일을 끌어다 놓거나 가져오기를 클릭하세요.",
         "emptyTitle": "아직 미디어가 없습니다",
         "loadingSubtitle": "미디어를 준비하는 중…",
-        "loadingTitle": "미디어를 불러오는 중…"
+        "loadingTitle": "미디어를 불러오는 중…",
+        "importButton": "미디어 가져오기",
+        "folderDropUnsupported": "폴더는 아직 지원되지 않습니다. 미디어 파일을 직접 놓으세요."
       },
       "info": {
         "codec": "코덱",
@@ -2044,7 +2074,9 @@
           "import": "가져오기",
           "filmstrip": "필름스트립",
           "waveform": "파형"
-        }
+        },
+        "importFailed_one": "{{count}}개 파일을 가져오지 못했습니다. 파일을 확인하고 다시 시도하세요.",
+        "importFailed_other": "{{count}}개 파일을 가져오지 못했습니다. 파일을 확인하고 다시 시도하세요."
       },
       "missingMedia": {
         "title": "누락된 미디어",
@@ -2200,7 +2232,9 @@
         "emptyHint": "将文件拖到此处，或点击导入添加媒体。",
         "emptyTitle": "暂无媒体",
         "loadingSubtitle": "正在准备媒体…",
-        "loadingTitle": "正在加载媒体…"
+        "loadingTitle": "正在加载媒体…",
+        "importButton": "导入媒体",
+        "folderDropUnsupported": "尚不支持文件夹。请直接拖放媒体文件。"
       },
       "info": {
         "codec": "编解码器",
@@ -2309,7 +2343,9 @@
           "import": "导入",
           "filmstrip": "缩略图条",
           "waveform": "波形"
-        }
+        },
+        "importFailed_one": "{{count}} 个文件导入失败。请检查文件后重试。",
+        "importFailed_other": "{{count}} 个文件导入失败。请检查文件后重试。"
       },
       "missingMedia": {
         "title": "缺失媒体",

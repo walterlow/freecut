@@ -9,6 +9,19 @@ export const MEDIA_FILE_PICKER_TYPES = [
   },
 ] satisfies FilePickerAcceptType[]
 
+const FORMAT_LABEL_OVERRIDES: Record<string, string> = {
+  webm: 'WebM',
+  webp: 'WebP',
+}
+
+export function getSupportedMediaFormatLabels(): string[] {
+  const extensions = Object.values(MEDIA_FILE_PICKER_TYPES[0]?.accept ?? {}).flat()
+  return extensions.map((extension) => {
+    const normalized = extension.replace(/^\./, '')
+    return FORMAT_LABEL_OVERRIDES[normalized] ?? normalized.toUpperCase()
+  })
+}
+
 export function hasMediaFilePickerSupport(): boolean {
   return typeof window !== 'undefined' && 'showOpenFilePicker' in window
 }

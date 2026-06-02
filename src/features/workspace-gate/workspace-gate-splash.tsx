@@ -1,5 +1,5 @@
 import { Trans, useTranslation } from 'react-i18next'
-import { FolderOpen, FolderX, Loader2, RefreshCw } from 'lucide-react'
+import { FolderOpen, FolderX, Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FreeCutLogo } from '@/components/brand/freecut-logo'
 
@@ -11,16 +11,24 @@ type Status =
 
 interface Props {
   status: Status
+  error?: string | null
   onPickFolder: () => void
   onReconnect: () => void
 }
 
-export function WorkspaceGateSplash({ status, onPickFolder, onReconnect }: Props) {
+export function WorkspaceGateSplash({ status, error, onPickFolder, onReconnect }: Props) {
   const { t } = useTranslation()
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="max-w-lg w-full text-center">
         <FreeCutLogo variant="full" size="lg" className="justify-center mb-8" />
+
+        {error && (
+          <div className="mb-5 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-left text-sm text-destructive flex gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         {status.kind === 'initializing' && (
           <div className="flex items-center justify-center gap-2 text-muted-foreground">

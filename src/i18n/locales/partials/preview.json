@@ -54,7 +54,9 @@
       },
       "stage": {
         "loadingMedia": "Loading Media",
-        "videoPreview": "Video Preview"
+        "videoPreview": "Video Preview",
+        "emptyTitle": "Nothing on the timeline yet",
+        "emptyDescription": "Import media, drag a clip to the timeline, then press Space to preview."
       },
       "zoom": {
         "ariaLabel": "ARIA Label",
@@ -142,7 +144,9 @@
       },
       "stage": {
         "loadingMedia": "Cargando medios…",
-        "videoPreview": "Previsualización de vídeo"
+        "videoPreview": "Previsualización de vídeo",
+        "emptyTitle": "Aún no hay nada en la línea de tiempo",
+        "emptyDescription": "Importa medios, arrastra un clip a la línea de tiempo y pulsa Espacio para previsualizar."
       },
       "zoom": {
         "ariaLabel": "Nivel de zoom: {{label}}",
@@ -230,7 +234,9 @@
       },
       "stage": {
         "loadingMedia": "Chargement des médias…",
-        "videoPreview": "Prévisualisation vidéo"
+        "videoPreview": "Prévisualisation vidéo",
+        "emptyTitle": "Rien sur la timeline pour l’instant",
+        "emptyDescription": "Importez des médias, faites glisser un clip sur la timeline, puis appuyez sur Espace pour prévisualiser."
       },
       "zoom": {
         "ariaLabel": "Niveau de zoom : {{label}}",
@@ -318,7 +324,9 @@
       },
       "stage": {
         "loadingMedia": "Medien werden geladen…",
-        "videoPreview": "Videovorschau"
+        "videoPreview": "Videovorschau",
+        "emptyTitle": "Noch nichts in der Timeline",
+        "emptyDescription": "Importiere Medien, ziehe einen Clip in die Timeline und drücke die Leertaste für die Vorschau."
       },
       "zoom": {
         "ariaLabel": "Zoomstufe: {{label}}",
@@ -406,7 +414,9 @@
       },
       "stage": {
         "loadingMedia": "Carregando midia",
-        "videoPreview": "Pre-visualizacao de video"
+        "videoPreview": "Pre-visualizacao de video",
+        "emptyTitle": "Ainda não há nada na linha do tempo",
+        "emptyDescription": "Importe mídia, arraste um clipe para a linha do tempo e pressione Espaço para visualizar."
       },
       "zoom": {
         "ariaLabel": "Rotulo ARIA",
@@ -494,7 +504,9 @@
       },
       "stage": {
         "loadingMedia": "Medya yükleniyor",
-        "videoPreview": "Video önizlemesi"
+        "videoPreview": "Video önizlemesi",
+        "emptyTitle": "Zaman çizelgesinde henüz bir şey yok",
+        "emptyDescription": "Medya içe aktarın, bir klibi zaman çizelgesine sürükleyin, ardından önizlemek için Boşluk tuşuna basın."
       },
       "zoom": {
         "ariaLabel": "Önizleme yakınlaştırması",
@@ -582,7 +594,9 @@
       },
       "stage": {
         "loadingMedia": "メディアを読み込み中…",
-        "videoPreview": "動画プレビュー"
+        "videoPreview": "動画プレビュー",
+        "emptyTitle": "タイムラインにはまだ何もありません",
+        "emptyDescription": "メディアをインポートし、クリップをタイムラインにドラッグしてから、Space キーでプレビューします。"
       },
       "zoom": {
         "ariaLabel": "ズーム倍率: {{label}}",
@@ -670,7 +684,9 @@
       },
       "stage": {
         "loadingMedia": "미디어를 불러오는 중…",
-        "videoPreview": "동영상 미리보기"
+        "videoPreview": "동영상 미리보기",
+        "emptyTitle": "타임라인에 아직 항목이 없습니다",
+        "emptyDescription": "미디어를 가져오고 클립을 타임라인에 드래그한 다음 Space를 눌러 미리 봅니다."
       },
       "zoom": {
         "ariaLabel": "확대/축소: {{label}}",
@@ -758,7 +774,9 @@
       },
       "stage": {
         "loadingMedia": "正在加载媒体…",
-        "videoPreview": "视频预览"
+        "videoPreview": "视频预览",
+        "emptyTitle": "时间线上还没有内容",
+        "emptyDescription": "导入媒体，将片段拖到时间线，然后按空格键预览。"
       },
       "zoom": {
         "ariaLabel": "缩放级别：{{label}}",

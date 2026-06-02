@@ -7,7 +7,11 @@
         "unableToAddDroppedFiles": "Unable to add dropped files to the timeline",
         "droppedMediaItems": "dropped media items",
         "droppedFiles": "dropped files",
-        "locked": "Locked"
+        "locked": "Locked",
+        "compositionDropWrongZone": "Cannot drop a compound clip into this timeline zone.",
+        "compositionDropCycle": "Cannot drop a compound clip into itself.",
+        "templateVideoOnly": "Templates can only be dropped on video tracks.",
+        "noSupportedMediaInDrop": "No supported media found in this drop."
       },
       "addAudioTrackHint": "Add audio track",
       "addVideoTrackHint": "Add video track",
@@ -265,7 +269,9 @@
       "tracks": "Tracks",
       "volumeControl": {
         "adjustClipVolume": "Adjust clip volume"
-      }
+      },
+      "emptyTitle": "Drag media here to start editing",
+      "emptyDescription": "Drop clips on tracks, then press Space to preview."
     }
   },
   "es": {
@@ -276,7 +282,11 @@
         "unableToAddDroppedFiles": "No se pudo a Agregar soltados archivos a the timeline",
         "droppedMediaItems": "soltados Medios elementos",
         "droppedFiles": "soltados archivos",
-        "locked": "bloqueado"
+        "locked": "bloqueado",
+        "compositionDropWrongZone": "No se puede soltar un clip compuesto en esta zona de la línea de tiempo.",
+        "compositionDropCycle": "No se puede soltar un clip compuesto dentro de sí mismo.",
+        "templateVideoOnly": "Las plantillas solo se pueden soltar en pistas de vídeo.",
+        "noSupportedMediaInDrop": "No se encontraron medios compatibles en este arrastre."
       },
       "addAudioTrackHint": "Agregar Audio Pista Ayuda",
       "addVideoTrackHint": "Agregar Video Pista Ayuda",
@@ -538,7 +548,9 @@
       "tracks": "pistas",
       "volumeControl": {
         "adjustClipVolume": "Ajustar clip volumen"
-      }
+      },
+      "emptyTitle": "Arrastra medios aquí para empezar a editar",
+      "emptyDescription": "Suelta clips en las pistas y pulsa Espacio para previsualizar."
     }
   },
   "fr": {
@@ -549,7 +561,11 @@
         "unableToAddDroppedFiles": "Impossible a Ajouter deposes fichiers a the timeline",
         "droppedMediaItems": "deposes Media elements",
         "droppedFiles": "deposes fichiers",
-        "locked": "verrouille"
+        "locked": "verrouille",
+        "compositionDropWrongZone": "Impossible de déposer un clip composé dans cette zone de la timeline.",
+        "compositionDropCycle": "Impossible de déposer un clip composé dans lui-même.",
+        "templateVideoOnly": "Les modèles ne peuvent être déposés que sur des pistes vidéo.",
+        "noSupportedMediaInDrop": "Aucun média compatible trouvé dans ce dépôt."
       },
       "addAudioTrackHint": "Ajouter Audio Piste Aide",
       "addVideoTrackHint": "Ajouter Video Piste Aide",
@@ -811,7 +827,9 @@
       "tracks": "pistes",
       "volumeControl": {
         "adjustClipVolume": "Ajuster clip volume"
-      }
+      },
+      "emptyTitle": "Faites glisser des médias ici pour commencer le montage",
+      "emptyDescription": "Déposez des clips sur les pistes, puis appuyez sur Espace pour prévisualiser."
     }
   },
   "de": {
@@ -822,7 +840,11 @@
         "unableToAddDroppedFiles": "Nicht moglich zu Hinzufugen abgelegte Dateien zu the timeline",
         "droppedMediaItems": "abgelegte Medien Elemente",
         "droppedFiles": "abgelegte Dateien",
-        "locked": "gesperrt"
+        "locked": "gesperrt",
+        "compositionDropWrongZone": "Ein Compound-Clip kann nicht in dieser Timeline-Zone abgelegt werden.",
+        "compositionDropCycle": "Ein Compound-Clip kann nicht in sich selbst abgelegt werden.",
+        "templateVideoOnly": "Vorlagen können nur auf Videospuren abgelegt werden.",
+        "noSupportedMediaInDrop": "In diesem Drop wurden keine unterstützten Medien gefunden."
       },
       "addAudioTrackHint": "Hinzufugen Audio Spur Hinweis",
       "addVideoTrackHint": "Hinzufugen Video Spur Hinweis",
@@ -1084,7 +1106,9 @@
       "tracks": "Spuren",
       "volumeControl": {
         "adjustClipVolume": "Anpassen Clip Lautstarke"
-      }
+      },
+      "emptyTitle": "Ziehe Medien hierher, um mit dem Schnitt zu beginnen",
+      "emptyDescription": "Lege Clips auf Spuren ab und drücke dann die Leertaste für die Vorschau."
     }
   },
   "pt-BR": {
@@ -1095,7 +1119,11 @@
         "unableToAddDroppedFiles": "Nao foi possivel adicionar os arquivos soltos a linha do tempo",
         "droppedMediaItems": "itens de midia soltos",
         "droppedFiles": "arquivos soltos",
-        "locked": "Bloqueada"
+        "locked": "Bloqueada",
+        "compositionDropWrongZone": "Não é possível soltar um clipe composto nesta zona da linha do tempo.",
+        "compositionDropCycle": "Não é possível soltar um clipe composto dentro dele mesmo.",
+        "templateVideoOnly": "Modelos só podem ser soltos em faixas de vídeo.",
+        "noSupportedMediaInDrop": "Nenhuma mídia compatível encontrada neste drop."
       },
       "addAudioTrackHint": "Adicionar faixa de audio",
       "addVideoTrackHint": "Adicionar faixa de video",
@@ -1357,7 +1385,9 @@
       "tracks": "Faixas",
       "volumeControl": {
         "adjustClipVolume": "Ajustar volume do clipe"
-      }
+      },
+      "emptyTitle": "Arraste mídia aqui para começar a editar",
+      "emptyDescription": "Solte clipes nas faixas e pressione Espaço para visualizar."
     }
   },
   "tr": {
@@ -1368,7 +1398,11 @@
         "unableToAddDroppedFiles": "Bırakılan dosyalar zaman çizelgesine eklenemedi",
         "droppedMediaItems": "bırakılan medya öğeleri",
         "droppedFiles": "bırakılan dosyalar",
-        "locked": "Kilitli"
+        "locked": "Kilitli",
+        "compositionDropWrongZone": "Bir bileşik klip bu zaman çizelgesi bölgesine bırakılamaz.",
+        "compositionDropCycle": "Bir bileşik klip kendi içine bırakılamaz.",
+        "templateVideoOnly": "Şablonlar yalnızca video parçalarına bırakılabilir.",
+        "noSupportedMediaInDrop": "Bu bırakmada desteklenen medya bulunamadı."
       },
       "addAudioTrackHint": "Ses parçası ekle",
       "addVideoTrackHint": "Video parçası ekle",
@@ -1626,7 +1660,9 @@
       "tracks": "Parçalar",
       "volumeControl": {
         "adjustClipVolume": "Klip ses düzeyini ayarla"
-      }
+      },
+      "emptyTitle": "Düzenlemeye başlamak için medyayı buraya sürükleyin",
+      "emptyDescription": "Klipleri parçalara bırakın, ardından önizlemek için Boşluk tuşuna basın."
     }
   },
   "ja": {
@@ -1637,7 +1673,11 @@
         "unableToAddDroppedFiles": "ドロップしたファイルをタイムラインに追加できません",
         "droppedMediaItems": "ドロップしたメディア項目",
         "droppedFiles": "ドロップしたファイル",
-        "locked": "ロック済み"
+        "locked": "ロック済み",
+        "compositionDropWrongZone": "複合クリップをこのタイムライン領域にドロップできません。",
+        "compositionDropCycle": "複合クリップを自分自身の中にドロップできません。",
+        "templateVideoOnly": "テンプレートはビデオトラックにのみドロップできます。",
+        "noSupportedMediaInDrop": "このドロップに対応メディアが見つかりません。"
       },
       "addAudioTrackHint": "オーディオトラックを追加",
       "addVideoTrackHint": "ビデオトラックを追加",
@@ -1899,7 +1939,9 @@
       "tracks": "トラック",
       "volumeControl": {
         "adjustClipVolume": "クリップ音量を調整"
-      }
+      },
+      "emptyTitle": "編集を始めるにはメディアをここにドラッグ",
+      "emptyDescription": "クリップをトラックにドロップし、Space キーでプレビューします。"
     }
   },
   "ko": {
@@ -1910,7 +1952,11 @@
         "unableToAddDroppedFiles": "드롭한 파일을 타임라인에 추가할 수 없음",
         "droppedMediaItems": "드롭한 미디어 항목",
         "droppedFiles": "드롭한 파일",
-        "locked": "잠김"
+        "locked": "잠김",
+        "compositionDropWrongZone": "컴파운드 클립을 이 타임라인 영역에 놓을 수 없습니다.",
+        "compositionDropCycle": "컴파운드 클립을 자기 자신 안에 놓을 수 없습니다.",
+        "templateVideoOnly": "템플릿은 비디오 트랙에만 놓을 수 있습니다.",
+        "noSupportedMediaInDrop": "이 드롭에서 지원되는 미디어를 찾지 못했습니다."
       },
       "addAudioTrackHint": "오디오 트랙 추가",
       "addVideoTrackHint": "비디오 트랙 추가",
@@ -2172,7 +2218,9 @@
       "tracks": "트랙",
       "volumeControl": {
         "adjustClipVolume": "클립 볼륨 조정"
-      }
+      },
+      "emptyTitle": "편집을 시작하려면 여기에 미디어를 드래그하세요",
+      "emptyDescription": "클립을 트랙에 놓은 다음 Space를 눌러 미리 봅니다."
     }
   },
   "zh": {
@@ -2183,7 +2231,11 @@
         "unableToAddDroppedFiles": "无法将拖放的文件添加到时间线",
         "droppedMediaItems": "拖放的媒体项目",
         "droppedFiles": "拖放的文件",
-        "locked": "已锁定"
+        "locked": "已锁定",
+        "compositionDropWrongZone": "无法将复合片段拖放到此时间线区域。",
+        "compositionDropCycle": "无法将复合片段拖放到其自身内部。",
+        "templateVideoOnly": "模板只能拖放到视频轨道。",
+        "noSupportedMediaInDrop": "此次拖放未找到支持的媒体。"
       },
       "addAudioTrackHint": "添加音频轨道",
       "addVideoTrackHint": "添加视频轨道",
@@ -2441,7 +2493,9 @@
       "tracks": "轨道",
       "volumeControl": {
         "adjustClipVolume": "调整剪辑音量"
-      }
+      },
+      "emptyTitle": "将媒体拖到这里开始编辑",
+      "emptyDescription": "把片段拖到轨道上，然后按空格键预览。"
     }
   }
 }

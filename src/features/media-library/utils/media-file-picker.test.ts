@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
 import {
+  getSupportedMediaFormatLabels,
   hasMediaFilePickerSupport,
   MEDIA_FILE_PICKER_TYPES,
   showMediaFilePicker,
@@ -37,5 +38,26 @@ describe('media-file-picker', () => {
     })
 
     vi.stubGlobal('window', originalWindow)
+  })
+
+  it('includes every accepted media extension in display order', () => {
+    expect(getSupportedMediaFormatLabels()).toEqual([
+      'MP4',
+      'WebM',
+      'MOV',
+      'AVI',
+      'MKV',
+      'MP3',
+      'WAV',
+      'OGG',
+      'M4A',
+      'AAC',
+      'JPG',
+      'JPEG',
+      'PNG',
+      'GIF',
+      'WebP',
+      'SVG',
+    ])
   })
 })

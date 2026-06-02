@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -139,10 +139,27 @@ export function ProjectCard({
     onCardClick?.(e, project)
   }
 
+  const openProject = () => {
+    navigate({ to: '/editor/$projectId', params: { projectId: project.id } })
+  }
+
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    navigate({ to: '/editor/$projectId', params: { projectId: project.id } })
+    openProject()
+  }
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    e.preventDefault()
+    e.stopPropagation()
+    openProject()
+  }
+
+  const handleOpenClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    openProject()
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -174,7 +191,11 @@ export function ProjectCard({
       onMouseDown={handleMouseDown}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
-      className={`group relative panel-bg border rounded-lg overflow-hidden transition-all cursor-pointer select-none ${
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label={t('projects.card.openProject')}
+      className={`group relative panel-bg border rounded-lg overflow-hidden transition-all cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
         isSelected
           ? 'border-primary ring-2 ring-primary/40 shadow-lg shadow-primary/10'
           : 'border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5'
@@ -204,11 +225,11 @@ export function ProjectCard({
         )}
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-          <div className="flex items-center gap-2 text-white">
-            <PlayCircle className="w-6 h-6" />
-            <span className="font-medium">{t('projects.card.doubleClickToOpen')}</span>
-          </div>
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center">
+          <Button size="sm" className="gap-2" onClick={handleOpenClick}>
+            <PlayCircle className="w-4 h-4" />
+            {t('projects.card.openProject')}
+          </Button>
         </div>
 
         {/* Resolution badge */}

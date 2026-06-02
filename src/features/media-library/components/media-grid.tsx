@@ -25,7 +25,10 @@ import {
 } from '@/components/ui/alert-dialog'
 
 import { GRID_MIN_SIZE_PX, GRID_GAP_BY_SIZE } from './media-grid-constants'
-import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker'
+import {
+  showMediaFilePicker,
+  getSupportedMediaFormatLabels,
+} from '@/features/media-library/utils/media-file-picker'
 
 interface MediaGridProps {
   onMediaSelect?: (mediaId: string) => void
@@ -229,43 +232,34 @@ export const MediaGrid = memo(function MediaGrid({
         </div>
       ) : !items && filteredItems.length === 0 ? (
         <div className="flex items-center justify-center py-24">
-          <div className="text-center max-w-md">
-            <div
-              className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-secondary hover:border-primary/50 hover:bg-secondary/80 cursor-pointer transition-colors"
-              onClick={handleEmptyStateClick}
-            >
+          <button
+            type="button"
+            className="text-center max-w-md rounded-xl border border-dashed border-border/80 p-6 transition-colors hover:border-primary/60 hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            onClick={handleEmptyStateClick}
+          >
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-secondary transition-colors">
               <Upload className="w-10 h-10 text-muted-foreground" />
             </div>
             <p className="text-base font-bold text-foreground mb-2 tracking-wide">
               {t('media.grid.emptyTitle')}
             </p>
-            <p className="text-sm text-muted-foreground font-light mb-3">
+            <p className="text-sm text-muted-foreground font-light mb-4">
               {t('media.grid.emptyHint')}
             </p>
+            <span className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground mb-4">
+              {t('media.grid.importButton')}
+            </span>
             <div className="flex flex-wrap justify-center gap-2">
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MP4
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                WebM
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MOV
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MP3
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                WAV
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                JPG
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                PNG
-              </span>
+              {getSupportedMediaFormatLabels().map((label) => (
+                <span
+                  key={label}
+                  className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground"
+                >
+                  {label}
+                </span>
+              ))}
             </div>
-          </div>
+          </button>
         </div>
       ) : (
         <div

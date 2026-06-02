@@ -70,7 +70,8 @@
         "deleteProjectDescription": "Are you sure you want to delete <strong>{{name}}</strong>? This action cannot be undone and will permanently remove the project and all its contents.",
         "alsoDeleteLocalFiles": "Also delete local files on disk",
         "removeFilesFromFolder": "Remove files from the linked folder. This cannot be undone.",
-        "removeFilesFromNamedFolder": "Remove files from the linked folder \"{{folder}}\". This cannot be undone."
+        "removeFilesFromNamedFolder": "Remove files from the linked folder \"{{folder}}\". This cannot be undone.",
+        "openProject": "Open project"
       },
       "form": {
         "createTitle": "Create New Project",
@@ -125,7 +126,9 @@
         "deleteSelectedFailed": "Failed to delete selected projects",
         "bulkDeleteTitle_one": "Delete {{count}} project?",
         "bulkDeleteTitle_other": "Delete {{count}} projects?",
-        "bulkDeleteDescription": "These projects will be moved to trash. You can restore them from the Trash section until they're permanently deleted."
+        "bulkDeleteDescription": "These projects will be moved to trash. You can restore them from the Trash section until they're permanently deleted.",
+        "createFirstProject": "Create your first project",
+        "importExistingProject": "Import an existing project"
       },
       "trash": {
         "title": "Trash",
@@ -185,7 +188,10 @@
         "reconnectTitle": "Reconnect your workspace",
         "reconnectDescription": "We need permission to access <code>{{name}}</code> again. This happens automatically between browser sessions.",
         "chooseDifferentFolder": "Choose a different folder",
-        "reconnect": "Reconnect"
+        "reconnect": "Reconnect",
+        "folderPermissionDenied": "Permission was not granted. Choose a folder and allow read/write access to continue.",
+        "folderPickFailed": "FreeCut could not open that folder. Try a normal folder you can edit, then grant read/write access.",
+        "reconnectPermissionDenied": "Permission was denied. Reconnect the workspace or choose a different folder."
       },
       "workspaceIndicator": {
         "workspaceFolder": "Workspace folder",
@@ -569,7 +575,8 @@
         "deleteProjectDescription": "¿Seguro que quieres eliminar <strong>{{name}}</strong>? Esta acción no se puede deshacer y eliminará permanentemente el proyecto y todo su contenido.",
         "alsoDeleteLocalFiles": "Eliminar también los archivos locales del disco",
         "removeFilesFromFolder": "Eliminar los archivos de la carpeta vinculada. Esto no se puede deshacer.",
-        "removeFilesFromNamedFolder": "Eliminar los archivos de la carpeta vinculada \"{{folder}}\". Esto no se puede deshacer."
+        "removeFilesFromNamedFolder": "Eliminar los archivos de la carpeta vinculada \"{{folder}}\". Esto no se puede deshacer.",
+        "openProject": "Abrir proyecto"
       },
       "form": {
         "createTitle": "Crear nuevo proyecto",
@@ -624,7 +631,9 @@
         "deleteSelectedFailed": "No se pudieron eliminar los proyectos seleccionados",
         "bulkDeleteTitle_one": "¿Eliminar {{count}} proyecto?",
         "bulkDeleteTitle_other": "¿Eliminar {{count}} proyectos?",
-        "bulkDeleteDescription": "Estos proyectos se moverán a la papelera. Puedes restaurarlos desde la sección Papelera hasta que se eliminen permanentemente."
+        "bulkDeleteDescription": "Estos proyectos se moverán a la papelera. Puedes restaurarlos desde la sección Papelera hasta que se eliminen permanentemente.",
+        "createFirstProject": "Crea tu primer proyecto",
+        "importExistingProject": "Importa un proyecto existente"
       },
       "trash": {
         "title": "Papelera",
@@ -684,7 +693,10 @@
         "reconnectTitle": "Vuelve a conectar tu espacio de trabajo",
         "reconnectDescription": "Necesitamos permiso para acceder a <code>{{name}}</code> de nuevo. Esto ocurre automáticamente entre sesiones del navegador.",
         "chooseDifferentFolder": "Elegir otra carpeta",
-        "reconnect": "Reconectar"
+        "reconnect": "Reconectar",
+        "folderPermissionDenied": "No se concedió el permiso. Elige una carpeta y permite acceso de lectura/escritura para continuar.",
+        "folderPickFailed": "FreeCut no pudo abrir esa carpeta. Prueba una carpeta normal que puedas editar y concede acceso de lectura/escritura.",
+        "reconnectPermissionDenied": "Permiso denegado. Reconecta el espacio de trabajo o elige otra carpeta."
       },
       "workspaceIndicator": {
         "workspaceFolder": "Carpeta de espacio de trabajo",
@@ -1068,7 +1080,8 @@
         "deleteProjectDescription": "Voulez-vous vraiment supprimer <strong>{{name}}</strong> ? Cette action est irréversible et supprimera définitivement le projet et tout son contenu.",
         "alsoDeleteLocalFiles": "Supprimer également les fichiers locaux sur le disque",
         "removeFilesFromFolder": "Supprimer les fichiers du dossier lié. Cette action est irréversible.",
-        "removeFilesFromNamedFolder": "Supprimer les fichiers du dossier lié « {{folder}} ». Cette action est irréversible."
+        "removeFilesFromNamedFolder": "Supprimer les fichiers du dossier lié « {{folder}} ». Cette action est irréversible.",
+        "openProject": "Ouvrir le projet"
       },
       "form": {
         "createTitle": "Créer un nouveau projet",
@@ -1123,7 +1136,9 @@
         "deleteSelectedFailed": "Échec de la suppression des projets sélectionnés",
         "bulkDeleteTitle_one": "Supprimer {{count}} projet ?",
         "bulkDeleteTitle_other": "Supprimer {{count}} projets ?",
-        "bulkDeleteDescription": "Ces projets seront déplacés vers la corbeille. Vous pouvez les restaurer depuis la section Corbeille jusqu'à leur suppression définitive."
+        "bulkDeleteDescription": "Ces projets seront déplacés vers la corbeille. Vous pouvez les restaurer depuis la section Corbeille jusqu'à leur suppression définitive.",
+        "createFirstProject": "Créer votre premier projet",
+        "importExistingProject": "Importer un projet existant"
       },
       "trash": {
         "title": "Corbeille",
@@ -1183,7 +1198,10 @@
         "reconnectTitle": "Reconnectez votre espace de travail",
         "reconnectDescription": "Nous avons besoin de l'autorisation d'accéder à nouveau à <code>{{name}}</code>. Cela se produit automatiquement entre les sessions du navigateur.",
         "chooseDifferentFolder": "Choisir un autre dossier",
-        "reconnect": "Reconnecter"
+        "reconnect": "Reconnecter",
+        "folderPermissionDenied": "L’autorisation n’a pas été accordée. Choisissez un dossier et autorisez l’accès en lecture/écriture pour continuer.",
+        "folderPickFailed": "FreeCut n’a pas pu ouvrir ce dossier. Essayez un dossier normal que vous pouvez modifier, puis autorisez l’accès en lecture/écriture.",
+        "reconnectPermissionDenied": "Autorisation refusée. Reconnectez l’espace de travail ou choisissez un autre dossier."
       },
       "workspaceIndicator": {
         "workspaceFolder": "Dossier d'espace de travail",
@@ -1567,7 +1585,8 @@
         "deleteProjectDescription": "Möchtest du <strong>{{name}}</strong> wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden und entfernt das Projekt und seinen gesamten Inhalt dauerhaft.",
         "alsoDeleteLocalFiles": "Auch lokale Dateien auf der Festplatte löschen",
         "removeFilesFromFolder": "Dateien aus dem verknüpften Ordner entfernen. Dies kann nicht rückgängig gemacht werden.",
-        "removeFilesFromNamedFolder": "Dateien aus dem verknüpften Ordner „{{folder}}\" entfernen. Dies kann nicht rückgängig gemacht werden."
+        "removeFilesFromNamedFolder": "Dateien aus dem verknüpften Ordner „{{folder}}\" entfernen. Dies kann nicht rückgängig gemacht werden.",
+        "openProject": "Projekt öffnen"
       },
       "form": {
         "createTitle": "Neues Projekt erstellen",
@@ -1622,7 +1641,9 @@
         "deleteSelectedFailed": "Ausgewählte Projekte konnten nicht gelöscht werden",
         "bulkDeleteTitle_one": "{{count}} Projekt löschen?",
         "bulkDeleteTitle_other": "{{count}} Projekte löschen?",
-        "bulkDeleteDescription": "Diese Projekte werden in den Papierkorb verschoben. Du kannst sie aus dem Papierkorb wiederherstellen, bis sie dauerhaft gelöscht werden."
+        "bulkDeleteDescription": "Diese Projekte werden in den Papierkorb verschoben. Du kannst sie aus dem Papierkorb wiederherstellen, bis sie dauerhaft gelöscht werden.",
+        "createFirstProject": "Erstes Projekt erstellen",
+        "importExistingProject": "Vorhandenes Projekt importieren"
       },
       "trash": {
         "title": "Papierkorb",
@@ -1682,7 +1703,10 @@
         "reconnectTitle": "Verbinde deinen Arbeitsbereich erneut",
         "reconnectDescription": "Wir benötigen erneut die Berechtigung, auf <code>{{name}}</code> zuzugreifen. Dies geschieht automatisch zwischen Browsersitzungen.",
         "chooseDifferentFolder": "Anderen Ordner auswählen",
-        "reconnect": "Erneut verbinden"
+        "reconnect": "Erneut verbinden",
+        "folderPermissionDenied": "Die Berechtigung wurde nicht erteilt. Wähle einen Ordner und erlaube Lese-/Schreibzugriff, um fortzufahren.",
+        "folderPickFailed": "FreeCut konnte diesen Ordner nicht öffnen. Versuche es mit einem normalen bearbeitbaren Ordner und erlaube Lese-/Schreibzugriff.",
+        "reconnectPermissionDenied": "Berechtigung verweigert. Verbinde den Arbeitsbereich erneut oder wähle einen anderen Ordner."
       },
       "workspaceIndicator": {
         "workspaceFolder": "Arbeitsbereich-Ordner",
@@ -2066,7 +2090,8 @@
         "deleteProjectDescription": "Tem certeza de que deseja excluir <strong>{{name}}</strong>? Esta ação não pode ser desfeita e removerá permanentemente o projeto e todo o seu conteúdo.",
         "alsoDeleteLocalFiles": "Também excluir os arquivos locais do disco",
         "removeFilesFromFolder": "Remover os arquivos da pasta vinculada. Isso não pode ser desfeito.",
-        "removeFilesFromNamedFolder": "Remover os arquivos da pasta vinculada \"{{folder}}\". Isso não pode ser desfeito."
+        "removeFilesFromNamedFolder": "Remover os arquivos da pasta vinculada \"{{folder}}\". Isso não pode ser desfeito.",
+        "openProject": "Abrir projeto"
       },
       "form": {
         "createTitle": "Criar novo projeto",
@@ -2121,7 +2146,9 @@
         "deleteSelectedFailed": "Falha ao excluir os projetos selecionados",
         "bulkDeleteTitle_one": "Excluir {{count}} projeto?",
         "bulkDeleteTitle_other": "Excluir {{count}} projetos?",
-        "bulkDeleteDescription": "Esses projetos serão movidos para a lixeira. Você pode restaurá-los na seção Lixeira até que sejam excluídos permanentemente."
+        "bulkDeleteDescription": "Esses projetos serão movidos para a lixeira. Você pode restaurá-los na seção Lixeira até que sejam excluídos permanentemente.",
+        "createFirstProject": "Crie seu primeiro projeto",
+        "importExistingProject": "Importar um projeto existente"
       },
       "trash": {
         "title": "Lixeira",
@@ -2181,7 +2208,10 @@
         "reconnectTitle": "Reconecte sua área de trabalho",
         "reconnectDescription": "Precisamos de permissão para acessar <code>{{name}}</code> novamente. Isso acontece automaticamente entre as sessões do navegador.",
         "chooseDifferentFolder": "Escolher outra pasta",
-        "reconnect": "Reconectar"
+        "reconnect": "Reconectar",
+        "folderPermissionDenied": "A permissão não foi concedida. Escolha uma pasta e permita acesso de leitura/gravação para continuar.",
+        "folderPickFailed": "O FreeCut não conseguiu abrir essa pasta. Tente uma pasta normal que você possa editar e conceda acesso de leitura/gravação.",
+        "reconnectPermissionDenied": "Permissão negada. Reconecte o espaço de trabalho ou escolha outra pasta."
       },
       "workspaceIndicator": {
         "workspaceFolder": "Pasta de área de trabalho",
@@ -2565,7 +2595,8 @@
         "deleteProjectDescription": "<strong>{{name}}</strong>を削除してもよろしいですか？この操作は元に戻せず、プロジェクトとそのすべての内容が完全に削除されます。",
         "alsoDeleteLocalFiles": "ディスク上のローカルファイルも削除する",
         "removeFilesFromFolder": "リンクされたフォルダからファイルを削除します。この操作は元に戻せません。",
-        "removeFilesFromNamedFolder": "リンクされたフォルダ「{{folder}}」からファイルを削除します。この操作は元に戻せません。"
+        "removeFilesFromNamedFolder": "リンクされたフォルダ「{{folder}}」からファイルを削除します。この操作は元に戻せません。",
+        "openProject": "プロジェクトを開く"
       },
       "form": {
         "createTitle": "新規プロジェクトを作成",
@@ -2620,7 +2651,9 @@
         "deleteSelectedFailed": "選択したプロジェクトの削除に失敗しました",
         "bulkDeleteTitle_one": "{{count}}件のプロジェクトを削除しますか？",
         "bulkDeleteTitle_other": "{{count}}件のプロジェクトを削除しますか？",
-        "bulkDeleteDescription": "これらのプロジェクトはゴミ箱に移動されます。完全に削除されるまでは、ゴミ箱セクションから復元できます。"
+        "bulkDeleteDescription": "これらのプロジェクトはゴミ箱に移動されます。完全に削除されるまでは、ゴミ箱セクションから復元できます。",
+        "createFirstProject": "最初のプロジェクトを作成",
+        "importExistingProject": "既存のプロジェクトをインポート"
       },
       "trash": {
         "title": "ゴミ箱",
@@ -2680,7 +2713,10 @@
         "reconnectTitle": "ワークスペースを再接続",
         "reconnectDescription": "<code>{{name}}</code>へ再びアクセスする許可が必要です。これはブラウザのセッション間で自動的に行われます。",
         "chooseDifferentFolder": "別のフォルダを選択",
-        "reconnect": "再接続"
+        "reconnect": "再接続",
+        "folderPermissionDenied": "権限が付与されませんでした。続行するにはフォルダーを選択し、読み書きアクセスを許可してください。",
+        "folderPickFailed": "FreeCut はそのフォルダーを開けませんでした。編集できる通常のフォルダーを選び、読み書きアクセスを許可してください。",
+        "reconnectPermissionDenied": "権限が拒否されました。ワークスペースを再接続するか、別のフォルダーを選択してください。"
       },
       "workspaceIndicator": {
         "workspaceFolder": "ワークスペースフォルダ",
@@ -3064,7 +3100,8 @@
         "deleteProjectDescription": "<strong>{{name}}</strong>을(를) 삭제하시겠습니까? 이 작업은 취소할 수 없으며 프로젝트와 모든 콘텐츠가 영구적으로 삭제됩니다.",
         "alsoDeleteLocalFiles": "디스크의 로컬 파일도 삭제",
         "removeFilesFromFolder": "연결된 폴더에서 파일을 삭제합니다. 이 작업은 취소할 수 없습니다.",
-        "removeFilesFromNamedFolder": "연결된 폴더 \"{{folder}}\"에서 파일을 삭제합니다. 이 작업은 취소할 수 없습니다."
+        "removeFilesFromNamedFolder": "연결된 폴더 \"{{folder}}\"에서 파일을 삭제합니다. 이 작업은 취소할 수 없습니다.",
+        "openProject": "프로젝트 열기"
       },
       "form": {
         "createTitle": "새 프로젝트 만들기",
@@ -3119,7 +3156,9 @@
         "deleteSelectedFailed": "선택한 프로젝트를 삭제하지 못했습니다",
         "bulkDeleteTitle_one": "프로젝트 {{count}}개를 삭제하시겠습니까?",
         "bulkDeleteTitle_other": "프로젝트 {{count}}개를 삭제하시겠습니까?",
-        "bulkDeleteDescription": "이 프로젝트들은 휴지통으로 이동됩니다. 영구적으로 삭제되기 전까지는 휴지통 섹션에서 복원할 수 있습니다."
+        "bulkDeleteDescription": "이 프로젝트들은 휴지통으로 이동됩니다. 영구적으로 삭제되기 전까지는 휴지통 섹션에서 복원할 수 있습니다.",
+        "createFirstProject": "첫 프로젝트 만들기",
+        "importExistingProject": "기존 프로젝트 가져오기"
       },
       "trash": {
         "title": "휴지통",
@@ -3179,7 +3218,10 @@
         "reconnectTitle": "작업 공간 다시 연결",
         "reconnectDescription": "<code>{{name}}</code>에 다시 접근할 권한이 필요합니다. 이는 브라우저 세션 간에 자동으로 이루어집니다.",
         "chooseDifferentFolder": "다른 폴더 선택",
-        "reconnect": "다시 연결"
+        "reconnect": "다시 연결",
+        "folderPermissionDenied": "권한이 부여되지 않았습니다. 계속하려면 폴더를 선택하고 읽기/쓰기 접근을 허용하세요.",
+        "folderPickFailed": "FreeCut이 해당 폴더를 열 수 없습니다. 편집할 수 있는 일반 폴더를 선택한 뒤 읽기/쓰기 접근을 허용하세요.",
+        "reconnectPermissionDenied": "권한이 거부되었습니다. 워크스페이스를 다시 연결하거나 다른 폴더를 선택하세요."
       },
       "workspaceIndicator": {
         "workspaceFolder": "작업 공간 폴더",
@@ -3563,7 +3605,8 @@
         "deleteProjectDescription": "确定要删除 <strong>{{name}}</strong> 吗？此操作无法撤销，将永久删除该项目及其所有内容。",
         "alsoDeleteLocalFiles": "同时删除磁盘上的本地文件",
         "removeFilesFromFolder": "从链接的文件夹中删除文件。此操作无法撤销。",
-        "removeFilesFromNamedFolder": "从链接的文件夹\"{{folder}}\"中删除文件。此操作无法撤销。"
+        "removeFilesFromNamedFolder": "从链接的文件夹\"{{folder}}\"中删除文件。此操作无法撤销。",
+        "openProject": "打开项目"
       },
       "form": {
         "createTitle": "创建新项目",
@@ -3618,7 +3661,9 @@
         "deleteSelectedFailed": "删除所选项目失败",
         "bulkDeleteTitle_one": "删除 {{count}} 个项目？",
         "bulkDeleteTitle_other": "删除 {{count}} 个项目？",
-        "bulkDeleteDescription": "这些项目将被移至回收站。在永久删除之前，你可以从回收站部分恢复它们。"
+        "bulkDeleteDescription": "这些项目将被移至回收站。在永久删除之前，你可以从回收站部分恢复它们。",
+        "createFirstProject": "创建第一个项目",
+        "importExistingProject": "导入已有项目"
       },
       "trash": {
         "title": "回收站",
@@ -3678,7 +3723,10 @@
         "reconnectTitle": "重新连接你的工作区",
         "reconnectDescription": "我们需要再次访问 <code>{{name}}</code> 的权限。这会在浏览器会话之间自动进行。",
         "chooseDifferentFolder": "选择其他文件夹",
-        "reconnect": "重新连接"
+        "reconnect": "重新连接",
+        "folderPermissionDenied": "未授予权限。请选择一个文件夹并允许读写访问后继续。",
+        "folderPickFailed": "FreeCut 无法打开该文件夹。请尝试选择一个可编辑的普通文件夹，并授予读写访问权限。",
+        "reconnectPermissionDenied": "权限被拒绝。请重新连接工作区或选择其他文件夹。"
       },
       "workspaceIndicator": {
         "workspaceFolder": "工作区文件夹",
@@ -4062,7 +4110,8 @@
         "deleteProjectDescription": "<strong>{{name}}</strong> projesini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz ve projeyi tüm içeriğiyle kalıcı olarak kaldırır.",
         "alsoDeleteLocalFiles": "Diskteki yerel dosyaları da sil",
         "removeFilesFromFolder": "Bağlı klasördeki dosyaları kaldır. Bu geri alınamaz.",
-        "removeFilesFromNamedFolder": "\"{{folder}}\" bağlı klasöründeki dosyaları kaldır. Bu geri alınamaz."
+        "removeFilesFromNamedFolder": "\"{{folder}}\" bağlı klasöründeki dosyaları kaldır. Bu geri alınamaz.",
+        "openProject": "Projeyi aç"
       },
       "form": {
         "createTitle": "Yeni Proje Oluştur",
@@ -4117,7 +4166,9 @@
         "deleteSelectedFailed": "Seçili projeler silinemedi",
         "bulkDeleteTitle_one": "{{count}} proje silinsin mi?",
         "bulkDeleteTitle_other": "{{count}} proje silinsin mi?",
-        "bulkDeleteDescription": "Bu projeler çöp kutusuna taşınacak. Kalıcı olarak silinene kadar Çöp Kutusu bölümünden geri yükleyebilirsiniz."
+        "bulkDeleteDescription": "Bu projeler çöp kutusuna taşınacak. Kalıcı olarak silinene kadar Çöp Kutusu bölümünden geri yükleyebilirsiniz.",
+        "createFirstProject": "İlk projenizi oluşturun",
+        "importExistingProject": "Mevcut bir projeyi içe aktar"
       },
       "trash": {
         "title": "Çöp Kutusu",
@@ -4248,7 +4299,10 @@
         "reconnectTitle": "Çalışma alanınızı yeniden bağlayın",
         "reconnectDescription": "<code>{{name}}</code> klasörüne tekrar erişim iznine ihtiyacımız var. Bu, tarayıcı oturumları arasında otomatik olarak olur.",
         "chooseDifferentFolder": "Farklı bir klasör seç",
-        "reconnect": "Yeniden bağlan"
+        "reconnect": "Yeniden bağlan",
+        "folderPermissionDenied": "İzin verilmedi. Devam etmek için bir klasör seçin ve okuma/yazma erişimine izin verin.",
+        "folderPickFailed": "FreeCut bu klasörü açamadı. Düzenleyebileceğiniz normal bir klasör deneyin ve okuma/yazma erişimine izin verin.",
+        "reconnectPermissionDenied": "İzin reddedildi. Çalışma alanını yeniden bağlayın veya farklı bir klasör seçin."
       },
       "workspaceIndicator": {
         "workspaceFolder": "Çalışma alanı klasörü",

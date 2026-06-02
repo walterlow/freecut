@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Search, ArrowUpDown, X, Trash2, AlertTriangle } from 'lucide-react'
+import { Search, ArrowUpDown, X, Trash2, AlertTriangle, Plus, Upload } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -45,6 +46,7 @@ import type { Project } from '@/types/project'
 
 interface ProjectListProps {
   onEditProject?: (project: Project) => void
+  onImportProject?: () => void
 }
 
 interface MarqueeRect {
@@ -56,7 +58,7 @@ interface MarqueeRect {
 
 const MARQUEE_DRAG_THRESHOLD = 4
 
-export function ProjectList({ onEditProject }: ProjectListProps) {
+export function ProjectList({ onEditProject, onImportProject }: ProjectListProps) {
   const { t } = useTranslation()
   const [localSearchQuery, setLocalSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -469,6 +471,20 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           <p className="text-muted-foreground max-w-md mb-6">
             {t('projects.list.welcomeDescription')}
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button size="lg" className="gap-2" asChild>
+              <Link to="/projects/new">
+                <Plus className="w-4 h-4" />
+                {t('projects.list.createFirstProject')}
+              </Link>
+            </Button>
+            {onImportProject && (
+              <Button variant="outline" size="lg" className="gap-2" onClick={onImportProject}>
+                <Upload className="w-4 h-4" />
+                {t('projects.list.importExistingProject')}
+              </Button>
+            )}
+          </div>
         </div>
       )}
 

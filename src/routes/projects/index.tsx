@@ -333,7 +333,7 @@ function ProjectsIndex() {
         ) : (
           /* Projects List */
           <div className="max-w-[1920px] mx-auto px-6 py-8">
-            <ProjectList onEditProject={handleEditProject} />
+            <ProjectList onEditProject={handleEditProject} onImportProject={handleImportClick} />
             <TrashSection />
           </div>
         )}

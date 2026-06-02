@@ -535,6 +535,46 @@ describe('createImportActions', () => {
     expect(currentState.mediaItems).toEqual([])
     expect(currentState.importingIds).toEqual([])
     expect(loggerMocks.error).toHaveBeenCalledWith('Failed to import clip.mp4', expect.any(Error))
+    expect(currentState.showNotification).toHaveBeenCalledWith({
+      type: 'warning',
+      message: '1 file failed to import. Check the file and try again.',
+    })
+  })
+
+  it('reports mixed import outcomes in one summary instead of overwriting earlier results', async () => {
+    const importedFile = new File(['video'], 'imported.mp4', { type: 'video/mp4' })
+    const duplicateFile = new File(['video'], 'duplicate.mp4', { type: 'video/mp4' })
+    const failedFile = new File(['video'], 'failed.mp4', { type: 'video/mp4' })
+    const handles = [
+      createHandle(importedFile),
+      createHandle(duplicateFile),
+      createHandle(failedFile),
+    ]
+    const imported = makeMedia({ id: 'imported-1', fileName: 'imported.mp4' })
+    const duplicate = makeMedia({ id: 'duplicate-1', fileName: 'duplicate.mp4' })
+
+    mediaLibraryServiceMocks.importMediaWithHandle
+      .mockResolvedValueOnce(imported)
+      .mockResolvedValueOnce({ ...duplicate, isDuplicate: true })
+      .mockRejectedValueOnce(new Error('Import failed'))
+
+    let currentState = createMockState({ mediaItems: [duplicate] })
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState &
+        MediaLibraryActions
+    })
+    const get = vi.fn(() => currentState)
+
+    const actions = createImportActions(set, get)
+    const result = await actions.importHandles(handles)
+
+    expect(result).toEqual([imported])
+    expect(currentState.showNotification).toHaveBeenCalledTimes(1)
+    expect(currentState.showNotification).toHaveBeenCalledWith({
+      type: 'warning',
+      message:
+        'Imported 1 file. Skipped 1 duplicate: duplicate.mp4. 1 file failed to import. Check the file and try again.',
+    })
   })
 
   it('sets a browser support error when the picker API is unavailable', async () => {
