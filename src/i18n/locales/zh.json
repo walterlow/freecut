@@ -39,6 +39,7 @@
     "backToProjects": "返回项目",
     "backToProjectsAria": "返回项目",
     "specs": "{{width}}x{{height}} | {{fps}} fps",
+    "specsDetailed": "{{width}}x{{height}} | {{fps}} fps | {{duration}} | {{clips}} 个片段 | {{media}} 个媒体 | 缺失 {{missing}} 个",
     "whatsNew": "新功能",
     "whatsNewAria": "新功能",
     "settings": "设置",

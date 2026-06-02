@@ -11,6 +11,7 @@ import {
   validateSettings,
   getDefaultAudioCodec,
   getAudioBitrateForQuality,
+  estimateFileSize,
 } from './client-renderer'
 
 export type ExportPreflightSeverity = 'ok' | 'info' | 'warning' | 'error'
@@ -34,6 +35,7 @@ export interface AssessExportPreflightOptions {
   supportedVideoCodecs?: ClientCodec[]
   workerAvailable?: boolean
   offlineAudioContextAvailable?: boolean
+  brokenMediaIds?: string[]
 }
 
 export interface ExportPreflightResult {
@@ -42,6 +44,7 @@ export interface ExportPreflightResult {
   resolvedSettings?: ClientExportSettings
   predictedRenderPath: 'worker' | 'main-thread'
   estimatedDurationSeconds: number
+  estimatedFileSizeBytes?: number
 }
 
 function hasAnimatedImage(tracks: TimelineTrack[]): boolean {
@@ -75,6 +78,24 @@ function hasAudibleItem(tracks: TimelineTrack[]): boolean {
     }
   }
   return false
+}
+
+function collectTimelineMediaIds(tracks: TimelineTrack[]): Set<string> {
+  const mediaIds = new Set<string>()
+  for (const track of tracks) {
+    for (const item of track.items ?? []) {
+      if ('mediaId' in item && item.mediaId) {
+        mediaIds.add(item.mediaId)
+      }
+    }
+  }
+  return mediaIds
+}
+
+function formatEstimatedBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
 function describeCodec(codec: ClientCodec): string {
@@ -188,10 +209,16 @@ export async function assessExportPreflight({
   supportedVideoCodecs,
   workerAvailable = typeof Worker !== 'undefined',
   offlineAudioContextAvailable = typeof OfflineAudioContext !== 'undefined',
+  brokenMediaIds = [],
 }: AssessExportPreflightOptions): Promise<ExportPreflightResult> {
   const checks: ExportPreflightCheck[] = []
   const estimatedDurationSeconds = framesToSeconds(durationFrames, fps)
   const resolved = await resolveSettingsForPreflight(settings, fps, supportedVideoCodecs)
+  const tracks = composition.tracks ?? []
+  const referencedMediaIds = collectTimelineMediaIds(tracks)
+  const brokenReferencedCount = brokenMediaIds.filter((mediaId) =>
+    referencedMediaIds.has(mediaId),
+  ).length
 
   if (durationFrames <= 0) {
     checks.push({
@@ -211,6 +238,17 @@ export async function assessExportPreflight({
         frames: durationFrames.toLocaleString(),
         seconds: estimatedDurationSeconds.toFixed(1),
       },
+    })
+  }
+
+  if (brokenReferencedCount > 0) {
+    checks.push({
+      id: 'missing-media-blocks-export',
+      severity: 'error',
+      titleKey: 'export.preflight.checks.missing-media-blocks-export.title',
+      detailKey: 'export.preflight.checks.missing-media-blocks-export.detail',
+      detailParams: { count: brokenReferencedCount },
+      fixKey: 'export.preflight.checks.missing-media-blocks-export.fix',
     })
   }
 
@@ -272,7 +310,6 @@ export async function assessExportPreflight({
     })
   }
 
-  const tracks = composition.tracks ?? []
   let predictedRenderPath: ExportPreflightResult['predictedRenderPath'] = 'worker'
 
   if (!workerAvailable) {
@@ -310,12 +347,40 @@ export async function assessExportPreflight({
     })
   }
 
+  const estimatedFileSizeBytes = estimateFileSize(
+    resolved.clientSettings,
+    Math.max(0, estimatedDurationSeconds),
+  )
+
+  if (estimatedFileSizeBytes >= 2 * 1024 * 1024 * 1024) {
+    checks.push({
+      id: 'large-file-risk',
+      severity: 'warning',
+      titleKey: 'export.preflight.checks.large-file-risk.title',
+      detailKey: 'export.preflight.checks.large-file-risk.detail',
+      detailParams: { size: formatEstimatedBytes(estimatedFileSizeBytes) },
+      fixKey: 'export.preflight.checks.large-file-risk.fix',
+    })
+  }
+
+  if (estimatedDurationSeconds >= 30 * 60) {
+    checks.push({
+      id: 'long-export-risk',
+      severity: 'warning',
+      titleKey: 'export.preflight.checks.long-export-risk.title',
+      detailKey: 'export.preflight.checks.long-export-risk.detail',
+      detailParams: { minutes: Math.round(estimatedDurationSeconds / 60) },
+      fixKey: 'export.preflight.checks.long-export-risk.fix',
+    })
+  }
+
   return {
     canExport: !checks.some((check) => check.severity === 'error'),
     checks,
     resolvedSettings: resolved.clientSettings,
     predictedRenderPath,
     estimatedDurationSeconds,
+    estimatedFileSizeBytes,
   }
 }
 

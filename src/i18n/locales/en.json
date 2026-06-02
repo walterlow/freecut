@@ -39,6 +39,7 @@
     "backToProjects": "Back to Projects",
     "backToProjectsAria": "Back to projects",
     "specs": "{{width}}x{{height}} | {{fps}}fps",
+    "specsDetailed": "{{width}}x{{height}} | {{fps}}fps | {{duration}} | {{clips}} clips | {{media}} media | {{missing}} missing",
     "whatsNew": "What's New",
     "whatsNewAria": "What's new",
     "settings": "Settings",

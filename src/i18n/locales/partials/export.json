@@ -142,6 +142,23 @@
             "title": "Audio mix requires main-thread fallback",
             "detail": "OfflineAudioContext is not available in the export worker, so audio rendering will run on the main thread."
           },
+          "missing-media-blocks-export": {
+            "title": "Missing media blocks export",
+            "detail": "{{count}} referenced media file is missing or needs permission.",
+            "detail_one": "{{count}} referenced media file is missing or needs permission.",
+            "detail_other": "{{count}} referenced media files are missing or need permission.",
+            "fix": "Relink missing media from the Media Library before exporting."
+          },
+          "large-file-risk": {
+            "title": "Large export file expected",
+            "detail": "This export is estimated around {{size}} before container variance.",
+            "fix": "Use Balanced or Small, lower resolution, or export a shorter range if disk space is tight."
+          },
+          "long-export-risk": {
+            "title": "Long export may take a while",
+            "detail": "This export is about {{minutes}} minutes long.",
+            "fix": "Export a shorter in/out range first if you want a quick validation render."
+          },
           "worker-export-ready": {
             "title": "Worker export path ready",
             "detail": "The export worker can render this composition without a known main-thread fallback."
@@ -292,6 +309,23 @@
           "worker-audio-context-fallback": {
             "title": "La mezcla de audio requiere el modo alternativo en el hilo principal",
             "detail": "OfflineAudioContext no está disponible en el worker de exportación, así que el audio se renderizará en el hilo principal."
+          },
+          "missing-media-blocks-export": {
+            "title": "Los medios faltantes bloquean la exportación",
+            "detail": "{{count}} archivo multimedia referenciado falta o necesita permiso.",
+            "detail_one": "{{count}} archivo multimedia referenciado falta o necesita permiso.",
+            "detail_other": "{{count}} archivos multimedia referenciados faltan o necesitan permiso.",
+            "fix": "Vuelve a vincular los medios faltantes desde la biblioteca antes de exportar."
+          },
+          "large-file-risk": {
+            "title": "Se espera un archivo de exportación grande",
+            "detail": "Esta exportación se estima en unos {{size}} antes de la variación del contenedor.",
+            "fix": "Usa Equilibrado o Archivo pequeño, baja la resolución o exporta un rango más corto si el espacio es limitado."
+          },
+          "long-export-risk": {
+            "title": "Una exportación larga puede tardar",
+            "detail": "Esta exportación dura unos {{minutes}} minutos.",
+            "fix": "Exporta primero un rango de entrada/salida más corto si quieres una prueba rápida."
           },
           "worker-export-ready": {
             "title": "Ruta de exportación con worker lista",
@@ -444,6 +478,23 @@
             "title": "Le mixage audio nécessite un repli sur le thread principal",
             "detail": "OfflineAudioContext n’est pas disponible dans le worker d’exportation ; le rendu audio s’exécutera donc sur le thread principal."
           },
+          "missing-media-blocks-export": {
+            "title": "Les médias manquants bloquent l’exportation",
+            "detail": "{{count}} fichier média référencé est manquant ou nécessite une autorisation.",
+            "detail_one": "{{count}} fichier média référencé est manquant ou nécessite une autorisation.",
+            "detail_other": "{{count}} fichiers média référencés sont manquants ou nécessitent une autorisation.",
+            "fix": "Reliez les médias manquants depuis la médiathèque avant d’exporter."
+          },
+          "large-file-risk": {
+            "title": "Fichier d’export volumineux attendu",
+            "detail": "Cette exportation est estimée à environ {{size}} avant variation du conteneur.",
+            "fix": "Utilisez Équilibré ou Petit fichier, réduisez la résolution ou exportez une plage plus courte si l’espace disque est limité."
+          },
+          "long-export-risk": {
+            "title": "Une longue exportation peut prendre du temps",
+            "detail": "Cette exportation dure environ {{minutes}} minutes.",
+            "fix": "Exportez d’abord une plage d’entrée/sortie plus courte pour une validation rapide."
+          },
           "worker-export-ready": {
             "title": "Chemin d’exportation par worker prêt",
             "detail": "Le worker d’exportation peut rendre cette composition sans repli connu sur le thread principal."
@@ -594,6 +645,23 @@
           "worker-audio-context-fallback": {
             "title": "Audiomix benötigt Fallback im Hauptthread",
             "detail": "OfflineAudioContext ist im Export-Worker nicht verfügbar, daher läuft das Audio-Rendering im Hauptthread."
+          },
+          "missing-media-blocks-export": {
+            "title": "Fehlende Medien blockieren den Export",
+            "detail": "{{count}} referenzierte Mediendatei fehlt oder benötigt Berechtigung.",
+            "detail_one": "{{count}} referenzierte Mediendatei fehlt oder benötigt Berechtigung.",
+            "detail_other": "{{count}} referenzierte Mediendateien fehlen oder benötigen Berechtigung.",
+            "fix": "Verknüpfe fehlende Medien vor dem Export erneut in der Medienbibliothek."
+          },
+          "large-file-risk": {
+            "title": "Große Exportdatei erwartet",
+            "detail": "Dieser Export wird vor Container-Abweichungen auf etwa {{size}} geschätzt.",
+            "fix": "Nutze Ausgewogen oder Kleine Datei, senke die Auflösung oder exportiere einen kürzeren Bereich, wenn Speicherplatz knapp ist."
+          },
+          "long-export-risk": {
+            "title": "Langer Export kann dauern",
+            "detail": "Dieser Export ist etwa {{minutes}} Minuten lang.",
+            "fix": "Exportiere zuerst einen kürzeren In/Out-Bereich, wenn du schnell validieren möchtest."
           },
           "worker-export-ready": {
             "title": "Worker-Exportpfad bereit",
@@ -746,6 +814,23 @@
             "title": "A mixagem de áudio exige fallback na thread principal",
             "detail": "OfflineAudioContext não está disponível no worker de exportação, então a renderização de áudio será executada na thread principal."
           },
+          "missing-media-blocks-export": {
+            "title": "Mídia ausente bloqueia a exportação",
+            "detail": "{{count}} arquivo de mídia referenciado está ausente ou precisa de permissão.",
+            "detail_one": "{{count}} arquivo de mídia referenciado está ausente ou precisa de permissão.",
+            "detail_other": "{{count}} arquivos de mídia referenciados estão ausentes ou precisam de permissão.",
+            "fix": "Revincule a mídia ausente na biblioteca antes de exportar."
+          },
+          "large-file-risk": {
+            "title": "Arquivo de exportação grande esperado",
+            "detail": "Esta exportação é estimada em cerca de {{size}} antes da variação do contêiner.",
+            "fix": "Use Equilibrado ou Arquivo pequeno, reduza a resolução ou exporte um intervalo menor se o espaço estiver apertado."
+          },
+          "long-export-risk": {
+            "title": "Exportação longa pode demorar",
+            "detail": "Esta exportação tem cerca de {{minutes}} minutos.",
+            "fix": "Exporte primeiro um intervalo de entrada/saída menor para uma validação rápida."
+          },
           "worker-export-ready": {
             "title": "Caminho de exportação por worker pronto",
             "detail": "O worker de exportação pode renderizar esta composição sem fallback conhecido para a thread principal."
@@ -896,6 +981,23 @@
           "worker-audio-context-fallback": {
             "title": "Ses miksajı ana iş parçacığına geri dönüş gerektirir",
             "detail": "OfflineAudioContext dışa aktarma worker’ında kullanılamıyor, bu nedenle ses render’ı ana iş parçacığında çalışacak."
+          },
+          "missing-media-blocks-export": {
+            "title": "Eksik medya dışa aktarmayı engelliyor",
+            "detail": "{{count}} başvurulan medya dosyası eksik veya izin gerekiyor.",
+            "detail_one": "{{count}} başvurulan medya dosyası eksik veya izin gerekiyor.",
+            "detail_other": "{{count}} başvurulan medya dosyası eksik veya izin gerekiyor.",
+            "fix": "Dışa aktarmadan önce eksik medyayı Medya Kitaplığı’ndan yeniden bağlayın."
+          },
+          "large-file-risk": {
+            "title": "Büyük dışa aktarma dosyası bekleniyor",
+            "detail": "Bu dışa aktarma, kapsayıcı farkları öncesinde yaklaşık {{size}} olarak tahmin ediliyor.",
+            "fix": "Disk alanı sınırlıysa Dengeli veya Küçük Dosya kullanın, çözünürlüğü düşürün ya da daha kısa bir aralık dışa aktarın."
+          },
+          "long-export-risk": {
+            "title": "Uzun dışa aktarma zaman alabilir",
+            "detail": "Bu dışa aktarma yaklaşık {{minutes}} dakika uzunluğunda.",
+            "fix": "Hızlı doğrulama için önce daha kısa bir giriş/çıkış aralığı dışa aktarın."
           },
           "worker-export-ready": {
             "title": "Worker dışa aktarma yolu hazır",
@@ -1048,6 +1150,23 @@
             "title": "音声ミックスにはメインスレッドへのフォールバックが必要です",
             "detail": "OfflineAudioContext は書き出しワーカーで利用できないため、音声レンダリングはメインスレッドで実行されます。"
           },
+          "missing-media-blocks-export": {
+            "title": "見つからないメディアが書き出しをブロックしています",
+            "detail": "参照中のメディアファイル {{count}} 件が見つからないか、権限が必要です。",
+            "detail_one": "参照中のメディアファイル {{count}} 件が見つからないか、権限が必要です。",
+            "detail_other": "参照中のメディアファイル {{count}} 件が見つからないか、権限が必要です。",
+            "fix": "書き出す前に、メディアライブラリで見つからないメディアを再リンクしてください。"
+          },
+          "large-file-risk": {
+            "title": "大きな書き出しファイルが予想されます",
+            "detail": "この書き出しはコンテナ差分を除いて約 {{size}} と推定されます。",
+            "fix": "空き容量が少ない場合は、バランスまたは小さいファイル、低い解像度、短い範囲を使ってください。"
+          },
+          "long-export-risk": {
+            "title": "長い書き出しには時間がかかる可能性があります",
+            "detail": "この書き出しは約 {{minutes}} 分です。",
+            "fix": "すばやく確認したい場合は、先に短いイン/アウト範囲を書き出してください。"
+          },
           "worker-export-ready": {
             "title": "ワーカー書き出しパスの準備完了",
             "detail": "書き出しワーカーは、既知のメインスレッドフォールバックなしでこのコンポジションをレンダリングできます。"
@@ -1199,6 +1318,23 @@
             "title": "오디오 믹스에는 메인 스레드 폴백이 필요합니다",
             "detail": "OfflineAudioContext를 내보내기 워커에서 사용할 수 없어 오디오 렌더링이 메인 스레드에서 실행됩니다."
           },
+          "missing-media-blocks-export": {
+            "title": "누락된 미디어가 내보내기를 막고 있습니다",
+            "detail": "참조된 미디어 파일 {{count}}개가 없거나 권한이 필요합니다.",
+            "detail_one": "참조된 미디어 파일 {{count}}개가 없거나 권한이 필요합니다.",
+            "detail_other": "참조된 미디어 파일 {{count}}개가 없거나 권한이 필요합니다.",
+            "fix": "내보내기 전에 미디어 라이브러리에서 누락된 미디어를 다시 연결하세요."
+          },
+          "large-file-risk": {
+            "title": "큰 내보내기 파일이 예상됩니다",
+            "detail": "이 내보내기는 컨테이너 차이를 제외하고 약 {{size}}로 예상됩니다.",
+            "fix": "디스크 공간이 부족하면 균형 또는 작은 파일, 낮은 해상도, 짧은 범위를 사용하세요."
+          },
+          "long-export-risk": {
+            "title": "긴 내보내기는 시간이 걸릴 수 있습니다",
+            "detail": "이 내보내기는 약 {{minutes}}분입니다.",
+            "fix": "빠른 확인이 필요하면 먼저 짧은 인/아웃 범위를 내보내세요."
+          },
           "worker-export-ready": {
             "title": "워커 내보내기 경로 준비 완료",
             "detail": "내보내기 워커가 알려진 메인 스레드 폴백 없이 이 컴포지션을 렌더링할 수 있습니다."
@@ -1349,6 +1485,23 @@
           "worker-audio-context-fallback": {
             "title": "音频混音需要主线程回退",
             "detail": "导出 worker 中无法使用 OfflineAudioContext，因此音频渲染将在主线程运行。"
+          },
+          "missing-media-blocks-export": {
+            "title": "缺失媒体会阻止导出",
+            "detail": "{{count}} 个引用的媒体文件缺失或需要权限。",
+            "detail_one": "{{count}} 个引用的媒体文件缺失或需要权限。",
+            "detail_other": "{{count}} 个引用的媒体文件缺失或需要权限。",
+            "fix": "导出前请在媒体库中重新链接缺失媒体。"
+          },
+          "large-file-risk": {
+            "title": "预计导出文件较大",
+            "detail": "此导出在容器差异前预计约为 {{size}}。",
+            "fix": "如果磁盘空间紧张，请使用平衡或小文件、降低分辨率，或导出更短的范围。"
+          },
+          "long-export-risk": {
+            "title": "长时间导出可能耗时较久",
+            "detail": "此导出约 {{minutes}} 分钟。",
+            "fix": "如果想快速验证，请先导出较短的入点/出点范围。"
           },
           "worker-export-ready": {
             "title": "Worker 导出路径已就绪",

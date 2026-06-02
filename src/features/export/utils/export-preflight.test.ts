@@ -51,6 +51,20 @@ function audioItem(overrides: Partial<Extract<TimelineItem, { type: 'audio' }>> 
   } satisfies Extract<TimelineItem, { type: 'audio' }>
 }
 
+function videoItem(overrides: Partial<Extract<TimelineItem, { type: 'video' }>> = {}) {
+  return {
+    id: 'video-1',
+    trackId: 'track-1',
+    type: 'video',
+    from: 0,
+    durationInFrames: 30,
+    label: 'clip.mp4',
+    mediaId: 'media-video-1',
+    src: 'blob://clip.mp4',
+    ...overrides,
+  } satisfies Extract<TimelineItem, { type: 'video' }>
+}
+
 function composition(items: TimelineItem[] = []): CompositionInputProps {
   return {
     fps: 30,
@@ -184,5 +198,68 @@ describe('assessExportPreflight', () => {
     expect(result.resolvedSettings?.mode).toBe('audio')
     expect(result.checks.map((check) => check.id)).toContain('audio-export-ready')
     expect(result.checks.map((check) => check.id)).not.toContain('video-codec-unavailable')
+  })
+
+  it('blocks export when the composition references broken media', async () => {
+    const result = await assessExportPreflight({
+      settings: baseSettings,
+      fps: 30,
+      composition: composition([videoItem({ mediaId: 'missing-media' })]),
+      durationFrames: 300,
+      supportedVideoCodecs: ['avc'],
+      workerAvailable: true,
+      offlineAudioContextAvailable: true,
+      brokenMediaIds: ['missing-media', 'unused-media'],
+    })
+
+    expect(result.canExport).toBe(false)
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({
+        id: 'missing-media-blocks-export',
+        severity: 'error',
+        detailParams: { count: 1 },
+      }),
+    )
+  })
+
+  it('warns when the estimated export file size is very large', async () => {
+    const result = await assessExportPreflight({
+      settings: { ...baseSettings, quality: 'ultra' },
+      fps: 30,
+      composition: composition([videoItem()]),
+      durationFrames: 30 * 60 * 30,
+      supportedVideoCodecs: ['avc'],
+      workerAvailable: true,
+      offlineAudioContextAvailable: true,
+    })
+
+    expect(result.estimatedFileSizeBytes).toBeGreaterThan(2 * 1024 * 1024 * 1024)
+    expect(result.canExport).toBe(true)
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({
+        id: 'large-file-risk',
+        severity: 'warning',
+      }),
+    )
+  })
+
+  it('warns when the export duration is long enough to be risky', async () => {
+    const result = await assessExportPreflight({
+      settings: baseSettings,
+      fps: 30,
+      composition: composition([videoItem()]),
+      durationFrames: 30 * 31 * 60,
+      supportedVideoCodecs: ['avc'],
+      workerAvailable: true,
+      offlineAudioContextAvailable: true,
+    })
+
+    expect(result.canExport).toBe(true)
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({
+        id: 'long-export-risk',
+        severity: 'warning',
+      }),
+    )
   })
 })

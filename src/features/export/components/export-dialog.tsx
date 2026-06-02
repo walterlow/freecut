@@ -72,6 +72,7 @@ import {
   type ClientAudioContainer,
 } from '../utils/client-renderer'
 import { ExportPreviewPlayer } from './export-preview-player'
+import { useBrokenMediaIds } from '../deps/media-library'
 
 export interface ExportDialogProps {
   open: boolean
@@ -305,6 +306,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   const inPoint = useTimelineStore((s) => s.inPoint)
   const outPoint = useTimelineStore((s) => s.outPoint)
   const markers = useTimelineStore((s) => s.markers ?? [])
+  const brokenMediaIds = useBrokenMediaIds()
   const enqueueJobs = useRenderQueueStore((s) => s.enqueueJobs)
 
   const [settings, setSettings] = useState<ExportSettings>({
@@ -708,6 +710,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
       composition: preflightComposition,
       durationFrames: exportRange.duration,
       supportedVideoCodecs: supportedVideoCodecs ?? [],
+      brokenMediaIds,
     }).then((result) => {
       if (!cancelled) setPreflight(result)
     })
@@ -717,6 +720,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
     }
   }, [
     audioContainer,
+    brokenMediaIds,
     embedSubtitles,
     exportMode,
     exportRange.duration,

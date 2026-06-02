@@ -39,6 +39,7 @@
     "backToProjects": "プロジェクトに戻る",
     "backToProjectsAria": "プロジェクトに戻る",
     "specs": "{{width}}x{{height}} | {{fps}} fps",
+    "specsDetailed": "{{width}}x{{height}} | {{fps}} fps | {{duration}} | {{clips}} クリップ | {{media}} メディア | 不明 {{missing}}",
     "whatsNew": "新着情報",
     "whatsNewAria": "新着情報",
     "settings": "設定",

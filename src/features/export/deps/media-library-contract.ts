@@ -26,3 +26,7 @@ export function getMediaAudioCodecById(mediaId: string | undefined): string | un
   }
   return undefined
 }
+
+export function useBrokenMediaIds(): string[] {
+  return useMediaLibraryStore((state) => state.brokenMediaIds)
+}

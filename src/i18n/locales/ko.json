@@ -39,6 +39,7 @@
     "backToProjects": "프로젝트로 돌아가기",
     "backToProjectsAria": "프로젝트로 돌아가기",
     "specs": "{{width}}x{{height}} | {{fps}} fps",
+    "specsDetailed": "{{width}}x{{height}} | {{fps}} fps | {{duration}} | 클립 {{clips}}개 | 미디어 {{media}}개 | 누락 {{missing}}개",
     "whatsNew": "새 소식",
     "whatsNewAria": "새 소식",
     "settings": "설정",

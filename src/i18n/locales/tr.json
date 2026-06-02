@@ -39,6 +39,7 @@
     "backToProjects": "Projelere Dön",
     "backToProjectsAria": "Projelere dön",
     "specs": "{{width}}x{{height}} | {{fps}}fps",
+    "specsDetailed": "{{width}}x{{height}} | {{fps}}fps | {{duration}} | {{clips}} klip | {{media}} medya | {{missing}} eksik",
     "whatsNew": "Yenilikler",
     "whatsNewAria": "Yenilikler",
     "settings": "Ayarlar",

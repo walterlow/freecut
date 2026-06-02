@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import {
@@ -35,8 +35,18 @@ import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
 import { cn } from '@/shared/ui/cn'
 import { LanguageSwitcher } from '@/shared/ui/language-switcher'
 import { useDebugStore } from '@/features/editor/stores/debug-store'
+import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { useMediaLibraryStore } from '@/features/editor/deps/media-library'
+import { buildProjectMetadataSummary } from '@/features/editor/utils/project-metadata-summary'
 
 const SAVE_ANIMATION_MIN_MS = 1800
+
+function formatProjectDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = Math.round(seconds % 60)
+  return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+}
 
 interface ToolbarProps {
   projectId: string
@@ -76,6 +86,17 @@ export const Toolbar = memo(function Toolbar({
   const [isSaveAnimating, setIsSaveAnimating] = useState(false)
   const [saveAnimationKey, setSaveAnimationKey] = useState(0)
   const saveAnimationTimeoutRef = useRef<number | undefined>(undefined)
+  const timelineItems = useTimelineStore((state) => state.items)
+  const brokenMediaIds = useMediaLibraryStore((state) => state.brokenMediaIds)
+  const projectSummary = useMemo(
+    () =>
+      buildProjectMetadataSummary({
+        fps: project.fps,
+        items: timelineItems,
+        brokenMediaIds,
+      }),
+    [brokenMediaIds, project.fps, timelineItems],
+  )
 
   useEffect(() => {
     setHasUnseenWhatsNew(hasUnseenChangelog())
@@ -165,10 +186,14 @@ export const Toolbar = memo(function Toolbar({
             {project?.name || t('common.untitledProject')}
           </h1>
           <span className="font-mono text-[11px] text-muted-foreground">
-            {t('toolbar.specs', {
+            {t('toolbar.specsDetailed', {
               width: project?.width,
               height: project?.height,
               fps: project?.fps,
+              duration: formatProjectDuration(projectSummary.durationSeconds),
+              clips: projectSummary.clipCount,
+              media: projectSummary.mediaCount,
+              missing: projectSummary.brokenMediaCount,
             })}
           </span>
         </div>
