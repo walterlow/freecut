@@ -34,7 +34,7 @@ export const useTimelineSettingsStore = create<TimelineSettingsState & TimelineS
     fps: 30,
     scrollPosition: 0,
     snapEnabled: true,
-    audioSkimmingEnabled: false,
+    audioSkimmingEnabled: true,
     isDirty: false,
     isTimelineLoading: true, // Start true - set false after loadTimeline completes
 
