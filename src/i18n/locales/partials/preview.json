@@ -2,6 +2,14 @@
   "en": {
     "preview": {
       "align": {
+        "left": "Align Left",
+        "centerH": "Align Center Horizontally",
+        "right": "Align Right",
+        "top": "Align Top",
+        "centerV": "Align Center Vertically",
+        "bottom": "Align Bottom",
+        "distributeH": "Distribute Horizontally",
+        "distributeV": "Distribute Vertically",
         "disableCanvasSnap": "Disable Canvas Snap",
         "enableCanvasSnap": "Enable Canvas Snap",
         "toggleCanvasSnap": "Toggle Canvas Snap"
@@ -92,6 +100,14 @@
   "es": {
     "preview": {
       "align": {
+        "left": "Alinear a la izquierda",
+        "centerH": "Centrar horizontalmente",
+        "right": "Alinear a la derecha",
+        "top": "Alinear arriba",
+        "centerV": "Centrar verticalmente",
+        "bottom": "Alinear abajo",
+        "distributeH": "Distribuir horizontalmente",
+        "distributeV": "Distribuir verticalmente",
         "disableCanvasSnap": "Desactivar ajuste al lienzo",
         "enableCanvasSnap": "Activar ajuste al lienzo",
         "toggleCanvasSnap": "Alternar ajuste al lienzo"
@@ -182,6 +198,14 @@
   "fr": {
     "preview": {
       "align": {
+        "left": "Aligner à gauche",
+        "centerH": "Centrer horizontalement",
+        "right": "Aligner à droite",
+        "top": "Aligner en haut",
+        "centerV": "Centrer verticalement",
+        "bottom": "Aligner en bas",
+        "distributeH": "Répartir horizontalement",
+        "distributeV": "Répartir verticalement",
         "disableCanvasSnap": "Désactiver l'aimantation",
         "enableCanvasSnap": "Activer l'aimantation",
         "toggleCanvasSnap": "Basculer l'aimantation"
@@ -272,6 +296,14 @@
   "de": {
     "preview": {
       "align": {
+        "left": "Links ausrichten",
+        "centerH": "Horizontal zentrieren",
+        "right": "Rechts ausrichten",
+        "top": "Oben ausrichten",
+        "centerV": "Vertikal zentrieren",
+        "bottom": "Unten ausrichten",
+        "distributeH": "Horizontal verteilen",
+        "distributeV": "Vertikal verteilen",
         "disableCanvasSnap": "Canvas-Einrasten deaktivieren",
         "enableCanvasSnap": "Canvas-Einrasten aktivieren",
         "toggleCanvasSnap": "Canvas-Einrasten umschalten"
@@ -362,6 +394,14 @@
   "pt-BR": {
     "preview": {
       "align": {
+        "left": "Alinhar à esquerda",
+        "centerH": "Centralizar horizontalmente",
+        "right": "Alinhar à direita",
+        "top": "Alinhar ao topo",
+        "centerV": "Centralizar verticalmente",
+        "bottom": "Alinhar à base",
+        "distributeH": "Distribuir horizontalmente",
+        "distributeV": "Distribuir verticalmente",
         "disableCanvasSnap": "Desativar encaixe no canvas",
         "enableCanvasSnap": "Ativar encaixe no canvas",
         "toggleCanvasSnap": "Alternar encaixe no canvas"
@@ -452,6 +492,14 @@
   "tr": {
     "preview": {
       "align": {
+        "left": "Sola hizala",
+        "centerH": "Yatay ortala",
+        "right": "Sağa hizala",
+        "top": "Üste hizala",
+        "centerV": "Dikey ortala",
+        "bottom": "Alta hizala",
+        "distributeH": "Yatay dağıt",
+        "distributeV": "Dikey dağıt",
         "disableCanvasSnap": "Tuval yakalamayı kapat",
         "enableCanvasSnap": "Tuval yakalamayı aç",
         "toggleCanvasSnap": "Tuval yakalamayı aç/kapat"
@@ -542,6 +590,14 @@
   "ja": {
     "preview": {
       "align": {
+        "left": "左揃え",
+        "centerH": "水平方向に中央揃え",
+        "right": "右揃え",
+        "top": "上揃え",
+        "centerV": "垂直方向に中央揃え",
+        "bottom": "下揃え",
+        "distributeH": "水平方向に均等配置",
+        "distributeV": "垂直方向に均等配置",
         "disableCanvasSnap": "キャンバスへのスナップを無効化",
         "enableCanvasSnap": "キャンバスへのスナップを有効化",
         "toggleCanvasSnap": "キャンバススナップを切り替え"
@@ -632,6 +688,14 @@
   "ko": {
     "preview": {
       "align": {
+        "left": "왼쪽 정렬",
+        "centerH": "가로 가운데 정렬",
+        "right": "오른쪽 정렬",
+        "top": "위쪽 정렬",
+        "centerV": "세로 가운데 정렬",
+        "bottom": "아래쪽 정렬",
+        "distributeH": "가로로 균등 배치",
+        "distributeV": "세로로 균등 배치",
         "disableCanvasSnap": "캔버스 스냅 비활성화",
         "enableCanvasSnap": "캔버스 스냅 활성화",
         "toggleCanvasSnap": "캔버스 스냅 전환"
@@ -722,6 +786,14 @@
   "zh": {
     "preview": {
       "align": {
+        "left": "左对齐",
+        "centerH": "水平居中",
+        "right": "右对齐",
+        "top": "顶部对齐",
+        "centerV": "垂直居中",
+        "bottom": "底部对齐",
+        "distributeH": "水平分布",
+        "distributeV": "垂直分布",
         "disableCanvasSnap": "禁用画布吸附",
         "enableCanvasSnap": "启用画布吸附",
         "toggleCanvasSnap": "切换画布吸附"
