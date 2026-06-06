@@ -47,6 +47,7 @@ import {
   applyTrackScopedMasks as applyTrackScopedMasksPure,
   type RenderedTaskResult,
 } from './frame-mask-helpers'
+import { renderTransitionFallbackCanvas as renderTransitionFallbackCanvasPure } from './frame-render-tasks'
 import {
   applyMasks,
   buildMaskFrameIndex,
@@ -83,7 +84,6 @@ import {
   renderItem,
   renderItemGpuEffectsToTexture,
   renderPreviewVideoGpuEffectsToCanvas,
-  renderTransitionToCanvas,
   renderTransitionToGpuTexture,
   type CanvasSettings,
   type WorkerLoadedImage,
@@ -1694,23 +1694,15 @@ export async function createCompositionRenderer(
         const renderMasksToGpuTexture = (masks: PreparedMask[]) =>
           renderMasksToGpuTexturePure(masks, { gpu, canvasSettings, maskSettings })
 
-        const renderTransitionFallbackCanvas = async (
+        const renderTransitionFallbackCanvas = (
           task: Extract<(typeof renderTasks)[number], { type: 'transition' }>,
-        ): Promise<RenderedTaskResult> => {
-          const transitionMasks = activeMasks.filter((mask) =>
-            doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
-          )
-          const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire()
-          await renderTransitionToCanvas(
-            trCtx,
-            task.transition,
+        ): Promise<RenderedTaskResult> =>
+          renderTransitionFallbackCanvasPure(task, {
             frame,
+            activeMasks,
             itemRenderContext,
-            task.trackOrder,
-            transitionMasks,
-          )
-          return { source: trCanvas, poolCanvases: [trCanvas] }
-        }
+            canvasPool,
+          })
 
         const applyTrackScopedMasks = (
           result: RenderedTaskResult | null,
