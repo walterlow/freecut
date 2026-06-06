@@ -49,6 +49,7 @@ Trace-*.json
 # src/routeTree.gen.ts
 .claude/settings.local.json
 .claude/worktrees/
+.claude/skills/impeccable/
 
 .vercel
 .env*.local
