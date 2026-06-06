@@ -53,19 +53,25 @@ function renderContextMenu(overrides: Partial<ComponentProps<typeof ItemContextM
   render(
     <ItemContextMenu
       trackLocked={false}
-      isSelected
-      canJoinSelected={false}
-      hasJoinableLeft={false}
-      hasJoinableRight={false}
-      closerEdge={null}
-      onJoinSelected={() => {}}
-      onJoinLeft={() => {}}
-      onJoinRight={() => {}}
-      onRippleDelete={() => {}}
-      onDelete={() => {}}
-      canDetectScenes
-      isDetectingScenes={false}
-      onDetectScenes={onDetectScenes}
+      joinActions={{
+        canJoinSelected: false,
+        hasJoinableLeft: false,
+        hasJoinableRight: false,
+        closerEdge: null,
+        onJoinSelected: () => {},
+        onJoinLeft: () => {},
+        onJoinRight: () => {},
+      }}
+      destructiveActions={{
+        isSelected: true,
+        onRippleDelete: () => {},
+        onDelete: () => {},
+      }}
+      sceneDetectionActions={{
+        canDetectScenes: true,
+        isDetectingScenes: false,
+        onDetectScenes,
+      }}
       {...overrides}
     >
       <div>Clip</div>
@@ -115,10 +121,12 @@ describe('ItemContextMenu captions', () => {
     const onOpenCaptionDialog = vi.fn()
 
     renderContextMenu({
-      canManageCaptions: true,
-      hasCaptions: false,
-      hasTranscript: false,
-      onOpenCaptionDialog,
+      captionActions: {
+        canManageCaptions: true,
+        hasCaptions: false,
+        hasTranscript: false,
+        onOpenCaptionDialog,
+      },
     })
 
     const item = screen.getByRole('button', { name: 'Generate Captions' })
@@ -133,11 +141,13 @@ describe('ItemContextMenu captions', () => {
     const onApplyCaptionsFromTranscript = vi.fn()
 
     renderContextMenu({
-      canManageCaptions: true,
-      hasCaptions: false,
-      hasTranscript: true,
-      onOpenCaptionDialog,
-      onApplyCaptionsFromTranscript,
+      captionActions: {
+        canManageCaptions: true,
+        hasCaptions: false,
+        hasTranscript: true,
+        onOpenCaptionDialog,
+        onApplyCaptionsFromTranscript,
+      },
     })
 
     expect(screen.getByText('Captions')).toBeInTheDocument()
@@ -150,11 +160,13 @@ describe('ItemContextMenu captions', () => {
 
   it('labels the generate item "Regenerate Captions" when the clip already has captions', () => {
     renderContextMenu({
-      canManageCaptions: true,
-      hasCaptions: true,
-      hasTranscript: true,
-      onOpenCaptionDialog: vi.fn(),
-      onApplyCaptionsFromTranscript: vi.fn(),
+      captionActions: {
+        canManageCaptions: true,
+        hasCaptions: true,
+        hasTranscript: true,
+        onOpenCaptionDialog: vi.fn(),
+        onApplyCaptionsFromTranscript: vi.fn(),
+      },
     })
 
     expect(screen.getByRole('button', { name: 'Regenerate Captions' })).toBeInTheDocument()

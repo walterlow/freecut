@@ -12,7 +12,7 @@ import type {
   KeyframeRef,
 } from '@/types/keyframe'
 import type { BlockedFrameRange } from '../../utils/transition-region'
-import { ValueGraphEditor } from '../value-graph-editor'
+import { EmbeddedValueGraphEditor } from '../value-graph-editor'
 import { PROPERTY_COLUMN_WIDTH, RULER_HEIGHT } from './dopesheet-constants'
 import type { Viewport } from './dopesheet-types'
 
@@ -127,7 +127,7 @@ export function DopesheetGraphPane({
         onKeyDown={handleGraphPaneKeyDown}
       >
         {graphPaneSize.width > 0 && graphPaneSize.height > 0 && graphVisiblePropertiesSize > 0 ? (
-          <ValueGraphEditor
+          <EmbeddedValueGraphEditor
             frameViewport={viewport}
             onFrameViewportChange={updateViewport}
             itemId={itemId}
@@ -155,14 +155,10 @@ export function DopesheetGraphPane({
             onNavigateToKeyframe={onNavigateToKeyframe}
             transitionBlockedRanges={transitionBlockedRanges}
             snapEnabled={snapEnabled}
-            showToolbar={false}
-            showKeyboardHints={false}
-            borderless
             showAllHandles={showAllGraphHandles}
             rulerUnit={graphRulerUnit}
             autoZoomGraphHeight={autoZoomGraphHeight}
             externalValueZoomLevel={graphVerticalZoomValue}
-            hideXLabels
             disabled={disabled || graphDisplayPropertyLocked}
           />
         ) : null}

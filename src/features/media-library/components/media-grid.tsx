@@ -4,7 +4,7 @@ import { Loader2, Upload, AlertTriangle } from 'lucide-react'
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaGrid')
-import { MediaCard } from './media-card'
+import { GridMediaCard, ListMediaCard } from './media-card'
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store'
 import type { MediaMetadata } from '@/types/storage'
 import {
@@ -278,10 +278,11 @@ export const MediaGrid = memo(function MediaGrid({
         >
           {filteredItems.map((media) => {
             const handlers = cardHandlersById.get(media.id)
+            const Card = viewMode === 'grid' ? GridMediaCard : ListMediaCard
 
             return (
               <div key={media.id} data-media-id={media.id}>
-                <MediaCard
+                <Card
                   media={media}
                   selected={selectedMediaIdSet.has(media.id)}
                   isBroken={brokenMediaIdSet.has(media.id)}
@@ -289,7 +290,6 @@ export const MediaGrid = memo(function MediaGrid({
                   onDoubleClick={handlers?.onDoubleClick}
                   onDelete={handlers?.onDelete}
                   onRelink={handlers?.onRelink}
-                  viewMode={viewMode}
                 />
               </div>
             )

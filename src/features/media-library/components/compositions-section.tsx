@@ -222,12 +222,12 @@ export function CompositionsSection() {
           {compositions.map((comp) => {
             const handlers = cardHandlersById.get(comp.id)
             if (!handlers) return null
+            const Card = viewMode === 'grid' ? GridCompositionCard : ListCompositionCard
 
             return (
-              <CompositionCard
+              <Card
                 key={comp.id}
                 composition={comp}
-                viewMode={viewMode}
                 selected={selectedCompositionIdSet.has(comp.id)}
                 isTranscriptionDialogOpen={isTranscriptionDialogOpen}
                 dragDisabled={wouldCreateCompositionCycle({
@@ -293,7 +293,6 @@ export function CompositionsSection() {
 
 interface CompositionCardProps {
   composition: SubComposition
-  viewMode: 'grid' | 'list'
   selected: boolean
   isTranscriptionDialogOpen: boolean
   dragDisabled: boolean
@@ -308,7 +307,19 @@ interface CompositionCardProps {
   onCancelRename: () => void
 }
 
-const CompositionCard = memo(function CompositionCard({
+interface CompositionCardInternalProps extends CompositionCardProps {
+  viewMode: 'grid' | 'list'
+}
+
+const GridCompositionCard = memo(function GridCompositionCard(props: CompositionCardProps) {
+  return <CompositionCardInternal {...props} viewMode="grid" />
+})
+
+const ListCompositionCard = memo(function ListCompositionCard(props: CompositionCardProps) {
+  return <CompositionCardInternal {...props} viewMode="list" />
+})
+
+const CompositionCardInternal = memo(function CompositionCardInternal({
   composition,
   viewMode,
   selected,
@@ -323,7 +334,7 @@ const CompositionCard = memo(function CompositionCard({
   onStartRename,
   onCommitRename,
   onCancelRename,
-}: CompositionCardProps) {
+}: CompositionCardInternalProps) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
   const thumbnailContainerRef = useRef<HTMLDivElement | null>(null)

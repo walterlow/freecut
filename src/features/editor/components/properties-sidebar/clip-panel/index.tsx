@@ -37,8 +37,11 @@ const LazyEffectsSection = lazy(() =>
 const LazySubtitleSection = lazy(() =>
   import('./subtitle-section').then((module) => ({ default: module.SubtitleSection })),
 )
-const LazyTextSection = lazy(() =>
-  import('./text-section').then((module) => ({ default: module.TextSection })),
+const LazyTextContentSection = lazy(() =>
+  import('./text-section').then((module) => ({ default: module.TextContentSection })),
+)
+const LazyTextEffectsSection = lazy(() =>
+  import('./text-section').then((module) => ({ default: module.TextEffectsSection })),
 )
 
 /**
@@ -279,12 +282,7 @@ export const ClipPanel = memo(function ClipPanel() {
               {showVideoTab && <CornerPinSection items={layoutFillItems} />}
               {hasTextItems && (
                 <Suspense fallback={null}>
-                  <LazyTextSection
-                    items={selectedItems}
-                    canvas={canvas}
-                    showEffectSection={false}
-                    showAnimationSection={false}
-                  />
+                  <LazyTextContentSection items={selectedItems} canvas={canvas} />
                 </Suspense>
               )}
               {hasShapeItems && <ShapeSection items={selectedItems} />}
@@ -323,11 +321,7 @@ export const ClipPanel = memo(function ClipPanel() {
               {hasTextItems && <Separator />}
               {hasTextItems && (
                 <Suspense fallback={null}>
-                  <LazyTextSection
-                    items={selectedItems}
-                    canvas={canvas}
-                    showContentSection={false}
-                  />
+                  <LazyTextEffectsSection items={selectedItems} canvas={canvas} />
                 </Suspense>
               )}
             </>

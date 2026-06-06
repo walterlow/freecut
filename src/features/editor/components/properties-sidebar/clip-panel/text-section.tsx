@@ -131,9 +131,12 @@ const TEXT_EFFECT_PRESETS = [
 interface TextSectionProps {
   items: TimelineItem[]
   canvas: CanvasSettings
-  showContentSection?: boolean
-  showEffectSection?: boolean
-  showAnimationSection?: boolean
+}
+
+type TextSectionSlot = 'content' | 'effects' | 'animation'
+
+interface TextSectionComposerProps extends TextSectionProps {
+  slots: TextSectionSlot[]
 }
 
 function normalizeTextShadow(shadow: NonNullable<TextItem['textShadow']>): TextItem['textShadow'] {
@@ -274,16 +277,19 @@ function getSpanEditorConfigs(
   ]
 }
 
-/**
- * Text section - properties for text items (font, color, alignment, etc.)
- */
-export function TextSection({
-  items,
-  canvas,
-  showContentSection = true,
-  showEffectSection = true,
-  showAnimationSection = true,
-}: TextSectionProps) {
+export function TextSection(props: TextSectionProps) {
+  return <TextSectionComposer {...props} slots={['content', 'effects', 'animation']} />
+}
+
+export function TextContentSection(props: TextSectionProps) {
+  return <TextSectionComposer {...props} slots={['content']} />
+}
+
+export function TextEffectsSection(props: TextSectionProps) {
+  return <TextSectionComposer {...props} slots={['effects', 'animation']} />
+}
+
+function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps) {
   const { t } = useTranslation()
   const updateItem = useTimelineStore((s) => s.updateItem)
   const addKeyframes = useTimelineStore((s) => s.addKeyframes)
@@ -1150,6 +1156,9 @@ export function TextSection({
   const textPadding = sharedValues.textPadding
   const backgroundRadius = sharedValues.backgroundRadius
   const spanEditorConfigs = getSpanEditorConfigs(activeEditorSpans.length, t)
+  const showContentSection = slots.includes('content')
+  const showEffectSection = slots.includes('effects')
+  const showAnimationSection = slots.includes('animation')
 
   return (
     <>

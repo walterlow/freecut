@@ -71,7 +71,10 @@ interface MediaCardProps {
   onDoubleClick?: () => void
   onDelete?: (mediaIds: string[]) => void
   onRelink?: () => void
-  viewMode?: 'grid' | 'list'
+}
+
+interface MediaCardInternalProps extends MediaCardProps {
+  viewMode: 'grid' | 'list'
 }
 
 interface MediaCardActionMenuProps {
@@ -93,6 +96,42 @@ interface MediaCardActionMenuProps {
   onDeleteTranscript: (event: React.MouseEvent) => Promise<void>
   onExtractEmbeddedSubtitles: (event: React.MouseEvent) => void | Promise<void>
   onAnalyzeWithAI: (event: React.MouseEvent) => void
+  onDelete: (event: React.MouseEvent) => void
+}
+
+type MediaCardMenuGroupProps = {
+  t: ReturnType<typeof useTranslation>['t']
+}
+
+type BrokenMediaActionsProps = MediaCardMenuGroupProps & {
+  onRelink: () => void
+}
+
+type ProxyActionsProps = MediaCardMenuGroupProps & {
+  canShowGenerateProxy: boolean
+  hasProxy: boolean
+  onGenerateProxy: (event: React.MouseEvent) => void | Promise<void>
+  onDeleteProxy: (event: React.MouseEvent) => Promise<void>
+}
+
+type TranscriptActionsProps = MediaCardMenuGroupProps & {
+  canShowGenerateTranscript: boolean
+  canShowDeleteTranscript: boolean
+  hasTranscript: boolean
+  onGenerateTranscript: (event: React.MouseEvent) => void | Promise<void>
+  onDeleteTranscript: (event: React.MouseEvent) => Promise<void>
+}
+
+type EmbeddedSubtitleActionsProps = MediaCardMenuGroupProps & {
+  isExtractingEmbeddedSubtitles: boolean
+  onExtractEmbeddedSubtitles: (event: React.MouseEvent) => void | Promise<void>
+}
+
+type AiActionsProps = MediaCardMenuGroupProps & {
+  onAnalyzeWithAI: (event: React.MouseEvent) => void
+}
+
+type DeleteMediaActionProps = MediaCardMenuGroupProps & {
   onDelete: (event: React.MouseEvent) => void
 }
 
@@ -224,7 +263,6 @@ function MediaCardActionMenuItems({
   onDelete,
 }: MediaCardActionMenuProps) {
   const { t } = useTranslation()
-  const hasBrokenGroup = isBroken && !!onRelink
   const canShowGenerateProxy = canGenerateProxy && !hasProxy && proxyStatus !== 'generating'
   const showProxyGroup = !isBroken && (canShowGenerateProxy || hasProxy)
   const canShowGenerateTranscript = isTranscribable && !isBroken && !isTranscribing
@@ -235,109 +273,53 @@ function MediaCardActionMenuItems({
 
   const groups: ReactNode[] = []
 
-  if (hasBrokenGroup) {
-    groups.push(
-      <Fragment key="broken">
-        <ContextMenuLabel>{t('media.card.menuFile')}</ContextMenuLabel>
-        <ContextMenuItem
-          onClick={(event) => {
-            event.stopPropagation()
-            onRelink!()
-          }}
-          className="text-primary focus:text-primary"
-        >
-          <RefreshCw className="w-3 h-3 mr-2" />
-          {t('media.card.relinkFile')}
-        </ContextMenuItem>
-      </Fragment>,
-    )
+  if (isBroken && onRelink) {
+    groups.push(<BrokenMediaActions key="broken" t={t} onRelink={onRelink} />)
   }
 
   if (showProxyGroup) {
     groups.push(
-      <Fragment key="proxy">
-        <ContextMenuLabel>{t('media.card.menuProxy')}</ContextMenuLabel>
-        {canShowGenerateProxy && (
-          <ContextMenuItem onClick={onGenerateProxy}>
-            <Zap className="w-3 h-3 mr-2" />
-            {t('media.card.generateProxy')}
-          </ContextMenuItem>
-        )}
-        {hasProxy && (
-          <ContextMenuItem
-            onClick={onDeleteProxy}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="w-3 h-3 mr-2" />
-            {t('media.card.deleteProxy')}
-          </ContextMenuItem>
-        )}
-      </Fragment>,
+      <ProxyActions
+        key="proxy"
+        t={t}
+        canShowGenerateProxy={canShowGenerateProxy}
+        hasProxy={hasProxy}
+        onGenerateProxy={onGenerateProxy}
+        onDeleteProxy={onDeleteProxy}
+      />,
     )
   }
 
   if (showTranscriptGroup) {
     groups.push(
-      <Fragment key="transcript">
-        <ContextMenuLabel>{t('media.card.menuTranscript')}</ContextMenuLabel>
-        {canShowGenerateTranscript && (
-          <ContextMenuItem onClick={onGenerateTranscript}>
-            <FileText className="w-3 h-3 mr-2" />
-            {hasTranscript ? t('media.card.refreshTranscript') : t('media.card.generateTranscript')}
-          </ContextMenuItem>
-        )}
-        {canShowDeleteTranscript && (
-          <ContextMenuItem
-            onClick={onDeleteTranscript}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="w-3 h-3 mr-2" />
-            {t('media.card.deleteTranscript')}
-          </ContextMenuItem>
-        )}
-      </Fragment>,
+      <TranscriptActions
+        key="transcript"
+        t={t}
+        canShowGenerateTranscript={canShowGenerateTranscript}
+        canShowDeleteTranscript={canShowDeleteTranscript}
+        hasTranscript={hasTranscript}
+        onGenerateTranscript={onGenerateTranscript}
+        onDeleteTranscript={onDeleteTranscript}
+      />,
     )
   }
 
   if (showEmbeddedSubtitleGroup) {
     groups.push(
-      <Fragment key="embedded-subtitles">
-        <ContextMenuLabel>{t('media.card.menuCaptions')}</ContextMenuLabel>
-        <ContextMenuItem
-          onClick={onExtractEmbeddedSubtitles}
-          disabled={isExtractingEmbeddedSubtitles}
-        >
-          {isExtractingEmbeddedSubtitles ? (
-            <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-          ) : (
-            <FileText className="w-3 h-3 mr-2" />
-          )}
-          {t('media.card.extractEmbeddedSubtitles')}
-        </ContextMenuItem>
-      </Fragment>,
+      <EmbeddedSubtitleActions
+        key="embedded-subtitles"
+        t={t}
+        isExtractingEmbeddedSubtitles={isExtractingEmbeddedSubtitles}
+        onExtractEmbeddedSubtitles={onExtractEmbeddedSubtitles}
+      />,
     )
   }
 
   if (showAiGroup) {
-    groups.push(
-      <Fragment key="ai">
-        <ContextMenuLabel>{t('media.card.menuAi')}</ContextMenuLabel>
-        <ContextMenuItem onClick={onAnalyzeWithAI}>
-          <Sparkles className="w-3 h-3 mr-2" />
-          {t('media.card.analyzeWithAI')}
-        </ContextMenuItem>
-      </Fragment>,
-    )
+    groups.push(<AiActions key="ai" t={t} onAnalyzeWithAI={onAnalyzeWithAI} />)
   }
 
-  groups.push(
-    <Fragment key="destructive">
-      <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-        <Trash2 className="w-3 h-3 mr-2" />
-        {t('common.delete')}
-      </ContextMenuItem>
-    </Fragment>,
-  )
+  groups.push(<DeleteMediaAction key="destructive" t={t} onDelete={onDelete} />)
 
   return (
     <>
@@ -351,7 +333,136 @@ function MediaCardActionMenuItems({
   )
 }
 
-export const MediaCard = memo(function MediaCard({
+function BrokenMediaActions({ t, onRelink }: BrokenMediaActionsProps) {
+  return (
+    <>
+      <ContextMenuLabel>{t('media.card.menuFile')}</ContextMenuLabel>
+      <ContextMenuItem
+        onClick={(event) => {
+          event.stopPropagation()
+          onRelink()
+        }}
+        className="text-primary focus:text-primary"
+      >
+        <RefreshCw className="w-3 h-3 mr-2" />
+        {t('media.card.relinkFile')}
+      </ContextMenuItem>
+    </>
+  )
+}
+
+function ProxyActions({
+  t,
+  canShowGenerateProxy,
+  hasProxy,
+  onGenerateProxy,
+  onDeleteProxy,
+}: ProxyActionsProps) {
+  return (
+    <>
+      <ContextMenuLabel>{t('media.card.menuProxy')}</ContextMenuLabel>
+      {canShowGenerateProxy && (
+        <ContextMenuItem onClick={onGenerateProxy}>
+          <Zap className="w-3 h-3 mr-2" />
+          {t('media.card.generateProxy')}
+        </ContextMenuItem>
+      )}
+      {hasProxy && (
+        <ContextMenuItem
+          onClick={onDeleteProxy}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 className="w-3 h-3 mr-2" />
+          {t('media.card.deleteProxy')}
+        </ContextMenuItem>
+      )}
+    </>
+  )
+}
+
+function TranscriptActions({
+  t,
+  canShowGenerateTranscript,
+  canShowDeleteTranscript,
+  hasTranscript,
+  onGenerateTranscript,
+  onDeleteTranscript,
+}: TranscriptActionsProps) {
+  return (
+    <>
+      <ContextMenuLabel>{t('media.card.menuTranscript')}</ContextMenuLabel>
+      {canShowGenerateTranscript && (
+        <ContextMenuItem onClick={onGenerateTranscript}>
+          <FileText className="w-3 h-3 mr-2" />
+          {hasTranscript ? t('media.card.refreshTranscript') : t('media.card.generateTranscript')}
+        </ContextMenuItem>
+      )}
+      {canShowDeleteTranscript && (
+        <ContextMenuItem
+          onClick={onDeleteTranscript}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 className="w-3 h-3 mr-2" />
+          {t('media.card.deleteTranscript')}
+        </ContextMenuItem>
+      )}
+    </>
+  )
+}
+
+function EmbeddedSubtitleActions({
+  t,
+  isExtractingEmbeddedSubtitles,
+  onExtractEmbeddedSubtitles,
+}: EmbeddedSubtitleActionsProps) {
+  return (
+    <>
+      <ContextMenuLabel>{t('media.card.menuCaptions')}</ContextMenuLabel>
+      <ContextMenuItem
+        onClick={onExtractEmbeddedSubtitles}
+        disabled={isExtractingEmbeddedSubtitles}
+      >
+        {isExtractingEmbeddedSubtitles ? (
+          <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+        ) : (
+          <FileText className="w-3 h-3 mr-2" />
+        )}
+        {t('media.card.extractEmbeddedSubtitles')}
+      </ContextMenuItem>
+    </>
+  )
+}
+
+function AiActions({ t, onAnalyzeWithAI }: AiActionsProps) {
+  return (
+    <>
+      <ContextMenuLabel>{t('media.card.menuAi')}</ContextMenuLabel>
+      <ContextMenuItem onClick={onAnalyzeWithAI}>
+        <Sparkles className="w-3 h-3 mr-2" />
+        {t('media.card.analyzeWithAI')}
+      </ContextMenuItem>
+    </>
+  )
+}
+
+function DeleteMediaAction({ t, onDelete }: DeleteMediaActionProps) {
+  return (
+    <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+      <Trash2 className="w-3 h-3 mr-2" />
+      {t('common.delete')}
+    </ContextMenuItem>
+  )
+}
+
+export const GridMediaCard = memo(function GridMediaCard(props: MediaCardProps) {
+  return <MediaCardInternal {...props} viewMode="grid" />
+})
+
+export const ListMediaCard = memo(function ListMediaCard(props: MediaCardProps) {
+  return <MediaCardInternal {...props} viewMode="list" />
+})
+
+const MediaCardInternal = memo(function MediaCardInternal({
   media,
   selected = false,
   isBroken = false,
@@ -359,8 +470,8 @@ export const MediaCard = memo(function MediaCard({
   onDoubleClick,
   onDelete,
   onRelink,
-  viewMode = 'grid',
-}: MediaCardProps) {
+  viewMode,
+}: MediaCardInternalProps) {
   const { t } = useTranslation()
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
   const [skimProgress, setSkimProgress] = useState<number | null>(null)

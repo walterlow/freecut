@@ -564,3 +564,9 @@ export const Player = forwardRef<PlayerRef, PlayerProps>((props, ref) => {
 })
 
 Player.displayName = 'Player'
+
+export const HeadlessPlayer = forwardRef<PlayerRef, Omit<PlayerProps, 'controls'>>((props, ref) => (
+  <Player {...props} ref={ref} controls={false} />
+))
+
+HeadlessPlayer.displayName = 'HeadlessPlayer'

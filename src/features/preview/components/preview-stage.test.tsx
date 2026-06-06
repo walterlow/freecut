@@ -16,8 +16,8 @@ vi.mock('@/shared/state/playback', () => {
   return { usePlaybackStore }
 })
 
-vi.mock('@/features/preview/deps/player-core', () => ({
-  Player: ({
+vi.mock('@/features/preview/deps/player-core', () => {
+  const MockPlayer = ({
     children,
     layoutSize,
     style,
@@ -34,8 +34,13 @@ vi.mock('@/features/preview/deps/player-core', () => ({
     >
       {children}
     </div>
-  ),
-}))
+  )
+
+  return {
+    HeadlessPlayer: MockPlayer,
+    Player: MockPlayer,
+  }
+})
 
 vi.mock('@/features/preview/deps/composition-runtime', () => ({
   MainComposition: ({ useProxyMedia }: { useProxyMedia?: boolean }) => (

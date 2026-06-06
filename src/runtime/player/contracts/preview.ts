@@ -3,7 +3,7 @@
  */
 
 export { AbsoluteFill } from '../composition'
-export { Player, type PlayerRef } from '..'
+export { HeadlessPlayer, Player, type PlayerRef } from '..'
 export { PlayerEmitterProvider } from '../event-emitter'
 export {
   ClockBridgeProvider,

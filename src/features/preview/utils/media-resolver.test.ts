@@ -11,17 +11,13 @@ const mediaLibraryService = vi.hoisted(() => ({
 }))
 
 // Mock dependencies used by the underlying media resolver implementation.
-vi.mock('@/features/media-library/services/media-library-service', () => ({
-  mediaLibraryService,
-  FileAccessError: class FileAccessError extends Error {
-    type: string
-    constructor(message: string, type: string) {
-      super(message)
-      this.name = 'FileAccessError'
-      this.type = type
-    }
-  },
-}))
+vi.mock('@/features/media-library/services/media-library-service', async () => {
+  const { FileAccessError } = await import('@/features/preview/deps/media-library')
+  return {
+    mediaLibraryService,
+    FileAccessError,
+  }
+})
 
 const mockValidateMediaHandle = vi.fn()
 vi.mock('@/infrastructure/storage', () => ({
@@ -82,7 +78,10 @@ describe('resolveMediaUrl', () => {
 
     expect(url).toMatch(/^blob:test-/)
     expect(mediaLibraryService.getMedia).toHaveBeenCalledWith('media-1')
-    expect(mediaLibraryService.getMediaFile).toHaveBeenCalledWith('media-1')
+    expect(mediaLibraryService.getMediaFile).toHaveBeenCalledWith({
+      id: 'media-1',
+      fileName: 'video.mp4',
+    })
   })
 
   it('returns empty string when media not found', async () => {
@@ -105,13 +104,14 @@ describe('resolveMediaUrl', () => {
     expect(url).toBe('')
   })
 
-  it('marks media broken when handle validation reports a missing file, before any decode attempt', async () => {
+  it('marks media broken when handle-backed reads report a missing file', async () => {
+    const mockError = new FileAccessError('File not found', 'file_missing')
     ;(mediaLibraryService.getMedia as Mock).mockResolvedValue({
       id: 'media-1',
       fileName: 'moved.mp4',
       storageType: 'handle',
     })
-    mockValidateMediaHandle.mockResolvedValue({ kind: 'missing' })
+    ;(mediaLibraryService.getMediaFile as Mock).mockRejectedValue(mockError)
 
     const url = await resolveMediaUrl('media-1')
 
@@ -122,16 +122,17 @@ describe('resolveMediaUrl', () => {
       errorType: 'file_missing',
     })
     // No decode attempt — validation short-circuited before getMediaFile.
-    expect(mediaLibraryService.getMediaFile).not.toHaveBeenCalled()
+    expect(mockValidateMediaHandle).not.toHaveBeenCalled()
   })
 
-  it('marks media broken with permission_denied when handle lost permission', async () => {
+  it('marks media broken with permission_denied when file reads lose permission', async () => {
+    const mockError = new FileAccessError('Permission denied', 'permission_denied')
     ;(mediaLibraryService.getMedia as Mock).mockResolvedValue({
       id: 'media-1',
       fileName: 'locked.mp4',
       storageType: 'handle',
     })
-    mockValidateMediaHandle.mockResolvedValue({ kind: 'permission' })
+    ;(mediaLibraryService.getMediaFile as Mock).mockRejectedValue(mockError)
 
     const url = await resolveMediaUrl('media-1')
 
@@ -141,30 +142,26 @@ describe('resolveMediaUrl', () => {
       fileName: 'locked.mp4',
       errorType: 'permission_denied',
     })
-    expect(mediaLibraryService.getMediaFile).not.toHaveBeenCalled()
+    expect(mockValidateMediaHandle).not.toHaveBeenCalled()
   })
 
-  it('treats size/mtime drift as file_missing so the user re-picks the file', async () => {
+  it('delegates changed handle validation to getMediaFile reads', async () => {
     ;(mediaLibraryService.getMedia as Mock).mockResolvedValue({
       id: 'media-1',
       fileName: 'edited-externally.mp4',
       storageType: 'handle',
     })
-    mockValidateMediaHandle.mockResolvedValue({
-      kind: 'changed',
-      currentSize: 999,
-      currentMtime: 12345,
-    })
+    ;(mediaLibraryService.getMediaFile as Mock).mockResolvedValue(new Blob(['data']))
 
     const url = await resolveMediaUrl('media-1')
 
-    expect(url).toBe('')
-    expect(mockMarkMediaBroken).toHaveBeenCalledWith('media-1', {
-      mediaId: 'media-1',
+    expect(url).toMatch(/^blob:test-/)
+    expect(mockValidateMediaHandle).not.toHaveBeenCalled()
+    expect(mediaLibraryService.getMediaFile).toHaveBeenCalledWith({
+      id: 'media-1',
       fileName: 'edited-externally.mp4',
-      errorType: 'file_missing',
+      storageType: 'handle',
     })
-    expect(mediaLibraryService.getMediaFile).not.toHaveBeenCalled()
   })
 
   it('skips handle validation for non-handle storage types', async () => {
@@ -178,7 +175,11 @@ describe('resolveMediaUrl', () => {
     await resolveMediaUrl('media-1')
 
     expect(mockValidateMediaHandle).not.toHaveBeenCalled()
-    expect(mediaLibraryService.getMediaFile).toHaveBeenCalledWith('media-1')
+    expect(mediaLibraryService.getMediaFile).toHaveBeenCalledWith({
+      id: 'media-1',
+      fileName: 'opfs-media.mp4',
+      storageType: 'opfs',
+    })
   })
 
   it('marks media broken on FileAccessError (file_missing)', async () => {

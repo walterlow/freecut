@@ -32,6 +32,8 @@ vi.mock('./audio-section', () => ({
 
 vi.mock('./text-section', () => ({
   TextSection: () => <div>Text Body</div>,
+  TextContentSection: () => <div>Text Content Body</div>,
+  TextEffectsSection: () => <div>Text Effects Body</div>,
 }))
 
 vi.mock('./shape-section', () => ({

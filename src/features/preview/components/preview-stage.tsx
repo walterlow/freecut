@@ -9,7 +9,7 @@ import {
   type RefObject,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Player, type PlayerRef } from '@/features/preview/deps/player-core'
+import { HeadlessPlayer, type PlayerRef } from '@/features/preview/deps/player-core'
 import { MainComposition } from '@/features/preview/deps/composition-runtime'
 import type { CompositionInputProps } from '@/types/export'
 import { usePlaybackStore } from '@/shared/state/playback'
@@ -173,7 +173,7 @@ export const PreviewStage = memo(function PreviewStage({
                 </div>
               )}
 
-              <Player
+              <HeadlessPlayer
                 ref={playerRef}
                 durationInFrames={totalFrames}
                 fps={fps}
@@ -181,7 +181,6 @@ export const PreviewStage = memo(function PreviewStage({
                 height={playerRenderSize.height}
                 autoPlay={false}
                 loop={false}
-                controls={false}
                 layoutSize={playerSize}
                 style={{
                   width: '100%',
@@ -191,7 +190,7 @@ export const PreviewStage = memo(function PreviewStage({
                 onPlayStateChange={onPlayStateChange}
               >
                 <MainComposition {...inputProps} useProxyMedia={useProxy} />
-              </Player>
+              </HeadlessPlayer>
 
               {FAST_SCRUB_RENDERER_ENABLED && (
                 <canvas

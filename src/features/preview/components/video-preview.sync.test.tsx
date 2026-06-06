@@ -350,6 +350,7 @@ vi.mock('@/features/preview/deps/player-core', async () => {
   MockPlayer.displayName = 'MockPlayer'
 
   return {
+    HeadlessPlayer: MockPlayer,
     Player: MockPlayer,
     AbsoluteFill: ({ children }: React.PropsWithChildren<Record<string, unknown>>) => (
       <div>{children}</div>

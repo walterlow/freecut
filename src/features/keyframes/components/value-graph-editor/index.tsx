@@ -128,6 +128,23 @@ interface ValueGraphEditorProps {
   className?: string
 }
 
+type EmbeddedValueGraphEditorProps = Omit<
+  ValueGraphEditorProps,
+  'showToolbar' | 'showKeyboardHints' | 'borderless' | 'hideXLabels'
+>
+
+export function EmbeddedValueGraphEditor(props: EmbeddedValueGraphEditorProps) {
+  return (
+    <ValueGraphEditor
+      {...props}
+      showToolbar={false}
+      showKeyboardHints={false}
+      borderless
+      hideXLabels
+    />
+  )
+}
+
 /**
  * Full-featured value graph editor for keyframe animation.
  * Shows keyframes as draggable points with interpolation curves.
