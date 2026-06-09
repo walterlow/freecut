@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
+import { useMediaPlaybackControls } from '@/shared/media/use-media-playback-controls'
 import { SliderInput } from '@/shared/ui/property-controls'
 import {
   getStoredTtsEngine,
@@ -175,26 +176,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
     }
   }, [])
 
-  const togglePlay = useCallback(() => {
-    const el = audioRef.current
-    if (!el) return
-    if (el.paused) {
-      void el.play()
-    } else {
-      el.pause()
-    }
-  }, [])
-
-  const handleSeek = useCallback(
-    (values: number[]) => {
-      const el = audioRef.current
-      if (!el || !duration) return
-      const time = ((values[0] ?? 0) / 100) * duration
-      el.currentTime = time
-      setCurrentTime(time)
-    },
-    [duration],
-  )
+  const { togglePlay, seekToPercent } = useMediaPlaybackControls(audioRef, duration, setCurrentTime)
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
 
@@ -213,7 +195,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         value={[progressPercent]}
         onValueChange={(values) => {
           setIsSeeking(true)
-          handleSeek(values)
+          seekToPercent(values)
         }}
         onValueCommit={() => setIsSeeking(false)}
         max={100}

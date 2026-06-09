@@ -49,6 +49,16 @@ type TransitionAudioItem = (VideoItem | AudioItem) & {
   trackVisible: boolean
 }
 
+function sortAudioItemsByTimelineOrder<TItem extends Pick<AudioItem, 'id' | 'trackId' | 'from'>>(
+  items: TItem[],
+): TItem[] {
+  return items.toSorted((a, b) => {
+    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId)
+    if (a.from !== b.from) return a.from - b.from
+    return a.id.localeCompare(b.id)
+  })
+}
+
 export interface AudioSegment {
   key: string
   itemId: string
@@ -215,11 +225,7 @@ function resolveContinuousClipTrimStarts<TItem extends ContinuousAudioItem>(
 ): Map<string, number> {
   const resolvedTrimBeforeById = new Map<string, number>()
   const previousByTrack = new Map<string, TItem>()
-  const sortedItems = items.toSorted((a, b) => {
-    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId)
-    if (a.from !== b.from) return a.from - b.from
-    return a.id.localeCompare(b.id)
-  })
+  const sortedItems = sortAudioItemsByTimelineOrder(items)
 
   for (const item of sortedItems) {
     const explicitTrimBefore = getTrimBefore(item)
@@ -253,11 +259,7 @@ export function buildStandaloneAudioSegments(
   items: StandaloneAudioItem[],
   fps: number,
 ): AudioSegment[] {
-  const sortedItems = items.toSorted((a, b) => {
-    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId)
-    if (a.from !== b.from) return a.from - b.from
-    return a.id.localeCompare(b.id)
-  })
+  const sortedItems = sortAudioItemsByTimelineOrder(items)
   const resolvedTrimBeforeById = resolveContinuousClipTrimStarts(sortedItems, fps)
 
   type ExpandedAudioSegment = AudioSegment & { clip: StandaloneAudioItem }
@@ -419,11 +421,7 @@ export function buildTransitionVideoAudioSegments(
   transitions: Transition[],
   fps: number,
 ): VideoAudioSegment[] {
-  const sortedItems = items.toSorted((a, b) => {
-    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId)
-    if (a.from !== b.from) return a.from - b.from
-    return a.id.localeCompare(b.id)
-  })
+  const sortedItems = sortAudioItemsByTimelineOrder(items)
   const resolvedTrimBeforeById = resolveContinuousClipTrimStarts(sortedItems, fps)
   const resolvedWindows = resolveTransitionWindowsForItems(transitions, sortedItems)
   const extensionByClipId = new Map<string, ClipAudioExtension>()
@@ -705,11 +703,7 @@ export function buildCompoundAudioTransitionSegments(
   transitions: Transition[],
   fps: number,
 ): CompoundAudioSegment[] {
-  const sortedItems = items.toSorted((a, b) => {
-    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId)
-    if (a.from !== b.from) return a.from - b.from
-    return a.id.localeCompare(b.id)
-  })
+  const sortedItems = sortAudioItemsByTimelineOrder(items)
   const resolvedTrimBeforeById = resolveContinuousClipTrimStarts(sortedItems, fps)
   const resolvedWindows = resolveTransitionWindowsForItems(transitions, sortedItems)
   const extensionByClipId = new Map<string, ClipAudioExtension>()

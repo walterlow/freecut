@@ -26,6 +26,33 @@ const baseItem: TextItem = {
   },
 }
 
+function expectIntroOpacityKeyframes(
+  payloads: ReturnType<typeof buildTextAnimationKeyframes>,
+  endValue: number,
+) {
+  expect(payloads.slice(0, 2)).toEqual([
+    {
+      itemId: 'text-1',
+      property: 'opacity',
+      frame: 0,
+      value: 0,
+      easing: 'cubic-bezier',
+      easingConfig: {
+        type: 'cubic-bezier',
+        bezier: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
+      },
+    },
+    {
+      itemId: 'text-1',
+      property: 'opacity',
+      frame: 14,
+      value: endValue,
+      easing: 'linear',
+      easingConfig: undefined,
+    },
+  ])
+}
+
 describe('text animation presets', () => {
   it('includes a none option for animation selectors', () => {
     expect(TEXT_ANIMATION_PRESETS[0]).toEqual({
@@ -61,27 +88,7 @@ describe('text animation presets', () => {
       },
     })
 
-    expect(payloads).toEqual([
-      {
-        itemId: 'text-1',
-        property: 'opacity',
-        frame: 0,
-        value: 0,
-        easing: 'cubic-bezier',
-        easingConfig: {
-          type: 'cubic-bezier',
-          bezier: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
-        },
-      },
-      {
-        itemId: 'text-1',
-        property: 'opacity',
-        frame: 14,
-        value: 0.8,
-        easing: 'linear',
-        easingConfig: undefined,
-      },
-    ])
+    expectIntroOpacityKeyframes(payloads, 0.8)
   })
 
   it('uses size-aware offsets for rise presets', () => {
@@ -100,26 +107,8 @@ describe('text animation presets', () => {
       },
     })
 
-    expect(payloads).toEqual([
-      {
-        itemId: 'text-1',
-        property: 'opacity',
-        frame: 0,
-        value: 0,
-        easing: 'cubic-bezier',
-        easingConfig: {
-          type: 'cubic-bezier',
-          bezier: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
-        },
-      },
-      {
-        itemId: 'text-1',
-        property: 'opacity',
-        frame: 14,
-        value: 1,
-        easing: 'linear',
-        easingConfig: undefined,
-      },
+    expectIntroOpacityKeyframes(payloads, 1)
+    expect(payloads.slice(2)).toEqual([
       {
         itemId: 'text-1',
         property: 'y',
@@ -310,26 +299,8 @@ describe('text animation presets', () => {
       },
     })
 
-    expect(payloads).toEqual([
-      {
-        itemId: 'text-1',
-        property: 'opacity',
-        frame: 0,
-        value: 0,
-        easing: 'cubic-bezier',
-        easingConfig: {
-          type: 'cubic-bezier',
-          bezier: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
-        },
-      },
-      {
-        itemId: 'text-1',
-        property: 'opacity',
-        frame: 14,
-        value: 1,
-        easing: 'linear',
-        easingConfig: undefined,
-      },
+    expectIntroOpacityKeyframes(payloads, 1)
+    expect(payloads.slice(2)).toEqual([
       {
         itemId: 'text-1',
         property: 'y',

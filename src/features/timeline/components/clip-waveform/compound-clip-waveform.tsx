@@ -17,6 +17,7 @@ import {
   getWaveformActiveTileCount,
   useAdaptiveWaveformRenderVersion,
 } from './adaptive-render-version'
+import { observeParentElementHeight } from '../measure-parent-height'
 
 const logger = createLogger('CompoundClipWaveform')
 const WAVEFORM_VERTICAL_PADDING_PX = 3
@@ -59,24 +60,7 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
   const compositionById = useCompositionsStore((s) => s.compositionById)
 
   useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const measure = () => {
-      const parent = container.parentElement
-      if (parent) {
-        setHeight(parent.clientHeight)
-      }
-    }
-
-    measure()
-
-    const resizeObserver = new ResizeObserver(measure)
-    if (container.parentElement) {
-      resizeObserver.observe(container.parentElement)
-    }
-
-    return () => resizeObserver.disconnect()
+    return observeParentElementHeight(containerRef.current, setHeight)
   }, [])
 
   const mediaFpsById = useMemo<Record<string, number | undefined>>(() => {

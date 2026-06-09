@@ -6,6 +6,29 @@ import { AudioEqCurveEditor } from './audio-eq-curve-editor'
 
 const DEFAULT_SETTINGS = resolveAudioEqSettings({})
 
+function setupCurveRoot(): HTMLDivElement {
+  const root = document.querySelector('[data-eq-curve-root="true"]') as HTMLDivElement | null
+  expect(root).not.toBeNull()
+
+  Object.defineProperty(root!, 'getBoundingClientRect', {
+    value: () => ({
+      x: 0,
+      y: 10,
+      top: 10,
+      bottom: 150,
+      left: 0,
+      right: 320,
+      width: 320,
+      height: 140,
+      toJSON: () => ({}),
+    }),
+  })
+  Object.defineProperty(root!, 'setPointerCapture', { value: vi.fn(), configurable: true })
+  Object.defineProperty(root!, 'releasePointerCapture', { value: vi.fn(), configurable: true })
+
+  return root!
+}
+
 describe('AudioEqCurveEditor', () => {
   it('drags a parametric band handle with live preview and final commit', () => {
     const onLiveChange = vi.fn()
@@ -19,33 +42,16 @@ describe('AudioEqCurveEditor', () => {
       />,
     )
 
-    const root = document.querySelector('[data-eq-curve-root="true"]') as HTMLDivElement | null
+    const root = setupCurveRoot()
     const highMidHandle = document.querySelector(
       '[data-eq-band="band4"]',
     ) as HTMLButtonElement | null
 
-    expect(root).not.toBeNull()
     expect(highMidHandle).not.toBeNull()
 
-    Object.defineProperty(root!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 10,
-        top: 10,
-        bottom: 150,
-        left: 0,
-        right: 320,
-        width: 320,
-        height: 140,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(root!, 'setPointerCapture', { value: vi.fn(), configurable: true })
-    Object.defineProperty(root!, 'releasePointerCapture', { value: vi.fn(), configurable: true })
-
     fireEvent.pointerDown(highMidHandle!, { pointerId: 1, clientX: 280, clientY: 24 })
-    fireEvent.pointerMove(root!, { pointerId: 1, clientX: 180, clientY: 122 })
-    fireEvent.pointerUp(root!, { pointerId: 1, clientX: 180, clientY: 122 })
+    fireEvent.pointerMove(root, { pointerId: 1, clientX: 180, clientY: 122 })
+    fireEvent.pointerUp(root, { pointerId: 1, clientX: 180, clientY: 122 })
 
     expect(onLiveChange).toHaveBeenCalled()
     expect(onLiveChange.mock.calls[0]?.[0]).toEqual(
@@ -120,31 +126,14 @@ describe('AudioEqCurveEditor', () => {
       />,
     )
 
-    const root = document.querySelector('[data-eq-curve-root="true"]') as HTMLDivElement | null
+    const root = setupCurveRoot()
     const lowHandle = document.querySelector('[data-eq-band="band2"]') as HTMLButtonElement | null
 
-    expect(root).not.toBeNull()
     expect(lowHandle).not.toBeNull()
 
-    Object.defineProperty(root!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 10,
-        top: 10,
-        bottom: 150,
-        left: 0,
-        right: 320,
-        width: 320,
-        height: 140,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(root!, 'setPointerCapture', { value: vi.fn(), configurable: true })
-    Object.defineProperty(root!, 'releasePointerCapture', { value: vi.fn(), configurable: true })
-
     fireEvent.pointerDown(lowHandle!, { pointerId: 7, clientX: 120, clientY: 70 })
-    fireEvent.pointerMove(root!, { pointerId: 7, clientX: 300, clientY: 70 })
-    fireEvent.pointerUp(root!, { pointerId: 7, clientX: 300, clientY: 70 })
+    fireEvent.pointerMove(root, { pointerId: 7, clientX: 300, clientY: 70 })
+    fireEvent.pointerUp(root, { pointerId: 7, clientX: 300, clientY: 70 })
 
     expect(onChange).toHaveBeenCalledTimes(1)
     expect(onChange.mock.calls[0]?.[0]).toEqual(
@@ -246,37 +235,20 @@ describe('AudioEqCurveEditor', () => {
 
     render(<Harness />)
 
-    const root = document.querySelector('[data-eq-curve-root="true"]') as HTMLDivElement | null
+    const root = setupCurveRoot()
     const lowMidHandle = document.querySelector(
       '[data-eq-band="band3"]',
     ) as HTMLButtonElement | null
     const highHandle = document.querySelector('[data-eq-band="band5"]') as HTMLButtonElement | null
 
-    expect(root).not.toBeNull()
     expect(lowMidHandle).not.toBeNull()
     expect(highHandle).not.toBeNull()
-
-    Object.defineProperty(root!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 10,
-        top: 10,
-        bottom: 150,
-        left: 0,
-        right: 320,
-        width: 320,
-        height: 140,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(root!, 'setPointerCapture', { value: vi.fn(), configurable: true })
-    Object.defineProperty(root!, 'releasePointerCapture', { value: vi.fn(), configurable: true })
 
     const initialLeft = highHandle!.style.left
     const initialTop = highHandle!.style.top
 
     fireEvent.pointerDown(lowMidHandle!, { pointerId: 9, clientX: 140, clientY: 70 })
-    fireEvent.pointerMove(root!, { pointerId: 9, clientX: 200, clientY: 40 })
+    fireEvent.pointerMove(root, { pointerId: 9, clientX: 200, clientY: 40 })
 
     expect(highHandle!.style.left).toBe(initialLeft)
     expect(highHandle!.style.top).toBe(initialTop)

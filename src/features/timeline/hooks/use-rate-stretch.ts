@@ -7,6 +7,7 @@ import { useTimelineStore } from '../stores/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
 import { pixelsToTimeNow } from '@/features/timeline/utils/zoom-conversions'
 import { useSnapCalculator } from './use-snap-calculator'
+import { setActiveSnapTargetIfChanged } from '../utils/snap-target-state'
 import {
   MIN_SPEED,
   MAX_SPEED,
@@ -505,21 +506,11 @@ export function useRateStretch(
       .getState()
       .setUpdates([stretchedItemPreview, ...linkedPreviewUpdates, ...rippleUpdates])
 
-    // Update snap target visualization (only when changed)
-    const prevSnap = prevSnapTargetRef.current
-    const snapChanged =
-      (prevSnap === null && snapTarget !== null) ||
-      (prevSnap !== null && snapTarget === null) ||
-      (prevSnap !== null &&
-        snapTarget !== null &&
-        (prevSnap.frame !== snapTarget.frame || prevSnap.type !== snapTarget.type))
-
-    if (snapChanged) {
-      prevSnapTargetRef.current = snapTarget
-        ? { frame: snapTarget.frame, type: snapTarget.type }
-        : null
-      setActiveSnapTarget(snapTarget)
-    }
+    setActiveSnapTargetIfChanged({
+      previousRef: prevSnapTargetRef,
+      snapTarget,
+      setActiveSnapTarget,
+    })
   })
 
   // Mouse up handler - commits changes to store (single update)

@@ -11,12 +11,8 @@ import { useKeyframesStore, useTimelineStore } from '@/features/effects/deps/tim
 import { useGizmoStore, useThrottledFrame } from '@/features/effects/deps/preview-contract'
 import { PropertySection } from '@/shared/ui/property-controls'
 import { GpuEffectPanel, GpuWheelsPanel, GpuCurvesPanel } from './panels'
-import {
-  getGpuCategoriesWithEffects,
-  getGpuEffect,
-  getGpuEffectDefaultParams,
-} from '@/infrastructure/gpu-effects'
-import { useEffectPreviews } from '../hooks/use-effect-previews'
+import { getGpuEffect, getGpuEffectDefaultParams } from '@/infrastructure/gpu-effects'
+import { useGpuEffectPreviewData } from '../hooks/use-gpu-effect-preview-data'
 import { getMappedSelectionEffectEntry } from '../utils/effect-selection'
 import {
   getAutoKeyframeOperation,
@@ -165,22 +161,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     [itemIds, addEffect],
   )
 
-  // GPU effect categories for dropdown menu
-  const gpuCategories = useMemo(() => getGpuCategoriesWithEffects(), [])
-
-  // Effect preview thumbnails — lazily GPU-rendered on first dropdown open
-  const allEffectEntries = useMemo(
-    () =>
-      gpuCategories.flatMap(({ effects: catEffects }) =>
-        catEffects.map((def) => ({ id: def.id, def })),
-      ),
-    [gpuCategories],
-  )
-  const presetIds = useMemo(() => EFFECT_PRESETS.map((p) => p.id), [])
-  const { previews: effectPreviews, trigger: triggerPreviews } = useEffectPreviews(
-    allEffectEntries,
-    presetIds,
-  )
+  const { gpuCategories, effectPreviews, triggerPreviews } = useGpuEffectPreviewData()
 
   // Update GPU effect parameter(s)
   const handleGpuParamChange = useCallback(

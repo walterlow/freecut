@@ -10,6 +10,7 @@
 import { createLogger } from '@/shared/logging/logger'
 import { createClipWorker } from './create-clip-worker'
 import type { EmbeddingsOptions } from './types'
+import { addAbortableWorkerMessageListener } from './worker-message-listener'
 
 const log = createLogger('ClipProvider')
 
@@ -37,6 +38,7 @@ function ensureReady(options: EmbeddingsOptions = {}): Promise<void> {
   const w = getWorker()
 
   readyPromise = new Promise<void>((resolve, reject) => {
+    let removeWorkerMessageListener = () => {}
     const timeout = setTimeout(() => {
       cleanup()
       reject(new Error('CLIP worker init timed out'))
@@ -44,8 +46,7 @@ function ensureReady(options: EmbeddingsOptions = {}): Promise<void> {
 
     const cleanup = () => {
       clearTimeout(timeout)
-      w.removeEventListener('message', onMessage)
-      options.signal?.removeEventListener('abort', onAbort)
+      removeWorkerMessageListener()
     }
 
     const onAbort = () => {
@@ -70,14 +71,15 @@ function ensureReady(options: EmbeddingsOptions = {}): Promise<void> {
       }
     }
 
-    if (options.signal?.aborted) {
-      cleanup()
-      reject(options.signal.reason)
-      return
-    }
-    options.signal?.addEventListener('abort', onAbort, { once: true })
+    const detachListener = addAbortableWorkerMessageListener({
+      worker: w,
+      signal: options.signal,
+      onAbort,
+      onMessage,
+    })
+    if (!detachListener) return
+    removeWorkerMessageListener = detachListener
 
-    w.addEventListener('message', onMessage)
     w.postMessage({ type: 'init' })
   })
 
@@ -98,10 +100,10 @@ function runEmbed(request: EmbedRequest, options: EmbeddingsOptions = {}): Promi
       new Promise<Float32Array[]>((resolve, reject) => {
         const id = ++nextId
         const w = getWorker()
+        let removeWorkerMessageListener = () => {}
 
         const cleanup = () => {
-          w.removeEventListener('message', onMessage)
-          options.signal?.removeEventListener('abort', onAbort)
+          removeWorkerMessageListener()
         }
 
         const onAbort = () => {
@@ -123,14 +125,15 @@ function runEmbed(request: EmbedRequest, options: EmbeddingsOptions = {}): Promi
           }
         }
 
-        if (options.signal?.aborted) {
-          cleanup()
-          reject(options.signal.reason)
-          return
-        }
-        options.signal?.addEventListener('abort', onAbort, { once: true })
+        const detachListener = addAbortableWorkerMessageListener({
+          worker: w,
+          signal: options.signal,
+          onAbort,
+          onMessage,
+        })
+        if (!detachListener) return
+        removeWorkerMessageListener = detachListener
 
-        w.addEventListener('message', onMessage)
         if (request.kind === 'images') {
           w.postMessage({ type: 'embed-images', id, blobs: request.payload })
         } else {

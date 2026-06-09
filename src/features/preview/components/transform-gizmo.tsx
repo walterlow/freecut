@@ -2,6 +2,7 @@ import { useMemo, useCallback } from 'react'
 import type { TimelineItem } from '@/types/timeline'
 import type { GizmoHandle, Transform, CoordinateParams } from '../types/gizmo'
 import { useGizmoStore } from '../stores/gizmo-store'
+import { useItemGizmoPreview } from '../stores/use-item-gizmo-preview'
 import { useAnimatedTransform } from '@/features/preview/deps/keyframes'
 import { useEscapeCancel } from '../hooks/use-drag-interaction'
 import { GizmoHandles } from './gizmo-handles'
@@ -11,6 +12,7 @@ import {
   getScaleCursor,
   getScreenTransformOrigin,
 } from '../utils/coordinate-transform'
+import { attachWindowTransformInteraction } from '../utils/gizmo-transform-interaction'
 import { hasCornerPin } from '@/features/preview/deps/composition-runtime'
 import { expandTextTransformForPreview } from '../utils/text-layout'
 
@@ -34,9 +36,7 @@ export function TransformGizmo({
   onTransformEnd,
   isPlaying = false,
 }: TransformGizmoProps) {
-  const activeGizmo = useGizmoStore((s) => s.activeGizmo)
-  const previewTransform = useGizmoStore((s) => s.previewTransform)
-  const itemPreview = useGizmoStore(useCallback((s) => s.preview?.[item.id], [item.id]))
+  const { activeGizmo, previewTransform, itemPreview } = useItemGizmoPreview(item.id)
   const startTranslate = useGizmoStore((s) => s.startTranslate)
   const startScale = useGizmoStore((s) => s.startScale)
   const startRotate = useGizmoStore((s) => s.startRotate)
@@ -129,18 +129,6 @@ export function TransformGizmo({
     [coordParams],
   )
 
-  // Check if transform actually changed (within tolerance)
-  const transformChanged = useCallback((a: Transform, b: Transform): boolean => {
-    const tolerance = 0.01
-    return (
-      Math.abs(a.x - b.x) > tolerance ||
-      Math.abs(a.y - b.y) > tolerance ||
-      Math.abs(a.width - b.width) > tolerance ||
-      Math.abs(a.height - b.height) > tolerance ||
-      Math.abs(a.rotation - b.rotation) > tolerance
-    )
-  }, [])
-
   // Get stroke width for shapes (used in snapping)
   const strokeWidth = item.type === 'shape' ? (item.strokeWidth ?? 0) : 0
 
@@ -155,33 +143,24 @@ export function TransformGizmo({
       onTransformStart()
       document.body.style.cursor = 'move'
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const movePoint = toCanvasPoint(moveEvent)
-        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey, moveEvent.altKey)
-      }
-
-      const handleMouseUp = () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
-        document.body.style.cursor = ''
-
-        const finalTransform = endInteraction()
-        // Only update timeline if transform actually changed
-        if (finalTransform && transformChanged(startTransformSnapshot, finalTransform)) {
-          onTransformEnd(finalTransform, 'move')
-        }
-        // Wait 2 animation frames before clearing preview to ensure React has
-        // processed the timeline store update and re-rendered with new item values.
-        // Single RAF was causing snap-back because item prop was still stale.
-        requestAnimationFrame(() => {
+      attachWindowTransformInteraction({
+        toCanvasPoint,
+        updateInteraction,
+        startTransform: startTransformSnapshot,
+        endInteraction,
+        onTransformEnd,
+        operation: 'move',
+        afterFinish: () => {
+          // Wait 2 animation frames before clearing preview to ensure React has
+          // processed the timeline store update and re-rendered with new item values.
+          // Single RAF was causing snap-back because item prop was still stale.
           requestAnimationFrame(() => {
-            clearInteraction()
+            requestAnimationFrame(() => {
+              clearInteraction()
+            })
           })
-        })
-      }
-
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('mouseup', handleMouseUp)
+        },
+      })
     },
     [
       item.id,
@@ -193,7 +172,6 @@ export function TransformGizmo({
       clearInteraction,
       onTransformStart,
       onTransformEnd,
-      transformChanged,
       strokeWidth,
     ],
   )
@@ -216,31 +194,23 @@ export function TransformGizmo({
       onTransformStart()
       document.body.style.cursor = getScaleCursor(handle, currentTransform.rotation)
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const movePoint = toCanvasPoint(moveEvent)
-        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey, moveEvent.altKey)
-      }
-
-      const handleMouseUp = () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
-        document.body.style.cursor = ''
-
-        const finalTransform = endInteraction()
-        if (finalTransform && transformChanged(startTransformSnapshot, finalTransform)) {
-          onTransformEnd(finalTransform, 'resize')
-        }
-        // Wait 2 animation frames before clearing preview to ensure React has
-        // processed the timeline store update and re-rendered with new item values.
-        requestAnimationFrame(() => {
+      attachWindowTransformInteraction({
+        toCanvasPoint,
+        updateInteraction,
+        startTransform: startTransformSnapshot,
+        endInteraction,
+        onTransformEnd,
+        operation: 'resize',
+        afterFinish: () => {
+          // Wait 2 animation frames before clearing preview to ensure React has
+          // processed the timeline store update and re-rendered with new item values.
           requestAnimationFrame(() => {
-            clearInteraction()
+            requestAnimationFrame(() => {
+              clearInteraction()
+            })
           })
-        })
-      }
-
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('mouseup', handleMouseUp)
+        },
+      })
     },
     [
       item.id,
@@ -254,7 +224,6 @@ export function TransformGizmo({
       clearInteraction,
       onTransformStart,
       onTransformEnd,
-      transformChanged,
       strokeWidth,
     ],
   )
@@ -269,31 +238,23 @@ export function TransformGizmo({
       onTransformStart()
       document.body.style.cursor = 'crosshair'
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const movePoint = toCanvasPoint(moveEvent)
-        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey, moveEvent.altKey)
-      }
-
-      const handleMouseUp = () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
-        document.body.style.cursor = ''
-
-        const finalTransform = endInteraction()
-        if (finalTransform && transformChanged(startTransformSnapshot, finalTransform)) {
-          onTransformEnd(finalTransform, 'rotate')
-        }
-        // Wait 2 animation frames before clearing preview to ensure React has
-        // processed the timeline store update and re-rendered with new item values.
-        requestAnimationFrame(() => {
+      attachWindowTransformInteraction({
+        toCanvasPoint,
+        updateInteraction,
+        startTransform: startTransformSnapshot,
+        endInteraction,
+        onTransformEnd,
+        operation: 'rotate',
+        afterFinish: () => {
+          // Wait 2 animation frames before clearing preview to ensure React has
+          // processed the timeline store update and re-rendered with new item values.
           requestAnimationFrame(() => {
-            clearInteraction()
+            requestAnimationFrame(() => {
+              clearInteraction()
+            })
           })
-        })
-      }
-
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('mouseup', handleMouseUp)
+        },
+      })
     },
     [
       item.id,
@@ -305,7 +266,6 @@ export function TransformGizmo({
       clearInteraction,
       onTransformStart,
       onTransformEnd,
-      transformChanged,
       strokeWidth,
     ],
   )

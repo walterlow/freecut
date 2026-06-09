@@ -564,10 +564,7 @@ class WaveformOPFSStorage {
     try {
       const dir = await this.ensureDirectory()
       const requestedStartSample = Math.max(0, Math.floor(startTime * sampleRate))
-      const requestedEndSample = Math.max(
-        requestedStartSample + 1,
-        Math.ceil(endTime * sampleRate),
-      )
+      const requestedEndSample = Math.max(requestedStartSample + 1, Math.ceil(endTime * sampleRate))
       const candidates: RangeIndex[] = []
 
       for await (const entry of dir.values()) {
@@ -681,6 +678,18 @@ class WaveformOPFSStorage {
     }
   }
 
+  private async getWaveformFile(mediaId: string): Promise<File | null> {
+    const dir = await this.ensureDirectory()
+    let fileHandle: FileSystemFileHandle
+    try {
+      fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
+    } catch {
+      if (!(await this.hydrateFromWorkspace(mediaId))) return null
+      fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
+    }
+    return fileHandle.getFile()
+  }
+
   /**
    * Get waveform metadata without loading data
    */
@@ -688,15 +697,8 @@ class WaveformOPFSStorage {
     mediaId: string,
   ): Promise<{ header: WaveformHeader; levels: LevelIndex[] } | null> {
     try {
-      const dir = await this.ensureDirectory()
-      let fileHandle: FileSystemFileHandle
-      try {
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
-      } catch {
-        if (!(await this.hydrateFromWorkspace(mediaId))) return null
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
-      }
-      const file = await fileHandle.getFile()
+      const file = await this.getWaveformFile(mediaId)
+      if (!file) return null
 
       // Read header
       const headerBuffer = await file.slice(0, HEADER_SIZE).arrayBuffer()
@@ -727,16 +729,8 @@ class WaveformOPFSStorage {
     levelIndex: number,
   ): Promise<{ sampleRate: number; peaks: Float32Array; channels: number } | null> {
     try {
-      const dir = await this.ensureDirectory()
-      let fileHandle
-      try {
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
-      } catch {
-        if (!(await this.hydrateFromWorkspace(mediaId))) return null
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
-      }
-
-      const file = await fileHandle.getFile()
+      const file = await this.getWaveformFile(mediaId)
+      if (!file) return null
 
       // Read entire file at once to avoid OPFS concurrency issues with multiple slice() calls
       const buffer = await file.arrayBuffer()
@@ -784,15 +778,8 @@ class WaveformOPFSStorage {
     endTime: number,
   ): Promise<{ sampleRate: number; peaks: Float32Array; startSample: number } | null> {
     try {
-      const dir = await this.ensureDirectory()
-      let fileHandle
-      try {
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
-      } catch {
-        if (!(await this.hydrateFromWorkspace(mediaId))) return null
-        fileHandle = await dir.getFileHandle(`${mediaId}.bin`)
-      }
-      const file = await fileHandle.getFile()
+      const file = await this.getWaveformFile(mediaId)
+      if (!file) return null
 
       // Read entire file at once to avoid OPFS concurrency issues
       const buffer = await file.arrayBuffer()

@@ -135,17 +135,23 @@ export function useTimelineTracks() {
     [setTracks],
   )
 
+  const updateExistingTrack = useCallback(
+    (id: string, getUpdates: (track: TimelineTrack) => Partial<TimelineTrack>) => {
+      const track = useTimelineStore.getState().tracks.find((t) => t.id === id)
+      if (!track) return
+      updateTrack(id, getUpdates(track))
+    },
+    [updateTrack],
+  )
+
   /**
    * Toggle track locked state.
    */
   const toggleTrackLock = useCallback(
     (id: string) => {
-      const currentTracks = useTimelineStore.getState().tracks
-      const track = currentTracks.find((t) => t.id === id)
-      if (!track) return
-      updateTrack(id, { locked: !track.locked })
+      updateExistingTrack(id, (track) => ({ locked: !track.locked }))
     },
-    [updateTrack],
+    [updateExistingTrack],
   )
 
   /**
@@ -153,12 +159,9 @@ export function useTimelineTracks() {
    */
   const toggleTrackSyncLock = useCallback(
     (id: string) => {
-      const currentTracks = useTimelineStore.getState().tracks
-      const track = currentTracks.find((t) => t.id === id)
-      if (!track) return
-      updateTrack(id, { syncLock: !isTrackSyncLockActive(track) })
+      updateExistingTrack(id, (track) => ({ syncLock: !isTrackSyncLockActive(track) }))
     },
-    [updateTrack],
+    [updateExistingTrack],
   )
 
   /**
@@ -166,12 +169,9 @@ export function useTimelineTracks() {
    */
   const toggleTrackVisibility = useCallback(
     (id: string) => {
-      const currentTracks = useTimelineStore.getState().tracks
-      const track = currentTracks.find((t) => t.id === id)
-      if (!track) return
-      updateTrack(id, { visible: track.visible === false ? true : false })
+      updateExistingTrack(id, (track) => ({ visible: track.visible === false ? true : false }))
     },
-    [updateTrack],
+    [updateExistingTrack],
   )
 
   /**
@@ -179,12 +179,9 @@ export function useTimelineTracks() {
    */
   const toggleTrackMute = useCallback(
     (id: string) => {
-      const currentTracks = useTimelineStore.getState().tracks
-      const track = currentTracks.find((t) => t.id === id)
-      if (!track) return
-      updateTrack(id, { muted: !track.muted })
+      updateExistingTrack(id, (track) => ({ muted: !track.muted }))
     },
-    [updateTrack],
+    [updateExistingTrack],
   )
 
   /**
@@ -194,27 +191,23 @@ export function useTimelineTracks() {
    */
   const toggleTrackDisabled = useCallback(
     (id: string) => {
-      const currentTracks = useTimelineStore.getState().tracks
-      const track = currentTracks.find((t) => t.id === id)
-      if (!track) return
+      updateExistingTrack(id, (track) => {
+        const kind = getTrackKind(track)
+        if (kind === 'video') {
+          return { visible: track.visible === false ? true : false }
+        }
+        if (kind === 'audio') {
+          return { muted: !track.muted }
+        }
 
-      const kind = getTrackKind(track)
-      if (kind === 'video') {
-        updateTrack(id, { visible: track.visible === false ? true : false })
-        return
-      }
-      if (kind === 'audio') {
-        updateTrack(id, { muted: !track.muted })
-        return
-      }
-
-      const isDisabled = track.visible === false || track.muted
-      updateTrack(id, {
-        visible: isDisabled,
-        muted: !isDisabled,
+        const isDisabled = track.visible === false || track.muted
+        return {
+          visible: isDisabled,
+          muted: !isDisabled,
+        }
       })
     },
-    [updateTrack],
+    [updateExistingTrack],
   )
 
   /**

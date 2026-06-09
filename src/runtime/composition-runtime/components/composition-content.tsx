@@ -17,9 +17,8 @@ import { blobUrlManager, useBlobUrlVersion } from '@/infrastructure/browser/blob
 import { VideoConfigProvider } from '@/runtime/composition-runtime/deps/player'
 import { useVideoConfig } from '../hooks/use-player-compat'
 import { useGizmoStore } from '@/runtime/composition-runtime/deps/stores'
-import { useTimelineStore } from '@/runtime/composition-runtime/deps/stores'
 import {
-  sourceToTimelineFrames,
+  mapSourceWindowOverlap,
   timelineToSourceFrames,
 } from '@/runtime/composition-runtime/deps/timeline'
 import { resolveTransform, getSourceDimensions } from '../utils/transform-resolver'
@@ -27,8 +26,8 @@ import {
   resolveAnimatedTransform,
   hasKeyframeAnimation,
 } from '@/runtime/composition-runtime/deps/keyframes'
-import { useItemKeyframesFromContext } from '../contexts/keyframes-context'
 import { KeyframesProvider } from '../contexts/keyframes-context'
+import { useRuntimeItemKeyframes } from './hooks/use-runtime-item-keyframes'
 import {
   CompositionSpaceProvider,
   useCompositionSpace,
@@ -121,57 +120,39 @@ function mapSubCompItemToWrapperWindow(params: {
   subCompFps: number
 }): TimelineItem | null {
   const { subItem, wrapper, parentFps, subCompFps } = params
-  const wrapperSpeed = wrapper.speed ?? 1
-  const wrapperSourceFps = wrapper.sourceFps ?? subCompFps
   const wrapperSourceStart = wrapper.sourceStart ?? wrapper.trimStart ?? 0
-  const wrapperSourceEnd =
-    wrapper.sourceEnd ??
-    wrapperSourceStart +
-      timelineToSourceFrames(wrapper.durationInFrames, wrapperSpeed, parentFps, wrapperSourceFps)
-  const subItemStart = subItem.from
-  const subItemEnd = subItem.from + subItem.durationInFrames
-  const overlapStart = Math.max(subItemStart, wrapperSourceStart)
-  const overlapEnd = Math.min(subItemEnd, wrapperSourceEnd)
+  const mapping = mapSourceWindowOverlap({
+    itemStart: subItem.from,
+    itemDuration: subItem.durationInFrames,
+    wrapperDuration: wrapper.durationInFrames,
+    wrapperSpeed: wrapper.speed,
+    wrapperSourceFps: wrapper.sourceFps,
+    wrapperSourceStart,
+    wrapperSourceEnd: wrapper.sourceEnd,
+    timelineFps: parentFps,
+    fallbackSourceFps: subCompFps,
+  })
 
-  if (overlapEnd <= overlapStart) {
-    return null
-  }
-
-  const mappedFrom = sourceToTimelineFrames(
-    overlapStart - wrapperSourceStart,
-    wrapperSpeed,
-    wrapperSourceFps,
-    parentFps,
-  )
-  const mappedEnd = sourceToTimelineFrames(
-    overlapEnd - wrapperSourceStart,
-    wrapperSpeed,
-    wrapperSourceFps,
-    parentFps,
-  )
-  const mappedDuration = Math.max(1, mappedEnd - mappedFrom)
-  const effectiveSpeed = (subItem.speed ?? 1) * wrapperSpeed
-  const clippedStartFrames = overlapStart - subItemStart
-  const clippedEndFrames = subItemEnd - overlapEnd
+  if (!mapping) return null
 
   const mappedItem: TimelineItem = {
     ...subItem,
-    from: mappedFrom,
-    durationInFrames: mappedDuration,
-    speed: effectiveSpeed,
+    from: mapping.mappedFrom,
+    durationInFrames: mapping.mappedDuration,
+    speed: (subItem.speed ?? 1) * mapping.wrapperSpeed,
   }
 
   if (subItem.type === 'video' || subItem.type === 'audio' || subItem.type === 'composition') {
     const childSourceFps = subItem.sourceFps ?? subCompFps
     const childSpeed = subItem.speed ?? 1
     const sourceStartDelta = timelineToSourceFrames(
-      clippedStartFrames,
+      mapping.clippedStartFrames,
       childSpeed,
       subCompFps,
       childSourceFps,
     )
     const sourceEndDelta = timelineToSourceFrames(
-      clippedEndFrames,
+      mapping.clippedEndFrames,
       childSpeed,
       subCompFps,
       childSourceFps,
@@ -278,11 +259,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(
     )
     const itemPreview = useGizmoStore(useCallback((s) => s.preview?.[item.id], [item.id]))
 
-    const contextKeyframes = useItemKeyframesFromContext(item.id)
-    const storeKeyframes = useTimelineStore(
-      useCallback((s) => s.keyframes.find((k) => k.itemId === item.id), [item.id]),
-    )
-    const itemKeyframes = contextKeyframes ?? storeKeyframes
+    const itemKeyframes = useRuntimeItemKeyframes(item.id)
     const hasAnimatedKeyframes = !!(itemKeyframes && hasKeyframeAnimation(itemKeyframes))
 
     const sequenceContext = useSequenceContext()

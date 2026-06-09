@@ -18,6 +18,7 @@ import {
   getWaveformActiveTileCount,
   useAdaptiveWaveformRenderVersion,
 } from './adaptive-render-version'
+import { observeParentElementHeight } from '../measure-parent-height'
 
 const logger = createLogger('ClipWaveform')
 
@@ -95,24 +96,7 @@ export const ClipWaveform = memo(function ClipWaveform({
   // (moving a segment across tracks), height would otherwise start at 0 for one
   // painted frame and flash the loading skeleton even though peaks are cached.
   useLayoutEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const measure = () => {
-      const parent = container.parentElement
-      if (parent) {
-        setHeight(parent.clientHeight)
-      }
-    }
-
-    measure()
-
-    const resizeObserver = new ResizeObserver(measure)
-    if (container.parentElement) {
-      resizeObserver.observe(container.parentElement)
-    }
-
-    return () => resizeObserver.disconnect()
+    return observeParentElementHeight(containerRef.current, setHeight)
   }, [])
 
   // Track if audio codec is supported for waveform generation
@@ -134,7 +118,10 @@ export const ClipWaveform = memo(function ClipWaveform({
     const endOffset = (visibleEndX / Math.max(1, pixelsPerSecond)) * speed
     const sourceA = isReversed ? effectiveEnd - endOffset : effectiveStart + startOffset
     const sourceB = isReversed ? effectiveEnd - startOffset : effectiveStart + endOffset
-    const padSeconds = Math.max(2, ((visibleEndX - visibleStartX) / Math.max(1, pixelsPerSecond)) * 0.25)
+    const padSeconds = Math.max(
+      2,
+      ((visibleEndX - visibleStartX) / Math.max(1, pixelsPerSecond)) * 0.25,
+    )
 
     return {
       start: Math.max(0, Math.min(sourceA, sourceB) - padSeconds),

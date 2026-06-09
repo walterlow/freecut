@@ -113,6 +113,24 @@ function makeTextItem(
   }
 }
 
+function mockQueuedTranscriptionSources() {
+  const sourceById = {
+    'media-1': new File(['one'], 'one.mp3', { type: 'audio/mpeg' }),
+    'media-2': new File(['two'], 'two.mp3', { type: 'audio/mpeg' }),
+  } as const
+
+  getMediaMock.mockImplementation(async (mediaId: string) => ({
+    id: mediaId,
+    fileName: `${mediaId}.mp3`,
+    mimeType: 'audio/mpeg',
+    codec: 'mp3',
+    fileLastModified: 123,
+  }))
+  getMediaFileMock.mockImplementation(
+    async (mediaId: string) => sourceById[mediaId as keyof typeof sourceById],
+  )
+}
+
 describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -545,20 +563,7 @@ describe('mediaTranscriptionService.transcribeMedia', () => {
   })
 
   it('runs only one transcription job at a time and queues later requests', async () => {
-    const sourceById = {
-      'media-1': new File(['one'], 'one.mp3', { type: 'audio/mpeg' }),
-      'media-2': new File(['two'], 'two.mp3', { type: 'audio/mpeg' }),
-    } as const
-    getMediaMock.mockImplementation(async (mediaId: string) => ({
-      id: mediaId,
-      fileName: `${mediaId}.mp3`,
-      mimeType: 'audio/mpeg',
-      codec: 'mp3',
-      fileLastModified: 123,
-    }))
-    getMediaFileMock.mockImplementation(
-      async (mediaId: string) => sourceById[mediaId as keyof typeof sourceById],
-    )
+    mockQueuedTranscriptionSources()
 
     let resolveFirstCollect!: (
       segments: Array<{ text: string; start: number; end: number }>,
@@ -601,20 +606,7 @@ describe('mediaTranscriptionService.transcribeMedia', () => {
   })
 
   it('cancels queued transcription jobs before they start', async () => {
-    const sourceById = {
-      'media-1': new File(['one'], 'one.mp3', { type: 'audio/mpeg' }),
-      'media-2': new File(['two'], 'two.mp3', { type: 'audio/mpeg' }),
-    } as const
-    getMediaMock.mockImplementation(async (mediaId: string) => ({
-      id: mediaId,
-      fileName: `${mediaId}.mp3`,
-      mimeType: 'audio/mpeg',
-      codec: 'mp3',
-      fileLastModified: 123,
-    }))
-    getMediaFileMock.mockImplementation(
-      async (mediaId: string) => sourceById[mediaId as keyof typeof sourceById],
-    )
+    mockQueuedTranscriptionSources()
 
     let resolveFirstCollect!: (
       segments: Array<{ text: string; start: number; end: number }>,
@@ -645,20 +637,7 @@ describe('mediaTranscriptionService.transcribeMedia', () => {
   })
 
   it('cancels the active transcription job and advances the queue', async () => {
-    const sourceById = {
-      'media-1': new File(['one'], 'one.mp3', { type: 'audio/mpeg' }),
-      'media-2': new File(['two'], 'two.mp3', { type: 'audio/mpeg' }),
-    } as const
-    getMediaMock.mockImplementation(async (mediaId: string) => ({
-      id: mediaId,
-      fileName: `${mediaId}.mp3`,
-      mimeType: 'audio/mpeg',
-      codec: 'mp3',
-      fileLastModified: 123,
-    }))
-    getMediaFileMock.mockImplementation(
-      async (mediaId: string) => sourceById[mediaId as keyof typeof sourceById],
-    )
+    mockQueuedTranscriptionSources()
 
     let rejectFirstCollect!: (error: Error) => void
     const firstCollect = vi.fn(

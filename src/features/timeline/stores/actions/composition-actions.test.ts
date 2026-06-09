@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vite-plus/test'
-import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import type { AudioItem, VideoItem } from '@/types/timeline'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useProjectStore } from '@/features/timeline/deps/projects'
+import {
+  makeTimelineAudioItem,
+  makeTimelineTrack as makeTrack,
+  makeTimelineVideoItem,
+  resetTimelineCompositionTestState,
+  setDefaultRootTimelineTracks,
+} from '@/features/timeline/test-helpers'
 import { useItemsStore } from '../items-store'
 import { useTransitionsStore } from '../transitions-store'
 import { useKeyframesStore } from '../keyframes-store'
@@ -19,66 +26,17 @@ import {
 } from './composition-actions'
 import { splitItem } from './item-actions'
 
-function makeTrack(
-  overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>,
-): TimelineTrack {
-  return {
-    height: 80,
-    locked: false,
-    visible: true,
-    muted: false,
-    solo: false,
-    volume: 0,
-    items: [],
-    ...overrides,
-  }
-}
-
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
-  return {
-    id: 'video-1',
-    type: 'video',
-    trackId: 'track-v1',
-    from: 0,
-    durationInFrames: 60,
-    label: 'clip.mp4',
-    src: 'blob:video',
-    mediaId: 'media-1',
-    linkedGroupId: 'group-1',
-    sourceStart: 0,
-    sourceEnd: 60,
-    sourceDuration: 120,
-    sourceFps: 30,
-    ...overrides,
-  }
+  return makeTimelineVideoItem({ linkedGroupId: 'group-1', ...overrides })
 }
 
 function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
-  return {
-    id: 'audio-1',
-    type: 'audio',
-    trackId: 'track-a1',
-    from: 0,
-    durationInFrames: 60,
-    label: 'clip.mp4',
-    src: 'blob:audio',
-    mediaId: 'media-1',
-    linkedGroupId: 'group-1',
-    sourceStart: 0,
-    sourceEnd: 60,
-    sourceDuration: 120,
-    sourceFps: 30,
-    ...overrides,
-  }
+  return makeTimelineAudioItem({ label: 'clip.mp4', linkedGroupId: 'group-1', ...overrides })
 }
 
 describe('composition-actions split wrappers', () => {
   beforeEach(() => {
-    useItemsStore.getState().setTracks([])
-    useItemsStore.getState().setItems([])
-    useTransitionsStore.getState().setTransitions([])
-    useKeyframesStore.getState().setKeyframes([])
-    useCompositionsStore.getState().setCompositions([])
+    resetTimelineCompositionTestState()
     useTimelineCommandStore.getState().clearHistory()
     useCompositionNavigationStore.getState().resetToRoot()
     useSelectionStore.getState().clearSelection()
@@ -100,12 +58,7 @@ describe('composition-actions split wrappers', () => {
   })
 
   it('creates linked compound video and audio wrappers on paired tracks', () => {
-    useItemsStore
-      .getState()
-      .setTracks([
-        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-      ])
+    setDefaultRootTimelineTracks()
     useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()])
 
     useSelectionStore.getState().selectItems(['video-1'])
@@ -141,12 +94,7 @@ describe('composition-actions split wrappers', () => {
   })
 
   it('dissolves linked compound wrappers back to original tracks', () => {
-    useItemsStore
-      .getState()
-      .setTracks([
-        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-      ])
+    setDefaultRootTimelineTracks()
     useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()])
     useSelectionStore.getState().selectItems(['video-1'])
 
@@ -171,12 +119,7 @@ describe('composition-actions split wrappers', () => {
   })
 
   it('dissolves only the selected split wrapper window and keeps sibling wrappers', () => {
-    useItemsStore
-      .getState()
-      .setTracks([
-        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-      ])
+    setDefaultRootTimelineTracks()
     useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()])
     useSelectionStore.getState().selectItems(['video-1'])
 
@@ -429,12 +372,7 @@ describe('composition-actions split wrappers', () => {
 
   it('preserves compound audio tracks when wrapping a compound clip with linked selection off', () => {
     useEditorStore.setState({ linkedSelectionEnabled: false })
-    useItemsStore
-      .getState()
-      .setTracks([
-        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-      ])
+    setDefaultRootTimelineTracks()
     useItemsStore.getState().setItems([
       {
         id: 'comp-visual',
@@ -511,12 +449,7 @@ describe('composition-actions split wrappers', () => {
   })
 
   it('deletes compound clips across the root timeline, nested compounds, and open editor state', () => {
-    useItemsStore
-      .getState()
-      .setTracks([
-        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-      ])
+    setDefaultRootTimelineTracks()
     useItemsStore.getState().setItems([
       {
         id: 'root-comp-a-video',
@@ -648,12 +581,7 @@ describe('composition-actions split wrappers', () => {
   })
 
   it('renames compound clips across wrapper labels and breadcrumbs', () => {
-    useItemsStore
-      .getState()
-      .setTracks([
-        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-      ])
+    setDefaultRootTimelineTracks()
     useItemsStore.getState().setItems([
       {
         id: 'root-comp-a-video',

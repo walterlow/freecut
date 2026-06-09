@@ -3,7 +3,13 @@ import {
   localInferenceRuntimeRegistry,
   useLocalInferenceStore,
 } from '@/shared/state/local-inference'
+import { sanitizeAiOutputFileNameSegment } from '@/shared/utils/ai-output-filename'
+import {
+  updateDownloadProgress,
+  type DownloadProgressCache,
+} from '@/shared/utils/download-progress'
 import { TRANSFORMERS_CACHE_NAME } from '@/shared/utils/local-model-cache'
+import { validateTtsGenerateRequest } from './tts-generate-validation'
 
 const logger = createLogger('KokoroTtsService')
 
@@ -93,18 +99,9 @@ export const KOKORO_TTS_VOICE_OPTIONS = [
 
 export type KokoroTtsVoice = (typeof KOKORO_TTS_VOICE_OPTIONS)[number]['value']
 
-function makeSafeFileNameSegment(text: string): string {
-  const collapsed = text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-
-  return collapsed.slice(0, 32) || 'speech'
-}
-
 function createOutputFileName(text: string, voice: KokoroTtsVoice, model: KokoroTtsModel): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  return `ai-tts-${makeSafeFileNameSegment(text)}-${voice}-${model}-${timestamp}.wav`
+  return `ai-tts-${sanitizeAiOutputFileNameSegment(text, 'speech')}-${voice}-${model}-${timestamp}.wav`
 }
 
 export function getKokoroTtsModelOption(model: KokoroTtsModel): KokoroTtsModelConfig {
@@ -415,7 +412,7 @@ class KokoroTtsService {
       const config = MODEL_CONFIGS[model]
       const cached = await this.isModelCached(model)
       const loadVerb = cached ? 'Loading' : 'Downloading'
-      const downloadCache = new Map<string, { loaded: number; total: number }>()
+      const downloadCache: DownloadProgressCache = new Map()
 
       onProgress?.(
         cached
@@ -430,26 +427,10 @@ class KokoroTtsService {
           if (progress.status !== 'progress' && progress.status !== 'download') {
             return
           }
-          if (!progress.file || !progress.total) {
-            return
-          }
-
-          downloadCache.set(progress.file, {
-            loaded: progress.loaded ?? 0,
-            total: progress.total,
-          })
-
-          let totalLoaded = 0
-          let totalExpected = 0
-          for (const entry of downloadCache.values()) {
-            totalLoaded += entry.loaded
-            totalExpected += entry.total
-          }
-
-          if (totalExpected > 0) {
-            const fraction = Math.min(0.99, totalLoaded / totalExpected)
+          const downloadProgress = updateDownloadProgress(progress, downloadCache)
+          if (downloadProgress) {
             onProgress?.(
-              `${loadVerb} Kokoro ${config.label.toLowerCase()} (${Math.round(fraction * 100)}%)...`,
+              `${loadVerb} Kokoro ${config.label.toLowerCase()} (${Math.round(downloadProgress.fraction * 100)}%)...`,
             )
           }
         },
@@ -528,14 +509,11 @@ class KokoroTtsService {
     model,
     onProgress,
   }: GenerateSpeechOptions): Promise<{ blob: Blob; file: File; duration: number }> {
-    const trimmedText = text.trim()
-    if (!trimmedText) {
-      throw new Error('Enter some text to synthesize.')
-    }
-
-    if (!this.isSupported()) {
-      throw new Error('WebGPU is not available in this browser.')
-    }
+    const trimmedText = validateTtsGenerateRequest({
+      text,
+      isSupported: this.isSupported(),
+      unsupportedMessage: 'WebGPU is not available in this browser.',
+    })
 
     return this.withGenerationLock(model, async () => {
       const runtime = await this.ensureRuntime(model, onProgress)

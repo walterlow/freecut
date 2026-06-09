@@ -1,19 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
+import { afterEach, describe, expect, it } from 'vite-plus/test'
 import type { DecodedPreviewAudioBin, DecodedPreviewAudioMeta } from '@/types/storage'
-
-vi.mock('@/shared/logging/logger', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    event: vi.fn(),
-    startEvent: () => ({ set: vi.fn(), merge: vi.fn(), success: vi.fn(), failure: vi.fn() }),
-    child: vi.fn(),
-    setLevel: vi.fn(),
-  }),
-  createOperationId: () => 'op-test',
-}))
+import '../test-utils/logger-test-mocks'
 
 import {
   deleteDecodedPreviewAudio,

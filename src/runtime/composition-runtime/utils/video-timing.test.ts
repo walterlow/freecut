@@ -5,6 +5,37 @@ import {
   snapSourceTime,
 } from './video-timing'
 
+function expectAudioVideoTargetTimesToMatch({
+  sourceStart,
+  sourceFps,
+  frame,
+  playbackRate,
+  timelineFps,
+}: {
+  sourceStart: number
+  sourceFps: number
+  frame: number
+  playbackRate: number
+  timelineFps: number
+}) {
+  const videoTime = getVideoTargetTimeSeconds(
+    sourceStart,
+    sourceFps,
+    frame,
+    playbackRate,
+    timelineFps,
+  )
+  const audioTime = getAudioTargetTimeSeconds(
+    sourceStart,
+    sourceFps,
+    frame,
+    playbackRate,
+    timelineFps,
+  )
+
+  expect(videoTime).toBeCloseTo(audioTime, 10)
+}
+
 describe('video timing with shared Sequences', () => {
   it('produces identical target time for grouped and isolated split clips', () => {
     const timelineFps = 30
@@ -104,22 +135,13 @@ describe('audio-video sync for non-native FPS sources', () => {
 
     // Check sync at multiple points throughout the clip
     for (const frame of [0, 1, 100, 500, 1000, 1784, durationInFrames]) {
-      const videoTime = getVideoTargetTimeSeconds(
+      expectAudioVideoTargetTimesToMatch({
         sourceStart,
         sourceFps,
         frame,
         playbackRate,
         timelineFps,
-      )
-      const audioTime = getAudioTargetTimeSeconds(
-        sourceStart,
-        sourceFps,
-        frame,
-        playbackRate,
-        timelineFps,
-      )
-
-      expect(videoTime).toBeCloseTo(audioTime, 10)
+      })
     }
   })
 
@@ -161,22 +183,13 @@ describe('audio-video sync for non-native FPS sources', () => {
 
     // Test common non-30fps formats
     for (const sourceFps of [23.976, 23.981, 24, 25, 29.97, 48, 50, 59.94, 60]) {
-      const videoTime = getVideoTargetTimeSeconds(
+      expectAudioVideoTargetTimesToMatch({
         sourceStart,
         sourceFps,
         frame,
         playbackRate,
         timelineFps,
-      )
-      const audioTime = getAudioTargetTimeSeconds(
-        sourceStart,
-        sourceFps,
-        frame,
-        playbackRate,
-        timelineFps,
-      )
-
-      expect(videoTime).toBeCloseTo(audioTime, 10)
+      })
 
       // Start position should use source FPS, not timeline FPS
       const expectedStart = sourceStart / sourceFps
@@ -199,21 +212,13 @@ describe('audio-video sync for non-native FPS sources', () => {
     const durationInFrames = 1785
 
     for (const frame of [0, 100, durationInFrames]) {
-      const videoTime = getVideoTargetTimeSeconds(
+      expectAudioVideoTargetTimesToMatch({
         sourceStart,
         sourceFps,
         frame,
         playbackRate,
         timelineFps,
-      )
-      const audioTime = getAudioTargetTimeSeconds(
-        sourceStart,
-        sourceFps,
-        frame,
-        playbackRate,
-        timelineFps,
-      )
-      expect(videoTime).toBeCloseTo(audioTime, 10)
+      })
     }
   })
 })

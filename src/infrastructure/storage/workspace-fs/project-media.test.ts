@@ -1,32 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
-
-const handlesMocks = vi.hoisted(() => ({
-  getHandle: vi.fn().mockResolvedValue(null),
-  saveHandle: vi.fn().mockResolvedValue(undefined),
-  deleteHandle: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('@/infrastructure/storage/handles-db', () => handlesMocks)
+import '../test-utils/storage-test-mocks'
 
 const mediaMocks = vi.hoisted(() => ({
   getMedia: vi.fn().mockResolvedValue(null),
 }))
 
 vi.mock('./media', () => mediaMocks)
-
-vi.mock('@/shared/logging/logger', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    event: vi.fn(),
-    startEvent: () => ({ set: vi.fn(), merge: vi.fn(), success: vi.fn(), failure: vi.fn() }),
-    child: vi.fn(),
-    setLevel: vi.fn(),
-  }),
-  createOperationId: () => 'op-test',
-}))
 
 import {
   associateMediaWithProject,

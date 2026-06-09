@@ -56,6 +56,58 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
   } as unknown as OffscreenCanvasRenderingContext2D
 }
 
+function createCompositionMaskRenderHarness(params: {
+  compositionItem: CompositionItem
+  subData: SubCompRenderData
+  imageElements?: ItemRenderContext['imageElements']
+  poolEntryCount?: number
+}) {
+  const poolEntries = Array.from({ length: params.poolEntryCount ?? 2 }, () => ({
+    canvas: { width: 640, height: 360 } as OffscreenCanvas,
+    ctx: createMockCtx(),
+  }))
+  const acquireQueue = [...poolEntries]
+  const canvasPool = {
+    acquire: vi.fn(() => acquireQueue.shift()),
+    release: vi.fn(),
+  }
+  const rootCtx = createMockCtx()
+  const rctx: ItemRenderContext = {
+    fps: 30,
+    canvasSettings: { width: 1280, height: 720, fps: 30 },
+    canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+    textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+    renderMode: 'export',
+    videoExtractors: new Map(),
+    videoElements: new Map(),
+    useMediabunny: new Set(),
+    mediabunnyDisabledItems: new Set(),
+    mediabunnyFailureCountByItem: new Map(),
+    imageElements: params.imageElements ?? new Map(),
+    gifFramesMap: new Map(),
+    keyframesMap: new Map(),
+    adjustmentLayers: [],
+    subCompRenderData: new Map([[params.compositionItem.compositionId, params.subData]]),
+  }
+  const transform: ItemTransform = {
+    x: 0,
+    y: 0,
+    width: 640,
+    height: 360,
+    rotation: 0,
+    opacity: 1,
+    cornerRadius: 0,
+  }
+
+  return {
+    canvasPool,
+    rootCtx,
+    rctx,
+    subContentCtx: poolEntries[1]!.ctx,
+    transform,
+  }
+}
+
 describe('canvas-item-renderer composition masks', () => {
   beforeEach(() => {
     mockFns.applyMasksMock.mockReset()
@@ -123,55 +175,11 @@ describe('canvas-item-renderer composition masks', () => {
       keyframesMap: new Map(),
     }
 
-    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const bottomMaskedCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const topMaskedCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subCtx = createMockCtx()
-    const subContentCtx = createMockCtx()
-    const bottomMaskedCtx = createMockCtx()
-    const topMaskedCtx = createMockCtx()
-    const rootCtx = createMockCtx()
-
-    const acquireQueue = [
-      { canvas: subCanvas, ctx: subCtx },
-      { canvas: subContentCanvas, ctx: subContentCtx },
-      { canvas: bottomMaskedCanvas, ctx: bottomMaskedCtx },
-      { canvas: topMaskedCanvas, ctx: topMaskedCtx },
-    ]
-
-    const canvasPool = {
-      acquire: vi.fn(() => acquireQueue.shift()),
-      release: vi.fn(),
-    }
-
-    const rctx: ItemRenderContext = {
-      fps: 30,
-      canvasSettings: { width: 1280, height: 720, fps: 30 },
-      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
-      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
-      renderMode: 'export',
-      videoExtractors: new Map(),
-      videoElements: new Map(),
-      useMediabunny: new Set(),
-      mediabunnyDisabledItems: new Set(),
-      mediabunnyFailureCountByItem: new Map(),
-      imageElements: new Map(),
-      gifFramesMap: new Map(),
-      keyframesMap: new Map(),
-      adjustmentLayers: [],
-      subCompRenderData: new Map([[compositionItem.compositionId, subData]]),
-    }
-
-    const transform: ItemTransform = {
-      x: 0,
-      y: 0,
-      width: 640,
-      height: 360,
-      rotation: 0,
-      opacity: 1,
-      cornerRadius: 0,
-    }
+    const { rootCtx, rctx, transform } = createCompositionMaskRenderHarness({
+      compositionItem,
+      subData,
+      poolEntryCount: 4,
+    })
 
     await renderItem(rootCtx, compositionItem, transform, 0, rctx)
 
@@ -248,49 +256,10 @@ describe('canvas-item-renderer composition masks', () => {
       keyframesMap: new Map(),
     }
 
-    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subCtx = createMockCtx()
-    const subContentCtx = createMockCtx()
-    const rootCtx = createMockCtx()
-
-    const acquireQueue = [
-      { canvas: subCanvas, ctx: subCtx },
-      { canvas: subContentCanvas, ctx: subContentCtx },
-    ]
-
-    const canvasPool = {
-      acquire: vi.fn(() => acquireQueue.shift()),
-      release: vi.fn(),
-    }
-
-    const rctx: ItemRenderContext = {
-      fps: 30,
-      canvasSettings: { width: 1280, height: 720, fps: 30 },
-      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
-      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
-      renderMode: 'export',
-      videoExtractors: new Map(),
-      videoElements: new Map(),
-      useMediabunny: new Set(),
-      mediabunnyDisabledItems: new Set(),
-      mediabunnyFailureCountByItem: new Map(),
-      imageElements: new Map(),
-      gifFramesMap: new Map(),
-      keyframesMap: new Map(),
-      adjustmentLayers: [],
-      subCompRenderData: new Map([[compositionItem.compositionId, subData]]),
-    }
-
-    const transform: ItemTransform = {
-      x: 0,
-      y: 0,
-      width: 640,
-      height: 360,
-      rotation: 0,
-      opacity: 1,
-      cornerRadius: 0,
-    }
+    const { rootCtx, rctx, transform } = createCompositionMaskRenderHarness({
+      compositionItem,
+      subData,
+    })
 
     await renderItem(rootCtx, compositionItem, transform, 0, rctx)
 
@@ -340,50 +309,16 @@ describe('canvas-item-renderer composition masks', () => {
       ],
       keyframesMap: new Map(),
     }
-    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subCtx = createMockCtx()
-    const subContentCtx = createMockCtx()
-    const rootCtx = createMockCtx()
-    const acquireQueue = [
-      { canvas: subCanvas, ctx: subCtx },
-      { canvas: subContentCanvas, ctx: subContentCtx },
-    ]
-    const canvasPool = {
-      acquire: vi.fn(() => acquireQueue.shift()),
-      release: vi.fn(),
-    }
-    const rctx: ItemRenderContext = {
-      fps: 30,
-      canvasSettings: { width: 1280, height: 720, fps: 30 },
-      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
-      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
-      renderMode: 'export',
-      videoExtractors: new Map(),
-      videoElements: new Map(),
-      useMediabunny: new Set(),
-      mediabunnyDisabledItems: new Set(),
-      mediabunnyFailureCountByItem: new Map(),
+    const { rootCtx, rctx, subContentCtx, transform } = createCompositionMaskRenderHarness({
+      compositionItem,
+      subData,
       imageElements: new Map([
         [
           topImage.id,
           { source: { width: 640, height: 360 } as ImageBitmap, width: 640, height: 360 },
         ],
       ]),
-      gifFramesMap: new Map(),
-      keyframesMap: new Map(),
-      adjustmentLayers: [],
-      subCompRenderData: new Map([[compositionItem.compositionId, subData]]),
-    }
-    const transform: ItemTransform = {
-      x: 0,
-      y: 0,
-      width: 640,
-      height: 360,
-      rotation: 0,
-      opacity: 1,
-      cornerRadius: 0,
-    }
+    })
 
     await renderItem(rootCtx, compositionItem, transform, 0, rctx)
 
@@ -447,50 +382,16 @@ describe('canvas-item-renderer composition masks', () => {
       ],
       keyframesMap: new Map(),
     }
-    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subCtx = createMockCtx()
-    const subContentCtx = createMockCtx()
-    const rootCtx = createMockCtx()
-    const acquireQueue = [
-      { canvas: subCanvas, ctx: subCtx },
-      { canvas: subContentCanvas, ctx: subContentCtx },
-    ]
-    const canvasPool = {
-      acquire: vi.fn(() => acquireQueue.shift()),
-      release: vi.fn(),
-    }
-    const rctx: ItemRenderContext = {
-      fps: 30,
-      canvasSettings: { width: 1280, height: 720, fps: 30 },
-      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
-      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
-      renderMode: 'export',
-      videoExtractors: new Map(),
-      videoElements: new Map(),
-      useMediabunny: new Set(),
-      mediabunnyDisabledItems: new Set(),
-      mediabunnyFailureCountByItem: new Map(),
+    const { rootCtx, rctx, transform } = createCompositionMaskRenderHarness({
+      compositionItem,
+      subData,
       imageElements: new Map([
         [
           topImage.id,
           { source: { width: 640, height: 360 } as ImageBitmap, width: 640, height: 360 },
         ],
       ]),
-      gifFramesMap: new Map(),
-      keyframesMap: new Map(),
-      adjustmentLayers: [],
-      subCompRenderData: new Map([[compositionItem.compositionId, subData]]),
-    }
-    const transform: ItemTransform = {
-      x: 0,
-      y: 0,
-      width: 640,
-      height: 360,
-      rotation: 0,
-      opacity: 1,
-      cornerRadius: 0,
-    }
+    })
 
     await renderItem(rootCtx, compositionItem, transform, 0, rctx)
 
@@ -555,56 +456,17 @@ describe('canvas-item-renderer composition masks', () => {
       ],
       keyframesMap: new Map(),
     }
-    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const bottomMaskedCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const topMaskedCanvas = { width: 640, height: 360 } as OffscreenCanvas
-    const subCtx = createMockCtx()
-    const subContentCtx = createMockCtx()
-    const bottomMaskedCtx = createMockCtx()
-    const topMaskedCtx = createMockCtx()
-    const rootCtx = createMockCtx()
-    const acquireQueue = [
-      { canvas: subCanvas, ctx: subCtx },
-      { canvas: subContentCanvas, ctx: subContentCtx },
-      { canvas: bottomMaskedCanvas, ctx: bottomMaskedCtx },
-      { canvas: topMaskedCanvas, ctx: topMaskedCtx },
-    ]
-    const canvasPool = {
-      acquire: vi.fn(() => acquireQueue.shift()),
-      release: vi.fn(),
-    }
-    const rctx: ItemRenderContext = {
-      fps: 30,
-      canvasSettings: { width: 1280, height: 720, fps: 30 },
-      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
-      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
-      renderMode: 'export',
-      videoExtractors: new Map(),
-      videoElements: new Map(),
-      useMediabunny: new Set(),
-      mediabunnyDisabledItems: new Set(),
-      mediabunnyFailureCountByItem: new Map(),
+    const { rootCtx, rctx, transform } = createCompositionMaskRenderHarness({
+      compositionItem,
+      subData,
       imageElements: new Map([
         [
           topImage.id,
           { source: { width: 640, height: 360 } as ImageBitmap, width: 640, height: 360 },
         ],
       ]),
-      gifFramesMap: new Map(),
-      keyframesMap: new Map(),
-      adjustmentLayers: [],
-      subCompRenderData: new Map([[compositionItem.compositionId, subData]]),
-    }
-    const transform: ItemTransform = {
-      x: 0,
-      y: 0,
-      width: 640,
-      height: 360,
-      rotation: 0,
-      opacity: 1,
-      cornerRadius: 0,
-    }
+      poolEntryCount: 4,
+    })
 
     await renderItem(rootCtx, compositionItem, transform, 0, rctx)
 

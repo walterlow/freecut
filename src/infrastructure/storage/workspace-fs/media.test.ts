@@ -1,27 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { MediaMetadata } from '@/types/storage'
-
-const handlesMocks = vi.hoisted(() => ({
-  getHandle: vi.fn().mockResolvedValue(null),
-  saveHandle: vi.fn().mockResolvedValue(undefined),
-  deleteHandle: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('@/infrastructure/storage/handles-db', () => handlesMocks)
-
-vi.mock('@/shared/logging/logger', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    event: vi.fn(),
-    startEvent: () => ({ set: vi.fn(), merge: vi.fn(), success: vi.fn(), failure: vi.fn() }),
-    child: vi.fn(),
-    setLevel: vi.fn(),
-  }),
-  createOperationId: () => 'op-test',
-}))
+import { handlesMocks } from '../test-utils/storage-test-mocks'
 
 import {
   createMedia,

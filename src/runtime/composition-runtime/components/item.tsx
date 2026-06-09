@@ -7,6 +7,7 @@ import type { TransformProperties } from '@/types/transform'
 import { DebugOverlay } from './debug-overlay'
 import { CustomDecoderAudio } from './custom-decoder-audio'
 import { PitchCorrectedAudio } from './pitch-corrected-audio'
+import type { AudioPlaybackProps } from './audio-playback-props'
 import { GifPlayer } from './gif-player'
 import { ItemVisualWrapper } from './item-visual-wrapper'
 import { TextContent } from './text-content'
@@ -63,6 +64,58 @@ interface ItemProps {
   audioGainLiveItemIds?: string[]
   audioEqStages?: ResolvedAudioEqSettings[]
   audioPitchShiftSemitones?: number
+}
+
+function getItemAudioPlaybackProps({
+  item,
+  trimBefore,
+  volume,
+  playbackRate,
+  isReversed,
+  reverseSourceEnd,
+  audioPitchShiftSemitones,
+  sourceFps,
+  muted,
+  audioEqStages,
+  liveGainItemIds,
+  volumeMultiplier,
+}: {
+  item: TimelineItem
+  trimBefore: number
+  volume: number
+  playbackRate: number
+  isReversed: boolean
+  reverseSourceEnd: number
+  audioPitchShiftSemitones: number
+  sourceFps: number
+  muted: boolean
+  audioEqStages: ResolvedAudioEqSettings[]
+  liveGainItemIds?: string[]
+  volumeMultiplier: number
+}): AudioPlaybackProps {
+  return {
+    itemId: item.id,
+    trimBefore,
+    volume,
+    playbackRate,
+    isReversed,
+    reverseSourceEnd,
+    audioPitchSemitones: item.audioPitchSemitones,
+    audioPitchCents: item.audioPitchCents,
+    audioPitchShiftSemitones,
+    sourceFps,
+    muted,
+    durationInFrames: item.durationInFrames,
+    audioFadeIn: item.audioFadeIn,
+    audioFadeOut: item.audioFadeOut,
+    audioFadeInCurve: item.audioFadeInCurve,
+    audioFadeOutCurve: item.audioFadeOutCurve,
+    audioFadeInCurveX: item.audioFadeInCurveX,
+    audioFadeOutCurveX: item.audioFadeOutCurveX,
+    audioEqStages,
+    liveGainItemIds,
+    volumeMultiplier,
+  }
 }
 
 /**
@@ -270,58 +323,32 @@ export const Item = React.memo<ItemProps>(
         !muted &&
         !!videoAudioSrc &&
         (isReversed || requiresPitchShiftedVideoAudio || shouldUseCustomDecodedVideoAudio)
+      const videoAudioPlaybackProps = getItemAudioPlaybackProps({
+        item,
+        trimBefore: safeTrimBefore,
+        volume: (item.volume ?? 0) + trackVolumeDb,
+        playbackRate,
+        isReversed,
+        reverseSourceEnd,
+        audioPitchShiftSemitones,
+        sourceFps,
+        muted,
+        audioEqStages: itemAudioEqStages,
+        liveGainItemIds: audioGainLiveItemIds,
+        volumeMultiplier: audioGainMultiplier,
+      })
       const externalVideoAudio = shouldRenderExternalVideoAudio ? (
         shouldUseCustomDecodedVideoAudio ? (
           <CustomDecoderAudio
+            {...videoAudioPlaybackProps}
             src={videoAudioSrc}
             mediaId={item.mediaId ?? `legacy-src:${videoAudioSrc}`}
-            itemId={item.id}
-            trimBefore={safeTrimBefore}
-            volume={(item.volume ?? 0) + trackVolumeDb}
-            playbackRate={playbackRate}
-            isReversed={isReversed}
-            reverseSourceEnd={reverseSourceEnd}
-            audioPitchSemitones={item.audioPitchSemitones}
-            audioPitchCents={item.audioPitchCents}
-            audioPitchShiftSemitones={audioPitchShiftSemitones}
-            sourceFps={sourceFps}
-            muted={muted}
-            durationInFrames={item.durationInFrames}
-            audioFadeIn={item.audioFadeIn}
-            audioFadeOut={item.audioFadeOut}
-            audioFadeInCurve={item.audioFadeInCurve}
-            audioFadeOutCurve={item.audioFadeOutCurve}
-            audioFadeInCurveX={item.audioFadeInCurveX}
-            audioFadeOutCurveX={item.audioFadeOutCurveX}
-            audioEqStages={itemAudioEqStages}
-            liveGainItemIds={audioGainLiveItemIds}
-            volumeMultiplier={audioGainMultiplier}
           />
         ) : (
           <PitchCorrectedAudio
+            {...videoAudioPlaybackProps}
             src={videoAudioSrc}
             mediaId={item.mediaId}
-            itemId={item.id}
-            trimBefore={safeTrimBefore}
-            volume={(item.volume ?? 0) + trackVolumeDb}
-            playbackRate={playbackRate}
-            isReversed={isReversed}
-            reverseSourceEnd={reverseSourceEnd}
-            audioPitchSemitones={item.audioPitchSemitones}
-            audioPitchCents={item.audioPitchCents}
-            audioPitchShiftSemitones={audioPitchShiftSemitones}
-            sourceFps={sourceFps}
-            muted={muted}
-            durationInFrames={item.durationInFrames}
-            audioFadeIn={item.audioFadeIn}
-            audioFadeOut={item.audioFadeOut}
-            audioFadeInCurve={item.audioFadeInCurve}
-            audioFadeOutCurve={item.audioFadeOutCurve}
-            audioFadeInCurveX={item.audioFadeInCurveX}
-            audioFadeOutCurveX={item.audioFadeOutCurveX}
-            audioEqStages={itemAudioEqStages}
-            liveGainItemIds={audioGainLiveItemIds}
-            volumeMultiplier={audioGainMultiplier}
           />
         )
       ) : null
@@ -418,36 +445,24 @@ export const Item = React.memo<ItemProps>(
 
       const trackVolumeDb =
         'trackVolumeDb' in item && typeof item.trackVolumeDb === 'number' ? item.trackVolumeDb : 0
+      const audioPlaybackProps = getItemAudioPlaybackProps({
+        item,
+        trimBefore,
+        volume: (item.volume ?? 0) + trackVolumeDb,
+        playbackRate,
+        isReversed: item.isReversed === true,
+        reverseSourceEnd,
+        audioPitchShiftSemitones,
+        sourceFps,
+        muted,
+        audioEqStages: itemAudioEqStages,
+        liveGainItemIds: audioGainLiveItemIds,
+        volumeMultiplier: audioGainMultiplier,
+      })
 
       // Use PitchCorrectedAudio for pitch-preserved playback during preview
       // and toneFrequency correction during rendering
-      return (
-        <PitchCorrectedAudio
-          src={item.src}
-          mediaId={item.mediaId}
-          itemId={item.id}
-          trimBefore={trimBefore}
-          volume={(item.volume ?? 0) + trackVolumeDb}
-          playbackRate={playbackRate}
-          isReversed={item.isReversed === true}
-          reverseSourceEnd={reverseSourceEnd}
-          audioPitchSemitones={item.audioPitchSemitones}
-          audioPitchCents={item.audioPitchCents}
-          audioPitchShiftSemitones={audioPitchShiftSemitones}
-          sourceFps={sourceFps}
-          muted={muted}
-          durationInFrames={item.durationInFrames}
-          audioFadeIn={item.audioFadeIn}
-          audioFadeOut={item.audioFadeOut}
-          audioFadeInCurve={item.audioFadeInCurve}
-          audioFadeOutCurve={item.audioFadeOutCurve}
-          audioFadeInCurveX={item.audioFadeInCurveX}
-          audioFadeOutCurveX={item.audioFadeOutCurveX}
-          audioEqStages={itemAudioEqStages}
-          liveGainItemIds={audioGainLiveItemIds}
-          volumeMultiplier={audioGainMultiplier}
-        />
-      )
+      return <PitchCorrectedAudio {...audioPlaybackProps} src={item.src} mediaId={item.mediaId} />
     }
 
     if (item.type === 'image') {

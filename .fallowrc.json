@@ -1,6 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-  "entry": ["src/index.{ts,tsx,js,jsx}", "src/main.{ts,tsx,js,jsx}"],
+  "entry": [
+    "src/index.{ts,tsx,js,jsx}",
+    "src/main.{ts,tsx,js,jsx}",
+    "src/test/setup.ts",
+    "headless/probe.mjs",
+    "headless/smoke.mjs",
+    "headless/media-smoke.mjs"
+  ],
+  "ignorePatterns": [
+    // Static reachability cannot see URL-loaded assets such as /sw.js
+    // and /moss-tts/moss_tts.worker.js.
+    "public/**"
+  ],
   "duplicates": {
     // Hide pair-only clones; focus on widespread copy-paste
     // worth refactoring. Lower to 2 to report every duplicate pair.

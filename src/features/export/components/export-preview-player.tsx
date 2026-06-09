@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react'
 import { createLogger } from '@/shared/logging/logger'
+import { useMediaPlaybackControls } from '@/shared/media/use-media-playback-controls'
 
 const log = createLogger('ExportPreviewPlayer')
 
@@ -43,26 +44,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
   const isSeekingRef = useRef(false)
   isSeekingRef.current = isSeeking
 
-  const togglePlay = useCallback(() => {
-    const el = mediaRef.current
-    if (!el) return
-    if (el.paused) {
-      void el.play()
-    } else {
-      el.pause()
-    }
-  }, [])
-
-  const handleSeek = useCallback(
-    (values: number[]) => {
-      const el = mediaRef.current
-      if (!el || !duration) return
-      const time = ((values[0] ?? 0) / 100) * duration
-      el.currentTime = time
-      setCurrentTime(time)
-    },
-    [duration],
-  )
+  const { togglePlay, seekToPercent } = useMediaPlaybackControls(mediaRef, duration, setCurrentTime)
 
   const handleVolumeChange = useCallback(
     (values: number[]) => {
@@ -195,7 +177,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
           value={[progressPercent]}
           onValueChange={(values) => {
             setIsSeeking(true)
-            handleSeek(values)
+            seekToPercent(values)
           }}
           onValueCommit={() => setIsSeeking(false)}
           max={100}

@@ -15,6 +15,7 @@ import {
   type EmbeddingsOptions,
   type EmbeddingsProvider,
 } from './types'
+import { addAbortableWorkerMessageListener } from './worker-message-listener'
 
 const log = createLogger('EmbeddingsProvider')
 
@@ -39,6 +40,7 @@ function ensureReady(options: EmbeddingsOptions = {}): Promise<void> {
   const w = getWorker()
 
   readyPromise = new Promise<void>((resolve, reject) => {
+    let removeWorkerMessageListener = () => {}
     const timeout = setTimeout(() => {
       cleanup()
       reject(new Error('Embeddings worker init timed out'))
@@ -46,8 +48,7 @@ function ensureReady(options: EmbeddingsOptions = {}): Promise<void> {
 
     const cleanup = () => {
       clearTimeout(timeout)
-      w.removeEventListener('message', onMessage)
-      options.signal?.removeEventListener('abort', onAbort)
+      removeWorkerMessageListener()
     }
 
     const onAbort = () => {
@@ -72,14 +73,15 @@ function ensureReady(options: EmbeddingsOptions = {}): Promise<void> {
       }
     }
 
-    if (options.signal?.aborted) {
-      cleanup()
-      reject(options.signal.reason)
-      return
-    }
-    options.signal?.addEventListener('abort', onAbort, { once: true })
+    const detachListener = addAbortableWorkerMessageListener({
+      worker: w,
+      signal: options.signal,
+      onAbort,
+      onMessage,
+    })
+    if (!detachListener) return
+    removeWorkerMessageListener = detachListener
 
-    w.addEventListener('message', onMessage)
     w.postMessage({ type: 'init' })
   })
 
@@ -101,9 +103,9 @@ function embedBatch(texts: string[], options: EmbeddingsOptions = {}): Promise<F
   return ensureReady(options).then(
     () =>
       new Promise<Float32Array[]>((resolve, reject) => {
+        let removeWorkerMessageListener = () => {}
         const cleanup = () => {
-          w.removeEventListener('message', onMessage)
-          options.signal?.removeEventListener('abort', onAbort)
+          removeWorkerMessageListener()
         }
 
         const onAbort = () => {
@@ -125,14 +127,15 @@ function embedBatch(texts: string[], options: EmbeddingsOptions = {}): Promise<F
           }
         }
 
-        if (options.signal?.aborted) {
-          cleanup()
-          reject(options.signal.reason)
-          return
-        }
-        options.signal?.addEventListener('abort', onAbort, { once: true })
+        const detachListener = addAbortableWorkerMessageListener({
+          worker: w,
+          signal: options.signal,
+          onAbort,
+          onMessage,
+        })
+        if (!detachListener) return
+        removeWorkerMessageListener = detachListener
 
-        w.addEventListener('message', onMessage)
         w.postMessage({ type: 'embed', id, texts })
       }),
   )

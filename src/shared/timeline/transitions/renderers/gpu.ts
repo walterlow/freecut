@@ -47,6 +47,20 @@ export function crossDissolveT(progress: number): number {
   return 0.5 - 0.5 * Math.cos(clamp01(progress) * Math.PI)
 }
 
+function getCanvasTransitionFrame(
+  leftCanvas: OffscreenCanvas,
+  progress: number,
+  canvas?: { width: number; height: number },
+): { p: number; w: number; h: number; envelope: number } {
+  const p = clamp01(progress)
+  return {
+    p,
+    w: canvas?.width ?? leftCanvas.width,
+    h: canvas?.height ?? leftCanvas.height,
+    envelope: Math.sin(p * Math.PI),
+  }
+}
+
 function renderCrossDissolveCanvas(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
@@ -810,10 +824,7 @@ const radialBlurDef: TransitionDefinition = {
 const liquidDistortRenderer: TransitionRenderer = {
   gpuTransitionId: 'liquidDistort',
   renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
-    const p = clamp01(progress)
-    const w = canvas?.width ?? leftCanvas.width
-    const h = canvas?.height ?? leftCanvas.height
-    const envelope = Math.sin(p * Math.PI)
+    const { p, w, h, envelope } = getCanvasTransitionFrame(leftCanvas, progress, canvas)
     const offset = Math.sin(p * Math.PI * 2.4) * envelope * 5
 
     ctx.save()
@@ -923,10 +934,7 @@ const liquidDistortDef: TransitionDefinition = {
 const lensWarpZoomRenderer: TransitionRenderer = {
   gpuTransitionId: 'lensWarpZoom',
   renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
-    const p = clamp01(progress)
-    const w = canvas?.width ?? leftCanvas.width
-    const h = canvas?.height ?? leftCanvas.height
-    const envelope = Math.sin(p * Math.PI)
+    const { p, w, h, envelope } = getCanvasTransitionFrame(leftCanvas, progress, canvas)
 
     const drawScaled = (source: OffscreenCanvas, scale: number, alpha: number) => {
       const dw = w * scale
@@ -1153,10 +1161,7 @@ const lightLeakBurnDef: TransitionDefinition = {
 const filmGateSlipRenderer: TransitionRenderer = {
   gpuTransitionId: 'filmGateSlip',
   renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
-    const p = clamp01(progress)
-    const w = canvas?.width ?? leftCanvas.width
-    const h = canvas?.height ?? leftCanvas.height
-    const envelope = Math.sin(p * Math.PI)
+    const { p, w, h, envelope } = getCanvasTransitionFrame(leftCanvas, progress, canvas)
     const frame = Math.floor(p * 18)
     const jitter = (seededRandom(frame * 17.3) - 0.5) * envelope
     const slip = (p - 0.5) * envelope * h * 0.08

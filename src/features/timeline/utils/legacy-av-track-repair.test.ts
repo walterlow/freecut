@@ -1,55 +1,29 @@
 import { describe, expect, it } from 'vite-plus/test'
 import type { ItemKeyframes } from '@/types/keyframe'
-import type { AdjustmentItem, AudioItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import type { AdjustmentItem, AudioItem, VideoItem } from '@/types/timeline'
+import {
+  makeTimelineAudioItem,
+  makeTimelineTrack as makeTrack,
+  makeTimelineVideoItem,
+} from '../test-helpers'
 import { needsLegacyAvTrackLayoutRepair, repairLegacyAvTrackLayout } from './legacy-av-track-repair'
 
-function makeTrack(
-  overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order'>,
-): TimelineTrack {
-  return {
-    height: 80,
-    locked: false,
-    visible: true,
-    muted: false,
-    solo: false,
-    volume: 0,
-    items: [],
-    ...overrides,
-  }
-}
-
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
-  return {
-    id: 'video-1',
-    type: 'video',
-    trackId: 'track-1',
-    from: 0,
+  return makeTimelineVideoItem({
     durationInFrames: 90,
     label: 'Video',
-    mediaId: 'media-1',
-    src: 'blob:video',
-    sourceStart: 0,
     sourceDuration: 90,
-    sourceFps: 30,
     ...overrides,
-  } as VideoItem
+  })
 }
 
 function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
-  return {
-    id: 'audio-1',
-    type: 'audio',
-    trackId: 'track-a1',
-    from: 0,
+  return makeTimelineAudioItem({
     durationInFrames: 90,
     label: 'Audio',
-    mediaId: 'media-1',
-    src: 'blob:audio',
-    sourceStart: 0,
     sourceDuration: 90,
-    sourceFps: 30,
     ...overrides,
-  } as AudioItem
+  })
 }
 
 describe('repairLegacyAvTrackLayout', () => {

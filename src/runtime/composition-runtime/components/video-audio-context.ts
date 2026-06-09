@@ -3,8 +3,7 @@ import { interpolate, useSequenceContext } from '@/runtime/composition-runtime/d
 import { useGizmoStore } from '@/runtime/composition-runtime/deps/stores'
 import { usePlaybackStore } from '@/runtime/composition-runtime/deps/stores'
 import { useVideoConfig } from '../hooks/use-player-compat'
-import { useTimelineStore } from '@/runtime/composition-runtime/deps/stores'
-import { useItemKeyframesFromContext } from '../contexts/keyframes-context'
+import { useRuntimeItemKeyframes } from './hooks/use-runtime-item-keyframes'
 import {
   getPropertyKeyframes,
   interpolatePropertyValue,
@@ -190,12 +189,7 @@ export function useVideoAudioState(
   const previewMasterMuted = usePlaybackStore((s) => s.muted)
   const masterBusDb = usePlaybackStore((s) => s.masterBusDb)
 
-  // Get keyframes for this item (context-first for render mode, store-fallback for preview)
-  const contextKeyframes = useItemKeyframesFromContext(item.id)
-  const storeKeyframes = useTimelineStore(
-    useCallback((s) => s.keyframes.find((k) => k.itemId === item.id), [item.id]),
-  )
-  const itemKeyframes = contextKeyframes ?? storeKeyframes
+  const itemKeyframes = useRuntimeItemKeyframes(item.id)
 
   // Interpolate volume from keyframes if they exist, otherwise use static value
   const volumeKeyframes = getPropertyKeyframes(itemKeyframes, 'volume')

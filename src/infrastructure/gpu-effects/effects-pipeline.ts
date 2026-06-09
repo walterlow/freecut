@@ -1,4 +1,5 @@
 import { createLogger } from '@/shared/logging/logger'
+import { drawFullscreenCanvasPass } from '@/infrastructure/gpu-shared/fullscreen-canvas-pass'
 import { FULLSCREEN_QUAD_WGSL } from '@/infrastructure/gpu-shared/fullscreen-quad'
 import { COMMON_WGSL } from './common'
 import type { GpuEffectDefinition, GpuEffectInstance } from './types'
@@ -684,21 +685,13 @@ export class EffectsPipeline {
           ],
         }))
 
-    const outputPass = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: outCtx.getCurrentTexture().createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-        },
-      ],
+    drawFullscreenCanvasPass({
+      device: this.device,
+      context: outCtx,
+      pipeline: this.blitPipeline!,
+      bindGroup: blitBindGroup,
+      encoder: commandEncoder,
     })
-    outputPass.setPipeline(this.blitPipeline!)
-    outputPass.setBindGroup(0, blitBindGroup)
-    outputPass.draw(6)
-    outputPass.end()
-
-    this.device.queue.submit([commandEncoder.finish()])
 
     return outCanvas
   }
@@ -932,21 +925,13 @@ export class EffectsPipeline {
           ],
         }))
 
-    const outputPass = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: outCtx.getCurrentTexture().createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-        },
-      ],
+    drawFullscreenCanvasPass({
+      device: this.device,
+      context: outCtx,
+      pipeline: this.blitPipeline!,
+      bindGroup: blitBindGroup,
+      encoder: commandEncoder,
     })
-    outputPass.setPipeline(this.blitPipeline!)
-    outputPass.setBindGroup(0, blitBindGroup)
-    outputPass.draw(6)
-    outputPass.end()
-
-    this.device.queue.submit([commandEncoder.finish()])
 
     return outCanvas
   }

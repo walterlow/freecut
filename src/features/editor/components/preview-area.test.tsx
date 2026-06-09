@@ -44,6 +44,38 @@ function resetStores() {
   })
 }
 
+function renderPathEditingPreview() {
+  useItemsStore.getState().setItems([
+    {
+      id: 'path-1',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 90,
+      label: 'Mask',
+      shapeType: 'path',
+      fillColor: '#ffffff',
+      pathVertices: [
+        { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
+        { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
+        { position: [1, 1], inHandle: [0, 0], outHandle: [0, 0] },
+        { position: [0, 1], inHandle: [0, 0], outHandle: [0, 0] },
+      ],
+      transform: {
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 60,
+        rotation: 0,
+        opacity: 1,
+      },
+    },
+  ])
+  useMaskEditorStore.getState().startEditing('path-1')
+
+  render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
+}
+
 describe('PreviewArea mask editor toolbar', () => {
   beforeAll(() => {
     class ResizeObserverMock {
@@ -59,35 +91,7 @@ describe('PreviewArea mask editor toolbar', () => {
   })
 
   it('shows the edit HUD when path edit mode is active', () => {
-    useItemsStore.getState().setItems([
-      {
-        id: 'path-1',
-        type: 'shape',
-        trackId: 'track-1',
-        from: 0,
-        durationInFrames: 90,
-        label: 'Mask',
-        shapeType: 'path',
-        fillColor: '#ffffff',
-        pathVertices: [
-          { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [1, 1], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [0, 1], inHandle: [0, 0], outHandle: [0, 0] },
-        ],
-        transform: {
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 60,
-          rotation: 0,
-          opacity: 1,
-        },
-      },
-    ])
-    useMaskEditorStore.getState().startEditing('path-1')
-
-    render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
+    renderPathEditingPreview()
 
     expect(screen.getByText('Path Edit')).toBeInTheDocument()
     expect(screen.getByText('4 points')).toBeInTheDocument()
@@ -142,7 +146,9 @@ describe('PreviewArea mask editor toolbar', () => {
       (await screen.findByTestId('source-monitor')).closest('[data-interaction-locked="true"]'),
     ).toBeTruthy()
     expect(
-      (await screen.findByTestId('color-scopes-monitor')).closest('[data-interaction-locked="true"]'),
+      (await screen.findByTestId('color-scopes-monitor')).closest(
+        '[data-interaction-locked="true"]',
+      ),
     ).toBeTruthy()
   })
 
@@ -173,35 +179,7 @@ describe('PreviewArea mask editor toolbar', () => {
   })
 
   it('enables knot conversion buttons for a selected point and dispatches the request', () => {
-    useItemsStore.getState().setItems([
-      {
-        id: 'path-1',
-        type: 'shape',
-        trackId: 'track-1',
-        from: 0,
-        durationInFrames: 90,
-        label: 'Mask',
-        shapeType: 'path',
-        fillColor: '#ffffff',
-        pathVertices: [
-          { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [1, 1], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [0, 1], inHandle: [0, 0], outHandle: [0, 0] },
-        ],
-        transform: {
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 60,
-          rotation: 0,
-          opacity: 1,
-        },
-      },
-    ])
-    useMaskEditorStore.getState().startEditing('path-1')
-
-    render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
+    renderPathEditingPreview()
 
     act(() => {
       useMaskEditorStore.getState().selectVertex(1)
@@ -217,35 +195,7 @@ describe('PreviewArea mask editor toolbar', () => {
   })
 
   it('shows the selected point count for multi-selection', () => {
-    useItemsStore.getState().setItems([
-      {
-        id: 'path-1',
-        type: 'shape',
-        trackId: 'track-1',
-        from: 0,
-        durationInFrames: 90,
-        label: 'Mask',
-        shapeType: 'path',
-        fillColor: '#ffffff',
-        pathVertices: [
-          { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [1, 1], inHandle: [0, 0], outHandle: [0, 0] },
-          { position: [0, 1], inHandle: [0, 0], outHandle: [0, 0] },
-        ],
-        transform: {
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 60,
-          rotation: 0,
-          opacity: 1,
-        },
-      },
-    ])
-    useMaskEditorStore.getState().startEditing('path-1')
-
-    render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
+    renderPathEditingPreview()
 
     act(() => {
       useMaskEditorStore.getState().selectVertices([0, 1, 2, 3], 3)

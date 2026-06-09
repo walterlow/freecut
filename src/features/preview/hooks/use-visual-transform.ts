@@ -4,9 +4,7 @@ import type { TimelineItem } from '@/types/timeline'
 import type { ResolvedTransform } from '@/types/transform'
 import { useKeyframesStore, useTimelineSettingsStore } from '@/features/preview/deps/timeline-store'
 import { resolveAnimatedTextItem } from '@/features/preview/deps/keyframes'
-import { usePlaybackStore } from '@/shared/state/playback'
-import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
-import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution'
+import { useResolvedPlaybackFrame } from '@/shared/state/playback/use-resolved-playback-frame'
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store'
 import {
   applyTransformOverride,
@@ -45,23 +43,10 @@ export function useVisualTransforms(
       useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),
     ),
   )
-  const currentFrame = usePlaybackStore((s) => s.currentFrame)
-  const previewFrame = usePlaybackStore((s) => s.previewFrame)
-  const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame)
-  const isPlaying = usePlaybackStore((s) => s.isPlaying)
-  const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch)
-  const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch)
   const activeGizmo = useGizmoStore((s) => s.activeGizmo)
   const gizmoPreviewTransform = useGizmoStore((s) => s.previewTransform)
   const preview = useGizmoStore((s) => s.preview)
-  const animationFrame = getResolvedPlaybackFrame({
-    currentFrame,
-    previewFrame,
-    displayedFrame,
-    isPlaying,
-    currentFrameEpoch,
-    previewFrameEpoch,
-  })
+  const animationFrame = useResolvedPlaybackFrame()
 
   return useMemo(() => {
     const transforms = new Map<string, ResolvedTransform>()

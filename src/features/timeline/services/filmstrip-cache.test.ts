@@ -47,6 +47,22 @@ function makeBitmap(): ImageBitmap {
   } as unknown as ImageBitmap
 }
 
+type SettledFilmstripFrame = { index: number; timestamp: number; url: string }
+
+function buildSettledFilmstrip(pending: unknown, frames: SettledFilmstripFrame[]) {
+  return (
+    filmstripCache as unknown as {
+      buildSettledFilmstrip: (
+        pendingArg: unknown,
+        framesArg: SettledFilmstripFrame[],
+      ) => {
+        isComplete: boolean
+        progress: number
+      }
+    }
+  ).buildSettledFilmstrip(pending, frames)
+}
+
 describe('filmstripCache completion semantics', () => {
   afterEach(async () => {
     vi.clearAllMocks()
@@ -69,17 +85,7 @@ describe('filmstripCache completion semantics', () => {
       { index: 2, timestamp: 2, url: 'blob:2' },
     ]
 
-    const result = (
-      filmstripCache as unknown as {
-        buildSettledFilmstrip: (
-          pendingArg: unknown,
-          framesArg: typeof frames,
-        ) => {
-          isComplete: boolean
-          progress: number
-        }
-      }
-    ).buildSettledFilmstrip(pending, frames)
+    const result = buildSettledFilmstrip(pending, frames)
 
     expect(result.isComplete).toBe(false)
     expect(result.progress).toBeLessThan(100)
@@ -101,17 +107,7 @@ describe('filmstripCache completion semantics', () => {
       { index: 2, timestamp: 2, url: 'blob:2' },
     ]
 
-    const result = (
-      filmstripCache as unknown as {
-        buildSettledFilmstrip: (
-          pendingArg: unknown,
-          framesArg: typeof frames,
-        ) => {
-          isComplete: boolean
-          progress: number
-        }
-      }
-    ).buildSettledFilmstrip(pending, frames)
+    const result = buildSettledFilmstrip(pending, frames)
 
     expect(result.isComplete).toBe(true)
     expect(result.progress).toBe(100)
@@ -131,17 +127,7 @@ describe('filmstripCache completion semantics', () => {
       { index: 2, timestamp: 2, url: 'blob:2' },
     ]
 
-    const result = (
-      filmstripCache as unknown as {
-        buildSettledFilmstrip: (
-          pendingArg: unknown,
-          framesArg: typeof frames,
-        ) => {
-          isComplete: boolean
-          progress: number
-        }
-      }
-    ).buildSettledFilmstrip(pending, frames)
+    const result = buildSettledFilmstrip(pending, frames)
 
     expect(result.isComplete).toBe(true)
     expect(result.progress).toBe(100)
@@ -166,17 +152,7 @@ describe('filmstripCache completion semantics', () => {
       { index: 119, timestamp: 119, url: 'blob:119' },
     ]
 
-    const result = (
-      filmstripCache as unknown as {
-        buildSettledFilmstrip: (
-          pendingArg: unknown,
-          framesArg: typeof frames,
-        ) => {
-          isComplete: boolean
-          progress: number
-        }
-      }
-    ).buildSettledFilmstrip(pending, frames)
+    const result = buildSettledFilmstrip(pending, frames)
 
     expect(result.isComplete).toBe(true)
     expect(result.progress).toBe(100)

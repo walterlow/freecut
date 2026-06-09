@@ -15,6 +15,7 @@ import type { BlendMode } from '@/types/blend-modes'
 import { BLEND_MODE_INDEX } from '@/types/blend-modes'
 import { createLogger } from '@/shared/logging/logger'
 import { BLEND_MODES_WGSL } from '@/infrastructure/gpu-shared/blend-modes'
+import { drawFullscreenCanvasPass } from '@/infrastructure/gpu-shared/fullscreen-canvas-pass'
 import { FULLSCREEN_QUAD_WGSL } from '@/infrastructure/gpu-shared/fullscreen-quad'
 
 const logger = createLogger('CompositorPipeline')
@@ -567,21 +568,13 @@ export class CompositorPipeline {
             ],
           }))
 
-    const outputPass = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: outputCtx.getCurrentTexture().createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-        },
-      ],
+    drawFullscreenCanvasPass({
+      device: this.device,
+      context: outputCtx,
+      pipeline: this.blitPipeline,
+      bindGroup: blitBindGroup,
+      encoder: commandEncoder,
     })
-    outputPass.setPipeline(this.blitPipeline)
-    outputPass.setBindGroup(0, blitBindGroup)
-    outputPass.draw(6)
-    outputPass.end()
-
-    this.device.queue.submit([commandEncoder.finish()])
     return true
   }
 

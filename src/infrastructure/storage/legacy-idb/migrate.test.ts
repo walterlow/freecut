@@ -17,6 +17,7 @@ import type {
   ThumbnailData,
   GifFrameData,
 } from '@/types/storage'
+import { handlesMocks } from '../test-utils/storage-test-mocks'
 
 /* ───────────────────────── idb mock ─────────────────────────
  * Hand-rolled openDB fake that satisfies the narrow surface the
@@ -88,33 +89,6 @@ const deleteDatabase = vi.fn(() => {
 })
 
 /* ───────────────────────── workspace-fs mocks ───────────────── */
-
-const handlesMocks = vi.hoisted(() => ({
-  getHandle: vi.fn().mockResolvedValue(null),
-  saveHandle: vi.fn().mockResolvedValue(undefined),
-  deleteHandle: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('@/infrastructure/storage/handles-db', () => handlesMocks)
-
-vi.mock('@/shared/logging/logger', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    event: vi.fn(),
-    startEvent: () => ({
-      set: vi.fn(),
-      merge: vi.fn(),
-      success: vi.fn(),
-      failure: vi.fn(),
-    }),
-    child: vi.fn(),
-    setLevel: vi.fn(),
-  }),
-  createOperationId: () => 'op-test',
-}))
 
 import { deleteLegacyIDB, getMigrationStatus, hasLegacyData, migrateFromLegacyIDB } from './migrate'
 import { getProject } from '@/infrastructure/storage/workspace-fs/projects'

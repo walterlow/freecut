@@ -87,6 +87,74 @@ export function sourceToTimelineFrames(
   return Math.floor((sourceSeconds * safeTimelineFps) / speed)
 }
 
+export interface SourceWindowOverlapMapping {
+  overlapStart: number
+  overlapEnd: number
+  mappedFrom: number
+  mappedEnd: number
+  mappedDuration: number
+  clippedStartFrames: number
+  clippedEndFrames: number
+  wrapperSpeed: number
+  wrapperSourceFps: number
+}
+
+export function mapSourceWindowOverlap(params: {
+  itemStart: number
+  itemDuration: number
+  wrapperDuration: number
+  wrapperSpeed?: number
+  wrapperSourceFps?: number
+  wrapperSourceStart: number
+  wrapperSourceEnd?: number
+  timelineFps: number
+  fallbackSourceFps: number
+}): SourceWindowOverlapMapping | null {
+  const wrapperSpeed = params.wrapperSpeed ?? DEFAULT_SPEED
+  const wrapperSourceFps = params.wrapperSourceFps ?? params.fallbackSourceFps
+  const wrapperSourceEnd =
+    params.wrapperSourceEnd ??
+    params.wrapperSourceStart +
+      timelineToSourceFrames(
+        params.wrapperDuration,
+        wrapperSpeed,
+        params.timelineFps,
+        wrapperSourceFps,
+      )
+  const itemEnd = params.itemStart + params.itemDuration
+  const overlapStart = Math.max(params.itemStart, params.wrapperSourceStart)
+  const overlapEnd = Math.min(itemEnd, wrapperSourceEnd)
+
+  if (overlapEnd <= overlapStart) {
+    return null
+  }
+
+  const mappedFrom = sourceToTimelineFrames(
+    overlapStart - params.wrapperSourceStart,
+    wrapperSpeed,
+    wrapperSourceFps,
+    params.timelineFps,
+  )
+  const mappedEnd = sourceToTimelineFrames(
+    overlapEnd - params.wrapperSourceStart,
+    wrapperSpeed,
+    wrapperSourceFps,
+    params.timelineFps,
+  )
+
+  return {
+    overlapStart,
+    overlapEnd,
+    mappedFrom,
+    mappedEnd,
+    mappedDuration: Math.max(1, mappedEnd - mappedFrom),
+    clippedStartFrames: overlapStart - params.itemStart,
+    clippedEndFrames: itemEnd - overlapEnd,
+    wrapperSpeed,
+    wrapperSourceFps,
+  }
+}
+
 /**
  * Calculate available source frames from current position to end.
  */

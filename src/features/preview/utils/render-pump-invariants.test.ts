@@ -113,8 +113,29 @@ function createPumpSimulation() {
   }
 }
 
+type PumpSimulation = ReturnType<typeof createPumpSimulation>
+
+function startForceClearReplacementPump(
+  sim: PumpSimulation,
+  {
+    renderDelayMs = 10,
+    initialFrame = 100,
+    replacementFrame = 200,
+  }: { renderDelayMs?: number; initialFrame?: number; replacementFrame?: number } = {},
+) {
+  sim.renderDelayMs = renderDelayMs
+  sim.setRequestedFrame(initialFrame)
+  const stalePump = sim.pump()
+
+  sim.forceUnlock()
+  sim.setRequestedFrame(replacementFrame)
+  const replacementPump = sim.pump()
+
+  return { stalePump, replacementPump }
+}
+
 describe('render pump invariants', () => {
-  let sim: ReturnType<typeof createPumpSimulation>
+  let sim: PumpSimulation
 
   beforeEach(() => {
     sim = createPumpSimulation()
@@ -153,17 +174,12 @@ describe('render pump invariants', () => {
   })
 
   it('playback-start force-clear allows new pump immediately', async () => {
-    sim.renderDelayMs = 50
-    sim.setRequestedFrame(100)
-    const p1 = sim.pump() // starts, lock = true
+    const { stalePump, replacementPump } = startForceClearReplacementPump(sim, {
+      renderDelayMs: 50,
+    })
 
-    // Simulate playback start
-    sim.forceUnlock() // bumps generation + clears lock
-    sim.setRequestedFrame(200)
-    const p2 = sim.pump() // should start (lock was cleared)
-
-    await p1
-    await p2
+    await stalePump
+    await replacementPump
 
     // Both pumps ran, but the stale one's finally didn't release the new lock
     expect(sim.renderedFrames).toContain(200)
@@ -171,16 +187,10 @@ describe('render pump invariants', () => {
   })
 
   it('stale pump finally does NOT release newer pump lock', async () => {
-    sim.renderDelayMs = 10
-    sim.setRequestedFrame(100)
-    const p1 = sim.pump()
+    const { stalePump, replacementPump } = startForceClearReplacementPump(sim)
 
-    sim.forceUnlock()
-    sim.setRequestedFrame(200)
-    const p2 = sim.pump()
-
-    await p1
-    await p2
+    await stalePump
+    await replacementPump
 
     // After both complete, lock should be released (by p2, not p1)
     expect(sim.inFlight).toBe(false)
@@ -252,19 +262,13 @@ describe('render pump invariants', () => {
   })
 
   it('lock stays held after stale pump (no deadlock with force-clear)', async () => {
-    sim.renderDelayMs = 10
-    sim.setRequestedFrame(100)
-    const p1 = sim.pump()
+    const { stalePump, replacementPump } = startForceClearReplacementPump(sim)
 
-    sim.forceUnlock()
-    sim.setRequestedFrame(200)
-    const p2 = sim.pump()
-
-    await p1
+    await stalePump
     // After stale p1 finishes, lock should still be held by p2
     // (p1's finally skipped the release)
 
-    await p2
+    await replacementPump
     // After p2 finishes, lock should be released
     expect(sim.inFlight).toBe(false)
   })

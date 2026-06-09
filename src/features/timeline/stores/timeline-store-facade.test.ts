@@ -69,7 +69,7 @@ vi.mock('@/shared/state/playback', () => ({
   },
 }))
 
-vi.mock('../zoom-store', () => ({
+vi.mock('./zoom-store', () => ({
   useZoomStore: {
     getState: () => zoomMocks,
   },

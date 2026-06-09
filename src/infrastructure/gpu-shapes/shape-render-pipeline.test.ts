@@ -1,39 +1,17 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
+import { createGpuRenderPipelineMocks } from '@/infrastructure/gpu-test-helpers'
 import { MAX_GPU_SHAPE_PATH_VERTICES, ShapeRenderPipeline } from './shape-render-pipeline'
 
 function createPipelineHarness() {
   vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 })
   vi.stubGlobal('GPUBufferUsage', { COPY_DST: 8, UNIFORM: 64 })
-  const queue = {
-    submit: vi.fn(),
-    writeBuffer: vi.fn(),
-  }
   const outputView = {}
   const outputTexture = {
     createView: vi.fn(() => outputView),
     width: 1920,
     height: 1080,
   } as unknown as GPUTexture
-  const pass = {
-    draw: vi.fn(),
-    end: vi.fn(),
-    setBindGroup: vi.fn(),
-    setPipeline: vi.fn(),
-  }
-  const commandEncoder = {
-    beginRenderPass: vi.fn(() => pass),
-    finish: vi.fn(() => 'finished-command-buffer'),
-  }
-  const device = {
-    createBindGroup: vi.fn(() => 'bind-group'),
-    createBindGroupLayout: vi.fn(() => 'bind-group-layout'),
-    createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
-    createCommandEncoder: vi.fn(() => commandEncoder),
-    createPipelineLayout: vi.fn(() => 'pipeline-layout'),
-    createRenderPipeline: vi.fn(() => 'render-pipeline'),
-    createShaderModule: vi.fn(() => 'shader-module'),
-    queue,
-  }
+  const { commandEncoder, device, pass, queue } = createGpuRenderPipelineMocks()
   const pipeline = new ShapeRenderPipeline(device as unknown as GPUDevice)
   return { commandEncoder, device, outputTexture, pass, pipeline, queue }
 }

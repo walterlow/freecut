@@ -33,6 +33,7 @@ import { useDopesheetMarquee } from './use-dopesheet-marquee'
 import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useElementSize } from './use-element-size'
+import { addWindowPointerListeners } from './dopesheet-pointer-listeners'
 import { DopesheetHeaderFrameInputs } from './dopesheet-header-frame-inputs'
 import { DopesheetRulerHeader } from './dopesheet-ruler-header'
 import { DopesheetSheetBody } from './dopesheet-sheet-body'
@@ -1601,12 +1602,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       scheduleDragPreviewFrames(null)
     }
 
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-    }
+    return addWindowPointerListeners(handlePointerMove, handlePointerUp)
   }, [
     disabled,
     buildSelectionFramePreview,

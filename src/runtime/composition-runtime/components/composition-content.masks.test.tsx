@@ -2,14 +2,17 @@ import React from 'react'
 import { describe, it, expect, beforeEach, vi } from 'vite-plus/test'
 import { act, render } from '@testing-library/react'
 import { VideoConfigProvider } from '@/runtime/composition-runtime/deps/player'
-import {
-  useCompositionsStore,
-  useTimelineStore,
-  useGizmoStore,
-  useMaskEditorStore,
-} from '@/runtime/composition-runtime/deps/stores'
-import type { CompositionItem, ShapeItem, TimelineTrack } from '@/types/timeline'
+import { useMaskEditorStore } from '@/runtime/composition-runtime/deps/stores'
+import type { ShapeItem } from '@/types/timeline'
 import { Item } from './item'
+import {
+  makeNestedTimelineTrack,
+  makeNestedShapeItem,
+  makeParentCompositionItem,
+  makeTestSubComposition,
+  resetCompositionContentRuntimeState,
+  storeTestSubComposition,
+} from './composition-content-test-helpers'
 
 vi.mock('@/runtime/composition-runtime/deps/player', async () => {
   const React = await import('react')
@@ -96,58 +99,52 @@ vi.mock('@/runtime/composition-runtime/deps/player', async () => {
   }
 })
 
+function makeClipMask(overrides: Partial<ShapeItem> = {}): ShapeItem {
+  return makeNestedShapeItem({
+    id: 'clip-mask',
+    trackId: 'mask-track',
+    label: 'Clip mask',
+    fillColor: '#ffffff',
+    isMask: true,
+    maskType: 'clip',
+    ...overrides,
+  })
+}
+
+function renderMaskedShapeItem(contentItem: ShapeItem, maskItem: ShapeItem) {
+  return render(
+    <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
+      <Item
+        item={contentItem}
+        muted={false}
+        masks={[
+          {
+            shape: maskItem,
+            transform: maskItem.transform!,
+            trackOrder: 1,
+          },
+        ]}
+      />
+    </VideoConfigProvider>,
+  )
+}
+
 describe('CompositionContent masks', () => {
   beforeEach(() => {
-    useCompositionsStore.setState({
-      compositions: [],
-      compositionById: {},
-      mediaDependencyIds: [],
-      mediaDependencyVersion: 0,
-    })
-    useTimelineStore.setState({ keyframes: [] } as Partial<
-      ReturnType<typeof useTimelineStore.getState>
-    >)
-    useGizmoStore.setState({
-      activeGizmo: null,
-      previewTransform: null,
-      preview: null,
-      snapLines: [],
-      canvasBackgroundPreview: null,
-    })
+    resetCompositionContentRuntimeState()
     useMaskEditorStore.getState().stopEditing()
   })
 
   it('updates the applied mask clip-path while preview vertices are dragged', () => {
-    const contentItem: ShapeItem = {
+    const contentItem = makeNestedShapeItem({
       id: 'content-shape',
-      type: 'shape',
       trackId: 'content-track',
-      from: 0,
-      durationInFrames: 60,
-      label: 'Content shape',
-      shapeType: 'rectangle',
-      fillColor: '#ff0000',
-      transform: {
-        x: 0,
-        y: 0,
-        width: 640,
-        height: 360,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
+    })
 
-    const maskItem: ShapeItem = {
+    const maskItem = makeClipMask({
       id: 'path-mask',
-      type: 'shape',
-      trackId: 'mask-track',
-      from: 0,
-      durationInFrames: 60,
       label: 'Path mask',
       shapeType: 'path',
-      fillColor: '#ffffff',
-      isMask: true,
-      maskType: 'clip',
       pathVertices: [
         {
           position: [0.2, 0.2],
@@ -165,31 +162,9 @@ describe('CompositionContent masks', () => {
           outHandle: [0.6, 0.7],
         },
       ],
-      transform: {
-        x: 0,
-        y: 0,
-        width: 640,
-        height: 360,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
+    })
 
-    const { container } = render(
-      <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
-        <Item
-          item={contentItem}
-          muted={false}
-          masks={[
-            {
-              shape: maskItem,
-              transform: maskItem.transform!,
-              trackOrder: 1,
-            },
-          ]}
-        />
-      </VideoConfigProvider>,
-    )
+    const { container } = renderMaskedShapeItem(contentItem, maskItem)
 
     const maskedElement = container.querySelector('[style*="clip-path"]')
     expect(maskedElement).not.toBeNull()
@@ -226,67 +201,25 @@ describe('CompositionContent masks', () => {
   })
 
   it('keeps clip masks on the full-canvas mask wrapper when corner pin is active', () => {
-    const contentItem: ShapeItem = {
+    const contentItem = makeNestedShapeItem({
       id: 'pinned-shape',
-      type: 'shape',
       trackId: 'content-track',
-      from: 0,
-      durationInFrames: 60,
       label: 'Pinned shape',
-      shapeType: 'rectangle',
-      fillColor: '#ff0000',
       cornerPin: {
         topLeft: [0, 0],
         topRight: [48, -24],
         bottomRight: [24, 18],
         bottomLeft: [-20, 16],
       },
-      transform: {
-        x: 0,
-        y: 0,
-        width: 640,
-        height: 360,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
+    })
 
-    const maskItem: ShapeItem = {
+    const maskItem = makeClipMask({
       id: 'heart-mask',
-      type: 'shape',
-      trackId: 'mask-track',
-      from: 0,
-      durationInFrames: 60,
       label: 'Heart mask',
       shapeType: 'heart',
-      fillColor: '#ffffff',
-      isMask: true,
-      maskType: 'clip',
-      transform: {
-        x: 0,
-        y: 0,
-        width: 640,
-        height: 360,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
+    })
 
-    const { container } = render(
-      <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
-        <Item
-          item={contentItem}
-          muted={false}
-          masks={[
-            {
-              shape: maskItem,
-              transform: maskItem.transform!,
-              trackOrder: 1,
-            },
-          ]}
-        />
-      </VideoConfigProvider>,
-    )
+    const { container } = renderMaskedShapeItem(contentItem, maskItem)
 
     const pinnedElement = Array.from(container.querySelectorAll('div')).find((element) =>
       (element as HTMLElement).style.transform.includes('matrix3d'),
@@ -299,123 +232,33 @@ describe('CompositionContent masks', () => {
   })
 
   it('keeps clip masks hard-edged even if a feather value is present', () => {
-    const contentItem: ShapeItem = {
+    const contentItem = makeNestedShapeItem({
       id: 'content-shape',
-      type: 'shape',
       trackId: 'content-track',
-      from: 0,
-      durationInFrames: 60,
-      label: 'Content shape',
-      shapeType: 'rectangle',
-      fillColor: '#ff0000',
-      transform: {
-        x: 0,
-        y: 0,
-        width: 640,
-        height: 360,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
+    })
 
-    const maskItem: ShapeItem = {
+    const maskItem = makeClipMask({
       id: 'clip-mask-with-feather',
-      type: 'shape',
-      trackId: 'mask-track',
-      from: 0,
-      durationInFrames: 60,
       label: 'Clip mask with feather',
-      shapeType: 'rectangle',
-      fillColor: '#ffffff',
-      isMask: true,
-      maskType: 'clip',
       maskFeather: 18,
-      transform: {
-        x: 0,
-        y: 0,
-        width: 640,
-        height: 360,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
+    })
 
-    const { container } = render(
-      <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
-        <Item
-          item={contentItem}
-          muted={false}
-          masks={[
-            {
-              shape: maskItem,
-              transform: maskItem.transform!,
-              trackOrder: 1,
-            },
-          ]}
-        />
-      </VideoConfigProvider>,
-    )
+    const { container } = renderMaskedShapeItem(contentItem, maskItem)
 
     expect(container.querySelector('[style*="clip-path"]')).not.toBeNull()
     expect(container.querySelector('mask')).toBeNull()
   })
 
   it('applies sub-comp masks only to content on lower tracks', () => {
-    const subTracks: TimelineTrack[] = [
-      {
-        id: 'sub-track-mask',
-        name: 'Mask',
-        height: 60,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: 0,
-        items: [],
-      },
-      {
-        id: 'sub-track-content',
-        name: 'Content',
-        height: 60,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: 1,
-        items: [],
-      },
-    ]
-
-    const maskItem: ShapeItem = {
+    const maskItem = makeClipMask({
       id: 'sub-mask',
-      type: 'shape',
       trackId: 'sub-track-mask',
-      from: 0,
-      durationInFrames: 60,
       label: 'Mask shape',
-      shapeType: 'rectangle',
-      fillColor: '#ffffff',
-      isMask: true,
-      maskType: 'clip',
-      transform: {
-        x: 0,
-        y: 0,
-        width: 640,
-        height: 360,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
+    })
 
-    const contentItem: ShapeItem = {
+    const contentItem = makeNestedShapeItem({
       id: 'sub-content',
-      type: 'shape',
       trackId: 'sub-track-content',
-      from: 0,
-      durationInFrames: 60,
-      label: 'Content shape',
-      shapeType: 'rectangle',
-      fillColor: '#ff0000',
       transform: {
         x: 0,
         y: 0,
@@ -424,39 +267,23 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    }
+    })
 
-    const subComp = {
+    const subComp = makeTestSubComposition({
       id: 'sub-comp-1',
       name: 'Masked precomp',
       items: [maskItem, contentItem],
-      tracks: subTracks,
-      transitions: [],
-      keyframes: [],
-      fps: 30,
-      width: 1280,
-      height: 720,
-      durationInFrames: 60,
-    }
-
-    useCompositionsStore.setState({
-      compositions: [subComp],
-      compositionById: { [subComp.id]: subComp },
-      mediaDependencyIds: [],
-      mediaDependencyVersion: 0,
+      tracks: [
+        makeNestedTimelineTrack({ id: 'sub-track-mask', name: 'Mask', order: 0 }),
+        makeNestedTimelineTrack({ id: 'sub-track-content', name: 'Content', order: 1 }),
+      ],
     })
 
-    const compositionItem: CompositionItem = {
-      id: 'parent-comp-item',
-      type: 'composition',
+    storeTestSubComposition(subComp)
+
+    const compositionItem = makeParentCompositionItem({
       compositionId: subComp.id,
-      trackId: 'parent-track',
-      from: 0,
-      durationInFrames: 60,
-      label: 'Nested comp',
-      compositionWidth: 1280,
-      compositionHeight: 720,
-    }
+    })
 
     const { container } = render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
@@ -473,61 +300,15 @@ describe('CompositionContent masks', () => {
   })
 
   it('does not apply a sub-comp mask to content above the mask track', () => {
-    const subTracks: TimelineTrack[] = [
-      {
-        id: 'sub-track-mask',
-        name: 'Mask',
-        height: 60,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: 1,
-        items: [],
-      },
-      {
-        id: 'sub-track-content',
-        name: 'Content',
-        height: 60,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: 0,
-        items: [],
-      },
-    ]
-
-    const maskItem: ShapeItem = {
+    const maskItem = makeClipMask({
       id: 'sub-mask',
-      type: 'shape',
       trackId: 'sub-track-mask',
-      from: 0,
-      durationInFrames: 60,
       label: 'Mask shape',
-      shapeType: 'rectangle',
-      fillColor: '#ffffff',
-      isMask: true,
-      maskType: 'clip',
-      transform: {
-        x: 0,
-        y: 0,
-        width: 640,
-        height: 360,
-        rotation: 0,
-        opacity: 1,
-      },
-    }
+    })
 
-    const contentItem: ShapeItem = {
+    const contentItem = makeNestedShapeItem({
       id: 'sub-content',
-      type: 'shape',
       trackId: 'sub-track-content',
-      from: 0,
-      durationInFrames: 60,
-      label: 'Content shape',
-      shapeType: 'rectangle',
-      fillColor: '#ff0000',
       transform: {
         x: 0,
         y: 0,
@@ -536,39 +317,23 @@ describe('CompositionContent masks', () => {
         rotation: 0,
         opacity: 1,
       },
-    }
+    })
 
-    const subComp = {
+    const subComp = makeTestSubComposition({
       id: 'sub-comp-1',
       name: 'Unmasked precomp',
       items: [maskItem, contentItem],
-      tracks: subTracks,
-      transitions: [],
-      keyframes: [],
-      fps: 30,
-      width: 1280,
-      height: 720,
-      durationInFrames: 60,
-    }
-
-    useCompositionsStore.setState({
-      compositions: [subComp],
-      compositionById: { [subComp.id]: subComp },
-      mediaDependencyIds: [],
-      mediaDependencyVersion: 0,
+      tracks: [
+        makeNestedTimelineTrack({ id: 'sub-track-mask', name: 'Mask', order: 1 }),
+        makeNestedTimelineTrack({ id: 'sub-track-content', name: 'Content', order: 0 }),
+      ],
     })
 
-    const compositionItem: CompositionItem = {
-      id: 'parent-comp-item',
-      type: 'composition',
+    storeTestSubComposition(subComp)
+
+    const compositionItem = makeParentCompositionItem({
       compositionId: subComp.id,
-      trackId: 'parent-track',
-      from: 0,
-      durationInFrames: 60,
-      label: 'Nested comp',
-      compositionWidth: 1280,
-      compositionHeight: 720,
-    }
+    })
 
     const { container } = render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>

@@ -1,43 +1,13 @@
 import { describe, expect, it } from 'vite-plus/test'
-import type { TimelineTrack, VideoItem } from '@/types/timeline'
+import {
+  makeTimelineTrack as makeTrack,
+  makeTimelineVideoItem as makeVideoItem,
+} from '@/features/timeline/test-helpers'
 import type { SubComposition } from '../stores/compositions-store'
 import {
   buildDroppedCompositionTimelineItems,
   compositionHasOwnedAudio,
 } from './dropped-composition'
-
-function makeTrack(
-  overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>,
-): TimelineTrack {
-  return {
-    height: 80,
-    locked: false,
-    visible: true,
-    muted: false,
-    solo: false,
-    volume: 0,
-    items: [],
-    ...overrides,
-  }
-}
-
-function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
-  return {
-    id: 'video-1',
-    type: 'video',
-    trackId: 'track-v1',
-    from: 0,
-    durationInFrames: 60,
-    label: 'clip.mp4',
-    src: 'blob:video',
-    mediaId: 'media-1',
-    sourceStart: 0,
-    sourceEnd: 60,
-    sourceDuration: 120,
-    sourceFps: 30,
-    ...overrides,
-  }
-}
 
 describe('dropped-composition', () => {
   it('detects owned audio through nested compound clips and builds a linked wrapper pair', () => {

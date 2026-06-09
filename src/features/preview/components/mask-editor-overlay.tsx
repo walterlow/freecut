@@ -665,6 +665,24 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     [penVertices, vertexToScreen, handleToScreen],
   )
 
+  const hitTestPenEvent = useCallback(
+    (event: Pick<React.MouseEvent | React.PointerEvent, 'clientX' | 'clientY'>): PenHit | null => {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return null
+      return hitTestPen(event.clientX - rect.left, event.clientY - rect.top)
+    },
+    [hitTestPen],
+  )
+
+  const hitTestEditEvent = useCallback(
+    (event: Pick<React.MouseEvent | React.PointerEvent, 'clientX' | 'clientY'>): MaskHit | null => {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return null
+      return hitTest(event.clientX - rect.left, event.clientY - rect.top)
+    },
+    [hitTest],
+  )
+
   // ============================================================
   // Edit mode: drag state
   // ============================================================
@@ -741,12 +759,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const norm = screenToNorm(e.clientX, e.clientY)
       setPenCursorPos(norm)
 
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (!rect) return
-
-      const localX = e.clientX - rect.left
-      const localY = e.clientY - rect.top
-      const hit = hitTestPen(localX, localY)
+      const hit = hitTestPenEvent(e)
       const canvasPos = screenToCanvas(e.clientX, e.clientY, coordParams)
 
       if (hit) {
@@ -812,7 +825,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       penVertices,
       screenToNorm,
       setPenCursorPos,
-      hitTestPen,
+      hitTestPenEvent,
       coordParams,
       setPenDragging,
       setHover,
@@ -867,12 +880,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         return
       }
 
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (!rect) return
-
-      const localX = e.clientX - rect.left
-      const localY = e.clientY - rect.top
-      const hit = hitTestPen(localX, localY)
+      const hit = hitTestPenEvent(e)
       if (!hit) {
         setHover(null)
       } else if (hit.type === 'vertex') {
@@ -889,7 +897,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       startVertexDrag,
       setPenVertices,
       buildPenDragVertices,
-      hitTestPen,
+      hitTestPenEvent,
       setHover,
     ],
   )
@@ -913,15 +921,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const norm = screenToNorm(e.clientX, e.clientY)
       setPenCursorPos(norm)
 
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (!rect) {
-        setHover(null)
-        return
-      }
-
-      const localX = e.clientX - rect.left
-      const localY = e.clientY - rect.top
-      const hit = hitTestPen(localX, localY)
+      const hit = hitTestPenEvent(e)
       if (!hit) {
         setHover(null)
       } else if (hit.type === 'vertex') {
@@ -930,17 +930,12 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         setHover(hit.index, hit.type === 'inHandle' ? 'in' : 'out')
       }
     },
-    [setPenDragging, endDrag, screenToNorm, setPenCursorPos, hitTestPen, setHover],
+    [setPenDragging, endDrag, screenToNorm, setPenCursorPos, hitTestPenEvent, setHover],
   )
 
   const handlePenContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (!rect) return
-
-      const localX = e.clientX - rect.left
-      const localY = e.clientY - rect.top
-      const hit = hitTestPen(localX, localY)
+      const hit = hitTestPenEvent(e)
       if (hit?.type !== 'vertex') return
 
       e.preventDefault()
@@ -956,7 +951,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         setHover(hit.index, null)
       }
     },
-    [hitTestPen, penVertices, setPenVertices, setHover],
+    [hitTestPenEvent, penVertices, setPenVertices, setHover],
   )
 
   /** Commit pen vertices as a new ShapeItem with shapeType='path'. */
@@ -1766,12 +1761,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
   const handleEditContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (!rect) return
-
-      const localX = e.clientX - rect.left
-      const localY = e.clientY - rect.top
-      const hit = hitTest(localX, localY)
+      const hit = hitTestEditEvent(e)
 
       if (hit?.type === 'vertex') {
         e.preventDefault()
@@ -1801,7 +1791,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       }
     },
     [
-      hitTest,
+      hitTestEditEvent,
       getVertices,
       selectedVertexIndices,
       selectedVertexIndex,
@@ -1812,12 +1802,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
   const handleEditDoubleClick = useCallback(
     (e: React.MouseEvent) => {
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (!rect) return
-
-      const localX = e.clientX - rect.left
-      const localY = e.clientY - rect.top
-      const hit = hitTest(localX, localY)
+      const hit = hitTestEditEvent(e)
 
       if (hit?.type !== 'segment') return
 
@@ -1833,7 +1818,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       setHoveredShapeBody(false)
       setHoveredSegmentIndex(null)
     },
-    [hitTest, getVertices, selectVertex, commitVertices],
+    [hitTestEditEvent, getVertices, selectVertex, commitVertices],
   )
 
   // ============================================================

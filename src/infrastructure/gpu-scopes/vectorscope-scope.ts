@@ -4,6 +4,13 @@
  * render shader visualizes with graticule, skin tone line, and color targets.
  */
 
+import {
+  createScopeRenderBindGroupLayout,
+  createScopeRenderPipeline,
+  dispatchScopeComputePass,
+  drawFullscreenScopePass,
+} from './scope-render-pass'
+
 const VECTORSCOPE_COMPUTE = /* wgsl */ `
 struct Params {
   outSize: u32,
@@ -252,20 +259,17 @@ export class VectorscopeScope {
       },
     })
 
-    this.renderBGL = device.createBindGroupLayout({
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-      ],
-    })
-
-    const renderModule = device.createShaderModule({ code: VECTORSCOPE_RENDER })
-    this.renderPipeline = device.createRenderPipeline({
-      layout: device.createPipelineLayout({ bindGroupLayouts: [this.renderBGL] }),
-      vertex: { module: renderModule, entryPoint: 'vs' },
-      fragment: { module: renderModule, entryPoint: 'fs', targets: [{ format }] },
+    this.renderBGL = createScopeRenderBindGroupLayout(device, [
+      'read-only-storage',
+      'read-only-storage',
+      'read-only-storage',
+      'uniform',
+    ])
+    this.renderPipeline = createScopeRenderPipeline({
+      device,
+      format,
+      layout: this.renderBGL,
+      shaderCode: VECTORSCOPE_RENDER,
     })
   }
 
@@ -298,11 +302,13 @@ export class VectorscopeScope {
       ],
     })
 
-    const cp = encoder.beginComputePass()
-    cp.setPipeline(this.computePipeline)
-    cp.setBindGroup(0, computeBG)
-    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16))
-    cp.end()
+    dispatchScopeComputePass({
+      encoder,
+      pipeline: this.computePipeline,
+      bindGroup: computeBG,
+      srcW,
+      srcH,
+    })
 
     const renderBG = d.createBindGroup({
       layout: this.renderBGL,
@@ -314,22 +320,13 @@ export class VectorscopeScope {
       ],
     })
 
-    const rp = encoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: ctx.getCurrentTexture().createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-          clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
-        },
-      ],
+    drawFullscreenScopePass({
+      device: d,
+      context: ctx,
+      pipeline: this.renderPipeline,
+      bindGroup: renderBG,
+      encoder,
     })
-    rp.setPipeline(this.renderPipeline)
-    rp.setBindGroup(0, renderBG)
-    rp.draw(3)
-    rp.end()
-
-    d.queue.submit([encoder.finish()])
   }
 
   destroy() {

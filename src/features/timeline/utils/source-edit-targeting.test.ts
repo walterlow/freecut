@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test'
 import type { TimelineTrack } from '@/types/timeline'
+import { makeTwoVideoTwoAudioTimelineTracks } from '@/features/timeline/test-helpers'
 import { resolveSourceEditTrackTargets } from './source-edit-targeting'
 
 function makeTrack(overrides: Partial<TimelineTrack> = {}): TimelineTrack {
@@ -94,12 +95,7 @@ describe('resolveSourceEditTrackTargets', () => {
 
   it('defaults linked source audio to the first available audio destination', () => {
     const result = resolveSourceEditTrackTargets({
-      tracks: [
-        makeTrack({ id: 'v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'v2', name: 'V2', kind: 'video', order: 1 }),
-        makeTrack({ id: 'a1', name: 'A1', kind: 'audio', order: 2 }),
-        makeTrack({ id: 'a2', name: 'A2', kind: 'audio', order: 3 }),
-      ],
+      tracks: makeTwoVideoTwoAudioTimelineTracks(64),
       activeTrackId: 'v2',
       mediaType: 'video',
       hasAudio: true,
@@ -113,12 +109,7 @@ describe('resolveSourceEditTrackTargets', () => {
 
   it('uses an explicitly selected audio destination for linked source edits', () => {
     const result = resolveSourceEditTrackTargets({
-      tracks: [
-        makeTrack({ id: 'v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'v2', name: 'V2', kind: 'video', order: 1 }),
-        makeTrack({ id: 'a1', name: 'A1', kind: 'audio', order: 2 }),
-        makeTrack({ id: 'a2', name: 'A2', kind: 'audio', order: 3 }),
-      ],
+      tracks: makeTwoVideoTwoAudioTimelineTracks(64),
       activeTrackId: 'v2',
       preferredAudioTrackId: 'a2',
       mediaType: 'video',
@@ -133,12 +124,7 @@ describe('resolveSourceEditTrackTargets', () => {
 
   it('uses an explicitly selected audio destination for audio-only source edits', () => {
     const result = resolveSourceEditTrackTargets({
-      tracks: [
-        makeTrack({ id: 'v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'v2', name: 'V2', kind: 'video', order: 1 }),
-        makeTrack({ id: 'a1', name: 'A1', kind: 'audio', order: 2 }),
-        makeTrack({ id: 'a2', name: 'A2', kind: 'audio', order: 3 }),
-      ],
+      tracks: makeTwoVideoTwoAudioTimelineTracks(64),
       activeTrackId: 'v2',
       preferredAudioTrackId: 'a2',
       mediaType: 'audio',
@@ -172,12 +158,7 @@ describe('resolveSourceEditTrackTargets', () => {
 
   it('keeps an explicitly selected video destination when the active lane is audio', () => {
     const result = resolveSourceEditTrackTargets({
-      tracks: [
-        makeTrack({ id: 'v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'v2', name: 'V2', kind: 'video', order: 1 }),
-        makeTrack({ id: 'a1', name: 'A1', kind: 'audio', order: 2 }),
-        makeTrack({ id: 'a2', name: 'A2', kind: 'audio', order: 3 }),
-      ],
+      tracks: makeTwoVideoTwoAudioTimelineTracks(64),
       activeTrackId: 'a2',
       preferredVideoTrackId: 'v2',
       mediaType: 'video',

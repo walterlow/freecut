@@ -1,15 +1,11 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
+import { createGpuRenderPipelineMocks } from '@/infrastructure/gpu-test-helpers'
 import { MediaRenderPipeline } from './media-render-pipeline'
 
 function createPipelineHarness() {
   vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 })
   vi.stubGlobal('GPUBufferUsage', { COPY_DST: 8, UNIFORM: 64 })
   vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, TEXTURE_BINDING: 4 })
-  const queue = {
-    copyExternalImageToTexture: vi.fn(),
-    submit: vi.fn(),
-    writeBuffer: vi.fn(),
-  }
   const inputView = {}
   const outputView = {}
   const inputTexture = {
@@ -23,28 +19,10 @@ function createPipelineHarness() {
     width: 1920,
     height: 1080,
   } as unknown as GPUTexture
-  const pass = {
-    draw: vi.fn(),
-    end: vi.fn(),
-    setBindGroup: vi.fn(),
-    setPipeline: vi.fn(),
-  }
-  const commandEncoder = {
-    beginRenderPass: vi.fn(() => pass),
-    finish: vi.fn(() => 'finished-command-buffer'),
-  }
-  const device = {
-    createBindGroup: vi.fn(() => 'bind-group'),
-    createBindGroupLayout: vi.fn(() => 'bind-group-layout'),
-    createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
-    createCommandEncoder: vi.fn(() => commandEncoder),
-    createPipelineLayout: vi.fn(() => 'pipeline-layout'),
-    createRenderPipeline: vi.fn(() => 'render-pipeline'),
-    createSampler: vi.fn(() => 'sampler'),
-    createShaderModule: vi.fn(() => 'shader-module'),
-    createTexture: vi.fn(() => inputTexture),
-    queue,
-  }
+  const { commandEncoder, device, pass, queue } = createGpuRenderPipelineMocks({
+    device: { createTexture: vi.fn(() => inputTexture) },
+    queue: { copyExternalImageToTexture: vi.fn() },
+  })
   const pipeline = new MediaRenderPipeline(device as unknown as GPUDevice)
 
   return { commandEncoder, device, inputTexture, outputTexture, pass, pipeline, queue }

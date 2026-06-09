@@ -6,6 +6,7 @@ import type {
   TextItem,
   VideoItem,
 } from '@/types/timeline'
+import { resetTimelineItemsTestState } from '@/features/timeline/test-helpers'
 import { useItemsStore } from './items-store'
 import { selectReplaceableCaptionClipIds } from './items-store-indexes'
 import { useTimelineSettingsStore } from './timeline-settings-store'
@@ -88,11 +89,17 @@ function makeShapeItem(overrides: Partial<ShapeItem> = {}): ShapeItem {
   }
 }
 
+function getRollingTrimPair() {
+  const items = useItemsStore.getState().items
+  return {
+    updatedLeft: items.find((i) => i.id === 'left')!,
+    updatedRight: items.find((i) => i.id === 'right')!,
+  }
+}
+
 describe('items-store rate stretch', () => {
   beforeEach(() => {
-    useTimelineSettingsStore.setState({ fps: 30 })
-    useItemsStore.getState().setItems([])
-    useItemsStore.getState().setTracks([])
+    resetTimelineItemsTestState()
   })
 
   it('preserves explicit source bounds for split clips', () => {
@@ -540,9 +547,7 @@ describe('items-store rate stretch', () => {
 
 describe('items-store indexes', () => {
   beforeEach(() => {
-    useTimelineSettingsStore.setState({ fps: 30 })
-    useItemsStore.getState().setItems([])
-    useItemsStore.getState().setTracks([])
+    resetTimelineItemsTestState()
   })
 
   it('indexes legacy generated captions as replaceable for their containing clip', () => {
@@ -648,9 +653,7 @@ describe('items-store shape mask normalization', () => {
 
 describe('rolling edit', () => {
   beforeEach(() => {
-    useTimelineSettingsStore.setState({ fps: 30 })
-    useItemsStore.getState().setItems([])
-    useItemsStore.getState().setTracks([])
+    resetTimelineItemsTestState()
   })
 
   it('moves edit point right between adjacent same-track clips (positive delta)', () => {
@@ -681,9 +684,7 @@ describe('rolling edit', () => {
     // Move edit point right by 20 frames
     rollingTrimItems('left', 'right', 20)
 
-    const items = useItemsStore.getState().items
-    const updatedLeft = items.find((i) => i.id === 'left')!
-    const updatedRight = items.find((i) => i.id === 'right')!
+    const { updatedLeft, updatedRight } = getRollingTrimPair()
 
     // Left clip extended by 20
     expect(updatedLeft.durationInFrames).toBe(120)
@@ -723,9 +724,7 @@ describe('rolling edit', () => {
     // Move edit point left by 30 frames
     rollingTrimItems('left', 'right', -30)
 
-    const items = useItemsStore.getState().items
-    const updatedLeft = items.find((i) => i.id === 'left')!
-    const updatedRight = items.find((i) => i.id === 'right')!
+    const { updatedLeft, updatedRight } = getRollingTrimPair()
 
     // Left clip shrunk by 30
     expect(updatedLeft.durationInFrames).toBe(70)
@@ -789,9 +788,7 @@ describe('rolling edit', () => {
     // Request 90 but right can only shrink by 39 (100 - 1 min duration)
     rollingTrimItems('left', 'right', 90)
 
-    const items = useItemsStore.getState().items
-    const updatedLeft = items.find((i) => i.id === 'left')!
-    const updatedRight = items.find((i) => i.id === 'right')!
+    const { updatedLeft, updatedRight } = getRollingTrimPair()
 
     // Right clamped to minimum 1 frame (shrank by 39, not 90)
     expect(updatedRight.durationInFrames).toBe(1)

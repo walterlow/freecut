@@ -9,6 +9,7 @@ import { pixelsToTimeNow } from '@/features/timeline/utils/zoom-conversions'
 import { useSnapCalculator } from './use-snap-calculator'
 import { trackPushItems } from '../stores/actions/item-actions'
 import type { SnapTarget } from '../types/drag'
+import { setActiveSnapTargetIfChanged } from '../utils/snap-target-state'
 
 interface TrackPushState {
   isActive: boolean
@@ -103,20 +104,11 @@ export function useTrackPush(
         setState((prev) => ({ ...prev, currentDelta: deltaFrames }))
       }
 
-      // Snap indicator
-      const prevSnap = prevSnapTargetRef.current
-      const snapChanged =
-        (prevSnap === null && snapTarget !== null) ||
-        (prevSnap !== null && snapTarget === null) ||
-        (prevSnap !== null &&
-          snapTarget !== null &&
-          (prevSnap.frame !== snapTarget.frame || prevSnap.type !== snapTarget.type))
-      if (snapChanged) {
-        prevSnapTargetRef.current = snapTarget
-          ? { frame: snapTarget.frame, type: snapTarget.type }
-          : null
-        setActiveSnapTarget(snapTarget)
-      }
+      setActiveSnapTargetIfChanged({
+        previousRef: prevSnapTargetRef,
+        snapTarget,
+        setActiveSnapTarget,
+      })
     },
     [pixelsToTime, fps, trackLocked, findSnapForFrame, setActiveSnapTarget, item.from],
   )

@@ -68,20 +68,8 @@ import type { PreviewRenderSource } from './preview-perf-metrics'
 
 export type VideoSourceSpan = { src: string; startFrame: number; endFrame: number }
 export type FastScrubBoundarySource = { frame: number; srcs: string[] }
-export type PreviewPerfSnapshot = {
-  ts: number
-  unresolvedQueue: number
-  pendingResolves: number
-  renderSource: PreviewRenderSource
-  renderSourceSwitches: number
-  renderSourceHistory: import('./preview-perf-metrics').RenderSourceSwitchEntry[]
-  resolveAvgMs: number
-  resolveMsPerId: number
-  resolveLastMs: number
-  resolveLastIds: number
-  preloadScanAvgMs: number
-  preloadScanLastMs: number
-  preloadBatchAvgMs: number
+
+export interface PreviewWarmPerfStats {
   preloadBatchLastMs: number
   preloadBatchLastIds: number
   preloadCandidateIds: number
@@ -100,44 +88,61 @@ export type PreviewPerfSnapshot = {
   sourcePoolActiveClips: number
   fastScrubPrewarmedSources: number
   fastScrubPrewarmSourceEvictions: number
-  preseekRequests: number
-  preseekCacheHits: number
-  preseekInflightReuses: number
-  preseekWorkerPosts: number
-  preseekWorkerSuccesses: number
-  preseekWorkerFailures: number
-  preseekWaitRequests: number
-  preseekWaitMatches: number
-  preseekWaitResolved: number
-  preseekWaitTimeouts: number
-  preseekCachedBitmaps: number
-  staleScrubOverlayDrops: number
-  scrubDroppedFrames: number
-  scrubUpdates: number
-  seekLatencyAvgMs: number
-  seekLatencyLastMs: number
-  seekLatencyPendingMs: number
-  seekLatencyTimeouts: number
-  userPreviewQuality: import('@/shared/state/playback').PreviewQuality
-  adaptiveQualityCap: import('@/shared/state/playback').PreviewQuality
-  effectivePreviewQuality: import('@/shared/state/playback').PreviewQuality
-  frameTimeBudgetMs: number
-  frameTimeEmaMs: number
-  adaptiveQualityDowngrades: number
-  adaptiveQualityRecovers: number
-  transitionSessionActive: boolean
-  transitionSessionMode: 'none' | 'dom' | 'render'
-  transitionSessionComplex: boolean
-  transitionSessionStartFrame: number
-  transitionSessionEndFrame: number
-  transitionBufferedFrames: number
-  transitionPreparedFrame: number
-  transitionLastPrepareMs: number
-  transitionLastReadyLeadMs: number
-  transitionLastEntryMisses: number
-  transitionLastSessionDurationMs: number
-  transitionSessionCount: number
 }
+
+export type PreviewPerfSnapshot = {
+  ts: number
+  unresolvedQueue: number
+  pendingResolves: number
+  renderSource: PreviewRenderSource
+  renderSourceSwitches: number
+  renderSourceHistory: import('./preview-perf-metrics').RenderSourceSwitchEntry[]
+  resolveAvgMs: number
+  resolveMsPerId: number
+  resolveLastMs: number
+  resolveLastIds: number
+  preloadScanAvgMs: number
+  preloadScanLastMs: number
+  preloadBatchAvgMs: number
+} & PreviewWarmPerfStats & {
+    preseekRequests: number
+    preseekCacheHits: number
+    preseekInflightReuses: number
+    preseekWorkerPosts: number
+    preseekWorkerSuccesses: number
+    preseekWorkerFailures: number
+    preseekWaitRequests: number
+    preseekWaitMatches: number
+    preseekWaitResolved: number
+    preseekWaitTimeouts: number
+    preseekCachedBitmaps: number
+    staleScrubOverlayDrops: number
+    scrubDroppedFrames: number
+    scrubUpdates: number
+    seekLatencyAvgMs: number
+    seekLatencyLastMs: number
+    seekLatencyPendingMs: number
+    seekLatencyTimeouts: number
+    userPreviewQuality: import('@/shared/state/playback').PreviewQuality
+    adaptiveQualityCap: import('@/shared/state/playback').PreviewQuality
+    effectivePreviewQuality: import('@/shared/state/playback').PreviewQuality
+    frameTimeBudgetMs: number
+    frameTimeEmaMs: number
+    adaptiveQualityDowngrades: number
+    adaptiveQualityRecovers: number
+    transitionSessionActive: boolean
+    transitionSessionMode: 'none' | 'dom' | 'render'
+    transitionSessionComplex: boolean
+    transitionSessionStartFrame: number
+    transitionSessionEndFrame: number
+    transitionBufferedFrames: number
+    transitionPreparedFrame: number
+    transitionLastPrepareMs: number
+    transitionLastReadyLeadMs: number
+    transitionLastEntryMisses: number
+    transitionLastSessionDurationMs: number
+    transitionSessionCount: number
+  }
 
 declare global {
   interface Window {

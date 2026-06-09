@@ -1,6 +1,6 @@
-import React, { useCallback } from 'react'
+import React from 'react'
 import { Rect, Circle, Triangle, Ellipse, Star, Polygon, Heart } from '@/shared/graphics/shapes'
-import { useGizmoStore } from '@/runtime/composition-runtime/deps/stores'
+import { useItemGizmoPreview } from '@/runtime/composition-runtime/deps/stores'
 import type { ShapeItem } from '@/types/timeline'
 import { useCompositionSpace } from '../contexts/composition-space-context'
 
@@ -15,11 +15,7 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
   const renderScaleY = compositionSpace?.scaleY ?? 1
   const renderScale = compositionSpace?.scale ?? 1
 
-  // Read transform preview from gizmo store for real-time scaling
-  const activeGizmo = useGizmoStore((s) => s.activeGizmo)
-  const previewTransform = useGizmoStore((s) => s.previewTransform)
-  // Read from unified preview system (includes transforms, properties, and effects)
-  const itemPreview = useGizmoStore(useCallback((s) => s.preview?.[item.id], [item.id]))
+  const { activeGizmo, previewTransform, itemPreview } = useItemGizmoPreview(item.id)
 
   // Use preview values if available, otherwise use item's stored values
   const shapePropsPreview = itemPreview?.properties

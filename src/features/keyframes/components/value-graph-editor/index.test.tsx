@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ComponentProps } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vite-plus/test'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -80,6 +80,40 @@ function installSvgDomMocks(svg: SVGSVGElement) {
     configurable: true,
     value: () => {},
   })
+}
+
+const overlayGraphProps = {
+  itemId: 'item-1',
+  keyframesByProperty: {
+    x: [{ id: 'kf-x', frame: 0, value: 100, easing: 'linear' }],
+    y: [{ id: 'kf-y', frame: 30, value: 200, easing: 'linear' }],
+  },
+  selectedProperty: 'x',
+  overlayProperties: ['x', 'y'],
+  width: 480,
+  height: 260,
+  totalFrames: 60,
+} satisfies ComponentProps<typeof EmbeddedValueGraphEditor>
+
+function renderEmbeddedOverlayGraph(
+  overrides: Partial<ComponentProps<typeof EmbeddedValueGraphEditor>> = {},
+) {
+  return render(
+    <TooltipProvider>
+      <EmbeddedValueGraphEditor {...overlayGraphProps} {...overrides} />
+    </TooltipProvider>,
+  )
+}
+
+function rerenderEmbeddedOverlayGraph(
+  rerender: ReturnType<typeof render>['rerender'],
+  overrides: Partial<ComponentProps<typeof EmbeddedValueGraphEditor>> = {},
+) {
+  rerender(
+    <TooltipProvider>
+      <EmbeddedValueGraphEditor {...overlayGraphProps} {...overrides} />
+    </TooltipProvider>,
+  )
 }
 
 describe('ValueGraphEditor clipping', () => {
@@ -196,23 +230,7 @@ describe('ValueGraphEditor clipping', () => {
 
   it('renders interactive keyframe points for visible overlay curves', () => {
     const onPropertyChange = vi.fn()
-    const { container } = render(
-      <TooltipProvider>
-        <EmbeddedValueGraphEditor
-          itemId="item-1"
-          keyframesByProperty={{
-            x: [{ id: 'kf-x', frame: 0, value: 100, easing: 'linear' }],
-            y: [{ id: 'kf-y', frame: 30, value: 200, easing: 'linear' }],
-          }}
-          selectedProperty="x"
-          overlayProperties={['x', 'y']}
-          width={480}
-          height={260}
-          totalFrames={60}
-          onPropertyChange={onPropertyChange}
-        />
-      </TooltipProvider>,
-    )
+    const { container } = renderEmbeddedOverlayGraph({ onPropertyChange })
 
     const keyframePoints = container.querySelectorAll('.graph-keyframe')
     expect(keyframePoints).toHaveLength(2)
@@ -225,23 +243,7 @@ describe('ValueGraphEditor clipping', () => {
 
   it('deselects the active curve when clicking empty graph space', () => {
     const onPropertyChange = vi.fn()
-    const { container } = render(
-      <TooltipProvider>
-        <EmbeddedValueGraphEditor
-          itemId="item-1"
-          keyframesByProperty={{
-            x: [{ id: 'kf-x', frame: 0, value: 100, easing: 'linear' }],
-            y: [{ id: 'kf-y', frame: 30, value: 200, easing: 'linear' }],
-          }}
-          selectedProperty="x"
-          overlayProperties={['x', 'y']}
-          width={480}
-          height={260}
-          totalFrames={60}
-          onPropertyChange={onPropertyChange}
-        />
-      </TooltipProvider>,
-    )
+    const { container } = renderEmbeddedOverlayGraph({ onPropertyChange })
 
     fireEvent.click(container.querySelector('svg')!)
 
@@ -249,39 +251,9 @@ describe('ValueGraphEditor clipping', () => {
   })
 
   it('keeps visible curves rendered after the active curve is cleared', () => {
-    const { container, rerender } = render(
-      <TooltipProvider>
-        <EmbeddedValueGraphEditor
-          itemId="item-1"
-          keyframesByProperty={{
-            x: [{ id: 'kf-x', frame: 0, value: 100, easing: 'linear' }],
-            y: [{ id: 'kf-y', frame: 30, value: 200, easing: 'linear' }],
-          }}
-          selectedProperty="x"
-          overlayProperties={['x', 'y']}
-          width={480}
-          height={260}
-          totalFrames={60}
-        />
-      </TooltipProvider>,
-    )
+    const { container, rerender } = renderEmbeddedOverlayGraph()
 
-    rerender(
-      <TooltipProvider>
-        <EmbeddedValueGraphEditor
-          itemId="item-1"
-          keyframesByProperty={{
-            x: [{ id: 'kf-x', frame: 0, value: 100, easing: 'linear' }],
-            y: [{ id: 'kf-y', frame: 30, value: 200, easing: 'linear' }],
-          }}
-          selectedProperty={null}
-          overlayProperties={['x', 'y']}
-          width={480}
-          height={260}
-          totalFrames={60}
-        />
-      </TooltipProvider>,
-    )
+    rerenderEmbeddedOverlayGraph(rerender, { selectedProperty: null })
 
     expect(container.querySelectorAll('.graph-keyframe')).toHaveLength(2)
   })

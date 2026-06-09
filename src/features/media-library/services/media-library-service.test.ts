@@ -178,6 +178,15 @@ function makeMediaMetadata(overrides: Partial<MediaMetadata> = {}): MediaMetadat
   }
 }
 
+function makeFileHandle(file: File): FileSystemFileHandle {
+  return {
+    name: file.name,
+    getFile: vi.fn().mockResolvedValue(file),
+    queryPermission: vi.fn().mockResolvedValue('granted'),
+    requestPermission: vi.fn().mockResolvedValue('granted'),
+  } as unknown as FileSystemFileHandle
+}
+
 describe('MediaLibraryService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -234,12 +243,7 @@ describe('MediaLibraryService', () => {
   describe('importMediaWithHandle', () => {
     it('imports a media file via handle and associates with project', async () => {
       const mockFile = new File(['data'], 'video.mp4', { type: 'video/mp4' })
-      const mockHandle = {
-        name: 'video.mp4',
-        getFile: vi.fn().mockResolvedValue(mockFile),
-        queryPermission: vi.fn().mockResolvedValue('granted'),
-        requestPermission: vi.fn().mockResolvedValue('granted'),
-      } as unknown as FileSystemFileHandle
+      const mockHandle = makeFileHandle(mockFile)
 
       mediaProcessorMocks.processMedia.mockResolvedValue({
         metadata: {
@@ -272,12 +276,7 @@ describe('MediaLibraryService', () => {
 
     it('does not queue filmstrip or waveform preparation during import', async () => {
       const mockFile = new File(['data'], 'video.mp4', { type: 'video/mp4' })
-      const mockHandle = {
-        name: 'video.mp4',
-        getFile: vi.fn().mockResolvedValue(mockFile),
-        queryPermission: vi.fn().mockResolvedValue('granted'),
-        requestPermission: vi.fn().mockResolvedValue('granted'),
-      } as unknown as FileSystemFileHandle
+      const mockHandle = makeFileHandle(mockFile)
 
       mediaProcessorMocks.processMedia.mockResolvedValue({
         metadata: {
@@ -309,12 +308,7 @@ describe('MediaLibraryService', () => {
 
     it('skips import-time waveform extraction for long media', async () => {
       const mockFile = new File(['data'], 'long-video.mp4', { type: 'video/mp4' })
-      const mockHandle = {
-        name: 'long-video.mp4',
-        getFile: vi.fn().mockResolvedValue(mockFile),
-        queryPermission: vi.fn().mockResolvedValue('granted'),
-        requestPermission: vi.fn().mockResolvedValue('granted'),
-      } as unknown as FileSystemFileHandle
+      const mockHandle = makeFileHandle(mockFile)
 
       mediaProcessorMocks.processMedia.mockResolvedValue({
         metadata: {
@@ -430,12 +424,7 @@ describe('MediaLibraryService', () => {
 
     it('starts preview audio conform in background for custom-decoded imports', async () => {
       const mockFile = new File(['audio'], 'clip.webm', { type: 'video/webm' })
-      const mockHandle = {
-        name: 'clip.webm',
-        getFile: vi.fn().mockResolvedValue(mockFile),
-        queryPermission: vi.fn().mockResolvedValue('granted'),
-        requestPermission: vi.fn().mockResolvedValue('granted'),
-      } as unknown as FileSystemFileHandle
+      const mockHandle = makeFileHandle(mockFile)
 
       mediaProcessorMocks.processMedia.mockResolvedValue({
         metadata: {

@@ -137,6 +137,24 @@ const LazyAudioEqPanelContent = lazy(() =>
   })),
 )
 
+function getTrackEditContext(trackId: string) {
+  const itemsState = useItemsStore.getState()
+  const currentTracks = itemsState.tracks
+  const targetTrack = currentTracks.find((track) => track.id === trackId)
+  if (!targetTrack) return null
+
+  const snapshot = captureSnapshot()
+  return {
+    itemsState,
+    currentTracks,
+    targetTrack,
+    beforeSnapshot: {
+      ...snapshot,
+      tracks: snapshot.tracks.map((track) => ({ ...track })),
+    },
+  }
+}
+
 interface AudioEqPanelSurfaceProps {
   targetLabel: string
   trackEq?: AudioEqSettings
@@ -612,14 +630,9 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   // Local version state forces the mixer UI to pick up the mutated track value.
   const handleTrackVolumeChange = useCallback((trackId: string, volumeDb: number) => {
     if (!Number.isFinite(volumeDb)) return
-    const currentTracks = useItemsStore.getState().tracks
-    const targetTrack = currentTracks.find((track) => track.id === trackId)
-    if (!targetTrack) return
-    const snapshot = captureSnapshot()
-    const beforeSnapshot = {
-      ...snapshot,
-      tracks: snapshot.tracks.map((track) => ({ ...track })),
-    }
+    const edit = getTrackEditContext(trackId)
+    if (!edit) return
+    const { beforeSnapshot, currentTracks, targetTrack } = edit
 
     let didChange = false
     const safeTargetVolume =
@@ -653,15 +666,9 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }, [])
 
   const handleTrackEqChange = useCallback((trackId: string, patch: AudioEqPatch) => {
-    const itemsState = useItemsStore.getState()
-    const currentTracks = itemsState.tracks
-    const targetTrack = currentTracks.find((track) => track.id === trackId)
-    if (!targetTrack) return
-    const snapshot = captureSnapshot()
-    const beforeSnapshot = {
-      ...snapshot,
-      tracks: snapshot.tracks.map((track) => ({ ...track })),
-    }
+    const edit = getTrackEditContext(trackId)
+    if (!edit) return
+    const { beforeSnapshot, currentTracks, itemsState, targetTrack } = edit
     const eqPatch = getSparseAudioEqSettings(patch)
     const nextTrackEq = { ...targetTrack.audioEq, ...eqPatch, midGainDb: 0 }
     const nextTracks = currentTracks.map((track) =>
@@ -680,15 +687,9 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }, [])
 
   const handleTrackEqEnabledChange = useCallback((trackId: string, enabled: boolean) => {
-    const itemsState = useItemsStore.getState()
-    const currentTracks = itemsState.tracks
-    const targetTrack = currentTracks.find((track) => track.id === trackId)
-    if (!targetTrack) return
-    const snapshot = captureSnapshot()
-    const beforeSnapshot = {
-      ...snapshot,
-      tracks: snapshot.tracks.map((track) => ({ ...track })),
-    }
+    const edit = getTrackEditContext(trackId)
+    if (!edit) return
+    const { beforeSnapshot, currentTracks, itemsState } = edit
     const nextTracks = currentTracks.map((track) =>
       track.id === trackId ? { ...track, audioEq: { ...(track.audioEq ?? {}), enabled } } : track,
     )

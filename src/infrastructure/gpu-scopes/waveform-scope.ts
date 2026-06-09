@@ -4,6 +4,13 @@
  * render shader visualizes with phosphor bloom. Supports parade mode (mode 5).
  */
 
+import {
+  createScopeRenderBindGroupLayout,
+  createScopeRenderPipeline,
+  dispatchScopeComputePass,
+  drawFullscreenScopePass,
+} from './scope-render-pass'
+
 const WAVEFORM_COMPUTE = /* wgsl */ `
 struct Params {
   outW: u32,
@@ -342,21 +349,18 @@ export class WaveformScope {
       },
     })
 
-    this.renderBGL = device.createBindGroupLayout({
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-        { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-      ],
-    })
-
-    const renderModule = device.createShaderModule({ code: WAVEFORM_RENDER })
-    this.renderPipeline = device.createRenderPipeline({
-      layout: device.createPipelineLayout({ bindGroupLayouts: [this.renderBGL] }),
-      vertex: { module: renderModule, entryPoint: 'vs' },
-      fragment: { module: renderModule, entryPoint: 'fs', targets: [{ format }] },
+    this.renderBGL = createScopeRenderBindGroupLayout(device, [
+      'read-only-storage',
+      'read-only-storage',
+      'read-only-storage',
+      'uniform',
+      'read-only-storage',
+    ])
+    this.renderPipeline = createScopeRenderPipeline({
+      device,
+      format,
+      layout: this.renderBGL,
+      shaderCode: WAVEFORM_RENDER,
     })
   }
 
@@ -394,11 +398,13 @@ export class WaveformScope {
       ],
     })
 
-    const cp = encoder.beginComputePass()
-    cp.setPipeline(this.computePipeline)
-    cp.setBindGroup(0, computeBG)
-    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16))
-    cp.end()
+    dispatchScopeComputePass({
+      encoder,
+      pipeline: this.computePipeline,
+      bindGroup: computeBG,
+      srcW,
+      srcH,
+    })
 
     d.queue.submit([encoder.finish()])
     return srcH
@@ -423,23 +429,12 @@ export class WaveformScope {
       ],
     })
 
-    const encoder = d.createCommandEncoder()
-    const rp = encoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: ctx.getCurrentTexture().createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-          clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
-        },
-      ],
+    drawFullscreenScopePass({
+      device: d,
+      context: ctx,
+      pipeline: this.renderPipeline,
+      bindGroup: renderBG,
     })
-    rp.setPipeline(this.renderPipeline)
-    rp.setBindGroup(0, renderBG)
-    rp.draw(3)
-    rp.end()
-
-    d.queue.submit([encoder.finish()])
   }
 
   render(

@@ -9,6 +9,7 @@ import { useItemsStore } from '../stores/items-store'
 import { useSelectionStore } from '@/shared/state/selection'
 import { pixelsToTimeNow } from '../utils/zoom-conversions'
 import { useSnapCalculator } from './use-snap-calculator'
+import { setActiveSnapTargetIfChanged } from '../utils/snap-target-state'
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils'
 import { useTransitionsStore } from '../stores/transitions-store'
 import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store'
@@ -637,21 +638,11 @@ export function useTimelineTrim(
         }))
       }
 
-      // Update snap target visualization (only when changed)
-      const prevSnap = prevSnapTargetRef.current
-      const snapChanged =
-        (prevSnap === null && snapTarget !== null) ||
-        (prevSnap !== null && snapTarget === null) ||
-        (prevSnap !== null &&
-          snapTarget !== null &&
-          (prevSnap.frame !== snapTarget.frame || prevSnap.type !== snapTarget.type))
-
-      if (snapChanged) {
-        prevSnapTargetRef.current = snapTarget
-          ? { frame: snapTarget.frame, type: snapTarget.type }
-          : null
-        setActiveSnapTarget(snapTarget)
-      }
+      setActiveSnapTargetIfChanged({
+        previousRef: prevSnapTargetRef,
+        snapTarget,
+        setActiveSnapTarget,
+      })
     },
     [
       pixelsToTime,

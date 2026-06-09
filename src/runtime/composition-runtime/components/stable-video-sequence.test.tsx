@@ -101,6 +101,88 @@ const comparatorProps = (
   transitionWindows: undefined,
 })
 
+function expectComparatorResult(overrides: Partial<StableVideoSequenceItem>, expected: boolean) {
+  const renderItem = vi.fn()
+  const prevProps = comparatorProps(renderComparatorGroup(), renderItem)
+  const nextProps = comparatorProps(
+    renderComparatorGroup(renderComparatorItem(overrides)),
+    renderItem,
+  )
+
+  expect(areGroupPropsEqual(prevProps, nextProps)).toBe(expected)
+}
+
+function makeTransitionVideoItem(
+  overrides: Partial<StableVideoSequenceItem> = {},
+): StableVideoSequenceItem {
+  return {
+    id: 'left',
+    label: 'Left',
+    mediaId: 'media-1',
+    originId: 'origin-1',
+    type: 'video',
+    trackId: 'track-1',
+    from: 0,
+    durationInFrames: 60,
+    src: 'blob:left',
+    zIndex: 1,
+    muted: false,
+    trackOrder: 0,
+    trackVisible: true,
+    ...overrides,
+  }
+}
+
+function makeLeftRightTransitionItems(softness?: number): StableVideoSequenceItem[] {
+  return [
+    makeTransitionVideoItem({
+      id: 'left',
+      label: 'Left',
+      src: 'blob:left',
+      crop: softness === undefined ? { left: 0.1 } : { left: 0.1, softness },
+    }),
+    makeTransitionVideoItem({
+      id: 'right',
+      label: 'Right',
+      from: 30,
+      src: 'blob:right',
+      crop: softness === undefined ? { right: 0.1 } : { right: 0.1, softness },
+    }),
+  ]
+}
+
+function makeTransitionWindow() {
+  return {
+    startFrame: 30,
+    endFrame: 50,
+    durationInFrames: 20,
+    leftClip: { id: 'left' },
+    rightClip: { id: 'right' },
+    leftPortion: 0.5,
+    rightPortion: 0.5,
+    cutPoint: 40,
+    transition: {
+      id: 'transition-1',
+      leftClipId: 'left',
+      rightClipId: 'right',
+      timing: 'linear',
+    },
+  } as never
+}
+
+function renderTransitionSequenceElement(
+  items: StableVideoSequenceItem[],
+  renderItem: (item: StableVideoSequenceItem) => React.ReactNode,
+) {
+  return (
+    <StableVideoSequence
+      items={items}
+      transitionWindows={[makeTransitionWindow()]}
+      renderItem={renderItem}
+    />
+  )
+}
+
 describe('getStableVideoRenderSignature', () => {
   it('centralizes exactly the currently compared item fields', () => {
     const cornerPin = {
@@ -186,14 +268,7 @@ describe('areGroupPropsEqual', () => {
     ['clip audio EQ', { audioEqEnabled: true, audioEqMidGainDb: 3 }],
     ['track audio EQ', { trackAudioEq: { enabled: true, midGainDb: 4 } }],
   ])('invalidates when the compared %s field changes', (_name, overrides) => {
-    const renderItem = vi.fn()
-    const prevProps = comparatorProps(renderComparatorGroup(), renderItem)
-    const nextProps = comparatorProps(
-      renderComparatorGroup(renderComparatorItem(overrides as Partial<StableVideoSequenceItem>)),
-      renderItem,
-    )
-
-    expect(areGroupPropsEqual(prevProps, nextProps)).toBe(false)
+    expectComparatorResult(overrides as Partial<StableVideoSequenceItem>, false)
   })
 
   it.each([
@@ -241,14 +316,7 @@ describe('areGroupPropsEqual', () => {
   ])(
     'characterizes %s as a frame-only/runtime-only field that does not invalidate',
     (_name, overrides) => {
-      const renderItem = vi.fn()
-      const prevProps = comparatorProps(renderComparatorGroup(), renderItem)
-      const nextProps = comparatorProps(
-        renderComparatorGroup(renderComparatorItem(overrides as Partial<StableVideoSequenceItem>)),
-        renderItem,
-      )
-
-      expect(areGroupPropsEqual(prevProps, nextProps)).toBe(true)
+      expectComparatorResult(overrides as Partial<StableVideoSequenceItem>, true)
     },
   )
 
@@ -267,14 +335,7 @@ describe('areGroupPropsEqual', () => {
     ['isReversed', { isReversed: true }],
     ['reverseConformPath', { reverseConformPath: '/cache/reverse.mp4' }],
   ])('documents current comparator gap: %s does not invalidate yet', (_name, overrides) => {
-    const renderItem = vi.fn()
-    const prevProps = comparatorProps(renderComparatorGroup(), renderItem)
-    const nextProps = comparatorProps(
-      renderComparatorGroup(renderComparatorItem(overrides as Partial<StableVideoSequenceItem>)),
-      renderItem,
-    )
-
-    expect(areGroupPropsEqual(prevProps, nextProps)).toBe(true)
+    expectComparatorResult(overrides as Partial<StableVideoSequenceItem>, true)
   })
 })
 
@@ -291,61 +352,7 @@ describe('StableVideoSequence', () => {
       <div data-testid={`render-${item.id}`}>{item.id}</div>
     ))
 
-    render(
-      <StableVideoSequence
-        items={[
-          {
-            id: 'left',
-            label: 'Left',
-            mediaId: 'media-1',
-            originId: 'origin-1',
-            type: 'video',
-            trackId: 'track-1',
-            from: 0,
-            durationInFrames: 60,
-            src: 'blob:left',
-            zIndex: 1,
-            muted: false,
-            trackOrder: 0,
-            trackVisible: true,
-          },
-          {
-            id: 'right',
-            label: 'Right',
-            mediaId: 'media-1',
-            originId: 'origin-1',
-            type: 'video',
-            trackId: 'track-1',
-            from: 30,
-            durationInFrames: 60,
-            src: 'blob:right',
-            zIndex: 1,
-            muted: false,
-            trackOrder: 0,
-            trackVisible: true,
-          },
-        ]}
-        transitionWindows={[
-          {
-            startFrame: 30,
-            endFrame: 50,
-            durationInFrames: 20,
-            leftClip: { id: 'left' },
-            rightClip: { id: 'right' },
-            leftPortion: 0.5,
-            rightPortion: 0.5,
-            cutPoint: 40,
-            transition: {
-              id: 'transition-1',
-              leftClipId: 'left',
-              rightClipId: 'right',
-              timing: 'linear',
-            },
-          } as never,
-        ]}
-        renderItem={renderItem}
-      />,
-    )
+    render(renderTransitionSequenceElement(makeLeftRightTransitionItems(), renderItem))
 
     expect(screen.getByTestId('render-left')).toBeInTheDocument()
     expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument()
@@ -360,61 +367,7 @@ describe('StableVideoSequence', () => {
       <div data-testid={`render-${item.id}`}>{item.id}</div>
     ))
 
-    render(
-      <StableVideoSequence
-        items={[
-          {
-            id: 'left',
-            label: 'Left',
-            mediaId: 'media-1',
-            originId: 'origin-1',
-            type: 'video',
-            trackId: 'track-1',
-            from: 0,
-            durationInFrames: 60,
-            src: 'blob:left',
-            zIndex: 1,
-            muted: false,
-            trackOrder: 0,
-            trackVisible: true,
-          },
-          {
-            id: 'right',
-            label: 'Right',
-            mediaId: 'media-1',
-            originId: 'origin-1',
-            type: 'video',
-            trackId: 'track-1',
-            from: 30,
-            durationInFrames: 60,
-            src: 'blob:right',
-            zIndex: 1,
-            muted: false,
-            trackOrder: 0,
-            trackVisible: true,
-          },
-        ]}
-        transitionWindows={[
-          {
-            startFrame: 30,
-            endFrame: 50,
-            durationInFrames: 20,
-            leftClip: { id: 'left' },
-            rightClip: { id: 'right' },
-            leftPortion: 0.5,
-            rightPortion: 0.5,
-            cutPoint: 40,
-            transition: {
-              id: 'transition-1',
-              leftClipId: 'left',
-              rightClipId: 'right',
-              timing: 'linear',
-            },
-          } as never,
-        ]}
-        renderItem={renderItem}
-      />,
-    )
+    render(renderTransitionSequenceElement(makeLeftRightTransitionItems(), renderItem))
 
     expect(screen.getByTestId('render-left')).toBeInTheDocument()
     expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument()
@@ -429,123 +382,13 @@ describe('StableVideoSequence', () => {
     ))
 
     const { rerender } = render(
-      <StableVideoSequence
-        items={[
-          {
-            id: 'left',
-            label: 'Left',
-            mediaId: 'media-1',
-            originId: 'origin-1',
-            type: 'video',
-            trackId: 'track-1',
-            from: 0,
-            durationInFrames: 60,
-            src: 'blob:left',
-            crop: { left: 0.1, softness: 0.1 },
-            zIndex: 1,
-            muted: false,
-            trackOrder: 0,
-            trackVisible: true,
-          },
-          {
-            id: 'right',
-            label: 'Right',
-            mediaId: 'media-1',
-            originId: 'origin-1',
-            type: 'video',
-            trackId: 'track-1',
-            from: 30,
-            durationInFrames: 60,
-            src: 'blob:right',
-            crop: { right: 0.1, softness: 0.1 },
-            zIndex: 1,
-            muted: false,
-            trackOrder: 0,
-            trackVisible: true,
-          },
-        ]}
-        transitionWindows={[
-          {
-            startFrame: 30,
-            endFrame: 50,
-            durationInFrames: 20,
-            leftClip: { id: 'left' },
-            rightClip: { id: 'right' },
-            leftPortion: 0.5,
-            rightPortion: 0.5,
-            cutPoint: 40,
-            transition: {
-              id: 'transition-1',
-              leftClipId: 'left',
-              rightClipId: 'right',
-              timing: 'linear',
-            },
-          } as never,
-        ]}
-        renderItem={renderItem}
-      />,
+      renderTransitionSequenceElement(makeLeftRightTransitionItems(0.1), renderItem),
     )
 
     expect(screen.getByTestId('render-left')).toHaveAttribute('data-softness', '0.1')
     expect(screen.getByTestId('shadow-video-right')).toHaveAttribute('data-softness', '0.1')
 
-    rerender(
-      <StableVideoSequence
-        items={[
-          {
-            id: 'left',
-            label: 'Left',
-            mediaId: 'media-1',
-            originId: 'origin-1',
-            type: 'video',
-            trackId: 'track-1',
-            from: 0,
-            durationInFrames: 60,
-            src: 'blob:left',
-            crop: { left: 0.1, softness: 0.25 },
-            zIndex: 1,
-            muted: false,
-            trackOrder: 0,
-            trackVisible: true,
-          },
-          {
-            id: 'right',
-            label: 'Right',
-            mediaId: 'media-1',
-            originId: 'origin-1',
-            type: 'video',
-            trackId: 'track-1',
-            from: 30,
-            durationInFrames: 60,
-            src: 'blob:right',
-            crop: { right: 0.1, softness: 0.25 },
-            zIndex: 1,
-            muted: false,
-            trackOrder: 0,
-            trackVisible: true,
-          },
-        ]}
-        transitionWindows={[
-          {
-            startFrame: 30,
-            endFrame: 50,
-            durationInFrames: 20,
-            leftClip: { id: 'left' },
-            rightClip: { id: 'right' },
-            leftPortion: 0.5,
-            rightPortion: 0.5,
-            cutPoint: 40,
-            transition: {
-              id: 'transition-1',
-              leftClipId: 'left',
-              rightClipId: 'right',
-              timing: 'linear',
-            },
-          } as never,
-        ]}
-        renderItem={renderItem}
-      />,
-    )
+    rerender(renderTransitionSequenceElement(makeLeftRightTransitionItems(0.25), renderItem))
 
     expect(screen.getByTestId('render-left')).toHaveAttribute('data-softness', '0.25')
     expect(screen.getByTestId('shadow-video-right')).toHaveAttribute('data-softness', '0.25')
@@ -563,31 +406,13 @@ describe('StableVideoSequence', () => {
     ))
 
     render(
-      <StableVideoSequence
-        items={[
+      renderTransitionSequenceElement(
+        [
           renderComparatorItem({ id: 'left', from: 0, durationInFrames: 60, sourceStart: 48 }),
           renderComparatorItem({ id: 'right', from: 30, durationInFrames: 60, sourceStart: 96 }),
-        ]}
-        transitionWindows={[
-          {
-            startFrame: 30,
-            endFrame: 50,
-            durationInFrames: 20,
-            leftClip: { id: 'left' },
-            rightClip: { id: 'right' },
-            leftPortion: 0.5,
-            rightPortion: 0.5,
-            cutPoint: 40,
-            transition: {
-              id: 'transition-1',
-              leftClipId: 'left',
-              rightClipId: 'right',
-              timing: 'linear',
-            },
-          } as never,
-        ]}
-        renderItem={renderItem}
-      />,
+        ],
+        renderItem,
+      ),
     )
 
     expect(screen.getByTestId('render-left')).toHaveAttribute('data-transition-sync', 'true')

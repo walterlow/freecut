@@ -9,6 +9,7 @@ import {
   PREVIEW_PERF_PUBLISH_INTERVAL_MS,
   PREVIEW_PERF_SEEK_TIMEOUT_MS,
   type PreviewPerfSnapshot,
+  type PreviewWarmPerfStats,
 } from '../utils/preview-constants'
 import {
   recordSeekLatency,
@@ -22,7 +23,7 @@ import type {
 
 const logger = createLogger('VideoPreview')
 
-interface PreviewPerfStats {
+interface PreviewPerfStats extends PreviewWarmPerfStats {
   resolveSamples: number
   resolveTotalMs: number
   resolveTotalIds: number
@@ -33,24 +34,6 @@ interface PreviewPerfStats {
   preloadScanLastMs: number
   preloadBatchSamples: number
   preloadBatchTotalMs: number
-  preloadBatchLastMs: number
-  preloadBatchLastIds: number
-  preloadCandidateIds: number
-  preloadBudgetBase: number
-  preloadBudgetAdjusted: number
-  preloadWindowMaxCost: number
-  preloadScanBudgetYields: number
-  preloadContinuations: number
-  preloadScrubDirection: -1 | 0 | 1
-  preloadDirectionPenaltyCount: number
-  sourceWarmTarget: number
-  sourceWarmKeep: number
-  sourceWarmEvictions: number
-  sourcePoolSources: number
-  sourcePoolElements: number
-  sourcePoolActiveClips: number
-  fastScrubPrewarmedSources: number
-  fastScrubPrewarmSourceEvictions: number
   staleScrubOverlayDrops: number
   scrubDroppedFrames: number
   scrubUpdates: number

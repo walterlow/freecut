@@ -10,7 +10,7 @@ import {
   getTrackKind,
   type TrackKind,
 } from '../../utils/classic-tracks'
-import { sourceToTimelineFrames, timelineToSourceFrames } from '../../utils/source-calculations'
+import { mapSourceWindowOverlap, timelineToSourceFrames } from '../../utils/source-calculations'
 import { getCompositionOwnedAudioSources } from '../../utils/composition-clip-summary'
 import { expandSelectionWithLinkedItems } from '../../utils/linked-items'
 import { useItemsStore } from '../items-store'
@@ -361,61 +361,42 @@ function mapSubCompItemToWrapperWindow(params: {
   subCompFps: number
 }): TimelineItem | null {
   const { subItem, wrapper, timelineFps, subCompFps } = params
-  const wrapperSpeed = wrapper.speed ?? 1
-  const wrapperSourceFps = wrapper.sourceFps ?? subCompFps
   const wrapperSourceStart = wrapper.sourceStart ?? wrapper.trimStart ?? 0
-  const wrapperSourceEnd =
-    wrapper.sourceEnd ??
-    wrapperSourceStart +
-      timelineToSourceFrames(wrapper.durationInFrames, wrapperSpeed, timelineFps, wrapperSourceFps)
-  const subItemStart = subItem.from
-  const subItemEnd = subItem.from + subItem.durationInFrames
-  const overlapStart = Math.max(subItemStart, wrapperSourceStart)
-  const overlapEnd = Math.min(subItemEnd, wrapperSourceEnd)
+  const mapping = mapSourceWindowOverlap({
+    itemStart: subItem.from,
+    itemDuration: subItem.durationInFrames,
+    wrapperDuration: wrapper.durationInFrames,
+    wrapperSpeed: wrapper.speed,
+    wrapperSourceFps: wrapper.sourceFps,
+    wrapperSourceStart,
+    wrapperSourceEnd: wrapper.sourceEnd,
+    timelineFps,
+    fallbackSourceFps: subCompFps,
+  })
 
-  if (overlapEnd <= overlapStart) {
-    return null
-  }
+  if (!mapping) return null
 
-  const mappedFrom =
-    wrapper.from +
-    sourceToTimelineFrames(
-      overlapStart - wrapperSourceStart,
-      wrapperSpeed,
-      wrapperSourceFps,
-      timelineFps,
-    )
-  const mappedEnd =
-    wrapper.from +
-    sourceToTimelineFrames(
-      overlapEnd - wrapperSourceStart,
-      wrapperSpeed,
-      wrapperSourceFps,
-      timelineFps,
-    )
-  const mappedDuration = Math.max(1, mappedEnd - mappedFrom)
+  const mappedFrom = wrapper.from + mapping.mappedFrom
   const mappedItem: TimelineItem = {
     ...subItem,
     from: mappedFrom,
-    durationInFrames: mappedDuration,
-    speed: (subItem.speed ?? 1) * wrapperSpeed,
+    durationInFrames: mapping.mappedDuration,
+    speed: (subItem.speed ?? 1) * mapping.wrapperSpeed,
   }
 
   if (subItem.type === 'video' || subItem.type === 'audio' || subItem.type === 'composition') {
     const childSourceFps = subItem.sourceFps ?? subCompFps
     const childSpeed = subItem.speed ?? 1
-    const clippedStartFrames = overlapStart - subItemStart
-    const clippedEndFrames = subItemEnd - overlapEnd
     const nextSourceStart =
       (subItem.sourceStart ?? 0) +
-      timelineToSourceFrames(clippedStartFrames, childSpeed, subCompFps, childSourceFps)
+      timelineToSourceFrames(mapping.clippedStartFrames, childSpeed, subCompFps, childSourceFps)
 
     mappedItem.sourceStart = nextSourceStart
     if (subItem.sourceEnd !== undefined) {
       mappedItem.sourceEnd = Math.max(
         nextSourceStart + 1,
         subItem.sourceEnd -
-          timelineToSourceFrames(clippedEndFrames, childSpeed, subCompFps, childSourceFps),
+          timelineToSourceFrames(mapping.clippedEndFrames, childSpeed, subCompFps, childSourceFps),
       )
     }
   }

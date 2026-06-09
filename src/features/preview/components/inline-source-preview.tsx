@@ -10,7 +10,7 @@ import { resolveMediaUrl } from '../utils/media-resolver'
 import { SourceComposition } from './source-composition'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
-import { getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
+import { getPreviewNeedsOverflow, getPreviewPlayerSize } from '../utils/preview-pixel-snap'
 
 interface InlineSourcePreviewProps {
   mediaId: string
@@ -19,10 +19,6 @@ interface InlineSourcePreviewProps {
     width: number
     height: number
   }
-}
-
-function getDevicePixelRatio(): number {
-  return typeof window === 'undefined' ? 1 : window.devicePixelRatio
 }
 
 function InlineSourcePreviewClockSync({ frame }: { frame: number | null }) {
@@ -80,46 +76,22 @@ const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
     }
   }, [mediaId])
 
-  const playerSize = useMemo(() => {
-    const aspectRatio = mediaWidth / mediaHeight
+  const containerWidth = containerSize.width
+  const containerHeight = containerSize.height
+  const playerSize = useMemo(
+    () =>
+      getPreviewPlayerSize({
+        sourceSize: { width: mediaWidth, height: mediaHeight },
+        containerSize: { width: containerWidth, height: containerHeight },
+        zoom,
+      }),
+    [containerHeight, containerWidth, mediaHeight, mediaWidth, zoom],
+  )
 
-    // Snap only the dominant dimension and derive the other from the source
-    // aspect ratio — independent rounding breaks the aspect ratio and lets
-    // the scrub overlay misalign with Remotion's uniformly scaled content.
-    if (zoom === -1) {
-      if (containerSize.width > 0 && containerSize.height > 0) {
-        const containerAspectRatio = containerSize.width / containerSize.height
-
-        if (containerAspectRatio > aspectRatio) {
-          const { height } = getPreviewPixelSnapSize(
-            { width: containerSize.height * aspectRatio, height: containerSize.height },
-            getDevicePixelRatio(),
-          )
-          return { width: height * aspectRatio, height }
-        }
-
-        const { width } = getPreviewPixelSnapSize(
-          { width: containerSize.width, height: containerSize.width / aspectRatio },
-          getDevicePixelRatio(),
-        )
-        return { width, height: width / aspectRatio }
-      }
-
-      return { width: mediaWidth, height: mediaHeight }
-    }
-
-    const { width } = getPreviewPixelSnapSize(
-      { width: mediaWidth * zoom, height: mediaHeight * zoom },
-      getDevicePixelRatio(),
-    )
-    return { width, height: width / aspectRatio }
-  }, [containerSize.height, containerSize.width, mediaHeight, mediaWidth, zoom])
-
-  const needsOverflow = useMemo(() => {
-    if (zoom === -1) return false
-    if (containerSize.width === 0 || containerSize.height === 0) return false
-    return playerSize.width > containerSize.width || playerSize.height > containerSize.height
-  }, [containerSize.height, containerSize.width, playerSize.height, playerSize.width, zoom])
+  const needsOverflow = useMemo(
+    () => getPreviewNeedsOverflow({ playerSize, containerSize, zoom }),
+    [containerSize, playerSize, zoom],
+  )
 
   if (!media) {
     return (

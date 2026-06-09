@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 
 import { useEditorStore } from '@/shared/state/editor'
 import { usePlaybackStore } from '@/shared/state/playback'
-import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
+import { resetPlaybackPreviewState } from '@/shared/state/playback-preview-test-helpers'
 import { useSelectionStore } from '@/shared/state/selection'
 import type { TimelineTrack, VideoItem } from '@/types/timeline'
 
@@ -147,28 +147,7 @@ function resetStores() {
     expandedKeyframeLanes: new Set<string>(),
   })
 
-  usePlaybackStore.setState({
-    currentFrame: 0,
-    currentFrameEpoch: 0,
-    isPlaying: false,
-    playbackRate: 1,
-    loop: false,
-    volume: 1,
-    muted: false,
-    zoom: -1,
-    previewFrame: null,
-    previewFrameEpoch: 0,
-    frameUpdateEpoch: 0,
-    previewItemId: null,
-    useProxy: true,
-    previewQuality: 1,
-  })
-  usePreviewBridgeStore.setState({
-    displayedFrame: null,
-    captureFrame: null,
-    captureFrameImageData: null,
-    captureCanvasSource: null,
-  })
+  resetPlaybackPreviewState()
 
   useTimelineStore.setState({
     fps: 30,

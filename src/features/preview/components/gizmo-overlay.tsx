@@ -19,6 +19,7 @@ import {
   screenToCanvas,
   transformToScreenBounds,
 } from '../utils/coordinate-transform'
+import { attachWindowTransformInteraction } from '../utils/gizmo-transform-interaction'
 import { computeItemAabb } from '../utils/canvas-snap-utils'
 import {
   useMarqueeSelection,
@@ -631,18 +632,6 @@ export function GizmoOverlay({
     }
   }, [contextMenu])
 
-  // Check if transform actually changed (within tolerance)
-  const transformChanged = useCallback((a: Transform, b: Transform): boolean => {
-    const tolerance = 0.01
-    return (
-      Math.abs(a.x - b.x) > tolerance ||
-      Math.abs(a.y - b.y) > tolerance ||
-      Math.abs(a.width - b.width) > tolerance ||
-      Math.abs(a.height - b.height) > tolerance ||
-      Math.abs(a.rotation - b.rotation) > tolerance
-    )
-  }, [])
-
   // Handle drag start from SelectableItem - select and start dragging in one motion
   const handleItemDragStart = useCallback(
     (itemId: string, e: React.MouseEvent, transform: Transform) => {
@@ -654,27 +643,22 @@ export function GizmoOverlay({
       startTranslate(itemId, point, transform)
       document.body.style.cursor = 'move'
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const movePoint = screenToCanvas(moveEvent.clientX, moveEvent.clientY, coordParams)
-        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey, moveEvent.altKey)
-      }
-
-      const handleMouseUp = () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
-        document.body.style.cursor = ''
-
-        const finalTransform = endInteraction()
-        if (finalTransform && transformChanged(startTransformSnapshot, finalTransform)) {
-          handleTransformEnd(itemId, finalTransform, 'move')
-        }
-        requestAnimationFrame(() => {
-          clearInteraction()
-        })
-      }
-
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('mouseup', handleMouseUp)
+      attachWindowTransformInteraction({
+        toCanvasPoint: (moveEvent) =>
+          screenToCanvas(moveEvent.clientX, moveEvent.clientY, coordParams),
+        updateInteraction,
+        startTransform: startTransformSnapshot,
+        endInteraction,
+        onTransformEnd: (finalTransform, operation) => {
+          handleTransformEnd(itemId, finalTransform, operation)
+        },
+        operation: 'move',
+        afterFinish: () => {
+          requestAnimationFrame(() => {
+            clearInteraction()
+          })
+        },
+      })
     },
     [
       coordParams,
@@ -683,7 +667,6 @@ export function GizmoOverlay({
       endInteraction,
       clearInteraction,
       handleTransformEnd,
-      transformChanged,
     ],
   )
 

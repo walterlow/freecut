@@ -7,6 +7,7 @@ import { useMediaBlobUrl } from '../../hooks/use-media-blob-url'
 import { filmstripCache, THUMBNAIL_WIDTH } from '../../services/filmstrip-cache'
 import { createLogger } from '@/shared/logging/logger'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
+import { observeParentElementHeight } from '../measure-parent-height'
 
 const logger = createLogger('ClipFilmstrip')
 
@@ -231,24 +232,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
 
   // Measure container height
   useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const measure = () => {
-      const parent = container.parentElement
-      if (parent) {
-        setHeight(parent.clientHeight)
-      }
-    }
-
-    measure()
-
-    const resizeObserver = new ResizeObserver(measure)
-    if (container.parentElement) {
-      resizeObserver.observe(container.parentElement)
-    }
-
-    return () => resizeObserver.disconnect()
+    return observeParentElementHeight(containerRef.current, setHeight)
   }, [])
 
   // Calculate thumbnail width based on height (16:9 aspect ratio)

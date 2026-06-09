@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vite-plus/test'
-import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import {
+  makeTimelineAudioItem as makeAudioItem,
+  makeTimelineTrack as makeTrack,
+  makeTimelineVideoItem as makeVideoItem,
+  resetTimelineCompositionTestState,
+  setDefaultRootTimelineTracks,
+} from '@/features/timeline/test-helpers'
 import { useItemsStore } from '../items-store'
-import { useTransitionsStore } from '../transitions-store'
-import { useKeyframesStore } from '../keyframes-store'
 import { useTimelineCommandStore } from '../timeline-command-store'
 import { useTimelineSettingsStore } from '../timeline-settings-store'
 import { useCompositionsStore } from '../compositions-store'
@@ -13,64 +17,9 @@ import {
   updateProjectItem,
 } from './project-item-actions'
 
-function makeTrack(
-  overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order' | 'kind'>,
-): TimelineTrack {
-  return {
-    height: 80,
-    locked: false,
-    visible: true,
-    muted: false,
-    solo: false,
-    volume: 0,
-    items: [],
-    ...overrides,
-  }
-}
-
-function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
-  return {
-    id: 'video-1',
-    type: 'video',
-    trackId: 'track-v1',
-    from: 0,
-    durationInFrames: 60,
-    label: 'clip.mp4',
-    src: 'blob:video',
-    mediaId: 'media-1',
-    sourceStart: 0,
-    sourceEnd: 60,
-    sourceDuration: 120,
-    sourceFps: 30,
-    ...overrides,
-  }
-}
-
-function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
-  return {
-    id: 'audio-1',
-    type: 'audio',
-    trackId: 'track-a1',
-    from: 0,
-    durationInFrames: 60,
-    label: 'clip.wav',
-    src: 'blob:audio',
-    mediaId: 'media-1',
-    sourceStart: 0,
-    sourceEnd: 60,
-    sourceDuration: 120,
-    sourceFps: 30,
-    ...overrides,
-  }
-}
-
 describe('project-item-actions', () => {
   beforeEach(() => {
-    useItemsStore.getState().setTracks([])
-    useItemsStore.getState().setItems([])
-    useTransitionsStore.getState().setTransitions([])
-    useKeyframesStore.getState().setKeyframes([])
-    useCompositionsStore.getState().setCompositions([])
+    resetTimelineCompositionTestState()
     useTimelineCommandStore.getState().clearHistory()
     useCompositionNavigationStore.getState().resetToRoot()
     useTimelineSettingsStore.getState().setFps(30)
@@ -186,12 +135,7 @@ describe('project-item-actions', () => {
   })
 
   it('counts a linked audio-video pair as one clip while still removing both timeline items', () => {
-    useItemsStore
-      .getState()
-      .setTracks([
-        makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),
-      ])
+    setDefaultRootTimelineTracks()
     useItemsStore.getState().setItems([
       makeVideoItem({
         id: 'video-ref',

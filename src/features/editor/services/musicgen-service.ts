@@ -11,6 +11,11 @@ import {
 } from '@/shared/state/local-inference'
 import { TRANSFORMERS_CACHE_NAME } from '@/shared/utils/local-model-cache'
 import { createLogger } from '@/shared/logging/logger'
+import { sanitizeAiOutputFileNameSegment } from '@/shared/utils/ai-output-filename'
+import {
+  updateDownloadProgress,
+  type DownloadProgressCache,
+} from '@/shared/utils/download-progress'
 
 const logger = createLogger('MusicgenService')
 
@@ -50,18 +55,9 @@ const MUSICGEN_DTYPE_CONFIG = {
   build_delay_pattern_mask: 'fp32',
 } as const
 
-function makeSafeFileNameSegment(text: string): string {
-  const collapsed = text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-
-  return collapsed.slice(0, 32) || 'music'
-}
-
 function createOutputFileName(prompt: string, model: MusicgenModelId): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  return `ai-music-${makeSafeFileNameSegment(prompt)}-${model}-${timestamp}.wav`
+  return `ai-music-${sanitizeAiOutputFileNameSegment(prompt, 'music')}-${model}-${timestamp}.wav`
 }
 
 class MusicgenService {
@@ -187,7 +183,7 @@ class MusicgenService {
       const config = getMusicgenModelDefinition(model)
       const cached = await this.isModelCached(model)
       const loadVerb = cached ? 'Loading' : 'Downloading'
-      const downloadCache = new Map<string, { loaded: number; total: number }>()
+      const downloadCache: DownloadProgressCache = new Map()
 
       onProgress?.('Loading MusicGen tokenizer...')
       const tokenizer = await module.AutoTokenizer.from_pretrained(config.modelId)
@@ -206,27 +202,11 @@ class MusicgenService {
             if (progress.status !== 'progress' && progress.status !== 'download') {
               return
             }
-            if (!progress.file || !progress.total) {
-              return
-            }
-
-            downloadCache.set(progress.file, {
-              loaded: progress.loaded ?? 0,
-              total: progress.total,
-            })
-
-            let totalLoaded = 0
-            let totalExpected = 0
-            for (const entry of downloadCache.values()) {
-              totalLoaded += entry.loaded
-              totalExpected += entry.total
-            }
-
-            if (totalExpected > 0) {
-              const fraction = Math.min(0.99, totalLoaded / totalExpected)
+            const downloadProgress = updateDownloadProgress(progress, downloadCache)
+            if (downloadProgress) {
               onProgress?.(
-                `${loadVerb} ${config.label} (${Math.round(fraction * 100)}%)...`,
-                fraction,
+                `${loadVerb} ${config.label} (${Math.round(downloadProgress.fraction * 100)}%)...`,
+                downloadProgress.fraction,
               )
             }
           },

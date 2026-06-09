@@ -100,6 +100,25 @@ function getLog() {
   return createLogger('ClientRenderEngine')
 }
 
+function getPrewarmVideoSourceTimeSeconds(item: VideoItem, frame: number, fps: number): number {
+  const localFrame = frame - item.from
+  const sourceStart = item.sourceStart ?? item.trimStart ?? 0
+  const sourceFps = item.sourceFps ?? fps
+  const speed = item.speed ?? 1
+  const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
+  const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
+  return getVideoTargetTimeSeconds(
+    sourceStart,
+    sourceFps,
+    localFrame,
+    speed,
+    fps,
+    0,
+    item.isReversed === true,
+    reverseSourceEnd,
+  )
+}
+
 // Predicate helpers (GPU-effect / animated-image classifiers) live in
 // `render-engine-predicates.ts`. `subCompositionRenderDataHasGpuEffects` is
 // re-exported so existing import sites (and its test) keep working.
@@ -564,6 +583,15 @@ export async function createCompositionRenderer(
 
     return null
   }
+
+  const collectPrewarmVideoCandidatesForFrame = (frame: number): VideoItem[] =>
+    collectFrameVideoCandidates({
+      tracksByOrderAsc: tracksTopToBottom,
+      visibleTrackIds,
+      minFrame: frame - 1,
+      maxFrame: frame + 1,
+      maxItems: PREWARM_DECODE_MAX_ITEMS,
+    }).map((item) => getCurrentItem(item))
 
   const initializeMediabunnyForItems = async (itemIds: string[]): Promise<Map<string, boolean>> => {
     const itemResult = new Map<string, boolean>()
@@ -1608,15 +1636,7 @@ export async function createCompositionRenderer(
       const ctx2d = getPrewarmContext()
       if (!ctx2d) return
 
-      const minFrame = frame - 1
-      const maxFrame = frame + 1
-      const candidates = collectFrameVideoCandidates({
-        tracksByOrderAsc: tracksTopToBottom,
-        visibleTrackIds,
-        minFrame,
-        maxFrame,
-        maxItems: PREWARM_DECODE_MAX_ITEMS,
-      }).map((item) => getCurrentItem(item))
+      const candidates = collectPrewarmVideoCandidatesForFrame(frame)
 
       const missingCandidateItemIds = candidates
         .map((item) => item.id)
@@ -1630,22 +1650,7 @@ export async function createCompositionRenderer(
         const extractor = videoExtractors.get(item.id)
         if (!extractor) continue
 
-        const localFrame = frame - item.from
-        const sourceStart = item.sourceStart ?? item.trimStart ?? 0
-        const sourceFps = item.sourceFps ?? fps
-        const speed = item.speed ?? 1
-        const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
-        const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
-        const sourceTime = getVideoTargetTimeSeconds(
-          sourceStart,
-          sourceFps,
-          localFrame,
-          speed,
-          fps,
-          0,
-          item.isReversed === true,
-          reverseSourceEnd,
-        )
+        const sourceTime = getPrewarmVideoSourceTimeSeconds(item, frame, fps)
         const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
 
         try {
@@ -1700,15 +1705,7 @@ export async function createCompositionRenderer(
       const fallbackFrames: number[] = []
 
       for (const frame of frames) {
-        const minFrame = frame - 1
-        const maxFrame = frame + 1
-        const candidates = collectFrameVideoCandidates({
-          tracksByOrderAsc: tracksTopToBottom,
-          visibleTrackIds,
-          minFrame,
-          maxFrame,
-          maxItems: PREWARM_DECODE_MAX_ITEMS,
-        }).map((item) => getCurrentItem(item))
+        const candidates = collectPrewarmVideoCandidatesForFrame(frame)
 
         for (const item of candidates) {
           if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue
@@ -1721,22 +1718,7 @@ export async function createCompositionRenderer(
             continue
           }
 
-          const localFrame = frame - item.from
-          const sourceStart = item.sourceStart ?? item.trimStart ?? 0
-          const sourceFps = item.sourceFps ?? fps
-          const speed = item.speed ?? 1
-          const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
-          const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
-          const sourceTime = getVideoTargetTimeSeconds(
-            sourceStart,
-            sourceFps,
-            localFrame,
-            speed,
-            fps,
-            0,
-            item.isReversed === true,
-            reverseSourceEnd,
-          )
+          const sourceTime = getPrewarmVideoSourceTimeSeconds(item, frame, fps)
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
 
           const existing = batchByExtractor.get(item.id)
@@ -1773,35 +1755,12 @@ export async function createCompositionRenderer(
       // Sequential fallback for extractors where batch is disabled
       for (const frame of fallbackFrames) {
         if (isDisposed) break
-        const minFrame = frame - 1
-        const maxFrame = frame + 1
-        const candidates = collectFrameVideoCandidates({
-          tracksByOrderAsc: tracksTopToBottom,
-          visibleTrackIds,
-          minFrame,
-          maxFrame,
-          maxItems: PREWARM_DECODE_MAX_ITEMS,
-        }).map((item) => getCurrentItem(item))
+        const candidates = collectPrewarmVideoCandidatesForFrame(frame)
         for (const item of candidates) {
           if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue
           const extractor = videoExtractors.get(item.id)
           if (!extractor) continue
-          const localFrame = frame - item.from
-          const sourceStart = item.sourceStart ?? item.trimStart ?? 0
-          const sourceFps = item.sourceFps ?? fps
-          const speed = item.speed ?? 1
-          const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
-          const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
-          const sourceTime = getVideoTargetTimeSeconds(
-            sourceStart,
-            sourceFps,
-            localFrame,
-            speed,
-            fps,
-            0,
-            item.isReversed === true,
-            reverseSourceEnd,
-          )
+          const sourceTime = getPrewarmVideoSourceTimeSeconds(item, frame, fps)
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01))
           try {
             await extractor.drawFrame(ctx2d, clampedTime, 0, 0, 1, 1)
@@ -1855,21 +1814,7 @@ export async function createCompositionRenderer(
             if (!item || item.type !== 'video') return
             const localFrame = targetFrame - item.from
             if (localFrame >= item.durationInFrames) return
-            const sourceStart = item.sourceStart ?? item.trimStart ?? 0
-            const sourceFps = item.sourceFps ?? fps
-            const speed = item.speed ?? 1
-            const sourceFramesNeeded = (item.durationInFrames * speed * sourceFps) / fps
-            const reverseSourceEnd = item.sourceEnd ?? sourceStart + sourceFramesNeeded
-            const baseSourceTime = getVideoTargetTimeSeconds(
-              sourceStart,
-              sourceFps,
-              localFrame,
-              speed,
-              fps,
-              0,
-              item.isReversed === true,
-              reverseSourceEnd,
-            )
+            const baseSourceTime = getPrewarmVideoSourceTimeSeconds(item, targetFrame, fps)
             try {
               await extractor.drawFrame(ctx2d, Math.max(0, baseSourceTime), 0, 0, 1, 1)
             } catch {

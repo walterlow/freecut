@@ -6,6 +6,10 @@ import type {
   WhisperWorkerMessage,
 } from '../types'
 import { createLogger } from '@/shared/logging/logger'
+import {
+  updateDownloadProgress,
+  type DownloadProgressCache,
+} from '@/shared/utils/download-progress'
 
 const logger = createLogger('TranscriptionWorker')
 
@@ -141,43 +145,32 @@ async function initPipeline(modelId: string, quantization: QuantizationType): Pr
 
     if (!asrPipeline || currentModelId !== modelId) {
       currentModelId = modelId
-      const downloadCache = new Map<string, { loaded: number; total: number }>()
+      const downloadCache: DownloadProgressCache = new Map()
       const dtype =
         quantization === 'hybrid'
           ? { encoder_model: 'fp32', decoder_model_merged: 'q4' }
           : quantization
 
       const progressCallback = (progress: ProgressInfo) => {
-        if (progress.status !== 'progress' || !progress.file || !progress.total) {
+        if (progress.status !== 'progress') {
           return
         }
 
-        downloadCache.set(progress.file, {
-          loaded: progress.loaded ?? 0,
-          total: progress.total,
+        const downloadProgress = updateDownloadProgress(progress, downloadCache)
+        if (!downloadProgress) return
+
+        if (downloadProgress.total > reportedEstimatedBytes) {
+          reportedEstimatedBytes = downloadProgress.total
+          postMain({ type: 'runtime', info: { estimatedBytes: downloadProgress.total } })
+        }
+
+        postMain({
+          type: 'progress',
+          event: {
+            stage: 'loading',
+            progress: downloadProgress.fraction,
+          },
         })
-
-        let totalLoaded = 0
-        let totalExpected = 0
-        for (const entry of downloadCache.values()) {
-          totalLoaded += entry.loaded
-          totalExpected += entry.total
-        }
-
-        if (totalExpected > 0) {
-          if (totalExpected > reportedEstimatedBytes) {
-            reportedEstimatedBytes = totalExpected
-            postMain({ type: 'runtime', info: { estimatedBytes: totalExpected } })
-          }
-
-          postMain({
-            type: 'progress',
-            event: {
-              stage: 'loading',
-              progress: Math.min(totalLoaded / totalExpected, 0.99),
-            },
-          })
-        }
       }
 
       const loadPipeline = async (device: 'webgpu' | 'wasm') =>

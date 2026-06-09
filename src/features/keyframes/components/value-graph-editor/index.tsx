@@ -41,6 +41,7 @@ import { GraphHandles } from './graph-handles'
 import { getKeyframePropertyLabel } from '@/features/keyframes/utils/property-i18n'
 import { GraphTransitionRegions } from './graph-transition-regions'
 import { useGraphInteraction } from './use-graph-interaction'
+import { getGraphDimensions } from './use-graph-viewport'
 import { KeyframeSvgMarquee } from '../keyframe-marquee'
 import type { BlockedFrameRange } from '../../utils/transition-region'
 import { getCombinedGraphValueRange } from './value-range-utils'
@@ -374,11 +375,10 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
   const createPointsForProperty = useCallback(
     (property: AnimatableProperty): GraphKeyframePoint[] => {
       const propertyKeyframes = keyframesByProperty[property] || []
-      const graphLeft = padding.left
-      const graphTop = padding.top
-      const graphWidth = viewport.width - padding.left - padding.right
-      const graphHeight = viewport.height - padding.top - padding.bottom
-      const frameRange = viewport.endFrame - viewport.startFrame
+      const { graphLeft, graphTop, graphWidth, graphHeight, frameRange } = getGraphDimensions(
+        viewport,
+        padding,
+      )
       const valueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue)
 
       return propertyKeyframes.map((keyframe) => ({
@@ -511,11 +511,10 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
   const pointsWithDragState = useMemo(() => {
     // If we're dragging and have preview values, update every dragged point's position
     if (isDragging && dragState?.type === 'keyframe' && previewValues) {
-      const graphLeft = padding.left
-      const graphTop = padding.top
-      const graphWidth = viewport.width - padding.left - padding.right
-      const graphHeight = viewport.height - padding.top - padding.bottom
-      const frameRange = viewport.endFrame - viewport.startFrame
+      const { graphLeft, graphTop, graphWidth, graphHeight, frameRange } = getGraphDimensions(
+        viewport,
+        padding,
+      )
 
       return interactivePoints.map((point) => {
         const previewValue = previewValues[point.keyframe.id]
@@ -542,9 +541,7 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
     }
 
     if (previewFramesById) {
-      const graphLeft = padding.left
-      const graphWidth = viewport.width - padding.left - padding.right
-      const frameRange = viewport.endFrame - viewport.startFrame
+      const { graphLeft, graphWidth, frameRange } = getGraphDimensions(viewport, padding)
 
       return interactivePoints.map((point) => {
         const previewFrame = previewFramesById[point.keyframe.id]
@@ -1276,10 +1273,12 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
               )
               if (!draggingPoint) return null
 
-              const graphLeft = padding.left
-              const graphRight = viewport.width - padding.right
-              const graphTop = padding.top
-              const graphBottom = viewport.height - padding.bottom
+              const { graphLeft, graphTop, graphWidth, graphHeight } = getGraphDimensions(
+                viewport,
+                padding,
+              )
+              const graphRight = graphLeft + graphWidth
+              const graphBottom = graphTop + graphHeight
 
               return constraintAxis === 'x' ? (
                 // Horizontal constraint line (frame only movement)

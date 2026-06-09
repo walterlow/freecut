@@ -119,6 +119,22 @@ function makeCompositionItem(overrides: Partial<CompositionItem> = {}): Composit
   } as CompositionItem
 }
 
+function setCompoundWrapperItems() {
+  useItemsStore.getState().setItems([
+    makeCompositionItem({ sourceStart: 10, sourceEnd: 70, sourceDuration: 120 }),
+    makeAudioItem({
+      id: 'comp-audio-1',
+      mediaId: undefined,
+      src: '',
+      label: 'Compound 1',
+      compositionId: 'composition-1',
+      sourceStart: 10,
+      sourceEnd: 70,
+      sourceDuration: 120,
+    }),
+  ])
+}
+
 describe('linked edit tools', () => {
   beforeEach(() => {
     useTimelineCommandStore.getState().clearHistory()
@@ -216,19 +232,7 @@ describe('linked edit tools', () => {
   })
 
   it('trims synchronized compound wrappers together', () => {
-    useItemsStore.getState().setItems([
-      makeCompositionItem({ sourceStart: 10, sourceEnd: 70, sourceDuration: 120 }),
-      makeAudioItem({
-        id: 'comp-audio-1',
-        mediaId: undefined,
-        src: '',
-        label: 'Compound 1',
-        compositionId: 'composition-1',
-        sourceStart: 10,
-        sourceEnd: 70,
-        sourceDuration: 120,
-      }),
-    ])
+    setCompoundWrapperItems()
 
     trimItemStart('comp-1', 10)
 
@@ -258,19 +262,7 @@ describe('linked edit tools', () => {
   })
 
   it('slips synchronized compound wrappers together', () => {
-    useItemsStore.getState().setItems([
-      makeCompositionItem({ sourceStart: 10, sourceEnd: 70, sourceDuration: 120 }),
-      makeAudioItem({
-        id: 'comp-audio-1',
-        mediaId: undefined,
-        src: '',
-        label: 'Compound 1',
-        compositionId: 'composition-1',
-        sourceStart: 10,
-        sourceEnd: 70,
-        sourceDuration: 120,
-      }),
-    ])
+    setCompoundWrapperItems()
 
     slipItem('comp-1', 12)
 
@@ -290,19 +282,7 @@ describe('linked edit tools', () => {
   })
 
   it('rate stretches synchronized compound wrappers together', () => {
-    useItemsStore.getState().setItems([
-      makeCompositionItem({ sourceStart: 10, sourceEnd: 70, sourceDuration: 120 }),
-      makeAudioItem({
-        id: 'comp-audio-1',
-        mediaId: undefined,
-        src: '',
-        label: 'Compound 1',
-        compositionId: 'composition-1',
-        sourceStart: 10,
-        sourceEnd: 70,
-        sourceDuration: 120,
-      }),
-    ])
+    setCompoundWrapperItems()
 
     rateStretchItem('comp-1', 0, 120, 0.5)
 

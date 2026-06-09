@@ -28,6 +28,25 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   }
 }
 
+function setTransitionClips({
+  left = {},
+  right = {},
+}: {
+  left?: Partial<VideoItem>
+  right?: Partial<VideoItem>
+} = {}) {
+  const leftClip = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60, ...left })
+  const rightClip = makeVideoItem({
+    id: 'right',
+    from: 140,
+    durationInFrames: 80,
+    mediaId: 'media-2',
+    ...right,
+  })
+  useItemsStore.getState().setItems([leftClip, rightClip])
+  return { left: leftClip, right: rightClip }
+}
+
 describe('TransitionItem preview bridge motion', () => {
   const transition: Transition = {
     id: 'tr-1',
@@ -55,14 +74,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('updates bridge position in realtime while slide preview delta changes', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 140,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips()
 
     render(<TransitionItem transition={transition} />)
 
@@ -84,14 +96,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('updates bridge position in realtime while rolling preview delta changes', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 140,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips()
 
     render(<TransitionItem transition={transition} />)
 
@@ -112,14 +117,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('keeps the bridge inside the full clip body below the title bar', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 140,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips()
 
     render(<TransitionItem transition={transition} />)
 
@@ -166,14 +164,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('selects the transition when an edge handle is clicked', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 140,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips()
 
     const { container } = render(<TransitionItem transition={transition} />)
     const handle = container.querySelector('[data-transition-hit-zone="left-edge"]')
@@ -186,14 +177,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('keeps the existing bridge droppable when zoomed out to its compact minimum width', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 160,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips({ right: { from: 160 } })
     useZoomStore.getState().setZoomLevelImmediate(0.1)
     useTransitionDragStore
       .getState()
@@ -224,14 +208,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('leaves the cut-side edge non-draggable for an incoming-aligned transition', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 160,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips({ right: { from: 160 } })
 
     const { container } = render(<TransitionItem transition={{ ...transition, alignment: 0 }} />)
 
@@ -240,14 +217,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('leaves the cut-side edge non-draggable for an outgoing-aligned transition', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 160,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips({ right: { from: 160 } })
 
     const { container } = render(<TransitionItem transition={{ ...transition, alignment: 1 }} />)
 
@@ -256,14 +226,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('hides the bridge while previewing a trim that breaks the transition', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 140,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips()
 
     render(<TransitionItem transition={transition} />)
     expect(screen.getByTitle('Fade (0.7s)')).toBeInTheDocument()
@@ -280,14 +243,7 @@ describe('TransitionItem preview bridge motion', () => {
   })
 
   it('hides the bridge when a linked preview temporarily hides either clip', () => {
-    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 })
-    const right = makeVideoItem({
-      id: 'right',
-      from: 140,
-      durationInFrames: 80,
-      mediaId: 'media-2',
-    })
-    useItemsStore.getState().setItems([left, right])
+    setTransitionClips()
 
     render(<TransitionItem transition={transition} />)
     expect(screen.getByTitle('Fade (0.7s)')).toBeInTheDocument()

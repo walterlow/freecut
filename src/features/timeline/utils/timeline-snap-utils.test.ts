@@ -33,27 +33,31 @@ function makeTransition(overrides: Partial<Transition> = {}): Transition {
   }
 }
 
+function getDefaultTransitionSnapEdges(
+  excludeItemIds?: string[],
+  options?: Parameters<typeof getFilteredItemSnapEdges>[4],
+) {
+  const left = makeItem({ id: 'left', trackId: 'track-1', from: 0, durationInFrames: 100 })
+  const right = makeItem({ id: 'right', trackId: 'track-1', from: 90, durationInFrames: 80 })
+
+  return getFilteredItemSnapEdges(
+    [left, right],
+    [makeTransition()],
+    new Set(['track-1']),
+    excludeItemIds,
+    options,
+  )
+}
+
 describe('getFilteredItemSnapEdges', () => {
   it('includes transition midpoint for the right clip when not excluded', () => {
-    const left = makeItem({ id: 'left', trackId: 'track-1', from: 0, durationInFrames: 100 })
-    const right = makeItem({ id: 'right', trackId: 'track-1', from: 90, durationInFrames: 80 })
-
-    const edges = getFilteredItemSnapEdges([left, right], [makeTransition()], new Set(['track-1']))
+    const edges = getDefaultTransitionSnapEdges()
 
     expect(edges).toContainEqual({ frame: 100, type: 'item-start', itemId: 'right' })
   })
 
   it('can omit transition midpoints for move dragging', () => {
-    const left = makeItem({ id: 'left', trackId: 'track-1', from: 0, durationInFrames: 100 })
-    const right = makeItem({ id: 'right', trackId: 'track-1', from: 90, durationInFrames: 80 })
-
-    const edges = getFilteredItemSnapEdges(
-      [left, right],
-      [makeTransition()],
-      new Set(['track-1']),
-      undefined,
-      { includeTransitionMidpoints: false },
-    )
+    const edges = getDefaultTransitionSnapEdges(undefined, { includeTransitionMidpoints: false })
 
     expect(edges).not.toContainEqual({ frame: 100, type: 'item-start', itemId: 'right' })
     expect(edges).toContainEqual({ frame: 0, type: 'item-start', itemId: 'left' })
@@ -61,30 +65,14 @@ describe('getFilteredItemSnapEdges', () => {
   })
 
   it('does not include transition midpoint or edges for excluded right clip', () => {
-    const left = makeItem({ id: 'left', trackId: 'track-1', from: 0, durationInFrames: 100 })
-    const right = makeItem({ id: 'right', trackId: 'track-1', from: 90, durationInFrames: 80 })
-
-    const edges = getFilteredItemSnapEdges(
-      [left, right],
-      [makeTransition()],
-      new Set(['track-1']),
-      ['right'],
-    )
+    const edges = getDefaultTransitionSnapEdges(['right'])
 
     expect(edges.some((edge) => edge.itemId === 'right')).toBe(false)
     expect(edges).toEqual([{ frame: 0, type: 'item-start', itemId: 'left' }])
   })
 
   it('does not include transition midpoint when left clip is excluded', () => {
-    const left = makeItem({ id: 'left', trackId: 'track-1', from: 0, durationInFrames: 100 })
-    const right = makeItem({ id: 'right', trackId: 'track-1', from: 90, durationInFrames: 80 })
-
-    const edges = getFilteredItemSnapEdges(
-      [left, right],
-      [makeTransition()],
-      new Set(['track-1']),
-      ['left'],
-    )
+    const edges = getDefaultTransitionSnapEdges(['left'])
 
     expect(edges).not.toContainEqual({ frame: 100, type: 'item-start', itemId: 'right' })
   })

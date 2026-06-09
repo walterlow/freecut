@@ -5,6 +5,7 @@
 
 export { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store'
 export { useGizmoStore } from '@/features/preview/stores/gizmo-store'
+export { useItemGizmoPreview } from '@/features/preview/stores/use-item-gizmo-preview'
 export type { ItemPropertiesPreview } from '@/features/preview/stores/gizmo-store'
 export { useCornerPinStore } from '@/features/preview/stores/corner-pin-store'
 export { useMaskEditorStore } from '@/features/preview/stores/mask-editor-store'

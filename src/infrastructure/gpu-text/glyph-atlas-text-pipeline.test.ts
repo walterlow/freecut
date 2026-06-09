@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
+import { createGpuRenderPipelineMocks } from '@/infrastructure/gpu-test-helpers'
 import { GlyphAtlasTextPipeline } from './glyph-atlas-text-pipeline'
 import type { TextItem } from '@/types/timeline'
 
@@ -64,38 +65,18 @@ function createPipelineHarness() {
   } as unknown as GPUTexture
   const uniformBuffer = { destroy: vi.fn(), label: 'uniform-buffer' }
   const vertexBuffer = { destroy: vi.fn(), label: 'vertex-buffer' }
-  const queue = {
-    submit: vi.fn(),
-    writeBuffer: vi.fn(),
-    writeTexture: vi.fn(),
-  }
-  const pass = {
-    draw: vi.fn(),
-    end: vi.fn(),
-    setBindGroup: vi.fn(),
-    setPipeline: vi.fn(),
-    setVertexBuffer: vi.fn(),
-  }
-  const commandEncoder = {
-    beginRenderPass: vi.fn(() => pass),
-    finish: vi.fn(() => 'finished-command-buffer'),
-  }
-  const device = {
-    createBindGroup: vi.fn(() => 'bind-group'),
-    createBindGroupLayout: vi.fn(() => 'bind-group-layout'),
-    createBuffer: vi.fn((descriptor: GPUBufferDescriptor) =>
-      descriptor.usage === (GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST)
-        ? uniformBuffer
-        : vertexBuffer,
-    ),
-    createCommandEncoder: vi.fn(() => commandEncoder),
-    createPipelineLayout: vi.fn(() => 'pipeline-layout'),
-    createRenderPipeline: vi.fn(() => 'render-pipeline'),
-    createSampler: vi.fn(() => 'sampler'),
-    createShaderModule: vi.fn(() => 'shader-module'),
-    createTexture: vi.fn(() => atlasTexture),
-    queue,
-  }
+  const { commandEncoder, device, pass, queue } = createGpuRenderPipelineMocks({
+    device: {
+      createBuffer: vi.fn((descriptor: GPUBufferDescriptor) =>
+        descriptor.usage === (GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST)
+          ? uniformBuffer
+          : vertexBuffer,
+      ),
+      createTexture: vi.fn(() => atlasTexture),
+    },
+    pass: { setVertexBuffer: vi.fn() },
+    queue: { writeTexture: vi.fn() },
+  })
   const pipeline = new GlyphAtlasTextPipeline(device as unknown as GPUDevice)
 
   return {

@@ -90,6 +90,19 @@ function drawIreGrid(ctx: CanvasRenderingContext2D, width: number, height: numbe
   ctx.restore()
 }
 
+function forEachScopePixel(
+  imageData: ImageData,
+  callback: (x: number, y: number, r: number, g: number, b: number) => void,
+): void {
+  const { data, width, height } = imageData
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4
+      callback(x, y, (data[idx] ?? 0) / 255, (data[idx + 1] ?? 0) / 255, (data[idx + 2] ?? 0) / 255)
+    }
+  }
+}
+
 function cpuDrawWaveform(
   imageData: ImageData,
   ctx: CanvasRenderingContext2D,
@@ -100,24 +113,18 @@ function cpuDrawWaveform(
 ): void {
   const { kr, kb } = getMatrixCoefficients(matrix)
   const kg = 1 - kr - kb
-  const { data, width, height } = imageData
+  const { width } = imageData
   const density = new Uint16Array(w * h)
   let maxD = 0
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4
-      const r = (data[idx] ?? 0) / 255
-      const g = (data[idx + 1] ?? 0) / 255
-      const b = (data[idx + 2] ?? 0) / 255
-      const luma = normalizeRange(kr * r + kg * g + kb * b, rangeMode)
-      const px = Math.floor((x / Math.max(1, width - 1)) * (w - 1))
-      const py = h - 1 - Math.floor(luma * (h - 1))
-      const di = py * w + px
-      const next = (density[di] ?? 0) + 1
-      density[di] = next
-      if (next > maxD) maxD = next
-    }
-  }
+  forEachScopePixel(imageData, (x, _y, r, g, b) => {
+    const luma = normalizeRange(kr * r + kg * g + kb * b, rangeMode)
+    const px = Math.floor((x / Math.max(1, width - 1)) * (w - 1))
+    const py = h - 1 - Math.floor(luma * (h - 1))
+    const di = py * w + px
+    const next = (density[di] ?? 0) + 1
+    density[di] = next
+    if (next > maxD) maxD = next
+  })
   const image = ctx.createImageData(w, h)
   const out = image.data
   const logDiv = Math.log1p(Math.max(1, maxD))
@@ -220,22 +227,15 @@ function cpuDrawHistogram(
 ): void {
   const { kr, kb } = getMatrixCoefficients(matrix)
   const kg = 1 - kr - kb
-  const { data, width, height } = imageData
   const bins = new Uint32Array(256)
   let maxBin = 0
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4
-      const r = (data[idx] ?? 0) / 255
-      const g = (data[idx + 1] ?? 0) / 255
-      const b = (data[idx + 2] ?? 0) / 255
-      const luma = normalizeRange(kr * r + kg * g + kb * b, rangeMode)
-      const bin = Math.max(0, Math.min(255, Math.round(luma * 255)))
-      const next = (bins[bin] ?? 0) + 1
-      bins[bin] = next
-      if (next > maxBin) maxBin = next
-    }
-  }
+  forEachScopePixel(imageData, (_x, _y, r, g, b) => {
+    const luma = normalizeRange(kr * r + kg * g + kb * b, rangeMode)
+    const bin = Math.max(0, Math.min(255, Math.round(luma * 255)))
+    const next = (bins[bin] ?? 0) + 1
+    bins[bin] = next
+    if (next > maxBin) maxBin = next
+  })
   ctx.fillStyle = '#030712'
   ctx.fillRect(0, 0, w, h)
   drawIreGrid(ctx, w, h)
@@ -259,29 +259,22 @@ function cpuDrawVectorscope(
 ): void {
   const { kr, kb } = getMatrixCoefficients(matrix)
   const kg = 1 - kr - kb
-  const { data, width, height } = imageData
   const density = new Uint32Array(size * size)
   let maxD = 0
   const center = Math.floor(size / 2)
   const radius = center - 2
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4
-      const r = (data[idx] ?? 0) / 255
-      const g = (data[idx + 1] ?? 0) / 255
-      const b = (data[idx + 2] ?? 0) / 255
-      const yP = kr * r + kg * g + kb * b
-      const cb = (b - yP) / (2 * (1 - kb))
-      const cr = (r - yP) / (2 * (1 - kr))
-      const px = Math.round(center + cb * radius * 2)
-      const py = Math.round(center - cr * radius * 2)
-      if (px < 0 || px >= size || py < 0 || py >= size) continue
-      const di = py * size + px
-      const next = (density[di] ?? 0) + 1
-      density[di] = next
-      if (next > maxD) maxD = next
-    }
-  }
+  forEachScopePixel(imageData, (_x, _y, r, g, b) => {
+    const yP = kr * r + kg * g + kb * b
+    const cb = (b - yP) / (2 * (1 - kb))
+    const cr = (r - yP) / (2 * (1 - kr))
+    const px = Math.round(center + cb * radius * 2)
+    const py = Math.round(center - cr * radius * 2)
+    if (px < 0 || px >= size || py < 0 || py >= size) return
+    const di = py * size + px
+    const next = (density[di] ?? 0) + 1
+    density[di] = next
+    if (next > maxD) maxD = next
+  })
   ctx.fillStyle = '#030712'
   ctx.fillRect(0, 0, size, size)
   const image = ctx.createImageData(size, size)

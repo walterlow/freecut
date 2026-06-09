@@ -1,9 +1,11 @@
 import { createLogger } from '@/shared/logging/logger'
+import { sanitizeAiOutputFileNameSegment } from '@/shared/utils/ai-output-filename'
 import {
   LOCAL_INFERENCE_UNLOADED_MESSAGE,
   localInferenceRuntimeRegistry,
   useLocalInferenceStore,
 } from '@/shared/state/local-inference'
+import { validateTtsGenerateRequest } from './tts-generate-validation'
 
 const logger = createLogger('MossTtsService')
 
@@ -102,18 +104,9 @@ export const MOSS_TTS_SUPPORTED_LANGUAGES = [
   'Turkish',
 ] as const
 
-function makeSafeFileNameSegment(text: string): string {
-  const collapsed = text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-
-  return collapsed.slice(0, 32) || 'speech'
-}
-
 function createOutputFileName(text: string, voice: MossTtsVoice): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  return `ai-tts-${makeSafeFileNameSegment(text)}-${makeSafeFileNameSegment(voice)}-moss-${timestamp}.wav`
+  return `ai-tts-${sanitizeAiOutputFileNameSegment(text, 'speech')}-${sanitizeAiOutputFileNameSegment(voice, 'speech')}-moss-${timestamp}.wav`
 }
 
 function concatFloat32Arrays(chunks: Float32Array[]): Float32Array {
@@ -510,14 +503,11 @@ class MossTtsService {
     speed,
     onProgress,
   }: GenerateSpeechOptions): Promise<{ blob: Blob; file: File; duration: number }> {
-    const trimmedText = text.trim()
-    if (!trimmedText) {
-      throw new Error('Enter some text to synthesize.')
-    }
-
-    if (!this.isSupported()) {
-      throw new Error('This browser cannot run the local MOSS multilingual TTS runtime.')
-    }
+    const trimmedText = validateTtsGenerateRequest({
+      text,
+      isSupported: this.isSupported(),
+      unsupportedMessage: 'This browser cannot run the local MOSS multilingual TTS runtime.',
+    })
 
     return this.withGenerationLock(async () => {
       await this.ensurePrepared(onProgress)

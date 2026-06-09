@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/shared/ui/cn'
+import { resolveMarqueeSelection } from '../marquee-selection'
 
 import {
   getKeyframeNavigatorThumbMetrics,
   type KeyframeNavigatorViewport,
 } from './compact-navigator-utils'
+import { addWindowPointerListeners } from './dopesheet-pointer-listeners'
 
 const DRAG_THRESHOLD_PX = 2
 type MarqueeMode = 'replace' | 'add' | 'toggle'
@@ -130,21 +132,7 @@ export function KeyframeTimingStrip({
           .map((marker) => marker.id),
       )
 
-      let nextSelection = new Set<string>()
-      if (state.mode === 'replace') {
-        nextSelection = hitIds
-      } else if (state.mode === 'add') {
-        nextSelection = new Set([...state.baseSelection, ...hitIds])
-      } else {
-        nextSelection = new Set(state.baseSelection)
-        for (const id of hitIds) {
-          if (nextSelection.has(id)) {
-            nextSelection.delete(id)
-          } else {
-            nextSelection.add(id)
-          }
-        }
-      }
+      const nextSelection = resolveMarqueeSelection(state.mode, state.baseSelection, hitIds)
 
       onSelectionChange?.(nextSelection)
       setMarqueeRange({
@@ -284,13 +272,7 @@ export function KeyframeTimingStrip({
       setMarqueeRange(null)
     }
 
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-    }
+    return addWindowPointerListeners(handlePointerMove, handlePointerUp)
   }, [
     metrics.contentFrameMax,
     metrics.usableTrackWidth,

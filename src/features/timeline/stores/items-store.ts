@@ -38,6 +38,7 @@ import {
   getTransitionLinkedIds,
   withItemIndexes,
 } from './items-store-indexes'
+import type { ItemsIndexState } from './items-store-indexes'
 
 function getLog() {
   return createLogger('ItemsStore')
@@ -111,6 +112,23 @@ interface ItemsActions {
   ) => void
   _removeEffect: (itemId: string, effectId: string) => void
   _toggleEffect: (itemId: string, effectId: string) => void
+}
+
+function updateVisualItemEffects(
+  state: ItemsState,
+  itemId: string,
+  updateEffects: (effects: ItemEffect[]) => ItemEffect[],
+): ItemsIndexState {
+  const nextItems = state.items.map((item) => {
+    if (item.id !== itemId) return item
+    if (item.type === 'audio') return item
+
+    return {
+      ...item,
+      effects: updateEffects(item.effects || []),
+    } as typeof item
+  })
+  return withItemIndexes(nextItems, state)
 }
 
 export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => ({
@@ -745,26 +763,16 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
 
   // Add effect to item
   _addEffect: (itemId, effect) =>
-    set((state) => {
-      const nextItems = state.items.map((item) => {
-        if (item.id !== itemId) return item
-        // Audio items don't support visual effects
-        if (item.type === 'audio') return item
-
-        const effects = item.effects || []
+    set((state) =>
+      updateVisualItemEffects(state, itemId, (effects) => {
         const newEffect: ItemEffect = {
           id: crypto.randomUUID(),
           effect,
           enabled: true,
         }
-
-        return {
-          ...item,
-          effects: [...effects, newEffect],
-        } as typeof item
-      })
-      return withItemIndexes(nextItems, state)
-    }),
+        return [...effects, newEffect]
+      }),
+    ),
 
   // Add effects to multiple items
   _addEffects: (updates) =>
@@ -794,62 +802,37 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
 
   // Update effect
   _updateEffect: (itemId, effectId, updates) =>
-    set((state) => {
-      const nextItems = state.items.map((item) => {
-        if (item.id !== itemId) return item
-        // Audio items don't support visual effects
-        if (item.type === 'audio') return item
-
-        const effects = item.effects || []
-        return {
-          ...item,
-          effects: effects.map((e) =>
-            e.id === effectId
-              ? {
-                  ...e,
-                  ...(updates.effect && { effect: updates.effect }),
-                  ...(updates.enabled !== undefined && { enabled: updates.enabled }),
-                }
-              : e,
-          ),
-        } as typeof item
-      })
-      return withItemIndexes(nextItems, state)
-    }),
+    set((state) =>
+      updateVisualItemEffects(state, itemId, (effects) =>
+        effects.map((effectItem) =>
+          effectItem.id === effectId
+            ? {
+                ...effectItem,
+                ...(updates.effect && { effect: updates.effect }),
+                ...(updates.enabled !== undefined && { enabled: updates.enabled }),
+              }
+            : effectItem,
+        ),
+      ),
+    ),
 
   // Remove effect
   _removeEffect: (itemId, effectId) =>
-    set((state) => {
-      const nextItems = state.items.map((item) => {
-        if (item.id !== itemId) return item
-        // Audio items don't support visual effects
-        if (item.type === 'audio') return item
-
-        const effects = item.effects || []
-        return {
-          ...item,
-          effects: effects.filter((e) => e.id !== effectId),
-        } as typeof item
-      })
-      return withItemIndexes(nextItems, state)
-    }),
+    set((state) =>
+      updateVisualItemEffects(state, itemId, (effects) =>
+        effects.filter((effectItem) => effectItem.id !== effectId),
+      ),
+    ),
 
   // Toggle effect
   _toggleEffect: (itemId, effectId) =>
-    set((state) => {
-      const nextItems = state.items.map((item) => {
-        if (item.id !== itemId) return item
-        // Audio items don't support visual effects
-        if (item.type === 'audio') return item
-
-        const effects = item.effects || []
-        return {
-          ...item,
-          effects: effects.map((e) => (e.id === effectId ? { ...e, enabled: !e.enabled } : e)),
-        } as typeof item
-      })
-      return withItemIndexes(nextItems, state)
-    }),
+    set((state) =>
+      updateVisualItemEffects(state, itemId, (effects) =>
+        effects.map((effectItem) =>
+          effectItem.id === effectId ? { ...effectItem, enabled: !effectItem.enabled } : effectItem,
+        ),
+      ),
+    ),
 }))
 
 let prevItemsRef = useItemsStore.getState().items

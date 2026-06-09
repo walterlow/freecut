@@ -17,6 +17,36 @@ function createVideoItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
   } as TimelineItem
 }
 
+function createCompositionItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
+  return {
+    id: 'comp-1',
+    type: 'composition',
+    trackId: 'track-1',
+    from: 0,
+    durationInFrames: 120,
+    label: 'Comp',
+    compositionId: 'sub-1',
+    compositionWidth: 1920,
+    compositionHeight: 1080,
+    ...overrides,
+  } as TimelineItem
+}
+
+function createSubComposition(items: TimelineItem[]): SubComposition {
+  return {
+    id: 'sub-1',
+    name: 'Sub',
+    fps: 30,
+    width: 1920,
+    height: 1080,
+    durationInFrames: 120,
+    tracks: [],
+    transitions: [],
+    keyframes: [],
+    items,
+  }
+}
+
 describe('shouldForceContinuousPreviewOverlay', () => {
   it('keeps numeric transition counts as a non-forcing legacy hint', () => {
     expect(shouldForceContinuousPreviewOverlay([createVideoItem()], 1, 0)).toBe(false)
@@ -211,47 +241,25 @@ describe('shouldForceContinuousPreviewOverlay', () => {
   })
 
   it('forces continuous overlay when an active compound clip has gpu effects on sub-items', () => {
-    const compItem: TimelineItem = {
-      id: 'comp-1',
-      type: 'composition',
-      trackId: 'track-1',
-      from: 0,
-      durationInFrames: 120,
-      label: 'Comp',
-      compositionId: 'sub-1',
-      compositionWidth: 1920,
-      compositionHeight: 1080,
-    } as TimelineItem
-
-    const subComp: SubComposition = {
-      id: 'sub-1',
-      name: 'Sub',
-      fps: 30,
-      width: 1920,
-      height: 1080,
-      durationInFrames: 120,
-      tracks: [],
-      transitions: [],
-      keyframes: [],
-      items: [
-        {
-          id: 'sub-item-1',
-          type: 'video',
-          trackId: 't',
-          from: 0,
-          durationInFrames: 120,
-          label: 'v',
-          src: 'blob:v',
-          effects: [
-            {
-              id: 'e',
-              enabled: true,
-              effect: { type: 'gpu-effect', gpuEffectType: 'gpu-blur', params: { amount: 0.5 } },
-            },
-          ],
-        } as TimelineItem,
-      ],
-    }
+    const compItem = createCompositionItem()
+    const subComp = createSubComposition([
+      {
+        id: 'sub-item-1',
+        type: 'video',
+        trackId: 't',
+        from: 0,
+        durationInFrames: 120,
+        label: 'v',
+        src: 'blob:v',
+        effects: [
+          {
+            id: 'e',
+            enabled: true,
+            effect: { type: 'gpu-effect', gpuEffectType: 'gpu-blur', params: { amount: 0.5 } },
+          },
+        ],
+      } as TimelineItem,
+    ])
 
     expect(
       shouldForceContinuousPreviewOverlay([compItem], 0, 0, undefined, { 'sub-1': subComp }),
@@ -259,48 +267,26 @@ describe('shouldForceContinuousPreviewOverlay', () => {
   })
 
   it('forces continuous overlay when an active compound clip has corner-pinned sub-items', () => {
-    const compItem: TimelineItem = {
-      id: 'comp-1',
-      type: 'composition',
-      trackId: 'track-1',
-      from: 0,
-      durationInFrames: 120,
-      label: 'Comp',
-      compositionId: 'sub-1',
-      compositionWidth: 1920,
-      compositionHeight: 1080,
-    } as TimelineItem
-
-    const subComp: SubComposition = {
-      id: 'sub-1',
-      name: 'Sub',
-      fps: 30,
-      width: 1920,
-      height: 1080,
-      durationInFrames: 120,
-      tracks: [],
-      transitions: [],
-      keyframes: [],
-      items: [
-        {
-          id: 'sub-title-1',
-          type: 'text',
-          trackId: 't',
-          from: 0,
-          durationInFrames: 120,
-          label: 'Title',
-          text: 'Headline',
-          fontSize: 96,
-          color: '#ffffff',
-          cornerPin: {
-            topLeft: [0, 0],
-            topRight: [18, -10],
-            bottomRight: [0, 0],
-            bottomLeft: [-12, 8],
-          },
-        } as TimelineItem,
-      ],
-    }
+    const compItem = createCompositionItem()
+    const subComp = createSubComposition([
+      {
+        id: 'sub-title-1',
+        type: 'text',
+        trackId: 't',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Title',
+        text: 'Headline',
+        fontSize: 96,
+        color: '#ffffff',
+        cornerPin: {
+          topLeft: [0, 0],
+          topRight: [18, -10],
+          bottomRight: [0, 0],
+          bottomLeft: [-12, 8],
+        },
+      } as TimelineItem,
+    ])
 
     expect(
       shouldForceContinuousPreviewOverlay([compItem], 0, 0, undefined, { 'sub-1': subComp }),
@@ -308,42 +294,20 @@ describe('shouldForceContinuousPreviewOverlay', () => {
   })
 
   it('ignores stale blend modes on sub-composition shape masks', () => {
-    const compItem: TimelineItem = {
-      id: 'comp-1',
-      type: 'composition',
-      trackId: 'track-1',
-      from: 0,
-      durationInFrames: 120,
-      label: 'Comp',
-      compositionId: 'sub-1',
-      compositionWidth: 1920,
-      compositionHeight: 1080,
-    } as TimelineItem
-
-    const subComp: SubComposition = {
-      id: 'sub-1',
-      name: 'Sub',
-      fps: 30,
-      width: 1920,
-      height: 1080,
-      durationInFrames: 120,
-      tracks: [],
-      transitions: [],
-      keyframes: [],
-      items: [
-        {
-          id: 'mask-1',
-          type: 'shape',
-          trackId: 't',
-          from: 0,
-          durationInFrames: 120,
-          label: 'Mask',
-          shapeType: 'path',
-          isMask: true,
-          blendMode: 'screen',
-        } as TimelineItem,
-      ],
-    }
+    const compItem = createCompositionItem()
+    const subComp = createSubComposition([
+      {
+        id: 'mask-1',
+        type: 'shape',
+        trackId: 't',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Mask',
+        shapeType: 'path',
+        isMask: true,
+        blendMode: 'screen',
+      } as TimelineItem,
+    ])
 
     expect(
       shouldForceContinuousPreviewOverlay([compItem], 0, 0, undefined, { 'sub-1': subComp }),
@@ -351,46 +315,24 @@ describe('shouldForceContinuousPreviewOverlay', () => {
   })
 
   it('forces continuous overlay when an active compound clip has adjustment-layer gpu effects', () => {
-    const compItem: TimelineItem = {
-      id: 'comp-1',
-      type: 'composition',
-      trackId: 'track-1',
-      from: 0,
-      durationInFrames: 120,
-      label: 'Comp',
-      compositionId: 'sub-1',
-      compositionWidth: 1920,
-      compositionHeight: 1080,
-    } as TimelineItem
-
-    const subComp: SubComposition = {
-      id: 'sub-1',
-      name: 'Sub',
-      fps: 30,
-      width: 1920,
-      height: 1080,
-      durationInFrames: 120,
-      tracks: [],
-      transitions: [],
-      keyframes: [],
-      items: [
-        {
-          id: 'adj-1',
-          type: 'adjustment',
-          trackId: 't',
-          from: 0,
-          durationInFrames: 120,
-          label: 'adj',
-          effects: [
-            {
-              id: 'e',
-              enabled: true,
-              effect: { type: 'gpu-effect', gpuEffectType: 'gpu-blur', params: { amount: 0.5 } },
-            },
-          ],
-        } as TimelineItem,
-      ],
-    }
+    const compItem = createCompositionItem()
+    const subComp = createSubComposition([
+      {
+        id: 'adj-1',
+        type: 'adjustment',
+        trackId: 't',
+        from: 0,
+        durationInFrames: 120,
+        label: 'adj',
+        effects: [
+          {
+            id: 'e',
+            enabled: true,
+            effect: { type: 'gpu-effect', gpuEffectType: 'gpu-blur', params: { amount: 0.5 } },
+          },
+        ],
+      } as TimelineItem,
+    ])
 
     expect(
       shouldForceContinuousPreviewOverlay([compItem], 0, 0, undefined, { 'sub-1': subComp }),

@@ -21,7 +21,7 @@ import { usePlaybackStore } from '@/shared/state/playback'
 import { useGizmoStore } from '../stores/gizmo-store'
 import { useMaskEditorStore } from '../stores/mask-editor-store'
 import { isMarqueeJustFinished } from '@/shared/marquee/use-marquee-selection'
-import { getPreviewPixelSnapSize } from '../utils/preview-pixel-snap'
+import { getPreviewNeedsOverflow, getPreviewPlayerSize } from '../utils/preview-pixel-snap'
 
 interface PreviewProjectDimensions {
   width: number
@@ -37,10 +37,6 @@ interface UsePreviewViewModelParams {
   project: PreviewProjectDimensions
   containerSize: PreviewContainerDimensions
   suspendOverlay: boolean
-}
-
-function getDevicePixelRatio(): number {
-  return typeof window === 'undefined' ? 1 : window.devicePixelRatio
 }
 
 export function usePreviewViewModel({
@@ -94,46 +90,24 @@ export function usePreviewViewModel({
     [activeGizmoItemId, items],
   )
 
-  const playerSize = useMemo(() => {
-    const aspectRatio = project.width / project.height
+  const containerWidth = containerSize.width
+  const containerHeight = containerSize.height
+  const projectWidth = project.width
+  const projectHeight = project.height
+  const playerSize = useMemo(
+    () =>
+      getPreviewPlayerSize({
+        sourceSize: { width: projectWidth, height: projectHeight },
+        containerSize: { width: containerWidth, height: containerHeight },
+        zoom,
+      }),
+    [containerHeight, containerWidth, projectHeight, projectWidth, zoom],
+  )
 
-    // Snap only the dominant dimension to a device pixel and derive the other
-    // from the source aspect ratio. Rounding both independently breaks the
-    // aspect ratio by up to a sub-pixel, which makes the scrub overlay (which
-    // fills the container at 100%/100%) misalign with Remotion's uniformly
-    // scaled composition along whichever edge ends up on the derived side.
-    if (zoom === -1) {
-      if (containerSize.width > 0 && containerSize.height > 0) {
-        const containerAspectRatio = containerSize.width / containerSize.height
-
-        if (containerAspectRatio > aspectRatio) {
-          const { height } = getPreviewPixelSnapSize(
-            { width: containerSize.height * aspectRatio, height: containerSize.height },
-            getDevicePixelRatio(),
-          )
-          return { width: height * aspectRatio, height }
-        }
-        const { width } = getPreviewPixelSnapSize(
-          { width: containerSize.width, height: containerSize.width / aspectRatio },
-          getDevicePixelRatio(),
-        )
-        return { width, height: width / aspectRatio }
-      }
-      return { width: project.width, height: project.height }
-    }
-
-    const { width } = getPreviewPixelSnapSize(
-      { width: project.width * zoom, height: project.height * zoom },
-      getDevicePixelRatio(),
-    )
-    return { width, height: width / aspectRatio }
-  }, [containerSize.height, containerSize.width, project.height, project.width, zoom])
-
-  const needsOverflow = useMemo(() => {
-    if (zoom === -1) return false
-    if (containerSize.width === 0 || containerSize.height === 0) return false
-    return playerSize.width > containerSize.width || playerSize.height > containerSize.height
-  }, [containerSize.height, containerSize.width, playerSize.height, playerSize.width, zoom])
+  const needsOverflow = useMemo(
+    () => getPreviewNeedsOverflow({ playerSize, containerSize, zoom }),
+    [containerSize, playerSize, zoom],
+  )
 
   const setPlayerContainerRefCallback = useCallback((el: HTMLDivElement | null) => {
     playerContainerRef.current = el

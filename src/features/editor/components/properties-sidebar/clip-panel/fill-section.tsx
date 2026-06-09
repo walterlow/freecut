@@ -26,6 +26,7 @@ import {
   KeyframeToggle,
 } from '@/features/editor/deps/keyframes'
 import { PropertySection, PropertyRow, NumberInput, SliderInput } from '../components'
+import { applyAutoKeyframedTransformChange } from './auto-keyframe-transform'
 
 interface FillSectionProps {
   items: TimelineItem[]
@@ -150,22 +151,13 @@ export const FillSection = memo(function FillSection({
     (value: number) => {
       const opacityValue = value / 100 // Convert from 0-100 to 0-1
 
-      const autoOps: AutoKeyframeOperation[] = []
-      const fallbackItemIds: string[] = []
-      for (const itemId of itemIds) {
-        const operation = autoKeyframeOpacity(itemId, opacityValue)
-        if (operation) {
-          autoOps.push(operation)
-        } else {
-          fallbackItemIds.push(itemId)
-        }
-      }
-      if (autoOps.length > 0) {
-        applyAutoKeyframeOperations(autoOps)
-      }
-      if (fallbackItemIds.length > 0) {
-        onTransformChange(fallbackItemIds, { opacity: opacityValue })
-      }
+      applyAutoKeyframedTransformChange({
+        itemIds,
+        updates: { opacity: opacityValue },
+        getOperation: (itemId) => autoKeyframeOpacity(itemId, opacityValue),
+        applyAutoKeyframeOperations,
+        onTransformChange,
+      })
       queueMicrotask(() => clearPreview())
     },
     [itemIds, onTransformChange, clearPreview, autoKeyframeOpacity, applyAutoKeyframeOperations],
@@ -186,22 +178,13 @@ export const FillSection = memo(function FillSection({
   // Commit corner radius (on mouse up, with auto-keyframe support)
   const handleCornerRadiusChange = useCallback(
     (value: number) => {
-      const autoOps: AutoKeyframeOperation[] = []
-      const fallbackItemIds: string[] = []
-      for (const itemId of itemIds) {
-        const operation = autoKeyframeCornerRadius(itemId, value)
-        if (operation) {
-          autoOps.push(operation)
-        } else {
-          fallbackItemIds.push(itemId)
-        }
-      }
-      if (autoOps.length > 0) {
-        applyAutoKeyframeOperations(autoOps)
-      }
-      if (fallbackItemIds.length > 0) {
-        onTransformChange(fallbackItemIds, { cornerRadius: value })
-      }
+      applyAutoKeyframedTransformChange({
+        itemIds,
+        updates: { cornerRadius: value },
+        getOperation: (itemId) => autoKeyframeCornerRadius(itemId, value),
+        applyAutoKeyframeOperations,
+        onTransformChange,
+      })
       queueMicrotask(() => clearPreview())
     },
     [

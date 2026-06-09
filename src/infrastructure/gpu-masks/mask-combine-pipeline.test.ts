@@ -1,13 +1,10 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
+import { createGpuRenderPipelineMocks } from '@/infrastructure/gpu-test-helpers'
 import { MaskCombinePipeline } from './mask-combine-pipeline'
 
 function createPipelineHarness() {
   vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 })
   vi.stubGlobal('GPUBufferUsage', { COPY_DST: 8, UNIFORM: 64 })
-  const queue = {
-    submit: vi.fn(),
-    writeBuffer: vi.fn(),
-  }
   const baseMask = {
     createView: vi.fn(() => 'base-view'),
     width: 640,
@@ -23,27 +20,7 @@ function createPipelineHarness() {
     width: 640,
     height: 360,
   } as unknown as GPUTexture
-  const pass = {
-    draw: vi.fn(),
-    end: vi.fn(),
-    setBindGroup: vi.fn(),
-    setPipeline: vi.fn(),
-  }
-  const commandEncoder = {
-    beginRenderPass: vi.fn(() => pass),
-    finish: vi.fn(() => 'finished-command-buffer'),
-  }
-  const device = {
-    createBindGroup: vi.fn(() => 'bind-group'),
-    createBindGroupLayout: vi.fn(() => 'bind-group-layout'),
-    createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
-    createCommandEncoder: vi.fn(() => commandEncoder),
-    createPipelineLayout: vi.fn(() => 'pipeline-layout'),
-    createRenderPipeline: vi.fn(() => 'render-pipeline'),
-    createSampler: vi.fn(() => 'sampler'),
-    createShaderModule: vi.fn(() => 'shader-module'),
-    queue,
-  }
+  const { commandEncoder, device, pass, queue } = createGpuRenderPipelineMocks()
   const pipeline = new MaskCombinePipeline(device as unknown as GPUDevice)
   return { baseMask, commandEncoder, device, nextMask, outputTexture, pass, pipeline, queue }
 }

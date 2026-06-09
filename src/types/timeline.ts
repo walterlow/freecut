@@ -3,6 +3,7 @@ import type { ItemEffect } from './effects'
 import type { BlendMode } from './blend-modes'
 import type { AudioEqSettings } from './audio'
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids'
+import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 
 export interface TimelineItemCornerPin {
   topLeft: [number, number]
@@ -148,71 +149,20 @@ export type AudioItem = BaseTimelineItem & {
   offset?: number // Trim offset in source audio
 }
 
-export type TextSpan = {
-  text: string
-  fontSize?: number
-  fontFamily?: string
-  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
-  fontStyle?: 'normal' | 'italic'
-  underline?: boolean
-  color?: string
-  letterSpacing?: number
-}
+export type { TextLayoutDrafts, TextSingleLayoutDraft, TextSpan } from './text'
 
-export type TextSingleLayoutDraft = {
-  text: string
-  fontSize?: number
-  fontFamily?: string
-  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
-  fontStyle?: 'normal' | 'italic'
-  underline?: boolean
-  color?: string
-  letterSpacing?: number
-}
-
-export type TextLayoutDrafts = {
-  single?: TextSingleLayoutDraft
-  twoSpans?: TextSpan[]
-  threeSpans?: TextSpan[]
-}
-
-export type TextItem = BaseTimelineItem & {
-  type: 'text'
-  text: string
-  textSpans?: TextSpan[]
-  textLayoutDrafts?: TextLayoutDrafts
-  textStylePresetId?: TextStylePresetId
-  textStyleScale?: number
-  textRole?: 'caption'
-  captionSource?: GeneratedCaptionSource
-  // Typography
-  fontSize?: number // Font size in pixels (default: 60)
-  fontFamily?: string // Font family name (default: 'Inter')
-  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold' // Font weight (default: 'normal')
-  fontStyle?: 'normal' | 'italic' // Font style (default: 'normal')
-  underline?: boolean // Underline text decoration (default: false)
-  // Colors
-  color: string // Text color (hex or oklch)
-  backgroundColor?: string // Background color behind text (optional)
-  backgroundRadius?: number // Background box radius in pixels (default: 0)
-  // Text layout
-  textAlign?: 'left' | 'center' | 'right' // Horizontal alignment (default: 'center')
-  verticalAlign?: 'top' | 'middle' | 'bottom' // Vertical alignment (default: 'middle')
-  lineHeight?: number // Line height multiplier (default: 1.2)
-  letterSpacing?: number // Letter spacing in pixels (default: 0)
-  textPadding?: number // Inset padding inside the text box in pixels (default: 16)
-  // Text effects
-  textShadow?: {
-    offsetX: number
-    offsetY: number
-    blur: number
-    color: string
+export type TextItem = BaseTimelineItem &
+  TextStyleFields & {
+    type: 'text'
+    text: string
+    textSpans?: TextSpan[]
+    textLayoutDrafts?: TextLayoutDrafts
+    textStylePresetId?: TextStylePresetId
+    textStyleScale?: number
+    textRole?: 'caption'
+    captionSource?: GeneratedCaptionSource
+    color: string // Text color (hex or oklch)
   }
-  stroke?: {
-    width: number
-    color: string
-  }
-}
 
 export type ImageItem = BaseTimelineItem & {
   type: 'image'
@@ -299,39 +249,17 @@ export interface SubtitleSegmentCue {
  * makes sense applied to all cues at once. Per-cue styling can be
  * layered on later via `cue.style?` if needed.
  */
-export type SubtitleSegmentItem = BaseTimelineItem & {
-  type: 'subtitle'
-  /** Source-track origin (e.g. "Squid.Game.S02E01.mkv - en (Track 6)"). */
-  sourceLabel?: string
-  /** How the cues were obtained — drives replace/refresh affordances. */
-  source: SubtitleSegmentSource
-  /** Cue list, sorted by `startSeconds`. Times are segment-relative. */
-  cues: SubtitleSegmentCue[]
-  // Typography (same defaults as TextItem)
-  fontSize?: number
-  fontFamily?: string
-  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
-  fontStyle?: 'normal' | 'italic'
-  underline?: boolean
-  color: string
-  backgroundColor?: string
-  backgroundRadius?: number
-  textAlign?: 'left' | 'center' | 'right'
-  verticalAlign?: 'top' | 'middle' | 'bottom'
-  lineHeight?: number
-  letterSpacing?: number
-  textPadding?: number
-  textShadow?: {
-    offsetX: number
-    offsetY: number
-    blur: number
+export type SubtitleSegmentItem = BaseTimelineItem &
+  TextStyleFields & {
+    type: 'subtitle'
+    /** Source-track origin (e.g. "Squid.Game.S02E01.mkv - en (Track 6)"). */
+    sourceLabel?: string
+    /** How the cues were obtained — drives replace/refresh affordances. */
+    source: SubtitleSegmentSource
+    /** Cue list, sorted by `startSeconds`. Times are segment-relative. */
+    cues: SubtitleSegmentCue[]
     color: string
   }
-  stroke?: {
-    width: number
-    color: string
-  }
-}
 
 export type SubtitleSegmentSource =
   | {

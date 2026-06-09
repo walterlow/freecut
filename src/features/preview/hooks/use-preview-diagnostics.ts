@@ -1,6 +1,6 @@
 import { useCallback, useRef, type MutableRefObject } from 'react'
 import { usePlaybackStore } from '@/shared/state/playback'
-import type { PreviewPerfSnapshot } from '../utils/preview-constants'
+import type { PreviewPerfSnapshot, PreviewWarmPerfStats } from '../utils/preview-constants'
 
 let devJitterMonitor: import('@/shared/logging/frame-jitter-monitor').FrameJitterMonitor | null =
   null
@@ -10,7 +10,7 @@ if (import.meta.env.DEV) {
   })
 }
 
-export interface PreviewPerfStats {
+export interface PreviewPerfStats extends PreviewWarmPerfStats {
   resolveSamples: number
   resolveTotalMs: number
   resolveTotalIds: number
@@ -21,24 +21,6 @@ export interface PreviewPerfStats {
   preloadScanLastMs: number
   preloadBatchSamples: number
   preloadBatchTotalMs: number
-  preloadBatchLastMs: number
-  preloadBatchLastIds: number
-  preloadCandidateIds: number
-  preloadBudgetBase: number
-  preloadBudgetAdjusted: number
-  preloadWindowMaxCost: number
-  preloadScanBudgetYields: number
-  preloadContinuations: number
-  preloadScrubDirection: -1 | 0 | 1
-  preloadDirectionPenaltyCount: number
-  sourceWarmTarget: number
-  sourceWarmKeep: number
-  sourceWarmEvictions: number
-  sourcePoolSources: number
-  sourcePoolElements: number
-  sourcePoolActiveClips: number
-  fastScrubPrewarmedSources: number
-  fastScrubPrewarmSourceEvictions: number
   staleScrubOverlayDrops: number
   scrubDroppedFrames: number
   scrubUpdates: number

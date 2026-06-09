@@ -14,6 +14,91 @@ vi.mock('@/config/editor-layout', async (importOriginal) => {
   }
 })
 
+function getTrackFader(container: HTMLElement, trackId = 'track-1'): HTMLDivElement {
+  const faderRoot = container.querySelector(
+    `[data-track-id="${trackId}"][data-fader-root="true"]`,
+  ) as HTMLDivElement | null
+  expect(faderRoot).not.toBeNull()
+  return faderRoot!
+}
+
+function stubFaderGeometry(faderRoot: HTMLDivElement): void {
+  Object.defineProperty(faderRoot, 'getBoundingClientRect', {
+    value: () => ({
+      x: 0,
+      y: 20,
+      top: 20,
+      bottom: 220,
+      left: 0,
+      right: 20,
+      width: 20,
+      height: 200,
+      toJSON: () => ({}),
+    }),
+  })
+  Object.defineProperty(faderRoot, 'setPointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+  Object.defineProperty(faderRoot, 'releasePointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+}
+
+function getReadyTrackFader(container: HTMLElement, trackId = 'track-1'): HTMLDivElement {
+  const faderRoot = getTrackFader(container, trackId)
+  stubFaderGeometry(faderRoot)
+  return faderRoot
+}
+
+function beginFaderDrag(faderRoot: HTMLDivElement, clientY = 53.5): void {
+  fireEvent.pointerDown(faderRoot, { pointerId: 1, clientY })
+}
+
+function renderDraggedTrackFader(handleTrackVolumeChange = vi.fn()) {
+  const view = render(
+    <AudioMixerView
+      tracks={[
+        {
+          id: 'track-1',
+          name: 'A1',
+          kind: 'audio',
+          muted: false,
+          solo: false,
+          volume: 0,
+          itemIds: ['item-1'],
+        },
+      ]}
+      perTrackLevels={new Map()}
+      masterEstimate={{
+        left: 0,
+        right: 0,
+        unresolvedSourceCount: 0,
+        resolvedSourceCount: 0,
+      }}
+      isPlaying
+      onTrackVolumeChange={handleTrackVolumeChange}
+      onTrackMuteToggle={() => undefined}
+      onTrackSoloToggle={() => undefined}
+      masterVolumeDb={0}
+      masterMuted={false}
+      onMasterVolumeChange={() => undefined}
+      onMasterMuteToggle={() => undefined}
+    />,
+  )
+  const faderRoot = getReadyTrackFader(view.container)
+
+  beginFaderDrag(faderRoot)
+  fireEvent.pointerMove(faderRoot, { pointerId: 1, clientY: 43.5 })
+
+  return {
+    ...view,
+    faderRoot,
+    handleTrackVolumeChange,
+  }
+}
+
 describe('AudioMixerView', () => {
   it('shows scanning fallback bars while waveform data is unresolved', () => {
     const { container } = render(
@@ -72,71 +157,11 @@ describe('AudioMixerView', () => {
 
   it('does not jump the volume to silence when dragging from the thumb', () => {
     const handleTrackVolumeChange = vi.fn()
-    const { container } = render(
-      <AudioMixerView
-        tracks={[
-          {
-            id: 'track-1',
-            name: 'A1',
-            kind: 'audio',
-            muted: false,
-            solo: false,
-            volume: 0,
-            itemIds: ['item-1'],
-          },
-        ]}
-        perTrackLevels={new Map()}
-        masterEstimate={{
-          left: 0,
-          right: 0,
-          unresolvedSourceCount: 0,
-          resolvedSourceCount: 0,
-        }}
-        isPlaying
-        onTrackVolumeChange={handleTrackVolumeChange}
-        onTrackMuteToggle={() => undefined}
-        onTrackSoloToggle={() => undefined}
-        masterVolumeDb={0}
-        masterMuted={false}
-        onMasterVolumeChange={() => undefined}
-        onMasterMuteToggle={() => undefined}
-      />,
-    )
-
-    const faderRoot = container.querySelector(
-      '[data-track-id="track-1"][data-fader-root="true"]',
-    ) as HTMLDivElement | null
-    expect(faderRoot).not.toBeNull()
-
-    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 20,
-        top: 20,
-        bottom: 220,
-        left: 0,
-        right: 20,
-        width: 20,
-        height: 200,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(faderRoot!, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
-    // Drag: knob moves imperatively, no store writes
-    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 })
-    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 43.5 })
+    const { faderRoot } = renderDraggedTrackFader(handleTrackVolumeChange)
     expect(handleTrackVolumeChange).not.toHaveBeenCalled()
 
     // Release: synchronous in-place mutation commit (no composition re-render)
-    fireEvent.pointerUp(faderRoot!, { pointerId: 1, clientY: 43.5 })
+    fireEvent.pointerUp(faderRoot, { pointerId: 1, clientY: 43.5 })
     expect(handleTrackVolumeChange).toHaveBeenCalledTimes(1)
     const committedVolume = handleTrackVolumeChange.mock.calls[0]?.[1]
     expect(committedVolume).toBeGreaterThan(-10)
@@ -174,38 +199,13 @@ describe('AudioMixerView', () => {
 
     const { container, rerender } = render(<AudioMixerView {...props} />)
 
-    const faderRoot = container.querySelector(
-      '[data-track-id="track-1"][data-fader-root="true"]',
-    ) as HTMLDivElement | null
-    expect(faderRoot).not.toBeNull()
+    const faderRoot = getReadyTrackFader(container)
     expect(
       container.querySelector('[data-track-id="track-1"][data-track-channel="left"]'),
     ).toHaveStyle({ height: '0%' })
 
-    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 20,
-        top: 20,
-        bottom: 220,
-        left: 0,
-        right: 20,
-        width: 20,
-        height: 200,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(faderRoot!, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
-    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 })
-    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 20 })
+    beginFaderDrag(faderRoot)
+    fireEvent.pointerMove(faderRoot, { pointerId: 1, clientY: 20 })
 
     rerender(<AudioMixerView {...props} />)
 
@@ -259,35 +259,10 @@ describe('AudioMixerView', () => {
 
     const { container, rerender } = render(<AudioMixerView {...props} />)
 
-    const faderRoot = container.querySelector(
-      '[data-track-id="track-1"][data-fader-root="true"]',
-    ) as HTMLDivElement | null
-    expect(faderRoot).not.toBeNull()
+    const faderRoot = getReadyTrackFader(container)
 
-    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 20,
-        top: 20,
-        bottom: 220,
-        left: 0,
-        right: 20,
-        width: 20,
-        height: 200,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(faderRoot!, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
-    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 })
-    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 20 })
+    beginFaderDrag(faderRoot)
+    fireEvent.pointerMove(faderRoot, { pointerId: 1, clientY: 20 })
 
     rerender(<AudioMixerView {...props} />)
 
@@ -411,37 +386,15 @@ describe('AudioMixerView', () => {
 
     const { container, rerender } = render(<AudioMixerView {...props} />)
 
-    const faderRoot = container.querySelector(
-      '[data-track-id="track-1"][data-fader-root="true"]',
-    ) as HTMLDivElement | null
+    const faderRoot = getReadyTrackFader(container)
     const leftBar = container.querySelector(
       '[data-track-id="track-1"][data-track-channel="left"]',
     ) as HTMLDivElement | null
-    expect(faderRoot).not.toBeNull()
     expect(leftBar).not.toBeNull()
 
-    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 20,
-        top: 20,
-        bottom: 220,
-        left: 0,
-        right: 20,
-        width: 20,
-        height: 200,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(faderRoot!, 'setPointerCapture', { value: vi.fn(), configurable: true })
-    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
     // Start a drag to enter the mid-drag path
-    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 })
-    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 40 })
+    beginFaderDrag(faderRoot)
+    fireEvent.pointerMove(faderRoot, { pointerId: 1, clientY: 40 })
 
     // Simulate the estimation pipeline delivering boosted levels mid-drag
     // (as getTrackGainCorrection would bake the fader override into the level).
@@ -490,7 +443,7 @@ describe('AudioMixerView', () => {
     expect(parseFloat(leftBar!.style.height)).toBeCloseTo(heightAfterPipeline, 5)
 
     // End drag
-    fireEvent.pointerUp(faderRoot!, { pointerId: 1, clientY: 40 })
+    fireEvent.pointerUp(faderRoot, { pointerId: 1, clientY: 40 })
   })
 
   it('keeps dragging active while meter props rerender during the gesture', () => {
@@ -535,34 +488,9 @@ describe('AudioMixerView', () => {
     }
 
     const { container, rerender } = render(<AudioMixerView {...props} />)
-    const faderRoot = container.querySelector(
-      '[data-track-id="track-1"][data-fader-root="true"]',
-    ) as HTMLDivElement | null
-    expect(faderRoot).not.toBeNull()
+    const faderRoot = getReadyTrackFader(container)
 
-    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 20,
-        top: 20,
-        bottom: 220,
-        left: 0,
-        right: 20,
-        width: 20,
-        height: 200,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(faderRoot!, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
-    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 })
+    beginFaderDrag(faderRoot)
     rerender(
       <AudioMixerView
         {...props}
@@ -581,77 +509,18 @@ describe('AudioMixerView', () => {
         }
       />,
     )
-    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 20 })
+    fireEvent.pointerMove(faderRoot, { pointerId: 1, clientY: 20 })
 
     expect(handleTrackVolumeChange).not.toHaveBeenCalled()
 
-    fireEvent.pointerUp(faderRoot!, { pointerId: 1, clientY: 20 })
+    fireEvent.pointerUp(faderRoot, { pointerId: 1, clientY: 20 })
     expect(handleTrackVolumeChange).toHaveBeenCalledTimes(1)
   })
 
   it('commits the dragged value when the pointer is cancelled', () => {
     const handleTrackVolumeChange = vi.fn()
-    const { container } = render(
-      <AudioMixerView
-        tracks={[
-          {
-            id: 'track-1',
-            name: 'A1',
-            kind: 'audio',
-            muted: false,
-            solo: false,
-            volume: 0,
-            itemIds: ['item-1'],
-          },
-        ]}
-        perTrackLevels={new Map()}
-        masterEstimate={{
-          left: 0,
-          right: 0,
-          unresolvedSourceCount: 0,
-          resolvedSourceCount: 0,
-        }}
-        isPlaying
-        onTrackVolumeChange={handleTrackVolumeChange}
-        onTrackMuteToggle={() => undefined}
-        onTrackSoloToggle={() => undefined}
-        masterVolumeDb={0}
-        masterMuted={false}
-        onMasterVolumeChange={() => undefined}
-        onMasterMuteToggle={() => undefined}
-      />,
-    )
-
-    const faderRoot = container.querySelector(
-      '[data-track-id="track-1"][data-fader-root="true"]',
-    ) as HTMLDivElement | null
-    expect(faderRoot).not.toBeNull()
-
-    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 20,
-        top: 20,
-        bottom: 220,
-        left: 0,
-        right: 20,
-        width: 20,
-        height: 200,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(faderRoot!, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
-    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 })
-    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 43.5 })
-    fireEvent.pointerCancel(faderRoot!, { pointerId: 1, clientY: 43.5 })
+    const { faderRoot } = renderDraggedTrackFader(handleTrackVolumeChange)
+    fireEvent.pointerCancel(faderRoot, { pointerId: 1, clientY: 43.5 })
 
     expect(handleTrackVolumeChange).toHaveBeenCalledTimes(1)
     expect(handleTrackVolumeChange.mock.calls[0]?.[1]).toBeGreaterThan(-10)
@@ -659,66 +528,7 @@ describe('AudioMixerView', () => {
 
   it('commits the dragged value when the mixer unmounts mid-drag', () => {
     const handleTrackVolumeChange = vi.fn()
-    const { container, unmount } = render(
-      <AudioMixerView
-        tracks={[
-          {
-            id: 'track-1',
-            name: 'A1',
-            kind: 'audio',
-            muted: false,
-            solo: false,
-            volume: 0,
-            itemIds: ['item-1'],
-          },
-        ]}
-        perTrackLevels={new Map()}
-        masterEstimate={{
-          left: 0,
-          right: 0,
-          unresolvedSourceCount: 0,
-          resolvedSourceCount: 0,
-        }}
-        isPlaying
-        onTrackVolumeChange={handleTrackVolumeChange}
-        onTrackMuteToggle={() => undefined}
-        onTrackSoloToggle={() => undefined}
-        masterVolumeDb={0}
-        masterMuted={false}
-        onMasterVolumeChange={() => undefined}
-        onMasterMuteToggle={() => undefined}
-      />,
-    )
-
-    const faderRoot = container.querySelector(
-      '[data-track-id="track-1"][data-fader-root="true"]',
-    ) as HTMLDivElement | null
-    expect(faderRoot).not.toBeNull()
-
-    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
-      value: () => ({
-        x: 0,
-        y: 20,
-        top: 20,
-        bottom: 220,
-        left: 0,
-        right: 20,
-        width: 20,
-        height: 200,
-        toJSON: () => ({}),
-      }),
-    })
-    Object.defineProperty(faderRoot!, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
-    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 })
-    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 43.5 })
+    const { unmount } = renderDraggedTrackFader(handleTrackVolumeChange)
     unmount()
 
     expect(handleTrackVolumeChange).toHaveBeenCalledTimes(1)

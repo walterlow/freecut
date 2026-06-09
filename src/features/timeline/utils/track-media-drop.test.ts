@@ -1,25 +1,10 @@
 import { describe, expect, it } from 'vite-plus/test'
+import { makeTwoVideoTwoAudioTimelineTracks } from '@/features/timeline/test-helpers'
 import { createDefaultClassicTracks } from './classic-tracks'
 import {
   buildGhostPreviewsFromTrackMediaDropPlan,
   planTrackMediaDropPlacements,
 } from './track-media-drop'
-
-function makeTrack(params: { id: string; name: string; kind: 'video' | 'audio'; order: number }) {
-  return {
-    id: params.id,
-    name: params.name,
-    kind: params.kind,
-    order: params.order,
-    height: 80,
-    locked: false,
-    visible: true,
-    muted: false,
-    solo: false,
-    volume: 0,
-    items: [],
-  }
-}
 
 describe('planTrackMediaDropPlacements', () => {
   it('plans linked video drops onto both video and audio tracks', () => {
@@ -49,12 +34,7 @@ describe('planTrackMediaDropPlacements', () => {
   })
 
   it('maps linked video dropped on V2 to A2', () => {
-    const tracks = [
-      makeTrack({ id: 'v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'v2', name: 'V2', kind: 'video', order: 1 }),
-      makeTrack({ id: 'a1', name: 'A1', kind: 'audio', order: 2 }),
-      makeTrack({ id: 'a2', name: 'A2', kind: 'audio', order: 3 }),
-    ]
+    const tracks = makeTwoVideoTwoAudioTimelineTracks()
 
     const result = planTrackMediaDropPlacements({
       entries: [
@@ -79,12 +59,7 @@ describe('planTrackMediaDropPlacements', () => {
   })
 
   it('routes linked video dropped on an audio track to the matching video/audio pair', () => {
-    const tracks = [
-      makeTrack({ id: 'v1', name: 'V1', kind: 'video', order: 0 }),
-      makeTrack({ id: 'v2', name: 'V2', kind: 'video', order: 1 }),
-      makeTrack({ id: 'a1', name: 'A1', kind: 'audio', order: 2 }),
-      makeTrack({ id: 'a2', name: 'A2', kind: 'audio', order: 3 }),
-    ]
+    const tracks = makeTwoVideoTwoAudioTimelineTracks()
 
     const result = planTrackMediaDropPlacements({
       entries: [

@@ -85,6 +85,15 @@ function makeTrack(
   }
 }
 
+function closeGapAndExpectVideo2From(expectedFrom: number) {
+  closeGapAtPosition('video-track', 75)
+
+  const items = useItemsStore.getState().items
+  expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: expectedFrom })
+
+  return items
+}
+
 describe('linked timeline items', () => {
   beforeEach(() => {
     useTimelineCommandStore.getState().clearHistory()
@@ -442,10 +451,7 @@ describe('linked timeline items', () => {
       }),
     ])
 
-    closeGapAtPosition('video-track', 75)
-
-    const items = useItemsStore.getState().items
-    expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: 60 })
+    const items = closeGapAndExpectVideo2From(60)
     expect(items.find((item) => item.id === 'audio-2')).toMatchObject({ from: 60 })
   })
 
@@ -475,10 +481,7 @@ describe('linked timeline items', () => {
       }),
     ])
 
-    closeGapAtPosition('video-track', 75)
-
-    const items = useItemsStore.getState().items
-    expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: 60 })
+    const items = closeGapAndExpectVideo2From(60)
     expect(items.find((item) => item.id === 'audio-2')).toMatchObject({ from: 60 })
   })
 
@@ -621,11 +624,7 @@ describe('linked timeline items', () => {
       }),
     ])
 
-    closeGapAtPosition('video-track', 75)
-
-    const items = useItemsStore.getState().items
-    // video-2 shifted from 100 to 50
-    expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: 50 })
+    const items = closeGapAndExpectVideo2From(50)
     // solo-audio at 40-70 is NOT shifted (from 40 < gapEnd 100), but would it be
     // overlapped? video-2 moves to 50-110 on video-track, solo-audio is on audio-track
     // -> different track, no overlap, should survive

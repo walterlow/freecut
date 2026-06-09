@@ -329,6 +329,25 @@ function makeMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
   }
 }
 
+function renderListMediaThumbnail(media: MediaMetadata = makeMedia()) {
+  const { container } = render(<ListMediaCard media={media} />)
+  const thumbnail = container.querySelector('.w-12.h-9') as HTMLDivElement
+  expect(thumbnail).toBeTruthy()
+  vi.spyOn(thumbnail, 'getBoundingClientRect').mockReturnValue({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    bottom: 36,
+    right: 100,
+    width: 100,
+    height: 36,
+    toJSON: () => ({}),
+  })
+
+  return { container, thumbnail }
+}
+
 describe('MediaCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -628,21 +647,7 @@ describe('MediaCard', () => {
   })
 
   it('pauses timeline playback and updates skim preview while hovering a video thumbnail', () => {
-    const { container } = render(<ListMediaCard media={makeMedia()} />)
-
-    const thumbnail = container.querySelector('.w-12.h-9') as HTMLDivElement
-    expect(thumbnail).toBeTruthy()
-    vi.spyOn(thumbnail, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      bottom: 36,
-      right: 100,
-      width: 100,
-      height: 36,
-      toJSON: () => ({}),
-    })
+    const { thumbnail } = renderListMediaThumbnail()
 
     fireEvent.pointerEnter(thumbnail, {
       clientX: 20,
@@ -672,21 +677,7 @@ describe('MediaCard', () => {
       fps: 0,
       codec: 'pcm',
     })
-    const { container } = render(<ListMediaCard media={media} />)
-
-    const thumbnail = container.querySelector('.w-12.h-9') as HTMLDivElement
-    expect(thumbnail).toBeTruthy()
-    vi.spyOn(thumbnail, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      bottom: 36,
-      right: 100,
-      width: 100,
-      height: 36,
-      toJSON: () => ({}),
-    })
+    const { thumbnail } = renderListMediaThumbnail(media)
 
     fireEvent.pointerEnter(thumbnail, {
       clientX: 50,
@@ -708,21 +699,7 @@ describe('MediaCard', () => {
   })
 
   it('keeps the skim indicator inside the right edge', () => {
-    const { container } = render(<ListMediaCard media={makeMedia()} />)
-
-    const thumbnail = container.querySelector('.w-12.h-9') as HTMLDivElement
-    expect(thumbnail).toBeTruthy()
-    vi.spyOn(thumbnail, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      bottom: 36,
-      right: 100,
-      width: 100,
-      height: 36,
-      toJSON: () => ({}),
-    })
+    const { container, thumbnail } = renderListMediaThumbnail()
 
     fireEvent.pointerEnter(thumbnail, {
       clientX: 100,

@@ -48,11 +48,8 @@ import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/tim
 import { useMaskEditorStore } from '@/features/editor/deps/preview'
 import type { VisualEffect, GpuEffect } from '@/types/effects'
 import { EFFECT_PRESETS } from '@/types/effects'
-import {
-  getGpuCategoriesWithEffects,
-  getGpuEffectDefaultParams,
-} from '@/infrastructure/gpu-effects'
-import { useEffectPreviews } from '@/features/editor/deps/effects-contract'
+import { getGpuEffectDefaultParams } from '@/infrastructure/gpu-effects'
+import { useGpuEffectPreviewData } from '@/features/editor/deps/effects-contract'
 import { createLogger } from '@/shared/logging/logger'
 import { useSettingsStore } from '@/features/editor/deps/settings'
 import { AiPanel } from './ai-panel'
@@ -543,20 +540,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     [handleAddAdjustmentLayer],
   )
 
-  // GPU effect categories and preview thumbnails (static data, memoize once)
-  const gpuCategories = useMemo(() => getGpuCategoriesWithEffects(), [])
-  const allEffectEntries = useMemo(
-    () =>
-      gpuCategories.flatMap(({ effects: catEffects }) =>
-        catEffects.map((def) => ({ id: def.id, def })),
-      ),
-    [gpuCategories],
-  )
-  const presetIds = useMemo(() => EFFECT_PRESETS.map((p) => p.id), [])
-  const { previews: effectPreviews, trigger: triggerPreviews } = useEffectPreviews(
-    allEffectEntries,
-    presetIds,
-  )
+  const { gpuCategories, effectPreviews, triggerPreviews } = useGpuEffectPreviewData()
   const textTemplatesByLayout = useMemo(() => {
     const grouped = {
       single: [] as TextStylePreset[],

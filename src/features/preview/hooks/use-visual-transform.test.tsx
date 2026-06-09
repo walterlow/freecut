@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vite-plus/test'
 import { createJSONStorage } from 'zustand/middleware'
 import { usePlaybackStore } from '@/shared/state/playback'
-import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
+import { resetPlaybackPreviewState } from '@/shared/state/playback-preview-test-helpers'
 import { useTimelineStore } from '@/features/preview/deps/timeline-store'
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store'
 import { useVisualTransforms } from './use-visual-transform'
@@ -109,28 +109,7 @@ function resetStores() {
     }
   }
 
-  usePlaybackStore.setState({
-    currentFrame: 10,
-    currentFrameEpoch: 0,
-    isPlaying: false,
-    playbackRate: 1,
-    loop: false,
-    volume: 1,
-    muted: false,
-    zoom: -1,
-    previewFrame: null,
-    previewFrameEpoch: 0,
-    frameUpdateEpoch: 0,
-    previewItemId: null,
-    useProxy: true,
-    previewQuality: 1,
-  })
-  usePreviewBridgeStore.setState({
-    displayedFrame: null,
-    captureFrame: null,
-    captureFrameImageData: null,
-    captureCanvasSource: null,
-  })
+  resetPlaybackPreviewState(10)
 
   useTimelineStore.setState({
     keyframes: [

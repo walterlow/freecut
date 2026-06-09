@@ -1,115 +1,166 @@
 import { describe, expect, it } from 'vite-plus/test'
 import type { ProjectTimeline } from '@/types/project'
+import type { BundleProject } from '../types/bundle'
 import { convertTimelineForBundle, restoreTimelineFromBundle } from './bundle-timeline'
+
+type BundleTimeline = NonNullable<BundleProject['timeline']>
+
+function makeTrack(): ProjectTimeline['tracks'][number] {
+  return {
+    id: 'track-1',
+    name: 'V1',
+    height: 80,
+    locked: false,
+    visible: true,
+    muted: false,
+    solo: false,
+    order: 0,
+  }
+}
+
+function makeTransition(): NonNullable<ProjectTimeline['transitions']>[number] {
+  return {
+    id: 'transition-1',
+    type: 'crossfade',
+    leftClipId: 'item-1',
+    rightClipId: 'item-2',
+    trackId: 'track-1',
+    durationInFrames: 18,
+    presentation: 'wipe',
+    timing: 'cubic-bezier',
+    direction: 'from-right',
+    alignment: 0.75,
+    bezierPoints: { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9 },
+    presetId: 'preset-1',
+    properties: { feather: 0.4 },
+    createdAt: 100,
+    lastModifiedAt: 200,
+  }
+}
+
+function makeTimelineKeyframes(): NonNullable<ProjectTimeline['keyframes']> {
+  return [
+    {
+      itemId: 'item-1',
+      properties: [
+        {
+          property: 'x',
+          keyframes: [{ id: 'keyframe-1', frame: 0, value: 0, easing: 'linear' }],
+        },
+      ],
+    },
+  ]
+}
+
+function makeMarkers(): NonNullable<ProjectTimeline['markers']> {
+  return [{ id: 'marker-1', frame: 12, color: '#fff000', label: 'Cut' }]
+}
+
+function makeCompositionTransition(): NonNullable<ProjectTimeline['transitions']>[number] {
+  return {
+    id: 'comp-transition-1',
+    type: 'crossfade',
+    leftClipId: 'comp-item-1',
+    rightClipId: 'comp-item-2',
+    trackId: 'track-1',
+    durationInFrames: 12,
+    presentation: 'fade',
+    timing: 'linear',
+  }
+}
+
+function makeProjectComposition(): NonNullable<ProjectTimeline['compositions']>[number] {
+  return {
+    id: 'composition-1',
+    name: 'Comp 1',
+    items: [
+      {
+        id: 'comp-item-1',
+        trackId: 'track-1',
+        from: 10,
+        durationInFrames: 45,
+        label: 'Comp Clip',
+        type: 'video',
+        mediaId: 'media-2',
+        src: 'blob:comp-clip',
+        thumbnailUrl: 'blob:comp-thumb',
+      },
+    ],
+    tracks: [makeTrack()],
+    transitions: [makeCompositionTransition()],
+    fps: 30,
+    width: 1920,
+    height: 1080,
+    durationInFrames: 90,
+  }
+}
+
+function makeBundleComposition(): NonNullable<BundleTimeline['compositions']>[number] {
+  return {
+    ...makeProjectComposition(),
+    items: [
+      {
+        id: 'comp-item-1',
+        trackId: 'track-1',
+        from: 10,
+        durationInFrames: 45,
+        label: 'Comp Clip',
+        type: 'video',
+        mediaRef: 'original-media-2',
+      },
+    ],
+  }
+}
+
+function makeProjectTimelineFixture(): ProjectTimeline {
+  return {
+    tracks: [makeTrack()],
+    items: [
+      {
+        id: 'item-1',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 90,
+        label: 'clip-1',
+        type: 'video',
+        mediaId: 'media-1',
+        src: 'blob:clip-1',
+        thumbnailUrl: 'blob:thumb-1',
+      },
+    ],
+    scrollPosition: 144,
+    markers: makeMarkers(),
+    transitions: [makeTransition()],
+    keyframes: makeTimelineKeyframes(),
+    compositions: [makeProjectComposition()],
+  }
+}
+
+function makeBundleTimelineFixture(): BundleTimeline {
+  return {
+    tracks: [makeTrack()],
+    items: [
+      {
+        id: 'item-1',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 90,
+        label: 'clip-1',
+        type: 'video',
+        mediaRef: 'original-media-1',
+      },
+    ],
+    scrollPosition: 144,
+    markers: makeMarkers(),
+    transitions: [makeTransition()],
+    keyframes: makeTimelineKeyframes(),
+    compositions: [makeBundleComposition()],
+  }
+}
 
 describe('bundle-timeline', () => {
   it('keeps transition metadata when converting timeline data for export', () => {
-    const timeline: ProjectTimeline = {
-      tracks: [
-        {
-          id: 'track-1',
-          name: 'V1',
-          height: 80,
-          locked: false,
-          visible: true,
-          muted: false,
-          solo: false,
-          order: 0,
-        },
-      ],
-      items: [
-        {
-          id: 'item-1',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          label: 'clip-1',
-          type: 'video',
-          mediaId: 'media-1',
-          src: 'blob:clip-1',
-          thumbnailUrl: 'blob:thumb-1',
-        },
-      ],
-      scrollPosition: 144,
-      markers: [{ id: 'marker-1', frame: 12, color: '#fff000', label: 'Cut' }],
-      transitions: [
-        {
-          id: 'transition-1',
-          type: 'crossfade',
-          leftClipId: 'item-1',
-          rightClipId: 'item-2',
-          trackId: 'track-1',
-          durationInFrames: 18,
-          presentation: 'wipe',
-          timing: 'cubic-bezier',
-          direction: 'from-right',
-          alignment: 0.75,
-          bezierPoints: { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9 },
-          presetId: 'preset-1',
-          properties: { feather: 0.4 },
-          createdAt: 100,
-          lastModifiedAt: 200,
-        },
-      ],
-      keyframes: [
-        {
-          itemId: 'item-1',
-          properties: [
-            {
-              property: 'x',
-              keyframes: [{ id: 'keyframe-1', frame: 0, value: 0, easing: 'linear' }],
-            },
-          ],
-        },
-      ],
-      compositions: [
-        {
-          id: 'composition-1',
-          name: 'Comp 1',
-          items: [
-            {
-              id: 'comp-item-1',
-              trackId: 'track-1',
-              from: 10,
-              durationInFrames: 45,
-              label: 'Comp Clip',
-              type: 'video',
-              mediaId: 'media-2',
-              src: 'blob:comp-clip',
-              thumbnailUrl: 'blob:comp-thumb',
-            },
-          ],
-          tracks: [
-            {
-              id: 'track-1',
-              name: 'V1',
-              height: 80,
-              locked: false,
-              visible: true,
-              muted: false,
-              solo: false,
-              order: 0,
-            },
-          ],
-          transitions: [
-            {
-              id: 'comp-transition-1',
-              type: 'crossfade',
-              leftClipId: 'comp-item-1',
-              rightClipId: 'comp-item-2',
-              trackId: 'track-1',
-              durationInFrames: 12,
-              presentation: 'fade',
-              timing: 'linear',
-            },
-          ],
-          fps: 30,
-          width: 1920,
-          height: 1080,
-          durationInFrames: 90,
-        },
-      ],
-    }
+    const timeline = makeProjectTimelineFixture()
 
     const bundleTimeline = convertTimelineForBundle(timeline)
 
@@ -129,108 +180,7 @@ describe('bundle-timeline', () => {
 
   it('restores bundle timelines without dropping transitions or timeline state', () => {
     const restored = restoreTimelineFromBundle(
-      {
-        tracks: [
-          {
-            id: 'track-1',
-            name: 'V1',
-            height: 80,
-            locked: false,
-            visible: true,
-            muted: false,
-            solo: false,
-            order: 0,
-          },
-        ],
-        items: [
-          {
-            id: 'item-1',
-            trackId: 'track-1',
-            from: 0,
-            durationInFrames: 90,
-            label: 'clip-1',
-            type: 'video',
-            mediaRef: 'original-media-1',
-          },
-        ],
-        scrollPosition: 144,
-        markers: [{ id: 'marker-1', frame: 12, color: '#fff000', label: 'Cut' }],
-        transitions: [
-          {
-            id: 'transition-1',
-            type: 'crossfade',
-            leftClipId: 'item-1',
-            rightClipId: 'item-2',
-            trackId: 'track-1',
-            durationInFrames: 18,
-            presentation: 'wipe',
-            timing: 'cubic-bezier',
-            direction: 'from-right',
-            alignment: 0.75,
-            bezierPoints: { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9 },
-            presetId: 'preset-1',
-            properties: { feather: 0.4 },
-            createdAt: 100,
-            lastModifiedAt: 200,
-          },
-        ],
-        keyframes: [
-          {
-            itemId: 'item-1',
-            properties: [
-              {
-                property: 'x',
-                keyframes: [{ id: 'keyframe-1', frame: 0, value: 0, easing: 'linear' }],
-              },
-            ],
-          },
-        ],
-        compositions: [
-          {
-            id: 'composition-1',
-            name: 'Comp 1',
-            items: [
-              {
-                id: 'comp-item-1',
-                trackId: 'track-1',
-                from: 10,
-                durationInFrames: 45,
-                label: 'Comp Clip',
-                type: 'video',
-                mediaRef: 'original-media-2',
-              },
-            ],
-            tracks: [
-              {
-                id: 'track-1',
-                name: 'V1',
-                height: 80,
-                locked: false,
-                visible: true,
-                muted: false,
-                solo: false,
-                order: 0,
-              },
-            ],
-            transitions: [
-              {
-                id: 'comp-transition-1',
-                type: 'crossfade',
-                leftClipId: 'comp-item-1',
-                rightClipId: 'comp-item-2',
-                trackId: 'track-1',
-                durationInFrames: 12,
-                presentation: 'fade',
-                timing: 'linear',
-              },
-            ],
-            fps: 30,
-            width: 1920,
-            height: 1080,
-            durationInFrames: 90,
-          },
-        ],
-      },
+      makeBundleTimelineFixture(),
       new Map([
         ['original-media-1', 'imported-media-1'],
         ['original-media-2', 'imported-media-2'],
@@ -239,29 +189,9 @@ describe('bundle-timeline', () => {
 
     expect(restored).toMatchObject({
       scrollPosition: 144,
-      markers: [{ id: 'marker-1', frame: 12, color: '#fff000', label: 'Cut' }],
-      transitions: [
-        {
-          id: 'transition-1',
-          alignment: 0.75,
-          bezierPoints: { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9 },
-          presetId: 'preset-1',
-          properties: { feather: 0.4 },
-          createdAt: 100,
-          lastModifiedAt: 200,
-        },
-      ],
-      keyframes: [
-        {
-          itemId: 'item-1',
-          properties: [
-            {
-              property: 'x',
-              keyframes: [{ id: 'keyframe-1', frame: 0, value: 0, easing: 'linear' }],
-            },
-          ],
-        },
-      ],
+      markers: makeMarkers(),
+      transitions: [makeTransition()],
+      keyframes: makeTimelineKeyframes(),
       compositions: [
         {
           id: 'composition-1',

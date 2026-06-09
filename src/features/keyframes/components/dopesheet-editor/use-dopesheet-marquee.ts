@@ -9,7 +9,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { KEYFRAME_MARQUEE_THRESHOLD, type KeyframeMarqueeRect } from '../keyframe-marquee'
+import { resolveMarqueeSelection } from '../marquee-selection'
 import { MARQUEE_SCROLL_EDGE_PX, MARQUEE_SCROLL_MAX_SPEED } from './dopesheet-constants'
+import { addWindowPointerListeners } from './dopesheet-pointer-listeners'
 import type { MarqueeMode, MarqueeState } from './dopesheet-types'
 
 interface KeyframePoint {
@@ -102,21 +104,7 @@ export function useDopesheetMarquee({
         }
       }
 
-      let nextSelection = new Set<string>()
-      if (state.mode === 'replace') {
-        nextSelection = hitIds
-      } else if (state.mode === 'add') {
-        nextSelection = new Set([...state.baseSelection, ...hitIds])
-      } else {
-        nextSelection = new Set(state.baseSelection)
-        for (const keyframeId of hitIds) {
-          if (nextSelection.has(keyframeId)) {
-            nextSelection.delete(keyframeId)
-          } else {
-            nextSelection.add(keyframeId)
-          }
-        }
-      }
+      const nextSelection = resolveMarqueeSelection(state.mode, state.baseSelection, hitIds)
 
       onSelectionChangeRef.current?.(nextSelection)
       setMarqueeRect({
@@ -188,12 +176,7 @@ export function useDopesheetMarquee({
       setMarqueeRect(null)
     }
 
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-    }
+    return addWindowPointerListeners(handlePointerMove, handlePointerUp)
   }, [getTimelineXFromClientX, getContentYFromClientY, updateSelectionFromMarquee, scrollAreaRef])
 
   return {

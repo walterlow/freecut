@@ -27,16 +27,6 @@ const proxyMocks = vi.hoisted(() => ({
   clearProxyKey: vi.fn(),
 }))
 
-const backgroundMediaWorkMocks = vi.hoisted(() => ({
-  enqueueBackgroundMediaWork: vi.fn((run: () => unknown) => {
-    const result = run()
-    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-      void (result as PromiseLike<unknown>)
-    }
-    return vi.fn()
-  }),
-}))
-
 const gifFrameCacheMocks = vi.hoisted(() => ({
   getGifFrames: vi.fn(),
   clearMedia: vi.fn(),
@@ -85,7 +75,11 @@ vi.mock('./proxy-service', () => ({
   proxyService: proxyMocks,
 }))
 
-vi.mock('./background-media-work', () => backgroundMediaWorkMocks)
+vi.mock('./background-media-work', async () => {
+  const { createBackgroundMediaWorkMocks } =
+    await import('../test-utils/background-media-work-test-mocks')
+  return createBackgroundMediaWorkMocks(vi)
+})
 
 vi.mock('../utils/thumbnail-generator', () => ({
   generateThumbnail: thumbnailMocks.generateThumbnail,

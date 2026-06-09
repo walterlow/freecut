@@ -107,6 +107,105 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
   } as AudioItem
 }
 
+function makeLinkedTransitionComposition(params: {
+  includeVideoTransition?: boolean
+  includeAudioTransition?: boolean
+  legacyLinkedPair?: boolean
+}): CompositionInputProps {
+  const leftVideo = makeVideoItem({
+    id: 'video-1',
+    linkedGroupId: params.legacyLinkedPair ? undefined : 'group-1',
+    trackId: 'track-v1',
+    from: 0,
+    durationInFrames: 30,
+    sourceStart: 0,
+    sourceEnd: 35,
+    sourceDuration: 120,
+  })
+  const leftAudio = makeAudioItem({
+    id: 'audio-1',
+    linkedGroupId: params.legacyLinkedPair ? undefined : 'group-1',
+    trackId: 'track-a1',
+    from: 0,
+    durationInFrames: 30,
+    sourceStart: 0,
+    sourceEnd: 35,
+    sourceDuration: 120,
+  })
+  const rightVideo = makeVideoItem({
+    id: 'video-2',
+    linkedGroupId: params.legacyLinkedPair ? undefined : 'group-2',
+    trackId: 'track-v1',
+    from: 30,
+    durationInFrames: 30,
+    mediaId: 'media-2',
+    src: 'blob:video-2',
+    sourceStart: 5,
+    sourceEnd: 35,
+    sourceDuration: 120,
+  })
+  const rightAudio = makeAudioItem({
+    id: 'audio-2',
+    linkedGroupId: params.legacyLinkedPair ? undefined : 'group-2',
+    trackId: 'track-a1',
+    from: 30,
+    durationInFrames: 30,
+    mediaId: 'media-2',
+    src: 'blob:audio-2',
+    sourceStart: 5,
+    sourceEnd: 35,
+    sourceDuration: 120,
+  })
+
+  const transitions: CompositionInputProps['transitions'] = []
+  if (params.includeVideoTransition) {
+    transitions.push({
+      id: 'video-transition-1',
+      type: 'crossfade',
+      leftClipId: 'video-1',
+      rightClipId: 'video-2',
+      trackId: 'track-v1',
+      durationInFrames: 10,
+      timing: 'linear',
+      presentation: 'fade',
+    })
+  }
+  if (params.includeAudioTransition) {
+    transitions.push({
+      id: 'audio-transition-1',
+      type: 'crossfade',
+      leftClipId: 'audio-1',
+      rightClipId: 'audio-2',
+      trackId: 'track-a1',
+      durationInFrames: 10,
+      timing: 'linear',
+      presentation: 'fade',
+    })
+  }
+
+  return {
+    fps: 30,
+    durationInFrames: 60,
+    width: 1920,
+    height: 1080,
+    tracks: [
+      makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
+      makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
+    ],
+    transitions,
+    keyframes: [],
+  }
+}
+
+function expectLinkedAudioSegments(composition: CompositionInputProps) {
+  const segments = extractAudioSegments(composition, composition.fps)
+
+  expect(segments).toHaveLength(2)
+  expect(segments.every((segment) => segment.type === 'audio')).toBe(true)
+
+  return segments
+}
+
 describe('extractAudioSegments', () => {
   beforeEach(() => {
     useCompositionsStore.setState({
@@ -194,73 +293,7 @@ describe('extractAudioSegments', () => {
   })
 
   it('expands linked audio companions around a cut-centered transition', () => {
-    const leftVideo = makeVideoItem({
-      id: 'video-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-v1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const leftAudio = makeAudioItem({
-      id: 'audio-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-a1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightVideo = makeVideoItem({
-      id: 'video-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-v1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:video-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightAudio = makeAudioItem({
-      id: 'audio-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-a1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:audio-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const composition: CompositionInputProps = {
-      fps: 30,
-      durationInFrames: 60,
-      width: 1920,
-      height: 1080,
-      tracks: [
-        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
-        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
-      ],
-      transitions: [
-        {
-          id: 'transition-1',
-          type: 'crossfade',
-          leftClipId: 'video-1',
-          rightClipId: 'video-2',
-          trackId: 'track-v1',
-          durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
-        },
-      ],
-      keyframes: [],
-    }
+    const composition = makeLinkedTransitionComposition({ includeVideoTransition: true })
 
     const segments = extractAudioSegments(composition, composition.fps)
 
@@ -349,235 +382,24 @@ describe('extractAudioSegments', () => {
   })
 
   it('uses only linked audio companions for linked clips with an explicit audio transition', () => {
-    const leftVideo = makeVideoItem({
-      id: 'video-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-v1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const leftAudio = makeAudioItem({
-      id: 'audio-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-a1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightVideo = makeVideoItem({
-      id: 'video-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-v1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:video-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightAudio = makeAudioItem({
-      id: 'audio-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-a1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:audio-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const composition: CompositionInputProps = {
-      fps: 30,
-      durationInFrames: 60,
-      width: 1920,
-      height: 1080,
-      tracks: [
-        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
-        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
-      ],
-      transitions: [
-        {
-          id: 'audio-transition-1',
-          type: 'crossfade',
-          leftClipId: 'audio-1',
-          rightClipId: 'audio-2',
-          trackId: 'track-a1',
-          durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
-        },
-      ],
-      keyframes: [],
-    }
+    const composition = makeLinkedTransitionComposition({ includeAudioTransition: true })
 
-    const segments = extractAudioSegments(composition, composition.fps)
-
-    expect(segments).toHaveLength(2)
-    expect(segments.every((segment) => segment.type === 'audio')).toBe(true)
+    const segments = expectLinkedAudioSegments(composition)
     expect(segments.map((segment) => segment.itemId)).toEqual(['audio-1', 'audio-2'])
   })
 
   it('does not duplicate linked audio when video and audio transitions coexist', () => {
-    const leftVideo = makeVideoItem({
-      id: 'video-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-v1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
+    const composition = makeLinkedTransitionComposition({
+      includeVideoTransition: true,
+      includeAudioTransition: true,
     })
-    const leftAudio = makeAudioItem({
-      id: 'audio-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-a1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightVideo = makeVideoItem({
-      id: 'video-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-v1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:video-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightAudio = makeAudioItem({
-      id: 'audio-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-a1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:audio-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const composition: CompositionInputProps = {
-      fps: 30,
-      durationInFrames: 60,
-      width: 1920,
-      height: 1080,
-      tracks: [
-        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
-        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
-      ],
-      transitions: [
-        {
-          id: 'video-transition-1',
-          type: 'crossfade',
-          leftClipId: 'video-1',
-          rightClipId: 'video-2',
-          trackId: 'track-v1',
-          durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
-        },
-        {
-          id: 'audio-transition-1',
-          type: 'crossfade',
-          leftClipId: 'audio-1',
-          rightClipId: 'audio-2',
-          trackId: 'track-a1',
-          durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
-        },
-      ],
-      keyframes: [],
-    }
 
-    const segments = extractAudioSegments(composition, composition.fps)
-
-    expect(segments).toHaveLength(2)
-    expect(segments.every((segment) => segment.type === 'audio')).toBe(true)
+    const segments = expectLinkedAudioSegments(composition)
     expect(segments.map((segment) => segment.itemId)).toEqual(['audio-1', 'audio-2'])
   })
 
   it('crossfades linked audio companions during export without doubling them', async () => {
-    const leftVideo = makeVideoItem({
-      id: 'video-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-v1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const leftAudio = makeAudioItem({
-      id: 'audio-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-a1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightVideo = makeVideoItem({
-      id: 'video-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-v1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:video-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightAudio = makeAudioItem({
-      id: 'audio-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-a1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:audio-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const composition: CompositionInputProps = {
-      fps: 30,
-      durationInFrames: 60,
-      width: 1920,
-      height: 1080,
-      tracks: [
-        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
-        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
-      ],
-      transitions: [
-        {
-          id: 'audio-transition-1',
-          type: 'crossfade',
-          leftClipId: 'audio-1',
-          rightClipId: 'audio-2',
-          trackId: 'track-a1',
-          durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
-        },
-      ],
-      keyframes: [],
-    }
+    const composition = makeLinkedTransitionComposition({ includeAudioTransition: true })
 
     const audio = await processAudio(composition)
 
@@ -595,83 +417,10 @@ describe('extractAudioSegments', () => {
   })
 
   it('does not double linked audio export when video and audio transitions coexist', async () => {
-    const leftVideo = makeVideoItem({
-      id: 'video-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-v1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
+    const composition = makeLinkedTransitionComposition({
+      includeVideoTransition: true,
+      includeAudioTransition: true,
     })
-    const leftAudio = makeAudioItem({
-      id: 'audio-1',
-      linkedGroupId: 'group-1',
-      trackId: 'track-a1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightVideo = makeVideoItem({
-      id: 'video-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-v1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:video-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const rightAudio = makeAudioItem({
-      id: 'audio-2',
-      linkedGroupId: 'group-2',
-      trackId: 'track-a1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:audio-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-    })
-    const composition: CompositionInputProps = {
-      fps: 30,
-      durationInFrames: 60,
-      width: 1920,
-      height: 1080,
-      tracks: [
-        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
-        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
-      ],
-      transitions: [
-        {
-          id: 'video-transition-1',
-          type: 'crossfade',
-          leftClipId: 'video-1',
-          rightClipId: 'video-2',
-          trackId: 'track-v1',
-          durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
-        },
-        {
-          id: 'audio-transition-1',
-          type: 'crossfade',
-          leftClipId: 'audio-1',
-          rightClipId: 'audio-2',
-          trackId: 'track-a1',
-          durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
-        },
-      ],
-      keyframes: [],
-    }
 
     const audio = await processAudio(composition)
 
@@ -687,81 +436,12 @@ describe('extractAudioSegments', () => {
   })
 
   it('treats imported legacy synced video/audio pairs as linked during audio export', async () => {
-    const leftVideo = makeVideoItem({
-      id: 'video-1',
-      trackId: 'track-v1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-      linkedGroupId: undefined,
-      originId: undefined,
+    const composition = makeLinkedTransitionComposition({
+      includeAudioTransition: true,
+      legacyLinkedPair: true,
     })
-    const leftAudio = makeAudioItem({
-      id: 'audio-1',
-      trackId: 'track-a1',
-      from: 0,
-      durationInFrames: 30,
-      sourceStart: 0,
-      sourceEnd: 35,
-      sourceDuration: 120,
-      linkedGroupId: undefined,
-      originId: undefined,
-    })
-    const rightVideo = makeVideoItem({
-      id: 'video-2',
-      trackId: 'track-v1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:video-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-      linkedGroupId: undefined,
-      originId: undefined,
-    })
-    const rightAudio = makeAudioItem({
-      id: 'audio-2',
-      trackId: 'track-a1',
-      from: 30,
-      durationInFrames: 30,
-      mediaId: 'media-2',
-      src: 'blob:audio-2',
-      sourceStart: 5,
-      sourceEnd: 35,
-      sourceDuration: 120,
-      linkedGroupId: undefined,
-      originId: undefined,
-    })
-    const composition: CompositionInputProps = {
-      fps: 30,
-      durationInFrames: 60,
-      width: 1920,
-      height: 1080,
-      tracks: [
-        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
-        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
-      ],
-      transitions: [
-        {
-          id: 'audio-transition-1',
-          type: 'crossfade',
-          leftClipId: 'audio-1',
-          rightClipId: 'audio-2',
-          trackId: 'track-a1',
-          durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
-        },
-      ],
-      keyframes: [],
-    }
 
-    const segments = extractAudioSegments(composition, composition.fps)
-    expect(segments).toHaveLength(2)
-    expect(segments.every((segment) => segment.type === 'audio')).toBe(true)
+    expectLinkedAudioSegments(composition)
 
     const audio = await processAudio(composition)
 

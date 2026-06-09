@@ -216,18 +216,10 @@ export class SharedVideoExtractorPool {
     const sourceReady = await this.initSource(src)
     if (!sourceReady) return false
 
-    let laneIndex = this.getAssignedLaneIndex(state, itemId)
-    let laneReady = await this.ensureLaneInitialized(state, laneIndex)
-
-    if (!laneReady && laneIndex !== 0) {
-      laneIndex = 0
-      laneReady = await this.ensureLaneInitialized(state, laneIndex)
-    }
-    if (!laneReady) return false
-
     // Serialize drawFrame calls per lane to prevent concurrent mutable-state corruption
     // inside VideoFrameExtractor (ensureSampleForTimestamp / recoverAndPrime).
-    const lane = state.lanes[laneIndex]!
+    const lane = await this.getInitializedLaneForItem(state, itemId)
+    if (!lane) return false
     const prev = lane.drawLock ?? Promise.resolve()
     const result = prev.then(() => lane.extractor.drawFrame(ctx, timestamp, x, y, width, height))
     lane.drawLock = result.then(
@@ -253,18 +245,8 @@ export class SharedVideoExtractorPool {
       return { success: false, capturedFrame: null, capturedSourceTime: null }
     }
 
-    let laneIndex = this.getAssignedLaneIndex(state, itemId)
-    let laneReady = await this.ensureLaneInitialized(state, laneIndex)
-
-    if (!laneReady && laneIndex !== 0) {
-      laneIndex = 0
-      laneReady = await this.ensureLaneInitialized(state, laneIndex)
-    }
-    if (!laneReady) {
-      return { success: false, capturedFrame: null, capturedSourceTime: null }
-    }
-
-    const lane = state.lanes[laneIndex]!
+    const lane = await this.getInitializedLaneForItem(state, itemId)
+    if (!lane) return { success: false, capturedFrame: null, capturedSourceTime: null }
     const prev = lane.drawLock ?? Promise.resolve()
     const result = prev.then(() =>
       lane.extractor.drawFrameWithCapture(ctx, timestamp, x, y, width, height),
@@ -287,18 +269,8 @@ export class SharedVideoExtractorPool {
       return { success: false, frame: null, sourceTime: null }
     }
 
-    let laneIndex = this.getAssignedLaneIndex(state, itemId)
-    let laneReady = await this.ensureLaneInitialized(state, laneIndex)
-
-    if (!laneReady && laneIndex !== 0) {
-      laneIndex = 0
-      laneReady = await this.ensureLaneInitialized(state, laneIndex)
-    }
-    if (!laneReady) {
-      return { success: false, frame: null, sourceTime: null }
-    }
-
-    const lane = state.lanes[laneIndex]!
+    const lane = await this.getInitializedLaneForItem(state, itemId)
+    if (!lane) return { success: false, frame: null, sourceTime: null }
     const prev = lane.drawLock ?? Promise.resolve()
     const result = prev.then(() => lane.extractor.captureFrame(timestamp))
     lane.drawLock = result.then(
@@ -415,6 +387,21 @@ export class SharedVideoExtractorPool {
       })
 
     return lane.initPromise
+  }
+
+  private async getInitializedLaneForItem(
+    state: SourceState,
+    itemId: string,
+  ): Promise<SourceLane | null> {
+    let laneIndex = this.getAssignedLaneIndex(state, itemId)
+    let laneReady = await this.ensureLaneInitialized(state, laneIndex)
+
+    if (!laneReady && laneIndex !== 0) {
+      laneIndex = 0
+      laneReady = await this.ensureLaneInitialized(state, laneIndex)
+    }
+
+    return laneReady ? (state.lanes[laneIndex] ?? null) : null
   }
 
   private getAssignedLaneIndex(state: SourceState, itemId: string): number {

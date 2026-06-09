@@ -56,6 +56,39 @@ beforeEach(() => {
   })
 })
 
+type MockMediaRecord = {
+  id: string
+  fileName: string
+  storageType?: string
+}
+
+async function expectResolveToMarkMediaBroken({
+  media,
+  error,
+  getMediaTwice = false,
+}: {
+  media: MockMediaRecord
+  error: FileAccessError
+  getMediaTwice?: boolean
+}) {
+  const getMediaMock = mediaLibraryService.getMedia as Mock
+  if (getMediaTwice) {
+    getMediaMock.mockResolvedValueOnce(media).mockResolvedValueOnce(media)
+  } else {
+    getMediaMock.mockResolvedValue(media)
+  }
+  ;(mediaLibraryService.getMediaFile as Mock).mockRejectedValue(error)
+
+  const url = await resolveMediaUrl(media.id)
+
+  expect(url).toBe('')
+  expect(mockMarkMediaBroken).toHaveBeenCalledWith(media.id, {
+    mediaId: media.id,
+    fileName: media.fileName,
+    errorType: error.type,
+  })
+}
+
 describe('resolveMediaUrl', () => {
   it('returns cached blob URL from blobUrlManager', async () => {
     blobUrlManager.acquire('media-1', new Blob(['cached']))
@@ -106,20 +139,13 @@ describe('resolveMediaUrl', () => {
 
   it('marks media broken when handle-backed reads report a missing file', async () => {
     const mockError = new FileAccessError('File not found', 'file_missing')
-    ;(mediaLibraryService.getMedia as Mock).mockResolvedValue({
-      id: 'media-1',
-      fileName: 'moved.mp4',
-      storageType: 'handle',
-    })
-    ;(mediaLibraryService.getMediaFile as Mock).mockRejectedValue(mockError)
-
-    const url = await resolveMediaUrl('media-1')
-
-    expect(url).toBe('')
-    expect(mockMarkMediaBroken).toHaveBeenCalledWith('media-1', {
-      mediaId: 'media-1',
-      fileName: 'moved.mp4',
-      errorType: 'file_missing',
+    await expectResolveToMarkMediaBroken({
+      media: {
+        id: 'media-1',
+        fileName: 'moved.mp4',
+        storageType: 'handle',
+      },
+      error: mockError,
     })
     // No decode attempt — validation short-circuited before getMediaFile.
     expect(mockValidateMediaHandle).not.toHaveBeenCalled()
@@ -127,20 +153,13 @@ describe('resolveMediaUrl', () => {
 
   it('marks media broken with permission_denied when file reads lose permission', async () => {
     const mockError = new FileAccessError('Permission denied', 'permission_denied')
-    ;(mediaLibraryService.getMedia as Mock).mockResolvedValue({
-      id: 'media-1',
-      fileName: 'locked.mp4',
-      storageType: 'handle',
-    })
-    ;(mediaLibraryService.getMediaFile as Mock).mockRejectedValue(mockError)
-
-    const url = await resolveMediaUrl('media-1')
-
-    expect(url).toBe('')
-    expect(mockMarkMediaBroken).toHaveBeenCalledWith('media-1', {
-      mediaId: 'media-1',
-      fileName: 'locked.mp4',
-      errorType: 'permission_denied',
+    await expectResolveToMarkMediaBroken({
+      media: {
+        id: 'media-1',
+        fileName: 'locked.mp4',
+        storageType: 'handle',
+      },
+      error: mockError,
     })
     expect(mockValidateMediaHandle).not.toHaveBeenCalled()
   })
@@ -184,18 +203,10 @@ describe('resolveMediaUrl', () => {
 
   it('marks media broken on FileAccessError (file_missing)', async () => {
     const mockError = new FileAccessError('File not found', 'file_missing')
-    ;(mediaLibraryService.getMedia as Mock)
-      .mockResolvedValueOnce({ id: 'media-1', fileName: 'video.mp4' }) // first call in resolve
-      .mockResolvedValueOnce({ id: 'media-1', fileName: 'video.mp4' }) // second call in catch
-    ;(mediaLibraryService.getMediaFile as Mock).mockRejectedValue(mockError)
-
-    const url = await resolveMediaUrl('media-1')
-
-    expect(url).toBe('')
-    expect(mockMarkMediaBroken).toHaveBeenCalledWith('media-1', {
-      mediaId: 'media-1',
-      fileName: 'video.mp4',
-      errorType: 'file_missing',
+    await expectResolveToMarkMediaBroken({
+      media: { id: 'media-1', fileName: 'video.mp4' },
+      error: mockError,
+      getMediaTwice: true,
     })
   })
 

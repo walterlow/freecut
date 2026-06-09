@@ -1,43 +1,12 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
 import type { TextItem } from '@/types/timeline'
-import type { ItemRenderContext, ItemTransform } from './canvas-item-renderer'
 import { renderItem } from './canvas-item-renderer'
-
-function createMockCtx(): OffscreenCanvasRenderingContext2D {
-  return {
-    save: vi.fn(),
-    restore: vi.fn(),
-    beginPath: vi.fn(),
-    roundRect: vi.fn(),
-    rect: vi.fn(),
-    clip: vi.fn(),
-    fill: vi.fn(),
-    fillRect: vi.fn(),
-    fillText: vi.fn(),
-    strokeText: vi.fn(),
-    measureText: vi.fn((text: string) => ({
-      width: text.length * 10,
-      fontBoundingBoxAscent: 8,
-      fontBoundingBoxDescent: 2,
-    })),
-    translate: vi.fn(),
-    rotate: vi.fn(),
-    scale: vi.fn(),
-    textAlign: 'left',
-    textBaseline: 'alphabetic',
-    font: '',
-    fillStyle: '#000000',
-    strokeStyle: '#000000',
-    lineWidth: 1,
-    lineJoin: 'miter',
-    shadowColor: '',
-    shadowBlur: 0,
-    shadowOffsetX: 0,
-    shadowOffsetY: 0,
-    globalAlpha: 1,
-    globalCompositeOperation: 'source-over',
-  } as unknown as OffscreenCanvasRenderingContext2D
-}
+import {
+  createItemRenderContext,
+  createItemTransform,
+  createMockCanvasContext,
+  createTextMeasureCache,
+} from './canvas-item-renderer-test-helpers'
 
 describe('canvas-item-renderer text backgrounds', () => {
   it('renders rounded text backgrounds during export', async () => {
@@ -66,42 +35,12 @@ describe('canvas-item-renderer text backgrounds', () => {
       },
     }
 
-    const ctx = createMockCtx()
-    const rctx: ItemRenderContext = {
-      fps: 30,
-      canvasSettings: { width: 1280, height: 720, fps: 30 },
-      canvasPool: {} as ItemRenderContext['canvasPool'],
-      textMeasureCache: {
-        measure: vi.fn(
-          (_: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) => {
-            const width = text.length * 10
-            return width + Math.max(0, text.length - 1) * letterSpacing
-          },
-        ),
-      } as unknown as ItemRenderContext['textMeasureCache'],
-      renderMode: 'export',
-      videoExtractors: new Map(),
-      videoElements: new Map(),
-      useMediabunny: new Set(),
-      mediabunnyDisabledItems: new Set(),
-      mediabunnyFailureCountByItem: new Map(),
-      imageElements: new Map(),
-      gifFramesMap: new Map(),
-      keyframesMap: new Map(),
-      adjustmentLayers: [],
-      subCompRenderData: new Map(),
-    }
-    const transform: ItemTransform = {
-      x: 0,
-      y: 0,
+    const ctx = createMockCanvasContext()
+    const rctx = createItemRenderContext({ textMeasureCache: createTextMeasureCache() })
+    const transform = createItemTransform({
       width: 320,
       height: 120,
-      anchorX: 160,
-      anchorY: 60,
-      rotation: 0,
-      opacity: 1,
-      cornerRadius: 0,
-    }
+    })
 
     await renderItem(ctx, item, transform, 0, rctx)
 
@@ -145,42 +84,12 @@ describe('canvas-item-renderer text backgrounds', () => {
       },
     }
 
-    const ctx = createMockCtx()
-    const rctx: ItemRenderContext = {
-      fps: 30,
-      canvasSettings: { width: 1280, height: 720, fps: 30 },
-      canvasPool: {} as ItemRenderContext['canvasPool'],
-      textMeasureCache: {
-        measure: vi.fn(
-          (_: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) => {
-            const width = text.length * 10
-            return width + Math.max(0, text.length - 1) * letterSpacing
-          },
-        ),
-      } as unknown as ItemRenderContext['textMeasureCache'],
-      renderMode: 'export',
-      videoExtractors: new Map(),
-      videoElements: new Map(),
-      useMediabunny: new Set(),
-      mediabunnyDisabledItems: new Set(),
-      mediabunnyFailureCountByItem: new Map(),
-      imageElements: new Map(),
-      gifFramesMap: new Map(),
-      keyframesMap: new Map(),
-      adjustmentLayers: [],
-      subCompRenderData: new Map(),
-    }
-    const transform: ItemTransform = {
-      x: 0,
-      y: 0,
+    const ctx = createMockCanvasContext()
+    const rctx = createItemRenderContext({ textMeasureCache: createTextMeasureCache() })
+    const transform = createItemTransform({
       width: 420,
       height: 180,
-      anchorX: 210,
-      anchorY: 90,
-      rotation: 0,
-      opacity: 1,
-      cornerRadius: 0,
-    }
+    })
 
     await renderItem(ctx, item, transform, 0, rctx)
 

@@ -10,13 +10,26 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { GraphKeyframePoint, GraphPadding, GraphViewport } from './types'
 
-interface GraphDimensions {
+export interface GraphDimensions {
   graphLeft: number
   graphTop: number
   graphWidth: number
   graphHeight: number
   frameRange: number
   valueRange: number
+}
+
+export function getGraphDimensions(
+  viewport: GraphViewport,
+  padding: GraphPadding,
+): GraphDimensions {
+  const graphLeft = padding.left
+  const graphTop = padding.top
+  const graphWidth = viewport.width - padding.left - padding.right
+  const graphHeight = viewport.height - padding.top - padding.bottom
+  const frameRange = viewport.endFrame - viewport.startFrame
+  const valueRange = viewport.maxValue - viewport.minValue
+  return { graphLeft, graphTop, graphWidth, graphHeight, frameRange, valueRange }
 }
 
 interface UseGraphViewportOptions {
@@ -60,13 +73,7 @@ export function useGraphViewport({
   }, [onViewportChange])
 
   const graphDimensions = useMemo<GraphDimensions>(() => {
-    const graphLeft = padding.left
-    const graphTop = padding.top
-    const graphWidth = viewport.width - padding.left - padding.right
-    const graphHeight = viewport.height - padding.top - padding.bottom
-    const frameRange = viewport.endFrame - viewport.startFrame
-    const valueRange = viewport.maxValue - viewport.minValue
-    return { graphLeft, graphTop, graphWidth, graphHeight, frameRange, valueRange }
+    return getGraphDimensions(viewport, padding)
   }, [viewport, padding])
 
   const zoomFocusPoint = useMemo(() => {

@@ -119,6 +119,38 @@ function fitContain(
   }
 }
 
+function createLayoutFrame(
+  items: BentoLayoutItem[],
+  canvasWidth: number,
+  canvasHeight: number,
+  config: LayoutConfig,
+): {
+  result: Map<string, TransformProperties>
+  gap: number
+  padding: number
+  availableWidth: number
+  availableHeight: number
+  canvasCenterX: number
+  canvasCenterY: number
+} | null {
+  const result = new Map<string, TransformProperties>()
+  if (items.length === 0) return null
+
+  const gap = config.gap ?? 0
+  const padding = config.padding ?? 0
+  return {
+    result,
+    gap,
+    padding,
+    availableWidth: canvasWidth - padding * 2,
+    availableHeight: canvasHeight - padding * 2,
+    canvasCenterX: canvasWidth / 2,
+    canvasCenterY: canvasHeight / 2,
+  }
+}
+
+type LayoutFrame = NonNullable<ReturnType<typeof createLayoutFrame>>
+
 // ── Grid layout (shared by auto / row / column / grid) ───────────────────
 
 /**
@@ -131,7 +163,7 @@ export function computeBentoLayout(
   canvasHeight: number,
   options?: BentoLayoutOptions,
 ): Map<string, TransformProperties> {
-  return computeGridLayout(items, canvasWidth, canvasHeight, {
+  return computeLayout(items, canvasWidth, canvasHeight, {
     preset: 'auto',
     gap: options?.gap,
     padding: options?.padding,
@@ -140,15 +172,11 @@ export function computeBentoLayout(
 
 function computeGridLayout(
   items: BentoLayoutItem[],
-  canvasWidth: number,
-  canvasHeight: number,
   config: LayoutConfig,
+  frame: LayoutFrame,
 ): Map<string, TransformProperties> {
-  const result = new Map<string, TransformProperties>()
-  if (items.length === 0) return result
-
-  const gap = config.gap ?? 0
-  const padding = config.padding ?? 0
+  const { result, gap, padding, availableWidth, availableHeight, canvasCenterX, canvasCenterY } =
+    frame
 
   // Determine cols/rows based on preset
   let cols: number
@@ -176,14 +204,8 @@ function computeGridLayout(
     }
   }
 
-  const availableWidth = canvasWidth - padding * 2
-  const availableHeight = canvasHeight - padding * 2
-
   const cellWidth = (availableWidth - gap * (cols - 1)) / cols
   const cellHeight = (availableHeight - gap * (rows - 1)) / rows
-
-  const canvasCenterX = canvasWidth / 2
-  const canvasCenterY = canvasHeight / 2
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]!
@@ -214,21 +236,10 @@ function computeGridLayout(
 
 function computePipLayout(
   items: BentoLayoutItem[],
-  canvasWidth: number,
-  canvasHeight: number,
-  config: LayoutConfig,
+  frame: LayoutFrame,
 ): Map<string, TransformProperties> {
-  const result = new Map<string, TransformProperties>()
-  if (items.length === 0) return result
-
-  const gap = config.gap ?? 0
-  const padding = config.padding ?? 0
-
-  const availableWidth = canvasWidth - padding * 2
-  const availableHeight = canvasHeight - padding * 2
-
-  const canvasCenterX = canvasWidth / 2
-  const canvasCenterY = canvasHeight / 2
+  const { result, gap, padding, availableWidth, availableHeight, canvasCenterX, canvasCenterY } =
+    frame
 
   // First item fills the available area (fit-contain)
   const main = items[0]!
@@ -294,21 +305,10 @@ function computePipLayout(
 
 function computeFocusSidebarLayout(
   items: BentoLayoutItem[],
-  canvasWidth: number,
-  canvasHeight: number,
-  config: LayoutConfig,
+  frame: LayoutFrame,
 ): Map<string, TransformProperties> {
-  const result = new Map<string, TransformProperties>()
-  if (items.length === 0) return result
-
-  const gap = config.gap ?? 0
-  const padding = config.padding ?? 0
-
-  const availableWidth = canvasWidth - padding * 2
-  const availableHeight = canvasHeight - padding * 2
-
-  const canvasCenterX = canvasWidth / 2
-  const canvasCenterY = canvasHeight / 2
+  const { result, gap, padding, availableWidth, availableHeight, canvasCenterX, canvasCenterY } =
+    frame
 
   // Focus area: left 2/3 (minus half gap)
   const focusWidth = ((availableWidth - gap) * 2) / 3
@@ -371,15 +371,18 @@ export function computeLayout(
   canvasHeight: number,
   config: LayoutConfig,
 ): Map<string, TransformProperties> {
+  const frame = createLayoutFrame(items, canvasWidth, canvasHeight, config)
+  if (!frame) return new Map()
+
   switch (config.preset) {
     case 'pip':
-      return computePipLayout(items, canvasWidth, canvasHeight, config)
+      return computePipLayout(items, frame)
     case 'focus-sidebar':
-      return computeFocusSidebarLayout(items, canvasWidth, canvasHeight, config)
+      return computeFocusSidebarLayout(items, frame)
     case 'auto':
     case 'row':
     case 'column':
     case 'grid':
-      return computeGridLayout(items, canvasWidth, canvasHeight, config)
+      return computeGridLayout(items, config, frame)
   }
 }

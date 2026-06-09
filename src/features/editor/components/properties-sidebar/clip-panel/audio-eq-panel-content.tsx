@@ -206,6 +206,45 @@ function RangeButtons({
   )
 }
 
+function QFactorControl({
+  value,
+  onChange,
+  onLiveChange,
+}: {
+  value: number | 'mixed'
+  onChange: (value: number) => void
+  onLiveChange: (value: number) => void
+}) {
+  return (
+    <>
+      <div className="text-[10px] text-zinc-500">Q Factor</div>
+      <div className="flex items-center gap-1.5">
+        <NumberInput
+          value={value}
+          onChange={onChange}
+          onLiveChange={onLiveChange}
+          min={AUDIO_EQ_Q_MIN}
+          max={AUDIO_EQ_Q_MAX}
+          step={0.05}
+          className="flex-1"
+        />
+        <RotaryKnob
+          value={value}
+          onChange={onChange}
+          onLiveChange={onLiveChange}
+          min={AUDIO_EQ_Q_MIN}
+          max={AUDIO_EQ_Q_MAX}
+          step={0.05}
+        />
+      </div>
+      <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600">
+        <span>{AUDIO_EQ_Q_MIN.toFixed(1)}</span>
+        <span>{AUDIO_EQ_Q_MAX.toFixed(1)}</span>
+      </div>
+    </>
+  )
+}
+
 function getEffectiveGainBandControlRangeId(
   selectedRangeId: AudioEqControlRangeId,
   frequencyHz: number | 'mixed',
@@ -1813,32 +1852,11 @@ export function AudioEqPanelContent({
                         </span>
                       </div>
                       {(eqLowType === 'mixed' ? 'low-shelf' : eqLowType) === 'peaking' ? (
-                        <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
-                          <div className="flex items-center gap-1.5">
-                            <NumberInput
-                              value={eqLowQ}
-                              onChange={(v) => handleEqFieldChange('audioEqLowQ', v)}
-                              onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowQ: v })}
-                              min={AUDIO_EQ_Q_MIN}
-                              max={AUDIO_EQ_Q_MAX}
-                              step={0.05}
-                              className="flex-1"
-                            />
-                            <RotaryKnob
-                              value={eqLowQ}
-                              onChange={(v) => handleEqFieldChange('audioEqLowQ', v)}
-                              onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowQ: v })}
-                              min={AUDIO_EQ_Q_MIN}
-                              max={AUDIO_EQ_Q_MAX}
-                              step={0.05}
-                            />
-                          </div>
-                          <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600">
-                            <span>{AUDIO_EQ_Q_MIN.toFixed(1)}</span>
-                            <span>{AUDIO_EQ_Q_MAX.toFixed(1)}</span>
-                          </div>
-                        </>
+                        <QFactorControl
+                          value={eqLowQ}
+                          onChange={(v) => handleEqFieldChange('audioEqLowQ', v)}
+                          onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowQ: v })}
+                        />
                       ) : null}
                     </>
                   ) : null}
@@ -1941,32 +1959,11 @@ export function AudioEqPanelContent({
                         </span>
                       </div>
                       {(eqLowMidType === 'mixed' ? 'peaking' : eqLowMidType) === 'peaking' ? (
-                        <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
-                          <div className="flex items-center gap-1.5">
-                            <NumberInput
-                              value={eqLowMidQ}
-                              onChange={(v) => handleEqFieldChange('audioEqLowMidQ', v)}
-                              onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidQ: v })}
-                              min={AUDIO_EQ_Q_MIN}
-                              max={AUDIO_EQ_Q_MAX}
-                              step={0.05}
-                              className="flex-1"
-                            />
-                            <RotaryKnob
-                              value={eqLowMidQ}
-                              onChange={(v) => handleEqFieldChange('audioEqLowMidQ', v)}
-                              onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidQ: v })}
-                              min={AUDIO_EQ_Q_MIN}
-                              max={AUDIO_EQ_Q_MAX}
-                              step={0.05}
-                            />
-                          </div>
-                          <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600">
-                            <span>{AUDIO_EQ_Q_MIN.toFixed(1)}</span>
-                            <span>{AUDIO_EQ_Q_MAX.toFixed(1)}</span>
-                          </div>
-                        </>
+                        <QFactorControl
+                          value={eqLowMidQ}
+                          onChange={(v) => handleEqFieldChange('audioEqLowMidQ', v)}
+                          onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidQ: v })}
+                        />
                       ) : null}
                     </>
                   ) : null}
@@ -2073,32 +2070,11 @@ export function AudioEqPanelContent({
                         </span>
                       </div>
                       {(eqHighMidType === 'mixed' ? 'peaking' : eqHighMidType) === 'peaking' ? (
-                        <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
-                          <div className="flex items-center gap-1.5">
-                            <NumberInput
-                              value={eqHighMidQ}
-                              onChange={(v) => handleEqFieldChange('audioEqHighMidQ', v)}
-                              onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidQ: v })}
-                              min={AUDIO_EQ_Q_MIN}
-                              max={AUDIO_EQ_Q_MAX}
-                              step={0.05}
-                              className="flex-1"
-                            />
-                            <RotaryKnob
-                              value={eqHighMidQ}
-                              onChange={(v) => handleEqFieldChange('audioEqHighMidQ', v)}
-                              onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidQ: v })}
-                              min={AUDIO_EQ_Q_MIN}
-                              max={AUDIO_EQ_Q_MAX}
-                              step={0.05}
-                            />
-                          </div>
-                          <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600">
-                            <span>{AUDIO_EQ_Q_MIN.toFixed(1)}</span>
-                            <span>{AUDIO_EQ_Q_MAX.toFixed(1)}</span>
-                          </div>
-                        </>
+                        <QFactorControl
+                          value={eqHighMidQ}
+                          onChange={(v) => handleEqFieldChange('audioEqHighMidQ', v)}
+                          onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidQ: v })}
+                        />
                       ) : null}
                     </>
                   ) : null}
@@ -2201,32 +2177,11 @@ export function AudioEqPanelContent({
                         </span>
                       </div>
                       {(eqHighType === 'mixed' ? 'high-shelf' : eqHighType) === 'peaking' ? (
-                        <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
-                          <div className="flex items-center gap-1.5">
-                            <NumberInput
-                              value={eqHighQ}
-                              onChange={(v) => handleEqFieldChange('audioEqHighQ', v)}
-                              onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighQ: v })}
-                              min={AUDIO_EQ_Q_MIN}
-                              max={AUDIO_EQ_Q_MAX}
-                              step={0.05}
-                              className="flex-1"
-                            />
-                            <RotaryKnob
-                              value={eqHighQ}
-                              onChange={(v) => handleEqFieldChange('audioEqHighQ', v)}
-                              onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighQ: v })}
-                              min={AUDIO_EQ_Q_MIN}
-                              max={AUDIO_EQ_Q_MAX}
-                              step={0.05}
-                            />
-                          </div>
-                          <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600">
-                            <span>{AUDIO_EQ_Q_MIN.toFixed(1)}</span>
-                            <span>{AUDIO_EQ_Q_MAX.toFixed(1)}</span>
-                          </div>
-                        </>
+                        <QFactorControl
+                          value={eqHighQ}
+                          onChange={(v) => handleEqFieldChange('audioEqHighQ', v)}
+                          onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighQ: v })}
+                        />
                       ) : null}
                     </>
                   ) : null}

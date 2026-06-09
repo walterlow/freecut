@@ -3,6 +3,7 @@ import type { AudioEqSettings } from './audio'
 import type { Transition } from './transition'
 import type { CropSettings } from './transform'
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids'
+import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 
 export interface Project {
   id: string
@@ -60,198 +61,137 @@ export interface ProjectTimeline {
     isCollapsed?: boolean
   }>
   busAudioEq?: AudioEqSettings
-  items: Array<{
-    id: string
-    trackId: string
-    from: number
-    durationInFrames: number
-    label: string
-    mediaId?: string
-    originId?: string // Tracks lineage for stable React keys
-    linkedGroupId?: string
-    type: 'video' | 'audio' | 'text' | 'image' | 'shape' | 'composition' | 'adjustment'
-    // Type-specific fields stored as optional for flexibility
-    src?: string
-    thumbnailUrl?: string
-    offset?: number // @deprecated Use sourceStart instead
-    waveformData?: number[]
-    // Source boundaries for media items (video/audio)
-    sourceStart?: number // Start position in source media (frames)
-    sourceEnd?: number // End position in source media (frames)
-    sourceDuration?: number // Total duration of source media (frames)
-    sourceFps?: number // Source media frame rate for source* frame fields
-    isReversed?: boolean // Play media source range from end to start
-    reverseConformSrc?: string
-    reverseConformPath?: string
-    reverseConformKey?: string
-    reverseConformPreviewSrc?: string
-    reverseConformPreviewPath?: string
-    reverseConformPreviewKey?: string
-    reverseConformPreviewUsesProxy?: boolean
-    reverseConformStatus?: 'pending' | 'ready' | 'error'
-    reverseConformLocalStart?: number
-    text?: string
-    textRole?: 'caption'
-    captionSource?: {
-      type: 'transcript' | 'ai-captions' | 'subtitle-import' | 'embedded-subtitles'
-      clipId: string
-      mediaId: string
-      fileName?: string
-      format?: 'srt' | 'vtt'
-      importedAt?: number
-    }
-    fontSize?: number
-    fontFamily?: string
-    fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
-    fontStyle?: 'normal' | 'italic'
-    underline?: boolean
-    color?: string
-    textStylePresetId?: TextStylePresetId
-    textStyleScale?: number
-    textSpans?: Array<{
-      text: string
-      fontSize?: number
-      fontFamily?: string
-      fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
-      fontStyle?: 'normal' | 'italic'
-      underline?: boolean
-      color?: string
-      letterSpacing?: number
-    }>
-    textLayoutDrafts?: {
-      single?: {
-        text: string
-        fontSize?: number
-        fontFamily?: string
-        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
-        fontStyle?: 'normal' | 'italic'
-        underline?: boolean
-        color?: string
-        letterSpacing?: number
+  items: Array<
+    {
+      id: string
+      trackId: string
+      from: number
+      durationInFrames: number
+      label: string
+      mediaId?: string
+      originId?: string // Tracks lineage for stable React keys
+      linkedGroupId?: string
+      type: 'video' | 'audio' | 'text' | 'image' | 'shape' | 'composition' | 'adjustment'
+      // Type-specific fields stored as optional for flexibility
+      src?: string
+      thumbnailUrl?: string
+      offset?: number // @deprecated Use sourceStart instead
+      waveformData?: number[]
+      // Source boundaries for media items (video/audio)
+      sourceStart?: number // Start position in source media (frames)
+      sourceEnd?: number // End position in source media (frames)
+      sourceDuration?: number // Total duration of source media (frames)
+      sourceFps?: number // Source media frame rate for source* frame fields
+      isReversed?: boolean // Play media source range from end to start
+      reverseConformSrc?: string
+      reverseConformPath?: string
+      reverseConformKey?: string
+      reverseConformPreviewSrc?: string
+      reverseConformPreviewPath?: string
+      reverseConformPreviewKey?: string
+      reverseConformPreviewUsesProxy?: boolean
+      reverseConformStatus?: 'pending' | 'ready' | 'error'
+      reverseConformLocalStart?: number
+      text?: string
+      textRole?: 'caption'
+      captionSource?: {
+        type: 'transcript' | 'ai-captions' | 'subtitle-import' | 'embedded-subtitles'
+        clipId: string
+        mediaId: string
+        fileName?: string
+        format?: 'srt' | 'vtt'
+        importedAt?: number
       }
-      twoSpans?: Array<{
-        text: string
-        fontSize?: number
-        fontFamily?: string
-        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
-        fontStyle?: 'normal' | 'italic'
-        underline?: boolean
-        color?: string
-        letterSpacing?: number
-      }>
-      threeSpans?: Array<{
-        text: string
-        fontSize?: number
-        fontFamily?: string
-        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'
-        fontStyle?: 'normal' | 'italic'
-        underline?: boolean
-        color?: string
-        letterSpacing?: number
-      }>
-    }
-    backgroundColor?: string
-    backgroundRadius?: number
-    textAlign?: 'left' | 'center' | 'right'
-    verticalAlign?: 'top' | 'middle' | 'bottom'
-    lineHeight?: number
-    letterSpacing?: number
-    textPadding?: number
-    textShadow?: {
-      offsetX: number
-      offsetY: number
-      blur: number
-      color: string
-    }
-    stroke?: {
-      width: number
-      color: string
-    }
-    shapeType?: 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon'
-    fillColor?: string
-    strokeColor?: string
-    strokeWidth?: number
-    direction?: 'up' | 'down' | 'left' | 'right'
-    points?: number
-    innerRadius?: number
-    speed?: number // Playback speed multiplier (default 1.0)
-    // Composition item fields
-    compositionId?: string // Reference to a sub-composition
-    compositionWidth?: number
-    compositionHeight?: number
-    // Source dimensions (for video/image items)
-    sourceWidth?: number
-    sourceHeight?: number
-    // Transform properties
-    transform?: {
-      x?: number
-      y?: number
-      width?: number
-      height?: number
-      anchorX?: number
-      anchorY?: number
-      rotation?: number
-      flipHorizontal?: boolean
-      flipVertical?: boolean
-      opacity?: number
-      cornerRadius?: number
-      aspectRatioLocked?: boolean
-    }
-    crop?: CropSettings
-    // Audio properties
-    volume?: number
-    audioFadeIn?: number
-    audioFadeOut?: number
-    audioFadeInCurve?: number
-    audioFadeOutCurve?: number
-    audioFadeInCurveX?: number
-    audioFadeOutCurveX?: number
-    audioPitchSemitones?: number
-    audioPitchCents?: number
-    audioEqOutputGainDb?: number
-    audioEqBand1Enabled?: boolean
-    audioEqBand1Type?: import('./audio').AudioEqBand1Type
-    audioEqBand1FrequencyHz?: number
-    audioEqBand1GainDb?: number
-    audioEqBand1Q?: number
-    audioEqBand1SlopeDbPerOct?: 6 | 12 | 18 | 24
-    audioEqLowCutEnabled?: boolean
-    audioEqLowCutFrequencyHz?: number
-    audioEqLowCutSlopeDbPerOct?: 6 | 12 | 18 | 24
-    audioEqLowEnabled?: boolean
-    audioEqLowType?: import('./audio').AudioEqInnerBandType
-    audioEqLowGainDb?: number
-    audioEqLowFrequencyHz?: number
-    audioEqLowQ?: number
-    audioEqLowMidEnabled?: boolean
-    audioEqLowMidType?: import('./audio').AudioEqInnerBandType
-    audioEqLowMidGainDb?: number
-    audioEqLowMidFrequencyHz?: number
-    audioEqLowMidQ?: number
-    audioEqMidGainDb?: number
-    audioEqHighMidEnabled?: boolean
-    audioEqHighMidType?: import('./audio').AudioEqInnerBandType
-    audioEqHighMidGainDb?: number
-    audioEqHighMidFrequencyHz?: number
-    audioEqHighMidQ?: number
-    audioEqHighEnabled?: boolean
-    audioEqHighType?: import('./audio').AudioEqInnerBandType
-    audioEqHighGainDb?: number
-    audioEqHighFrequencyHz?: number
-    audioEqHighQ?: number
-    audioEqBand6Enabled?: boolean
-    audioEqBand6Type?: import('./audio').AudioEqBand6Type
-    audioEqBand6FrequencyHz?: number
-    audioEqBand6GainDb?: number
-    audioEqBand6Q?: number
-    audioEqBand6SlopeDbPerOct?: 6 | 12 | 18 | 24
-    audioEqHighCutEnabled?: boolean
-    audioEqHighCutFrequencyHz?: number
-    audioEqHighCutSlopeDbPerOct?: 6 | 12 | 18 | 24
-    // Video properties
-    fadeIn?: number
-    fadeOut?: number
-  }>
+      textStylePresetId?: TextStylePresetId
+      textStyleScale?: number
+      textSpans?: TextSpan[]
+      textLayoutDrafts?: TextLayoutDrafts
+      shapeType?: 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon'
+      fillColor?: string
+      strokeColor?: string
+      strokeWidth?: number
+      direction?: 'up' | 'down' | 'left' | 'right'
+      points?: number
+      innerRadius?: number
+      speed?: number // Playback speed multiplier (default 1.0)
+      // Composition item fields
+      compositionId?: string // Reference to a sub-composition
+      compositionWidth?: number
+      compositionHeight?: number
+      // Source dimensions (for video/image items)
+      sourceWidth?: number
+      sourceHeight?: number
+      // Transform properties
+      transform?: {
+        x?: number
+        y?: number
+        width?: number
+        height?: number
+        anchorX?: number
+        anchorY?: number
+        rotation?: number
+        flipHorizontal?: boolean
+        flipVertical?: boolean
+        opacity?: number
+        cornerRadius?: number
+        aspectRatioLocked?: boolean
+      }
+      crop?: CropSettings
+      // Audio properties
+      volume?: number
+      audioFadeIn?: number
+      audioFadeOut?: number
+      audioFadeInCurve?: number
+      audioFadeOutCurve?: number
+      audioFadeInCurveX?: number
+      audioFadeOutCurveX?: number
+      audioPitchSemitones?: number
+      audioPitchCents?: number
+      audioEqOutputGainDb?: number
+      audioEqBand1Enabled?: boolean
+      audioEqBand1Type?: import('./audio').AudioEqBand1Type
+      audioEqBand1FrequencyHz?: number
+      audioEqBand1GainDb?: number
+      audioEqBand1Q?: number
+      audioEqBand1SlopeDbPerOct?: 6 | 12 | 18 | 24
+      audioEqLowCutEnabled?: boolean
+      audioEqLowCutFrequencyHz?: number
+      audioEqLowCutSlopeDbPerOct?: 6 | 12 | 18 | 24
+      audioEqLowEnabled?: boolean
+      audioEqLowType?: import('./audio').AudioEqInnerBandType
+      audioEqLowGainDb?: number
+      audioEqLowFrequencyHz?: number
+      audioEqLowQ?: number
+      audioEqLowMidEnabled?: boolean
+      audioEqLowMidType?: import('./audio').AudioEqInnerBandType
+      audioEqLowMidGainDb?: number
+      audioEqLowMidFrequencyHz?: number
+      audioEqLowMidQ?: number
+      audioEqMidGainDb?: number
+      audioEqHighMidEnabled?: boolean
+      audioEqHighMidType?: import('./audio').AudioEqInnerBandType
+      audioEqHighMidGainDb?: number
+      audioEqHighMidFrequencyHz?: number
+      audioEqHighMidQ?: number
+      audioEqHighEnabled?: boolean
+      audioEqHighType?: import('./audio').AudioEqInnerBandType
+      audioEqHighGainDb?: number
+      audioEqHighFrequencyHz?: number
+      audioEqHighQ?: number
+      audioEqBand6Enabled?: boolean
+      audioEqBand6Type?: import('./audio').AudioEqBand6Type
+      audioEqBand6FrequencyHz?: number
+      audioEqBand6GainDb?: number
+      audioEqBand6Q?: number
+      audioEqBand6SlopeDbPerOct?: 6 | 12 | 18 | 24
+      audioEqHighCutEnabled?: boolean
+      audioEqHighCutFrequencyHz?: number
+      audioEqHighCutSlopeDbPerOct?: 6 | 12 | 18 | 24
+      // Video properties
+      fadeIn?: number
+      fadeOut?: number
+    } & TextStyleFields
+  >
   // Playback and view state
   currentFrame?: number
   zoomLevel?: number

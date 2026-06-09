@@ -2,18 +2,17 @@ import { useMemo, useCallback } from 'react'
 import { useVideoConfig } from '../../hooks/use-player-compat'
 import { interpolate, useSequenceContext } from '@/runtime/composition-runtime/deps/player'
 import {
-  useGizmoStore,
+  useItemGizmoPreview,
   type ItemPropertiesPreview,
 } from '@/runtime/composition-runtime/deps/stores'
 import { useMaskEditorStore } from '@/runtime/composition-runtime/deps/stores'
-import { useTimelineStore } from '@/runtime/composition-runtime/deps/stores'
 import type { TimelineItem } from '@/types/timeline'
 import type { ResolvedTransform, CanvasSettings, CropSettings } from '@/types/transform'
 import { toTransformStyle, getSourceDimensions } from '../../utils/transform-resolver'
 import { getShapePath, rotatePath } from '../../utils/shape-path'
 import { hasCornerPin } from '../../utils/corner-pin'
-import { useItemKeyframesFromContext } from '../../contexts/keyframes-context'
 import { useCompositionSpace } from '../../contexts/composition-space-context'
+import { useRuntimeItemKeyframes } from './use-runtime-item-keyframes'
 import type { MaskInfo } from '../item'
 import type React from 'react'
 import {
@@ -113,18 +112,9 @@ export function useItemVisualState(
 
   // === GRANULAR SELECTORS ===
   // Using individual selectors to avoid creating new object references
-  const activeGizmo = useGizmoStore((s) => s.activeGizmo)
-  const previewTransform = useGizmoStore((s) => s.previewTransform)
-  const itemPreview = useGizmoStore(useCallback((s) => s.preview?.[item.id], [item.id]))
+  const { activeGizmo, previewTransform, itemPreview } = useItemGizmoPreview(item.id)
 
-  // Get keyframes for this item
-  // First try context (render mode with inputProps), then fall back to store (preview mode)
-  const contextKeyframes = useItemKeyframesFromContext(item.id)
-  const storeKeyframes = useTimelineStore(
-    useCallback((s) => s.keyframes.find((k) => k.itemId === item.id), [item.id]),
-  )
-  // Prefer context keyframes (render mode) over store keyframes (preview mode)
-  const itemKeyframes = contextKeyframes ?? storeKeyframes
+  const itemKeyframes = useRuntimeItemKeyframes(item.id)
   const maskIds = useMemo(() => new Set(masks.map((mask) => mask.shape.id)), [masks])
   const previewMaskEditingItemId = useMaskEditorStore(
     useCallback(

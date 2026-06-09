@@ -93,6 +93,22 @@ describe('render-span', () => {
       return { left, right }
     }
 
+    function makeAARampContext() {
+      const { left, right } = makeSplitPair()
+      const transition = createActiveTransition({
+        leftClip: left,
+        rightClip: right,
+        transitionStart: 50,
+        transitionEnd: 70,
+        cutPoint: 60,
+      })
+      const ramps = resolveAATransitionRamps(left, right, transition, 30)
+      if (!ramps) {
+        throw new Error('Expected continuous A-A split ramps')
+      }
+      return { left, right, transition, ramps }
+    }
+
     it('detects continuous A-A split via shared media and source continuity', () => {
       const { left, right } = makeSplitPair()
       expect(isAAContinuousSplit(left, right, 30)).toBe(true)
@@ -114,18 +130,9 @@ describe('render-span', () => {
     })
 
     it('emits symmetric anchored ramps for A-A splits', () => {
-      const { left, right } = makeSplitPair()
-      const transition = createActiveTransition({
-        leftClip: left,
-        rightClip: right,
-        transitionStart: 50,
-        transitionEnd: 70,
-        cutPoint: 60,
-      })
-      const ramps = resolveAATransitionRamps(left, right, transition, 30)
-      expect(ramps).not.toBeNull()
-      expect(ramps?.left).toEqual({ anchor: 'start', slope: 0.5, rampStart: 50, rampEnd: 70 })
-      expect(ramps?.right).toEqual({ anchor: 'end', slope: 0.5, rampStart: 50, rampEnd: 70 })
+      const { ramps } = makeAARampContext()
+      expect(ramps.left).toEqual({ anchor: 'start', slope: 0.5, rampStart: 50, rampEnd: 70 })
+      expect(ramps.right).toEqual({ anchor: 'end', slope: 0.5, rampStart: 50, rampEnd: 70 })
     })
 
     it('returns null for non-A-A pairs', () => {
@@ -135,15 +142,7 @@ describe('render-span', () => {
     })
 
     it('threads ramp through into the render span', () => {
-      const { left, right } = makeSplitPair()
-      const transition = createActiveTransition({
-        leftClip: left,
-        rightClip: right,
-        transitionStart: 50,
-        transitionEnd: 70,
-        cutPoint: 60,
-      })
-      const ramps = resolveAATransitionRamps(left, right, transition, 30)!
+      const { left, right, transition, ramps } = makeAARampContext()
       const leftSpan = resolveTransitionRenderTimelineSpan(left, transition, 30, ramps.left)
       const rightSpan = resolveTransitionRenderTimelineSpan(right, transition, 30, ramps.right)
       expect(leftSpan.sourceTimeRamp).toEqual(ramps.left)
@@ -151,15 +150,7 @@ describe('render-span', () => {
     })
 
     it('ramp offset is zero at the anchor boundary (no jump where clip continues)', () => {
-      const { left, right } = makeSplitPair()
-      const transition = createActiveTransition({
-        leftClip: left,
-        rightClip: right,
-        transitionStart: 50,
-        transitionEnd: 70,
-        cutPoint: 60,
-      })
-      const ramps = resolveAATransitionRamps(left, right, transition, 30)!
+      const { ramps } = makeAARampContext()
       // Left exists naturally for F<50, so anchor='start' (frame=50 → offset 0).
       expect(getSourceFrameRampOffset(ramps.left, 50)).toBe(0)
       // Right exists naturally for F>70, so anchor='end' (frame=70 → offset 0).
@@ -167,15 +158,7 @@ describe('render-span', () => {
     })
 
     it('ramp offset is also zero outside the window (no effect on adjacent frames)', () => {
-      const { left, right } = makeSplitPair()
-      const transition = createActiveTransition({
-        leftClip: left,
-        rightClip: right,
-        transitionStart: 50,
-        transitionEnd: 70,
-        cutPoint: 60,
-      })
-      const ramps = resolveAATransitionRamps(left, right, transition, 30)!
+      const { ramps } = makeAARampContext()
       expect(getSourceFrameRampOffset(ramps.left, 49)).toBe(0)
       expect(getSourceFrameRampOffset(ramps.left, 71)).toBe(0)
       expect(getSourceFrameRampOffset(ramps.right, 49)).toBe(0)
@@ -183,15 +166,7 @@ describe('render-span', () => {
     })
 
     it('midpoint separates left/right rendered source by half the window duration', () => {
-      const { left, right } = makeSplitPair()
-      const transition = createActiveTransition({
-        leftClip: left,
-        rightClip: right,
-        transitionStart: 50,
-        transitionEnd: 70,
-        cutPoint: 60,
-      })
-      const ramps = resolveAATransitionRamps(left, right, transition, 30)!
+      const { ramps } = makeAARampContext()
       // At midpoint F=60 with slope=0.5: left offset = +5, right offset = -5.
       // Combined difference = 10 source frames = windowDuration / 2.
       expect(getSourceFrameRampOffset(ramps.left, 60)).toBe(5)
@@ -199,15 +174,7 @@ describe('render-span', () => {
     })
 
     it('non-anchor boundary offset equals half window duration (max separation)', () => {
-      const { left, right } = makeSplitPair()
-      const transition = createActiveTransition({
-        leftClip: left,
-        rightClip: right,
-        transitionStart: 50,
-        transitionEnd: 70,
-        cutPoint: 60,
-      })
-      const ramps = resolveAATransitionRamps(left, right, transition, 30)!
+      const { ramps } = makeAARampContext()
       expect(getSourceFrameRampOffset(ramps.left, 70)).toBe(10)
       expect(getSourceFrameRampOffset(ramps.right, 50)).toBe(-10)
     })

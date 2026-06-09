@@ -17,6 +17,7 @@ import {
   KeyframeToggle,
 } from '@/features/editor/deps/keyframes'
 import { PropertySection, PropertyRow, NumberInput, SliderInput } from '../components'
+import { applyAutoKeyframedTransformChange } from './auto-keyframe-transform'
 
 interface LayoutSectionProps {
   items: TimelineItem[]
@@ -245,22 +246,13 @@ export const LayoutSection = memo(function LayoutSection({
   // Commit X position (with auto-keyframe support)
   const handleXChange = useCallback(
     (value: number) => {
-      const autoOps: AutoKeyframeOperation[] = []
-      const fallbackItemIds: string[] = []
-      for (const itemId of itemIds) {
-        const operation = getAutoKeyframeOperation(itemId, 'x', value)
-        if (operation) {
-          autoOps.push(operation)
-        } else {
-          fallbackItemIds.push(itemId)
-        }
-      }
-      if (autoOps.length > 0) {
-        applyAutoKeyframeOperations(autoOps)
-      }
-      if (fallbackItemIds.length > 0) {
-        onTransformChange(fallbackItemIds, { x: value })
-      }
+      applyAutoKeyframedTransformChange({
+        itemIds,
+        updates: { x: value },
+        getOperation: (itemId) => getAutoKeyframeOperation(itemId, 'x', value),
+        applyAutoKeyframeOperations,
+        onTransformChange,
+      })
       queueMicrotask(() => clearPreview())
     },
     [
@@ -287,22 +279,13 @@ export const LayoutSection = memo(function LayoutSection({
   // Commit Y position (with auto-keyframe support)
   const handleYChange = useCallback(
     (value: number) => {
-      const autoOps: AutoKeyframeOperation[] = []
-      const fallbackItemIds: string[] = []
-      for (const itemId of itemIds) {
-        const operation = getAutoKeyframeOperation(itemId, 'y', value)
-        if (operation) {
-          autoOps.push(operation)
-        } else {
-          fallbackItemIds.push(itemId)
-        }
-      }
-      if (autoOps.length > 0) {
-        applyAutoKeyframeOperations(autoOps)
-      }
-      if (fallbackItemIds.length > 0) {
-        onTransformChange(fallbackItemIds, { y: value })
-      }
+      applyAutoKeyframedTransformChange({
+        itemIds,
+        updates: { y: value },
+        getOperation: (itemId) => getAutoKeyframeOperation(itemId, 'y', value),
+        applyAutoKeyframeOperations,
+        onTransformChange,
+      })
       queueMicrotask(() => clearPreview())
     },
     [
@@ -451,22 +434,13 @@ export const LayoutSection = memo(function LayoutSection({
   // Commit rotation (on mouse up, with auto-keyframe support)
   const handleRotationChange = useCallback(
     (value: number) => {
-      const autoOps: AutoKeyframeOperation[] = []
-      const fallbackItemIds: string[] = []
-      for (const itemId of itemIds) {
-        const operation = getAutoKeyframeOperation(itemId, 'rotation', value)
-        if (operation) {
-          autoOps.push(operation)
-        } else {
-          fallbackItemIds.push(itemId)
-        }
-      }
-      if (autoOps.length > 0) {
-        applyAutoKeyframeOperations(autoOps)
-      }
-      if (fallbackItemIds.length > 0) {
-        onTransformChange(fallbackItemIds, { rotation: value })
-      }
+      applyAutoKeyframedTransformChange({
+        itemIds,
+        updates: { rotation: value },
+        getOperation: (itemId) => getAutoKeyframeOperation(itemId, 'rotation', value),
+        applyAutoKeyframeOperations,
+        onTransformChange,
+      })
       queueMicrotask(() => clearPreview())
     },
     [
@@ -493,22 +467,13 @@ export const LayoutSection = memo(function LayoutSection({
   const handleAnchorXChange = useCallback(
     (value: number) => {
       if (mediaTransformItemIds.length === 0) return
-      const autoOps: AutoKeyframeOperation[] = []
-      const fallbackItemIds: string[] = []
-      for (const itemId of mediaTransformItemIds) {
-        const operation = getAutoKeyframeOperation(itemId, 'anchorX', value)
-        if (operation) {
-          autoOps.push(operation)
-        } else {
-          fallbackItemIds.push(itemId)
-        }
-      }
-      if (autoOps.length > 0) {
-        applyAutoKeyframeOperations(autoOps)
-      }
-      if (fallbackItemIds.length > 0) {
-        onTransformChange(fallbackItemIds, { anchorX: value })
-      }
+      applyAutoKeyframedTransformChange({
+        itemIds: mediaTransformItemIds,
+        updates: { anchorX: value },
+        getOperation: (itemId) => getAutoKeyframeOperation(itemId, 'anchorX', value),
+        applyAutoKeyframeOperations,
+        onTransformChange,
+      })
       queueMicrotask(() => clearPreview())
     },
     [
@@ -535,22 +500,13 @@ export const LayoutSection = memo(function LayoutSection({
   const handleAnchorYChange = useCallback(
     (value: number) => {
       if (mediaTransformItemIds.length === 0) return
-      const autoOps: AutoKeyframeOperation[] = []
-      const fallbackItemIds: string[] = []
-      for (const itemId of mediaTransformItemIds) {
-        const operation = getAutoKeyframeOperation(itemId, 'anchorY', value)
-        if (operation) {
-          autoOps.push(operation)
-        } else {
-          fallbackItemIds.push(itemId)
-        }
-      }
-      if (autoOps.length > 0) {
-        applyAutoKeyframeOperations(autoOps)
-      }
-      if (fallbackItemIds.length > 0) {
-        onTransformChange(fallbackItemIds, { anchorY: value })
-      }
+      applyAutoKeyframedTransformChange({
+        itemIds: mediaTransformItemIds,
+        updates: { anchorY: value },
+        getOperation: (itemId) => getAutoKeyframeOperation(itemId, 'anchorY', value),
+        applyAutoKeyframeOperations,
+        onTransformChange,
+      })
       queueMicrotask(() => clearPreview())
     },
     [

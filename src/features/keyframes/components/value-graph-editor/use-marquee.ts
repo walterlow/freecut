@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { KEYFRAME_MARQUEE_THRESHOLD, type KeyframeMarqueeRect } from '../keyframe-marquee'
+import { resolveMarqueeSelection } from '../marquee-selection'
 import type { GraphKeyframePoint, GraphViewport } from './types'
 import type {
   BezierDragStartState,
@@ -72,21 +73,7 @@ export function useMarquee({
         }
       }
 
-      let nextSelection = new Set<string>()
-      if (state.mode === 'replace') {
-        nextSelection = hitIds
-      } else if (state.mode === 'add') {
-        nextSelection = new Set([...state.baseSelection, ...hitIds])
-      } else {
-        nextSelection = new Set(state.baseSelection)
-        for (const keyframeId of hitIds) {
-          if (nextSelection.has(keyframeId)) {
-            nextSelection.delete(keyframeId)
-          } else {
-            nextSelection.add(keyframeId)
-          }
-        }
-      }
+      const nextSelection = resolveMarqueeSelection(state.mode, state.baseSelection, hitIds)
 
       onSelectionChangeRef.current?.(nextSelection)
       setMarqueeRect({

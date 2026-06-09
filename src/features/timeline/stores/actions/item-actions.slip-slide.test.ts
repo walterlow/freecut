@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vite-plus/test'
 import type { VideoItem, TextItem } from '@/types/timeline'
+import { resetTimelineItemsTestState } from '@/features/timeline/test-helpers'
 import { useItemsStore } from '../items-store'
-import { useTimelineSettingsStore } from '../timeline-settings-store'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
 import { slipItem, slideItem } from './item-actions'
@@ -20,11 +20,15 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   }
 }
 
+function getVideoItem(id: string): VideoItem {
+  const item = useItemsStore.getState().items.find((candidate) => candidate.id === id)
+  expect(item).toBeDefined()
+  return item as VideoItem
+}
+
 describe('slipItem', () => {
   beforeEach(() => {
-    useTimelineSettingsStore.setState({ fps: 30 })
-    useItemsStore.getState().setItems([])
-    useItemsStore.getState().setTracks([])
+    resetTimelineItemsTestState()
     usePlaybackStore.setState({
       currentFrame: 150,
       currentFrameEpoch: 0,
@@ -56,8 +60,7 @@ describe('slipItem', () => {
 
     slipItem('slip-clip', 20)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'slip-clip') as VideoItem
-    expect(updated).toBeDefined()
+    const updated = getVideoItem('slip-clip')
     expect(updated.sourceStart).toBe(70)
     expect(updated.sourceEnd).toBe(170)
     // Position and duration unchanged
@@ -81,8 +84,7 @@ describe('slipItem', () => {
     // Try to slip left by 30 but sourceStart is only 10
     slipItem('slip-clip', -30)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'slip-clip') as VideoItem
-    expect(updated).toBeDefined()
+    const updated = getVideoItem('slip-clip')
     expect(updated.sourceStart).toBe(0)
     expect(updated.sourceEnd).toBe(100)
   })
@@ -103,8 +105,7 @@ describe('slipItem', () => {
     // Try to slip right by 50 but sourceEnd can only go to 300
     slipItem('slip-clip', 50)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'slip-clip') as VideoItem
-    expect(updated).toBeDefined()
+    const updated = getVideoItem('slip-clip')
     expect(updated.sourceStart).toBe(200)
     expect(updated.sourceEnd).toBe(300)
   })
@@ -146,8 +147,7 @@ describe('slipItem', () => {
 
     slipItem('slip-clip', 0)
 
-    const updated = useItemsStore.getState().items.find((i) => i.id === 'slip-clip') as VideoItem
-    expect(updated).toBeDefined()
+    const updated = getVideoItem('slip-clip')
     expect(updated.sourceStart).toBe(50)
     expect(updated.sourceEnd).toBe(150)
   })
@@ -155,9 +155,7 @@ describe('slipItem', () => {
 
 describe('slideItem', () => {
   beforeEach(() => {
-    useTimelineSettingsStore.setState({ fps: 30 })
-    useItemsStore.getState().setItems([])
-    useItemsStore.getState().setTracks([])
+    resetTimelineItemsTestState()
   })
 
   it('moves clip and adjusts adjacent neighbors correctly (slide right)', () => {

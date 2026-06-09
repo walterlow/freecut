@@ -196,6 +196,31 @@ export function GroupGizmo({
     [],
   )
 
+  const resetInteractionState = useCallback(() => {
+    setInteractionMode('idle')
+    setPreviewTransforms(null)
+    groupStateRef.current = null
+    startPointRef.current = null
+  }, [setPreviewTransforms])
+
+  const finishTransformInteraction = useCallback(
+    (operation: 'move' | 'resize' | 'rotate', options: { clearSnapLines?: boolean } = {}) => {
+      document.body.style.cursor = ''
+      if (options.clearSnapLines) {
+        snapLinesRef.current = []
+        setSnapLines([])
+      }
+
+      const finalTransforms = previewTransformsRef.current ?? itemTransforms
+      if (transformsChanged(startTransformsRef.current, finalTransforms)) {
+        onTransformEnd(finalTransforms, operation)
+      }
+
+      resetInteractionState()
+    },
+    [itemTransforms, onTransformEnd, resetInteractionState, setSnapLines, transformsChanged],
+  )
+
   // Helper to find which item (if any) contains a canvas point
   const findItemAtPoint = useCallback(
     (canvasPoint: Point): string | null => {
@@ -318,26 +343,14 @@ export function GroupGizmo({
           const clickedItemId = findItemAtPoint(point)
           if (clickedItemId) {
             // Clean up without committing transform
-            setInteractionMode('idle')
-            setPreviewTransforms(null)
-            groupStateRef.current = null
-            startPointRef.current = null
+            resetInteractionState()
             // Select just the clicked item
             onItemClick(clickedItemId)
             return
           }
         }
 
-        // Use ref to get latest preview transforms (avoids closure issues)
-        const finalTransforms = previewTransformsRef.current ?? itemTransforms
-        if (transformsChanged(startTransformsRef.current, finalTransforms)) {
-          onTransformEnd(finalTransforms, 'move')
-        }
-
-        setInteractionMode('idle')
-        setPreviewTransforms(null)
-        groupStateRef.current = null
-        startPointRef.current = null
+        finishTransformInteraction('move', { clearSnapLines: true })
       }
 
       window.addEventListener('mousemove', handleMouseMove)
@@ -349,8 +362,8 @@ export function GroupGizmo({
       projectSize,
       toCanvasPoint,
       onTransformStart,
-      onTransformEnd,
-      transformsChanged,
+      resetInteractionState,
+      finishTransformInteraction,
       setPreviewTransforms,
       setSnapLines,
       onItemClick,
@@ -434,20 +447,7 @@ export function GroupGizmo({
       const handleMouseUp = () => {
         window.removeEventListener('mousemove', handleMouseMove)
         window.removeEventListener('mouseup', handleMouseUp)
-        document.body.style.cursor = ''
-        snapLinesRef.current = []
-        setSnapLines([])
-
-        // Use ref to get latest preview transforms (avoids closure issues)
-        const finalTransforms = previewTransformsRef.current ?? itemTransforms
-        if (transformsChanged(startTransformsRef.current, finalTransforms)) {
-          onTransformEnd(finalTransforms, 'resize')
-        }
-
-        setInteractionMode('idle')
-        setPreviewTransforms(null)
-        groupStateRef.current = null
-        startPointRef.current = null
+        finishTransformInteraction('resize', { clearSnapLines: true })
       }
 
       window.addEventListener('mousemove', handleMouseMove)
@@ -459,9 +459,8 @@ export function GroupGizmo({
       projectSize,
       toCanvasPoint,
       onTransformStart,
-      onTransformEnd,
-      transformsChanged,
       groupRotation,
+      finishTransformInteraction,
       setPreviewTransforms,
       setSnapLines,
       scale,
@@ -512,18 +511,7 @@ export function GroupGizmo({
       const handleMouseUp = () => {
         window.removeEventListener('mousemove', handleMouseMove)
         window.removeEventListener('mouseup', handleMouseUp)
-        document.body.style.cursor = ''
-
-        // Use ref to get latest preview transforms (avoids closure issues)
-        const finalTransforms = previewTransformsRef.current ?? itemTransforms
-        if (transformsChanged(startTransformsRef.current, finalTransforms)) {
-          onTransformEnd(finalTransforms, 'rotate')
-        }
-
-        setInteractionMode('idle')
-        setPreviewTransforms(null)
-        groupStateRef.current = null
-        startPointRef.current = null
+        finishTransformInteraction('rotate')
       }
 
       window.addEventListener('mousemove', handleMouseMove)
@@ -535,8 +523,7 @@ export function GroupGizmo({
       projectSize,
       toCanvasPoint,
       onTransformStart,
-      onTransformEnd,
-      transformsChanged,
+      finishTransformInteraction,
       setPreviewTransforms,
     ],
   )

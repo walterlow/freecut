@@ -1,86 +1,25 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
-import path from 'node:path';
 import process from 'node:process';
-
-const ROOT_DIR = process.cwd();
-const FEATURES_DIR = path.join(ROOT_DIR, 'src', 'features');
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx']);
-const RESOLVE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
-
-const IMPORT_EXPORT_SPEC_REGEX =
-  /\b(?:import|export)\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g;
-const DYNAMIC_IMPORT_SPEC_REGEX = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
-
-function normalizePath(filePath) {
-  return filePath.split(path.sep).join('/');
-}
-
-function stripQueryAndHash(specifier) {
-  const [withoutHash] = specifier.split('#');
-  const [withoutQuery] = withoutHash.split('?');
-  return withoutQuery;
-}
-
-function collectFeatureFiles(dirPath, out = []) {
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  for (const entry of entries) {
-    const absolutePath = path.join(dirPath, entry.name);
-    if (entry.isDirectory()) {
-      collectFeatureFiles(absolutePath, out);
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
-      out.push(absolutePath);
-    }
-  }
-  return out;
-}
+import {
+  FEATURES_DIR,
+  collectFeatureFiles,
+  collectSpecifiers,
+  relativeToRoot,
+  resolveRelativeSpecifier,
+  stripQueryAndHash,
+} from './feature-boundary-context.mjs';
 
 function getFeatureNameFromFeatureFile(absolutePath) {
-  const relative = normalizePath(path.relative(ROOT_DIR, absolutePath));
+  const relative = relativeToRoot(absolutePath);
   const match = relative.match(/^src\/features\/([^/]+)\//);
   return match?.[1] ?? null;
 }
 
 function isFeatureDepsFile(absolutePath) {
-  const relative = normalizePath(path.relative(ROOT_DIR, absolutePath));
+  const relative = relativeToRoot(absolutePath);
   return /^src\/features\/[^/]+\/deps\//.test(relative);
-}
-
-function resolveRelativeSpecifier(fromFile, rawSpecifier) {
-  const specifier = stripQueryAndHash(rawSpecifier);
-  const basePath = path.resolve(path.dirname(fromFile), specifier);
-
-  const candidates = [
-    basePath,
-    ...RESOLVE_EXTENSIONS.map((ext) => `${basePath}${ext}`),
-    ...RESOLVE_EXTENSIONS.map((ext) => path.join(basePath, `index${ext}`)),
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-function collectSpecifiers(fileContent) {
-  const specifiers = new Set();
-
-  for (const regex of [IMPORT_EXPORT_SPEC_REGEX, DYNAMIC_IMPORT_SPEC_REGEX]) {
-    regex.lastIndex = 0;
-    let match;
-    while ((match = regex.exec(fileContent)) !== null) {
-      specifiers.add(match[1]);
-    }
-  }
-
-  return [...specifiers];
 }
 
 function resolveTargetFeature(fromFile, rawSpecifier) {
@@ -100,7 +39,7 @@ function resolveTargetFeature(fromFile, rawSpecifier) {
   const resolvedPath = resolveRelativeSpecifier(fromFile, normalizedSpecifier);
   if (!resolvedPath) return null;
 
-  const normalizedResolved = normalizePath(path.relative(ROOT_DIR, resolvedPath));
+  const normalizedResolved = relativeToRoot(resolvedPath);
   const targetMatch = normalizedResolved.match(/^src\/features\/([^/]+)\//);
   return targetMatch?.[1] ?? null;
 }
@@ -155,7 +94,7 @@ function reportFeatureEdges() {
     process.exit(1);
   }
 
-  const files = collectFeatureFiles(FEATURES_DIR);
+  const files = collectFeatureFiles();
   const directEdges = new Map();
   const adapterEdges = new Map();
 
@@ -166,7 +105,7 @@ function reportFeatureEdges() {
     const source = fs.readFileSync(file, 'utf8');
     const specifiers = collectSpecifiers(source);
     const isDepsFile = isFeatureDepsFile(file);
-    const filePath = normalizePath(path.relative(ROOT_DIR, file));
+    const filePath = relativeToRoot(file);
 
     for (const specifier of specifiers) {
       const toFeature = resolveTargetFeature(file, specifier);

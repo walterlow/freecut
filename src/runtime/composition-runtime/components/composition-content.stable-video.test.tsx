@@ -3,16 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { render } from '@testing-library/react'
 import { VideoConfigProvider } from '@/runtime/composition-runtime/deps/player'
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
-import {
-  useCompositionsStore,
-  useGizmoStore,
-  useTimelineStore,
-} from '@/runtime/composition-runtime/deps/stores'
-import type { CompositionItem, TimelineTrack } from '@/types/timeline'
 import { CompositionContent } from './composition-content'
 import { NestedMediaResolutionProvider } from '../contexts/nested-media-resolution-context'
-
-type TestSubComposition = ReturnType<typeof useCompositionsStore.getState>['compositions'][number]
+import {
+  makeNestedTimelineTrack,
+  makeNestedVideoItem,
+  makeParentCompositionItem,
+  makeTestSubComposition,
+  resetCompositionContentRuntimeState,
+  storeTestSubComposition,
+} from './composition-content-test-helpers'
 
 const stableVideoSequenceSpy = vi.fn()
 const resolveProxyUrlMock = vi.hoisted(() => vi.fn())
@@ -113,81 +113,26 @@ describe('CompositionContent stable video identity', () => {
     stableVideoSequenceSpy.mockClear()
     resolveProxyUrlMock.mockReset()
     blobUrlManagerGetSpy.mockReset()
-    useCompositionsStore.setState({
-      compositions: [],
-      compositionById: {},
-      mediaDependencyIds: [],
-      mediaDependencyVersion: 0,
-    })
-    useTimelineStore.setState({ keyframes: [] } as Partial<
-      ReturnType<typeof useTimelineStore.getState>
-    >)
-    useGizmoStore.setState({
-      activeGizmo: null,
-      previewTransform: null,
-      preview: null,
-      snapLines: [],
-      canvasBackgroundPreview: null,
-    })
+    resetCompositionContentRuntimeState()
   })
 
   it('reuses nested stable-video items when only the wrapper transform changes', () => {
-    const subTracks: TimelineTrack[] = [
-      {
-        id: 'sub-track-video',
-        name: 'V1',
-        kind: 'video',
-        height: 60,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: 0,
-        items: [],
-      },
-    ]
-
-    const subComp: TestSubComposition = {
+    const subComp = makeTestSubComposition({
       id: 'sub-comp-stable-video',
       name: 'Stable video precomp',
       items: [
-        {
+        makeNestedVideoItem({
           id: 'nested-video',
-          type: 'video',
-          trackId: 'sub-track-video',
-          from: 0,
-          durationInFrames: 60,
-          label: 'Nested video',
-          src: 'blob:video',
           originId: 'nested-video-origin',
-        },
+        }),
       ],
-      tracks: subTracks,
-      transitions: [],
-      keyframes: [],
-      fps: 30,
-      width: 1280,
-      height: 720,
-      durationInFrames: 60,
-    }
-
-    useCompositionsStore.setState({
-      compositions: [subComp],
-      compositionById: { [subComp.id]: subComp },
-      mediaDependencyIds: [],
-      mediaDependencyVersion: 0,
+      tracks: [makeNestedTimelineTrack({ id: 'sub-track-video', name: 'V1', kind: 'video' })],
     })
 
-    const initialItem: CompositionItem = {
-      id: 'parent-comp-item',
-      type: 'composition',
+    storeTestSubComposition(subComp)
+
+    const initialItem = makeParentCompositionItem({
       compositionId: subComp.id,
-      trackId: 'parent-track',
-      from: 0,
-      durationInFrames: 60,
-      label: 'Nested comp',
-      compositionWidth: 1280,
-      compositionHeight: 720,
       transform: {
         x: 0,
         y: 0,
@@ -196,7 +141,7 @@ describe('CompositionContent stable video identity', () => {
         rotation: 0,
         opacity: 1,
       },
-    }
+    })
 
     const { rerender } = render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
@@ -233,64 +178,24 @@ describe('CompositionContent stable video identity', () => {
       mediaId === 'media-1' ? 'proxy://video-1' : null,
     )
 
-    const subTracks: TimelineTrack[] = [
-      {
-        id: 'sub-track-video',
-        name: 'V1',
-        kind: 'video',
-        height: 60,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: 0,
-        items: [],
-      },
-    ]
-
-    const subComp: TestSubComposition = {
+    const subComp = makeTestSubComposition({
       id: 'sub-comp-proxy-video',
       name: 'Proxy video precomp',
       items: [
-        {
+        makeNestedVideoItem({
           id: 'nested-video',
-          type: 'video',
-          trackId: 'sub-track-video',
-          from: 0,
-          durationInFrames: 60,
-          label: 'Nested video',
           src: 'blob:stale',
-          mediaId: 'media-1',
           originId: 'nested-video-origin',
-        },
+        }),
       ],
-      tracks: subTracks,
-      transitions: [],
-      keyframes: [],
-      fps: 30,
-      width: 1280,
-      height: 720,
-      durationInFrames: 60,
-    }
-
-    useCompositionsStore.setState({
-      compositions: [subComp],
-      compositionById: { [subComp.id]: subComp },
-      mediaDependencyIds: [],
-      mediaDependencyVersion: 0,
+      tracks: [makeNestedTimelineTrack({ id: 'sub-track-video', name: 'V1', kind: 'video' })],
     })
 
-    const compositionItem: CompositionItem = {
-      id: 'parent-comp-item',
-      type: 'composition',
+    storeTestSubComposition(subComp)
+
+    const compositionItem = makeParentCompositionItem({
       compositionId: subComp.id,
-      trackId: 'parent-track',
-      from: 0,
-      durationInFrames: 60,
-      label: 'Nested comp',
-      compositionWidth: 1280,
-      compositionHeight: 720,
-    }
+    })
 
     render(
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
