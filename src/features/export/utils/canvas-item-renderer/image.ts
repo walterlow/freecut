@@ -3,7 +3,7 @@
  */
 
 import type { ImageItem } from '@/types/timeline'
-import { gifFrameCache } from '@/features/export/deps/timeline'
+import { gifFrameCache } from '@/features/export/deps/timeline-gif-cache'
 import type { ItemRenderContext } from './types'
 import { drawContainedMediaSource } from './media-draw'
 

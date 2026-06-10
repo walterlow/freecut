@@ -14,7 +14,7 @@ import type { ItemKeyframes } from '@/types/keyframe'
 import type { ItemEffect } from '@/types/effects'
 import type { ResolvedTransform } from '@/types/transform'
 import type { ScrubbingCache } from '@/features/export/deps/preview'
-import type { CachedGifFrames } from '@/features/export/deps/timeline'
+import type { CachedGifFrames } from '@/features/export/deps/timeline-gif-cache'
 import type { CanvasPool, TextMeasurementCache } from '../canvas-pool'
 import type { VideoFrameSource } from '../shared-video-extractor'
 import type { ReverseVideoFrameCache } from '../reverse-video-frame-cache'
@@ -29,7 +29,7 @@ import type {
 import type { ShapeRenderPipeline } from '@/infrastructure/gpu-shapes'
 import type { GlyphAtlasTextPipeline } from '@/infrastructure/gpu-text'
 import type { MaskCombinePipeline } from '@/infrastructure/gpu-masks'
-import type { AdjustmentLayerWithTrackOrder } from '../canvas-effects'
+import type { AdjustmentLayerWithTrackOrder, EffectSourceMask } from '../canvas-effects'
 import type { RenderTimelineSpan } from '../render-span'
 import type { calculateMediaCropLayout } from '@/shared/utils/media-crop'
 
@@ -68,6 +68,17 @@ export interface WorkerLoadedImage {
   height: number
 }
 
+export type RenderItemDelegate = (
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: TimelineItem,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+  sourceFrameOffset?: number,
+  renderSpan?: RenderTimelineSpan,
+  preCornerPinMasks?: EffectSourceMask[],
+) => Promise<void>
+
 /**
  * Bundles the mutable/shared state that the item-level renderers need from the
  * composition renderer.  This replaces the closure captures that existed when
@@ -79,6 +90,7 @@ export interface ItemRenderContext {
   canvasPool: CanvasPool
   textMeasureCache: TextMeasurementCache
   renderMode: 'export' | 'preview'
+  renderItem: RenderItemDelegate
   scrubbingCache?: ScrubbingCache | null
   getCurrentItemSnapshot?: <TItem extends TimelineItem>(item: TItem) => TItem
   getLiveItemSnapshotById?: (itemId: string) => TimelineItem | undefined

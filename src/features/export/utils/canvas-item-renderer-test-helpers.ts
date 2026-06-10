@@ -55,6 +55,7 @@ export function createItemRenderContext(
     canvasPool: {} as ItemRenderContext['canvasPool'],
     textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
     renderMode: 'export',
+    renderItem: vi.fn(),
     videoExtractors: new Map(),
     videoElements: new Map(),
     useMediabunny: new Set(),

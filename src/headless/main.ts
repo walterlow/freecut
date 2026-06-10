@@ -40,7 +40,10 @@ import {
 import type { ClientVideoContainer } from '@/features/export/utils/client-renderer'
 import { resolveMediaUrls } from '@/features/media-library/utils/media-resolver'
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
-import { useCompositionsStore, type SubComposition } from '@/features/export/deps/timeline'
+import {
+  useCompositionsStore,
+  type SubComposition,
+} from '@/features/export/deps/timeline-compositions'
 import { editProject } from './edit'
 import { seedMediaLibrary } from './seed-media'
 

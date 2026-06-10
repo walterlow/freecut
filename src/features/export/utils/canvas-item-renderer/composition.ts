@@ -24,7 +24,6 @@ import {
 import type { CanvasSettings, ItemRenderContext, ItemTransform, SubCompRenderData } from './types'
 import { log } from './shared'
 import { calculateMediaDrawDimensions } from './media-draw'
-import { renderItem } from './render-item'
 
 /**
  * Render a CompositionItem by rendering all its sub-composition items to an
@@ -214,14 +213,14 @@ export async function renderCompositionItem(
         const hasEffects = combinedEffects.length > 0
 
         if (!hasEffects && applicableMasks.length === 0) {
-          await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx)
+          await rctx.renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx)
         } else if (!hasEffects) {
           const { canvas: maskedItemCanvas, ctx: maskedItemCtx } = rctx.canvasPool.acquire()
           try {
             maskedItemCanvas.width = item.compositionWidth
             maskedItemCanvas.height = item.compositionHeight
             maskedItemCtx.clearRect(0, 0, maskedItemCanvas.width, maskedItemCanvas.height)
-            await renderItem(
+            await rctx.renderItem(
               maskedItemCtx,
               subItem,
               subItemTransform,
@@ -245,7 +244,7 @@ export async function renderCompositionItem(
           itemCanvas.height = item.compositionHeight
           itemCtx.clearRect(0, 0, itemCanvas.width, itemCanvas.height)
           try {
-            await renderItem(
+            await rctx.renderItem(
               itemCtx,
               subItem,
               subItemTransform,

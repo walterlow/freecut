@@ -21,9 +21,11 @@ import { resolveTransitionWindows } from '@/shared/timeline/transitions/transiti
 import {
   timelineToSourceFrames,
   sourceToTimelineFrames,
+} from '@/features/export/deps/timeline-frame'
+import {
   useCompositionsStore,
   collectReachableCompositionIdsFromTracks,
-} from '@/features/export/deps/timeline'
+} from '@/features/export/deps/timeline-compositions'
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/export/deps/keyframes'
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
 import { getMediaAudioCodecById, resolveMediaUrl } from '@/features/export/deps/media-library'

@@ -1,6 +1,6 @@
 import type { TimelineItem } from '@/types/timeline'
 import type { ActiveTransition } from './canvas-transitions'
-import { timelineToSourceFrames } from '@/features/export/deps/timeline'
+import { timelineToSourceFrames } from '@/features/export/deps/timeline-frame'
 
 /**
  * Linear source-time ramp applied during a transition window.

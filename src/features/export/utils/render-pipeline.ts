@@ -34,7 +34,7 @@ import {
   getPreferredContainerForCodec,
   selectFallbackVideoCodec,
 } from './client-renderer'
-import { renderAudioOnly, renderComposition } from './client-render-engine'
+import { renderAudioOnly, renderComposition } from './canvas-render-orchestrator'
 import type {
   ExportRenderWorkerRequest,
   ExportRenderWorkerResponse,

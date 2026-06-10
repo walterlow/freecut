@@ -1,4 +1,4 @@
-import { renderAudioOnly, renderComposition } from '../utils/client-render-engine'
+import { renderAudioOnly, renderComposition } from '../utils/canvas-render-orchestrator'
 import { isGifUrl, isWebpUrl } from '@/shared/utils/media-utils'
 import { createLogger } from '@/shared/logging/logger'
 import type { ImageItem } from '@/types/timeline'

@@ -9,7 +9,13 @@ Export-local adapters for external feature dependencies.
 - `keyframes.ts`: the preferred entry point for export modules that need
   keyframe interpolation/animation utilities.
 - `timeline.ts`: the preferred entry point for export modules that need
-  timeline stores, timeline utilities, or GIF frame cache services.
+  timeline store state.
+- `timeline-frame.ts`: the preferred entry point for export modules that need
+  timeline/source frame conversion or effective track state helpers.
+- `timeline-compositions.ts`: the preferred entry point for export modules
+  that need composition store state or composition graph utilities.
+- `timeline-gif-cache.ts`: the preferred entry point for export modules that
+  need GIF frame cache services.
 - `projects.ts`: the preferred entry point for export modules that need
   project metadata/state stores.
 - `player-contract.ts`: adapter exports for export modules that need player

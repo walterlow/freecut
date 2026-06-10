@@ -7,7 +7,7 @@ import { interpolatePropertyValue } from '@/features/export/deps/keyframes'
 import {
   resolveEffectiveTrackStates,
   timelineToSourceFrames,
-} from '@/features/export/deps/timeline'
+} from '@/features/export/deps/timeline-frame'
 import { createLogger } from '@/shared/logging/logger'
 import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
 

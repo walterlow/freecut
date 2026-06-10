@@ -78,6 +78,7 @@ function createCompositionMaskRenderHarness(params: {
     canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
     textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
     renderMode: 'export',
+    renderItem,
     videoExtractors: new Map(),
     videoElements: new Map(),
     useMediabunny: new Set(),

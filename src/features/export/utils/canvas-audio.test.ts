@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { CompositionInputProps } from '@/types/export'
 import type { AudioItem, CompositionItem, TimelineTrack, VideoItem } from '@/types/timeline'
-import { useCompositionsStore } from '@/features/export/deps/timeline'
+import { useCompositionsStore } from '@/features/export/deps/timeline-compositions'
 
 vi.mock('mediabunny', () => {
   class UrlSource {

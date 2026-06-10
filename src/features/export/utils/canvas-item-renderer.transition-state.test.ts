@@ -880,6 +880,7 @@ describe('renderTransitionToGpuTexture', () => {
       canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
       textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
       renderMode: 'preview',
+      renderItem: vi.fn(),
       videoExtractors: new Map([
         [leftClip.id, leftExtractor as unknown as VideoFrameSource],
         [rightClip.id, rightExtractor as unknown as VideoFrameSource],
@@ -1713,6 +1714,7 @@ describe('renderTransitionToGpuTexture', () => {
         ),
       } as unknown as ItemRenderContext['textMeasureCache'],
       renderMode: 'export',
+      renderItem: vi.fn(),
       videoExtractors: new Map(),
       videoElements: new Map(),
       useMediabunny: new Set(),

@@ -6,9 +6,8 @@
  * animations.
  *
  * The top-level render orchestration functions (`renderComposition`,
- * `renderAudioOnly`, `renderSingleFrame`) have been extracted to
- * `canvas-render-orchestrator.ts`.  They are re-exported here so that
- * existing import sites continue to work unchanged.
+ * `renderAudioOnly`, `renderSingleFrame`) live in
+ * `canvas-render-orchestrator.ts`.
  *
  * Per-item rendering helpers (video, image, text, shape, transitions) live
  * in `canvas-item-renderer.ts`.
@@ -53,17 +52,20 @@ import {
   type PreparedMask,
 } from './canvas-masks'
 import { type ActiveTransition } from './canvas-transitions'
-import { type CachedGifFrames, gifFrameCache } from '@/features/export/deps/timeline'
+import { type CachedGifFrames, gifFrameCache } from '@/features/export/deps/timeline-gif-cache'
 import { CanvasPool, TextMeasurementCache } from './canvas-pool'
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor'
 import { getCompositeOperation } from '@/types/blend-mode-css'
-import { useCompositionsStore, type SubComposition } from '@/features/export/deps/timeline'
+import {
+  useCompositionsStore,
+  type SubComposition,
+} from '@/features/export/deps/timeline-compositions'
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope'
 import type { FrameInvalidationRequest } from '@/shared/utils/frame-invalidation'
 import {
   collectReachableCompositionIdsFromItems,
   collectReachableCompositionIdsFromTracks,
-} from '@/features/export/deps/timeline'
+} from '@/features/export/deps/timeline-compositions'
 
 // Item renderer
 import {
@@ -76,6 +78,7 @@ import {
   resolveFrameRenderScene,
 } from '@/features/export/deps/composition-runtime'
 import {
+  renderItem,
   renderTransitionToGpuTexture,
   type CanvasSettings,
   type WorkerLoadedImage,
@@ -92,9 +95,6 @@ import {
   isGifFormat,
   subCompositionRenderDataHasGpuEffects,
 } from './render-engine-predicates'
-
-// Re-export orchestration functions so existing import sites keep working
-export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator'
 
 function getLog() {
   return createLogger('ClientRenderEngine')
@@ -497,6 +497,7 @@ export async function createCompositionRenderer(
     canvasPool,
     textMeasureCache,
     renderMode,
+    renderItem,
     scrubbingCache,
     getCurrentItemSnapshot: getCurrentItem,
     getLiveItemSnapshotById: getLiveItemSnapshot,
