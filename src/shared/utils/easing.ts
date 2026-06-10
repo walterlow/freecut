@@ -61,7 +61,7 @@ export function cubicBezier(t: number, points: BezierControlPoints): number {
   return ((ay * tCurve + by) * tCurve + cy) * tCurve
 }
 
-export function springEasing(t: number, params: SpringParameters): number {
+function springEasing(t: number, params: SpringParameters): number {
   const { tension, friction, mass } = params
 
   if (t === 0) return 0

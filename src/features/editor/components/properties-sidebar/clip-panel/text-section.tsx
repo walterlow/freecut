@@ -277,10 +277,6 @@ function getSpanEditorConfigs(
   ]
 }
 
-export function TextSection(props: TextSectionProps) {
-  return <TextSectionComposer {...props} slots={['content', 'effects', 'animation']} />
-}
-
 export function TextContentSection(props: TextSectionProps) {
   return <TextSectionComposer {...props} slots={['content']} />
 }
