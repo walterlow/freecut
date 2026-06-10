@@ -3,7 +3,7 @@ import { drawFullscreenCanvasPass } from '@/infrastructure/gpu-shared/fullscreen
 import { FULLSCREEN_QUAD_WGSL } from '@/infrastructure/gpu-shared/fullscreen-quad'
 import { COMMON_WGSL } from './common'
 import type { GpuEffectDefinition, GpuEffectInstance } from './types'
-import { GPU_EFFECT_REGISTRY, getGpuEffect } from './index'
+import { GPU_EFFECT_REGISTRY, getGpuEffect } from './registry'
 
 function getLogger() {
   return createLogger('EffectsPipeline')
