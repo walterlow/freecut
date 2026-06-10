@@ -20,7 +20,6 @@ export {
   CLIP_EMBEDDING_DIM,
   buildEmbeddingText,
   extractDominantColors,
-  extractDominantColorPhrase,
 } from '@/infrastructure/analysis/embeddings'
 export type {
   EmbeddingsOptions,

@@ -179,11 +179,3 @@ export async function extractDominantColors(blob: Blob): Promise<ExtractedColors
     bitmap.close()
   }
 }
-
-/**
- * Back-compat helper for code paths that only need the human phrase
- * (embedding input). Equivalent to `extractDominantColors().phrase`.
- */
-export async function extractDominantColorPhrase(blob: Blob): Promise<string> {
-  return (await extractDominantColors(blob)).phrase
-}
