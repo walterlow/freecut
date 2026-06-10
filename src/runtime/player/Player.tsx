@@ -535,7 +535,7 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
  * The ClockBridgeProvider maintains backwards compatibility with
  * existing code that uses useTimelineContext().
  */
-export const Player = forwardRef<PlayerRef, PlayerProps>((props, ref) => {
+const Player = forwardRef<PlayerRef, PlayerProps>((props, ref) => {
   const { durationInFrames, fps, initialFrame, initiallyMuted, playbackRate, loop, onEnded } = props
 
   return (

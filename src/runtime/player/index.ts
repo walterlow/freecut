@@ -1,3 +1,3 @@
 // Main player component exports.
-export { HeadlessPlayer, Player } from './Player'
+export { HeadlessPlayer } from './Player'
 export type { PlayerRef } from './Player'
