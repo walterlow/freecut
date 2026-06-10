@@ -5,7 +5,7 @@ import type {
   TransformProperties,
 } from '@/types/transform'
 import type { TimelineItem, VideoItem, ImageItem, CompositionItem } from '@/types/timeline'
-import { useMediaLibraryStore } from '@/runtime/composition-runtime/deps/stores'
+import { useMediaLibraryStore } from '@/runtime/composition-runtime/deps/media-library-store'
 
 function buildCssTransform(rotation: number, transform?: TransformProperties): string | undefined {
   const transforms: string[] = []
