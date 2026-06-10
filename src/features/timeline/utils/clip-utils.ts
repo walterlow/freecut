@@ -1,5 +1,5 @@
 import type { TimelineItem } from '@/types/timeline'
-import { areFramesAligned } from './transition-utils'
+import { areFramesAligned } from './frame-alignment'
 
 /**
  * Check if two items can be joined (inverse of split)

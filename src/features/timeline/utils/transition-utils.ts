@@ -25,25 +25,14 @@ import {
 import { calculateTransitionPortions } from '@/shared/timeline/transitions/transition-planner'
 import { calculateTrimSourceUpdate, type TrimHandle } from './trim-utils'
 import { computeSlideContinuitySourceDelta } from './slide-utils'
+import { areFramesAligned, areFramesOverlapping } from './frame-alignment'
 import {
   applyMovePreview,
   applyTrimEndPreview,
   applyTrimStartPreview,
   type PreviewItemUpdate,
 } from './item-edit-preview'
-
-const FRAME_EPSILON = 1
-
-export function areFramesAligned(leftEnd: number, rightStart: number): boolean {
-  return Math.abs(leftEnd - rightStart) <= FRAME_EPSILON
-}
-
-/**
- * Check if two clips overlap (right clip starts before left clip ends).
- */
-export function areFramesOverlapping(leftEnd: number, rightStart: number): boolean {
-  return rightStart < leftEnd - FRAME_EPSILON
-}
+export { areFramesAligned, areFramesOverlapping } from './frame-alignment'
 
 export function getMaxTransitionDurationForHandles(
   leftClip: TimelineItem,
