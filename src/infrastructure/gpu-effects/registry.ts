@@ -8,7 +8,7 @@ import * as keyingEffects from './effects/keying'
 
 export const GPU_EFFECT_REGISTRY = new Map<string, GpuEffectDefinition>()
 
-export const GPU_EFFECT_CATEGORIES: Record<GpuEffectCategory, GpuEffectDefinition[]> = {
+const GPU_EFFECT_CATEGORIES: Record<GpuEffectCategory, GpuEffectDefinition[]> = {
   color: [],
   blur: [],
   distort: [],

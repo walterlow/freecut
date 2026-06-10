@@ -354,14 +354,14 @@ export function resolvePausedVariableSpeedPrewarmPlan(
  * Seconds of forward jump below which mediabunny's sequential advance is fast
  * enough (~1ms/frame) that a background worker preseek isn't worth queuing.
  */
-export const JUMP_PRESEEK_FORWARD_THRESHOLD_SECONDS = 3
+const JUMP_PRESEEK_FORWARD_THRESHOLD_SECONDS = 3
 /**
  * Seconds of backward jump above which a worker preseek is queued. Backward
  * jumps can't ride sequential advance — mediabunny must seek to the previous
  * keyframe and decode forward (300-600ms), so the threshold is much smaller
  * than the forward one.
  */
-export const JUMP_PRESEEK_BACKWARD_THRESHOLD_SECONDS = 0.5
+const JUMP_PRESEEK_BACKWARD_THRESHOLD_SECONDS = 0.5
 
 /**
  * Decide whether a paused playhead jump should queue a background worker

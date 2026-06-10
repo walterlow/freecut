@@ -5,14 +5,7 @@
  * loadFont() starts loading fonts asynchronously.
  */
 
-import {
-  loadFont as nativeLoadFont,
-  loadFonts as nativeLoadFonts,
-  FONT_WEIGHT_MAP as NATIVE_FONT_WEIGHT_MAP,
-} from '@/shared/typography/fonts'
-
-// Re-export font weight map for external use
-export const FONT_WEIGHT_MAP = NATIVE_FONT_WEIGHT_MAP
+import { loadFont as nativeLoadFont, loadFonts as nativeLoadFonts } from '@/shared/typography/fonts'
 
 /**
  * Load a Google Font for use in compositions.
