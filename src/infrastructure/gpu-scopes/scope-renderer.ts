@@ -103,18 +103,6 @@ export class ScopeRenderer {
     )
   }
 
-  renderWaveform(ctx: GPUCanvasContext, mode: number) {
-    if (!this.srcTexture) return
-    this.waveform.renderBatch(
-      this.srcTexture,
-      [{ ctx, mode }],
-      this.kr,
-      this.kb,
-      this.rangeMin,
-      this.rangeMax,
-    )
-  }
-
   renderWaveforms(requests: Array<{ ctx: GPUCanvasContext; mode: number }>) {
     if (!this.srcTexture || requests.length === 0) return
     this.waveform.renderBatch(
@@ -143,27 +131,6 @@ export class ScopeRenderer {
   renderVectorscope(ctx: GPUCanvasContext) {
     if (!this.srcTexture) return
     this.vectorscope.render(this.srcTexture, ctx, this.kr, this.kb)
-  }
-
-  clearScope(ctx: GPUCanvasContext) {
-    try {
-      const enc = this.device.createCommandEncoder()
-      enc
-        .beginRenderPass({
-          colorAttachments: [
-            {
-              view: ctx.getCurrentTexture().createView(),
-              loadOp: 'clear',
-              storeOp: 'store',
-              clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
-            },
-          ],
-        })
-        .end()
-      this.device.queue.submit([enc.finish()])
-    } catch {
-      // GPU error — ignore
-    }
   }
 
   destroy() {
