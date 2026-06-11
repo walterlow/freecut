@@ -128,19 +128,13 @@ export { proxyDir, proxyFilePath, proxyMetaPath } from '@/infrastructure/storage
 export {
   getEmbeddedSubtitleSidecar,
   saveEmbeddedSubtitleSidecar,
-  type EmbeddedSubtitleSidecar,
 } from '@/infrastructure/storage/workspace-fs/embedded-subtitles'
 
 // Scene-detection results
 export { deleteScenes } from '@/infrastructure/storage/workspace-fs/scenes'
 
 // Generic AI-output envelope (use these directly for new AI services)
-export {
-  readAiOutput,
-  type AiOutput,
-  type AiOutputKind,
-  type AiOutputPayloads,
-} from '@/infrastructure/storage/workspace-fs/ai-outputs'
+export { readAiOutput } from '@/infrastructure/storage/workspace-fs/ai-outputs'
 
 // Orphan cache sweep
 export {
@@ -156,7 +150,6 @@ export {
   readExportFile,
   deleteExportFile,
   workspaceFolderName,
-  type SavedExport,
   type ExportFileEntry,
 } from '@/infrastructure/storage/workspace-fs/exports'
 
@@ -174,6 +167,5 @@ export {
   getTrashedProjectMediaIds,
   sweepTrashOlderThan,
   DEFAULT_TRASH_TTL_MS,
-  type TrashMarker,
   type TrashedProjectEntry,
 } from '@/infrastructure/storage/workspace-fs/trash'

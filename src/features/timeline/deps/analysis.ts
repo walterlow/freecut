@@ -18,4 +18,3 @@ export function getSceneVerificationModelOptions(): readonly {
 }
 
 export type VerificationModel = SceneVerificationModelId
-export type { SceneCut, SceneDetectionProgress } from '@/infrastructure/analysis/scene-detection'

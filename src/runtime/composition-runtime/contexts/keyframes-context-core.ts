@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { ItemKeyframes } from '@/types/keyframe'
 
-export interface KeyframesContextValue {
+interface KeyframesContextValue {
   keyframes: ItemKeyframes[]
   getItemKeyframes: (itemId: string) => ItemKeyframes | undefined
 }

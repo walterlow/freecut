@@ -1,5 +1,1 @@
-export {
-  useProjectMediaMatchDialogStore,
-  type ProjectMediaMatchCandidate,
-  type ProjectMediaMatchChoice,
-} from './store'
+export { useProjectMediaMatchDialogStore, type ProjectMediaMatchChoice } from './store'

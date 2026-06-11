@@ -8,7 +8,6 @@ export {
   getMediaDragData,
   clearMediaDragData,
   type CompositionDragData,
-  type TimelineTemplateDragData,
 } from '@/features/media-library/utils/drag-data-cache'
 export {
   extractValidMediaFileEntriesFromDataTransfer,

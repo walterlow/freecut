@@ -13,8 +13,6 @@
  * a real machine and dumped/analyzed in one call.
  */
 
-export type PreviewTraceChannel = 'pump' | 'render'
-
 /** One overlay decision the pump made for a priority playback frame. */
 export interface PreviewPumpTraceEvent {
   ch: 'pump'

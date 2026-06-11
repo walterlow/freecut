@@ -7,7 +7,6 @@ export {
   clearMediaDragData,
   type CompositionDragData,
   getMediaDragData,
-  type TimelineTemplateDragData,
 } from './media-library-resolver-contract'
 export {
   extractValidMediaFileEntriesFromDataTransfer,

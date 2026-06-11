@@ -6,11 +6,7 @@
  */
 
 export { captionVideo, captionImage } from '@/infrastructure/analysis/media-tagger'
-export type {
-  MediaCaption,
-  CaptioningProgress,
-  CaptioningOptions,
-} from '@/infrastructure/analysis/media-tagger'
+export type { MediaCaption } from '@/infrastructure/analysis/media-tagger'
 export {
   embeddingsProvider,
   EMBEDDING_MODEL_ID,
@@ -20,12 +16,4 @@ export {
   CLIP_EMBEDDING_DIM,
   buildEmbeddingText,
   extractDominantColors,
-} from '@/infrastructure/analysis/embeddings'
-export type {
-  EmbeddingsOptions,
-  EmbeddingsProgress,
-  EmbeddingsProvider,
-  BuildEmbeddingTextInput,
-  TranscriptSegment,
-  PaletteEntry,
 } from '@/infrastructure/analysis/embeddings'

@@ -15,7 +15,7 @@
  *   __FRAME_JITTER__.histogram()   — frame time distribution
  */
 
-export interface FrameTimingSample {
+interface FrameTimingSample {
   frame: number
   /** ms since previous sample */
   deltaMs: number
@@ -27,7 +27,7 @@ export interface FrameTimingSample {
   source: 'clock' | 'render'
 }
 
-export interface StallEvent {
+interface StallEvent {
   frame: number
   deltaMs: number
   expectedMs: number
@@ -37,7 +37,7 @@ export interface StallEvent {
   inTransition: boolean
 }
 
-export interface TransitionFrameLog {
+interface TransitionFrameLog {
   frame: number
   renderMs: number
   clockDeltaMs: number | null

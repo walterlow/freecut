@@ -52,7 +52,7 @@ interface HandlesDBSchema extends DBSchema {
   }
 }
 
-export type HandlesDBInstance = IDBPDatabase<HandlesDBSchema>
+type HandlesDBInstance = IDBPDatabase<HandlesDBSchema>
 
 let dbPromise: Promise<HandlesDBInstance> | null = null
 

@@ -2,7 +2,6 @@
  * Timeline contract consumed by preview feature adapters.
  */
 
-export type { TimelineState } from '../types'
 export { useTimelineStore } from '../stores/timeline-store'
 export { useItemsStore } from '../stores/items-store'
 export { useKeyframesStore } from '../stores/keyframes-store'
@@ -33,9 +32,5 @@ export {
   buildSubCompositionInput,
   collectSubCompositionMediaIds,
 } from '../utils/sub-composition-preview'
-export {
-  createScrubThrottleState,
-  shouldCommitScrubFrame,
-  type ScrubThrottleState,
-} from '../utils/scrub-throttle'
+export { createScrubThrottleState, shouldCommitScrubFrame } from '../utils/scrub-throttle'
 export { useWaveform } from '../hooks/use-waveform'

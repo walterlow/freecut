@@ -6,4 +6,3 @@
 export { EffectsSection } from '@/features/effects/components/effects-section'
 export { prewarmEffectPreviews } from '@/features/effects/hooks/use-effect-previews'
 export { useGpuEffectPreviewData } from '@/features/effects/hooks/use-gpu-effect-preview-data'
-export type { EffectPreviewEntry } from '@/features/effects/hooks/use-effect-previews'

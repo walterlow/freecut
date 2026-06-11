@@ -12,10 +12,6 @@ export {
   getTrackKind,
   type DroppableMediaType,
 } from './timeline-contract'
-export {
-  createScrubThrottleState,
-  shouldCommitScrubFrame,
-  type ScrubThrottleState,
-} from './timeline-contract'
+export { createScrubThrottleState, shouldCommitScrubFrame } from './timeline-contract'
 export { timelineToSourceFrames } from './timeline-contract'
 export { useWaveform } from './timeline-contract'

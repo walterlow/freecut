@@ -2,12 +2,7 @@
  * Single import seam for preview -> timeline dependencies.
  */
 
-export type {
-  DroppableMediaType,
-  ScrubThrottleState,
-  SubComposition,
-  TimelineState,
-} from '@/features/timeline/contracts/preview'
+export type { DroppableMediaType, SubComposition } from '@/features/timeline/contracts/preview'
 export {
   buildDroppedMediaTimelineItem,
   buildSubCompositionInput,

@@ -6,4 +6,3 @@ export {
   useSettingsStore,
   resolveCaptioningIntervalSec,
 } from '@/features/settings/stores/settings-store'
-export type { CaptioningIntervalUnit } from '@/features/settings/stores/settings-store'

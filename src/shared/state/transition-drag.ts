@@ -13,7 +13,7 @@ export interface DraggedTransitionDescriptor {
   direction?: WipeDirection | SlideDirection | FlipDirection
 }
 
-export interface TransitionDragPreview {
+interface TransitionDragPreview {
   leftClipId: string
   rightClipId: string
   durationInFrames: number
@@ -21,7 +21,7 @@ export interface TransitionDragPreview {
   existingTransitionId?: string
 }
 
-export interface TransitionDragHint {
+interface TransitionDragHint {
   x: number
   y: number
   message: string

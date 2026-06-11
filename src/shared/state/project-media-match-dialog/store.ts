@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export interface ProjectMediaMatchCandidate {
+interface ProjectMediaMatchCandidate {
   fileName: string
   width: number
   height: number

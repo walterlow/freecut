@@ -14,12 +14,4 @@ export {
   extractDominantColors,
   deltaE2000,
 } from '@/infrastructure/analysis/embeddings'
-export type {
-  EmbeddingsOptions,
-  EmbeddingsProgress,
-  EmbeddingsProvider,
-  BuildEmbeddingTextInput,
-  TranscriptSegment,
-  PaletteEntry,
-  LabColor,
-} from '@/infrastructure/analysis/embeddings'
+export type { PaletteEntry, LabColor } from '@/infrastructure/analysis/embeddings'
