@@ -2,6 +2,7 @@
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
 
 const DEFAULT_BASE_REF = 'HEAD';
@@ -32,10 +33,21 @@ function parseJson(stdout) {
   return JSON.parse(trimmed);
 }
 
-function createFallowCommand(baseRef) {
-  const fallowArgs = ['audit', '--format', 'json', '--quiet', '--base', baseRef];
+function getNpmExecPath() {
   const npmExecPath = process.env.npm_execpath;
   if (npmExecPath && fs.existsSync(npmExecPath)) {
+    return npmExecPath;
+  }
+
+  const nodeDir = path.dirname(process.execPath);
+  const bundledNpmPath = path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  return fs.existsSync(bundledNpmPath) ? bundledNpmPath : '';
+}
+
+function createFallowCommand(baseRef) {
+  const fallowArgs = ['audit', '--format', 'json', '--quiet', '--base', baseRef];
+  const npmExecPath = getNpmExecPath();
+  if (npmExecPath) {
     return {
       command: process.execPath,
       args: [npmExecPath, 'exec', '--yes', '--', FALLOW_PACKAGE, ...fallowArgs],

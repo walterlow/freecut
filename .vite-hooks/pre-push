@@ -5,25 +5,28 @@ set -e
 
 echo "Running quality checks before push..."
 
-echo "  [1/6] check:boundaries"
+echo "  [1/7] check:boundaries"
 vp run check:boundaries --silent
 
-echo "  [2/6] check:deps-contracts"
+echo "  [2/7] check:deps-contracts"
 vp run check:deps-contracts --silent
 
-echo "  [3/6] check:legacy-lib-imports"
+echo "  [3/7] check:legacy-lib-imports"
 vp run check:legacy-lib-imports --silent
 
-echo "  [4/6] check:deps-wrapper-health"
+echo "  [4/7] check:deps-wrapper-health"
 vp run check:deps-wrapper-health --silent
 
-echo "  [5/6] check:edge-budgets"
+echo "  [5/7] check:changed-health"
+vp run check:changed-health
+
+echo "  [6/7] check:edge-budgets"
 EDGE_REPORT=$(mktemp)
 trap 'rm -f "$EDGE_REPORT"' EXIT
 node scripts/report-feature-edges.mjs --json > "$EDGE_REPORT"
 node scripts/check-feature-edge-budgets.mjs --input "$EDGE_REPORT"
 
-echo "  [6/6] check"
+echo "  [7/7] check"
 vp run check --silent
 
 echo "All quality checks passed."
