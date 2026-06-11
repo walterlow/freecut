@@ -61,11 +61,9 @@ function WaveformPrefetchProbe({ onRender }: { onRender: () => void }) {
 }
 
 async function flushPrefetchTimers() {
-  // Three passes drain the full prefetch chain: each store update reschedules the
-  // schedulePreviewWork debounce timer (advanceTimersByTime), the fired callback awaits
-  // a dynamic import() of the waveform-cache module, and the resolved import then queues
-  // the prefetch calls. The two Promise.resolve() drains flush the import microtask before
-  // the next pass advances timers, so any work it re-scheduled is picked up.
+  // Three passes drain the timer chain: each store update reschedules the
+  // schedulePreviewWork debounce timer, and the fired callback queues a dynamic
+  // import of the waveform-cache module.
   for (let i = 0; i < 3; i += 1) {
     await act(async () => {
       vi.advanceTimersByTime(120)
@@ -74,6 +72,12 @@ async function flushPrefetchTimers() {
       await Promise.resolve()
     })
   }
+}
+
+async function flushWaveformPrefetch() {
+  await flushPrefetchTimers()
+  await import('../services/waveform-cache')
+  await Promise.resolve()
 }
 
 /** Replicate the prefetch range calculation */
@@ -248,15 +252,9 @@ describe('waveform prefetch filtering', () => {
           viewportHeight: 120,
         })
       })
-      await flushPrefetchTimers()
+      await flushWaveformPrefetch()
 
-      // The fixed-pass flush can finish before the waveform-cache dynamic
-      // import lands when the worker is CPU-starved (parallel full-suite
-      // runs). waitFor yields on real timers between checks — and advances
-      // the fake timers each pass — so the import gets event-loop time.
-      await vi.waitFor(() =>
-        expect(waveformCacheMocks.prefetch).toHaveBeenCalledWith(item.mediaId, 'blob:prefetch'),
-      )
+      expect(waveformCacheMocks.prefetch).toHaveBeenCalledWith(item.mediaId, 'blob:prefetch')
     } finally {
       vi.useRealTimers()
     }
@@ -284,7 +282,7 @@ describe('waveform prefetch filtering', () => {
 
       render(createElement(WaveformPrefetchProbe, { onRender: () => {} }))
 
-      await flushPrefetchTimers()
+      await flushWaveformPrefetch()
 
       expect(waveformCacheMocks.prefetch).toHaveBeenCalledWith(item.mediaId, null)
     } finally {
