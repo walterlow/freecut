@@ -58,28 +58,6 @@ export class PlayerEmitter {
     this.listeners[name] = this.listeners[name].filter((l) => l !== callback) as PlayerListeners[Q]
   }
 
-  once<Q extends PlayerEventTypes>(name: Q, callback: CallbackListener<Q>): void {
-    const wrapper: CallbackListener<Q> = (data) => {
-      callback(data)
-      this.removeEventListener(name, wrapper)
-    }
-    this.addEventListener(name, wrapper)
-  }
-
-  hasListeners(name: PlayerEventTypes): boolean {
-    return this.listeners[name].length > 0
-  }
-
-  listenerCount(name: PlayerEventTypes): number {
-    return this.listeners[name].length
-  }
-
-  removeAllListeners(): void {
-    Object.keys(this.listeners).forEach((key) => {
-      this.listeners[key as PlayerEventTypes] = []
-    })
-  }
-
   dispatchSeek(frame: number): void {
     this.dispatchEvent('seeked', { frame })
   }

@@ -99,33 +99,4 @@ export class GpuTexturePool {
           : 'n/a',
     })
   }
-
-  /** Shrink pools by destroying unused textures. Call periodically (e.g. every 60 frames). */
-  compact(): void {
-    for (const [key, entries] of this.pools.entries()) {
-      const inUse = entries.filter((e) => e.inUse)
-      const unused = entries.filter((e) => !e.inUse)
-      // Keep at most 2 unused textures per key
-      const toDestroy = unused.slice(2)
-      for (const entry of toDestroy) {
-        entry.texture.destroy()
-      }
-      if (toDestroy.length > 0) {
-        this.pools.set(key, [...inUse, ...unused.slice(0, 2)])
-      }
-    }
-  }
-
-  getMetrics() {
-    return {
-      totalCreated: this.totalCreated,
-      totalAcquires: this.totalAcquires,
-      cacheHits: this.cacheHits,
-      cacheHitRate:
-        this.totalAcquires > 0
-          ? `${((this.cacheHits / this.totalAcquires) * 100).toFixed(1)}%`
-          : 'n/a',
-      poolCount: this.pools.size,
-    }
-  }
 }
