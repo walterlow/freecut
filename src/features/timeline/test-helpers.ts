@@ -65,6 +65,25 @@ export function setDefaultRootTimelineTracks() {
     ])
 }
 
+/**
+ * Seeds `useItemsStore` with the standard V1/A1 track pair plus two video
+ * items (the second starting at frame 60) and one audio item.
+ */
+export function seedTimelineWithVideoAndAudioTracks(itemIds: {
+  firstVideoId: string
+  secondVideoId: string
+  audioId: string
+}): void {
+  setDefaultRootTimelineTracks()
+  useItemsStore
+    .getState()
+    .setItems([
+      makeTimelineVideoItem({ id: itemIds.firstVideoId }),
+      makeTimelineVideoItem({ id: itemIds.secondVideoId, from: 60 }),
+      makeTimelineAudioItem({ id: itemIds.audioId }),
+    ])
+}
+
 export function makeTwoVideoTwoAudioTimelineTracks(height = 80): TimelineTrack[] {
   return [
     makeTimelineTrack({ id: 'v1', name: 'V1', kind: 'video', order: 0, height }),

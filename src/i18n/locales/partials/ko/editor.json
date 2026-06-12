@@ -547,6 +547,10 @@
         "lofiElectroLabel": "Lo-fi 일렉트로",
         "lofiElectroPrompt": "오가닉 샘플이 있는 느린 BPM의 lo-fi 일렉트로 칠"
       }
+    },
+    "colorPanel": {
+      "emptyState": "색 보정할 클립을 선택하세요",
+      "adjustmentLayerLabel": "색 보정"
     }
   }
 }

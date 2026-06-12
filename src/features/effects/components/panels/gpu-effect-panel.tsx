@@ -19,8 +19,9 @@ import {
   getEffectOptionLabel,
   getEffectParamLabel,
 } from '@/features/effects/utils/effect-i18n'
+import { EffectMoveButtons, type EffectMoveProps } from './effect-move-buttons'
 
-interface GpuEffectPanelProps {
+interface GpuEffectPanelProps extends EffectMoveProps {
   itemIds: string[]
   effect: ItemEffect
   gpuEffect: GpuEffect
@@ -43,7 +44,10 @@ function ActionButtons({
   onReset,
   onToggle,
   onRemove,
-}: {
+  onMove,
+  canMoveUp,
+  canMoveDown,
+}: EffectMoveProps & {
   effectId: string
   enabled: boolean
   isDefault: boolean
@@ -54,6 +58,12 @@ function ActionButtons({
   const { t } = useTranslation()
   return (
     <>
+      <EffectMoveButtons
+        effectId={effectId}
+        onMove={onMove}
+        canMoveUp={canMoveUp}
+        canMoveDown={canMoveDown}
+      />
       <Button
         variant="ghost"
         size="icon"
@@ -101,6 +111,9 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
   onReset,
   onToggle,
   onRemove,
+  onMove,
+  canMoveUp,
+  canMoveDown,
 }: GpuEffectPanelProps) {
   const { t } = useTranslation()
   const paramEntries = Object.entries(definition.params)
@@ -140,6 +153,9 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
             onReset={onReset}
             onToggle={onToggle}
             onRemove={onRemove}
+            onMove={onMove}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
           />
         </div>
       </PropertyRow>
@@ -158,6 +174,9 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
             onReset={onReset}
             onToggle={onToggle}
             onRemove={onRemove}
+            onMove={onMove}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
           />
         </div>
       </PropertyRow>
@@ -176,6 +195,9 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
             onReset={onReset}
             onToggle={onToggle}
             onRemove={onRemove}
+            onMove={onMove}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
           />
         </div>
       </PropertyRow>

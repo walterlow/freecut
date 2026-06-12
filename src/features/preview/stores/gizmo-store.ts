@@ -141,6 +141,11 @@ interface GizmoStoreState {
   preview: Record<string, ItemPreview> | null
   /** Canvas background color preview (during color picker drag) */
   canvasBackgroundPreview: string | null
+  /**
+   * Preview-only bypass of all color-category effects (grade bypass).
+   * Used for before/after comparison while grading; never affects export.
+   */
+  colorGradeBypassed: boolean
 }
 
 interface GizmoStoreActions {
@@ -232,6 +237,9 @@ interface GizmoStoreActions {
    */
   setEffectsPreviewNew: (effects: Record<string, ItemEffect[]>) => void
 
+  /** Toggle preview-only color grade bypass (before/after comparison) */
+  toggleColorGradeBypass: () => void
+
   /** Clear all preview data */
   clearPreview: () => void
 
@@ -256,6 +264,7 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>((set, g
   otherItemBounds: [],
   preview: null,
   canvasBackgroundPreview: null,
+  colorGradeBypassed: false,
 
   // Actions
   setCanvasSize: (width, height) => set({ canvasSize: { width, height } }),
@@ -475,6 +484,8 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>((set, g
     }
     set({ preview: merged })
   },
+
+  toggleColorGradeBypass: () => set((state) => ({ colorGradeBypassed: !state.colorGradeBypassed })),
 
   clearPreview: () => set({ preview: null }),
 

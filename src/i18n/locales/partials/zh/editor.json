@@ -547,6 +547,10 @@
         "lofiElectroLabel": "Lo-fi 电子",
         "lofiElectroPrompt": "低速 lo-fi 电子\f，配有有机采样"
       }
+    },
+    "colorPanel": {
+      "emptyState": "选择要调色的剪辑",
+      "adjustmentLayerLabel": "调色"
     }
   }
 }

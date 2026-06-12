@@ -547,6 +547,10 @@
         "lofiElectroLabel": "Lo-fi eletrônico",
         "lofiElectroPrompt": "Lo-fi electro chill de BPM lento com samples orgânicos"
       }
+    },
+    "colorPanel": {
+      "emptyState": "Selecione um clipe para corrigir as cores",
+      "adjustmentLayerLabel": "Correção de cor"
     }
   }
 }

@@ -547,6 +547,10 @@
         "lofiElectroLabel": "Lo-fi エレクトロ",
         "lofiElectroPrompt": "オーガニックなサンプルを使った低速 BPM の lo-fi エレクトロチル"
       }
+    },
+    "colorPanel": {
+      "emptyState": "グレーディングするクリップを選択してください",
+      "adjustmentLayerLabel": "グレーディング"
     }
   }
 }

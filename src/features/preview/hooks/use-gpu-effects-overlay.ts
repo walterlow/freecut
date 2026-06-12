@@ -159,7 +159,7 @@ export function useGpuEffectsOverlay(..._args: unknown[]) {
     const unsubTransitions = useTransitionsStore.subscribe(check)
     const unsubCompositions = useCompositionsStore.subscribe(check)
     const unsubGizmo = useGizmoStore.subscribe((state, prev) => {
-      if (state.preview === prev.preview) {
+      if (state.preview === prev.preview && state.colorGradeBypassed === prev.colorGradeBypassed) {
         return
       }
       check()

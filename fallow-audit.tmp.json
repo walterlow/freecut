@@ -1,0 +1,2655 @@
+{
+  "schema_version": 7,
+  "version": "2.89.0",
+  "command": "audit",
+  "verdict": "fail",
+  "changed_files_count": 71,
+  "base_ref": "HEAD",
+  "head_sha": "70a8d4b8",
+  "elapsed_ms": 3077,
+  "summary": {
+    "dead_code_issues": 7,
+    "dead_code_has_errors": true,
+    "complexity_findings": 36,
+    "max_cyclomatic": 85,
+    "duplication_clone_groups": 6
+  },
+  "attribution": {
+    "gate": "new-only",
+    "dead_code_introduced": 0,
+    "dead_code_inherited": 7,
+    "complexity_introduced": 4,
+    "complexity_inherited": 32,
+    "duplication_introduced": 4,
+    "duplication_inherited": 2
+  },
+  "dead_code": {
+    "schema_version": 7,
+    "version": "2.89.0",
+    "elapsed_ms": 859,
+    "total_issues": 7,
+    "entry_points": {
+      "total": 442,
+      "sources": {
+        "manual_entry": 5,
+        "package.json": 18,
+        "plugin": 419
+      }
+    },
+    "summary": {
+      "total_issues": 7,
+      "unused_files": 0,
+      "unused_exports": 1,
+      "unused_types": 0,
+      "private_type_leaks": 0,
+      "unused_dependencies": 0,
+      "unused_enum_members": 0,
+      "unused_class_members": 6,
+      "unresolved_imports": 0,
+      "unlisted_dependencies": 0,
+      "duplicate_exports": 0,
+      "type_only_dependencies": 0,
+      "test_only_dependencies": 0,
+      "circular_dependencies": 0,
+      "re_export_cycles": 0,
+      "boundary_violations": 0,
+      "stale_suppressions": 0,
+      "unused_catalog_entries": 0,
+      "empty_catalog_groups": 0,
+      "unresolved_catalog_references": 0,
+      "unused_dependency_overrides": 0,
+      "misconfigured_dependency_overrides": 0
+    },
+    "unused_files": [],
+    "unused_exports": [
+      {
+        "path": "src/infrastructure/storage/index.ts",
+        "export_name": "saveExportFile",
+        "is_type_only": false,
+        "line": 148,
+        "col": 2,
+        "span_start": 3668,
+        "is_re_export": true,
+        "actions": [
+          {
+            "type": "remove-export",
+            "auto_fixable": true,
+            "description": "Remove the unused export from the public API",
+            "note": "This finding originates from a re-export; verify it is not part of your public API before removing"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the line",
+            "comment": "// fallow-ignore-next-line unused-export"
+          }
+        ],
+        "introduced": false
+      }
+    ],
+    "unused_types": [],
+    "private_type_leaks": [],
+    "unused_dependencies": [],
+    "unused_dev_dependencies": [],
+    "unused_optional_dependencies": [],
+    "unused_enum_members": [],
+    "unused_class_members": [
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "parent_name": "EffectsPipeline",
+        "member_name": "beginBatch",
+        "kind": "class_method",
+        "line": 513,
+        "col": 2,
+        "actions": [
+          {
+            "type": "remove-class-member",
+            "auto_fixable": false,
+            "description": "Remove this class member",
+            "note": "Class member may be used via dependency injection or decorators"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the line",
+            "comment": "// fallow-ignore-next-line unused-class-member"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "parent_name": "EffectsPipeline",
+        "member_name": "endBatch",
+        "kind": "class_method",
+        "line": 521,
+        "col": 2,
+        "actions": [
+          {
+            "type": "remove-class-member",
+            "auto_fixable": false,
+            "description": "Remove this class member",
+            "note": "Class member may be used via dependency injection or decorators"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the line",
+            "comment": "// fallow-ignore-next-line unused-class-member"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "parent_name": "EffectsPipeline",
+        "member_name": "waitForSubmittedWork",
+        "kind": "class_method",
+        "line": 530,
+        "col": 2,
+        "actions": [
+          {
+            "type": "remove-class-member",
+            "auto_fixable": false,
+            "description": "Remove this class member",
+            "note": "Class member may be used via dependency injection or decorators"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the line",
+            "comment": "// fallow-ignore-next-line unused-class-member"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "parent_name": "EffectsPipeline",
+        "member_name": "applyEffectsToTexture",
+        "kind": "class_method",
+        "line": 661,
+        "col": 2,
+        "actions": [
+          {
+            "type": "remove-class-member",
+            "auto_fixable": false,
+            "description": "Remove this class member",
+            "note": "Class member may be used via dependency injection or decorators"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the line",
+            "comment": "// fallow-ignore-next-line unused-class-member"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "parent_name": "EffectsPipeline",
+        "member_name": "applyTextureEffectsToTexture",
+        "kind": "class_method",
+        "line": 708,
+        "col": 2,
+        "actions": [
+          {
+            "type": "remove-class-member",
+            "auto_fixable": false,
+            "description": "Remove this class member",
+            "note": "Class member may be used via dependency injection or decorators"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the line",
+            "comment": "// fallow-ignore-next-line unused-class-member, complexity"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "parent_name": "EffectsPipeline",
+        "member_name": "applyEffectsToVideo",
+        "kind": "class_method",
+        "line": 769,
+        "col": 2,
+        "actions": [
+          {
+            "type": "remove-class-member",
+            "auto_fixable": false,
+            "description": "Remove this class member",
+            "note": "Class member may be used via dependency injection or decorators"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the line",
+            "comment": "// fallow-ignore-next-line unused-class-member, complexity"
+          }
+        ],
+        "introduced": false
+      }
+    ],
+    "unresolved_imports": [],
+    "unlisted_dependencies": [],
+    "duplicate_exports": [],
+    "type_only_dependencies": [],
+    "test_only_dependencies": [],
+    "circular_dependencies": [],
+    "re_export_cycles": [],
+    "boundary_violations": [],
+    "stale_suppressions": [],
+    "unused_catalog_entries": [],
+    "empty_catalog_groups": [],
+    "unresolved_catalog_references": [],
+    "unused_dependency_overrides": [],
+    "misconfigured_dependency_overrides": []
+  },
+  "duplication": {
+    "clone_groups": [
+      {
+        "instances": [
+          {
+            "file": "src/features/editor/components/properties-sidebar/clip-panel/audio-section.tsx",
+            "start_line": 56,
+            "end_line": 93,
+            "start_col": 8,
+            "end_col": 51,
+            "fragment": "audioItemsById = useMemo(\n    () => new Map(audioItems.map((item) => [item.id, item])),\n    [audioItems],\n  )\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  const volume = useMemo(() => {\n    if (audioItems.length === 0) return 0 as number | 'mixed'\n\n    const values = audioItems.map((item) => {\n      const staticVolume = item.volume ?? 0\n      const itemKeyframes = keyframesByItemId.get(item.id) ?? undefined\n      if (itemKeyframes) {\n        const volumeKfs = getPropertyKeyframes(itemKeyframes, 'volume')\n        if (volumeKfs.length > 0) {\n          const relativeFrame = currentFrame - item.from\n          return interpolatePropertyValue(volumeKfs, relativeFrame, staticVolume)\n        }\n      }\n      return staticVolume\n    })\n\n    const first = values[0]!\n    return values.every((v) => Math.abs(v - first) < 0.01)\n      ? Math.round(first * 10) / 10\n      : ('mixed' as const)\n  }, [audioItems, currentFrame, keyframesByItemId])"
+          },
+          {
+            "file": "src/features/editor/components/properties-sidebar/clip-panel/fill-section.tsx",
+            "start_line": 53,
+            "end_line": 69,
+            "start_col": 8,
+            "end_col": 58,
+            "fragment": "currentFrame = useThrottledFrame()\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  // Item update for non-transform properties (blend mode)\n  const updateItem = useTimelineStore((s) => s.updateItem)"
+          },
+          {
+            "file": "src/features/editor/components/properties-sidebar/clip-panel/layout-section.tsx",
+            "start_line": 66,
+            "end_line": 82,
+            "start_col": 8,
+            "end_col": 73,
+            "fragment": "currentFrame = useThrottledFrame()\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  // Gizmo store for live preview (both for properties panel and gizmo drag sync)\n  const setTransformPreview = useGizmoStore((s) => s.setTransformPreview)"
+          },
+          {
+            "file": "src/features/editor/components/properties-sidebar/clip-panel/video-section.tsx",
+            "start_line": 149,
+            "end_line": 178,
+            "start_col": 8,
+            "end_col": 51,
+            "fragment": "rateStretchableIds = useMemo(\n    () =>\n      items\n        .filter(\n          (item): item is VideoItem | AudioItem => item.type === 'video' || item.type === 'audio',\n        )\n        .map((item) => item.id),\n    [items],\n  )\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  const resolvedCropStatesByItem = useMemo(() => {\n    const map = new Map<string, ResolvedCropState>()\n    for (const item of videoItems) {\n      map.set(item.id, getResolvedCropState(item, currentFrame, keyframesByItemId.get(item.id)))\n    }\n    return map\n  }, [currentFrame, keyframesByItemId, videoItems])"
+          },
+          {
+            "file": "src/features/effects/components/effects-section.tsx",
+            "start_line": 62,
+            "end_line": 81,
+            "start_col": 8,
+            "end_col": 3,
+            "fragment": "displayItem = visualItems[0] ?? null\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  const getMappedEffectEntry = useCallback(\n    (item: TimelineItem, displayEffectId: string): ItemEffect | null => {\n      return getMappedSelectionEffectEntry(effects, item.effects, displayEffectId)\n    },\n    [effects],\n  )"
+          }
+        ],
+        "token_count": 106,
+        "line_count": 38,
+        "fingerprint": "dup:477eec76",
+        "suggested_name": "itemKeyframes",
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract duplicated code (38 lines, 5 instances) into a shared function"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "instances": [
+          {
+            "file": "src/features/editor/components/properties-sidebar/clip-panel/audio-section.tsx",
+            "start_line": 56,
+            "end_line": 71,
+            "start_col": 8,
+            "end_col": 30,
+            "fragment": "audioItemsById = useMemo(\n    () => new Map(audioItems.map((item) => [item.id, item])),\n    [audioItems],\n  )\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+          },
+          {
+            "file": "src/features/editor/components/properties-sidebar/clip-panel/fill-section.tsx",
+            "start_line": 53,
+            "end_line": 66,
+            "start_col": 8,
+            "end_col": 30,
+            "fragment": "currentFrame = useThrottledFrame()\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+          },
+          {
+            "file": "src/features/editor/components/properties-sidebar/clip-panel/layout-section.tsx",
+            "start_line": 66,
+            "end_line": 79,
+            "start_col": 8,
+            "end_col": 30,
+            "fragment": "currentFrame = useThrottledFrame()\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+          },
+          {
+            "file": "src/features/editor/components/properties-sidebar/clip-panel/video-section.tsx",
+            "start_line": 149,
+            "end_line": 170,
+            "start_col": 8,
+            "end_col": 30,
+            "fragment": "rateStretchableIds = useMemo(\n    () =>\n      items\n        .filter(\n          (item): item is VideoItem | AudioItem => item.type === 'video' || item.type === 'audio',\n        )\n        .map((item) => item.id),\n    [items],\n  )\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+          },
+          {
+            "file": "src/features/effects/components/effects-section.tsx",
+            "start_line": 62,
+            "end_line": 74,
+            "start_col": 8,
+            "end_col": 30,
+            "fragment": "displayItem = visualItems[0] ?? null\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+          },
+          {
+            "file": "src/features/preview/hooks/use-visual-transform.ts",
+            "start_line": 40,
+            "end_line": 46,
+            "start_col": 8,
+            "end_col": 57,
+            "fragment": "itemIds = useMemo(() => items.map((item) => item.id), [items])\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const activeGizmo = useGizmoStore((s) => s.activeGizmo)"
+          }
+        ],
+        "token_count": 50,
+        "line_count": 22,
+        "fingerprint": "dup:6885a1c7",
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract duplicated code (22 lines, 6 instances) into a shared function"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "instances": [
+          {
+            "file": "src/features/effects/components/panels/gpu-curves-panel.tsx",
+            "start_line": 341,
+            "end_line": 400,
+            "start_col": 8,
+            "end_col": 55,
+            "fragment": "handleResetChannel = useCallback(() => {\n    const updates: Record<string, number | string> = {\n      [getGpuCurvesPointsParamKey(activeChannel)]: '',\n      ...toGpuCurvesChannelParamUpdates(activeChannel, getDefaultGpuCurvesChannelControl()),\n    }\n    updateChannelDraft(\n      activeChannel,\n      buildGpuCurvesChannelPoints(getDefaultGpuCurvesChannelControl()),\n    )\n    onParamsBatchChange(effect.id, updates)\n  }, [activeChannel, effect.id, onParamsBatchChange, updateChannelDraft])\n\n  return (\n    <div className=\"space-y-0\">\n      <PropertyRow label={getEffectDefinitionName(definition)}>\n        <div className=\"flex items-center gap-1 min-w-0 w-full justify-end\">\n          <EffectMoveButtons\n            effectId={effect.id}\n            onMove={onMove}\n            canMoveUp={canMoveUp}\n            canMoveDown={canMoveDown}\n          />\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}\n            onClick={() => onReset(effect.id)}\n            title={t('effects.panel.resetToDefaults')}\n            disabled={isDefault}\n          >\n            <RotateCcw className=\"w-3 h-3\" />\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onToggle(effect.id)}\n            title={\n              effect.enabled ? t('effects.panel.disableEffect') : t('effects.panel.enableEffect')\n            }\n          >\n            {effect.enabled ? (\n              <Eye className=\"w-3 h-3\" />\n            ) : (\n              <EyeOff className=\"w-3 h-3 text-muted-foreground\" />\n            )}\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onRemove(effect.id)}\n            title={t('effects.panel.removeEffect')}\n          >\n            <Trash2 className=\"w-3 h-3\" />\n          </Button>\n        </div>\n      </PropertyRow>\n\n      <PropertyRow label={t('effects.curves.channel')}>"
+          },
+          {
+            "file": "src/features/effects/components/panels/gpu-lut-panel.tsx",
+            "start_line": 108,
+            "end_line": 160,
+            "start_col": 8,
+            "end_col": 7,
+            "fragment": "keyframeProperty = getKeyframeProperty(effect.id, 'intensity')\n\n  return (\n    <div className=\"space-y-0\">\n      <PropertyRow label={getEffectDefinitionName(definition)}>\n        <div className=\"flex items-center gap-1 min-w-0 w-full justify-end\">\n          <EffectMoveButtons\n            effectId={effect.id}\n            onMove={onMove}\n            canMoveUp={canMoveUp}\n            canMoveDown={canMoveDown}\n          />\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}\n            onClick={() => onReset(effect.id)}\n            title={t('effects.panel.resetToDefaults')}\n            disabled={isDefault}\n          >\n            <RotateCcw className=\"w-3 h-3\" />\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onToggle(effect.id)}\n            title={\n              effect.enabled ? t('effects.panel.disableEffect') : t('effects.panel.enableEffect')\n            }\n          >\n            {effect.enabled ? (\n              <Eye className=\"w-3 h-3\" />\n            ) : (\n              <EyeOff className=\"w-3 h-3 text-muted-foreground\" />\n            )}\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onRemove(effect.id)}\n            title={t('effects.panel.removeEffect')}\n          >\n            <Trash2 className=\"w-3 h-3\" />\n          </Button>\n        </div>\n      </PropertyRow>\n\n      <PropertyRow\n        label={t('effects.lut.file')}\n        className={!effect.enabled ? 'opacity-50' : undefined}\n      >"
+          },
+          {
+            "file": "src/features/effects/components/panels/gpu-wheels-panel.tsx",
+            "start_line": 248,
+            "end_line": 297,
+            "start_col": 8,
+            "end_col": 33,
+            "fragment": "tonalRowClass = '[&>span]:w-[84px] [&>span]:min-w-[84px]'\n\n  return (\n    <div className=\"space-y-0\">\n      <PropertyRow label={getEffectDefinitionName(definition)}>\n        <div className=\"flex items-center gap-1 min-w-0 w-full justify-end\">\n          <EffectMoveButtons\n            effectId={effect.id}\n            onMove={onMove}\n            canMoveUp={canMoveUp}\n            canMoveDown={canMoveDown}\n          />\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}\n            onClick={() => onReset(effect.id)}\n            title={t('effects.panel.resetToDefaults')}\n            disabled={isDefault}\n          >\n            <RotateCcw className=\"w-3 h-3\" />\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onToggle(effect.id)}\n            title={\n              effect.enabled ? t('effects.panel.disableEffect') : t('effects.panel.enableEffect')\n            }\n          >\n            {effect.enabled ? (\n              <Eye className=\"w-3 h-3\" />\n            ) : (\n              <EyeOff className=\"w-3 h-3 text-muted-foreground\" />\n            )}\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onRemove(effect.id)}\n            title={t('effects.panel.removeEffect')}\n          >\n            <Trash2 className=\"w-3 h-3\" />\n          </Button>\n        </div>\n      </PropertyRow>\n\n      <div className=\"px-2 pb-2\">"
+          }
+        ],
+        "token_count": 173,
+        "line_count": 60,
+        "fingerprint": "dup:7340064f",
+        "suggested_name": "className",
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract duplicated code (60 lines, 3 instances) into a shared function"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ],
+        "introduced": true
+      },
+      {
+        "instances": [
+          {
+            "file": "src/features/effects/components/panels/gpu-effect-panel.tsx",
+            "start_line": 24,
+            "end_line": 31,
+            "start_col": 38,
+            "end_col": 99,
+            "fragment": "EffectMoveProps {\n  itemIds: string[]\n  effect: ItemEffect\n  gpuEffect: GpuEffect\n  definition: GpuEffectDefinition\n  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null\n  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void\n  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void"
+          },
+          {
+            "file": "src/features/effects/components/panels/gpu-lut-panel.tsx",
+            "start_line": 24,
+            "end_line": 31,
+            "start_col": 35,
+            "end_col": 99,
+            "fragment": "EffectMoveProps {\n  itemIds: string[]\n  effect: ItemEffect\n  gpuEffect: GpuEffect\n  definition: GpuEffectDefinition\n  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null\n  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void\n  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void"
+          },
+          {
+            "file": "src/features/effects/components/panels/gpu-wheels-panel.tsx",
+            "start_line": 14,
+            "end_line": 21,
+            "start_col": 38,
+            "end_col": 99,
+            "fragment": "EffectMoveProps {\n  itemIds: string[]\n  effect: ItemEffect\n  gpuEffect: GpuEffect\n  definition: GpuEffectDefinition\n  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null\n  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void\n  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void"
+          }
+        ],
+        "token_count": 62,
+        "line_count": 8,
+        "fingerprint": "dup:7a705a8b",
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract duplicated code (8 lines, 3 instances) into a shared function"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ],
+        "introduced": true
+      },
+      {
+        "instances": [
+          {
+            "file": "src/features/timeline/stores/actions/effect-actions.test.ts",
+            "start_line": 25,
+            "end_line": 38,
+            "start_col": 38,
+            "end_col": 7,
+            "fragment": "{ fps: 30, isDirty: false })\n    useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore\n      .getState()\n      .setItems([\n        makeTimelineVideoItem({ id: 'a' }),\n        makeTimelineVideoItem({ id: 'b', from: 60 }),\n        makeTimelineAudioItem({ id: 'audio-1' }),\n      ]"
+          },
+          {
+            "file": "src/features/timeline/stores/actions/source-edit-actions.test.ts",
+            "start_line": 80,
+            "end_line": 87,
+            "start_col": 38,
+            "end_col": 40,
+            "fragment": "{ fps: 30, isDirty: false })\n    useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore.getState().setItems([]"
+          },
+          {
+            "file": "src/features/timeline/utils/grade-clipboard-ops.test.ts",
+            "start_line": 32,
+            "end_line": 45,
+            "start_col": 36,
+            "end_col": 7,
+            "fragment": "{ grade: null })\n    useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore\n      .getState()\n      .setItems([\n        makeTimelineVideoItem({ id: 'source' }),\n        makeTimelineVideoItem({ id: 'target', from: 60 }),\n        makeTimelineAudioItem({ id: 'audio-1' }),\n      ]"
+          }
+        ],
+        "token_count": 54,
+        "line_count": 14,
+        "fingerprint": "dup:5bd20fe9",
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract duplicated code (14 lines, 3 instances) into a shared function"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ],
+        "introduced": true
+      },
+      {
+        "instances": [
+          {
+            "file": "src/features/timeline/stores/actions/effect-actions.test.ts",
+            "start_line": 26,
+            "end_line": 38,
+            "start_col": 4,
+            "end_col": 7,
+            "fragment": "useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore\n      .getState()\n      .setItems([\n        makeTimelineVideoItem({ id: 'a' }),\n        makeTimelineVideoItem({ id: 'b', from: 60 }),\n        makeTimelineAudioItem({ id: 'audio-1' }),\n      ]"
+          },
+          {
+            "file": "src/features/timeline/stores/actions/source-edit-actions.test.ts",
+            "start_line": 81,
+            "end_line": 87,
+            "start_col": 4,
+            "end_col": 40,
+            "fragment": "useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore.getState().setItems([]"
+          },
+          {
+            "file": "src/features/timeline/stores/actions/split-bookkeeping.test.ts",
+            "start_line": 24,
+            "end_line": 30,
+            "start_col": 4,
+            "end_col": 40,
+            "fragment": "useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore.getState().setItems([]"
+          },
+          {
+            "file": "src/features/timeline/utils/grade-clipboard-ops.test.ts",
+            "start_line": 33,
+            "end_line": 45,
+            "start_col": 4,
+            "end_col": 7,
+            "fragment": "useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore\n      .getState()\n      .setItems([\n        makeTimelineVideoItem({ id: 'source' }),\n        makeTimelineVideoItem({ id: 'target', from: 60 }),\n        makeTimelineAudioItem({ id: 'audio-1' }),\n      ]"
+          }
+        ],
+        "token_count": 50,
+        "line_count": 13,
+        "fingerprint": "dup:a3de4aa6",
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract duplicated code (13 lines, 4 instances) into a shared function"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ],
+        "introduced": true
+      }
+    ],
+    "clone_families": [
+      {
+        "files": [
+          "src/features/effects/components/panels/gpu-curves-panel.tsx",
+          "src/features/effects/components/panels/gpu-lut-panel.tsx",
+          "src/features/effects/components/panels/gpu-wheels-panel.tsx"
+        ],
+        "groups": [
+          {
+            "instances": [
+              {
+                "file": "src/features/effects/components/panels/gpu-curves-panel.tsx",
+                "start_line": 341,
+                "end_line": 400,
+                "start_col": 8,
+                "end_col": 55,
+                "fragment": "handleResetChannel = useCallback(() => {\n    const updates: Record<string, number | string> = {\n      [getGpuCurvesPointsParamKey(activeChannel)]: '',\n      ...toGpuCurvesChannelParamUpdates(activeChannel, getDefaultGpuCurvesChannelControl()),\n    }\n    updateChannelDraft(\n      activeChannel,\n      buildGpuCurvesChannelPoints(getDefaultGpuCurvesChannelControl()),\n    )\n    onParamsBatchChange(effect.id, updates)\n  }, [activeChannel, effect.id, onParamsBatchChange, updateChannelDraft])\n\n  return (\n    <div className=\"space-y-0\">\n      <PropertyRow label={getEffectDefinitionName(definition)}>\n        <div className=\"flex items-center gap-1 min-w-0 w-full justify-end\">\n          <EffectMoveButtons\n            effectId={effect.id}\n            onMove={onMove}\n            canMoveUp={canMoveUp}\n            canMoveDown={canMoveDown}\n          />\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}\n            onClick={() => onReset(effect.id)}\n            title={t('effects.panel.resetToDefaults')}\n            disabled={isDefault}\n          >\n            <RotateCcw className=\"w-3 h-3\" />\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onToggle(effect.id)}\n            title={\n              effect.enabled ? t('effects.panel.disableEffect') : t('effects.panel.enableEffect')\n            }\n          >\n            {effect.enabled ? (\n              <Eye className=\"w-3 h-3\" />\n            ) : (\n              <EyeOff className=\"w-3 h-3 text-muted-foreground\" />\n            )}\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onRemove(effect.id)}\n            title={t('effects.panel.removeEffect')}\n          >\n            <Trash2 className=\"w-3 h-3\" />\n          </Button>\n        </div>\n      </PropertyRow>\n\n      <PropertyRow label={t('effects.curves.channel')}>"
+              },
+              {
+                "file": "src/features/effects/components/panels/gpu-lut-panel.tsx",
+                "start_line": 108,
+                "end_line": 160,
+                "start_col": 8,
+                "end_col": 7,
+                "fragment": "keyframeProperty = getKeyframeProperty(effect.id, 'intensity')\n\n  return (\n    <div className=\"space-y-0\">\n      <PropertyRow label={getEffectDefinitionName(definition)}>\n        <div className=\"flex items-center gap-1 min-w-0 w-full justify-end\">\n          <EffectMoveButtons\n            effectId={effect.id}\n            onMove={onMove}\n            canMoveUp={canMoveUp}\n            canMoveDown={canMoveDown}\n          />\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}\n            onClick={() => onReset(effect.id)}\n            title={t('effects.panel.resetToDefaults')}\n            disabled={isDefault}\n          >\n            <RotateCcw className=\"w-3 h-3\" />\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onToggle(effect.id)}\n            title={\n              effect.enabled ? t('effects.panel.disableEffect') : t('effects.panel.enableEffect')\n            }\n          >\n            {effect.enabled ? (\n              <Eye className=\"w-3 h-3\" />\n            ) : (\n              <EyeOff className=\"w-3 h-3 text-muted-foreground\" />\n            )}\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onRemove(effect.id)}\n            title={t('effects.panel.removeEffect')}\n          >\n            <Trash2 className=\"w-3 h-3\" />\n          </Button>\n        </div>\n      </PropertyRow>\n\n      <PropertyRow\n        label={t('effects.lut.file')}\n        className={!effect.enabled ? 'opacity-50' : undefined}\n      >"
+              },
+              {
+                "file": "src/features/effects/components/panels/gpu-wheels-panel.tsx",
+                "start_line": 248,
+                "end_line": 297,
+                "start_col": 8,
+                "end_col": 33,
+                "fragment": "tonalRowClass = '[&>span]:w-[84px] [&>span]:min-w-[84px]'\n\n  return (\n    <div className=\"space-y-0\">\n      <PropertyRow label={getEffectDefinitionName(definition)}>\n        <div className=\"flex items-center gap-1 min-w-0 w-full justify-end\">\n          <EffectMoveButtons\n            effectId={effect.id}\n            onMove={onMove}\n            canMoveUp={canMoveUp}\n            canMoveDown={canMoveDown}\n          />\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}\n            onClick={() => onReset(effect.id)}\n            title={t('effects.panel.resetToDefaults')}\n            disabled={isDefault}\n          >\n            <RotateCcw className=\"w-3 h-3\" />\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onToggle(effect.id)}\n            title={\n              effect.enabled ? t('effects.panel.disableEffect') : t('effects.panel.enableEffect')\n            }\n          >\n            {effect.enabled ? (\n              <Eye className=\"w-3 h-3\" />\n            ) : (\n              <EyeOff className=\"w-3 h-3 text-muted-foreground\" />\n            )}\n          </Button>\n          <Button\n            variant=\"ghost\"\n            size=\"icon\"\n            className=\"h-6 w-6 flex-shrink-0\"\n            onClick={() => onRemove(effect.id)}\n            title={t('effects.panel.removeEffect')}\n          >\n            <Trash2 className=\"w-3 h-3\" />\n          </Button>\n        </div>\n      </PropertyRow>\n\n      <div className=\"px-2 pb-2\">"
+              }
+            ],
+            "token_count": 173,
+            "line_count": 60,
+            "fingerprint": "dup:7340064f",
+            "suggested_name": "className",
+            "actions": [
+              {
+                "type": "extract-shared",
+                "auto_fixable": false,
+                "description": "Extract duplicated code (60 lines, 3 instances) into a shared function"
+              },
+              {
+                "type": "suppress-line",
+                "auto_fixable": false,
+                "description": "Suppress with an inline comment above the duplicated code",
+                "comment": "// fallow-ignore-next-line code-duplication"
+              }
+            ]
+          }
+        ],
+        "total_duplicated_lines": 60,
+        "total_duplicated_tokens": 173,
+        "suggestions": [
+          {
+            "kind": "ExtractModule",
+            "description": "Extract 1 shared clone group (60 lines) from gpu-curves-panel.tsx, gpu-lut-panel.tsx, gpu-wheels-panel.tsx into src\\features\\effects\\components\\panels",
+            "estimated_savings": 120
+          }
+        ],
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract 1 duplicated code block (60 lines) into a shared module",
+            "note": "These clone groups share the same files, indicating a structural relationship; refactor together"
+          },
+          {
+            "type": "apply-suggestion",
+            "auto_fixable": false,
+            "description": "Extract 1 shared clone group (60 lines) from gpu-curves-panel.tsx, gpu-lut-panel.tsx, gpu-wheels-panel.tsx into src\\features\\effects\\components\\panels"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ]
+      },
+      {
+        "files": [
+          "src/features/editor/components/properties-sidebar/clip-panel/audio-section.tsx",
+          "src/features/editor/components/properties-sidebar/clip-panel/fill-section.tsx",
+          "src/features/editor/components/properties-sidebar/clip-panel/layout-section.tsx",
+          "src/features/editor/components/properties-sidebar/clip-panel/video-section.tsx",
+          "src/features/effects/components/effects-section.tsx"
+        ],
+        "groups": [
+          {
+            "instances": [
+              {
+                "file": "src/features/editor/components/properties-sidebar/clip-panel/audio-section.tsx",
+                "start_line": 56,
+                "end_line": 93,
+                "start_col": 8,
+                "end_col": 51,
+                "fragment": "audioItemsById = useMemo(\n    () => new Map(audioItems.map((item) => [item.id, item])),\n    [audioItems],\n  )\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  const volume = useMemo(() => {\n    if (audioItems.length === 0) return 0 as number | 'mixed'\n\n    const values = audioItems.map((item) => {\n      const staticVolume = item.volume ?? 0\n      const itemKeyframes = keyframesByItemId.get(item.id) ?? undefined\n      if (itemKeyframes) {\n        const volumeKfs = getPropertyKeyframes(itemKeyframes, 'volume')\n        if (volumeKfs.length > 0) {\n          const relativeFrame = currentFrame - item.from\n          return interpolatePropertyValue(volumeKfs, relativeFrame, staticVolume)\n        }\n      }\n      return staticVolume\n    })\n\n    const first = values[0]!\n    return values.every((v) => Math.abs(v - first) < 0.01)\n      ? Math.round(first * 10) / 10\n      : ('mixed' as const)\n  }, [audioItems, currentFrame, keyframesByItemId])"
+              },
+              {
+                "file": "src/features/editor/components/properties-sidebar/clip-panel/fill-section.tsx",
+                "start_line": 53,
+                "end_line": 69,
+                "start_col": 8,
+                "end_col": 58,
+                "fragment": "currentFrame = useThrottledFrame()\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  // Item update for non-transform properties (blend mode)\n  const updateItem = useTimelineStore((s) => s.updateItem)"
+              },
+              {
+                "file": "src/features/editor/components/properties-sidebar/clip-panel/layout-section.tsx",
+                "start_line": 66,
+                "end_line": 82,
+                "start_col": 8,
+                "end_col": 73,
+                "fragment": "currentFrame = useThrottledFrame()\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  // Gizmo store for live preview (both for properties panel and gizmo drag sync)\n  const setTransformPreview = useGizmoStore((s) => s.setTransformPreview)"
+              },
+              {
+                "file": "src/features/editor/components/properties-sidebar/clip-panel/video-section.tsx",
+                "start_line": 149,
+                "end_line": 178,
+                "start_col": 8,
+                "end_col": 51,
+                "fragment": "rateStretchableIds = useMemo(\n    () =>\n      items\n        .filter(\n          (item): item is VideoItem | AudioItem => item.type === 'video' || item.type === 'audio',\n        )\n        .map((item) => item.id),\n    [items],\n  )\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  const resolvedCropStatesByItem = useMemo(() => {\n    const map = new Map<string, ResolvedCropState>()\n    for (const item of videoItems) {\n      map.set(item.id, getResolvedCropState(item, currentFrame, keyframesByItemId.get(item.id)))\n    }\n    return map\n  }, [currentFrame, keyframesByItemId, videoItems])"
+              },
+              {
+                "file": "src/features/effects/components/effects-section.tsx",
+                "start_line": 62,
+                "end_line": 81,
+                "start_col": 8,
+                "end_col": 3,
+                "fragment": "displayItem = visualItems[0] ?? null\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])\n\n  const getMappedEffectEntry = useCallback(\n    (item: TimelineItem, displayEffectId: string): ItemEffect | null => {\n      return getMappedSelectionEffectEntry(effects, item.effects, displayEffectId)\n    },\n    [effects],\n  )"
+              }
+            ],
+            "token_count": 106,
+            "line_count": 38,
+            "fingerprint": "dup:477eec76",
+            "suggested_name": "itemKeyframes",
+            "actions": [
+              {
+                "type": "extract-shared",
+                "auto_fixable": false,
+                "description": "Extract duplicated code (38 lines, 5 instances) into a shared function"
+              },
+              {
+                "type": "suppress-line",
+                "auto_fixable": false,
+                "description": "Suppress with an inline comment above the duplicated code",
+                "comment": "// fallow-ignore-next-line code-duplication"
+              }
+            ]
+          }
+        ],
+        "total_duplicated_lines": 38,
+        "total_duplicated_tokens": 106,
+        "suggestions": [
+          {
+            "kind": "ExtractFunction",
+            "description": "Extract shared function (38 lines) from audio-section.tsx, fill-section.tsx, layout-section.tsx, video-section.tsx, effects-section.tsx",
+            "estimated_savings": 152
+          }
+        ],
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract 1 duplicated code block (38 lines) into a shared module",
+            "note": "These clone groups share the same files, indicating a structural relationship; refactor together"
+          },
+          {
+            "type": "apply-suggestion",
+            "auto_fixable": false,
+            "description": "Extract shared function (38 lines) from audio-section.tsx, fill-section.tsx, layout-section.tsx, video-section.tsx, effects-section.tsx"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ]
+      },
+      {
+        "files": [
+          "src/features/editor/components/properties-sidebar/clip-panel/audio-section.tsx",
+          "src/features/editor/components/properties-sidebar/clip-panel/fill-section.tsx",
+          "src/features/editor/components/properties-sidebar/clip-panel/layout-section.tsx",
+          "src/features/editor/components/properties-sidebar/clip-panel/video-section.tsx",
+          "src/features/effects/components/effects-section.tsx",
+          "src/features/preview/hooks/use-visual-transform.ts"
+        ],
+        "groups": [
+          {
+            "instances": [
+              {
+                "file": "src/features/editor/components/properties-sidebar/clip-panel/audio-section.tsx",
+                "start_line": 56,
+                "end_line": 71,
+                "start_col": 8,
+                "end_col": 30,
+                "fragment": "audioItemsById = useMemo(\n    () => new Map(audioItems.map((item) => [item.id, item])),\n    [audioItems],\n  )\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+              },
+              {
+                "file": "src/features/editor/components/properties-sidebar/clip-panel/fill-section.tsx",
+                "start_line": 53,
+                "end_line": 66,
+                "start_col": 8,
+                "end_col": 30,
+                "fragment": "currentFrame = useThrottledFrame()\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+              },
+              {
+                "file": "src/features/editor/components/properties-sidebar/clip-panel/layout-section.tsx",
+                "start_line": 66,
+                "end_line": 79,
+                "start_col": 8,
+                "end_col": 30,
+                "fragment": "currentFrame = useThrottledFrame()\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+              },
+              {
+                "file": "src/features/editor/components/properties-sidebar/clip-panel/video-section.tsx",
+                "start_line": 149,
+                "end_line": 170,
+                "start_col": 8,
+                "end_col": 30,
+                "fragment": "rateStretchableIds = useMemo(\n    () =>\n      items\n        .filter(\n          (item): item is VideoItem | AudioItem => item.type === 'video' || item.type === 'audio',\n        )\n        .map((item) => item.id),\n    [items],\n  )\n\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+              },
+              {
+                "file": "src/features/effects/components/effects-section.tsx",
+                "start_line": 62,
+                "end_line": 74,
+                "start_col": 8,
+                "end_col": 30,
+                "fragment": "displayItem = visualItems[0] ?? null\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const keyframesByItemId = useMemo(() => {\n    const map = new Map<string, (typeof itemKeyframes)[number]>()\n    for (const [index, itemId] of itemIds.entries()) {\n      map.set(itemId, itemKeyframes[index] ?? null)\n    }\n    return map\n  }, [itemIds, itemKeyframes])"
+              },
+              {
+                "file": "src/features/preview/hooks/use-visual-transform.ts",
+                "start_line": 40,
+                "end_line": 46,
+                "start_col": 8,
+                "end_col": 57,
+                "fragment": "itemIds = useMemo(() => items.map((item) => item.id), [items])\n  const itemKeyframes = useKeyframesStore(\n    useShallow(\n      useCallback((s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null), [itemIds]),\n    ),\n  )\n  const activeGizmo = useGizmoStore((s) => s.activeGizmo)"
+              }
+            ],
+            "token_count": 50,
+            "line_count": 22,
+            "fingerprint": "dup:6885a1c7",
+            "actions": [
+              {
+                "type": "extract-shared",
+                "auto_fixable": false,
+                "description": "Extract duplicated code (22 lines, 6 instances) into a shared function"
+              },
+              {
+                "type": "suppress-line",
+                "auto_fixable": false,
+                "description": "Suppress with an inline comment above the duplicated code",
+                "comment": "// fallow-ignore-next-line code-duplication"
+              }
+            ]
+          }
+        ],
+        "total_duplicated_lines": 22,
+        "total_duplicated_tokens": 50,
+        "suggestions": [
+          {
+            "kind": "ExtractFunction",
+            "description": "Extract shared function (22 lines) from audio-section.tsx, fill-section.tsx, layout-section.tsx, video-section.tsx, effects-section.tsx, use-visual-transform.ts",
+            "estimated_savings": 110
+          }
+        ],
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract 1 duplicated code block (22 lines) into a shared module",
+            "note": "These clone groups share the same files, indicating a structural relationship; refactor together"
+          },
+          {
+            "type": "apply-suggestion",
+            "auto_fixable": false,
+            "description": "Extract shared function (22 lines) from audio-section.tsx, fill-section.tsx, layout-section.tsx, video-section.tsx, effects-section.tsx, use-visual-transform.ts"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ]
+      },
+      {
+        "files": [
+          "src/features/timeline/stores/actions/effect-actions.test.ts",
+          "src/features/timeline/stores/actions/source-edit-actions.test.ts",
+          "src/features/timeline/utils/grade-clipboard-ops.test.ts"
+        ],
+        "groups": [
+          {
+            "instances": [
+              {
+                "file": "src/features/timeline/stores/actions/effect-actions.test.ts",
+                "start_line": 25,
+                "end_line": 38,
+                "start_col": 38,
+                "end_col": 7,
+                "fragment": "{ fps: 30, isDirty: false })\n    useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore\n      .getState()\n      .setItems([\n        makeTimelineVideoItem({ id: 'a' }),\n        makeTimelineVideoItem({ id: 'b', from: 60 }),\n        makeTimelineAudioItem({ id: 'audio-1' }),\n      ]"
+              },
+              {
+                "file": "src/features/timeline/stores/actions/source-edit-actions.test.ts",
+                "start_line": 80,
+                "end_line": 87,
+                "start_col": 38,
+                "end_col": 40,
+                "fragment": "{ fps: 30, isDirty: false })\n    useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore.getState().setItems([]"
+              },
+              {
+                "file": "src/features/timeline/utils/grade-clipboard-ops.test.ts",
+                "start_line": 32,
+                "end_line": 45,
+                "start_col": 36,
+                "end_col": 7,
+                "fragment": "{ grade: null })\n    useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore\n      .getState()\n      .setItems([\n        makeTimelineVideoItem({ id: 'source' }),\n        makeTimelineVideoItem({ id: 'target', from: 60 }),\n        makeTimelineAudioItem({ id: 'audio-1' }),\n      ]"
+              }
+            ],
+            "token_count": 54,
+            "line_count": 14,
+            "fingerprint": "dup:5bd20fe9",
+            "actions": [
+              {
+                "type": "extract-shared",
+                "auto_fixable": false,
+                "description": "Extract duplicated code (14 lines, 3 instances) into a shared function"
+              },
+              {
+                "type": "suppress-line",
+                "auto_fixable": false,
+                "description": "Suppress with an inline comment above the duplicated code",
+                "comment": "// fallow-ignore-next-line code-duplication"
+              }
+            ]
+          }
+        ],
+        "total_duplicated_lines": 14,
+        "total_duplicated_tokens": 54,
+        "suggestions": [
+          {
+            "kind": "ExtractFunction",
+            "description": "Extract shared function (14 lines) from effect-actions.test.ts, source-edit-actions.test.ts, grade-clipboard-ops.test.ts",
+            "estimated_savings": 28
+          }
+        ],
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract 1 duplicated code block (14 lines) into a shared module",
+            "note": "These clone groups share the same files, indicating a structural relationship; refactor together"
+          },
+          {
+            "type": "apply-suggestion",
+            "auto_fixable": false,
+            "description": "Extract shared function (14 lines) from effect-actions.test.ts, source-edit-actions.test.ts, grade-clipboard-ops.test.ts"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ]
+      },
+      {
+        "files": [
+          "src/features/timeline/stores/actions/effect-actions.test.ts",
+          "src/features/timeline/stores/actions/source-edit-actions.test.ts",
+          "src/features/timeline/stores/actions/split-bookkeeping.test.ts",
+          "src/features/timeline/utils/grade-clipboard-ops.test.ts"
+        ],
+        "groups": [
+          {
+            "instances": [
+              {
+                "file": "src/features/timeline/stores/actions/effect-actions.test.ts",
+                "start_line": 26,
+                "end_line": 38,
+                "start_col": 4,
+                "end_col": 7,
+                "fragment": "useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore\n      .getState()\n      .setItems([\n        makeTimelineVideoItem({ id: 'a' }),\n        makeTimelineVideoItem({ id: 'b', from: 60 }),\n        makeTimelineAudioItem({ id: 'audio-1' }),\n      ]"
+              },
+              {
+                "file": "src/features/timeline/stores/actions/source-edit-actions.test.ts",
+                "start_line": 81,
+                "end_line": 87,
+                "start_col": 4,
+                "end_col": 40,
+                "fragment": "useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore.getState().setItems([]"
+              },
+              {
+                "file": "src/features/timeline/stores/actions/split-bookkeeping.test.ts",
+                "start_line": 24,
+                "end_line": 30,
+                "start_col": 4,
+                "end_col": 40,
+                "fragment": "useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore.getState().setItems([]"
+              },
+              {
+                "file": "src/features/timeline/utils/grade-clipboard-ops.test.ts",
+                "start_line": 33,
+                "end_line": 45,
+                "start_col": 4,
+                "end_col": 7,
+                "fragment": "useItemsStore\n      .getState()\n      .setTracks([\n        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),\n        makeTimelineTrack({ id: 'track-a1', name: 'A1', kind: 'audio', order: 1 }),\n      ])\n    useItemsStore\n      .getState()\n      .setItems([\n        makeTimelineVideoItem({ id: 'source' }),\n        makeTimelineVideoItem({ id: 'target', from: 60 }),\n        makeTimelineAudioItem({ id: 'audio-1' }),\n      ]"
+              }
+            ],
+            "token_count": 50,
+            "line_count": 13,
+            "fingerprint": "dup:a3de4aa6",
+            "actions": [
+              {
+                "type": "extract-shared",
+                "auto_fixable": false,
+                "description": "Extract duplicated code (13 lines, 4 instances) into a shared function"
+              },
+              {
+                "type": "suppress-line",
+                "auto_fixable": false,
+                "description": "Suppress with an inline comment above the duplicated code",
+                "comment": "// fallow-ignore-next-line code-duplication"
+              }
+            ]
+          }
+        ],
+        "total_duplicated_lines": 13,
+        "total_duplicated_tokens": 50,
+        "suggestions": [
+          {
+            "kind": "ExtractFunction",
+            "description": "Extract shared function (13 lines) from effect-actions.test.ts, source-edit-actions.test.ts, split-bookkeeping.test.ts, grade-clipboard-ops.test.ts",
+            "estimated_savings": 39
+          }
+        ],
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract 1 duplicated code block (13 lines) into a shared module",
+            "note": "These clone groups share the same files, indicating a structural relationship; refactor together"
+          },
+          {
+            "type": "apply-suggestion",
+            "auto_fixable": false,
+            "description": "Extract shared function (13 lines) from effect-actions.test.ts, source-edit-actions.test.ts, split-bookkeeping.test.ts, grade-clipboard-ops.test.ts"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ]
+      },
+      {
+        "files": [
+          "src/features/effects/components/panels/gpu-effect-panel.tsx",
+          "src/features/effects/components/panels/gpu-lut-panel.tsx",
+          "src/features/effects/components/panels/gpu-wheels-panel.tsx"
+        ],
+        "groups": [
+          {
+            "instances": [
+              {
+                "file": "src/features/effects/components/panels/gpu-effect-panel.tsx",
+                "start_line": 24,
+                "end_line": 31,
+                "start_col": 38,
+                "end_col": 99,
+                "fragment": "EffectMoveProps {\n  itemIds: string[]\n  effect: ItemEffect\n  gpuEffect: GpuEffect\n  definition: GpuEffectDefinition\n  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null\n  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void\n  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void"
+              },
+              {
+                "file": "src/features/effects/components/panels/gpu-lut-panel.tsx",
+                "start_line": 24,
+                "end_line": 31,
+                "start_col": 35,
+                "end_col": 99,
+                "fragment": "EffectMoveProps {\n  itemIds: string[]\n  effect: ItemEffect\n  gpuEffect: GpuEffect\n  definition: GpuEffectDefinition\n  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null\n  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void\n  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void"
+              },
+              {
+                "file": "src/features/effects/components/panels/gpu-wheels-panel.tsx",
+                "start_line": 14,
+                "end_line": 21,
+                "start_col": 38,
+                "end_col": 99,
+                "fragment": "EffectMoveProps {\n  itemIds: string[]\n  effect: ItemEffect\n  gpuEffect: GpuEffect\n  definition: GpuEffectDefinition\n  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null\n  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void\n  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void"
+              }
+            ],
+            "token_count": 62,
+            "line_count": 8,
+            "fingerprint": "dup:7a705a8b",
+            "actions": [
+              {
+                "type": "extract-shared",
+                "auto_fixable": false,
+                "description": "Extract duplicated code (8 lines, 3 instances) into a shared function"
+              },
+              {
+                "type": "suppress-line",
+                "auto_fixable": false,
+                "description": "Suppress with an inline comment above the duplicated code",
+                "comment": "// fallow-ignore-next-line code-duplication"
+              }
+            ]
+          }
+        ],
+        "total_duplicated_lines": 8,
+        "total_duplicated_tokens": 62,
+        "suggestions": [
+          {
+            "kind": "ExtractFunction",
+            "description": "Extract shared function (8 lines) from gpu-effect-panel.tsx, gpu-lut-panel.tsx, gpu-wheels-panel.tsx",
+            "estimated_savings": 16
+          }
+        ],
+        "actions": [
+          {
+            "type": "extract-shared",
+            "auto_fixable": false,
+            "description": "Extract 1 duplicated code block (8 lines) into a shared module",
+            "note": "These clone groups share the same files, indicating a structural relationship; refactor together"
+          },
+          {
+            "type": "apply-suggestion",
+            "auto_fixable": false,
+            "description": "Extract shared function (8 lines) from gpu-effect-panel.tsx, gpu-lut-panel.tsx, gpu-wheels-panel.tsx"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the duplicated code",
+            "comment": "// fallow-ignore-next-line code-duplication"
+          }
+        ]
+      }
+    ],
+    "stats": {
+      "total_files": 1373,
+      "files_with_clones": 14,
+      "total_lines": 338777,
+      "duplicated_lines": 359,
+      "total_tokens": 1605116,
+      "duplicated_tokens": 1897,
+      "clone_groups": 6,
+      "clone_instances": 24,
+      "duplication_percentage": 0.10596941350800083,
+      "clone_groups_below_min_occurrences": 35
+    }
+  },
+  "complexity": {
+    "findings": [
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "pumpRenderLoop",
+        "line": 425,
+        "col": 27,
+        "cyclomatic": 85,
+        "cognitive": 173,
+        "line_count": 416,
+        "param_count": 0,
+        "exceeded": "all",
+        "severity": "critical",
+        "crap": 1645.6,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `pumpRenderLoop` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "<arrow>",
+        "line": 257,
+        "col": 12,
+        "cyclomatic": 50,
+        "cognitive": 85,
+        "line_count": 1537,
+        "param_count": 0,
+        "exceeded": "all",
+        "severity": "critical",
+        "crap": 590.0,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `<arrow>` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "handleScrubTargetUpdate",
+        "line": 1296,
+        "col": 36,
+        "cyclomatic": 43,
+        "cognitive": 64,
+        "line_count": 207,
+        "param_count": 2,
+        "exceeded": "all",
+        "severity": "critical",
+        "crap": 442.4,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `handleScrubTargetUpdate` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "handleActivePlaybackTransitionMaintenance",
+        "line": 1042,
+        "col": 54,
+        "cyclomatic": 36,
+        "cognitive": 62,
+        "line_count": 127,
+        "param_count": 1,
+        "exceeded": "all",
+        "severity": "critical",
+        "crap": 315.9,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `handleActivePlaybackTransitionMaintenance` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/stores/timeline-store-facade.ts",
+        "name": "<arrow>",
+        "line": 270,
+        "col": 30,
+        "cyclomatic": 35,
+        "cognitive": 32,
+        "line_count": 59,
+        "param_count": 1,
+        "exceeded": "all",
+        "severity": "critical",
+        "crap": 299.6,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `<arrow>` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/lut/cube-lut.ts",
+        "name": "parseCubeLut",
+        "line": 36,
+        "col": 7,
+        "cyclomatic": 32,
+        "cognitive": 46,
+        "line_count": 103,
+        "param_count": 1,
+        "exceeded": "all",
+        "severity": "critical",
+        "crap": 35.5,
+        "coverage_tier": "high",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `parseCubeLut` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": true
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-composition-model.ts",
+        "name": "buildPreviewCompositionData",
+        "line": 271,
+        "col": 7,
+        "cyclomatic": 31,
+        "cognitive": 60,
+        "line_count": 165,
+        "param_count": 1,
+        "exceeded": "all",
+        "severity": "critical",
+        "crap": 34.2,
+        "coverage_tier": "high",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `buildPreviewCompositionData` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "applyEffectsToVideo",
+        "line": 769,
+        "col": 21,
+        "cyclomatic": 23,
+        "cognitive": 22,
+        "line_count": 123,
+        "param_count": 5,
+        "exceeded": "all",
+        "severity": "critical",
+        "crap": 137.3,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `applyEffectsToVideo` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `applyEffectsToVideo` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line unused-class-member, complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/editor/components/media-sidebar.tsx",
+        "name": "MediaSidebar",
+        "line": 286,
+        "col": 33,
+        "cyclomatic": 22,
+        "cognitive": 21,
+        "line_count": 861,
+        "param_count": 0,
+        "exceeded": "both",
+        "severity": "moderate",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `MediaSidebar` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-effect-panel.tsx",
+        "name": "<arrow>",
+        "line": 205,
+        "col": 24,
+        "cyclomatic": 20,
+        "cognitive": 25,
+        "line_count": 102,
+        "param_count": 1,
+        "exceeded": "cognitive_crap",
+        "severity": "critical",
+        "crap": 106.4,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `<arrow>` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `<arrow>` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "applyEffectsToCanvas",
+        "line": 570,
+        "col": 22,
+        "cyclomatic": 19,
+        "cognitive": 19,
+        "line_count": 82,
+        "param_count": 2,
+        "exceeded": "cognitive_crap",
+        "severity": "high",
+        "crap": 97.0,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `applyEffectsToCanvas` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `applyEffectsToCanvas` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/editor/components/properties-sidebar/index.tsx",
+        "name": "PropertiesSidebar",
+        "line": 104,
+        "col": 38,
+        "cyclomatic": 17,
+        "cognitive": 23,
+        "line_count": 215,
+        "param_count": 0,
+        "exceeded": "cognitive",
+        "severity": "moderate",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `PropertiesSidebar` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "handlePausedTransitionPrewarm",
+        "line": 1201,
+        "col": 42,
+        "cyclomatic": 16,
+        "cognitive": 23,
+        "line_count": 94,
+        "param_count": 2,
+        "exceeded": "cognitive_crap",
+        "severity": "high",
+        "crap": 71.3,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `handlePausedTransitionPrewarm` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `handlePausedTransitionPrewarm` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/stores/gizmo-store.ts",
+        "name": "updateInteraction",
+        "line": 334,
+        "col": 21,
+        "cyclomatic": 16,
+        "cognitive": 20,
+        "line_count": 82,
+        "param_count": 4,
+        "exceeded": "cognitive_crap",
+        "severity": "high",
+        "crap": 71.3,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `updateInteraction` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `updateInteraction` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/stores/items-store.ts",
+        "name": "nextItems",
+        "line": 638,
+        "col": 40,
+        "cyclomatic": 16,
+        "cognitive": 12,
+        "line_count": 54,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "high",
+        "crap": 71.3,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `nextItems` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `nextItems` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/editor/components/media-sidebar.tsx",
+        "name": "renderTextTemplatePreview",
+        "line": 81,
+        "col": 0,
+        "cyclomatic": 15,
+        "cognitive": 14,
+        "line_count": 192,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "high",
+        "crap": 63.6,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `renderTextTemplatePreview` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `renderTextTemplatePreview` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/components/timeline-item/item-context-menu.tsx",
+        "name": "MediaActions",
+        "line": 499,
+        "col": 0,
+        "cyclomatic": 15,
+        "cognitive": 8,
+        "line_count": 71,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "high",
+        "crap": 63.6,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `MediaActions` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `MediaActions` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/stores/items-store.ts",
+        "name": "_splitItem",
+        "line": 453,
+        "col": 14,
+        "cyclomatic": 14,
+        "cognitive": 19,
+        "line_count": 140,
+        "param_count": 2,
+        "exceeded": "cognitive_crap",
+        "severity": "high",
+        "crap": 56.3,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `_splitItem` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `_splitItem` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "runEffectChain",
+        "line": 401,
+        "col": 24,
+        "cyclomatic": 14,
+        "cognitive": 25,
+        "line_count": 81,
+        "param_count": 6,
+        "exceeded": "cognitive_crap",
+        "severity": "high",
+        "crap": 56.3,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `runEffectChain` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `runEffectChain` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/stores/timeline-store-facade.ts",
+        "name": "getSnapshot",
+        "line": 56,
+        "col": 0,
+        "cyclomatic": 14,
+        "cognitive": 3,
+        "line_count": 125,
+        "param_count": 0,
+        "exceeded": "crap",
+        "severity": "high",
+        "crap": 56.3,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `getSnapshot` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/hooks/use-gpu-effects-overlay.ts",
+        "name": "shouldForceContinuousPreviewOverlay",
+        "line": 62,
+        "col": 7,
+        "cyclomatic": 13,
+        "cognitive": 25,
+        "line_count": 52,
+        "param_count": 6,
+        "exceeded": "cognitive",
+        "severity": "high",
+        "actions": [
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `shouldForceContinuousPreviewOverlay` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "getOrUpdateDataTexture",
+        "line": 325,
+        "col": 32,
+        "cyclomatic": 13,
+        "cognitive": 11,
+        "line_count": 62,
+        "param_count": 3,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 49.5,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `getOrUpdateDataTexture` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": true
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-curves-panel.tsx",
+        "name": "handleSvgMouseDown",
+        "line": 287,
+        "col": 4,
+        "cyclomatic": 13,
+        "cognitive": 12,
+        "line_count": 44,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 49.5,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `handleSvgMouseDown` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": true
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "unsubscribeGizmo",
+        "line": 1516,
+        "col": 53,
+        "cyclomatic": 12,
+        "cognitive": 10,
+        "line_count": 37,
+        "param_count": 2,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 43.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `unsubscribeGizmo` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": true
+      },
+      {
+        "path": "src/features/effects/components/effects-section.tsx",
+        "name": "getResolvedDisplayGpuEffect",
+        "line": 102,
+        "col": 4,
+        "cyclomatic": 12,
+        "cognitive": 14,
+        "line_count": 46,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 43.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `getResolvedDisplayGpuEffect` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/components/timeline-item/item-context-menu.tsx",
+        "name": "CompositionActions",
+        "line": 672,
+        "col": 0,
+        "cyclomatic": 12,
+        "cognitive": 8,
+        "line_count": 35,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 43.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `CompositionActions` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/editor/components/properties-sidebar/index.tsx",
+        "name": "buildClipHeaderGroups",
+        "line": 34,
+        "col": 0,
+        "cyclomatic": 11,
+        "cognitive": 17,
+        "line_count": 39,
+        "param_count": 1,
+        "exceeded": "cognitive_crap",
+        "severity": "moderate",
+        "crap": 37.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `buildClipHeaderGroups` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `buildClipHeaderGroups` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "playbackRafPump",
+        "line": 863,
+        "col": 28,
+        "cyclomatic": 11,
+        "cognitive": 16,
+        "line_count": 48,
+        "param_count": 0,
+        "exceeded": "cognitive_crap",
+        "severity": "moderate",
+        "crap": 37.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `playbackRafPump` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `playbackRafPump` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "<arrow>",
+        "line": 1218,
+        "col": 20,
+        "cyclomatic": 11,
+        "cognitive": 19,
+        "line_count": 43,
+        "param_count": 0,
+        "exceeded": "cognitive_crap",
+        "severity": "moderate",
+        "crap": 37.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `<arrow>` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "refactor-function",
+            "auto_fixable": false,
+            "description": "Refactor `<arrow>` to reduce complexity (extract helper functions, simplify branching)",
+            "note": "Consider splitting into smaller functions with single responsibilities"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/preview/hooks/use-gpu-effects-overlay.ts",
+        "name": "<arrow>",
+        "line": 99,
+        "col": 20,
+        "cyclomatic": 11,
+        "cognitive": 11,
+        "line_count": 14,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 37.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `<arrow>` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/components/timeline-item/item-context-menu.tsx",
+        "name": "JoinActions",
+        "line": 381,
+        "col": 0,
+        "cyclomatic": 11,
+        "cognitive": 9,
+        "line_count": 40,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 37.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `JoinActions` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/components/timeline-item/item-context-menu.tsx",
+        "name": "CaptionActions",
+        "line": 609,
+        "col": 0,
+        "cyclomatic": 11,
+        "cognitive": 8,
+        "line_count": 62,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 37.1,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `CaptionActions` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "applyTextureEffectsToTexture",
+        "line": 708,
+        "col": 30,
+        "cyclomatic": 10,
+        "cognitive": 7,
+        "line_count": 53,
+        "param_count": 5,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 31.6,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `applyTextureEffectsToTexture` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line unused-class-member, complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/shared/utils/curve-spline.ts",
+        "name": "normalizeCurvePoints",
+        "line": 54,
+        "col": 0,
+        "cyclomatic": 10,
+        "cognitive": 11,
+        "line_count": 45,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 31.6,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `normalizeCurvePoints` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/features/timeline/components/timeline-item/item-context-menu.tsx",
+        "name": "ItemContextMenuFull",
+        "line": 252,
+        "col": 33,
+        "cyclomatic": 10,
+        "cognitive": 5,
+        "line_count": 81,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 31.6,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `ItemContextMenuFull` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects/color.ts",
+        "name": "packUniforms",
+        "line": 655,
+        "col": 16,
+        "cyclomatic": 10,
+        "cognitive": 9,
+        "line_count": 15,
+        "param_count": 1,
+        "exceeded": "crap",
+        "severity": "moderate",
+        "crap": 31.6,
+        "coverage_tier": "partial",
+        "coverage_source": "estimated",
+        "actions": [
+          {
+            "type": "increase-coverage",
+            "auto_fixable": false,
+            "description": "Increase test coverage for `packUniforms` (file is reachable from existing tests; add targeted assertions for uncovered branches)",
+            "note": "CRAP = CC^2 * (1 - cov/100)^3 + CC; targeted branch coverage is more efficient than scaffolding new test files when the file already has coverage"
+          },
+          {
+            "type": "suppress-line",
+            "auto_fixable": false,
+            "description": "Suppress with an inline comment above the function declaration",
+            "comment": "// fallow-ignore-next-line complexity",
+            "placement": "above-function-declaration"
+          }
+        ],
+        "introduced": false
+      }
+    ],
+    "summary": {
+      "files_analyzed": 42,
+      "functions_analyzed": 870,
+      "functions_above_threshold": 36,
+      "max_cyclomatic_threshold": 20,
+      "max_cognitive_threshold": 15,
+      "max_crap_threshold": 30.0,
+      "coverage_source_consistency": "uniform",
+      "severity_critical_count": 9,
+      "severity_high_count": 10,
+      "severity_moderate_count": 17
+    },
+    "vital_signs": {
+      "dead_file_pct": 0.0,
+      "dead_export_pct": 0.5,
+      "avg_cyclomatic": 2.7,
+      "critical_complexity_pct": 0.2,
+      "p90_cyclomatic": 6,
+      "maintainability_avg": 87.8,
+      "maintainability_low_pct": 0.0,
+      "unused_dep_count": 0,
+      "unused_deps_per_k_files": 0.0,
+      "circular_dep_count": 0,
+      "circular_deps_per_k_files": 0.0,
+      "counts": {
+        "total_files": 42,
+        "total_exports": 220,
+        "dead_files": 0,
+        "dead_exports": 1,
+        "total_lines": 13826,
+        "files_scored": 36,
+        "total_deps": 0
+      },
+      "unit_size_profile": {
+        "low_risk": 75.1,
+        "medium_risk": 12.5,
+        "high_risk": 7.0,
+        "very_high_risk": 5.4
+      },
+      "functions_over_60_loc_per_k": 54.0,
+      "unit_interfacing_profile": {
+        "low_risk": 96.1,
+        "medium_risk": 3.2,
+        "high_risk": 0.6,
+        "very_high_risk": 0.1
+      },
+      "p95_fan_in": 17,
+      "coupling_high_pct": 2.8,
+      "total_loc": 13826
+    },
+    "large_functions": [
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "usePreviewRenderPump",
+        "line": 176,
+        "line_count": 1690
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "<arrow>",
+        "line": 257,
+        "line_count": 1537
+      },
+      {
+        "path": "src/features/editor/components/media-sidebar.tsx",
+        "name": "MediaSidebar",
+        "line": 286,
+        "line_count": 861
+      },
+      {
+        "path": "src/features/effects/components/effects-section.tsx",
+        "name": "EffectsSection",
+        "line": 38,
+        "line_count": 839
+      },
+      {
+        "path": "src/features/timeline/stores/items-store.ts",
+        "name": "useItemsStore",
+        "line": 135,
+        "line_count": 724
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-curves-panel.tsx",
+        "name": "GpuCurvesPanel",
+        "line": 111,
+        "line_count": 433
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "pumpRenderLoop",
+        "line": 425,
+        "line_count": 416
+      },
+      {
+        "path": "src/features/effects/components/color-grade-section.tsx",
+        "name": "ColorGradeSection",
+        "line": 47,
+        "line_count": 333
+      },
+      {
+        "path": "src/shared/state/editor/store.ts",
+        "name": "useEditorStore",
+        "line": 88,
+        "line_count": 264
+      },
+      {
+        "path": "src/features/preview/stores/gizmo-store.ts",
+        "name": "useGizmoStore",
+        "line": 256,
+        "line_count": 250
+      },
+      {
+        "path": "src/features/editor/components/properties-sidebar/index.tsx",
+        "name": "PropertiesSidebar",
+        "line": 104,
+        "line_count": 215
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-effect-panel.tsx",
+        "name": "GpuEffectPanel",
+        "line": 103,
+        "line_count": 207
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "handleScrubTargetUpdate",
+        "line": 1296,
+        "line_count": 207
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-curves-panel.test.tsx",
+        "name": "<arrow>",
+        "line": 79,
+        "line_count": 201
+      },
+      {
+        "path": "src/features/editor/components/media-sidebar.tsx",
+        "name": "renderTextTemplatePreview",
+        "line": 81,
+        "line_count": 192
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-composition-model.ts",
+        "name": "buildPreviewCompositionData",
+        "line": 271,
+        "line_count": 165
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-wheels-panel.tsx",
+        "name": "GpuWheelsPanel",
+        "line": 206,
+        "line_count": 161
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-lut-panel.tsx",
+        "name": "GpuLutPanel",
+        "line": 45,
+        "line_count": 160
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-composition-model.ts",
+        "name": "usePreviewCompositionModel",
+        "line": 124,
+        "line_count": 146
+      },
+      {
+        "path": "src/features/timeline/stores/items-store.ts",
+        "name": "_splitItem",
+        "line": 453,
+        "line_count": 140
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-wheels-panel.tsx",
+        "name": "WheelControl",
+        "line": 68,
+        "line_count": 129
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "handleActivePlaybackTransitionMaintenance",
+        "line": 1042,
+        "line_count": 127
+      },
+      {
+        "path": "src/features/timeline/stores/timeline-store-facade.ts",
+        "name": "getSnapshot",
+        "line": 56,
+        "line_count": 125
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "applyEffectsToVideo",
+        "line": 769,
+        "line_count": 123
+      },
+      {
+        "path": "src/features/timeline/stores/timeline-store-facade.ts",
+        "name": "createTimelineStoreFacade",
+        "line": 223,
+        "line_count": 122
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/lut/cube-lut.ts",
+        "name": "parseCubeLut",
+        "line": 36,
+        "line_count": 103
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-effect-panel.tsx",
+        "name": "<arrow>",
+        "line": 205,
+        "line_count": 102
+      },
+      {
+        "path": "src/features/effects/components/effects-section.tsx",
+        "name": "<arrow>",
+        "line": 771,
+        "line_count": 95
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "handlePausedTransitionPrewarm",
+        "line": 1201,
+        "line_count": 94
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/lut/cube-lut.test.ts",
+        "name": "<arrow>",
+        "line": 10,
+        "line_count": 93
+      },
+      {
+        "path": "src/features/timeline/utils/grade-clipboard-ops.test.ts",
+        "name": "<arrow>",
+        "line": 28,
+        "line_count": 91
+      },
+      {
+        "path": "src/features/preview/stores/gizmo-store.ts",
+        "name": "updateInteraction",
+        "line": 334,
+        "line_count": 82
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "applyEffectsToCanvas",
+        "line": 570,
+        "line_count": 82
+      },
+      {
+        "path": "src/features/effects/components/effects-section.tsx",
+        "name": "handleGpuParamsBatchChange",
+        "line": 249,
+        "line_count": 81
+      },
+      {
+        "path": "src/features/timeline/components/timeline-item/item-context-menu.tsx",
+        "name": "ItemContextMenuFull",
+        "line": 252,
+        "line_count": 81
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "runEffectChain",
+        "line": 401,
+        "line_count": 81
+      },
+      {
+        "path": "src/features/timeline/components/timeline-item/item-context-menu.tsx",
+        "name": "MediaActions",
+        "line": 499,
+        "line_count": 71
+      },
+      {
+        "path": "src/shared/utils/gpu-curves.test.ts",
+        "name": "<arrow>",
+        "line": 73,
+        "line_count": 71
+      },
+      {
+        "path": "src/features/preview/hooks/use-gpu-effects-overlay.ts",
+        "name": "useGpuEffectsOverlay",
+        "line": 116,
+        "line_count": 68
+      },
+      {
+        "path": "src/features/preview/hooks/use-preview-render-pump-controller.ts",
+        "name": "handlePlaybackLifecycleUpdate",
+        "line": 975,
+        "line_count": 66
+      },
+      {
+        "path": "src/features/effects/components/effects-section.tsx",
+        "name": "handleGpuParamChange",
+        "line": 170,
+        "line_count": 65
+      },
+      {
+        "path": "src/features/editor/components/media-sidebar.tsx",
+        "name": "<arrow>",
+        "line": 753,
+        "line_count": 64
+      },
+      {
+        "path": "src/features/effects/components/panels/gpu-effect-panel.tsx",
+        "name": "ActionButtons",
+        "line": 40,
+        "line_count": 62
+      },
+      {
+        "path": "src/features/preview/hooks/use-gpu-effects-overlay.ts",
+        "name": "<arrow>",
+        "line": 119,
+        "line_count": 62
+      },
+      {
+        "path": "src/features/timeline/components/timeline-item/item-context-menu.tsx",
+        "name": "CaptionActions",
+        "line": 609,
+        "line_count": 62
+      },
+      {
+        "path": "src/infrastructure/gpu-effects/effects-pipeline.ts",
+        "name": "getOrUpdateDataTexture",
+        "line": 325,
+        "line_count": 62
+      },
+      {
+        "path": "src/shared/utils/gpu-curves.test.ts",
+        "name": "<arrow>",
+        "line": 10,
+        "line_count": 62
+      }
+    ]
+  },
+  "kind": "audit"
+}

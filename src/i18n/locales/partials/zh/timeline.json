@@ -76,7 +76,9 @@
       "rippleDelete": "波纹删除",
       "unlinkClips": "取消链接剪辑",
       "unreverse": "取消反向",
-      "updatingCaptions": "正在更新字幕"
+      "updatingCaptions": "正在更新字幕",
+      "copyGrade": "复制调色",
+      "pasteGrade": "粘贴调色"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "调整音频淡入",

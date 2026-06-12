@@ -1,9 +1,12 @@
-import type { GpuEffectDefinition } from '../types'
+import type { EffectParam, GpuEffectDefinition } from '../types'
 import {
   GPU_CURVES_CHANNELS,
+  GPU_CURVES_LUT_WIDTH,
+  buildGpuCurvesLutData,
   getDefaultGpuCurvesChannelControl,
   getGpuCurvesChannelParamKeys,
-  readGpuCurvesChannelControl,
+  getGpuCurvesLutKey,
+  getGpuCurvesPointsParamKey,
 } from '@/shared/utils/gpu-curves'
 
 export const brightness: GpuEffectDefinition = {
@@ -404,125 +407,43 @@ fn sepiaFragment(input: VertexOutput) -> @location(0) vec4f {
   packUniforms: (p) => new Float32Array([(p.amount as number) ?? 1, 0, 0, 0]),
 }
 
+/**
+ * Curves with arbitrary control points. The combined per-channel transfer
+ * functions (channel ∘ master, monotone cubic over the control points) are
+ * baked CPU-side into a 256x1 rgba8 LUT bound at @binding(3) — the shader is
+ * a single lookup per channel. Legacy 2-point numeric params remain (and
+ * stay keyframable); the per-channel `<channel>Points` JSON params take
+ * precedence when set.
+ */
 export const curves: GpuEffectDefinition = {
   id: 'gpu-curves',
   name: 'Curves',
   category: 'color',
   entryPoint: 'curvesFragment',
-  uniformSize: 64,
+  uniformSize: 0,
   shader: /* wgsl */ `
-struct CurvesParams {
-  masterShadowX: f32, masterShadowY: f32, masterHighlightX: f32, masterHighlightY: f32,
-  redShadowX: f32, redShadowY: f32, redHighlightX: f32, redHighlightY: f32,
-  greenShadowX: f32, greenShadowY: f32, greenHighlightX: f32, greenHighlightY: f32,
-  blueShadowX: f32, blueShadowY: f32, blueHighlightX: f32, blueHighlightY: f32,
-};
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> params: CurvesParams;
+@group(0) @binding(3) var curveLut: texture_2d<f32>;
 
-fn evaluateCurve(inputValue: f32, shadowPoint: vec2f, highlightPoint: vec2f) -> f32 {
-  let inputX = clamp(inputValue, 0.0, 1.0);
-  let shadowX = clamp(shadowPoint.x, 0.02, 0.94);
-  let highlightX = clamp(highlightPoint.x, shadowX + 0.04, 0.98);
-  let shadowY = clamp(shadowPoint.y, 0.0, 1.0);
-  let highlightY = clamp(highlightPoint.y, 0.0, 1.0);
-
-  var xs: array<f32, 4>;
-  xs[0] = 0.0;
-  xs[1] = shadowX;
-  xs[2] = highlightX;
-  xs[3] = 1.0;
-
-  var ys: array<f32, 4>;
-  ys[0] = 0.0;
-  ys[1] = shadowY;
-  ys[2] = highlightY;
-  ys[3] = 1.0;
-
-  var slopes: array<f32, 3>;
-  for (var i = 0u; i < 3u; i = i + 1u) {
-    let width = max(0.0001, xs[i + 1u] - xs[i]);
-    slopes[i] = (ys[i + 1u] - ys[i]) / width;
-  }
-
-  var tangents: array<f32, 4>;
-  tangents[0] = slopes[0];
-  tangents[3] = slopes[2];
-  tangents[1] = select(0.0, 0.5 * (slopes[0] + slopes[1]), slopes[0] * slopes[1] > 0.0);
-  tangents[2] = select(0.0, 0.5 * (slopes[1] + slopes[2]), slopes[1] * slopes[2] > 0.0);
-
-  for (var i = 0u; i < 3u; i = i + 1u) {
-    let slope = slopes[i];
-    if (abs(slope) < 0.00001) {
-      tangents[i] = 0.0;
-      tangents[i + 1u] = 0.0;
-    } else {
-      let a = tangents[i] / slope;
-      let b = tangents[i + 1u] / slope;
-      let magnitude = a * a + b * b;
-      if (magnitude > 9.0) {
-        let scale = 3.0 / sqrt(magnitude);
-        tangents[i] = scale * a * slope;
-        tangents[i + 1u] = scale * b * slope;
-      }
-    }
-  }
-
-  var segment = 0u;
-  if (inputX > xs[1]) {
-    segment = 1u;
-  }
-  if (inputX > xs[2]) {
-    segment = 2u;
-  }
-
-  let leftX = xs[segment];
-  let rightX = xs[segment + 1u];
-  let width = max(0.0001, rightX - leftX);
-  let t = clamp((inputX - leftX) / width, 0.0, 1.0);
-  let t2 = t * t;
-  let t3 = t2 * t;
-
-  let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
-  let h10 = t3 - 2.0 * t2 + t;
-  let h01 = -2.0 * t3 + 3.0 * t2;
-  let h11 = t3 - t2;
-
-  let value =
-    h00 * ys[segment]
-    + h10 * width * tangents[segment]
-    + h01 * ys[segment + 1u]
-    + h11 * width * tangents[segment + 1u];
-
-  return clamp(value, 0.0, 1.0);
-}
-
-fn applyChannelCurve(value: f32, shadowPoint: vec2f, highlightPoint: vec2f) -> f32 {
-  return evaluateCurve(value, shadowPoint, highlightPoint);
+fn sampleCurveLut(value: f32) -> vec3f {
+  let lutWidth = ${GPU_CURVES_LUT_WIDTH}.0;
+  let u = (clamp(value, 0.0, 1.0) * (lutWidth - 1.0) + 0.5) / lutWidth;
+  return textureSample(curveLut, texSampler, vec2f(u, 0.5)).rgb;
 }
 
 @fragment
 fn curvesFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = textureSample(inputTex, texSampler, input.uv);
-  let masterShadow = vec2f(params.masterShadowX, params.masterShadowY);
-  let masterHighlight = vec2f(params.masterHighlightX, params.masterHighlightY);
-  let mappedMaster = vec3f(
-    evaluateCurve(color.r, masterShadow, masterHighlight),
-    evaluateCurve(color.g, masterShadow, masterHighlight),
-    evaluateCurve(color.b, masterShadow, masterHighlight),
-  );
-
   let c = vec3f(
-    applyChannelCurve(mappedMaster.r, vec2f(params.redShadowX, params.redShadowY), vec2f(params.redHighlightX, params.redHighlightY)),
-    applyChannelCurve(mappedMaster.g, vec2f(params.greenShadowX, params.greenShadowY), vec2f(params.greenHighlightX, params.greenHighlightY)),
-    applyChannelCurve(mappedMaster.b, vec2f(params.blueShadowX, params.blueShadowY), vec2f(params.blueHighlightX, params.blueHighlightY)),
+    sampleCurveLut(color.r).r,
+    sampleCurveLut(color.g).g,
+    sampleCurveLut(color.b).b,
   );
-
   return vec4f(c, color.a);
 }`,
-  params: Object.fromEntries(
-    GPU_CURVES_CHANNELS.flatMap((channel) => {
+  params: Object.fromEntries([
+    ...GPU_CURVES_CHANNELS.flatMap((channel): Array<[string, EffectParam]> => {
       const keys = getGpuCurvesChannelParamKeys(channel)
       const defaults = getDefaultGpuCurvesChannelControl()
       const prefix = channel.charAt(0).toUpperCase() + channel.slice(1)
@@ -577,14 +498,28 @@ fn curvesFragment(input: VertexOutput) -> @location(0) vec4f {
         ],
       ]
     }),
-  ),
-  packUniforms: (p) => {
-    const floats: number[] = []
-    for (const channel of GPU_CURVES_CHANNELS) {
-      const control = readGpuCurvesChannelControl(p, channel)
-      floats.push(control.shadow.x, control.shadow.y, control.highlight.x, control.highlight.y)
-    }
-    return new Float32Array(floats)
+    ...GPU_CURVES_CHANNELS.map((channel): [string, EffectParam] => {
+      const prefix = channel.charAt(0).toUpperCase() + channel.slice(1)
+      return [
+        getGpuCurvesPointsParamKey(channel),
+        {
+          type: 'json',
+          label: `${prefix} Points`,
+          default: '',
+        },
+      ]
+    }),
+  ]),
+  packUniforms: () => null,
+  dataTexture: {
+    dimension: '2d',
+    key: getGpuCurvesLutKey,
+    build: (params) => ({
+      width: GPU_CURVES_LUT_WIDTH,
+      height: 1,
+      depth: 1,
+      data: buildGpuCurvesLutData(params),
+    }),
   },
 }
 

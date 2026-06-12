@@ -76,7 +76,9 @@
       "rippleDelete": "Ripple Loschen",
       "unlinkClips": "Trennen Clips",
       "unreverse": "Umkehrung aufheben",
-      "updatingCaptions": "Aktualisieren Untertitel"
+      "updatingCaptions": "Aktualisieren Untertitel",
+      "copyGrade": "Farbkorrektur kopieren",
+      "pasteGrade": "Farbkorrektur einfügen"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Anpassen Audio Fade ein",

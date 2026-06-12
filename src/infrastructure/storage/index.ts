@@ -169,3 +169,10 @@ export {
   DEFAULT_TRASH_TTL_MS,
   type TrashedProjectEntry,
 } from '@/infrastructure/storage/workspace-fs/trash'
+
+// User-saved effect presets (grades)
+export {
+  readUserEffectPresets,
+  saveUserEffectPresets,
+  type UserEffectPreset,
+} from '@/infrastructure/storage/workspace-fs/effect-presets'

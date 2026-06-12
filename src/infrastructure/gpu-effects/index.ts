@@ -6,4 +6,5 @@ export {
   getGpuEffectDefaultParams,
   getGpuEffectsByCategory,
   getGpuCategoriesWithEffects,
+  isColorGradeEffectType,
 } from './registry'

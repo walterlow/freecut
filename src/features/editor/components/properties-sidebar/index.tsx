@@ -19,6 +19,9 @@ import {
 const LazyClipPanel = lazy(() =>
   import('./clip-panel').then((module) => ({ default: module.ClipPanel })),
 )
+const LazyColorGradePanel = lazy(() =>
+  import('./color-grade-panel').then((module) => ({ default: module.ColorGradePanel })),
+)
 const LazyMarkerPanel = lazy(() =>
   import('./marker-panel').then((module) => ({ default: module.MarkerPanel })),
 )
@@ -109,6 +112,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
   const setRightSidebarWidth = useEditorStore((s) => s.setRightSidebarWidth)
   const propertiesFullColumn = useEditorStore((s) => s.propertiesFullColumn)
   const togglePropertiesFullColumn = useEditorStore((s) => s.togglePropertiesFullColumn)
+  const workspace = useEditorStore((s) => s.workspace)
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId)
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId)
@@ -273,6 +277,10 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
               ) : selectedMarkerId ? (
                 <Suspense fallback={null}>
                   <LazyMarkerPanel />
+                </Suspense>
+              ) : workspace === 'color' ? (
+                <Suspense fallback={null}>
+                  <LazyColorGradePanel />
                 </Suspense>
               ) : hasClipSelection ? (
                 <Suspense fallback={null}>

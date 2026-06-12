@@ -547,6 +547,10 @@
         "lofiElectroLabel": "Lo-fi Electro",
         "lofiElectroPrompt": "Lofi slow bpm electro chill with organic samples"
       }
+    },
+    "colorPanel": {
+      "emptyState": "Sélectionnez un clip à étalonner",
+      "adjustmentLayerLabel": "Étalonnage"
     }
   }
 }

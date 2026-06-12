@@ -76,7 +76,9 @@
       "rippleDelete": "リップル削除",
       "unlinkClips": "クリップのリンクを解除",
       "unreverse": "反転を解除",
-      "updatingCaptions": "キャプションを更新中"
+      "updatingCaptions": "キャプションを更新中",
+      "copyGrade": "グレーディングをコピー",
+      "pasteGrade": "グレーディングをペースト"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "オーディオのフェードインを調整",

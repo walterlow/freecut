@@ -1,6 +1,7 @@
 import type { GpuEffectCategory, GpuEffectDefinition } from './types'
 
 import * as colorEffects from './effects/color'
+import * as lutEffects from './effects/lut'
 import * as blurEffects from './effects/blur'
 import * as distortEffects from './effects/distort'
 import * as stylizeEffects from './effects/stylize'
@@ -39,6 +40,7 @@ function registerEffects(effects: Record<string, unknown>) {
 }
 
 registerEffects(colorEffects)
+registerEffects(lutEffects)
 registerEffects(blurEffects)
 registerEffects(distortEffects)
 registerEffects(stylizeEffects)
@@ -56,6 +58,11 @@ export function getGpuEffectDefaultParams(id: string): Record<string, number | b
     defaults[key] = param.default
   }
   return defaults
+}
+
+/** True when the gpu effect type belongs to the color category (a "grade" effect). */
+export function isColorGradeEffectType(gpuEffectType: string): boolean {
+  return GPU_EFFECT_REGISTRY.get(gpuEffectType)?.category === 'color'
 }
 
 export function getGpuEffectsByCategory(category: GpuEffectCategory): GpuEffectDefinition[] {

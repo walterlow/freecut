@@ -7,10 +7,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
-function formatCoord(value: number): string {
-  return Number(value.toFixed(3)).toString()
-}
-
 function computeMonotoneTangents(points: CurvePoint[]): number[] {
   if (points.length <= 1) return [0]
 
@@ -136,33 +132,4 @@ export function evaluateMonotoneCurve(points: CurvePoint[] | undefined, x: numbe
   const y = h00 * left.y + h10 * width * m0 + h01 * right.y + h11 * width * m1
 
   return clamp(y, 0, 1)
-}
-
-export function buildMonotoneCurveSvgPath(
-  points: CurvePoint[] | undefined,
-  width: number,
-  height: number,
-): string {
-  const normalized = normalizeCurvePoints(points)
-  if (normalized.length === 0) return ''
-
-  const tangents = computeMonotoneTangents(normalized)
-  const toX = (x: number) => x * width
-  const toY = (y: number) => (1 - y) * height
-
-  let path = `M ${formatCoord(toX(normalized[0]!.x))} ${formatCoord(toY(normalized[0]!.y))}`
-
-  for (let i = 0; i < normalized.length - 1; i += 1) {
-    const left = normalized[i]!
-    const right = normalized[i + 1]!
-    const span = right.x - left.x
-    const cp1x = left.x + span / 3
-    const cp1y = left.y + (tangents[i]! * span) / 3
-    const cp2x = right.x - span / 3
-    const cp2y = right.y - (tangents[i + 1]! * span) / 3
-
-    path += ` C ${formatCoord(toX(cp1x))} ${formatCoord(toY(cp1y))} ${formatCoord(toX(cp2x))} ${formatCoord(toY(cp2y))} ${formatCoord(toX(right.x))} ${formatCoord(toY(right.y))}`
-  }
-
-  return path
 }

@@ -12,7 +12,9 @@
     "off": "Aus",
     "on": "An",
     "removeEffect": "Effekt entfernen",
-    "resetToDefaults": "Auf Standard zuruecksetzen"
+    "resetToDefaults": "Auf Standard zuruecksetzen",
+    "moveUp": "Effekt nach oben verschieben",
+    "moveDown": "Effekt nach unten verschieben"
   },
   "section": {
     "addEffect": "Effekt hinzufuegen",
@@ -22,7 +24,9 @@
     "noEffectsFound": "Keine Effekte gefunden",
     "presets": "Vorgaben",
     "searchEffects": "Effekte suchen",
-    "title": "Effekte"
+    "title": "Effekte",
+    "myPresets": "Meine Vorgaben",
+    "deletePreset": "Vorgabe löschen"
   },
   "curves": {
     "channel": "Kanal",
@@ -31,7 +35,8 @@
     "channelMaster": "Master",
     "channelRed": "Rot",
     "channelGreen": "Gruen",
-    "channelBlue": "Blau"
+    "channelBlue": "Blau",
+    "multiPointHint": "Klicke auf die Kurve, um einen Punkt hinzuzufügen. Doppelklicke auf einen Punkt, um ihn zu entfernen."
   },
   "wheels": {
     "resetWheel": "{{name}} zuruecksetzen",
@@ -284,5 +289,24 @@
     "contour": "Contour",
     "cascade": "Cascade",
     "flat": "Flat"
+  },
+  "colorPanel": {
+    "title": "Farbe",
+    "bypass": "Farbkorrektur umgehen",
+    "bypassOn": "Farbkorrektur umgangen",
+    "bypassTooltip": "Vorher-Nachher-Vergleich nur in der Vorschau. Wirkt sich nie auf Exporte aus.",
+    "adjustmentLayer": "Einstellungsebene",
+    "adjustmentLayerTooltip": "Erstelle eine Einstellungsebene, um alle Clips darunter farblich zu korrigieren",
+    "savePreset": "Speichern",
+    "savePresetTooltip": "Diese Farbkorrektur als Vorgabe speichern",
+    "presetNamePlaceholder": "Name der Vorgabe"
+  },
+  "lut": {
+    "file": "LUT",
+    "import": ".cube-LUT importieren",
+    "importTooltip": "Eine .cube-3D-LUT-Datei laden",
+    "importFailed": "Diese .cube-Datei konnte nicht gelesen werden",
+    "intensity": "Intensität",
+    "unsupportedBrowser": "Der LUT-Import benötigt einen Chromium-basierten Browser"
   }
 }

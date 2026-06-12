@@ -27,14 +27,33 @@ function loadEditorWorkspaceId(): EditorWorkspaceId {
   }
 }
 
+function loadLegacyPropertiesFullColumn(): boolean {
+  try {
+    return localStorage.getItem('editor:propertiesFullColumn') === 'true'
+  } catch {
+    return false
+  }
+}
+
 /** Saved per-workspace layout (user tweaks), falling back to the workspace preset. */
 function loadEditorWorkspaceLayout(workspace: EditorWorkspaceId): EditorWorkspaceLayout {
+  let stored: unknown = null
   try {
     const raw = localStorage.getItem(workspaceLayoutStorageKey(workspace))
-    return normalizeEditorWorkspaceLayout(raw === null ? null : JSON.parse(raw), workspace)
+    stored = raw === null ? null : JSON.parse(raw)
   } catch {
-    return normalizeEditorWorkspaceLayout(null, workspace)
+    stored = null
   }
+
+  const layout = normalizeEditorWorkspaceLayout(stored, workspace)
+  // The edit workspace inherits the pre-workspaces global preference until
+  // the user has a saved snapshot for it.
+  const hasStoredFullColumn =
+    typeof (stored as { propertiesFullColumn?: unknown } | null)?.propertiesFullColumn === 'boolean'
+  if (workspace === 'edit' && !hasStoredFullColumn) {
+    return { ...layout, propertiesFullColumn: loadLegacyPropertiesFullColumn() }
+  }
+  return layout
 }
 
 const initialWorkspace = loadEditorWorkspaceId()
@@ -101,13 +120,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
       return false
     }
   })(),
-  propertiesFullColumn: (() => {
-    try {
-      return localStorage.getItem('editor:propertiesFullColumn') === 'true'
-    } catch {
-      return false
-    }
-  })(),
+  propertiesFullColumn: initialWorkspaceLayout.propertiesFullColumn,
   mediaFullColumn: (() => {
     try {
       const v = localStorage.getItem('editor:mediaFullColumn')
@@ -154,6 +167,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
           colorScopesOpen: state.colorScopesOpen,
           clipInspectorTab: state.clipInspectorTab,
           activeTab: state.activeTab,
+          propertiesFullColumn: state.propertiesFullColumn,
         }
         localStorage.setItem(
           workspaceLayoutStorageKey(state.workspace),

@@ -76,7 +76,9 @@
       "rippleDelete": "Ripple sil",
       "unlinkClips": "Kliplerin bağını kaldır",
       "unreverse": "Tersi kaldır",
-      "updatingCaptions": "Altyazılar güncelleniyor"
+      "updatingCaptions": "Altyazılar güncelleniyor",
+      "copyGrade": "Renk düzenlemeyi kopyala",
+      "pasteGrade": "Renk düzenlemeyi yapıştır"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Ses giriş yumuşatmasını ayarla",

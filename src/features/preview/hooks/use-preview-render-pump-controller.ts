@@ -1523,8 +1523,15 @@ export function usePreviewRenderPump({
       if (!forceFastScrubOverlay) return
       const unifiedPreviewChanged = state.preview !== prev.preview
       const transformPreviewChanged = state.previewTransform !== prev.previewTransform
+      const gradeBypassChanged = state.colorGradeBypassed !== prev.colorGradeBypassed
       // Gizmo transform changes require an active gizmo; effect preview changes don't.
-      if (!unifiedPreviewChanged && !(transformPreviewChanged && state.activeGizmo)) return
+      if (
+        !unifiedPreviewChanged &&
+        !gradeBypassChanged &&
+        !(transformPreviewChanged && state.activeGizmo)
+      ) {
+        return
+      }
 
       const playbackState = usePlaybackStore.getState()
       const currentFrame = playbackState.currentFrame
@@ -1532,8 +1539,11 @@ export function usePreviewRenderPump({
       // Preview-only changes don't advance the frame number, so the frame
       // cache would otherwise return the stale bitmap for the current frame.
       // Invalidate before requesting a repaint so gizmo resize/translate and
-      // live panel previews re-composite immediately.
-      if ((unifiedPreviewChanged || transformPreviewChanged) && scrubRendererRef.current) {
+      // live panel previews re-composite immediately. Grade bypass affects
+      // every frame, so it evicts the whole cache.
+      if (gradeBypassChanged && scrubRendererRef.current) {
+        scrubRendererRef.current.invalidateFrameCache()
+      } else if ((unifiedPreviewChanged || transformPreviewChanged) && scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache({ frames: [currentFrame] })
       }
 

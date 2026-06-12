@@ -12,7 +12,9 @@
     "off": "オフ",
     "on": "オン",
     "removeEffect": "エフェクトを削除",
-    "resetToDefaults": "デフォルトにリセット"
+    "resetToDefaults": "デフォルトにリセット",
+    "moveUp": "エフェクトを上へ移動",
+    "moveDown": "エフェクトを下へ移動"
   },
   "section": {
     "addEffect": "エフェクトを追加",
@@ -22,7 +24,9 @@
     "noEffectsFound": "エフェクトが見つかりません",
     "presets": "プリセット",
     "searchEffects": "エフェクトを検索",
-    "title": "エフェクト"
+    "title": "エフェクト",
+    "myPresets": "マイプリセット",
+    "deletePreset": "プリセットを削除"
   },
   "curves": {
     "channel": "チャンネル",
@@ -31,7 +35,8 @@
     "channelMaster": "マスター",
     "channelRed": "赤",
     "channelGreen": "緑",
-    "channelBlue": "青"
+    "channelBlue": "青",
+    "multiPointHint": "カーブをクリックするとポイントを追加できます。ポイントをダブルクリックすると削除されます。"
   },
   "wheels": {
     "resetWheel": "{{name}}をリセット",
@@ -288,5 +293,24 @@
     "contour": "Contour",
     "cascade": "Cascade",
     "flat": "Flat"
+  },
+  "colorPanel": {
+    "title": "カラー",
+    "bypass": "グレーディングをバイパス",
+    "bypassOn": "グレーディングをバイパス中",
+    "bypassTooltip": "プレビュー専用のビフォー/アフター比較です。書き出しには影響しません。",
+    "adjustmentLayer": "調整レイヤー",
+    "adjustmentLayerTooltip": "調整レイヤーを作成して、その下のすべてのクリップをグレーディングします",
+    "savePreset": "保存",
+    "savePresetTooltip": "このグレーディングをプリセットとして保存",
+    "presetNamePlaceholder": "プリセット名"
+  },
+  "lut": {
+    "file": "LUT",
+    "import": ".cube LUT を読み込む",
+    "importTooltip": ".cube 形式の 3D LUT ファイルを読み込みます",
+    "importFailed": "この .cube ファイルを読み込めませんでした",
+    "intensity": "強度",
+    "unsupportedBrowser": "LUT の読み込みには Chromium ベースのブラウザが必要です"
   }
 }

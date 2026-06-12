@@ -20,8 +20,8 @@ const DEFAULT_POINT_XS = {
 } as const
 
 export const GPU_CURVES_CHANNELS: GpuCurvesChannelKey[] = ['master', 'red', 'green', 'blue']
-export const GPU_CURVES_POINT_MIN_X = 0.02
-export const GPU_CURVES_POINT_MAX_X = 0.98
+const GPU_CURVES_POINT_MIN_X = 0.02
+const GPU_CURVES_POINT_MAX_X = 0.98
 export const GPU_CURVES_POINT_MIN_GAP = 0.04
 
 function clamp(value: number, min: number, max: number): number {
@@ -216,8 +216,87 @@ export function getGpuCurvesDraftParams(params: EffectParams): Record<string, nu
   }, {})
 }
 
-function evaluateGpuCurvesChannel(control: GpuCurvesChannelControl, input: number): number {
-  return evaluateMonotoneCurve(buildGpuCurvesChannelPoints(control), input)
+// --- Multi-point curves -----------------------------------------------------
+//
+// Curves historically had two draggable points per channel (shadow/highlight,
+// stored as 16 numeric params). Channels now support arbitrary control points
+// stored as a JSON param per channel (`masterPoints`, `redPoints`, ...). When
+// the JSON param is empty, the channel falls back to the legacy 2-point
+// params, so existing projects (and keyframed 2-point curves) keep working.
+
+export const GPU_CURVES_LUT_WIDTH = 256
+export const GPU_CURVES_MAX_POINTS = 16
+
+export function getGpuCurvesPointsParamKey(channel: GpuCurvesChannelKey): string {
+  return `${channel}Points`
+}
+
+export function serializeGpuCurvesChannelPoints(points: GpuCurvesControlPoint[]): string {
+  return JSON.stringify(points.map((point) => [point.x, point.y]))
+}
+
+/** Sort by x, clamp to [0,1], enforce a minimum x gap, cap the point count. */
+export function sanitizeGpuCurvesChannelPoints(
+  points: GpuCurvesControlPoint[],
+): GpuCurvesControlPoint[] {
+  const cleaned = points
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+    .map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }))
+    .sort((a, b) => a.x - b.x)
+    .slice(0, GPU_CURVES_MAX_POINTS)
+
+  const result: GpuCurvesControlPoint[] = []
+  for (const point of cleaned) {
+    const previous = result[result.length - 1]
+    if (previous && point.x - previous.x < GPU_CURVES_POINT_MIN_GAP / 2) continue
+    result.push(point)
+  }
+
+  if (result.length < 2) {
+    return [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ]
+  }
+  return result
+}
+
+function parseGpuCurvesChannelPoints(raw: string): GpuCurvesControlPoint[] | null {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    const points: GpuCurvesControlPoint[] = []
+    for (const entry of parsed) {
+      if (!Array.isArray(entry) || entry.length < 2) return null
+      const [x, y] = entry
+      if (typeof x !== 'number' || typeof y !== 'number') return null
+      points.push({ x, y })
+    }
+    return points.length >= 2 ? sanitizeGpuCurvesChannelPoints(points) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The channel's full control point list (endpoints included). Prefers the
+ * multi-point JSON param; falls back to the legacy 2-point controls.
+ */
+export function readGpuCurvesChannelPoints(
+  params: EffectParams,
+  channel: GpuCurvesChannelKey,
+): GpuCurvesControlPoint[] {
+  const raw = params[getGpuCurvesPointsParamKey(channel)]
+  if (typeof raw === 'string' && raw.length > 0) {
+    const points = parseGpuCurvesChannelPoints(raw)
+    if (points) return points
+  }
+  return buildGpuCurvesChannelPoints(readGpuCurvesChannelControl(params, channel))
+}
+
+/** True when the channel's points are the identity line. */
+export function isGpuCurvesChannelIdentity(points: GpuCurvesControlPoint[]): boolean {
+  return points.every((point) => Math.abs(point.y - point.x) < 0.0005)
 }
 
 export function evaluateGpuCurvesEffectChannel(
@@ -225,9 +304,50 @@ export function evaluateGpuCurvesEffectChannel(
   channel: GpuCurvesChannelKey,
   input: number,
 ): number {
-  const masterValue = evaluateGpuCurvesChannel(readGpuCurvesChannelControl(params, 'master'), input)
+  const masterValue = evaluateMonotoneCurve(readGpuCurvesChannelPoints(params, 'master'), input)
   if (channel === 'master') {
     return masterValue
   }
-  return evaluateGpuCurvesChannel(readGpuCurvesChannelControl(params, channel), masterValue)
+  return evaluateMonotoneCurve(readGpuCurvesChannelPoints(params, channel), masterValue)
+}
+
+/**
+ * Bake the combined per-channel transfer functions into a 256x1 rgba8 LUT:
+ * texel.r/g/b = red/green/blue(master(x)), sampled in the curves shader.
+ */
+export function buildGpuCurvesLutData(params: EffectParams): Uint8Array {
+  const width = GPU_CURVES_LUT_WIDTH
+  const masterPoints = readGpuCurvesChannelPoints(params, 'master')
+  const redPoints = readGpuCurvesChannelPoints(params, 'red')
+  const greenPoints = readGpuCurvesChannelPoints(params, 'green')
+  const bluePoints = readGpuCurvesChannelPoints(params, 'blue')
+
+  const data = new Uint8Array(width * 4)
+  for (let i = 0; i < width; i++) {
+    const x = i / (width - 1)
+    const master = evaluateMonotoneCurve(masterPoints, x)
+    data[i * 4] = Math.round(clamp(evaluateMonotoneCurve(redPoints, master), 0, 1) * 255)
+    data[i * 4 + 1] = Math.round(clamp(evaluateMonotoneCurve(greenPoints, master), 0, 1) * 255)
+    data[i * 4 + 2] = Math.round(clamp(evaluateMonotoneCurve(bluePoints, master), 0, 1) * 255)
+    data[i * 4 + 3] = 255
+  }
+  return data
+}
+
+/** Cheap change-detection key over every param the LUT bake depends on. */
+export function getGpuCurvesLutKey(params: EffectParams): string {
+  const parts: Array<string | number> = []
+  for (const channel of GPU_CURVES_CHANNELS) {
+    const keys = getGpuCurvesChannelParamKeys(channel)
+    parts.push(
+      asFiniteNumber(params[keys.shadowX], -1),
+      asFiniteNumber(params[keys.shadowY], -1),
+      asFiniteNumber(params[keys.highlightX], -1),
+      asFiniteNumber(params[keys.highlightY], -1),
+      typeof params[getGpuCurvesPointsParamKey(channel)] === 'string'
+        ? (params[getGpuCurvesPointsParamKey(channel)] as string)
+        : '',
+    )
+  }
+  return parts.join('|')
 }

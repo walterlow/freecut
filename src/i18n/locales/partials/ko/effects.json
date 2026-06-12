@@ -12,7 +12,9 @@
     "off": "끄기",
     "on": "켜기",
     "removeEffect": "효과 제거",
-    "resetToDefaults": "기본값으로 재설정"
+    "resetToDefaults": "기본값으로 재설정",
+    "moveUp": "효과 위로 이동",
+    "moveDown": "효과 아래로 이동"
   },
   "section": {
     "addEffect": "효과 추가",
@@ -22,7 +24,9 @@
     "noEffectsFound": "효과를 찾을 수 없음",
     "presets": "프리셋",
     "searchEffects": "효과 검색",
-    "title": "효과"
+    "title": "효과",
+    "myPresets": "내 프리셋",
+    "deletePreset": "프리셋 삭제"
   },
   "curves": {
     "channel": "채널",
@@ -31,7 +35,8 @@
     "channelMaster": "마스터",
     "channelRed": "빨강",
     "channelGreen": "초록",
-    "channelBlue": "파랑"
+    "channelBlue": "파랑",
+    "multiPointHint": "곡선을 클릭하면 포인트가 추가됩니다. 포인트를 더블 클릭하면 제거됩니다."
   },
   "wheels": {
     "resetWheel": "{{name}} 재설정",
@@ -285,5 +290,24 @@
     "contour": "Contour",
     "cascade": "Cascade",
     "flat": "Flat"
+  },
+  "colorPanel": {
+    "title": "컬러",
+    "bypass": "색 보정 바이패스",
+    "bypassOn": "색 보정 바이패스됨",
+    "bypassTooltip": "미리보기 전용 전/후 비교입니다. 내보내기에는 영향을 주지 않습니다.",
+    "adjustmentLayer": "조정 레이어",
+    "adjustmentLayerTooltip": "조정 레이어를 만들어 아래의 모든 클립에 색 보정을 적용합니다",
+    "savePreset": "저장",
+    "savePresetTooltip": "이 색 보정을 프리셋으로 저장",
+    "presetNamePlaceholder": "프리셋 이름"
+  },
+  "lut": {
+    "file": "LUT",
+    "import": ".cube LUT 가져오기",
+    "importTooltip": ".cube 3D LUT 파일을 불러옵니다",
+    "importFailed": "이 .cube 파일을 읽을 수 없습니다",
+    "intensity": "강도",
+    "unsupportedBrowser": "LUT 가져오기에는 Chromium 기반 브라우저가 필요합니다"
   }
 }

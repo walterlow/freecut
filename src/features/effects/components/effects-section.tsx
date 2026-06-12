@@ -1,7 +1,7 @@
 import { useCallback, useMemo, memo, useRef, useState, useEffect, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import { Sparkles, Plus, Eye, EyeOff, Search } from 'lucide-react'
+import { Sparkles, Plus, Eye, EyeOff, Search, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
 import type { TimelineItem } from '@/types/timeline'
@@ -10,10 +10,11 @@ import { EFFECT_PRESETS } from '@/types/effects'
 import { useKeyframesStore, useTimelineStore } from '@/features/effects/deps/timeline-contract'
 import { useGizmoStore, useThrottledFrame } from '@/features/effects/deps/preview-contract'
 import { PropertySection } from '@/shared/ui/property-controls'
-import { GpuEffectPanel, GpuWheelsPanel, GpuCurvesPanel } from './panels'
+import { GpuEffectPanel, GpuWheelsPanel, GpuCurvesPanel, GpuLutPanel } from './panels'
 import { getGpuEffect, getGpuEffectDefaultParams } from '@/infrastructure/gpu-effects'
 import { useGpuEffectPreviewData } from '../hooks/use-gpu-effect-preview-data'
 import { getMappedSelectionEffectEntry } from '../utils/effect-selection'
+import { useUserPresetsStore } from '../stores/user-presets-store'
 import {
   getAutoKeyframeOperation,
   getResolvedAnimatedEffectParamValue,
@@ -41,6 +42,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   const updateEffect = useTimelineStore((s) => s.updateEffect)
   const removeEffect = useTimelineStore((s) => s.removeEffect)
   const toggleEffect = useTimelineStore((s) => s.toggleEffect)
+  const setItemEffects = useTimelineStore((s) => s.setItemEffects)
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations)
 
   // Gizmo store for live effect preview
@@ -452,6 +454,32 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     })
   }, [allEffectsEnabled, effects, getMappedEffectEntry, toggleEffect, visualItems])
 
+  // Move effect up/down within the stack (order matters for color math).
+  // One undo step across all selected items.
+  const handleMoveEffect = useCallback(
+    (effectId: string, direction: -1 | 1) => {
+      const updates: Array<{ itemId: string; effects: ItemEffect[] }> = []
+      visualItems.forEach((item) => {
+        const targetEffect = getMappedEffectEntry(item, effectId)
+        if (!targetEffect) return
+        const itemEffects = item.effects ?? []
+        const index = itemEffects.findIndex((entry) => entry.id === targetEffect.id)
+        const swapIndex = index + direction
+        if (index < 0 || swapIndex < 0 || swapIndex >= itemEffects.length) return
+
+        const reordered = [...itemEffects]
+        const moved = reordered[index]!
+        reordered[index] = reordered[swapIndex]!
+        reordered[swapIndex] = moved
+        updates.push({ itemId: item.id, effects: reordered })
+      })
+      if (updates.length > 0) {
+        setItemEffects(updates)
+      }
+    },
+    [getMappedEffectEntry, setItemEffects, visualItems],
+  )
+
   // Remove effect
   const handleRemove = useCallback(
     (effectId: string) => {
@@ -475,8 +503,23 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   // Position the picker panel below the trigger button
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({})
 
+  const userPresets = useUserPresetsStore((s) => s.presets)
+  const loadUserPresets = useUserPresetsStore((s) => s.loadPresets)
+  const removeUserPreset = useUserPresetsStore((s) => s.removePreset)
+
+  // Apply a user-saved preset (grade) to all selected items as one batch
+  const handleApplyUserPreset = useCallback(
+    (presetId: string) => {
+      const preset = useUserPresetsStore.getState().presets.find((p) => p.id === presetId)
+      if (!preset) return
+      addEffects(itemIds.map((id) => ({ itemId: id, effects: preset.effects })))
+    },
+    [itemIds, addEffects],
+  )
+
   const openPicker = useCallback(() => {
     triggerPreviews()
+    void loadUserPresets()
     setSearchQuery('')
     // Measure the trigger synchronously so the portal mounts already
     // positioned — otherwise the first render flashes a full-width,
@@ -491,7 +534,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       })
     }
     setPickerOpen(true)
-  }, [triggerPreviews])
+  }, [loadUserPresets, triggerPreviews])
 
   const closePicker = useCallback(() => {
     setPickerOpen(false)
@@ -545,7 +588,14 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     return EFFECT_PRESETS.filter((p) => p.name.toLowerCase().includes(q))
   }, [searchQuery])
 
-  const hasResults = filteredCategories.length > 0 || filteredPresets.length > 0
+  const filteredUserPresets = useMemo(() => {
+    if (!searchQuery.trim()) return userPresets
+    const q = searchQuery.toLowerCase()
+    return userPresets.filter((p) => p.name.toLowerCase().includes(q))
+  }, [searchQuery, userPresets])
+
+  const hasResults =
+    filteredCategories.length > 0 || filteredPresets.length > 0 || filteredUserPresets.length > 0
 
   if (visualItems.length === 0) return null
 
@@ -650,6 +700,43 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                   </>
                 )}
 
+                {filteredUserPresets.length > 0 && (
+                  <>
+                    {(filteredCategories.length > 0 || filteredPresets.length > 0) && (
+                      <div className="-mx-1 my-1 h-px bg-muted" />
+                    )}
+                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                      {t('effects.section.myPresets')}
+                    </div>
+                    {filteredUserPresets.map((preset) => (
+                      <div key={preset.id} className="group relative flex items-center">
+                        <button
+                          type="button"
+                          className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 pr-7 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
+                          onClick={() => {
+                            handleApplyUserPreset(preset.id)
+                            closePicker()
+                          }}
+                        >
+                          <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
+                          <span className="truncate">{preset.name}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="absolute right-1.5 hidden h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-destructive group-hover:flex"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void removeUserPreset(preset.id)
+                          }}
+                          title={t('effects.section.deletePreset')}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
+
                 {/* No results */}
                 {!hasResults && (
                   <div className="px-2 py-4 text-xs text-muted-foreground text-center">
@@ -681,7 +768,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
 
       {/* Active Effects List - wrapped to prevent space-y-3 from PropertySection */}
       <div className="space-y-0">
-        {effects.map((effect) => {
+        {effects.map((effect, effectIndex) => {
           if (effect.effect.type === 'gpu-effect') {
             const gpuEff = effect.effect as GpuEffect
             const def = getGpuEffect(gpuEff.gpuEffectType)
@@ -702,6 +789,31 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                   onReset={handleResetGpuEffect}
                   onToggle={handleToggle}
                   onRemove={handleRemove}
+                  onMove={handleMoveEffect}
+                  canMoveUp={effectIndex > 0}
+                  canMoveDown={effectIndex < effects.length - 1}
+                />
+              )
+            }
+
+            if (gpuEff.gpuEffectType === 'gpu-lut') {
+              return (
+                <GpuLutPanel
+                  key={effect.id}
+                  itemIds={itemIds}
+                  effect={effect}
+                  gpuEffect={displayGpuEffect}
+                  definition={def}
+                  getKeyframeProperty={getKeyframeProperty}
+                  onParamChange={handleGpuParamChange}
+                  onParamLiveChange={handleGpuParamLiveChange}
+                  onParamsBatchChange={handleGpuParamsBatchChange}
+                  onReset={handleResetGpuEffect}
+                  onToggle={handleToggle}
+                  onRemove={handleRemove}
+                  onMove={handleMoveEffect}
+                  canMoveUp={effectIndex > 0}
+                  canMoveDown={effectIndex < effects.length - 1}
                 />
               )
             }
@@ -722,6 +834,9 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                   onReset={handleResetGpuEffect}
                   onToggle={handleToggle}
                   onRemove={handleRemove}
+                  onMove={handleMoveEffect}
+                  canMoveUp={effectIndex > 0}
+                  canMoveDown={effectIndex < effects.length - 1}
                 />
               )
             }
@@ -739,6 +854,9 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                 onReset={handleResetGpuEffect}
                 onToggle={handleToggle}
                 onRemove={handleRemove}
+                onMove={handleMoveEffect}
+                canMoveUp={effectIndex > 0}
+                canMoveDown={effectIndex < effects.length - 1}
               />
             )
           }

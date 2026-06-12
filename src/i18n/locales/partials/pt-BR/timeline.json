@@ -76,7 +76,9 @@
       "rippleDelete": "Exclusao ripple",
       "unlinkClips": "Desvincular clipes",
       "unreverse": "Desfazer reversao",
-      "updatingCaptions": "Atualizando legendas"
+      "updatingCaptions": "Atualizando legendas",
+      "copyGrade": "Copiar correção de cor",
+      "pasteGrade": "Colar correção de cor"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Ajustar fade de entrada do audio",

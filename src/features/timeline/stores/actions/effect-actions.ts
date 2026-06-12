@@ -2,7 +2,7 @@
  * Effect Actions - Visual effect operations with undo/redo support.
  */
 
-import type { VisualEffect } from '@/types/effects'
+import type { ItemEffect, VisualEffect } from '@/types/effects'
 import { useItemsStore } from '../items-store'
 import { useTimelineSettingsStore } from '../timeline-settings-store'
 import { execute } from './shared'
@@ -52,6 +52,22 @@ export function removeEffect(itemId: string, effectId: string): void {
       useTimelineSettingsStore.getState().markDirty()
     },
     { itemId, effectId },
+  )
+}
+
+/**
+ * Replace the full effects list on multiple items as one undo step.
+ * Used for effect reordering and grade paste, where the new list is
+ * derived from the existing one (retained effects keep their ids).
+ */
+export function setItemEffects(updates: Array<{ itemId: string; effects: ItemEffect[] }>): void {
+  execute(
+    'SET_ITEM_EFFECTS',
+    () => {
+      useItemsStore.getState()._setItemEffects(updates)
+      useTimelineSettingsStore.getState().markDirty()
+    },
+    { count: updates.length },
   )
 }
 

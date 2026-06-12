@@ -47,14 +47,14 @@ import {
 import { KeyframeGraphPanel } from '@/features/editor/deps/timeline-contract'
 import { TransitionsPanel } from './transitions-panel'
 import {
-  createDefaultAdjustmentItem,
   createDefaultShapeItem,
   createTextTemplateItem,
   findCompatibleTrackForItemType,
   findNearestAvailableSpace,
   getDefaultGeneratedLayerDurationInFrames,
 } from '@/features/editor/deps/timeline-utils'
-import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/timeline'
+import { addAdjustmentLayer } from '../utils/add-adjustment-layer'
+import type { TextItem, ShapeItem, ShapeType } from '@/types/timeline'
 import { useMaskEditorStore } from '@/features/editor/deps/preview'
 import type { VisualEffect, GpuEffect } from '@/types/effects'
 import { EFFECT_PRESETS } from '@/types/effects'
@@ -477,41 +477,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
   // Add adjustment layer to timeline at the best available position
   // Optionally with pre-applied effects and custom label
   const handleAddAdjustmentLayer = useCallback((effects?: VisualEffect[], label?: string) => {
-    // Read all needed state from stores directly to avoid subscriptions
-    const { tracks, items, fps, addItem } = useTimelineStore.getState()
-    const { activeTrackId, selectItems } = useSelectionStore.getState()
-
-    const targetTrack = findCompatibleTrackForItemType({
-      tracks,
-      items,
-      itemType: 'adjustment',
-      preferredTrackId: activeTrackId,
-    })
-
-    if (!targetTrack) {
-      logger.warn('No available track for adjustment layer')
-      return
-    }
-
-    const durationInFrames = getDefaultGeneratedLayerDurationInFrames(fps)
-
-    // Find the best position: start at playhead, find nearest available space
-    const proposedPosition = usePlaybackStore.getState().currentFrame
-    const finalPosition =
-      findNearestAvailableSpace(proposedPosition, durationInFrames, targetTrack.id, items) ??
-      proposedPosition
-
-    const adjustmentItem: AdjustmentItem = createDefaultAdjustmentItem({
-      trackId: targetTrack.id,
-      from: finalPosition,
-      durationInFrames,
-      effects,
-      label,
-    })
-
-    addItem(adjustmentItem)
-    // Select the new item
-    selectItems([adjustmentItem.id])
+    addAdjustmentLayer(effects, label)
   }, [])
 
   // Create adjustment layer with preset effects

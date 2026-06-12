@@ -12,7 +12,9 @@
     "off": "Desligado",
     "on": "Ligado",
     "removeEffect": "Remover efeito",
-    "resetToDefaults": "Redefinir padroes"
+    "resetToDefaults": "Redefinir padroes",
+    "moveUp": "Mover efeito para cima",
+    "moveDown": "Mover efeito para baixo"
   },
   "section": {
     "addEffect": "Adicionar efeito",
@@ -22,7 +24,9 @@
     "noEffectsFound": "Nenhum efeito encontrado",
     "presets": "Predefinicoes",
     "searchEffects": "Pesquisar efeitos",
-    "title": "Efeitos"
+    "title": "Efeitos",
+    "myPresets": "Minhas predefinições",
+    "deletePreset": "Excluir predefinição"
   },
   "curves": {
     "channel": "Canal",
@@ -31,7 +35,8 @@
     "channelMaster": "Mestre",
     "channelRed": "Vermelho",
     "channelGreen": "Verde",
-    "channelBlue": "Azul"
+    "channelBlue": "Azul",
+    "multiPointHint": "Clique na curva para adicionar um ponto. Clique duas vezes em um ponto para removê-lo."
   },
   "wheels": {
     "resetWheel": "Redefinir {{name}}",
@@ -284,5 +289,24 @@
     "contour": "Contour",
     "cascade": "Cascade",
     "flat": "Flat"
+  },
+  "colorPanel": {
+    "title": "Cor",
+    "bypass": "Ignorar correção de cor",
+    "bypassOn": "Correção de cor ignorada",
+    "bypassTooltip": "Comparação antes/depois apenas na pré-visualização. Nunca afeta as exportações.",
+    "adjustmentLayer": "Camada de ajuste",
+    "adjustmentLayerTooltip": "Crie uma camada de ajuste para aplicar correção de cor a todos os clipes abaixo dela",
+    "savePreset": "Salvar",
+    "savePresetTooltip": "Salvar esta correção de cor como predefinição",
+    "presetNamePlaceholder": "Nome da predefinição"
+  },
+  "lut": {
+    "file": "LUT",
+    "import": "Importar LUT .cube",
+    "importTooltip": "Carregar um arquivo de LUT 3D .cube",
+    "importFailed": "Não foi possível ler este arquivo .cube",
+    "intensity": "Intensidade",
+    "unsupportedBrowser": "A importação de LUT requer um navegador baseado em Chromium"
   }
 }

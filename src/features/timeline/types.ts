@@ -1,6 +1,6 @@
 import type { TimelineTrack, TimelineItem, ProjectMarker, VideoItem } from '@/types/timeline'
 import type { TransformProperties } from '@/types/transform'
-import type { VisualEffect } from '@/types/effects'
+import type { ItemEffect, VisualEffect } from '@/types/effects'
 import type {
   Transition,
   TransitionType,
@@ -136,6 +136,7 @@ export interface TimelineActions {
   ) => void
   removeEffect: (itemId: string, effectId: string) => void
   toggleEffect: (itemId: string, effectId: string) => void
+  setItemEffects: (updates: Array<{ itemId: string; effects: ItemEffect[] }>) => void
   // Transition actions
   addTransition: (
     leftClipId: string,

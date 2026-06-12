@@ -14,6 +14,13 @@ import {
 import type { LazyContextMenuEventInit } from '../../utils/lazy-context-menu'
 import { captureContextMenuEventInit, replayContextMenuEvent } from '../../utils/lazy-context-menu'
 import { useSelectionStore } from '@/shared/state/selection'
+import { useGradeClipboardStore } from '@/shared/state/grade-clipboard'
+import { useItemsStore } from '../../stores/items-store'
+import {
+  copyGradeFromItem,
+  itemHasColorGrade,
+  pasteGradeToItems,
+} from '../../utils/grade-clipboard-ops'
 import { PROPERTY_LABELS, type AnimatableProperty } from '@/types/keyframe'
 import type { PropertyKeyframes } from '@/types/keyframe'
 import {
@@ -314,6 +321,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           />
         )}
         {captionActions && <CaptionActions t={t} hotkeys={hotkeys} {...captionActions} />}
+        <GradeActions t={t} />
         {compositionActions && (
           <CompositionActions t={t} hotkeys={hotkeys} {...compositionActions} />
         )}
@@ -322,6 +330,53 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
     </ContextMenu>
   )
 })
+
+/**
+ * Copy/paste color grade. Self-contained: reads selection, items, and the
+ * grade clipboard directly instead of threading config through the host.
+ */
+function GradeActions({ t }: { t: ReturnType<typeof useTranslation>['t'] }) {
+  const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
+  const hasCopiedGrade = useGradeClipboardStore((s) => s.grade !== null && s.grade.length > 0)
+  const canCopyGrade = useItemsStore((s) =>
+    selectedItemIds.some((itemId) => itemHasColorGrade(s.itemById[itemId])),
+  )
+  const hasVisualSelection = useItemsStore((s) =>
+    selectedItemIds.some((itemId) => {
+      const item = s.itemById[itemId]
+      return item !== undefined && item.type !== 'audio'
+    }),
+  )
+  const canPasteGrade = hasCopiedGrade && hasVisualSelection
+
+  if (!canCopyGrade && !canPasteGrade) return null
+
+  const handleCopyGrade = () => {
+    const { itemById } = useItemsStore.getState()
+    const sourceId = selectedItemIds.find((itemId) => itemHasColorGrade(itemById[itemId]))
+    if (sourceId) copyGradeFromItem(sourceId)
+  }
+
+  const handlePasteGrade = () => {
+    pasteGradeToItems(selectedItemIds)
+  }
+
+  return (
+    <>
+      {canCopyGrade && (
+        <ContextMenuItem onClick={handleCopyGrade}>
+          {t('timeline.contextMenu.copyGrade')}
+        </ContextMenuItem>
+      )}
+      {canPasteGrade && (
+        <ContextMenuItem onClick={handlePasteGrade}>
+          {t('timeline.contextMenu.pasteGrade')}
+        </ContextMenuItem>
+      )}
+      <ContextMenuSeparator />
+    </>
+  )
+}
 
 function JoinActions({
   t,

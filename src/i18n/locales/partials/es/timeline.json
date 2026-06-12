@@ -76,7 +76,9 @@
       "rippleDelete": "Ripple Eliminar",
       "unlinkClips": "Desvincular clips",
       "unreverse": "Quitar inversion",
-      "updatingCaptions": "Actualizando Subtitulos"
+      "updatingCaptions": "Actualizando Subtitulos",
+      "copyGrade": "Copiar etalonaje",
+      "pasteGrade": "Pegar etalonaje"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Ajustar Audio fundido entrada",

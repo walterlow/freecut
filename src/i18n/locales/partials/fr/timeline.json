@@ -76,7 +76,9 @@
       "rippleDelete": "Ripple Supprimer",
       "unlinkClips": "Delier clips",
       "unreverse": "Annuler inversion",
-      "updatingCaptions": "Mise a jour Sous-titres"
+      "updatingCaptions": "Mise a jour Sous-titres",
+      "copyGrade": "Copier l'étalonnage",
+      "pasteGrade": "Coller l'étalonnage"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Ajuster Audio fondu entree",

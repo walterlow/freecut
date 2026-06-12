@@ -76,7 +76,9 @@
       "rippleDelete": "Ripple Delete",
       "unlinkClips": "Unlink Clips",
       "unreverse": "Unreverse",
-      "updatingCaptions": "Updating Captions"
+      "updatingCaptions": "Updating Captions",
+      "copyGrade": "Copy grade",
+      "pasteGrade": "Paste grade"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Adjust audio fade in",

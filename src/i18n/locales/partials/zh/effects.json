@@ -12,7 +12,9 @@
     "off": "关",
     "on": "开",
     "removeEffect": "移除效果",
-    "resetToDefaults": "重置为默认值"
+    "resetToDefaults": "重置为默认值",
+    "moveUp": "上移效果",
+    "moveDown": "下移效果"
   },
   "section": {
     "addEffect": "添加效果",
@@ -22,7 +24,9 @@
     "noEffectsFound": "未找到效果",
     "presets": "预设",
     "searchEffects": "搜索效果",
-    "title": "效果"
+    "title": "效果",
+    "myPresets": "我的预设",
+    "deletePreset": "删除预设"
   },
   "curves": {
     "channel": "通道",
@@ -31,7 +35,8 @@
     "channelMaster": "主通道",
     "channelRed": "红",
     "channelGreen": "绿",
-    "channelBlue": "蓝"
+    "channelBlue": "蓝",
+    "multiPointHint": "点击曲线以添加控制点。双击控制点可将其删除。"
   },
   "wheels": {
     "resetWheel": "重置 {{name}}",
@@ -285,5 +290,24 @@
     "contour": "Contour",
     "cascade": "Cascade",
     "flat": "Flat"
+  },
+  "colorPanel": {
+    "title": "调色",
+    "bypass": "旁路调色",
+    "bypassOn": "调色已旁路",
+    "bypassTooltip": "仅在预览中进行前后对比，绝不影响导出。",
+    "adjustmentLayer": "调整图层",
+    "adjustmentLayerTooltip": "创建调整图层，对其下方的所有剪辑进行调色",
+    "savePreset": "保存",
+    "savePresetTooltip": "将此调色保存为预设",
+    "presetNamePlaceholder": "预设名称"
+  },
+  "lut": {
+    "file": "LUT",
+    "import": "导入 .cube LUT",
+    "importTooltip": "加载 .cube 3D LUT 文件",
+    "importFailed": "无法读取此 .cube 文件",
+    "intensity": "强度",
+    "unsupportedBrowser": "导入 LUT 需要基于 Chromium 的浏览器"
   }
 }

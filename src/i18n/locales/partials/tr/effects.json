@@ -12,7 +12,9 @@
     "off": "Kapalı",
     "on": "Açık",
     "removeEffect": "Efekti Kaldır",
-    "resetToDefaults": "Varsayılanlara Sıfırla"
+    "resetToDefaults": "Varsayılanlara Sıfırla",
+    "moveUp": "Efekti Yukarı Taşı",
+    "moveDown": "Efekti Aşağı Taşı"
   },
   "section": {
     "addEffect": "Efekt Ekle",
@@ -22,7 +24,9 @@
     "noEffectsFound": "Efekt bulunamadı",
     "presets": "Ön Ayarlar",
     "searchEffects": "Efektlerde ara",
-    "title": "Efektler"
+    "title": "Efektler",
+    "myPresets": "Ön Ayarlarım",
+    "deletePreset": "Ön Ayarı Sil"
   },
   "curves": {
     "channel": "Kanal",
@@ -31,7 +35,8 @@
     "channelMaster": "Ana",
     "channelRed": "Kırmızı",
     "channelGreen": "Yeşil",
-    "channelBlue": "Mavi"
+    "channelBlue": "Mavi",
+    "multiPointHint": "Nokta eklemek için eğriye tıklayın. Bir noktayı kaldırmak için üzerine çift tıklayın."
   },
   "wheels": {
     "resetWheel": "{{name}} sıfırla",
@@ -283,5 +288,24 @@
     "contour": "Kontur",
     "cascade": "Kademeli",
     "flat": "Düz"
+  },
+  "colorPanel": {
+    "title": "Renk",
+    "bypass": "Renk düzenlemeyi atla",
+    "bypassOn": "Renk düzenleme atlandı",
+    "bypassTooltip": "Yalnızca önizlemede önce/sonra karşılaştırması. Dışa aktarmaları asla etkilemez.",
+    "adjustmentLayer": "Ayar katmanı",
+    "adjustmentLayerTooltip": "Altındaki tüm kliplere renk düzenleme uygulamak için bir ayar katmanı oluşturun",
+    "savePreset": "Kaydet",
+    "savePresetTooltip": "Bu renk düzenlemeyi ön ayar olarak kaydet",
+    "presetNamePlaceholder": "Ön ayar adı"
+  },
+  "lut": {
+    "file": "LUT",
+    "import": ".cube LUT içe aktar",
+    "importTooltip": "Bir .cube 3D LUT dosyası yükleyin",
+    "importFailed": "Bu .cube dosyası okunamadı",
+    "intensity": "Yoğunluk",
+    "unsupportedBrowser": "LUT içe aktarma Chromium tabanlı bir tarayıcı gerektirir"
   }
 }

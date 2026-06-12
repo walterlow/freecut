@@ -2,28 +2,30 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, RotateCcw, Trash2 } from 'lucide-react'
+import { EffectMoveButtons, type EffectMoveProps } from './effect-move-buttons'
 import { Button } from '@/components/ui/button'
 import type { GpuEffectDefinition } from '@/infrastructure/gpu-effects'
 import { PropertyRow } from '@/shared/ui/property-controls'
-import { buildMonotoneCurveSvgPath } from '@/shared/utils/curve-spline'
+import { evaluateMonotoneCurve } from '@/shared/utils/curve-spline'
 import {
   buildGpuCurvesChannelPoints,
   getDefaultGpuCurvesChannelControl,
-  getGpuCurvesDefaultParams,
-  getGpuCurvesDraftParams,
+  getGpuCurvesPointsParamKey,
   GPU_CURVES_CHANNELS,
-  GPU_CURVES_POINT_MAX_X,
+  GPU_CURVES_MAX_POINTS,
   GPU_CURVES_POINT_MIN_GAP,
-  GPU_CURVES_POINT_MIN_X,
-  readGpuCurvesChannelControl,
+  isGpuCurvesChannelIdentity,
+  readGpuCurvesChannelPoints,
+  sanitizeGpuCurvesChannelPoints,
+  serializeGpuCurvesChannelPoints,
   toGpuCurvesChannelParamUpdates,
-  type GpuCurvesChannelControl,
   type GpuCurvesChannelKey,
+  type GpuCurvesControlPoint,
 } from '@/shared/utils/gpu-curves'
 import type { GpuEffect, ItemEffect } from '@/types/effects'
 import { getEffectDefinitionName } from '@/features/effects/utils/effect-i18n'
 
-interface GpuCurvesPanelProps {
+interface GpuCurvesPanelProps extends EffectMoveProps {
   effect: ItemEffect
   gpuEffect: GpuEffect
   definition: GpuEffectDefinition
@@ -42,10 +44,15 @@ interface GpuCurvesPanelProps {
   onRemove: (effectId: string) => void
 }
 
-type DraftParams = Record<string, number>
-type PointKey = keyof GpuCurvesChannelControl
+type ChannelPointsDraft = Record<GpuCurvesChannelKey, GpuCurvesControlPoint[]>
+
+interface DragState {
+  channel: GpuCurvesChannelKey
+  index: number
+}
 
 const CURVE_SIZE = 230
+const CURVE_SAMPLE_STEPS = 64
 const CHANNELS: Array<{ key: GpuCurvesChannelKey; labelKey: string; color: string }> = [
   { key: 'master', labelKey: 'effects.curves.channelMaster', color: '#e5e7eb' },
   { key: 'red', labelKey: 'effects.curves.channelRed', color: '#ef4444' },
@@ -57,8 +64,48 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
-function getResetParamsForChannel(channel: GpuCurvesChannelKey): Record<string, number> {
-  return toGpuCurvesChannelParamUpdates(channel, getDefaultGpuCurvesChannelControl())
+function readAllChannelPoints(params: GpuEffect['params']): ChannelPointsDraft {
+  return {
+    master: readGpuCurvesChannelPoints(params, 'master'),
+    red: readGpuCurvesChannelPoints(params, 'red'),
+    green: readGpuCurvesChannelPoints(params, 'green'),
+    blue: readGpuCurvesChannelPoints(params, 'blue'),
+  }
+}
+
+function buildSampledCurvePath(points: GpuCurvesControlPoint[], size: number): string {
+  const segments: string[] = []
+  for (let i = 0; i <= CURVE_SAMPLE_STEPS; i += 1) {
+    const x = i / CURVE_SAMPLE_STEPS
+    const y = evaluateMonotoneCurve(points, x)
+    const command = i === 0 ? 'M' : 'L'
+    segments.push(`${command} ${(x * size).toFixed(2)} ${((1 - y) * size).toFixed(2)}`)
+  }
+  return segments.join(' ')
+}
+
+/**
+ * Endpoints keep their x locked to 0/1 (y free); interior points stay strictly
+ * ordered by clamping x between their neighbors with a minimum gap.
+ */
+function clampDraggedPoint(
+  points: GpuCurvesControlPoint[],
+  index: number,
+  position: GpuCurvesControlPoint,
+): GpuCurvesControlPoint | null {
+  const lastIndex = points.length - 1
+  const y = clamp(position.y, 0, 1)
+  if (index === 0) return { x: 0, y }
+  if (index === lastIndex) return { x: 1, y }
+
+  const previous = points[index - 1]
+  const next = points[index + 1]
+  if (!previous || !next) return null
+
+  const min = previous.x + GPU_CURVES_POINT_MIN_GAP
+  const max = next.x - GPU_CURVES_POINT_MIN_GAP
+  const x = min > max ? (previous.x + next.x) / 2 : clamp(position.x, min, max)
+  return { x, y }
 }
 
 export const GpuCurvesPanel = memo(function GpuCurvesPanel({
@@ -70,59 +117,57 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
   onReset,
   onToggle,
   onRemove,
+  onMove,
+  canMoveUp,
+  canMoveDown,
 }: GpuCurvesPanelProps) {
   const { t } = useTranslation()
   const svgRef = useRef<SVGSVGElement>(null)
   const [activeChannel, setActiveChannel] = useState<GpuCurvesChannelKey>('master')
   const [dragging, setDragging] = useState(false)
-  const [draft, setDraft] = useState<DraftParams>(() => getGpuCurvesDraftParams(gpuEffect.params))
+  const [draft, setDraft] = useState<ChannelPointsDraft>(() =>
+    readAllChannelPoints(gpuEffect.params),
+  )
   const draftRef = useRef(draft)
 
-  useEffect(() => {
-    draftRef.current = draft
-  }, [draft])
+  const dragRef = useRef<DragState | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const pendingPositionRef = useRef<GpuCurvesControlPoint | null>(null)
+
+  const updateChannelDraft = useCallback(
+    (channel: GpuCurvesChannelKey, points: GpuCurvesControlPoint[]) => {
+      draftRef.current = { ...draftRef.current, [channel]: points }
+      setDraft(draftRef.current)
+    },
+    [],
+  )
 
   useEffect(() => {
-    if (!dragging) {
-      setDraft(getGpuCurvesDraftParams(gpuEffect.params))
-    }
+    if (dragging) return
+    const next = readAllChannelPoints(gpuEffect.params)
+    draftRef.current = next
+    setDraft(next)
   }, [dragging, gpuEffect.params])
 
-  const isDefault = useMemo(() => {
-    const defaults = getGpuCurvesDefaultParams()
-    return Object.entries(defaults).every(([key, value]) => draft[key] === value)
-  }, [draft])
+  const isDefault = useMemo(
+    () => GPU_CURVES_CHANNELS.every((channel) => isGpuCurvesChannelIdentity(draft[channel])),
+    [draft],
+  )
 
   const activeChannelMeta = CHANNELS.find((channel) => channel.key === activeChannel)!
   const activeChannelLabel = t(activeChannelMeta.labelKey)
-  const activeControl = useMemo(
-    () => readGpuCurvesChannelControl(draft, activeChannel),
-    [activeChannel, draft],
-  )
-  const handlePoints = useMemo(
-    () => buildGpuCurvesChannelPoints(activeControl).slice(1, 3),
-    [activeControl],
-  )
+  const activePoints = draft[activeChannel]
 
   const curvePaths = useMemo(
     () =>
       Object.fromEntries(
         GPU_CURVES_CHANNELS.map((channel) => [
           channel,
-          buildMonotoneCurveSvgPath(
-            buildGpuCurvesChannelPoints(readGpuCurvesChannelControl(draft, channel)),
-            CURVE_SIZE,
-            CURVE_SIZE,
-          ),
+          buildSampledCurvePath(draft[channel], CURVE_SIZE),
         ]),
       ) as Record<GpuCurvesChannelKey, string>,
     [draft],
   )
-
-  const dragRef = useRef<{
-    channel: GpuCurvesChannelKey
-    pointKey: PointKey
-  } | null>(null)
 
   const getNormalizedPointFromClient = useCallback((clientX: number, clientY: number) => {
     const svg = svgRef.current
@@ -135,55 +180,61 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
     }
   }, [])
 
-  const computeDragUpdates = useCallback(
-    (clientX: number, clientY: number) => {
-      const state = dragRef.current
-      if (!state) return null
-
-      const position = getNormalizedPointFromClient(clientX, clientY)
-      if (!position) return null
-
-      const current = readGpuCurvesChannelControl(draftRef.current, state.channel)
-      const otherPoint = state.pointKey === 'shadow' ? current.highlight : current.shadow
-
-      const nextControl: GpuCurvesChannelControl = {
-        ...current,
-        [state.pointKey]: {
-          x:
-            state.pointKey === 'shadow'
-              ? clamp(position.x, GPU_CURVES_POINT_MIN_X, otherPoint.x - GPU_CURVES_POINT_MIN_GAP)
-              : clamp(position.x, otherPoint.x + GPU_CURVES_POINT_MIN_GAP, GPU_CURVES_POINT_MAX_X),
-          y: position.y,
-        },
-      }
-
-      return toGpuCurvesChannelParamUpdates(state.channel, nextControl)
+  const moveDraggedPoint = useCallback(
+    (state: DragState, position: GpuCurvesControlPoint): GpuCurvesControlPoint[] | null => {
+      const points = draftRef.current[state.channel]
+      if (state.index < 0 || state.index >= points.length) return null
+      const moved = clampDraggedPoint(points, state.index, position)
+      if (!moved) return null
+      return points.map((point, index) => (index === state.index ? moved : point))
     },
-    [getNormalizedPointFromClient],
+    [],
   )
 
   useEffect(() => {
+    const flushDragFrame = () => {
+      rafRef.current = null
+      const state = dragRef.current
+      const position = pendingPositionRef.current
+      if (!state || !position) return
+      const points = moveDraggedPoint(state, position)
+      if (!points) return
+      updateChannelDraft(state.channel, points)
+      onParamsBatchLiveChange(effect.id, {
+        [getGpuCurvesPointsParamKey(state.channel)]: serializeGpuCurvesChannelPoints(points),
+      })
+    }
+
     const handleMouseMove = (event: MouseEvent) => {
-      const updates = computeDragUpdates(event.clientX, event.clientY)
-      if (!updates) return
-      setDraft((prev) => ({ ...prev, ...updates }))
-      onParamsBatchLiveChange(effect.id, updates)
+      if (!dragRef.current) return
+      const position = getNormalizedPointFromClient(event.clientX, event.clientY)
+      if (!position) return
+      pendingPositionRef.current = position
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(flushDragFrame)
+      }
     }
 
     const handleMouseUp = (event: MouseEvent) => {
       const state = dragRef.current
       if (!state) return
 
-      const updates =
-        computeDragUpdates(event.clientX, event.clientY) ??
-        toGpuCurvesChannelParamUpdates(
-          state.channel,
-          readGpuCurvesChannelControl(draftRef.current, state.channel),
-        )
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
 
-      setDraft((prev) => ({ ...prev, ...updates }))
-      onParamsBatchChange(effect.id, updates)
+      const position = getNormalizedPointFromClient(event.clientX, event.clientY)
+      const moved = position ? moveDraggedPoint(state, position) : null
+      const points = sanitizeGpuCurvesChannelPoints(moved ?? draftRef.current[state.channel])
+
+      updateChannelDraft(state.channel, points)
+      onParamsBatchChange(effect.id, {
+        [getGpuCurvesPointsParamKey(state.channel)]: serializeGpuCurvesChannelPoints(points),
+      })
+
       dragRef.current = null
+      pendingPositionRef.current = null
       setDragging(false)
     }
 
@@ -192,30 +243,123 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
     return () => {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
     }
-  }, [computeDragUpdates, effect.id, onParamsBatchChange, onParamsBatchLiveChange])
+  }, [
+    effect.id,
+    getNormalizedPointFromClient,
+    moveDraggedPoint,
+    onParamsBatchChange,
+    onParamsBatchLiveChange,
+    updateChannelDraft,
+  ])
 
   const handlePointMouseDown = useCallback(
-    (event: React.MouseEvent, pointKey: PointKey) => {
-      if (!effect.enabled) return
+    (event: React.MouseEvent, index: number) => {
+      if (!effect.enabled || event.button !== 0) return
       event.preventDefault()
       event.stopPropagation()
-      dragRef.current = { channel: activeChannel, pointKey }
+
+      const points = draftRef.current[activeChannel]
+      const isEndpoint = index === 0 || index === points.length - 1
+
+      if (event.detail >= 2) {
+        // Double-click removes interior points; endpoints are fixed.
+        if (isEndpoint) return
+        const nextPoints = points.filter((_, pointIndex) => pointIndex !== index)
+        updateChannelDraft(activeChannel, nextPoints)
+        onParamsBatchChange(effect.id, {
+          [getGpuCurvesPointsParamKey(activeChannel)]: serializeGpuCurvesChannelPoints(nextPoints),
+        })
+        return
+      }
+
+      dragRef.current = { channel: activeChannel, index }
       setDragging(true)
     },
-    [activeChannel, effect.enabled],
+    [activeChannel, effect.enabled, effect.id, onParamsBatchChange, updateChannelDraft],
+  )
+
+  const handleSvgMouseDown = useCallback(
+    (event: React.MouseEvent) => {
+      if (!effect.enabled || event.button !== 0 || dragRef.current) return
+
+      const position = getNormalizedPointFromClient(event.clientX, event.clientY)
+      if (!position) return
+
+      const points = draftRef.current[activeChannel]
+      if (points.length >= GPU_CURVES_MAX_POINTS) return
+
+      let insertIndex = points.length
+      for (let i = 0; i < points.length; i += 1) {
+        const point = points[i]
+        if (point && position.x < point.x) {
+          insertIndex = i
+          break
+        }
+      }
+      insertIndex = clamp(insertIndex, 1, points.length - 1)
+
+      const previous = points[insertIndex - 1]
+      const next = points[insertIndex]
+      if (!previous || !next) return
+      if (
+        position.x - previous.x < GPU_CURVES_POINT_MIN_GAP / 2 ||
+        next.x - position.x < GPU_CURVES_POINT_MIN_GAP / 2
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      const nextPoints = [
+        ...points.slice(0, insertIndex),
+        { x: position.x, y: position.y },
+        ...points.slice(insertIndex),
+      ]
+      updateChannelDraft(activeChannel, nextPoints)
+      onParamsBatchLiveChange(effect.id, {
+        [getGpuCurvesPointsParamKey(activeChannel)]: serializeGpuCurvesChannelPoints(nextPoints),
+      })
+
+      // The new point is grabbed immediately; mouseup commits it.
+      dragRef.current = { channel: activeChannel, index: insertIndex }
+      setDragging(true)
+    },
+    [
+      activeChannel,
+      effect.enabled,
+      effect.id,
+      getNormalizedPointFromClient,
+      onParamsBatchLiveChange,
+      updateChannelDraft,
+    ],
   )
 
   const handleResetChannel = useCallback(() => {
-    const updates = getResetParamsForChannel(activeChannel)
-    setDraft((prev) => ({ ...prev, ...updates }))
+    const updates: Record<string, number | string> = {
+      [getGpuCurvesPointsParamKey(activeChannel)]: '',
+      ...toGpuCurvesChannelParamUpdates(activeChannel, getDefaultGpuCurvesChannelControl()),
+    }
+    updateChannelDraft(
+      activeChannel,
+      buildGpuCurvesChannelPoints(getDefaultGpuCurvesChannelControl()),
+    )
     onParamsBatchChange(effect.id, updates)
-  }, [activeChannel, effect.id, onParamsBatchChange])
+  }, [activeChannel, effect.id, onParamsBatchChange, updateChannelDraft])
 
   return (
     <div className="space-y-0">
       <PropertyRow label={getEffectDefinitionName(definition)}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
+          <EffectMoveButtons
+            effectId={effect.id}
+            onMove={onMove}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
+          />
           <Button
             variant="ghost"
             size="icon"
@@ -282,8 +426,10 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
         <div className="relative overflow-hidden rounded border border-border/70 bg-black/50">
           <svg
             ref={svgRef}
+            data-curves-editor="true"
             viewBox={`0 0 ${CURVE_SIZE} ${CURVE_SIZE}`}
-            className="aspect-square w-full cursor-default"
+            className={`aspect-square w-full ${effect.enabled ? 'cursor-crosshair' : 'cursor-default'}`}
+            onMouseDown={handleSvgMouseDown}
           >
             {[0.25, 0.5, 0.75].map((grid) => (
               <g key={grid}>
@@ -357,13 +503,12 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
               fill="none"
             />
 
-            {handlePoints.map((point, index) => {
-              const pointKey = index === 0 ? 'shadow' : 'highlight'
+            {activePoints.map((point, index) => {
               const x = point.x * CURVE_SIZE
               const y = (1 - point.y) * CURVE_SIZE
 
               return (
-                <g key={pointKey}>
+                <g key={`${activeChannel}-${index}`}>
                   <line
                     x1={x}
                     y1={CURVE_SIZE}
@@ -374,6 +519,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                     opacity={0.18}
                   />
                   <circle
+                    data-curve-point={index}
                     cx={x}
                     cy={y}
                     r={6}
@@ -381,7 +527,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                     stroke="rgba(3,7,18,0.95)"
                     strokeWidth={1.5}
                     className={effect.enabled ? 'cursor-move' : 'pointer-events-none'}
-                    onMouseDown={(event) => handlePointMouseDown(event, pointKey)}
+                    onMouseDown={(event) => handlePointMouseDown(event, index)}
                   />
                 </g>
               )
@@ -389,7 +535,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
           </svg>
         </div>
         <div className="mt-1 text-center text-[10px] text-muted-foreground">
-          {t('effects.curves.dragHint', { channel: activeChannelLabel.toLowerCase() })}
+          {t('effects.curves.multiPointHint', { channel: activeChannelLabel.toLowerCase() })}
         </div>
       </div>
     </div>

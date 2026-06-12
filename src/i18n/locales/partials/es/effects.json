@@ -12,7 +12,9 @@
     "off": "Apagado",
     "on": "Encendido",
     "removeEffect": "Eliminar efecto",
-    "resetToDefaults": "Restablecer valores"
+    "resetToDefaults": "Restablecer valores",
+    "moveUp": "Subir efecto",
+    "moveDown": "Bajar efecto"
   },
   "section": {
     "addEffect": "Agregar efecto",
@@ -22,7 +24,9 @@
     "noEffectsFound": "No se encontraron efectos",
     "presets": "Preajustes",
     "searchEffects": "Buscar efectos",
-    "title": "Efectos"
+    "title": "Efectos",
+    "myPresets": "Mis preajustes",
+    "deletePreset": "Eliminar preajuste"
   },
   "curves": {
     "channel": "Canal",
@@ -31,7 +35,8 @@
     "channelMaster": "Maestro",
     "channelRed": "Rojo",
     "channelGreen": "Verde",
-    "channelBlue": "Azul"
+    "channelBlue": "Azul",
+    "multiPointHint": "Haz clic en la curva para añadir un punto. Haz doble clic en un punto para eliminarlo."
   },
   "wheels": {
     "resetWheel": "Restablecer {{name}}",
@@ -285,5 +290,24 @@
     "contour": "Contour",
     "cascade": "Cascade",
     "flat": "Flat"
+  },
+  "colorPanel": {
+    "title": "Color",
+    "bypass": "Omitir etalonaje",
+    "bypassOn": "Etalonaje omitido",
+    "bypassTooltip": "Comparación antes/después solo en la vista previa. Nunca afecta a las exportaciones.",
+    "adjustmentLayer": "Capa de ajuste",
+    "adjustmentLayerTooltip": "Crea una capa de ajuste para etalonar todos los clips debajo de ella",
+    "savePreset": "Guardar",
+    "savePresetTooltip": "Guardar este etalonaje como preajuste",
+    "presetNamePlaceholder": "Nombre del preajuste"
+  },
+  "lut": {
+    "file": "LUT",
+    "import": "Importar LUT .cube",
+    "importTooltip": "Cargar un archivo LUT 3D .cube",
+    "importFailed": "No se pudo leer este archivo .cube",
+    "intensity": "Intensidad",
+    "unsupportedBrowser": "La importación de LUT requiere un navegador basado en Chromium"
   }
 }

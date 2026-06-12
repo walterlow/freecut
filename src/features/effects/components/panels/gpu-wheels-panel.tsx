@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react'
+import { EffectMoveButtons, type EffectMoveProps } from './effect-move-buttons'
 import { Button } from '@/components/ui/button'
 import type { ItemEffect, GpuEffect } from '@/types/effects'
 import type { GpuEffectDefinition } from '@/infrastructure/gpu-effects'
@@ -10,7 +11,7 @@ import type { AnimatableProperty } from '@/types/keyframe'
 import { PropertyRow, SliderInput } from '@/shared/ui/property-controls'
 import { getEffectDefinitionName, getEffectParamLabel } from '@/features/effects/utils/effect-i18n'
 
-interface GpuWheelsPanelProps {
+interface GpuWheelsPanelProps extends EffectMoveProps {
   itemIds: string[]
   effect: ItemEffect
   gpuEffect: GpuEffect
@@ -215,6 +216,9 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
   onReset,
   onToggle,
   onRemove,
+  onMove,
+  canMoveUp,
+  canMoveDown,
 }: GpuWheelsPanelProps) {
   const { t } = useTranslation()
   const wheelGridRef = useRef<HTMLDivElement>(null)
@@ -247,6 +251,12 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
     <div className="space-y-0">
       <PropertyRow label={getEffectDefinitionName(definition)}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
+          <EffectMoveButtons
+            effectId={effect.id}
+            onMove={onMove}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
+          />
           <Button
             variant="ghost"
             size="icon"

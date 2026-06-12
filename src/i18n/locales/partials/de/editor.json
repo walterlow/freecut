@@ -547,6 +547,10 @@
         "lofiElectroLabel": "Lo-fi Electro",
         "lofiElectroPrompt": "Lofi slow bpm electro chill with organic samples"
       }
+    },
+    "colorPanel": {
+      "emptyState": "Wähle einen Clip für die Farbkorrektur aus",
+      "adjustmentLayerLabel": "Farbkorrektur"
     }
   }
 }

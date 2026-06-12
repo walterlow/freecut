@@ -17,6 +17,7 @@ export interface EditorWorkspaceLayout {
   colorScopesOpen: boolean
   clipInspectorTab: EditorClipInspectorTab
   activeTab: EditorSidebarTab
+  propertiesFullColumn: boolean
 }
 
 const EDITOR_WORKSPACE_PRESETS: Record<EditorWorkspaceId, EditorWorkspaceLayout> = {
@@ -24,11 +25,15 @@ const EDITOR_WORKSPACE_PRESETS: Record<EditorWorkspaceId, EditorWorkspaceLayout>
     colorScopesOpen: false,
     clipInspectorTab: 'video',
     activeTab: 'media',
+    propertiesFullColumn: false,
   },
   color: {
     colorScopesOpen: true,
     clipInspectorTab: 'effects',
     activeTab: 'effects',
+    // The grade panel stacks wheels + curves + the effect list — give it
+    // the full column height by default.
+    propertiesFullColumn: true,
   },
 }
 
@@ -84,5 +89,9 @@ export function normalizeEditorWorkspaceLayout(
       ? candidate.clipInspectorTab
       : preset.clipInspectorTab,
     activeTab: isSidebarTab(candidate.activeTab) ? candidate.activeTab : preset.activeTab,
+    propertiesFullColumn:
+      typeof candidate.propertiesFullColumn === 'boolean'
+        ? candidate.propertiesFullColumn
+        : preset.propertiesFullColumn,
   }
 }

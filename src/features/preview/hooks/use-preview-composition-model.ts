@@ -6,7 +6,9 @@ import type { ItemKeyframes } from '@/types/keyframe'
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import type { ResolvedTransform } from '@/types/transform'
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
+import { isColorGradeEffectType } from '@/infrastructure/gpu-effects'
 import { resolveEffectiveTrackStates } from '@/features/preview/deps/timeline-utils'
+import { useCompositionsStore, useItemsStore } from '@/features/preview/deps/timeline-store'
 import { useCornerPinStore } from '../stores/corner-pin-store'
 import { useGizmoStore } from '../stores/gizmo-store'
 import { useMaskEditorStore } from '../stores/mask-editor-store'
@@ -17,6 +19,35 @@ import {
   type FastScrubBoundarySource,
   type VideoSourceSpan,
 } from '../utils/preview-constants'
+
+/** Return the effects list with enabled color-category effects switched off. */
+function withColorGradeBypassed(effects: ItemEffect[] | undefined): ItemEffect[] | undefined {
+  if (!effects || effects.length === 0) return effects
+  let changed = false
+  const next = effects.map((entry) => {
+    if (
+      entry.enabled &&
+      entry.effect.type === 'gpu-effect' &&
+      isColorGradeEffectType(entry.effect.gpuEffectType)
+    ) {
+      changed = true
+      return { ...entry, enabled: false }
+    }
+    return entry
+  })
+  return changed ? next : effects
+}
+
+/** Resolve an item's current effects, including items inside sub-compositions. */
+function findCurrentItemEffects(itemId: string): ItemEffect[] | undefined {
+  const item = useItemsStore.getState().itemById[itemId]
+  if (item) return item.effects
+  for (const composition of useCompositionsStore.getState().compositions) {
+    const subItem = composition.items.find((candidate) => candidate.id === itemId)
+    if (subItem) return subItem.effects
+  }
+  return undefined
+}
 
 interface PreviewProject {
   width: number
@@ -160,7 +191,13 @@ export function usePreviewCompositionModel({
 
   const getPreviewEffectsOverride = useCallback((itemId: string): ItemEffect[] | undefined => {
     const gizmoState = useGizmoStore.getState()
-    return gizmoState.preview?.[itemId]?.effects
+    const overriddenEffects = gizmoState.preview?.[itemId]?.effects
+    if (!gizmoState.colorGradeBypassed) {
+      return overriddenEffects
+    }
+    // Grade bypass: disable color-category effects in the preview only.
+    // Export never receives this override, so renders are unaffected.
+    return withColorGradeBypassed(overriddenEffects ?? findCurrentItemEffects(itemId))
   }, [])
 
   const getPreviewCornerPinOverride = useCallback((itemId: string) => {

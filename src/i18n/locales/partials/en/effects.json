@@ -12,7 +12,9 @@
     "off": "Off",
     "on": "On",
     "removeEffect": "Remove Effect",
-    "resetToDefaults": "Reset To Defaults"
+    "resetToDefaults": "Reset To Defaults",
+    "moveUp": "Move effect up",
+    "moveDown": "Move effect down"
   },
   "section": {
     "addEffect": "Add Effect",
@@ -22,7 +24,9 @@
     "noEffectsFound": "No effects found",
     "presets": "Presets",
     "searchEffects": "Search effects",
-    "title": "Effects"
+    "title": "Effects",
+    "myPresets": "My presets",
+    "deletePreset": "Delete preset"
   },
   "curves": {
     "channel": "Channel",
@@ -31,7 +35,8 @@
     "channelMaster": "Master",
     "channelRed": "Red",
     "channelGreen": "Green",
-    "channelBlue": "Blue"
+    "channelBlue": "Blue",
+    "multiPointHint": "Click the curve to add a point. Double-click a point to remove it."
   },
   "wheels": {
     "resetWheel": "Reset {{name}}",
@@ -283,5 +288,24 @@
     "contour": "Contour",
     "cascade": "Cascade",
     "flat": "Flat"
+  },
+  "colorPanel": {
+    "title": "Color",
+    "bypass": "Bypass grade",
+    "bypassOn": "Grade bypassed",
+    "bypassTooltip": "Preview-only before/after comparison. Never affects exports.",
+    "adjustmentLayer": "Adjustment layer",
+    "adjustmentLayerTooltip": "Create an adjustment layer to grade every clip below it",
+    "savePreset": "Save",
+    "savePresetTooltip": "Save this grade as a preset",
+    "presetNamePlaceholder": "Preset name"
+  },
+  "lut": {
+    "file": "LUT",
+    "import": "Import .cube LUT",
+    "importTooltip": "Load a .cube 3D LUT file",
+    "importFailed": "Could not read this .cube file",
+    "intensity": "Intensity",
+    "unsupportedBrowser": "LUT import needs a Chromium-based browser"
   }
 }
