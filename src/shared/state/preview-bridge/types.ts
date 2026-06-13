@@ -15,7 +15,9 @@ export interface PreviewBridgeState {
   /** Optional raw capture path that returns ImageData directly (avoids encode/decode overhead) */
   captureFrameImageData: ((options?: CaptureOptions) => Promise<ImageData | null>) | null
   /** Returns the rendered canvas directly for GPU-accelerated scope analysis (near-zero-copy) */
-  captureCanvasSource: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null
+  captureCanvasSource:
+    | ((options?: CaptureOptions) => Promise<OffscreenCanvas | HTMLCanvasElement | null>)
+    | null
   /** Latest request to prewarm the preview renderer after an edit commit. */
   postEditWarmRequest: PostEditWarmRequest | null
 }
@@ -30,7 +32,7 @@ export interface PreviewBridgeActions {
   ) => void
   /** Register canvas source capture for GPU scopes (optional) */
   setCaptureCanvasSource: (
-    fn: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null,
+    fn: ((options?: CaptureOptions) => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null,
   ) => void
   requestPostEditWarm: (frame: number, itemIds: string[], frames?: number[]) => void
 }

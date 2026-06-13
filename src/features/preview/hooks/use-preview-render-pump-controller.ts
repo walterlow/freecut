@@ -1566,8 +1566,12 @@ export function usePreviewRenderPump({
       // every frame, so it evicts the whole cache.
       if (invalidation === 'all' && scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache()
+        scrubOffscreenRenderedFrameRef.current = null
       } else if (scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache({ frames: [currentFrame] })
+        if (scrubOffscreenRenderedFrameRef.current === currentFrame) {
+          scrubOffscreenRenderedFrameRef.current = null
+        }
       }
       if (gradeBypassChanged) {
         setDisplayedFrame(null)

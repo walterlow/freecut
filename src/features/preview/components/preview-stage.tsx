@@ -126,9 +126,10 @@ export const PreviewStage = memo(function PreviewStage({
       ? `translate3d(${pixelSnapOffset.x}px, ${pixelSnapOffset.y}px, 0)`
       : undefined
   const isTimelineEmpty = inputProps.tracks.every((track) => track.items.length === 0)
-  const isSplitGradeComparison = colorGradeComparisonMode === 'split' && isRenderedOverlayVisible
+  const isSplitGradeComparison = colorGradeComparisonMode === 'split'
   const splitPosition = Math.max(0.05, Math.min(0.95, colorGradeSplitPosition))
   const splitPercent = splitPosition * 100
+  const splitClipPath = `inset(0 ${100 - splitPercent}% 0 0)`
 
   const updateSplitPositionFromPointer = useCallback(
     (event: { clientX: number }) => {
@@ -259,11 +260,11 @@ export const PreviewStage = memo(function PreviewStage({
                   className="absolute left-0 top-0 pointer-events-none"
                   data-grade-comparison-before-layer={isSplitGradeComparison ? 'true' : undefined}
                   style={{
-                    width: isSplitGradeComparison ? `${splitPercent}%` : '100%',
+                    width: '100%',
                     height: '100%',
                     zIndex: 4,
                     visibility: isRenderedOverlayVisible ? 'visible' : 'hidden',
-                    overflow: isSplitGradeComparison ? 'hidden' : undefined,
+                    clipPath: isSplitGradeComparison ? splitClipPath : undefined,
                     backgroundColor: '#000',
                   }}
                 >
@@ -271,8 +272,8 @@ export const PreviewStage = memo(function PreviewStage({
                     ref={scrubCanvasRef}
                     className="absolute left-0 top-0 pointer-events-none"
                     style={{
-                      width: isSplitGradeComparison ? `${playerSize.width}px` : '100%',
-                      height: isSplitGradeComparison ? `${playerSize.height}px` : '100%',
+                      width: '100%',
+                      height: '100%',
                       maxWidth: 'none',
                       maxHeight: 'none',
                       visibility: isRenderedOverlayVisible ? 'visible' : 'hidden',

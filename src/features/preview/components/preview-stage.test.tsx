@@ -192,15 +192,17 @@ describe('PreviewStage', () => {
     })
   })
 
-  it('clips the preview overlay and labels before/after sides in split grade comparison mode', () => {
+  it('clips the preview overlay without resizing render surfaces in split grade comparison mode', () => {
     renderSplitPreviewStage()
 
     const scrubCanvas = document.querySelectorAll('canvas')[0] as HTMLCanvasElement
     const beforeLayer = document.querySelector(
       '[data-grade-comparison-before-layer="true"]',
     ) as HTMLDivElement
-    expect(beforeLayer).toHaveStyle({ width: '50%', height: '100%', overflow: 'hidden' })
-    expect(scrubCanvas).toHaveStyle({ width: '1280px', height: '720px' })
+    expect(beforeLayer).toHaveStyle({ width: '100%', height: '100%' })
+    expect(beforeLayer.style.clipPath).toBe('inset(0 50% 0 0)')
+    expect(beforeLayer.style.overflow).toBe('')
+    expect(scrubCanvas).toHaveStyle({ width: '100%', height: '100%' })
     expect(scrubCanvas.style.clipPath).toBe('')
     expect(screen.getByLabelText('Split grade comparison')).toBeTruthy()
     expect(screen.getByText('Before')).toBeTruthy()
@@ -221,8 +223,10 @@ describe('PreviewStage', () => {
       '[data-grade-comparison-before-layer="true"]',
     ) as HTMLDivElement
     const wipeHandle = screen.getByRole('slider', { name: 'Adjust split comparison' })
-    expect(beforeLayer).toHaveStyle({ width: '35%', overflow: 'hidden' })
-    expect(scrubCanvas).toHaveStyle({ width: '1280px', height: '720px' })
+    expect(beforeLayer).toHaveStyle({ width: '100%' })
+    expect(beforeLayer.style.clipPath).toBe('inset(0 65% 0 0)')
+    expect(beforeLayer.style.overflow).toBe('')
+    expect(scrubCanvas).toHaveStyle({ width: '100%', height: '100%' })
     expect(scrubCanvas.style.clipPath).toBe('')
     expect(wipeHandle).toHaveAttribute('aria-valuenow', '35')
 
@@ -259,5 +263,19 @@ describe('PreviewStage', () => {
 
     expect(handleSplitPositionChange).toHaveBeenCalledWith(0.25)
     expect(handleSplitPositionChange).toHaveBeenCalledWith(0.5)
+  })
+
+  it('keeps split wipe chrome mounted while the comparison overlay is waiting for a frame', () => {
+    renderSplitPreviewStage({ isRenderedOverlayVisible: false })
+
+    const beforeLayer = document.querySelector(
+      '[data-grade-comparison-before-layer="true"]',
+    ) as HTMLDivElement
+    expect(beforeLayer).toHaveStyle({ width: '100%', visibility: 'hidden' })
+    expect(beforeLayer.style.clipPath).toBe('inset(0 50% 0 0)')
+    expect(screen.getByRole('slider', { name: 'Adjust split comparison' })).toHaveAttribute(
+      'aria-valuenow',
+      '50',
+    )
   })
 })

@@ -556,7 +556,10 @@ export const ColorScopesView = memo(function ColorScopesView({
         // Try near-zero-copy canvas path first
         const canvasSourceFn = usePreviewBridgeStore.getState().captureCanvasSource
         if (canvasSourceFn) {
-          const source = await canvasSourceFn()
+          const source = await canvasSourceFn({
+            fresh: isPlayingRef.current,
+            preferRenderedFrame: true,
+          })
           if (source && !cancelled) {
             renderer.uploadFromCanvas(source)
           } else if (!cancelled) {
@@ -605,7 +608,12 @@ export const ColorScopesView = memo(function ColorScopesView({
       if (!captureFn) return
       const sampleW = isPlayingRef.current ? SAMPLE_WIDTH_PLAYING : SAMPLE_WIDTH_PAUSED
       const sampleH = isPlayingRef.current ? SAMPLE_HEIGHT_PLAYING : SAMPLE_HEIGHT_PAUSED
-      const imageData = await captureFn({ width: sampleW, height: sampleH })
+      const imageData = await captureFn({
+        width: sampleW,
+        height: sampleH,
+        fresh: isPlayingRef.current,
+        preferRenderedFrame: true,
+      })
       if (imageData) r.uploadFrame(imageData)
     }
 
@@ -670,7 +678,12 @@ export const ColorScopesView = memo(function ColorScopesView({
         let imageData: ImageData | null = null
 
         if (captureFrameImageData) {
-          imageData = await captureFrameImageData({ width: sampleW, height: sampleH })
+          imageData = await captureFrameImageData({
+            width: sampleW,
+            height: sampleH,
+            fresh: isPlaying,
+            preferRenderedFrame: true,
+          })
         }
 
         if (!imageData && captureFrame) {
@@ -679,6 +692,8 @@ export const ColorScopesView = memo(function ColorScopesView({
             height: sampleH,
             format: 'image/jpeg',
             quality: isPlaying ? 0.72 : 0.85,
+            fresh: isPlaying,
+            preferRenderedFrame: true,
           })
           if (dataUrl) {
             const img = new Image()

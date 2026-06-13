@@ -168,6 +168,34 @@ export async function renderItemWithEffects(
   // this into a visible bright edge. The standard canvas 2D → GPU path
   // below handles video correctly with negligible extra cost (~1-2ms).
 
+  // DOM-video GPU-effect fast path FIRST. It self-gates to null unless we're in
+  // preview mode with a DOM video provider installed (i.e. playback), the clip
+  // is a simple video (no crop/rotation/opacity/cornerRadius/flip/cornerPin) and
+  // has only gpu-effects. In that case it applies the effects directly to the
+  // Player's live <video> element — the same zero-copy source the on-screen
+  // preview uses. The direct-to-texture path below sources frames via mediabunny
+  // decode, which can't track a playing video, so during playback it must not
+  // win for video: scopes (and any capture re-rendering through this path) would
+  // otherwise freeze on effect clips while non-effect clips kept updating.
+  // Outside playback (no provider) this returns null and the mediabunny path runs
+  // exactly as before, and export (renderMode !== 'preview') is unaffected.
+  if (renderMasks.length === 0 && combinedEffects.length > 0) {
+    const directGpuCanvas = renderPreviewVideoGpuEffectsToCanvas(
+      effectiveItem,
+      transform,
+      combinedEffects,
+      frame,
+      itemRenderContext,
+    )
+    if (directGpuCanvas) {
+      if (deferred) {
+        return { source: directGpuCanvas, poolCanvases: [] }
+      }
+      targetCtx.drawImage(directGpuCanvas, 0, 0)
+      return null
+    }
+  }
+
   const canRenderDirectGpuEffects =
     allowDirectGpu &&
     preferGpuTextureOutput &&
@@ -198,23 +226,6 @@ export async function renderItemWithEffects(
       if (!renderedDirect) {
         gpu.texturePool.release(outputTexture)
       }
-    }
-  }
-
-  if (renderMasks.length === 0 && combinedEffects.length > 0) {
-    const directGpuCanvas = renderPreviewVideoGpuEffectsToCanvas(
-      effectiveItem,
-      transform,
-      combinedEffects,
-      frame,
-      itemRenderContext,
-    )
-    if (directGpuCanvas) {
-      if (deferred) {
-        return { source: directGpuCanvas, poolCanvases: [] }
-      }
-      targetCtx.drawImage(directGpuCanvas, 0, 0)
-      return null
     }
   }
 

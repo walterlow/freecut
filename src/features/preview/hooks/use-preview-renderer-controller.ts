@@ -25,7 +25,10 @@ import {
 } from '@/features/preview/deps/timeline-store'
 import { usePreviewBridgeStore, type PostEditWarmRequest } from '@/shared/state/preview-bridge'
 import { createLogger } from '@/shared/logging/logger'
-import type { PreviewPathVerticesOverride } from '../deps/composition-runtime'
+import {
+  getBestDomVideoElementForItem,
+  type PreviewPathVerticesOverride,
+} from '../deps/composition-runtime'
 import { getPreviewRuntimeSnapshotFromPlaybackState } from '../utils/preview-state-coordinator'
 import {
   FAST_SCRUB_PRELOAD_BUDGET_MS,
@@ -123,7 +126,7 @@ interface UsePreviewRendererControllerParams {
     fn: ((options?: CaptureOptions) => Promise<ImageData | null>) | null,
   ) => void
   setCaptureCanvasSource: (
-    fn: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null,
+    fn: ((options?: CaptureOptions) => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null,
   ) => void
   setDisplayedFrame: (frame: number | null) => void
 }
@@ -205,6 +208,13 @@ export function usePreviewRendererController({
   const previousIsResolvingRef = useRef(isResolving)
   const pendingPostEditWarmRequestRef = useRef<PostEditWarmRequest | null>(null)
   const postEditWarmInFlightRef = useRef(false)
+  const liveScopeCaptureRendererRef = useRef<PreviewCompositionRenderer | null>(null)
+  const liveScopeCaptureInitPromiseRef = useRef<Promise<PreviewCompositionRenderer | null> | null>(
+    null,
+  )
+  const liveScopeCaptureCanvasRef = useRef<OffscreenCanvas | null>(null)
+  const liveScopeCaptureCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null)
+  const liveScopeCaptureStructureKeyRef = useRef<string | null>(null)
 
   useLayoutEffect(() => {
     const canvas = scrubCanvasRef.current
@@ -263,6 +273,19 @@ export function usePreviewRendererController({
     bgTransitionRendererStructureKeyRef.current = null
     bgTransitionInitPromiseRef.current = null
     bgTransitionRenderInFlightRef.current = false
+
+    if (liveScopeCaptureRendererRef.current) {
+      try {
+        liveScopeCaptureRendererRef.current.dispose()
+      } catch {
+        // Best effort.
+      }
+      liveScopeCaptureRendererRef.current = null
+    }
+    liveScopeCaptureInitPromiseRef.current = null
+    liveScopeCaptureCanvasRef.current = null
+    liveScopeCaptureCtxRef.current = null
+    liveScopeCaptureStructureKeyRef.current = null
   }, [
     bgTransitionInitPromiseRef,
     bgTransitionRenderInFlightRef,
@@ -292,6 +315,84 @@ export function usePreviewRendererController({
     scrubRendererStructureKeyRef,
     scrubRequestedFrameRef,
     transitionPrepareTimeoutRef,
+  ])
+
+  const ensureLiveScopeCaptureRenderer = useCallback(async () => {
+    if (!FAST_SCRUB_RENDERER_ENABLED) return null
+    if (typeof OffscreenCanvas === 'undefined') return null
+    if (isResolving) return null
+    if (
+      liveScopeCaptureRendererRef.current &&
+      liveScopeCaptureStructureKeyRef.current !== fastScrubRendererStructureKey
+    ) {
+      try {
+        liveScopeCaptureRendererRef.current.dispose()
+      } catch {
+        // Best effort.
+      }
+      liveScopeCaptureRendererRef.current = null
+      liveScopeCaptureCanvasRef.current = null
+      liveScopeCaptureCtxRef.current = null
+      liveScopeCaptureStructureKeyRef.current = null
+    }
+    if (liveScopeCaptureRendererRef.current) return liveScopeCaptureRendererRef.current
+    if (liveScopeCaptureInitPromiseRef.current) return liveScopeCaptureInitPromiseRef.current
+
+    liveScopeCaptureInitPromiseRef.current = (async () => {
+      try {
+        const offscreen = new OffscreenCanvas(renderSize.width, renderSize.height)
+        const offscreenCtx = offscreen.getContext('2d')
+        if (!offscreenCtx) return null
+        const { createCompositionRenderer } = await importCompositionRenderer()
+        const renderer = await createCompositionRenderer(
+          fastScrubInputProps,
+          offscreen,
+          offscreenCtx,
+          {
+            mode: 'preview',
+            useProxyMedia: useProxy,
+            getPreviewTransformOverride,
+            getPreviewEffectsOverride,
+            getPreviewCornerPinOverride,
+            getPreviewPathVerticesOverride,
+            getLiveItemSnapshot,
+            getLiveKeyframes,
+          },
+        )
+        liveScopeCaptureCanvasRef.current = offscreen
+        liveScopeCaptureCtxRef.current = offscreenCtx
+        liveScopeCaptureRendererRef.current = renderer
+        liveScopeCaptureStructureKeyRef.current = fastScrubRendererStructureKey
+        if ('warmGpuPipeline' in renderer) {
+          void renderer.warmGpuPipeline()
+        }
+        return renderer
+      } catch (error) {
+        logger.warn('Failed to initialize live scope capture renderer:', error)
+        liveScopeCaptureRendererRef.current = null
+        liveScopeCaptureCanvasRef.current = null
+        liveScopeCaptureCtxRef.current = null
+        liveScopeCaptureStructureKeyRef.current = null
+        return null
+      } finally {
+        liveScopeCaptureInitPromiseRef.current = null
+      }
+    })()
+
+    return liveScopeCaptureInitPromiseRef.current
+  }, [
+    fastScrubInputProps,
+    fastScrubRendererStructureKey,
+    getLiveItemSnapshot,
+    getLiveKeyframes,
+    getPreviewCornerPinOverride,
+    getPreviewEffectsOverride,
+    getPreviewPathVerticesOverride,
+    getPreviewTransformOverride,
+    isResolving,
+    renderSize.height,
+    renderSize.width,
+    useProxy,
   ])
 
   const ensureBgTransitionRenderer =
@@ -531,7 +632,10 @@ export function usePreviewRendererController({
   )
 
   const renderOffscreenFrame = useCallback(
-    async (targetFrame: number): Promise<OffscreenCanvas | null> => {
+    async (
+      targetFrame: number,
+      options: { useLiveDomProvider?: boolean } = {},
+    ): Promise<OffscreenCanvas | null> => {
       // Renderer init is slow — make sure it exists before taking the lock.
       if (
         scrubOffscreenRenderedFrameRef.current !== targetFrame ||
@@ -541,12 +645,19 @@ export function usePreviewRendererController({
         if (!renderer || !scrubOffscreenCanvasRef.current) return null
       }
 
+      const useLiveDomProvider = options.useLiveDomProvider ?? true
+      const isPlayingForCapture = useLiveDomProvider && usePlaybackStore.getState().isPlaying
       return withScrubRenderLock(async () => {
         const offscreen = scrubOffscreenCanvasRef.current
         if (!offscreen) return null
-        if (scrubOffscreenRenderedFrameRef.current !== targetFrame) {
-          const renderer = scrubRendererRef.current
-          if (!renderer) return null
+        const renderer = scrubRendererRef.current
+        if (!renderer) return null
+        if ('setDomVideoElementProvider' in renderer) {
+          renderer.setDomVideoElementProvider?.(
+            isPlayingForCapture ? getBestDomVideoElementForItem : undefined,
+          )
+        }
+        if (scrubOffscreenRenderedFrameRef.current !== targetFrame || isPlayingForCapture) {
           await renderer.renderFrame(targetFrame)
           scrubOffscreenRenderedFrameRef.current = targetFrame
         }
@@ -990,26 +1101,129 @@ export function usePreviewRendererController({
     })
   }, [ensureFastScrubRenderer, isResolving, scrubOffscreenRenderedFrameRef])
 
-  const resolveCaptureTargetFrame = useCallback(() => {
-    const playback = usePlaybackStore.getState()
-    return resolvePreviewCaptureFrame({
-      currentFrame: playback.currentFrame,
-      previewFrame: playback.previewFrame,
-      isPlaying: playback.isPlaying,
-      livePlaybackFrame: playback.isPlaying ? getLivePlaybackFrame() : null,
-    })
-  }, [getLivePlaybackFrame])
+  const resolveCaptureTargetFrame = useCallback(
+    (options?: CaptureOptions) => {
+      const playback = usePlaybackStore.getState()
+      if (options?.preferRenderedFrame) {
+        if (playback.isPlaying) {
+          return resolvePreviewCaptureFrame({
+            currentFrame: playback.currentFrame,
+            previewFrame: playback.previewFrame,
+            isPlaying: playback.isPlaying,
+            livePlaybackFrame: getLivePlaybackFrame(),
+          })
+        }
+
+        const displayedFrame = usePreviewBridgeStore.getState().displayedFrame
+        if (displayedFrame !== null) {
+          return Math.max(0, Math.round(displayedFrame))
+        }
+        const renderedFrame = playback.previewFrame ?? playback.currentFrame
+        return Math.max(0, Math.round(renderedFrame))
+      }
+
+      return resolvePreviewCaptureFrame({
+        currentFrame: playback.currentFrame,
+        previewFrame: playback.previewFrame,
+        isPlaying: playback.isPlaying,
+        livePlaybackFrame: playback.isPlaying ? getLivePlaybackFrame() : null,
+      })
+    },
+    [getLivePlaybackFrame],
+  )
+
+  const captureDisplaySnapshotCanvasRef = useRef<OffscreenCanvas | null>(null)
+  const captureLiveScopeSnapshotCanvasRef = useRef<OffscreenCanvas | null>(null)
+
+  const captureRenderedDisplaySnapshot = useCallback(
+    (options?: CaptureOptions): OffscreenCanvas | null => {
+      if (!options?.preferRenderedFrame || !usePlaybackStore.getState().isPlaying) {
+        return null
+      }
+      if (usePreviewBridgeStore.getState().displayedFrame === null) {
+        return null
+      }
+      const displayCanvas = scrubCanvasRef.current
+      if (!displayCanvas || displayCanvas.width <= 0 || displayCanvas.height <= 0) {
+        return null
+      }
+
+      let snapshot = captureDisplaySnapshotCanvasRef.current
+      if (
+        !snapshot ||
+        snapshot.width !== displayCanvas.width ||
+        snapshot.height !== displayCanvas.height
+      ) {
+        snapshot = new OffscreenCanvas(displayCanvas.width, displayCanvas.height)
+        captureDisplaySnapshotCanvasRef.current = snapshot
+      }
+      const snapshotCtx = snapshot.getContext('2d')
+      if (!snapshotCtx) return null
+      snapshotCtx.clearRect(0, 0, snapshot.width, snapshot.height)
+      snapshotCtx.drawImage(displayCanvas, 0, 0)
+      return snapshot
+    },
+    [scrubCanvasRef],
+  )
+
+  const captureLiveScopeRenderedSnapshot = useCallback(
+    async (options?: CaptureOptions): Promise<OffscreenCanvas | null> => {
+      const playback = usePlaybackStore.getState()
+      if (!options?.preferRenderedFrame || !playback.isPlaying) {
+        return null
+      }
+      const targetFrame = resolveCaptureTargetFrame(options)
+      const renderer = await ensureLiveScopeCaptureRenderer()
+      const offscreen = liveScopeCaptureCanvasRef.current
+      if (!renderer || !offscreen) return null
+
+      if ('setDomVideoElementProvider' in renderer) {
+        renderer.setDomVideoElementProvider?.(getBestDomVideoElementForItem)
+      }
+      await renderer.renderFrame(targetFrame)
+
+      let snapshot = captureLiveScopeSnapshotCanvasRef.current
+      if (
+        !snapshot ||
+        snapshot.width !== offscreen.width ||
+        snapshot.height !== offscreen.height
+      ) {
+        snapshot = new OffscreenCanvas(offscreen.width, offscreen.height)
+        captureLiveScopeSnapshotCanvasRef.current = snapshot
+      }
+      const snapshotCtx = snapshot.getContext('2d')
+      if (!snapshotCtx) return null
+      snapshotCtx.clearRect(0, 0, snapshot.width, snapshot.height)
+      snapshotCtx.drawImage(offscreen, 0, 0)
+      return snapshot
+    },
+    [ensureLiveScopeCaptureRenderer, resolveCaptureTargetFrame],
+  )
 
   const captureCurrentFrame = useCallback(
     async (options?: CaptureOptions): Promise<string | null> => {
+      if (captureInFlightRef.current) {
+        if (options?.fresh) {
+          await captureInFlightRef.current.catch(() => null)
+        } else {
+          return captureInFlightRef.current
+        }
+      }
+
       if (captureInFlightRef.current) {
         return captureInFlightRef.current
       }
 
       const task = (async () => {
         try {
-          const targetFrame = resolveCaptureTargetFrame()
-          const offscreen = await renderOffscreenFrame(targetFrame)
+          const targetFrame = resolveCaptureTargetFrame(options)
+          const offscreen =
+            (await captureLiveScopeRenderedSnapshot(options)) ??
+            captureRenderedDisplaySnapshot(options) ??
+            (await renderOffscreenFrame(targetFrame, {
+              useLiveDomProvider:
+                !options?.preferRenderedFrame || usePlaybackStore.getState().isPlaying,
+            }))
           if (!offscreen) return null
 
           const format = options?.format ?? 'image/jpeg'
@@ -1070,19 +1284,39 @@ export function usePreviewRendererController({
       captureInFlightRef.current = task
       return task
     },
-    [captureInFlightRef, renderOffscreenFrame, resolveCaptureTargetFrame],
+    [
+      captureInFlightRef,
+      captureLiveScopeRenderedSnapshot,
+      captureRenderedDisplaySnapshot,
+      renderOffscreenFrame,
+      resolveCaptureTargetFrame,
+    ],
   )
 
   const captureCurrentFrameImageData = useCallback(
     async (options?: CaptureOptions): Promise<ImageData | null> => {
+      if (captureImageDataInFlightRef.current) {
+        if (options?.fresh) {
+          await captureImageDataInFlightRef.current.catch(() => null)
+        } else {
+          return captureImageDataInFlightRef.current
+        }
+      }
+
       if (captureImageDataInFlightRef.current) {
         return captureImageDataInFlightRef.current
       }
 
       const task = (async () => {
         try {
-          const targetFrame = resolveCaptureTargetFrame()
-          const offscreen = await renderOffscreenFrame(targetFrame)
+          const targetFrame = resolveCaptureTargetFrame(options)
+          const offscreen =
+            (await captureLiveScopeRenderedSnapshot(options)) ??
+            captureRenderedDisplaySnapshot(options) ??
+            (await renderOffscreenFrame(targetFrame, {
+              useLiveDomProvider:
+                !options?.preferRenderedFrame || usePlaybackStore.getState().isPlaying,
+            }))
           if (!offscreen) return null
 
           const targetWidth = Math.max(2, Math.round(options?.width ?? offscreen.width))
@@ -1127,6 +1361,8 @@ export function usePreviewRendererController({
     },
     [
       captureImageDataInFlightRef,
+      captureLiveScopeRenderedSnapshot,
+      captureRenderedDisplaySnapshot,
       captureScaleCanvasRef,
       renderOffscreenFrame,
       resolveCaptureTargetFrame,
@@ -1136,16 +1372,32 @@ export function usePreviewRendererController({
 
   const captureSnapshotCanvasRef = useRef<OffscreenCanvas | null>(null)
 
-  const captureCanvasSource = useCallback(async (): Promise<
+  const captureCanvasSource = useCallback(async (options?: CaptureOptions): Promise<
     OffscreenCanvas | HTMLCanvasElement | null
   > => {
+    if (captureCanvasSourceInFlightRef.current) {
+      if (options?.fresh) {
+        await captureCanvasSourceInFlightRef.current.catch(() => null)
+      } else {
+        return captureCanvasSourceInFlightRef.current
+      }
+    }
+
     if (captureCanvasSourceInFlightRef.current) {
       return captureCanvasSourceInFlightRef.current
     }
 
     const task = (async () => {
       try {
-        const targetFrame = resolveCaptureTargetFrame()
+        const liveScopeSnapshot = await captureLiveScopeRenderedSnapshot(options)
+        if (liveScopeSnapshot) return liveScopeSnapshot
+        const displaySnapshot = captureRenderedDisplaySnapshot(options)
+        if (displaySnapshot) return displaySnapshot
+
+        const targetFrame = resolveCaptureTargetFrame(options)
+        const useLiveDomProvider =
+          !options?.preferRenderedFrame || usePlaybackStore.getState().isPlaying
+        const isPlayingForCapture = useLiveDomProvider && usePlaybackStore.getState().isPlaying
 
         if (
           scrubOffscreenRenderedFrameRef.current !== targetFrame ||
@@ -1162,9 +1414,25 @@ export function usePreviewRendererController({
         return await withScrubRenderLock(async () => {
           const offscreen = scrubOffscreenCanvasRef.current
           if (!offscreen) return null
-          if (scrubOffscreenRenderedFrameRef.current !== targetFrame) {
-            const renderer = scrubRendererRef.current
-            if (!renderer) return null
+          const renderer = scrubRendererRef.current
+          if (!renderer) return null
+          // During playback the on-screen graded frame is produced by the GPU
+          // effect fast path (`applyEffectsToVideo`), which reads the Player's
+          // live <video> elements via the DOM video provider. The pump installs
+          // that provider for its own renders; captures don't go through the
+          // pump, so without it the fast path bails (`no-dom-provider`) and the
+          // capture falls back to a decode that can't track playback — freezing
+          // scopes on effect clips while non-effect clips (which draw the DOM
+          // video directly) keep updating. Mirror the pump: provide the live
+          // elements while playing, clear when paused so seeked frames render
+          // from decode as before. Force a fresh render while playing since the
+          // live video advances even when the frame number momentarily repeats.
+          if ('setDomVideoElementProvider' in renderer) {
+            renderer.setDomVideoElementProvider?.(
+              isPlayingForCapture ? getBestDomVideoElementForItem : undefined,
+            )
+          }
+          if (scrubOffscreenRenderedFrameRef.current !== targetFrame || isPlayingForCapture) {
             await renderer.renderFrame(targetFrame)
             scrubOffscreenRenderedFrameRef.current = targetFrame
           }
@@ -1196,6 +1464,8 @@ export function usePreviewRendererController({
     return task
   }, [
     captureCanvasSourceInFlightRef,
+    captureLiveScopeRenderedSnapshot,
+    captureRenderedDisplaySnapshot,
     ensureFastScrubRenderer,
     resolveCaptureTargetFrame,
     scrubOffscreenCanvasRef,

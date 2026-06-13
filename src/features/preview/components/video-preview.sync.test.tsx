@@ -5,6 +5,7 @@ import type { TimelineItem } from '@/types/timeline'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
 import {
+  useCompositionsStore,
   useItemsStore,
   useTimelineStore,
   useTimelineSettingsStore,
@@ -479,6 +480,7 @@ function resetStores() {
 
   useItemsStore.getState().setTracks([])
   useItemsStore.getState().setItems([])
+  useCompositionsStore.getState().setCompositions([])
   useTimelineStore.setState({ keyframes: [] })
   useTransitionsStore.getState().setTransitions([])
   useTimelineSettingsStore.setState({
@@ -534,6 +536,73 @@ function setSingleVideoItemAtFrame(item: Record<string, unknown>, frame = 24) {
       durationInFrames: 120,
       src: 'blob:mock-video',
       ...item,
+    } as unknown as TimelineItem,
+  ])
+  act(() => {
+    usePlaybackStore.getState().setCurrentFrame(frame)
+  })
+}
+
+function setSingleCompoundItemWithGpuEffectAtFrame(frame = 24) {
+  const nestedTrack = {
+    id: 'sub-track-video',
+    name: 'Video',
+    height: 60,
+    locked: false,
+    visible: true,
+    muted: false,
+    solo: false,
+    order: 0,
+    items: [],
+  }
+  useCompositionsStore.getState().setCompositions([
+    {
+      id: 'composition-gpu',
+      name: 'Compound GPU',
+      width: 1920,
+      height: 1080,
+      fps: 30,
+      durationInFrames: 120,
+      backgroundColor: '#000000',
+      tracks: [nestedTrack],
+      transitions: [],
+      keyframes: [],
+      items: [
+        {
+          id: 'nested-gpu-video',
+          label: 'Nested GPU Video',
+          type: 'video',
+          trackId: 'sub-track-video',
+          from: 0,
+          durationInFrames: 120,
+          src: 'blob:nested-gpu-video',
+          effects: [
+            {
+              id: 'nested-effect',
+              enabled: true,
+              effect: {
+                type: 'gpu-effect',
+                gpuEffectType: 'gpu-sepia',
+                params: { amount: 0.5 },
+              },
+            },
+          ],
+        } as unknown as TimelineItem,
+      ],
+    },
+  ])
+  setSingleVideoTrack()
+  useItemsStore.getState().setItems([
+    {
+      id: 'compound-gpu-item',
+      label: 'Compound GPU',
+      type: 'composition',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 120,
+      compositionId: 'composition-gpu',
+      compositionWidth: 1920,
+      compositionHeight: 1080,
     } as unknown as TimelineItem,
   ])
   act(() => {
@@ -679,7 +748,7 @@ async function setScrubFrameAndWaitVisible(
 
 async function renderReadySingleRendererPreview(
   expectedFrame: number,
-  options: { expectedDisplayedFrame?: number } = {},
+  options: { expectedDisplayedFrame?: number; expectVisible?: boolean } = {},
 ) {
   const { container } = renderDefaultPreview()
   const scrubCanvas = getScrubCanvas(container)
@@ -1405,9 +1474,10 @@ describe('VideoPreview sync behavior', () => {
         '[data-grade-comparison-before-layer="true"]',
       ) as HTMLDivElement | null
       expect(beforeLayer).not.toBeNull()
-      expect(beforeLayer).toHaveStyle({ width: '50%', height: '100%', overflow: 'hidden' })
-      expect(scrubCanvas).toHaveStyle({ width: '1280px', height: '720px' })
-      expect(scrubCanvas.style.clipPath).toBe('')
+      expect(beforeLayer).toHaveStyle({ width: '100%', height: '100%' })
+      expect(beforeLayer?.style.clipPath).toBe('inset(0 50% 0 0)')
+      expect(beforeLayer?.style.overflow).toBe('')
+      expect(scrubCanvas).toHaveStyle({ width: '100%', height: '100%' })
       expect(container.querySelector('[data-grade-comparison-after-layer="true"]')).not.toBeNull()
     })
 
@@ -1476,6 +1546,64 @@ describe('VideoPreview sync behavior', () => {
       expect(screen.getByLabelText('Split grade comparison')).toBeTruthy()
       expect(container.querySelector('[data-grade-comparison-after-layer="true"]')).not.toBeNull()
       expect(screen.getByTestId('mock-player-frame')).toHaveTextContent('0')
+    })
+  })
+
+  it('keeps the split after renderer warm when toggling away from split and back', async () => {
+    setSingleVideoItemAtFrame({
+      id: 'item-graded',
+      effects: [
+        {
+          id: 'effect-grade',
+          enabled: true,
+          effect: {
+            type: 'gpu-effect',
+            gpuEffectType: 'gpu-color-wheels',
+            params: { exposure: 0.5 },
+          },
+        },
+      ],
+    })
+
+    const { container } = renderDefaultPreview()
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1)
+      return rendererMockState.instances[0]!
+    })
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24)
+      expect(getDisplayedFrame()).toBe(24)
+    })
+
+    act(() => {
+      useGizmoStore.getState().setColorGradeComparisonMode('split')
+    })
+
+    const splitAfterRenderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(2)
+      expect(container.querySelector('[data-grade-comparison-after-layer="true"]')).not.toBeNull()
+      return rendererMockState.instances[1]!
+    })
+    splitAfterRenderer.renderFrame.mockClear()
+
+    act(() => {
+      useGizmoStore.getState().setColorGradeComparisonMode('off')
+    })
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-grade-comparison-after-layer="true"]')).toBeNull()
+    })
+    expect(splitAfterRenderer.dispose).not.toHaveBeenCalled()
+
+    act(() => {
+      useGizmoStore.getState().setColorGradeComparisonMode('split')
+    })
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(2)
+      expect(splitAfterRenderer.renderFrame).toHaveBeenCalledWith(24)
+      expect(container.querySelector('[data-grade-comparison-after-layer="true"]')).not.toBeNull()
     })
   })
 
@@ -2349,6 +2477,248 @@ describe('VideoPreview sync behavior', () => {
       expect(getDisplayedFrame()).toBe(49)
       expect(scrubCanvas.style.visibility).toBe('visible')
     })
+  })
+
+  it('captures a fresh live frame for scopes instead of reusing an in-flight stale sample', async () => {
+    setSingleVideoItemAtFrame({ id: 'item-live-scopes' })
+    const { renderer } = await renderReadySingleRendererPreview(24, { expectVisible: false })
+    const captureCanvasSource = await waitFor(() => {
+      const fn = usePreviewBridgeStore.getState().captureCanvasSource
+      expect(fn).not.toBeNull()
+      return fn!
+    })
+
+    let resolveStaleRender: (() => void) | null = null
+    renderer.renderFrame.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveStaleRender = resolve
+        }),
+    )
+
+    act(() => {
+      usePlaybackStore.setState({ isPlaying: true, currentFrame: 25 })
+      mockedPlayerFrame = 25
+    })
+
+    const staleCapture = captureCanvasSource()
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(25)
+    })
+
+    act(() => {
+      usePlaybackStore.setState({ currentFrame: 30 })
+      mockedPlayerFrame = 30
+    })
+
+    const freshCapture = captureCanvasSource({ fresh: true })
+
+    await act(async () => {
+      resolveStaleRender?.()
+      await staleCapture
+      await freshCapture
+    })
+
+    expect(renderer.renderFrame).toHaveBeenCalledWith(30)
+  })
+
+  it('captures a refreshed paused scope sample after a live gpu effect preview changes', async () => {
+    setSingleVideoItemAtFrame({
+      id: 'item-paused-scope-preview',
+      effects: [
+        {
+          id: 'effect-preview',
+          enabled: true,
+          effect: {
+            type: 'gpu-effect',
+            gpuEffectType: 'gpu-sepia',
+            params: { amount: 0.4 },
+          },
+        },
+      ],
+    })
+    const { renderer } = await renderReadySingleRendererPreview(24, { expectVisible: false })
+    const captureCanvasSource = await waitFor(() => {
+      const fn = usePreviewBridgeStore.getState().captureCanvasSource
+      expect(fn).not.toBeNull()
+      return fn!
+    })
+    renderer.invalidateFrameCache.mockClear()
+    renderer.renderFrame.mockClear()
+
+    act(() => {
+      useGizmoStore.getState().setEffectsPreviewNew({
+        'item-paused-scope-preview': [
+          {
+            id: 'effect-preview',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.9 },
+            },
+          },
+        ],
+      })
+    })
+
+    renderer.setDomVideoElementProvider.mockClear()
+    await act(async () => {
+      await captureCanvasSource({ fresh: true, preferRenderedFrame: true })
+    })
+
+    expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({ frames: [24] })
+    expect(renderer.renderFrame).toHaveBeenCalledWith(24)
+    expect(renderer.setDomVideoElementProvider).toHaveBeenCalledWith(undefined)
+  })
+
+  it('captures a live rendered scope frame for GPU effect clips during playback', async () => {
+    setSingleVideoItemAtFrame({
+      id: 'item-live-gpu-scope-preview',
+      effects: [
+        {
+          id: 'effect-live-preview',
+          enabled: true,
+          effect: {
+            type: 'gpu-effect',
+            gpuEffectType: 'gpu-sepia',
+            params: { amount: 0.4 },
+          },
+        },
+      ],
+    })
+    const { renderer } = await renderReadySingleRendererPreview(24, { expectVisible: false })
+    const captureCanvasSource = await waitFor(() => {
+      const fn = usePreviewBridgeStore.getState().captureCanvasSource
+      expect(fn).not.toBeNull()
+      return fn!
+    })
+
+    act(() => {
+      usePlaybackStore.setState({ isPlaying: true, currentFrame: 30 })
+      usePlaybackStore.getState().setPreviewFrame(24)
+      mockedPlayerFrame = 30
+    })
+
+    renderer.renderFrame.mockClear()
+    await act(async () => {
+      await captureCanvasSource({ fresh: true })
+    })
+    expect(renderer.renderFrame).toHaveBeenCalledWith(30)
+
+    renderer.renderFrame.mockClear()
+    renderer.setDomVideoElementProvider.mockClear()
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24)
+      usePreviewBridgeStore.getState().setDisplayedFrame(null)
+    })
+    await act(async () => {
+      await captureCanvasSource({ fresh: true, preferRenderedFrame: true })
+    })
+    const scopeRenderer = rendererMockState.instances[1]!
+    expect(scopeRenderer.renderFrame).toHaveBeenCalledWith(30)
+    expect(scopeRenderer.setDomVideoElementProvider).toHaveBeenCalledWith(expect.any(Function))
+  })
+
+  it('samples the presented overlay canvas for live scopes on GPU effect clips', async () => {
+    setSingleVideoItemAtFrame({
+      id: 'item-live-gpu-display-scope',
+      effects: [
+        {
+          id: 'effect-live-display',
+          enabled: true,
+          effect: {
+            type: 'gpu-effect',
+            gpuEffectType: 'gpu-sepia',
+            params: { amount: 0.4 },
+          },
+        },
+      ],
+    })
+    const { renderer, scrubCanvas } = await renderReadySingleRendererPreview(24, {
+      expectVisible: false,
+    })
+    const captureCanvasSource = await waitFor(() => {
+      const fn = usePreviewBridgeStore.getState().captureCanvasSource
+      expect(fn).not.toBeNull()
+      return fn!
+    })
+
+    act(() => {
+      usePlaybackStore.setState({ isPlaying: true, currentFrame: 30 })
+      usePreviewBridgeStore.getState().setDisplayedFrame(30)
+      mockedPlayerFrame = 30
+    })
+
+    renderer.renderFrame.mockClear()
+    const source = await captureCanvasSource({ fresh: true, preferRenderedFrame: true })
+    const scopeRenderer = rendererMockState.instances[1]!
+
+    expect(source).not.toBeNull()
+    expect(source).not.toBe(scrubCanvas)
+    expect(source?.width).toBe(scrubCanvas.width)
+    expect(source?.height).toBe(scrubCanvas.height)
+    expect(renderer.renderFrame).not.toHaveBeenCalled()
+    expect(scopeRenderer.renderFrame).toHaveBeenCalledWith(30)
+  })
+
+  it('samples the presented overlay canvas for live scopes on compound clips with GPU effects', async () => {
+    setSingleCompoundItemWithGpuEffectAtFrame(24)
+    const { renderer, scrubCanvas } = await renderReadySingleRendererPreview(24, {
+      expectVisible: false,
+    })
+    const captureCanvasSource = await waitFor(() => {
+      const fn = usePreviewBridgeStore.getState().captureCanvasSource
+      expect(fn).not.toBeNull()
+      return fn!
+    })
+
+    act(() => {
+      usePlaybackStore.setState({ isPlaying: true, currentFrame: 30 })
+      usePreviewBridgeStore.getState().setDisplayedFrame(30)
+      mockedPlayerFrame = 30
+    })
+
+    renderer.renderFrame.mockClear()
+    const source = await captureCanvasSource({ fresh: true, preferRenderedFrame: true })
+    const scopeRenderer = rendererMockState.instances[1]!
+
+    expect(source).not.toBeNull()
+    expect(source).not.toBe(scrubCanvas)
+    expect(source?.width).toBe(scrubCanvas.width)
+    expect(source?.height).toBe(scrubCanvas.height)
+    expect(renderer.renderFrame).not.toHaveBeenCalled()
+    expect(scopeRenderer.renderFrame).toHaveBeenCalledWith(30)
+  })
+
+  it('captures the advanced store frame when reversed playback reports a stale player frame', async () => {
+    setSingleVideoItemAtFrame({
+      id: 'item-reversed-live-scopes',
+      isReversed: true,
+      reverseConformStatus: 'ready',
+      reverseConformPreviewSrc: 'blob:reverse-preview',
+      reverseConformSrc: 'blob:reverse-full',
+      reverseConformLocalStart: 0,
+    })
+    const { renderer } = await renderReadySingleRendererPreview(24, { expectVisible: false })
+    const captureCanvasSource = await waitFor(() => {
+      const fn = usePreviewBridgeStore.getState().captureCanvasSource
+      expect(fn).not.toBeNull()
+      return fn!
+    })
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24)
+      usePlaybackStore.setState({ isPlaying: true, currentFrame: 30 })
+      mockedPlayerFrame = 24
+    })
+
+    await act(async () => {
+      await captureCanvasSource({ fresh: true })
+    })
+
+    expect(renderer.renderFrame).toHaveBeenCalledWith(30)
   })
 
   it('keeps backward ruler drag on fast-scrub presentation', async () => {

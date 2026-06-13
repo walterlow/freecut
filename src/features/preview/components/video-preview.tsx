@@ -645,7 +645,8 @@ const VideoPreviewBase = memo(function VideoPreviewBase({
 
   useEffect(() => {
     if (stageColorGradeComparisonMode !== 'split') {
-      disposeSplitAfterRenderer()
+      splitAfterPendingFrameRef.current = null
+      setSplitAfterRenderedFrame(null)
       return
     }
 
@@ -696,7 +697,6 @@ const VideoPreviewBase = memo(function VideoPreviewBase({
     }
   }, [
     comparisonTargetFrame,
-    disposeSplitAfterRenderer,
     ensureSplitAfterRenderer,
     gpuEffectsCanvasRef,
     livePreviewEdits,

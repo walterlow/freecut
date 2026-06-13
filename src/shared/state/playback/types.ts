@@ -7,6 +7,18 @@ export interface CaptureOptions {
   format?: 'image/jpeg' | 'image/png' | 'image/webp'
   /** If true, capture at container size without scaling */
   fullResolution?: boolean
+  /**
+   * If true, do not join an existing in-flight capture. Used by live scopes so
+   * playback sampling waits for the previous read and then captures the newest
+   * frame instead of reusing stale pixels.
+   */
+  fresh?: boolean
+  /**
+   * If true, prefer the rendered preview overlay frame when one is visible.
+   * Color scopes use this so GPU-effect samples match the color workspace
+   * preview instead of an adjacent live player frame.
+   */
+  preferRenderedFrame?: boolean
 }
 
 export type PreviewQuality = 1 | 0.5 | 0.33 | 0.25
