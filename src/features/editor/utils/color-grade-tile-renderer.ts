@@ -18,11 +18,13 @@ import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('ColorGradeTileRenderer')
 
-let pipeline: EffectsPipeline | null = null
+// `undefined` = not yet attempted; `null` = attempted and WebGPU unavailable
+// (cached so we don't re-fire EffectsPipeline.create() on every render/drag).
+let pipeline: EffectsPipeline | null | undefined = undefined
 let pipelinePromise: Promise<EffectsPipeline | null> | null = null
 
 async function getPipeline(): Promise<EffectsPipeline | null> {
-  if (pipeline) return pipeline
+  if (pipeline !== undefined) return pipeline
   if (!pipelinePromise) pipelinePromise = EffectsPipeline.create()
   pipeline = await pipelinePromise
   pipelinePromise = null
@@ -30,11 +32,19 @@ async function getPipeline(): Promise<EffectsPipeline | null> {
 }
 
 // Decode each frame URL once; tiles that share a source frame reuse the bitmap.
+// Bounded LRU so retained decoded bitmaps don't accumulate across a long session
+// as filmstrip evictions / poster rotations mint fresh blob URLs. Map insertion
+// order is the recency order: touched entries are re-inserted at the tail.
+const IMAGE_CACHE_MAX = 64
 const imageCache = new Map<string, Promise<HTMLImageElement | null>>()
 
 function loadImage(url: string): Promise<HTMLImageElement | null> {
   const cached = imageCache.get(url)
-  if (cached) return cached
+  if (cached) {
+    imageCache.delete(url)
+    imageCache.set(url, cached)
+    return cached
+  }
   const promise = new Promise<HTMLImageElement | null>((resolve) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -43,6 +53,11 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
     img.src = url
   })
   imageCache.set(url, promise)
+  while (imageCache.size > IMAGE_CACHE_MAX) {
+    const oldest = imageCache.keys().next().value
+    if (oldest === undefined) break
+    imageCache.delete(oldest)
+  }
   return promise
 }
 

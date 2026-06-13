@@ -406,14 +406,19 @@ function useClipStartFrameUrl(clip: TimelineClip, projectFps: number): string | 
     useCallback((s) => s.mediaById[mediaId]?.fps ?? 0, [mediaId]),
   )
 
-  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  // Tie the resolved URL to the media it belongs to so a tile reused for a new
+  // mediaId (same clip.id, relinked/replaced source) doesn't keep feeding the
+  // old blob URL into useFilmstrip — `blobUrl` falls back to null until the new
+  // media resolves.
+  const [resolved, setResolved] = useState<{ mediaId: string; url: string } | null>(null)
+  const blobUrl = resolved?.mediaId === mediaId ? resolved.url : null
 
   useEffect(() => {
     if (!isVideo || !mediaId || blobUrl) return
     let cancelled = false
     void resolveMediaUrl(mediaId)
       .then((url) => {
-        if (!cancelled && url) setBlobUrl(url)
+        if (!cancelled && url) setResolved({ mediaId, url })
       })
       .catch(() => {
         /* extraction simply stays unavailable; poster fallback remains */
