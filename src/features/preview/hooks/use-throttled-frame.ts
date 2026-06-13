@@ -19,6 +19,11 @@ interface UseThrottledFrameOptions {
    * If false (default), only updates when paused/scrubbing.
    */
   updateDuringPlayback?: boolean
+  /**
+   * If true (default), paused scrub preview frames update subscribers live.
+   * Heavy inspectors can set this false and catch up when the scrub releases.
+   */
+  updateDuringScrub?: boolean
   /** Update rate in ms when updateDuringPlayback is true. Default 100ms (10fps). */
   throttleMs?: number
 }
@@ -34,7 +39,7 @@ interface UseThrottledFrameOptions {
  * Does NOT update during playback by default (set updateDuringPlayback: true to enable).
  */
 export function useThrottledFrame(options: UseThrottledFrameOptions = {}) {
-  const { updateDuringPlayback = false, throttleMs = 100 } = options
+  const { updateDuringPlayback = false, updateDuringScrub = true, throttleMs = 100 } = options
 
   // Local state that triggers re-renders
   const [frame, setFrame] = useState(() => usePlaybackStore.getState().currentFrame)
@@ -44,7 +49,7 @@ export function useThrottledFrame(options: UseThrottledFrameOptions = {}) {
   useEffect(() => {
     let wasPlaying = usePlaybackStore.getState().isPlaying
 
-    const unsubscribe = usePlaybackStore.subscribe((state) => {
+    const unsubscribe = usePlaybackStore.subscribe((state, previousState) => {
       const isPlaying = state.isPlaying
       const currentFrame = state.currentFrame
 
@@ -59,7 +64,13 @@ export function useThrottledFrame(options: UseThrottledFrameOptions = {}) {
 
       // When paused, update immediately (scrubbing)
       if (!isPlaying) {
+        if (!updateDuringScrub && state.previewFrame !== null) {
+          return
+        }
         setFrame(currentFrame)
+        if (!updateDuringScrub && previousState.previewFrame !== null) {
+          lastUpdateTimeRef.current = performance.now()
+        }
         return
       }
 
@@ -81,7 +92,7 @@ export function useThrottledFrame(options: UseThrottledFrameOptions = {}) {
     return () => {
       unsubscribe()
     }
-  }, [updateDuringPlayback, throttleMs])
+  }, [updateDuringPlayback, updateDuringScrub, throttleMs])
 
   return frame
 }

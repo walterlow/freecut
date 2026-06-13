@@ -327,7 +327,6 @@ export const ColorTimelineNavigator = memo(function ColorTimelineNavigator() {
     })),
   )
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame)
-  const setScrubFrame = usePlaybackStore((s) => s.setScrubFrame)
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame)
   const pausePlayback = usePlaybackStore((s) => s.pause)
   const fps = useTimelineStore((s) => s.fps)
@@ -429,12 +428,12 @@ export const ColorTimelineNavigator = memo(function ColorTimelineNavigator() {
           nowMs: performance.now(),
         })
       ) {
-        setScrubFrame(frame, null)
+        setPreviewFrame(frame, null)
       }
     }
 
     scrubRafRef.current = requestAnimationFrame(runScrubLoop)
-  }, [clientXToFrame, fps, setScrubFrame, timelineMaxFrame])
+  }, [clientXToFrame, fps, setPreviewFrame, timelineMaxFrame])
 
   const handleScrubStart = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -451,12 +450,12 @@ export const ColorTimelineNavigator = memo(function ColorTimelineNavigator() {
         frame,
         nowMs: performance.now(),
       })
-      setScrubFrame(frame, null)
+      setPreviewFrame(frame, null)
       if (scrubRafRef.current === null) {
         scrubRafRef.current = requestAnimationFrame(runScrubLoop)
       }
     },
-    [clientXToFrame, pausePlayback, runScrubLoop, setScrubFrame],
+    [clientXToFrame, pausePlayback, runScrubLoop, setPreviewFrame],
   )
 
   const handleScrubMove = useCallback(
@@ -472,7 +471,7 @@ export const ColorTimelineNavigator = memo(function ColorTimelineNavigator() {
       if (!isScrubbingRef.current) return
       cancelScrubRaf()
       const frame = clientXToFrame(event.clientX)
-      if (frame !== null) setScrubFrame(frame, null)
+      if (frame !== null) setCurrentFrame(frame)
       isScrubbingRef.current = false
       scrubRectRef.current = null
       if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
@@ -480,7 +479,7 @@ export const ColorTimelineNavigator = memo(function ColorTimelineNavigator() {
       }
       setPreviewFrame(null)
     },
-    [cancelScrubRaf, clientXToFrame, setScrubFrame, setPreviewFrame],
+    [cancelScrubRaf, clientXToFrame, setCurrentFrame, setPreviewFrame],
   )
 
   const cancelScrub = useCallback(

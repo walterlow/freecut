@@ -547,6 +547,9 @@ export const ColorScopesView = memo(function ColorScopesView({
 
     const renderGpuFrame = async () => {
       if (gpuRenderInFlightRef.current) return
+      // Scrub/hover preview frames are latency-sensitive. Let the program
+      // monitor own those transient frames, then scopes catch up on release.
+      if (usePlaybackStore.getState().previewFrame !== null) return
       gpuRenderInFlightRef.current = true
       const { kr, kb } = getMatrixCoefficients(SCOPE_COLOR_MATRIX)
       renderer.setMatrix(kr, kb)
@@ -818,6 +821,13 @@ export const ColorScopesView = memo(function ColorScopesView({
       if (state.isPlaying) {
         return
       }
+      if (state.previewFrame !== null) {
+        return
+      }
+      if (previousState.previewFrame !== null) {
+        scheduleDraw()
+        return
+      }
 
       const nextRequestedFrame = getResolvedPlaybackFrame({
         currentFrame: state.currentFrame,
@@ -842,7 +852,7 @@ export const ColorScopesView = memo(function ColorScopesView({
     const unsubscribePreviewBridge = usePreviewBridgeStore.subscribe(
       (bridgeState, previousBridgeState) => {
         const playbackState = usePlaybackStore.getState()
-        if (playbackState.isPlaying) {
+        if (playbackState.isPlaying || playbackState.previewFrame !== null) {
           return
         }
 

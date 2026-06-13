@@ -69,7 +69,7 @@ export const EffectsSection = memo(function EffectsSection({
   // Gizmo store for live effect preview
   const setEffectsPreviewNew = useGizmoStore((s) => s.setEffectsPreviewNew)
   const clearPreview = useGizmoStore((s) => s.clearPreview)
-  const currentFrame = useThrottledFrame()
+  const currentFrame = useThrottledFrame({ updateDuringScrub: !isDock })
 
   // Items are already filtered by parent - use directly
   const visualItems = items

@@ -252,15 +252,15 @@ describe('ColorTimelineNavigator', () => {
 
     fireEvent.pointerDown(scrubSurface, { button: 0, clientX: 146, pointerId: 1 })
     expect(usePlaybackStore.getState().isPlaying).toBe(false)
-    expect(usePlaybackStore.getState().currentFrame).toBe(60)
+    expect(usePlaybackStore.getState().currentFrame).toBe(0)
     expect(usePlaybackStore.getState().previewFrame).toBe(60)
 
     // Move commits are rAF-batched — wait for the scheduled frame to land.
     fireEvent.pointerMove(scrubSurface, { clientX: 316, pointerId: 1 })
     await waitFor(() => {
-      expect(usePlaybackStore.getState().currentFrame).toBe(150)
+      expect(usePlaybackStore.getState().previewFrame).toBe(150)
     })
-    expect(usePlaybackStore.getState().previewFrame).toBe(150)
+    expect(usePlaybackStore.getState().currentFrame).toBe(0)
 
     fireEvent.pointerUp(scrubSurface, { clientX: 316, pointerId: 1 })
     expect(usePlaybackStore.getState().currentFrame).toBe(150)

@@ -138,7 +138,7 @@ export const ColorGradeSection = memo(function ColorGradeSection({
   const colorGradeComparisonMode = useGizmoStore((s) => s.colorGradeComparisonMode)
   const setColorGradeComparisonMode = useGizmoStore((s) => s.setColorGradeComparisonMode)
   const hasCopiedGrade = useGradeClipboardStore((s) => s.grade !== null && s.grade.length > 0)
-  const currentFrame = useThrottledFrame()
+  const currentFrame = useThrottledFrame({ updateDuringScrub: layout !== 'dock' })
 
   const visualItems = items
   const itemIds = useMemo(() => visualItems.map((item) => item.id), [visualItems])

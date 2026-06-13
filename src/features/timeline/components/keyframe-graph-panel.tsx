@@ -278,6 +278,52 @@ function toSpringDraft(params: SpringParameters): Record<SpringInputKey, string>
   }
 }
 
+function useKeyframeEditorPlaybackFrame(selectedItemId: string | null): number {
+  const [frame, setFrame] = useState(() => usePlaybackStore.getState().currentFrame)
+  const frameRef = useRef(frame)
+
+  useEffect(() => {
+    const nextFrame = usePlaybackStore.getState().currentFrame
+    frameRef.current = nextFrame
+    setFrame(nextFrame)
+  }, [selectedItemId])
+
+  useEffect(() => {
+    let wasPlaying = usePlaybackStore.getState().isPlaying
+
+    const commitFrame = (nextFrame: number) => {
+      if (frameRef.current === nextFrame) return
+      frameRef.current = nextFrame
+      setFrame(nextFrame)
+    }
+
+    const unsubscribe = usePlaybackStore.subscribe((state) => {
+      const nextFrame = state.currentFrame
+
+      if (state.isPlaying) {
+        wasPlaying = true
+        return
+      }
+
+      if (wasPlaying) {
+        wasPlaying = false
+        commitFrame(nextFrame)
+        return
+      }
+
+      const isSettledSeek = state.previewFrame === null
+      const isPanelScrub = selectedItemId !== null && state.previewItemId === selectedItemId
+      if (isSettledSeek || isPanelScrub) {
+        commitFrame(nextFrame)
+      }
+    })
+
+    return unsubscribe
+  }, [selectedItemId])
+
+  return frame
+}
+
 function loadKeyframeEditorMode(): KeyframeEditorMode {
   try {
     const value = localStorage.getItem(KEYFRAME_EDITOR_MODE_STORAGE_KEY)
@@ -692,8 +738,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   const cutSelectedKeyframes = useKeyframeSelectionStore((s) => s.cutSelectedKeyframes)
   const clearKeyframeClipboard = useKeyframeSelectionStore((s) => s.clearClipboard)
 
-  // Playback state
-  const currentFrame = usePlaybackStore((s) => s.currentFrame)
+  // Playback state: follow this panel's own scrubs live, but defer external
+  // timeline scrubs until release so the Color workspace dock stays out of the hot path.
+  const currentFrame = useKeyframeEditorPlaybackFrame(selectedItemForEditor?.id ?? null)
 
   // Track selected property for graph editor
   const [selectedProperty, setSelectedProperty] = useState<AnimatableProperty | null>(null)
