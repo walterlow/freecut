@@ -4,6 +4,7 @@
  */
 
 export {
+  createClassicTrack,
   createDefaultAdjustmentItem,
   createScrubThrottleState,
   shouldCommitScrubFrame,

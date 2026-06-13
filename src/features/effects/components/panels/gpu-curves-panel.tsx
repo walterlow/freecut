@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { useTranslation } from 'react-i18next'
+import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PropertyRow } from '@/shared/ui/property-controls'
 import { cn } from '@/shared/ui/cn'
@@ -117,7 +118,7 @@ function getInsertIndexForCurvePoint(
 }
 
 function getKeyboardPointDelta(
-  event: React.KeyboardEvent<SVGCircleElement>,
+  event: React.KeyboardEvent<SVGElement>,
 ): GpuCurvesControlPoint | null {
   const step = event.shiftKey ? 0.05 : 0.01
   if (event.key === 'ArrowLeft') return { x: -step, y: 0 }
@@ -148,6 +149,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
   const { t } = useTranslation()
   const isDock = layout === 'dock'
   const svgRef = useRef<SVGSVGElement>(null)
+  const [svgSize, setSvgSize] = useState({ width: CURVE_SIZE, height: CURVE_SIZE })
   const [activeChannel, setActiveChannel] = useState<GpuCurvesChannelKey>('master')
   const [dragging, setDragging] = useState(false)
   const [draft, setDraft] = useState<ChannelPointsDraft>(() =>
@@ -203,6 +205,24 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
       x: clamp((clientX - rect.left) / rect.width, 0, 1),
       y: clamp(1 - (clientY - rect.top) / rect.height, 0, 1),
     }
+  }, [])
+
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+
+    const updateSize = () => {
+      const rect = svg.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+      setSvgSize({ width: rect.width, height: rect.height })
+    }
+
+    updateSize()
+    if (typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(svg)
+    return () => observer.disconnect()
   }, [])
 
   const moveDraggedPoint = useCallback(
@@ -309,7 +329,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
   )
 
   const handlePointKeyDown = useCallback(
-    (event: React.KeyboardEvent<SVGCircleElement>, index: number) => {
+    (event: React.KeyboardEvent<SVGEllipseElement>, index: number) => {
       if (!effect.enabled) return
 
       const points = draftRef.current[activeChannel]
@@ -395,14 +415,26 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
     onParamsBatchChange(effect.id, updates)
   }, [activeChannel, effect.id, onParamsBatchChange, updateChannelDraft])
 
+  const resetChannelLabel = t('effects.curves.resetChannel')
+  const pointScaleX = Math.max(svgSize.width / CURVE_SIZE, 0.001)
+  const pointScaleY = Math.max(svgSize.height / CURVE_SIZE, 0.001)
+  const pointScreenScale = Math.min(pointScaleX, pointScaleY)
+  const pointRadiusX = (6 * pointScreenScale) / pointScaleX
+  const pointRadiusY = (6 * pointScreenScale) / pointScaleY
+  const pointStrokeWidth = (1.5 * pointScreenScale) / Math.max(pointScaleX, pointScaleY)
   const channelControls = (
-    <div className="flex items-center gap-1 flex-wrap justify-end">
+    <div
+      className={cn(
+        'flex items-center gap-1 justify-end',
+        isDock ? 'min-w-0 flex-nowrap' : 'flex-wrap',
+      )}
+    >
       {CHANNELS.map((channel) => (
         <Button
           key={channel.key}
           variant={activeChannel === channel.key ? 'secondary' : 'outline'}
           size="sm"
-          className="h-7 px-2 text-xs"
+          className={cn('h-7 text-xs', isDock ? 'shrink-0 px-1.5' : 'px-2')}
           onClick={() => setActiveChannel(channel.key)}
         >
           {t(channel.labelKey)}
@@ -410,12 +442,17 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
       ))}
       <Button
         variant="ghost"
-        size="sm"
-        className="h-7 px-2 text-xs"
+        size={isDock ? 'icon' : 'sm'}
+        className={cn(
+          'h-7 text-xs',
+          isDock ? 'w-7 shrink-0' : 'px-2',
+        )}
         onClick={handleResetChannel}
         disabled={!effect.enabled}
+        title={resetChannelLabel}
+        aria-label={resetChannelLabel}
       >
-        {t('effects.curves.resetChannel')}
+        {isDock ? <RotateCcw className="h-3 w-3" /> : resetChannelLabel}
       </Button>
     </div>
   )
@@ -448,7 +485,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
         <div
           className={cn(
             'relative overflow-hidden rounded border border-border/70 bg-black/50',
-            isDock && 'flex min-h-0 flex-1 items-center justify-center p-2',
+            isDock && 'flex min-h-0 flex-1',
           )}
         >
           <svg
@@ -459,9 +496,9 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
               defaultValue: `${activeChannelLabel} curve editor`,
             })}
             viewBox={`0 0 ${CURVE_SIZE} ${CURVE_SIZE}`}
+            preserveAspectRatio={isDock ? 'none' : 'xMidYMid meet'}
             className={cn(
-              'aspect-square',
-              isDock ? 'h-full max-h-full w-auto max-w-full' : 'w-full',
+              isDock ? 'h-full w-full' : 'aspect-square w-full',
               effect.enabled ? 'cursor-crosshair' : 'cursor-default',
             )}
             onMouseDown={handleSvgMouseDown}
@@ -475,6 +512,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                   y2={CURVE_SIZE}
                   stroke="rgba(148,163,184,0.22)"
                   strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
                 />
                 <line
                   x1={0}
@@ -483,6 +521,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                   y2={grid * CURVE_SIZE}
                   stroke="rgba(148,163,184,0.22)"
                   strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
                 />
               </g>
             ))}
@@ -493,6 +532,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
               strokeWidth={1}
               fill="none"
               strokeDasharray="4 4"
+              vectorEffect="non-scaling-stroke"
             />
 
             {activeChannel === 'master' && (
@@ -503,6 +543,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                   strokeWidth={1.2}
                   fill="none"
                   opacity={0.35}
+                  vectorEffect="non-scaling-stroke"
                 />
                 <path
                   d={curvePaths.green}
@@ -510,6 +551,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                   strokeWidth={1.2}
                   fill="none"
                   opacity={0.35}
+                  vectorEffect="non-scaling-stroke"
                 />
                 <path
                   d={curvePaths.blue}
@@ -517,6 +559,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                   strokeWidth={1.2}
                   fill="none"
                   opacity={0.35}
+                  vectorEffect="non-scaling-stroke"
                 />
               </>
             )}
@@ -528,6 +571,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                 strokeWidth={1.2}
                 fill="none"
                 strokeDasharray="5 4"
+                vectorEffect="non-scaling-stroke"
               />
             )}
 
@@ -536,6 +580,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
               stroke={activeChannelMeta.color}
               strokeWidth={2}
               fill="none"
+              vectorEffect="non-scaling-stroke"
             />
 
             {activePoints.map((point, index) => {
@@ -552,8 +597,9 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                     stroke={activeChannelMeta.color}
                     strokeWidth={1}
                     opacity={0.18}
+                    vectorEffect="non-scaling-stroke"
                   />
-                  <circle
+                  <ellipse
                     data-curve-point={index}
                     tabIndex={effect.enabled ? 0 : -1}
                     role="slider"
@@ -568,10 +614,11 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
                     aria-valuetext={`input ${Math.round(point.x * 100)}%, output ${Math.round(point.y * 100)}%`}
                     cx={x}
                     cy={y}
-                    r={6}
+                    rx={pointRadiusX}
+                    ry={pointRadiusY}
                     fill={activeChannelMeta.color}
                     stroke="rgba(3,7,18,0.95)"
-                    strokeWidth={1.5}
+                    strokeWidth={pointStrokeWidth}
                     className={effect.enabled ? 'cursor-move' : 'pointer-events-none'}
                     onMouseDown={(event) => handlePointMouseDown(event, index)}
                     onKeyDown={(event) => handlePointKeyDown(event, index)}

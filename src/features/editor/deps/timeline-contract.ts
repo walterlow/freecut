@@ -8,6 +8,7 @@ export type {
 } from '@/features/timeline/contracts/editor'
 export {
   captureSnapshot,
+  createClassicTrack,
   createDefaultAdjustmentItem,
   createScrubThrottleState,
   shouldCommitScrubFrame,

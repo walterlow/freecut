@@ -62,12 +62,12 @@ function setupEditorSvg(): SVGSVGElement {
   return svg!
 }
 
-function getPoint(index: number): SVGCircleElement {
-  const circle = document.querySelector(
-    `circle[data-curve-point="${index}"]`,
-  ) as SVGCircleElement | null
-  expect(circle).not.toBeNull()
-  return circle!
+function getPoint(index: number): SVGEllipseElement {
+  const ellipse = document.querySelector(
+    `ellipse[data-curve-point="${index}"]`,
+  ) as SVGEllipseElement | null
+  expect(ellipse).not.toBeNull()
+  return ellipse!
 }
 
 function parsePoints(serialized: unknown): GpuCurvesControlPoint[] {
@@ -114,7 +114,7 @@ describe('GpuCurvesPanel', () => {
       <GpuCurvesPanel {...makeProps({ masterPoints: serializeGpuCurvesChannelPoints(points) })} />,
     )
 
-    expect(document.querySelectorAll('circle[data-curve-point]')).toHaveLength(5)
+    expect(document.querySelectorAll('ellipse[data-curve-point]')).toHaveLength(5)
   })
 
   it('drags an interior point with live updates and commits on mouseup', () => {
@@ -251,7 +251,7 @@ describe('GpuCurvesPanel', () => {
     fireEvent.mouseDown(getPoint(0), { button: 0, detail: 2, clientX: 0, clientY: CURVE_SIZE })
 
     expect(props.onParamsBatchChange).not.toHaveBeenCalled()
-    expect(document.querySelectorAll('circle[data-curve-point]')).toHaveLength(4)
+    expect(document.querySelectorAll('ellipse[data-curve-point]')).toHaveLength(4)
   })
 
   it('resets the active channel by clearing the points param and restoring legacy defaults', () => {
