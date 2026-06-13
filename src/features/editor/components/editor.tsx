@@ -484,6 +484,11 @@ export const LoadedEditor = memo(function LoadedEditor({
     if (previousWorkspace === workspace) return
     previousWorkspaceRef.current = workspace
 
+    // Workspace switches should not carry transient scrub/hover preview
+    // frames across surfaces. Color scopes intentionally skip previewFrame
+    // samples, so a stale Edit preview frame can make them appear frozen.
+    usePlaybackStore.getState().setPreviewFrame(null)
+
     const timelinePanel = timelinePanelRef.current
     if (!timelinePanel) return
 
