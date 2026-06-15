@@ -1,5 +1,9 @@
 {
   "editor": {
+    "animateTimeline": {
+      "label": "Animate timeline",
+      "noClip": "No clips to animate"
+    },
     "shortcutsDialog": {
       "title": "Keyboard Shortcuts",
       "description": "Edit keyboard shortcut bindings."

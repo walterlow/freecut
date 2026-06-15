@@ -1,5 +1,9 @@
 {
   "editor": {
+    "animateTimeline": {
+      "label": "动画时间线",
+      "noClip": "没有可动画的片段"
+    },
     "shortcutsDialog": {
       "title": "键盘快捷键",
       "description": "编辑键盘快捷键绑定。"

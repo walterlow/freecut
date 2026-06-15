@@ -1,5 +1,9 @@
 {
   "editor": {
+    "animateTimeline": {
+      "label": "Animations-Zeitleiste",
+      "noClip": "Keine Clips zum Animieren"
+    },
     "shortcutsDialog": {
       "title": "Tastenkürzel",
       "description": "Tastenkürzel-Belegungen bearbeiten."

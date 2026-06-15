@@ -1,5 +1,9 @@
 {
   "editor": {
+    "animateTimeline": {
+      "label": "Chronologie d'animation",
+      "noClip": "Aucun clip à animer"
+    },
     "shortcutsDialog": {
       "title": "Raccourcis clavier",
       "description": "Modifier les raccourcis clavier."

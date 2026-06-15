@@ -1,5 +1,9 @@
 {
   "editor": {
+    "animateTimeline": {
+      "label": "Animasyon zaman çizelgesi",
+      "noClip": "Animasyon için klip yok"
+    },
     "shortcutsDialog": {
       "title": "Klavye Kısayolları",
       "description": "Klavye kısayol atamalarını düzenleyin."

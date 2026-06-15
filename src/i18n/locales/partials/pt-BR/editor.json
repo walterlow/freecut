@@ -1,5 +1,9 @@
 {
   "editor": {
+    "animateTimeline": {
+      "label": "Linha do tempo de animação",
+      "noClip": "Nenhum clipe para animar"
+    },
     "shortcutsDialog": {
       "title": "Atalhos de teclado",
       "description": "Editar as combinações de teclas."

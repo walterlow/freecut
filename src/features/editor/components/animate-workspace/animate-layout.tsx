@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { ErrorBoundary } from '@/app/error-boundary'
 import { KeyframeGraphPanel } from '@/features/editor/deps/timeline-contract'
 import { PreviewArea } from '../preview-area'
+import { AnimateTimelineStrip } from './animate-timeline-strip'
 
 interface AnimateLayoutProps {
   project: {
@@ -19,9 +20,8 @@ const noop = () => {}
  * surface filling the rest. Mirrors the Color workspace's imperative-branch
  * approach in `editor.tsx` rather than the resizable preview/timeline split.
  *
- * U2 mounts the existing `KeyframeGraphPanel` and a strip placeholder; the
- * purpose-built strip (U3) and the both-panes editing surface (U4) replace
- * those in place.
+ * U2 mounts the existing `KeyframeGraphPanel`; the both-panes editing surface
+ * (U4) replaces the single-pane host in place.
  */
 export const AnimateLayout = memo(function AnimateLayout({ project }: AnimateLayoutProps) {
   return (
@@ -33,11 +33,10 @@ export const AnimateLayout = memo(function AnimateLayout({ project }: AnimateLay
         </ErrorBoundary>
       </div>
 
-      {/* Thin timeline strip — placeholder until AnimateTimelineStrip (U3) lands */}
-      <div
-        className="flex h-14 shrink-0 items-center border-t border-border bg-muted/30 px-3 text-xs text-muted-foreground"
-        data-animate-timeline-strip-placeholder
-      />
+      {/* Thin timeline strip — select the clip to animate + scrub for context */}
+      <ErrorBoundary level="feature">
+        <AnimateTimelineStrip />
+      </ErrorBoundary>
 
       {/* Keyframe editing surface (dopesheet + curve editor) */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border">

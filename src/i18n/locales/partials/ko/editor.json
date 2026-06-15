@@ -1,5 +1,9 @@
 {
   "editor": {
+    "animateTimeline": {
+      "label": "애니메이트 타임라인",
+      "noClip": "애니메이트할 클립이 없습니다"
+    },
     "shortcutsDialog": {
       "title": "키보드 단축키",
       "description": "키보드 단축키 할당을 편집합니다."

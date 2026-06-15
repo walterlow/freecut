@@ -1,5 +1,9 @@
 {
   "editor": {
+    "animateTimeline": {
+      "label": "アニメーションタイムライン",
+      "noClip": "アニメーション対象のクリップがありません"
+    },
     "shortcutsDialog": {
       "title": "キーボードショートカット",
       "description": "キーボードショートカットの割り当てを編集します。"
