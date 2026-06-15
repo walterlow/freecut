@@ -176,3 +176,12 @@ export {
   saveUserEffectPresets,
   type UserEffectPreset,
 } from '@/infrastructure/storage/workspace-fs/effect-presets'
+
+// Per-project animation presets
+export {
+  readAnimationPresets,
+  saveAnimationPresets,
+  sanitizeAnimationPresets,
+  type AnimationPreset,
+  type AnimationPresetProperty,
+} from '@/infrastructure/storage/workspace-fs/animation-presets'

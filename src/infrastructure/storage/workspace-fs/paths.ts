@@ -73,6 +73,8 @@ const PROJECT_THUMBNAIL_FILENAME = 'thumbnail.jpg'
 const PROJECT_MEDIA_LINKS_FILENAME = 'media-links.json'
 /** Persisted render-queue jobs for a project (survives refresh). */
 const PROJECT_RENDER_QUEUE_FILENAME = 'render-queue.json'
+/** User-saved animation presets, scoped to a single project. */
+const PROJECT_ANIMATION_PRESETS_FILENAME = 'animation-presets.json'
 
 /**
  * Marker file present inside a project directory that has been soft-deleted.
@@ -136,6 +138,11 @@ export function projectMediaLinksPath(id: string): string[] {
 /** Segments for `projects/{id}/render-queue.json`. */
 export function projectRenderQueuePath(id: string): string[] {
   return [...projectDir(id), PROJECT_RENDER_QUEUE_FILENAME]
+}
+
+/** Segments for `projects/{id}/animation-presets.json`. */
+export function projectAnimationPresetsPath(id: string): string[] {
+  return [...projectDir(id), PROJECT_ANIMATION_PRESETS_FILENAME]
 }
 
 /** Segments for `projects/{id}/exports/` — a project's rendered output files. */
