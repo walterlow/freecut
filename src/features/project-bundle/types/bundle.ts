@@ -36,8 +36,28 @@ export interface BundleManifest {
   projectId: string
   projectName: string
   media: BundleMediaEntry[]
+  /**
+   * Animation presets sidecar entry. Present only when the project has at
+   * least one saved preset; absent bundles import with an empty preset set.
+   */
+  animationPresets?: BundleAnimationPresetsEntry
   checksum: string // SHA-256 of manifest (excluding this field)
 }
+
+/**
+ * Animation presets sidecar entry in manifest. Mirrors how media entries
+ * point at an independently-collected file in the bundle.
+ */
+export interface BundleAnimationPresetsEntry {
+  relativePath: string // Path within bundle (BUNDLE_ANIMATION_PRESETS_PATH)
+  count: number // Number of presets in the sidecar file
+}
+
+/**
+ * Stable bundle-root path for the animation presets sidecar, mirroring how
+ * `project.json` sits at the bundle root.
+ */
+export const BUNDLE_ANIMATION_PRESETS_PATH = 'animation-presets.json'
 
 /**
  * Media file entry in manifest

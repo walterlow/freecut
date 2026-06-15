@@ -616,6 +616,44 @@ const mediaReferenceSchema = z.object({
 })
 
 // ============================================================================
+// Animation Presets Manifest + Sidecar Schemas
+// ============================================================================
+
+/**
+ * Manifest entry pointing at the independently-collected animation presets
+ * sidecar file (mirrors how media entries reference a bundled file).
+ */
+const animationPresetsManifestEntrySchema = z.object({
+  relativePath: z.string().min(1),
+  count: z.number().int().min(0),
+})
+
+const animationPresetPropertySchema = z.object({
+  property: animatablePropertySchema,
+  keyframes: z.array(keyframeSchema),
+})
+
+const animationPresetSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    sourceItemType: itemTypeSchema,
+    properties: z.array(animationPresetPropertySchema),
+    effects: z.array(gpuEffectSchema).optional(),
+    sourceDurationInFrames: z.number().optional(),
+    createdAt: z.number().optional(),
+  })
+  .passthrough()
+
+/** The animation presets sidecar file (`animation-presets.json`). */
+const animationPresetsFileSchema = z
+  .object({
+    version: z.literal(1),
+    presets: z.array(animationPresetSchema),
+  })
+  .passthrough()
+
+// ============================================================================
 // Snapshot Schema
 // ============================================================================
 
@@ -665,6 +703,41 @@ export function validateSnapshot(data: unknown): {
   errors?: z.ZodError
 } {
   const result = snapshotSchema.safeParse(data)
+  if (result.success) {
+    return { success: true, data: result.data }
+  }
+  return { success: false, errors: result.error }
+}
+
+type ValidatedAnimationPresetsFile = z.infer<typeof animationPresetsFileSchema>
+type ValidatedAnimationPresetsManifestEntry = z.infer<typeof animationPresetsManifestEntrySchema>
+
+/**
+ * Validate the animation presets manifest entry (shape only — the sidecar
+ * file's contents are validated separately and sanitized at restore time).
+ */
+export function validateAnimationPresetsManifestEntry(data: unknown): {
+  success: boolean
+  data?: ValidatedAnimationPresetsManifestEntry
+  errors?: z.ZodError
+} {
+  const result = animationPresetsManifestEntrySchema.safeParse(data)
+  if (result.success) {
+    return { success: true, data: result.data }
+  }
+  return { success: false, errors: result.error }
+}
+
+/**
+ * Validate the animation presets sidecar file envelope. Restore additionally
+ * runs the defensive runtime sanitizer; this is the structural gate.
+ */
+export function validateAnimationPresetsFile(data: unknown): {
+  success: boolean
+  data?: ValidatedAnimationPresetsFile
+  errors?: z.ZodError
+} {
+  const result = animationPresetsFileSchema.safeParse(data)
   if (result.success) {
     return { success: true, data: result.data }
   }

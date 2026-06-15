@@ -13,8 +13,14 @@ import {
   ExportResult,
   BUNDLE_VERSION,
   BUNDLE_EXTENSION,
+  BUNDLE_ANIMATION_PRESETS_PATH,
 } from '../types/bundle'
-import { getProject, getProjectMediaIds, loadProjectThumbnail } from '@/infrastructure/storage'
+import {
+  getProject,
+  getProjectMediaIds,
+  loadProjectThumbnail,
+  readAnimationPresets,
+} from '@/infrastructure/storage'
 import {
   importMediaLibraryService,
   computeContentHashFromBuffer,
@@ -32,6 +38,36 @@ const logger = createLogger('BundleExportService')
 
 // App version - should be imported from a config
 const APP_VERSION = '1.0.0'
+
+/**
+ * Read the project's animation presets and, when at least one exists, add the
+ * sidecar file to the zip and record a manifest entry. The file is omitted
+ * entirely when the project has no presets — import tolerates its absence.
+ *
+ * Mirrors the per-media independently-collected-file path: a stable bundle
+ * path plus a manifest entry folded into the checksum.
+ */
+async function addAnimationPresetsToBundle(
+  projectId: string,
+  manifest: BundleManifest,
+  addFile: (relativePath: string, contents: Uint8Array) => void,
+): Promise<number> {
+  const presets = await readAnimationPresets(projectId)
+  if (presets.length === 0) return 0
+
+  // Write the same `{ version, presets }` envelope the storage layer uses so
+  // the import sanitizer accepts the file unchanged.
+  const contents = new TextEncoder().encode(
+    JSON.stringify({ version: 1, presets }, null, 2),
+  )
+  addFile(BUNDLE_ANIMATION_PRESETS_PATH, contents)
+
+  manifest.animationPresets = {
+    relativePath: BUNDLE_ANIMATION_PRESETS_PATH,
+    count: presets.length,
+  }
+  return presets.length
+}
 
 /**
  * Export a project as a bundle
@@ -177,6 +213,13 @@ export async function exportProjectBundle(
       logger.warn('Could not export project thumbnail:', err)
     }
   }
+
+  // Step 7b: Add animation presets sidecar if the project has any
+  await addAnimationPresetsToBundle(project.id, manifest, (relativePath, contents) => {
+    const presetsFile = new ZipDeflate(relativePath)
+    zip.add(presetsFile)
+    presetsFile.push(contents, true)
+  })
 
   // Step 8: Compute manifest checksum and add manifest.json
   manifest.checksum = await computeBundleManifestChecksum(manifest)
@@ -360,6 +403,13 @@ export async function exportProjectBundleStreaming(
         logger.warn('Could not export project thumbnail:', err)
       }
     }
+
+    // Step 7b: Add animation presets sidecar if the project has any
+    await addAnimationPresetsToBundle(project.id, manifest, (relativePath, contents) => {
+      const presetsFile = new ZipDeflate(relativePath)
+      zip.add(presetsFile)
+      presetsFile.push(contents, true)
+    })
 
     // Step 8: Compute manifest checksum and add manifest.json
     manifest.checksum = await computeBundleManifestChecksum(manifest)
