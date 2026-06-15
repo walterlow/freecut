@@ -1899,9 +1899,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             showGraphPane && !rowLocked && 'cursor-pointer',
             rowLocked && 'opacity-70',
           )}
-          onClick={
-            showGraphPane && !rowLocked ? () => activateProperty(row.property) : undefined
-          }
+          onClick={showGraphPane && !rowLocked ? () => activateProperty(row.property) : undefined}
         >
           <div
             className={cn(
@@ -2880,10 +2878,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             {/* Sheet on top (shared ruler + its aligned playhead overlay),
                 curve/graph below. Both panes share the single `viewport` and
                 `currentFrame`, so the two playheads cannot desync. */}
-            <div
-              className="relative min-h-0 flex-1 overflow-hidden"
-              onWheel={handleWheel}
-            >
+            <div className="relative min-h-0 flex-1 overflow-hidden" onWheel={handleWheel}>
               {playheadOverlayElement}
               {sheetBodyElement}
             </div>

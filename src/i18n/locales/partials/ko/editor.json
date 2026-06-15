@@ -4,6 +4,33 @@
       "label": "애니메이트 타임라인",
       "noClip": "애니메이트할 클립이 없습니다"
     },
+    "animatePresets": {
+      "title": "프리셋",
+      "animationsHeading": "애니메이션",
+      "easingHeading": "이징",
+      "saveButton": "저장",
+      "empty": "저장된 애니메이션이 아직 없습니다",
+      "savedToast": "“{{name}}”을(를) 저장했습니다",
+      "appliedToast": "“{{name}}”을(를) 적용했습니다",
+      "applyFailed": "프리셋을 적용할 수 없습니다",
+      "saveFailed": "프리셋을 저장할 수 없습니다",
+      "deleteLabel": "프리셋 삭제",
+      "incompatibleType": "{{type}} 클립이 필요합니다",
+      "incompatibleProperty": "대상에 애니메이션 속성이 없습니다",
+      "selectClipFirst": "적용할 클립을 선택하세요",
+      "selectKeyframesFirst": "이징을 적용할 키프레임을 선택하세요",
+      "noAnimationToSave": "저장하려면 키프레임이 있는 클립을 선택하세요",
+      "dialog": {
+        "title": "애니메이션 프리셋 저장",
+        "description": "이 클립의 키프레임을 이 프로젝트에서 재사용할 수 있는 프리셋으로 저장합니다.",
+        "nameLabel": "프리셋 이름",
+        "namePlaceholder": "내 애니메이션",
+        "duplicateWarning": "이 이름의 프리셋이 이미 있으며 덮어쓰게 됩니다.",
+        "save": "저장",
+        "overwrite": "덮어쓰기",
+        "cancel": "취소"
+      }
+    },
     "shortcutsDialog": {
       "title": "키보드 단축키",
       "description": "키보드 단축키 할당을 편집합니다."

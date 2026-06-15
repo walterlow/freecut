@@ -4,6 +4,33 @@
       "label": "Chronologie d'animation",
       "noClip": "Aucun clip à animer"
     },
+    "animatePresets": {
+      "title": "Préréglages",
+      "animationsHeading": "Animations",
+      "easingHeading": "Accélération",
+      "saveButton": "Enregistrer",
+      "empty": "Aucune animation enregistrée pour le moment",
+      "savedToast": "« {{name}} » enregistré",
+      "appliedToast": "« {{name}} » appliqué",
+      "applyFailed": "Impossible d'appliquer le préréglage",
+      "saveFailed": "Impossible d'enregistrer le préréglage",
+      "deleteLabel": "Supprimer le préréglage",
+      "incompatibleType": "Nécessite un clip de type {{type}}",
+      "incompatibleProperty": "Il manque une propriété animée à la cible",
+      "selectClipFirst": "Sélectionnez un clip à appliquer",
+      "selectKeyframesFirst": "Sélectionnez des images clés pour appliquer l'accélération",
+      "noAnimationToSave": "Sélectionnez un clip avec des images clés à enregistrer",
+      "dialog": {
+        "title": "Enregistrer le préréglage d'animation",
+        "description": "Enregistrez les images clés de ce clip comme préréglage réutilisable pour ce projet.",
+        "nameLabel": "Nom du préréglage",
+        "namePlaceholder": "Mon animation",
+        "duplicateWarning": "Un préréglage portant ce nom existe déjà et sera écrasé.",
+        "save": "Enregistrer",
+        "overwrite": "Écraser",
+        "cancel": "Annuler"
+      }
+    },
     "shortcutsDialog": {
       "title": "Raccourcis clavier",
       "description": "Modifier les raccourcis clavier."

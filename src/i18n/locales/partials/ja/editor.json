@@ -4,6 +4,33 @@
       "label": "アニメーションタイムライン",
       "noClip": "アニメーション対象のクリップがありません"
     },
+    "animatePresets": {
+      "title": "プリセット",
+      "animationsHeading": "アニメーション",
+      "easingHeading": "イージング",
+      "saveButton": "保存",
+      "empty": "保存されたアニメーションはまだありません",
+      "savedToast": "「{{name}}」を保存しました",
+      "appliedToast": "「{{name}}」を適用しました",
+      "applyFailed": "プリセットを適用できませんでした",
+      "saveFailed": "プリセットを保存できませんでした",
+      "deleteLabel": "プリセットを削除",
+      "incompatibleType": "{{type}}クリップが必要です",
+      "incompatibleProperty": "対象にアニメーション化されたプロパティがありません",
+      "selectClipFirst": "適用するクリップを選択してください",
+      "selectKeyframesFirst": "イージングを適用するキーフレームを選択してください",
+      "noAnimationToSave": "保存するにはキーフレームのあるクリップを選択してください",
+      "dialog": {
+        "title": "アニメーションプリセットを保存",
+        "description": "このクリップのキーフレームを、このプロジェクトで再利用できるプリセットとして保存します。",
+        "nameLabel": "プリセット名",
+        "namePlaceholder": "マイアニメーション",
+        "duplicateWarning": "この名前のプリセットが既に存在し、上書きされます。",
+        "save": "保存",
+        "overwrite": "上書き",
+        "cancel": "キャンセル"
+      }
+    },
     "shortcutsDialog": {
       "title": "キーボードショートカット",
       "description": "キーボードショートカットの割り当てを編集します。"

@@ -5,12 +5,7 @@ import { toast } from 'sonner'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useProjectStore } from '@/features/editor/deps/projects'
 import {
@@ -36,11 +31,31 @@ const BUILTIN_EASING_PRESETS: ReadonlyArray<{
   labelKey: string
   bezier: BezierControlPoints
 }> = [
-  { id: 'soft', labelKey: 'timeline.keyframeEditor.bezierPreset.soft', bezier: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 } },
-  { id: 'easeOut', labelKey: 'timeline.keyframeEditor.bezierPreset.easeOut', bezier: { x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 } },
-  { id: 'easeIn', labelKey: 'timeline.keyframeEditor.bezierPreset.easeIn', bezier: { x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19 } },
-  { id: 'easeInOut', labelKey: 'timeline.keyframeEditor.bezierPreset.easeInOut', bezier: { x1: 0.645, y1: 0.045, x2: 0.355, y2: 1 } },
-  { id: 'overshoot', labelKey: 'timeline.keyframeEditor.bezierPreset.overshoot', bezier: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 } },
+  {
+    id: 'soft',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.soft',
+    bezier: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 },
+  },
+  {
+    id: 'easeOut',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.easeOut',
+    bezier: { x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 },
+  },
+  {
+    id: 'easeIn',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.easeIn',
+    bezier: { x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19 },
+  },
+  {
+    id: 'easeInOut',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.easeInOut',
+    bezier: { x1: 0.645, y1: 0.045, x2: 0.355, y2: 1 },
+  },
+  {
+    id: 'overshoot',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.overshoot',
+    bezier: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 },
+  },
 ]
 
 /**

@@ -4,6 +4,33 @@
       "label": "Animasyon zaman çizelgesi",
       "noClip": "Animasyon için klip yok"
     },
+    "animatePresets": {
+      "title": "Hazır ayarlar",
+      "animationsHeading": "Animasyonlar",
+      "easingHeading": "Yumuşatma",
+      "saveButton": "Kaydet",
+      "empty": "Henüz kaydedilmiş animasyon yok",
+      "savedToast": "“{{name}}” kaydedildi",
+      "appliedToast": "“{{name}}” uygulandı",
+      "applyFailed": "Hazır ayar uygulanamadı",
+      "saveFailed": "Hazır ayar kaydedilemedi",
+      "deleteLabel": "Hazır ayarı sil",
+      "incompatibleType": "{{type}} türünde bir klip gerekiyor",
+      "incompatibleProperty": "Hedefte animasyonlu bir özellik eksik",
+      "selectClipFirst": "Uygulamak için bir klip seçin",
+      "selectKeyframesFirst": "Yumuşatma uygulamak için anahtar kareler seçin",
+      "noAnimationToSave": "Kaydetmek için anahtar kareleri olan bir klip seçin",
+      "dialog": {
+        "title": "Animasyon hazır ayarını kaydet",
+        "description": "Bu klibin anahtar karelerini bu proje için yeniden kullanılabilir bir hazır ayar olarak kaydedin.",
+        "nameLabel": "Hazır ayar adı",
+        "namePlaceholder": "Animasyonum",
+        "duplicateWarning": "Bu ada sahip bir hazır ayar mevcut ve üzerine yazılacak.",
+        "save": "Kaydet",
+        "overwrite": "Üzerine yaz",
+        "cancel": "İptal"
+      }
+    },
     "shortcutsDialog": {
       "title": "Klavye Kısayolları",
       "description": "Klavye kısayol atamalarını düzenleyin."

@@ -4,6 +4,33 @@
       "label": "Línea de tiempo de animación",
       "noClip": "No hay clips para animar"
     },
+    "animatePresets": {
+      "title": "Ajustes preestablecidos",
+      "animationsHeading": "Animaciones",
+      "easingHeading": "Suavizado",
+      "saveButton": "Guardar",
+      "empty": "Aún no hay animaciones guardadas",
+      "savedToast": "Se guardó «{{name}}»",
+      "appliedToast": "Se aplicó «{{name}}»",
+      "applyFailed": "No se pudo aplicar el ajuste preestablecido",
+      "saveFailed": "No se pudo guardar el ajuste preestablecido",
+      "deleteLabel": "Eliminar ajuste preestablecido",
+      "incompatibleType": "Requiere un clip de tipo {{type}}",
+      "incompatibleProperty": "Al destino le falta una propiedad animada",
+      "selectClipFirst": "Selecciona un clip para aplicar",
+      "selectKeyframesFirst": "Selecciona fotogramas clave para aplicar el suavizado",
+      "noAnimationToSave": "Selecciona un clip con fotogramas clave para guardar",
+      "dialog": {
+        "title": "Guardar ajuste preestablecido de animación",
+        "description": "Guarda los fotogramas clave de este clip como un ajuste preestablecido reutilizable para este proyecto.",
+        "nameLabel": "Nombre del ajuste preestablecido",
+        "namePlaceholder": "Mi animación",
+        "duplicateWarning": "Ya existe un ajuste preestablecido con este nombre y se sobrescribirá.",
+        "save": "Guardar",
+        "overwrite": "Sobrescribir",
+        "cancel": "Cancelar"
+      }
+    },
     "shortcutsDialog": {
       "title": "Atajos de teclado",
       "description": "Editar las combinaciones de teclas."

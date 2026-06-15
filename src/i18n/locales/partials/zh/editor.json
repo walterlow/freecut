@@ -4,6 +4,33 @@
       "label": "动画时间线",
       "noClip": "没有可动画的片段"
     },
+    "animatePresets": {
+      "title": "预设",
+      "animationsHeading": "动画",
+      "easingHeading": "缓动",
+      "saveButton": "保存",
+      "empty": "尚无已保存的动画",
+      "savedToast": "已保存“{{name}}”",
+      "appliedToast": "已应用“{{name}}”",
+      "applyFailed": "无法应用预设",
+      "saveFailed": "无法保存预设",
+      "deleteLabel": "删除预设",
+      "incompatibleType": "需要 {{type}} 片段",
+      "incompatibleProperty": "目标缺少可动画的属性",
+      "selectClipFirst": "选择要应用的片段",
+      "selectKeyframesFirst": "选择关键帧以应用缓动",
+      "noAnimationToSave": "选择带有关键帧的片段以保存",
+      "dialog": {
+        "title": "保存动画预设",
+        "description": "将此片段的关键帧保存为可在本项目中重复使用的预设。",
+        "nameLabel": "预设名称",
+        "namePlaceholder": "我的动画",
+        "duplicateWarning": "已存在同名预设，将被覆盖。",
+        "save": "保存",
+        "overwrite": "覆盖",
+        "cancel": "取消"
+      }
+    },
     "shortcutsDialog": {
       "title": "键盘快捷键",
       "description": "编辑键盘快捷键绑定。"

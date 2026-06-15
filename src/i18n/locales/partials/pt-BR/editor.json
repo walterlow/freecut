@@ -4,6 +4,33 @@
       "label": "Linha do tempo de animação",
       "noClip": "Nenhum clipe para animar"
     },
+    "animatePresets": {
+      "title": "Predefinições",
+      "animationsHeading": "Animações",
+      "easingHeading": "Suavização",
+      "saveButton": "Salvar",
+      "empty": "Nenhuma animação salva ainda",
+      "savedToast": "“{{name}}” salvo",
+      "appliedToast": "“{{name}}” aplicado",
+      "applyFailed": "Não foi possível aplicar a predefinição",
+      "saveFailed": "Não foi possível salvar a predefinição",
+      "deleteLabel": "Excluir predefinição",
+      "incompatibleType": "Requer um clipe do tipo {{type}}",
+      "incompatibleProperty": "O destino não tem uma propriedade animada",
+      "selectClipFirst": "Selecione um clipe para aplicar",
+      "selectKeyframesFirst": "Selecione quadros-chave para aplicar a suavização",
+      "noAnimationToSave": "Selecione um clipe com quadros-chave para salvar",
+      "dialog": {
+        "title": "Salvar predefinição de animação",
+        "description": "Salve os quadros-chave deste clipe como uma predefinição reutilizável para este projeto.",
+        "nameLabel": "Nome da predefinição",
+        "namePlaceholder": "Minha animação",
+        "duplicateWarning": "Já existe uma predefinição com este nome e ela será substituída.",
+        "save": "Salvar",
+        "overwrite": "Substituir",
+        "cancel": "Cancelar"
+      }
+    },
     "shortcutsDialog": {
       "title": "Atalhos de teclado",
       "description": "Editar as combinações de teclas."
