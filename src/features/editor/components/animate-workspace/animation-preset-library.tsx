@@ -24,6 +24,7 @@ import {
   getMotionPresetAnchorFrame,
   MOTION_PRESET_CATEGORIES,
   MOTION_PRESETS,
+  motionPresetScalesBox,
   resolveAnimatedTransform,
   type MotionPreset,
   type MotionPresetCategory,
@@ -47,8 +48,7 @@ const presetsByCategory = MOTION_PRESET_CATEGORIES.reduce(
 interface MotionPresetSectionProps {
   category: MotionPresetCategory
   presets: MotionPreset[]
-  hasSelection: boolean
-  isCompatible: (preset: MotionPreset) => boolean
+  reasonFor: (preset: MotionPreset) => string | null
   onApply: (preset: MotionPreset) => void
   t: (key: string, options?: Record<string, unknown>) => string
 }
@@ -57,8 +57,7 @@ interface MotionPresetSectionProps {
 const MotionPresetSection = memo(function MotionPresetSection({
   category,
   presets,
-  hasSelection,
-  isCompatible,
+  reasonFor,
   onApply,
   t,
 }: MotionPresetSectionProps) {
@@ -69,12 +68,8 @@ const MotionPresetSection = memo(function MotionPresetSection({
       </h3>
       <div className="grid grid-cols-3 gap-1.5">
         {presets.map((preset) => {
-          const disabled = !hasSelection || !isCompatible(preset)
-          const reason = !hasSelection
-            ? t('editor.animatePresets.selectClipFirst')
-            : !isCompatible(preset)
-              ? t('editor.animatePresets.incompatibleProperty')
-              : null
+          const reason = reasonFor(preset)
+          const disabled = reason !== null
           const label = t(`editor.motionPresets.items.${preset.labelKey}`)
 
           const tile = (
@@ -218,10 +213,20 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
     [selectedItem],
   )
 
-  const isMotionCompatible = useCallback(
-    (preset: MotionPreset) =>
-      !!motionPropertySet && preset.properties.every((property) => motionPropertySet.has(property)),
-    [motionPropertySet],
+  // Disabled reason for a motion preset on the current selection, or null when
+  // it can apply. Scale presets reflow text, so they are gated for text clips.
+  const motionReason = useCallback(
+    (preset: MotionPreset): string | null => {
+      if (!selectedItem || !motionPropertySet) return t('editor.animatePresets.selectClipFirst')
+      if (selectedItem.type === 'text' && motionPresetScalesBox(preset)) {
+        return t('editor.motionPresets.textIncompatible')
+      }
+      if (!preset.properties.every((property) => motionPropertySet.has(property))) {
+        return t('editor.animatePresets.incompatibleProperty')
+      }
+      return null
+    },
+    [motionPropertySet, selectedItem, t],
   )
 
   const handleApplyMotion = useCallback(
@@ -335,8 +340,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
                 key={category}
                 category={category}
                 presets={presetsByCategory[category]}
-                isCompatible={isMotionCompatible}
-                hasSelection={!!selectedItem}
+                reasonFor={motionReason}
                 onApply={handleApplyMotion}
                 t={t}
               />

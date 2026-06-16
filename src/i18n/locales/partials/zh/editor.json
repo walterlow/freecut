@@ -30,6 +30,7 @@
       }
     },
     "motionPresets": {
+      "textIncompatible": "不适用于文本",
       "categories": {
         "entrance": "入场",
         "exit": "出场",

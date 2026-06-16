@@ -30,6 +30,7 @@
       }
     },
     "motionPresets": {
+      "textIncompatible": "텍스트에는 부적합",
       "categories": {
         "entrance": "등장",
         "exit": "퇴장",

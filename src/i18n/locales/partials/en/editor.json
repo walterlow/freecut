@@ -30,6 +30,7 @@
       }
     },
     "motionPresets": {
+      "textIncompatible": "Not suited for text",
       "categories": {
         "entrance": "Entrance",
         "exit": "Exit",

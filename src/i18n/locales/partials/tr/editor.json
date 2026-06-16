@@ -30,6 +30,7 @@
       }
     },
     "motionPresets": {
+      "textIncompatible": "Metin için uygun değil",
       "categories": {
         "entrance": "Giriş",
         "exit": "Çıkış",

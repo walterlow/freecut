@@ -1,6 +1,13 @@
 import type { TextItem } from '@/types/timeline'
 import type { AnimatableProperty, EasingConfig, EasingType, ItemKeyframes } from '@/types/keyframe'
 import type { ResolvedTransform } from '@/types/transform'
+import {
+  animationWindowFrames,
+  clamp,
+  EASE_IN_SOFT as SOFT_EASE_IN,
+  EASE_OUT_SOFT as SOFT_EASE_OUT,
+  SPRING_SETTLE as TITLE_SPRING,
+} from '@/features/editor/deps/keyframes'
 
 export type TextAnimationPresetId =
   | 'fade'
@@ -68,22 +75,6 @@ const TEXT_ANIMATION_DURATION_SECONDS = 0.45
 const DEFAULT_END_EASING: EasingType = 'linear'
 const ROTATION_OFFSET_DEGREES = 8
 const VALUE_EPSILON = 0.01
-const SOFT_EASE_OUT: EasingConfig = {
-  type: 'cubic-bezier',
-  bezier: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
-}
-const SOFT_EASE_IN: EasingConfig = {
-  type: 'cubic-bezier',
-  bezier: { x1: 0.7, y1: 0, x2: 0.84, y2: 0 },
-}
-const TITLE_SPRING: EasingConfig = {
-  type: 'spring',
-  spring: { tension: 220, friction: 18, mass: 0.9 },
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 function buildOpacityPair(isIntro: boolean, endOpacity: number): AnimationValuePair {
   return {
@@ -122,14 +113,7 @@ function getKeyframeAtFrame(
 }
 
 export function getTextAnimationDurationFrames(itemDurationInFrames: number, fps: number): number {
-  if (itemDurationInFrames <= 1) {
-    return 0
-  }
-
-  return Math.max(
-    1,
-    Math.min(itemDurationInFrames - 1, Math.round(fps * TEXT_ANIMATION_DURATION_SECONDS)),
-  )
+  return animationWindowFrames(TEXT_ANIMATION_DURATION_SECONDS, itemDurationInFrames, fps)
 }
 
 export function getTextAnimationFrameRange(

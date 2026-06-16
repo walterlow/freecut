@@ -19,10 +19,18 @@ export {
 } from '@/features/keyframes/utils/auto-keyframe'
 export { getAnimatablePropertiesForItem } from '@/features/keyframes/utils/animatable-properties'
 export {
+  animationWindowFrames,
+  clamp,
+  EASE_IN_SOFT,
+  EASE_OUT_SOFT,
+  SPRING_SETTLE,
+} from '@/features/keyframes/utils/animation-easing'
+export {
   MOTION_PRESETS,
   MOTION_PRESETS_BY_ID,
   MOTION_PRESET_CATEGORIES,
   getMotionPresetAnchorFrame,
+  motionPresetScalesBox,
   type MotionPreset,
   type MotionPresetId,
   type MotionPresetCategory,

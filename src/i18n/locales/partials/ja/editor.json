@@ -30,6 +30,7 @@
       }
     },
     "motionPresets": {
+      "textIncompatible": "テキストには不向き",
       "categories": {
         "entrance": "イン",
         "exit": "アウト",

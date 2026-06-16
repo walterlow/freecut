@@ -20,6 +20,13 @@
 
 import type { ResolvedTransform } from '@/types/transform'
 import type { AnimatableProperty, EasingConfig, EasingType } from '@/types/keyframe'
+import {
+  animationWindowFrames as windowFrames,
+  clamp,
+  EASE_IN_SOFT,
+  EASE_OUT_SOFT,
+  SPRING_SETTLE,
+} from './animation-easing'
 
 export type MotionPresetCategory = 'entrance' | 'exit' | 'emphasis' | 'loop'
 
@@ -102,22 +109,12 @@ export interface MotionPreset {
 }
 
 // --- Easing -----------------------------------------------------------------
+// Shared curves (EASE_OUT_SOFT / EASE_IN_SOFT / SPRING_SETTLE) come from
+// `animation-easing`; these two overshoot curves are motion-preset specific.
 
-const EASE_OUT_SOFT: EasingConfig = {
-  type: 'cubic-bezier',
-  bezier: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
-}
-const EASE_IN_SOFT: EasingConfig = {
-  type: 'cubic-bezier',
-  bezier: { x1: 0.7, y1: 0, x2: 0.84, y2: 0 },
-}
 const OVERSHOOT: EasingConfig = {
   type: 'cubic-bezier',
   bezier: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 },
-}
-const SPRING_SETTLE: EasingConfig = {
-  type: 'spring',
-  spring: { tension: 220, friction: 18, mass: 0.9 },
 }
 const BOUNCE: EasingConfig = {
   type: 'cubic-bezier',
@@ -131,16 +128,6 @@ const EASE_IN_OUT: EasingType = 'ease-in-out'
 
 const ENTRANCE_SECONDS = 0.5
 const EMPHASIS_SECONDS = 0.6
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
-
-/** Window length (in frames) for one-shot presets, clamped to the clip. */
-function windowFrames(seconds: number, durationInFrames: number, fps: number): number {
-  if (durationInFrames <= 1) return 0
-  return Math.max(1, Math.min(durationInFrames - 1, Math.round(fps * seconds)))
-}
 
 /**
  * The frame at which the clip sits at its resting transform for `category`.
@@ -622,3 +609,12 @@ export const MOTION_PRESET_CATEGORIES: MotionPresetCategory[] = [
   'emphasis',
   'loop',
 ]
+
+/**
+ * Whether a preset animates the clip box (`width`/`height`). On text clips this
+ * reflows the type rather than scaling it, so the Animate grid gates these out
+ * for text — text has its own reflow-safe presets in the properties sidebar.
+ */
+export function motionPresetScalesBox(preset: MotionPreset): boolean {
+  return preset.properties.includes('width') || preset.properties.includes('height')
+}
