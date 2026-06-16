@@ -7,14 +7,6 @@
     "animatePresets": {
       "title": "Presets",
       "animationsHeading": "Animations",
-      "easingHeading": "Easing",
-      "easingPresets": {
-        "soft": "Soft",
-        "easeOut": "Ease Out",
-        "easeIn": "Ease In",
-        "easeInOut": "Ease In/Out",
-        "overshoot": "Overshoot"
-      },
       "saveButton": "Save",
       "empty": "No saved animations yet",
       "savedToast": "Saved “{{name}}”",
@@ -25,7 +17,6 @@
       "incompatibleType": "Needs a {{type}} clip",
       "incompatibleProperty": "Target is missing an animated property",
       "selectClipFirst": "Select a clip to apply",
-      "selectKeyframesFirst": "Select keyframes to apply easing",
       "noAnimationToSave": "Select a clip with keyframes to save",
       "dialog": {
         "title": "Save animation preset",

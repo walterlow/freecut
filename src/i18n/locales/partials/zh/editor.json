@@ -7,14 +7,6 @@
     "animatePresets": {
       "title": "预设",
       "animationsHeading": "动画",
-      "easingHeading": "缓动",
-      "easingPresets": {
-        "soft": "柔和",
-        "easeOut": "缓出",
-        "easeIn": "缓入",
-        "easeInOut": "缓入/缓出",
-        "overshoot": "过冲"
-      },
       "saveButton": "保存",
       "empty": "尚无已保存的动画",
       "savedToast": "已保存“{{name}}”",
@@ -25,7 +17,6 @@
       "incompatibleType": "需要 {{type}} 片段",
       "incompatibleProperty": "目标缺少可动画的属性",
       "selectClipFirst": "选择要应用的片段",
-      "selectKeyframesFirst": "选择关键帧以应用缓动",
       "noAnimationToSave": "选择带有关键帧的片段以保存",
       "dialog": {
         "title": "保存动画预设",

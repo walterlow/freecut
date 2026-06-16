@@ -7,14 +7,6 @@
     "animatePresets": {
       "title": "プリセット",
       "animationsHeading": "アニメーション",
-      "easingHeading": "イージング",
-      "easingPresets": {
-        "soft": "ソフト",
-        "easeOut": "イーズアウト",
-        "easeIn": "イーズイン",
-        "easeInOut": "イーズイン/アウト",
-        "overshoot": "オーバーシュート"
-      },
       "saveButton": "保存",
       "empty": "保存されたアニメーションはまだありません",
       "savedToast": "「{{name}}」を保存しました",
@@ -25,7 +17,6 @@
       "incompatibleType": "{{type}}クリップが必要です",
       "incompatibleProperty": "対象にアニメーション化されたプロパティがありません",
       "selectClipFirst": "適用するクリップを選択してください",
-      "selectKeyframesFirst": "イージングを適用するキーフレームを選択してください",
       "noAnimationToSave": "保存するにはキーフレームのあるクリップを選択してください",
       "dialog": {
         "title": "アニメーションプリセットを保存",

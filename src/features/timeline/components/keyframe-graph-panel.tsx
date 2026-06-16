@@ -132,6 +132,8 @@ const EASING_OPTIONS: Array<{ value: EasingType; labelKey: string; defaultLabel:
     labelKey: 'timeline.keyframeEditor.easing.easeOut',
     defaultLabel: 'Ease Out',
   },
+  { value: 'cubic-bezier', labelKey: 'timeline.keyframeEditor.bezier', defaultLabel: 'Bezier' },
+  { value: 'spring', labelKey: 'timeline.keyframeEditor.spring', defaultLabel: 'Spring' },
 ]
 const BEZIER_PRESETS = [
   {

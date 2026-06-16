@@ -7,14 +7,6 @@
     "animatePresets": {
       "title": "Hazır ayarlar",
       "animationsHeading": "Animasyonlar",
-      "easingHeading": "Yumuşatma",
-      "easingPresets": {
-        "soft": "Yumuşak",
-        "easeOut": "Yavaşlayarak",
-        "easeIn": "Hızlanarak",
-        "easeInOut": "Yavaş/Hızlı",
-        "overshoot": "Aşma"
-      },
       "saveButton": "Kaydet",
       "empty": "Henüz kaydedilmiş animasyon yok",
       "savedToast": "“{{name}}” kaydedildi",
@@ -25,7 +17,6 @@
       "incompatibleType": "{{type}} türünde bir klip gerekiyor",
       "incompatibleProperty": "Hedefte animasyonlu bir özellik eksik",
       "selectClipFirst": "Uygulamak için bir klip seçin",
-      "selectKeyframesFirst": "Yumuşatma uygulamak için anahtar kareler seçin",
       "noAnimationToSave": "Kaydetmek için anahtar kareleri olan bir klip seçin",
       "dialog": {
         "title": "Animasyon hazır ayarını kaydet",

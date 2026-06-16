@@ -12,57 +12,22 @@ import {
   applyAnimationPreset,
   captureAnimationFromItem,
   getPresetCompatibility,
-  updateKeyframes,
   useItemsStore,
   useKeyframesStore,
-  useKeyframeSelectionStore,
 } from '@/features/editor/deps/timeline-store'
 import {
   readAnimationPresets,
   saveAnimationPresets,
   type AnimationPreset,
 } from '@/infrastructure/storage'
-import type { BezierControlPoints } from '@/types/keyframe'
 import { SaveAnimationPresetDialog } from './save-animation-preset-dialog'
 
-/** Built-in easing curves (mirror the keyframe editor's bezier presets). */
-const BUILTIN_EASING_PRESETS: ReadonlyArray<{
-  id: string
-  labelKey: string
-  bezier: BezierControlPoints
-}> = [
-  {
-    id: 'soft',
-    labelKey: 'editor.animatePresets.easingPresets.soft',
-    bezier: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 },
-  },
-  {
-    id: 'easeOut',
-    labelKey: 'editor.animatePresets.easingPresets.easeOut',
-    bezier: { x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 },
-  },
-  {
-    id: 'easeIn',
-    labelKey: 'editor.animatePresets.easingPresets.easeIn',
-    bezier: { x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19 },
-  },
-  {
-    id: 'easeInOut',
-    labelKey: 'editor.animatePresets.easingPresets.easeInOut',
-    bezier: { x1: 0.645, y1: 0.045, x2: 0.355, y2: 1 },
-  },
-  {
-    id: 'overshoot',
-    labelKey: 'editor.animatePresets.easingPresets.overshoot',
-    bezier: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 },
-  },
-]
-
 /**
- * Animation preset library (U7, R16): browse built-in easing presets plus the
- * project's saved animation presets, and save/apply from the Animate workspace.
- * Presentational shell over the storage layer (U5) and apply path (U6); presets
- * incompatible with the current selection render disabled with a reason tooltip.
+ * Animation preset library (U7, R16): browse and save/apply the project's saved
+ * animation presets from the Animate workspace. Presentational shell over the
+ * storage layer (U5) and apply path (U6); presets incompatible with the current
+ * selection render disabled with a reason tooltip. (Per-keyframe easing curves
+ * live in the dopesheet's interpolation icon row, not here.)
  */
 export const AnimationPresetLibrary = memo(function AnimationPresetLibrary() {
   const { t } = useTranslation()
@@ -86,7 +51,6 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary() {
       [selectedItem],
     ),
   )
-  const selectedKeyframes = useKeyframeSelectionStore((s) => s.selectedKeyframes)
 
   const [presets, setPresets] = useState<AnimationPreset[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -167,21 +131,6 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary() {
     [presets, projectId, t],
   )
 
-  const handleApplyEasing = useCallback(
-    (bezier: BezierControlPoints) => {
-      if (selectedKeyframes.length === 0) return
-      updateKeyframes(
-        selectedKeyframes.map((ref) => ({
-          itemId: ref.itemId,
-          property: ref.property,
-          keyframeId: ref.keyframeId,
-          updates: { easing: 'cubic-bezier', easingConfig: { type: 'cubic-bezier', bezier } },
-        })),
-      )
-    },
-    [selectedKeyframes],
-  )
-
   // Compatibility depends only on the presets and the target item, so compute
   // it once per change rather than per preset on every render (the component
   // also re-renders on keyframe-selection changes for the easing section).
@@ -205,8 +154,6 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary() {
     },
     [compatibilityByPresetId, selectedItem, t],
   )
-
-  const easingApplyDisabled = selectedKeyframes.length === 0
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -286,31 +233,6 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary() {
                     </Tooltip>
                   )
                 })
-              )}
-            </section>
-
-            <section className="flex flex-col gap-1">
-              <h3 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                {t('editor.animatePresets.easingHeading')}
-              </h3>
-              <div className="flex flex-wrap gap-1">
-                {BUILTIN_EASING_PRESETS.map((preset) => (
-                  <Button
-                    key={preset.id}
-                    variant="secondary"
-                    size="sm"
-                    className="h-6 px-2 text-[11px]"
-                    disabled={easingApplyDisabled}
-                    onClick={() => handleApplyEasing(preset.bezier)}
-                  >
-                    {t(preset.labelKey)}
-                  </Button>
-                ))}
-              </div>
-              {easingApplyDisabled && (
-                <p className="text-[11px] text-muted-foreground">
-                  {t('editor.animatePresets.selectKeyframesFirst')}
-                </p>
               )}
             </section>
           </div>

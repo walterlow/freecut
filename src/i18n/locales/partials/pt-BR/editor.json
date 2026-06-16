@@ -7,14 +7,6 @@
     "animatePresets": {
       "title": "Predefinições",
       "animationsHeading": "Animações",
-      "easingHeading": "Suavização",
-      "easingPresets": {
-        "soft": "Suave",
-        "easeOut": "Saída suave",
-        "easeIn": "Entrada suave",
-        "easeInOut": "Entrada/Saída",
-        "overshoot": "Ultrapassagem"
-      },
       "saveButton": "Salvar",
       "empty": "Nenhuma animação salva ainda",
       "savedToast": "“{{name}}” salvo",
@@ -25,7 +17,6 @@
       "incompatibleType": "Requer um clipe do tipo {{type}}",
       "incompatibleProperty": "O destino não tem uma propriedade animada",
       "selectClipFirst": "Selecione um clipe para aplicar",
-      "selectKeyframesFirst": "Selecione quadros-chave para aplicar a suavização",
       "noAnimationToSave": "Selecione um clipe com quadros-chave para salvar",
       "dialog": {
         "title": "Salvar predefinição de animação",

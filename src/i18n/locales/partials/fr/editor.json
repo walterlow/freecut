@@ -7,14 +7,6 @@
     "animatePresets": {
       "title": "Préréglages",
       "animationsHeading": "Animations",
-      "easingHeading": "Accélération",
-      "easingPresets": {
-        "soft": "Doux",
-        "easeOut": "Sortie douce",
-        "easeIn": "Entrée douce",
-        "easeInOut": "Entrée/Sortie",
-        "overshoot": "Dépassement"
-      },
       "saveButton": "Enregistrer",
       "empty": "Aucune animation enregistrée pour le moment",
       "savedToast": "« {{name}} » enregistré",
@@ -25,7 +17,6 @@
       "incompatibleType": "Nécessite un clip de type {{type}}",
       "incompatibleProperty": "Il manque une propriété animée à la cible",
       "selectClipFirst": "Sélectionnez un clip à appliquer",
-      "selectKeyframesFirst": "Sélectionnez des images clés pour appliquer l'accélération",
       "noAnimationToSave": "Sélectionnez un clip avec des images clés à enregistrer",
       "dialog": {
         "title": "Enregistrer le préréglage d'animation",

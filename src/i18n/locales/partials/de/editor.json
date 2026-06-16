@@ -7,14 +7,6 @@
     "animatePresets": {
       "title": "Voreinstellungen",
       "animationsHeading": "Animationen",
-      "easingHeading": "Beschleunigung",
-      "easingPresets": {
-        "soft": "Weich",
-        "easeOut": "Ausklang",
-        "easeIn": "Einklang",
-        "easeInOut": "Ein/Ausklang",
-        "overshoot": "Überschwingen"
-      },
       "saveButton": "Speichern",
       "empty": "Noch keine gespeicherten Animationen",
       "savedToast": "„{{name}}“ gespeichert",
@@ -25,7 +17,6 @@
       "incompatibleType": "Benötigt einen {{type}}-Clip",
       "incompatibleProperty": "Dem Ziel fehlt eine animierte Eigenschaft",
       "selectClipFirst": "Wähle einen Clip zum Anwenden aus",
-      "selectKeyframesFirst": "Wähle Keyframes aus, um die Beschleunigung anzuwenden",
       "noAnimationToSave": "Wähle einen Clip mit Keyframes zum Speichern aus",
       "dialog": {
         "title": "Animations-Voreinstellung speichern",
