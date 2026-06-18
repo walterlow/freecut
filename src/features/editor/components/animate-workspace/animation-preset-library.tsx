@@ -209,7 +209,10 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
   const addKeyframes = useTimelineStore((s) => s.addKeyframes)
 
   const motionPropertySet = useMemo(
-    () => (selectedItem ? new Set<AnimatableProperty>(getAnimatablePropertiesForItem(selectedItem)) : null),
+    () =>
+      selectedItem
+        ? new Set<AnimatableProperty>(getAnimatablePropertiesForItem(selectedItem))
+        : null,
     [selectedItem],
   )
 
@@ -241,11 +244,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
         selectedItem.durationInFrames,
         canvas.fps,
       )
-      const anchor = resolveAnimatedTransform(
-        base,
-        selectedItemKeyframes ?? undefined,
-        anchorFrame,
-      )
+      const anchor = resolveAnimatedTransform(base, selectedItemKeyframes ?? undefined, anchorFrame)
       const built = preset.build({
         anchor,
         durationInFrames: selectedItem.durationInFrames,

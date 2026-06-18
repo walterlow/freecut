@@ -58,7 +58,10 @@
 @keyframes mp-slide {
   0%,
   100% {
-    transform: translate(calc(cos(var(--mp-angle, 0deg)) * -7px), calc(sin(var(--mp-angle, 0deg)) * -7px));
+    transform: translate(
+      calc(cos(var(--mp-angle, 0deg)) * -7px),
+      calc(sin(var(--mp-angle, 0deg)) * -7px)
+    );
     opacity: 0.3;
   }
   50% {

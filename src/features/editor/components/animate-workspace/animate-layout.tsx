@@ -16,13 +16,12 @@ interface AnimateLayoutProps {
 const noop = () => {}
 
 /**
- * Animate workspace layout: a fixed column of a small preview, a thin timeline
- * strip for clip selection + scrubbing context, and the keyframe editing
- * surface filling the rest. Mirrors the Color workspace's imperative-branch
- * approach in `editor.tsx` rather than the resizable preview/timeline split.
- *
- * U2 mounts the existing `KeyframeGraphPanel`; the both-panes editing surface
- * (U4) replaces the single-pane host in place.
+ * Animate workspace layout: a fixed column of a small preview, the shared mini
+ * timeline (film tiles + IO bar + ruler + track lanes + playhead — the same
+ * primitives the Color workspace uses) for selecting the animation target and
+ * scrubbing context, and the keyframe editing surface filling the rest. Mirrors
+ * the Color workspace's imperative-branch approach in `editor.tsx` rather than
+ * the resizable preview/timeline split.
  */
 export const AnimateLayout = memo(function AnimateLayout({ project }: AnimateLayoutProps) {
   return (
@@ -34,7 +33,7 @@ export const AnimateLayout = memo(function AnimateLayout({ project }: AnimateLay
         </ErrorBoundary>
       </div>
 
-      {/* Thin timeline strip — select the clip to animate + scrub for context */}
+      {/* Mini timeline — select the clip to animate + scrub for context */}
       <ErrorBoundary level="feature">
         <AnimateTimelineStrip />
       </ErrorBoundary>

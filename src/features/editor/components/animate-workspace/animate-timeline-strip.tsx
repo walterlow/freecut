@@ -2,32 +2,46 @@ import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useTranslation } from 'react-i18next'
 import { useItemsStore, useTimelineStore } from '@/features/editor/deps/timeline-store'
-import {
-  createScrubThrottleState,
-  getDefaultActiveTrackId,
-  shouldCommitScrubFrame,
-} from '@/features/editor/deps/timeline-utils'
+import { getDefaultActiveTrackId } from '@/features/editor/deps/timeline-utils'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
-import { PlayheadMarks } from '@/shared/ui/playhead-marks'
-import type { TimelineItem, TimelineTrack } from '@/types/timeline'
+import {
+  buildTimelineAnnotationModel,
+  type TimelineAnnotationMarker,
+} from '@/shared/timeline/timeline-annotations'
+import type { TimelineItem } from '@/types/timeline'
+import {
+  formatMiniTimelineTimecode,
+  MiniFilmTile,
+  MiniTimelineAnnotations,
+  MiniTimelineIoLane,
+  MiniTimelinePlayhead,
+  MiniTimelineRuler,
+  MiniTimelineTrackLanes,
+  resolveMiniTimelineMaxFrame,
+  useClipStartFrameUrl,
+  useMediaPosterUrls,
+  useMiniTimelineScrub,
+  MINI_FILM_TILE_SCROLLBAR_GUTTER,
+  MINI_FILM_TILE_STRIP_HEIGHT,
+  MINI_TIMELINE_IO_LANE_HEIGHT,
+  MINI_TIMELINE_LABEL_WIDTH,
+  MINI_TIMELINE_RULER_HEIGHT,
+  type MiniFilmTileClip,
+  type MiniTimelineClip,
+} from '@/features/editor/components/mini-timeline'
 
-const LABEL_WIDTH = 32
-const RULER_HEIGHT = 18
-const TRACK_AREA_HEIGHT = 56
-const MIN_TIMELINE_FRAMES = 300
+const TEST_ID_PREFIX = 'animate-timeline'
+const STRIP_HEIGHT = 212
+const TRACK_AREA_HEIGHT =
+  STRIP_HEIGHT -
+  MINI_FILM_TILE_STRIP_HEIGHT -
+  MINI_TIMELINE_IO_LANE_HEIGHT -
+  MINI_TIMELINE_RULER_HEIGHT
 
-interface StripClip {
-  id: string
-  type: TimelineItem['type']
-  label: string
+/** Film-tile clip carrying its track id so the same list feeds the mini lanes. */
+interface AnimateClip extends MiniFilmTileClip {
   trackId: string
-  from: number
-  durationInFrames: number
-}
-
-function isStripTrack(track: TimelineTrack): boolean {
-  return !track.isGroup
 }
 
 function getStripLabel(item: TimelineItem): string {
@@ -35,118 +49,83 @@ function getStripLabel(item: TimelineItem): string {
   return label || item.type
 }
 
-function resolveMaxFrame(items: readonly TimelineItem[]): number {
-  const itemMax = items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
-  return Math.max(MIN_TIMELINE_FRAMES, itemMax)
+function getThumbnailUrl(item: TimelineItem): string | undefined {
+  return 'thumbnailUrl' in item ? item.thumbnailUrl : undefined
 }
 
-function formatStripTime(frame: number, fps: number): string {
-  const safeFps = fps > 0 ? fps : 30
-  const totalSeconds = Math.max(0, Math.floor(frame / safeFps))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+interface AnimateFilmTileProps {
+  clip: AnimateClip
+  index: number
+  selected: boolean
+  fps: number
+  posterUrl?: string
+  onSelect: (clip: AnimateClip) => void
 }
 
-function getDisplayFrame() {
-  const playbackState = usePlaybackStore.getState()
-  return playbackState.previewFrame ?? playbackState.currentFrame
-}
-
-/**
- * Self-tracking playhead overlay. Subscribes to the playback store and moves
- * itself via a transform so per-frame scrub updates never re-render the strip
- * (mirrors the Color navigator + Edit playhead pattern — see CLAUDE.md render
- * gotchas).
- */
-const AnimateStripPlayhead = memo(function AnimateStripPlayhead({
-  timelineMaxFrame,
-}: {
-  timelineMaxFrame: number
-}) {
-  const playheadRef = useRef<HTMLDivElement>(null)
-  const maxFrameRef = useRef(timelineMaxFrame)
-  maxFrameRef.current = timelineMaxFrame
-  const containerWidthRef = useRef(0)
-
-  const updatePosition = useCallback((frame: number) => {
-    const playhead = playheadRef.current
-    if (!playhead) return
-    if (containerWidthRef.current <= 0) {
-      containerWidthRef.current = playhead.parentElement?.getBoundingClientRect().width ?? 0
-    }
-    const contentWidth = Math.max(0, containerWidthRef.current - LABEL_WIDTH)
-    const maxFrame = Math.max(MIN_TIMELINE_FRAMES, maxFrameRef.current, frame + 1)
-    const ratio = maxFrame > 0 ? Math.max(0, Math.min(1, frame / maxFrame)) : 0
-    playhead.style.transform = `translate3d(${Math.round(LABEL_WIDTH + contentWidth * ratio)}px, 0, 0)`
-  }, [])
-
-  useEffect(() => {
-    updatePosition(getDisplayFrame())
-    const unsubscribe = usePlaybackStore.subscribe((state) => {
-      updatePosition(state.previewFrame ?? state.currentFrame)
-    })
-    const container = playheadRef.current?.parentElement
-    if (typeof ResizeObserver === 'undefined' || !container) return unsubscribe
-    const resizeObserver = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width
-      if (width !== undefined) containerWidthRef.current = width
-      updatePosition(getDisplayFrame())
-    })
-    resizeObserver.observe(container)
-    return () => {
-      resizeObserver.disconnect()
-      unsubscribe()
-    }
-  }, [updatePosition])
-
+/** Plain film tile (no grade baking) over the shared {@link MiniFilmTile}. */
+const AnimateFilmTile = memo(function AnimateFilmTile({
+  clip,
+  index,
+  selected,
+  fps,
+  posterUrl,
+  onSelect,
+}: AnimateFilmTileProps) {
+  const startFrameUrl = useClipStartFrameUrl(clip, fps)
+  const thumbnailUrl = startFrameUrl ?? clip.thumbnailUrl ?? posterUrl
   return (
-    <div
-      ref={playheadRef}
-      className="pointer-events-none absolute bottom-0 top-0 z-20 w-0"
-      data-testid="animate-timeline-playhead"
-      aria-hidden="true"
-    >
-      <PlayheadMarks handle="flag" />
-    </div>
+    <MiniFilmTile
+      index={index}
+      label={clip.label}
+      trackName={clip.trackName}
+      timecodeText={formatMiniTimelineTimecode(clip.from, fps)}
+      thumbnailUrl={thumbnailUrl}
+      selected={selected}
+      onSelect={() => onSelect(clip)}
+      testId={`${TEST_ID_PREFIX}-film-tile`}
+      dataClipId={clip.id}
+    />
   )
 })
 
 /**
- * Thin timeline strip for the Animate workspace. Shows every animatable clip as
- * a compact lane per track, lets the user pick the animation target by clicking
- * a clip (selecting it), and scrubs the shared playhead via the fast-scrub path
- * so the preview and keyframe editors stay in sync. Purpose-built rather than a
- * compact mode of the main Timeline (which has none).
+ * Animate workspace timeline: the same composable mini timeline the Color
+ * workspace uses (film-tile row + IO bar + annotations + ruler + track lanes +
+ * self-tracking playhead). Picking a tile or mini-clip selects the animation
+ * target and seeks to its start; scrubbing the surface skims the shared
+ * playhead so the preview and keyframe editors stay in sync.
  */
 export const AnimateTimelineStrip = memo(function AnimateTimelineStrip() {
   const { t } = useTranslation()
-  const { items, tracks } = useItemsStore(
-    useShallow((s) => ({ items: s.items, tracks: s.tracks })),
+  const { items, tracks } = useItemsStore(useShallow((s) => ({ items: s.items, tracks: s.tracks })))
+  const { fps, markers, inPoint, outPoint } = useTimelineStore(
+    useShallow((s) => ({
+      fps: s.fps,
+      markers: s.markers,
+      inPoint: s.inPoint,
+      outPoint: s.outPoint,
+    })),
   )
-  const fps = useTimelineStore((s) => s.fps)
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame)
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame)
   const pausePlayback = usePlaybackStore((s) => s.pause)
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
+  const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId)
   const selectItems = useSelectionStore((s) => s.selectItems)
-
-  const isScrubbingRef = useRef(false)
-  const scrubRectRef = useRef<DOMRect | null>(null)
-  const scrubThrottleRef = useRef(createScrubThrottleState())
-  const pendingClientXRef = useRef<number | null>(null)
-  const scrubRafRef = useRef<number | null>(null)
+  const selectMarker = useSelectionStore((s) => s.selectMarker)
+  // Set while an IO drag is active so the playhead stops chasing the preview.
+  const suppressPlayheadPreviewRef = useRef(false)
 
   const selectedItemIdSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds])
   const trackRows = useMemo(
-    () => tracks.filter(isStripTrack).sort((a, b) => a.order - b.order),
+    () => tracks.filter((track) => !track.isGroup).sort((a, b) => a.order - b.order),
     [tracks],
   )
-  const trackLaneIndexById = useMemo(
-    () => new Map(trackRows.map((track, index) => [track.id, index])),
-    [trackRows],
+  const trackNameById = useMemo(
+    () => new Map(tracks.map((track) => [track.id, track.name || track.id])),
+    [tracks],
   )
-  const clips = useMemo<StripClip[]>(
+  const filmClips = useMemo<AnimateClip[]>(
     () =>
       items
         .filter((item) => item.type !== 'subtitle')
@@ -154,122 +133,53 @@ export const AnimateTimelineStrip = memo(function AnimateTimelineStrip() {
           id: item.id,
           type: item.type,
           label: getStripLabel(item),
-          trackId: item.trackId,
+          trackName: trackNameById.get(item.trackId) ?? 'T1',
+          mediaId: item.mediaId,
           from: item.from,
           durationInFrames: item.durationInFrames,
+          sourceStartFrames: Math.max(0, item.sourceStart ?? 0),
+          sourceDurationFrames: Math.max(1, item.sourceDuration ?? item.durationInFrames),
+          sourceFps: item.sourceFps && item.sourceFps > 0 ? item.sourceFps : fps,
+          trimStartFrames: item.trimStart ?? 0,
+          thumbnailUrl: getThumbnailUrl(item),
+          trackId: item.trackId,
         }))
-        .sort((a, b) => a.from - b.from),
-    [items],
+        .sort((a, b) => a.from - b.from || a.trackId.localeCompare(b.trackId)),
+    [items, trackNameById, fps],
   )
-  const timelineMaxFrame = useMemo(() => resolveMaxFrame(items), [items])
-
-  const clientXToFrame = useCallback(
-    (clientX: number): number | null => {
-      const rect = scrubRectRef.current
-      if (!rect || rect.width <= 0) return null
-      const timelineWidth = Math.max(1, rect.width - LABEL_WIDTH)
-      const ratio = Math.max(0, Math.min(1, (clientX - rect.left - LABEL_WIDTH) / timelineWidth))
-      return Math.round(ratio * timelineMaxFrame)
-    },
-    [timelineMaxFrame],
+  const miniClips = useMemo<MiniTimelineClip[]>(
+    () =>
+      filmClips.map((clip) => ({
+        id: clip.id,
+        trackId: clip.trackId,
+        from: clip.from,
+        durationInFrames: clip.durationInFrames,
+        label: clip.label,
+      })),
+    [filmClips],
   )
-
-  const cancelScrubRaf = useCallback(() => {
-    if (scrubRafRef.current !== null) {
-      cancelAnimationFrame(scrubRafRef.current)
-      scrubRafRef.current = null
-    }
-    pendingClientXRef.current = null
-  }, [])
-
-  useEffect(() => cancelScrubRaf, [cancelScrubRaf])
-
-  const runScrubLoop = useCallback(() => {
-    const clientX = pendingClientXRef.current
-    const rect = scrubRectRef.current
-    if (!isScrubbingRef.current || clientX === null || !rect) {
-      scrubRafRef.current = null
-      return
-    }
-    const frame = clientXToFrame(clientX)
-    if (frame !== null) {
-      const timelineWidth = Math.max(1, rect.width - LABEL_WIDTH)
-      const pixelsPerSecond = (timelineWidth * (fps > 0 ? fps : 30)) / timelineMaxFrame
-      if (
-        shouldCommitScrubFrame({
-          state: scrubThrottleRef.current,
-          pointerX: clientX - rect.left - LABEL_WIDTH,
-          targetFrame: frame,
-          pixelsPerSecond,
-          nowMs: performance.now(),
-        })
-      ) {
-        setPreviewFrame(frame, null)
-      }
-    }
-    scrubRafRef.current = requestAnimationFrame(runScrubLoop)
-  }, [clientXToFrame, fps, setPreviewFrame, timelineMaxFrame])
-
-  const handleScrubStart = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return
-      isScrubbingRef.current = true
-      event.currentTarget.setPointerCapture?.(event.pointerId)
-      scrubRectRef.current = event.currentTarget.getBoundingClientRect()
-      const frame = clientXToFrame(event.clientX)
-      if (frame === null) return
-      pausePlayback()
-      pendingClientXRef.current = event.clientX
-      scrubThrottleRef.current = createScrubThrottleState({
-        pointerX: event.clientX - scrubRectRef.current.left - LABEL_WIDTH,
-        frame,
-        nowMs: performance.now(),
-      })
-      setPreviewFrame(frame, null)
-      if (scrubRafRef.current === null) {
-        scrubRafRef.current = requestAnimationFrame(runScrubLoop)
-      }
-    },
-    [clientXToFrame, pausePlayback, runScrubLoop, setPreviewFrame],
+  const posterMediaIds = useMemo(
+    () =>
+      Array.from(
+        new Set(filmClips.map((clip) => clip.mediaId).filter((id): id is string => Boolean(id))),
+      ),
+    [filmClips],
+  )
+  const posterUrls = useMediaPosterUrls(posterMediaIds)
+  const timelineMaxFrame = resolveMiniTimelineMaxFrame({ items, markers, inPoint, outPoint })
+  const annotationModel = useMemo(
+    () => buildTimelineAnnotationModel({ markers, inPoint, outPoint, maxFrame: timelineMaxFrame }),
+    [inPoint, markers, outPoint, timelineMaxFrame],
   )
 
-  const handleScrubMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isScrubbingRef.current) return
-    pendingClientXRef.current = event.clientX
-  }, [])
-
-  const finishScrub = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!isScrubbingRef.current) return
-      cancelScrubRaf()
-      const frame = clientXToFrame(event.clientX)
-      if (frame !== null) setCurrentFrame(frame)
-      isScrubbingRef.current = false
-      scrubRectRef.current = null
-      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }
-      setPreviewFrame(null)
-    },
-    [cancelScrubRaf, clientXToFrame, setCurrentFrame, setPreviewFrame],
-  )
-
-  const cancelScrub = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!isScrubbingRef.current) return
-      cancelScrubRaf()
-      isScrubbingRef.current = false
-      scrubRectRef.current = null
-      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }
-      setPreviewFrame(null)
-    },
-    [cancelScrubRaf, setPreviewFrame],
-  )
+  const scrubHandlers = useMiniTimelineScrub({
+    maxFrame: timelineMaxFrame,
+    fps,
+    labelWidth: MINI_TIMELINE_LABEL_WIDTH,
+  })
 
   const selectClip = useCallback(
-    (clip: StripClip) => {
+    (clip: { id: string; from: number }) => {
       pausePlayback()
       setPreviewFrame(null)
       setCurrentFrame(clip.from)
@@ -278,13 +188,20 @@ export const AnimateTimelineStrip = memo(function AnimateTimelineStrip() {
     [pausePlayback, selectItems, setCurrentFrame, setPreviewFrame],
   )
 
-  // Auto-select a default clip when entering the Animate workspace (or after a
-  // refresh) with nothing selected, so the keyframe editor doesn't open on its
-  // empty "select an item to animate" state. Targets V1 (the default active
-  // track, i.e. the bottom-most video track) and selects its earliest clip. If
-  // V1 has no clips, falls back to the earliest clip anywhere so the editor still
-  // has a target. Runs once per mount: if the user later deselects on purpose, we
-  // leave the empty state alone.
+  const seekToMarker = useCallback(
+    (marker: TimelineAnnotationMarker) => {
+      pausePlayback()
+      setPreviewFrame(null)
+      setCurrentFrame(marker.frame)
+      selectMarker(marker.id)
+    },
+    [pausePlayback, selectMarker, setCurrentFrame, setPreviewFrame],
+  )
+
+  // Auto-select a default clip on first mount with nothing selected so the
+  // keyframe editor doesn't open on its empty state. Targets V1 (the default
+  // active track) and its earliest clip, falling back to the earliest clip
+  // anywhere. Runs once: a later deliberate deselect is left alone.
   const hasAutoSelectedRef = useRef(false)
   useEffect(() => {
     if (hasAutoSelectedRef.current) return
@@ -292,116 +209,100 @@ export const AnimateTimelineStrip = memo(function AnimateTimelineStrip() {
       hasAutoSelectedRef.current = true
       return
     }
-    if (clips.length === 0) return // items not loaded yet — retry when they arrive
-    // `clips` is sorted by `from`, so the first match on V1 is its earliest clip.
+    if (filmClips.length === 0) return // items not loaded yet — retry when they arrive
     const v1TrackId = getDefaultActiveTrackId(tracks)
-    const target = clips.find((clip) => clip.trackId === v1TrackId) ?? clips[0]
+    const target = filmClips.find((clip) => clip.trackId === v1TrackId) ?? filmClips[0]
     if (!target) return
     hasAutoSelectedRef.current = true
     selectItems([target.id])
-  }, [clips, selectedItemIds, selectItems, tracks])
-
-  const rowCount = Math.max(1, trackRows.length)
-  const rowHeight = TRACK_AREA_HEIGHT / rowCount
+  }, [filmClips, selectedItemIds, selectItems, tracks])
 
   return (
     <section
-      className="panel-bg shrink-0 overflow-hidden border-b border-border bg-[#1d1e23]"
+      className="panel-bg shrink-0 overflow-hidden border-b border-border bg-[#24252b]"
       aria-label={t('editor.animateTimeline.label')}
       data-testid="animate-timeline-strip"
-      style={{ height: RULER_HEIGHT + TRACK_AREA_HEIGHT }}
+      style={{ height: STRIP_HEIGHT }}
     >
-      {clips.length === 0 ? (
-        <div className="flex h-full items-center px-3 text-[10px] font-medium text-zinc-500">
-          {t('editor.animateTimeline.noClip')}
-        </div>
-      ) : (
+      <div className="flex h-full flex-col">
         <div
-          className="relative h-full cursor-ew-resize"
-          data-testid="animate-timeline-scrub-surface"
-          onPointerDown={handleScrubStart}
-          onPointerMove={handleScrubMove}
-          onPointerUp={finishScrub}
-          onPointerCancel={cancelScrub}
+          className="flex shrink-0 gap-1 overflow-x-auto overflow-y-hidden border-b border-black/40 px-1 pt-1"
+          data-testid="animate-timeline-filmstrip-scroll"
+          style={{
+            height: MINI_FILM_TILE_STRIP_HEIGHT,
+            paddingBottom: MINI_FILM_TILE_SCROLLBAR_GUTTER,
+          }}
         >
-          {/* Ruler */}
-          <div className="relative border-b border-black/40" style={{ height: RULER_HEIGHT }}>
-            <div className="absolute inset-y-0 right-0" style={{ left: LABEL_WIDTH }}>
-              {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
-                <div
-                  key={ratio}
-                  className="absolute top-0 h-full border-l border-zinc-500/45 pl-1 pt-0.5 text-[10px] text-zinc-500"
-                  style={{ left: `${ratio * 100}%` }}
-                >
-                  {formatStripTime(Math.round(ratio * timelineMaxFrame), fps)}
-                </div>
-              ))}
+          {filmClips.length > 0 ? (
+            filmClips.map((clip, index) => (
+              <AnimateFilmTile
+                key={`${clip.id}-film-tile`}
+                clip={clip}
+                index={index}
+                selected={selectedItemIdSet.has(clip.id)}
+                fps={fps}
+                posterUrl={clip.mediaId ? posterUrls.get(clip.mediaId) : undefined}
+                onSelect={selectClip}
+              />
+            ))
+          ) : (
+            <div className="flex h-full items-center px-2 text-[10px] font-medium text-zinc-500">
+              {t('editor.animateTimeline.noClip')}
             </div>
-          </div>
-
-          {/* Track lanes + clips */}
-          <div className="relative" style={{ height: TRACK_AREA_HEIGHT }}>
-            <div
-              className="absolute left-0 top-0 h-full border-r border-black/35 text-[9px] font-semibold text-zinc-400"
-              style={{ width: LABEL_WIDTH }}
-            >
-              {trackRows.map((track, index) => (
-                <span
-                  key={track.id}
-                  className="absolute left-0 flex w-full items-center justify-center overflow-hidden leading-none"
-                  style={{ top: index * rowHeight, height: rowHeight }}
-                >
-                  {track.name || `T${index + 1}`}
-                </span>
-              ))}
-            </div>
-            <div className="absolute inset-y-0 right-0" style={{ left: LABEL_WIDTH }}>
-              {trackRows.map((track, index) => (
-                <div
-                  key={track.id}
-                  className="absolute left-0 right-0 border-t border-zinc-700/70"
-                  style={{ top: index * rowHeight }}
-                />
-              ))}
-              {clips.map((clip) => {
-                const selected = selectedItemIdSet.has(clip.id)
-                const laneIndex = trackLaneIndexById.get(clip.trackId) ?? 0
-                const clipHeight = Math.max(8, Math.min(18, rowHeight - 4))
-                const clipTop = laneIndex * rowHeight + Math.max(1, (rowHeight - clipHeight) / 2)
-                return (
-                  <button
-                    key={clip.id}
-                    type="button"
-                    data-testid="animate-timeline-clip"
-                    data-clip-id={clip.id}
-                    className={`absolute overflow-hidden rounded-[2px] border text-left transition-colors ${
-                      selected
-                        ? 'border-orange-500 bg-orange-500/30 shadow-[0_0_0_1px_rgba(249,115,22,0.5)]'
-                        : 'border-sky-500/70 bg-sky-500/40 hover:border-sky-300'
-                    }`}
-                    style={{
-                      left: `${(clip.from / timelineMaxFrame) * 100}%`,
-                      width: `${Math.max(0.6, (clip.durationInFrames / timelineMaxFrame) * 100)}%`,
-                      minWidth: 14,
-                      top: clipTop,
-                      height: clipHeight,
-                    }}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      selectClip(clip)
-                    }}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    title={clip.label}
-                    aria-label={clip.label}
-                  />
-                )
-              })}
-            </div>
-          </div>
-
-          <AnimateStripPlayhead timelineMaxFrame={timelineMaxFrame} />
+          )}
         </div>
-      )}
+
+        <div
+          className="relative flex min-h-0 flex-1 cursor-ew-resize flex-col bg-[#1d1e23]"
+          data-testid="animate-timeline-scrub-surface"
+          {...scrubHandlers}
+        >
+          <div
+            className="relative shrink-0 border-b border-black/40 bg-[#202127]"
+            style={{ height: MINI_TIMELINE_IO_LANE_HEIGHT }}
+          >
+            <MiniTimelineIoLane
+              model={annotationModel}
+              timelineMaxFrame={timelineMaxFrame}
+              labelWidth={MINI_TIMELINE_LABEL_WIDTH}
+              suppressPlayheadPreviewRef={suppressPlayheadPreviewRef}
+              testIdPrefix={TEST_ID_PREFIX}
+            />
+          </div>
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <MiniTimelineAnnotations
+              model={annotationModel}
+              selectedMarkerId={selectedMarkerId}
+              onMarkerPress={seekToMarker}
+              labelWidth={MINI_TIMELINE_LABEL_WIDTH}
+              testIdPrefix={TEST_ID_PREFIX}
+            />
+            <MiniTimelineRuler
+              labelWidth={MINI_TIMELINE_LABEL_WIDTH}
+              maxFrame={timelineMaxFrame}
+              fps={fps}
+            />
+            <MiniTimelineTrackLanes
+              tracks={trackRows}
+              clips={miniClips}
+              selectedIds={selectedItemIdSet}
+              maxFrame={timelineMaxFrame}
+              trackAreaHeight={TRACK_AREA_HEIGHT}
+              labelWidth={MINI_TIMELINE_LABEL_WIDTH}
+              onSelectClip={selectClip}
+              fallbackLabelPrefix="T"
+              clipTestId="animate-timeline-clip"
+            />
+            <MiniTimelinePlayhead
+              labelWidth={MINI_TIMELINE_LABEL_WIDTH}
+              maxFrame={timelineMaxFrame}
+              handle="flag"
+              suppressPreviewRef={suppressPlayheadPreviewRef}
+              testId="animate-timeline-playhead"
+            />
+          </div>
+        </div>
+      </div>
     </section>
   )
 })
