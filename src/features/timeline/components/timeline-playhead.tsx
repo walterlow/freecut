@@ -14,6 +14,8 @@ import { PlayheadMarks } from '@/shared/ui/playhead-marks'
 interface TimelinePlayheadProps {
   inRuler?: boolean // If true, shows diamond indicator for ruler
   maxFrame?: number // Maximum frame the playhead can be dragged to (content duration)
+  // Drop the marks below the ruler's top IO lane so the flag doesn't share it.
+  topOffsetPx?: number
 }
 
 /**
@@ -25,7 +27,11 @@ interface TimelinePlayheadProps {
  * - Synchronized with playback store via manual subscription (no re-renders during playback)
  * - Draggable for scrubbing through timeline
  */
-export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayheadProps) {
+export function TimelinePlayhead({
+  inRuler = false,
+  maxFrame,
+  topOffsetPx = 0,
+}: TimelinePlayheadProps) {
   perfMarkRender('TimelinePlayhead')
   // Don't subscribe to currentFrame - use ref + manual subscription instead
   const setScrubFrame = usePlaybackStore((s) => s.setScrubFrame)
@@ -258,14 +264,14 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
       }}
     >
       {/* Shared line + (ruler-only) flag handle. */}
-      <PlayheadMarks handle={inRuler ? 'flag' : 'none'} />
+      <PlayheadMarks handle={inRuler ? 'flag' : 'none'} topOffsetPx={topOffsetPx} />
 
       {/* Invisible larger hit area over the flag — draggable to scrub. */}
       {inRuler && (
         <div
           className="absolute"
           style={{
-            top: '0px',
+            top: `${topOffsetPx}px`,
             left: '0px',
             width: '20px',
             height: '20px',

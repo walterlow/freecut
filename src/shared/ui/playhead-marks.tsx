@@ -19,6 +19,12 @@ interface PlayheadMarksProps {
   bleedBottom?: boolean
   /** Extra classes merged onto the vertical line (e.g. a z-index override). */
   className?: string
+  /**
+   * Drop the whole group (line + flag + pointer) down by this many pixels. Used
+   * by the Edit ruler so the flag sits in the tick lane below the IO bar's
+   * dedicated lane, rather than overlapping it.
+   */
+  topOffsetPx?: number
 }
 
 /**
@@ -38,21 +44,29 @@ export function PlayheadMarks({
   pointer = false,
   bleedBottom = false,
   className,
+  topOffsetPx = 0,
 }: PlayheadMarksProps) {
   return (
     <>
       <span
         className={cn(
-          'pointer-events-none absolute top-0 w-px -translate-x-1/2 bg-timeline-playhead shadow-[0_0_5px_rgba(255,140,58,0.65)]',
+          'pointer-events-none absolute w-px -translate-x-1/2 bg-timeline-playhead shadow-[0_0_5px_rgba(255,140,58,0.65)]',
           bleedBottom ? '-bottom-px' : 'bottom-0',
           className,
         )}
+        style={{ top: topOffsetPx }}
       />
       {handle === 'flag' && (
-        <span className="pointer-events-none absolute left-0 top-0 h-3 w-2 -translate-x-1/2 rounded-b-[2px] border border-timeline-playhead/60 bg-timeline-playhead shadow-[0_0_7px_rgba(255,140,58,0.55)]" />
+        <span
+          className="pointer-events-none absolute left-0 h-3 w-2 -translate-x-1/2 rounded-b-[2px] border border-timeline-playhead/60 bg-timeline-playhead shadow-[0_0_7px_rgba(255,140,58,0.55)]"
+          style={{ top: topOffsetPx }}
+        />
       )}
       {pointer && (
-        <span className="pointer-events-none absolute left-0 top-3 h-0 w-0 -translate-x-1/2 border-x-[4px] border-t-[5px] border-x-transparent border-t-timeline-playhead" />
+        <span
+          className="pointer-events-none absolute left-0 h-0 w-0 -translate-x-1/2 border-x-[4px] border-t-[5px] border-x-transparent border-t-timeline-playhead"
+          style={{ top: topOffsetPx + 12 }}
+        />
       )}
     </>
   )

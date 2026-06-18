@@ -42,9 +42,15 @@ const MAX_VISIBLE_MINOR_MARKERS = 72
 const MIN_MINOR_TICK_SPACING_PX = 14
 
 // Tick marks rise from the ruler's bottom edge. Majors are taller to read as the
-// primary division; both stay short so they don't compete with the playhead/clip grid.
-const MAJOR_TICK_HEIGHT = 14
-const MINOR_TICK_HEIGHT = 7
+// primary division; both stay short so they don't compete with the playhead/clip
+// grid (sized for the ~22px tick lane below the IO lane).
+const MAJOR_TICK_HEIGHT = 8
+const MINOR_TICK_HEIGHT = 4
+
+// The in/out (IO) bar gets its own lane at the top of the ruler; the tick ruler
+// occupies the remaining height below it (mirrors the Color workspace). Exported
+// so the ruler playhead can drop its flag below the lane.
+export const IO_LANE_HEIGHT = 12
 
 // Quantize pixelsPerSecond for cache keys to avoid redrawing on every minor zoom change
 // Uses logarithmic steps for perceptually uniform quantization across zoom range
@@ -454,7 +460,9 @@ export const TimelineMarkers = memo(function TimelineMarkers({
   // Calculate dimensions
   const timelineContentWidth = timeToPixels(duration)
   const displayWidth = width || Math.max(timelineContentWidth, viewportWidth)
-  const canvasHeight = editorLayout.timelineRulerHeight
+  // Ticks live in the lane below the IO bar, so the canvas is the ruler height
+  // minus the IO lane.
+  const canvasHeight = editorLayout.timelineRulerHeight - IO_LANE_HEIGHT
 
   // Quantize PPS for cache keys - allows cache reuse across similar zoom levels
   // This dramatically reduces redraws during continuous zoom
@@ -964,49 +972,42 @@ export const TimelineMarkers = memo(function TimelineMarkers({
         minWidth: width ? `${width}px` : undefined,
       }}
     >
-      {/* Tiled canvas container (tick lines only) */}
-      <div ref={tilesContainerRef} className="absolute inset-0" style={{ pointerEvents: 'none' }} />
+      {/* Tiled canvas container (tick lines only) — below the IO lane */}
+      <div
+        ref={tilesContainerRef}
+        className="absolute left-0 right-0 bottom-0"
+        style={{ top: IO_LANE_HEIGHT, pointerEvents: 'none' }}
+      />
 
       {/* Imperative label pool — managed by syncRulerScroll, zero React re-renders on scroll */}
       <div
         ref={labelsContainerRef}
-        className="absolute inset-0 overflow-hidden pointer-events-none"
-        style={{ contain: 'layout style paint' }}
+        className="absolute left-0 right-0 bottom-0 overflow-hidden pointer-events-none"
+        style={{ top: IO_LANE_HEIGHT, contain: 'layout style paint' }}
       />
 
-      {/* Full ruler highlight between in/out points */}
-      {safeInPoint !== null && safeOutPoint !== null && (
-        <div
-          className="absolute top-0 bottom-0 pointer-events-none"
-          style={{
-            left: `${timeToPixels(safeInPoint / fps)}px`,
-            width: `${Math.max(2, timeToPixels((safeOutPoint - safeInPoint) / fps))}px`,
-            backgroundColor: 'oklch(0.50 0.10 220 / 0.16)',
-            borderLeft:
-              '1px solid color-mix(in oklch, var(--color-timeline-io-range-border) 45%, transparent)',
-            borderRight:
-              '1px solid color-mix(in oklch, var(--color-timeline-io-range-border) 45%, transparent)',
-            zIndex: 9,
-          }}
-        />
-      )}
+      {/* IO lane backdrop + divider so the in/out bar reads as its own track
+          rather than floating over the ruler ticks. */}
+      <div
+        className="absolute left-0 right-0 top-0 border-b border-border/70 bg-black/25 pointer-events-none"
+        style={{ height: IO_LANE_HEIGHT, zIndex: 8 }}
+      />
 
-      {/* Draggable in/out strip */}
+      {/* Draggable in/out strip — its own lane at the top of the ruler */}
       {safeInPoint !== null && safeOutPoint !== null && (
         <div
           className="absolute cursor-move"
           onMouseDown={handleRangeMouseDown}
           style={{
             left: `${timeToPixels(safeInPoint / fps)}px`,
-            bottom: '0px',
-            height: '14px',
+            top: '0px',
+            height: `${IO_LANE_HEIGHT}px`,
             width: `${Math.max(2, timeToPixels((safeOutPoint - safeInPoint) / fps))}px`,
-            background:
-              'linear-gradient(to bottom, var(--color-timeline-io-range-fill), color-mix(in oklch, var(--color-timeline-io-range-fill) 82%, black))',
-            border: '1px solid var(--color-timeline-io-range-border)',
-            borderRadius: '2px',
-            boxShadow:
-              'inset 0 1px 0 color-mix(in oklch, white 22%, transparent), 0 0 8px var(--color-timeline-io-range-glow)',
+            // Match the Color workspace IO bar: flat solid muted gray, rounded,
+            // no glow (the blue accent lives on the handles).
+            background: 'color-mix(in oklch, var(--muted-foreground) 82%, black)',
+            border: '1px solid color-mix(in oklch, var(--muted-foreground) 70%, transparent)',
+            borderRadius: '5px',
             zIndex: 11,
             pointerEvents: 'auto',
           }}

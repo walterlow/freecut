@@ -3,6 +3,10 @@ import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context'
 import { formatTimecode } from '@/shared/utils/time-utils'
+import { IO_LANE_HEIGHT } from './timeline-markers'
+
+// Playhead flag tab height (matches PlayheadMarks' h-3).
+const FLAG_HEIGHT = 12
 
 interface TimelinePreviewScrubberProps {
   inRuler?: boolean
@@ -128,12 +132,13 @@ export function TimelinePreviewScrubber({
         zIndex: 20,
       }}
     >
-      {/* Ghost line. In the ruler it starts below the flag (12px) so it doesn't
-          show through the translucent tab; in the tracks it spans full height. */}
+      {/* Ghost line. In the ruler it starts below the flag (which sits in the
+          tick lane under the IO bar) so it doesn't show through the translucent
+          tab; in the tracks it spans full height. */}
       <div
         ref={lineRef}
         className="absolute bg-white/30"
-        style={{ top: inRuler ? '12px' : 0, right: 0, bottom: 0, left: 0 }}
+        style={{ top: inRuler ? IO_LANE_HEIGHT + FLAG_HEIGHT : 0, right: 0, bottom: 0, left: 0 }}
       />
 
       {/* Ruler area: flag handle + time tooltip */}
@@ -146,10 +151,10 @@ export function TimelinePreviewScrubber({
             ref={handleRef}
             className="absolute rounded-b-[2px] bg-white/40"
             style={{
-              top: '0px',
+              top: `${IO_LANE_HEIGHT}px`,
               left: '50%',
               width: '8px',
-              height: '12px',
+              height: `${FLAG_HEIGHT}px`,
               transform: 'translateX(-50%)',
             }}
           />

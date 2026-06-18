@@ -34,7 +34,7 @@ import {
 } from '../constants'
 
 // Components
-import { TimelineMarkers } from './timeline-markers'
+import { IO_LANE_HEIGHT, TimelineMarkers } from './timeline-markers'
 import { TimelinePlayhead } from './timeline-playhead'
 import { TimelinePreviewScrubber } from './timeline-preview-scrubber'
 import { TimelineTrack } from './timeline-track'
@@ -1833,7 +1833,7 @@ export const TimelineContent = memo(function TimelineContent({
         >
           <TimelineMarkers duration={actualDuration} width={timelineWidth} />
           <TimelinePreviewScrubber inRuler maxFrame={maxTimelineFrame} />
-          <TimelinePlayhead inRuler maxFrame={maxTimelineFrame} />
+          <TimelinePlayhead inRuler maxFrame={maxTimelineFrame} topOffsetPx={IO_LANE_HEIGHT} />
         </div>
 
         <TimelineTrackSectionsSurface
