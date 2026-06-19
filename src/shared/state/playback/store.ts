@@ -34,6 +34,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       previewItemId: null,
       useProxy: true,
       previewQuality: 1 as PreviewQuality,
+      compositionVisualFrozen: false,
 
       // Actions
       setCurrentFrame: (frame) =>
@@ -109,6 +110,10 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           if (state.previewQuality === nextQuality) return state
           return { previewQuality: nextQuality }
         }),
+      setCompositionVisualFrozen: (frozen) =>
+        set((state) =>
+          state.compositionVisualFrozen === frozen ? state : { compositionVisualFrozen: frozen },
+        ),
     }),
     {
       name: 'playback-storage',

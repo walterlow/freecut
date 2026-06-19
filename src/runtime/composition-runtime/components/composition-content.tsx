@@ -28,6 +28,7 @@ import {
 } from '@/runtime/composition-runtime/deps/keyframes'
 import { KeyframesProvider } from '../contexts/keyframes-context'
 import { useRuntimeItemKeyframes } from './hooks/use-runtime-item-keyframes'
+import { useVisualFreezeFrame } from './hooks/use-visual-freeze-frame'
 import {
   CompositionSpaceProvider,
   useCompositionSpace,
@@ -266,6 +267,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(
     const frame = sequenceContext?.localFrame ?? 0
     const relativeFrame =
       frame - ((item as TimelineItem & { _sequenceFrameOffset?: number })._sequenceFrameOffset ?? 0)
+    const visualFrame = useVisualFreezeFrame(relativeFrame)
     const sourceOffset = item.sourceStart ?? item.trimStart ?? 0
     const subCompFrame =
       sourceOffset +
@@ -278,7 +280,10 @@ export const CompositionContent = React.memo<CompositionContentProps>(
 
     // Only include relativeFrame as a dependency when keyframes are actually animated.
     // This prevents per-frame recomputation during playback for non-animated sub-comps.
-    const keyframeFrame = hasAnimatedKeyframes ? relativeFrame : 0
+    // During overlay playback the container transform is occluded by the GPU overlay,
+    // so freeze it at the pre-playback frame (subCompFrame above stays live so the
+    // nested tree keeps mounting/playing the right items for the overlay to sample).
+    const keyframeFrame = hasAnimatedKeyframes ? visualFrame : 0
 
     const containerDims = useMemo(() => {
       const canvas = { width: projectWidth, height: projectHeight, fps: mainFps }

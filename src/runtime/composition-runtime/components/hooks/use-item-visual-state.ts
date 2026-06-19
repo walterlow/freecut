@@ -13,6 +13,7 @@ import { getShapePath, rotatePath } from '../../utils/shape-path'
 import { hasCornerPin } from '../../utils/corner-pin'
 import { useCompositionSpace } from '../../contexts/composition-space-context'
 import { useRuntimeItemKeyframes } from './use-runtime-item-keyframes'
+import { useVisualFreezeFrame } from './use-visual-freeze-frame'
 import type { MaskInfo } from '../item'
 import type React from 'react'
 import {
@@ -109,6 +110,10 @@ export function useItemVisualState(
   // _sequenceFrameOffset = item.from - group.minFrom, so:
   // relativeFrame = frame - _sequenceFrameOffset = frame - (item.from - group.minFrom)
   const relativeFrame = frame - (item._sequenceFrameOffset ?? 0)
+  // During overlay playback the GPU overlay composites the visible frames, so
+  // freeze the (occluded) per-item visual derivation at the last frame before
+  // playback. Mount/visibility and video sync keep using the live frame.
+  const visualFrame = useVisualFreezeFrame(relativeFrame)
 
   // === GRANULAR SELECTORS ===
   // Using individual selectors to avoid creating new object references
@@ -152,12 +157,12 @@ export function useItemVisualState(
     const propertiesPreview = itemPreview?.properties
     const sourceDimensions = getSourceDimensions(item)
     const resolvedAnimatedCrop = sourceDimensions
-      ? resolveAnimatedCrop(item.crop, itemKeyframes ?? undefined, relativeFrame, sourceDimensions)
+      ? resolveAnimatedCrop(item.crop, itemKeyframes ?? undefined, visualFrame, sourceDimensions)
       : item.crop
 
     const animatedResolved = resolveItemTransformAtRelativeFrame(item, {
       canvas: logicalCanvas,
-      relativeFrame,
+      relativeFrame: visualFrame,
       keyframes: itemKeyframes,
     })
 
@@ -171,7 +176,7 @@ export function useItemVisualState(
 
     if (item.type === 'text' && !hasCornerPin(item.cornerPin)) {
       resolved = expandTextTransformToFitContent(
-        resolveAnimatedTextItem(item, itemKeyframes ?? undefined, relativeFrame, logicalCanvas),
+        resolveAnimatedTextItem(item, itemKeyframes ?? undefined, visualFrame, logicalCanvas),
         resolved,
         propertiesPreview,
       )
@@ -196,7 +201,7 @@ export function useItemVisualState(
           const midPoint = item.durationInFrames / 2
           const peakOpacity = Math.min(1, midPoint / Math.max(fadeInFrames, 1))
           computedFadeOpacity = interpolate(
-            relativeFrame,
+            visualFrame,
             [0, midPoint, item.durationInFrames],
             [0, peakOpacity, 0],
             { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
@@ -204,20 +209,20 @@ export function useItemVisualState(
         } else {
           // Normal case - distinct fade in/out regions
           computedFadeOpacity = interpolate(
-            relativeFrame,
+            visualFrame,
             [0, fadeInFrames, fadeOutStart, item.durationInFrames],
             [0, 1, 1, 0],
             { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
           )
         }
       } else if (hasFadeIn) {
-        computedFadeOpacity = interpolate(relativeFrame, [0, fadeInFrames], [0, 1], {
+        computedFadeOpacity = interpolate(visualFrame, [0, fadeInFrames], [0, 1], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
         })
       } else {
         computedFadeOpacity = interpolate(
-          relativeFrame,
+          visualFrame,
           [fadeOutStart, item.durationInFrames],
           [1, 0],
           { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
@@ -262,7 +267,7 @@ export function useItemVisualState(
     logicalCanvas,
     renderCanvas,
     itemKeyframes,
-    relativeFrame,
+    visualFrame,
     fps,
     scaleX,
     scaleY,

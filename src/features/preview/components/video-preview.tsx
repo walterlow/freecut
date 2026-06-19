@@ -433,6 +433,19 @@ const VideoPreviewBase = memo(function VideoPreviewBase({
     ])
 
   const forceFastScrubOverlay = showGpuEffectsOverlay
+
+  // While the GPU overlay owns the preview during playback, the DOM composition
+  // tree is occluded — freeze its per-item visual recomputation so it stops
+  // re-deriving transforms/masks/text on every frame behind the overlay. The
+  // overlay composites the real frames; mount/visibility and video sync stay live.
+  useEffect(() => {
+    const frozen = forceFastScrubOverlay && isPlaying
+    usePlaybackStore.getState().setCompositionVisualFrozen(frozen)
+    return () => {
+      usePlaybackStore.getState().setCompositionVisualFrozen(false)
+    }
+  }, [forceFastScrubOverlay, isPlaying])
+
   const {
     clearTransitionPlaybackSession,
     pinTransitionPlaybackSession,
