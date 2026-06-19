@@ -1,6 +1,7 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Blend, Info } from 'lucide-react'
+import { TransitionPreview } from './transition-preview/transition-preview'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
 import { resolveTransitionTargetFromSelection } from '@/features/editor/deps/timeline-utils'
@@ -11,6 +12,7 @@ import type {
   PresentationConfig,
 } from '@/types/transition'
 import { cn } from '@/shared/ui/cn'
+import { transitionRegistry } from '@/shared/timeline/transitions'
 import { TRANSITION_DRAG_MIME, useTransitionDragStore } from '@/shared/state/transition-drag'
 import {
   TRANSITION_ICON_MAP,
@@ -42,6 +44,10 @@ const TransitionCard = memo(function TransitionCard({
   onDragEnd,
 }: TransitionCardProps) {
   const Icon = TRANSITION_ICON_MAP[config.icon] ?? Blend
+  // Animated A/B preview when the renderer exposes a Canvas 2D path; static icon otherwise.
+  const showPreview = !!transitionRegistry.getRenderer(config.id)?.renderCanvas
+  const previewDirection = config.direction ?? config.defaultDirection
+  const [hovered, setHovered] = useState(false)
 
   const handleClick = useCallback(() => {
     if (clickDisabled) return
@@ -55,18 +61,28 @@ const TransitionCard = memo(function TransitionCard({
       draggable={true}
       onDragStart={(event) => onDragStart(event, configIndex)}
       onDragEnd={onDragEnd}
+      onPointerEnter={showPreview ? () => setHovered(true) : undefined}
+      onPointerLeave={showPreview ? () => setHovered(false) : undefined}
       aria-disabled={clickDisabled}
       className={cn(
         'flex flex-col items-center justify-center gap-1 p-2 rounded-lg',
         'border border-border bg-secondary/30',
         'hover:bg-secondary/50 hover:border-primary/50',
         'transition-colors group text-center cursor-grab active:cursor-grabbing',
-        'min-w-[60px] h-[56px]',
+        showPreview ? 'min-w-[60px] h-[72px]' : 'min-w-[60px] h-[56px]',
         clickDisabled && 'focus-visible:outline-muted-foreground/40',
       )}
       title={config.description}
     >
-      <Icon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+      {showPreview ? (
+        <TransitionPreview
+          presentationId={config.id}
+          direction={previewDirection}
+          active={hovered}
+        />
+      ) : (
+        <Icon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+      )}
       <span className="text-[10px] text-muted-foreground group-hover:text-foreground truncate w-full">
         {config.label}
       </span>
