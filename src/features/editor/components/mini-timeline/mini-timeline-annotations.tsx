@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type {
   TimelineAnnotationMarker,
   TimelineAnnotationModel,
@@ -23,6 +24,7 @@ export const MiniTimelineAnnotations = memo(function MiniTimelineAnnotations({
   labelWidth: number
   testIdPrefix: string
 }) {
+  const { t } = useTranslation()
   return (
     <div
       className="pointer-events-none absolute bottom-0 right-0 top-0"
@@ -39,8 +41,10 @@ export const MiniTimelineAnnotations = memo(function MiniTimelineAnnotations({
             data-testid={`${testIdPrefix}-marker`}
             data-marker-id={marker.id}
             style={{ left: `${marker.positionRatio * 100}%` }}
-            title={marker.label || `Marker at frame ${marker.frame}`}
-            aria-label={marker.label || `Marker at frame ${marker.frame}`}
+            title={marker.label || t('editor.miniTimeline.markerAtFrame', { frame: marker.frame })}
+            aria-label={
+              marker.label || t('editor.miniTimeline.markerAtFrame', { frame: marker.frame })
+            }
             onPointerDown={(event) => {
               event.stopPropagation()
               if (event.button !== 0) return
@@ -48,6 +52,9 @@ export const MiniTimelineAnnotations = memo(function MiniTimelineAnnotations({
             }}
             onClick={(event) => {
               event.stopPropagation()
+              // Mouse clicks are already handled by onPointerDown; only act on
+              // keyboard activation (Enter/Space), which has detail === 0.
+              if (event.detail !== 0) return
               onMarkerPress(marker)
             }}
           >

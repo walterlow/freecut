@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, type PointerEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   setInOutPointsWithoutHistory,
   useTimelineSettingsStore,
@@ -42,6 +43,7 @@ export const MiniTimelineIoLane = memo(function MiniTimelineIoLane({
   suppressPlayheadPreviewRef: { current: boolean }
   testIdPrefix: string
 }) {
+  const { t } = useTranslation()
   const ioRangeStyle = ioRangeStyleFor(model)
   const setInPoint = useTimelineStore((s) => s.setInPoint)
   const setOutPoint = useTimelineStore((s) => s.setOutPoint)
@@ -162,7 +164,7 @@ export const MiniTimelineIoLane = memo(function MiniTimelineIoLane({
         key={side}
         className="absolute top-0 z-[2] w-0"
         style={{ left: `${point.positionRatio * 100}%` }}
-        title={side === 'in' ? 'In point' : 'Out point'}
+        title={side === 'in' ? t('editor.miniTimeline.inPoint') : t('editor.miniTimeline.outPoint')}
       >
         <span
           className="absolute pointer-events-none"

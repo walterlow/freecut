@@ -1,5 +1,10 @@
 {
   "editor": {
+    "miniTimeline": {
+      "inPoint": "Giriş noktası",
+      "outPoint": "Çıkış noktası",
+      "markerAtFrame": "{{frame}} karesindeki işaretçi"
+    },
     "animateTimeline": {
       "label": "Animasyon zaman çizelgesi",
       "noClip": "Animasyon için klip yok"

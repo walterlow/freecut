@@ -35,11 +35,9 @@ import { getEmptyTrackIdsForRemoval } from '../utils/track-removal'
 import { createLogger } from '@/shared/logging/logger'
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/config/editor-layout'
 import { useTrackHeightResize } from '../hooks/use-track-height-resize'
-import { resizeAllTracksInList, resizeTracksOfKindByDelta } from '../utils/track-resize'
-import { captureSnapshot } from '../stores/commands/snapshot'
-import { useTimelineCommandStore } from '../stores/timeline-command-store'
+import { resizeTracksOfKindByDelta } from '../utils/track-resize'
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
-import { usePlaybackStore } from '@/shared/state/playback'
+import { resizeAllTracks } from '../stores/actions/track-actions'
 import { useZoomStore } from '../stores/zoom-store'
 import {
   computeWheelZoomStep,
@@ -680,22 +678,7 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
   const handleSelectTrackSize = useCallback(
     (preset: (typeof TRACK_SIZE_OPTIONS)[number]) => {
       setTrackSizePreset(preset.id)
-
-      const currentTracks = useItemsStore.getState().tracks
-      const nextTracks = resizeAllTracksInList(currentTracks, preset.height)
-      if (nextTracks === currentTracks) return
-
-      const beforeSnapshot = captureSnapshot()
-      usePlaybackStore.getState().setPreviewFrame(null)
-      useItemsStore.getState().setTracks(nextTracks)
-
-      useTimelineCommandStore
-        .getState()
-        .addUndoEntry(
-          { type: 'RESIZE_ALL_TRACKS', payload: { count: nextTracks.length } },
-          beforeSnapshot,
-        )
-      useTimelineSettingsStore.getState().markDirty()
+      resizeAllTracks(preset.height)
     },
     [setTrackSizePreset],
   )

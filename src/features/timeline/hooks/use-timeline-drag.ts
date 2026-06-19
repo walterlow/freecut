@@ -675,7 +675,14 @@ export function useTimelineDrag(
         linkedIds,
         linkedSelectionEnabled,
       )
-      if (isInSelection && baseItemsToDrag.length !== currentSelectedIds.length) {
+      // Compare cohort *contents*, not just lengths: a same-size but
+      // differently-composed drag cohort (e.g. linked items swapped in) must
+      // still re-sync the selection.
+      const selectedIdSet = new Set(currentSelectedIds)
+      const cohortMatchesSelection =
+        baseItemsToDrag.length === selectedIdSet.size &&
+        baseItemsToDrag.every((id) => selectedIdSet.has(id))
+      if (isInSelection && !cohortMatchesSelection) {
         selectItems(baseItemsToDrag)
       }
 

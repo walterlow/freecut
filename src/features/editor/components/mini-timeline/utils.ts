@@ -40,8 +40,13 @@ export function formatMiniTimelineTimecode(frame: number, fps: number): string {
   return [hours, minutes, seconds, frames].map((part) => String(part).padStart(2, '0')).join(':')
 }
 
-/** Frame the playhead should sit at right now (preview wins over committed). */
-export function getMiniTimelineDisplayFrame(): number {
+/**
+ * Frame the playhead should sit at right now. Preview wins over committed,
+ * unless `suppressPreview` is set (e.g. during an IO drag) — then the playhead
+ * stays pinned to the committed frame while the preview canvas keeps updating.
+ */
+export function getMiniTimelineDisplayFrame(suppressPreview = false): number {
   const playbackState = usePlaybackStore.getState()
+  if (suppressPreview) return playbackState.currentFrame
   return playbackState.previewFrame ?? playbackState.currentFrame
 }

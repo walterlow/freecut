@@ -47,7 +47,10 @@ export const MiniFilmTile = memo(function MiniFilmTile({
           : 'border-zinc-700 hover:border-zinc-500'
       }`}
       style={{ width: MINI_FILM_TILE_WIDTH, height: MINI_FILM_TILE_HEIGHT }}
-      onClick={() => {
+      onClick={(event) => {
+        // Mouse clicks are already handled by onPointerDown; only act on
+        // keyboard activation (Enter/Space), which fires click with detail === 0.
+        if (event.detail !== 0) return
         onSelect()
       }}
       onPointerDown={(event) => {

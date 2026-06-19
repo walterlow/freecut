@@ -49,7 +49,7 @@ export const MiniTimelinePlayhead = memo(function MiniTimelinePlayhead({
   )
 
   useEffect(() => {
-    updatePosition(getMiniTimelineDisplayFrame())
+    updatePosition(getMiniTimelineDisplayFrame(suppressPreviewRef?.current === true))
 
     const unsubscribe = usePlaybackStore.subscribe((state) => {
       const frame = suppressPreviewRef?.current
@@ -64,7 +64,7 @@ export const MiniTimelinePlayhead = memo(function MiniTimelinePlayhead({
     const resizeObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width
       if (width !== undefined) containerWidthRef.current = width
-      updatePosition(getMiniTimelineDisplayFrame())
+      updatePosition(getMiniTimelineDisplayFrame(suppressPreviewRef?.current === true))
     })
     resizeObserver.observe(container)
 
@@ -75,8 +75,8 @@ export const MiniTimelinePlayhead = memo(function MiniTimelinePlayhead({
   }, [updatePosition, suppressPreviewRef])
 
   useLayoutEffect(() => {
-    updatePosition(getMiniTimelineDisplayFrame())
-  }, [labelWidth, maxFrame, updatePosition])
+    updatePosition(getMiniTimelineDisplayFrame(suppressPreviewRef?.current === true))
+  }, [labelWidth, maxFrame, updatePosition, suppressPreviewRef])
 
   return (
     <div

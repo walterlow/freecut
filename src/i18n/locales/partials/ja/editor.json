@@ -1,5 +1,10 @@
 {
   "editor": {
+    "miniTimeline": {
+      "inPoint": "イン点",
+      "outPoint": "アウト点",
+      "markerAtFrame": "フレーム {{frame}} のマーカー"
+    },
     "animateTimeline": {
       "label": "アニメーションタイムライン",
       "noClip": "アニメーション対象のクリップがありません"

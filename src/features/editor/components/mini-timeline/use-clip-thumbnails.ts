@@ -38,10 +38,15 @@ export function useMediaPosterUrls(mediaIds: readonly string[]): Map<string, str
     let cancelled = false
     void importMediaLibraryService().then(async ({ mediaLibraryService }) => {
       if (cancelled) return
-      const entries = await Promise.all(
+      // allSettled (not all): one failed thumbnail must not drop the whole
+      // batch of successfully-resolved posters.
+      const settled = await Promise.allSettled(
         missing.map(async (id) => [id, await mediaLibraryService.getThumbnailBlobUrl(id)] as const),
       )
       if (cancelled) return
+      const entries = settled.flatMap((result) =>
+        result.status === 'fulfilled' ? [result.value] : [],
+      )
       setPosterUrls((prev) => {
         let changed = false
         const next = new Map(prev)
