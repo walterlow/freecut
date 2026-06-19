@@ -1183,11 +1183,7 @@ export function usePreviewRendererController({
       await renderer.renderFrame(targetFrame)
 
       let snapshot = captureLiveScopeSnapshotCanvasRef.current
-      if (
-        !snapshot ||
-        snapshot.width !== offscreen.width ||
-        snapshot.height !== offscreen.height
-      ) {
+      if (!snapshot || snapshot.width !== offscreen.width || snapshot.height !== offscreen.height) {
         snapshot = new OffscreenCanvas(offscreen.width, offscreen.height)
         captureLiveScopeSnapshotCanvasRef.current = snapshot
       }
@@ -1372,107 +1368,108 @@ export function usePreviewRendererController({
 
   const captureSnapshotCanvasRef = useRef<OffscreenCanvas | null>(null)
 
-  const captureCanvasSource = useCallback(async (options?: CaptureOptions): Promise<
-    OffscreenCanvas | HTMLCanvasElement | null
-  > => {
-    if (captureCanvasSourceInFlightRef.current) {
-      if (options?.fresh) {
-        await captureCanvasSourceInFlightRef.current.catch(() => null)
-      } else {
+  const captureCanvasSource = useCallback(
+    async (options?: CaptureOptions): Promise<OffscreenCanvas | HTMLCanvasElement | null> => {
+      if (captureCanvasSourceInFlightRef.current) {
+        if (options?.fresh) {
+          await captureCanvasSourceInFlightRef.current.catch(() => null)
+        } else {
+          return captureCanvasSourceInFlightRef.current
+        }
+      }
+
+      if (captureCanvasSourceInFlightRef.current) {
         return captureCanvasSourceInFlightRef.current
       }
-    }
 
-    if (captureCanvasSourceInFlightRef.current) {
-      return captureCanvasSourceInFlightRef.current
-    }
+      const task = (async () => {
+        try {
+          const liveScopeSnapshot = await captureLiveScopeRenderedSnapshot(options)
+          if (liveScopeSnapshot) return liveScopeSnapshot
+          const displaySnapshot = captureRenderedDisplaySnapshot(options)
+          if (displaySnapshot) return displaySnapshot
 
-    const task = (async () => {
-      try {
-        const liveScopeSnapshot = await captureLiveScopeRenderedSnapshot(options)
-        if (liveScopeSnapshot) return liveScopeSnapshot
-        const displaySnapshot = captureRenderedDisplaySnapshot(options)
-        if (displaySnapshot) return displaySnapshot
+          const targetFrame = resolveCaptureTargetFrame(options)
+          const useLiveDomProvider =
+            !options?.preferRenderedFrame || usePlaybackStore.getState().isPlaying
+          const isPlayingForCapture = useLiveDomProvider && usePlaybackStore.getState().isPlaying
 
-        const targetFrame = resolveCaptureTargetFrame(options)
-        const useLiveDomProvider =
-          !options?.preferRenderedFrame || usePlaybackStore.getState().isPlaying
-        const isPlayingForCapture = useLiveDomProvider && usePlaybackStore.getState().isPlaying
-
-        if (
-          scrubOffscreenRenderedFrameRef.current !== targetFrame ||
-          !scrubOffscreenCanvasRef.current
-        ) {
-          const renderer = await ensureFastScrubRenderer()
-          if (!renderer || !scrubOffscreenCanvasRef.current) return null
-        }
-
-        // Render (if stale) and snapshot inside one lock session: consumers
-        // like the scopes upload the returned canvas after further awaits,
-        // by which time the pump may be redrawing the shared offscreen.
-        // Handing out a private copy makes the sample immune to that.
-        return await withScrubRenderLock(async () => {
-          const offscreen = scrubOffscreenCanvasRef.current
-          if (!offscreen) return null
-          const renderer = scrubRendererRef.current
-          if (!renderer) return null
-          // During playback the on-screen graded frame is produced by the GPU
-          // effect fast path (`applyEffectsToVideo`), which reads the Player's
-          // live <video> elements via the DOM video provider. The pump installs
-          // that provider for its own renders; captures don't go through the
-          // pump, so without it the fast path bails (`no-dom-provider`) and the
-          // capture falls back to a decode that can't track playback — freezing
-          // scopes on effect clips while non-effect clips (which draw the DOM
-          // video directly) keep updating. Mirror the pump: provide the live
-          // elements while playing, clear when paused so seeked frames render
-          // from decode as before. Force a fresh render while playing since the
-          // live video advances even when the frame number momentarily repeats.
-          if ('setDomVideoElementProvider' in renderer) {
-            renderer.setDomVideoElementProvider?.(
-              isPlayingForCapture ? getBestDomVideoElementForItem : undefined,
-            )
-          }
-          if (scrubOffscreenRenderedFrameRef.current !== targetFrame || isPlayingForCapture) {
-            await renderer.renderFrame(targetFrame)
-            scrubOffscreenRenderedFrameRef.current = targetFrame
-          }
-
-          let snapshot = captureSnapshotCanvasRef.current
           if (
-            !snapshot ||
-            snapshot.width !== offscreen.width ||
-            snapshot.height !== offscreen.height
+            scrubOffscreenRenderedFrameRef.current !== targetFrame ||
+            !scrubOffscreenCanvasRef.current
           ) {
-            snapshot = new OffscreenCanvas(offscreen.width, offscreen.height)
-            captureSnapshotCanvasRef.current = snapshot
+            const renderer = await ensureFastScrubRenderer()
+            if (!renderer || !scrubOffscreenCanvasRef.current) return null
           }
-          const snapshotCtx = snapshot.getContext('2d')
-          if (!snapshotCtx) return null
-          snapshotCtx.clearRect(0, 0, snapshot.width, snapshot.height)
-          snapshotCtx.drawImage(offscreen, 0, 0)
-          return snapshot
-        })
-      } catch (error) {
-        logger.warn('Failed to capture canvas source:', error)
-        return null
-      } finally {
-        captureCanvasSourceInFlightRef.current = null
-      }
-    })()
 
-    captureCanvasSourceInFlightRef.current = task
-    return task
-  }, [
-    captureCanvasSourceInFlightRef,
-    captureLiveScopeRenderedSnapshot,
-    captureRenderedDisplaySnapshot,
-    ensureFastScrubRenderer,
-    resolveCaptureTargetFrame,
-    scrubOffscreenCanvasRef,
-    scrubOffscreenRenderedFrameRef,
-    scrubRendererRef,
-    withScrubRenderLock,
-  ])
+          // Render (if stale) and snapshot inside one lock session: consumers
+          // like the scopes upload the returned canvas after further awaits,
+          // by which time the pump may be redrawing the shared offscreen.
+          // Handing out a private copy makes the sample immune to that.
+          return await withScrubRenderLock(async () => {
+            const offscreen = scrubOffscreenCanvasRef.current
+            if (!offscreen) return null
+            const renderer = scrubRendererRef.current
+            if (!renderer) return null
+            // During playback the on-screen graded frame is produced by the GPU
+            // effect fast path (`applyEffectsToVideo`), which reads the Player's
+            // live <video> elements via the DOM video provider. The pump installs
+            // that provider for its own renders; captures don't go through the
+            // pump, so without it the fast path bails (`no-dom-provider`) and the
+            // capture falls back to a decode that can't track playback — freezing
+            // scopes on effect clips while non-effect clips (which draw the DOM
+            // video directly) keep updating. Mirror the pump: provide the live
+            // elements while playing, clear when paused so seeked frames render
+            // from decode as before. Force a fresh render while playing since the
+            // live video advances even when the frame number momentarily repeats.
+            if ('setDomVideoElementProvider' in renderer) {
+              renderer.setDomVideoElementProvider?.(
+                isPlayingForCapture ? getBestDomVideoElementForItem : undefined,
+              )
+            }
+            if (scrubOffscreenRenderedFrameRef.current !== targetFrame || isPlayingForCapture) {
+              await renderer.renderFrame(targetFrame)
+              scrubOffscreenRenderedFrameRef.current = targetFrame
+            }
+
+            let snapshot = captureSnapshotCanvasRef.current
+            if (
+              !snapshot ||
+              snapshot.width !== offscreen.width ||
+              snapshot.height !== offscreen.height
+            ) {
+              snapshot = new OffscreenCanvas(offscreen.width, offscreen.height)
+              captureSnapshotCanvasRef.current = snapshot
+            }
+            const snapshotCtx = snapshot.getContext('2d')
+            if (!snapshotCtx) return null
+            snapshotCtx.clearRect(0, 0, snapshot.width, snapshot.height)
+            snapshotCtx.drawImage(offscreen, 0, 0)
+            return snapshot
+          })
+        } catch (error) {
+          logger.warn('Failed to capture canvas source:', error)
+          return null
+        } finally {
+          captureCanvasSourceInFlightRef.current = null
+        }
+      })()
+
+      captureCanvasSourceInFlightRef.current = task
+      return task
+    },
+    [
+      captureCanvasSourceInFlightRef,
+      captureLiveScopeRenderedSnapshot,
+      captureRenderedDisplaySnapshot,
+      ensureFastScrubRenderer,
+      resolveCaptureTargetFrame,
+      scrubOffscreenCanvasRef,
+      scrubOffscreenRenderedFrameRef,
+      scrubRendererRef,
+      withScrubRenderLock,
+    ],
+  )
 
   usePreviewCaptureBridge({
     captureCurrentFrame,

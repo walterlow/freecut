@@ -303,11 +303,7 @@ describe('MediaLibraryService', () => {
       expect(result.fileHandle).toBeUndefined()
       expect(result.fileName).toBe('video.mp4')
       expect(opfsMocks.saveFile).toHaveBeenCalledTimes(1)
-      expect(indexedDbMocks.writeMediaSource).toHaveBeenCalledWith(
-        result.id,
-        mockFile,
-        'video.mp4',
-      )
+      expect(indexedDbMocks.writeMediaSource).toHaveBeenCalledWith(result.id, mockFile, 'video.mp4')
       expect(indexedDbMocks.createMedia).toHaveBeenCalledWith(
         expect.objectContaining({
           id: result.id,

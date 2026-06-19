@@ -12,8 +12,11 @@
       "templateVideoOnly": "Las plantillas solo se pueden soltar en pistas de vídeo.",
       "noSupportedMediaInDrop": "No se encontraron medios compatibles en este arrastre."
     },
-    "addAudioTrackHint": "Agregar Audio Pista Ayuda",
-    "addVideoTrackHint": "Agregar Video Pista Ayuda",
+    "addTrack": {
+      "label": "Agregar pista",
+      "video": "Agregar pista de video",
+      "audio": "Agregar pista de audio"
+    },
     "bento": {
       "apply": "Aplicar",
       "description": "Organiza {{count}} clips seleccionados en una cuadrícula.",
@@ -268,7 +271,8 @@
     "trackHeader": {
       "addAudioTrack": "Agregar Audio Pista",
       "addVideoTrack": "Agregar Video Pista",
-      "clipCount": "clip Count",
+      "clipCount_one": "{{count}} clip",
+      "clipCount_other": "{{count}} clips",
       "closeAllGaps": "Cerrar todo espacios",
       "deleteEmptyTracks": "Eliminar vacias pistas",
       "deleteTrack": "Eliminar Pista",
@@ -285,7 +289,12 @@
       "resizeSections": "redimensionar Video and Audio Pista secciones",
       "resizeTrackHeight": "redimensionar Pista altura"
     },
-    "tracks": "pistas",
+    "trackSize": {
+      "label": "Tamaño de pista",
+      "compact": "Compacto",
+      "medium": "Mediano",
+      "large": "Grande"
+    },
     "volumeControl": {
       "adjustClipVolume": "Ajustar clip volumen"
     },

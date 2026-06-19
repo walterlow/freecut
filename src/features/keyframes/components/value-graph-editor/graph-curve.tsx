@@ -381,18 +381,19 @@ export const GraphPlayhead = memo(function GraphPlayhead({
       )}
       {visuals === 'visible' && (
         <>
-          {/* Red playhead line — matches the dopesheet body line; the flag
-              handle is rendered once in the shared ruler. */}
+          {/* Playhead line — orange, matching the dopesheet body line and the
+              main timeline playhead; the flag handle is rendered once in the
+              shared ruler. */}
           <line
             x1={0}
-            y1={graphTop}
+            y1={0}
             x2={0}
             y2={graphTop + graphHeight}
-            stroke="#ef4444"
+            stroke="var(--color-timeline-playhead)"
             strokeWidth={1}
             onPointerDown={isInteractive ? handlePointerDown : undefined}
             style={{
-              filter: 'drop-shadow(0 0 5px rgba(239, 68, 68, 0.65))',
+              filter: 'drop-shadow(0 0 5px rgba(255, 140, 58, 0.65))',
               cursor: isInteractive ? 'ew-resize' : 'default',
             }}
           />

@@ -3,8 +3,10 @@ import { useCallback, useMemo, useRef, useEffect, memo, forwardRef } from 'react
 import { useTimelineStore } from '../stores/timeline-store'
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context'
 import { usePlaybackStore } from '@/shared/state/playback'
+import { previewScrubberSuppressRef } from './preview-scrubber-suppress'
 
-const IO_LANE_HEIGHT = 14
+// Matches the ruler's top IO lane height in timeline-markers.tsx.
+const IO_LANE_HEIGHT = 12
 const IO_HIT_AREA_HEIGHT = IO_LANE_HEIGHT + 6
 const IO_HANDLE_WIDTH = 6
 const IO_HANDLE_COLOR = 'var(--color-timeline-io-handle)'
@@ -45,6 +47,9 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
       const setter = handle === 'in' ? setInPointRef : setOutPointRef
       const prevCursor = document.body.style.cursor
       document.body.style.cursor = 'col-resize'
+      // Keep the preview canvas refreshing but pin the ghost skimmer so it
+      // doesn't chase the marker (matches the Color workspace IO drag).
+      previewScrubberSuppressRef.current = true
 
       const onMove = (ev: MouseEvent) => {
         const rect = container.getBoundingClientRect()
@@ -61,6 +66,7 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
         document.removeEventListener('mousemove', onMove)
         document.removeEventListener('mouseup', cleanup)
         document.body.style.cursor = prevCursor
+        previewScrubberSuppressRef.current = false
         usePlaybackStore.getState().setPreviewFrame(null)
         dragCleanupRef.current = null
       }
@@ -127,17 +133,19 @@ const IOMarker = memo(
           zIndex: 22,
         }}
       >
-        {/* Side grip handle */}
+        {/* Side grip handle in the top IO lane — matches the Color workspace
+            handle: brighter blue, rounded outer corners, top highlight + inset
+            sheen, minimal glow. */}
         <div
           className="absolute pointer-events-none"
           style={{
-            bottom: 0,
+            top: 0,
             left: side === 'in' ? 0 : -IO_HANDLE_WIDTH,
             width: IO_HANDLE_WIDTH,
             height: IO_LANE_HEIGHT,
-            borderRadius: '2px',
-            background: `linear-gradient(to bottom, ${IO_HANDLE_COLOR}, color-mix(in oklch, ${IO_HANDLE_COLOR} 75%, black))`,
-            boxShadow: `0 0 6px color-mix(in oklch, ${IO_HANDLE_COLOR} 55%, transparent)`,
+            borderRadius: side === 'in' ? '5px 1px 1px 5px' : '1px 5px 5px 1px',
+            background: `linear-gradient(to bottom, color-mix(in oklch, ${IO_HANDLE_COLOR} 92%, white), color-mix(in oklch, ${IO_HANDLE_COLOR} 78%, black))`,
+            boxShadow: `inset 0 1px 0 color-mix(in oklch, white 35%, transparent), 0 0 2px color-mix(in oklch, ${IO_HANDLE_COLOR} 45%, transparent)`,
           }}
         />
 
@@ -145,7 +153,7 @@ const IOMarker = memo(
         <div
           className="absolute pointer-events-auto"
           style={{
-            bottom: 0,
+            top: 0,
             height: IO_HIT_AREA_HEIGHT,
             left: -8,
             width: 18,

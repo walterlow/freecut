@@ -24,6 +24,9 @@ import { CAPTION_STYLE_PRESETS } from '@/shared/typography/caption-style-presets
 interface AppSettings {
   // Timeline defaults
   snapEnabled: boolean
+  // Vertical position (px) of the A/V section divider. Null = centered default.
+  // A viewport layout preference, persisted globally (not per project).
+  timelineSectionDividerPosition: number | null
   // Canvas/gizmo snap (preview area) — independent from timeline frame snap
   canvasSnapEnabled: boolean
   showWaveforms: boolean
@@ -135,6 +138,7 @@ function areHotkeyOverridesEqual(left: HotkeyOverrideMap, right: HotkeyOverrideM
 const DEFAULT_SETTINGS: AppSettings = {
   // Timeline defaults
   snapEnabled: true,
+  timelineSectionDividerPosition: null,
   canvasSnapEnabled: true,
   showWaveforms: true,
   showFilmstrips: true,

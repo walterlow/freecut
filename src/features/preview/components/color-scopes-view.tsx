@@ -460,8 +460,7 @@ export const ColorScopesView = memo(function ColorScopesView({
   const captureFrameImageData = usePreviewBridgeStore((s) => s.captureFrameImageData)
   const captureFrame = usePreviewBridgeStore((s) => s.captureFrame)
   const isEmbeddedStackLayout = embedded && embeddedLayout === 'stack'
-  const stackShows = (scope: StackScopeView) =>
-    !isEmbeddedStackLayout || stackView === scope
+  const stackShows = (scope: StackScopeView) => !isEmbeddedStackLayout || stackView === scope
   const showWaveform = stackShows('waveform')
   const showParade = embedded && stackShows('parade')
   const showVectorscope = stackShows('vectorscope')
@@ -505,12 +504,7 @@ export const ColorScopesView = memo(function ColorScopesView({
   // triggers: switching the stack scope picker unmounts/remounts sections,
   // and the effect must re-observe the fresh container element.
   useGpuCanvasResize(waveformCanvasRef, waveformContainerRef, undefined, showWaveform)
-  useGpuCanvasResize(
-    paradeCanvasRef,
-    paradeContainerRef,
-    PARADE_SCOPE_ASPECT_RATIO,
-    showParade,
-  )
+  useGpuCanvasResize(paradeCanvasRef, paradeContainerRef, PARADE_SCOPE_ASPECT_RATIO, showParade)
   useGpuCanvasResize(histogramCanvasRef, histogramContainerRef, undefined, showHistogram)
   useGpuCanvasResize(vectorscopeCanvasRef, vectorscopeContainerRef, 1, showVectorscope)
 
@@ -595,10 +589,7 @@ export const ColorScopesView = memo(function ColorScopesView({
       if (cancelled) return
       // Self-heal a stuck in-flight render so a single hung capture can't
       // freeze the scopes for the rest of the session.
-      if (
-        gpuRenderInFlightRef.current &&
-        time - inFlightSince >= GPU_RENDER_STUCK_TIMEOUT_MS
-      ) {
+      if (gpuRenderInFlightRef.current && time - inFlightSince >= GPU_RENDER_STUCK_TIMEOUT_MS) {
         gpuRenderInFlightRef.current = false
       }
       if (time - lastTime >= GPU_INTERVAL && !gpuRenderInFlightRef.current) {

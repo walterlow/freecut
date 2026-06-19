@@ -61,12 +61,20 @@ describe('grade presets', () => {
       {
         id: 'grade-1',
         enabled: true,
-        effect: { type: 'gpu-effect', gpuEffectType: 'gpu-color-wheels', params: { exposure: -0.25 } },
+        effect: {
+          type: 'gpu-effect',
+          gpuEffectType: 'gpu-color-wheels',
+          params: { exposure: -0.25 },
+        },
       },
       {
         id: 'grade-2',
         enabled: true,
-        effect: { type: 'gpu-effect', gpuEffectType: 'gpu-curves', params: { master: '[[0,0],[1,1]]' } },
+        effect: {
+          type: 'gpu-effect',
+          gpuEffectType: 'gpu-curves',
+          params: { master: '[[0,0],[1,1]]' },
+        },
       },
     ])
     expect(nextEffects[1]?.effect.params).not.toBe(presetEffects[0]?.params)

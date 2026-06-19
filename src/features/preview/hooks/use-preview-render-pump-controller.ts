@@ -1557,7 +1557,15 @@ export function usePreviewRenderPump({
       // overlay here would switch from browser video seek (±1 frame) to
       // mediabunny (exact), causing a visible frame shift — especially at
       // soft-edge crop boundaries where the content difference is amplified.
-      if (!forceFastScrubOverlay) return
+      //
+      // Exception: if the rendered fast-scrub overlay is already the visible
+      // layer (e.g. after a scrub/seek settled on the current frame), it sits
+      // on top of the DOM Player and would freeze at the pre-drag frame while
+      // the Player updates invisibly underneath — the dragged item appears
+      // stuck until the next scrub. Refreshing the already-visible overlay is
+      // safe: it is showing a rendered frame, so no browser-seek -> mediabunny
+      // frame shift is introduced.
+      if (!forceFastScrubOverlay && !showFastScrubOverlayRef.current) return
       const invalidation = getGizmoPreviewInvalidation(state, prev)
       if (!invalidation) return
 

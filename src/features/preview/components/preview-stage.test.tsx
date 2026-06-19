@@ -68,9 +68,7 @@ function createRef<T>(): RefObject<T | null> {
   return { current: null }
 }
 
-function renderSplitPreviewStage(
-  overrides: Partial<Parameters<typeof PreviewStage>[0]> = {},
-) {
+function renderSplitPreviewStage(overrides: Partial<Parameters<typeof PreviewStage>[0]> = {}) {
   const handleSplitPositionChange = vi.fn()
   render(
     <PreviewStage

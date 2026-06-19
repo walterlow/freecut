@@ -76,7 +76,7 @@ export const ColorGradePanel = memo(function ColorGradePanel({
 
   if (layout === 'dock') {
     return (
-      <div className="grid h-full min-h-0 grid-cols-[minmax(0,1.7fr)_minmax(280px,0.8fr)] gap-3">
+      <div className="grid h-full min-h-0 grid-cols-[minmax(0,10fr)_minmax(0,3fr)_minmax(0,7fr)] gap-3">
         <Suspense fallback={null}>
           <div className={sectionClassName}>
             <LazyColorGradeSection
@@ -85,22 +85,23 @@ export const ColorGradePanel = memo(function ColorGradePanel({
               onCreateAdjustmentLayer={handleCreateAdjustmentLayer}
             />
           </div>
-          <div className="grid min-h-0 grid-rows-[minmax(0,0.42fr)_minmax(0,0.58fr)] overflow-hidden rounded-[3px] border border-border/70 bg-background/35">
-            <div className="min-h-0 overflow-hidden border-b border-border/70">
-              <LazyEffectsSection
-                items={visualItems}
-                hiddenGpuEffectTypes={COLOR_PANEL_EFFECT_TYPES}
-                layout="dock"
-              />
-            </div>
-            <div className="min-h-0 overflow-hidden" data-testid="color-keyframes-lane">
-              <KeyframeGraphPanel
-                isOpen={true}
-                placement="side"
-                showCloseButton={false}
-                onClose={handleKeepKeyframesOpen}
-              />
-            </div>
+          <div className="min-h-0 overflow-hidden rounded-[3px] border border-border/70 bg-background/35">
+            <LazyEffectsSection
+              items={visualItems}
+              hiddenGpuEffectTypes={COLOR_PANEL_EFFECT_TYPES}
+              layout="dock"
+            />
+          </div>
+          <div
+            className="min-h-0 overflow-hidden rounded-[3px] border border-border/70 bg-background/35"
+            data-testid="color-keyframes-lane"
+          >
+            <KeyframeGraphPanel
+              isOpen={true}
+              placement="side"
+              showCloseButton={false}
+              onClose={handleKeepKeyframesOpen}
+            />
           </div>
         </Suspense>
       </div>

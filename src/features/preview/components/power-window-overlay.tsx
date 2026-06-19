@@ -180,7 +180,9 @@ const PowerWindowOverlay = memo(function PowerWindowOverlay({
       if (!drag || event.buttons !== 1) return
       event.preventDefault()
       event.stopPropagation()
-      applyPreview(derivePowerWindowDragParams(drag, pointerToItemUv(event, coordParams, itemTransform)))
+      applyPreview(
+        derivePowerWindowDragParams(drag, pointerToItemUv(event, coordParams, itemTransform)),
+      )
     },
     [applyPreview, coordParams, itemTransform],
   )

@@ -257,6 +257,47 @@ function clearGlobalDragCursor(): void {
   document.body.classList.remove(...DRAG_CURSOR_CLASSES)
 }
 
+interface DraggedItemState {
+  id: string
+  initialFrame: number
+  initialTrackId: string
+}
+
+/**
+ * Resolve the full set of items a drag should move and their initial positions:
+ * expand the base selection (linked items when enabled, else the raw selection
+ * or the just-clicked clip), attach captions, drop locked items, and snapshot
+ * each survivor's starting frame + track.
+ */
+function resolveDraggedItemStates(
+  allItems: TimelineItem[],
+  currentTracks: TimelineTrack[],
+  currentSelectedIds: string[],
+  isInSelection: boolean,
+  linkedIds: string[],
+  linkedSelectionEnabled: boolean,
+): { baseItemsToDrag: string[]; draggableItemIds: string[]; draggedItems: DraggedItemState[] } {
+  const baseItemsToDrag = isInSelection
+    ? linkedSelectionEnabled
+      ? expandSelectionWithLinkedItems(allItems, currentSelectedIds)
+      : currentSelectedIds
+    : linkedIds
+  const itemsToDrag = expandItemIdsWithAttachedCaptions(allItems, baseItemsToDrag)
+  const draggableItemIds = filterUnlockedItemIds(allItems, currentTracks, itemsToDrag)
+  const draggedItems = draggableItemIds
+    .map((id) => {
+      const dragItem = allItems.find((i) => i.id === id)
+      if (!dragItem) return null
+      return {
+        id: dragItem.id,
+        initialFrame: dragItem.from,
+        initialTrackId: dragItem.trackId,
+      }
+    })
+    .filter((i): i is DraggedItemState => i !== null)
+  return { baseItemsToDrag, draggableItemIds, draggedItems }
+}
+
 /**
  * Timeline drag-and-drop hook - Phase 2 Enhanced
  *
@@ -615,40 +656,35 @@ export function useTimelineDrag(
       const currentTracks = tracksRef.current
       const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled
 
-      // If not in selection, select it (multi-select handled by TimelineItem's onClick)
+      // If not in selection, select it (multi-select handled by TimelineItem's onClick).
+      // Skip when a multi-select modifier is held: replacing the selection here
+      // would wipe the existing multi-selection, and the click handler's additive
+      // toggle would then read this clip as "already selected" and remove it again.
+      const isMultiSelectClick = e.ctrlKey || e.metaKey
       const linkedIds = linkedSelectionEnabled ? getLinkedItemIds(allItems, item.id) : [item.id]
-      if (!isInSelection) {
+      if (!isInSelection && !isMultiSelectClick) {
         selectItems(linkedIds)
       }
 
-      // Determine which items to drag
-      const baseItemsToDrag = isInSelection
-        ? linkedSelectionEnabled
-          ? expandSelectionWithLinkedItems(allItems, currentSelectedIds)
-          : currentSelectedIds
-        : linkedIds
-      const itemsToDrag = expandItemIdsWithAttachedCaptions(allItems, baseItemsToDrag)
-      const draggableItemIds = filterUnlockedItemIds(allItems, currentTracks, itemsToDrag)
-      if (isInSelection && baseItemsToDrag.length !== currentSelectedIds.length) {
+      // Determine which items to drag and snapshot their initial positions
+      const { baseItemsToDrag, draggedItems } = resolveDraggedItemStates(
+        allItems,
+        currentTracks,
+        currentSelectedIds,
+        isInSelection,
+        linkedIds,
+        linkedSelectionEnabled,
+      )
+      // Compare cohort *contents*, not just lengths: a same-size but
+      // differently-composed drag cohort (e.g. linked items swapped in) must
+      // still re-sync the selection.
+      const selectedIdSet = new Set(currentSelectedIds)
+      const cohortMatchesSelection =
+        baseItemsToDrag.length === selectedIdSet.size &&
+        baseItemsToDrag.every((id) => selectedIdSet.has(id))
+      if (isInSelection && !cohortMatchesSelection) {
         selectItems(baseItemsToDrag)
       }
-
-      // Store initial state for all dragged items
-      const draggedItems = draggableItemIds
-        .map((id) => {
-          const dragItem = allItems.find((i) => i.id === id)
-          if (!dragItem) return null
-          return {
-            id: dragItem.id,
-            initialFrame: dragItem.from,
-            initialTrackId: dragItem.trackId,
-          }
-        })
-        .filter((i) => i !== null) as Array<{
-        id: string
-        initialFrame: number
-        initialTrackId: string
-      }>
 
       // Initialize drag state
       dragStateRef.current = {

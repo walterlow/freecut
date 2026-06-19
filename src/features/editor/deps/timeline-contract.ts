@@ -36,6 +36,7 @@ export {
   KeyframeGraphPanel,
   linkItems,
   rateStretchItemWithoutHistory,
+  setInOutPointsWithoutHistory,
   resolveEffectiveTrackStates,
   resolveTransitionTargetFromSelection,
   sourceToTimelineFrames,

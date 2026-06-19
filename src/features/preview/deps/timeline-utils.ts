@@ -8,8 +8,12 @@ export {
   findBestCanvasDropPlacement,
   buildDroppedMediaTimelineItem,
   createClassicTrack,
+  createNewVideoZoneTrack,
+  createTimelineTemplateItem,
+  getDefaultGeneratedLayerDurationInFrames,
   getDroppedMediaDurationInFrames,
   getTrackKind,
+  isTimelineTemplateDragData,
   type DroppableMediaType,
 } from './timeline-contract'
 export { createScrubThrottleState, shouldCommitScrubFrame } from './timeline-contract'

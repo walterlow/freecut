@@ -236,6 +236,11 @@ export function useTimelineItemPointerHandlers({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      // Only the left button starts clip interactions. Middle-button (1) is
+      // reserved for timeline panning — bail without stopPropagation so the
+      // event bubbles to the timeline area's MMB handler instead of a drag.
+      if (e.button !== 0) return
+
       const rect = e.currentTarget.getBoundingClientRect()
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top

@@ -12,8 +12,11 @@
       "templateVideoOnly": "Vorlagen können nur auf Videospuren abgelegt werden.",
       "noSupportedMediaInDrop": "In diesem Drop wurden keine unterstützten Medien gefunden."
     },
-    "addAudioTrackHint": "Hinzufugen Audio Spur Hinweis",
-    "addVideoTrackHint": "Hinzufugen Video Spur Hinweis",
+    "addTrack": {
+      "label": "Spur hinzufügen",
+      "video": "Videospur hinzufügen",
+      "audio": "Audiospur hinzufügen"
+    },
     "bento": {
       "apply": "Anwenden",
       "description": "{{count}} ausgewählte Clips in einem Raster anordnen.",
@@ -268,7 +271,8 @@
     "trackHeader": {
       "addAudioTrack": "Hinzufugen Audio Spur",
       "addVideoTrack": "Hinzufugen Video Spur",
-      "clipCount": "Clip-Anzahl",
+      "clipCount_one": "{{count}} Clip",
+      "clipCount_other": "{{count}} Clips",
       "closeAllGaps": "Schliessen alle Lucken",
       "deleteEmptyTracks": "Loschen leere Spuren",
       "deleteTrack": "Loschen Spur",
@@ -285,7 +289,12 @@
       "resizeSections": "Grosse andern Video and Audio Spur Abschnitte",
       "resizeTrackHeight": "Grosse andern Spur Hohe"
     },
-    "tracks": "Spuren",
+    "trackSize": {
+      "label": "Spurhöhe",
+      "compact": "Kompakt",
+      "medium": "Mittel",
+      "large": "Groß"
+    },
     "volumeControl": {
       "adjustClipVolume": "Anpassen Clip Lautstarke"
     },

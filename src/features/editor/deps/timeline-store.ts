@@ -7,6 +7,7 @@ export type { TimelineState, TimelineActions } from './timeline-contract'
 export {
   importWaveformCache,
   rateStretchItemWithoutHistory,
+  setInOutPointsWithoutHistory,
   useTimelineStore,
   useTimelineSettingsStore,
   useItemsStore,

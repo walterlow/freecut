@@ -4,9 +4,14 @@ import type { MediaMetadata } from '@/types/storage'
 
 const mocks = vi.hoisted(() => ({
   addItem: vi.fn(),
+  addItemOnNewTrack: vi.fn(),
   setActiveTrack: vi.fn(),
   selectItems: vi.fn(),
   findBestCanvasDropPlacement: vi.fn(() => ({ trackId: 'track-1', from: 24 })),
+  createNewVideoZoneTrack: vi.fn(() => ({
+    trackId: 'new-track-1',
+    tracks: [{ id: 'new-track-1' }],
+  })),
   getDroppedMediaDurationInFrames: vi.fn(() => 120),
   buildDroppedMediaTimelineItem: vi.fn(
     (params: {
@@ -38,6 +43,24 @@ const mocks = vi.hoisted(() => ({
       },
     }),
   ),
+  createTimelineTemplateItem: vi.fn(
+    (params: {
+      template: { itemType: string; label: string }
+      placement: { trackId: string; from: number; durationInFrames: number }
+    }) => ({
+      id: 'template-item-1',
+      type: params.template.itemType,
+      trackId: params.placement.trackId,
+      from: params.placement.from,
+      durationInFrames: params.placement.durationInFrames,
+      label: params.template.label,
+      transform: { x: 0, y: 0, width: 200, height: 200, rotation: 0, opacity: 1 },
+    }),
+  ),
+  getDefaultGeneratedLayerDurationInFrames: vi.fn(() => 1800),
+  isTimelineTemplateDragData: vi.fn(
+    (value: { type?: string } | null) => value?.type === 'timeline-template',
+  ),
   extractValidMediaFileEntriesFromDataTransfer: vi.fn(),
   getMimeType: vi.fn(() => 'video/mp4'),
   processMedia: vi.fn(),
@@ -46,9 +69,12 @@ const mocks = vi.hoisted(() => ({
   resolveMediaUrl: vi.fn(async () => 'blob:test'),
   getThumbnailBlobUrl: vi.fn(async () => null),
   screenToCanvas: vi.fn(() => ({ x: 320, y: 240 })),
+  clearMediaDragData: vi.fn(),
   toastWarning: vi.fn(),
   toastError: vi.fn(),
 }))
+
+let dragDataValue: { type: string; itemType?: string; label?: string } | null = null
 
 let mediaStoreState: {
   currentProjectId: string | null
@@ -82,6 +108,7 @@ vi.mock('@/features/preview/deps/timeline-store', () => ({
       tracks: [],
       items: [],
       addItem: mocks.addItem,
+      addItemOnNewTrack: mocks.addItemOnNewTrack,
     }),
   }),
 }))
@@ -90,11 +117,16 @@ vi.mock('@/features/preview/deps/timeline-utils', () => ({
   findBestCanvasDropPlacement: mocks.findBestCanvasDropPlacement,
   getDroppedMediaDurationInFrames: mocks.getDroppedMediaDurationInFrames,
   buildDroppedMediaTimelineItem: mocks.buildDroppedMediaTimelineItem,
+  createNewVideoZoneTrack: mocks.createNewVideoZoneTrack,
+  createTimelineTemplateItem: mocks.createTimelineTemplateItem,
+  getDefaultGeneratedLayerDurationInFrames: mocks.getDefaultGeneratedLayerDurationInFrames,
+  isTimelineTemplateDragData: mocks.isTimelineTemplateDragData,
 }))
 
 vi.mock('@/features/preview/deps/media-library', () => ({
   extractValidMediaFileEntriesFromDataTransfer: mocks.extractValidMediaFileEntriesFromDataTransfer,
-  getMediaDragData: () => null,
+  getMediaDragData: () => dragDataValue,
+  clearMediaDragData: mocks.clearMediaDragData,
   getMediaType: (mimeType: string) => (mimeType.startsWith('video/') ? 'video' : 'image'),
   getMimeType: mocks.getMimeType,
   importMediaLibraryService: vi.fn(async () => ({
@@ -168,6 +200,7 @@ function DropProbe() {
 describe('useCanvasMediaDrop', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    dragDataValue = null
 
     mediaStoreState = {
       currentProjectId: 'project-1',
@@ -238,5 +271,65 @@ describe('useCanvasMediaDrop', () => {
         }),
       }),
     )
+  })
+
+  it('places a text preset on a new overlay layer at the drop position', async () => {
+    dragDataValue = { type: 'timeline-template', itemType: 'text', label: 'Neon' }
+    render(<DropProbe />)
+
+    await act(async () => {
+      fireEvent.drop(screen.getByTestId('drop-target'), {
+        clientX: 640,
+        clientY: 360,
+        dataTransfer: { types: [], items: [] },
+      })
+    })
+
+    await waitFor(() => expect(mocks.addItemOnNewTrack).toHaveBeenCalledTimes(1))
+
+    // A fresh overlay track is created and the layer is placed at the playhead
+    // (currentFrame 48) on it — not sequenced into an existing track.
+    expect(mocks.createNewVideoZoneTrack).toHaveBeenCalledTimes(1)
+    expect(mocks.createTimelineTemplateItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: expect.objectContaining({ itemType: 'text', label: 'Neon' }),
+        placement: expect.objectContaining({
+          trackId: 'new-track-1',
+          from: 48,
+          durationInFrames: 1800,
+        }),
+      }),
+    )
+    // screenToCanvas → { x: 320, y: 240 }; clampDropPosition centers the
+    // 200x200 layer there: x = 320 - 1280/2 = -320, y = 240 - 720/2 = -120.
+    expect(mocks.addItemOnNewTrack).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'text',
+        transform: expect.objectContaining({ x: -320, y: -120 }),
+      }),
+      [{ id: 'new-track-1' }],
+    )
+    expect(mocks.addItem).not.toHaveBeenCalled()
+    expect(mocks.setActiveTrack).toHaveBeenCalledWith('new-track-1')
+    expect(mocks.selectItems).toHaveBeenCalledWith(['template-item-1'])
+  })
+
+  it('rejects adjustment presets on the canvas', async () => {
+    dragDataValue = { type: 'timeline-template', itemType: 'adjustment', label: 'Adjustment' }
+    render(<DropProbe />)
+
+    await act(async () => {
+      fireEvent.drop(screen.getByTestId('drop-target'), {
+        clientX: 640,
+        clientY: 360,
+        dataTransfer: { types: [], items: [] },
+      })
+    })
+
+    expect(mocks.toastWarning).toHaveBeenCalledWith(
+      'Adjustment layers apply to the whole frame — place them on the timeline.',
+    )
+    expect(mocks.addItem).not.toHaveBeenCalled()
+    expect(mocks.createTimelineTemplateItem).not.toHaveBeenCalled()
   })
 })

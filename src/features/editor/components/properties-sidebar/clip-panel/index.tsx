@@ -90,6 +90,8 @@ export const ClipPanel = memo(function ClipPanel() {
   // Granular selectors with explicit types
   const clipInspectorTab = useEditorStore((s) => s.clipInspectorTab)
   const setClipInspectorTab = useEditorStore((s) => s.setClipInspectorTab)
+  const setWorkspace = useEditorStore((s) => s.setWorkspace)
+  const handleEditInColor = useCallback(() => setWorkspace('color'), [setWorkspace])
   const selectedItemIds = useSelectionStore(
     (s: SelectionState & SelectionActions) => s.selectedItemIds,
   )
@@ -316,7 +318,7 @@ export const ClipPanel = memo(function ClipPanel() {
                 </div>
               )}
               <Suspense fallback={null}>
-                <LazyEffectsSection items={visualItems} />
+                <LazyEffectsSection items={visualItems} onEditInColor={handleEditInColor} />
               </Suspense>
               {hasTextItems && <Separator />}
               {hasTextItems && (

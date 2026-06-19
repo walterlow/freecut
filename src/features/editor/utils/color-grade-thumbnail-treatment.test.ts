@@ -21,7 +21,11 @@ describe('resolveColorGradeThumbnailTreatment', () => {
       imageStyle: {},
       overlayStyle: null,
     })
-    expect(resolveColorGradeThumbnailTreatment([{ ...effect('gpu-saturation', { amount: 2 }), enabled: false }]).hasGrade).toBe(false)
+    expect(
+      resolveColorGradeThumbnailTreatment([
+        { ...effect('gpu-saturation', { amount: 2 }), enabled: false },
+      ]).hasGrade,
+    ).toBe(false)
   })
 
   it('maps color wheels params to a visible thumbnail treatment', () => {

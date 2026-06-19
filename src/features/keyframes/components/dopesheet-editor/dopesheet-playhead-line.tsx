@@ -10,6 +10,7 @@
  */
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { usePlaybackStore } from '@/shared/state/playback'
+import { PlayheadMarks } from '@/shared/ui/playhead-marks'
 
 interface DopesheetPlayheadLineProps {
   /** Clip-relative playhead frame for the paused/seek/zoom (React-driven) case. */
@@ -90,21 +91,20 @@ export function DopesheetPlayheadLine({
   }, [])
 
   if (variant === 'flag') {
-    // Flag handle that sits in the ruler — matches the animate timeline strip.
-    // The head sits at the top of the ruler; a line runs the full ruler height
-    // so it joins the body playhead line that starts just below the ruler.
+    // Flag handle that sits in the ruler. The line bleeds 1px past the ruler's
+    // bottom border (`bleedBottom`) so it joins the body line starting just
+    // below the ruler — otherwise the `border-b` paints a notch at the seam.
     return (
       <div ref={ref} data-testid="dopesheet-playhead-flag" className={className}>
-        <span className="absolute top-0 bottom-0 w-px -translate-x-1/2 bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.65)]" />
-        <span className="absolute top-0 left-0 h-3 w-2 -translate-x-1/2 rounded-b-[2px] border border-red-300/60 bg-red-500" />
+        <PlayheadMarks handle="flag" bleedBottom />
       </div>
     )
   }
 
   return (
     <div ref={ref} data-testid="dopesheet-playhead-line" className={className}>
-      {/* Red playhead line through the body — matches the animate timeline strip. */}
-      <span className="absolute bottom-0 top-0 w-px -translate-x-1/2 bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.65)]" />
+      {/* Body line only — the flag is drawn separately up in the ruler. */}
+      <PlayheadMarks handle="none" />
     </div>
   )
 }

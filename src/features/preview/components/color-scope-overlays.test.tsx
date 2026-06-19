@@ -1,9 +1,7 @@
 import { createRef } from 'react'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vite-plus/test'
-import {
-  ScopeCanvasFrame,
-} from './color-scope-overlays'
+import { ScopeCanvasFrame } from './color-scope-overlays'
 import { SCOPE_LUMA_GUIDES, VECTOR_SCOPE_TARGETS } from './color-scope-overlay-data'
 
 describe('color scope overlays', () => {

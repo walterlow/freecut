@@ -143,8 +143,8 @@ describe('createMediabunnyInputSource', () => {
     vi.stubGlobal('self', {})
     vi.stubGlobal('window', undefined)
 
-    expect(() => createMediabunnyInputSource(mockMediabunny, 'blob:http://localhost/media')).toThrow(
-      'Blob URL source is not registered in this worker',
-    )
+    expect(() =>
+      createMediabunnyInputSource(mockMediabunny, 'blob:http://localhost/media'),
+    ).toThrow('Blob URL source is not registered in this worker')
   })
 })

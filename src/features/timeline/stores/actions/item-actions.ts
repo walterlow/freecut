@@ -137,6 +137,28 @@ export function addItemWithLinkedAudio(video: VideoItem): void {
   )
 }
 
+/**
+ * Add a single item together with a freshly created track in one undoable step.
+ *
+ * Used for overlay layers (text/shape presets dropped on the canvas) that get
+ * their own new track above existing content. The caller has already planned
+ * the track (so `tracks` includes it) and positioned the item on that empty
+ * track, so the placement is collision-free and is committed directly without
+ * re-running overlap placement.
+ */
+export function addItemOnNewTrack(item: TimelineItem, tracks: TimelineTrack[]): void {
+  execute(
+    'ADD_ITEM_ON_NEW_TRACK',
+    () => {
+      const store = useItemsStore.getState()
+      store.setTracks(tracks)
+      store._addItem(item)
+      useTimelineSettingsStore.getState().markDirty()
+    },
+    { itemId: item.id, type: item.type, trackId: item.trackId },
+  )
+}
+
 export function updateItem(id: string, updates: Partial<TimelineItem>): void {
   execute(
     'UPDATE_ITEM',

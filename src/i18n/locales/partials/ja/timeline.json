@@ -12,8 +12,11 @@
       "templateVideoOnly": "テンプレートはビデオトラックにのみドロップできます。",
       "noSupportedMediaInDrop": "このドロップに対応メディアが見つかりません。"
     },
-    "addAudioTrackHint": "オーディオトラックを追加",
-    "addVideoTrackHint": "ビデオトラックを追加",
+    "addTrack": {
+      "label": "トラックを追加",
+      "video": "ビデオトラックを追加",
+      "audio": "オーディオトラックを追加"
+    },
     "bento": {
       "apply": "適用",
       "description": "選択した {{count}} 件のクリップをグリッドに配置します。",
@@ -268,7 +271,8 @@
     "trackHeader": {
       "addAudioTrack": "オーディオトラックを追加",
       "addVideoTrack": "ビデオトラックを追加",
-      "clipCount": "クリップ数",
+      "clipCount_one": "{{count}} クリップ",
+      "clipCount_other": "{{count}} クリップ",
       "closeAllGaps": "すべてのギャップを閉じる",
       "deleteEmptyTracks": "空のトラックを削除",
       "deleteTrack": "トラックを削除",
@@ -285,7 +289,12 @@
       "resizeSections": "ビデオ/オーディオトラック領域のサイズを変更",
       "resizeTrackHeight": "トラックの高さを変更"
     },
-    "tracks": "トラック",
+    "trackSize": {
+      "label": "トラックサイズ",
+      "compact": "コンパクト",
+      "medium": "中",
+      "large": "大"
+    },
     "volumeControl": {
       "adjustClipVolume": "クリップ音量を調整"
     },

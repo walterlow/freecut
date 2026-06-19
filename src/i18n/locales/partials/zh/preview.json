@@ -74,6 +74,8 @@
       "dropOnTimeline": "拖放到时间线",
       "compoundClipsTimeline": "复合剪辑仍然最适合放在时间线上。",
       "presetsTimeline": "文本和形状预设仍然最适合放在时间线上。",
+      "adjustmentLayersTimeline": "调整图层应用于整个画面 — 请将其放置在时间线上。",
+      "placeLayerDescription": "将此图层放置在拖放位置。",
       "dropOneItem": "拖放一个项目",
       "oneMediaAtATime": "一次只能在画布上放置一个媒体项目。",
       "audioGoesOnTimeline": "音频应放到时间线",

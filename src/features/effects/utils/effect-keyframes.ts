@@ -1,7 +1,5 @@
 import { getGpuEffect } from '@/infrastructure/gpu-effects'
-import {
-  getResolvedAnimatedEffectParamValue,
-} from '@/features/effects/deps/keyframes-contract'
+import { getResolvedAnimatedEffectParamValue } from '@/features/effects/deps/keyframes-contract'
 import { buildEffectAnimatableProperty, type AnimatableProperty } from '@/types/keyframe'
 import type { GpuEffect, ItemEffect } from '@/types/effects'
 import type { ItemKeyframes } from '@/types/keyframe'

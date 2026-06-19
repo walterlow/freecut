@@ -329,7 +329,7 @@ export function KeyframeTimingStrip({
                     ? 'cursor-ew-resize'
                     : 'cursor-pointer',
                 marker.selected
-                  ? 'h-3 w-3 rounded-[2px] border border-orange-200/70 bg-orange-500 rotate-45'
+                  ? 'h-3 w-3 rounded-[2px] border border-blue-200/70 bg-blue-500 rotate-45'
                   : 'h-2 w-2 rounded-full border border-muted-foreground/60 bg-muted-foreground/70',
               )}
               style={markerStyle}

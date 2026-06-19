@@ -194,7 +194,10 @@ export const DEFAULT_AUDIO_EQ_SETTINGS: Readonly<ResolvedAudioEqSettings> = Obje
   highCutSlopeDbPerOct: 12,
 })
 
-export function clampAudioEqFrequencyForSampleRate(frequencyHz: number, sampleRate: number): number {
+export function clampAudioEqFrequencyForSampleRate(
+  frequencyHz: number,
+  sampleRate: number,
+): number {
   return Math.max(20, Math.min(frequencyHz, sampleRate * 0.45))
 }
 

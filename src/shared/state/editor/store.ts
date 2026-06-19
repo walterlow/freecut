@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { EditorState, EditorActions } from './types'
+import type { EditorState, EditorActions, TrackSizePreset } from './types'
 import {
   EDITOR_LAYOUT,
   getLeftEditorSidebarBounds,
@@ -14,6 +14,19 @@ import {
 
 const LEGACY_SIDEBAR_DEFAULT_WIDTH = 320
 const WORKSPACE_STORAGE_KEY = 'editor:workspace'
+const TRACK_SIZE_PRESET_STORAGE_KEY = 'editor:trackSizePreset'
+
+function loadTrackSizePreset(): TrackSizePreset {
+  try {
+    const stored = localStorage.getItem(TRACK_SIZE_PRESET_STORAGE_KEY)
+    if (stored === 'compact' || stored === 'medium' || stored === 'large') {
+      return stored
+    }
+  } catch {
+    /* noop */
+  }
+  return 'medium'
+}
 
 function workspaceLayoutStorageKey(workspace: EditorWorkspaceId): string {
   return `editor:workspaceLayout:${workspace}`
@@ -65,7 +78,10 @@ function getEditorWorkspaceLayoutSnapshot(state: EditorState): EditorWorkspaceLa
   }
 }
 
-function saveEditorWorkspaceLayout(workspace: EditorWorkspaceId, layout: EditorWorkspaceLayout): void {
+function saveEditorWorkspaceLayout(
+  workspace: EditorWorkspaceId,
+  layout: EditorWorkspaceLayout,
+): void {
   try {
     localStorage.setItem(workspaceLayoutStorageKey(workspace), JSON.stringify(layout))
   } catch {
@@ -146,6 +162,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
       return true
     }
   })(),
+  trackSizePreset: loadTrackSizePreset(),
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -379,4 +396,12 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
       }
       return { mediaFullColumn: next }
     }),
+  setTrackSizePreset: (preset) => {
+    try {
+      localStorage.setItem(TRACK_SIZE_PRESET_STORAGE_KEY, preset)
+    } catch {
+      /* noop */
+    }
+    set({ trackSizePreset: preset })
+  },
 }))

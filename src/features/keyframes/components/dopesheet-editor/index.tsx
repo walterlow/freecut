@@ -1765,8 +1765,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         return
       }
 
-      const horizontalDelta =
-        event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0
+      const horizontalDelta = event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0
       if (horizontalDelta !== 0) {
         event.preventDefault()
         panFrames(Math.round((horizontalDelta / effectiveTimelineWidth) * frameRange))
@@ -2152,7 +2151,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 className={cn(
                   'h-4 w-4 p-0 hover:bg-transparent',
                   row.controls.hasKeyframeAtCurrentFrame
-                    ? 'text-primary hover:text-primary'
+                    ? 'text-neutral-200 hover:text-neutral-200'
                     : 'text-muted-foreground hover:text-foreground',
                   isCurrentFrameBlocked &&
                     !row.controls.hasKeyframeAtCurrentFrame &&
@@ -2192,7 +2191,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                   className={cn(
                     'block h-[7px] w-[7px] rotate-45 border transition-colors',
                     row.controls.hasKeyframeAtCurrentFrame
-                      ? 'border-primary bg-primary'
+                      ? 'border-neutral-200 bg-neutral-200'
                       : 'border-current bg-transparent',
                   )}
                 />
@@ -2482,7 +2481,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 MINI_ICON_BUTTON_CLASS,
                 'hover:bg-transparent',
                 group.hasKeyframeAtCurrentFrame
-                  ? 'text-primary hover:text-primary'
+                  ? 'text-neutral-200 hover:text-neutral-200'
                   : 'text-muted-foreground hover:text-foreground',
                 isCurrentFrameBlocked &&
                   !group.hasKeyframeAtCurrentFrame &&
@@ -2520,7 +2519,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 className={cn(
                   'block h-[7px] w-[7px] rotate-45 border transition-colors',
                   hasUnlockedCurrentKeyframes
-                    ? 'border-primary bg-primary'
+                    ? 'border-neutral-200 bg-neutral-200'
                     : 'border-current bg-transparent',
                 )}
               />

@@ -12,8 +12,11 @@
       "templateVideoOnly": "Les modèles ne peuvent être déposés que sur des pistes vidéo.",
       "noSupportedMediaInDrop": "Aucun média compatible trouvé dans ce dépôt."
     },
-    "addAudioTrackHint": "Ajouter Audio Piste Aide",
-    "addVideoTrackHint": "Ajouter Video Piste Aide",
+    "addTrack": {
+      "label": "Ajouter une piste",
+      "video": "Ajouter une piste vidéo",
+      "audio": "Ajouter une piste audio"
+    },
     "bento": {
       "apply": "Appliquer",
       "description": "Disposer les {{count}} clips sélectionnés en grille.",
@@ -268,7 +271,8 @@
     "trackHeader": {
       "addAudioTrack": "Ajouter Audio Piste",
       "addVideoTrack": "Ajouter Video Piste",
-      "clipCount": "clip Count",
+      "clipCount_one": "{{count}} clip",
+      "clipCount_other": "{{count}} clips",
       "closeAllGaps": "Fermer tout ecarts",
       "deleteEmptyTracks": "Supprimer vides pistes",
       "deleteTrack": "Supprimer Piste",
@@ -285,7 +289,12 @@
       "resizeSections": "redimensionner Video and Audio Piste sections",
       "resizeTrackHeight": "redimensionner Piste hauteur"
     },
-    "tracks": "pistes",
+    "trackSize": {
+      "label": "Taille de piste",
+      "compact": "Compact",
+      "medium": "Moyen",
+      "large": "Grand"
+    },
     "volumeControl": {
       "adjustClipVolume": "Ajuster clip volume"
     },

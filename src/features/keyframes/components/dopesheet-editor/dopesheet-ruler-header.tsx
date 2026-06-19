@@ -35,7 +35,7 @@ export function DopesheetRulerHeader({
       <div
         data-testid="dopesheet-ruler"
         ref={timelineRef}
-        className="relative border-l border-border cursor-ew-resize overflow-hidden"
+        className="relative border-l border-border cursor-ew-resize overflow-x-clip"
         style={{ height: RULER_HEIGHT }}
         onPointerDown={onRulerPointerDown}
         onPointerMove={onRulerPointerMove}

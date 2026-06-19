@@ -137,6 +137,8 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
   gpuEffect,
   definition,
   layout = 'sidebar',
+  collapsible = false,
+  onEditInColor,
   onParamsBatchChange,
   onParamsBatchLiveChange,
   onReset,
@@ -148,6 +150,10 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
 }: GpuCurvesPanelProps) {
   const { t } = useTranslation()
   const isDock = layout === 'dock'
+  // Collapse only in the sidebar — the dock is the dedicated grading surface.
+  const allowCollapse = collapsible && !isDock
+  const [collapsed, setCollapsed] = useState(allowCollapse)
+  const showBody = !(allowCollapse && collapsed)
   const svgRef = useRef<SVGSVGElement>(null)
   const [svgSize, setSvgSize] = useState({ width: CURVE_SIZE, height: CURVE_SIZE })
   const [activeChannel, setActiveChannel] = useState<GpuCurvesChannelKey>('master')
@@ -443,10 +449,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
       <Button
         variant="ghost"
         size={isDock ? 'icon' : 'sm'}
-        className={cn(
-          'h-7 text-xs',
-          isDock ? 'w-7 shrink-0' : 'px-2',
-        )}
+        className={cn('h-7 text-xs', isDock ? 'w-7 shrink-0' : 'px-2')}
         onClick={handleResetChannel}
         disabled={!effect.enabled}
         title={resetChannelLabel}
@@ -470,170 +473,176 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
         onMove={onMove}
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}
+        collapsed={allowCollapse ? collapsed : undefined}
+        onToggleCollapsed={allowCollapse ? () => setCollapsed((value) => !value) : undefined}
+        onEditInColor={onEditInColor}
       />
 
-      {isDock ? (
-        <div className="flex h-9 shrink-0 items-center justify-between gap-2 px-2">
-          <span className="text-xs text-muted-foreground">{t('effects.curves.channel')}</span>
-          {channelControls}
-        </div>
-      ) : (
-        <PropertyRow label={t('effects.curves.channel')}>{channelControls}</PropertyRow>
-      )}
+      {showBody &&
+        (isDock ? (
+          <div className="flex h-9 shrink-0 items-center justify-between gap-2 px-2">
+            <span className="text-xs text-muted-foreground">{t('effects.curves.channel')}</span>
+            {channelControls}
+          </div>
+        ) : (
+          <PropertyRow label={t('effects.curves.channel')}>{channelControls}</PropertyRow>
+        ))}
 
-      <div className={cn('px-2', isDock && 'flex min-h-0 flex-1 pb-2')}>
-        <div
-          className={cn(
-            'relative overflow-hidden rounded border border-border/70 bg-black/50',
-            isDock && 'flex min-h-0 flex-1',
-          )}
-        >
-          <svg
-            ref={svgRef}
-            data-curves-editor="true"
-            aria-label={t('effects.curves.editorAriaLabel', {
-              channel: activeChannelLabel,
-              defaultValue: `${activeChannelLabel} curve editor`,
-            })}
-            viewBox={`0 0 ${CURVE_SIZE} ${CURVE_SIZE}`}
-            preserveAspectRatio={isDock ? 'none' : 'xMidYMid meet'}
+      {showBody && (
+        <div className={cn('px-2', isDock && 'flex min-h-0 flex-1 pb-2')}>
+          <div
             className={cn(
-              isDock ? 'h-full w-full' : 'aspect-square w-full',
-              effect.enabled ? 'cursor-crosshair' : 'cursor-default',
+              'relative overflow-hidden rounded border border-border/70 bg-black/50',
+              isDock && 'flex min-h-0 flex-1',
             )}
-            onMouseDown={handleSvgMouseDown}
           >
-            {[0.25, 0.5, 0.75].map((grid) => (
-              <g key={grid}>
-                <line
-                  x1={grid * CURVE_SIZE}
-                  y1={0}
-                  x2={grid * CURVE_SIZE}
-                  y2={CURVE_SIZE}
-                  stroke="rgba(148,163,184,0.22)"
-                  strokeWidth={1}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <line
-                  x1={0}
-                  y1={grid * CURVE_SIZE}
-                  x2={CURVE_SIZE}
-                  y2={grid * CURVE_SIZE}
-                  stroke="rgba(148,163,184,0.22)"
-                  strokeWidth={1}
-                  vectorEffect="non-scaling-stroke"
-                />
-              </g>
-            ))}
-
-            <path
-              d={`M 0 ${CURVE_SIZE} L ${CURVE_SIZE} 0`}
-              stroke="rgba(148,163,184,0.35)"
-              strokeWidth={1}
-              fill="none"
-              strokeDasharray="4 4"
-              vectorEffect="non-scaling-stroke"
-            />
-
-            {activeChannel === 'master' && (
-              <>
-                <path
-                  d={curvePaths.red}
-                  stroke="#ef4444"
-                  strokeWidth={1.2}
-                  fill="none"
-                  opacity={0.35}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <path
-                  d={curvePaths.green}
-                  stroke="#22c55e"
-                  strokeWidth={1.2}
-                  fill="none"
-                  opacity={0.35}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <path
-                  d={curvePaths.blue}
-                  stroke="#3b82f6"
-                  strokeWidth={1.2}
-                  fill="none"
-                  opacity={0.35}
-                  vectorEffect="non-scaling-stroke"
-                />
-              </>
-            )}
-
-            {activeChannel !== 'master' && (
-              <path
-                d={curvePaths.master}
-                stroke="rgba(229,231,235,0.35)"
-                strokeWidth={1.2}
-                fill="none"
-                strokeDasharray="5 4"
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-
-            <path
-              d={curvePaths[activeChannel]}
-              stroke={activeChannelMeta.color}
-              strokeWidth={2}
-              fill="none"
-              vectorEffect="non-scaling-stroke"
-            />
-
-            {activePoints.map((point, index) => {
-              const x = point.x * CURVE_SIZE
-              const y = (1 - point.y) * CURVE_SIZE
-
-              return (
-                <g key={`${activeChannel}-${index}`}>
+            <svg
+              ref={svgRef}
+              data-curves-editor="true"
+              aria-label={t('effects.curves.editorAriaLabel', {
+                channel: activeChannelLabel,
+                defaultValue: `${activeChannelLabel} curve editor`,
+              })}
+              viewBox={`0 0 ${CURVE_SIZE} ${CURVE_SIZE}`}
+              preserveAspectRatio={isDock ? 'none' : 'xMidYMid meet'}
+              className={cn(
+                isDock ? 'h-full w-full' : 'aspect-square w-full',
+                effect.enabled ? 'cursor-crosshair' : 'cursor-default',
+              )}
+              onMouseDown={handleSvgMouseDown}
+            >
+              {[0.25, 0.5, 0.75].map((grid) => (
+                <g key={grid}>
                   <line
-                    x1={x}
-                    y1={CURVE_SIZE}
-                    x2={x}
-                    y2={y}
-                    stroke={activeChannelMeta.color}
+                    x1={grid * CURVE_SIZE}
+                    y1={0}
+                    x2={grid * CURVE_SIZE}
+                    y2={CURVE_SIZE}
+                    stroke="rgba(148,163,184,0.22)"
                     strokeWidth={1}
-                    opacity={0.18}
                     vectorEffect="non-scaling-stroke"
                   />
-                  <ellipse
-                    data-curve-point={index}
-                    tabIndex={effect.enabled ? 0 : -1}
-                    role="slider"
-                    aria-label={t('effects.curves.pointAriaLabel', {
-                      channel: activeChannelLabel,
-                      index: index + 1,
-                      defaultValue: `${activeChannelLabel} curve point ${index + 1}`,
-                    })}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.round(point.y * 100)}
-                    aria-valuetext={`input ${Math.round(point.x * 100)}%, output ${Math.round(point.y * 100)}%`}
-                    cx={x}
-                    cy={y}
-                    rx={pointRadiusX}
-                    ry={pointRadiusY}
-                    fill={activeChannelMeta.color}
-                    stroke="rgba(3,7,18,0.95)"
-                    strokeWidth={pointStrokeWidth}
-                    className={effect.enabled ? 'cursor-move' : 'pointer-events-none'}
-                    onMouseDown={(event) => handlePointMouseDown(event, index)}
-                    onKeyDown={(event) => handlePointKeyDown(event, index)}
+                  <line
+                    x1={0}
+                    y1={grid * CURVE_SIZE}
+                    x2={CURVE_SIZE}
+                    y2={grid * CURVE_SIZE}
+                    stroke="rgba(148,163,184,0.22)"
+                    strokeWidth={1}
+                    vectorEffect="non-scaling-stroke"
                   />
                 </g>
-              )
-            })}
-          </svg>
-        </div>
-        {!isDock && (
-          <div className="mt-1 text-center text-[10px] text-muted-foreground">
-            {t('effects.curves.multiPointHint', { channel: activeChannelLabel.toLowerCase() })}
+              ))}
+
+              <path
+                d={`M 0 ${CURVE_SIZE} L ${CURVE_SIZE} 0`}
+                stroke="rgba(148,163,184,0.35)"
+                strokeWidth={1}
+                fill="none"
+                strokeDasharray="4 4"
+                vectorEffect="non-scaling-stroke"
+              />
+
+              {activeChannel === 'master' && (
+                <>
+                  <path
+                    d={curvePaths.red}
+                    stroke="#ef4444"
+                    strokeWidth={1.2}
+                    fill="none"
+                    opacity={0.35}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <path
+                    d={curvePaths.green}
+                    stroke="#22c55e"
+                    strokeWidth={1.2}
+                    fill="none"
+                    opacity={0.35}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <path
+                    d={curvePaths.blue}
+                    stroke="#3b82f6"
+                    strokeWidth={1.2}
+                    fill="none"
+                    opacity={0.35}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </>
+              )}
+
+              {activeChannel !== 'master' && (
+                <path
+                  d={curvePaths.master}
+                  stroke="rgba(229,231,235,0.35)"
+                  strokeWidth={1.2}
+                  fill="none"
+                  strokeDasharray="5 4"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+
+              <path
+                d={curvePaths[activeChannel]}
+                stroke={activeChannelMeta.color}
+                strokeWidth={2}
+                fill="none"
+                vectorEffect="non-scaling-stroke"
+              />
+
+              {activePoints.map((point, index) => {
+                const x = point.x * CURVE_SIZE
+                const y = (1 - point.y) * CURVE_SIZE
+
+                return (
+                  <g key={`${activeChannel}-${index}`}>
+                    <line
+                      x1={x}
+                      y1={CURVE_SIZE}
+                      x2={x}
+                      y2={y}
+                      stroke={activeChannelMeta.color}
+                      strokeWidth={1}
+                      opacity={0.18}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <ellipse
+                      data-curve-point={index}
+                      tabIndex={effect.enabled ? 0 : -1}
+                      role="slider"
+                      aria-label={t('effects.curves.pointAriaLabel', {
+                        channel: activeChannelLabel,
+                        index: index + 1,
+                        defaultValue: `${activeChannelLabel} curve point ${index + 1}`,
+                      })}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(point.y * 100)}
+                      aria-valuetext={`input ${Math.round(point.x * 100)}%, output ${Math.round(point.y * 100)}%`}
+                      cx={x}
+                      cy={y}
+                      rx={pointRadiusX}
+                      ry={pointRadiusY}
+                      fill={activeChannelMeta.color}
+                      stroke="rgba(3,7,18,0.95)"
+                      strokeWidth={pointStrokeWidth}
+                      className={effect.enabled ? 'cursor-move' : 'pointer-events-none'}
+                      onMouseDown={(event) => handlePointMouseDown(event, index)}
+                      onKeyDown={(event) => handlePointKeyDown(event, index)}
+                    />
+                  </g>
+                )
+              })}
+            </svg>
           </div>
-        )}
-      </div>
+          {!isDock && (
+            <div className="mt-1 text-center text-[10px] text-muted-foreground">
+              {t('effects.curves.multiPointHint', { channel: activeChannelLabel.toLowerCase() })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 })

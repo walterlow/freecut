@@ -378,7 +378,10 @@ function loadKeyframeEditorMode(): KeyframeEditorMode {
   } catch {
     // ignore localStorage read errors
   }
-  return 'dopesheet'
+  // Default to the stacked split (dopesheet on top, value graph on bottom) for
+  // split-capable surfaces; non-split placements fall back to dopesheet via
+  // `effectiveEditorMode`.
+  return 'split'
 }
 
 interface AdvancedEasingControlsProps {
@@ -1533,7 +1536,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   // the strip only when there are actual controls to show, so the editor
   // reclaims that space the rest of the time.
   const showEasingControls = Boolean(
-    (showBezierControls && selectedBezierPoints) || (showSpringControls && selectedSpringParameters),
+    (showBezierControls && selectedBezierPoints) ||
+    (showSpringControls && selectedSpringParameters),
   )
   const advancedControlsKey = useMemo(
     () =>

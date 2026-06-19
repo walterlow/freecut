@@ -100,11 +100,11 @@ describe('power window overlay helpers', () => {
       enabled: true,
       effect: { type: 'gpu-effect', gpuEffectType: 'gpu-brightness', params: { amount: 0.2 } },
     }
-    const updated = buildPowerWindowEffects(
-      [otherEffect, makePowerWindowEffect()],
-      'window-1',
-      { ...baseParams, centerX: 0.75, shape: 'rectangle' },
-    )
+    const updated = buildPowerWindowEffects([otherEffect, makePowerWindowEffect()], 'window-1', {
+      ...baseParams,
+      centerX: 0.75,
+      shape: 'rectangle',
+    })
 
     expect(updated[0]).toBe(otherEffect)
     expect(updated[1]?.effect.params).toMatchObject({

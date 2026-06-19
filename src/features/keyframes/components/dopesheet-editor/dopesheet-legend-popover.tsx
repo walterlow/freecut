@@ -55,7 +55,7 @@ export function DopesheetLegendPopover({ disabled }: DopesheetLegendPopoverProps
             <span>{t('timeline.keyframeEditor.legend.iconAutoKey')}</span>
           </li>
           <li className="flex items-start gap-1.5">
-            <span className="mt-0.5 block h-2 w-2 flex-shrink-0 rotate-45 bg-primary" />
+            <span className="mt-0.5 block h-2 w-2 flex-shrink-0 rotate-45 bg-neutral-200" />
             <span>{t('timeline.keyframeEditor.legend.iconDiamond')}</span>
           </li>
         </ul>
@@ -65,11 +65,11 @@ export function DopesheetLegendPopover({ disabled }: DopesheetLegendPopoverProps
         </p>
         <ul className="space-y-1 text-muted-foreground">
           <li className="flex items-start gap-1.5">
-            <span className="mt-0.5 block h-2 w-2 flex-shrink-0 rotate-45 bg-orange-500" />
+            <span className="mt-0.5 block h-2 w-2 flex-shrink-0 rotate-45 bg-neutral-200" />
             <span>{t('timeline.keyframeEditor.legend.colorDefault')}</span>
           </li>
           <li className="flex items-start gap-1.5">
-            <span className="mt-0.5 block h-2 w-2 flex-shrink-0 rotate-45 bg-orange-500 shadow-[0_0_0_1px_rgba(249,115,22,0.45)]" />
+            <span className="mt-0.5 block h-2 w-2 flex-shrink-0 rotate-45 bg-blue-500 shadow-[0_0_0_1px_rgba(59,130,246,0.45)]" />
             <span>{t('timeline.keyframeEditor.legend.colorSelected')}</span>
           </li>
         </ul>

@@ -1,5 +1,10 @@
 {
   "editor": {
+    "miniTimeline": {
+      "inPoint": "In point",
+      "outPoint": "Out point",
+      "markerAtFrame": "Marker at frame {{frame}}"
+    },
     "animateTimeline": {
       "label": "Animate timeline",
       "noClip": "No clips to animate"

@@ -12,8 +12,11 @@
       "templateVideoOnly": "Şablonlar yalnızca video parçalarına bırakılabilir.",
       "noSupportedMediaInDrop": "Bu bırakmada desteklenen medya bulunamadı."
     },
-    "addAudioTrackHint": "Ses parçası ekle",
-    "addVideoTrackHint": "Video parçası ekle",
+    "addTrack": {
+      "label": "Parça ekle",
+      "video": "Video parçası ekle",
+      "audio": "Ses parçası ekle"
+    },
     "bento": {
       "apply": "Uygula",
       "description": "{{count}} seçili klibi bir ızgaraya yerleştir.",
@@ -264,7 +267,8 @@
     "trackHeader": {
       "addAudioTrack": "Ses parçası ekle",
       "addVideoTrack": "Video parçası ekle",
-      "clipCount": "Klip sayısı",
+      "clipCount_one": "{{count}} klip",
+      "clipCount_other": "{{count}} klip",
       "closeAllGaps": "Tüm boşlukları kapat",
       "deleteEmptyTracks": "Boş parçaları sil",
       "deleteTrack": "Parçayı sil",
@@ -281,7 +285,12 @@
       "resizeSections": "Video ve ses parçası bölümlerini yeniden boyutlandır",
       "resizeTrackHeight": "Parça yüksekliğini yeniden boyutlandır"
     },
-    "tracks": "Parçalar",
+    "trackSize": {
+      "label": "Parça boyutu",
+      "compact": "Kompakt",
+      "medium": "Orta",
+      "large": "Büyük"
+    },
     "volumeControl": {
       "adjustClipVolume": "Klip ses düzeyini ayarla"
     },

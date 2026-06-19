@@ -162,8 +162,7 @@ describe('GPU effect registry', () => {
     })
 
     expect(Array.from(effect!.packUniforms(defaults, 1920, 1080)!)).toEqual([
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0.5, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0,
-      0, 50, 100, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0.5, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 50, 100, 0, 0,
     ])
   })
 
@@ -234,7 +233,11 @@ describe('GPU effect registry', () => {
     )
 
     const rectMatte = Array.from(
-      effect!.packUniforms({ ...defaults, shape: 'rectangle', invertMask: true, showMask: true }, 3840, 2160)!,
+      effect!.packUniforms(
+        { ...defaults, shape: 'rectangle', invertMask: true, showMask: true },
+        3840,
+        2160,
+      )!,
     )
     expect(rectMatte[0]).toBe(1)
     expect(rectMatte[7]).toBe(1)

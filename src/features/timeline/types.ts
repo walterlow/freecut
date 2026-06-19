@@ -55,6 +55,7 @@ export interface TimelineActions {
   addItem: (item: TimelineItem) => void
   addItems: (items: TimelineItem[]) => void
   addItemWithLinkedAudio: (video: VideoItem) => void
+  addItemOnNewTrack: (item: TimelineItem, tracks: TimelineTrack[]) => void
   updateItem: (id: string, updates: Partial<TimelineItem>) => void
   removeItems: (ids: string[]) => void
   rippleDeleteItems: (ids: string[]) => void

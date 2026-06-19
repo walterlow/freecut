@@ -108,7 +108,7 @@ describe('track-resize', () => {
     expect(bottomCollapsedLayout.audioPaneHeight).toBe(36)
   })
 
-  it('defaults the split around the section content heights', () => {
+  it('centers the divider so the panes split evenly by default', () => {
     const viewportHeight = 420
     const trackTitleBarHeight = 24
     const tracks = [createTrack('v1', 'video', 120), createTrack('a1', 'audio', 80)]
@@ -120,8 +120,10 @@ describe('track-resize', () => {
       trackTitleBarHeight,
     })
 
-    expect(layout.videoPaneHeight).toBe(229)
-    expect(layout.audioPaneHeight).toBe(189)
+    // The default divider centers the available pane height (viewport minus the
+    // divider), so both panes get equal height regardless of track content.
+    expect(layout.videoPaneHeight).toBe(209)
+    expect(layout.audioPaneHeight).toBe(209)
   })
 
   it('keeps a manual divider position stable when track heights change', () => {

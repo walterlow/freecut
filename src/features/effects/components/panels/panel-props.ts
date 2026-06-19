@@ -16,6 +16,14 @@ export interface GpuPanelBaseProps extends EffectMoveProps {
   onReset: (effectId: string) => void
   onToggle: (effectId: string) => void
   onRemove: (effectId: string) => void
+  /**
+   * Render the panel as a collapsible disclosure. Used by the heavyweight grade
+   * panels (wheels, curves) in the Edit sidebar so they show as a single
+   * summary row instead of the full grading surface, which belongs to Color.
+   */
+  collapsible?: boolean
+  /** Jump to the Color workspace, where the full grading surface lives. */
+  onEditInColor?: () => void
 }
 
 /** Base props for panels whose params can be keyframed. */

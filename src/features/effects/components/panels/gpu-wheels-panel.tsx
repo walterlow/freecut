@@ -831,6 +831,8 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
   gpuEffect,
   definition,
   layout = 'sidebar',
+  collapsible = false,
+  onEditInColor,
   getKeyframeProperty,
   onParamChange,
   onParamLiveChange,
@@ -847,6 +849,10 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
   const wheelGridRef = useRef<HTMLDivElement>(null)
   const [wheelSize, setWheelSize] = useState(MAX_WHEEL_SIZE)
   const isDock = layout === 'dock'
+  // Collapse only in the sidebar — the dock is the dedicated grading surface.
+  const allowCollapse = collapsible && !isDock
+  const [collapsed, setCollapsed] = useState(allowCollapse)
+  const showBody = !(allowCollapse && collapsed)
 
   const paramEntries = Object.entries(definition.params)
   const isDefault = paramEntries.every(([key, param]) => gpuEffect.params[key] === param.default)
@@ -1176,81 +1182,133 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
         onMove={onMove}
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}
+        collapsed={allowCollapse ? collapsed : undefined}
+        onToggleCollapsed={allowCollapse ? () => setCollapsed((value) => !value) : undefined}
+        onEditInColor={onEditInColor}
       />
 
-      {isDock ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div
-            className="grid shrink-0 items-center gap-x-3 border-b border-border/70 px-4 py-1.5"
-            style={{
-              gridTemplateColumns: `auto repeat(${DOCK_TOP_PARAMS.length}, minmax(0, 1fr))`,
-            }}
-          >
-            <div className="flex items-center gap-0.5 pr-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                disabled={!effect.enabled}
-                onClick={() => void handleAutoBalance()}
-                title={t('effects.wheels.autoBalance')}
-                aria-label={t('effects.wheels.autoBalance')}
-              >
-                <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[8px] font-semibold leading-none">
-                  A
-                </span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                disabled={!effect.enabled || !eyeDropperSupported}
-                onClick={() => void handlePickWhiteBalance()}
-                title={t('effects.wheels.pickWhiteBalance')}
-                aria-label={t('effects.wheels.pickWhiteBalance')}
-              >
-                <Pipette className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                disabled={!effect.enabled || !eyeDropperSupported}
-                onClick={() => void handlePickBlackPoint()}
-                title={t('effects.wheels.pickBlackPoint')}
-                aria-label={t('effects.wheels.pickBlackPoint')}
-              >
-                <span className="relative">
+      {showBody &&
+        (isDock ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div
+              className="grid shrink-0 items-center gap-x-3 border-b border-border/70 px-4 py-1.5"
+              style={{
+                gridTemplateColumns: `auto repeat(${DOCK_TOP_PARAMS.length}, minmax(0, 1fr))`,
+              }}
+            >
+              <div className="flex items-center gap-0.5 pr-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  disabled={!effect.enabled}
+                  onClick={() => void handleAutoBalance()}
+                  title={t('effects.wheels.autoBalance')}
+                  aria-label={t('effects.wheels.autoBalance')}
+                >
+                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[8px] font-semibold leading-none">
+                    A
+                  </span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  disabled={!effect.enabled || !eyeDropperSupported}
+                  onClick={() => void handlePickWhiteBalance()}
+                  title={t('effects.wheels.pickWhiteBalance')}
+                  aria-label={t('effects.wheels.pickWhiteBalance')}
+                >
                   <Pipette className="h-3.5 w-3.5" />
-                  <span
-                    aria-hidden="true"
-                    className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-zinc-500 bg-black"
-                  />
-                </span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                disabled={!effect.enabled || !eyeDropperSupported}
-                onClick={() => void handlePickWhitePoint()}
-                title={t('effects.wheels.pickWhitePoint')}
-                aria-label={t('effects.wheels.pickWhitePoint')}
-              >
-                <span className="relative">
-                  <Pipette className="h-3.5 w-3.5" />
-                  <span
-                    aria-hidden="true"
-                    className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-zinc-600 bg-white"
-                  />
-                </span>
-              </Button>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  disabled={!effect.enabled || !eyeDropperSupported}
+                  onClick={() => void handlePickBlackPoint()}
+                  title={t('effects.wheels.pickBlackPoint')}
+                  aria-label={t('effects.wheels.pickBlackPoint')}
+                >
+                  <span className="relative">
+                    <Pipette className="h-3.5 w-3.5" />
+                    <span
+                      aria-hidden="true"
+                      className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-zinc-500 bg-black"
+                    />
+                  </span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  disabled={!effect.enabled || !eyeDropperSupported}
+                  onClick={() => void handlePickWhitePoint()}
+                  title={t('effects.wheels.pickWhitePoint')}
+                  aria-label={t('effects.wheels.pickWhitePoint')}
+                >
+                  <span className="relative">
+                    <Pipette className="h-3.5 w-3.5" />
+                    <span
+                      aria-hidden="true"
+                      className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-zinc-600 bg-white"
+                    />
+                  </span>
+                </Button>
+              </div>
+              {DOCK_TOP_PARAMS.map(renderDockNumberControl)}
             </div>
-            {DOCK_TOP_PARAMS.map(renderDockNumberControl)}
+            <div ref={wheelGridRef} className="min-h-0 flex-1 overflow-hidden px-6 py-3">
+              <div className="grid min-h-full grid-cols-[repeat(4,minmax(3rem,1fr))] items-center gap-7">
+                {DOCK_WHEEL_DESCRIPTORS.map((desc) => (
+                  <WheelControl
+                    key={desc.labelKey}
+                    label={t(desc.labelKey)}
+                    hue={(displayParams[desc.hueKey] as number) ?? 0}
+                    amount={(displayParams[desc.amountKey] as number) ?? 0}
+                    size={wheelSize}
+                    disabled={!effect.enabled}
+                    dock
+                    masterRingFill={getMasterRingFill(desc)}
+                    masterRingFromDeg={desc.ring.fromDeg}
+                    dockFields={renderDockWheelFields(desc, t(desc.labelKey))}
+                    onLiveChange={(hue, amount) => {
+                      emitLiveBatch({
+                        [desc.hueKey]: hue,
+                        [desc.amountKey]: amount,
+                      })
+                    }}
+                    onCommit={(hue, amount) => {
+                      emitCommitBatch({
+                        [desc.hueKey]: hue,
+                        [desc.amountKey]: amount,
+                      })
+                    }}
+                    onReset={() => {
+                      // Reset the whole wheel: color push and its master level.
+                      emitCommitBatch({
+                        [desc.hueKey]: 0,
+                        [desc.amountKey]: 0,
+                        [desc.levelKey]: (definition.params[desc.levelKey]?.default as number) ?? 0,
+                      })
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div
+              className="grid shrink-0 items-center gap-x-3 border-t border-border/70 px-4 py-1.5"
+              style={{
+                gridTemplateColumns: `repeat(${DOCK_BOTTOM_PARAMS.length}, minmax(0, 1fr))`,
+              }}
+            >
+              {DOCK_BOTTOM_PARAMS.map(renderDockNumberControl)}
+            </div>
           </div>
-          <div ref={wheelGridRef} className="min-h-0 flex-1 overflow-hidden px-6 py-3">
-            <div className="grid min-h-full grid-cols-[repeat(4,minmax(3rem,1fr))] items-center gap-7">
-              {DOCK_WHEEL_DESCRIPTORS.map((desc) => (
+        ) : (
+          <div className="px-2 pb-2">
+            <div ref={wheelGridRef} className="grid grid-cols-3 gap-1">
+              {WHEEL_DESCRIPTORS.map((desc) => (
                 <WheelControl
                   key={desc.labelKey}
                   label={t(desc.labelKey)}
@@ -1258,10 +1316,6 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
                   amount={(displayParams[desc.amountKey] as number) ?? 0}
                   size={wheelSize}
                   disabled={!effect.enabled}
-                  dock
-                  masterRingFill={getMasterRingFill(desc)}
-                  masterRingFromDeg={desc.ring.fromDeg}
-                  dockFields={renderDockWheelFields(desc, t(desc.labelKey))}
                   onLiveChange={(hue, amount) => {
                     emitLiveBatch({
                       [desc.hueKey]: hue,
@@ -1275,60 +1329,18 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
                     })
                   }}
                   onReset={() => {
-                    // Reset the whole wheel: color push and its master level.
                     emitCommitBatch({
                       [desc.hueKey]: 0,
                       [desc.amountKey]: 0,
-                      [desc.levelKey]: (definition.params[desc.levelKey]?.default as number) ?? 0,
                     })
                   }}
                 />
               ))}
             </div>
           </div>
-          <div
-            className="grid shrink-0 items-center gap-x-3 border-t border-border/70 px-4 py-1.5"
-            style={{ gridTemplateColumns: `repeat(${DOCK_BOTTOM_PARAMS.length}, minmax(0, 1fr))` }}
-          >
-            {DOCK_BOTTOM_PARAMS.map(renderDockNumberControl)}
-          </div>
-        </div>
-      ) : (
-        <div className="px-2 pb-2">
-          <div ref={wheelGridRef} className="grid grid-cols-3 gap-1">
-            {WHEEL_DESCRIPTORS.map((desc) => (
-              <WheelControl
-                key={desc.labelKey}
-                label={t(desc.labelKey)}
-                hue={(displayParams[desc.hueKey] as number) ?? 0}
-                amount={(displayParams[desc.amountKey] as number) ?? 0}
-                size={wheelSize}
-                disabled={!effect.enabled}
-                onLiveChange={(hue, amount) => {
-                  emitLiveBatch({
-                    [desc.hueKey]: hue,
-                    [desc.amountKey]: amount,
-                  })
-                }}
-                onCommit={(hue, amount) => {
-                  emitCommitBatch({
-                    [desc.hueKey]: hue,
-                    [desc.amountKey]: amount,
-                  })
-                }}
-                onReset={() => {
-                  emitCommitBatch({
-                    [desc.hueKey]: 0,
-                    [desc.amountKey]: 0,
-                  })
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        ))}
 
-      {!isDock && (
+      {showBody && !isDock && (
         <>
           <div className="px-2 pb-1 pt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             {t('effects.wheels.primaries', { defaultValue: 'Primaries' })}

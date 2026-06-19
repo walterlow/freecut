@@ -35,10 +35,7 @@ describe('GpuPowerWindowPanel', () => {
     expect(screen.getByText('Window')).toBeInTheDocument()
     expect(screen.getByText('Matte')).toBeInTheDocument()
     expect(screen.getByText('Correction')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ellipse' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    expect(screen.getByRole('button', { name: 'Ellipse' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Rectangle' })).toHaveAttribute(
       'aria-pressed',
       'false',

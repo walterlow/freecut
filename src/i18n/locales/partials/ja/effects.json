@@ -14,7 +14,8 @@
     "removeEffect": "エフェクトを削除",
     "resetToDefaults": "デフォルトにリセット",
     "moveUp": "エフェクトを上へ移動",
-    "moveDown": "エフェクトを下へ移動"
+    "moveDown": "エフェクトを下へ移動",
+    "editInColor": "カラーで編集"
   },
   "section": {
     "addEffect": "エフェクトを追加",

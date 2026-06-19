@@ -14,7 +14,8 @@
     "removeEffect": "Efekti Kaldır",
     "resetToDefaults": "Varsayılanlara Sıfırla",
     "moveUp": "Efekti Yukarı Taşı",
-    "moveDown": "Efekti Aşağı Taşı"
+    "moveDown": "Efekti Aşağı Taşı",
+    "editInColor": "Color'da düzenle"
   },
   "section": {
     "addEffect": "Efekt Ekle",

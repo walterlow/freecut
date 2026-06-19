@@ -12,8 +12,11 @@
       "templateVideoOnly": "Templates can only be dropped on video tracks.",
       "noSupportedMediaInDrop": "No supported media found in this drop."
     },
-    "addAudioTrackHint": "Add audio track",
-    "addVideoTrackHint": "Add video track",
+    "addTrack": {
+      "label": "Add track",
+      "video": "Add video track",
+      "audio": "Add audio track"
+    },
     "bento": {
       "apply": "Apply",
       "description": "Arrange {{count}} selected clips into a grid.",
@@ -268,7 +271,8 @@
     "trackHeader": {
       "addAudioTrack": "Add Audio Track",
       "addVideoTrack": "Add Video Track",
-      "clipCount": "Clip Count",
+      "clipCount_one": "{{count}} clip",
+      "clipCount_other": "{{count}} clips",
       "closeAllGaps": "Close All Gaps",
       "deleteEmptyTracks": "Delete Empty Tracks",
       "deleteTrack": "Delete Track",
@@ -285,7 +289,12 @@
       "resizeSections": "Resize video and audio track sections",
       "resizeTrackHeight": "Resize track height"
     },
-    "tracks": "Tracks",
+    "trackSize": {
+      "label": "Track size",
+      "compact": "Compact",
+      "medium": "Medium",
+      "large": "Large"
+    },
     "volumeControl": {
       "adjustClipVolume": "Adjust clip volume"
     },

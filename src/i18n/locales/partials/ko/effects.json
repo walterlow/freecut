@@ -14,7 +14,8 @@
     "removeEffect": "효과 제거",
     "resetToDefaults": "기본값으로 재설정",
     "moveUp": "효과 위로 이동",
-    "moveDown": "효과 아래로 이동"
+    "moveDown": "효과 아래로 이동",
+    "editInColor": "색상에서 편집"
   },
   "section": {
     "addEffect": "효과 추가",

@@ -16,7 +16,13 @@ import { HOTKEY_OPTIONS } from '@/config/hotkeys'
 import { useSettingsStore, useResolvedHotkeys } from '@/features/timeline/deps/settings'
 
 import { Button } from '@/components/ui/button'
-import { Plus, Minus } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
+import { Plus, Minus, Rows4, Rows3, Rows2, Check, Video, AudioLines } from 'lucide-react'
 import { CompositionBreadcrumbs } from './composition-breadcrumbs'
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store'
 import {
@@ -31,8 +37,14 @@ import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/config/editor-layou
 import { useTrackHeightResize } from '../hooks/use-track-height-resize'
 import { resizeTracksOfKindByDelta } from '../utils/track-resize'
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
+import { resizeAllTracks } from '../stores/actions/track-actions'
 import { useZoomStore } from '../stores/zoom-store'
-import { computeWheelZoomStep } from '../constants'
+import {
+  computeWheelZoomStep,
+  COMPACT_TRACK_HEIGHT,
+  MAX_TRACK_HEIGHT,
+  DEFAULT_TRACK_HEIGHT,
+} from '../constants'
 import { clampSectionDividerPosition, getTrackSectionLayout } from '../utils/track-resize'
 import { clearMediaDragData } from '@/features/timeline/deps/media-library-resolver'
 import { useNewTrackZonePreviewStore } from '../stores/new-track-zone-preview-store'
@@ -45,6 +57,26 @@ import {
 import { getDefaultActiveTrackId } from '../utils/default-active-track'
 
 const logger = createLogger('Timeline')
+
+/**
+ * Track height presets exposed through the track-size flyout. `medium` maps to
+ * the default track height so it doubles as a reset.
+ */
+const TRACK_SIZE_OPTIONS = [
+  {
+    id: 'compact',
+    height: COMPACT_TRACK_HEIGHT,
+    icon: Rows4,
+    labelKey: 'timeline.trackSize.compact',
+  },
+  {
+    id: 'medium',
+    height: DEFAULT_TRACK_HEIGHT,
+    icon: Rows3,
+    labelKey: 'timeline.trackSize.medium',
+  },
+  { id: 'large', height: MAX_TRACK_HEIGHT, icon: Rows2, labelKey: 'timeline.trackSize.large' },
+] as const
 
 interface TimelineProps {
   duration: number // Total timeline duration in seconds
@@ -137,9 +169,16 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     timelineWidth: 0,
   })
   const [trackRowsViewportHeight, setTrackRowsViewportHeight] = useState(0)
-  const [sectionDividerPosition, setSectionDividerPosition] = useState<number | null>(null)
+  // A/V divider position is a viewport layout preference, persisted globally in
+  // localStorage (null = centered default). Seed the live value once from the
+  // saved preference; the drag handler commits the final value back on mouseup.
+  const [sectionDividerPosition, setSectionDividerPosition] = useState<number | null>(
+    () => useSettingsStore.getState().timelineSectionDividerPosition,
+  )
 
   const toggleKeyframeEditorOpen = useEditorStore((s) => s.toggleKeyframeEditorOpen)
+  const trackSizePreset = useEditorStore((s) => s.trackSizePreset)
+  const setTrackSizePreset = useEditorStore((s) => s.setTrackSizePreset)
   const setTimelineTracks = useTimelineStore((s) => s.setTracks)
 
   useEffect(() => {
@@ -334,19 +373,19 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
       document.body.style.userSelect = 'none'
       document.body.style.cursor = 'row-resize'
 
+      let latestPosition = clampedSectionDividerPosition
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const dragState = sectionDividerDragRef.current
         if (!dragState) return
 
         const deltaY = moveEvent.clientY - dragState.startY
-        setSectionDividerPosition(
-          clampSectionDividerPosition({
-            viewportHeight: trackRowsViewportHeight,
-            tracks: visibleTracks,
-            requestedDividerPosition: dragState.startDividerPosition + deltaY,
-            trackTitleBarHeight: editorLayout.timelineClipLabelRowHeight,
-          }),
-        )
+        latestPosition = clampSectionDividerPosition({
+          viewportHeight: trackRowsViewportHeight,
+          tracks: visibleTracks,
+          requestedDividerPosition: dragState.startDividerPosition + deltaY,
+          trackTitleBarHeight: editorLayout.timelineClipLabelRowHeight,
+        })
+        setSectionDividerPosition(latestPosition)
       }
 
       const handleMouseUp = () => {
@@ -355,6 +394,9 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
         document.body.style.cursor = ''
         window.removeEventListener('mousemove', handleMouseMove)
         window.removeEventListener('mouseup', handleMouseUp)
+        // Persist to localStorage so the split survives a refresh (one write
+        // per gesture, on release — not on every mousemove frame).
+        useSettingsStore.getState().setSetting('timelineSectionDividerPosition', latestPosition)
       }
 
       window.addEventListener('mousemove', handleMouseMove)
@@ -552,7 +594,6 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
           return
         }
       }
-
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -560,16 +601,6 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
-
-  const nextTrackKind = useMemo(() => {
-    const activeTrack = activeTrackId ? tracks.find((track) => track.id === activeTrackId) : null
-
-    if (!activeTrack) {
-      return 'video' as const
-    }
-
-    return getTrackKind(activeTrack) ?? 'video'
-  }, [activeTrackId, tracks])
 
   const syncTrackSelectionAfterRemoval = useCallback(
     (removedTrackIds: string[], fallbackTrackId: string | null) => {
@@ -636,18 +667,21 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     videoTracks,
   ])
 
-  /**
-   * Handle adding a new track
-   * Video tracks add to the top; audio tracks append within the audio section.
-   */
-  const handleAddTrack = useCallback(() => {
-    if (nextTrackKind === 'audio') {
-      appendAudioTrackToSection()
-      return
-    }
+  // Trigger reflects the persisted preset (saved as a local editor setting).
+  const ActiveTrackSizeIcon =
+    TRACK_SIZE_OPTIONS.find((option) => option.id === trackSizePreset)?.icon ?? Rows3
 
-    addVideoTrackToTop()
-  }, [addVideoTrackToTop, appendAudioTrackToSection, nextTrackKind])
+  /**
+   * Apply a track-size preset: persist the choice as a local setting and resize
+   * every track to the preset height in one undoable step.
+   */
+  const handleSelectTrackSize = useCallback(
+    (preset: (typeof TRACK_SIZE_OPTIONS)[number]) => {
+      setTrackSizePreset(preset.id)
+      resizeAllTracks(preset.height)
+    },
+    [setTrackSizePreset],
+  )
 
   const handleDeleteTrack = useCallback(
     (trackId: string) => {
@@ -861,24 +895,59 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
             className="flex items-center justify-between px-3 border-b border-border bg-secondary/20 flex-shrink-0"
             style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
           >
-            <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
-              {t('timeline.tracks')}
-            </span>
+            {/* Track size flyout */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  title={t('timeline.trackSize.label')}
+                >
+                  <ActiveTrackSizeIcon className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[10rem]">
+                {TRACK_SIZE_OPTIONS.map((option) => {
+                  const OptionIcon = option.icon
+                  const isActive = trackSizePreset === option.id
+                  return (
+                    <DropdownMenuItem
+                      key={option.id}
+                      onSelect={() => handleSelectTrackSize(option)}
+                    >
+                      <OptionIcon className="w-4 h-4" />
+                      <span className="flex-1">{t(option.labelKey)}</span>
+                      {isActive ? <Check className="w-4 h-4" /> : null}
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div className="flex items-center gap-1">
-              {/* Add track button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleAddTrack}
-                title={
-                  nextTrackKind === 'audio'
-                    ? t('timeline.addAudioTrackHint')
-                    : t('timeline.addVideoTrackHint')
-                }
-              >
-                <Plus className="w-3 h-3" />
-              </Button>
+              {/* Add track flyout */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    title={t('timeline.addTrack.label')}
+                  >
+                    <Plus className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[10rem]">
+                  <DropdownMenuItem onSelect={() => addVideoTrackToTop()}>
+                    <Video className="w-4 h-4" />
+                    <span className="flex-1">{t('timeline.addTrack.video')}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => appendAudioTrackToSection()}>
+                    <AudioLines className="w-4 h-4" />
+                    <span className="flex-1">{t('timeline.addTrack.audio')}</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               {/* Remove track button */}
               <Button
                 variant="ghost"

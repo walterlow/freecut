@@ -57,6 +57,16 @@ export interface PlaybackState {
   useProxy: boolean
   /** Fast-scrub render resolution multiplier (1 = full, 0.5 = half, 0.33 = third, 0.25 = quarter) */
   previewQuality: PreviewQuality
+  /**
+   * True while the GPU fast-scrub overlay owns the preview during playback.
+   * When set, the (occluded) DOM composition tree freezes its per-item visual
+   * recomputation (transforms, masks, text layout) at the frame it held when
+   * playback began — the overlay composites the actual frames, so re-deriving
+   * those styles every frame is wasted work behind the overlay. Mount/visibility
+   * and video element sync stay live so the overlay always has correct sources.
+   * Transient runtime flag — never persisted.
+   */
+  compositionVisualFrozen: boolean
 }
 
 export interface PlaybackActions {
@@ -78,4 +88,6 @@ export interface PlaybackActions {
   toggleUseProxy: () => void
   /** Set fast-scrub render quality */
   setPreviewQuality: (quality: PreviewQuality) => void
+  /** Toggle the composition-tree visual freeze used during overlay playback. */
+  setCompositionVisualFrozen: (frozen: boolean) => void
 }

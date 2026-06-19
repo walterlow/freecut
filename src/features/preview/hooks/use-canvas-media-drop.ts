@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { i18n } from '@/i18n'
 import { useSelectionStore } from '@/shared/state/selection'
@@ -6,8 +6,12 @@ import { usePlaybackStore } from '@/shared/state/playback'
 import { useTimelineStore } from '@/features/preview/deps/timeline-store'
 import {
   buildDroppedMediaTimelineItem,
+  createNewVideoZoneTrack,
+  createTimelineTemplateItem,
   findBestCanvasDropPlacement,
+  getDefaultGeneratedLayerDurationInFrames,
   getDroppedMediaDurationInFrames,
+  isTimelineTemplateDragData,
   type DroppableMediaType,
 } from '@/features/preview/deps/timeline-utils'
 import {
@@ -23,7 +27,7 @@ import {
 } from '@/features/preview/deps/media-library'
 import { screenToCanvas } from '../utils/coordinate-transform'
 import type { CoordinateParams } from '../types/gizmo'
-import type { TimelineItem } from '@/types/timeline'
+import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import type { MediaMetadata } from '@/types/storage'
 import {
   useProjectMediaMatchDialogStore,
@@ -117,6 +121,24 @@ function clampDropPosition(
   }
 }
 
+// Picks the track a new overlay layer anchors to (active track, else the
+// topmost non-group track) and the height the new track should adopt.
+function resolveOverlayLayerAnchor(
+  tracks: TimelineTrack[],
+  activeTrackId: string | null,
+): { anchorTrackId: string; preferredTrackHeight: number } {
+  // Group tracks are headers only and never hold items, so the active track
+  // only counts when it is a non-group track; otherwise fall through to the
+  // first non-group track (never tracks[0], which may itself be a group).
+  const activeNonGroupTrackId = tracks.find(
+    (track) => track.id === activeTrackId && !track.isGroup,
+  )?.id
+  const anchorTrackId =
+    activeNonGroupTrackId ?? tracks.find((track) => !track.isGroup)?.id ?? ''
+  const preferredTrackHeight = tracks.find((track) => track.id === anchorTrackId)?.height ?? 64
+  return { anchorTrackId, preferredTrackHeight }
+}
+
 function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null {
   const t = i18n.t.bind(i18n)
   const dragData = getMediaDragData()
@@ -131,11 +153,23 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
     }
 
     if (dragData.type === 'timeline-template') {
+      // Adjustment layers cover the whole frame and have no spatial position,
+      // so they stay timeline-only. Text and shape presets are visual layers
+      // with a transform — drop them at the cursor to set initial placement.
+      if (dragData.itemType === 'adjustment') {
+        return {
+          allowed: false,
+          source: 'library',
+          title: t('preview.canvasDrop.dropOnTimeline'),
+          description: t('preview.canvasDrop.adjustmentLayersTimeline'),
+        }
+      }
+
       return {
-        allowed: false,
+        allowed: true,
         source: 'library',
-        title: t('preview.canvasDrop.dropOnTimeline'),
-        description: t('preview.canvasDrop.presetsTimeline'),
+        title: t('preview.canvasDrop.dropToPlace'),
+        description: t('preview.canvasDrop.placeLayerDescription'),
       }
     }
 
@@ -201,13 +235,31 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
 }
 
 export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaDropParams) {
-  const dragDepthRef = useRef(0)
   const [dropState, setDropState] = useState<CanvasDropState | null>(null)
 
   const clearDropState = useCallback(() => {
-    dragDepthRef.current = 0
     setDropState(null)
   }, [])
+
+  // Safety net: when a drag ends anywhere (dropped on the timeline, released
+  // outside the canvas, or cancelled with Escape) the canvas itself may never
+  // receive a balancing `dragleave`/`drop`, which would otherwise leave the
+  // "Drop on timeline" overlay painted on the canvas. `dragend` fires on the
+  // drag source for in-page drags and the bubbled window `drop` covers the
+  // rest, so force-clear the overlay on either.
+  useEffect(() => {
+    if (!dropState) {
+      return
+    }
+
+    const forceClear = () => setDropState(null)
+    window.addEventListener('dragend', forceClear)
+    window.addEventListener('drop', forceClear)
+    return () => {
+      window.removeEventListener('dragend', forceClear)
+      window.removeEventListener('drop', forceClear)
+    }
+  }, [dropState])
 
   const placeMediaOnCanvas = useCallback(
     async ({
@@ -289,6 +341,64 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
     [coordParams, projectSize],
   )
 
+  const placeTemplateOnCanvas = useCallback(
+    (template: unknown, clientX: number, clientY: number) => {
+      // Only text and shape presets reach the canvas; adjustment layers are
+      // rejected earlier in evaluateCanvasDrop because they have no position.
+      if (
+        !coordParams ||
+        !isTimelineTemplateDragData(template) ||
+        template.itemType === 'adjustment'
+      ) {
+        return
+      }
+
+      const timelineState = useTimelineStore.getState()
+      const playbackState = usePlaybackStore.getState()
+      const selectionState = useSelectionStore.getState()
+
+      // Text and shapes are overlays, not sequenced clips: give each its own new
+      // layer above existing content (matching the timeline drop behavior) so it
+      // sits at the playhead over whatever is below instead of being shoved to
+      // free space on a shared track.
+      const tracks = timelineState.tracks
+      const { anchorTrackId, preferredTrackHeight } = resolveOverlayLayerAnchor(
+        tracks,
+        selectionState.activeTrackId,
+      )
+      const newTrack = createNewVideoZoneTrack({ tracks, anchorTrackId, preferredTrackHeight })
+
+      if (!newTrack) {
+        toast.warning(i18n.t('preview.canvasDrop.noCompatibleTrack'))
+        return
+      }
+
+      const durationInFrames = getDefaultGeneratedLayerDurationInFrames(timelineState.fps)
+      const baseItem = createTimelineTemplateItem({
+        template,
+        placement: {
+          trackId: newTrack.trackId,
+          from: Math.max(0, playbackState.currentFrame),
+          durationInFrames,
+          canvasWidth: projectSize.width,
+          canvasHeight: projectSize.height,
+          fps: timelineState.fps,
+        },
+      })
+
+      const placedItem = clampDropPosition(
+        baseItem,
+        screenToCanvas(clientX, clientY, coordParams),
+        projectSize,
+      )
+
+      timelineState.addItemOnNewTrack(placedItem, newTrack.tracks)
+      selectionState.setActiveTrack(newTrack.trackId)
+      selectionState.selectItems([placedItem.id])
+    },
+    [coordParams, projectSize],
+  )
+
   const handleLibraryDrop = useCallback(
     async (event: React.DragEvent, currentDropState: CanvasDropState) => {
       if (!currentDropState.allowed) {
@@ -298,6 +408,11 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
 
       const dragData = getMediaDragData()
       if (!dragData) {
+        return
+      }
+
+      if (dragData.type === 'timeline-template') {
+        placeTemplateOnCanvas(dragData, event.clientX, event.clientY)
         return
       }
 
@@ -347,7 +462,7 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
         clientY: event.clientY,
       })
     },
-    [placeMediaOnCanvas],
+    [placeMediaOnCanvas, placeTemplateOnCanvas],
   )
 
   const handleExternalFileDrop = useCallback(
@@ -467,7 +582,6 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
     }
 
     event.preventDefault()
-    dragDepthRef.current += 1
     setDropState(nextDropState)
   }, [])
 
@@ -492,20 +606,20 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
     })
   }, [])
 
-  const handleDragLeave = useCallback(
-    (event: React.DragEvent) => {
-      if (!dropState) {
-        return
-      }
+  const handleDragLeave = useCallback((event: React.DragEvent) => {
+    // Ignore leaves into descendant elements (gizmos, clickable item areas):
+    // the drag is still over the canvas, so the related target stays contained.
+    // Only clear when the pointer leaves the drop container entirely (or the
+    // related target is null, e.g. leaving the window). This avoids the
+    // enter/leave counter desync that left the overlay stuck.
+    const relatedTarget = event.relatedTarget
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return
+    }
 
-      event.preventDefault()
-      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
-      if (dragDepthRef.current === 0) {
-        setDropState(null)
-      }
-    },
-    [dropState],
-  )
+    event.preventDefault()
+    setDropState(null)
+  }, [])
 
   const handleDrop = useCallback(
     async (event: React.DragEvent) => {

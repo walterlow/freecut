@@ -12,8 +12,11 @@
       "templateVideoOnly": "Modelos só podem ser soltos em faixas de vídeo.",
       "noSupportedMediaInDrop": "Nenhuma mídia compatível encontrada neste drop."
     },
-    "addAudioTrackHint": "Adicionar faixa de audio",
-    "addVideoTrackHint": "Adicionar faixa de video",
+    "addTrack": {
+      "label": "Adicionar faixa",
+      "video": "Adicionar faixa de vídeo",
+      "audio": "Adicionar faixa de áudio"
+    },
     "bento": {
       "apply": "Aplicar",
       "description": "Organize {{count}} clipes selecionados em uma grade.",
@@ -268,7 +271,8 @@
     "trackHeader": {
       "addAudioTrack": "Adicionar faixa de audio",
       "addVideoTrack": "Adicionar faixa de video",
-      "clipCount": "Contagem de clipes",
+      "clipCount_one": "{{count}} clipe",
+      "clipCount_other": "{{count}} clipes",
       "closeAllGaps": "Fechar todos os espacos",
       "deleteEmptyTracks": "Excluir faixas vazias",
       "deleteTrack": "Excluir faixa",
@@ -285,7 +289,12 @@
       "resizeSections": "Redimensionar secoes das faixas de video e audio",
       "resizeTrackHeight": "Redimensionar altura da faixa"
     },
-    "tracks": "Faixas",
+    "trackSize": {
+      "label": "Tamanho da faixa",
+      "compact": "Compacto",
+      "medium": "Médio",
+      "large": "Grande"
+    },
     "volumeControl": {
       "adjustClipVolume": "Ajustar volume do clipe"
     },

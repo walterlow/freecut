@@ -74,6 +74,8 @@
       "dropOnTimeline": "Déposer sur la timeline",
       "compoundClipsTimeline": "Les clips composés se placent toujours mieux sur la timeline.",
       "presetsTimeline": "Les préréglages de texte et de forme se placent toujours mieux sur la timeline.",
+      "adjustmentLayersTimeline": "Les calques de réglage s'appliquent à toute l'image — placez-les sur la timeline.",
+      "placeLayerDescription": "Placez ce calque à la position de dépôt.",
       "dropOneItem": "Déposer un élément",
       "oneMediaAtATime": "Placez un média à la fois sur le canevas.",
       "audioGoesOnTimeline": "L'audio va sur la timeline",

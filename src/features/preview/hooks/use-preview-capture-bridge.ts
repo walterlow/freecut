@@ -4,7 +4,9 @@ import type { CaptureOptions } from '@/shared/state/playback'
 interface UsePreviewCaptureBridgeParams {
   captureCurrentFrame: (options?: CaptureOptions) => Promise<string | null>
   captureCurrentFrameImageData: (options?: CaptureOptions) => Promise<ImageData | null>
-  captureCanvasSource: (options?: CaptureOptions) => Promise<OffscreenCanvas | HTMLCanvasElement | null>
+  captureCanvasSource: (
+    options?: CaptureOptions,
+  ) => Promise<OffscreenCanvas | HTMLCanvasElement | null>
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void
   setCaptureFrameImageData: (
     fn: ((options?: CaptureOptions) => Promise<ImageData | null>) | null,

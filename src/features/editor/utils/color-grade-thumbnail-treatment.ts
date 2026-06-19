@@ -86,9 +86,7 @@ function applyWheelsEffect(state: TreatmentState, params: EffectParams): void {
   state.contrast *= clamp(readNumber(params, 'contrast', 1), 0.1, 3)
   state.contrast *= clamp(1 / Math.max(0.08, whitePoint - blackPoint), 0.35, 3)
   state.saturate *= clamp(
-    1 +
-      readNumber(params, 'saturation', 0) / 100 +
-      readNumber(params, 'colorBoost', 0) / 150,
+    1 + readNumber(params, 'saturation', 0) / 100 + readNumber(params, 'colorBoost', 0) / 150,
     0,
     4,
   )
@@ -105,7 +103,11 @@ function applyWheelsEffect(state: TreatmentState, params: EffectParams): void {
     readNumber(params, 'tint', 0),
     0.0024,
   )
-  addHueOverlay(state, readNumber(params, 'offsetHue', 0), readNumber(params, 'offsetAmount', 0) * 0.22)
+  addHueOverlay(
+    state,
+    readNumber(params, 'offsetHue', 0),
+    readNumber(params, 'offsetAmount', 0) * 0.22,
+  )
   addHueOverlay(
     state,
     readNumber(params, 'shadowsHue', 0),
@@ -131,7 +133,11 @@ function getCurveDelta(params: EffectParams, channel: GpuCurvesChannelKey): numb
 function applyCurvesEffect(state: TreatmentState, params: EffectParams): void {
   const masterDelta = getCurveDelta(params, 'master')
   state.brightness *= clamp(1 + masterDelta * 0.45, 0.25, 2.5)
-  state.contrast *= clamp(1 + (readGpuCurvesChannelControl(params, 'master').highlight.y - 0.75) * 1.2, 0.3, 2.6)
+  state.contrast *= clamp(
+    1 + (readGpuCurvesChannelControl(params, 'master').highlight.y - 0.75) * 1.2,
+    0.3,
+    2.6,
+  )
 
   const channelDeltas = GPU_CURVES_CHANNELS.filter(
     (channel): channel is Exclude<GpuCurvesChannelKey, 'master'> => channel !== 'master',
@@ -190,7 +196,11 @@ function applyGenericColorEffect(state: TreatmentState, type: string, params: Ef
       const inputBlack = readNumber(params, 'inputBlack', 0)
       const inputWhite = readNumber(params, 'inputWhite', 1)
       state.contrast *= clamp(1 / Math.max(0.08, inputWhite - inputBlack), 0.25, 3)
-      state.brightness *= clamp(readNumber(params, 'outputWhite', 1) - readNumber(params, 'outputBlack', 0), 0.1, 2)
+      state.brightness *= clamp(
+        readNumber(params, 'outputWhite', 1) - readNumber(params, 'outputBlack', 0),
+        0.1,
+        2,
+      )
       break
     }
   }
@@ -200,7 +210,10 @@ function buildOverlayStyle(overlays: TreatmentState['overlays']): CSSProperties 
   if (overlays.length === 0) return null
   return {
     background: overlays
-      .map(({ hue, alpha }) => `linear-gradient(hsla(${Math.round(hue)}, 90%, 55%, ${alpha}), hsla(${Math.round(hue)}, 90%, 55%, ${alpha}))`)
+      .map(
+        ({ hue, alpha }) =>
+          `linear-gradient(hsla(${Math.round(hue)}, 90%, 55%, ${alpha}), hsla(${Math.round(hue)}, 90%, 55%, ${alpha}))`,
+      )
       .join(', '),
     mixBlendMode: 'color',
   }
@@ -211,7 +224,9 @@ export function resolveColorGradeThumbnailTreatment(
 ): ColorGradeThumbnailTreatment {
   const gradeEffects = (effects ?? []).filter(
     (entry) =>
-      entry.enabled && entry.effect.type === 'gpu-effect' && isColorGradeEffectType(entry.effect.gpuEffectType),
+      entry.enabled &&
+      entry.effect.type === 'gpu-effect' &&
+      isColorGradeEffectType(entry.effect.gpuEffectType),
   )
   if (gradeEffects.length === 0) return DEFAULT_TREATMENT
 

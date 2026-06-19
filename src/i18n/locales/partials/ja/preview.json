@@ -74,6 +74,8 @@
       "dropOnTimeline": "タイムラインにドロップ",
       "compoundClipsTimeline": "コンパウンドクリップはタイムラインに配置するのが最適です。",
       "presetsTimeline": "テキストと図形のプリセットはタイムラインに配置するのが最適です。",
+      "adjustmentLayersTimeline": "調整レイヤーはフレーム全体に適用されます。タイムラインに配置してください。",
+      "placeLayerDescription": "このレイヤーをドロップ位置に配置します。",
       "dropOneItem": "1項目をドロップ",
       "oneMediaAtATime": "キャンバスにはメディアを1つずつ配置してください。",
       "audioGoesOnTimeline": "音声はタイムラインへ",

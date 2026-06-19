@@ -12,8 +12,11 @@
       "templateVideoOnly": "模板只能拖放到视频轨道。",
       "noSupportedMediaInDrop": "此次拖放未找到支持的媒体。"
     },
-    "addAudioTrackHint": "添加音频轨道",
-    "addVideoTrackHint": "添加视频轨道",
+    "addTrack": {
+      "label": "添加轨道",
+      "video": "添加视频轨道",
+      "audio": "添加音频轨道"
+    },
     "bento": {
       "apply": "应用",
       "description": "将所选的 {{count}} 个片段排列为网格。",
@@ -142,9 +145,13 @@
       "clearInOutPointsTooltip": "清除入点/出点",
       "controls": "控制",
       "disableLinkedSelection": "禁用链接选择",
+      "disableAudioSkimming": "禁用音频试听",
       "disableSnapping": "禁用吸附",
+      "enableAudioSkimming": "启用音频试听",
       "enableLinkedSelection": "启用链接选择",
       "enableSnapping": "启用吸附",
+      "audioSkimmingDisabled": "音频试听已禁用",
+      "audioSkimmingEnabled": "音频试听已启用",
       "hideColorScopes": "隐藏颜色示波器",
       "hideColorScopesTooltip": "隐藏颜色示波器",
       "linkedSelectionOff": "链接选择关闭",
@@ -264,7 +271,8 @@
     "trackHeader": {
       "addAudioTrack": "添加音频轨道",
       "addVideoTrack": "添加视频轨道",
-      "clipCount": "剪辑数",
+      "clipCount_one": "{{count}} 个剪辑",
+      "clipCount_other": "{{count}} 个剪辑",
       "closeAllGaps": "关闭所有间隙",
       "deleteEmptyTracks": "删除空轨道",
       "deleteTrack": "删除轨道",
@@ -281,7 +289,12 @@
       "resizeSections": "调整视频和音频轨道区域大小",
       "resizeTrackHeight": "调整轨道高度"
     },
-    "tracks": "轨道",
+    "trackSize": {
+      "label": "轨道大小",
+      "compact": "紧凑",
+      "medium": "中等",
+      "large": "较大"
+    },
     "volumeControl": {
       "adjustClipVolume": "调整剪辑音量"
     },

@@ -74,6 +74,8 @@
       "dropOnTimeline": "Zaman çizelgesine bırak",
       "compoundClipsTimeline": "Bileşik klipler hâlâ en iyi zaman çizelgesine yerleşir.",
       "presetsTimeline": "Metin ve şekil ön ayarları hâlâ en iyi zaman çizelgesine yerleşir.",
+      "adjustmentLayersTimeline": "Ayar katmanları tüm kareye uygulanır — bunları zaman çizelgesine yerleştirin.",
+      "placeLayerDescription": "Bu katmanı bırakma konumuna yerleştirin.",
       "dropOneItem": "Bir öğe bırak",
       "oneMediaAtATime": "Tuvale tek seferde bir medya öğesi yerleştirin.",
       "audioGoesOnTimeline": "Ses zaman çizelgesine gider",

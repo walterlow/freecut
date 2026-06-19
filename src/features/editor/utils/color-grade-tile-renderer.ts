@@ -4,7 +4,7 @@
  * Bakes a clip's real GPU color grade onto its thumbnail frame, reusing the
  * shared (globally cached) WebGPU device through a dedicated EffectsPipeline —
  * the same primitive the Add-Effect picker uses for its preview thumbnails
- * (`use-effect-previews.ts`). Tiles are tiny (≈118×80) so each render is a
+ * (`effect-thumbnail/engine.ts`). Tiles are tiny (≈118×80) so each render is a
  * sub-millisecond GPU pass plus one readback; work runs off the playback loop.
  *
  * The pipeline's non-pool output canvas is reused per call, so GPU draws + the

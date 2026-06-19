@@ -19,11 +19,10 @@ import {
 } from './panels'
 import { getGpuEffect, getGpuEffectDefaultParams } from '@/infrastructure/gpu-effects'
 import { useGpuEffectPreviewData } from '../hooks/use-gpu-effect-preview-data'
+import { EffectThumbnail } from './effect-thumbnail'
 import { getMappedSelectionEffectEntry } from '../utils/effect-selection'
 import { useUserPresetsStore } from '../stores/user-presets-store'
-import {
-  getAutoKeyframeOperation,
-} from '@/features/effects/deps/keyframes-contract'
+import { getAutoKeyframeOperation } from '@/features/effects/deps/keyframes-contract'
 import { buildEffectAnimatableProperty, type AnimatableProperty } from '@/types/keyframe'
 import {
   getEffectCategoryLabel,
@@ -42,6 +41,12 @@ interface EffectsSectionProps {
   hiddenGpuEffectTypes?: readonly string[]
   /** Sidebar keeps the legacy inspector shell; dock fits inside the Color page lane. */
   layout?: 'sidebar' | 'dock'
+  /**
+   * Jump to the Color workspace. When provided, heavyweight grade panels
+   * (wheels, curves) render collapsed in the sidebar with an "Edit in Color"
+   * affordance instead of the full grading surface.
+   */
+  onEditInColor?: () => void
 }
 
 const EMPTY_HIDDEN_GPU_EFFECT_TYPES: readonly string[] = []
@@ -55,9 +60,13 @@ export const EffectsSection = memo(function EffectsSection({
   items,
   hiddenGpuEffectTypes = EMPTY_HIDDEN_GPU_EFFECT_TYPES,
   layout = 'sidebar',
+  onEditInColor,
 }: EffectsSectionProps) {
   const { t } = useTranslation()
   const isDock = layout === 'dock'
+  // Grade panels collapse to a summary row in the sidebar (the Edit workspace);
+  // the dock owns the full grading surface, so it never collapses.
+  const gradePanelCollapsible = !isDock
   const addEffect = useTimelineStore((s) => s.addEffect)
   const addEffects = useTimelineStore((s) => s.addEffects)
   const updateEffect = useTimelineStore((s) => s.updateEffect)
@@ -144,7 +153,9 @@ export const EffectsSection = memo(function EffectsSection({
     [itemIds, addEffect],
   )
 
-  const { gpuCategories, effectPreviews, triggerPreviews } = useGpuEffectPreviewData()
+  const { gpuCategories, triggerPreviews } = useGpuEffectPreviewData()
+  // Which picker row is hovered — drives that thumbnail's live sweep animation.
+  const [hoveredPickerKey, setHoveredPickerKey] = useState<string | null>(null)
 
   // Update GPU effect parameter(s)
   const handleGpuParamChange = useCallback(
@@ -603,168 +614,162 @@ export const EffectsSection = memo(function EffectsSection({
 
   const addEffectControls = (
     <div className={isDock ? 'flex min-w-0 flex-1 gap-1' : 'px-2 pb-2 flex gap-1'}>
+      <Button
+        ref={triggerRef}
+        variant="outline"
+        size="sm"
+        className="flex-1 h-7 min-w-0 text-xs"
+        onClick={() => (pickerOpen ? closePicker() : openPicker())}
+      >
+        <Plus className="w-3 h-3 mr-1" />
+        <span className="truncate">{t('effects.section.addEffect')}</span>
+      </Button>
+      {pickerOpen &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={panelStyle}
+            className="z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 slide-in-from-top-2"
+          >
+            {/* Search input */}
+            <div className="p-1.5 border-b">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t('effects.section.searchEffects')}
+                  className="w-full h-7 pl-7 pr-2 text-xs bg-transparent rounded-sm border border-input placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+            </div>
+
+            {/* Scrollable effect list */}
+            <div className="max-h-[280px] overflow-y-auto overflow-x-hidden p-1">
+              {/* GPU Shader Effects */}
+              {filteredCategories.map(({ category, effects: catEffects }, index) => (
+                <div key={category}>
+                  {index > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {getEffectCategoryLabel(t, category)}
+                  </div>
+                  {catEffects.map((def) => (
+                    <button
+                      key={def.id}
+                      type="button"
+                      className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
+                      onMouseEnter={() => setHoveredPickerKey(def.id)}
+                      onMouseLeave={() => setHoveredPickerKey((k) => (k === def.id ? null : k))}
+                      onClick={() => {
+                        handleAddGpuEffect(def.id)
+                        closePicker()
+                      }}
+                    >
+                      <EffectThumbnail
+                        effectId={def.id}
+                        active={hoveredPickerKey === def.id}
+                        className="w-8 h-[18px] rounded-sm flex-shrink-0"
+                      />
+                      {getEffectDefinitionName(def)}
+                    </button>
+                  ))}
+                </div>
+              ))}
+
+              {filteredPresets.length > 0 && (
+                <>
+                  {filteredCategories.length > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {t('effects.section.presets')}
+                  </div>
+                  {filteredPresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
+                      onMouseEnter={() => setHoveredPickerKey(`preset:${preset.id}`)}
+                      onMouseLeave={() =>
+                        setHoveredPickerKey((k) => (k === `preset:${preset.id}` ? null : k))
+                      }
+                      onClick={() => {
+                        handleApplyPreset(preset.id)
+                        closePicker()
+                      }}
+                    >
+                      <EffectThumbnail
+                        effects={preset.effects}
+                        active={hoveredPickerKey === `preset:${preset.id}`}
+                        className="w-8 h-[18px] rounded-sm flex-shrink-0"
+                      />
+                      {preset.name}
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {filteredUserPresets.length > 0 && (
+                <>
+                  {(filteredCategories.length > 0 || filteredPresets.length > 0) && (
+                    <div className="-mx-1 my-1 h-px bg-muted" />
+                  )}
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {t('effects.section.myPresets')}
+                  </div>
+                  {filteredUserPresets.map((preset) => (
+                    <div key={preset.id} className="group relative flex items-center">
+                      <button
+                        type="button"
+                        className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 pr-7 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => {
+                          handleApplyUserPreset(preset.id)
+                          closePicker()
+                        }}
+                      >
+                        <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
+                        <span className="truncate">{preset.name}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="absolute right-1.5 hidden h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-destructive group-hover:flex"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void removeUserPreset(preset.id)
+                        }}
+                        title={t('effects.section.deletePreset')}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* No results */}
+              {!hasResults && (
+                <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                  {t('effects.section.noEffectsFound')}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
+      {effects.length > 0 && (
         <Button
-          ref={triggerRef}
           variant="outline"
           size="sm"
-          className="flex-1 h-7 min-w-0 text-xs"
-          onClick={() => (pickerOpen ? closePicker() : openPicker())}
+          className="h-7 px-2"
+          onClick={handleToggleAll}
+          title={
+            allEffectsEnabled ? t('effects.section.disableAll') : t('effects.section.enableAll')
+          }
         >
-          <Plus className="w-3 h-3 mr-1" />
-          <span className="truncate">{t('effects.section.addEffect')}</span>
+          {allEffectsEnabled ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
         </Button>
-        {pickerOpen &&
-          createPortal(
-            <div
-              ref={panelRef}
-              style={panelStyle}
-              className="z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 slide-in-from-top-2"
-            >
-              {/* Search input */}
-              <div className="p-1.5 border-b">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={t('effects.section.searchEffects')}
-                    className="w-full h-7 pl-7 pr-2 text-xs bg-transparent rounded-sm border border-input placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  />
-                </div>
-              </div>
-
-              {/* Scrollable effect list */}
-              <div className="max-h-[280px] overflow-y-auto overflow-x-hidden p-1">
-                {/* GPU Shader Effects */}
-                {filteredCategories.map(({ category, effects: catEffects }, index) => (
-                  <div key={category}>
-                    {index > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
-                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                      {getEffectCategoryLabel(t, category)}
-                    </div>
-                    {catEffects.map((def) => (
-                      <button
-                        key={def.id}
-                        type="button"
-                        className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
-                        onClick={() => {
-                          handleAddGpuEffect(def.id)
-                          closePicker()
-                        }}
-                      >
-                        {effectPreviews.has(def.id) ? (
-                          <img
-                            src={effectPreviews.get(def.id)}
-                            alt=""
-                            className="w-8 h-[18px] rounded-sm object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
-                        )}
-                        {getEffectDefinitionName(def)}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-
-                {filteredPresets.length > 0 && (
-                  <>
-                    {filteredCategories.length > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
-                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                      {t('effects.section.presets')}
-                    </div>
-                    {filteredPresets.map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
-                        onClick={() => {
-                          handleApplyPreset(preset.id)
-                          closePicker()
-                        }}
-                      >
-                        {effectPreviews.has(`preset:${preset.id}`) ? (
-                          <img
-                            src={effectPreviews.get(`preset:${preset.id}`)}
-                            alt=""
-                            className="w-8 h-[18px] rounded-sm object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
-                        )}
-                        {preset.name}
-                      </button>
-                    ))}
-                  </>
-                )}
-
-                {filteredUserPresets.length > 0 && (
-                  <>
-                    {(filteredCategories.length > 0 || filteredPresets.length > 0) && (
-                      <div className="-mx-1 my-1 h-px bg-muted" />
-                    )}
-                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                      {t('effects.section.myPresets')}
-                    </div>
-                    {filteredUserPresets.map((preset) => (
-                      <div key={preset.id} className="group relative flex items-center">
-                        <button
-                          type="button"
-                          className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 pr-7 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
-                          onClick={() => {
-                            handleApplyUserPreset(preset.id)
-                            closePicker()
-                          }}
-                        >
-                          <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
-                          <span className="truncate">{preset.name}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="absolute right-1.5 hidden h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-destructive group-hover:flex"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            void removeUserPreset(preset.id)
-                          }}
-                          title={t('effects.section.deletePreset')}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </>
-                )}
-
-                {/* No results */}
-                {!hasResults && (
-                  <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-                    {t('effects.section.noEffectsFound')}
-                  </div>
-                )}
-              </div>
-            </div>,
-            document.body,
-          )}
-        {effects.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2"
-            onClick={handleToggleAll}
-            title={
-              allEffectsEnabled ? t('effects.section.disableAll') : t('effects.section.enableAll')
-            }
-          >
-            {allEffectsEnabled ? (
-              <EyeOff className="w-3.5 h-3.5" />
-            ) : (
-              <Eye className="w-3.5 h-3.5" />
-            )}
-            </Button>
-          )}
-      </div>
+      )}
+    </div>
   )
 
   const effectList = (
@@ -783,6 +788,8 @@ export const EffectsSection = memo(function EffectsSection({
                 effect={effect}
                 gpuEffect={displayGpuEffect}
                 definition={def}
+                collapsible={gradePanelCollapsible}
+                onEditInColor={onEditInColor}
                 onParamChange={handleGpuParamChange}
                 onParamLiveChange={handleGpuParamLiveChange}
                 onParamsBatchChange={handleGpuParamsBatchChange}
@@ -827,6 +834,8 @@ export const EffectsSection = memo(function EffectsSection({
                 effect={effect}
                 gpuEffect={displayGpuEffect}
                 definition={def}
+                collapsible={gradePanelCollapsible}
+                onEditInColor={onEditInColor}
                 getKeyframeProperty={getKeyframeProperty}
                 onParamChange={handleGpuParamChange}
                 onParamLiveChange={handleGpuParamLiveChange}

@@ -14,7 +14,8 @@
     "removeEffect": "移除效果",
     "resetToDefaults": "重置为默认值",
     "moveUp": "上移效果",
-    "moveDown": "下移效果"
+    "moveDown": "下移效果",
+    "editInColor": "在调色中编辑"
   },
   "section": {
     "addEffect": "添加效果",

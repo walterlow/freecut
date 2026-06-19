@@ -80,7 +80,10 @@ vi.mock('./panels', () => ({
     onParamsBatchChange: (effectId: string, updates: Record<string, string>) => void
   }) => (
     <div data-testid="curves-panel" data-effect-id={effect.id}>
-      <button type="button" onClick={() => onParamsBatchChange(effect.id, { masterPoints: '[[0,0],[1,1]]' })}>
+      <button
+        type="button"
+        onClick={() => onParamsBatchChange(effect.id, { masterPoints: '[[0,0],[1,1]]' })}
+      >
         commit curves
       </button>
     </div>

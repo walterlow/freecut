@@ -1,6 +1,7 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Blend, Info } from 'lucide-react'
+import { TransitionPreview } from './transition-preview/transition-preview'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
 import { resolveTransitionTargetFromSelection } from '@/features/editor/deps/timeline-utils'
@@ -11,6 +12,7 @@ import type {
   PresentationConfig,
 } from '@/types/transition'
 import { cn } from '@/shared/ui/cn'
+import { transitionRegistry } from '@/shared/timeline/transitions'
 import { TRANSITION_DRAG_MIME, useTransitionDragStore } from '@/shared/state/transition-drag'
 import {
   TRANSITION_ICON_MAP,
@@ -31,6 +33,20 @@ interface TransitionCardProps {
 }
 
 /**
+ * Resolve a transition card's visual mode from its config: the fallback icon,
+ * whether an animated A/B preview is available (GPU shader or Canvas 2D path),
+ * and the direction to preview.
+ */
+function resolveTransitionCardVisuals(config: PresentationConfig) {
+  const renderer = transitionRegistry.getRenderer(config.id)
+  return {
+    Icon: TRANSITION_ICON_MAP[config.icon] ?? Blend,
+    showPreview: !!(renderer?.gpuTransitionId || renderer?.renderCanvas),
+    previewDirection: config.direction ?? config.defaultDirection,
+  }
+}
+
+/**
  * Compact transition card - displays as a small clickable tile
  */
 const TransitionCard = memo(function TransitionCard({
@@ -41,7 +57,8 @@ const TransitionCard = memo(function TransitionCard({
   onDragStart,
   onDragEnd,
 }: TransitionCardProps) {
-  const Icon = TRANSITION_ICON_MAP[config.icon] ?? Blend
+  const { Icon, showPreview, previewDirection } = resolveTransitionCardVisuals(config)
+  const [hovered, setHovered] = useState(false)
 
   const handleClick = useCallback(() => {
     if (clickDisabled) return
@@ -55,18 +72,29 @@ const TransitionCard = memo(function TransitionCard({
       draggable={true}
       onDragStart={(event) => onDragStart(event, configIndex)}
       onDragEnd={onDragEnd}
+      onPointerEnter={showPreview ? () => setHovered(true) : undefined}
+      onPointerLeave={showPreview ? () => setHovered(false) : undefined}
       aria-disabled={clickDisabled}
       className={cn(
-        'flex flex-col items-center justify-center gap-1 p-2 rounded-lg',
+        'flex flex-col items-center gap-1 p-2 rounded-lg min-w-[60px]',
         'border border-border bg-secondary/30',
         'hover:bg-secondary/50 hover:border-primary/50',
         'transition-colors group text-center cursor-grab active:cursor-grabbing',
-        'min-w-[60px] h-[56px]',
         clickDisabled && 'focus-visible:outline-muted-foreground/40',
       )}
       title={config.description}
     >
-      <Icon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+      {showPreview ? (
+        <TransitionPreview
+          presentationId={config.id}
+          direction={previewDirection}
+          active={hovered}
+        />
+      ) : (
+        <div className="flex aspect-video w-full items-center justify-center rounded-[3px] bg-black/40">
+          <Icon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+        </div>
+      )}
       <span className="text-[10px] text-muted-foreground group-hover:text-foreground truncate w-full">
         {config.label}
       </span>
@@ -107,7 +135,7 @@ const CategorySection = memo(function CategorySection({
       <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
         {title}
       </div>
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5">
         {configs.map((config, index) => (
           <TransitionCard
             key={`${config.id}-${config.direction || index}`}

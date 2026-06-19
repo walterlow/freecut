@@ -47,6 +47,7 @@
       "src/features/editor/utils/color-grade-thumbnail-treatment.ts",
       "src/features/editor/hooks/use-color-playhead-auto-select.ts",
       "src/features/effects/components/panels/gpu-wheels-panel.tsx",
+      "src/features/effects/components/panels/gpu-curves-panel.tsx",
       "src/features/timeline/components/timeline.tsx",
       "src/features/timeline/services/reverse-conform-service.ts"
     ]

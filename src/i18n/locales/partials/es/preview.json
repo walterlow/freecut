@@ -74,6 +74,8 @@
       "dropOnTimeline": "Soltar en la línea de tiempo",
       "compoundClipsTimeline": "Los clips compuestos siguen funcionando mejor en la línea de tiempo.",
       "presetsTimeline": "Los preajustes de texto y forma siguen funcionando mejor en la línea de tiempo.",
+      "adjustmentLayersTimeline": "Las capas de ajuste se aplican a todo el fotograma; colócalas en la línea de tiempo.",
+      "placeLayerDescription": "Coloca esta capa en la posición de soltado.",
       "dropOneItem": "Suelta un elemento",
       "oneMediaAtATime": "Coloca un elemento multimedia a la vez en el lienzo.",
       "audioGoesOnTimeline": "El audio va en la línea de tiempo",

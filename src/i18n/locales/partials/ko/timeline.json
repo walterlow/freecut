@@ -12,8 +12,11 @@
       "templateVideoOnly": "템플릿은 비디오 트랙에만 놓을 수 있습니다.",
       "noSupportedMediaInDrop": "이 드롭에서 지원되는 미디어를 찾지 못했습니다."
     },
-    "addAudioTrackHint": "오디오 트랙 추가",
-    "addVideoTrackHint": "비디오 트랙 추가",
+    "addTrack": {
+      "label": "트랙 추가",
+      "video": "비디오 트랙 추가",
+      "audio": "오디오 트랙 추가"
+    },
     "bento": {
       "apply": "적용",
       "description": "선택한 클립 {{count}}개를 격자로 배치합니다.",
@@ -268,7 +271,8 @@
     "trackHeader": {
       "addAudioTrack": "오디오 트랙 추가",
       "addVideoTrack": "비디오 트랙 추가",
-      "clipCount": "클립 수",
+      "clipCount_one": "클립 {{count}}개",
+      "clipCount_other": "클립 {{count}}개",
       "closeAllGaps": "모든 간격 닫기",
       "deleteEmptyTracks": "빈 트랙 삭제",
       "deleteTrack": "트랙 삭제",
@@ -285,7 +289,12 @@
       "resizeSections": "비디오 및 오디오 트랙 영역 크기 조정",
       "resizeTrackHeight": "트랙 높이 조정"
     },
-    "tracks": "트랙",
+    "trackSize": {
+      "label": "트랙 크기",
+      "compact": "좁게",
+      "medium": "보통",
+      "large": "크게"
+    },
     "volumeControl": {
       "adjustClipVolume": "클립 볼륨 조정"
     },

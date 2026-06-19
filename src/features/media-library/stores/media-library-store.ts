@@ -16,7 +16,11 @@ import { createImportActions } from './media-import-actions'
 import { createDeleteActions } from './media-delete-actions'
 import { createRelinkingActions } from './media-relinking-actions'
 import { useMediaPreparationStore } from './media-preparation-store'
-import { getTranscriptMediaIds, hasMediaSource, validateMediaHandle } from '@/infrastructure/storage'
+import {
+  getTranscriptMediaIds,
+  hasMediaSource,
+  validateMediaHandle,
+} from '@/infrastructure/storage'
 import { scanWorkspaceMediaHealth } from '../utils/workspace-health'
 import { mergeTranscriptionProgress } from '@/shared/utils/transcription-progress'
 

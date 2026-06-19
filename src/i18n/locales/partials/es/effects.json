@@ -14,7 +14,8 @@
     "removeEffect": "Eliminar efecto",
     "resetToDefaults": "Restablecer valores",
     "moveUp": "Subir efecto",
-    "moveDown": "Bajar efecto"
+    "moveDown": "Bajar efecto",
+    "editInColor": "Editar en Color"
   },
   "section": {
     "addEffect": "Agregar efecto",

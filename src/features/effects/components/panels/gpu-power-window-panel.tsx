@@ -39,7 +39,8 @@ export const GpuPowerWindowPanel = memo(function GpuPowerWindowPanel({
   const paramEntries = Object.entries(definition.params)
   const isDefault = paramEntries.every(([key, param]) => gpuEffect.params[key] === param.default)
   const enabled = effect.enabled
-  const activeShape = typeof gpuEffect.params.shape === 'string' ? gpuEffect.params.shape : 'ellipse'
+  const activeShape =
+    typeof gpuEffect.params.shape === 'string' ? gpuEffect.params.shape : 'ellipse'
 
   const renderNumberRow = (key: string) => {
     const param = definition.params[key]
@@ -96,7 +97,11 @@ export const GpuPowerWindowPanel = memo(function GpuPowerWindowPanel({
         aria-pressed={active}
       >
         {key === 'showMask' ? (
-          active ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />
+          active ? (
+            <Eye className="h-3 w-3" />
+          ) : (
+            <EyeOff className="h-3 w-3" />
+          )
         ) : null}
         {label}
       </Button>

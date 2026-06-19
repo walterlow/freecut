@@ -23,7 +23,9 @@ export function applyGradePresetToEffectStack(
   presetEffects: readonly VisualEffect[],
   createId: CreateId = () => crypto.randomUUID(),
 ): ItemEffect[] {
-  const preservedEffects = (currentEffects ?? []).filter((entry) => !isGradePresetEffect(entry.effect))
+  const preservedEffects = (currentEffects ?? []).filter(
+    (entry) => !isGradePresetEffect(entry.effect),
+  )
   const gradeEntries = presetEffects.filter(isGradePresetEffect).map((effect) => ({
     id: createId(),
     enabled: true,

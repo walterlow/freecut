@@ -20,6 +20,12 @@ export {
   getDroppedMediaDurationInFrames,
   type DroppableMediaType,
 } from '../utils/dropped-media'
+export {
+  createTimelineTemplateItem,
+  getDefaultGeneratedLayerDurationInFrames,
+  isTimelineTemplateDragData,
+} from '../utils/generated-layer-items'
+export { createNewVideoZoneTrack } from '../utils/new-track-zone-media'
 export { performInsertEdit, performOverwriteEdit } from '../stores/actions/source-edit-actions'
 export { resolveSourceEditTrackTargets } from '../utils/source-edit-targeting'
 export { getTrackKind } from '../utils/classic-tracks'

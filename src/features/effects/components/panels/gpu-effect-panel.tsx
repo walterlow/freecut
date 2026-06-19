@@ -108,10 +108,10 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
     <div className="space-y-0">
       <PropertyRow label={effectName}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
-            <EffectPanelHeaderActions
-              effectId={effect.id}
-              enabled={effect.enabled}
-              isDefault={isDefault}
+          <EffectPanelHeaderActions
+            effectId={effect.id}
+            enabled={effect.enabled}
+            isDefault={isDefault}
             onReset={onReset}
             onToggle={onToggle}
             onRemove={onRemove}

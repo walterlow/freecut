@@ -144,7 +144,9 @@ describe('ValueGraphEditor clipping', () => {
 
     const clipRect = clipPath?.querySelector('rect')
     expect(clipRect).toHaveAttribute('x', String(DEFAULT_GRAPH_PADDING.left))
-    expect(clipRect).toHaveAttribute('y', String(DEFAULT_GRAPH_PADDING.top))
+    // The clip extends up to the SVG top edge (y=0) so the playhead line can
+    // reach the ruler flag; horizontal clipping (x=left) still bounds curves.
+    expect(clipRect).toHaveAttribute('y', '0')
 
     const clippedGroup = container.querySelector('g[clip-path^="url(#"]')
     expect(clippedGroup).toBeInTheDocument()

@@ -106,7 +106,7 @@ describe('ColorTimelineNavigator', () => {
     const filmstripScroll = screen.getByTestId('color-timeline-filmstrip-scroll')
     const tile = screen.getByTestId('color-timeline-film-tile')
 
-    expect(filmstripScroll).toHaveStyle({ height: '104px', paddingBottom: '16px' })
+    expect(filmstripScroll).toHaveStyle({ height: '92px', paddingBottom: '8px' })
     expect(tile).toHaveStyle({ height: '80px' })
   })
 
@@ -193,11 +193,8 @@ describe('ColorTimelineNavigator', () => {
 
     render(<ColorTimelineNavigator />)
 
-    expect(screen.getByTestId('color-timeline-io-range')).toBeInTheDocument()
     expect(screen.getByTestId('color-timeline-io-strip')).toBeInTheDocument()
-    expect(screen.getByTestId('color-timeline-in-point')).toBeInTheDocument()
     expect(screen.getByTestId('color-timeline-in-handle')).toBeInTheDocument()
-    expect(screen.getByTestId('color-timeline-out-point')).toBeInTheDocument()
     expect(screen.getByTestId('color-timeline-out-handle')).toBeInTheDocument()
     expect(screen.getAllByTestId('color-timeline-marker')).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Warm pass' })).toBeInTheDocument()

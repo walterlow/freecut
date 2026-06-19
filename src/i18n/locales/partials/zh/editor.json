@@ -1,5 +1,10 @@
 {
   "editor": {
+    "miniTimeline": {
+      "inPoint": "入点",
+      "outPoint": "出点",
+      "markerAtFrame": "第 {{frame}} 帧的标记"
+    },
     "animateTimeline": {
       "label": "动画时间线",
       "noClip": "没有可动画的片段"

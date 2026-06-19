@@ -20,7 +20,10 @@ export function ScopeCanvasFrame({
   return (
     <div
       ref={containerRef}
-      className={cn('relative overflow-hidden rounded border border-border/70 bg-black/80', className)}
+      className={cn(
+        'relative overflow-hidden rounded border border-border/70 bg-black/80',
+        className,
+      )}
     >
       {children}
       <ScopeOverlay kind={kind} />
@@ -39,7 +42,11 @@ function LumaScopeOverlay({ parade, histogram }: { parade: boolean; histogram: b
       {SCOPE_LUMA_GUIDES.map((level) => {
         const top = `${100 - level}%`
         return (
-          <div key={level} className="absolute left-0 right-0 border-t border-slate-400/18" style={{ top }}>
+          <div
+            key={level}
+            className="absolute left-0 right-0 border-t border-slate-400/18"
+            style={{ top }}
+          >
             <span className="absolute left-1 -translate-y-1/2 rounded-sm bg-black/45 px-1 font-mono text-[9px] leading-4 text-slate-300/80">
               {level}
             </span>

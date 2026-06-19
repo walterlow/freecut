@@ -28,8 +28,10 @@ const EDITOR_DENSITY_PRESETS = {
     timelineMaxSize: 80,
     graphPanelSizeIncrease: 10,
     timelineHeaderHeight: 40,
-    timelineTracksHeaderHeight: 40,
-    timelineRulerHeight: 40,
+    // Ruler + its left-column header are kept equal so track rows align on both
+    // sides. The ruler now hosts a top IO lane (12px) + a shorter tick ruler.
+    timelineTracksHeaderHeight: 34,
+    timelineRulerHeight: 34,
     timelineSidebarWidth: 176,
     timelineMeterWidth: 84,
     timelineMixerWidth: 260,

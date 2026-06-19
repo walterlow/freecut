@@ -11,7 +11,14 @@ import { EffectPanelHeaderRow } from './effect-panel-header-actions'
 import type { GpuKeyframePanelProps } from './panel-props'
 
 const HUE_KEYS = ['hueCenter', 'hueWidth', 'hueSoftness'] as const
-const MATTE_KEYS = ['satLow', 'satHigh', 'satSoftness', 'lumaLow', 'lumaHigh', 'lumaSoftness'] as const
+const MATTE_KEYS = [
+  'satLow',
+  'satHigh',
+  'satSoftness',
+  'lumaLow',
+  'lumaHigh',
+  'lumaSoftness',
+] as const
 const CORRECTION_KEYS = ['exposure', 'saturation', 'temperature', 'tint', 'strength'] as const
 
 function clamp(value: number, min: number, max: number): number {
@@ -51,11 +58,14 @@ const HueBandControl = memo(function HueBandControl({
   const { t } = useTranslation()
   const [dragging, setDragging] = useState(false)
 
-  const getHueFromClient = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    if (rect.width <= 0) return center
-    return clamp(((event.clientX - rect.left) / rect.width) * 360, 0, 360)
-  }, [center])
+  const getHueFromClient = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      const rect = event.currentTarget.getBoundingClientRect()
+      if (rect.width <= 0) return center
+      return clamp(((event.clientX - rect.left) / rect.width) * 360, 0, 360)
+    },
+    [center],
+  )
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -232,7 +242,11 @@ export const GpuSecondaryQualifierPanel = memo(function GpuSecondaryQualifierPan
         aria-pressed={active}
       >
         {key === 'showMask' ? (
-          active ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />
+          active ? (
+            <Eye className="h-3 w-3" />
+          ) : (
+            <EyeOff className="h-3 w-3" />
+          )
         ) : null}
         {label}
       </Button>

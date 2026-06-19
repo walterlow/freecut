@@ -14,7 +14,8 @@
     "removeEffect": "Effekt entfernen",
     "resetToDefaults": "Auf Standard zuruecksetzen",
     "moveUp": "Effekt nach oben verschieben",
-    "moveDown": "Effekt nach unten verschieben"
+    "moveDown": "Effekt nach unten verschieben",
+    "editInColor": "In Color bearbeiten"
   },
   "section": {
     "addEffect": "Effekt hinzufuegen",

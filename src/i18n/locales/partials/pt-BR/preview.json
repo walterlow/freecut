@@ -74,6 +74,8 @@
       "dropOnTimeline": "Soltar na linha do tempo",
       "compoundClipsTimeline": "Clipes compostos ainda ficam melhor na linha do tempo.",
       "presetsTimeline": "Predefinições de texto e forma ainda ficam melhor na linha do tempo.",
+      "adjustmentLayersTimeline": "As camadas de ajuste se aplicam a todo o quadro — coloque-as na linha do tempo.",
+      "placeLayerDescription": "Coloque esta camada na posição de soltura.",
       "dropOneItem": "Solte um item",
       "oneMediaAtATime": "Coloque um item de mídia por vez na tela.",
       "audioGoesOnTimeline": "Áudio vai na linha do tempo",

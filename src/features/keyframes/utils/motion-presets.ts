@@ -271,7 +271,9 @@ export const MOTION_PRESETS: MotionPreset[] = [
     thumbnail: { kind: 'fade' },
     properties: ['opacity'],
     build: (ctx) =>
-      buildEntrance(ctx, (s, e) => entrancePair('opacity', s, e, 0, ctx.anchor.opacity, EASE_OUT_SOFT)),
+      buildEntrance(ctx, (s, e) =>
+        entrancePair('opacity', s, e, 0, ctx.anchor.opacity, EASE_OUT_SOFT),
+      ),
   },
   {
     id: 'slide-in-left',
@@ -281,7 +283,14 @@ export const MOTION_PRESETS: MotionPreset[] = [
     properties: ['x', 'opacity'],
     build: (ctx) =>
       buildEntrance(ctx, (s, e) => [
-        ...entrancePair('x', s, e, ctx.anchor.x - slideTravel(ctx.frameWidth), ctx.anchor.x, SPRING_SETTLE),
+        ...entrancePair(
+          'x',
+          s,
+          e,
+          ctx.anchor.x - slideTravel(ctx.frameWidth),
+          ctx.anchor.x,
+          SPRING_SETTLE,
+        ),
         ...entrancePair('opacity', s, e, 0, ctx.anchor.opacity, EASE_OUT_SOFT),
       ]),
   },
@@ -293,7 +302,14 @@ export const MOTION_PRESETS: MotionPreset[] = [
     properties: ['x', 'opacity'],
     build: (ctx) =>
       buildEntrance(ctx, (s, e) => [
-        ...entrancePair('x', s, e, ctx.anchor.x + slideTravel(ctx.frameWidth), ctx.anchor.x, SPRING_SETTLE),
+        ...entrancePair(
+          'x',
+          s,
+          e,
+          ctx.anchor.x + slideTravel(ctx.frameWidth),
+          ctx.anchor.x,
+          SPRING_SETTLE,
+        ),
         ...entrancePair('opacity', s, e, 0, ctx.anchor.opacity, EASE_OUT_SOFT),
       ]),
   },
@@ -305,7 +321,14 @@ export const MOTION_PRESETS: MotionPreset[] = [
     properties: ['y', 'opacity'],
     build: (ctx) =>
       buildEntrance(ctx, (s, e) => [
-        ...entrancePair('y', s, e, ctx.anchor.y + slideTravel(ctx.frameHeight), ctx.anchor.y, SPRING_SETTLE),
+        ...entrancePair(
+          'y',
+          s,
+          e,
+          ctx.anchor.y + slideTravel(ctx.frameHeight),
+          ctx.anchor.y,
+          SPRING_SETTLE,
+        ),
         ...entrancePair('opacity', s, e, 0, ctx.anchor.opacity, EASE_OUT_SOFT),
       ]),
   },
@@ -317,7 +340,14 @@ export const MOTION_PRESETS: MotionPreset[] = [
     properties: ['y', 'opacity'],
     build: (ctx) =>
       buildEntrance(ctx, (s, e) => [
-        ...entrancePair('y', s, e, ctx.anchor.y - slideTravel(ctx.frameHeight), ctx.anchor.y, SPRING_SETTLE),
+        ...entrancePair(
+          'y',
+          s,
+          e,
+          ctx.anchor.y - slideTravel(ctx.frameHeight),
+          ctx.anchor.y,
+          SPRING_SETTLE,
+        ),
         ...entrancePair('opacity', s, e, 0, ctx.anchor.opacity, EASE_OUT_SOFT),
       ]),
   },
@@ -355,7 +385,14 @@ export const MOTION_PRESETS: MotionPreset[] = [
     properties: ['rotation', 'width', 'height', 'opacity'],
     build: (ctx) =>
       buildEntrance(ctx, (s, e) => [
-        ...entrancePair('rotation', s, e, ctx.anchor.rotation - 180, ctx.anchor.rotation, SPRING_SETTLE),
+        ...entrancePair(
+          'rotation',
+          s,
+          e,
+          ctx.anchor.rotation - 180,
+          ctx.anchor.rotation,
+          SPRING_SETTLE,
+        ),
         ...entrancePair('width', s, e, ctx.anchor.width * 0.8, ctx.anchor.width, SPRING_SETTLE),
         ...entrancePair('height', s, e, ctx.anchor.height * 0.8, ctx.anchor.height, SPRING_SETTLE),
         ...entrancePair('opacity', s, e, 0, ctx.anchor.opacity, EASE_OUT_SOFT),
@@ -369,7 +406,14 @@ export const MOTION_PRESETS: MotionPreset[] = [
     properties: ['y', 'opacity'],
     build: (ctx) =>
       buildEntrance(ctx, (s, e) => [
-        ...entrancePair('y', s, e, ctx.anchor.y - slideTravel(ctx.frameHeight) * 0.6, ctx.anchor.y, BOUNCE),
+        ...entrancePair(
+          'y',
+          s,
+          e,
+          ctx.anchor.y - slideTravel(ctx.frameHeight) * 0.6,
+          ctx.anchor.y,
+          BOUNCE,
+        ),
         ...entrancePair('opacity', s, e, 0, ctx.anchor.opacity, EASE_OUT_SOFT),
       ]),
   },
@@ -533,8 +577,7 @@ export const MOTION_PRESETS: MotionPreset[] = [
     labelKey: 'float',
     thumbnail: { kind: 'slide', angle: 90, loop: true },
     properties: ['y'],
-    build: (ctx) =>
-      buildSineLoop(ctx, 'y', ctx.anchor.y, clamp(ctx.frameHeight * 0.015, 6, 24)),
+    build: (ctx) => buildSineLoop(ctx, 'y', ctx.anchor.y, clamp(ctx.frameHeight * 0.015, 6, 24)),
   },
   {
     id: 'sway',

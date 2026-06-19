@@ -6,6 +6,9 @@ import type {
 
 export type ClipInspectorTab = EditorClipInspectorTab
 
+/** Persisted timeline track-height preset chosen from the track-size flyout. */
+export type TrackSizePreset = 'compact' | 'medium' | 'large'
+
 export interface EditorState {
   activePanel: 'media' | 'effects' | 'properties' | null
   leftSidebarOpen: boolean
@@ -33,6 +36,7 @@ export interface EditorState {
   mixerFloating: boolean
   propertiesFullColumn: boolean
   mediaFullColumn: boolean
+  trackSizePreset: TrackSizePreset
 }
 
 export interface EditorActions {
@@ -79,4 +83,5 @@ export interface EditorActions {
   toggleMixerFloating: () => void
   togglePropertiesFullColumn: () => void
   toggleMediaFullColumn: () => void
+  setTrackSizePreset: (preset: TrackSizePreset) => void
 }

@@ -1,5 +1,4 @@
 import { memo } from 'react'
-import { Palette } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useColorPlayheadAutoSelect } from '../hooks/use-color-playhead-auto-select'
 import { ColorGradePanel } from './properties-sidebar/color-grade-panel'
@@ -14,12 +13,6 @@ export const ColorGradingDock = memo(function ColorGradingDock() {
       aria-label={t('editor.colorPanel.dockLabel')}
       data-testid="color-grading-dock"
     >
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-3">
-        <Palette className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {t('editor.colorPanel.dockTitle')}
-        </h2>
-      </div>
       <div className="min-h-0 flex-1 overflow-hidden p-2">
         <ColorGradePanel layout="dock" />
       </div>

@@ -123,8 +123,8 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
               className={cn(
                 'pointer-events-none block h-2 w-2 rotate-45 border transition-colors',
                 isSelected
-                  ? 'border-orange-50 bg-orange-500 shadow-[0_0_0_1px_rgba(249,115,22,0.45)]'
-                  : 'border-transparent bg-orange-500 group-hover:bg-orange-400',
+                  ? 'border-blue-100 bg-blue-500 shadow-[0_0_0_1px_rgba(59,130,246,0.45)]'
+                  : 'border-transparent bg-neutral-200 group-hover:bg-white',
               )}
             />
           </button>
@@ -267,8 +267,8 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
               className={cn(
                 'pointer-events-none block h-2 w-2 rotate-45 border transition-colors',
                 selected
-                  ? 'border-orange-50 bg-orange-500 shadow-[0_0_0_1px_rgba(249,115,22,0.45)]'
-                  : 'border-transparent bg-orange-500 group-hover:bg-orange-400',
+                  ? 'border-blue-100 bg-blue-500 shadow-[0_0_0_1px_rgba(59,130,246,0.45)]'
+                  : 'border-transparent bg-neutral-200 group-hover:bg-white',
               )}
             />
           </button>

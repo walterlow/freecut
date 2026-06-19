@@ -1178,11 +1178,15 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
       >
         <defs>
           <clipPath id={graphClipPathId}>
+            {/* Extends up through the top margin (y=0) so the playhead line can
+                reach the SVG's top edge and visually join the ruler flag above.
+                Curves/keyframes never draw above `padding.top`, so widening the
+                clip upward only affects the playhead. */}
             <rect
               x={padding.left}
-              y={padding.top}
+              y={0}
               width={graphAreaWidth}
-              height={graphAreaHeight}
+              height={graphAreaHeight + padding.top}
               rx={4}
             />
           </clipPath>

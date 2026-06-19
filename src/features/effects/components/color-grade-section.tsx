@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Palette, CircleOff, ClipboardPaste, Columns2, Copy, Eye, Layers, Save, X } from 'lucide-react'
+import {
+  Palette,
+  CircleOff,
+  ClipboardPaste,
+  Columns2,
+  Copy,
+  Eye,
+  Layers,
+  Save,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { TimelineItem } from '@/types/timeline'
 import type { ItemEffect, GpuEffect } from '@/types/effects'

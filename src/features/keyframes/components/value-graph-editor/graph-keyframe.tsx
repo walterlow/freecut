@@ -115,7 +115,7 @@ const GraphKeyframe = memo(function GraphKeyframe({
           L ${point.x - halfSize} ${point.y}
           Z
         `}
-        fill={showDragPreview ? '#3b82f6' : point.isSelected ? '#3b82f6' : '#f97316'}
+        fill={showDragPreview ? '#3b82f6' : point.isSelected ? '#3b82f6' : '#e5e5e5'}
         stroke="#1a1a1a"
         strokeWidth={2}
         style={{ pointerEvents: 'none' }}

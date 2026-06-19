@@ -1,5 +1,10 @@
 {
   "editor": {
+    "miniTimeline": {
+      "inPoint": "인 포인트",
+      "outPoint": "아웃 포인트",
+      "markerAtFrame": "프레임 {{frame}}의 마커"
+    },
     "animateTimeline": {
       "label": "애니메이트 타임라인",
       "noClip": "애니메이트할 클립이 없습니다"

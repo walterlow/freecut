@@ -285,9 +285,7 @@ export const PreviewStage = memo(function PreviewStage({
               <canvas
                 ref={gpuEffectsCanvasRef}
                 className="absolute inset-0 pointer-events-none"
-                data-grade-comparison-after-layer={
-                  isSplitGradeAfterVisible ? 'true' : undefined
-                }
+                data-grade-comparison-after-layer={isSplitGradeAfterVisible ? 'true' : undefined}
                 style={{
                   width: '100%',
                   height: '100%',

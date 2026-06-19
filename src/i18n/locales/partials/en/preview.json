@@ -78,6 +78,8 @@
       "dropOnTimeline": "Drop on timeline",
       "compoundClipsTimeline": "Compound clips still place best on the timeline.",
       "presetsTimeline": "Text and shape presets still place best on the timeline.",
+      "adjustmentLayersTimeline": "Adjustment layers apply to the whole frame — place them on the timeline.",
+      "placeLayerDescription": "Place this layer at the drop position.",
       "dropOneItem": "Drop one item",
       "oneMediaAtATime": "Place one media item at a time on the canvas.",
       "audioGoesOnTimeline": "Audio goes on timeline",

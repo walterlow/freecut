@@ -40,7 +40,10 @@ function buildPastedGradeEffects(grade: GradeClipboardEntry[]): ItemEffect[] {
   }))
 }
 
-function replaceColorEffectsInPlace(effects: ItemEffect[], grade: GradeClipboardEntry[]): ItemEffect[] {
+function replaceColorEffectsInPlace(
+  effects: ItemEffect[],
+  grade: GradeClipboardEntry[],
+): ItemEffect[] {
   const pastedEffects = buildPastedGradeEffects(grade)
   let inserted = false
   const nextEffects: ItemEffect[] = []

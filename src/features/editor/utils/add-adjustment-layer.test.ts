@@ -23,7 +23,12 @@ function makeTrack(id: string, order: number, kind: 'video' | 'audio' = 'video')
   }
 }
 
-function makeVideoItem(id: string, trackId: string, from: number, durationInFrames: number): VideoItem {
+function makeVideoItem(
+  id: string,
+  trackId: string,
+  from: number,
+  durationInFrames: number,
+): VideoItem {
   return {
     id,
     type: 'video',
@@ -66,10 +71,12 @@ describe('addAdjustmentLayer', () => {
 
   it('creates a new top video track when the current top track is occupied at the playhead', () => {
     useItemsStore.getState().setTracks([makeTrack('top', 0), makeTrack('main', 1)])
-    useItemsStore.getState().setItems([
-      makeVideoItem('top-clip', 'top', 0, 90),
-      makeVideoItem('main-clip', 'main', 0, 90),
-    ])
+    useItemsStore
+      .getState()
+      .setItems([
+        makeVideoItem('top-clip', 'top', 0, 90),
+        makeVideoItem('main-clip', 'main', 0, 90),
+      ])
     useSelectionStore.getState().setActiveTrack('main')
 
     expect(addAdjustmentLayer()).toBe(true)
@@ -89,10 +96,12 @@ describe('addAdjustmentLayer', () => {
   it('undoes the layer and any track created for it in one step', () => {
     const originalTracks = [makeTrack('top', 0), makeTrack('main', 1)]
     useItemsStore.getState().setTracks(originalTracks)
-    useItemsStore.getState().setItems([
-      makeVideoItem('top-clip', 'top', 0, 90),
-      makeVideoItem('main-clip', 'main', 0, 90),
-    ])
+    useItemsStore
+      .getState()
+      .setItems([
+        makeVideoItem('top-clip', 'top', 0, 90),
+        makeVideoItem('main-clip', 'main', 0, 90),
+      ])
     useSelectionStore.getState().setActiveTrack('main')
 
     expect(addAdjustmentLayer()).toBe(true)

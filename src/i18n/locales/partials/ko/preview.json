@@ -74,6 +74,8 @@
       "dropOnTimeline": "타임라인에 놓기",
       "compoundClipsTimeline": "컴파운드 클립은 타임라인에 배치하는 것이 가장 좋습니다.",
       "presetsTimeline": "텍스트 및 도형 프리셋은 타임라인에 배치하는 것이 가장 좋습니다.",
+      "adjustmentLayersTimeline": "조정 레이어는 전체 프레임에 적용됩니다. 타임라인에 배치하세요.",
+      "placeLayerDescription": "이 레이어를 놓은 위치에 배치합니다.",
       "dropOneItem": "항목 하나 놓기",
       "oneMediaAtATime": "캔버스에는 미디어 항목을 한 번에 하나씩 배치하세요.",
       "audioGoesOnTimeline": "오디오는 타임라인으로",

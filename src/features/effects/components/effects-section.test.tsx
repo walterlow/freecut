@@ -44,7 +44,6 @@ vi.mock('../hooks/use-keyframes-by-item-id', () => ({
 vi.mock('../hooks/use-gpu-effect-preview-data', () => ({
   useGpuEffectPreviewData: () => ({
     gpuCategories: [],
-    effectPreviews: new Map(),
     triggerPreviews: vi.fn(),
   }),
 }))
@@ -67,18 +66,10 @@ vi.mock('./panels', () => {
     canMoveDown?: boolean
   }) => (
     <div data-testid={`effect-${effect.id}`}>
-      <button
-        type="button"
-        disabled={!canMoveUp}
-        onClick={() => onMove?.(effect.id, -1)}
-      >
+      <button type="button" disabled={!canMoveUp} onClick={() => onMove?.(effect.id, -1)}>
         move {effect.id} up
       </button>
-      <button
-        type="button"
-        disabled={!canMoveDown}
-        onClick={() => onMove?.(effect.id, 1)}
-      >
+      <button type="button" disabled={!canMoveDown} onClick={() => onMove?.(effect.id, 1)}>
         move {effect.id} down
       </button>
     </div>

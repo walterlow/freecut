@@ -43,6 +43,7 @@ vi.mock('../hooks/use-waveform-prefetch', () => ({
 
 vi.mock('./timeline-markers', () => ({
   TimelineMarkers: () => null,
+  IO_LANE_HEIGHT: 12,
 }))
 
 vi.mock('./timeline-playhead', () => ({

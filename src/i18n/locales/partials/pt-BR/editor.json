@@ -1,5 +1,10 @@
 {
   "editor": {
+    "miniTimeline": {
+      "inPoint": "Ponto de entrada",
+      "outPoint": "Ponto de saída",
+      "markerAtFrame": "Marcador no quadro {{frame}}"
+    },
     "animateTimeline": {
       "label": "Linha do tempo de animação",
       "noClip": "Nenhum clipe para animar"

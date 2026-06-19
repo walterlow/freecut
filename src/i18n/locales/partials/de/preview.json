@@ -74,6 +74,8 @@
       "dropOnTimeline": "Auf Timeline ablegen",
       "compoundClipsTimeline": "Compound-Clips werden weiterhin am besten auf der Timeline platziert.",
       "presetsTimeline": "Text- und Formvorgaben werden weiterhin am besten auf der Timeline platziert.",
+      "adjustmentLayersTimeline": "Anpassungsebenen wirken auf das gesamte Bild — platziere sie in der Timeline.",
+      "placeLayerDescription": "Platziere diese Ebene an der Ablageposition.",
       "dropOneItem": "Ein Element ablegen",
       "oneMediaAtATime": "Platziere jeweils ein Medienelement auf der Leinwand.",
       "audioGoesOnTimeline": "Audio gehört auf die Timeline",
