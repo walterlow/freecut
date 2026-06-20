@@ -75,6 +75,12 @@ function computeItemTypeInfo(items: TimelineItem[]) {
     hasShapeItems: types.has('shape'),
     hasAdjustmentItems: types.has('adjustment'),
     hasSubtitleItems: types.has('subtitle'),
+    hasVirtualSubtitleItems: items.some(
+      (item) =>
+        (item.type === 'video' || item.type === 'audio') &&
+        item.transcriptCaptions?.type === 'transcript' &&
+        item.transcriptCaptions.cues.length > 0,
+    ),
     isOnlyTextOrShape:
       items.length > 0 && items.every((item) => item.type === 'text' || item.type === 'shape'),
   }
@@ -148,6 +154,7 @@ export const ClipPanel = memo(function ClipPanel() {
     hasShapeItems,
     hasAdjustmentItems,
     hasSubtitleItems,
+    hasVirtualSubtitleItems,
     isOnlyTextOrShape,
   } = itemTypeInfo
 
@@ -288,7 +295,7 @@ export const ClipPanel = memo(function ClipPanel() {
                 </Suspense>
               )}
               {hasShapeItems && <ShapeSection items={selectedItems} />}
-              {hasSubtitleItems && (
+              {(hasSubtitleItems || hasVirtualSubtitleItems) && (
                 <Suspense fallback={null}>
                   <LazySubtitleSection items={selectedItems} canvas={canvas} />
                 </Suspense>

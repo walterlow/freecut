@@ -24,6 +24,7 @@ interface CaptionStyleControlsProps {
   items: CaptionStylableItem[]
   canvasWidth: number
   canvasHeight: number
+  onApplyPatch?: (patch: Partial<CaptionStylableItem>) => void
 }
 
 /**
@@ -38,15 +39,20 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
   items,
   canvasWidth,
   canvasHeight,
+  onApplyPatch,
 }: CaptionStyleControlsProps) {
   const { t } = useTranslation()
   const updateItem = useTimelineStore((s) => s.updateItem)
 
   const applyPatch = useCallback(
     (patch: Partial<CaptionStylableItem>) => {
+      if (onApplyPatch) {
+        onApplyPatch(patch)
+        return
+      }
       for (const item of items) updateItem(item.id, patch)
     },
-    [items, updateItem],
+    [items, onApplyPatch, updateItem],
   )
 
   const applyPreset = useCallback(

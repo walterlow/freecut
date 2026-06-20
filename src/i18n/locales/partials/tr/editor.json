@@ -319,7 +319,8 @@
       "bold": "Kalın",
       "underline": "Altı çizili",
       "cuePosition": "İpucu konumu: {{vertical}} {{horizontal}}",
-      "cueCount": "{{count}} ipucu"
+      "cueCount": "{{count}} ipucu",
+      "showSubtitle": "Altyazıyı göster"
     },
     "audioSection": {
       "audio": "Ses",

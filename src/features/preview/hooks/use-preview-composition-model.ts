@@ -10,6 +10,7 @@ import { isColorGradeEffectType } from '@/infrastructure/gpu-effects'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { resolveEffectiveTrackStates } from '@/features/preview/deps/timeline-utils'
 import { useCompositionsStore, useItemsStore } from '@/features/preview/deps/timeline-store'
+import { appendVirtualTranscriptCaptionTrack } from '@/features/preview/deps/caption-items'
 import { useCornerPinStore } from '../stores/corner-pin-store'
 import { useGizmoStore } from '../stores/gizmo-store'
 import { useMaskEditorStore } from '../stores/mask-editor-store'
@@ -380,9 +381,19 @@ export function buildPreviewCompositionData({
     .map(([frame, srcSet]) => ({ frame, srcs: [...srcSet] }))
     .sort((a, b) => a.frame - b.frame)
 
-  const resolvedTracks = resolvedTrackList
-  const fastScrubTracks = fastScrubTrackList
-  const fastScrubTracksTopologyFingerprint = toTrackTopologyFingerprint(fastScrubTrackList)
+  const resolvedTracks = appendVirtualTranscriptCaptionTrack(
+    resolvedTrackList,
+    fps,
+    project.width,
+    project.height,
+  )
+  const fastScrubTracks = appendVirtualTranscriptCaptionTrack(
+    fastScrubTrackList,
+    fps,
+    project.width,
+    project.height,
+  )
+  const fastScrubTracksTopologyFingerprint = toTrackTopologyFingerprint(fastScrubTracks)
   const furthestItemEndFrame = items.reduce(
     (max, item) => Math.max(max, item.from + item.durationInFrames),
     0,

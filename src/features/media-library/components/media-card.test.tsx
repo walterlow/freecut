@@ -25,6 +25,11 @@ const mediaTranscriptionServiceMocks = vi.hoisted(() => ({
   cancelTranscription: vi.fn(),
 }))
 
+const mediaTranscriptionRunnerMocks = vi.hoisted(() => ({
+  runMediaTranscriptionJob: vi.fn(),
+  cancelMediaTranscriptionJob: vi.fn(),
+}))
+
 const subtitleSidecarServiceMocks = vi.hoisted(() => ({
   scanEmbeddedSubtitleTracks: vi.fn(),
   insertEmbeddedSubtitleTrack: vi.fn(),
@@ -191,6 +196,8 @@ vi.mock('../services/proxy-service', () => ({
 vi.mock('../services/media-transcription-service', () => ({
   mediaTranscriptionService: mediaTranscriptionServiceMocks,
 }))
+
+vi.mock('../services/media-transcription-runner', () => mediaTranscriptionRunnerMocks)
 
 vi.mock('../services/subtitle-sidecar-service', () => ({
   subtitleSidecarService: subtitleSidecarServiceMocks,
@@ -381,7 +388,10 @@ describe('MediaCard', () => {
     mediaLibraryServiceMocks.getMediaBlobUrl.mockResolvedValue('blob:media-1')
     proxyServiceMocks.canGenerateProxy.mockReturnValue(true)
     proxyServiceMocks.deleteProxy.mockResolvedValue(undefined)
-    mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined)
+    mediaTranscriptionRunnerMocks.runMediaTranscriptionJob.mockResolvedValue({
+      status: 'completed',
+      transcript: {},
+    })
     subtitleSidecarServiceMocks.scanEmbeddedSubtitleTracks.mockResolvedValue({
       tracks: [
         {
@@ -427,7 +437,6 @@ describe('MediaCard', () => {
 
   it('opens the transcribe dialog and defers work until the user confirms', async () => {
     const media = makeMedia()
-    mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined)
 
     render(<ListMediaCard media={media} />)
 
@@ -435,20 +444,21 @@ describe('MediaCard', () => {
 
     // Clicking the menu item opens the dialog; transcription has NOT started.
     expect(screen.getByTestId('transcribe-dialog')).toBeInTheDocument()
-    expect(mediaTranscriptionServiceMocks.transcribeMedia).not.toHaveBeenCalled()
+    expect(mediaTranscriptionRunnerMocks.runMediaTranscriptionJob).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByText('Start Transcription'))
 
     await waitFor(() => {
-      expect(mediaTranscriptionServiceMocks.transcribeMedia).toHaveBeenCalledWith(
-        'media-1',
-        expect.objectContaining({
-          model: 'whisper-base',
-          quantization: 'hybrid',
-          onProgress: expect.any(Function),
-        }),
-      )
+      expect(mediaTranscriptionRunnerMocks.runMediaTranscriptionJob).toHaveBeenCalledTimes(1)
     })
+    const [, options] = mediaTranscriptionRunnerMocks.runMediaTranscriptionJob.mock.calls[0]!
+    expect(options).toEqual(
+      expect.objectContaining({
+        model: 'whisper-base',
+        quantization: 'hybrid',
+        language: undefined,
+      }),
+    )
   })
 
   it('uses transcript wording in the media action menu', () => {

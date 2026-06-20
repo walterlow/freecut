@@ -319,7 +319,8 @@
       "bold": "Fett",
       "underline": "Unterstrichen",
       "cuePosition": "Untertitelposition: {{vertical}} {{horizontal}}",
-      "cueCount": "{{count}} Cue(s)"
+      "cueCount": "{{count}} Cue(s)",
+      "showSubtitle": "Untertitel anzeigen"
     },
     "audioSection": {
       "audio": "Audio",

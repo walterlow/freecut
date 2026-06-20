@@ -319,7 +319,8 @@
       "bold": "Gras",
       "underline": "Souligné",
       "cuePosition": "Position du sous-titre : {{vertical}} {{horizontal}}",
-      "cueCount": "{{count}} réplique(s)"
+      "cueCount": "{{count}} réplique(s)",
+      "showSubtitle": "Afficher les sous-titres"
     },
     "audioSection": {
       "audio": "Audio",

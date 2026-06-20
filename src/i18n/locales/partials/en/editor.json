@@ -319,7 +319,8 @@
       "bold": "Bold",
       "underline": "Underline",
       "cuePosition": "Cue position: {{vertical}} {{horizontal}}",
-      "cueCount": "{{count}} cue(s)"
+      "cueCount": "{{count}} cue(s)",
+      "showSubtitle": "Show subtitle"
     },
     "audioSection": {
       "audio": "Audio",

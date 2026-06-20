@@ -12,6 +12,7 @@ import type { MediaTranscript, MediaTranscriptModel, MediaTranscriptSegment } fr
 import type {
   AudioItem,
   SubtitleSegmentItem,
+  TimelineTranscriptCaptionCue,
   TimelineItem,
   TimelineTrack,
   VideoItem,
@@ -26,6 +27,7 @@ import {
   buildSubtitleSegmentForClip,
   getCaptionStyleTemplateFromPreset,
   buildCaptionTrackAbove,
+  type CaptionTextItemTemplate,
   findReplaceableCaptionItemsForClip,
   findCompatibleCaptionTrackForRanges,
   isCaptionTrackCandidate,
@@ -33,7 +35,10 @@ import {
   getCaptionRangeForClip,
 } from '../utils/caption-items'
 import { useProjectStore } from '@/features/media-library/deps/projects'
-import { useTimelineStore } from '@/features/media-library/deps/timeline-stores'
+import {
+  removeTimelineItemsExact,
+  useTimelineStore,
+} from '@/features/media-library/deps/timeline-stores'
 import { useSettingsStore } from '@/features/media-library/deps/settings-contract'
 import {
   needsCustomAudioDecoder,
@@ -66,6 +71,25 @@ interface InsertTranscriptAsCaptionsOptions {
 interface InsertTranscriptAsCaptionsResult {
   insertedItemCount: number
   removedItemCount: number
+}
+
+interface EnableTranscriptCaptionsResult {
+  updatedClipCount: number
+  removedItemCount: number
+}
+
+function definedCaptionStyleFields(
+  template: Partial<CaptionTextItemTemplate> | undefined,
+): Partial<CaptionTextItemTemplate> {
+  if (!template) return {}
+  const defined: Partial<CaptionTextItemTemplate> = {}
+  for (const key of Object.keys(template) as Array<keyof CaptionTextItemTemplate>) {
+    const value = template[key]
+    if (value !== undefined) {
+      ;(defined as Record<string, unknown>)[key] = value
+    }
+  }
+  return defined
 }
 
 type QueueState = 'queued' | 'running'
@@ -608,7 +632,7 @@ class MediaTranscriptionService {
     }
 
     if (generatedCaptionIdsToRemove.size > 0) {
-      timeline.removeItems([...generatedCaptionIdsToRemove])
+      removeTimelineItemsExact([...generatedCaptionIdsToRemove])
     }
 
     if (insertedItems.length > 0) {
@@ -618,6 +642,99 @@ class MediaTranscriptionService {
 
     return {
       insertedItemCount: insertedItems.length,
+      removedItemCount: generatedCaptionIdsToRemove.size,
+    }
+  }
+
+  async enableTranscriptCaptions(
+    mediaId: string,
+    options: InsertTranscriptAsCaptionsOptions = {},
+  ): Promise<EnableTranscriptCaptionsResult> {
+    const transcript = await getTranscript(mediaId)
+    if (!transcript) {
+      throw new Error('No transcript found for this media item')
+    }
+
+    const timeline = useTimelineStore.getState()
+    const project = useProjectStore.getState().currentProject
+    const targetClips = this.resolveCaptionTargetClips(mediaId, options.clipIds)
+    if (targetClips.length === 0) {
+      throw new Error('Select a clip for this media, or place one on the timeline first')
+    }
+
+    const canvasWidth = project?.metadata.width ?? DEFAULT_PROJECT_WIDTH
+    const canvasHeight = project?.metadata.height ?? DEFAULT_PROJECT_HEIGHT
+    const defaultCaptionTemplate = getCaptionStyleTemplateFromPreset(
+      useSettingsStore.getState().defaultCaptionStylePresetId,
+      canvasWidth,
+      canvasHeight,
+    )
+    const sourceCues: TimelineTranscriptCaptionCue[] = transcript.segments.map(
+      (segment, index) => ({
+        id: `transcript-${mediaId}-${index}`,
+        startSeconds: segment.start,
+        endSeconds: segment.end,
+        text: segment.text,
+      }),
+    )
+    const generatedCaptionIdsToRemove = options.replaceExisting
+      ? new Set(
+          targetClips.flatMap((clip) =>
+            findReplaceableCaptionItemsForClip(timeline.items, clip, 'transcript').map(
+              (item) => item.id,
+            ),
+          ),
+        )
+      : new Set<string>()
+
+    let updatedClipCount = 0
+    for (const clip of targetClips) {
+      const clipRange = getCaptionRangeForClip(clip, transcript.segments, timeline.fps)
+      if (!clipRange) continue
+
+      const existingGeneratedCaptions = options.replaceExisting
+        ? findReplaceableCaptionItemsForClip(timeline.items, clip, 'transcript')
+        : []
+      const previousVirtualStyle = clip.transcriptCaptions?.style
+      const existingStyle =
+        existingGeneratedCaptions[0] !== undefined
+          ? getCaptionTextItemTemplate(existingGeneratedCaptions[0])
+          : undefined
+      const mergedStyleTemplate = {
+        ...definedCaptionStyleFields(defaultCaptionTemplate),
+        ...definedCaptionStyleFields(previousVirtualStyle),
+        ...definedCaptionStyleFields(existingStyle),
+      } as CaptionTextItemTemplate
+      const styleTemplate =
+        Object.keys(mergedStyleTemplate).length > 0 ? mergedStyleTemplate : undefined
+
+      timeline.updateItem(clip.id, {
+        transcriptCaptions: {
+          type: 'transcript',
+          mediaId,
+          enabled: true,
+          updatedAt: Date.now(),
+          cues: sourceCues,
+          ...(styleTemplate ? { style: styleTemplate } : {}),
+        },
+      } as Partial<TimelineItem>)
+      updatedClipCount += 1
+    }
+
+    if (updatedClipCount === 0 && generatedCaptionIdsToRemove.size === 0) {
+      throw new Error('Transcript does not overlap the selected clip source range')
+    }
+
+    if (generatedCaptionIdsToRemove.size > 0) {
+      removeTimelineItemsExact([...generatedCaptionIdsToRemove])
+    }
+
+    if (updatedClipCount > 0) {
+      useSelectionStore.getState().selectItems(targetClips.map((clip) => clip.id))
+    }
+
+    return {
+      updatedClipCount,
       removedItemCount: generatedCaptionIdsToRemove.size,
     }
   }

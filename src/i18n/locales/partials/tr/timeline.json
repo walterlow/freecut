@@ -72,7 +72,6 @@
       "extractEmbeddedSubtitles": "Gömülü altyazıları çıkar",
       "generateAudioFromText": "Metinden ses oluştur",
       "generateCaptions": "Altyazı oluştur",
-      "insertExistingCaptions": "Mevcut altyazıları ekle",
       "insertFreezeFrame": "Donmuş kare ekle",
       "joinSelected": "Seçilileri birleştir",
       "joinWithNext": "Sonrakiyle birleştir",
@@ -88,7 +87,8 @@
       "unreverse": "Tersi kaldır",
       "updatingCaptions": "Altyazılar güncelleniyor",
       "copyGrade": "Renk düzenlemeyi kopyala",
-      "pasteGrade": "Renk düzenlemeyi yapıştır"
+      "pasteGrade": "Renk düzenlemeyi yapıştır",
+      "showTranscriptCaptions": "Döküm altyazılarını göster"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Ses giriş yumuşatmasını ayarla",

@@ -319,7 +319,8 @@
       "bold": "粗体",
       "underline": "下划线",
       "cuePosition": "字幕位置：{{vertical}} {{horizontal}}",
-      "cueCount": "{{count}} 条字幕"
+      "cueCount": "{{count}} 条字幕",
+      "showSubtitle": "显示字幕"
     },
     "audioSection": {
       "audio": "音频",

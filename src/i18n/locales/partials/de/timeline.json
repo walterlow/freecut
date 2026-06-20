@@ -72,7 +72,6 @@
       "extractEmbeddedSubtitles": "Extrahieren eingebettet Untertitel",
       "generateAudioFromText": "Generieren Audio aus Text",
       "generateCaptions": "Generieren Untertitel",
-      "insertExistingCaptions": "Einfugen vorhandene Untertitel",
       "insertFreezeFrame": "Einfugen Standbild Frame",
       "joinSelected": "Verbinden ausgewahlt",
       "joinWithNext": "Verbinden mit nachstem",
@@ -88,7 +87,8 @@
       "unreverse": "Umkehrung aufheben",
       "updatingCaptions": "Aktualisieren Untertitel",
       "copyGrade": "Farbkorrektur kopieren",
-      "pasteGrade": "Farbkorrektur einfügen"
+      "pasteGrade": "Farbkorrektur einfügen",
+      "showTranscriptCaptions": "Transkript-Untertitel anzeigen"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Anpassen Audio Fade ein",

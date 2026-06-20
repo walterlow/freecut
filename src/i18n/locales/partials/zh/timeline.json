@@ -72,7 +72,6 @@
       "extractEmbeddedSubtitles": "提取内嵌字幕",
       "generateAudioFromText": "从文本生成音频",
       "generateCaptions": "生成字幕",
-      "insertExistingCaptions": "插入现有字幕",
       "insertFreezeFrame": "插入冻结帧",
       "joinSelected": "合并所选",
       "joinWithNext": "与下一个合并",
@@ -88,7 +87,8 @@
       "unreverse": "取消反向",
       "updatingCaptions": "正在更新字幕",
       "copyGrade": "复制调色",
-      "pasteGrade": "粘贴调色"
+      "pasteGrade": "粘贴调色",
+      "showTranscriptCaptions": "显示转录字幕"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "调整音频淡入",

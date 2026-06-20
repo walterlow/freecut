@@ -9,6 +9,7 @@ export {
   deleteCompoundClips,
   getCompoundClipDeletionImpact,
   getMediaDeletionImpact,
+  removeTimelineItemsExact,
   removeProjectItems,
   renameCompoundClip,
 } from './timeline-actions-contract'

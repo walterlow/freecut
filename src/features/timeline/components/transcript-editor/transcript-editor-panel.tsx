@@ -11,7 +11,10 @@ import type { MediaTranscript } from '@/types/storage'
 import { useItemsStore } from '../../stores/items-store'
 import { useTimelineSettingsStore } from '../../stores/timeline-settings-store'
 import { useTimelineStore } from '../../stores/timeline-store'
-import { mediaTranscriptionService } from '../../deps/media-transcription-service'
+import {
+  mediaTranscriptionService,
+  runMediaTranscriptionJob,
+} from '../../deps/media-transcription-service'
 import {
   buildRemovalRangesByMediaId,
   buildTranscriptTokens,
@@ -312,7 +315,12 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
     void Promise.all(
       targets.map(async (mediaId) => {
         try {
-          const transcript = await mediaTranscriptionService.transcribeMedia(mediaId)
+          const result = await runMediaTranscriptionJob(mediaId)
+          if (result.status === 'cancelled') {
+            setMediaState((prev) => ({ ...prev, [mediaId]: { status: 'needs' } }))
+            return
+          }
+          const { transcript } = result
           setMediaState((prev) => ({
             ...prev,
             [mediaId]: hasWordTimings(transcript)

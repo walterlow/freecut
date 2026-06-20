@@ -43,6 +43,10 @@ import { CARD_GRID_BASE, CARD_LIST_BASE, CARD_PERF_STYLE } from './card-styles'
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache'
 import { proxyService } from '../services/proxy-service'
 import { mediaTranscriptionService } from '../services/media-transcription-service'
+import {
+  cancelMediaTranscriptionJob,
+  runMediaTranscriptionJob,
+} from '../services/media-transcription-runner'
 import { subtitleSidecarService } from '../services/subtitle-sidecar-service'
 import { useEditorStore } from '@/shared/state/editor'
 import { usePlaybackStore } from '@/shared/state/playback'
@@ -52,7 +56,6 @@ import {
   getTranscriptionStageLabel,
 } from '@/shared/utils/transcription-progress'
 import {
-  isTranscriptionCancellationError,
   isTranscriptionOutOfMemoryError,
   TRANSCRIPTION_OOM_HINT,
 } from '@/shared/utils/transcription-cancellation'
@@ -641,15 +644,8 @@ const MediaCardInternal = memo(function MediaCardInternal({
     (values: TranscribeDialogValues) => {
       const store = useMediaLibraryStore.getState()
       const targets = getTargetMediaItems()
-      const previousStatusById = new Map<string, ReturnType<typeof store.transcriptStatus.get>>(
-        targets.map((t) => [t.id, store.transcriptStatus.get(t.id) ?? 'idle']),
-      )
 
       setTranscribeErrorMessage(null)
-      for (const t of targets) {
-        store.setTranscriptStatus(t.id, 'queued')
-        store.setTranscriptProgress(t.id, { stage: 'queued', progress: 0 })
-      }
 
       // Close the dialog and transcribe in the background — exactly like the transcript
       // panel, which just calls transcribeMedia and tracks status. Keeping the modal open
@@ -664,39 +660,17 @@ const MediaCardInternal = memo(function MediaCardInternal({
           let lastErrorMessage: string | null = null
 
           for (const target of targets) {
-            const previousStatus = previousStatusById.get(target.id) ?? 'idle'
             try {
-              await mediaTranscriptionService.transcribeMedia(target.id, {
+              const result = await runMediaTranscriptionJob(target.id, {
                 model: values.model,
                 quantization: values.quantization,
                 language: values.language || undefined,
-                onQueueStatusChange: (state) => {
-                  store.setTranscriptStatus(
-                    target.id,
-                    state === 'queued' ? 'queued' : 'transcribing',
-                  )
-                },
-                // Mirror progress into the store so the aggregate "Generating Transcripts" bar
-                // fills as the job runs. Both the decode and transcribe stages emit at most
-                // whole-percent steps, and the store merge is monotonic, so this is a bounded
-                // ~100 updates over the whole job — not the per-packet storm we throttled away.
-                onProgress: (progress) => {
-                  store.setTranscriptProgress(target.id, progress)
-                },
               })
-              store.setTranscriptStatus(target.id, 'ready')
-              store.clearTranscriptProgress(target.id)
-              succeeded += 1
-            } catch (error) {
-              if (isTranscriptionCancellationError(error)) {
-                store.setTranscriptStatus(target.id, previousStatus)
-                store.clearTranscriptProgress(target.id)
+              if (result.status === 'cancelled') {
                 continue
               }
-
-              store.setTranscriptStatus(target.id, previousStatus === 'ready' ? 'ready' : 'error')
-              store.clearTranscriptProgress(target.id)
-
+              succeeded += 1
+            } catch (error) {
               const baseMessage =
                 error instanceof Error ? error.message : i18n.t('media.card.transcribeFailed')
               lastErrorMessage = isTranscriptionOutOfMemoryError(error)
@@ -750,7 +724,7 @@ const MediaCardInternal = memo(function MediaCardInternal({
       return status === 'queued' || status === 'transcribing'
     })
     for (const item of targets) {
-      mediaTranscriptionService.cancelTranscription(item.id)
+      cancelMediaTranscriptionJob(item.id)
     }
   }
 

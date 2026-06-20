@@ -319,7 +319,8 @@
       "bold": "Negrito",
       "underline": "Sublinhado",
       "cuePosition": "Posição da legenda: {{vertical}} {{horizontal}}",
-      "cueCount": "{{count}} legenda(s)"
+      "cueCount": "{{count}} legenda(s)",
+      "showSubtitle": "Mostrar legenda"
     },
     "audioSection": {
       "audio": "Áudio",

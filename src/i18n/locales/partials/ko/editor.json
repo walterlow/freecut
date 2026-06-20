@@ -319,7 +319,8 @@
       "bold": "굵게",
       "underline": "밑줄",
       "cuePosition": "자막 위치: {{vertical}} {{horizontal}}",
-      "cueCount": "{{count}}개 큐"
+      "cueCount": "{{count}}개 큐",
+      "showSubtitle": "자막 표시"
     },
     "audioSection": {
       "audio": "오디오",

@@ -622,6 +622,8 @@ function CaptionActions({
   const captionActionLabel = hasCaptions
     ? t('timeline.contextMenu.regenerateCaptions')
     : t('timeline.contextMenu.generateCaptions')
+  const shouldShowCaptionSubmenu =
+    !hasCaptions && hasTranscript === true && !!onApplyCaptionsFromTranscript
 
   return (
     <>
@@ -629,13 +631,15 @@ function CaptionActions({
         <>
           {isGeneratingCaptions ? (
             <ContextMenuItem disabled>{t('timeline.contextMenu.updatingCaptions')}</ContextMenuItem>
-          ) : hasTranscript && onApplyCaptionsFromTranscript ? (
+          ) : shouldShowCaptionSubmenu ? (
             <ContextMenuSub>
               <ContextMenuSubTrigger>{t('timeline.contextMenu.captions')}</ContextMenuSubTrigger>
               <ContextMenuSubContent className="w-56">
-                <ContextMenuItem onClick={onApplyCaptionsFromTranscript}>
-                  {t('timeline.contextMenu.insertExistingCaptions')}
-                </ContextMenuItem>
+                {!hasCaptions && hasTranscript && onApplyCaptionsFromTranscript && (
+                  <ContextMenuItem onClick={onApplyCaptionsFromTranscript}>
+                    {t('timeline.contextMenu.showTranscriptCaptions')}
+                  </ContextMenuItem>
+                )}
                 <ContextMenuItem onClick={onOpenCaptionDialog}>
                   {captionActionLabel}
                 </ContextMenuItem>

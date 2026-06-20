@@ -136,7 +136,7 @@ describe('ItemContextMenu captions', () => {
     expect(onOpenCaptionDialog).toHaveBeenCalledTimes(1)
   })
 
-  it('shows a Captions submenu with Insert + Generate when a transcript already exists', () => {
+  it('shows a Captions submenu with Show + Generate when a transcript already exists', () => {
     const onOpenCaptionDialog = vi.fn()
     const onApplyCaptionsFromTranscript = vi.fn()
 
@@ -151,10 +151,10 @@ describe('ItemContextMenu captions', () => {
     })
 
     expect(screen.getByText('Captions')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Insert Existing Captions' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show Transcript Captions' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Generate Captions' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Insert Existing Captions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show Transcript Captions' }))
     expect(onApplyCaptionsFromTranscript).toHaveBeenCalledTimes(1)
   })
 
@@ -169,6 +169,29 @@ describe('ItemContextMenu captions', () => {
       },
     })
 
+    expect(screen.getByRole('button', { name: 'Regenerate Captions' })).toBeInTheDocument()
+  })
+
+  it('does not show transcript visibility controls when the clip already has captions', () => {
+    renderContextMenu({
+      captionActions: {
+        canManageCaptions: true,
+        hasCaptions: true,
+        hasTranscript: true,
+        onOpenCaptionDialog: vi.fn(),
+        onApplyCaptionsFromTranscript: vi.fn(),
+      },
+    })
+
+    expect(
+      screen.queryByRole('button', { name: 'Hide Transcript Captions' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Show Transcript Captions' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Insert Existing Captions' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Regenerate Captions' })).toBeInTheDocument()
   })
 })

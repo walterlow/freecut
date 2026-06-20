@@ -14,6 +14,27 @@ export interface TimelineItemCornerPin {
   referenceHeight?: number
 }
 
+export interface TimelineTranscriptCaptionCue {
+  id: string
+  startSeconds: number
+  endSeconds: number
+  text: string
+}
+
+export type TimelineTranscriptCaptionStyle = TextStyleFields & {
+  transform?: TransformProperties
+}
+
+export interface TimelineTranscriptCaptions {
+  type: 'transcript'
+  mediaId: string
+  enabled: boolean
+  updatedAt: number
+  /** Source-relative transcript cues. Render/export trims them to the clip. */
+  cues: TimelineTranscriptCaptionCue[]
+  style?: TimelineTranscriptCaptionStyle
+}
+
 // Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
   id: string
@@ -110,6 +131,7 @@ type BaseTimelineItem = {
   blendMode?: BlendMode
   // Corner pin transform (perspective warp)
   cornerPin?: TimelineItemCornerPin
+  transcriptCaptions?: TimelineTranscriptCaptions
 }
 
 export interface GeneratedCaptionSource {

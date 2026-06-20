@@ -72,7 +72,6 @@
       "extractEmbeddedSubtitles": "Extrair legendas incorporadas",
       "generateAudioFromText": "Gerar audio a partir de texto",
       "generateCaptions": "Gerar legendas",
-      "insertExistingCaptions": "Inserir legendas existentes",
       "insertFreezeFrame": "Inserir quadro congelado",
       "joinSelected": "Unir selecionados",
       "joinWithNext": "Unir com o proximo",
@@ -88,7 +87,8 @@
       "unreverse": "Desfazer reversao",
       "updatingCaptions": "Atualizando legendas",
       "copyGrade": "Copiar correção de cor",
-      "pasteGrade": "Colar correção de cor"
+      "pasteGrade": "Colar correção de cor",
+      "showTranscriptCaptions": "Mostrar legendas da transcrição"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "Ajustar fade de entrada do audio",

@@ -8,6 +8,7 @@ import {
   resolveEffectiveTrackStates,
   timelineToSourceFrames,
 } from '@/features/export/deps/timeline-frame'
+import { appendVirtualTranscriptCaptionTrack } from '@/features/export/deps/caption-items'
 import { createLogger } from '@/shared/logging/logger'
 import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
 
@@ -193,7 +194,12 @@ export function convertTimelineToComposition(
 
   // Sort tracks in descending order so Track 1 (order: 0) renders last and appears on top
   // This matches the preview behavior in video-preview.tsx
-  const sortedTracks = tracksWithItems.sort((a, b) => b.order - a.order)
+  const sortedTracks = appendVirtualTranscriptCaptionTrack(
+    tracksWithItems,
+    fps,
+    width,
+    height,
+  ).sort((a, b) => b.order - a.order)
 
   // Filter transitions to only include those involving clips that are in the export
   const processedItemIds = new Set(processedItems.map((item) => item.id))

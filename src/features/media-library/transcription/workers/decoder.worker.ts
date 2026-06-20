@@ -92,7 +92,7 @@ async function run(file: File): Promise<void> {
       return
     }
     port.postMessage(chunk, [chunk.samples.buffer])
-  }, duration)
+  })
 
   const decoder = new AudioDecoder({
     output(audioData: AudioData) {

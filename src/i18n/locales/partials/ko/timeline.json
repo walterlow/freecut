@@ -72,7 +72,6 @@
       "extractEmbeddedSubtitles": "내장 자막 추출",
       "generateAudioFromText": "텍스트에서 오디오 생성",
       "generateCaptions": "자막 생성",
-      "insertExistingCaptions": "기존 자막 삽입",
       "insertFreezeFrame": "정지 프레임 삽입",
       "joinSelected": "선택 항목 결합",
       "joinWithNext": "다음과 결합",
@@ -88,7 +87,8 @@
       "unreverse": "반전 해제",
       "updatingCaptions": "자막 업데이트 중",
       "copyGrade": "색 보정 복사",
-      "pasteGrade": "색 보정 붙여넣기"
+      "pasteGrade": "색 보정 붙여넣기",
+      "showTranscriptCaptions": "전사 자막 표시"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "오디오 페이드 인 조정",

@@ -69,6 +69,7 @@ vi.mock('../deps/timeline-caption-utils-contract', () => ({
 
 import {
   aiCaptionsToSegments,
+  appendVirtualTranscriptCaptionTrack,
   buildCaptionTextItems,
   buildSubtitleTextItems,
   buildSubtitleTextItemsForClip,
@@ -88,6 +89,7 @@ import {
   isGeneratedContentTrackCandidate,
   isCaptionTrackCandidate,
   normalizeCaptionSegments,
+  VIRTUAL_TRANSCRIPT_CAPTION_TRACK_ID,
 } from './caption-items'
 import { getTrackKind } from '../deps/timeline-caption-utils-contract'
 import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
@@ -754,6 +756,68 @@ describe('caption-items', () => {
     })
 
     expect(segment?.linkedGroupId).toBeUndefined()
+  })
+
+  it('expands clip-owned transcript captions into a render-only top subtitle track', () => {
+    const sourceTrack: TimelineTrack = {
+      id: 'track-v',
+      name: 'V1',
+      kind: 'video',
+      height: 64,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 1,
+      items: [
+        {
+          id: 'video-clip',
+          type: 'video',
+          trackId: 'track-v',
+          from: 90,
+          durationInFrames: 90,
+          label: 'Clip',
+          mediaId: 'media-1',
+          src: 'blob:test',
+          sourceStart: 30,
+          sourceEnd: 120,
+          sourceDuration: 120,
+          sourceFps: 30,
+          speed: 1,
+          transcriptCaptions: {
+            type: 'transcript',
+            mediaId: 'media-1',
+            enabled: true,
+            updatedAt: 1,
+            cues: [
+              { id: 'before', startSeconds: 0, endSeconds: 0.5, text: 'Before' },
+              { id: 'active', startSeconds: 1, endSeconds: 2, text: 'Active' },
+            ],
+          },
+        },
+      ],
+    }
+
+    const tracks = appendVirtualTranscriptCaptionTrack([sourceTrack], 30, 1920, 1080)
+
+    expect(tracks).toHaveLength(2)
+    expect(tracks[0]).toBe(sourceTrack)
+    const virtualTrack = tracks[1]
+    expect(virtualTrack?.id).toBe(VIRTUAL_TRANSCRIPT_CAPTION_TRACK_ID)
+    expect(virtualTrack?.order).toBe(0)
+    expect(virtualTrack?.items).toHaveLength(1)
+    expect(virtualTrack?.items[0]).toMatchObject({
+      id: 'virtual-transcript-video-clip',
+      type: 'subtitle',
+      from: 90,
+      durationInFrames: 30,
+      source: {
+        type: 'transcript',
+        mediaId: 'media-1',
+        clipId: 'video-clip',
+      },
+      cues: [{ id: 'active', startSeconds: 0, endSeconds: 1, text: 'Active' }],
+    })
   })
 
   it('inherits linkedGroupId from the source clip when consolidating per-cue captions', () => {

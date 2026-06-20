@@ -72,7 +72,6 @@
       "extractEmbeddedSubtitles": "埋め込み字幕を抽出",
       "generateAudioFromText": "テキストから音声を生成",
       "generateCaptions": "キャプションを生成",
-      "insertExistingCaptions": "既存のキャプションを挿入",
       "insertFreezeFrame": "フリーズフレームを挿入",
       "joinSelected": "選択項目を結合",
       "joinWithNext": "次と結合",
@@ -88,7 +87,8 @@
       "unreverse": "反転を解除",
       "updatingCaptions": "キャプションを更新中",
       "copyGrade": "グレーディングをコピー",
-      "pasteGrade": "グレーディングをペースト"
+      "pasteGrade": "グレーディングをペースト",
+      "showTranscriptCaptions": "文字起こし字幕を表示"
     },
     "fadeHandles": {
       "adjustAudioFadeIn": "オーディオのフェードインを調整",

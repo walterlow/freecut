@@ -136,15 +136,22 @@ export const TimelineItem = memo(function TimelineItem({
       [item.mediaId, item.id],
     ),
   )
-  // Lazy, items-keyed memo: legacy generated-caption detection rebuilds only
-  // when the items array identity changes (not on every store mutation).
-  const hasGeneratedCaptions = useItemsStore(
-    useCallback((s) => selectReplaceableCaptionClipIds(s).has(item.id), [item.id]),
-  )
   // O(1) via index, including legacy linked audio/video pairs.
   const isLinked = useItemsStore(useCallback((s) => !!s.linkedItemsByItemId[item.id], [item.id]))
   const linkedItemsForCaptionOwnership = useItemsStore(
     useCallback((s) => s.linkedItemsByItemId[item.id] ?? EMPTY_LINKED_ITEMS, [item.id]),
+  )
+  // Lazy, items-keyed memo: legacy generated-caption detection rebuilds only
+  // when the items array identity changes (not on every store mutation).
+  const hasGeneratedCaptions = useItemsStore(
+    useCallback(
+      (s) => {
+        const captionClipIds = selectReplaceableCaptionClipIds(s)
+        if (captionClipIds.has(item.id)) return true
+        return linkedItemsForCaptionOwnership.some((linkedItem) => captionClipIds.has(linkedItem.id))
+      },
+      [item.id, linkedItemsForCaptionOwnership],
+    ),
   )
   const linkedSelectionEnabled = useEditorStore((s) => s.linkedSelectionEnabled)
   const segmentOverlays = useTimelineItemOverlayStore(

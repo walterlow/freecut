@@ -319,7 +319,8 @@
       "bold": "太字",
       "underline": "下線",
       "cuePosition": "字幕の位置：{{vertical}} {{horizontal}}",
-      "cueCount": "{{count}} 件のキュー"
+      "cueCount": "{{count}} 件のキュー",
+      "showSubtitle": "字幕を表示"
     },
     "audioSection": {
       "audio": "オーディオ",

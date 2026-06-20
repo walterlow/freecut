@@ -92,7 +92,7 @@ import {
 import { useProjectStore } from '@/features/media-library/deps/projects'
 import { proxyService } from '../services/proxy-service'
 import { importMediaLibraryService } from '../services/media-library-service-loader'
-import { mediaTranscriptionService } from '../services/media-transcription-service'
+import { cancelMediaTranscriptionJob } from '../services/media-transcription-runner'
 import { importMediaAnalysisService } from '../services/media-analysis-service-loader'
 import { getSupportedMediaFormatLabels } from '../utils/media-file-picker'
 import { getSharedProxyKey } from '../utils/proxy-key'
@@ -485,7 +485,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         continue
       }
 
-      mediaTranscriptionService.cancelTranscription(mediaId)
+      cancelMediaTranscriptionJob(mediaId)
     }
   }
 

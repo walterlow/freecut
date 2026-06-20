@@ -1,5 +1,8 @@
 import { useProjectStore } from '@/features/media-library/deps/projects'
-import { useTimelineStore } from '@/features/media-library/deps/timeline-stores'
+import {
+  removeTimelineItemsExact,
+  useTimelineStore,
+} from '@/features/media-library/deps/timeline-stores'
 import { useSelectionStore } from '@/shared/state/selection'
 import {
   extractMatroskaTextSubtitleTracksFromBlob,
@@ -150,11 +153,11 @@ class SubtitleSidecarService {
       // Nothing new to insert; still remove the obsolete entries so a
       // re-extract that produced no usable cues at least clears the stale
       // segment instead of leaving the user looking at outdated text.
-      if (obsoleteIds.length > 0) timeline.removeItems(obsoleteIds)
+      if (obsoleteIds.length > 0) removeTimelineItemsExact(obsoleteIds)
       return 0
     }
 
-    if (obsoleteIds.length > 0) timeline.removeItems(obsoleteIds)
+    if (obsoleteIds.length > 0) removeTimelineItemsExact(obsoleteIds)
 
     // Pick a single track that can host every segment's range so captions
     // stay on one row rather than scattering across several.

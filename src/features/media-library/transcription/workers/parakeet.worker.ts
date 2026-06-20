@@ -21,7 +21,6 @@ const DECODER_INT8 = 'decoder_joint-model.int8.onnx'
 const PREPROCESSOR = 'nemo128.onnx'
 const VOCAB_FILE = 'vocab.txt'
 
-const SAMPLE_RATE = 16_000
 const SUBSAMPLING = 8
 const SEC_PER_FRAME = 0.01 * SUBSAMPLING // 80ms per encoder frame
 const MAX_TOKENS_PER_STEP = 10
@@ -351,25 +350,7 @@ async function transcribeChunk(chunk: PCMChunk): Promise<void> {
     return
   }
 
-  // Report absolute progress — (chunk start + decoded offset) / total duration — so the bar
-  // fills smoothly through the long greedy decode and never regresses between chunks. Throttle
-  // to whole-percent steps so a multi-thousand-step decode loop can't flood the main thread.
-  const chunkSeconds = chunk.samples.length / SAMPLE_RATE
-  const totalSeconds =
-    chunk.totalDuration && chunk.totalDuration > 0
-      ? chunk.totalDuration
-      : chunk.timestamp + chunkSeconds
-  let lastTranscribePct = -1
-  const emitTranscribeProgress = (offsetSeconds: number): void => {
-    const progress = Math.min(Math.max((chunk.timestamp + offsetSeconds) / totalSeconds, 0), 1)
-    const pct = Math.floor(progress * 100)
-    if (pct > lastTranscribePct) {
-      lastTranscribePct = pct
-      postMain({ type: 'progress', event: { stage: 'transcribing', progress } })
-    }
-  }
-
-  emitTranscribeProgress(0)
+  postMain({ type: 'progress', event: { stage: 'transcribing', progress: 0 } })
 
   const ort = await getOrt()
 
@@ -431,8 +412,6 @@ async function transcribeChunk(chunk: PCMChunk): Promise<void> {
       t += 1
       emitted = 0
     }
-
-    if (frames > 0) emitTranscribeProgress((t / frames) * chunkSeconds)
   }
 
   // 4. Group BPE tokens into words; timestamps are chunk-relative -> offset to absolute.
@@ -478,9 +457,7 @@ async function transcribeChunk(chunk: PCMChunk): Promise<void> {
     })
   }
 
-  // End of this chunk's span. On the final chunk this resolves to ~1.0; on earlier chunks it
-  // is the chunk's end fraction, leaving headroom for the chunks that follow.
-  emitTranscribeProgress(chunkSeconds)
+  postMain({ type: 'progress', event: { stage: 'transcribing', progress: 1 } })
 
   if (chunk.final) postMain({ type: 'done' })
 }

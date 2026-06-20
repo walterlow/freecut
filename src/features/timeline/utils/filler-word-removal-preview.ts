@@ -1,5 +1,8 @@
 import type { MediaTranscript, MediaTranscriptWord } from '@/types/storage'
-import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service'
+import {
+  mediaTranscriptionService,
+  runMediaTranscriptionJob,
+} from '@/features/timeline/deps/media-transcription-service'
 import { useItemsStore } from '@/features/timeline/stores/items-store'
 import { createLogger } from '@/shared/logging/logger'
 import {
@@ -288,7 +291,11 @@ async function getTranscriptWithWords(mediaId: string): Promise<MediaTranscript>
       return existing
     }
 
-    return mediaTranscriptionService.transcribeMedia(mediaId)
+    const result = await runMediaTranscriptionJob(mediaId)
+    if (result.status === 'cancelled') {
+      throw new Error('Transcription cancelled')
+    }
+    return result.transcript
   })()
 
   wordTranscriptCache.set(mediaId, promise)

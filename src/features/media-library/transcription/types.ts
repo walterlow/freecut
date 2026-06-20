@@ -44,9 +44,6 @@ export interface PCMChunk {
   samples: Float32Array
   timestamp: number
   final: boolean
-  // Total audio duration in seconds, when known. Lets engines report absolute progress —
-  // (chunk timestamp + within-chunk offset) / total — which stays monotonic across chunks.
-  totalDuration?: number
 }
 
 export type MainThreadMessage =

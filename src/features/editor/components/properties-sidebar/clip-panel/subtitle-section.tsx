@@ -17,7 +17,13 @@ import {
   type CueFormatFlags,
 } from '@/shared/utils/subtitle-cue-format'
 import { cn } from '@/shared/ui/cn'
-import type { SubtitleSegmentItem, TimelineItem } from '@/types/timeline'
+import type {
+  AudioItem,
+  SubtitleSegmentItem,
+  TextItem,
+  TimelineItem,
+  VideoItem,
+} from '@/types/timeline'
 
 import { CaptionStyleControls } from './caption-style-controls'
 import { PropertySection } from '../components'
@@ -55,11 +61,33 @@ export const SubtitleSection = memo(function SubtitleSection({
     () => items.filter((item): item is SubtitleSegmentItem => item.type === 'subtitle'),
     [items],
   )
+  const virtualTranscriptClips = useMemo(
+    () =>
+      items.filter(
+        (item): item is (AudioItem | VideoItem) & {
+          transcriptCaptions: NonNullable<(AudioItem | VideoItem)['transcriptCaptions']>
+        } =>
+          (item.type === 'video' || item.type === 'audio') &&
+          item.transcriptCaptions?.type === 'transcript' &&
+          item.transcriptCaptions.cues.length > 0,
+      ),
+    [items],
+  )
 
-  if (segments.length === 0) return null
+  if (segments.length === 0 && virtualTranscriptClips.length === 0) return null
 
   const canvasWidth = canvas?.width ?? DEFAULT_PROJECT_WIDTH
   const canvasHeight = canvas?.height ?? DEFAULT_PROJECT_HEIGHT
+
+  if (segments.length === 0 && virtualTranscriptClips.length > 0) {
+    return (
+      <VirtualTranscriptSubtitleEditor
+        clips={virtualTranscriptClips}
+        canvasWidth={canvasWidth}
+        canvasHeight={canvasHeight}
+      />
+    )
+  }
 
   if (segments.length > 1) {
     const totalCues = segments.reduce((sum, segment) => sum + segment.cues.length, 0)
@@ -93,6 +121,194 @@ export const SubtitleSection = memo(function SubtitleSection({
       canvasWidth={canvasWidth}
       canvasHeight={canvasHeight}
     />
+  )
+})
+
+type VirtualTranscriptCaptionClip = (AudioItem | VideoItem) & {
+  transcriptCaptions: NonNullable<(AudioItem | VideoItem)['transcriptCaptions']>
+}
+
+interface VirtualTranscriptSubtitleEditorProps {
+  clips: VirtualTranscriptCaptionClip[]
+  canvasWidth: number
+  canvasHeight: number
+}
+
+const VirtualTranscriptSubtitleEditor = memo(function VirtualTranscriptSubtitleEditor({
+  clips,
+  canvasWidth,
+  canvasHeight,
+}: VirtualTranscriptSubtitleEditorProps) {
+  const updateItem = useTimelineStore((s) => s.updateItem)
+  const fps = useTimelineStore((s) => s.fps)
+  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame)
+  const firstClip = clips[0]!
+  const totalCues = clips.reduce((sum, clip) => sum + clip.transcriptCaptions.cues.length, 0)
+  const captionsVisible = clips.every((clip) => clip.transcriptCaptions.enabled)
+
+  const styleSample = useMemo<SubtitleSegmentItem>(() => {
+    const style = firstClip.transcriptCaptions.style ?? {}
+    return {
+      id: `${firstClip.id}:transcript-captions-style`,
+      type: 'subtitle',
+      trackId: firstClip.trackId,
+      from: firstClip.from,
+      durationInFrames: firstClip.durationInFrames,
+      label: i18n.t('editor.subtitleSection.transcript'),
+      mediaId: firstClip.mediaId,
+      source: {
+        type: 'transcript',
+        mediaId: firstClip.transcriptCaptions.mediaId,
+        clipId: firstClip.id,
+      },
+      cues: [],
+      color: style.color ?? '#ffffff',
+      ...style,
+    }
+  }, [firstClip])
+
+  const styleItems = useMemo(() => [styleSample], [styleSample])
+
+  const applyStylePatch = useCallback(
+    (patch: Partial<SubtitleSegmentItem | TextItem>) => {
+      for (const clip of clips) {
+        updateItem(clip.id, {
+          transcriptCaptions: {
+            ...clip.transcriptCaptions,
+            style: {
+              ...(clip.transcriptCaptions.style ?? {}),
+              ...patch,
+            },
+            updatedAt: Date.now(),
+          },
+        } as Partial<TimelineItem>)
+      }
+    },
+    [clips, updateItem],
+  )
+
+  const setCaptionsVisible = useCallback(
+    (enabled: boolean) => {
+      for (const clip of clips) {
+        updateItem(clip.id, {
+          transcriptCaptions: {
+            ...clip.transcriptCaptions,
+            enabled,
+            updatedAt: Date.now(),
+          },
+        } as Partial<TimelineItem>)
+      }
+    },
+    [clips, updateItem],
+  )
+
+  const updateCue = useCallback(
+    (cueId: string, patch: Partial<{ text: string; startSeconds: number; endSeconds: number }>) => {
+      const next = firstClip.transcriptCaptions.cues.map((cue) =>
+        cue.id === cueId ? { ...cue, ...patch } : cue,
+      )
+      updateItem(firstClip.id, {
+        transcriptCaptions: {
+          ...firstClip.transcriptCaptions,
+          cues: next,
+          updatedAt: Date.now(),
+        },
+      } as Partial<TimelineItem>)
+    },
+    [firstClip, updateItem],
+  )
+
+  const seekToCue = useCallback(
+    (startSeconds: number) => {
+      const sourceFps = firstClip.sourceFps ?? fps
+      const sourceStartSeconds = (firstClip.sourceStart ?? 0) / sourceFps
+      const speed = firstClip.speed ?? 1
+      const timelineSeconds = Math.max(0, (startSeconds - sourceStartSeconds) / speed)
+      setCurrentFrame(Math.max(0, firstClip.from + Math.round(timelineSeconds * fps)))
+    },
+    [firstClip, fps, setCurrentFrame],
+  )
+
+  if (clips.length > 1) {
+    return (
+      <PropertySection
+        title={i18n.t('editor.subtitleSection.title')}
+        icon={Captions}
+        defaultOpen={true}
+      >
+        <div className="space-y-3 px-1">
+          <div className="flex items-center justify-between gap-3 rounded border border-border bg-muted/20 px-2 py-1.5">
+            <Label htmlFor="virtual-transcript-captions-visible" className="text-xs font-medium">
+              {i18n.t('editor.subtitleSection.showSubtitle')}
+            </Label>
+            <input
+              id="virtual-transcript-captions-visible"
+              type="checkbox"
+              checked={captionsVisible}
+              onChange={(event) => setCaptionsVisible(event.currentTarget.checked)}
+              className="h-4 w-4 rounded border-border accent-primary"
+            />
+          </div>
+
+          <CaptionStyleControls
+            items={styleItems}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+            onApplyPatch={applyStylePatch}
+          />
+
+          <p className="text-xs text-muted-foreground">
+            {i18n.t('editor.subtitleSection.multiSelectHint', {
+              segments: clips.length,
+              cues: totalCues,
+            })}
+          </p>
+        </div>
+      </PropertySection>
+    )
+  }
+
+  return (
+    <PropertySection
+      title={i18n.t('editor.subtitleSection.title')}
+      icon={Captions}
+      defaultOpen={true}
+    >
+      <div className="space-y-3 px-1">
+        <p className="text-xs text-muted-foreground">
+          {i18n.t('editor.subtitleSection.cueCount', {
+            count: firstClip.transcriptCaptions.cues.length,
+          })}{' '}
+          - {i18n.t('editor.subtitleSection.transcript')}
+        </p>
+
+        <div className="flex items-center justify-between gap-3 rounded border border-border bg-muted/20 px-2 py-1.5">
+          <Label htmlFor="virtual-transcript-captions-visible" className="text-xs font-medium">
+            {i18n.t('editor.subtitleSection.showSubtitle')}
+          </Label>
+          <input
+            id="virtual-transcript-captions-visible"
+            type="checkbox"
+            checked={captionsVisible}
+            onChange={(event) => setCaptionsVisible(event.currentTarget.checked)}
+            className="h-4 w-4 rounded border-border accent-primary"
+          />
+        </div>
+
+        <CaptionStyleControls
+          items={styleItems}
+          canvasWidth={canvasWidth}
+          canvasHeight={canvasHeight}
+          onApplyPatch={applyStylePatch}
+        />
+
+        <VirtualCueList
+          cues={firstClip.transcriptCaptions.cues}
+          onChange={updateCue}
+          onSeek={seekToCue}
+        />
+      </div>
+    </PropertySection>
   )
 })
 
@@ -158,7 +374,7 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
     >
       <div className="space-y-3 px-1">
         <p className="text-xs text-muted-foreground">
-          {i18n.t('editor.subtitleSection.cueCount', { count: segment.cues.length })} ·{' '}
+          {i18n.t('editor.subtitleSection.cueCount', { count: segment.cues.length })} -{' '}
           {sourceLabel}
         </p>
 

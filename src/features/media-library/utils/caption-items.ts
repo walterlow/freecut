@@ -93,6 +93,8 @@ export type CaptionTextItemTemplate = Pick<
   | 'transform'
 >
 
+export const VIRTUAL_TRANSCRIPT_CAPTION_TRACK_ID = '__virtual-transcript-captions__'
+
 export function normalizeCaptionSegments(
   segments: readonly MediaTranscriptSegment[],
 ): MediaTranscriptSegment[] {
@@ -959,6 +961,79 @@ export function buildSubtitleSegmentForClip(
     ...defaultStyle,
     ...styleTemplate,
   }
+}
+
+export function appendVirtualTranscriptCaptionTrack(
+  tracks: readonly TimelineTrack[],
+  timelineFps: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): TimelineTrack[] {
+  const baseTracks = tracks.filter((track) => track.id !== VIRTUAL_TRANSCRIPT_CAPTION_TRACK_ID)
+  const hasSoloTracks = baseTracks.some((track) => track.solo)
+  const sourceTracks = baseTracks.filter((track) =>
+    hasSoloTracks ? track.solo === true : track.visible !== false,
+  )
+  const virtualItems: SubtitleSegmentItem[] = []
+
+  for (const track of sourceTracks) {
+    for (const item of track.items ?? []) {
+      if ((item.type !== 'video' && item.type !== 'audio') || !item.mediaId) continue
+      const transcriptCaptions = item.transcriptCaptions
+      if (
+        !transcriptCaptions?.enabled ||
+        transcriptCaptions.type !== 'transcript' ||
+        transcriptCaptions.cues.length === 0
+      ) {
+        continue
+      }
+
+      const segment = buildSubtitleSegmentForClip({
+        trackId: VIRTUAL_TRANSCRIPT_CAPTION_TRACK_ID,
+        cues: transcriptCaptions.cues,
+        clip: item,
+        timelineFps,
+        canvasWidth,
+        canvasHeight,
+        label: 'Transcript',
+        source: {
+          type: 'transcript',
+          mediaId: transcriptCaptions.mediaId || item.mediaId,
+          clipId: item.id,
+        },
+        styleTemplate: transcriptCaptions.style as CaptionTextItemTemplate | undefined,
+      })
+
+      if (!segment) continue
+      virtualItems.push({
+        ...segment,
+        id: `virtual-transcript-${item.id}`,
+        trackId: VIRTUAL_TRANSCRIPT_CAPTION_TRACK_ID,
+        linkedGroupId: undefined,
+      })
+    }
+  }
+
+  if (virtualItems.length === 0) return baseTracks as TimelineTrack[]
+
+  const minOrder =
+    baseTracks.length > 0 ? Math.min(...baseTracks.map((track) => track.order ?? 0)) : 0
+  const virtualTrack: TimelineTrack = {
+    id: VIRTUAL_TRANSCRIPT_CAPTION_TRACK_ID,
+    name: 'Transcript Captions',
+    kind: 'video',
+    height: 1,
+    locked: true,
+    syncLock: false,
+    visible: true,
+    muted: true,
+    solo: hasSoloTracks,
+    volume: 0,
+    order: minOrder - 1,
+    items: virtualItems,
+  }
+
+  return [...baseTracks, virtualTrack]
 }
 
 /**

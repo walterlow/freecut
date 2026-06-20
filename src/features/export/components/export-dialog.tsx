@@ -334,7 +334,14 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   // Check if in/out points are set
   const hasInOutPoints = inPoint !== null && outPoint !== null && outPoint > inPoint
   const hasTranscriptSubtitles = useMemo(
-    () => items.some((item) => item.type === 'subtitle' && item.source.type === 'transcript'),
+    () =>
+      items.some(
+        (item) =>
+          (item.type === 'subtitle' && item.source.type === 'transcript') ||
+          ((item.type === 'video' || item.type === 'audio') &&
+            item.transcriptCaptions?.enabled === true &&
+            item.transcriptCaptions.type === 'transcript'),
+      ),
     [items],
   )
   const containerSupportsEmbeddedSubtitles =
