@@ -86,3 +86,12 @@ tmp-workspace/
 plans/
 
 .compound-engineering/*.local.yaml
+
+# design-sync (staged scripts, build output, machine state)
+.ds-sync/
+ds-bundle/
+.design-sync/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+.design-sync/freecut-tailwind.css
