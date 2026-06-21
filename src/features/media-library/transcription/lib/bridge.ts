@@ -257,8 +257,9 @@ export class Bridge {
         break
       case 'done':
         this.callbacks.onDone()
-        // Keep the shared Parakeet worker warm for the next job; whisper's per-job worker
-        // is torn down with the managed session.
+        // Both whisper and parakeet run on shared, persistent workers from the pool,
+        // so teardown(false) detaches this job's handlers but keeps the worker warm
+        // for the next job regardless of which engine ran.
         this.teardown(false)
         break
       case 'error':

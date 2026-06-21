@@ -135,7 +135,7 @@ describe('ItemContextMenu captions', () => {
     expect(onOpenCaptionDialog).toHaveBeenCalledTimes(1)
   })
 
-  it('shows a single "Generate Captions" item when a transcript already exists', () => {
+  it('shows a single "Generate Captions" item when captions are disabled', () => {
     const onOpenCaptionDialog = vi.fn()
 
     renderContextMenu({

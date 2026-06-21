@@ -26,6 +26,8 @@ const MODEL_ID = 'onnx-community/gemma-4-E4B-it-ONNX'
 env.useBrowserCache = true
 env.allowLocalModels = false
 
+// transformers.js model/tokenizer types are complex internals that aren't
+// exported for external use, so `any` is the pragmatic choice here.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let tokenizer: any = null
 let model: any = null
