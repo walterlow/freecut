@@ -10,6 +10,7 @@ import {
   getMusicgenModelDefinition,
   type MusicgenModelId,
 } from './musicgen-models'
+import { ONNX_MODEL_CACHE_NAME } from './onnx-model-cache'
 
 export const TRANSFORMERS_CACHE_NAME = 'transformers-cache'
 const WHISPER_CACHE_MATCH_FRAGMENTS = ['/onnx-community/whisper-']
@@ -20,6 +21,8 @@ export type LocalModelCacheId =
   | SceneVerificationModelId
   | MusicgenModelId
   | 'kokoro-tts'
+  | 'parakeet'
+  | 'supertonic-tts'
 
 export interface LocalModelCacheDefinition {
   id: LocalModelCacheId
@@ -78,6 +81,20 @@ export const LOCAL_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = [
     description: 'Kokoro ONNX model weights and tokenizer files.',
     cacheName: TRANSFORMERS_CACHE_NAME,
     matchPathFragments: KOKORO_TTS_CACHE_MATCH_FRAGMENTS,
+  },
+  {
+    id: 'parakeet',
+    label: 'Parakeet',
+    description: 'Parakeet TDT ASR encoder, decoder/joint, preprocessor, and vocab files.',
+    cacheName: ONNX_MODEL_CACHE_NAME,
+    matchPathFragments: ['/parakeet-tdt-0.6b-v3-smoothquant-onnx/'],
+  },
+  {
+    id: 'supertonic-tts',
+    label: 'Supertonic TTS',
+    description: 'Supertonic TTS ONNX models, tokenizer configs, and voice styles.',
+    cacheName: ONNX_MODEL_CACHE_NAME,
+    matchPathFragments: ['/supertonic-3/'],
   },
 ]
 

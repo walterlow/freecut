@@ -1,5 +1,6 @@
 import type { MainThreadMessage, PCMChunk, TranscriptWord, WhisperWorkerMessage } from '../types'
 import { createLogger } from '@/shared/logging/logger'
+import { fetchOnnxModelBytes, fetchOnnxModelText } from '@/shared/utils/onnx-model-cache'
 
 // Parakeet TDT 0.6B v3 (NVIDIA, CC-BY-4.0) on-device ASR. Clean-room ORT-web pipeline
 // (nemo128 log-mel preprocessor -> FastConformer encoder -> token-and-duration greedy
@@ -120,36 +121,8 @@ function getOrt(): Promise<OrtModule> {
   return ortPromise
 }
 
-async function fetchModel(
-  url: string,
-  onBytes?: (received: number, total: number) => void,
-): Promise<ArrayBuffer> {
-  const res = await fetch(url)
-  if (!res.ok || !res.body) {
-    throw new Error(`Failed to fetch ${url} (${res.status})`)
-  }
-  const total = Number(res.headers.get('content-length')) || 0
-  const reader = res.body.getReader()
-  const chunks: Uint8Array[] = []
-  let received = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    chunks.push(value)
-    received += value.byteLength
-    onBytes?.(received, total)
-  }
-  const buf = new Uint8Array(received)
-  let offset = 0
-  for (const chunk of chunks) {
-    buf.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return buf.buffer
-}
-
 async function loadVocab(): Promise<NonNullable<typeof vocab>> {
-  const text = await (await fetch(`${HF_BASE}/${VOCAB_FILE}`)).text()
+  const text = await fetchOnnxModelText(`${HF_BASE}/${VOCAB_FILE}`)
   const idToToken = new Map<number, string>()
   let blankIdx = -1
   for (const rawLine of text.split('\n')) {
@@ -175,7 +148,7 @@ async function createSession(
   backend: 'webgpu' | 'wasm',
   onBytes?: (received: number, total: number) => void,
 ): Promise<OrtSession> {
-  const bytes = await fetchModel(url, onBytes)
+  const bytes = await fetchOnnxModelBytes(url, onBytes)
   return ort.InferenceSession.create(bytes, {
     executionProviders: [backend],
     graphOptimizationLevel: 'all',

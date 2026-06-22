@@ -1,4 +1,15 @@
-import { Activity, lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
+import {
+  Activity,
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { i18n } from '@/i18n'
@@ -136,6 +147,14 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
   const clipHeader = useMemo(() => getClipHeader(selectedItems), [selectedItems])
   const activeClipHeader = !selectedTransitionId && !selectedMarkerId ? clipHeader : null
 
+  // Keep the panel content mounted + visible while the collapse animation plays
+  // so it slides out smoothly instead of blinking away. Only switch Activity to
+  // `hidden` (the perf win) once the close animation has actually settled.
+  const [contentVisible, setContentVisible] = useState(rightSidebarOpen)
+  useEffect(() => {
+    if (rightSidebarOpen) setContentVisible(true)
+  }, [rightSidebarOpen])
+
   // Resize handle logic
   const isResizingRef = useRef(false)
   const startXRef = useRef(0)
@@ -182,22 +201,28 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
 
   return (
     <>
-      {/* Right Sidebar */}
-      <div
-        className={`panel-bg border-l border-border shrink-0 relative h-full ${
-          rightSidebarOpen ? '' : 'w-0'
-        }`}
-        style={
-          rightSidebarOpen
-            ? {
-                width: rightSidebarWidth,
-                transition: isResizingRef.current ? 'none' : 'width 200ms',
-              }
-            : { transition: 'width 200ms' }
+      {/* Right Sidebar — width animated via motion for the open/close toggle.
+          We intentionally animate `width` (a layout property, not the cheaper
+          transform/opacity) because collapsing must reclaim layout space for the
+          preview — transform can't do that. overflow-hidden clips the fixed-width
+          inner content while the panel closes. Close is a touch faster than open
+          (exit < entrance). During a resize-drag we snap (duration 0) so width
+          tracks the pointer instead of easing behind it. */}
+      <motion.div
+        className="panel-bg border-l border-border shrink-0 relative h-full overflow-hidden"
+        initial={false}
+        animate={{ width: rightSidebarOpen ? rightSidebarWidth : 0 }}
+        transition={
+          isResizingRef.current
+            ? { duration: 0 }
+            : { type: 'tween', duration: rightSidebarOpen ? 0.26 : 0.2, ease: [0.32, 0.72, 0, 1] }
         }
+        onAnimationComplete={() => {
+          if (!rightSidebarOpen) setContentVisible(false)
+        }}
       >
         {/* Use Activity for React 19 performance optimization */}
-        <Activity mode={rightSidebarOpen ? 'visible' : 'hidden'}>
+        <Activity mode={contentVisible ? 'visible' : 'hidden'}>
           <div className="h-full flex flex-col" style={{ width: rightSidebarWidth }}>
             {/* Sidebar Header */}
             <div
@@ -291,18 +316,25 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
             className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary/50 transition-colors z-10"
           />
         )}
-      </div>
+      </motion.div>
 
-      {/* Right Sidebar Toggle */}
+      {/* Right Sidebar reveal toggle — matched to the in-header collapse button's
+          size, chevron, and top alignment so the arrow stays in the same place
+          and size when toggling (mirrors the always-present arrow on the left
+          sidebar rail). Edge-attached rounded tab keeps it discoverable. */}
       {!rightSidebarOpen && (
         <button
           onClick={toggleRightSidebar}
-          className="absolute right-0 top-3 z-10 w-6 bg-secondary/50 hover:bg-secondary border border-border rounded-l-md flex items-center justify-center transition-all hover:w-7"
-          style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarRevealToggleHeight }}
+          className="absolute right-0 top-2 z-10 flex items-center justify-center rounded-l-md border border-r-0 border-border bg-secondary/50 hover:bg-secondary transition-colors"
+          style={{
+            width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize,
+            height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize,
+          }}
           data-tooltip={t('editor.propertiesSidebar.showPanel')}
           data-tooltip-side="left"
+          aria-label={t('editor.propertiesSidebar.showPanel')}
         >
-          <ChevronLeft className="w-3 h-3 text-muted-foreground" />
+          <ChevronLeft className="w-3.5 h-3.5 text-muted-foreground" />
         </button>
       )}
     </>

@@ -5,6 +5,7 @@ import {
   useLocalInferenceStore,
 } from '@/shared/state/local-inference'
 import { validateTtsGenerateRequest } from './tts-generate-validation'
+import { fetchOnnxModelBytes, fetchOnnxModelJson } from '@/shared/utils/onnx-model-cache'
 
 const logger = createLogger('SupertonicTtsService')
 
@@ -514,11 +515,7 @@ function speedToDurationFactor(speed: number): number {
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`)
-  }
-  return (await response.json()) as T
+  return fetchOnnxModelJson<T>(url)
 }
 
 class SupertonicTtsService {
@@ -627,10 +624,8 @@ class SupertonicTtsService {
 
     await Promise.all(
       modelFiles.map(async ([key, label, fileName]) => {
-        const session = await ort.InferenceSession.create(
-          `${ONNX_BASE_URL}/${fileName}`,
-          sessionOptions,
-        )
+        const bytes = await fetchOnnxModelBytes(`${ONNX_BASE_URL}/${fileName}`)
+        const session = await ort.InferenceSession.create(bytes, sessionOptions)
         completed += 1
         onProgress?.(`Loading Supertonic ${backend.toUpperCase()} (${completed}/4): ${label}...`)
         loaded[key] = session
