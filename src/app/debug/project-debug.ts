@@ -145,6 +145,8 @@ interface ProjectDebugAPI {
       iterations?: number
       warmup?: number
       batchSize?: number
+      source?: 'texture' | 'canvas'
+      readback?: boolean
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) => Promise<any>
@@ -642,8 +644,42 @@ function createDebugAPI(): ProjectDebugAPI {
 
       const params = { ...getGpuEffectDefaultParams(effectType), ...(paramOverrides ?? {}) }
       const effects = [{ id: 'bench', type: effectType, name: effectType, enabled: true, params }]
-      const runOnce = () =>
-        pipeline.applyTextureEffectsToTexture(sourceTexture, effects, outputTexture, width, height)
+
+      // `source` selects which real entry point to time, isolating cost layers:
+      //  - 'texture' (default): passes only (texture -> texture). Pure shader ALU.
+      //  - 'canvas': copyExternalImageToTexture upload + passes + blit to a
+      //    WebGPU output canvas. Upper bound on the live video fast path's
+      //    per-frame GPU cost (the video path imports zero-copy instead of
+      //    uploading, but pays the same passes + blit).
+      // `readback: true` additionally drawImage()s the result onto a 2D canvas
+      // each frame — the compositing cost the preview pays after the effect.
+      const sourceMode = opts?.source ?? 'texture'
+      const readback = opts?.readback === true
+      let sourceCanvas: OffscreenCanvas | null = null
+      let readbackCtx: OffscreenCanvasRenderingContext2D | null = null
+      if (sourceMode === 'canvas') {
+        sourceCanvas = new OffscreenCanvas(width, height)
+        const sctx = sourceCanvas.getContext('2d')
+        if (sctx) {
+          const grad = sctx.createLinearGradient(0, 0, width, height)
+          grad.addColorStop(0, '#1b3a5f')
+          grad.addColorStop(1, '#c25e3a')
+          sctx.fillStyle = grad
+          sctx.fillRect(0, 0, width, height)
+        }
+      }
+      if (readback) {
+        readbackCtx = new OffscreenCanvas(width, height).getContext('2d')
+      }
+
+      const runOnce = () => {
+        if (sourceMode === 'canvas' && sourceCanvas) {
+          const out = pipeline.applyEffectsToCanvas(sourceCanvas, effects)
+          if (out && readbackCtx) readbackCtx.drawImage(out, 0, 0)
+          return out !== null
+        }
+        return pipeline.applyTextureEffectsToTexture(sourceTexture, effects, outputTexture, width, height)
+      }
 
       try {
         if (!runOnce()) {

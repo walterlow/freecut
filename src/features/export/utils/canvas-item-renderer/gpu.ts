@@ -304,6 +304,13 @@ export function renderPreviewVideoGpuEffectsToCanvas(
       rctx.canvasSettings.width,
       rctx.canvasSettings.height,
     )
+    if (!canvas) {
+      // applyEffectsToVideo bailed (importExternalTexture unsupported/failed).
+      // Returning null drops this item to the per-frame mediabunny decode path,
+      // so this must NOT be recorded as a fast-path hit.
+      recordFastPath('apply-null')
+      return null
+    }
     recordFastPath('hit', {
       effectCount: enabledEffects.length,
       videoTime: video.currentTime,
