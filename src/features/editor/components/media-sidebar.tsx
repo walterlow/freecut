@@ -21,7 +21,7 @@ import {
   Captions,
   WandSparkles,
 } from 'lucide-react'
-import { motion } from 'motion/react'
+import { motion, useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/shared/ui/cn'
 import { useEditorStore } from '@/shared/state/editor'
@@ -290,6 +290,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
   const setActiveTab = useEditorStore((s) => s.setActiveTab)
   const sidebarWidth = useEditorStore((s) => s.sidebarWidth)
   const setSidebarWidth = useEditorStore((s) => s.setSidebarWidth)
+  const prefersReducedMotion = useReducedMotion()
 
   const [aiTabActivated, setAiTabActivated] = useState(activeTab === 'ai')
   useEffect(() => {
@@ -644,7 +645,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 }
               }}
               className={`
-                w-9 h-9 rounded-lg flex items-center justify-center transition-all
+                w-9 h-9 rounded-lg flex items-center justify-center transition-[transform,background-color,color] duration-150 active:scale-95
                 ${
                   activeTab === id && leftSidebarOpen && !keyframeEditorOpen
                     ? 'bg-primary text-primary-foreground hover:bg-primary/90'
@@ -663,7 +664,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
           <button
             onClick={toggleKeyframeEditorOpen}
             className={`
-              w-9 h-9 rounded-lg flex items-center justify-center transition-all
+              w-9 h-9 rounded-lg flex items-center justify-center transition-[transform,background-color,color] duration-150 active:scale-95
               ${
                 keyframeEditorOpen
                   ? 'bg-primary text-primary-foreground hover:bg-primary/90'
@@ -700,7 +701,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
         initial={false}
         animate={{ width: leftSidebarOpen ? sidebarWidth : 0 }}
         transition={
-          isResizingRef.current
+          isResizingRef.current || prefersReducedMotion
             ? { duration: 0 }
             : { type: 'tween', duration: leftSidebarOpen ? 0.26 : 0.2, ease: [0.32, 0.72, 0, 1] }
         }
@@ -805,7 +806,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                                   if (shouldSuppressGeneratedItemClick()) return
                                   handleAddText()
                                 }}
-                                className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                                className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                               >
                                 {renderTextTemplatePreview()}
                                 <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
@@ -830,7 +831,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                                 className={cn(
                                   'flex flex-col items-center gap-1 p-1.5 rounded-md border border-border',
                                   'bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50',
-                                  'transition-colors group',
+                                  'transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group',
                                 )}
                               >
                                 {renderTextTemplatePreview(preset)}
@@ -864,7 +865,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       if (shouldSuppressGeneratedItemClick()) return
                       handleAddShape('rectangle')
                     }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Square className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
@@ -886,7 +887,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       if (shouldSuppressGeneratedItemClick()) return
                       handleAddShape('circle')
                     }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Circle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
@@ -908,7 +909,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       if (shouldSuppressGeneratedItemClick()) return
                       handleAddShape('triangle')
                     }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Triangle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
@@ -930,7 +931,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       if (shouldSuppressGeneratedItemClick()) return
                       handleAddShape('ellipse')
                     }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Circle className="w-3.5 h-2.5 text-muted-foreground group-hover:text-foreground" />
@@ -952,7 +953,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       if (shouldSuppressGeneratedItemClick()) return
                       handleAddShape('star')
                     }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Star className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
@@ -974,7 +975,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       if (shouldSuppressGeneratedItemClick()) return
                       handleAddShape('polygon')
                     }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Hexagon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
@@ -996,7 +997,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       if (shouldSuppressGeneratedItemClick()) return
                       handleAddShape('heart')
                     }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Heart className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
@@ -1008,7 +1009,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
                   <button
                     onClick={() => useMaskEditorStore.getState().startShapePenMode()}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                     title={t('editor.mediaSidebar.penToolHint')}
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
@@ -1038,7 +1039,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       if (shouldSuppressGeneratedItemClick()) return
                       handleAddAdjustmentLayer()
                     }}
-                    className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                    className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                   >
                     <div className="w-8 h-8 rounded-md border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70 flex-shrink-0">
                       <Layers className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
@@ -1074,7 +1075,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                             if (shouldSuppressGeneratedItemClick()) return
                             handleAddPreset(preset.id)
                           }}
-                          className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                          className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                         >
                           <EffectThumbnail
                             effects={preset.effects}
@@ -1120,7 +1121,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                               if (shouldSuppressGeneratedItemClick()) return
                               handleAddGpuEffect(def.id)
                             }}
-                            className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                            className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                           >
                             <EffectThumbnail
                               effectId={def.id}

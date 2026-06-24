@@ -7,6 +7,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Shared easing tokens — strong custom curves, not the weak CSS built-ins.
+   Non-inline @theme so the values are both emitted to :root (usable as
+   `var(--ease-out-strong)` in raw CSS / inline styles) AND generate Tailwind
+   utilities: `ease-out-strong`, `ease-in-out-strong`, `ease-drawer`. Reference
+   these instead of hand-rolling cubic-beziers so "feels right" is the default. */
+@theme {
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1); /* UI entrances/exits */
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1); /* on-screen movement */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* iOS-like drawer/panel slide */
+}
+
 @layer base {
   :root {
     /* Professional Video Editor Dark Theme - OKLCH Colors */
@@ -193,11 +204,6 @@
     background-color: oklch(var(--timeline-bg));
   }
 
-  /* Smooth panel transitions */
-  .panel-transition {
-    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
   /* Subtle glow for active elements */
   .glow-primary {
     box-shadow: 0 0 12px oklch(var(--primary) / 0.3);
@@ -320,15 +326,15 @@
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.2s var(--ease-out-strong);
 }
 
 .animate-slide-in-right {
-  animation: slideInRight 0.3s ease-out;
+  animation: slideInRight 0.2s var(--ease-out-strong);
 }
 
 .animate-slide-in-left {
-  animation: slideInLeft 0.3s ease-out;
+  animation: slideInLeft 0.2s var(--ease-out-strong);
 }
 
 .animate-pulse-subtle {
@@ -341,4 +347,20 @@
 
 .animate-shimmer {
   animation: shimmer 2s ease-in-out infinite;
+}
+
+/* Reduced motion: keep opacity-based entrances for comprehension, but strip the
+   positional movement (slide/translate). Looping decorative motion (scan,
+   shimmer, pulse) is also stilled. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-in-right,
+  .animate-slide-in-left {
+    animation: fadeIn 0.2s var(--ease-out-strong);
+  }
+
+  .animate-scan,
+  .animate-shimmer,
+  .animate-pulse-subtle {
+    animation: none;
+  }
 }

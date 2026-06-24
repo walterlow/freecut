@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { motion } from 'motion/react'
+import { motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { i18n } from '@/i18n'
@@ -123,6 +123,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId)
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId)
+  const prefersReducedMotion = useReducedMotion()
   const selectedItems = useItemsStore(
     useShallow(
       useCallback(
@@ -213,7 +214,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
         initial={false}
         animate={{ width: rightSidebarOpen ? rightSidebarWidth : 0 }}
         transition={
-          isResizingRef.current
+          isResizingRef.current || prefersReducedMotion
             ? { duration: 0 }
             : { type: 'tween', duration: rightSidebarOpen ? 0.26 : 0.2, ease: [0.32, 0.72, 0, 1] }
         }

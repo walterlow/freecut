@@ -624,7 +624,7 @@ export const SliderInput = memo(function SliderInput({
             left: `max(4px, calc(${Math.max(0, Math.min(100, fillPercentRef.current))}% - 1.5px))`,
             transform: `translateY(-50%) scaleX(${isActive ? 1 : 0.25}) scaleY(${isActive && valueDodge ? 0.75 : 1})`,
             opacity: handleOpacity,
-            transition: 'opacity 150ms, transform 200ms cubic-bezier(0.23, 1, 0.32, 1)',
+            transition: 'opacity 150ms, transform 200ms var(--ease-out-strong)',
           }}
         />
 

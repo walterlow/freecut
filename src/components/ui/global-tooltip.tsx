@@ -4,11 +4,19 @@ type TooltipSide = 'top' | 'bottom' | 'left' | 'right'
 
 interface TooltipState {
   visible: boolean
+  // Skip the open delay + entrance animation when another tooltip was visible
+  // moments ago — moving across a toolbar should feel instant after the first.
+  instant: boolean
   text: string
   x: number
   y: number
   side: TooltipSide
 }
+
+// How long after a tooltip hides that the next one opens instantly (no delay,
+// no animation). Matches the standard 300ms show delay.
+const INSTANT_WINDOW_MS = 300
+const SHOW_DELAY_MS = 300
 
 /**
  * Global Tooltip Component
@@ -35,17 +43,10 @@ const origins: Record<TooltipSide, string> = {
   right: 'left center',
 }
 
-// Slide animation based on side (matches Radix tooltip)
-const slideAnimations: Record<TooltipSide, string> = {
-  top: 'slide-in-from-bottom-2',
-  bottom: 'slide-in-from-top-2',
-  left: 'slide-in-from-right-2',
-  right: 'slide-in-from-left-2',
-}
-
 export function GlobalTooltip() {
   const [state, setState] = useState<TooltipState>({
     visible: false,
+    instant: false,
     text: '',
     x: 0,
     y: 0,
@@ -53,8 +54,11 @@ export function GlobalTooltip() {
   })
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
+  // Timestamp of the last hide, used to decide whether the next tooltip should
+  // open instantly (subsequent-hover skip-delay).
+  const lastHiddenAtRef = useRef(0)
 
-  const showTooltip = useCallback((element: HTMLElement) => {
+  const showTooltip = useCallback((element: HTMLElement, instant: boolean) => {
     const text = element.getAttribute('data-tooltip')
     if (!text) return
 
@@ -85,11 +89,13 @@ export function GlobalTooltip() {
         break
     }
 
-    setState({ visible: true, text, x, y, side })
+    setState({ visible: true, instant, text, x, y, side })
   }, [])
 
   const hideTooltip = useCallback(() => {
-    setState((s) => ({ ...s, visible: false }))
+    lastHiddenAtRef.current = Date.now()
+    // Reset instant so the exit always fades, even if it opened instantly.
+    setState((s) => ({ ...s, visible: false, instant: false }))
   }, [])
 
   useEffect(() => {
@@ -107,7 +113,11 @@ export function GlobalTooltip() {
           clearTimeout(timeoutRef.current)
           timeoutRef.current = null
         }
-        timeoutRef.current = setTimeout(() => showTooltip(target), 300)
+        const instant = Date.now() - lastHiddenAtRef.current < INSTANT_WINDOW_MS
+        timeoutRef.current = setTimeout(
+          () => showTooltip(target, instant),
+          instant ? 0 : SHOW_DELAY_MS,
+        )
         return
       }
 
@@ -120,10 +130,13 @@ export function GlobalTooltip() {
         timeoutRef.current = null
       }
 
-      // Delay showing tooltip (300ms like TooltipProvider)
-      timeoutRef.current = setTimeout(() => {
-        showTooltip(target)
-      }, 300)
+      // Open instantly when another tooltip was visible moments ago, otherwise
+      // wait the standard delay to avoid accidental activation.
+      const instant = Date.now() - lastHiddenAtRef.current < INSTANT_WINDOW_MS
+      timeoutRef.current = setTimeout(
+        () => showTooltip(target, instant),
+        instant ? 0 : SHOW_DELAY_MS,
+      )
     }
 
     const handleMouseLeave = (e: MouseEvent) => {
@@ -179,9 +192,9 @@ export function GlobalTooltip() {
     }
   }, [showTooltip, hideTooltip])
 
-  // Don't render anything if not visible
-  if (!state.visible) return null
-
+  // Always render the (invisible, non-interactive) tooltip so there's always a
+  // hidden state to transition from — this makes both the entrance and exit
+  // animate, including the very first tooltip of the session.
   return (
     <div
       ref={tooltipRef}
@@ -194,10 +207,18 @@ export function GlobalTooltip() {
         pointerEvents: 'none',
       }}
     >
+      {/* Interruptible opacity+scale transition (not a one-shot keyframe) so
+          moving between adjacent triggers retargets smoothly. Origin-aware scale
+          gives a subtle directional feel without a separate slide. Subsequent
+          hovers snap (duration 0) via the instant flag. */}
       <div
         role="tooltip"
-        className={`overflow-hidden rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground animate-in fade-in-0 zoom-in-95 ${slideAnimations[state.side]}`}
-        style={{ transformOrigin: origins[state.side] }}
+        data-visible={state.visible}
+        className="overflow-hidden rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground opacity-0 scale-[0.97] transition-[opacity,transform] ease-out-strong data-[visible=true]:opacity-100 data-[visible=true]:scale-100"
+        style={{
+          transformOrigin: origins[state.side],
+          transitionDuration: state.instant ? '0ms' : '125ms',
+        }}
       >
         {state.text}
       </div>

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Cpu, Loader2 } from 'lucide-react'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   formatEstimatedBytes,
   getLocalInferenceSummary,
@@ -12,6 +12,8 @@ export function LocalInferenceStatusPill() {
   const { t } = useTranslation()
   const runtimesById = useLocalInferenceStore((state) => state.runtimesById)
   const summary = useMemo(() => getLocalInferenceSummary(runtimesById), [runtimesById])
+  const prefersReducedMotion = useReducedMotion()
+  const enterY = prefersReducedMotion ? 0 : -4
 
   function getStateLabel(state: 'loading' | 'running' | 'ready' | 'error'): string {
     switch (state) {
@@ -44,10 +46,10 @@ export function LocalInferenceStatusPill() {
       {summary && (
         <motion.div
           key="local-inference-pill"
-          initial={{ opacity: 0, y: -4 }}
+          initial={{ opacity: 0, y: enterY }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
+          exit={{ opacity: 0, y: enterY }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
           className="hidden items-center gap-2 rounded-md border border-border/70 bg-secondary/35 px-2.5 py-1 lg:flex"
         >
           {summary.state === 'loading' || summary.state === 'running' ? (
