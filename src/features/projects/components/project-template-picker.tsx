@@ -28,7 +28,7 @@ export function ProjectTemplatePicker({
             type="button"
             aria-pressed={isSelected}
             onClick={() => onSelectTemplate(template)}
-            className={`group relative flex flex-col gap-3 p-4 panel-bg border rounded-lg transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
+            className={`group relative flex flex-col gap-3 p-4 panel-bg border rounded-lg transition-[transform,border-color,box-shadow] duration-150 active:scale-[0.98] hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
               isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'
             }`}
           >
@@ -72,7 +72,7 @@ export function ProjectTemplatePicker({
           type="button"
           aria-pressed={isCustomSelected}
           onClick={onSelectCustom}
-          className={`group relative flex flex-col gap-3 p-4 panel-bg border rounded-lg transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
+          className={`group relative flex flex-col gap-3 p-4 panel-bg border rounded-lg transition-[transform,border-color,box-shadow] duration-150 active:scale-[0.98] hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
             isCustomSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'
           }`}
         >

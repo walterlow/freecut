@@ -195,7 +195,7 @@ export function ProjectCard({
       role="button"
       tabIndex={0}
       aria-label={t('projects.card.openProject')}
-      className={`group relative panel-bg border rounded-lg overflow-hidden transition-all cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+      className={`group relative panel-bg border rounded-lg overflow-hidden transition-[transform,border-color,box-shadow] duration-150 active:scale-[0.99] cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
         isSelected
           ? 'border-primary ring-2 ring-primary/40 shadow-lg shadow-primary/10'
           : 'border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5'
