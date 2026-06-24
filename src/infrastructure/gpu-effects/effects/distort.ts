@@ -642,16 +642,28 @@ fn flutedGlassFragment(input: VertexOutput) -> @location(0) vec4f {
     distortion *= fadeX;
   }
 
-  let dudx = dpdx(input.uv);
-  let dudy = dpdy(input.uv);
-  var grainUV = input.uv - 0.5;
-  let derivativeScale = 0.8 / max(vec2f(length(dudx), length(dudy)), vec2f(0.0001));
-  grainUV *= derivativeScale;
-  grainUV += 0.5;
-  var grain = flutedOverlayNoise(grainUV);
-  grain = smoothstep(0.4, 0.7, grain);
-  grain *= grainMixer;
-  distortion = mix(distortion, 0.0, grain);
+  // Grain UV (and its derivatives) are only needed when grain or grain overlay
+  // are active. grainMixer/grainOverlay are uniform, so these branches are
+  // coherent across the draw — no divergence — and the dpdx/dpdy derivatives
+  // stay in uniform control flow. Skips ~36 sin-based hash() calls per pixel
+  // when grain is off (the common case), which dominates this shader's ALU.
+  let grainActive = grainMixer > 0.0 || grainOverlay > 0.0;
+  var grainUV = input.uv;
+  if (grainActive) {
+    let dudx = dpdx(input.uv);
+    let dudy = dpdy(input.uv);
+    var gUV = input.uv - 0.5;
+    let derivativeScale = 0.8 / max(vec2f(length(dudx), length(dudy)), vec2f(0.0001));
+    gUV *= derivativeScale;
+    gUV += 0.5;
+    grainUV = gUV;
+  }
+  if (grainMixer > 0.0) {
+    var grain = flutedOverlayNoise(grainUV);
+    grain = smoothstep(0.4, 0.7, grain);
+    grain *= grainMixer;
+    distortion = mix(distortion, 0.0, grain);
+  }
 
   shadows = min(shadows, 1.0);
   shadows += maskStrokeInner;
@@ -680,11 +692,15 @@ fn flutedGlassFragment(input: VertexOutput) -> @location(0) vec4f {
   edgeDistortion *= mask;
   let frame = getUvFrame(uv, edgeDistortion);
 
-  var stretch = 1.0 - smoothstep(0.0, 0.5, xNonSmooth) * smoothstep(1.0, 0.5, xNonSmooth);
-  stretch = pow(stretch, 2.0);
-  stretch *= mask;
-  stretch *= getUvFrame(uv, 0.1 + 0.05 * mask * frameFade);
-  uv = vec2f(uv.x, mix(uv.y, 0.5, stretchAmount * stretch));
+  // stretchAmount is uniform — skip the stretch warp (and its getUvFrame /
+  // fwidth work) entirely when stretch is off.
+  if (stretchAmount > 0.0) {
+    var stretch = 1.0 - smoothstep(0.0, 0.5, xNonSmooth) * smoothstep(1.0, 0.5, xNonSmooth);
+    stretch = pow(stretch, 2.0);
+    stretch *= mask;
+    stretch *= getUvFrame(uv, 0.1 + 0.05 * mask * frameFade);
+    uv = vec2f(uv.x, mix(uv.y, 0.5, stretchAmount * stretch));
+  }
 
   let imageSample = getBlur(uv, 1.0 / vec2f(width, height), vec2f(0.0, 1.0), blur);
   let image = vec4f(imageSample.rgb * imageSample.a, imageSample.a);
@@ -707,18 +723,21 @@ fn flutedGlassFragment(input: VertexOutput) -> @location(0) vec4f {
   color += backColor.rgb * (1.0 - opacity);
   opacity += backColor.a * (1.0 - opacity);
 
-  var grainOverlayNoise = flutedOverlayNoise(rotate2d(grainUV, 1.0) + vec2f(3.0));
-  grainOverlayNoise = mix(grainOverlayNoise, flutedOverlayNoise(rotate2d(grainUV, 2.0) + vec2f(-1.0)), 0.5);
-  grainOverlayNoise = pow(grainOverlayNoise, 1.3);
+  // grainOverlay is uniform — the two-octave overlay noise (24 sin-based
+  // hash() calls) only runs when the overlay is actually dialed in.
+  if (grainOverlay > 0.0) {
+    var grainOverlayNoise = flutedOverlayNoise(rotate2d(grainUV, 1.0) + vec2f(3.0));
+    grainOverlayNoise = mix(grainOverlayNoise, flutedOverlayNoise(rotate2d(grainUV, 2.0) + vec2f(-1.0)), 0.5);
+    grainOverlayNoise = pow(grainOverlayNoise, 1.3);
 
-  let grainOverlayV = grainOverlayNoise * 2.0 - 1.0;
-  let grainOverlayColor = vec3f(select(0.0, 1.0, grainOverlayV >= 0.0));
-  var grainOverlayStrength = grainOverlay * abs(grainOverlayV);
-  grainOverlayStrength = pow(grainOverlayStrength, 0.8);
-  grainOverlayStrength *= mask;
-  color = mix(color, grainOverlayColor, 0.35 * grainOverlayStrength);
-
-  opacity += 0.5 * grainOverlayStrength;
+    let grainOverlayV = grainOverlayNoise * 2.0 - 1.0;
+    let grainOverlayColor = vec3f(select(0.0, 1.0, grainOverlayV >= 0.0));
+    var grainOverlayStrength = grainOverlay * abs(grainOverlayV);
+    grainOverlayStrength = pow(grainOverlayStrength, 0.8);
+    grainOverlayStrength *= mask;
+    color = mix(color, grainOverlayColor, 0.35 * grainOverlayStrength);
+    opacity += 0.5 * grainOverlayStrength;
+  }
   opacity = clamp(opacity, 0.0, 1.0);
 
   return vec4f(color, opacity);
