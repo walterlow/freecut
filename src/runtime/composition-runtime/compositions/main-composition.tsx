@@ -59,6 +59,13 @@ import { getAudioPitchShiftSemitones } from '@/shared/utils/audio-pitch'
 
 const TRANSITION_AUDIO_PREMOUNT_SECONDS = 0.5
 const STANDALONE_AUDIO_PREMOUNT_SECONDS = 2
+// Frames the incoming video clip mounts + seeks to its in-point before it
+// becomes visible, so its pooled <video> reaches readyState >= 2 before the
+// playhead crosses the boundary (avoids the dom-video-not-ready stall at clip
+// entry). The source URL is already kept warm ~8s ahead; this only governs the
+// DOM element/decoder. Well within the pool's element cap (40) since it adds at
+// most ~1 extra mounted element per video track.
+const VIDEO_CLIP_PREMOUNT_SECONDS = 2
 
 const ActiveMasksContext = React.createContext<MaskInfo[]>(EMPTY_MASK_INFOS)
 
@@ -613,7 +620,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                 <StableVideoSequence
                   items={videoItems}
                   transitionWindows={renderPlan.transitionWindows}
-                  premountFor={Math.round(fps * 1)}
+                  premountFor={Math.round(fps * VIDEO_CLIP_PREMOUNT_SECONDS)}
                   renderItem={renderVideoItem}
                 />
 
