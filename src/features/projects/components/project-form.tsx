@@ -146,7 +146,7 @@ function ProjectFormBase({
                     id="name"
                     type="text"
                     {...register('name')}
-                    className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                    className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-[color,border-color,box-shadow] duration-150"
                     placeholder={t('projects.form.projectNamePlaceholder')}
                   />
                   {errors.name && (
@@ -166,7 +166,7 @@ function ProjectFormBase({
                     id="description"
                     rows={4}
                     {...register('description')}
-                    className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all resize-none"
+                    className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-[color,border-color,box-shadow] duration-150 resize-none"
                     placeholder={t('projects.form.descriptionPlaceholder')}
                   />
                   {errors.description && (
@@ -230,7 +230,7 @@ function ProjectFormBase({
                       id="width"
                       type="number"
                       {...register('width', { valueAsNumber: true })}
-                      className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                      className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-[color,border-color,box-shadow] duration-150"
                       placeholder="1920"
                       min={320}
                     />
@@ -250,7 +250,7 @@ function ProjectFormBase({
                       id="height"
                       type="number"
                       {...register('height', { valueAsNumber: true })}
-                      className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                      className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-[color,border-color,box-shadow] duration-150"
                       placeholder="1080"
                       min={240}
                     />

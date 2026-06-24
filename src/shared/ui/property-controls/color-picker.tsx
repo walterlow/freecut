@@ -251,7 +251,7 @@ export const ColorPicker = memo(function ColorPicker({
                   key={preset}
                   type="button"
                   onClick={() => handlePresetClick(preset)}
-                  className="w-6 h-6 rounded border border-border hover:ring-1 hover:ring-ring transition-all"
+                  className="w-6 h-6 rounded border border-border hover:ring-1 hover:ring-ring transition-[transform,box-shadow] duration-150 active:scale-90"
                   style={{ backgroundColor: preset }}
                   title={preset}
                 />

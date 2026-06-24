@@ -126,8 +126,8 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
               type="button"
               className={cn(
                 'flex aspect-square items-center justify-center rounded-md border border-white/10',
-                'bg-secondary/60 text-muted-foreground transition-all',
-                'hover:-translate-y-0.5 hover:text-foreground hover:shadow-md',
+                'bg-secondary/60 text-muted-foreground transition-[transform,box-shadow,color] duration-150',
+                'hover:-translate-y-0.5 active:translate-y-0 hover:text-foreground hover:shadow-md',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
               )}
               title={t('sceneBrowser.palette.moreColors', { count: hidden.length })}
@@ -184,8 +184,8 @@ function SwatchButton({
       type="button"
       onClick={() => onPick(cluster)}
       className={cn(
-        'aspect-square rounded-md border border-white/10 transition-all',
-        'hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none',
+        'aspect-square rounded-md border border-white/10 transition-[transform,box-shadow,color] duration-150',
+        'hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md focus-visible:outline-none',
         'focus-visible:ring-2 focus-visible:ring-primary',
         active && 'ring-2 ring-primary',
       )}
