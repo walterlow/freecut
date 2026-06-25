@@ -271,43 +271,61 @@ export const TransitionItem = memo(function TransitionItem({
   const [hoveredEdge, setHoveredEdge] = useState<'left' | 'right' | null>(null)
   const [isBridgeHovered, setIsBridgeHovered] = useState(false)
 
-  // Ref for applying drag offset when both clips are being dragged
+  // Ref for applying the live drag offset to the bridge so it follows whichever of
+  // its clips is being dragged — instead of staying frozen at the old cut until
+  // release. `draggedSide` is the dragged clip we anchor to ('left'/'right'/null).
   const containerRef = useRef<HTMLDivElement>(null)
   const rafIdRef = useRef<number | null>(null)
-  const bothClipsDragged = useSelectionStore(
+  const draggedSide = useSelectionStore(
     useCallback(
-      (state: SelectionState) => {
+      (state: SelectionState): 'left' | 'right' | null => {
         if (!state.dragState?.isDragging) {
-          return false
+          return null
         }
 
         const draggedItemIdSet =
           state.dragState.draggedItemIdSet ?? new Set(state.dragState.draggedItemIds)
-        return (
-          draggedItemIdSet.has(transition.leftClipId) &&
-          draggedItemIdSet.has(transition.rightClipId)
-        )
+        if (draggedItemIdSet.has(transition.leftClipId)) return 'left'
+        if (draggedItemIdSet.has(transition.rightClipId)) return 'right'
+        return null
       },
       [transition.leftClipId, transition.rightClipId],
     ),
   )
+
+  // Horizontal pixels the bridge's computed position has ALREADY shifted because
+  // the linked-move preview moved the dragged clip's geometry (only happens for
+  // clips that have a linked companion). The RAF subtracts this so we don't double
+  // the horizontal motion — for a linked clip it cancels offset.x to ~0 (position
+  // handles X) leaving only the vertical follow; for an unlinked clip it's 0 so the
+  // full offset applies. Either way the bridge stays pinned to the dragged clip,
+  // including when it moves to another lane (the vertical axis the position never
+  // tracks). Updated during render and read live in the RAF.
+  const positionShiftXRef = useRef(0)
+  positionShiftXRef.current =
+    draggedSide === 'left' && leftClip && leftLinkedEditPreview?.from != null
+      ? frameToPixels(leftLinkedEditPreview.from) - frameToPixels(leftClip.from)
+      : draggedSide === 'right' && rightClip && rightLinkedEditPreview?.from != null
+        ? frameToPixels(rightLinkedEditPreview.from) - frameToPixels(rightClip.from)
+        : 0
+
   /*
-   * This effect subscribes to a boolean derived from selection state instead
+   * This effect subscribes to a small enum derived from selection state instead
    * of the full drag payload. Per-frame movement still comes directly from
-   * dragOffsetRef in RAF so the bridge follows both clips without waking
+   * dragOffsetRef in RAF so the bridge follows the dragged clip without waking
    * every transition instance on each selection-store drag UI churn.
    */
-
   useEffect(() => {
     const container = containerRef.current
     const updateDragOffset = () => {
       if (!container) return
       const offset = dragOffsetRef.current
-      container.style.transform = `translate(${offset.x}px, ${offset.y}px)`
+      const x = offset.x - positionShiftXRef.current
+      container.style.transform = `translate(${x}px, ${offset.y}px)`
       rafIdRef.current = requestAnimationFrame(updateDragOffset)
     }
 
-    if (!bothClipsDragged) {
+    if (!draggedSide) {
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current)
         rafIdRef.current = null
@@ -329,7 +347,7 @@ export const TransitionItem = memo(function TransitionItem({
         container.style.transform = ''
       }
     }
-  }, [bothClipsDragged])
+  }, [draggedSide])
   // Calculate position and size for the transition indicator.
   // The bridge covers the actual overlap region: from (leftEnd - duration) to leftEnd.
   // The right edge is anchored at leftEnd (the left clip's end); the left edge moves
