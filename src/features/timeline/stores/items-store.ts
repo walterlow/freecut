@@ -17,6 +17,7 @@ import {
   clampSpeed,
 } from '../utils/source-calculations'
 import { isCompositionWrapperItem, wouldCreateCompositionCycle } from '../utils/composition-graph'
+import { normalizeClassicTrackNames } from '../utils/classic-tracks'
 import { getActiveCompositionId } from './composition-navigation-active'
 import { useCompositionsStore } from './compositions-store'
 import { useTimelineSettingsStore } from './timeline-settings-store'
@@ -160,12 +161,16 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
       // passes the existing stored object, normalization is a no-op re-clone, so
       // reuse the previous reference.
       const previousById = new Map(state.tracks.map((track) => [track.id, track]))
-      const nextTracks = tracks
+      const sortedTracks = tracks
         .map((track) => {
           const previous = previousById.get(track.id)
           return previous === track ? previous : normalizeTrack(track)
         })
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      // Re-derive classic V#/A# labels from the settled stack order so create /
+      // delete history can't leave names out of sequence (e.g. V1, V5, V3, V4).
+      // No-ops (and preserves references) when names already match position.
+      const nextTracks = normalizeClassicTrackNames(sortedTracks)
 
       // If the result is element-wise identical to the current tracks, keep the
       // same array reference so `s.tracks` selectors don't fire at all.

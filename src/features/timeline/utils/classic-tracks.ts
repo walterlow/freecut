@@ -61,6 +61,51 @@ export function getNextClassicTrackName(tracks: TimelineTrack[], kind: TrackKind
   return `${getTrackPrefix(kind)}${next}`
 }
 
+/**
+ * Re-derive classic `V#`/`A#` track names from spatial position so the labels
+ * always reflect the stack order regardless of the create/delete history that
+ * produced them. Video numbering rises from the bottom (bottom-most video lane is
+ * `V1`, climbing upward); audio numbering descends from the top (top-most audio
+ * lane is `A1`, going downward) — mirroring how the app grows each section. This
+ * matches the `order` convention (lower order = visually higher).
+ *
+ * Group headers and tracks with custom (non-classic) names are left untouched and
+ * do not consume a number. Track references whose name does not change are
+ * returned as-is, and the original array reference is returned when nothing
+ * changes, so identity-based memoization (`areTrackPropsEqual`) keeps working.
+ */
+export function normalizeClassicTrackNames(tracks: TimelineTrack[]): TimelineTrack[] {
+  const desiredNameById = new Map<string, string>()
+
+  const collectClassicTracks = (kind: TrackKind): TimelineTrack[] =>
+    tracks.filter(
+      (track) =>
+        !track.isGroup && getTrackKind(track) === kind && getTrackNameRegex(kind).test(track.name),
+    )
+
+  // Video: bottom-most lane (highest order) is V1, numbering upward.
+  collectClassicTracks('video')
+    .sort((left, right) => right.order - left.order)
+    .forEach((track, index) => desiredNameById.set(track.id, `V${index + 1}`))
+
+  // Audio: top-most lane (lowest order) is A1, numbering downward.
+  collectClassicTracks('audio')
+    .sort((left, right) => left.order - right.order)
+    .forEach((track, index) => desiredNameById.set(track.id, `A${index + 1}`))
+
+  let changed = false
+  const next = tracks.map((track) => {
+    const desiredName = desiredNameById.get(track.id)
+    if (desiredName && desiredName !== track.name) {
+      changed = true
+      return { ...track, name: desiredName }
+    }
+    return track
+  })
+
+  return changed ? next : tracks
+}
+
 export function getAdjacentTrackOrder(
   tracks: TimelineTrack[],
   targetTrack: TimelineTrack,
