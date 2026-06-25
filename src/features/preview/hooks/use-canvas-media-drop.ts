@@ -133,8 +133,7 @@ function resolveOverlayLayerAnchor(
   const activeNonGroupTrackId = tracks.find(
     (track) => track.id === activeTrackId && !track.isGroup,
   )?.id
-  const anchorTrackId =
-    activeNonGroupTrackId ?? tracks.find((track) => !track.isGroup)?.id ?? ''
+  const anchorTrackId = activeNonGroupTrackId ?? tracks.find((track) => !track.isGroup)?.id ?? ''
   const preferredTrackHeight = tracks.find((track) => track.id === anchorTrackId)?.height ?? 64
   return { anchorTrackId, preferredTrackHeight }
 }

@@ -69,7 +69,8 @@ function defineTool<S extends z.ZodType>(def: {
 const CLIPS_PROP = {
   type: 'array',
   items: { type: 'string' },
-  description: 'Clip refs like ["c1","c3"] from the timeline list. Omit to use the current selection.',
+  description:
+    'Clip refs like ["c1","c3"] from the timeline list. Omit to use the current selection.',
 }
 
 function objSchema(properties: Record<string, unknown>, required: string[] = []): JsonSchema {
@@ -94,7 +95,10 @@ const findClips = defineTool({
   description:
     'List clips on the timeline, optionally filtered by type or a label substring. Returns their refs so other tools can target them.',
   inputSchema: objSchema({
-    query: { type: 'string', description: 'Case-insensitive substring to match against clip labels.' },
+    query: {
+      type: 'string',
+      description: 'Case-insensitive substring to match against clip labels.',
+    },
     type: {
       type: 'string',
       enum: ['video', 'audio', 'text', 'image', 'shape'],
@@ -115,9 +119,8 @@ const findClips = defineTool({
       return true
     })
     const summary =
-      matches
-        .map((clip) => `${clip.ref} ${clip.type} "${clip.label}"`)
-        .join('; ') || 'no matching clips'
+      matches.map((clip) => `${clip.ref} ${clip.type} "${clip.label}"`).join('; ') ||
+      'no matching clips'
     return { ok: true, message: `Found ${matches.length}: ${summary}`, data: matches }
   },
 })
@@ -186,7 +189,11 @@ const addTitle = defineTool({
   inputSchema: objSchema(
     {
       text: { type: 'string', description: 'Title text.' },
-      atSeconds: { type: 'number', minimum: 0, description: 'Start time; defaults to the playhead.' },
+      atSeconds: {
+        type: 'number',
+        minimum: 0,
+        description: 'Start time; defaults to the playhead.',
+      },
     },
     ['text'],
   ),
@@ -245,7 +252,8 @@ const split = defineTool({
     atSeconds: { type: 'number', minimum: 0, description: 'Split time; defaults to the playhead.' },
   }),
   schema: z.object({ clips: clipsField, atSeconds: z.number().min(0).optional() }),
-  summarize: (args) => `Split at ${args.atSeconds !== undefined ? `${args.atSeconds.toFixed(1)}s` : 'the playhead'}`,
+  summarize: (args) =>
+    `Split at ${args.atSeconds !== undefined ? `${args.atSeconds.toFixed(1)}s` : 'the playhead'}`,
   execute: (args) => {
     const { items, splitItem } = useTimelineStore.getState()
     const frame =
@@ -261,7 +269,10 @@ const split = defineTool({
     if (crossing.length === 0) throw new Error('No clips cross that time to split.')
 
     for (const item of crossing) splitItem(item.id, frame)
-    return { ok: true, message: `Split ${crossing.length} clip${crossing.length === 1 ? '' : 's'}.` }
+    return {
+      ok: true,
+      message: `Split ${crossing.length} clip${crossing.length === 1 ? '' : 's'}.`,
+    }
   },
 })
 
@@ -300,7 +311,10 @@ const setSpeed = defineTool({
       const newDuration = Math.max(1, Math.round((item.durationInFrames * current) / args.speed))
       rateStretchItem(item.id, item.from, newDuration, args.speed)
     }
-    return { ok: true, message: `Set ${media.length} clip${media.length === 1 ? '' : 's'} to ${args.speed}x.` }
+    return {
+      ok: true,
+      message: `Set ${media.length} clip${media.length === 1 ? '' : 's'} to ${args.speed}x.`,
+    }
   },
 })
 
@@ -352,7 +366,10 @@ const trimClip = defineTool({
     const { trimItemStart, trimItemEnd } = useTimelineStore.getState()
     if (args.side === 'start') trimItemStart(item.id, frames)
     else trimItemEnd(item.id, frames)
-    return { ok: true, message: `Trimmed ${args.seconds.toFixed(1)}s off the ${args.side} of ${args.clip}.` }
+    return {
+      ok: true,
+      message: `Trimmed ${args.seconds.toFixed(1)}s off the ${args.side} of ${args.clip}.`,
+    }
   },
 })
 
@@ -398,7 +415,10 @@ const addTransition = defineTool({
 function cleanupTargetIds(clips: string[] | undefined): string[] {
   const targeted = resolveTargetItems(clips).filter(isMedia)
   if (targeted.length > 0) return targeted.map((item) => item.id)
-  return useTimelineStore.getState().items.filter(isMedia).map((item) => item.id)
+  return useTimelineStore
+    .getState()
+    .items.filter(isMedia)
+    .map((item) => item.id)
 }
 
 const removeSilence = defineTool({

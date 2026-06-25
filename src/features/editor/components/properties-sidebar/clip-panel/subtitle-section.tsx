@@ -64,7 +64,9 @@ export const SubtitleSection = memo(function SubtitleSection({
   const virtualTranscriptClips = useMemo(
     () =>
       items.filter(
-        (item): item is (AudioItem | VideoItem) & {
+        (
+          item,
+        ): item is (AudioItem | VideoItem) & {
           transcriptCaptions: NonNullable<(AudioItem | VideoItem)['transcriptCaptions']>
         } =>
           (item.type === 'video' || item.type === 'audio') &&
