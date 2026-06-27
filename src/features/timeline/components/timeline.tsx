@@ -523,7 +523,9 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     }
   }, [isTrackDragging])
 
-  // Drag visuals: move all dragged track headers together via direct DOM manipulation.
+  // Drag visuals: move all dragged track headers together with their clip rows via
+  // direct DOM manipulation. Headers and content rows both carry data-track-id, so the
+  // dragged track's clips ghost-follow the header in lockstep.
   // This handles groups (header + children move as one) and multi-select drag.
   useEffect(() => {
     if (!isTrackDragging) return
@@ -534,6 +536,13 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     const draggedIds = new Set(dragState.draggedTrackIds)
     const container = trackHeadersRootRef.current
     if (!container) return
+
+    // Content clip rows live under the track-sections surface, scoped here so we don't
+    // also match the header rows (both use data-track-id).
+    const getContentRows = (): NodeListOf<HTMLElement> | HTMLElement[] =>
+      document.getElementById('timeline-track-sections')?.querySelectorAll<HTMLElement>(
+        '[data-track-id]',
+      ) ?? []
 
     let rafId: number
     const updateDragVisuals = () => {
@@ -547,6 +556,17 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
           el.style.opacity = '0.5'
           el.style.transition = 'none'
           el.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)'
+        }
+      }
+      // Clip rows ghost-follow the header. No horizontal scale here — it would shift the
+      // clips sideways; just translate + dim so the clips track the drag.
+      for (const el of getContentRows()) {
+        const trackId = el.getAttribute('data-track-id')
+        if (trackId && draggedIds.has(trackId)) {
+          el.style.transform = `translateY(${offset}px)`
+          el.style.zIndex = '50'
+          el.style.opacity = '0.5'
+          el.style.transition = 'none'
         }
       }
       rafId = requestAnimationFrame(updateDragVisuals)
@@ -565,6 +585,13 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
           el.style.transition = ''
           el.style.boxShadow = ''
         }
+      }
+      // Reset styles on the clip rows
+      for (const el of getContentRows()) {
+        el.style.transform = ''
+        el.style.zIndex = ''
+        el.style.opacity = ''
+        el.style.transition = ''
       }
     }
   }, [isTrackDragging])
