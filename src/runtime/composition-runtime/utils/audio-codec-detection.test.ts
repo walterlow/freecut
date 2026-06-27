@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { needsCustomAudioDecoder } from './audio-codec-detection'
+import { isNonNativeAudioContainer, needsCustomAudioDecoder } from './audio-codec-detection'
 
 describe('needsCustomAudioDecoder', () => {
   it('detects AC-3/E-AC-3 codecs', () => {
@@ -30,5 +30,26 @@ describe('needsCustomAudioDecoder', () => {
     expect(needsCustomAudioDecoder(undefined)).toBe(false)
     expect(needsCustomAudioDecoder('aac')).toBe(false)
     expect(needsCustomAudioDecoder('opus')).toBe(false)
+  })
+})
+
+describe('isNonNativeAudioContainer', () => {
+  it('flags Matroska by mime type', () => {
+    expect(isNonNativeAudioContainer('video/x-matroska', undefined)).toBe(true)
+    expect(isNonNativeAudioContainer('audio/x-matroska', undefined)).toBe(true)
+    expect(isNonNativeAudioContainer('video/x-matroska; codecs="vp9,opus"', undefined)).toBe(true)
+  })
+
+  it('flags Matroska by file extension', () => {
+    expect(isNonNativeAudioContainer(undefined, 'Sacrifice.mkv')).toBe(true)
+    expect(isNonNativeAudioContainer(undefined, 'audio-only.mka')).toBe(true)
+    expect(isNonNativeAudioContainer('', 'UPPERCASE.MKV')).toBe(true)
+  })
+
+  it('does not flag natively demuxable containers', () => {
+    expect(isNonNativeAudioContainer(undefined, undefined)).toBe(false)
+    expect(isNonNativeAudioContainer('video/mp4', 'clip.mp4')).toBe(false)
+    expect(isNonNativeAudioContainer('video/webm', 'clip.webm')).toBe(false)
+    expect(isNonNativeAudioContainer('audio/mpeg', 'song.mp3')).toBe(false)
   })
 })

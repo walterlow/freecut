@@ -82,9 +82,7 @@ export function resolveClipRefs(refs: readonly string[]): string[] {
  */
 export function resolveTargetItems(refs: readonly string[] | undefined): TimelineItem[] {
   const ids =
-    refs && refs.length > 0
-      ? resolveClipRefs(refs)
-      : useSelectionStore.getState().selectedItemIds
+    refs && refs.length > 0 ? resolveClipRefs(refs) : useSelectionStore.getState().selectedItemIds
   const byId = new Map(useTimelineStore.getState().items.map((item) => [item.id, item]))
   return ids.map((id) => byId.get(id)).filter((item): item is TimelineItem => Boolean(item))
 }

@@ -9,12 +9,7 @@
 
 import { create } from 'zustand'
 import type { LlmMessage } from '@/infrastructure/llm'
-import {
-  getAgentAdapter,
-  planRequest,
-  runStep,
-  type PlannedStep,
-} from './agent-service'
+import { getAgentAdapter, planRequest, runStep, type PlannedStep } from './agent-service'
 
 export type ModelStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type AgentPhase = 'idle' | 'planning' | 'awaiting-confirm' | 'running'
@@ -132,7 +127,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         messages: [...state.messages, assistantMessage],
         streamingText: '',
         phase: hasSteps ? 'awaiting-confirm' : 'idle',
-        plan: hasSteps ? result.steps.map((step) => ({ ...step, status: 'pending' as const })) : null,
+        plan: hasSteps
+          ? result.steps.map((step) => ({ ...step, status: 'pending' as const }))
+          : null,
       }))
     } catch (error) {
       if (controller.signal.aborted) {
@@ -162,8 +159,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     for (let index = 0; index < plan.length; index++) {
       set((state) => ({
         plan:
-          state.plan?.map((step, i) => (i === index ? { ...step, status: 'running' as const } : step)) ??
-          null,
+          state.plan?.map((step, i) =>
+            i === index ? { ...step, status: 'running' as const } : step,
+          ) ?? null,
       }))
       const step = plan[index]
       if (!step) continue
@@ -173,14 +171,21 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         plan:
           state.plan?.map((s, i) =>
             i === index
-              ? { ...s, status: result.ok ? ('done' as const) : ('error' as const), result: result.message }
+              ? {
+                  ...s,
+                  status: result.ok ? ('done' as const) : ('error' as const),
+                  result: result.message,
+                }
               : s,
           ) ?? null,
       }))
     }
 
     set((state) => ({
-      messages: [...state.messages, { id: newId(), role: 'assistant', content: results.join('\n') }],
+      messages: [
+        ...state.messages,
+        { id: newId(), role: 'assistant', content: results.join('\n') },
+      ],
       phase: 'idle',
     }))
   },

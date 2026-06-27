@@ -149,7 +149,9 @@ export const TimelineItem = memo(function TimelineItem({
       (s) => {
         const captionClipIds = selectReplaceableCaptionClipIds(s)
         if (captionClipIds.has(item.id)) return true
-        return linkedItemsForCaptionOwnership.some((linkedItem) => captionClipIds.has(linkedItem.id))
+        return linkedItemsForCaptionOwnership.some((linkedItem) =>
+          captionClipIds.has(linkedItem.id),
+        )
       },
       [item.id, linkedItemsForCaptionOwnership],
     ),

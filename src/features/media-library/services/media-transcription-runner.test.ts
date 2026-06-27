@@ -24,9 +24,8 @@ vi.mock('./media-transcription-service', () => ({
   mediaTranscriptionService: mediaTranscriptionServiceMocks,
 }))
 
-const { cancelMediaTranscriptionJob, runMediaTranscriptionJob } = await import(
-  './media-transcription-runner'
-)
+const { cancelMediaTranscriptionJob, runMediaTranscriptionJob } =
+  await import('./media-transcription-runner')
 
 function makeTranscript(mediaId = 'media-1'): MediaTranscript {
   return {

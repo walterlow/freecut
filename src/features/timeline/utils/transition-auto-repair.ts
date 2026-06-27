@@ -24,8 +24,14 @@ import {
   getMaxTransitionDurationForHandles,
 } from './transition-utils'
 
-/** Clip types that can have transitions */
-const VALID_TRANSITION_TYPES = new Set(['video', 'image'])
+/**
+ * Clip types that can have transitions.
+ * Must stay in sync with `canAddTransition()` in transition-utils.ts — otherwise
+ * a transition that was legitimately created (e.g. between composition clips) gets
+ * flagged `invalid_type` and removed by the repair pass on the next clip change
+ * (a false positive, e.g. when reordering whole tracks).
+ */
+const VALID_TRANSITION_TYPES = new Set(['video', 'image', 'composition'])
 
 /**
  * Repair transitions after clip changes.

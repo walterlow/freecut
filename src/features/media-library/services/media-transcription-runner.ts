@@ -1,4 +1,8 @@
-import type { MediaTranscript, MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage'
+import type {
+  MediaTranscript,
+  MediaTranscriptModel,
+  MediaTranscriptQuantization,
+} from '@/types/storage'
 import { isTranscriptionCancellationError } from '@/shared/utils/transcription-cancellation'
 import type { TranscribeOptions } from '../transcription/types'
 import type { MediaTranscriptStatus } from '../types'

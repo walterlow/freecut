@@ -97,6 +97,7 @@ src/
 - Vitest + jsdom + @testing-library/react
 - `src/test/setup.ts` mocks ImageData, WebGPU APIs (`navigator.gpu`), and GPU constants
 - Tests live next to source files: `*.test.ts` / `*.test.tsx`
+- **Only write tests that exercise real logic.** A test must be able to fail for a reason other than someone editing a constant or a string. Do NOT add tests that: re-assert a static config/registry/preset constant back to itself (config snapshots); assert `typeof x === 'function'` or `has correct initial state` on a store; only verify a mocked function was called / returned its mock value (the real code is stubbed, so nothing real is covered); render a component and assert a passed-in prop/className/style string appears with no branching behind it; exercise library/framework behavior (Radix, jsdom events, controlled inputs). When the only collaborators are mocked, test against the real in-memory fake (e.g. workspace-fs round-trips) instead. Worth testing: algorithm/math (FPS/timeline conversions, transitions, interpolation, color/curve math), reducer/state-machine transitions, schema migrations, edge/boundary cases, and named regressions. If unsure whether a test adds value, prefer no test over a low-value one
 
 ## Environment
 

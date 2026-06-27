@@ -519,7 +519,11 @@ describe('mediaTranscriptionService.enableTranscriptCaptions', () => {
 
     useTimelineStoreGetStateMock.mockReturnValue({
       fps: 30,
-      tracks: [makeTrack('track-captions', 0), makeTrack('track-video', 1), makeTrack('track-audio', 2)],
+      tracks: [
+        makeTrack('track-captions', 0),
+        makeTrack('track-video', 1),
+        makeTrack('track-audio', 2),
+      ],
       items: [clip, linkedAudio, existingTranscript],
       setTracks,
       removeItems,

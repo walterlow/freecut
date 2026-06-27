@@ -10,7 +10,7 @@ import { PitchCorrectedAudio } from '../components/pitch-corrected-audio'
 import { CustomDecoderAudio } from '../components/custom-decoder-audio'
 import { getSharedPreviewAudioContext } from '../utils/preview-audio-graph'
 import { useMediaLibraryStore } from '@/runtime/composition-runtime/deps/stores'
-import { needsCustomAudioDecoder } from '../utils/audio-codec-detection'
+import { isNonNativeAudioContainer, needsCustomAudioDecoder } from '../utils/audio-codec-detection'
 import {
   StableVideoSequence,
   type StableVideoSequenceItem,
@@ -313,6 +313,11 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
         // Orphaned media metadata; native audio path can be silent for AC-3/E-AC-3.
         return true
       }
+
+      // Containers the browser can't natively demux (e.g. Matroska/.mkv) must
+      // go through mediabunny even when the audio codec is browser-friendly,
+      // otherwise the native element opens nothing and the clip plays silently.
+      if (isNonNativeAudioContainer(media.mimeType, media.fileName)) return true
 
       // Video assets usually expose audio codec in media.audioCodec.
       // Audio-only assets persist their codec in media.codec.

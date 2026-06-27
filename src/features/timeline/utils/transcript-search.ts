@@ -60,7 +60,11 @@ export async function searchTimelineTranscript(
     // Join a small forward window so multi-word phrases match across tokens.
     let windowText = ''
     let end = i
-    while (end < tokens.length && end < i + WINDOW_TOKENS && windowText.length < needle.length + 48) {
+    while (
+      end < tokens.length &&
+      end < i + WINDOW_TOKENS &&
+      windowText.length < needle.length + 48
+    ) {
       const word = words[end]
       if (word) windowText += (end > i ? ' ' : '') + word
       end++

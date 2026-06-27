@@ -39,3 +39,26 @@ export function needsCustomAudioDecoder(audioCodec: string | undefined): boolean
 
   return false
 }
+
+/**
+ * Detects whether a media item's *container* can't be demuxed by the browser's
+ * native media element, so its audio must go through the mediabunny decode path
+ * regardless of the audio codec.
+ *
+ * The Matroska container (`.mkv`) is the common offender: Chrome can decode
+ * VP9/Opus, but only inside WebM — it returns "" from canPlayType for Matroska
+ * and never reaches `loadedmetadata`. Without this, an MKV whose audio codec is
+ * otherwise browser-friendly (e.g. Opus) routes to the native element and plays
+ * silently. WebM (`.webm`) is natively supported and intentionally excluded.
+ */
+const MATROSKA_MIME_PATTERN = /x-matroska/i
+const MATROSKA_EXTENSION_PATTERN = /\.mk[av]$/i
+
+export function isNonNativeAudioContainer(
+  mimeType: string | undefined,
+  fileName: string | undefined,
+): boolean {
+  if (mimeType && MATROSKA_MIME_PATTERN.test(mimeType)) return true
+  if (fileName && MATROSKA_EXTENSION_PATTERN.test(fileName.trim())) return true
+  return false
+}
