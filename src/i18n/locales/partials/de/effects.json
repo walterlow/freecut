@@ -50,6 +50,10 @@
     "highlights": "Lichter"
   },
   "params": {
+    "font": "Schriftart",
+    "customChars": "Eigene Zeichen",
+    "transparentBg": "Transparenter Hintergrund",
+    "edgeDetect": "Kantenerkennung",
     "coverage": "Abdeckung",
     "blockSize": "Blockgröße",
     "curvature": "Krümmung",
@@ -140,6 +144,12 @@
     "threshold": "Schwelle"
   },
   "options": {
+    "monospace": "Monospace",
+    "ascii": "ASCII-Verlauf",
+    "dense": "Dicht",
+    "binary": "Binär",
+    "symbols": "Symbole",
+    "custom": "Benutzerdefiniert",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

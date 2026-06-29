@@ -50,6 +50,10 @@
     "highlights": "高光"
   },
   "params": {
+    "font": "字体",
+    "customChars": "自定义字符",
+    "transparentBg": "透明背景",
+    "edgeDetect": "边缘检测",
     "coverage": "覆盖范围",
     "blockSize": "块大小",
     "curvature": "曲率",
@@ -141,6 +145,12 @@
     "threshold": "阈值"
   },
   "options": {
+    "monospace": "等宽",
+    "ascii": "ASCII 渐变",
+    "dense": "密集",
+    "binary": "二进制",
+    "symbols": "符号",
+    "custom": "自定义",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

@@ -50,6 +50,10 @@
     "highlights": "ハイライト"
   },
   "params": {
+    "font": "フォント",
+    "customChars": "カスタム文字",
+    "transparentBg": "透明背景",
+    "edgeDetect": "エッジ検出",
     "coverage": "カバレッジ",
     "blockSize": "ブロックサイズ",
     "curvature": "曲率",
@@ -141,6 +145,12 @@
     "threshold": "しきい値"
   },
   "options": {
+    "monospace": "等幅",
+    "ascii": "ASCIIランプ",
+    "dense": "高密度",
+    "binary": "バイナリ",
+    "symbols": "記号",
+    "custom": "カスタム",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

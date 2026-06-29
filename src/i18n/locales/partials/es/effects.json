@@ -50,6 +50,10 @@
     "highlights": "Altas luces"
   },
   "params": {
+    "font": "Fuente",
+    "customChars": "Caracteres personalizados",
+    "transparentBg": "Fondo transparente",
+    "edgeDetect": "Detección de bordes",
     "coverage": "Cobertura",
     "blockSize": "Tamaño de bloque",
     "curvature": "Curvatura",
@@ -141,6 +145,12 @@
     "threshold": "Umbral"
   },
   "options": {
+    "monospace": "Monoespaciada",
+    "ascii": "Rampa ASCII",
+    "dense": "Denso",
+    "binary": "Binario",
+    "symbols": "Símbolos",
+    "custom": "Personalizado",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

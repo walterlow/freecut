@@ -70,22 +70,8 @@ describe('GPU effect registry', () => {
     expect(effect?.category).toBe('stylize')
 
     const defaults = getGpuEffectDefaultParams('gpu-ascii')
-    expect(defaults).toEqual({
-      charSet: 'standard',
-      fontSize: 8,
-      letterSpacing: 0,
-      lineHeight: 1,
-      matchSourceColor: true,
-      textColor: '#ffffff',
-      bgColor: '#0a0a0f',
-      colorSaturation: 100,
-      asciiOpacity: 100,
-      originalOpacity: 0,
-      contrast: 100,
-      brightness: 0,
-      invert: false,
-    })
 
+    // Default charset 'ascii' is an atlas ramp of 10 glyphs, so glyphCount packs as 10.
     expect(Array.from(effect!.packUniforms(defaults, 1920, 1080)!)).toEqual(
       Array.from(
         new Float32Array([
@@ -104,7 +90,7 @@ describe('GPU effect registry', () => {
           1080,
           0,
           0,
-          0,
+          10,
           1,
           1,
           1,

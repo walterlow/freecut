@@ -1,4 +1,4 @@
-import type { GpuEffectDefinition } from '../types'
+import type { EffectDataTexturePayload, GpuEffectDefinition } from '../types'
 
 export const vignette: GpuEffectDefinition = {
   id: 'gpu-vignette',
@@ -1327,6 +1327,77 @@ const ASCII_CHARSET_MAP: Record<string, number> = {
   minimal: 4,
 }
 
+// Atlas-based character sets render real glyphs (vs the procedural masks of the
+// legacy charsets above). Ramps are ordered DENSE -> LIGHT so a dark pixel maps
+// to the densest glyph and a bright pixel to the lightest (trailing space).
+const ASCII_ATLAS_RAMPS: Record<string, string> = {
+  ascii: '@%#*+=-:. ',
+  dense: '@WB#$oahkbn+=-:. ',
+  binary: '01',
+  symbols: '#@&$%*+!=;:-. ',
+}
+
+const ASCII_ATLAS_CELL = 24
+const ASCII_ATLAS_MAX_GLYPHS = 64
+
+// CSS font-family stacks per font option. All fall back to generic monospace so
+// the atlas still rasterizes even where the named font is unavailable (e.g. the
+// export Web Worker, which may not resolve system fonts).
+const ASCII_FONT_STACK: Record<string, string> = {
+  monospace: 'monospace',
+  courier: '"Courier New", Courier, monospace',
+  consolas: 'Consolas, "Lucida Console", monospace',
+  lucida: '"Lucida Console", Monaco, monospace',
+}
+
+/** Ordered glyph ramp for atlas charsets, or null for the procedural-mask path. */
+function asciiAtlasRamp(charSet: string, customChars: string): string | null {
+  if (charSet === 'custom') {
+    const chars = [...customChars].slice(0, ASCII_ATLAS_MAX_GLYPHS)
+    return chars.length > 0 ? chars.join('') : null
+  }
+  return ASCII_ATLAS_RAMPS[charSet] ?? null
+}
+
+/** Rasterize the ramp into a horizontal-strip glyph atlas (one cell per glyph). */
+function buildAsciiAtlas(ramp: string, font: string): EffectDataTexturePayload {
+  const chars = [...ramp].slice(0, ASCII_ATLAS_MAX_GLYPHS)
+  const cell = ASCII_ATLAS_CELL
+  const n = Math.max(chars.length, 1)
+  const width = n * cell
+  const height = cell
+  const data = new Uint8Array(width * height * 4)
+
+  const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(width, height) : null
+  const ctx = canvas?.getContext('2d', { willReadFrequently: true }) as
+    | OffscreenCanvasRenderingContext2D
+    | null
+    | undefined
+  if (!ctx) {
+    data.fill(255) // No canvas available: solid coverage so the effect still draws.
+    return { width, height, depth: 1, data }
+  }
+
+  const fontStack = ASCII_FONT_STACK[font] ?? ASCII_FONT_STACK.monospace
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `${Math.round(cell * 0.82)}px ${fontStack}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (let i = 0; i < chars.length; i++) {
+    ctx.fillText(chars[i]!, i * cell + cell / 2, cell / 2 + 1)
+  }
+  const img = ctx.getImageData(0, 0, width, height).data
+  for (let i = 0; i < width * height; i++) {
+    const a = img[i * 4 + 3] ?? 0 // rendered alpha = glyph coverage, stored in every channel
+    data[i * 4] = a
+    data[i * 4 + 1] = a
+    data[i * 4 + 2] = a
+    data[i * 4 + 3] = a
+  }
+  return { width, height, depth: 1, data }
+}
+
 export const dither: GpuEffectDefinition = {
   id: 'gpu-dither',
   name: 'Dither',
@@ -1732,13 +1803,14 @@ struct AsciiParams {
   fontSize: f32, letterSpacing: f32, lineHeight: f32, charsetKind: f32,
   matchSourceColor: f32, invert: f32, asciiOpacity: f32, originalOpacity: f32,
   contrast: f32, brightness: f32, saturation: f32, width: f32,
-  height: f32, _pad0: f32, _pad1: f32, _pad2: f32,
+  height: f32, transparentBg: f32, edgeDetect: f32, glyphCount: f32,
   textColor: vec4f,
   bgColor: vec4f,
 };
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: AsciiParams;
+@group(0) @binding(3) var asciiAtlas: texture_2d<f32>;
 
 fn asciiClampTexelCoord(coord: vec2i, texSize: vec2i) -> vec2i {
   return vec2i(
@@ -1932,6 +2004,24 @@ fn asciiGlyphIndex(brightness: f32, charsetKind: i32) -> i32 {
   return i32(clamp(scaled, 0.0, f32(maxIndex)));
 }
 
+// Sobel edge magnitude sampled at cell scale (steps = one cell), used to drive
+// glyph density in edge-detection mode so glyphs trace contours instead of tone.
+fn asciiEdgeStrength(centerPx: vec2f, texSize: vec2i, stepX: f32, stepY: f32) -> f32 {
+  let sx = max(stepX, 1.0);
+  let sy = max(stepY, 1.0);
+  let tl = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(-sx, -sy)), texSize).rgb);
+  let tc = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(0.0, -sy)), texSize).rgb);
+  let tr = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(sx, -sy)), texSize).rgb);
+  let ml = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(-sx, 0.0)), texSize).rgb);
+  let mr = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(sx, 0.0)), texSize).rgb);
+  let bl = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(-sx, sy)), texSize).rgb);
+  let bc = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(0.0, sy)), texSize).rgb);
+  let br = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(sx, sy)), texSize).rgb);
+  let gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
+  let gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
+  return clamp(length(vec2f(gx, gy)), 0.0, 1.0);
+}
+
 @fragment
 fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
   let texSize = vec2f(params.width, params.height);
@@ -1953,12 +2043,19 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
   let gridSize = vec2f(cols * cellWidth, rows * cellHeight);
   let origin = (texSize - gridSize) * 0.5;
 
+  let transparent = params.transparentBg >= 0.5;
+
   if (
     pixelPos.x < origin.x ||
     pixelPos.y < origin.y ||
     pixelPos.x >= origin.x + gridSize.x ||
     pixelPos.y >= origin.y + gridSize.y
   ) {
+    // Border (grid letterboxing): no glyphs here. Transparent mode shows only the
+    // original at its opacity; opaque mode shows the filled background.
+    if (transparent) {
+      return vec4f(adjustedBase, base.a * params.originalOpacity);
+    }
     return vec4f(background, base.a);
   }
 
@@ -1969,36 +2066,88 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
   let sampleColor = asciiLoadTexel(vec2i(samplePos), texSizeI);
   let adjustedSample = asciiAdjustColor(sampleColor.rgb, params.contrast, params.brightness);
 
-  var brightness = luminance601(adjustedSample);
+  // Glyph density is driven by tone, or by edge magnitude in edge-detection mode.
+  var density = luminance601(adjustedSample);
+  if (params.edgeDetect >= 0.5) {
+    density = asciiEdgeStrength(samplePos, texSizeI, cellWidth, cellHeight);
+  }
   if (params.invert >= 0.5) {
-    brightness = 1.0 - brightness;
+    density = 1.0 - density;
   }
 
-  let charsetKind = i32(params.charsetKind + 0.5);
-  let glyphIndex = asciiGlyphIndex(brightness, charsetKind);
-  let blur = max(0.5 / min(cellWidth, cellHeight), 0.002);
-  let mask = asciiGlyphMask(charsetKind, glyphIndex, localUv, blur);
+  // Atlas charsets (glyphCount > 0) sample real glyphs; otherwise fall back to
+  // the procedural mask shapes of the legacy charsets.
+  var mask = 0.0;
+  if (params.glyphCount > 0.5) {
+    let n = i32(params.glyphCount + 0.5);
+    let gi = clamp(i32(floor(density * f32(n))), 0, n - 1);
+    let lx = clamp(localUv.x, 0.04, 0.96);
+    let atlasUv = vec2f((f32(gi) + lx) / f32(n), localUv.y);
+    mask = textureSampleLevel(asciiAtlas, texSampler, atlasUv, 0.0).a;
+  } else {
+    let charsetKind = i32(params.charsetKind + 0.5);
+    let glyphIndex = asciiGlyphIndex(density, charsetKind);
+    let blur = max(0.5 / min(cellWidth, cellHeight), 0.002);
+    mask = asciiGlyphMask(charsetKind, glyphIndex, localUv, blur);
+  }
 
   var glyphColor = params.textColor.rgb;
   if (params.matchSourceColor >= 0.5) {
     glyphColor = asciiApplySaturation(adjustedSample, params.saturation);
   }
 
-  let color = mix(background, glyphColor, clamp(mask * params.asciiOpacity, 0.0, 1.0));
+  let inkAlpha = clamp(mask * params.asciiOpacity, 0.0, 1.0);
+
+  if (transparent) {
+    // Composite glyph ink over the (optional) original underlay over transparency.
+    let underA = params.originalOpacity * (1.0 - inkAlpha);
+    let outA = inkAlpha + underA;
+    let outRGB = (glyphColor * inkAlpha + adjustedBase * underA) / max(outA, 0.0001);
+    return vec4f(outRGB, base.a * outA);
+  }
+
+  let color = mix(background, glyphColor, inkAlpha);
   return vec4f(color, base.a);
 }`,
   params: {
     charSet: {
       type: 'select',
       label: 'Character Set',
-      default: 'standard',
+      default: 'ascii',
       options: [
-        { value: 'standard', label: 'Standard' },
-        { value: 'simple', label: 'Simple' },
-        { value: 'blocks', label: 'Blocks' },
-        { value: 'dots', label: 'Dots' },
-        { value: 'minimal', label: 'Minimal' },
+        { value: 'ascii', label: 'ASCII Ramp' },
+        { value: 'dense', label: 'Dense' },
+        { value: 'binary', label: 'Binary' },
+        { value: 'symbols', label: 'Symbols' },
+        { value: 'custom', label: 'Custom' },
+        { value: 'standard', label: 'Standard (shapes)' },
+        { value: 'simple', label: 'Simple (shapes)' },
+        { value: 'blocks', label: 'Blocks (shapes)' },
+        { value: 'dots', label: 'Dots (shapes)' },
+        { value: 'minimal', label: 'Minimal (shapes)' },
       ],
+    },
+    customChars: {
+      type: 'text',
+      label: 'Custom Characters',
+      default: 'FREECUT 01',
+      visibleWhen: (params) => params.charSet === 'custom',
+    },
+    font: {
+      type: 'select',
+      label: 'Font',
+      default: 'monospace',
+      options: [
+        { value: 'monospace', label: 'Monospace' },
+        { value: 'courier', label: 'Courier' },
+        { value: 'consolas', label: 'Consolas' },
+        { value: 'lucida', label: 'Lucida Console' },
+      ],
+      visibleWhen: (params) =>
+        asciiAtlasRamp(
+          (params.charSet as string) ?? 'ascii',
+          (params.customChars as string) ?? '',
+        ) !== null,
     },
     fontSize: {
       type: 'number',
@@ -2034,7 +2183,14 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       default: '#ffffff',
       visibleWhen: (params) => params.matchSourceColor !== true,
     },
-    bgColor: { type: 'color', label: 'Background', default: '#0a0a0f' },
+    bgColor: {
+      type: 'color',
+      label: 'Background',
+      default: '#0a0a0f',
+      visibleWhen: (params) => params.transparentBg !== true,
+    },
+    transparentBg: { type: 'boolean', label: 'Transparent Background', default: false },
+    edgeDetect: { type: 'boolean', label: 'Edge Detection', default: false },
     colorSaturation: {
       type: 'number',
       label: 'Saturation',
@@ -2091,6 +2247,8 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       15 / 255,
       1,
     ])
+    const ramp = asciiAtlasRamp((p.charSet as string) ?? 'ascii', (p.customChars as string) ?? '')
+    const glyphCount = ramp ? [...ramp].length : 0
     return new Float32Array([
       (p.fontSize as number) ?? 8,
       (p.letterSpacing as number) ?? 0,
@@ -2105,9 +2263,9 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       ((p.colorSaturation as number) ?? 100) / 100,
       w,
       h,
-      0,
-      0,
-      0,
+      p.transparentBg === true ? 1 : 0,
+      p.edgeDetect === true ? 1 : 0,
+      glyphCount,
       textColor[0],
       textColor[1],
       textColor[2],
@@ -2117,6 +2275,18 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       bgColor[2],
       bgColor[3],
     ])
+  },
+  dataTexture: {
+    dimension: '2d',
+    key: (p) => {
+      const ramp = asciiAtlasRamp((p.charSet as string) ?? 'ascii', (p.customChars as string) ?? '')
+      return ramp ? `${ramp}|${(p.font as string) ?? 'monospace'}` : ''
+    },
+    build: (p) => {
+      const ramp = asciiAtlasRamp((p.charSet as string) ?? 'ascii', (p.customChars as string) ?? '')
+      if (!ramp) return { width: 1, height: 1, depth: 1, data: new Uint8Array([0, 0, 0, 0]) }
+      return buildAsciiAtlas(ramp, (p.font as string) ?? 'monospace')
+    },
   },
 }
 

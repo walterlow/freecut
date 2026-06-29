@@ -50,6 +50,10 @@
     "highlights": "밝은 영역"
   },
   "params": {
+    "font": "글꼴",
+    "customChars": "사용자 문자",
+    "transparentBg": "투명 배경",
+    "edgeDetect": "엣지 감지",
     "coverage": "범위",
     "blockSize": "블록 크기",
     "curvature": "곡률",
@@ -141,6 +145,12 @@
     "threshold": "임계값"
   },
   "options": {
+    "monospace": "고정폭",
+    "ascii": "ASCII 램프",
+    "dense": "조밀",
+    "binary": "이진",
+    "symbols": "기호",
+    "custom": "사용자 지정",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

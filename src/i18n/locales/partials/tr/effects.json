@@ -50,6 +50,10 @@
     "highlights": "Parlak alanlar"
   },
   "params": {
+    "font": "Yazı Tipi",
+    "customChars": "Özel Karakterler",
+    "transparentBg": "Şeffaf Arka Plan",
+    "edgeDetect": "Kenar Algılama",
     "coverage": "Kapsama",
     "blockSize": "Blok Boyutu",
     "curvature": "Eğrilik",
@@ -139,6 +143,12 @@
     "grainSize": "Gren Boyutu"
   },
   "options": {
+    "monospace": "Eşaralıklı",
+    "ascii": "ASCII Rampası",
+    "dense": "Yoğun",
+    "binary": "İkili",
+    "symbols": "Semboller",
+    "custom": "Özel",
     "standard": "Standart",
     "simple": "Basit",
     "blocks": "Bloklar",

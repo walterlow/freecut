@@ -50,6 +50,10 @@
     "highlights": "Hautes lumieres"
   },
   "params": {
+    "font": "Police",
+    "customChars": "Caractères personnalisés",
+    "transparentBg": "Fond transparent",
+    "edgeDetect": "Détection de contours",
     "coverage": "Couverture",
     "blockSize": "Taille des blocs",
     "curvature": "Courbure",
@@ -140,6 +144,12 @@
     "threshold": "Seuil"
   },
   "options": {
+    "monospace": "Monospace",
+    "ascii": "Rampe ASCII",
+    "dense": "Dense",
+    "binary": "Binaire",
+    "symbols": "Symboles",
+    "custom": "Personnalisé",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

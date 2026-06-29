@@ -67,6 +67,10 @@
     "rectangle": "Rectangle"
   },
   "params": {
+    "font": "Font",
+    "customChars": "Custom Characters",
+    "transparentBg": "Transparent Background",
+    "edgeDetect": "Edge Detection",
     "coverage": "Coverage",
     "blockSize": "Block Size",
     "curvature": "Curvature",
@@ -187,6 +191,12 @@
     "showMask": "Show Mask"
   },
   "options": {
+    "monospace": "Monospace",
+    "ascii": "ASCII Ramp",
+    "dense": "Dense",
+    "binary": "Binary",
+    "symbols": "Symbols",
+    "custom": "Custom",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

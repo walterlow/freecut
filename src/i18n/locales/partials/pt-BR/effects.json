@@ -50,6 +50,10 @@
     "highlights": "Realces"
   },
   "params": {
+    "font": "Fonte",
+    "customChars": "Caracteres personalizados",
+    "transparentBg": "Fundo transparente",
+    "edgeDetect": "Detecção de bordas",
     "coverage": "Cobertura",
     "blockSize": "Tamanho do bloco",
     "curvature": "Curvatura",
@@ -140,6 +144,12 @@
     "threshold": "Limiar"
   },
   "options": {
+    "monospace": "Monoespaçada",
+    "ascii": "Rampa ASCII",
+    "dense": "Denso",
+    "binary": "Binário",
+    "symbols": "Símbolos",
+    "custom": "Personalizado",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

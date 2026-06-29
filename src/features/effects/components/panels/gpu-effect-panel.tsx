@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -229,6 +230,24 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                   disabled={!paramEnabled}
                 />
               ) : null}
+            </PropertyRow>
+          )
+        }
+
+        if (param.type === 'text') {
+          return (
+            <PropertyRow
+              key={key}
+              label={getEffectParamLabel(t, definition, key)}
+              className={!paramEnabled ? 'opacity-50' : undefined}
+            >
+              <Input
+                value={currentValue as string}
+                onChange={(e) => onParamChange(effect.id, key, e.target.value)}
+                disabled={!paramEnabled}
+                className="h-6 text-xs flex-1 min-w-0"
+                spellCheck={false}
+              />
             </PropertyRow>
           )
         }
