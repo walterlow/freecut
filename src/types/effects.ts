@@ -109,6 +109,27 @@ export const EFFECT_PRESETS: EffectPreset[] = [
     ],
   },
   {
+    id: 'retro-tv',
+    name: 'Retro TV',
+    effects: [
+      {
+        type: 'gpu-effect',
+        gpuEffectType: 'gpu-vhs',
+        params: { bleed: 0.5, waviness: 0.4, noise: 0.2, scanline: 0.2, speed: 1 },
+      },
+      {
+        type: 'gpu-effect',
+        gpuEffectType: 'gpu-crt',
+        params: { curvature: 0.3, scanlines: 0.3, vignette: 0.35, chroma: 0.4 },
+      },
+      {
+        type: 'gpu-effect',
+        gpuEffectType: 'gpu-grain',
+        params: { amount: 0.05, size: 1.2, speed: 1 },
+      },
+    ],
+  },
+  {
     id: 'vintage',
     name: 'Vintage',
     effects: [
