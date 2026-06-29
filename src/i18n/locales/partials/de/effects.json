@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Stopp hinzufügen",
+    "removeStop": "Stopp entfernen"
+  },
   "categories": {
     "color": "Farbe",
     "blur": "Weichzeichnen",
@@ -50,6 +54,11 @@
     "highlights": "Lichter"
   },
   "params": {
+    "flow": "Fluss",
+    "span": "Spanne",
+    "preset": "Palette",
+    "customStops": "Eigene Stopps",
+    "mix": "Mischung",
     "font": "Schriftart",
     "customChars": "Eigene Zeichen",
     "transparentBg": "Transparenter Hintergrund",
@@ -144,6 +153,10 @@
     "threshold": "Schwelle"
   },
   "options": {
+    "fire": "Feuer",
+    "ice": "Eis",
+    "sunset": "Sonnenuntergang",
+    "grayscale": "Graustufen",
     "monospace": "Monospace",
     "ascii": "ASCII-Verlauf",
     "dense": "Dicht",

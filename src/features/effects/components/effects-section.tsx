@@ -14,6 +14,7 @@ import {
   GpuWheelsPanel,
   GpuCurvesPanel,
   GpuLutPanel,
+  GpuGradientMapPanel,
   GpuPowerWindowPanel,
   GpuSecondaryQualifierPanel,
 } from './panels'
@@ -830,6 +831,27 @@ export const EffectsSection = memo(function EffectsSection({
                 onParamLiveChange={handleGpuParamLiveChange}
                 onParamsBatchChange={handleGpuParamsBatchChange}
                 onParamsBatchLiveChange={handleGpuParamsBatchLiveChange}
+                onReset={handleResetGpuEffect}
+                onToggle={handleToggle}
+                onRemove={handleRemove}
+                onMove={handleMoveEffect}
+                canMoveUp={effectIndex > 0}
+                canMoveDown={effectIndex < effects.length - 1}
+              />
+            )
+          }
+
+          if (gpuEff.gpuEffectType === 'gpu-gradient-map') {
+            return (
+              <GpuGradientMapPanel
+                key={effect.id}
+                itemIds={itemIds}
+                effect={effect}
+                gpuEffect={displayGpuEffect}
+                definition={def}
+                getKeyframeProperty={getKeyframeProperty}
+                onParamChange={handleGpuParamChange}
+                onParamLiveChange={handleGpuParamLiveChange}
                 onReset={handleResetGpuEffect}
                 onToggle={handleToggle}
                 onRemove={handleRemove}

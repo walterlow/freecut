@@ -830,6 +830,60 @@ const migrations: Record<number, Migration> = {
       }
     },
   },
+  11: {
+    version: 11,
+    description:
+      'Convert gpu-gradient-map from fixed shadow/mid/highlight colors to preset + custom stops',
+    migrate: (project: Project): Project => {
+      if (!project.timeline) return project
+
+      const convertItem = (item: unknown): unknown => {
+        const record = item as Record<string, unknown>
+        const effects = record.effects as
+          | Array<{ id: string; effect: Record<string, unknown>; enabled: boolean }>
+          | undefined
+        if (!effects || effects.length === 0) return item
+
+        let changed = false
+        const nextEffects = effects.map((entry) => {
+          const effect = entry.effect
+          if (effect?.type !== 'gpu-effect' || effect.gpuEffectType !== 'gpu-gradient-map') {
+            return entry
+          }
+          const params = (effect.params ?? {}) as Record<string, unknown>
+          if ('preset' in params || 'customStops' in params) return entry // already migrated
+
+          const shadow = typeof params.shadowColor === 'string' ? params.shadowColor : '#241634'
+          const mid = typeof params.midColor === 'string' ? params.midColor : '#c2456b'
+          const high = typeof params.highlightColor === 'string' ? params.highlightColor : '#ffd9a0'
+          const mix = typeof params.mix === 'number' ? params.mix : 1
+          changed = true
+          return {
+            ...entry,
+            effect: {
+              ...effect,
+              params: { preset: 'custom', customStops: `${shadow}, ${mid}, ${high}`, mix },
+            },
+          }
+        })
+        return changed ? { ...record, effects: nextEffects } : item
+      }
+
+      const timeline = project.timeline
+      return {
+        ...project,
+        timeline: {
+          ...timeline,
+          items: timeline.items?.map(convertItem) ?? timeline.items,
+          compositions:
+            timeline.compositions?.map((composition) => ({
+              ...composition,
+              items: composition.items?.map(convertItem) ?? composition.items,
+            })) ?? timeline.compositions,
+        },
+      } as Project
+    },
+  },
 }
 
 /**

@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Add Stop",
+    "removeStop": "Remove stop"
+  },
   "categories": {
     "color": "Color",
     "blur": "Blur",
@@ -67,6 +71,11 @@
     "rectangle": "Rectangle"
   },
   "params": {
+    "flow": "Flow",
+    "span": "Span",
+    "preset": "Palette",
+    "customStops": "Custom Stops",
+    "mix": "Mix",
     "font": "Font",
     "customChars": "Custom Characters",
     "transparentBg": "Transparent Background",
@@ -191,6 +200,10 @@
     "showMask": "Show Mask"
   },
   "options": {
+    "fire": "Fire",
+    "ice": "Ice",
+    "sunset": "Sunset",
+    "grayscale": "Grayscale",
     "monospace": "Monospace",
     "ascii": "ASCII Ramp",
     "dense": "Dense",

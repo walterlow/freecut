@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "정지점 추가",
+    "removeStop": "정지점 제거"
+  },
   "categories": {
     "color": "색상",
     "blur": "블러",
@@ -50,6 +54,11 @@
     "highlights": "밝은 영역"
   },
   "params": {
+    "flow": "흐름",
+    "span": "폭",
+    "preset": "팔레트",
+    "customStops": "사용자 정지점",
+    "mix": "혼합",
     "font": "글꼴",
     "customChars": "사용자 문자",
     "transparentBg": "투명 배경",
@@ -145,6 +154,10 @@
     "threshold": "임계값"
   },
   "options": {
+    "fire": "불",
+    "ice": "얼음",
+    "sunset": "노을",
+    "grayscale": "그레이스케일",
     "monospace": "고정폭",
     "ascii": "ASCII 램프",
     "dense": "조밀",

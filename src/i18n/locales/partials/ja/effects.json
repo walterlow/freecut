@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "ストップを追加",
+    "removeStop": "ストップを削除"
+  },
   "categories": {
     "color": "色",
     "blur": "ぼかし",
@@ -50,6 +54,11 @@
     "highlights": "ハイライト"
   },
   "params": {
+    "flow": "フロー",
+    "span": "範囲",
+    "preset": "パレット",
+    "customStops": "カスタムストップ",
+    "mix": "ミックス",
     "font": "フォント",
     "customChars": "カスタム文字",
     "transparentBg": "透明背景",
@@ -145,6 +154,10 @@
     "threshold": "しきい値"
   },
   "options": {
+    "fire": "ファイア",
+    "ice": "アイス",
+    "sunset": "サンセット",
+    "grayscale": "グレースケール",
     "monospace": "等幅",
     "ascii": "ASCIIランプ",
     "dense": "高密度",

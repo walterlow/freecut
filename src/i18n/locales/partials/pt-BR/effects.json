@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Adicionar parada",
+    "removeStop": "Remover parada"
+  },
   "categories": {
     "color": "Cor",
     "blur": "Desfoque",
@@ -50,6 +54,11 @@
     "highlights": "Realces"
   },
   "params": {
+    "flow": "Fluxo",
+    "span": "Intervalo",
+    "preset": "Paleta",
+    "customStops": "Paradas personalizadas",
+    "mix": "Mistura",
     "font": "Fonte",
     "customChars": "Caracteres personalizados",
     "transparentBg": "Fundo transparente",
@@ -144,6 +153,10 @@
     "threshold": "Limiar"
   },
   "options": {
+    "fire": "Fogo",
+    "ice": "Gelo",
+    "sunset": "Pôr do sol",
+    "grayscale": "Escala de cinza",
     "monospace": "Monoespaçada",
     "ascii": "Rampa ASCII",
     "dense": "Denso",

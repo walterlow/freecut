@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Añadir parada",
+    "removeStop": "Eliminar parada"
+  },
   "categories": {
     "color": "Color",
     "blur": "Desenfoque",
@@ -50,6 +54,11 @@
     "highlights": "Altas luces"
   },
   "params": {
+    "flow": "Flujo",
+    "span": "Rango",
+    "preset": "Paleta",
+    "customStops": "Paradas personalizadas",
+    "mix": "Mezcla",
     "font": "Fuente",
     "customChars": "Caracteres personalizados",
     "transparentBg": "Fondo transparente",
@@ -145,6 +154,10 @@
     "threshold": "Umbral"
   },
   "options": {
+    "fire": "Fuego",
+    "ice": "Hielo",
+    "sunset": "Atardecer",
+    "grayscale": "Escala de grises",
     "monospace": "Monoespaciada",
     "ascii": "Rampa ASCII",
     "dense": "Denso",

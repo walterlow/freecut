@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "添加色标",
+    "removeStop": "删除色标"
+  },
   "categories": {
     "color": "色彩",
     "blur": "模糊",
@@ -50,6 +54,11 @@
     "highlights": "高光"
   },
   "params": {
+    "flow": "流动",
+    "span": "跨度",
+    "preset": "调色板",
+    "customStops": "自定义色标",
+    "mix": "混合",
     "font": "字体",
     "customChars": "自定义字符",
     "transparentBg": "透明背景",
@@ -145,6 +154,10 @@
     "threshold": "阈值"
   },
   "options": {
+    "fire": "火焰",
+    "ice": "冰",
+    "sunset": "日落",
+    "grayscale": "灰度",
     "monospace": "等宽",
     "ascii": "ASCII 渐变",
     "dense": "密集",

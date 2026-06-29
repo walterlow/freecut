@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Durak Ekle",
+    "removeStop": "Durağı kaldır"
+  },
   "categories": {
     "color": "Renk",
     "blur": "Bulanıklık",
@@ -50,6 +54,11 @@
     "highlights": "Parlak alanlar"
   },
   "params": {
+    "flow": "Akış",
+    "span": "Aralık",
+    "preset": "Palet",
+    "customStops": "Özel Duraklar",
+    "mix": "Karışım",
     "font": "Yazı Tipi",
     "customChars": "Özel Karakterler",
     "transparentBg": "Şeffaf Arka Plan",
@@ -143,6 +152,10 @@
     "grainSize": "Gren Boyutu"
   },
   "options": {
+    "fire": "Ateş",
+    "ice": "Buz",
+    "sunset": "Gün Batımı",
+    "grayscale": "Gri Tonlama",
     "monospace": "Eşaralıklı",
     "ascii": "ASCII Rampası",
     "dense": "Yoğun",

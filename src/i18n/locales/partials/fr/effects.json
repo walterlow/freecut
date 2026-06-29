@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Ajouter un arrêt",
+    "removeStop": "Supprimer l'arrêt"
+  },
   "categories": {
     "color": "Couleur",
     "blur": "Flou",
@@ -50,6 +54,11 @@
     "highlights": "Hautes lumieres"
   },
   "params": {
+    "flow": "Flux",
+    "span": "Plage",
+    "preset": "Palette",
+    "customStops": "Arrêts personnalisés",
+    "mix": "Mélange",
     "font": "Police",
     "customChars": "Caractères personnalisés",
     "transparentBg": "Fond transparent",
@@ -144,6 +153,10 @@
     "threshold": "Seuil"
   },
   "options": {
+    "fire": "Feu",
+    "ice": "Glace",
+    "sunset": "Coucher de soleil",
+    "grayscale": "Niveaux de gris",
     "monospace": "Monospace",
     "ascii": "Rampe ASCII",
     "dense": "Dense",
