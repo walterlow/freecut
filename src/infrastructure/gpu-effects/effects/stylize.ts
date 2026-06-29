@@ -453,15 +453,45 @@ struct ColorGlitchParams { intensity: f32, speed: f32, time: f32, _pad: f32 };
 @group(0) @binding(2) var<uniform> params: ColorGlitchParams;
 @fragment
 fn colorGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
-  let color = textureSample(inputTex, texSampler, input.uv);
-  let t = params.time * params.speed;
-  let glitchNoise = hash(vec2f(floor(t * 8.0), floor(input.uv.y * 20.0)));
-  let shouldGlitch = step(1.0 - params.intensity, glitchNoise);
-  let hueShift = hash(vec2f(floor(t * 12.0), 0.0)) * shouldGlitch;
-  var hsv = rgb2hsv(color.rgb);
-  hsv.x = fract(hsv.x + hueShift);
-  let glitched = hsv2rgb(hsv);
-  return vec4f(mix(color.rgb, glitched, shouldGlitch * params.intensity), color.a);
+  let uv = input.uv;
+  let amt = clamp(params.intensity, 0.0, 1.0);
+
+  // Discrete time steps give the stuttering digital-glitch cadence and keep the
+  // look readable even when playback is paused (the seed stays fixed per step).
+  // The seed MUST be wrapped into a small range: the shared sin() hash loses all
+  // precision with large inputs, so an unbounded (time * speed) seed collapses
+  // bandNoise to a constant at higher speeds / long sessions and the effect looks
+  // frozen. Wrapping keeps the seed usable at any speed.
+  let rawStep = floor(params.time * params.speed * 12.0);
+  let t = rawStep - floor(rawStep / 64.0) * 64.0;
+
+  // Tear the frame into horizontal bands; each band glitches independently.
+  let band = floor(uv.y * 28.0);
+  let bandNoise = hash(vec2f(band, t));
+
+  // More bands corrupt as intensity rises (full frame at intensity = 1).
+  let glitchOn = step(1.0 - amt, bandNoise);
+
+  // Per-band horizontal block displacement.
+  let shift = (hash(vec2f(band * 1.7, t + 3.0)) - 0.5) * 0.15 * amt * glitchOn;
+
+  // RGB channel separation — the signature colour-glitch fringing, scaled so even
+  // a single still frame reads clearly.
+  let split = (0.004 + 0.02 * amt) * glitchOn;
+  let baseUv = vec2f(uv.x + shift, uv.y);
+  let r = textureSample(inputTex, texSampler, baseUv + vec2f(split, 0.0)).r;
+  let g = textureSample(inputTex, texSampler, baseUv).g;
+  let b = textureSample(inputTex, texSampler, baseUv - vec2f(split, 0.0)).b;
+  let a = textureSample(inputTex, texSampler, baseUv).a;
+  var rgb = vec3f(r, g, b);
+
+  // Hard hue corruption on the strongest bands for the "colour" in colour glitch.
+  let hueHit = step(0.82, bandNoise) * glitchOn;
+  var hsv = rgb2hsv(rgb);
+  hsv.x = fract(hsv.x + hash(vec2f(band, t + 7.0)));
+  rgb = mix(rgb, hsv2rgb(hsv), hueHit);
+
+  return vec4f(rgb, a);
 }`,
   params: {
     intensity: {
