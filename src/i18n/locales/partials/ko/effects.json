@@ -169,6 +169,11 @@
     }
   },
   "params": {
+    "coverage": "범위",
+    "blockSize": "블록 크기",
+    "curvature": "곡률",
+    "scanlines": "스캔라인",
+    "vignette": "비네트",
     "amount": "양",
     "angle": "Angle",
     "radius": "Radius",

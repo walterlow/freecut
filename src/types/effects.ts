@@ -88,6 +88,27 @@ export const EFFECT_PRESETS: EffectPreset[] = [
     ],
   },
   {
+    id: 'crt',
+    name: 'CRT',
+    effects: [
+      {
+        type: 'gpu-effect',
+        gpuEffectType: 'gpu-crt',
+        params: { curvature: 0.35, scanlines: 0.35, vignette: 0.35, chroma: 0.5 },
+      },
+      {
+        type: 'gpu-effect',
+        gpuEffectType: 'gpu-grain',
+        params: { amount: 0.06, size: 1.2, speed: 1 },
+      },
+      {
+        type: 'gpu-effect',
+        gpuEffectType: 'gpu-saturation',
+        params: { amount: 1.1 },
+      },
+    ],
+  },
+  {
     id: 'vintage',
     name: 'Vintage',
     effects: [

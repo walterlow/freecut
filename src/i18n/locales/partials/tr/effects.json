@@ -169,6 +169,11 @@
     }
   },
   "params": {
+    "coverage": "Kapsama",
+    "blockSize": "Blok Boyutu",
+    "curvature": "Eğrilik",
+    "scanlines": "Tarama Çizgileri",
+    "vignette": "Vinyet",
     "amount": "Miktar",
     "angle": "Açı",
     "radius": "Yarıçap",

@@ -87,7 +87,11 @@ fn grainNoise(uv: vec2f, t: f32) -> f32 {
 fn grainFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = textureSample(inputTex, texSampler, input.uv);
   let grainUV = input.uv * (100.0 / params.size);
-  let noise = grainNoise(grainUV, params.time * params.speed) * 2.0 - 1.0;
+  // Wrap the time seed: the sin() inside grainNoise loses precision once the
+  // unbounded (time * speed) term grows large, freezing the grain over long
+  // sessions. The 600s period is imperceptible but keeps the seed bounded.
+  let gt = params.time * params.speed;
+  let noise = grainNoise(grainUV, gt - floor(gt / 600.0) * 600.0) * 2.0 - 1.0;
   let luma = luminance(color.rgb);
   let grainIntensity = params.amount * (1.0 - luma * 0.5);
   let grainColor = color.rgb + vec3f(noise * grainIntensity);
@@ -517,6 +521,218 @@ fn colorGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
     const time = performance.now() / 1000
     return new Float32Array([(p.intensity as number) ?? 0.5, (p.speed as number) ?? 1, time, 0])
   },
+}
+
+export const blockGlitch: GpuEffectDefinition = {
+  id: 'gpu-block-glitch',
+  name: 'Block Glitch',
+  category: 'stylize',
+  entryPoint: 'blockGlitchFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct BlockGlitchParams {
+  coverage: f32, intensity: f32, blockSize: f32, speed: f32,
+  time: f32, width: f32, height: f32, pad: f32
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: BlockGlitchParams;
+@fragment
+fn blockGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
+  let uv = input.uv;
+  let amt = clamp(params.intensity, 0.0, 1.0);
+  let cov = clamp(params.coverage, 0.0, 1.0);
+
+  // Discrete, wrapped time step — keeps the sin() hash seed in its precise range
+  // so the glitch stays alive at any speed / session length.
+  let rawStep = floor(params.time * params.speed * 8.0);
+  let t = rawStep - floor(rawStep / 64.0) * 64.0;
+
+  // Block grid in pixels.
+  let cell = max(params.blockSize, 2.0);
+  let cols = max(params.width / cell, 1.0);
+  let rows = max(params.height / cell, 1.0);
+  let block = vec2f(floor(uv.x * cols), floor(uv.y * rows));
+
+  // Per-block, per-step decision: does this block glitch?
+  let r1 = hash(vec2f(block.x + block.y * 3.0, t));
+  let glitchOn = step(1.0 - cov, r1);
+
+  // Block displacement: a horizontal datamosh slab plus a smaller vertical jump.
+  let dispX = (hash(vec2f(block.y, t + 5.0)) - 0.5) * 0.25 * amt * glitchOn;
+  let vJump = step(0.6, hash(vec2f(block.x + block.y, t + 13.0)));
+  let dispY = (hash(vec2f(block.x, t + 9.0)) - 0.5) * 0.06 * amt * glitchOn * vJump;
+  let srcUv = vec2f(uv.x + dispX, uv.y + dispY);
+
+  // RGB channel split on glitched blocks.
+  let split = (0.01 + 0.03 * amt) * glitchOn;
+  let rr = textureSample(inputTex, texSampler, srcUv + vec2f(split, 0.0)).r;
+  let gg = textureSample(inputTex, texSampler, srcUv).g;
+  let bb = textureSample(inputTex, texSampler, srcUv - vec2f(split, 0.0)).b;
+  let aa = textureSample(inputTex, texSampler, srcUv).a;
+  let rgb = vec3f(rr, gg, bb);
+
+  // Digital corruption on a subset of glitched blocks: channel rotate / invert /
+  // posterize. Sampling already done above, so this control flow is safe.
+  let corrupt = step(0.7, hash(vec2f(block.x * 1.3 + block.y, t + 21.0))) * glitchOn;
+  let mode = hash(vec2f(block.y * 2.1 + block.x, t + 27.0));
+  var c = rgb;
+  if (mode < 0.34) {
+    c = rgb.gbr;
+  } else if (mode < 0.67) {
+    c = vec3f(1.0) - rgb;
+  } else {
+    c = floor(rgb * 4.0) / 4.0;
+  }
+
+  return vec4f(mix(rgb, c, corrupt), aa);
+}`,
+  params: {
+    coverage: {
+      type: 'number',
+      label: 'Coverage',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    intensity: {
+      type: 'number',
+      label: 'Intensity',
+      default: 0.6,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    blockSize: {
+      type: 'number',
+      label: 'Block Size',
+      default: 40,
+      min: 8,
+      max: 200,
+      step: 1,
+      animatable: true,
+    },
+    speed: {
+      type: 'number',
+      label: 'Speed',
+      default: 1,
+      min: 0.1,
+      max: 5,
+      step: 0.1,
+      animatable: false,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.coverage as number) ?? 0.3,
+      (p.intensity as number) ?? 0.6,
+      (p.blockSize as number) ?? 40,
+      (p.speed as number) ?? 1,
+      performance.now() / 1000,
+      w,
+      h,
+      0,
+    ]),
+}
+
+export const crt: GpuEffectDefinition = {
+  id: 'gpu-crt',
+  name: 'CRT',
+  category: 'stylize',
+  entryPoint: 'crtFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct CrtParams {
+  curvature: f32, scanlines: f32, vignette: f32, chroma: f32,
+  width: f32, height: f32, pad0: f32, pad1: f32
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: CrtParams;
+@fragment
+fn crtFragment(input: VertexOutput) -> @location(0) vec4f {
+  // Barrel-warp the sampling coordinate around the screen centre.
+  let curveAmt = clamp(params.curvature, 0.0, 1.0) * 0.35;
+  let cc = input.uv * 2.0 - 1.0;
+  let r2 = dot(cc, cc);
+  let warped = cc * (1.0 + r2 * curveAmt);
+  let cuv = warped * 0.5 + 0.5;
+
+  // Soft black border where the warped image leaves the tube.
+  let edge = 0.004 + curveAmt * 0.02;
+  let mask = smoothstep(0.0, edge, cuv.x) * smoothstep(0.0, edge, 1.0 - cuv.x)
+           * smoothstep(0.0, edge, cuv.y) * smoothstep(0.0, edge, 1.0 - cuv.y);
+
+  // Chromatic aberration that grows toward the edges.
+  let ca = params.chroma * 0.012 * r2;
+  let dir = normalize(cc + vec2f(0.00001, 0.00001));
+  let rC = textureSample(inputTex, texSampler, cuv + dir * ca).r;
+  let gC = textureSample(inputTex, texSampler, cuv).g;
+  let bC = textureSample(inputTex, texSampler, cuv - dir * ca).b;
+  let aC = textureSample(inputTex, texSampler, cuv).a;
+  var rgb = vec3f(rC, gC, bC);
+
+  // Scanlines (resolution-independent line count).
+  let sl = 0.5 + 0.5 * sin(cuv.y * 320.0 * PI);
+  rgb = rgb * (1.0 - clamp(params.scanlines, 0.0, 1.0) * (1.0 - sl));
+
+  // Vignette toward the corners.
+  rgb = rgb * (1.0 - clamp(params.vignette, 0.0, 1.0) * smoothstep(0.35, 1.5, r2));
+
+  return vec4f(rgb * mask, aC);
+}`,
+  params: {
+    curvature: {
+      type: 'number',
+      label: 'Curvature',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    scanlines: {
+      type: 'number',
+      label: 'Scanlines',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    vignette: {
+      type: 'number',
+      label: 'Vignette',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    chroma: {
+      type: 'number',
+      label: 'Chroma',
+      default: 0.4,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.curvature as number) ?? 0.3,
+      (p.scanlines as number) ?? 0.3,
+      (p.vignette as number) ?? 0.3,
+      (p.chroma as number) ?? 0.4,
+      w,
+      h,
+      0,
+      0,
+    ]),
 }
 
 function clamp01(value: number): number {
@@ -1955,13 +2171,17 @@ fn vhsFragment(input: VertexOutput) -> @location(0) vec4f {
   let t = params.time;
   var uv = input.uv;
 
-  // horizontal tracking wobble
+  // horizontal tracking wobble (sin-based, stable at any phase)
   let wave = (sin(uv.y * 120.0 + t * 5.0) + sin(uv.y * 17.0 - t * 2.3)) * 0.5;
   uv.x = uv.x + wave * params.waviness * 0.015;
 
-  // occasional tracking-band jump
-  let bandId = floor(uv.y * 6.0 + t * 0.7);
-  let bandHit = step(0.92, hash(vec2f(bandId, floor(t * 3.0))));
+  // occasional tracking-band jump. Wrap every time-derived term before it feeds
+  // hash() — the sin()-based hash collapses to a constant once the unbounded
+  // (time * speed) seed grows large, killing the jumps over a session / at speed.
+  let bandScroll = (t * 0.7) - floor((t * 0.7) / 64.0) * 64.0;
+  let jumpStep = floor(t * 3.0) - floor(floor(t * 3.0) / 64.0) * 64.0;
+  let bandId = floor(uv.y * 6.0 + bandScroll);
+  let bandHit = step(0.92, hash(vec2f(bandId, jumpStep)));
   uv.x = uv.x + bandHit * (hash(vec2f(bandId, 7.0)) - 0.5) * 0.06;
 
   // chroma bleed (luma/chroma drift)
@@ -1976,8 +2196,11 @@ fn vhsFragment(input: VertexOutput) -> @location(0) vec4f {
   let sl = 0.82 + 0.18 * sin(input.position.y * PI);
   rgb = mix(rgb, rgb * sl, clamp(params.scanline, 0.0, 1.0));
 
-  // tape noise
-  let n = hash(uv * vec2f(params.width, params.height) * 0.5 + vec2f(t * 120.0, t * 60.0)) - 0.5;
+  // tape noise — wrap the (unbounded) time addends so the per-pixel seed stays
+  // bounded and the noise doesn't go static after ~30min of playback.
+  let tnx = (t * 120.0) - floor((t * 120.0) / 512.0) * 512.0;
+  let tny = (t * 60.0) - floor((t * 60.0) / 512.0) * 512.0;
+  let n = hash(uv * vec2f(params.width, params.height) * 0.5 + vec2f(tnx, tny)) - 0.5;
   rgb = rgb + n * params.noise * 0.5;
 
   return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), a);

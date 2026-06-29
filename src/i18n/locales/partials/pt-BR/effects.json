@@ -169,6 +169,11 @@
     }
   },
   "params": {
+    "coverage": "Cobertura",
+    "blockSize": "Tamanho do bloco",
+    "curvature": "Curvatura",
+    "scanlines": "Linhas de varredura",
+    "vignette": "Vinheta",
     "amount": "Quantidade",
     "angle": "Angle",
     "radius": "Radius",

@@ -172,6 +172,11 @@
     }
   },
   "params": {
+    "coverage": "カバレッジ",
+    "blockSize": "ブロックサイズ",
+    "curvature": "曲率",
+    "scanlines": "走査線",
+    "vignette": "ビネット",
     "amount": "量",
     "angle": "Angle",
     "radius": "Radius",

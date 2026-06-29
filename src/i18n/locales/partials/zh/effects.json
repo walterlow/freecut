@@ -169,6 +169,11 @@
     }
   },
   "params": {
+    "coverage": "覆盖范围",
+    "blockSize": "块大小",
+    "curvature": "曲率",
+    "scanlines": "扫描线",
+    "vignette": "暗角",
     "amount": "数量",
     "angle": "Angle",
     "radius": "Radius",
