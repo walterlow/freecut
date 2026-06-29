@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Animate timeline",
-      "noClip": "No clips to animate"
+      "noClip": "No clips to animate",
+      "animatedClip": "Animated"
     },
     "animatePresets": {
       "title": "Presets",
@@ -32,6 +33,24 @@
         "save": "Save",
         "overwrite": "Overwrite",
         "cancel": "Cancel"
+      }
+    },
+    "animateStages": {
+      "presetsHint": "Presets drop editable keyframes — refine them in the graph.",
+      "adjustTitle": "Adjust",
+      "adjustHint": "Applies to presets and motion you add next.",
+      "continuousTitle": "Continuous motion",
+      "continuousHint": "Runs live and non-destructive until baked.",
+      "liveBadge": "Live",
+      "appliedTitle": "Applied",
+      "keyframedChip": "{{count}} keyframed",
+      "clearKeyframes": "Clear keyframes",
+      "removeModulator": "Remove {{name}}",
+      "audioPulseChip": "Audio pulse",
+      "onApply": "On apply",
+      "applyMode": {
+        "replace": "Replace",
+        "add": "Add"
       }
     },
     "motionGenerator": {

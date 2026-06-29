@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Tem keyframes",
+      "hasMotion": "Tem movimento contínuo",
       "mask": "Mascara",
       "mediaMissing": "Midia ausente",
       "preparingReversed": "Preparando reverso",

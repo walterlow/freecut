@@ -68,6 +68,41 @@ export function addKeyframes(payloads: KeyframeAddPayload[]): string[] {
   )
 }
 
+/**
+ * Apply a motion preset's keyframes, optionally clearing the properties it
+ * targets first so reapplying an entrance/exit preset REPLACES the previous one
+ * instead of silently overwriting only the frames that collide. The clear + add
+ * run inside a single undo block so one Ctrl+Z reverts the whole apply.
+ */
+export function applyMotionPresetKeyframes(
+  payloads: KeyframeAddPayload[],
+  clearProperties: Array<{ itemId: string; property: AnimatableProperty }> = [],
+): string[] {
+  if (payloads.length === 0) return []
+
+  const validPayloads = payloads.filter((p) => canAddKeyframeAtFrame(p.itemId, p.frame))
+  if (validPayloads.length === 0) {
+    getLogger().warn('All preset keyframes blocked by transition regions', {
+      originalCount: payloads.length,
+    })
+    return []
+  }
+
+  return execute(
+    'APPLY_MOTION_PRESET_KEYFRAMES',
+    () => {
+      const keyframesStore = useKeyframesStore.getState()
+      for (const { itemId, property } of clearProperties) {
+        keyframesStore._removeKeyframesForProperty(itemId, property)
+      }
+      const ids = keyframesStore._addKeyframes(validPayloads)
+      useTimelineSettingsStore.getState().markDirty()
+      return ids
+    },
+    { count: validPayloads.length, cleared: clearProperties.length },
+  )
+}
+
 export function updateKeyframe(
   itemId: string,
   property: AnimatableProperty,

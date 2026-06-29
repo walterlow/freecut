@@ -24,6 +24,7 @@
       "property": "Propriedade",
       "noParametersMatch": "Nenhum parâmetro corresponde à visualização atual",
       "noKeyframesToDisplay": "Nenhum keyframe para exibir",
+      "proceduralMotionHint": "Este clipe tem movimento contínuo (deriva, respiração, tremor ou pulso de áudio) — consolide-o para editar como quadros-chave.",
       "emptyState": {
         "title": "Nenhum keyframe ainda",
         "intro": "Anime este clipe adicionando keyframes a qualquer parâmetro.",

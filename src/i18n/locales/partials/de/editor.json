@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Animations-Zeitleiste",
-      "noClip": "Keine Clips zum Animieren"
+      "noClip": "Keine Clips zum Animieren",
+      "animatedClip": "Animiert"
     },
     "animatePresets": {
       "title": "Voreinstellungen",
@@ -32,6 +33,24 @@
         "save": "Speichern",
         "overwrite": "Überschreiben",
         "cancel": "Abbrechen"
+      }
+    },
+    "animateStages": {
+      "presetsHint": "Vorlagen erzeugen bearbeitbare Keyframes — verfeinere sie im Graphen.",
+      "adjustTitle": "Anpassen",
+      "adjustHint": "Gilt für danach hinzugefügte Vorlagen und Bewegungen.",
+      "continuousTitle": "Kontinuierliche Bewegung",
+      "continuousHint": "Läuft live und nicht-destruktiv bis zum Backen.",
+      "liveBadge": "Live",
+      "appliedTitle": "Angewendet",
+      "keyframedChip": "{{count}} mit Keyframes",
+      "clearKeyframes": "Keyframes löschen",
+      "removeModulator": "{{name}} entfernen",
+      "audioPulseChip": "Audio-Puls",
+      "onApply": "Beim Anwenden",
+      "applyMode": {
+        "replace": "Ersetzen",
+        "add": "Hinzufügen"
       }
     },
     "motionPresets": {

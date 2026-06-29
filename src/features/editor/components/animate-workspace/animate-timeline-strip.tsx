@@ -1,7 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useTranslation } from 'react-i18next'
-import { useItemsStore, useTimelineStore } from '@/features/editor/deps/timeline-store'
+import {
+  useItemsStore,
+  useKeyframesStore,
+  useTimelineStore,
+} from '@/features/editor/deps/timeline-store'
 import { getDefaultActiveTrackId } from '@/features/editor/deps/timeline-utils'
 import { getLinkedAudioCompanion } from '@/shared/utils/linked-media'
 import { usePlaybackStore } from '@/shared/state/playback'
@@ -58,6 +62,7 @@ interface AnimateFilmTileProps {
   clip: AnimateClip
   index: number
   selected: boolean
+  animated: boolean
   fps: number
   posterUrl?: string
   onSelect: (clip: AnimateClip) => void
@@ -68,10 +73,12 @@ const AnimateFilmTile = memo(function AnimateFilmTile({
   clip,
   index,
   selected,
+  animated,
   fps,
   posterUrl,
   onSelect,
 }: AnimateFilmTileProps) {
+  const { t } = useTranslation()
   const startFrameUrl = useClipStartFrameUrl(clip, fps)
   const thumbnailUrl = startFrameUrl ?? clip.thumbnailUrl ?? posterUrl
   return (
@@ -85,6 +92,15 @@ const AnimateFilmTile = memo(function AnimateFilmTile({
       onSelect={() => onSelect(clip)}
       testId={`${TEST_ID_PREFIX}-film-tile`}
       dataClipId={clip.id}
+      overlay={
+        animated ? (
+          <span
+            className="absolute left-1 top-1 h-2 w-2 rounded-full bg-sky-400 shadow ring-1 ring-black/50"
+            title={t('editor.animateTimeline.animatedClip')}
+            data-testid={`${TEST_ID_PREFIX}-animated-dot`}
+          />
+        ) : undefined
+      }
     />
   )
 })
@@ -99,6 +115,7 @@ const AnimateFilmTile = memo(function AnimateFilmTile({
 export const AnimateTimelineStrip = memo(function AnimateTimelineStrip() {
   const { t } = useTranslation()
   const { items, tracks } = useItemsStore(useShallow((s) => ({ items: s.items, tracks: s.tracks })))
+  const keyframesByItemId = useKeyframesStore((s) => s.keyframesByItemId)
   const { fps, markers, inPoint, outPoint } = useTimelineStore(
     useShallow((s) => ({
       fps: s.fps,
@@ -118,6 +135,20 @@ export const AnimateTimelineStrip = memo(function AnimateTimelineStrip() {
   const suppressPlayheadPreviewRef = useRef(false)
 
   const selectedItemIdSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds])
+  // Clips carrying any animation — keyframes OR procedural motion — so the strip
+  // shows at a glance which clips are animated without selecting each one.
+  const animatedItemIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const item of items) {
+      const itemKeyframes = keyframesByItemId[item.id]
+      const hasKeyframes = itemKeyframes?.properties.some((p) => p.keyframes.length > 0) ?? false
+      const hasMotion =
+        (item.motionModifiers?.some((modifier) => modifier.enabled) ?? false) ||
+        (item.effects?.some((effect) => effect.audioPulse?.enabled) ?? false)
+      if (hasKeyframes || hasMotion) ids.add(item.id)
+    }
+    return ids
+  }, [items, keyframesByItemId])
   const trackRows = useMemo(
     () => tracks.filter((track) => !track.isGroup).sort((a, b) => a.order - b.order),
     [tracks],
@@ -267,6 +298,7 @@ export const AnimateTimelineStrip = memo(function AnimateTimelineStrip() {
                 clip={clip}
                 index={index}
                 selected={selectedItemIdSet.has(clip.id)}
+                animated={animatedItemIds.has(clip.id)}
                 fps={fps}
                 posterUrl={clip.mediaId ? posterUrls.get(clip.mediaId) : undefined}
                 onSelect={selectClip}

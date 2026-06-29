@@ -88,6 +88,7 @@ import {
 } from '@/features/keyframes/utils/color-keyframes'
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
+import { useItemsStore } from '@/features/keyframes/deps/timeline'
 import { clampFrame } from './frame-utils'
 import {
   buildSelectionFramePreview as buildSelectionFramePreviewState,
@@ -2758,6 +2759,20 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     ? t('timeline.keyframeEditor.noParametersMatch')
     : t('timeline.keyframeEditor.noKeyframesToDisplay')
   const showEmptyGuidance = !hasPropertyFilters
+  // A clip can be animated by procedural modulators / audio pulse yet have no
+  // keyframes — the sheet would otherwise look empty and "unanimated".
+  const hasProceduralMotion = useItemsStore((s) => {
+    const target = s.itemById[itemId]
+    if (!target) return false
+    return (
+      (target.motionModifiers?.some((modifier) => modifier.enabled) ?? false) ||
+      (target.effects?.some((effect) => effect.audioPulse?.enabled) ?? false)
+    )
+  })
+  const proceduralHint =
+    showEmptyGuidance && hasProceduralMotion
+      ? t('timeline.keyframeEditor.proceduralMotionHint')
+      : undefined
 
   // Hoisted so the graph pane and sheet body can be composed once and reused
   // across the exclusive (`graph`/`dopesheet`) and the `split` placements.
@@ -2828,6 +2843,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       hasRows={sheetRows.length > 0}
       emptyStateMessage={emptyStateMessage}
       showEmptyGuidance={showEmptyGuidance}
+      proceduralHint={proceduralHint}
       rowElements={rowElements}
       marqueeRect={marqueeRect}
       marqueeJustEnded={marqueeJustEndedRef.current}
@@ -2840,6 +2856,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       hasRows={propertyRows.length > 0}
       emptyStateMessage={emptyStateMessage}
       showEmptyGuidance={showEmptyGuidance}
+      proceduralHint={proceduralHint}
       propertyColumnElements={propertyColumnElements}
       propertyColumnWidth={columnWidth}
       graphPaneRef={graphPaneRef}

@@ -1,13 +1,32 @@
 import { useTranslation } from 'react-i18next'
-import { Timer } from 'lucide-react'
+import { Timer, Waves } from 'lucide-react'
 
 interface DopesheetEmptyStateProps {
   showGuidance: boolean
   fallbackMessage: string
+  /** Shown when the clip has procedural motion (modulators/audio pulse) but no
+   *  keyframes — explains why the sheet is empty even though it's animated. */
+  proceduralHint?: string
 }
 
-export function DopesheetEmptyState({ showGuidance, fallbackMessage }: DopesheetEmptyStateProps) {
+export function DopesheetEmptyState({
+  showGuidance,
+  fallbackMessage,
+  proceduralHint,
+}: DopesheetEmptyStateProps) {
   const { t } = useTranslation()
+
+  if (proceduralHint) {
+    return (
+      <div
+        data-testid="dopesheet-empty-state-procedural"
+        className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center"
+      >
+        <Waves className="h-4 w-4 text-primary" />
+        <p className="max-w-sm text-xs text-muted-foreground">{proceduralHint}</p>
+      </div>
+    )
+  }
 
   if (!showGuidance) {
     return (

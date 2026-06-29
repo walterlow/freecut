@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Chronologie d'animation",
-      "noClip": "Aucun clip à animer"
+      "noClip": "Aucun clip à animer",
+      "animatedClip": "Animé"
     },
     "animatePresets": {
       "title": "Préréglages",
@@ -32,6 +33,24 @@
         "save": "Enregistrer",
         "overwrite": "Écraser",
         "cancel": "Annuler"
+      }
+    },
+    "animateStages": {
+      "presetsHint": "Les préréglages créent des images clés modifiables — affinez-les dans le graphique.",
+      "adjustTitle": "Ajuster",
+      "adjustHint": "S’applique aux préréglages et au mouvement ajoutés ensuite.",
+      "continuousTitle": "Mouvement continu",
+      "continuousHint": "S’exécute en direct et de façon non destructive jusqu’à la conversion.",
+      "liveBadge": "Direct",
+      "appliedTitle": "Appliqué",
+      "keyframedChip": "{{count}} avec images clés",
+      "clearKeyframes": "Effacer les images clés",
+      "removeModulator": "Supprimer {{name}}",
+      "audioPulseChip": "Impulsion audio",
+      "onApply": "À l’application",
+      "applyMode": {
+        "replace": "Remplacer",
+        "add": "Ajouter"
       }
     },
     "motionPresets": {

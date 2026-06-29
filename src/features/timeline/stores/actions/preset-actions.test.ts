@@ -65,6 +65,30 @@ describe('applyAnimationPreset', () => {
     expect(getKeyframes('a', 'x')).toHaveLength(0)
   })
 
+  it('replace mode clears prior keyframes on the preset properties before applying', () => {
+    // Pre-existing animation on the same property the preset targets.
+    useKeyframesStore
+      .getState()
+      ._addKeyframes([{ itemId: 'a', property: 'x', frame: 60, value: 5, easing: 'linear' }])
+    expect(getKeyframes('a', 'x').map((k) => k.frame)).toEqual([60])
+
+    applyAnimationPreset('a', makePreset(), 0, { replace: true })
+
+    // The old frame-60 keyframe is gone; only the preset's keyframes remain.
+    expect(getKeyframes('a', 'x').map((k) => k.frame)).toEqual([0, 30])
+  })
+
+  it('add mode (default) layers the preset onto existing keyframes', () => {
+    useKeyframesStore
+      .getState()
+      ._addKeyframes([{ itemId: 'a', property: 'x', frame: 60, value: 5, easing: 'linear' }])
+
+    applyAnimationPreset('a', makePreset(), 0, { replace: false })
+
+    // Distinct-frame keyframes coexist (frame 60 survives alongside 0 and 30).
+    expect(getKeyframes('a', 'x').map((k) => k.frame)).toEqual([0, 30, 60])
+  })
+
   it('anchors the preset at the requested frame', () => {
     applyAnimationPreset('a', makePreset(), 20)
     expect(getKeyframes('a', 'x').map((k) => k.frame)).toEqual([20, 50])

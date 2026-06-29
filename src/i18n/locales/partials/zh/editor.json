@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "动画时间线",
-      "noClip": "没有可动画的片段"
+      "noClip": "没有可动画的片段",
+      "animatedClip": "有动画"
     },
     "animatePresets": {
       "title": "预设",
@@ -32,6 +33,24 @@
         "save": "保存",
         "overwrite": "覆盖",
         "cancel": "取消"
+      }
+    },
+    "animateStages": {
+      "presetsHint": "预设会生成可编辑的关键帧 — 可在图表中进行细调。",
+      "adjustTitle": "调整",
+      "adjustHint": "应用于随后添加的预设和运动。",
+      "continuousTitle": "连续运动",
+      "continuousHint": "在烘焙之前以实时且非破坏性的方式运行。",
+      "liveBadge": "实时",
+      "appliedTitle": "已应用",
+      "keyframedChip": "{{count}} 个关键帧属性",
+      "clearKeyframes": "清除关键帧",
+      "removeModulator": "移除 {{name}}",
+      "audioPulseChip": "音频脉冲",
+      "onApply": "应用时",
+      "applyMode": {
+        "replace": "替换",
+        "add": "添加"
       }
     },
     "motionPresets": {

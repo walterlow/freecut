@@ -24,6 +24,7 @@
       "property": "Propiedad",
       "noParametersMatch": "Ningún parámetro coincide con la vista actual",
       "noKeyframesToDisplay": "No hay fotogramas clave para mostrar",
+      "proceduralMotionHint": "Este clip tiene movimiento continuo (deriva, respiración, vibración o pulso de audio): hornéalo para editarlo como fotogramas clave.",
       "emptyState": {
         "title": "Aún no hay fotogramas clave",
         "intro": "Anima este clip añadiendo fotogramas clave a cualquier parámetro.",

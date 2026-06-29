@@ -21,6 +21,7 @@ interface DopesheetGraphPaneProps {
   hasRows: boolean
   emptyStateMessage: string
   showEmptyGuidance: boolean
+  proceduralHint?: string
   propertyColumnElements: ReactNode
   propertyColumnWidth?: number
   graphPaneRef: React.RefObject<HTMLDivElement | null>
@@ -73,6 +74,7 @@ export function DopesheetGraphPane({
   hasRows,
   emptyStateMessage,
   showEmptyGuidance,
+  proceduralHint,
   propertyColumnElements,
   propertyColumnWidth = PROPERTY_COLUMN_WIDTH,
   graphPaneRef,
@@ -117,7 +119,11 @@ export function DopesheetGraphPane({
 }: DopesheetGraphPaneProps) {
   if (!hasRows) {
     return (
-      <DopesheetEmptyState showGuidance={showEmptyGuidance} fallbackMessage={emptyStateMessage} />
+      <DopesheetEmptyState
+        showGuidance={showEmptyGuidance}
+        fallbackMessage={emptyStateMessage}
+        proceduralHint={proceduralHint}
+      />
     )
   }
 

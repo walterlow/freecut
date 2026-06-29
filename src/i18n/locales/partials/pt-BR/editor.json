@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Linha do tempo de animação",
-      "noClip": "Nenhum clipe para animar"
+      "noClip": "Nenhum clipe para animar",
+      "animatedClip": "Animado"
     },
     "animatePresets": {
       "title": "Predefinições",
@@ -32,6 +33,24 @@
         "save": "Salvar",
         "overwrite": "Substituir",
         "cancel": "Cancelar"
+      }
+    },
+    "animateStages": {
+      "presetsHint": "As predefinições criam quadros-chave editáveis — refine-os no gráfico.",
+      "adjustTitle": "Ajustar",
+      "adjustHint": "Aplica-se às predefinições e ao movimento adicionados em seguida.",
+      "continuousTitle": "Movimento contínuo",
+      "continuousHint": "Executa ao vivo e de forma não destrutiva até ser consolidado.",
+      "liveBadge": "Ao vivo",
+      "appliedTitle": "Aplicado",
+      "keyframedChip": "{{count}} com quadros-chave",
+      "clearKeyframes": "Limpar quadros-chave",
+      "removeModulator": "Remover {{name}}",
+      "audioPulseChip": "Pulso de áudio",
+      "onApply": "Ao aplicar",
+      "applyMode": {
+        "replace": "Substituir",
+        "add": "Adicionar"
       }
     },
     "motionPresets": {

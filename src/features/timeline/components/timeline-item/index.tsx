@@ -171,6 +171,9 @@ export const TimelineItem = memo(function TimelineItem({
     [itemKeyframes],
   )
   const hasKeyframes = keyframedProperties.length > 0
+  const hasMotion =
+    (item.motionModifiers?.some((modifier) => modifier.enabled) ?? false) ||
+    (item.effects?.some((effect) => effect.audioPulse?.enabled) ?? false)
   const caption = useCaptionDialogState({
     item,
     isBroken,
@@ -1058,6 +1061,7 @@ export const TimelineItem = memo(function TimelineItem({
               /* Status indicators */
               <ClipIndicators
                 hasKeyframes={hasKeyframes}
+                hasMotion={hasMotion}
                 currentSpeed={currentSpeed}
                 isReversed={item.isReversed === true}
                 reverseConformStatus={item.reverseConformStatus}

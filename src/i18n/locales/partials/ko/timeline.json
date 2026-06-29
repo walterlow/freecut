@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "키프레임 있음",
+      "hasMotion": "연속 모션 있음",
       "mask": "마스크",
       "mediaMissing": "미디어 없음",
       "preparingReversed": "역방향 준비 중",

@@ -24,6 +24,7 @@
       "property": "Propriété",
       "noParametersMatch": "Aucun paramètre ne correspond à la vue actuelle",
       "noKeyframesToDisplay": "Aucune image clé à afficher",
+      "proceduralMotionHint": "Ce clip a un mouvement continu (dérive, respiration, secousse ou impulsion audio) — cuisez-le pour l’éditer en images clés.",
       "emptyState": {
         "title": "Aucune image clé pour le moment",
         "intro": "Animez ce clip en ajoutant des images clés à n’importe quel paramètre.",

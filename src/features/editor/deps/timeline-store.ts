@@ -17,6 +17,7 @@ export {
   executeTimelineCommand,
   captureSnapshot,
   applyAnimationPreset,
+  applyMotionPresetKeyframes,
   applyMotionModifierToItems,
   removeMotionModifierFromItems,
   setEffectAudioPulse,

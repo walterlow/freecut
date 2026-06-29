@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "キーフレームあり",
+      "hasMotion": "連続モーションあり",
       "mask": "マスク",
       "mediaMissing": "メディアが見つかりません",
       "preparingReversed": "逆再生を準備中",

@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Has Keyframes",
+      "hasMotion": "Has continuous motion",
       "mask": "Mask",
       "mediaMissing": "Media Missing",
       "preparingReversed": "Preparing Reversed",

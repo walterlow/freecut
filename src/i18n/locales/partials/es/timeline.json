@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Has fotogramas clave",
+      "hasMotion": "Tiene movimiento continuo",
       "mask": "Mascara",
       "mediaMissing": "Medios faltante",
       "preparingReversed": "Preparando invertido",

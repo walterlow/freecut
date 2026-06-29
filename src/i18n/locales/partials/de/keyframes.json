@@ -24,6 +24,7 @@
       "property": "Eigenschaft",
       "noParametersMatch": "Keine Parameter entsprechen der aktuellen Ansicht",
       "noKeyframesToDisplay": "Keine Keyframes zum Anzeigen",
+      "proceduralMotionHint": "Dieser Clip hat kontinuierliche Bewegung (Drift, Atmen, Wackeln oder Audio-Puls) — backe ihn, um ihn als Keyframes zu bearbeiten.",
       "emptyState": {
         "title": "Noch keine Keyframes",
         "intro": "Animiere diesen Clip, indem du Keyframes zu einem beliebigen Parameter hinzufügst.",

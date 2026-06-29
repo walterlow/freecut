@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "애니메이트 타임라인",
-      "noClip": "애니메이트할 클립이 없습니다"
+      "noClip": "애니메이트할 클립이 없습니다",
+      "animatedClip": "애니메이션 있음"
     },
     "animatePresets": {
       "title": "프리셋",
@@ -32,6 +33,24 @@
         "save": "저장",
         "overwrite": "덮어쓰기",
         "cancel": "취소"
+      }
+    },
+    "animateStages": {
+      "presetsHint": "프리셋은 편집 가능한 키프레임을 생성합니다 — 그래프에서 다듬으세요.",
+      "adjustTitle": "조정",
+      "adjustHint": "다음에 추가하는 프리셋과 모션에 적용됩니다.",
+      "continuousTitle": "연속 모션",
+      "continuousHint": "베이크하기 전까지 라이브로 비파괴적으로 동작합니다.",
+      "liveBadge": "라이브",
+      "appliedTitle": "적용됨",
+      "keyframedChip": "{{count}}개 키프레임",
+      "clearKeyframes": "키프레임 지우기",
+      "removeModulator": "{{name}} 제거",
+      "audioPulseChip": "오디오 펄스",
+      "onApply": "적용 시",
+      "applyMode": {
+        "replace": "교체",
+        "add": "추가"
       }
     },
     "motionPresets": {

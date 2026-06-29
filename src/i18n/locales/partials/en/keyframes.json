@@ -24,6 +24,7 @@
       "property": "Property",
       "noParametersMatch": "No parameters match the current view",
       "noKeyframesToDisplay": "No keyframes to display",
+      "proceduralMotionHint": "This clip has continuous motion (drift, breath, shake or audio pulse) — Bake it to edit as keyframes.",
       "emptyState": {
         "title": "No keyframes yet",
         "intro": "Animate this clip by adding keyframes to any parameter.",

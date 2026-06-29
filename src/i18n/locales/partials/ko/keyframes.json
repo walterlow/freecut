@@ -24,6 +24,7 @@
       "property": "속성",
       "noParametersMatch": "현재 보기에 일치하는 매개변수가 없습니다",
       "noKeyframesToDisplay": "표시할 키프레임이 없습니다",
+      "proceduralMotionHint": "이 클립에는 연속 모션(드리프트, 브레스, 셰이크 또는 오디오 펄스)이 있습니다 — 키프레임으로 편집하려면 베이크하세요.",
       "emptyState": {
         "title": "아직 키프레임이 없습니다",
         "intro": "원하는 매개변수에 키프레임을 추가하여 이 클립을 애니메이션화하세요.",

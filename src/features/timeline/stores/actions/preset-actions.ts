@@ -47,6 +47,7 @@ export function applyAnimationPreset(
   targetItemId: string,
   preset: AnimationPreset,
   anchorFrame = 0,
+  options: { replace?: boolean } = {},
 ): ApplyAnimationPresetResult {
   const item = useItemsStore.getState().itemById[targetItemId]
   if (!item) {
@@ -160,7 +161,17 @@ export function applyAnimationPreset(
 
   let applied = 0
   if (payloads.length > 0) {
-    applied = useKeyframesStore.getState()._addKeyframes(payloads).length
+    const keyframesStore = useKeyframesStore.getState()
+    // Replace mode: drop existing keyframes on the properties this preset writes
+    // so reapplying a saved animation swaps it instead of merging frame-by-frame.
+    // Same undo block as the add (captureSnapshot was taken above).
+    if (options.replace) {
+      const replacedProperties = new Set(payloads.map((payload) => payload.property))
+      for (const property of replacedProperties) {
+        keyframesStore._removeKeyframesForProperty(targetItemId, property)
+      }
+    }
+    applied = keyframesStore._addKeyframes(payloads).length
   }
 
   if (applied > 0 || addedEffects > 0) {

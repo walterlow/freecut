@@ -24,6 +24,7 @@
       "property": "属性",
       "noParametersMatch": "没有匹配当前视图的参数",
       "noKeyframesToDisplay": "没有可显示的关键帧",
+      "proceduralMotionHint": "此片段具有连续运动（漂移、呼吸、抖动或音频脉冲）——烘焙后可作为关键帧编辑。",
       "emptyState": {
         "title": "尚无关键帧",
         "intro": "为任意参数添加关键帧来为此片段制作动画。",

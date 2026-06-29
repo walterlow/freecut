@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Animasyon zaman çizelgesi",
-      "noClip": "Animasyon için klip yok"
+      "noClip": "Animasyon için klip yok",
+      "animatedClip": "Animasyonlu"
     },
     "animatePresets": {
       "title": "Hazır ayarlar",
@@ -32,6 +33,24 @@
         "save": "Kaydet",
         "overwrite": "Üzerine yaz",
         "cancel": "İptal"
+      }
+    },
+    "animateStages": {
+      "presetsHint": "Hazır ayarlar düzenlenebilir kareler oluşturur — bunları grafikte iyileştirin.",
+      "adjustTitle": "Ayarla",
+      "adjustHint": "Sonra eklediğiniz hazır ayarlara ve harekete uygulanır.",
+      "continuousTitle": "Sürekli hareket",
+      "continuousHint": "Pişirilene kadar canlı ve tahribatsız çalışır.",
+      "liveBadge": "Canlı",
+      "appliedTitle": "Uygulanan",
+      "keyframedChip": "{{count}} anahtar kareli",
+      "clearKeyframes": "Anahtar kareleri temizle",
+      "removeModulator": "{{name}} kaldır",
+      "audioPulseChip": "Ses darbesi",
+      "onApply": "Uygularken",
+      "applyMode": {
+        "replace": "Değiştir",
+        "add": "Ekle"
       }
     },
     "motionPresets": {

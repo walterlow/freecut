@@ -8,6 +8,7 @@ interface DopesheetSheetBodyProps {
   hasRows: boolean
   emptyStateMessage: string
   showEmptyGuidance: boolean
+  proceduralHint?: string
   rowElements: ReactNode
   marqueeRect: KeyframeMarqueeRect | null
   marqueeJustEnded: boolean
@@ -20,6 +21,7 @@ export function DopesheetSheetBody({
   hasRows,
   emptyStateMessage,
   showEmptyGuidance,
+  proceduralHint,
   rowElements,
   marqueeRect,
   marqueeJustEnded,
@@ -33,7 +35,11 @@ export function DopesheetSheetBody({
       style={{ height: `calc(100% - ${RULER_HEIGHT}px)` }}
     >
       {!hasRows ? (
-        <DopesheetEmptyState showGuidance={showEmptyGuidance} fallbackMessage={emptyStateMessage} />
+        <DopesheetEmptyState
+          showGuidance={showEmptyGuidance}
+          fallbackMessage={emptyStateMessage}
+          proceduralHint={proceduralHint}
+        />
       ) : (
         <div className="relative min-h-full">
           <div

@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Ana kareler var",
+      "hasMotion": "Sürekli harekete sahip",
       "mask": "Maske",
       "mediaMissing": "Medya eksik",
       "preparingReversed": "Ters oynatma hazırlanıyor",
