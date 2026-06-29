@@ -1905,3 +1905,109 @@ fn thresholdFragment(input: VertexOutput) -> @location(0) vec4f {
   },
   packUniforms: (p) => new Float32Array([(p.level as number) ?? 0.5, 0, 0, 0]),
 }
+
+export const vhs: GpuEffectDefinition = {
+  id: 'gpu-vhs',
+  name: 'VHS',
+  category: 'stylize',
+  entryPoint: 'vhsFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct VhsParams {
+  bleed: f32, waviness: f32, noise: f32, scanline: f32,
+  time: f32, width: f32, height: f32, pad: f32
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: VhsParams;
+@fragment
+fn vhsFragment(input: VertexOutput) -> @location(0) vec4f {
+  let t = params.time;
+  var uv = input.uv;
+
+  // horizontal tracking wobble
+  let wave = (sin(uv.y * 120.0 + t * 5.0) + sin(uv.y * 17.0 - t * 2.3)) * 0.5;
+  uv.x = uv.x + wave * params.waviness * 0.015;
+
+  // occasional tracking-band jump
+  let bandId = floor(uv.y * 6.0 + t * 0.7);
+  let bandHit = step(0.92, hash(vec2f(bandId, floor(t * 3.0))));
+  uv.x = uv.x + bandHit * (hash(vec2f(bandId, 7.0)) - 0.5) * 0.06;
+
+  // chroma bleed (luma/chroma drift)
+  let off = params.bleed * 0.012;
+  let r = textureSample(inputTex, texSampler, vec2f(uv.x + off, uv.y)).r;
+  let g = textureSample(inputTex, texSampler, uv).g;
+  let b = textureSample(inputTex, texSampler, vec2f(uv.x - off, uv.y)).b;
+  let a = textureSample(inputTex, texSampler, uv).a;
+  var rgb = vec3f(r, g, b);
+
+  // scanlines
+  let sl = 0.82 + 0.18 * sin(input.position.y * PI);
+  rgb = mix(rgb, rgb * sl, clamp(params.scanline, 0.0, 1.0));
+
+  // tape noise
+  let n = hash(uv * vec2f(params.width, params.height) * 0.5 + vec2f(t * 120.0, t * 60.0)) - 0.5;
+  rgb = rgb + n * params.noise * 0.5;
+
+  return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), a);
+}`,
+  params: {
+    bleed: {
+      type: 'number',
+      label: 'Chroma Bleed',
+      default: 0.4,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+    waviness: {
+      type: 'number',
+      label: 'Tracking',
+      default: 0.3,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+    noise: {
+      type: 'number',
+      label: 'Tape Noise',
+      default: 0.25,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    scanline: {
+      type: 'number',
+      label: 'Scanlines',
+      default: 0.35,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    speed: {
+      type: 'number',
+      label: 'Speed',
+      default: 1,
+      min: 0,
+      max: 4,
+      step: 0.1,
+      animatable: false,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.bleed as number) ?? 0.4,
+      (p.waviness as number) ?? 0.3,
+      (p.noise as number) ?? 0.25,
+      (p.scanline as number) ?? 0.35,
+      (performance.now() / 1000) * ((p.speed as number) ?? 1),
+      w,
+      h,
+      0,
+    ]),
+}

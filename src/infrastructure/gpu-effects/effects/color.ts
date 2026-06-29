@@ -18,6 +18,26 @@ function readNumberParam(
   return typeof value === 'number' ? value : fallback
 }
 
+function parseHexColorRgb(
+  color: string,
+  fallback: [number, number, number],
+): [number, number, number] {
+  if (typeof color !== 'string' || !color.startsWith('#')) return fallback
+  const hex = color.slice(1)
+  const full =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : hex
+  if (full.length < 6) return fallback
+  const r = parseInt(full.slice(0, 2), 16) / 255
+  const g = parseInt(full.slice(2, 4), 16) / 255
+  const b = parseInt(full.slice(4, 6), 16) / 255
+  return [r, g, b].every(Number.isFinite) ? [r, g, b] : fallback
+}
+
 export const brightness: GpuEffectDefinition = {
   id: 'gpu-brightness',
   name: 'Brightness',
@@ -1371,4 +1391,67 @@ fn vibranceFragment(input: VertexOutput) -> @location(0) vec4f {
     },
   },
   packUniforms: (p) => new Float32Array([(p.amount as number) ?? 0, 0, 0, 0]),
+}
+
+export const gradientMap: GpuEffectDefinition = {
+  id: 'gpu-gradient-map',
+  name: 'Gradient Map',
+  category: 'color',
+  entryPoint: 'gradientMapFragment',
+  uniformSize: 64,
+  shader: /* wgsl */ `
+struct GradientMapParams { shadow: vec4f, mid: vec4f, high: vec4f, settings: vec4f };
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: GradientMapParams;
+@fragment
+fn gradientMapFragment(input: VertexOutput) -> @location(0) vec4f {
+  let color = textureSample(inputTex, texSampler, input.uv);
+  let lum = clamp(luminance601(color.rgb), 0.0, 1.0);
+  var mapped: vec3f;
+  if (lum < 0.5) {
+    mapped = mix(params.shadow.rgb, params.mid.rgb, smootherstep(0.0, 1.0, lum * 2.0));
+  } else {
+    mapped = mix(params.mid.rgb, params.high.rgb, smootherstep(0.0, 1.0, (lum - 0.5) * 2.0));
+  }
+  let outRgb = mix(color.rgb, mapped, clamp(params.settings.x, 0.0, 1.0));
+  return vec4f(outRgb, color.a);
+}`,
+  params: {
+    shadowColor: { type: 'color', label: 'Shadows', default: '#241634', animatable: true },
+    midColor: { type: 'color', label: 'Midtones', default: '#c2456b', animatable: true },
+    highlightColor: { type: 'color', label: 'Highlights', default: '#ffd9a0', animatable: true },
+    mix: {
+      type: 'number',
+      label: 'Mix',
+      default: 1,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+  },
+  packUniforms: (p) => {
+    const shadow = parseHexColorRgb((p.shadowColor as string) ?? '#241634', [0.14, 0.09, 0.2])
+    const mid = parseHexColorRgb((p.midColor as string) ?? '#c2456b', [0.76, 0.27, 0.42])
+    const high = parseHexColorRgb((p.highlightColor as string) ?? '#ffd9a0', [1, 0.85, 0.63])
+    return new Float32Array([
+      shadow[0],
+      shadow[1],
+      shadow[2],
+      0,
+      mid[0],
+      mid[1],
+      mid[2],
+      0,
+      high[0],
+      high[1],
+      high[2],
+      0,
+      readNumberParam(p, 'mix', 1),
+      0,
+      0,
+      0,
+    ])
+  },
 }
