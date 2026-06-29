@@ -93,6 +93,23 @@ describe('addAdjustmentLayer', () => {
     expect(state.tracks.map((track) => track.id)).toContain('main')
   })
 
+  it('uses explicit placement when provided', () => {
+    useItemsStore.getState().setTracks([makeTrack('top', 0), makeTrack('main', 1)])
+    useItemsStore.getState().setItems([makeVideoItem('clip', 'main', 0, 180)])
+    useSelectionStore.getState().setActiveTrack('main')
+
+    expect(addAdjustmentLayer(undefined, 'Beat Layer', { from: 42, durationInFrames: 75 })).toBe(
+      true,
+    )
+
+    const adjustment = useItemsStore.getState().items.find((item) => item.type === 'adjustment')
+    expect(adjustment).toMatchObject({
+      label: 'Beat Layer',
+      from: 42,
+      durationInFrames: 75,
+    })
+  })
+
   it('undoes the layer and any track created for it in one step', () => {
     const originalTracks = [makeTrack('top', 0), makeTrack('main', 1)]
     useItemsStore.getState().setTracks(originalTracks)

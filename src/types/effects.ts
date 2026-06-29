@@ -8,11 +8,37 @@ export interface GpuEffect {
 // Union of all visual effects (GPU-only since v6 migration)
 export type VisualEffect = GpuEffect
 
+/** A detected audio onset, frame relative to the item start. */
+export interface AudioPulseBeat {
+  frame: number
+  amplitude: number // 0..1 normalized onset strength
+}
+
+/**
+ * Procedural audio-reactive modulation of a `gpu-trigger-wave` effect.
+ * Stores the sparse detected beats + envelope shape and is evaluated
+ * analytically per frame at render time (no baked keyframes).
+ */
+export interface AudioPulseModulation {
+  enabled: boolean
+  beats: AudioPulseBeat[]
+  /** Envelope length per beat, in frames. */
+  durationFrames: number
+  /** Peak strength at a full-amplitude beat. */
+  strength: number
+  /** Peak chroma at a full-amplitude beat. */
+  chroma: number
+  /** Resting glow color as packed 0xRRGGBB. */
+  glowColorBase: number
+}
+
 // Effect instance applied to a timeline item
 export interface ItemEffect {
   id: string
   effect: VisualEffect
   enabled: boolean
+  /** Procedural audio-reactive driver for this effect's params (trigger-wave). */
+  audioPulse?: AudioPulseModulation
 }
 
 // Effect presets (combinations of multiple effects)

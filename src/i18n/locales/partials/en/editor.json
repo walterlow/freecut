@@ -34,6 +34,33 @@
         "cancel": "Cancel"
       }
     },
+    "motionGenerator": {
+      "title": "Generator",
+      "intensity": "Intensity",
+      "duration": "Duration",
+      "stagger": "Stagger",
+      "triggerWaveColor": "Glow color",
+      "triggerWaveLayer": "Trigger Wave Layer",
+      "audioTriggerWaveLayer": "Audio Trigger Wave",
+      "triggerWaveCreated": "Created Trigger Wave layer",
+      "audioTriggerWaveCreated": "Created audio-reactive Trigger Wave layer from {{count}} beat(s)",
+      "audioTriggerWaveNoWaveform": "Select an audio clip with waveform data",
+      "audioTriggerWaveNoBeats": "No strong beats found in selected audio",
+      "triggerWaveFailed": "Could not create Trigger Wave layer",
+      "modulatorsTitle": "Modulators",
+      "modulatorApplied": "Applied {{name}} to {{count}} clip(s)",
+      "modulatorRemoved": "Removed {{name}}",
+      "modulatorApplyFailed": "Could not apply modulator",
+      "bakeToKeyframes": "Bake to keyframes",
+      "bakeToKeyframesHint": "Flatten procedural motion on the selected clips into editable keyframes",
+      "bakeNoMotion": "No procedural motion to bake on the selection",
+      "motionBaked": "Baked motion on {{count}} clip(s)",
+      "modulators": {
+        "floatDrift": "Float drift",
+        "breathPulse": "Breath pulse",
+        "microShake": "Micro shake"
+      }
+    },
     "motionPresets": {
       "textIncompatible": "Not suited for text",
       "categories": {

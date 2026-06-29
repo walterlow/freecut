@@ -15,6 +15,7 @@ import {
   getEffectOptionLabel,
   getEffectParamLabel,
 } from '@/features/effects/utils/effect-i18n'
+import { getGpuEffectKeyframeValue } from '@/features/effects/utils/effect-keyframes'
 import { EffectPanelHeaderActions } from './effect-panel-header-actions'
 import type { GpuKeyframePanelProps } from './panel-props'
 
@@ -206,6 +207,8 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
         }
 
         if (param.type === 'color') {
+          const keyframeProperty = getKeyframeProperty(effect.id, key)
+          const keyframeValue = getGpuEffectKeyframeValue(effect, key, currentValue)
           return (
             <PropertyRow
               key={key}
@@ -218,6 +221,14 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 onLiveChange={(v) => onParamLiveChange(effect.id, key, v)}
                 disabled={!paramEnabled}
               />
+              {keyframeProperty && keyframeValue !== null ? (
+                <KeyframeToggle
+                  itemIds={itemIds}
+                  property={keyframeProperty}
+                  currentValue={keyframeValue}
+                  disabled={!paramEnabled}
+                />
+              ) : null}
             </PropertyRow>
           )
         }

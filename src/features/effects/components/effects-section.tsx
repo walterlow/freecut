@@ -30,6 +30,7 @@ import {
 } from '@/features/effects/utils/effect-i18n'
 import {
   getGpuEffectKeyframeProperty,
+  getGpuEffectKeyframeValue,
   getResolvedGpuEffectForFrame,
 } from '@/features/effects/utils/effect-keyframes'
 import { useKeyframesByItemId } from '../hooks/use-keyframes-by-item-id'
@@ -163,28 +164,27 @@ export const EffectsSection = memo(function EffectsSection({
       const effect = effects.find((e) => e.id === effectId)
       if (!effect || effect.effect.type !== 'gpu-effect') return
 
-      const gpuEff = effect.effect as GpuEffect
-      const definition = getGpuEffect(gpuEff.gpuEffectType)
-      const param = definition?.params[paramKey]
+      const displayKeyframeValue = getGpuEffectKeyframeValue(effect, paramKey, value)
       const autoOperations =
-        typeof value === 'number' && definition && param?.type === 'number' && param.animatable
+        displayKeyframeValue !== null
           ? visualItems.flatMap((item) => {
               const targetEffect = getMappedEffectEntry(item, effectId)
               if (!targetEffect || targetEffect.effect.type !== 'gpu-effect') {
                 return []
               }
 
+              const keyframeValue = getGpuEffectKeyframeValue(targetEffect, paramKey, value)
+              const property = getGpuEffectKeyframeProperty(targetEffect, paramKey)
+              if (keyframeValue === null || !property) {
+                return []
+              }
+
               const itemKeyframeState = keyframesByItemId.get(item.id) ?? undefined
-              const property = buildEffectAnimatableProperty(
-                targetEffect.effect.gpuEffectType,
-                targetEffect.id,
-                paramKey,
-              )
               const operation = getAutoKeyframeOperation(
                 item,
                 itemKeyframeState ?? undefined,
                 property,
-                value,
+                keyframeValue,
                 currentFrame,
               )
               return operation ? [operation] : []
@@ -207,7 +207,7 @@ export const EffectsSection = memo(function EffectsSection({
           paramKey,
         )
         const autoHandled =
-          typeof value === 'number' &&
+          displayKeyframeValue !== null &&
           autoOperations.some(
             (operation) => operation.itemId === item.id && operation.property === property,
           )
@@ -242,8 +242,6 @@ export const EffectsSection = memo(function EffectsSection({
       const effect = effects.find((e) => e.id === effectId)
       if (!effect || effect.effect.type !== 'gpu-effect') return
 
-      const gpuEff = effect.effect as GpuEffect
-      const definition = getGpuEffect(gpuEff.gpuEffectType)
       const autoOperations = visualItems.flatMap((item) => {
         const targetEffect = getMappedEffectEntry(item, effectId)
         if (!targetEffect || targetEffect.effect.type !== 'gpu-effect') {
@@ -253,26 +251,17 @@ export const EffectsSection = memo(function EffectsSection({
         const itemKeyframeState = keyframesByItemId.get(item.id) ?? undefined
 
         return Object.entries(updates).flatMap(([paramKey, paramValue]) => {
-          const param = definition?.params[paramKey]
-          if (
-            typeof paramValue !== 'number' ||
-            !definition ||
-            param?.type !== 'number' ||
-            !param.animatable
-          ) {
+          const keyframeValue = getGpuEffectKeyframeValue(targetEffect, paramKey, paramValue)
+          const property = getGpuEffectKeyframeProperty(targetEffect, paramKey)
+          if (keyframeValue === null || !property) {
             return []
           }
 
-          const property = buildEffectAnimatableProperty(
-            targetEffect.effect.gpuEffectType,
-            targetEffect.id,
-            paramKey,
-          )
           const operation = getAutoKeyframeOperation(
             item,
             itemKeyframeState ?? undefined,
             property,
-            paramValue,
+            keyframeValue,
             currentFrame,
           )
           return operation ? [operation] : []
@@ -297,7 +286,7 @@ export const EffectsSection = memo(function EffectsSection({
             paramKey,
           )
           const autoHandled =
-            typeof paramValue === 'number' &&
+            getGpuEffectKeyframeValue(targetEffect, paramKey, paramValue) !== null &&
             autoOperations.some(
               (operation) => operation.itemId === item.id && operation.property === property,
             )

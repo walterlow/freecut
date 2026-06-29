@@ -13,6 +13,7 @@ import {
   resolveAnimatedTransform,
   hasKeyframeAnimation,
   resolveAnimatedTextItem,
+  applyMotionModifiers,
 } from '../deps/keyframes'
 import { resolveTransitionFrameState, type TransitionFrameState } from './transition-scene'
 import {
@@ -80,7 +81,16 @@ export function resolveItemTransformAtRelativeFrame(
       ? resolveAnimatedTransform(baseResolved, keyframes, relativeFrame)
       : baseResolved
 
-  const resolved = applyTransformOverride(animatedResolved, previewTransform)
+  // Procedural motion modifiers layer on top of the keyframe-resolved transform
+  // before any live preview override wins.
+  const modulatedResolved = applyMotionModifiers(animatedResolved, item.motionModifiers, {
+    frame: relativeFrame,
+    fps: canvas.fps,
+    frameWidth: canvas.width,
+    frameHeight: canvas.height,
+  })
+
+  const resolved = applyTransformOverride(modulatedResolved, previewTransform)
 
   return item.type === 'text' && !hasCornerPin(item.cornerPin)
     ? expandTextTransformToFitContent(

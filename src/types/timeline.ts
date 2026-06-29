@@ -1,5 +1,6 @@
 import type { CropSettings, TransformProperties } from './transform'
 import type { ItemEffect } from './effects'
+import type { MotionModifier } from './motion'
 import type { BlendMode } from './blend-modes'
 import type { AudioEqSettings } from './audio'
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids'
@@ -127,6 +128,9 @@ type BaseTimelineItem = {
   fadeOut?: number // Video fade out duration in seconds (default: 0)
   // Visual effects (GPU shader effects)
   effects?: ItemEffect[]
+  // Procedural motion modifiers — continuous drift/breath/shake evaluated at
+  // render time (no baked keyframes). See @/types/motion.
+  motionModifiers?: MotionModifier[]
   // Blend mode for layer compositing (default: 'normal')
   blendMode?: BlendMode
   // Corner pin transform (perspective warp)

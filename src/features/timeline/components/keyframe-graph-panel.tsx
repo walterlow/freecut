@@ -163,6 +163,64 @@ const BEZIER_PRESETS = [
     points: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 },
   },
 ] as const
+const EASING_CHIPS: Array<{
+  id: string
+  labelKey: string
+  defaultLabel: string
+  easing: EasingType
+  easingConfig?: EasingConfig
+}> = [
+  {
+    id: 'soft-out',
+    labelKey: 'timeline.keyframeEditor.easingChip.softOut',
+    defaultLabel: 'Soft Out',
+    easing: 'cubic-bezier',
+    easingConfig: {
+      type: 'cubic-bezier',
+      bezier: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
+    },
+  },
+  {
+    id: 'smooth',
+    labelKey: 'timeline.keyframeEditor.easingChip.smooth',
+    defaultLabel: 'Smooth',
+    easing: 'cubic-bezier',
+    easingConfig: {
+      type: 'cubic-bezier',
+      bezier: { x1: 0.645, y1: 0.045, x2: 0.355, y2: 1 },
+    },
+  },
+  {
+    id: 'snap',
+    labelKey: 'timeline.keyframeEditor.easingChip.snap',
+    defaultLabel: 'Snap',
+    easing: 'cubic-bezier',
+    easingConfig: {
+      type: 'cubic-bezier',
+      bezier: { x1: 0.19, y1: 1, x2: 0.22, y2: 1 },
+    },
+  },
+  {
+    id: 'overshoot',
+    labelKey: 'timeline.keyframeEditor.easingChip.overshoot',
+    defaultLabel: 'Overshoot',
+    easing: 'cubic-bezier',
+    easingConfig: {
+      type: 'cubic-bezier',
+      bezier: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 },
+    },
+  },
+  {
+    id: 'spring',
+    labelKey: 'timeline.keyframeEditor.easingChip.spring',
+    defaultLabel: 'Spring',
+    easing: 'spring',
+    easingConfig: {
+      type: 'spring',
+      spring: { ...DEFAULT_SPRING_PARAMS },
+    },
+  },
+]
 const BEZIER_INPUT_KEYS = ['x1', 'y1', 'x2', 'y2'] as const
 const SPRING_INPUT_KEYS = ['tension', 'friction', 'mass'] as const
 
@@ -390,6 +448,7 @@ interface AdvancedEasingControlsProps {
   hasMixedBezierConfig: boolean
   selectedSpringParameters: SpringParameters | null
   hasMixedSpringConfig: boolean
+  applyEasingChip: (easing: EasingType, easingConfig?: EasingConfig) => void
   applyBezier: (bezier: BezierControlPoints) => void
   applySpring: (spring: SpringParameters) => void
 }
@@ -400,6 +459,7 @@ function AdvancedEasingControls({
   hasMixedBezierConfig,
   selectedSpringParameters,
   hasMixedSpringConfig,
+  applyEasingChip,
   applyBezier,
   applySpring,
 }: AdvancedEasingControlsProps) {
@@ -501,9 +561,26 @@ function AdvancedEasingControls({
 
   return (
     <div
-      className="mb-2 flex items-center overflow-x-auto rounded-md border border-border bg-secondary/20 px-2"
+      className="mb-2 flex items-center gap-3 overflow-x-auto rounded-md border border-border bg-secondary/20 px-2"
       style={{ height: ADVANCED_EASING_STRIP_HEIGHT }}
     >
+      <div className="flex w-max items-center gap-1 border-r border-border/80 pr-2">
+        <span className="mr-1 text-[11px] font-medium text-muted-foreground">
+          {t('timeline.keyframeEditor.easingChips')}
+        </span>
+        {EASING_CHIPS.map((chip) => (
+          <Button
+            key={chip.id}
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-[11px]"
+            onClick={() => applyEasingChip(chip.easing, chip.easingConfig)}
+          >
+            {t(chip.labelKey, { defaultValue: chip.defaultLabel })}
+          </Button>
+        ))}
+      </div>
       {selectedBezierPoints && (
         <div className="flex w-max items-center gap-2 text-xs">
           <span className="font-medium text-foreground">{t('timeline.keyframeEditor.bezier')}</span>
@@ -1099,7 +1176,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   }, [cutSelectedKeyframes, selectedEditorKeyframes.length])
 
   const handleSelectedKeyframeEasingChange = useCallback(
-    (value: string) => {
+    (value: string, easingConfig?: EasingConfig) => {
       if (selectedEditorKeyframes.length === 0) return
 
       const easing = value as EasingType
@@ -1110,7 +1187,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
           keyframeId: ref.keyframeId,
           updates: {
             easing,
-            easingConfig: buildEasingConfig(easing, keyframe.easingConfig),
+            easingConfig: easingConfig ?? buildEasingConfig(easing, keyframe.easingConfig),
           },
         })),
       )
@@ -1531,14 +1608,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   const editorWidth = Math.max(0, containerWidth - 16)
   const showBezierControls = selectedEditorEasing === 'cubic-bezier'
   const showSpringControls = selectedEditorEasing === 'spring'
-  // The easing strip only carries bezier/spring controls now — the old
-  // "select a keyframe" hint banner is dropped. Render (and reserve height for)
-  // the strip only when there are actual controls to show, so the editor
-  // reclaims that space the rest of the time.
-  const showEasingControls = Boolean(
-    (showBezierControls && selectedBezierPoints) ||
-    (showSpringControls && selectedSpringParameters),
-  )
+  // Keep named easing chips available for every selected keyframe, with
+  // detailed controls shown only for bezier and spring curves.
+  const showEasingControls = selectedEditorKeyframes.length > 0
   const advancedControlsKey = useMemo(
     () =>
       selectedEditorKeyframes
@@ -1713,6 +1785,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                   hasMixedBezierConfig={hasMixedBezierConfig}
                   selectedSpringParameters={showSpringControls ? selectedSpringParameters : null}
                   hasMixedSpringConfig={hasMixedSpringConfig}
+                  applyEasingChip={handleSelectedKeyframeEasingChange}
                   applyBezier={applyBezierToSelection}
                   applySpring={applySpringToSelection}
                 />

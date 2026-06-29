@@ -10,6 +10,10 @@ export type {
 } from '@/features/timeline/contracts/editor'
 export {
   applyAnimationPreset,
+  applyMotionModifierToItems,
+  removeMotionModifierFromItems,
+  setEffectAudioPulse,
+  bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
   captureSnapshot,

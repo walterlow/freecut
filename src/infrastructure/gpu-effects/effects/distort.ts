@@ -408,6 +408,7 @@ fn triggerWaveFragment(input: VertexOutput) -> @location(0) vec4f {
       type: 'color',
       label: 'Glow Color',
       default: '#2e6b8c',
+      animatable: true,
     },
   },
   packUniforms: (p, w, h) => {

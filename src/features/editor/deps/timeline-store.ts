@@ -17,6 +17,10 @@ export {
   executeTimelineCommand,
   captureSnapshot,
   applyAnimationPreset,
+  applyMotionModifierToItems,
+  removeMotionModifierFromItems,
+  setEffectAudioPulse,
+  bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
 } from './timeline-contract'

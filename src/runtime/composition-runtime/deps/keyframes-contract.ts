@@ -6,6 +6,7 @@ export {
   resolveAnimatedTransform,
   hasKeyframeAnimation,
 } from '@/features/keyframes/utils/animated-transform-resolver'
+export { applyMotionModifiers } from '@/features/keyframes/utils/motion-modifier-eval'
 export { resolveAnimatedCrop } from '@/features/keyframes/utils/animated-crop-resolver'
 export {
   getPropertyKeyframes,

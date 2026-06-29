@@ -1,5 +1,9 @@
 import { getGpuEffect } from '@/infrastructure/gpu-effects'
 import {
+  MAX_PACKED_RGB,
+  MIN_PACKED_RGB,
+} from '@/features/keyframes/utils/color-keyframes'
+import {
   isBuiltInAnimatableProperty,
   parseEffectAnimatableProperty,
   type AnimatableProperty,
@@ -81,7 +85,21 @@ function getPropertyValueRange(property: AnimatableProperty): PropertyValueRange
 
   const definition = getGpuEffect(parsed.gpuEffectType)
   const param = definition?.params[parsed.paramKey]
-  if (!definition || !param || param.type !== 'number') {
+  if (!definition || !param) {
+    return null
+  }
+
+  if (param.type === 'color') {
+    return {
+      property,
+      min: MIN_PACKED_RGB,
+      max: MAX_PACKED_RGB,
+      unit: '',
+      decimals: 0,
+    }
+  }
+
+  if (param.type !== 'number') {
     return null
   }
 
@@ -106,3 +124,9 @@ export const PROPERTY_VALUE_RANGES = new Proxy<Record<string, PropertyValueRange
     },
   },
 ) as Record<AnimatableProperty, PropertyValueRange>
+
+export function isColorAnimatableProperty(property: AnimatableProperty): boolean {
+  const parsed = parseEffectAnimatableProperty(property)
+  if (!parsed) return false
+  return getGpuEffect(parsed.gpuEffectType)?.params[parsed.paramKey]?.type === 'color'
+}

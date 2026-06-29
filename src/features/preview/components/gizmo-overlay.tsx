@@ -3,7 +3,11 @@ import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useSettingsStore } from '@/features/preview/deps/settings'
-import { useKeyframesStore, useTimelineStore } from '@/features/preview/deps/timeline-store'
+import {
+  useKeyframesStore,
+  useTimelineSettingsStore,
+  useTimelineStore,
+} from '@/features/preview/deps/timeline-store'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
 import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution'
@@ -13,6 +17,7 @@ import { useMaskEditorStore } from '../stores/mask-editor-store'
 import { TransformGizmo } from './transform-gizmo'
 import { GroupGizmo } from './group-gizmo'
 import { SelectableItem } from './selectable-item'
+import { MotionPathOverlay } from './motion-path-overlay'
 import { SnapGuides } from './snap-guides'
 import {
   getEffectiveScale,
@@ -29,6 +34,10 @@ import {
 import { MarqueeOverlay } from '@/shared/marquee/marquee-overlay'
 import { useVisualTransforms } from '../hooks/use-visual-transform'
 import { useCanvasMediaDrop } from '../hooks/use-canvas-media-drop'
+import {
+  buildMotionPathPoints,
+  canvasPointToMotionPathScreenPoint,
+} from '../utils/motion-path'
 import {
   getAutoKeyframeOperation,
   GIZMO_ANIMATABLE_PROPS,
@@ -107,6 +116,7 @@ export function GizmoOverlay({
     ),
   )
   const tracks = useTimelineStore((s) => s.tracks)
+  const fps = useTimelineSettingsStore((s) => s.fps)
   const canvasSnapEnabled = useSettingsStore((s) => s.canvasSnapEnabled)
   const updateItemTransform = useTimelineStore((s) => s.updateItemTransform)
   const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap)
@@ -267,6 +277,18 @@ export function GizmoOverlay({
   const selectedItems = useMemo(() => {
     return visibleItems.filter((item) => selectedItemIdsSet.has(item.id))
   }, [visibleItems, selectedItemIdsSet])
+  const selectedVisibleItemIds = useMemo(
+    () => selectedItems.map((item) => item.id),
+    [selectedItems],
+  )
+  const selectedItemKeyframes = useKeyframesStore(
+    useShallow(
+      useCallback(
+        (s) => selectedVisibleItemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null),
+        [selectedVisibleItemIds],
+      ),
+    ),
+  )
 
   // Get unselected visible items (for click-to-select, use Set for O(1) lookups)
   const unselectedItems = useMemo(() => {
@@ -297,6 +319,34 @@ export function GizmoOverlay({
       coordParams,
       projectSize,
     })
+
+  const motionPaths = useMemo(() => {
+    if (!coordParams || isCornerPinEditing || isMaskEditing) return []
+    const canvas = { width: projectSize.width, height: projectSize.height, fps }
+    return selectedItems.flatMap((item, index) => {
+      const points = buildMotionPathPoints({
+        item,
+        itemKeyframes: selectedItemKeyframes[index] ?? undefined,
+        canvas,
+      })
+      if (points.length === 0) return []
+      return [
+        {
+          itemId: item.id,
+          points: points.map((point) => canvasPointToMotionPathScreenPoint(point, coordParams)),
+        },
+      ]
+    })
+  }, [
+    coordParams,
+    fps,
+    isCornerPinEditing,
+    isMaskEditing,
+    projectSize.height,
+    projectSize.width,
+    selectedItemKeyframes,
+    selectedItems,
+  ])
 
   // Get visual transforms for all visible items (base + keyframes + preview).
   const visualTransformsMap = useVisualTransforms(visibleItems, projectSize)
@@ -735,6 +785,12 @@ export function GizmoOverlay({
             </div>
           </div>
         )}
+
+        <MotionPathOverlay
+          paths={motionPaths}
+          width={playerSize.width}
+          height={playerSize.height}
+        />
 
         {/* Clickable areas for UNSELECTED visible items */}
         {/* Selected items are handled by their respective gizmos (TransformGizmo or GroupGizmo) */}

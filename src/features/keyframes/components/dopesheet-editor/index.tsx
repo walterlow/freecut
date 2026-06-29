@@ -77,7 +77,14 @@ import type {
 import { getDopesheetRowControlState } from './row-controls'
 import { getPropertyAccordionGroups } from './property-groups'
 import { getCombinedGraphValueRange } from '../value-graph-editor/value-range-utils'
-import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges'
+import {
+  PROPERTY_VALUE_RANGES,
+  isColorAnimatableProperty,
+} from '@/features/keyframes/property-value-ranges'
+import {
+  colorStringToKeyframeValue,
+  keyframeValueToHexColor,
+} from '@/features/keyframes/utils/color-keyframes'
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
 import { clampFrame } from './frame-utils'
@@ -451,6 +458,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const formatPropertyValue = useCallback(
     (property: AnimatableProperty, value: number | undefined) => {
       if (value === undefined || Number.isNaN(value)) return ''
+      if (isColorAnimatableProperty(property)) return keyframeValueToHexColor(value)
       const decimals = PROPERTY_VALUE_RANGES[property]?.decimals ?? 2
       return decimals === 0 ? String(Math.round(value)) : value.toFixed(decimals)
     },
@@ -1268,9 +1276,11 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     (property: AnimatableProperty, options?: { allowCreate?: boolean }) => {
       if (isPropertyLocked(property)) return
       const range = PROPERTY_VALUE_RANGES[property]
-      const parsed = Number(valueDrafts[property])
+      const parsed = isColorAnimatableProperty(property)
+        ? colorStringToKeyframeValue(valueDrafts[property] ?? '')
+        : Number(valueDrafts[property])
 
-      if (!Number.isFinite(parsed)) {
+      if (parsed === null || !Number.isFinite(parsed)) {
         setValueDrafts((prev) => ({
           ...prev,
           [property]: formatPropertyValue(property, propertyValues[property]),
@@ -2070,7 +2080,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
           </div>
           <div className="ml-auto flex items-center gap-0">
             <Input
-              type="number"
+              type={isColorAnimatableProperty(row.property) ? 'text' : 'number'}
               value={valueDrafts[row.property] ?? ''}
               onChange={(event) => handleRowValueChange(row.property, event.target.value)}
               onFocus={() => {
@@ -2105,14 +2115,28 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                   event.currentTarget.blur()
                 }
               }}
-              step={(PROPERTY_VALUE_RANGES[row.property]?.decimals ?? 2) === 0 ? 1 : 0.1}
-              min={PROPERTY_VALUE_RANGES[row.property]?.min}
-              max={PROPERTY_VALUE_RANGES[row.property]?.max}
-              inputMode="decimal"
+              step={
+                isColorAnimatableProperty(row.property)
+                  ? undefined
+                  : (PROPERTY_VALUE_RANGES[row.property]?.decimals ?? 2) === 0
+                    ? 1
+                    : 0.1
+              }
+              min={
+                isColorAnimatableProperty(row.property)
+                  ? undefined
+                  : PROPERTY_VALUE_RANGES[row.property]?.min
+              }
+              max={
+                isColorAnimatableProperty(row.property)
+                  ? undefined
+                  : PROPERTY_VALUE_RANGES[row.property]?.max
+              }
+              inputMode={isColorAnimatableProperty(row.property) ? 'text' : 'decimal'}
               className={cn(
                 'h-[18px] border-border/70 bg-background/85 px-1 py-0 text-right text-[9px] leading-none tabular-nums md:text-[9px]',
                 '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
-                spacious ? 'w-[64px]' : 'w-[44px]',
+                isColorAnimatableProperty(row.property) ? 'w-[68px]' : spacious ? 'w-[64px]' : 'w-[44px]',
               )}
               disabled={
                 disabled ||
