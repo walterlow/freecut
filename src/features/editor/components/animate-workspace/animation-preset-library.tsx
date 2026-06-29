@@ -5,21 +5,19 @@ import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import type { CanvasSettings } from '@/types/transform'
 import type { AnimatableProperty } from '@/types/keyframe'
-import type { AudioItem, TimelineItem } from '@/types/timeline'
+import type { TimelineItem } from '@/types/timeline'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Slider } from '@/components/ui/slider'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ColorPicker } from '@/shared/ui/property-controls'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useProjectStore } from '@/features/editor/deps/projects'
 import {
   applyAnimationPreset,
   applyMotionModifierToItems,
   removeMotionModifierFromItems,
-  setEffectAudioPulse,
   bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
@@ -36,22 +34,16 @@ import {
   MOTION_PRESETS,
   motionPresetScalesBox,
   DEFAULT_MOTION_GENERATOR_SETTINGS,
-  TRIGGER_WAVE_MOTION_LAYER_LABEL,
   applyMotionGeneratorSettings,
   createMotionModifier,
-  createAudioPulseModulation,
   bakeMotionModifiersToKeyframes,
   bakeAudioPulseToKeyframes,
-  buildTriggerWaveMotionLayerKeyframes,
-  createTriggerWaveMotionLayerEffects,
-  detectAudioReactiveBeats,
   resolveAnimatedTransform,
   type MotionPreset,
   type MotionPresetCategory,
   type MotionGeneratorSettings,
   type MotionModulator,
 } from '@/features/editor/deps/keyframes'
-import { addAdjustmentLayer } from '@/features/editor/utils/add-adjustment-layer'
 import {
   readAnimationPresets,
   saveAnimationPresets,
@@ -70,10 +62,6 @@ const presetsByCategory = MOTION_PRESET_CATEGORIES.reduce(
 
 function isTimelineItem(item: TimelineItem | undefined): item is TimelineItem {
   return Boolean(item)
-}
-
-function hasWaveformData(item: TimelineItem): item is AudioItem & { waveformData: number[] } {
-  return item.type === 'audio' && Array.isArray(item.waveformData) && item.waveformData.length > 0
 }
 
 interface GeneratorControlProps {
@@ -522,97 +510,6 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
     toast.success(t('editor.motionGenerator.motionBaked', { count: baked }))
   }, [canvas, keyframesByItemId, selectedItems, t])
 
-  const handleCreateTriggerWaveLayer = useCallback(() => {
-    const effects = createTriggerWaveMotionLayerEffects(generatorSettings)
-    const created = addAdjustmentLayer(effects, TRIGGER_WAVE_MOTION_LAYER_LABEL)
-    if (!created) {
-      toast.warning(t('editor.motionGenerator.triggerWaveFailed'))
-      return
-    }
-
-    const createdItemId = useSelectionStore.getState().selectedItemIds[0]
-    const createdItem = createdItemId ? useItemsStore.getState().itemById[createdItemId] : null
-    if (!createdItem || createdItem.type !== 'adjustment') {
-      toast.warning(t('editor.motionGenerator.triggerWaveFailed'))
-      return
-    }
-
-    const triggerWaveEffect = createdItem.effects?.find(
-      (entry) =>
-        entry.effect.type === 'gpu-effect' && entry.effect.gpuEffectType === 'gpu-trigger-wave',
-    )
-    if (!triggerWaveEffect) {
-      toast.warning(t('editor.motionGenerator.triggerWaveFailed'))
-      return
-    }
-
-    const payloads = buildTriggerWaveMotionLayerKeyframes({
-      itemId: createdItem.id,
-      effectId: triggerWaveEffect.id,
-      durationInFrames: createdItem.durationInFrames,
-      fps: canvas.fps,
-      settings: generatorSettings,
-    })
-    addKeyframes(payloads)
-    toast.success(t('editor.motionGenerator.triggerWaveCreated'))
-  }, [addKeyframes, canvas.fps, generatorSettings, t])
-
-  const handleCreateAudioTriggerWaveLayer = useCallback(() => {
-    const audioItem = selectedItems.find(hasWaveformData)
-    if (!audioItem) {
-      toast.warning(t('editor.motionGenerator.audioTriggerWaveNoWaveform'))
-      return
-    }
-
-    const beats = detectAudioReactiveBeats({
-      waveformData: audioItem.waveformData,
-      durationInFrames: audioItem.durationInFrames,
-      fps: canvas.fps,
-      sensitivity: generatorSettings.intensityScale,
-    })
-    if (beats.length === 0) {
-      toast.warning(t('editor.motionGenerator.audioTriggerWaveNoBeats'))
-      return
-    }
-
-    const effects = createTriggerWaveMotionLayerEffects(generatorSettings)
-    const created = addAdjustmentLayer(effects, TRIGGER_WAVE_MOTION_LAYER_LABEL, {
-      from: audioItem.from,
-      durationInFrames: audioItem.durationInFrames,
-    })
-    if (!created) {
-      toast.warning(t('editor.motionGenerator.triggerWaveFailed'))
-      return
-    }
-
-    const createdItemId = useSelectionStore.getState().selectedItemIds[0]
-    const createdItem = createdItemId ? useItemsStore.getState().itemById[createdItemId] : null
-    if (!createdItem || createdItem.type !== 'adjustment') {
-      toast.warning(t('editor.motionGenerator.triggerWaveFailed'))
-      return
-    }
-
-    const triggerWaveEffect = createdItem.effects?.find(
-      (entry) =>
-        entry.effect.type === 'gpu-effect' && entry.effect.gpuEffectType === 'gpu-trigger-wave',
-    )
-    if (!triggerWaveEffect) {
-      toast.warning(t('editor.motionGenerator.triggerWaveFailed'))
-      return
-    }
-
-    // Procedural: store the sparse beats + envelope as an audio-pulse modulation
-    // on the effect, evaluated at render time — no baked per-beat keyframes.
-    const modulation = createAudioPulseModulation({
-      beats,
-      durationInFrames: createdItem.durationInFrames,
-      fps: canvas.fps,
-      settings: generatorSettings,
-    })
-    setEffectAudioPulse(createdItem.id, triggerWaveEffect.id, modulation)
-    toast.success(t('editor.motionGenerator.audioTriggerWaveCreated', { count: beats.length }))
-  }, [canvas.fps, generatorSettings, selectedItems, t])
-
   const handleDelete = useCallback(
     async (preset: AnimationPreset) => {
       if (!projectId) return
@@ -660,7 +557,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex h-full w-60 min-w-0 flex-col border-l border-border bg-background">
+      <div className="flex h-full w-72 min-w-0 flex-col border-l border-border bg-background">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-xs font-medium text-muted-foreground">
             {t('editor.animatePresets.title')}
@@ -687,7 +584,8 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
         </div>
 
         <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-4 p-3">
+          {/* Extra right padding clears the overlay scrollbar so values aren't clipped. */}
+          <div className="flex flex-col gap-4 p-3 pr-4">
             <section className="flex flex-col gap-2 rounded-md border border-border/60 p-2">
               <h3 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 {t('editor.motionGenerator.title')}
@@ -719,36 +617,6 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
                 step={1}
                 onChange={(value) => updateGeneratorSetting('staggerFrames', value)}
               />
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-muted-foreground">
-                  {t('editor.motionGenerator.triggerWaveColor')}
-                </span>
-                <ColorPicker
-                  color={generatorSettings.triggerWaveColor ?? '#2e6b8c'}
-                  onChange={(value) => updateGeneratorSetting('triggerWaveColor', value)}
-                  onLiveChange={(value) => updateGeneratorSetting('triggerWaveColor', value)}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="mt-1 h-7 justify-start gap-1.5 px-2 text-[11px]"
-                onClick={handleCreateTriggerWaveLayer}
-              >
-                <WandSparkles className="h-3.5 w-3.5" />
-                {t('editor.motionGenerator.triggerWaveLayer')}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="h-7 justify-start gap-1.5 px-2 text-[11px]"
-                onClick={handleCreateAudioTriggerWaveLayer}
-              >
-                <WandSparkles className="h-3.5 w-3.5" />
-                {t('editor.motionGenerator.audioTriggerWaveLayer')}
-              </Button>
               <div className="flex flex-col gap-1 pt-1">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   {t('editor.motionGenerator.modulatorsTitle')}
