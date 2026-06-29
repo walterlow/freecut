@@ -145,6 +145,9 @@
     "gpu-rgb-split": {
       "name": "RGB Split"
     },
+    "gpu-trigger-wave": {
+      "name": "Trigger Wave"
+    },
     "gpu-twirl": {
       "name": "Twirl"
     },
@@ -278,6 +281,12 @@
     "amplitudeY": "Vertical Amp",
     "frequencyX": "Horizontal Freq",
     "frequencyY": "Vertical Freq",
+    "frequency": "Frequency",
+    "decay": "Decay",
+    "phase": "Phase",
+    "chroma": "Chroma",
+    "scanlineMix": "Scanlines",
+    "glowColor": "Glow Color",
     "colorFront": "Front Color",
     "originalColors": "Original Colors",
     "inverted": "Inverted",
