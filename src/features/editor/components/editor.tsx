@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react'
-import { useNavigate, useRouter } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { createLogger } from '@/shared/logging/logger'
 import { i18n } from '@/i18n'
@@ -56,7 +56,6 @@ import {
   createProjectUpgradeBackup,
   formatProjectUpgradeBackupName,
 } from '@/features/editor/deps/projects'
-import { ProjectUpgradeDialog } from './project-upgrade-dialog'
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog'
 import { useTtsGenerateDialogStore } from '@/shared/state/tts-generate-dialog'
 import { useProjectMediaMatchDialogStore } from '@/shared/state/project-media-match-dialog'
@@ -179,13 +178,19 @@ interface EditorProps {
 }
 
 /**
+ * Tracks projects whose upgrade backup has already been started this session.
+ * Module-scoped so it survives StrictMode's double effect invocation and any
+ * remount — without it the auto-backup runs twice and creates duplicate backups.
+ */
+const startedUpgradeBackups = new Set<string>()
+
+/**
  * Video Editor entrypoint.
- * Shows an explicit backup-and-upgrade prompt for legacy projects before loading editor state.
+ * Legacy projects are upgraded automatically: a backup on the original schema is
+ * snapshotted first (best-effort safety net), then the editor loads. No prompt.
  */
 export const Editor = memo(function Editor({ projectId, project, migration }: EditorProps) {
-  const navigate = useNavigate()
   const [upgradeApproved, setUpgradeApproved] = useState(!migration.requiresUpgrade)
-  const [isPreparingUpgrade, setIsPreparingUpgrade] = useState(false)
   const backupName = formatProjectUpgradeBackupName(
     project.name,
     migration.storedSchemaVersion,
@@ -194,49 +199,49 @@ export const Editor = memo(function Editor({ projectId, project, migration }: Ed
 
   useEffect(() => {
     setUpgradeApproved(!migration.requiresUpgrade)
-    setIsPreparingUpgrade(false)
   }, [migration.requiresUpgrade, projectId])
 
-  const handleCancelUpgrade = useCallback(() => {
-    navigate({ to: '/projects' })
-  }, [navigate])
+  // Auto-backup then auto-upgrade. The backup keeps the pre-upgrade project on its
+  // original schema; loading proceeds regardless so the user is never blocked.
+  useEffect(() => {
+    if (!migration.requiresUpgrade || upgradeApproved) return
+    // Guard against duplicate backups (StrictMode re-invokes effects, and the
+    // async create can't be cancelled once started).
+    if (startedUpgradeBackups.has(projectId)) return
+    startedUpgradeBackups.add(projectId)
 
-  const handleConfirmUpgrade = useCallback(async () => {
-    setIsPreparingUpgrade(true)
-
-    try {
-      const backup = await createProjectUpgradeBackup(projectId, {
-        fromVersion: migration.storedSchemaVersion,
-        toVersion: migration.currentSchemaVersion,
-        backupName,
-      })
-      toast.success(i18n.t('editor.editor.backupCreated'), {
-        description: backup.name,
-      })
-      setUpgradeApproved(true)
-    } catch (error) {
-      logger.error('Failed to create upgrade backup:', error)
-      toast.error(i18n.t('editor.editor.backupFailed'), {
-        description: error instanceof Error ? error.message : i18n.t('editor.editor.tryAgain'),
-      })
-    } finally {
-      setIsPreparingUpgrade(false)
-    }
-  }, [backupName, migration.currentSchemaVersion, migration.storedSchemaVersion, projectId])
+    void (async () => {
+      try {
+        const backup = await createProjectUpgradeBackup(projectId, {
+          fromVersion: migration.storedSchemaVersion,
+          toVersion: migration.currentSchemaVersion,
+          backupName,
+        })
+        toast.success(i18n.t('editor.editor.backupCreated'), { description: backup.name })
+      } catch (error) {
+        logger.error('Failed to create upgrade backup:', error)
+        toast.error(i18n.t('editor.editor.backupFailed'), {
+          description: error instanceof Error ? error.message : i18n.t('editor.editor.tryAgain'),
+        })
+      } finally {
+        setUpgradeApproved(true)
+      }
+    })()
+  }, [
+    migration.requiresUpgrade,
+    migration.storedSchemaVersion,
+    migration.currentSchemaVersion,
+    upgradeApproved,
+    projectId,
+    backupName,
+  ])
 
   if (!upgradeApproved) {
     return (
-      <div className="min-h-screen bg-background">
-        <ProjectUpgradeDialog
-          open
-          projectName={project.name}
-          storedSchemaVersion={migration.storedSchemaVersion}
-          currentSchemaVersion={migration.currentSchemaVersion}
-          backupName={backupName}
-          isUpgrading={isPreparingUpgrade}
-          onCancel={handleCancelUpgrade}
-          onConfirm={handleConfirmUpgrade}
-        />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">
+          {i18n.t('editor.editor.upgrading', { defaultValue: 'Upgrading project…' })}
+        </div>
       </div>
     )
   }

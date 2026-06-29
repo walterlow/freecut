@@ -22,6 +22,49 @@ import type { KeyframeMeta } from './dopesheet-types'
 type FrameGroup = DopesheetPropertyGroupStructure['frameGroups'][number]
 type StructureRow = { property: AnimatableProperty; keyframes: Keyframe[] }
 
+interface ConnectorSegment {
+  key: string
+  left: number
+  width: number
+  /** True when the value is held across the span (no interpolation). */
+  held: boolean
+}
+
+/**
+ * Build the horizontal segments drawn between consecutive keyframes. A segment
+ * communicates that a property is *animating* across that span; a `held`
+ * segment (the `from` keyframe uses `hold` easing) is dashed to show the value
+ * is parked until the next keyframe.
+ */
+function buildConnectorSegments(
+  points: Array<{ id: string; frame: number; x: number; held: boolean }>,
+): ConnectorSegment[] {
+  const sorted = [...points].sort((a, b) => a.frame - b.frame)
+  return sorted.flatMap((point, index) => {
+    const next = sorted[index + 1]
+    if (!next) return []
+    const left = Math.min(point.x, next.x)
+    const width = Math.abs(next.x - point.x)
+    if (width <= 0) return []
+    return [{ key: point.id, left, width, held: point.held }]
+  })
+}
+
+function KeyframeConnectors({ segments }: { segments: ConnectorSegment[] }) {
+  return segments.map((segment) => (
+    <div
+      key={segment.key}
+      className={cn(
+        'pointer-events-none absolute z-0 -translate-y-1/2',
+        segment.held
+          ? 'border-t border-dashed border-neutral-500/50'
+          : 'h-px bg-neutral-400/50',
+      )}
+      style={{ left: segment.left, width: segment.width, top: '50%' }}
+    />
+  ))
+}
+
 interface GroupTimelineCellProps {
   groupId: string
   groupLabel: string
@@ -66,6 +109,22 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
     sheetPreviewFrames,
     sheetPreviewDuplicateKeyframeIds,
   })
+  const renderedFrameGroups = sheetPreviewDuplicateKeyframeIds ? frameGroups : displayedFrameGroups
+  const connectorSegments = buildConnectorSegments(
+    renderedFrameGroups.flatMap((frameGroup) => {
+      const x = getRenderedKeyframeX(frameGroup.frame)
+      if (x === null) return []
+      return [
+        {
+          id: `${groupId}-${frameGroup.frame}`,
+          frame: frameGroup.frame,
+          x,
+          // A group span only "holds" if every property parks across it.
+          held: frameGroup.keyframes.every(({ keyframe }) => keyframe.easing === 'hold'),
+        },
+      ]
+    }),
+  )
 
   return (
     <div
@@ -76,11 +135,13 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
         <div
           key={`${groupId}-tick-${frame}`}
           className="absolute inset-y-0 border-l border-border/30 pointer-events-none"
-          style={{ left: frameToX(frame) }}
+          style={{ left: Math.round(frameToX(frame)) }}
         />
       ))}
 
-      {(sheetPreviewDuplicateKeyframeIds ? frameGroups : displayedFrameGroups).map((frameGroup) => {
+      <KeyframeConnectors segments={connectorSegments} />
+
+      {renderedFrameGroups.map((frameGroup) => {
         const renderedX = getRenderedKeyframeX(frameGroup.frame)
         if (renderedX === null) {
           return null
@@ -198,6 +259,14 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
 }: PropertyTimelineCellProps) {
   const { t } = useTranslation()
 
+  const connectorSegments = buildConnectorSegments(
+    keyframes.flatMap((keyframe) => {
+      const x = renderedKeyframeXById.get(keyframe.id)
+      if (x === undefined) return []
+      return [{ id: keyframe.id, frame: keyframe.frame, x, held: keyframe.easing === 'hold' }]
+    }),
+  )
+
   return (
     <div
       className="relative border-l border-border/60 overflow-hidden"
@@ -207,7 +276,7 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
         <div
           key={frame}
           className="absolute inset-y-0 border-l border-border/30 pointer-events-none"
-          style={{ left: frameToX(frame) }}
+          style={{ left: Math.round(frameToX(frame)) }}
         />
       ))}
 
@@ -221,6 +290,8 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
           }}
         />
       ))}
+
+      <KeyframeConnectors segments={connectorSegments} />
 
       {keyframes.map((keyframe) => {
         const renderedX = renderedKeyframeXById.get(keyframe.id)

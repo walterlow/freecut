@@ -4,6 +4,7 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
@@ -202,6 +203,8 @@ interface DopesheetEditorProps {
   /** Use the wider property column + value inputs (Animate workspace, where
    *  there is room). Defaults to the compact sidebar sizing. */
   spacious?: boolean
+  /** Named easing-preset controls rendered inline in the Parameters bar. */
+  easingControls?: ReactNode
   /** Additional class name */
   className?: string
 }
@@ -257,6 +260,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   disabled = false,
   visualizationMode = 'dopesheet',
   spacious = false,
+  easingControls = null,
   className,
 }: DopesheetEditorProps) {
   const { t } = useTranslation()
@@ -290,9 +294,23 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     string[] | null
   >(null)
 
+  const keyframeFrameBounds = useMemo(() => {
+    let min = Infinity
+    let max = -Infinity
+    for (const list of Object.values(keyframesByProperty)) {
+      for (const keyframe of list ?? []) {
+        if (keyframe.frame < min) min = keyframe.frame
+        if (keyframe.frame > max) max = keyframe.frame
+      }
+    }
+    return max >= min ? { min, max } : null
+  }, [keyframesByProperty])
+
   const { viewport, updateViewport, normalizeViewport, contentFrameMax, minViewportFrames } =
     useDopesheetViewport({
+      itemId,
       totalFrames,
+      keyframeFrameBounds,
       frameViewport,
       onFrameViewportChange,
     })
@@ -302,6 +320,14 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const availableProperties = useMemo(
     () => Object.keys(keyframesByProperty) as AnimatableProperty[],
     [keyframesByProperty],
+  )
+  // Properties with an actual curve to draw (>= 2 keyframes). The graph picks a
+  // default from these so it isn't blank when the selected/first property only
+  // has a single keyframe.
+  const graphableProperties = useMemo(
+    () =>
+      availableProperties.filter((property) => (keyframesByProperty[property]?.length ?? 0) >= 2),
+    [availableProperties, keyframesByProperty],
   )
   const allPropertyGroups = useMemo(
     () => getPropertyAccordionGroups(availableProperties),
@@ -338,6 +364,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   } = useGraphViewState({
     itemId,
     availableProperties,
+    graphableProperties,
     selectedProperty,
     onPropertyChange,
     onActivePropertyChange,
@@ -1737,34 +1764,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [flushPendingRulerScrub, onScrubEnd],
   )
 
+  // Standard scroll model, shared by the sheet-only and split-sheet panes:
+  // - Ctrl/Cmd+wheel zooms the time axis about the cursor.
+  // - Shift+wheel / trackpad horizontal swipe pans the time axis.
+  // - Plain vertical wheel is left to bubble so the property rows scroll
+  //   natively (their container is `overflow-auto`); it never hijacks the time
+  //   axis.
   const handleWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      if (disabled) return
-      event.preventDefault()
-      if (event.ctrlKey || event.metaKey) {
-        const pivotFrame = getFrameFromClientX(event.clientX)
-        if (event.deltaY > 0) {
-          zoomAroundFrame(pivotFrame, ZOOM_OUT_FACTOR)
-        } else {
-          zoomAroundFrame(pivotFrame, ZOOM_IN_FACTOR)
-        }
-        return
-      }
-
-      const deltaFrames = Math.round((event.deltaY / effectiveTimelineWidth) * frameRange)
-      panFrames(deltaFrames)
-    },
-    [disabled, getFrameFromClientX, zoomAroundFrame, panFrames, effectiveTimelineWidth, frameRange],
-  )
-
-  // Split-view sheet wheel. The two panes share one horizontal time axis but
-  // scroll differently on the vertical axis: the sheet scrolls property rows,
-  // the graph zooms its value axis. So over the sheet a plain vertical wheel
-  // must scroll rows (not hijack the shared time axis), while time zoom/pan
-  // stays reachable via Ctrl (zoom) and horizontal intent (Shift / trackpad
-  // swipe). Only when the rows can't travel further do we fall back to panning
-  // time, so the gesture never dead-ends.
-  const handleSplitSheetWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
       if (disabled) return
 
@@ -1782,30 +1788,34 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         return
       }
 
-      const node = scrollAreaRef.current
-      if (node && node.scrollHeight > node.clientHeight + 1) {
-        const atTop = node.scrollTop <= 0
-        const atBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 1
-        const pastBound = (event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)
-        if (!pastBound) {
-          // Let the inner overflow-auto scroll the rows natively.
-          return
-        }
-      }
-
-      event.preventDefault()
-      panFrames(Math.round((event.deltaY / effectiveTimelineWidth) * frameRange))
+      // Plain vertical wheel: let the rows scroll natively (no preventDefault).
     },
     [disabled, getFrameFromClientX, zoomAroundFrame, panFrames, effectiveTimelineWidth, frameRange],
   )
 
   const graphDisplayProperty = useMemo(() => {
     if (graphVisibleProperties.size === 0) return null
+    const graphableSet = new Set(graphableProperties)
+    // Honour the selection when it has a drawable curve.
+    if (
+      activeSelectedProperty &&
+      graphVisibleProperties.has(activeSelectedProperty) &&
+      graphableSet.has(activeSelectedProperty)
+    ) {
+      return activeSelectedProperty
+    }
+    // Otherwise show the first visible property that actually has a curve, so the
+    // graph isn't blank when the selection is a single-keyframe property.
+    const graphableVisible = [...graphVisibleProperties].find((property) =>
+      graphableSet.has(property),
+    )
+    if (graphableVisible) return graphableVisible
+    // Fall back to the selection even without a full curve.
     if (activeSelectedProperty && graphVisibleProperties.has(activeSelectedProperty)) {
       return activeSelectedProperty
     }
     return null
-  }, [activeSelectedProperty, graphVisibleProperties])
+  }, [activeSelectedProperty, graphVisibleProperties, graphableProperties])
   const graphDisplayPropertyLocked = graphDisplayProperty
     ? isPropertyLocked(graphDisplayProperty)
     : false
@@ -1931,7 +1941,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         <div
           key={frame}
           className="absolute inset-y-0 border-l border-border/60"
-          style={{ left: frameToX(frame) }}
+          style={{ left: Math.round(frameToX(frame)) }}
         >
           <span className="absolute top-0.5 left-1 text-[10px] text-muted-foreground">
             {formatRulerTick(frame)}
@@ -2938,14 +2948,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {showGraphPane && (
-            <DopesheetInterpolationButtons
-              options={interpolationOptions}
-              selected={selectedInterpolation}
-              disabled={disabled || interpolationDisabled}
-              onSelect={onInterpolationChange}
-            />
-          )}
+          <DopesheetInterpolationButtons
+            options={interpolationOptions}
+            selected={selectedInterpolation}
+            disabled={disabled || interpolationDisabled}
+            onSelect={onInterpolationChange}
+          />
+          {easingControls}
           <DopesheetClipboardActions
             disabled={disabled}
             hasSelection={selectedRefs.length > 0}
@@ -2997,10 +3006,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             {/* Sheet on top, curve/graph below, with ONE shared playhead line
                 ({splitPlayheadOverlayElement}) drawn over both panes so they
                 stay identical in position and appearance. */}
-            <div
-              className="relative min-h-0 flex-1 overflow-hidden"
-              onWheel={handleSplitSheetWheel}
-            >
+            <div className="relative min-h-0 flex-1 overflow-hidden" onWheel={handleWheel}>
               {sheetBodyElement}
             </div>
             <div className="min-h-0 flex-1 overflow-hidden border-t border-border/60">

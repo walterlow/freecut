@@ -382,6 +382,7 @@
     },
     "editor": {
       "appLabel": "FreeCut 비디오 편집기",
+      "upgrading": "프로젝트 업그레이드 중…",
       "backupCreated": "업그레이드 전 백업이 생성되었습니다",
       "backupFailed": "업그레이드 전 백업 생성에 실패했습니다",
       "tryAgain": "다시 시도하세요.",

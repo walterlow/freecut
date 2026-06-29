@@ -1,8 +1,10 @@
 /**
- * Graph wheel hook.
- * Owns the wheel handler: Ctrl/Cmd+wheel zooms about the mouse,
- * plain wheel pans the frame axis. Gates against active drags via
- * shared refs so the wheel does not interrupt a pointer drag in flight.
+ * Graph wheel hook. Standard scroll model:
+ * - Ctrl/Cmd+wheel zooms the time axis about the mouse.
+ * - Shift+wheel / trackpad horizontal swipe pans the time axis.
+ * - Plain wheel pans the value (vertical) axis.
+ * Gates against active drags via shared refs so the wheel does not interrupt a
+ * pointer drag in flight.
  */
 
 import { useCallback, useEffect, useRef } from 'react'
@@ -16,7 +18,9 @@ import {
 
 interface GraphDimensionsSlice {
   graphWidth: number
+  graphHeight: number
   frameRange: number
+  valueRange: number
 }
 
 interface UseGraphWheelOptions {
@@ -63,9 +67,10 @@ export function useGraphWheel({
       const mouseX = event.clientX - rect.left
       const mouseY = event.clientY - rect.top
 
-      const { frameRange } = graphDimensions
+      const { frameRange, graphWidth, graphHeight, valueRange } = graphDimensions
       const { frame: mouseFrame } = screenToGraph(mouseX, mouseY)
 
+      // Ctrl/Cmd → zoom the time axis about the cursor.
       if (event.ctrlKey || event.metaKey) {
         const zoomFactor = event.deltaY > 0 ? FRAME_ZOOM_OUT_FACTOR : FRAME_ZOOM_IN_FACTOR
         const newFrameRange = frameRange * zoomFactor
@@ -87,14 +92,29 @@ export function useGraphWheel({
         return
       }
 
-      const deltaFrames = Math.round(
-        (event.deltaY / Math.max(1, graphDimensions.graphWidth)) * frameRange,
-      )
+      // Shift / trackpad horizontal swipe → pan the time axis.
+      const horizontalDelta =
+        event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0
+      if (horizontalDelta !== 0) {
+        const deltaFrames = Math.round((horizontalDelta / Math.max(1, graphWidth)) * frameRange)
+        onViewportChangeRef.current?.(
+          clampViewportToBounds({
+            ...viewport,
+            startFrame: viewport.startFrame + deltaFrames,
+            endFrame: viewport.endFrame + deltaFrames,
+          }),
+        )
+        return
+      }
+
+      // Plain wheel → pan the value (vertical) axis. A no-op when the value axis
+      // is fully fit; meaningful once it's zoomed via the vertical-zoom control.
+      const deltaValue = (event.deltaY / Math.max(1, graphHeight)) * valueRange
       onViewportChangeRef.current?.(
         clampViewportToBounds({
           ...viewport,
-          startFrame: viewport.startFrame + deltaFrames,
-          endFrame: viewport.endFrame + deltaFrames,
+          minValue: viewport.minValue - deltaValue,
+          maxValue: viewport.maxValue - deltaValue,
         }),
       )
     },

@@ -382,6 +382,7 @@
     },
     "editor": {
       "appLabel": "FreeCut Video Editörü",
+      "upgrading": "Proje yükseltiliyor…",
       "backupCreated": "Yükseltmeden önce yedek oluşturuldu",
       "backupFailed": "Yükseltmeden önce yedek oluşturulamadı",
       "tryAgain": "Lütfen tekrar deneyin.",

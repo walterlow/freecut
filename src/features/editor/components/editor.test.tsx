@@ -289,10 +289,6 @@ vi.mock('@/features/projects/utils/project-helpers', () => ({
   formatProjectUpgradeBackupName: () => 'Backup',
 }))
 
-vi.mock('./project-upgrade-dialog', () => ({
-  ProjectUpgradeDialog: () => null,
-}))
-
 import { LoadedEditor } from './editor'
 
 describe('LoadedEditor migration metadata refresh', () => {

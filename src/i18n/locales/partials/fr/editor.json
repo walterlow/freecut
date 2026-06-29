@@ -382,6 +382,7 @@
     },
     "editor": {
       "appLabel": "Éditeur vidéo FreeCut",
+      "upgrading": "Mise à niveau du projet…",
       "backupCreated": "Sauvegarde créée avant la mise à jour",
       "backupFailed": "Échec de la création de la sauvegarde avant la mise à jour",
       "tryAgain": "Veuillez réessayer.",

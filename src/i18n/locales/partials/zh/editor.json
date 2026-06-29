@@ -382,6 +382,7 @@
     },
     "editor": {
       "appLabel": "FreeCut 视频编辑器",
+      "upgrading": "正在升级项目…",
       "backupCreated": "升级前已创建备份",
       "backupFailed": "升级前创建备份失败",
       "tryAgain": "请重试。",

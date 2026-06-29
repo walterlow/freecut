@@ -52,14 +52,6 @@
         "easeInOut": "Ease In/Out",
         "easeOut": "Ease Out"
       },
-      "easingChips": "Curves",
-      "easingChip": {
-        "softOut": "Soft Out",
-        "smooth": "Smooth",
-        "snap": "Snap",
-        "overshoot": "Overshoot",
-        "spring": "Spring"
-      },
       "legend": {
         "trigger": "What do these icons mean?",
         "title": "Editor guide",

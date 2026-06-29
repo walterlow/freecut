@@ -382,6 +382,7 @@
     },
     "editor": {
       "appLabel": "FreeCut ビデオエディター",
+      "upgrading": "プロジェクトをアップグレード中…",
       "backupCreated": "アップグレード前にバックアップを作成しました",
       "backupFailed": "アップグレード前のバックアップ作成に失敗しました",
       "tryAgain": "もう一度お試しください。",
