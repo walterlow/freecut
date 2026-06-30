@@ -99,11 +99,12 @@ interface ContinuousMotionRowProps {
 }
 
 /**
- * One continuous-motion generator. Not applied → a button that applies it with
- * sensible defaults in one click. Applied → a flyout (popover) whose Intensity/
- * Duration sliders tune the LIVE modifier on the clip (preview updates as you
- * drag, one undo per gesture); the modifier is removed from inside the flyout.
- * No tuning happens before applying.
+ * One continuous-motion generator, rendered as an animated tile (the glyph
+ * demonstrates the motion on hover, mirroring the keyframe-preset grid). Not
+ * applied → click applies it with sensible defaults. Applied → the tile is a
+ * flyout (popover) whose Intensity/Duration sliders tune the LIVE modifier on
+ * the clip (preview updates as you drag, one undo per gesture) and remove it. No
+ * tuning happens before applying.
  */
 const ContinuousMotionRow = memo(function ContinuousMotionRow({
   modulator,
@@ -117,26 +118,34 @@ const ContinuousMotionRow = memo(function ContinuousMotionRow({
   t,
 }: ContinuousMotionRowProps) {
   const label = t(`editor.motionGenerator.modulators.${modulator.labelKey}`)
+  const tileBody = (
+    <>
+      <MotionPresetThumbnail thumbnail={modulator.thumbnail} />
+      <span className="w-full truncate text-center leading-tight">{label}</span>
+    </>
+  )
 
   if (!active) {
-    const button = (
-      <Button
+    const tile = (
+      <button
         type="button"
-        variant="outline"
-        size="sm"
-        className="h-7 w-full justify-start gap-1.5 px-2 text-[11px]"
         disabled={reason !== null}
         onClick={onApply}
+        className={cn(
+          'group flex h-full w-full flex-col items-center gap-1 rounded-md border border-border/60 p-1.5 text-[10px]',
+          reason !== null
+            ? 'cursor-not-allowed text-muted-foreground/50'
+            : 'text-muted-foreground hover:border-border hover:bg-secondary/40 hover:text-foreground',
+        )}
       >
-        <WandSparkles className="h-3.5 w-3.5" />
-        {label}
-      </Button>
+        {tileBody}
+      </button>
     )
-    if (!reason) return button
+    if (!reason) return tile
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span>{button}</span>
+          <div>{tile}</div>
         </TooltipTrigger>
         <TooltipContent>{reason}</TooltipContent>
       </Tooltip>
@@ -151,14 +160,12 @@ const ContinuousMotionRow = memo(function ContinuousMotionRow({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-7 w-full items-center gap-1.5 rounded-md border border-primary/60 bg-secondary/30 px-2 text-[11px] text-foreground hover:bg-secondary/50"
+          aria-label={t('editor.animateStages.liveBadge') + ' — ' + label}
+          className="group relative flex h-full w-full flex-col items-center gap-1 rounded-md border border-primary/60 bg-secondary/30 p-1.5 text-[10px] text-foreground hover:bg-secondary/50"
         >
-          <WandSparkles className="h-3.5 w-3.5" />
-          {label}
-          <span className="ml-auto rounded bg-primary/15 px-1 text-[9px] font-medium uppercase tracking-wide text-primary">
-            {t('editor.animateStages.liveBadge')}
-          </span>
-          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+          {/* Active dot — the tile is "live"; the flyout holds the controls. */}
+          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary shadow ring-1 ring-background" />
+          {tileBody}
         </button>
       </PopoverTrigger>
       <PopoverContent side="left" align="start" className="w-56 space-y-2 p-2">
@@ -891,7 +898,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
               title={t('editor.animateStages.continuousTitle')}
               hint={t('editor.animateStages.continuousHint')}
             >
-              <div className="grid grid-cols-1 gap-1">
+              <div className="grid grid-cols-3 gap-1.5">
                 {MOTION_MODULATORS.map((modulator) => (
                   <ContinuousMotionRow
                     key={modulator.id}

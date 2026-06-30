@@ -167,6 +167,44 @@
   }
 }
 
+/* Micro shake = the modulator (distinct from the bigger .mp-shake preset). A
+   small, fast, organic 2D jitter matching evaluateMicroShake's smooth value
+   noise: x wander ~1.8x wider than y, a tiny ±2° rotation, kept deliberately
+   small so it reads as "micro". Built from summed integer-harmonic sines so it
+   loops with no seam. */
+.mp-micro-shake {
+  animation-name: mp-micro-shake;
+  animation-duration: 0.8s;
+  animation-timing-function: linear;
+}
+@keyframes mp-micro-shake {
+  0% { transform: translate(0.89px, 0.73px) rotate(1.26deg); }
+  4.167% { transform: translate(0.43px, -0.03px) rotate(0.24deg); }
+  8.333% { transform: translate(0.39px, -0.98px) rotate(0.51deg); }
+  12.5% { transform: translate(1.49px, 0.04px) rotate(-0.88deg); }
+  16.667% { transform: translate(0.35px, -0.16px) rotate(-1.77deg); }
+  20.833% { transform: translate(-1.67px, 0.48px) rotate(0.64deg); }
+  25% { transform: translate(-0.98px, 0.86px) rotate(1.26deg); }
+  29.167% { transform: translate(0.05px, -0.61px) rotate(0.24deg); }
+  33.333% { transform: translate(-0.55px, -0.30px) rotate(0.51deg); }
+  37.5% { transform: translate(0.23px, -0.36px) rotate(-0.88deg); }
+  41.667% { transform: translate(1.93px, -0.29px) rotate(-1.77deg); }
+  45.833% { transform: translate(0.90px, 1.06px) rotate(0.64deg); }
+  50% { transform: translate(-0.89px, 0.17px) rotate(1.26deg); }
+  54.167% { transform: translate(-0.43px, -0.21px) rotate(0.24deg); }
+  58.333% { transform: translate(-0.39px, -0.17px) rotate(0.51deg); }
+  62.5% { transform: translate(-1.49px, -0.94px) rotate(-0.88deg); }
+  66.667% { transform: translate(-0.35px, 0.40px) rotate(-1.77deg); }
+  70.833% { transform: translate(1.67px, 0.67px) rotate(0.64deg); }
+  75% { transform: translate(0.98px, 0.04px) rotate(1.26deg); }
+  79.167% { transform: translate(-0.05px, 0.36px) rotate(0.24deg); }
+  83.333% { transform: translate(0.55px, -0.85px) rotate(0.51deg); }
+  87.5% { transform: translate(-0.23px, -0.54px) rotate(-0.88deg); }
+  91.667% { transform: translate(-1.93px, 0.53px) rotate(-1.77deg); }
+  95.833% { transform: translate(-0.90px, 0.09px) rotate(0.64deg); }
+  100% { transform: translate(0.89px, 0.73px) rotate(1.26deg); }
+}
+
 .mp-wobble {
   animation-name: mp-wobble;
 }
@@ -181,6 +219,45 @@
   75% {
     transform: rotate(-12deg);
   }
+}
+
+/* Float drift = a gentle SWAY around the center pivot (rotation, the dominant
+   visual on a full-frame clip — a tiny tilt sweeps the edges further than the
+   positional drift) plus a subtle float. Rotation pivots around the shape center
+   (default transform-origin) and runs at HALF the float frequency (real motion is
+   rot = -sin(ωt/2)), so the loop spans two float circles per sway cycle. The
+   tilt is amplified to read on a 13px glyph; the float is kept small. */
+.mp-drift {
+  animation-name: mp-drift;
+  animation-duration: 3.2s;
+  animation-timing-function: linear;
+}
+@keyframes mp-drift {
+  0% { transform: translate(3px, 0px) rotate(0deg); }
+  4.167% { transform: translate(2.6px, 1.5px) rotate(-4.14deg); }
+  8.333% { transform: translate(1.5px, 2.6px) rotate(-8deg); }
+  12.5% { transform: translate(0px, 3px) rotate(-11.31deg); }
+  16.667% { transform: translate(-1.5px, 2.6px) rotate(-13.86deg); }
+  20.833% { transform: translate(-2.6px, 1.5px) rotate(-15.45deg); }
+  25% { transform: translate(-3px, 0px) rotate(-16deg); }
+  29.167% { transform: translate(-2.6px, -1.5px) rotate(-15.45deg); }
+  33.333% { transform: translate(-1.5px, -2.6px) rotate(-13.86deg); }
+  37.5% { transform: translate(0px, -3px) rotate(-11.31deg); }
+  41.667% { transform: translate(1.5px, -2.6px) rotate(-8deg); }
+  45.833% { transform: translate(2.6px, -1.5px) rotate(-4.14deg); }
+  50% { transform: translate(3px, 0px) rotate(0deg); }
+  54.167% { transform: translate(2.6px, 1.5px) rotate(4.14deg); }
+  58.333% { transform: translate(1.5px, 2.6px) rotate(8deg); }
+  62.5% { transform: translate(0px, 3px) rotate(11.31deg); }
+  66.667% { transform: translate(-1.5px, 2.6px) rotate(13.86deg); }
+  70.833% { transform: translate(-2.6px, 1.5px) rotate(15.45deg); }
+  75% { transform: translate(-3px, 0px) rotate(16deg); }
+  79.167% { transform: translate(-2.6px, -1.5px) rotate(15.45deg); }
+  83.333% { transform: translate(-1.5px, -2.6px) rotate(13.86deg); }
+  87.5% { transform: translate(0px, -3px) rotate(11.31deg); }
+  91.667% { transform: translate(1.5px, -2.6px) rotate(8deg); }
+  95.833% { transform: translate(2.6px, -1.5px) rotate(4.14deg); }
+  100% { transform: translate(3px, 0px) rotate(0deg); }
 }
 
 .mp-wiggle {

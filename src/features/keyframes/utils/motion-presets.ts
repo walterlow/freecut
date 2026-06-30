@@ -67,7 +67,18 @@ export type MotionPresetId =
  * (e.g. all four slide directions reuse the `slide` thumbnail with an angle).
  */
 export interface MotionThumbnail {
-  kind: 'fade' | 'slide' | 'scale' | 'spin' | 'bounce' | 'pulse' | 'shake' | 'wobble' | 'wiggle'
+  kind:
+    | 'fade'
+    | 'slide'
+    | 'scale'
+    | 'spin'
+    | 'bounce'
+    | 'pulse'
+    | 'shake'
+    | 'wobble'
+    | 'wiggle'
+    | 'drift'
+    | 'micro-shake'
   /** Direction in degrees for `slide` (0 = →, 90 = ↓, 180 = ←, 270 = ↑). */
   angle?: number
   /** `1` grows, `-1` shrinks — for `scale`. */
