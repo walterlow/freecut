@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { ResolvedTransform } from '@/types/transform'
 import type { AudioPulseModulation } from '@/types/effects'
 import type { MotionModifier } from '@/types/motion'
+import type { TimelineItem } from '@/types/timeline'
 import { applyMotionModifiers } from './motion-modifier-eval'
-import { bakeMotionModifiersToKeyframes, bakeAudioPulseToKeyframes } from './bake-motion'
+import {
+  bakeMotionModifiersToKeyframes,
+  bakeAudioPulseToKeyframes,
+  buildBakeMotionPlan,
+} from './bake-motion'
 
 const baseTransform: ResolvedTransform = {
   x: 100,
@@ -99,6 +104,40 @@ describe('bake motion modifiers to keyframes', () => {
     })
     expect(result.keyframes).toEqual([])
     expect(result.properties).toEqual([])
+  })
+})
+
+describe('buildBakeMotionPlan', () => {
+  it('builds one entry per clip with procedural motion, skipping the rest', () => {
+    const animated = {
+      id: 'a',
+      durationInFrames: 120,
+      motionModifiers: [modifier({ type: 'float-drift' })],
+      effects: [],
+    } as unknown as TimelineItem
+    const plain = {
+      id: 'b',
+      durationInFrames: 120,
+      motionModifiers: [],
+      effects: [],
+    } as unknown as TimelineItem
+
+    const plan = buildBakeMotionPlan({
+      items: [animated, plain],
+      keyframesByItemId: {},
+      fps: 30,
+      frameWidth: 1920,
+      frameHeight: 1080,
+      resolveBase: () => baseTransform,
+    })
+
+    expect(plan).toHaveLength(1)
+    const entry = plan[0]!
+    expect(entry.itemId).toBe('a')
+    expect(entry.clearMotionModifiers).toBe(true)
+    expect(new Set(entry.clearProperties)).toEqual(new Set(['x', 'y', 'rotation']))
+    expect(entry.keyframes.length).toBeGreaterThan(0)
+    expect(entry.keyframes.every((kf) => kf.itemId === 'a' && kf.easing === 'linear')).toBe(true)
   })
 })
 

@@ -26,6 +26,9 @@
       "noKeyframesToDisplay": "표시할 키프레임이 없습니다",
       "proceduralMotionHint": "이 클립에는 연속 모션(드리프트, 브레스, 셰이크 또는 오디오 펄스)이 있습니다 — 키프레임으로 편집하려면 베이크하세요.",
       "proceduralBand": "생성된 모션 — 베이크하면 키프레임으로 편집할 수 있습니다",
+      "bakeMotion": "모션 베이크",
+      "bakeMotionHint": "이 클립의 생성된 모션을 편집 가능한 키프레임으로 변환합니다",
+      "motionBaked": "{{count}}개 클립의 모션을 베이크했습니다",
       "transitionBlocked": "전환 구간 안에는 키프레임을 추가할 수 없습니다 — 재생 헤드를 강조된 영역 밖으로 옮기세요.",
       "transitionBlockedPill": "전환 구간",
       "emptyState": {

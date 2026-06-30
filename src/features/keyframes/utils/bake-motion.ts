@@ -10,6 +10,7 @@
 
 import type { ResolvedTransform } from '@/types/transform'
 import type { AudioPulseModulation } from '@/types/effects'
+import type { TimelineItem } from '@/types/timeline'
 import type { AudioReactiveTarget, MotionModifier, MotionModifierType } from '@/types/motion'
 import {
   buildEffectAnimatableProperty,
@@ -191,4 +192,84 @@ export function bakeAudioPulseToKeyframes(params: {
 
 function prop(effectId: string, paramKey: string): AnimatableProperty {
   return buildEffectAnimatableProperty('gpu-trigger-wave', effectId, paramKey)
+}
+
+/** A single item's bake instructions: keyframes to add + procedural to drop. */
+export interface BakeMotionPlanEntry {
+  itemId: string
+  keyframes: Array<{
+    itemId: string
+    property: AnimatableProperty
+    frame: number
+    value: number
+    easing: 'linear'
+  }>
+  clearProperties: AnimatableProperty[]
+  clearMotionModifiers: boolean
+  clearAudioPulseEffectIds: string[]
+}
+
+/**
+ * Build the bake plan for the given items — sampling enabled motion modifiers
+ * and audio-pulse effects into keyframes. Pure: the caller injects `resolveBase`
+ * (which needs canvas + source dims) so this stays free of render/store deps.
+ * Feed the result straight to the `bakeMotionToKeyframes` action.
+ */
+export function buildBakeMotionPlan(params: {
+  items: readonly TimelineItem[]
+  keyframesByItemId: Record<string, ItemKeyframes>
+  fps: number
+  frameWidth: number
+  frameHeight: number
+  resolveBase: (item: TimelineItem) => ResolvedTransform
+}): BakeMotionPlanEntry[] {
+  const { items, keyframesByItemId, fps, frameWidth, frameHeight, resolveBase } = params
+
+  return items.flatMap((item) => {
+    const enabledModifiers = item.motionModifiers?.filter((modifier) => modifier.enabled) ?? []
+    const audioEffects = item.effects?.filter((effect) => effect.audioPulse?.enabled) ?? []
+    if (enabledModifiers.length === 0 && audioEffects.length === 0) return []
+
+    const itemKeyframes = keyframesByItemId[item.id]
+    const keyframes: BakeMotionPlanEntry['keyframes'] = []
+    const clearProperties = new Set<AnimatableProperty>()
+
+    if (enabledModifiers.length > 0) {
+      const baked = bakeMotionModifiersToKeyframes({
+        baseTransform: resolveBase(item),
+        keyframes: itemKeyframes,
+        modifiers: enabledModifiers,
+        durationInFrames: item.durationInFrames,
+        fps,
+        frameWidth,
+        frameHeight,
+      })
+      for (const property of baked.properties) clearProperties.add(property)
+      for (const keyframe of baked.keyframes) {
+        keyframes.push({ itemId: item.id, ...keyframe, easing: 'linear' })
+      }
+    }
+
+    for (const effect of audioEffects) {
+      const baked = bakeAudioPulseToKeyframes({
+        effectId: effect.id,
+        modulation: effect.audioPulse!,
+        durationInFrames: item.durationInFrames,
+      })
+      for (const keyframe of baked) {
+        clearProperties.add(keyframe.property)
+        keyframes.push({ itemId: item.id, ...keyframe, easing: 'linear' })
+      }
+    }
+
+    return [
+      {
+        itemId: item.id,
+        keyframes,
+        clearProperties: [...clearProperties],
+        clearMotionModifiers: enabledModifiers.length > 0,
+        clearAudioPulseEffectIds: audioEffects.map((effect) => effect.id),
+      },
+    ]
+  })
 }

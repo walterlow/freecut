@@ -35,8 +35,10 @@ import {
   DopesheetEditor,
   getAnimatablePropertiesForItem,
   getEffectPropertyBaseValue,
+  buildBakeMotionPlan,
   type ProceduralPreviewInput,
 } from '@/features/timeline/deps/keyframe-editors'
+import { bakeMotionToKeyframes } from '../stores/actions/motion-modifier-actions'
 import { resolveTransform, getSourceDimensions } from '@/features/timeline/deps/composition-runtime'
 import { useProjectStore } from '@/features/timeline/deps/projects'
 import {
@@ -909,6 +911,27 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       frameHeight: canvas.height,
     }
   }, [selectedItemForEditor, canvas])
+
+  // The edited clip can be baked when it carries any procedural motion.
+  const canBakeProceduralMotion =
+    !!selectedItemForEditor &&
+    ((selectedItemForEditor.motionModifiers?.some((modifier) => modifier.enabled) ?? false) ||
+      (selectedItemForEditor.effects?.some((effect) => effect.audioPulse?.enabled) ?? false))
+
+  const handleBakeProceduralMotion = useCallback(() => {
+    if (!selectedItemForEditor) return
+    const plan = buildBakeMotionPlan({
+      items: [selectedItemForEditor],
+      keyframesByItemId: useKeyframesStore.getState().keyframesByItemId,
+      fps: canvas.fps,
+      frameWidth: canvas.width,
+      frameHeight: canvas.height,
+      resolveBase: (item) => resolveTransform(item, canvas, getSourceDimensions(item)),
+    })
+    if (plan.length === 0) return
+    const baked = bakeMotionToKeyframes(plan)
+    toast.success(t('timeline.keyframeEditor.motionBaked', { count: baked }))
+  }, [selectedItemForEditor, canvas, t])
   const effectiveSelectedProperty = useMemo(
     () =>
       selectedProperty && availableProperties.includes(selectedProperty) ? selectedProperty : null,
@@ -1846,6 +1869,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                   onNavigateToKeyframe={handleNavigateToKeyframe}
                   transitionBlockedRanges={transitionBlockedRanges}
                   proceduralPreview={proceduralPreview}
+                  canBakeMotion={canBakeProceduralMotion}
+                  onBakeMotion={handleBakeProceduralMotion}
                   visualizationMode={effectiveEditorMode}
                   spacious={splitView}
                 />

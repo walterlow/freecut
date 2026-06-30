@@ -26,6 +26,9 @@
       "noKeyframesToDisplay": "表示するキーフレームはありません",
       "proceduralMotionHint": "このクリップには連続モーション（ドリフト、ブレス、シェイク、オーディオパルス）があります。ベイクするとキーフレームとして編集できます。",
       "proceduralBand": "生成されたモーション — ベイクするとキーフレームとして編集できます",
+      "bakeMotion": "モーションをベイク",
+      "bakeMotionHint": "このクリップの生成モーションを編集可能なキーフレームに変換します",
+      "motionBaked": "{{count}} 件のクリップでモーションをベイクしました",
       "transitionBlocked": "トランジション内にはキーフレームを追加できません。再生ヘッドをハイライト領域の外に移動してください。",
       "transitionBlockedPill": "トランジション中",
       "emptyState": {

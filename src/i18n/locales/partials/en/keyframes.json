@@ -26,6 +26,9 @@
       "noKeyframesToDisplay": "No keyframes to display",
       "proceduralMotionHint": "This clip has continuous motion (drift, breath, shake or audio pulse) — Bake it to edit as keyframes.",
       "proceduralBand": "Generated motion — bake to edit as keyframes",
+      "bakeMotion": "Bake motion",
+      "bakeMotionHint": "Flatten this clip’s generated motion into editable keyframes",
+      "motionBaked": "Baked motion on {{count}} clip(s)",
       "transitionBlocked": "Keyframes can’t be added inside a transition — move the playhead out of the highlighted region.",
       "transitionBlockedPill": "In transition",
       "emptyState": {

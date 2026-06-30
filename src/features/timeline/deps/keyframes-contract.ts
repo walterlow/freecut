@@ -18,6 +18,7 @@ export {
 export { DopesheetEditor } from '@/features/keyframes/components/dopesheet-editor'
 export { getAnimatablePropertiesForItem } from '@/features/keyframes/utils/animatable-properties'
 export type { ProceduralPreviewInput } from '@/features/keyframes/utils/procedural-preview'
+export { buildBakeMotionPlan } from '@/features/keyframes/utils/bake-motion'
 export { getEffectPropertyBaseValue } from '@/features/keyframes/utils/effect-animatable-properties'
 export {
   captureAnimationFromItem,

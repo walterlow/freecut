@@ -8,7 +8,16 @@ import type { ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
-import { ChevronDown, ChevronLeft, ChevronRight, LineChart, Lock, Timer, X } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  LineChart,
+  Lock,
+  Sparkles,
+  Timer,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
@@ -202,6 +211,10 @@ interface DopesheetEditorProps {
   transitionBlockedRanges?: BlockedFrameRange[]
   /** Procedural generator inputs for dashed ghost curves in the graph. */
   proceduralPreview?: ProceduralPreviewInput
+  /** Whether the edited clip carries bakeable procedural motion. */
+  canBakeMotion?: boolean
+  /** Flatten the clip's procedural motion into editable keyframes. */
+  onBakeMotion?: () => void
   /** Whether the editor is disabled */
   disabled?: boolean
   /** Which visualization to render on the right side. `split` shows both the
@@ -266,6 +279,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   onNavigateToKeyframe,
   transitionBlockedRanges = [],
   proceduralPreview,
+  canBakeMotion = false,
+  onBakeMotion,
   disabled = false,
   visualizationMode = 'dopesheet',
   spacious = false,
@@ -2999,6 +3014,20 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             >
               {t('timeline.keyframeEditor.transitionBlockedPill')}
             </span>
+          )}
+
+          {canBakeMotion && onBakeMotion && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-1.5 text-[11px] text-sky-300 hover:text-sky-200"
+              onClick={onBakeMotion}
+              title={t('timeline.keyframeEditor.bakeMotionHint')}
+            >
+              <Sparkles className="h-3 w-3" />
+              {t('timeline.keyframeEditor.bakeMotion')}
+            </Button>
           )}
 
           <DopesheetHeaderFrameInputs

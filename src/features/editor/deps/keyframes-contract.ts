@@ -51,6 +51,7 @@ export type { AudioReactiveTarget } from '@/types/motion'
 export {
   bakeMotionModifiersToKeyframes,
   bakeAudioPulseToKeyframes,
+  buildBakeMotionPlan,
 } from '@/features/keyframes/utils/bake-motion'
 export {
   TRIGGER_WAVE_MOTION_LAYER_LABEL,

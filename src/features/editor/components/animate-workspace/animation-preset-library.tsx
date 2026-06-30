@@ -49,8 +49,7 @@ import {
   createMotionModifier,
   createAudioReactiveModifier,
   detectAudioReactiveBeats,
-  bakeMotionModifiersToKeyframes,
-  bakeAudioPulseToKeyframes,
+  buildBakeMotionPlan,
   resolveAnimatedTransform,
   type MotionPreset,
   type MotionPresetCategory,
@@ -561,59 +560,13 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
   )
 
   const handleBakeMotion = useCallback(() => {
-    const plan = selectedItems.flatMap((item) => {
-      const enabledModifiers = item.motionModifiers?.filter((modifier) => modifier.enabled) ?? []
-      const audioEffects = item.effects?.filter((effect) => effect.audioPulse?.enabled) ?? []
-      if (enabledModifiers.length === 0 && audioEffects.length === 0) return []
-
-      const itemKeyframes = keyframesByItemId[item.id]
-      const keyframes: Array<{
-        itemId: string
-        property: AnimatableProperty
-        frame: number
-        value: number
-        easing: 'linear'
-      }> = []
-      const clearProperties = new Set<AnimatableProperty>()
-
-      if (enabledModifiers.length > 0) {
-        const baseTransform = resolveTransform(item, canvas, getSourceDimensions(item))
-        const baked = bakeMotionModifiersToKeyframes({
-          baseTransform,
-          keyframes: itemKeyframes,
-          modifiers: enabledModifiers,
-          durationInFrames: item.durationInFrames,
-          fps: canvas.fps,
-          frameWidth: canvas.width,
-          frameHeight: canvas.height,
-        })
-        for (const property of baked.properties) clearProperties.add(property)
-        for (const keyframe of baked.keyframes) {
-          keyframes.push({ itemId: item.id, ...keyframe, easing: 'linear' })
-        }
-      }
-
-      for (const effect of audioEffects) {
-        const baked = bakeAudioPulseToKeyframes({
-          effectId: effect.id,
-          modulation: effect.audioPulse!,
-          durationInFrames: item.durationInFrames,
-        })
-        for (const keyframe of baked) {
-          clearProperties.add(keyframe.property)
-          keyframes.push({ itemId: item.id, ...keyframe, easing: 'linear' })
-        }
-      }
-
-      return [
-        {
-          itemId: item.id,
-          keyframes,
-          clearProperties: [...clearProperties],
-          clearMotionModifiers: enabledModifiers.length > 0,
-          clearAudioPulseEffectIds: audioEffects.map((effect) => effect.id),
-        },
-      ]
+    const plan = buildBakeMotionPlan({
+      items: selectedItems,
+      keyframesByItemId,
+      fps: canvas.fps,
+      frameWidth: canvas.width,
+      frameHeight: canvas.height,
+      resolveBase: (item) => resolveTransform(item, canvas, getSourceDimensions(item)),
     })
 
     if (plan.length === 0) {
