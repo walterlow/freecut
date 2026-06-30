@@ -17,9 +17,38 @@
  */
 
 import type { EncodedPacket, InputVideoTrack, VideoSample } from 'mediabunny'
-import type { Decoder, FilledFrame } from 'turbores'
+import type { Decoder, FilledFrame, PixelFormat } from 'turbores'
 import { createLogger } from '@/shared/logging/logger'
 import { parseProResFrameHeader, type ProResFrameInfo } from './prores-frame-header'
+
+/**
+ * Pixel formats the browser's `VideoFrame` constructor accepts from a raw buffer.
+ *
+ * turbores emits a stream's native format by default, but ProRes 4444 (`ap4h`/`ap4x`)
+ * decodes to 12-bit formats (e.g. `I444AP12`) that Chrome's `VideoFrame` constructor
+ * rejects — only 8- and 10-bit layouts are constructable. Passing this allow-list lets
+ * turbores keep the native format when it is already safe (the common 422-HQ `I422P10`
+ * path is unchanged) and perform a zero-cost conversion otherwise. Its heuristic prefers
+ * the least-lossy alternative — preserving chroma resolution and alpha — so `I444AP12`
+ * becomes `I444AP10` (4:4:4 + alpha, 10-bit) rather than collapsing to 4:2:0.
+ *
+ * The omitted formats are exactly the 12-bit ones (`*P12`), which the browser cannot
+ * construct from a buffer.
+ */
+const BROWSER_CONSTRUCTABLE_FORMATS: PixelFormat[] = [
+  'I420',
+  'I420P10',
+  'I420A',
+  'I420AP10',
+  'I422',
+  'I422P10',
+  'I422A',
+  'I422AP10',
+  'I444',
+  'I444P10',
+  'I444A',
+  'I444AP10',
+]
 
 type MediabunnyModule = typeof import('mediabunny')
 
@@ -84,6 +113,7 @@ export function createProResSampleSink(
         const created = await Decoder.create({
           proresFourCc: frameInfo.fourCc,
           useSharedMemory,
+          allowedOutputFormats: BROWSER_CONSTRUCTABLE_FORMATS,
         })
         if (created instanceof Error) {
           throw created
