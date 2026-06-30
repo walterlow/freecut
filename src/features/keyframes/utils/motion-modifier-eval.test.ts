@@ -153,6 +153,29 @@ describe('motion modifier evaluation', () => {
     expect(intensityOnly.frequency).toBe(mod.frequency)
   })
 
+  it('sway oscillates rotation only, peaking near a quarter period', () => {
+    const sway = createMotionModifier('sway', DEFAULT_MOTION_GENERATOR_SETTINGS)
+    // freq 0.5Hz -> 2s period -> quarter at 0.5s = frame 15 @30fps, sin=1.
+    const peak = evaluateMotionModifiers([sway], ctx({ frame: 15 }))
+    const start = evaluateMotionModifiers([sway], ctx({ frame: 0 }))
+    expect(peak.dRotation).toBeCloseTo(4, 3) // ±4° at full intensity
+    expect(start.dRotation).toBeCloseTo(0, 6)
+    expect(peak.dx).toBe(0) // rotation only
+    expect(peak.scaleWidth).toBe(1)
+  })
+
+  it('spin accumulates rotation continuously (not an oscillation)', () => {
+    const spin = createMotionModifier('spin', DEFAULT_MOTION_GENERATOR_SETTINGS)
+    const r0 = evaluateMotionModifiers([spin], ctx({ frame: 0 })).dRotation
+    const r1 = evaluateMotionModifiers([spin], ctx({ frame: 30 })).dRotation
+    const r2 = evaluateMotionModifiers([spin], ctx({ frame: 60 })).dRotation
+    expect(r0).toBe(0)
+    expect(r1).toBeGreaterThan(0)
+    expect(r2).toBeGreaterThan(r1) // keeps growing, doesn't return
+    // freq 0.3 rev/s -> 108°/s; at 1s ≈ 108°.
+    expect(r1).toBeCloseTo(108, 3)
+  })
+
   it('createMotionModifier slows oscillation as duration scale grows', () => {
     const fast = createMotionModifier('float-drift', {
       ...DEFAULT_MOTION_GENERATOR_SETTINGS,

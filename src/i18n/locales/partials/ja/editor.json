@@ -57,8 +57,7 @@
       "categories": {
         "entrance": "イン",
         "exit": "アウト",
-        "emphasis": "強調",
-        "loop": "ループ"
+        "emphasis": "強調"
       },
       "items": {
         "fadeIn": "フェードイン",
@@ -80,12 +79,7 @@
         "pulse": "パルス",
         "shake": "シェイク",
         "wobble": "ウォブル",
-        "flash": "フラッシュ",
-        "float": "フロート",
-        "sway": "スウェイ",
-        "breathe": "ブリーズ",
-        "spin": "スピン",
-        "wiggle": "ウィグル"
+        "flash": "フラッシュ"
       }
     },
     "shortcutsDialog": {

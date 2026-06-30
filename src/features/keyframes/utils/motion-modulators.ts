@@ -30,11 +30,23 @@ export const MOTION_MODULATORS: MotionModulator[] = [
     thumbnail: { kind: 'drift', loop: true },
   },
   {
+    id: 'sway',
+    labelKey: 'sway',
+    properties: ['rotation'],
+    thumbnail: { kind: 'wobble', loop: true },
+  },
+  {
     id: 'breath-pulse',
     labelKey: 'breathPulse',
     properties: ['width', 'height', 'opacity'],
     scalesBox: true,
     thumbnail: { kind: 'pulse', loop: true },
+  },
+  {
+    id: 'spin',
+    labelKey: 'spin',
+    properties: ['rotation'],
+    thumbnail: { kind: 'spin', loop: true },
   },
   {
     id: 'micro-shake',

@@ -57,8 +57,7 @@
       "categories": {
         "entrance": "Entrada",
         "exit": "Saída",
-        "emphasis": "Ênfase",
-        "loop": "Repetição"
+        "emphasis": "Ênfase"
       },
       "items": {
         "fadeIn": "Surgir",
@@ -80,12 +79,7 @@
         "pulse": "Pulsar",
         "shake": "Sacudir",
         "wobble": "Cambalear",
-        "flash": "Lampejo",
-        "float": "Flutuar",
-        "sway": "Balançar",
-        "breathe": "Respirar",
-        "spin": "Girar",
-        "wiggle": "Tremer"
+        "flash": "Lampejo"
       }
     },
     "shortcutsDialog": {

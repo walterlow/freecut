@@ -9,7 +9,12 @@
  * The evaluator lives in `@/features/keyframes/utils/motion-modifier-eval`.
  */
 
-export type MotionModifierType = 'float-drift' | 'breath-pulse' | 'micro-shake'
+export type MotionModifierType =
+  | 'float-drift'
+  | 'breath-pulse'
+  | 'micro-shake'
+  | 'sway'
+  | 'spin'
 
 export interface MotionModifier {
   /** Stable id (for list keys / per-instance edits). */

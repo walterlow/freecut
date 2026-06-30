@@ -57,8 +57,7 @@
       "categories": {
         "entrance": "Giriş",
         "exit": "Çıkış",
-        "emphasis": "Vurgu",
-        "loop": "Döngü"
+        "emphasis": "Vurgu"
       },
       "items": {
         "fadeIn": "Belirme",
@@ -80,12 +79,7 @@
         "pulse": "Nabız",
         "shake": "Sallama",
         "wobble": "Yalpalama",
-        "flash": "Parlama",
-        "float": "Süzülme",
-        "sway": "Sallanma",
-        "breathe": "Nefes alma",
-        "spin": "Dönme",
-        "wiggle": "Titreşme"
+        "flash": "Parlama"
       }
     },
     "shortcutsDialog": {

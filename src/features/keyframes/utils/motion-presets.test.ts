@@ -80,19 +80,9 @@ describe('motion presets', () => {
     expect(keys.at(-1)).toMatchObject({ value: 0 })
   })
 
-  it('continuous spin accumulates full turns over the clip', () => {
-    const keys = MOTION_PRESETS_BY_ID['spin'].build(ctx())
-    const values = keys.map((k) => k.value)
-    for (let i = 1; i < values.length; i++) {
-      expect(values[i]!).toBeGreaterThanOrEqual(values[i - 1]!)
-    }
-    expect(values.at(-1)! - anchor.rotation).toBeGreaterThanOrEqual(360)
-  })
-
   it('anchors entrance at the end of its window and exit before it leaves', () => {
     expect(getMotionPresetAnchorFrame('entrance', 90, 30)).toBe(15)
     expect(getMotionPresetAnchorFrame('exit', 90, 30)).toBe(89 - 15)
-    expect(getMotionPresetAnchorFrame('loop', 90, 30)).toBe(0)
     expect(getMotionPresetAnchorFrame('emphasis', 90, 30)).toBe(0)
   })
 })

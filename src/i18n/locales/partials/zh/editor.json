@@ -57,8 +57,7 @@
       "categories": {
         "entrance": "入场",
         "exit": "出场",
-        "emphasis": "强调",
-        "loop": "循环"
+        "emphasis": "强调"
       },
       "items": {
         "fadeIn": "淡入",
@@ -80,12 +79,7 @@
         "pulse": "脉冲",
         "shake": "抖动",
         "wobble": "摇摆",
-        "flash": "闪烁",
-        "float": "漂浮",
-        "sway": "摆动",
-        "breathe": "呼吸",
-        "spin": "旋转",
-        "wiggle": "扭动"
+        "flash": "闪烁"
       }
     },
     "shortcutsDialog": {

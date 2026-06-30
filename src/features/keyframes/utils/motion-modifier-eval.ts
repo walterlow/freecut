@@ -18,6 +18,8 @@ const BASE_FREQUENCY_HZ: Record<MotionModifierType, number> = {
   'float-drift': 0.625, // ~1.6s per cycle
   'breath-pulse': 0.55, // ~1.8s per breath
   'micro-shake': 8, // noise sample rate (8 updates/sec)
+  sway: 0.5, // ~2s per sway (one cycle per 2s, matching the old loop preset)
+  spin: 0.3, // revolutions per second (~3.3s per turn)
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -123,6 +125,31 @@ function evaluateMicroShake(
   out.dRotation += valueNoise(seed + 37, s) * rotAmp
 }
 
+/** Gentle rotation oscillation around the anchor (±4° at full intensity). */
+function evaluateSway(
+  modifier: MotionModifier,
+  ctx: MotionModifierEvalContext,
+  out: MotionContribution,
+): void {
+  const t = ctx.frame / Math.max(1, ctx.fps)
+  const phase = (modifier.phaseFrames / Math.max(1, ctx.fps)) * modifier.frequency * TWO_PI
+  out.dRotation += 4 * modifier.amplitude * Math.sin(TWO_PI * modifier.frequency * t + phase)
+}
+
+/**
+ * Continuous rotation (not an oscillator): a constant angular velocity that
+ * accumulates over the clip. `frequency` is revolutions/sec and amplitude scales
+ * the speed (so Intensity 0 stops it, higher spins faster).
+ */
+function evaluateSpin(
+  modifier: MotionModifier,
+  ctx: MotionModifierEvalContext,
+  out: MotionContribution,
+): void {
+  const t = ctx.frame / Math.max(1, ctx.fps)
+  out.dRotation += 360 * modifier.frequency * modifier.amplitude * t
+}
+
 function evaluateOne(
   modifier: MotionModifier,
   ctx: MotionModifierEvalContext,
@@ -136,6 +163,10 @@ function evaluateOne(
       return evaluateBreathPulse(modifier, ctx, out)
     case 'micro-shake':
       return evaluateMicroShake(modifier, ctx, out)
+    case 'sway':
+      return evaluateSway(modifier, ctx, out)
+    case 'spin':
+      return evaluateSpin(modifier, ctx, out)
   }
 }
 

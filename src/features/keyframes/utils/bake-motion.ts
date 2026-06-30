@@ -34,6 +34,8 @@ const MODIFIER_PROPERTIES: Record<MotionModifierType, TransformAnimatablePropert
   'float-drift': ['x', 'y', 'rotation'],
   'breath-pulse': ['width', 'height', 'opacity'],
   'micro-shake': ['x', 'y', 'rotation'],
+  sway: ['rotation'],
+  spin: ['rotation'],
 }
 
 function clamp(value: number, min: number, max: number): number {

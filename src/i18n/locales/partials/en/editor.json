@@ -67,7 +67,9 @@
       "modulators": {
         "floatDrift": "Float drift",
         "breathPulse": "Breath pulse",
-        "microShake": "Micro shake"
+        "microShake": "Micro shake",
+        "sway": "Sway",
+        "spin": "Spin"
       },
       "removeAction": "Remove"
     },
@@ -76,8 +78,7 @@
       "categories": {
         "entrance": "Entrance",
         "exit": "Exit",
-        "emphasis": "Emphasis",
-        "loop": "Loop"
+        "emphasis": "Emphasis"
       },
       "items": {
         "fadeIn": "Fade In",
@@ -99,12 +100,7 @@
         "pulse": "Pulse",
         "shake": "Shake",
         "wobble": "Wobble",
-        "flash": "Flash",
-        "float": "Float",
-        "sway": "Sway",
-        "breathe": "Breathe",
-        "spin": "Spin",
-        "wiggle": "Wiggle"
+        "flash": "Flash"
       }
     },
     "shortcutsDialog": {

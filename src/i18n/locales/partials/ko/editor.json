@@ -57,8 +57,7 @@
       "categories": {
         "entrance": "등장",
         "exit": "퇴장",
-        "emphasis": "강조",
-        "loop": "반복"
+        "emphasis": "강조"
       },
       "items": {
         "fadeIn": "페이드 인",
@@ -80,12 +79,7 @@
         "pulse": "펄스",
         "shake": "흔들기",
         "wobble": "흔들림",
-        "flash": "플래시",
-        "float": "떠오르기",
-        "sway": "흔들거림",
-        "breathe": "숨쉬기",
-        "spin": "회전",
-        "wiggle": "꿈틀거림"
+        "flash": "플래시"
       }
     },
     "shortcutsDialog": {

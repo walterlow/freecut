@@ -45,6 +45,9 @@ function modifierProperties(modifier: MotionModifier): TransformAnimatableProper
       return ['x', 'y', 'rotation']
     case 'breath-pulse':
       return ['width', 'height', 'opacity']
+    case 'sway':
+    case 'spin':
+      return ['rotation']
   }
 }
 

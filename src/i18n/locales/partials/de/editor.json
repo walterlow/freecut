@@ -57,8 +57,7 @@
       "categories": {
         "entrance": "Eingang",
         "exit": "Ausgang",
-        "emphasis": "Betonung",
-        "loop": "Schleife"
+        "emphasis": "Betonung"
       },
       "items": {
         "fadeIn": "Einblenden",
@@ -80,12 +79,7 @@
         "pulse": "Pulsieren",
         "shake": "Schütteln",
         "wobble": "Wackeln",
-        "flash": "Blitzen",
-        "float": "Schweben",
-        "sway": "Schaukeln",
-        "breathe": "Atmen",
-        "spin": "Drehen",
-        "wiggle": "Zappeln"
+        "flash": "Blitzen"
       }
     },
     "shortcutsDialog": {
