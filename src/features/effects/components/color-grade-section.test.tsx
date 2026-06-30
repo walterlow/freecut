@@ -88,6 +88,24 @@ vi.mock('./panels', () => ({
       </button>
     </div>
   ),
+  GpuLutPanel: ({
+    effect,
+    onParamsBatchChange,
+  }: {
+    effect: ItemEffect
+    onParamsBatchChange: (effectId: string, updates: Record<string, string>) => void
+  }) => (
+    <div data-testid="lut-panel" data-effect-id={effect.id}>
+      <button
+        type="button"
+        onClick={() =>
+          onParamsBatchChange(effect.id, { lutName: 'test', lutSize: '2', lutData: 'x' })
+        }
+      >
+        load lut
+      </button>
+    </div>
+  ),
 }))
 
 function makeVideoItem(effects: ItemEffect[] = [], id = 'clip-1'): TimelineItem {
