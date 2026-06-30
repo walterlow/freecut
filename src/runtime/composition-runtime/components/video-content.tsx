@@ -144,6 +144,9 @@ const NativePreviewVideo: React.FC<{
   const audioEqStagesRef = useRef(audioEqStages)
   const onErrorRef = useRef(onError)
   const lastSyncTimeRef = useRef<number>(Date.now())
+  // Timestamp of the last drift-correction seek, for the seek cooldown that prevents
+  // re-seeking a heavy clip into a decode-stall loop.
+  const lastSeekTimeRef = useRef<number>(0)
   const needsInitialSyncRef = useRef<boolean>(true)
   const lastFrameRef = useRef<number>(-1)
   const registeredElementRef = useRef<HTMLVideoElement | null>(null)
@@ -896,11 +899,14 @@ const NativePreviewVideo: React.FC<{
         targetTime: clamped,
         nominalRate,
         readyState: v.readyState,
+        lastSeekTimeMs: lastSeekTimeRef.current,
+        nowMs: Date.now(),
       })
 
       if (correctionPlan.kind === 'seek') {
         try {
           v.currentTime = correctionPlan.seekTo
+          lastSeekTimeRef.current = Date.now()
           if (correctionPlan.shouldUpdateLastSyncTime) {
             lastSyncTimeRef.current = Date.now()
           }
