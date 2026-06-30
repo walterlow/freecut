@@ -20,7 +20,6 @@ import type { EncodedPacket, InputVideoTrack, VideoSample } from 'mediabunny'
 import type { Decoder, FilledFrame } from 'turbores'
 import { createLogger } from '@/shared/logging/logger'
 import { parseProResFrameHeader, type ProResFrameInfo } from './prores-frame-header'
-import { frameNeedsToneMap, toneMapProResFrame } from './prores-tone-map'
 
 type MediabunnyModule = typeof import('mediabunny')
 
@@ -158,25 +157,16 @@ function buildVideoSample(
   frame: FilledFrame,
   packet: EncodedPacket,
 ): VideoSample {
-  // HDR (HLG) frames are tone-mapped to an 8-bit SDR (Rec.709) canvas — the editor
-  // pipeline is 8-bit sRGB, so a naive draw of HLG looks washed out. The tone-mapped
-  // canvas becomes the sample; VideoSample(canvas) snapshots it, so the shared GL
-  // canvas is safe to reuse on the next frame.
-  if (frameNeedsToneMap(frame)) {
-    const toneMapped = toneMapProResFrame(frame)
-    if (toneMapped) {
-      return new mb.VideoSample(toneMapped, {
-        timestamp: packet.timestamp,
-        duration: packet.duration,
-      })
-    }
-  }
-
   // Construct a WebCodecs VideoFrame from the raw planes and wrap it, rather than
   // building a VideoSample from the buffer directly. The browser's VideoFrame applies
   // the correct plane strides/offsets for the coded format (notably 10-bit 4:2:2,
   // where chroma planes are full coded-height); mediabunny's raw-buffer path
   // mishandles the coded-vs-visible padding and corrupts the top strip of the frame.
+  //
+  // Color: the VideoFrame is tagged with the source's full color space (BT.2020/HLG
+  // for HDR). The browser's compositor then applies a proper color-managed HLG→SDR
+  // conversion when the frame is drawn to an sRGB canvas — we deliberately do NOT
+  // tone-map ourselves, which produced a worse (too-dark) result than the browser's.
   // VideoFrame timestamps are integer microseconds.
   const videoFrame = new VideoFrame(frame.frameData.slice(), {
     // turbores pixel-format strings are WebCodecs `VideoPixelFormat` compatible.
