@@ -19,7 +19,7 @@ import { useGizmoStore, useThrottledFrame } from '@/features/effects/deps/previe
 import { useGradeClipboardStore, type GradeClipboardEntry } from '@/shared/state/grade-clipboard'
 import { PropertySection } from '@/shared/ui/property-controls'
 import { cn } from '@/shared/ui/cn'
-import { GpuWheelsPanel, GpuCurvesPanel, GpuLutPanel } from './panels'
+import { GpuWheelsPanel, GpuCurvesPanel } from './panels'
 import {
   getGpuEffect,
   getGpuEffectDefaultParams,
@@ -35,12 +35,10 @@ import {
 } from '../utils/effect-keyframes'
 import { applyGradePresetToEffectStack, hasGradePresetEffects } from '../utils/grade-presets'
 
-type GradeEffectType = 'gpu-lut' | 'gpu-color-wheels' | 'gpu-curves'
+type GradeEffectType = 'gpu-color-wheels' | 'gpu-curves'
 type EffectParams = Record<string, number | boolean | string>
 
-// LUT first: it's the input transform (e.g. S-Log3→Rec.709) applied before the
-// creative grade, so it's created at the head of the stack when touched first.
-const GRADE_EFFECT_TYPES: readonly GradeEffectType[] = ['gpu-lut', 'gpu-color-wheels', 'gpu-curves']
+const GRADE_EFFECT_TYPES: readonly GradeEffectType[] = ['gpu-color-wheels', 'gpu-curves']
 
 function syntheticGradeId(type: GradeEffectType): string {
   return `__grade:${type}__`
@@ -470,11 +468,9 @@ export const ColorGradeSection = memo(function ColorGradeSection({
 
   const wheelsDefinition = getGpuEffect('gpu-color-wheels')
   const curvesDefinition = getGpuEffect('gpu-curves')
-  const lutDefinition = getGpuEffect('gpu-lut')
   const savePresetLabel = t('effects.colorPanel.savePresetTooltip')
 
-  if (visualItems.length === 0 || !wheelsDefinition || !curvesDefinition || !lutDefinition)
-    return null
+  if (visualItems.length === 0 || !wheelsDefinition || !curvesDefinition) return null
 
   const wheelsEntry = displayEntries['gpu-color-wheels']
   const curvesEntry = displayEntries['gpu-curves']
@@ -696,29 +692,6 @@ export const ColorGradeSection = memo(function ColorGradeSection({
     />
   )
 
-  const lutEntry = displayEntries['gpu-lut']
-  const lutGpuEffect = getResolvedGpuEffectForFrame(
-    lutEntry,
-    displayItem,
-    displayItem ? (keyframesByItemId.get(displayItem.id) ?? undefined) : undefined,
-    currentFrame,
-  )
-  const lutPanel = (
-    <GpuLutPanel
-      itemIds={itemIds}
-      effect={lutEntry}
-      gpuEffect={lutGpuEffect}
-      definition={lutDefinition}
-      getKeyframeProperty={getKeyframeProperty}
-      onParamChange={handleParamChange}
-      onParamLiveChange={handleParamLiveChange}
-      onParamsBatchChange={handleParamsBatchChange}
-      onReset={handleReset}
-      onToggle={handleToggle}
-      onRemove={handleRemove}
-    />
-  )
-
   if (layout === 'dock') {
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[3px] border border-border/70 bg-background/35">
@@ -728,7 +701,6 @@ export const ColorGradeSection = memo(function ColorGradeSection({
         </div>
         {presetNameInput}
         {gradeGallery}
-        <div className="shrink-0 border-b border-border/70 p-2">{lutPanel}</div>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.5fr)_minmax(0,0.5fr)]">
           <DockPane className="border-r border-border/70">{wheelsPanel}</DockPane>
           <DockPane>{curvesPanel}</DockPane>
@@ -748,7 +720,6 @@ export const ColorGradeSection = memo(function ColorGradeSection({
       {gradeGallery}
 
       <div className="space-y-0">
-        {lutPanel}
         {wheelsPanel}
         {curvesPanel}
       </div>
