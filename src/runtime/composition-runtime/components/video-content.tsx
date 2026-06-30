@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from
 import { useSequenceContext } from '@/runtime/composition-runtime/deps/player'
 import { usePlaybackStore } from '@/runtime/composition-runtime/deps/stores'
 import { useGizmoStore } from '@/runtime/composition-runtime/deps/stores'
+import { useMediaLibraryStore } from '@/runtime/composition-runtime/deps/stores'
 import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat'
 import { useClock } from '@/runtime/composition-runtime/deps/player'
 import type { ResolvedAudioEqSettings } from '@/types/audio'
@@ -1012,9 +1013,20 @@ export const VideoContent: React.FC<{
   // ProRes (and other browser-undecodable codecs) can't play through a <video>
   // element, so on failure we fall back to live turbores decode painted to a canvas.
   // Initialize from the session set so a known-undecodable clip never mounts a <video>.
-  const [useLiveDecode, setUseLiveDecode] = useState(
-    () => item.mediaId !== undefined && liveDecodeMediaIds.has(item.mediaId),
-  )
+  const [useLiveDecode, setUseLiveDecode] = useState(() => {
+    if (item.mediaId === undefined) return false
+    if (liveDecodeMediaIds.has(item.mediaId)) return true
+    // Detect browser-undecodable codecs (ProRes) up front from the import-time codec
+    // probe, so we skip mounting the <video> element that would error, invalidate the
+    // blob URL, and flash "Media not loaded" while it re-resolves and falls back. Older
+    // media without the flag (undefined) keep the error-driven fallback path.
+    const media = useMediaLibraryStore.getState().mediaById[item.mediaId]
+    if (media?.videoCodecSupported === false) {
+      liveDecodeMediaIds.add(item.mediaId)
+      return true
+    }
+    return false
+  })
   const liveDecodeTriedRef = useRef(false)
   // One-shot per-item retry: on first failure, invalidate the blob URL so
   // the upstream resolver (driven by `useBlobUrlVersion`) produces a fresh
