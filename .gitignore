@@ -41,6 +41,7 @@ coverage
 .hermes/
 
 *.mp4
+*.mov
 
 # DevTools performance trace exports
 Trace-*.json

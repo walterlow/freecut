@@ -11,8 +11,92 @@
  *     meta.json - { width, height, status, createdAt, version, sourceWidth, sourceHeight }
  */
 
-import type { Conversion as ConversionType } from 'mediabunny'
+import type { InputVideoTrack } from 'mediabunny'
+import type { ProResFrameInfo } from '@/infrastructure/browser/prores-frame-header'
+import {
+  createProResSampleSink,
+  detectProResTrack,
+} from '@/infrastructure/browser/prores-sample-sink'
 import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants'
+
+type MediabunnyModule = typeof import('mediabunny')
+
+/**
+ * A unit of proxy work that writes to an output target. Implemented either by
+ * mediabunny's `Conversion` (decodable codecs) or by a turbores decode→encode loop
+ * (ProRes), so the surrounding generation envelope is shared by both.
+ */
+interface ProxyJob {
+  readonly isValid: boolean
+  readonly discardedTracks: ReadonlyArray<{ track: { type?: string | null }; reason: string }>
+  execute(onProgress: (progress: number) => void): Promise<void>
+  cancel(): Promise<void>
+}
+
+/**
+ * Builds a proxy job that decodes a ProRes track via turbores and re-encodes it to the
+ * H.264 proxy. Each decoded frame is drawn to a proxy-sized canvas (downscale) and fed
+ * to a mediabunny `CanvasSource`. ProRes is all-intra, so frames decode in order with
+ * no GOP handling.
+ */
+function buildProResProxyJob(
+  mb: MediabunnyModule,
+  output: InstanceType<MediabunnyModule['Output']>,
+  input: InstanceType<MediabunnyModule['Input']>,
+  videoTrack: InputVideoTrack,
+  proResInfo: ProResFrameInfo,
+  proxyDimensions: { width: number; height: number },
+): ProxyJob {
+  let cancelled = false
+  return {
+    isValid: true,
+    discardedTracks: [],
+    cancel: async () => {
+      cancelled = true
+    },
+    async execute(onProgress) {
+      const { width, height } = proxyDimensions
+      const canvas = new OffscreenCanvas(width, height)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        throw new Error('Failed to acquire 2D context for ProRes proxy generation')
+      }
+      const source = new mb.CanvasSource(canvas, {
+        codec: 'avc',
+        bitrate: mb.QUALITY_LOW,
+        keyFrameInterval: PROXY_KEYFRAME_INTERVAL_SECONDS,
+      })
+      output.addVideoTrack(source)
+      await output.start()
+
+      const sink = createProResSampleSink(mb, videoTrack, proResInfo)
+      const totalDuration = await input.computeDuration().catch(() => 0)
+      try {
+        for await (const sample of sink.samples()) {
+          if (cancelled) {
+            sample.close()
+            break
+          }
+          // Draw scales the visible frame into the proxy box (AR-preserved dims).
+          sample.draw(ctx, 0, 0, width, height)
+          const timestamp = sample.timestamp
+          await source.add(timestamp, sample.duration || 1 / 30)
+          sample.close()
+          if (totalDuration > 0) {
+            onProgress(Math.min(1, timestamp / totalDuration))
+          }
+        }
+        if (cancelled) {
+          await output.cancel()
+          return
+        }
+        await output.finalize()
+      } finally {
+        await sink.close()
+      }
+    },
+  }
+}
 
 const PROXY_WIDTH = 960
 const PROXY_HEIGHT = 540
@@ -171,6 +255,7 @@ function calculateProxyDimensions(
 async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   const { mediaId, source, sourceOpfsPath, sourceMimeType, sourceWidth, sourceHeight } = request
 
+  const mb = await loadMediabunny()
   const {
     Input,
     BlobSource,
@@ -184,7 +269,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     QTFF,
     WEBM,
     MATROSKA,
-  } = await loadMediabunny()
+  } = mb
 
   const dir = await getProxyDir(mediaId)
   const proxyDimensions = calculateProxyDimensions(sourceWidth, sourceHeight)
@@ -213,22 +298,37 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     formats: [MP4, QTFF, WEBM, MATROSKA],
   })
 
-  let conversion: ConversionType | null = null
+  // ProRes (and other codecs mediabunny can't decode via WebCodecs) must be decoded
+  // through turbores instead of mediabunny's Conversion API.
+  const videoTrack = await input.getPrimaryVideoTrack()
+  let proResInfo: Awaited<ReturnType<typeof detectProResTrack>> = null
+  if (videoTrack && typeof videoTrack.canDecode === 'function') {
+    const decodable = await videoTrack.canDecode().catch(() => true)
+    if (!decodable) {
+      proResInfo = await detectProResTrack(mb, videoTrack)
+    }
+  }
+
+  let job: ProxyJob | null = null
   let streamedToFile = false
   let bufferTarget: InstanceType<typeof BufferTarget> | null = null
   let writable: FileSystemWritableFileStream | undefined
 
   try {
-    const buildConversion = async (
+    const buildJob = async (
       outputTarget: InstanceType<typeof StreamTarget> | InstanceType<typeof BufferTarget>,
       useInMemoryFastStart: boolean,
-    ) => {
+    ): Promise<ProxyJob> => {
       const output = new Output({
         format: new Mp4OutputFormat({ fastStart: useInMemoryFastStart ? 'in-memory' : false }),
         target: outputTarget,
       })
 
-      return Conversion.init({
+      if (proResInfo && videoTrack) {
+        return buildProResProxyJob(mb, output, input!, videoTrack, proResInfo, proxyDimensions)
+      }
+
+      const conversion = await Conversion.init({
         input,
         output,
         video: {
@@ -247,6 +347,19 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
           discard: true,
         },
       })
+      return {
+        get isValid() {
+          return conversion.isValid
+        },
+        get discardedTracks() {
+          return conversion.discardedTracks
+        },
+        execute(onProgress) {
+          conversion.onProgress = onProgress
+          return conversion.execute()
+        },
+        cancel: () => conversion.cancel(),
+      }
     }
 
     const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true })
@@ -257,7 +370,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
         chunkSize: PROXY_STREAM_CHUNK_SIZE_BYTES,
       })
       streamedToFile = true
-      conversion = await buildConversion(streamTarget, false)
+      job = await buildJob(streamTarget, false)
     } catch {
       // Close leaked writable before falling back to buffer target.
       if (writable) {
@@ -269,11 +382,11 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       }
       streamedToFile = false
       bufferTarget = new BufferTarget()
-      conversion = await buildConversion(bufferTarget, true)
+      job = await buildJob(bufferTarget, true)
     }
 
-    if (!conversion.isValid) {
-      const reasons = conversion.discardedTracks
+    if (!job.isValid) {
+      const reasons = job.discardedTracks
         .map((d) => `${d.track.type ?? 'unknown'}: ${d.reason}`)
         .join('; ')
       throw new Error(`Proxy conversion invalid: ${reasons || 'no usable tracks'}`)
@@ -281,20 +394,17 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
 
     // Store cancel handle
     activeConversions.set(mediaId, {
-      cancel: () => conversion!.cancel(),
+      cancel: () => job!.cancel(),
     })
 
-    // Wire up progress
-    conversion.onProgress = (progress: number) => {
-      self.postMessage({
-        type: 'progress',
-        mediaId,
-        progress,
-      } as ProxyProgressResponse)
-    }
-
     try {
-      await conversion.execute()
+      await job.execute((progress: number) => {
+        self.postMessage({
+          type: 'progress',
+          mediaId,
+          progress,
+        } as ProxyProgressResponse)
+      })
     } catch (execError) {
       // If cancel() was invoked, activeConversions entry is already deleted.
       if (!activeConversions.has(mediaId)) {

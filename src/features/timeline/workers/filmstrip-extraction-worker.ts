@@ -8,6 +8,41 @@
 
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
 import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-url-registry'
+import {
+  createProResSampleSink,
+  detectProResTrack,
+  type ProResSampleSink,
+} from '@/infrastructure/browser/prores-sample-sink'
+
+/**
+ * Yields `cover`-fit canvases for ProRes timestamps, decoded via turbores — a drop-in
+ * for mediabunny's `CanvasSink.canvasesAtTimestamps`, which can't decode ProRes.
+ */
+async function* proResCanvasesAtTimestamps(
+  sink: ProResSampleSink,
+  timestamps: AsyncGenerator<number>,
+  width: number,
+  height: number,
+): AsyncGenerator<{ canvas: OffscreenCanvas } | null> {
+  for await (const timestamp of timestamps) {
+    const { value: sample } = await sink.samplesAtTimestamps([timestamp]).next()
+    if (!sample) {
+      yield null
+      continue
+    }
+    const canvas = new OffscreenCanvas(width, height)
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      // Cover fit: scale to fill the box (preserving aspect ratio) and center-crop.
+      const scale = Math.max(width / sample.displayWidth, height / sample.displayHeight)
+      const drawWidth = sample.displayWidth * scale
+      const drawHeight = sample.displayHeight * scale
+      sample.draw(ctx, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+    }
+    sample.close()
+    yield { canvas }
+  }
+}
 const IMAGE_FORMAT = 'image/jpeg'
 const IMAGE_QUALITY = 0.7 // JPEG is substantially faster to encode for tiny thumbnails
 const FRAME_RATE = 1 // 1fps for filmstrip thumbnails
@@ -171,15 +206,17 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
   }
 
   // Load mediabunny
-  const { Input, CanvasSink, ALL_FORMATS } = await loadMediabunny()
+  const mb = await loadMediabunny()
+  const { Input, CanvasSink, ALL_FORMATS } = mb
 
   let input: InstanceType<typeof Input> | null = null
   let sink: InstanceType<typeof CanvasSink> | null = null
+  let proResSink: ProResSampleSink | null = null
 
   try {
     // Create input from blob URL
     input = new Input({
-      source: createMediabunnyInputSource(await loadMediabunny(), blobUrl, {
+      source: createMediabunnyInputSource(mb, blobUrl, {
         metadata: sourceMetadata,
         fallbackBlob: blob,
       }),
@@ -192,14 +229,29 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
       throw new Error('No video track found')
     }
 
-    // Create CanvasSink with poolSize matching our parallel save capacity
-    // This keeps VRAM constant and prevents allocation/deallocation churn
-    sink = new CanvasSink(videoTrack, {
-      width,
-      height,
-      fit: 'cover',
-      poolSize: 4, // Reduced for 1fps extraction
-    })
+    // ProRes (and other codecs mediabunny can't decode) go through turbores; everything
+    // else uses the WebCodecs-backed CanvasSink.
+    const decodable =
+      typeof videoTrack.canDecode === 'function'
+        ? await videoTrack.canDecode().catch(() => true)
+        : true
+    const proResInfo = decodable ? null : await detectProResTrack(mb, videoTrack)
+
+    let canvasIterable: AsyncIterable<{ canvas: OffscreenCanvas | HTMLCanvasElement } | null>
+    if (proResInfo) {
+      proResSink = createProResSampleSink(mb, videoTrack, proResInfo)
+      canvasIterable = proResCanvasesAtTimestamps(proResSink, timestampGenerator(), width, height)
+    } else {
+      // CanvasSink poolSize matches our parallel save capacity to keep VRAM constant
+      // and prevent allocation/deallocation churn.
+      sink = new CanvasSink(videoTrack, {
+        width,
+        height,
+        fit: 'cover',
+        poolSize: 4, // Reduced for 1fps extraction
+      })
+      canvasIterable = sink.canvasesAtTimestamps(timestampGenerator())
+    }
 
     // Track extracted frames
     let extractedCount = initialCompletedCount
@@ -231,7 +283,7 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
       savedSinceLastReport.push({ index: frameIndex, blob })
     }
 
-    for await (const wrapped of sink.canvasesAtTimestamps(timestampGenerator())) {
+    for await (const wrapped of canvasIterable) {
       if (state.aborted) break
 
       const frame = framesToExtract[frameListIndex]
@@ -333,6 +385,9 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
   } finally {
     // Clean up mediabunny resources to free memory
     ;(sink as unknown as { dispose?: () => void } | null)?.dispose?.()
+    if (proResSink) {
+      void proResSink.close().catch(() => undefined)
+    }
     input?.dispose()
   }
 }

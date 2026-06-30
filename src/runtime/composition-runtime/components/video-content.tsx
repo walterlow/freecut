@@ -26,6 +26,7 @@ import {
   unregisterDomVideoElement,
 } from '../utils/dom-video-element-registry'
 import { subscribeToWarmupActivity } from '../utils/activity-rewarm'
+import { ProResPreviewCanvas } from './prores-preview-canvas'
 import {
   applyVideoElementAudioState,
   useVideoAudioState,
@@ -36,6 +37,12 @@ import {
 
 const videoLog = createLogger('NativePreviewVideo')
 const contentLog = createLogger('VideoContent')
+
+// Media IDs discovered to be undecodable by a <video> element (e.g. ProRes). Once a
+// clip fails and falls back to live turbores decode, we remember it for the session so
+// later mounts skip the doomed <video> entirely — avoiding a remount → error → retry →
+// re-resolve flicker loop.
+const liveDecodeMediaIds = new Set<string>()
 videoLog.setLevel(2) // WARN — suppress noisy per-frame debug logs
 const POOL_RELEASE_STICKY_MS = 400
 
@@ -1002,6 +1009,13 @@ export const VideoContent: React.FC<{
   // from the crossfade renderer.
   const audioVolume = item._sharedTransitionSync ? 0 : baseAudioVolume
   const [hasError, setHasError] = useState(false)
+  // ProRes (and other browser-undecodable codecs) can't play through a <video>
+  // element, so on failure we fall back to live turbores decode painted to a canvas.
+  // Initialize from the session set so a known-undecodable clip never mounts a <video>.
+  const [useLiveDecode, setUseLiveDecode] = useState(
+    () => item.mediaId !== undefined && liveDecodeMediaIds.has(item.mediaId),
+  )
+  const liveDecodeTriedRef = useRef(false)
   // One-shot per-item retry: on first failure, invalidate the blob URL so
   // the upstream resolver (driven by `useBlobUrlVersion`) produces a fresh
   // one. Fixes `ERR_UPLOAD_FILE_CHANGED` / "Format error" when a blob URL
@@ -1017,16 +1031,45 @@ export const VideoContent: React.FC<{
     (error: Error) => {
       contentLog.warn(`Media error for item ${item.id}:`, error.message)
 
-      if (isRecoverableVideoLoadError(error.message) && !retriedRef.current && item.mediaId) {
+      // Skip the blob-refresh retry for media already known to need live decode — the
+      // failure is the codec, not a stale blob, so re-resolving just causes churn.
+      const knownLiveDecode = item.mediaId !== undefined && liveDecodeMediaIds.has(item.mediaId)
+      if (
+        !knownLiveDecode &&
+        isRecoverableVideoLoadError(error.message) &&
+        !retriedRef.current &&
+        item.mediaId
+      ) {
         retriedRef.current = true
         contentLog.info(`Retrying item ${item.id} with fresh blob URL for media ${item.mediaId}`)
         blobUrlManager.invalidate(item.mediaId)
         return
       }
 
+      // The <video> element can't decode this source. Before giving up, try live
+      // turbores decode (ProRes). If that also fails, the canvas reports back and we
+      // show the unavailable state.
+      if (!liveDecodeTriedRef.current) {
+        liveDecodeTriedRef.current = true
+        if (item.mediaId) {
+          liveDecodeMediaIds.add(item.mediaId)
+        }
+        contentLog.info(`Falling back to live decode for item ${item.id}`)
+        setUseLiveDecode(true)
+        return
+      }
+
       setHasError(true)
     },
     [item.id, item.mediaId],
+  )
+
+  const handleLiveDecodeError = useCallback(
+    (error: Error) => {
+      contentLog.warn(`Live decode failed for item ${item.id}:`, error.message)
+      setHasError(true)
+    },
+    [item.id],
   )
 
   // Show error state if media failed to load
@@ -1044,6 +1087,23 @@ export const VideoContent: React.FC<{
       >
         <p style={{ color: '#666', fontSize: 14 }}>Media unavailable</p>
       </div>
+    )
+  }
+
+  // ProRes and other browser-undecodable codecs: decode live via turbores to a canvas.
+  if (useLiveDecode) {
+    return (
+      <ProResPreviewCanvas
+        itemId={item.id}
+        src={item.src!}
+        safeTrimBefore={safeTrimBefore}
+        sequenceFrameOffset={item._sequenceFrameOffset ?? 0}
+        sourceFps={sourceFps}
+        playbackRate={playbackRate}
+        isReversed={isReversed}
+        reverseSourceEnd={reverseSourceEnd}
+        onError={handleLiveDecodeError}
+      />
     )
   }
 

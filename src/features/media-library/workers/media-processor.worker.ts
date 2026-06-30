@@ -26,6 +26,7 @@ interface MediabunnyVideoTrack {
   displayHeight: number
   codec: string
   computePacketStats(count: number): Promise<{ averagePacketRate: number } | null>
+  canDecode?: () => Promise<boolean>
 }
 
 interface MediabunnyAudioTrack {
@@ -125,6 +126,8 @@ export interface VideoMetadata {
   bitrate: number
   audioCodec?: string
   audioCodecSupported: boolean
+  /** Whether the browser can decode this video track via WebCodecs. False for e.g. ProRes, which requires a proxy. */
+  videoCodecSupported: boolean
   /** Sorted keyframe timestamps in seconds (undefined if all-intra or extraction failed) */
   keyframeTimestamps?: number[]
   /** Average keyframe interval in seconds (GOP length) */
@@ -440,6 +443,11 @@ async function extractVideoMetadata(
 
     const audioCodec = audioTrack?.codec
     const audioCodecSupported = isAudioCodecSupported(audioCodec)
+    // ProRes and other codecs WebCodecs can't decode report canDecode() === false;
+    // these require a proxy to be viewable. Assume supported if the probe is absent or throws.
+    const videoCodecSupported = videoTrack.canDecode
+      ? await videoTrack.canDecode().catch(() => true)
+      : true
 
     // Compute average GOP interval from keyframe timestamps
     let gopInterval: number | undefined
@@ -458,6 +466,7 @@ async function extractVideoMetadata(
       bitrate: 0,
       audioCodec,
       audioCodecSupported,
+      videoCodecSupported,
       keyframeTimestamps,
       gopInterval,
     }
