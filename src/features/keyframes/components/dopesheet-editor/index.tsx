@@ -90,7 +90,10 @@ import {
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
 import { useItemsStore } from '@/features/keyframes/deps/timeline'
-import { getProceduralBands } from '@/features/keyframes/utils/procedural-preview'
+import {
+  getProceduralBands,
+  type ProceduralPreviewInput,
+} from '@/features/keyframes/utils/procedural-preview'
 import { clampFrame } from './frame-utils'
 import {
   buildSelectionFramePreview as buildSelectionFramePreviewState,
@@ -197,6 +200,8 @@ interface DopesheetEditorProps {
   onNavigateToKeyframe?: (frame: number) => void
   /** Transition-blocked frame ranges (keyframes cannot be placed here) */
   transitionBlockedRanges?: BlockedFrameRange[]
+  /** Procedural generator inputs for dashed ghost curves in the graph. */
+  proceduralPreview?: ProceduralPreviewInput
   /** Whether the editor is disabled */
   disabled?: boolean
   /** Which visualization to render on the right side. `split` shows both the
@@ -260,6 +265,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   interpolationDisabled = false,
   onNavigateToKeyframe,
   transitionBlockedRanges = [],
+  proceduralPreview,
   disabled = false,
   visualizationMode = 'dopesheet',
   spacious = false,
@@ -2933,6 +2939,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       onRemoveKeyframes={onRemoveKeyframes}
       onNavigateToKeyframe={onNavigateToKeyframe}
       transitionBlockedRanges={transitionBlockedRanges}
+      proceduralPreview={proceduralPreview}
       snapEnabled={snapEnabled}
       graphHandleVisibility={showAllGraphHandles ? 'all' : 'selected'}
       graphRulerUnit={graphRulerUnit}

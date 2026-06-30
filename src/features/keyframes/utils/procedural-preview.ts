@@ -16,6 +16,17 @@ import type { MotionModifier } from '@/types/motion'
 import { applyMotionModifiers } from './motion-modifier-eval'
 import { resolveAnimatedTransform } from './animated-transform-resolver'
 
+/**
+ * Inputs needed to sample procedural ghost curves in the graph. Threaded from
+ * the panel (which owns the canvas + resolved base transform) into the graph.
+ */
+export interface ProceduralPreviewInput {
+  base: ResolvedTransform
+  modifiers: MotionModifier[]
+  frameWidth: number
+  frameHeight: number
+}
+
 export type ProceduralBandKind = 'wave' | 'noise' | 'beats'
 
 export interface ProceduralBand {

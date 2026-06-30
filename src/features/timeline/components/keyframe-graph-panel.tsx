@@ -35,6 +35,7 @@ import {
   DopesheetEditor,
   getAnimatablePropertiesForItem,
   getEffectPropertyBaseValue,
+  type ProceduralPreviewInput,
 } from '@/features/timeline/deps/keyframe-editors'
 import { resolveTransform, getSourceDimensions } from '@/features/timeline/deps/composition-runtime'
 import { useProjectStore } from '@/features/timeline/deps/projects'
@@ -891,6 +892,23 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     () => (selectedItemForEditor ? getAnimatablePropertiesForItem(selectedItemForEditor) : []),
     [selectedItemForEditor],
   )
+
+  // Inputs for the dopesheet/graph to draw procedural generators (dashed ghost
+  // curves) before they're baked — base transform + active modifiers + canvas.
+  const proceduralPreview = useMemo<ProceduralPreviewInput | undefined>(() => {
+    if (!selectedItemForEditor) return undefined
+    const modifiers =
+      selectedItemForEditor.motionModifiers?.filter(
+        (modifier) => modifier.enabled && modifier.amplitude > 0,
+      ) ?? []
+    if (modifiers.length === 0) return undefined
+    return {
+      base: resolveTransform(selectedItemForEditor, canvas, getSourceDimensions(selectedItemForEditor)),
+      modifiers,
+      frameWidth: canvas.width,
+      frameHeight: canvas.height,
+    }
+  }, [selectedItemForEditor, canvas])
   const effectiveSelectedProperty = useMemo(
     () =>
       selectedProperty && availableProperties.includes(selectedProperty) ? selectedProperty : null,
@@ -1827,6 +1845,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                   }
                   onNavigateToKeyframe={handleNavigateToKeyframe}
                   transitionBlockedRanges={transitionBlockedRanges}
+                  proceduralPreview={proceduralPreview}
                   visualizationMode={effectiveEditorMode}
                   spacious={splitView}
                 />
