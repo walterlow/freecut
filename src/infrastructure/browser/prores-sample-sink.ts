@@ -50,17 +50,6 @@ const BROWSER_CONSTRUCTABLE_FORMATS: PixelFormat[] = [
   'I444AP10',
 ]
 
-/**
- * Cap on turbores decode worker threads. `Decoder.create` defaults to
- * `navigator.hardwareConcurrency`, and worker spawn + per-worker WASM compile dominate
- * creation time — measured ~106ms for 32 workers vs ~14ms for 8. Each ProRes clip opens
- * its own decoder (preview, filmstrip, thumbnail, export), so the default 32-worker spawn
- * is the bulk of "slow to load". turbores parallelizes a single frame's slices across
- * workers, and 4 workers already decode 4K well above real time (~80fps), so 8 keeps
- * ample throughput (incl. export) while cutting spawn cost ~7x.
- */
-const MAX_DECODE_WORKERS = 8
-
 type MediabunnyModule = typeof import('mediabunny')
 
 const log = createLogger('ProResSampleSink')
@@ -125,7 +114,6 @@ export function createProResSampleSink(
           proresFourCc: frameInfo.fourCc,
           useSharedMemory,
           allowedOutputFormats: BROWSER_CONSTRUCTABLE_FORMATS,
-          concurrency: Math.min(globalThis.navigator?.hardwareConcurrency ?? 4, MAX_DECODE_WORKERS),
         })
         if (created instanceof Error) {
           throw created
@@ -210,14 +198,7 @@ function buildVideoSample(
   // conversion when the frame is drawn to an sRGB canvas — we deliberately do NOT
   // tone-map ourselves, which produced a worse (too-dark) result than the browser's.
   // VideoFrame timestamps are integer microseconds.
-  //
-  // Pass turbores' plane buffer directly — no `.slice()`. The `VideoFrame` constructor
-  // copies the buffer synchronously into the frame's own storage (verified for both
-  // SharedArrayBuffer-backed and subarray views), so by the time it returns the data is
-  // owned by the VideoFrame and turbores is free to reclaim/reuse `frameData` (the caller
-  // clears the Frame right after). Slicing first just added a second full-frame copy per
-  // decode — ~33MB/frame at 4K 4:2:2 10-bit, more for 4444.
-  const videoFrame = new VideoFrame(frame.frameData, {
+  const videoFrame = new VideoFrame(frame.frameData.slice(), {
     // turbores pixel-format strings are WebCodecs `VideoPixelFormat` compatible.
     format: frame.pixelFormat as VideoPixelFormat,
     codedWidth: frame.codedWidth,
