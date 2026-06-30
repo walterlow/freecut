@@ -18,6 +18,7 @@
       "savedToast": "“{{name}}” salvo",
       "appliedToast": "“{{name}}” aplicado",
       "applyFailed": "Não foi possível aplicar a predefinição",
+      "transitionBlocked": "Não foi possível aplicar: a animação cai dentro de uma região de transição.",
       "saveFailed": "Não foi possível salvar a predefinição",
       "deleteLabel": "Excluir predefinição",
       "incompatibleType": "Requer um clipe do tipo {{type}}",
@@ -51,6 +52,26 @@
       "applyMode": {
         "replace": "Substituir",
         "add": "Adicionar"
+      }
+    },
+    "audioReactive": {
+      "title": "Reativo ao áudio",
+      "label": "Reativo ao áudio",
+      "apply": "Aplicar",
+      "update": "Atualizar",
+      "targetLabel": "Pulso",
+      "sourceLabel": "Fonte",
+      "untitledSource": "Áudio sem título",
+      "noSourceHint": "Adicione um clipe de áudio para impulsionar o movimento reativo à batida.",
+      "noSource": "Selecione uma fonte de áudio",
+      "noBeats": "Nenhuma batida forte encontrada no áudio",
+      "noOverlap": "Nenhuma batida cai dentro do clipe selecionado",
+      "applied": "Movimento reativo ao áudio em {{count}} clipe(s)",
+      "notReady": "O áudio ainda está sendo analisado — tente novamente em instantes.",
+      "targets": {
+        "scale": "Escala",
+        "bounce": "Salto",
+        "rotation": "Rotação"
       }
     },
     "motionPresets": {

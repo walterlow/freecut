@@ -25,6 +25,9 @@
       "noParametersMatch": "Geçerli görünümle eşleşen parametre yok",
       "noKeyframesToDisplay": "Gösterilecek anahtar kare yok",
       "proceduralMotionHint": "Bu klipte sürekli hareket var (kayma, nefes, sarsıntı veya ses darbesi) — anahtar kare olarak düzenlemek için pişirin.",
+      "proceduralBand": "Üretilen hareket — anahtar kare olarak düzenlemek için pişirin",
+      "transitionBlocked": "Bir geçişin içine anahtar kare eklenemez — oynatma kafasını vurgulanan bölgenin dışına taşıyın.",
+      "transitionBlockedPill": "Geçişte",
       "emptyState": {
         "title": "Henüz anahtar kare yok",
         "intro": "Herhangi bir parametreye anahtar kare ekleyerek bu klibi canlandırın.",

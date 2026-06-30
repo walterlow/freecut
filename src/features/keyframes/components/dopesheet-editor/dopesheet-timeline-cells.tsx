@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/shared/ui/cn'
 import type { AnimatableProperty, Keyframe } from '@/types/keyframe'
 import type { BlockedFrameRange } from '../../utils/transition-region'
+import type { ProceduralBand } from '@/features/keyframes/utils/procedural-preview'
 import { getKeyframeGroupLabel } from '@/features/keyframes/utils/property-i18n'
 import { getDisplayedGroupFrameGroups } from './sheet-preview-frame-groups'
 import type { DopesheetPropertyGroupStructure } from './dopesheet-helpers'
@@ -63,6 +64,49 @@ function KeyframeConnectors({ segments }: { segments: ConnectorSegment[] }) {
       style={{ left: segment.left, width: segment.width, top: '50%' }}
     />
   ))
+}
+
+// Hatched fill marks a span as generated/procedural (distinct from solid
+// connector lines and diamonds). Beats render as ticks instead of a hatch.
+const PROCEDURAL_HATCH =
+  'repeating-linear-gradient(45deg, rgba(56,189,248,0.25) 0 2px, transparent 2px 5px)'
+
+/**
+ * A non-keyframe band marking that a property is driven by a procedural motion
+ * generator over a frame range. Sky-tinted to match the timeline Waves cue;
+ * 'beats' bands draw ticks at each beat, others use a hatch fill.
+ */
+function ProceduralBandView({
+  band,
+  frameToX,
+  title,
+}: {
+  band: ProceduralBand
+  frameToX: (frame: number) => number
+  title: string
+}) {
+  const left = frameToX(band.fromFrame)
+  const width = Math.max(3, frameToX(band.toFrame) - left)
+  return (
+    <div
+      className="pointer-events-none absolute top-1/2 z-0 h-2 -translate-y-1/2 overflow-hidden rounded-sm border border-sky-400/40 bg-sky-400/10"
+      style={{
+        left,
+        width,
+        backgroundImage: band.kind === 'beats' ? undefined : PROCEDURAL_HATCH,
+      }}
+      title={title}
+    >
+      {band.kind === 'beats' &&
+        band.beats?.map((beatFrame, index) => (
+          <span
+            key={`${beatFrame}-${index}`}
+            className="absolute inset-y-0 w-px bg-sky-300/80"
+            style={{ left: Math.max(0, frameToX(beatFrame) - left) }}
+          />
+        ))}
+    </div>
+  )
 }
 
 interface GroupTimelineCellProps {
@@ -222,6 +266,8 @@ interface PropertyTimelineCellProps {
   getRenderedKeyframeX: (frame: number) => number | null
   renderedKeyframeXById: Map<string, number>
   transitionBlockedRanges: BlockedFrameRange[]
+  /** Procedural generator band for this property (when not keyframed). */
+  proceduralBand?: ProceduralBand
   selectedKeyframeIds: Set<string>
   disabled: boolean
   onRowPointerDown: (
@@ -248,6 +294,7 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
   getRenderedKeyframeX,
   renderedKeyframeXById,
   transitionBlockedRanges,
+  proceduralBand,
   selectedKeyframeIds,
   disabled,
   onRowPointerDown,
@@ -290,6 +337,14 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
           }}
         />
       ))}
+
+      {proceduralBand && (
+        <ProceduralBandView
+          band={proceduralBand}
+          frameToX={frameToX}
+          title={t('timeline.keyframeEditor.proceduralBand')}
+        />
+      )}
 
       <KeyframeConnectors segments={connectorSegments} />
 

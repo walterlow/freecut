@@ -18,6 +18,7 @@
       "savedToast": "„{{name}}“ gespeichert",
       "appliedToast": "„{{name}}“ angewendet",
       "applyFailed": "Voreinstellung konnte nicht angewendet werden",
+      "transitionBlocked": "Konnte nicht angewendet werden: Die Animation liegt in einem Übergangsbereich.",
       "saveFailed": "Voreinstellung konnte nicht gespeichert werden",
       "deleteLabel": "Voreinstellung löschen",
       "incompatibleType": "Benötigt einen {{type}}-Clip",
@@ -51,6 +52,26 @@
       "applyMode": {
         "replace": "Ersetzen",
         "add": "Hinzufügen"
+      }
+    },
+    "audioReactive": {
+      "title": "Audioreaktiv",
+      "label": "Audioreaktiv",
+      "apply": "Anwenden",
+      "update": "Aktualisieren",
+      "targetLabel": "Puls",
+      "sourceLabel": "Quelle",
+      "untitledSource": "Unbenanntes Audio",
+      "noSourceHint": "Füge einen Audioclip hinzu, um beat-reaktive Bewegung zu steuern.",
+      "noSource": "Wähle eine Audioquelle",
+      "noBeats": "Keine markanten Beats im Audio gefunden",
+      "noOverlap": "Keine Beats liegen im ausgewählten Clip",
+      "applied": "Audioreaktive Bewegung auf {{count}} Clip(s)",
+      "notReady": "Audio wird noch analysiert — versuche es gleich erneut.",
+      "targets": {
+        "scale": "Skalierung",
+        "bounce": "Sprung",
+        "rotation": "Rotation"
       }
     },
     "motionPresets": {

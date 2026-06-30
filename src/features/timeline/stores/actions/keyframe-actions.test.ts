@@ -11,6 +11,7 @@ import {
   addKeyframe,
   addKeyframes,
   applyAutoKeyframeOperations,
+  applyMotionPresetKeyframes,
   removeKeyframe,
   removeKeyframes,
   removeKeyframesForItem,
@@ -189,6 +190,68 @@ describe('keyframe actions', () => {
       const restored = getKeyframes('a', 'opacity')
       expect(restored).toHaveLength(1)
       expect(restored[0]?.value).toBe(0)
+    })
+  })
+
+  describe('applyMotionPresetKeyframes (region-aware replace)', () => {
+    it('clears only keyframes inside the window, preserving out-of-window animation', () => {
+      // Existing: an entrance (width + opacity at 0,10) and an exit (opacity 90,100).
+      addKeyframes([
+        { itemId: 'a', property: 'width', frame: 0, value: 140 },
+        { itemId: 'a', property: 'width', frame: 10, value: 100 },
+        { itemId: 'a', property: 'opacity', frame: 0, value: 0 },
+        { itemId: 'a', property: 'opacity', frame: 10, value: 1 },
+        { itemId: 'a', property: 'opacity', frame: 90, value: 1 },
+        { itemId: 'a', property: 'opacity', frame: 100, value: 0 },
+      ])
+
+      // Reapply a new entrance that only writes opacity in [0,10]; Replace clears
+      // BOTH width and opacity within that window (so the old width entrance is
+      // gone) but must leave the exit at 90/100 untouched.
+      applyMotionPresetKeyframes(
+        [
+          { itemId: 'a', property: 'opacity', frame: 0, value: 0 },
+          { itemId: 'a', property: 'opacity', frame: 10, value: 1 },
+        ],
+        [
+          { itemId: 'a', property: 'width', fromFrame: 0, toFrame: 10 },
+          { itemId: 'a', property: 'opacity', fromFrame: 0, toFrame: 10 },
+        ],
+      )
+
+      // Leftover width entrance from the old preset is cleared and not re-added.
+      expect(getKeyframes('a', 'width')).toHaveLength(0)
+      // Opacity entrance replaced; exit preserved.
+      expect(getKeyframes('a', 'opacity').map((kf) => kf.frame)).toEqual([0, 10, 90, 100])
+    })
+
+    it('clears the whole property when no frame range is given', () => {
+      addKeyframes([
+        { itemId: 'a', property: 'opacity', frame: 0, value: 0 },
+        { itemId: 'a', property: 'opacity', frame: 90, value: 1 },
+      ])
+
+      applyMotionPresetKeyframes(
+        [{ itemId: 'a', property: 'opacity', frame: 0, value: 0.5 }],
+        [{ itemId: 'a', property: 'opacity' }],
+      )
+
+      expect(getKeyframes('a', 'opacity').map((kf) => kf.frame)).toEqual([0])
+    })
+
+    it('applies clear + add as a single undo entry', () => {
+      addKeyframes([{ itemId: 'a', property: 'opacity', frame: 5, value: 0.2 }])
+      const undoDepth = useTimelineCommandStore.getState().undoStack.length
+
+      applyMotionPresetKeyframes(
+        [{ itemId: 'a', property: 'opacity', frame: 0, value: 1 }],
+        [{ itemId: 'a', property: 'opacity', fromFrame: 0, toFrame: 10 }],
+      )
+
+      expect(useTimelineCommandStore.getState().undoStack.length).toBe(undoDepth + 1)
+      useTimelineCommandStore.getState().undo()
+      // Undo restores exactly the pre-apply state (the frame-5 keyframe).
+      expect(getKeyframes('a', 'opacity').map((kf) => kf.frame)).toEqual([5])
     })
   })
 

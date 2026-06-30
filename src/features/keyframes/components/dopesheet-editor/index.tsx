@@ -9,6 +9,7 @@ import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { ChevronDown, ChevronLeft, ChevronRight, LineChart, Lock, Timer, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -89,6 +90,7 @@ import {
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
 import { useItemsStore } from '@/features/keyframes/deps/timeline'
+import { getProceduralBands } from '@/features/keyframes/utils/procedural-preview'
 import { clampFrame } from './frame-utils'
 import {
   buildSelectionFramePreview as buildSelectionFramePreviewState,
@@ -874,6 +876,23 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [transitionBlockedRanges, currentFrame],
   )
 
+  // Procedural motion (drift / breath / shake / audio-reactive) isn't keyed, so
+  // show it as a band per driven property instead of diamonds, until baked.
+  const itemMotionModifiers = useItemsStore((s) => s.itemById[itemId]?.motionModifiers)
+  const proceduralBandByProperty = useMemo(
+    () => getProceduralBands(itemMotionModifiers, totalFrames),
+    [itemMotionModifiers, totalFrames],
+  )
+
+  // Adds inside a transition region are rejected by the action layer; surface
+  // that instead of failing silently. A fixed toast id prevents stacking on
+  // repeated clicks.
+  const notifyKeyframeBlocked = useCallback(() => {
+    toast.warning(t('timeline.keyframeEditor.transitionBlocked'), {
+      id: 'keyframe-transition-blocked',
+    })
+  }, [t])
+
   const snapFrameTargets = useMemo(() => {
     const targets: number[] = [0, currentFrame]
     for (const { keyframe } of visibleKeyframes) {
@@ -1164,6 +1183,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       const entries = buildGroupAddEntries(group.rows, currentFrame, canAddKeyframeForRow)
 
       if (entries.length === 0) {
+        // Nothing added: explain when the cause is the playhead being in a
+        // transition (vs. every row already keyed at this frame).
+        if (isCurrentFrameBlocked) notifyKeyframeBlocked()
         return
       }
 
@@ -1176,7 +1198,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         onAddKeyframe?.(entry.property, entry.frame)
       }
     },
-    [canAddKeyframeForRow, currentFrame, disabled, onAddKeyframe, onAddKeyframes],
+    [
+      canAddKeyframeForRow,
+      currentFrame,
+      disabled,
+      isCurrentFrameBlocked,
+      notifyKeyframeBlocked,
+      onAddKeyframe,
+      onAddKeyframes,
+    ],
   )
 
   const handleClearGroup = useCallback(
@@ -1256,12 +1286,17 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         return
       }
 
-      if (isCurrentFrameBlocked || !onAddKeyframe) return
+      if (isCurrentFrameBlocked) {
+        notifyKeyframeBlocked()
+        return
+      }
+      if (!onAddKeyframe) return
       onAddKeyframe(property, currentFrame)
     },
     [
       currentFrame,
       isCurrentFrameBlocked,
+      notifyKeyframeBlocked,
       itemId,
       onAddKeyframe,
       onRemoveKeyframes,
@@ -2200,26 +2235,30 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                     (isCurrentFrameBlocked || !onAddKeyframe))
                 }
                 title={
-                  row.controls.hasKeyframeAtCurrentFrame
-                    ? t('timeline.keyframeEditor.removePropertyKeyframeAtPlayhead', {
-                        property: rowLabel,
-                        defaultValue: `Remove ${rowLabel} keyframe at playhead`,
-                      })
-                    : t('timeline.keyframeEditor.togglePropertyKeyframeAtPlayhead', {
-                        property: rowLabel,
-                        defaultValue: `Toggle ${rowLabel} keyframe at playhead`,
-                      })
+                  !row.controls.hasKeyframeAtCurrentFrame && isCurrentFrameBlocked
+                    ? t('timeline.keyframeEditor.transitionBlocked')
+                    : row.controls.hasKeyframeAtCurrentFrame
+                      ? t('timeline.keyframeEditor.removePropertyKeyframeAtPlayhead', {
+                          property: rowLabel,
+                          defaultValue: `Remove ${rowLabel} keyframe at playhead`,
+                        })
+                      : t('timeline.keyframeEditor.togglePropertyKeyframeAtPlayhead', {
+                          property: rowLabel,
+                          defaultValue: `Toggle ${rowLabel} keyframe at playhead`,
+                        })
                 }
                 aria-label={
-                  row.controls.hasKeyframeAtCurrentFrame
-                    ? t('timeline.keyframeEditor.removePropertyKeyframeAtPlayhead', {
-                        property: rowLabel,
-                        defaultValue: `Remove ${rowLabel} keyframe at playhead`,
-                      })
-                    : t('timeline.keyframeEditor.togglePropertyKeyframeAtPlayhead', {
-                        property: rowLabel,
-                        defaultValue: `Toggle ${rowLabel} keyframe at playhead`,
-                      })
+                  !row.controls.hasKeyframeAtCurrentFrame && isCurrentFrameBlocked
+                    ? t('timeline.keyframeEditor.transitionBlocked')
+                    : row.controls.hasKeyframeAtCurrentFrame
+                      ? t('timeline.keyframeEditor.removePropertyKeyframeAtPlayhead', {
+                          property: rowLabel,
+                          defaultValue: `Remove ${rowLabel} keyframe at playhead`,
+                        })
+                      : t('timeline.keyframeEditor.togglePropertyKeyframeAtPlayhead', {
+                          property: rowLabel,
+                          defaultValue: `Toggle ${rowLabel} keyframe at playhead`,
+                        })
                 }
               >
                 <span
@@ -2690,6 +2729,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               getRenderedKeyframeX={getRenderedKeyframeX}
               renderedKeyframeXById={renderedKeyframeXById}
               transitionBlockedRanges={transitionBlockedRanges}
+              proceduralBand={proceduralBandByProperty.get(row.property)}
               selectedKeyframeIds={selectedKeyframeIds}
               disabled={disabled}
               onRowPointerDown={handleRowPointerDown}
@@ -2718,6 +2758,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       ticks,
       frameToX,
       transitionBlockedRanges,
+      proceduralBandByProperty,
       renderedKeyframeXById,
       selectedKeyframeIds,
       sheetPreviewDuplicateKeyframeIds,
@@ -2943,6 +2984,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
           <span className="text-xs text-muted-foreground">
             {t('timeline.keyframeEditor.keyframes', { count: visibleKeyframes.length })}
           </span>
+
+          {isCurrentFrameBlocked && (
+            <span
+              className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300"
+              title={t('timeline.keyframeEditor.transitionBlocked')}
+            >
+              {t('timeline.keyframeEditor.transitionBlockedPill')}
+            </span>
+          )}
 
           <DopesheetHeaderFrameInputs
             disabled={disabled}

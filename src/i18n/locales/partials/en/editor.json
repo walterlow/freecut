@@ -18,6 +18,7 @@
       "savedToast": "Saved “{{name}}”",
       "appliedToast": "Applied “{{name}}”",
       "applyFailed": "Could not apply preset",
+      "transitionBlocked": "Couldn’t apply: the animation falls inside a transition region.",
       "saveFailed": "Could not save preset",
       "deleteLabel": "Delete preset",
       "incompatibleType": "Needs a {{type}} clip",
@@ -70,6 +71,26 @@
         "floatDrift": "Float drift",
         "breathPulse": "Breath pulse",
         "microShake": "Micro shake"
+      }
+    },
+    "audioReactive": {
+      "title": "Audio reactive",
+      "label": "Audio reactive",
+      "apply": "Apply",
+      "update": "Update",
+      "targetLabel": "Pulse",
+      "sourceLabel": "Source",
+      "untitledSource": "Untitled audio",
+      "noSourceHint": "Add an audio clip to drive beat-reactive motion.",
+      "noSource": "Select an audio source",
+      "noBeats": "No strong beats found in the audio",
+      "noOverlap": "No beats fall within the selected clip",
+      "applied": "Audio-reactive motion on {{count}} clip(s)",
+      "notReady": "Audio is still analyzing — try again in a moment.",
+      "targets": {
+        "scale": "Scale",
+        "bounce": "Bounce",
+        "rotation": "Rotation"
       }
     },
     "motionPresets": {

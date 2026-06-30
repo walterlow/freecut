@@ -18,6 +18,7 @@
       "savedToast": "“{{name}}” kaydedildi",
       "appliedToast": "“{{name}}” uygulandı",
       "applyFailed": "Hazır ayar uygulanamadı",
+      "transitionBlocked": "Uygulanamadı: animasyon bir geçiş bölgesine denk geliyor.",
       "saveFailed": "Hazır ayar kaydedilemedi",
       "deleteLabel": "Hazır ayarı sil",
       "incompatibleType": "{{type}} türünde bir klip gerekiyor",
@@ -51,6 +52,26 @@
       "applyMode": {
         "replace": "Değiştir",
         "add": "Ekle"
+      }
+    },
+    "audioReactive": {
+      "title": "Sese tepkili",
+      "label": "Sese tepkili",
+      "apply": "Uygula",
+      "update": "Güncelle",
+      "targetLabel": "Darbe",
+      "sourceLabel": "Kaynak",
+      "untitledSource": "Adsız ses",
+      "noSourceHint": "Ritme tepkili hareketi yönlendirmek için bir ses klibi ekleyin.",
+      "noSource": "Bir ses kaynağı seçin",
+      "noBeats": "Seste belirgin vuruş bulunamadı",
+      "noOverlap": "Seçili klibe denk gelen vuruş yok",
+      "applied": "{{count}} klipte sese tepkili hareket",
+      "notReady": "Ses hâlâ analiz ediliyor — birazdan tekrar deneyin.",
+      "targets": {
+        "scale": "Ölçek",
+        "bounce": "Zıplama",
+        "rotation": "Döndürme"
       }
     },
     "motionPresets": {

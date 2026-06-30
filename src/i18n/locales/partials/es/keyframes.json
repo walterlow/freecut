@@ -25,6 +25,9 @@
       "noParametersMatch": "Ningún parámetro coincide con la vista actual",
       "noKeyframesToDisplay": "No hay fotogramas clave para mostrar",
       "proceduralMotionHint": "Este clip tiene movimiento continuo (deriva, respiración, vibración o pulso de audio): hornéalo para editarlo como fotogramas clave.",
+      "proceduralBand": "Movimiento generado: hornéalo para editarlo como fotogramas clave",
+      "transitionBlocked": "No se pueden añadir fotogramas clave dentro de una transición: mueve el cabezal fuera de la región resaltada.",
+      "transitionBlockedPill": "En transición",
       "emptyState": {
         "title": "Aún no hay fotogramas clave",
         "intro": "Anima este clip añadiendo fotogramas clave a cualquier parámetro.",

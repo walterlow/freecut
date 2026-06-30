@@ -43,7 +43,11 @@ export {
   MOTION_MODULATORS,
   type MotionModulator,
 } from '@/features/keyframes/utils/motion-modulators'
-export { createMotionModifier } from '@/features/keyframes/utils/motion-modifier-eval'
+export {
+  createMotionModifier,
+  createAudioReactiveModifier,
+} from '@/features/keyframes/utils/motion-modifier-eval'
+export type { AudioReactiveTarget } from '@/types/motion'
 export {
   bakeMotionModifiersToKeyframes,
   bakeAudioPulseToKeyframes,

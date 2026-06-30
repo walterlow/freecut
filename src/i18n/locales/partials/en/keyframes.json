@@ -25,6 +25,9 @@
       "noParametersMatch": "No parameters match the current view",
       "noKeyframesToDisplay": "No keyframes to display",
       "proceduralMotionHint": "This clip has continuous motion (drift, breath, shake or audio pulse) — Bake it to edit as keyframes.",
+      "proceduralBand": "Generated motion — bake to edit as keyframes",
+      "transitionBlocked": "Keyframes can’t be added inside a transition — move the playhead out of the highlighted region.",
+      "transitionBlockedPill": "In transition",
       "emptyState": {
         "title": "No keyframes yet",
         "intro": "Animate this clip by adding keyframes to any parameter.",

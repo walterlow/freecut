@@ -25,6 +25,9 @@
       "noParametersMatch": "Nenhum parâmetro corresponde à visualização atual",
       "noKeyframesToDisplay": "Nenhum keyframe para exibir",
       "proceduralMotionHint": "Este clipe tem movimento contínuo (deriva, respiração, tremor ou pulso de áudio) — consolide-o para editar como quadros-chave.",
+      "proceduralBand": "Movimento gerado — consolide para editar como quadros-chave",
+      "transitionBlocked": "Não é possível adicionar quadros-chave dentro de uma transição — mova o cursor para fora da região destacada.",
+      "transitionBlockedPill": "Na transição",
       "emptyState": {
         "title": "Nenhum keyframe ainda",
         "intro": "Anime este clipe adicionando keyframes a qualquer parâmetro.",

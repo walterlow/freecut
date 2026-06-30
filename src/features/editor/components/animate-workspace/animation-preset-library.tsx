@@ -12,6 +12,13 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Slider } from '@/components/ui/slider'
 import { Separator } from '@/components/ui/separator'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog'
@@ -24,6 +31,7 @@ import {
   bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
+  importWaveformCache,
   useItemsStore,
   useKeyframesStore,
   useTimelineStore,
@@ -39,6 +47,8 @@ import {
   DEFAULT_MOTION_GENERATOR_SETTINGS,
   applyMotionGeneratorSettings,
   createMotionModifier,
+  createAudioReactiveModifier,
+  detectAudioReactiveBeats,
   bakeMotionModifiersToKeyframes,
   bakeAudioPulseToKeyframes,
   resolveAnimatedTransform,
@@ -46,6 +56,7 @@ import {
   type MotionPresetCategory,
   type MotionGeneratorSettings,
   type MotionModulator,
+  type AudioReactiveTarget,
 } from '@/features/editor/deps/keyframes'
 import {
   readAnimationPresets,
@@ -54,6 +65,13 @@ import {
 } from '@/infrastructure/storage'
 import { MotionPresetThumbnail } from './motion-preset-thumbnail'
 import { SaveAnimationPresetDialog } from './save-animation-preset-dialog'
+
+// Every transform/opacity property any built-in motion preset can write. In
+// Replace mode we clear these (within the new preset's frame window) so a fresh
+// preset fully supersedes whatever animation occupied that region.
+const MOTION_PRESET_PROPERTIES: AnimatableProperty[] = Array.from(
+  new Set(MOTION_PRESETS.flatMap((preset) => preset.properties)),
+)
 
 const presetsByCategory = MOTION_PRESET_CATEGORIES.reduce(
   (map, category) => {
@@ -253,6 +271,8 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
   // 'replace' (default) clears a preset's target properties before applying so
   // reapplying an entrance/exit preset swaps it; 'add' layers onto what's there.
   const [applyMode, setApplyMode] = useState<'replace' | 'add'>('replace')
+  const [audioReactiveTarget, setAudioReactiveTarget] = useState<AudioReactiveTarget>('scale')
+  const [audioSourceId, setAudioSourceId] = useState<string | null>(null)
   const [generatorSettings, setGeneratorSettings] = useState<MotionGeneratorSettings>(
     DEFAULT_MOTION_GENERATOR_SETTINGS,
   )
@@ -386,18 +406,27 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
         return
       }
       const replace = applyMode === 'replace'
-      const presetProperties = new Set<AnimatableProperty>(preset.properties)
-      const payloads = selectedItems.flatMap((item, index) => {
+      const clearSet = new Set<AnimatableProperty>(MOTION_PRESET_PROPERTIES)
+      const payloads: Array<{ itemId: string } & ReturnType<typeof applyMotionGeneratorSettings>[number]> =
+        []
+      const clears: Array<{
+        itemId: string
+        property: AnimatableProperty
+        fromFrame: number
+        toFrame: number
+      }> = []
+
+      selectedItems.forEach((item, index) => {
         const itemKeyframes = keyframesByItemId[item.id]
-        // In Replace mode the preset defines this clip's animation for its own
-        // properties, so anchor the resting pose off the BASE transform, ignoring
-        // any existing keyframes on those properties (they're about to be cleared).
+        // In Replace mode the preset defines this clip's animation, so anchor the
+        // resting pose off the BASE transform, ignoring existing keyframes on any
+        // preset-owned property (they're about to be cleared in this region).
         const anchorKeyframes =
           replace && itemKeyframes
             ? {
                 ...itemKeyframes,
                 properties: itemKeyframes.properties.filter(
-                  (entry) => !presetProperties.has(entry.property),
+                  (entry) => !clearSet.has(entry.property),
                 ),
               }
             : itemKeyframes
@@ -422,20 +451,34 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
           generatorSettings,
           index,
         )
-        return built.map((keyframe) => ({ itemId: item.id, ...keyframe }))
+        if (built.length === 0) return
+        for (const keyframe of built) payloads.push({ itemId: item.id, ...keyframe })
+
+        if (replace) {
+          // Clear every preset-owned property within THIS preset's frame window,
+          // so a new entrance wipes a previous entrance (whatever properties it
+          // used) while an exit at the other end of the clip is left intact.
+          const frames = built.map((keyframe) => keyframe.frame)
+          const fromFrame = Math.min(...frames)
+          const toFrame = Math.max(...frames)
+          for (const property of MOTION_PRESET_PROPERTIES) {
+            clears.push({ itemId: item.id, property, fromFrame, toFrame })
+          }
+        }
       })
 
       if (payloads.length === 0) {
         toast.warning(t('editor.animatePresets.applyFailed'))
         return
       }
-      if (replace) {
-        const clears = selectedItems.flatMap((item) =>
-          preset.properties.map((property) => ({ itemId: item.id, property })),
-        )
-        applyMotionPresetKeyframes(payloads, clears)
-      } else {
-        addKeyframes(payloads)
+      // The action drops keyframes that land inside a transition region; if every
+      // keyframe was dropped nothing was applied, so don't claim success.
+      const appliedIds = replace
+        ? applyMotionPresetKeyframes(payloads, clears)
+        : addKeyframes(payloads)
+      if (appliedIds.length === 0) {
+        toast.warning(t('editor.animatePresets.transitionBlocked'))
+        return
       }
       toast.success(
         t('editor.animatePresets.appliedToast', {
@@ -627,6 +670,162 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
     [],
   )
 
+  // --- Audio-reactive modulator (cross-clip beat source) ---
+  const allItems = useItemsStore((s) => s.items)
+  // Any clip that can carry audio is a candidate beat source: audio clips and
+  // video clips (their waveform is fetched from the cache at apply time). We no
+  // longer require inline waveformData, which is rarely populated.
+  const audioSources = useMemo(
+    () =>
+      allItems.filter(
+        (item) =>
+          (item.type === 'audio' || item.type === 'video') &&
+          (Boolean(item.mediaId) ||
+            (item.type === 'audio' &&
+              Array.isArray(item.waveformData) &&
+              item.waveformData.length > 0)),
+      ),
+    [allItems],
+  )
+  const resolvedAudioSourceId =
+    audioSourceId && audioSources.some((source) => source.id === audioSourceId)
+      ? audioSourceId
+      : (audioSources[0]?.id ?? null)
+  const hasAudioReactive = useMemo(
+    () =>
+      selectedItems.length > 0 &&
+      selectedItems.every((item) =>
+        item.motionModifiers?.some((modifier) => modifier.type === 'audio-reactive' && modifier.enabled),
+      ),
+    [selectedItems],
+  )
+  const hasAudioReactiveOnClip = !!selectedItem?.motionModifiers?.some(
+    (modifier) => modifier.type === 'audio-reactive' && modifier.enabled,
+  )
+
+  const handleApplyAudioReactive = useCallback(async () => {
+    if (selectedItems.length === 0) {
+      toast.warning(t('editor.animatePresets.selectClipFirst'))
+      return
+    }
+    const source = resolvedAudioSourceId
+      ? useItemsStore.getState().itemById[resolvedAudioSourceId]
+      : null
+    if (!source || (source.type !== 'audio' && source.type !== 'video')) {
+      toast.warning(t('editor.audioReactive.noSource'))
+      return
+    }
+
+    // Resolve the source clip's audio peaks: inline data first, otherwise the
+    // mediaId-keyed waveform cache (generating from the clip's blob if needed).
+    let peaks: number[] | null = null
+    let peaksSampleRate = 0 // >0 means peaks span the whole media (needs slicing)
+    if (source.type === 'audio' && source.waveformData?.length) {
+      peaks = source.waveformData
+    } else if (source.mediaId) {
+      try {
+        const { waveformCache, getMonoPeaks } = await importWaveformCache()
+        let waveform = await waveformCache.getCachedWaveform(source.mediaId)
+        const blobUrl = 'src' in source ? source.src : undefined
+        if (!waveform?.isComplete && blobUrl) {
+          waveform = await waveformCache.getWaveform(source.mediaId, blobUrl)
+        }
+        if (waveform) {
+          peaks = Array.from(getMonoPeaks(waveform))
+          peaksSampleRate = waveform.sampleRate
+        }
+      } catch {
+        // fall through to the not-ready toast
+      }
+    }
+    if (!peaks || peaks.length === 0) {
+      toast.warning(t('editor.audioReactive.notReady'))
+      return
+    }
+
+    // Cache peaks span the whole media; slice to the clip's visible window so
+    // beats line up with what actually plays (best-effort trim offset).
+    let detectData = peaks
+    if (peaksSampleRate > 0) {
+      const sourceFps = source.type === 'video' && source.sourceFps ? source.sourceFps : canvas.fps
+      const offsetSec =
+        source.type === 'video'
+          ? (source.sourceStart ?? 0) / Math.max(1, sourceFps)
+          : (source.offset ?? 0)
+      const durSec = source.durationInFrames / canvas.fps
+      const start = Math.max(0, Math.floor(offsetSec * peaksSampleRate))
+      const end = Math.min(peaks.length, Math.ceil((offsetSec + durSec) * peaksSampleRate))
+      if (end > start) detectData = peaks.slice(start, end)
+    }
+
+    const sourceBeats = detectAudioReactiveBeats({
+      waveformData: detectData,
+      durationInFrames: source.durationInFrames,
+      fps: canvas.fps,
+      sensitivity: generatorSettings.intensityScale,
+    })
+    if (sourceBeats.length === 0) {
+      toast.warning(t('editor.audioReactive.noBeats'))
+      return
+    }
+
+    const assignments = selectedItems.flatMap((item, index) => {
+      // Remap the source clip's beats onto this item's local timeline so the
+      // target reacts at the real musical moments, even across clips.
+      const localBeats = sourceBeats
+        .map((beat) => ({
+          frame: source.from + beat.frame - item.from,
+          amplitude: beat.amplitude,
+        }))
+        .filter((beat) => beat.frame >= 0 && beat.frame < item.durationInFrames)
+      if (localBeats.length === 0) return []
+      return [
+        {
+          itemId: item.id,
+          modifier: createAudioReactiveModifier({
+            beats: localBeats,
+            target: audioReactiveTarget,
+            settings: generatorSettings,
+            fps: canvas.fps,
+            durationInFrames: item.durationInFrames,
+            itemIndex: index,
+          }),
+        },
+      ]
+    })
+
+    if (assignments.length === 0) {
+      toast.warning(t('editor.audioReactive.noOverlap'))
+      return
+    }
+    const applied = applyMotionModifierToItems(assignments)
+    if (applied === 0) {
+      toast.warning(t('editor.motionGenerator.modulatorApplyFailed'))
+      return
+    }
+    toast.success(t('editor.audioReactive.applied', { count: applied }))
+  }, [
+    audioReactiveTarget,
+    canvas.fps,
+    generatorSettings,
+    resolvedAudioSourceId,
+    selectedItems,
+    t,
+  ])
+
+  const handleRemoveAudioReactive = useCallback(() => {
+    if (selectedItems.length === 0) return
+    removeMotionModifierFromItems(
+      selectedItems.map((item) => item.id),
+      'audio-reactive',
+    )
+    toast.success(
+      t('editor.motionGenerator.modulatorRemoved', {
+        name: t('editor.audioReactive.label'),
+      }),
+    )
+  }, [selectedItems, t])
+
   // --- "Applied to this clip" summary (state the panel otherwise hides) ---
   const keyframedPropertyCount = useMemo(
     () =>
@@ -643,7 +842,10 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
     [selectedItem],
   )
   const hasAnyAnimation =
-    keyframedPropertyCount > 0 || activeModulators.length > 0 || hasAudioPulse
+    keyframedPropertyCount > 0 ||
+    activeModulators.length > 0 ||
+    hasAudioPulse ||
+    hasAudioReactiveOnClip
 
   const handleClearKeyframes = useCallback(() => {
     if (selectedItemIds.length === 0) return
@@ -720,6 +922,21 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
                       </button>
                     </span>
                   ))}
+                  {hasAudioReactiveOnClip && (
+                    <span className="inline-flex items-center gap-1 rounded border border-sky-400/40 bg-sky-400/10 py-0.5 pl-1.5 pr-0.5 text-[10px] text-sky-300">
+                      {t('editor.audioReactive.label')}
+                      <button
+                        type="button"
+                        aria-label={t('editor.animateStages.removeModulator', {
+                          name: t('editor.audioReactive.label'),
+                        })}
+                        className="rounded p-0.5 hover:bg-sky-400/20"
+                        onClick={handleRemoveAudioReactive}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  )}
                   {hasAudioPulse && (
                     <span className="inline-flex items-center rounded border border-border bg-secondary/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                       {t('editor.animateStages.audioPulseChip')}
@@ -853,6 +1070,65 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
                   )
                 })}
               </div>
+
+              {/* Audio-reactive: pulse a property on each beat of a chosen audio
+                  clip. Beats are detected at apply time and stored on the clip. */}
+              <div className="flex flex-col gap-1.5 rounded-md border border-border/50 p-1.5">
+                <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                  {t('editor.audioReactive.title')}
+                </span>
+                {audioSources.length === 0 ? (
+                  <p className="text-[10px] leading-snug text-muted-foreground/70">
+                    {t('editor.audioReactive.noSourceHint')}
+                  </p>
+                ) : (
+                  <>
+                    <Select
+                      value={audioReactiveTarget}
+                      onValueChange={(value) => setAudioReactiveTarget(value as AudioReactiveTarget)}
+                    >
+                      <SelectTrigger className="h-7 text-[11px]">
+                        <SelectValue placeholder={t('editor.audioReactive.targetLabel')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(['scale', 'bounce', 'rotation'] as const).map((target) => (
+                          <SelectItem key={target} value={target} className="text-[11px]">
+                            {t(`editor.audioReactive.targets.${target}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={resolvedAudioSourceId ?? undefined}
+                      onValueChange={(value) => setAudioSourceId(value)}
+                    >
+                      <SelectTrigger className="h-7 text-[11px]">
+                        <SelectValue placeholder={t('editor.audioReactive.sourceLabel')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {audioSources.map((source) => (
+                          <SelectItem key={source.id} value={source.id} className="text-[11px]">
+                            {source.label || t('editor.audioReactive.untitledSource')}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 justify-start gap-1.5 px-2 text-[11px]"
+                      onClick={() => void handleApplyAudioReactive()}
+                    >
+                      <WandSparkles className="h-3.5 w-3.5" />
+                      {hasAudioReactive
+                        ? t('editor.audioReactive.update')
+                        : t('editor.audioReactive.apply')}
+                    </Button>
+                  </>
+                )}
+              </div>
+
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span>

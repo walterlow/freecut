@@ -25,6 +25,9 @@
       "noParametersMatch": "Aucun paramètre ne correspond à la vue actuelle",
       "noKeyframesToDisplay": "Aucune image clé à afficher",
       "proceduralMotionHint": "Ce clip a un mouvement continu (dérive, respiration, secousse ou impulsion audio) — cuisez-le pour l’éditer en images clés.",
+      "proceduralBand": "Mouvement généré — cuisez-le pour l’éditer en images clés",
+      "transitionBlocked": "Impossible d’ajouter des images clés dans une transition — déplacez la tête de lecture hors de la zone surlignée.",
+      "transitionBlockedPill": "Dans la transition",
       "emptyState": {
         "title": "Aucune image clé pour le moment",
         "intro": "Animez ce clip en ajoutant des images clés à n’importe quel paramètre.",

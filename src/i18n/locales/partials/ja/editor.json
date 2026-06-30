@@ -18,6 +18,7 @@
       "savedToast": "「{{name}}」を保存しました",
       "appliedToast": "「{{name}}」を適用しました",
       "applyFailed": "プリセットを適用できませんでした",
+      "transitionBlocked": "適用できません: アニメーションがトランジション領域に重なっています。",
       "saveFailed": "プリセットを保存できませんでした",
       "deleteLabel": "プリセットを削除",
       "incompatibleType": "{{type}}クリップが必要です",
@@ -51,6 +52,26 @@
       "applyMode": {
         "replace": "置換",
         "add": "追加"
+      }
+    },
+    "audioReactive": {
+      "title": "オーディオ反応",
+      "label": "オーディオ反応",
+      "apply": "適用",
+      "update": "更新",
+      "targetLabel": "パルス",
+      "sourceLabel": "ソース",
+      "untitledSource": "無題のオーディオ",
+      "noSourceHint": "ビートに反応する動きを駆動するにはオーディオクリップを追加してください。",
+      "noSource": "オーディオソースを選択してください",
+      "noBeats": "オーディオに強いビートが見つかりません",
+      "noOverlap": "選択したクリップ内にビートがありません",
+      "applied": "{{count}} 件のクリップにオーディオ反応モーション",
+      "notReady": "オーディオを解析中です。しばらくしてからもう一度お試しください。",
+      "targets": {
+        "scale": "スケール",
+        "bounce": "バウンス",
+        "rotation": "回転"
       }
     },
     "motionPresets": {

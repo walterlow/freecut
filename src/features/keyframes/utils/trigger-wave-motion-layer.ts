@@ -278,7 +278,7 @@ function smoothstep(t: number): number {
 }
 
 /** Beat-pulse envelope in [0,1]: fast attack to a peak at 15%, ease-out decay. */
-function pulseEnvelope(progress: number): number {
+export function pulseEnvelope(progress: number): number {
   if (progress < 0.15) return smoothstep(progress / 0.15)
   return 1 - smoothstep((progress - 0.15) / 0.85)
 }

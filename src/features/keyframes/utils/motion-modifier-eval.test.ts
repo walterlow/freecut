@@ -4,6 +4,7 @@ import type { MotionModifier } from '@/types/motion'
 import { DEFAULT_MOTION_GENERATOR_SETTINGS } from './motion-generator'
 import {
   applyMotionModifiers,
+  createAudioReactiveModifier,
   createMotionModifier,
   evaluateMotionModifiers,
   type MotionModifierEvalContext,
@@ -126,6 +127,42 @@ describe('motion modifier evaluation', () => {
     expect(second.phaseFrames).toBe(8)
     expect(second.seed).not.toBe(first.seed)
     expect(first.amplitude).toBe(settings.intensityScale)
+  })
+
+  it('audio-reactive pulses scale only near a beat, idle otherwise', () => {
+    const mod = createAudioReactiveModifier({
+      beats: [{ frame: 20, amplitude: 1 }],
+      target: 'scale',
+      settings: DEFAULT_MOTION_GENERATOR_SETTINGS,
+      fps: 30,
+      durationInFrames: 90,
+    })
+    const pulseFrames = mod.pulseFrames ?? 0
+    expect(pulseFrames).toBeGreaterThan(0)
+
+    // Just after the beat onset (within the attack), scale exceeds rest.
+    const onBeat = evaluateMotionModifiers([mod], ctx({ frame: 21 }))
+    expect(onBeat.scaleWidth).toBeGreaterThan(1)
+    expect(onBeat.scaleHeight).toBeGreaterThan(1)
+
+    // Before the beat and after the envelope ends, no contribution.
+    const before = evaluateMotionModifiers([mod], ctx({ frame: 10 }))
+    const after = evaluateMotionModifiers([mod], ctx({ frame: 20 + pulseFrames + 1 }))
+    expect(before.scaleWidth).toBe(1)
+    expect(after.scaleWidth).toBe(1)
+  })
+
+  it('audio-reactive bounce kicks upward (negative dy) on a beat', () => {
+    const mod = createAudioReactiveModifier({
+      beats: [{ frame: 20, amplitude: 1 }],
+      target: 'bounce',
+      settings: DEFAULT_MOTION_GENERATOR_SETTINGS,
+      fps: 30,
+      durationInFrames: 90,
+    })
+    const onBeat = evaluateMotionModifiers([mod], ctx({ frame: 21 }))
+    expect(onBeat.dy).toBeLessThan(0)
+    expect(onBeat.scaleWidth).toBe(1) // bounce doesn't touch scale
   })
 
   it('createMotionModifier slows oscillation as duration scale grows', () => {
