@@ -96,3 +96,5 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules
 .design-sync/freecut-tailwind.css
+
+artifacts/
