@@ -50,6 +50,17 @@ const BROWSER_CONSTRUCTABLE_FORMATS: PixelFormat[] = [
   'I444AP10',
 ]
 
+/**
+ * Worker count for background / one-shot decoders (thumbnail at import, filmstrip, proxy,
+ * metadata). These don't need real-time throughput, so a small pool keeps decoder
+ * creation cheap — measured ~7ms to spawn 4 workers vs ~106ms for the 32-worker default
+ * (`navigator.hardwareConcurrency`), which is the bulk of ProRes "slow to load". The
+ * preview and export sinks deliberately omit this (full concurrency) so playback and
+ * export decode throughput are never reduced — capping the preview pool caused playback
+ * judder.
+ */
+export const BACKGROUND_DECODE_WORKERS = 4
+
 type MediabunnyModule = typeof import('mediabunny')
 
 const log = createLogger('ProResSampleSink')
@@ -93,6 +104,16 @@ async function* toAsync<T>(iterable: Iterable<T> | AsyncIterable<T>): AsyncGener
   }
 }
 
+export interface ProResSampleSinkOptions {
+  /**
+   * Cap on turbores decode worker threads. Omit for full concurrency
+   * (`navigator.hardwareConcurrency`) — correct for the preview and export paths, which
+   * want maximum decode throughput. Background / one-shot consumers should pass
+   * {@link BACKGROUND_DECODE_WORKERS} to keep decoder creation cheap.
+   */
+  maxWorkers?: number
+}
+
 /**
  * Creates a ProRes sample sink for the given track. `frameInfo` comes from
  * {@link detectProResTrack}; it determines the turbores decoder variant.
@@ -101,6 +122,7 @@ export function createProResSampleSink(
   mb: MediabunnyModule,
   track: InputVideoTrack,
   frameInfo: ProResFrameInfo,
+  options: ProResSampleSinkOptions = {},
 ): ProResSampleSink {
   const packetSink = new mb.EncodedPacketSink(track)
   let decoderPromise: Promise<Decoder> | null = null
@@ -114,6 +136,8 @@ export function createProResSampleSink(
           proresFourCc: frameInfo.fourCc,
           useSharedMemory,
           allowedOutputFormats: BROWSER_CONSTRUCTABLE_FORMATS,
+          // Full concurrency (turbores default) unless a caller caps it for background work.
+          ...(options.maxWorkers != null ? { concurrency: options.maxWorkers } : {}),
         })
         if (created instanceof Error) {
           throw created

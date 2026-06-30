@@ -14,6 +14,7 @@
 import type { InputVideoTrack } from 'mediabunny'
 import type { ProResFrameInfo } from '@/infrastructure/browser/prores-frame-header'
 import {
+  BACKGROUND_DECODE_WORKERS,
   createProResSampleSink,
   detectProResTrack,
 } from '@/infrastructure/browser/prores-sample-sink'
@@ -69,7 +70,9 @@ function buildProResProxyJob(
       output.addVideoTrack(source)
       await output.start()
 
-      const sink = createProResSampleSink(mb, videoTrack, proResInfo)
+      const sink = createProResSampleSink(mb, videoTrack, proResInfo, {
+        maxWorkers: BACKGROUND_DECODE_WORKERS,
+      })
       const totalDuration = await input.computeDuration().catch(() => 0)
       try {
         for await (const sample of sink.samples()) {

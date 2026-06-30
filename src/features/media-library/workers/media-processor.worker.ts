@@ -10,6 +10,7 @@
  */
 
 import {
+  BACKGROUND_DECODE_WORKERS,
   createProResSampleSink,
   detectProResTrack,
 } from '@/infrastructure/browser/prores-sample-sink'
@@ -605,6 +606,7 @@ async function generateVideoThumbnail(
         mbModule,
         videoTrack as Parameters<typeof createProResSampleSink>[1],
         proResInfo,
+        { maxWorkers: BACKGROUND_DECODE_WORKERS },
       )
       try {
         const { value: sample } = await proResSink.samplesAtTimestamps([clampedTimestamp]).next()

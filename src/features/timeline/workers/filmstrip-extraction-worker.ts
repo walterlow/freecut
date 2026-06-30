@@ -9,6 +9,7 @@
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
 import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-url-registry'
 import {
+  BACKGROUND_DECODE_WORKERS,
   createProResSampleSink,
   detectProResTrack,
   type ProResSampleSink,
@@ -239,7 +240,9 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
 
     let canvasIterable: AsyncIterable<{ canvas: OffscreenCanvas | HTMLCanvasElement } | null>
     if (proResInfo) {
-      proResSink = createProResSampleSink(mb, videoTrack, proResInfo)
+      proResSink = createProResSampleSink(mb, videoTrack, proResInfo, {
+        maxWorkers: BACKGROUND_DECODE_WORKERS,
+      })
       canvasIterable = proResCanvasesAtTimestamps(proResSink, timestampGenerator(), width, height)
     } else {
       // CanvasSink poolSize matches our parallel save capacity to keep VRAM constant
