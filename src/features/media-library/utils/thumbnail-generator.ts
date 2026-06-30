@@ -6,6 +6,10 @@
  * Audio files get a generated waveform placeholder.
  */
 
+import {
+  createProResSampleSink,
+  detectProResTrack,
+} from '@/infrastructure/browser/prores-sample-sink'
 import { getMimeType } from './validation'
 
 interface ThumbnailOptions {
@@ -30,7 +34,8 @@ const loadMediabunny = () => import('mediabunny')
 async function generateVideoThumbnail(file: File, options: ThumbnailOptions = {}): Promise<Blob> {
   const opts = { ...DEFAULT_THUMBNAIL_OPTIONS, ...options }
 
-  const { Input, BlobSource, CanvasSink, ALL_FORMATS } = await loadMediabunny()
+  const mb = await loadMediabunny()
+  const { Input, BlobSource, CanvasSink, ALL_FORMATS } = mb
   let input: InstanceType<typeof Input> | null = null
   let sink: InstanceType<typeof CanvasSink> | null = null
 
@@ -51,15 +56,41 @@ async function generateVideoThumbnail(file: File, options: ThumbnailOptions = {}
     const width = dw > dh ? opts.maxSize : Math.floor((opts.maxSize * dw) / dh)
     const height = dh > dw ? opts.maxSize : Math.floor((opts.maxSize * dh) / dw)
 
+    // Get timestamp, clamped to valid range
+    const duration = await input.computeDuration()
+    const timestamp = Math.min(opts.timestamp, Math.max(0, duration - 0.1))
+
+    // ProRes (undecodable by WebCodecs/CanvasSink) is decoded via turbores instead.
+    const decodable =
+      typeof videoTrack.canDecode === 'function'
+        ? await videoTrack.canDecode().catch(() => true)
+        : true
+    const proResInfo = decodable ? null : await detectProResTrack(mb, videoTrack)
+    if (proResInfo) {
+      const proResSink = createProResSampleSink(mb, videoTrack, proResInfo)
+      try {
+        const { value: sample } = await proResSink.samplesAtTimestamps([timestamp]).next()
+        if (!sample) {
+          throw new Error('Failed to extract ProRes frame')
+        }
+        const canvas = new OffscreenCanvas(width, height)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          throw new Error('Failed to acquire 2D context for ProRes thumbnail')
+        }
+        sample.draw(ctx, 0, 0, width, height)
+        sample.close()
+        return await canvas.convertToBlob({ type: 'image/webp', quality: opts.quality })
+      } finally {
+        await proResSink.close()
+      }
+    }
+
     sink = new CanvasSink(videoTrack, {
       width,
       height,
       fit: 'fill',
     })
-
-    // Get timestamp, clamped to valid range
-    const duration = await input.computeDuration()
-    const timestamp = Math.min(opts.timestamp, Math.max(0, duration - 0.1))
 
     const wrapped = await sink.getCanvas(timestamp)
     if (!wrapped) {

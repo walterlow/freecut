@@ -9,6 +9,10 @@
  * This prevents UI blocking when importing media files.
  */
 
+import {
+  createProResSampleSink,
+  detectProResTrack,
+} from '@/infrastructure/browser/prores-sample-sink'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
 
@@ -586,15 +590,45 @@ async function generateVideoThumbnail(
     const width = dw > dh ? maxSize : Math.floor((maxSize * dw) / dh)
     const height = dh > dw ? maxSize : Math.floor((maxSize * dh) / dw)
 
+    // Clamp timestamp to valid range
+    const duration = await input.computeDuration()
+    const clampedTimestamp = Math.min(timestamp, Math.max(0, duration - 0.1))
+
+    // ProRes (undecodable by WebCodecs/CanvasSink) is decoded via turbores instead.
+    const decodable = videoTrack.canDecode ? await videoTrack.canDecode().catch(() => true) : true
+    const mbModule = mb as unknown as Parameters<typeof detectProResTrack>[0]
+    const proResInfo = decodable
+      ? null
+      : await detectProResTrack(mbModule, videoTrack as Parameters<typeof detectProResTrack>[1])
+    if (proResInfo) {
+      const proResSink = createProResSampleSink(
+        mbModule,
+        videoTrack as Parameters<typeof createProResSampleSink>[1],
+        proResInfo,
+      )
+      try {
+        const { value: sample } = await proResSink.samplesAtTimestamps([clampedTimestamp]).next()
+        if (!sample) {
+          throw new Error('Failed to extract ProRes frame')
+        }
+        const canvas = new OffscreenCanvas(width, height)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          throw new Error('Failed to acquire 2D context for ProRes thumbnail')
+        }
+        sample.draw(ctx, 0, 0, width, height)
+        sample.close()
+        return await canvas.convertToBlob({ type: 'image/webp', quality })
+      } finally {
+        await proResSink.close()
+      }
+    }
+
     sink = new mb.CanvasSink(videoTrack, {
       width,
       height,
       fit: 'fill',
     })
-
-    // Clamp timestamp to valid range
-    const duration = await input.computeDuration()
-    const clampedTimestamp = Math.min(timestamp, Math.max(0, duration - 0.1))
 
     const wrapped = await sink.getCanvas(clampedTimestamp)
     if (!wrapped) {
