@@ -39,30 +39,10 @@ describe('getProceduralBands', () => {
     expect(xBand.toFrame).toBe(89)
   })
 
-  it('uses a beats band scoped to the beat span for audio-reactive', () => {
-    const ar: MotionModifier = {
-      id: 'a1',
-      type: 'audio-reactive',
-      enabled: true,
-      amplitude: 1,
-      frequency: 0,
-      phaseFrames: 0,
-      seed: 1,
-      target: 'scale',
-      pulseFrames: 6,
-      beats: [
-        { frame: 10, amplitude: 1 },
-        { frame: 40, amplitude: 0.8 },
-      ],
-    }
-    const bands = getProceduralBands([ar], 90)
-    // scale target → width + height
-    expect([...bands.keys()].sort()).toEqual(['height', 'width'])
-    const band = bands.get('width')!
-    expect(band.kind).toBe('beats')
-    expect(band.beats).toEqual([10, 40])
-    expect(band.fromFrame).toBe(10)
-    expect(band.toFrame).toBe(46) // last beat (40) + pulseFrames (6)
+  it('tags micro-shake as a noise band', () => {
+    const shake = drift({ id: 's1', type: 'micro-shake' })
+    const bands = getProceduralBands([shake], 90)
+    expect(bands.get('x')?.kind).toBe('noise')
   })
 
   it('ignores disabled / zero-amplitude modifiers', () => {

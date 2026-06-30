@@ -38,8 +38,6 @@
     },
     "animateStages": {
       "presetsHint": "Presets drop editable keyframes — refine them in the graph.",
-      "adjustTitle": "Adjust",
-      "adjustHint": "Applies to presets and motion you add next.",
       "continuousTitle": "Continuous motion",
       "continuousHint": "Runs live and non-destructive until baked.",
       "liveBadge": "Live",
@@ -58,7 +56,6 @@
       "title": "Generator",
       "intensity": "Intensity",
       "duration": "Duration",
-      "stagger": "Stagger",
       "modulatorsTitle": "Modulators",
       "modulatorApplied": "Applied {{name}} to {{count}} clip(s)",
       "modulatorRemoved": "Removed {{name}}",
@@ -71,27 +68,8 @@
         "floatDrift": "Float drift",
         "breathPulse": "Breath pulse",
         "microShake": "Micro shake"
-      }
-    },
-    "audioReactive": {
-      "title": "Audio reactive",
-      "label": "Audio reactive",
-      "apply": "Apply",
-      "update": "Update",
-      "targetLabel": "Pulse",
-      "sourceLabel": "Source",
-      "untitledSource": "Untitled audio",
-      "noSourceHint": "Add an audio clip to drive beat-reactive motion.",
-      "noSource": "Select an audio source",
-      "noBeats": "No strong beats found in the audio",
-      "noOverlap": "No beats fall within the selected clip",
-      "applied": "Audio-reactive motion on {{count}} clip(s)",
-      "notReady": "Audio is still analyzing — try again in a moment.",
-      "targets": {
-        "scale": "Scale",
-        "bounce": "Bounce",
-        "rotation": "Rotation"
-      }
+      },
+      "removeAction": "Remove"
     },
     "motionPresets": {
       "textIncompatible": "Not suited for text",

@@ -38,8 +38,6 @@
     },
     "animateStages": {
       "presetsHint": "Hazır ayarlar düzenlenebilir kareler oluşturur — bunları grafikte iyileştirin.",
-      "adjustTitle": "Ayarla",
-      "adjustHint": "Sonra eklediğiniz hazır ayarlara ve harekete uygulanır.",
       "continuousTitle": "Sürekli hareket",
       "continuousHint": "Pişirilene kadar canlı ve tahribatsız çalışır.",
       "liveBadge": "Canlı",
@@ -52,26 +50,6 @@
       "applyMode": {
         "replace": "Değiştir",
         "add": "Ekle"
-      }
-    },
-    "audioReactive": {
-      "title": "Sese tepkili",
-      "label": "Sese tepkili",
-      "apply": "Uygula",
-      "update": "Güncelle",
-      "targetLabel": "Darbe",
-      "sourceLabel": "Kaynak",
-      "untitledSource": "Adsız ses",
-      "noSourceHint": "Ritme tepkili hareketi yönlendirmek için bir ses klibi ekleyin.",
-      "noSource": "Bir ses kaynağı seçin",
-      "noBeats": "Seste belirgin vuruş bulunamadı",
-      "noOverlap": "Seçili klibe denk gelen vuruş yok",
-      "applied": "{{count}} klipte sese tepkili hareket",
-      "notReady": "Ses hâlâ analiz ediliyor — birazdan tekrar deneyin.",
-      "targets": {
-        "scale": "Ölçek",
-        "bounce": "Zıplama",
-        "rotation": "Döndürme"
       }
     },
     "motionPresets": {

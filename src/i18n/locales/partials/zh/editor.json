@@ -38,8 +38,6 @@
     },
     "animateStages": {
       "presetsHint": "预设会生成可编辑的关键帧 — 可在图表中进行细调。",
-      "adjustTitle": "调整",
-      "adjustHint": "应用于随后添加的预设和运动。",
       "continuousTitle": "连续运动",
       "continuousHint": "在烘焙之前以实时且非破坏性的方式运行。",
       "liveBadge": "实时",
@@ -52,26 +50,6 @@
       "applyMode": {
         "replace": "替换",
         "add": "添加"
-      }
-    },
-    "audioReactive": {
-      "title": "音频反应",
-      "label": "音频反应",
-      "apply": "应用",
-      "update": "更新",
-      "targetLabel": "脉冲",
-      "sourceLabel": "来源",
-      "untitledSource": "未命名音频",
-      "noSourceHint": "添加音频片段以驱动随节拍反应的运动。",
-      "noSource": "请选择音频来源",
-      "noBeats": "音频中未找到明显节拍",
-      "noOverlap": "所选片段内没有节拍",
-      "applied": "{{count}} 个片段上的音频反应运动",
-      "notReady": "音频仍在分析中——请稍后重试。",
-      "targets": {
-        "scale": "缩放",
-        "bounce": "弹跳",
-        "rotation": "旋转"
       }
     },
     "motionPresets": {

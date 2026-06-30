@@ -13,6 +13,9 @@ import type { TimelineItem } from '@/types/timeline'
 import { useItemsStore } from '../items-store'
 import { useKeyframesStore, type KeyframeAddPayload } from '../keyframes-store'
 import { useTimelineSettingsStore } from '../timeline-settings-store'
+import { useTimelineCommandStore } from '../timeline-command-store'
+import { captureSnapshot } from '../commands/snapshot'
+import type { TimelineSnapshot } from '../commands/types'
 import { execute, canAddKeyframeAtFrame } from './shared'
 
 export interface MotionModifierAssignment {
@@ -55,6 +58,39 @@ export function applyMotionModifierToItems(assignments: MotionModifierAssignment
     },
     { count: assignments.length },
   )
+}
+
+/**
+ * Live (no-undo) replace of same-type modifiers — for flyout slider drags. Each
+ * call mutates the store directly so the preview tracks the drag; undo is added
+ * once at the end of the gesture via {@link commitMotionModifierEdit}.
+ */
+export function updateMotionModifiersLive(assignments: MotionModifierAssignment[]): void {
+  if (assignments.length === 0) return
+  const store = useItemsStore.getState()
+  for (const { itemId, modifier } of assignments) {
+    const item = store.itemById[itemId]
+    if (!item) continue
+    store._updateItem(itemId, {
+      motionModifiers: withModifier(item.motionModifiers, modifier),
+    })
+  }
+}
+
+/** Snapshot before a live modifier-edit gesture (drag start). */
+export function beginMotionModifierEdit(): TimelineSnapshot {
+  return captureSnapshot()
+}
+
+/**
+ * Close a live modifier-edit gesture: record a single undo entry spanning the
+ * whole drag (against the pre-drag `before` snapshot) and mark the project dirty.
+ */
+export function commitMotionModifierEdit(before: TimelineSnapshot): void {
+  useTimelineCommandStore
+    .getState()
+    .addUndoEntry({ type: 'UPDATE_MOTION_MODIFIERS', payload: {} }, before)
+  useTimelineSettingsStore.getState().markDirty()
 }
 
 export interface BakeMotionPlanEntry {

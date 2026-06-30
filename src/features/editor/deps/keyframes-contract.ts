@@ -45,9 +45,9 @@ export {
 } from '@/features/keyframes/utils/motion-modulators'
 export {
   createMotionModifier,
-  createAudioReactiveModifier,
+  getMotionModifierSettings,
+  updateMotionModifierSettings,
 } from '@/features/keyframes/utils/motion-modifier-eval'
-export type { AudioReactiveTarget } from '@/types/motion'
 export {
   bakeMotionModifiersToKeyframes,
   bakeAudioPulseToKeyframes,
@@ -58,5 +58,4 @@ export {
   createAudioPulseModulation,
   buildTriggerWaveMotionLayerKeyframes,
   createTriggerWaveMotionLayerEffects,
-  detectAudioReactiveBeats,
 } from '@/features/keyframes/utils/trigger-wave-motion-layer'

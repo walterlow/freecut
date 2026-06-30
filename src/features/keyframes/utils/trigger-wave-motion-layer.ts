@@ -213,65 +213,6 @@ export function buildTriggerWaveMotionLayerKeyframes(params: {
   ]
 }
 
-export function detectAudioReactiveBeats(params: {
-  waveformData: readonly number[]
-  durationInFrames: number
-  fps: number
-  sensitivity?: number
-  maxBeats?: number
-}): AudioReactiveBeat[] {
-  const { waveformData, durationInFrames, fps } = params
-  const maxFrame = Math.max(0, durationInFrames - 1)
-  if (waveformData.length === 0 || maxFrame <= 0) return []
-
-  const frameCount = maxFrame + 1
-  const frameEnergy = new Array<number>(frameCount).fill(0)
-  const samplesPerFrame = waveformData.length / frameCount
-
-  for (let frame = 0; frame < frameCount; frame += 1) {
-    const start = Math.floor(frame * samplesPerFrame)
-    const end = Math.max(start + 1, Math.ceil((frame + 1) * samplesPerFrame))
-    let peak = 0
-    for (let sample = start; sample < end && sample < waveformData.length; sample += 1) {
-      peak = Math.max(peak, Math.abs(waveformData[sample] ?? 0))
-    }
-    frameEnergy[frame] = peak
-  }
-
-  const maxEnergy = Math.max(...frameEnergy)
-  if (maxEnergy <= 0) return []
-
-  const normalized = frameEnergy.map((value) => value / maxEnergy)
-  const average = normalized.reduce((sum, value) => sum + value, 0) / normalized.length
-  const variance =
-    normalized.reduce((sum, value) => sum + (value - average) * (value - average), 0) /
-    normalized.length
-  const deviation = Math.sqrt(variance)
-  const sensitivity = clamp(params.sensitivity ?? 1, 0.25, 2)
-  const threshold = clamp(Math.max(0.28, average + deviation * (1.1 / sensitivity)), 0.18, 0.9)
-  const minSpacing = Math.max(1, Math.round(fps * 0.18))
-
-  const candidates: AudioReactiveBeat[] = []
-  for (let frame = 1; frame < normalized.length - 1; frame += 1) {
-    const value = normalized[frame] ?? 0
-    if (value < threshold) continue
-    if (value < (normalized[frame - 1] ?? 0) || value < (normalized[frame + 1] ?? 0)) continue
-    candidates.push({ frame, amplitude: value })
-  }
-
-  const maxBeats = Math.max(1, params.maxBeats ?? 48)
-  const selected: AudioReactiveBeat[] = []
-  for (const candidate of [...candidates].sort((left, right) => right.amplitude - left.amplitude)) {
-    if (selected.some((beat) => Math.abs(beat.frame - candidate.frame) < minSpacing)) {
-      continue
-    }
-    selected.push(candidate)
-    if (selected.length >= maxBeats) break
-  }
-
-  return selected.sort((left, right) => left.frame - right.frame)
-}
-
 function smoothstep(t: number): number {
   const x = clamp(t, 0, 1)
   return x * x * (3 - 2 * x)

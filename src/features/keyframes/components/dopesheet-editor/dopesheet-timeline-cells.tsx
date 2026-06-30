@@ -67,14 +67,13 @@ function KeyframeConnectors({ segments }: { segments: ConnectorSegment[] }) {
 }
 
 // Hatched fill marks a span as generated/procedural (distinct from solid
-// connector lines and diamonds). Beats render as ticks instead of a hatch.
+// connector lines and diamonds).
 const PROCEDURAL_HATCH =
   'repeating-linear-gradient(45deg, rgba(56,189,248,0.25) 0 2px, transparent 2px 5px)'
 
 /**
  * A non-keyframe band marking that a property is driven by a procedural motion
- * generator over a frame range. Sky-tinted to match the timeline Waves cue;
- * 'beats' bands draw ticks at each beat, others use a hatch fill.
+ * generator over a frame range. Sky-tinted to match the timeline Waves cue.
  */
 function ProceduralBandView({
   band,
@@ -90,22 +89,9 @@ function ProceduralBandView({
   return (
     <div
       className="pointer-events-none absolute top-1/2 z-0 h-2 -translate-y-1/2 overflow-hidden rounded-sm border border-sky-400/40 bg-sky-400/10"
-      style={{
-        left,
-        width,
-        backgroundImage: band.kind === 'beats' ? undefined : PROCEDURAL_HATCH,
-      }}
+      style={{ left, width, backgroundImage: PROCEDURAL_HATCH }}
       title={title}
-    >
-      {band.kind === 'beats' &&
-        band.beats?.map((beatFrame, index) => (
-          <span
-            key={`${beatFrame}-${index}`}
-            className="absolute inset-y-0 w-px bg-sky-300/80"
-            style={{ left: Math.max(0, frameToX(beatFrame) - left) }}
-          />
-        ))}
-    </div>
+    />
   )
 }
 

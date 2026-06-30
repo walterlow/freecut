@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, Plus, Trash2, WandSparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -6,20 +6,15 @@ import { useShallow } from 'zustand/react/shallow'
 import type { CanvasSettings } from '@/types/transform'
 import type { AnimatableProperty } from '@/types/keyframe'
 import type { TimelineItem } from '@/types/timeline'
+import type { MotionModifierType } from '@/types/motion'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Slider } from '@/components/ui/slider'
 import { Separator } from '@/components/ui/separator'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { SliderInput } from '@/shared/ui/property-controls'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog'
 import { useProjectStore } from '@/features/editor/deps/projects'
@@ -27,11 +22,13 @@ import {
   applyAnimationPreset,
   applyMotionPresetKeyframes,
   applyMotionModifierToItems,
+  updateMotionModifiersLive,
+  beginMotionModifierEdit,
+  commitMotionModifierEdit,
   removeMotionModifierFromItems,
   bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
-  importWaveformCache,
   useItemsStore,
   useKeyframesStore,
   useTimelineStore,
@@ -47,15 +44,13 @@ import {
   DEFAULT_MOTION_GENERATOR_SETTINGS,
   applyMotionGeneratorSettings,
   createMotionModifier,
-  createAudioReactiveModifier,
-  detectAudioReactiveBeats,
+  getMotionModifierSettings,
+  updateMotionModifierSettings,
   buildBakeMotionPlan,
   resolveAnimatedTransform,
   type MotionPreset,
   type MotionPresetCategory,
-  type MotionGeneratorSettings,
   type MotionModulator,
-  type AudioReactiveTarget,
 } from '@/features/editor/deps/keyframes'
 import {
   readAnimationPresets,
@@ -84,40 +79,124 @@ function isTimelineItem(item: TimelineItem | undefined): item is TimelineItem {
   return Boolean(item)
 }
 
-interface GeneratorControlProps {
-  label: string
-  value: number
-  displayValue: string
-  min: number
-  max: number
-  step: number
-  onChange: (value: number) => void
+interface ModifierEditSettings {
+  intensityScale?: number
+  durationScale?: number
 }
 
-const GeneratorControl = memo(function GeneratorControl({
-  label,
-  value,
-  displayValue,
-  min,
-  max,
-  step,
-  onChange,
-}: GeneratorControlProps) {
+interface ContinuousMotionRowProps {
+  modulator: MotionModulator
+  active: boolean
+  /** Disabled reason (incompatible selection) or null. */
+  reason: string | null
+  /** Live settings of the applied modifier (seeds the flyout sliders). */
+  settings: { intensityScale: number; durationScale: number } | null
+  onApply: () => void
+  onRemove: () => void
+  onLiveEdit: (settings: ModifierEditSettings) => void
+  onCommitEdit: (settings: ModifierEditSettings) => void
+  t: (key: string, options?: Record<string, unknown>) => string
+}
+
+/**
+ * One continuous-motion generator. Not applied → a button that applies it with
+ * sensible defaults in one click. Applied → a flyout (popover) whose Intensity/
+ * Duration sliders tune the LIVE modifier on the clip (preview updates as you
+ * drag, one undo per gesture); the modifier is removed from inside the flyout.
+ * No tuning happens before applying.
+ */
+const ContinuousMotionRow = memo(function ContinuousMotionRow({
+  modulator,
+  active,
+  reason,
+  settings,
+  onApply,
+  onRemove,
+  onLiveEdit,
+  onCommitEdit,
+  t,
+}: ContinuousMotionRowProps) {
+  const label = t(`editor.motionGenerator.modulators.${modulator.labelKey}`)
+
+  if (!active) {
+    const button = (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 w-full justify-start gap-1.5 px-2 text-[11px]"
+        disabled={reason !== null}
+        onClick={onApply}
+      >
+        <WandSparkles className="h-3.5 w-3.5" />
+        {label}
+      </Button>
+    )
+    if (!reason) return button
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>{button}</span>
+        </TooltipTrigger>
+        <TooltipContent>{reason}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  const intensity = settings?.intensityScale ?? 1
+  const duration = settings?.durationScale ?? 1
+
   return (
-    <label className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-        <span>{label}</span>
-        <span className="tabular-nums">{displayValue}</span>
-      </div>
-      <Slider
-        value={[value]}
-        min={min}
-        max={max}
-        step={step}
-        onValueChange={(next) => onChange(next[0] ?? value)}
-        className="h-4"
-      />
-    </label>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-7 w-full items-center gap-1.5 rounded-md border border-primary/60 bg-secondary/30 px-2 text-[11px] text-foreground hover:bg-secondary/50"
+        >
+          <WandSparkles className="h-3.5 w-3.5" />
+          {label}
+          <span className="ml-auto rounded bg-primary/15 px-1 text-[9px] font-medium uppercase tracking-wide text-primary">
+            {t('editor.animateStages.liveBadge')}
+          </span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="left" align="start" className="w-56 space-y-2 p-2">
+        <div className="text-[11px] font-medium text-foreground">{label}</div>
+        <div className="flex flex-col gap-1.5">
+          <SliderInput
+            label={t('editor.motionGenerator.intensity')}
+            value={intensity}
+            min={0}
+            max={2}
+            step={0.05}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
+            onChange={(v) => onCommitEdit({ intensityScale: v })}
+            onLiveChange={(v) => onLiveEdit({ intensityScale: v })}
+          />
+          <SliderInput
+            label={t('editor.motionGenerator.duration')}
+            value={duration}
+            min={0.25}
+            max={3}
+            step={0.05}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
+            onChange={(v) => onCommitEdit({ durationScale: v })}
+            onLiveChange={(v) => onLiveEdit({ durationScale: v })}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 w-full justify-start gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          {t('editor.motionGenerator.removeAction')}
+        </Button>
+      </PopoverContent>
+    </Popover>
   )
 })
 
@@ -132,8 +211,8 @@ interface StageSectionProps {
 
 /**
  * Collapsible workflow stage. The Animate panel reads top-to-bottom as a funnel
- * — Presets (declarative) → Adjust (parametric) → Continuous motion (procedural)
- * — and the secondary stages collapse so preset-only users keep a clean panel.
+ * — Presets (declarative) → Continuous motion (procedural) — and the secondary
+ * stage collapses so preset-only users keep a clean panel.
  */
 const StageSection = memo(function StageSection({
   title,
@@ -270,11 +349,6 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
   // 'replace' (default) clears a preset's target properties before applying so
   // reapplying an entrance/exit preset swaps it; 'add' layers onto what's there.
   const [applyMode, setApplyMode] = useState<'replace' | 'add'>('replace')
-  const [audioReactiveTarget, setAudioReactiveTarget] = useState<AudioReactiveTarget>('scale')
-  const [audioSourceId, setAudioSourceId] = useState<string | null>(null)
-  const [generatorSettings, setGeneratorSettings] = useState<MotionGeneratorSettings>(
-    DEFAULT_MOTION_GENERATOR_SETTINGS,
-  )
 
   useEffect(() => {
     if (!projectId) {
@@ -447,7 +521,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
           preset,
           preset.build(ctx),
           ctx,
-          generatorSettings,
+          DEFAULT_MOTION_GENERATOR_SETTINGS,
           index,
         )
         if (built.length === 0) return
@@ -485,7 +559,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
         }),
       )
     },
-    [addKeyframes, applyMode, canvas, generatorSettings, keyframesByItemId, selectedItems, t],
+    [addKeyframes, applyMode, canvas, keyframesByItemId, selectedItems, t],
   )
 
   // A modulator is "active" when every selected clip already carries it — used
@@ -502,6 +576,9 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
     return active
   }, [selectedItems])
 
+  // Apply-on-click: attach a parametric modifier with sensible defaults. It runs
+  // live at render time (non-destructive); the per-row flyout tunes it afterward.
+  // Per-item index staggers phase/seed across a multi-clip selection.
   const handleApplyModulator = useCallback(
     (modulator: MotionModulator) => {
       const reason = modulatorReason(modulator)
@@ -509,34 +586,15 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
         toast.warning(reason)
         return
       }
-
-      // Toggle off when already present on the whole selection.
-      if (activeModulatorIds.has(modulator.id)) {
-        removeMotionModifierFromItems(
-          selectedItems.map((item) => item.id),
-          modulator.id,
-        )
-        toast.success(
-          t('editor.motionGenerator.modulatorRemoved', {
-            name: t(`editor.motionGenerator.modulators.${modulator.labelKey}`),
-          }),
-        )
-        return
-      }
-
-      // Procedural: attach a parametric modifier evaluated at render time rather
-      // than baking a wall of keyframes. Per-item index staggers phase/seed.
       const assignments = selectedItems.map((item, index) => ({
         itemId: item.id,
-        modifier: createMotionModifier(modulator.id, generatorSettings, index),
+        modifier: createMotionModifier(modulator.id, DEFAULT_MOTION_GENERATOR_SETTINGS, index),
       }))
-
       const applied = applyMotionModifierToItems(assignments)
       if (applied === 0) {
         toast.warning(t('editor.motionGenerator.modulatorApplyFailed'))
         return
       }
-
       toast.success(
         t('editor.motionGenerator.modulatorApplied', {
           name: t(`editor.motionGenerator.modulators.${modulator.labelKey}`),
@@ -544,7 +602,71 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
         }),
       )
     },
-    [activeModulatorIds, generatorSettings, modulatorReason, selectedItems, t],
+    [modulatorReason, selectedItems, t],
+  )
+
+  const handleRemoveModulator = useCallback(
+    (modulator: MotionModulator) => {
+      if (selectedItems.length === 0) return
+      removeMotionModifierFromItems(
+        selectedItems.map((item) => item.id),
+        modulator.id,
+      )
+      toast.success(
+        t('editor.motionGenerator.modulatorRemoved', {
+          name: t(`editor.motionGenerator.modulators.${modulator.labelKey}`),
+        }),
+      )
+    },
+    [selectedItems, t],
+  )
+
+  // Live settings of each applied modulator on the first selected clip — seeds
+  // the flyout sliders so they open showing the modifier's current values.
+  const modulatorSettingsByType = useMemo(() => {
+    const map = new Map<MotionModifierType, { intensityScale: number; durationScale: number }>()
+    for (const modifier of selectedItem?.motionModifiers ?? []) {
+      if (modifier.enabled) map.set(modifier.type, getMotionModifierSettings(modifier))
+    }
+    return map
+  }, [selectedItem])
+
+  // One coalesced undo per flyout drag: snapshot on the first live change, commit
+  // on release. A plain click (no drag) commits directly. Only one flyout opens
+  // at a time, so a single ref tracks the active gesture.
+  const modifierEditRef = useRef<ReturnType<typeof beginMotionModifierEdit> | null>(null)
+  const buildModifierEditAssignments = useCallback(
+    (type: MotionModifierType, settings: ModifierEditSettings) =>
+      selectedItems.flatMap((item) => {
+        const existing = item.motionModifiers?.find((m) => m.type === type && m.enabled)
+        return existing
+          ? [{ itemId: item.id, modifier: updateMotionModifierSettings(existing, settings) }]
+          : []
+      }),
+    [selectedItems],
+  )
+  const handleModulatorLiveEdit = useCallback(
+    (type: MotionModifierType, settings: ModifierEditSettings) => {
+      const assignments = buildModifierEditAssignments(type, settings)
+      if (assignments.length === 0) return
+      if (!modifierEditRef.current) modifierEditRef.current = beginMotionModifierEdit()
+      updateMotionModifiersLive(assignments)
+    },
+    [buildModifierEditAssignments],
+  )
+  const handleModulatorCommitEdit = useCallback(
+    (type: MotionModifierType, settings: ModifierEditSettings) => {
+      const assignments = buildModifierEditAssignments(type, settings)
+      if (assignments.length === 0) return
+      if (modifierEditRef.current) {
+        updateMotionModifiersLive(assignments)
+        commitMotionModifierEdit(modifierEditRef.current)
+        modifierEditRef.current = null
+      } else {
+        applyMotionModifierToItems(assignments)
+      }
+    },
+    [buildModifierEditAssignments],
   )
 
   // Bake bridge: any selected clip carrying procedural motion can be flattened
@@ -616,169 +738,6 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
     [compatibilityByPresetId, selectedItem, t],
   )
 
-  const updateGeneratorSetting = useCallback(
-    (key: keyof MotionGeneratorSettings, value: number | string) => {
-      setGeneratorSettings((current) => ({ ...current, [key]: value }))
-    },
-    [],
-  )
-
-  // --- Audio-reactive modulator (cross-clip beat source) ---
-  const allItems = useItemsStore((s) => s.items)
-  // Any clip that can carry audio is a candidate beat source: audio clips and
-  // video clips (their waveform is fetched from the cache at apply time). We no
-  // longer require inline waveformData, which is rarely populated.
-  const audioSources = useMemo(
-    () =>
-      allItems.filter(
-        (item) =>
-          (item.type === 'audio' || item.type === 'video') &&
-          (Boolean(item.mediaId) ||
-            (item.type === 'audio' &&
-              Array.isArray(item.waveformData) &&
-              item.waveformData.length > 0)),
-      ),
-    [allItems],
-  )
-  const resolvedAudioSourceId =
-    audioSourceId && audioSources.some((source) => source.id === audioSourceId)
-      ? audioSourceId
-      : (audioSources[0]?.id ?? null)
-  const hasAudioReactive = useMemo(
-    () =>
-      selectedItems.length > 0 &&
-      selectedItems.every((item) =>
-        item.motionModifiers?.some((modifier) => modifier.type === 'audio-reactive' && modifier.enabled),
-      ),
-    [selectedItems],
-  )
-  const hasAudioReactiveOnClip = !!selectedItem?.motionModifiers?.some(
-    (modifier) => modifier.type === 'audio-reactive' && modifier.enabled,
-  )
-
-  const handleApplyAudioReactive = useCallback(async () => {
-    if (selectedItems.length === 0) {
-      toast.warning(t('editor.animatePresets.selectClipFirst'))
-      return
-    }
-    const source = resolvedAudioSourceId
-      ? useItemsStore.getState().itemById[resolvedAudioSourceId]
-      : null
-    if (!source || (source.type !== 'audio' && source.type !== 'video')) {
-      toast.warning(t('editor.audioReactive.noSource'))
-      return
-    }
-
-    // Resolve the source clip's audio peaks: inline data first, otherwise the
-    // mediaId-keyed waveform cache (generating from the clip's blob if needed).
-    let peaks: number[] | null = null
-    let peaksSampleRate = 0 // >0 means peaks span the whole media (needs slicing)
-    if (source.type === 'audio' && source.waveformData?.length) {
-      peaks = source.waveformData
-    } else if (source.mediaId) {
-      try {
-        const { waveformCache, getMonoPeaks } = await importWaveformCache()
-        let waveform = await waveformCache.getCachedWaveform(source.mediaId)
-        const blobUrl = 'src' in source ? source.src : undefined
-        if (!waveform?.isComplete && blobUrl) {
-          waveform = await waveformCache.getWaveform(source.mediaId, blobUrl)
-        }
-        if (waveform) {
-          peaks = Array.from(getMonoPeaks(waveform))
-          peaksSampleRate = waveform.sampleRate
-        }
-      } catch {
-        // fall through to the not-ready toast
-      }
-    }
-    if (!peaks || peaks.length === 0) {
-      toast.warning(t('editor.audioReactive.notReady'))
-      return
-    }
-
-    // Cache peaks span the whole media; slice to the clip's visible window so
-    // beats line up with what actually plays (best-effort trim offset).
-    let detectData = peaks
-    if (peaksSampleRate > 0) {
-      const sourceFps = source.type === 'video' && source.sourceFps ? source.sourceFps : canvas.fps
-      const offsetSec =
-        source.type === 'video'
-          ? (source.sourceStart ?? 0) / Math.max(1, sourceFps)
-          : (source.offset ?? 0)
-      const durSec = source.durationInFrames / canvas.fps
-      const start = Math.max(0, Math.floor(offsetSec * peaksSampleRate))
-      const end = Math.min(peaks.length, Math.ceil((offsetSec + durSec) * peaksSampleRate))
-      if (end > start) detectData = peaks.slice(start, end)
-    }
-
-    const sourceBeats = detectAudioReactiveBeats({
-      waveformData: detectData,
-      durationInFrames: source.durationInFrames,
-      fps: canvas.fps,
-      sensitivity: generatorSettings.intensityScale,
-    })
-    if (sourceBeats.length === 0) {
-      toast.warning(t('editor.audioReactive.noBeats'))
-      return
-    }
-
-    const assignments = selectedItems.flatMap((item, index) => {
-      // Remap the source clip's beats onto this item's local timeline so the
-      // target reacts at the real musical moments, even across clips.
-      const localBeats = sourceBeats
-        .map((beat) => ({
-          frame: source.from + beat.frame - item.from,
-          amplitude: beat.amplitude,
-        }))
-        .filter((beat) => beat.frame >= 0 && beat.frame < item.durationInFrames)
-      if (localBeats.length === 0) return []
-      return [
-        {
-          itemId: item.id,
-          modifier: createAudioReactiveModifier({
-            beats: localBeats,
-            target: audioReactiveTarget,
-            settings: generatorSettings,
-            fps: canvas.fps,
-            durationInFrames: item.durationInFrames,
-            itemIndex: index,
-          }),
-        },
-      ]
-    })
-
-    if (assignments.length === 0) {
-      toast.warning(t('editor.audioReactive.noOverlap'))
-      return
-    }
-    const applied = applyMotionModifierToItems(assignments)
-    if (applied === 0) {
-      toast.warning(t('editor.motionGenerator.modulatorApplyFailed'))
-      return
-    }
-    toast.success(t('editor.audioReactive.applied', { count: applied }))
-  }, [
-    audioReactiveTarget,
-    canvas.fps,
-    generatorSettings,
-    resolvedAudioSourceId,
-    selectedItems,
-    t,
-  ])
-
-  const handleRemoveAudioReactive = useCallback(() => {
-    if (selectedItems.length === 0) return
-    removeMotionModifierFromItems(
-      selectedItems.map((item) => item.id),
-      'audio-reactive',
-    )
-    toast.success(
-      t('editor.motionGenerator.modulatorRemoved', {
-        name: t('editor.audioReactive.label'),
-      }),
-    )
-  }, [selectedItems, t])
-
   // --- "Applied to this clip" summary (state the panel otherwise hides) ---
   const keyframedPropertyCount = useMemo(
     () =>
@@ -795,10 +754,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
     [selectedItem],
   )
   const hasAnyAnimation =
-    keyframedPropertyCount > 0 ||
-    activeModulators.length > 0 ||
-    hasAudioPulse ||
-    hasAudioReactiveOnClip
+    keyframedPropertyCount > 0 || activeModulators.length > 0 || hasAudioPulse
 
   const handleClearKeyframes = useCallback(() => {
     if (selectedItemIds.length === 0) return
@@ -869,27 +825,12 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
                           name: t(`editor.motionGenerator.modulators.${modulator.labelKey}`),
                         })}
                         className="rounded p-0.5 hover:bg-primary/20"
-                        onClick={() => handleApplyModulator(modulator)}
+                        onClick={() => handleRemoveModulator(modulator)}
                       >
                         <X className="h-2.5 w-2.5" />
                       </button>
                     </span>
                   ))}
-                  {hasAudioReactiveOnClip && (
-                    <span className="inline-flex items-center gap-1 rounded border border-sky-400/40 bg-sky-400/10 py-0.5 pl-1.5 pr-0.5 text-[10px] text-sky-300">
-                      {t('editor.audioReactive.label')}
-                      <button
-                        type="button"
-                        aria-label={t('editor.animateStages.removeModulator', {
-                          name: t('editor.audioReactive.label'),
-                        })}
-                        className="rounded p-0.5 hover:bg-sky-400/20"
-                        onClick={handleRemoveAudioReactive}
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </span>
-                  )}
                   {hasAudioPulse && (
                     <span className="inline-flex items-center rounded border border-border bg-secondary/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                       {t('editor.animateStages.audioPulseChip')}
@@ -943,143 +884,28 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
 
             <Separator />
 
-            {/* ── Shape: parametric tuning applied to anything added next ── */}
-            <StageSection
-              title={t('editor.animateStages.adjustTitle')}
-              hint={t('editor.animateStages.adjustHint')}
-            >
-              <GeneratorControl
-                label={t('editor.motionGenerator.intensity')}
-                value={generatorSettings.intensityScale}
-                displayValue={`${Math.round(generatorSettings.intensityScale * 100)}%`}
-                min={0}
-                max={2}
-                step={0.05}
-                onChange={(value) => updateGeneratorSetting('intensityScale', value)}
-              />
-              <GeneratorControl
-                label={t('editor.motionGenerator.duration')}
-                value={generatorSettings.durationScale}
-                displayValue={`${Math.round(generatorSettings.durationScale * 100)}%`}
-                min={0.25}
-                max={3}
-                step={0.05}
-                onChange={(value) => updateGeneratorSetting('durationScale', value)}
-              />
-              <GeneratorControl
-                label={t('editor.motionGenerator.stagger')}
-                value={generatorSettings.staggerFrames}
-                displayValue={`${Math.round(generatorSettings.staggerFrames)}f`}
-                min={0}
-                max={30}
-                step={1}
-                onChange={(value) => updateGeneratorSetting('staggerFrames', value)}
-              />
-            </StageSection>
-
-            <Separator />
-
-            {/* ── Shape: procedural. Modulators run live at render time and are
-                non-destructive until Bake flattens them into keyframes. ── */}
+            {/* ── Procedural generators. Click applies with defaults (runs live,
+                non-destructive); the per-row flyout tunes the live modifier and
+                Bake flattens them into keyframes. ── */}
             <StageSection
               title={t('editor.animateStages.continuousTitle')}
               hint={t('editor.animateStages.continuousHint')}
             >
               <div className="grid grid-cols-1 gap-1">
-                {MOTION_MODULATORS.map((modulator) => {
-                  const reason = modulatorReason(modulator)
-                  const active = activeModulatorIds.has(modulator.id)
-                  const button = (
-                    <Button
-                      key={modulator.id}
-                      type="button"
-                      variant={active ? 'secondary' : 'outline'}
-                      size="sm"
-                      aria-pressed={active}
-                      className={cn(
-                        'h-7 justify-start gap-1.5 px-2 text-[11px]',
-                        active && 'border-primary/60 text-foreground',
-                      )}
-                      disabled={reason !== null}
-                      onClick={() => handleApplyModulator(modulator)}
-                    >
-                      <WandSparkles className="h-3.5 w-3.5" />
-                      {t(`editor.motionGenerator.modulators.${modulator.labelKey}`)}
-                      {active && (
-                        <span className="ml-auto rounded bg-primary/15 px-1 text-[9px] font-medium uppercase tracking-wide text-primary">
-                          {t('editor.animateStages.liveBadge')}
-                        </span>
-                      )}
-                    </Button>
-                  )
-                  if (!reason) return button
-                  return (
-                    <Tooltip key={modulator.id}>
-                      <TooltipTrigger asChild>
-                        <span>{button}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>{reason}</TooltipContent>
-                    </Tooltip>
-                  )
-                })}
-              </div>
-
-              {/* Audio-reactive: pulse a property on each beat of a chosen audio
-                  clip. Beats are detected at apply time and stored on the clip. */}
-              <div className="flex flex-col gap-1.5 rounded-md border border-border/50 p-1.5">
-                <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                  {t('editor.audioReactive.title')}
-                </span>
-                {audioSources.length === 0 ? (
-                  <p className="text-[10px] leading-snug text-muted-foreground/70">
-                    {t('editor.audioReactive.noSourceHint')}
-                  </p>
-                ) : (
-                  <>
-                    <Select
-                      value={audioReactiveTarget}
-                      onValueChange={(value) => setAudioReactiveTarget(value as AudioReactiveTarget)}
-                    >
-                      <SelectTrigger className="h-7 text-[11px]">
-                        <SelectValue placeholder={t('editor.audioReactive.targetLabel')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(['scale', 'bounce', 'rotation'] as const).map((target) => (
-                          <SelectItem key={target} value={target} className="text-[11px]">
-                            {t(`editor.audioReactive.targets.${target}`)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select
-                      value={resolvedAudioSourceId ?? undefined}
-                      onValueChange={(value) => setAudioSourceId(value)}
-                    >
-                      <SelectTrigger className="h-7 text-[11px]">
-                        <SelectValue placeholder={t('editor.audioReactive.sourceLabel')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {audioSources.map((source) => (
-                          <SelectItem key={source.id} value={source.id} className="text-[11px]">
-                            {source.label || t('editor.audioReactive.untitledSource')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-7 justify-start gap-1.5 px-2 text-[11px]"
-                      onClick={() => void handleApplyAudioReactive()}
-                    >
-                      <WandSparkles className="h-3.5 w-3.5" />
-                      {hasAudioReactive
-                        ? t('editor.audioReactive.update')
-                        : t('editor.audioReactive.apply')}
-                    </Button>
-                  </>
-                )}
+                {MOTION_MODULATORS.map((modulator) => (
+                  <ContinuousMotionRow
+                    key={modulator.id}
+                    modulator={modulator}
+                    active={activeModulatorIds.has(modulator.id)}
+                    reason={modulatorReason(modulator)}
+                    settings={modulatorSettingsByType.get(modulator.id) ?? null}
+                    onApply={() => handleApplyModulator(modulator)}
+                    onRemove={() => handleRemoveModulator(modulator)}
+                    onLiveEdit={(settings) => handleModulatorLiveEdit(modulator.id, settings)}
+                    onCommitEdit={(settings) => handleModulatorCommitEdit(modulator.id, settings)}
+                    t={t}
+                  />
+                ))}
               </div>
 
               <Tooltip>

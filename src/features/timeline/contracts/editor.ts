@@ -40,6 +40,9 @@ export { applyAnimationPreset } from '../stores/actions/preset-actions'
 export { applyMotionPresetKeyframes } from '../stores/actions/keyframe-actions'
 export {
   applyMotionModifierToItems,
+  updateMotionModifiersLive,
+  beginMotionModifierEdit,
+  commitMotionModifierEdit,
   removeMotionModifierFromItems,
   setEffectAudioPulse,
   bakeMotionToKeyframes,

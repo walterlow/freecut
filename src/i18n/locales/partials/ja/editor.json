@@ -38,8 +38,6 @@
     },
     "animateStages": {
       "presetsHint": "プリセットは編集可能なキーフレームを生成します。グラフで調整できます。",
-      "adjustTitle": "調整",
-      "adjustHint": "次に追加するプリセットとモーションに適用されます。",
       "continuousTitle": "連続モーション",
       "continuousHint": "ベイクするまでライブかつ非破壊で動作します。",
       "liveBadge": "ライブ",
@@ -52,26 +50,6 @@
       "applyMode": {
         "replace": "置換",
         "add": "追加"
-      }
-    },
-    "audioReactive": {
-      "title": "オーディオ反応",
-      "label": "オーディオ反応",
-      "apply": "適用",
-      "update": "更新",
-      "targetLabel": "パルス",
-      "sourceLabel": "ソース",
-      "untitledSource": "無題のオーディオ",
-      "noSourceHint": "ビートに反応する動きを駆動するにはオーディオクリップを追加してください。",
-      "noSource": "オーディオソースを選択してください",
-      "noBeats": "オーディオに強いビートが見つかりません",
-      "noOverlap": "選択したクリップ内にビートがありません",
-      "applied": "{{count}} 件のクリップにオーディオ反応モーション",
-      "notReady": "オーディオを解析中です。しばらくしてからもう一度お試しください。",
-      "targets": {
-        "scale": "スケール",
-        "bounce": "バウンス",
-        "rotation": "回転"
       }
     },
     "motionPresets": {

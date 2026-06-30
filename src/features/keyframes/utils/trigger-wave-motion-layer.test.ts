@@ -4,7 +4,6 @@ import {
   evaluateAudioPulseParams,
   buildTriggerWaveMotionLayerKeyframes,
   createTriggerWaveMotionLayerEffects,
-  detectAudioReactiveBeats,
 } from './trigger-wave-motion-layer'
 import { DEFAULT_MOTION_GENERATOR_SETTINGS } from './motion-generator'
 
@@ -74,32 +73,6 @@ describe('trigger wave motion layer', () => {
 
     expect(payloads[1]).toMatchObject({ frame: 72, value: 1 })
     expect(payloads[3]?.value).toBeCloseTo(0.035)
-  })
-
-  it('detects strong local peaks from waveform data', () => {
-    const waveform = new Array<number>(120).fill(0.08)
-    waveform[15] = 0.92
-    waveform[50] = 0.7
-    waveform[90] = 1
-
-    const beats = detectAudioReactiveBeats({
-      waveformData: waveform,
-      durationInFrames: 120,
-      fps: 30,
-    })
-
-    expect(beats.map((beat) => beat.frame)).toEqual([15, 50, 90])
-    expect(beats[2]?.amplitude).toBeCloseTo(1)
-  })
-
-  it('ignores silent waveform data', () => {
-    expect(
-      detectAudioReactiveBeats({
-        waveformData: new Array<number>(60).fill(0),
-        durationInFrames: 60,
-        fps: 30,
-      }),
-    ).toEqual([])
   })
 
   it('builds a sparse audio-pulse modulation instead of baking keyframes', () => {

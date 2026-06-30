@@ -4,9 +4,10 @@ import type { MotionModifier } from '@/types/motion'
 import { DEFAULT_MOTION_GENERATOR_SETTINGS } from './motion-generator'
 import {
   applyMotionModifiers,
-  createAudioReactiveModifier,
   createMotionModifier,
   evaluateMotionModifiers,
+  getMotionModifierSettings,
+  updateMotionModifierSettings,
   type MotionModifierEvalContext,
 } from './motion-modifier-eval'
 
@@ -129,40 +130,27 @@ describe('motion modifier evaluation', () => {
     expect(first.amplitude).toBe(settings.intensityScale)
   })
 
-  it('audio-reactive pulses scale only near a beat, idle otherwise', () => {
-    const mod = createAudioReactiveModifier({
-      beats: [{ frame: 20, amplitude: 1 }],
-      target: 'scale',
-      settings: DEFAULT_MOTION_GENERATOR_SETTINGS,
-      fps: 30,
-      durationInFrames: 90,
-    })
-    const pulseFrames = mod.pulseFrames ?? 0
-    expect(pulseFrames).toBeGreaterThan(0)
-
-    // Just after the beat onset (within the attack), scale exceeds rest.
-    const onBeat = evaluateMotionModifiers([mod], ctx({ frame: 21 }))
-    expect(onBeat.scaleWidth).toBeGreaterThan(1)
-    expect(onBeat.scaleHeight).toBeGreaterThan(1)
-
-    // Before the beat and after the envelope ends, no contribution.
-    const before = evaluateMotionModifiers([mod], ctx({ frame: 10 }))
-    const after = evaluateMotionModifiers([mod], ctx({ frame: 20 + pulseFrames + 1 }))
-    expect(before.scaleWidth).toBe(1)
-    expect(after.scaleWidth).toBe(1)
+  it('round-trips generator settings through create/get (frequency is duration inverse)', () => {
+    const settings = { ...DEFAULT_MOTION_GENERATOR_SETTINGS, intensityScale: 1.4, durationScale: 2 }
+    const mod = createMotionModifier('float-drift', settings)
+    const recovered = getMotionModifierSettings(mod)
+    expect(recovered.intensityScale).toBeCloseTo(1.4, 6)
+    expect(recovered.durationScale).toBeCloseTo(2, 6)
   })
 
-  it('audio-reactive bounce kicks upward (negative dy) on a beat', () => {
-    const mod = createAudioReactiveModifier({
-      beats: [{ frame: 20, amplitude: 1 }],
-      target: 'bounce',
-      settings: DEFAULT_MOTION_GENERATOR_SETTINGS,
-      fps: 30,
-      durationInFrames: 90,
-    })
-    const onBeat = evaluateMotionModifiers([mod], ctx({ frame: 21 }))
-    expect(onBeat.dy).toBeLessThan(0)
-    expect(onBeat.scaleWidth).toBe(1) // bounce doesn't touch scale
+  it('updateMotionModifierSettings tunes amplitude/frequency but keeps identity', () => {
+    const mod = createMotionModifier('breath-pulse', DEFAULT_MOTION_GENERATOR_SETTINGS, 3)
+    const next = updateMotionModifierSettings(mod, { intensityScale: 0.5, durationScale: 0.5 })
+
+    expect(next.id).toBe(mod.id) // same instance — editing, not replacing
+    expect(next.seed).toBe(mod.seed)
+    expect(next.amplitude).toBeCloseTo(0.5, 6)
+    // durationScale 0.5 → twice as fast as the 1.0 baseline.
+    const baseline = createMotionModifier('breath-pulse', DEFAULT_MOTION_GENERATOR_SETTINGS)
+    expect(next.frequency).toBeCloseTo(baseline.frequency * 2, 6)
+    // A partial edit leaves the untouched field alone.
+    const intensityOnly = updateMotionModifierSettings(mod, { intensityScale: 1 })
+    expect(intensityOnly.frequency).toBe(mod.frequency)
   })
 
   it('createMotionModifier slows oscillation as duration scale grows', () => {

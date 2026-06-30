@@ -38,8 +38,6 @@
     },
     "animateStages": {
       "presetsHint": "Vorlagen erzeugen bearbeitbare Keyframes — verfeinere sie im Graphen.",
-      "adjustTitle": "Anpassen",
-      "adjustHint": "Gilt für danach hinzugefügte Vorlagen und Bewegungen.",
       "continuousTitle": "Kontinuierliche Bewegung",
       "continuousHint": "Läuft live und nicht-destruktiv bis zum Backen.",
       "liveBadge": "Live",
@@ -52,26 +50,6 @@
       "applyMode": {
         "replace": "Ersetzen",
         "add": "Hinzufügen"
-      }
-    },
-    "audioReactive": {
-      "title": "Audioreaktiv",
-      "label": "Audioreaktiv",
-      "apply": "Anwenden",
-      "update": "Aktualisieren",
-      "targetLabel": "Puls",
-      "sourceLabel": "Quelle",
-      "untitledSource": "Unbenanntes Audio",
-      "noSourceHint": "Füge einen Audioclip hinzu, um beat-reaktive Bewegung zu steuern.",
-      "noSource": "Wähle eine Audioquelle",
-      "noBeats": "Keine markanten Beats im Audio gefunden",
-      "noOverlap": "Keine Beats liegen im ausgewählten Clip",
-      "applied": "Audioreaktive Bewegung auf {{count}} Clip(s)",
-      "notReady": "Audio wird noch analysiert — versuche es gleich erneut.",
-      "targets": {
-        "scale": "Skalierung",
-        "bounce": "Sprung",
-        "rotation": "Rotation"
       }
     },
     "motionPresets": {

@@ -11,7 +11,7 @@
 import type { ResolvedTransform } from '@/types/transform'
 import type { AudioPulseModulation } from '@/types/effects'
 import type { TimelineItem } from '@/types/timeline'
-import type { AudioReactiveTarget, MotionModifier, MotionModifierType } from '@/types/motion'
+import type { MotionModifier, MotionModifierType } from '@/types/motion'
 import {
   buildEffectAnimatableProperty,
   type AnimatableProperty,
@@ -30,25 +30,10 @@ export interface BakedKeyframe {
   easing: EasingType
 }
 
-const MODIFIER_PROPERTIES: Record<
-  Exclude<MotionModifierType, 'audio-reactive'>,
-  TransformAnimatableProperty[]
-> = {
+const MODIFIER_PROPERTIES: Record<MotionModifierType, TransformAnimatableProperty[]> = {
   'float-drift': ['x', 'y', 'rotation'],
   'breath-pulse': ['width', 'height', 'opacity'],
   'micro-shake': ['x', 'y', 'rotation'],
-}
-
-/** Transform properties an audio-reactive modifier writes, by target. */
-function audioReactiveProperties(target: AudioReactiveTarget): TransformAnimatableProperty[] {
-  switch (target) {
-    case 'scale':
-      return ['width', 'height']
-    case 'bounce':
-      return ['y']
-    case 'rotation':
-      return ['rotation']
-  }
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -57,14 +42,12 @@ function clamp(value: number, min: number, max: number): number {
 
 /**
  * Finest uniform sample step (frames) across the continuous-wave modifiers; 0
- * when none. Audio-reactive modifiers are beat-driven, not oscillators — they
- * contribute explicit control frames instead (see {@link beatControlFrames}).
+ * when none.
  */
 function sampleStep(modifiers: readonly MotionModifier[], fps: number): number {
   let step = Number.POSITIVE_INFINITY
   for (const modifier of modifiers) {
     if (!modifier.enabled || modifier.amplitude <= 0) continue
-    if (modifier.type === 'audio-reactive') continue
     // Smooth waves: 6 samples/cycle. Noise: sample at the noise rate itself.
     const samplesPerCycle = modifier.type === 'micro-shake' ? 1 : 6
     const stepForModifier = Math.max(
@@ -76,35 +59,11 @@ function sampleStep(modifiers: readonly MotionModifier[], fps: number): number {
   return Number.isFinite(step) ? step : 0
 }
 
-/** Control frames around each audio-reactive beat: rest, onset, peak, decay end. */
-function beatControlFrames(
-  modifiers: readonly MotionModifier[],
-  fps: number,
-  last: number,
-): number[] {
-  const frames: number[] = []
-  for (const modifier of modifiers) {
-    if (modifier.type !== 'audio-reactive' || !modifier.enabled || modifier.amplitude <= 0) continue
-    if (!modifier.beats || modifier.beats.length === 0) continue
-    const duration = Math.max(1, modifier.pulseFrames ?? Math.round(fps * 0.36))
-    const attack = Math.round(duration * 0.15)
-    for (const beat of modifier.beats) {
-      const start = clamp(beat.frame, 0, last)
-      frames.push(Math.max(0, start - 1), start, clamp(start + attack, 0, last), clamp(start + duration, 0, last))
-    }
-  }
-  return frames
-}
-
 function activeProperties(modifiers: readonly MotionModifier[]): TransformAnimatableProperty[] {
   const set = new Set<TransformAnimatableProperty>()
   for (const modifier of modifiers) {
     if (!modifier.enabled || modifier.amplitude <= 0) continue
-    const properties =
-      modifier.type === 'audio-reactive'
-        ? audioReactiveProperties(modifier.target ?? 'scale')
-        : MODIFIER_PROPERTIES[modifier.type]
-    for (const property of properties) set.add(property)
+    for (const property of MODIFIER_PROPERTIES[modifier.type]) set.add(property)
   }
   return [...set]
 }
@@ -127,14 +86,11 @@ export function bakeMotionModifiersToKeyframes(params: {
     return { keyframes: [], properties: [] }
   }
 
-  // Union of uniform wave samples and per-beat control frames, so both
-  // continuous and audio-reactive modifiers are captured in one pass.
   const frameSet = new Set<number>([0, last])
   const step = sampleStep(modifiers, fps)
   if (step > 0) {
     for (let frame = 0; frame <= last; frame += step) frameSet.add(frame)
   }
-  for (const frame of beatControlFrames(modifiers, fps, last)) frameSet.add(frame)
   const frames = [...frameSet].sort((left, right) => left - right)
 
   const baked: BakedKeyframe[] = []

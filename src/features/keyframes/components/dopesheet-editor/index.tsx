@@ -897,8 +897,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [transitionBlockedRanges, currentFrame],
   )
 
-  // Procedural motion (drift / breath / shake / audio-reactive) isn't keyed, so
-  // show it as a band per driven property instead of diamonds, until baked.
+  // Procedural motion (drift / breath / shake) isn't keyed, so show it as a band
+  // per driven property instead of diamonds, until baked.
   const itemMotionModifiers = useItemsStore((s) => s.itemById[itemId]?.motionModifiers)
   const proceduralBandByProperty = useMemo(
     () => getProceduralBands(itemMotionModifiers, totalFrames),

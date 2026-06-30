@@ -38,8 +38,6 @@
     },
     "animateStages": {
       "presetsHint": "As predefinições criam quadros-chave editáveis — refine-os no gráfico.",
-      "adjustTitle": "Ajustar",
-      "adjustHint": "Aplica-se às predefinições e ao movimento adicionados em seguida.",
       "continuousTitle": "Movimento contínuo",
       "continuousHint": "Executa ao vivo e de forma não destrutiva até ser consolidado.",
       "liveBadge": "Ao vivo",
@@ -52,26 +50,6 @@
       "applyMode": {
         "replace": "Substituir",
         "add": "Adicionar"
-      }
-    },
-    "audioReactive": {
-      "title": "Reativo ao áudio",
-      "label": "Reativo ao áudio",
-      "apply": "Aplicar",
-      "update": "Atualizar",
-      "targetLabel": "Pulso",
-      "sourceLabel": "Fonte",
-      "untitledSource": "Áudio sem título",
-      "noSourceHint": "Adicione um clipe de áudio para impulsionar o movimento reativo à batida.",
-      "noSource": "Selecione uma fonte de áudio",
-      "noBeats": "Nenhuma batida forte encontrada no áudio",
-      "noOverlap": "Nenhuma batida cai dentro do clipe selecionado",
-      "applied": "Movimento reativo ao áudio em {{count}} clipe(s)",
-      "notReady": "O áudio ainda está sendo analisado — tente novamente em instantes.",
-      "targets": {
-        "scale": "Escala",
-        "bounce": "Salto",
-        "rotation": "Rotação"
       }
     },
     "motionPresets": {

@@ -38,8 +38,6 @@
     },
     "animateStages": {
       "presetsHint": "Les préréglages créent des images clés modifiables — affinez-les dans le graphique.",
-      "adjustTitle": "Ajuster",
-      "adjustHint": "S’applique aux préréglages et au mouvement ajoutés ensuite.",
       "continuousTitle": "Mouvement continu",
       "continuousHint": "S’exécute en direct et de façon non destructive jusqu’à la conversion.",
       "liveBadge": "Direct",
@@ -52,26 +50,6 @@
       "applyMode": {
         "replace": "Remplacer",
         "add": "Ajouter"
-      }
-    },
-    "audioReactive": {
-      "title": "Réactif à l’audio",
-      "label": "Réactif à l’audio",
-      "apply": "Appliquer",
-      "update": "Mettre à jour",
-      "targetLabel": "Impulsion",
-      "sourceLabel": "Source",
-      "untitledSource": "Audio sans titre",
-      "noSourceHint": "Ajoutez un clip audio pour piloter le mouvement réactif au rythme.",
-      "noSource": "Sélectionnez une source audio",
-      "noBeats": "Aucun temps fort détecté dans l’audio",
-      "noOverlap": "Aucun temps ne tombe dans le clip sélectionné",
-      "applied": "Mouvement réactif à l’audio sur {{count}} clip(s)",
-      "notReady": "L’audio est encore en cours d’analyse — réessayez dans un instant.",
-      "targets": {
-        "scale": "Échelle",
-        "bounce": "Rebond",
-        "rotation": "Rotation"
       }
     },
     "motionPresets": {
