@@ -656,16 +656,26 @@ const VideoPreviewBase = memo(function VideoPreviewBase({
       ? displayedFrame
       : baseComparisonTargetFrame
 
+  // Leaving split comparison clears the rendered after-frame. Kept as its own
+  // effect keyed only on the mode so the per-frame `comparisonTargetFrame`
+  // churn doesn't re-run the heavier split render effect on every frame.
   useEffect(() => {
-    if (stageColorGradeComparisonMode !== 'split') {
-      splitAfterPendingFrameRef.current = null
-      setSplitAfterRenderedFrame(null)
-      return
-    }
+    if (stageColorGradeComparisonMode === 'split') return
+    splitAfterPendingFrameRef.current = null
+    setSplitAfterRenderedFrame((frame) => (frame === null ? frame : null))
+  }, [stageColorGradeComparisonMode])
+
+  useEffect(() => {
+    if (stageColorGradeComparisonMode !== 'split') return
 
     let cancelled = false
     splitAfterPendingFrameRef.current = comparisonTargetFrame
-    setSplitAfterRenderedFrame((frame) => (frame === comparisonTargetFrame ? frame : null))
+    // Intentionally NOT resetting `splitAfterRenderedFrame` here: the readiness
+    // check (`splitAfterRenderedFrame === comparisonTargetFrame`) already gates
+    // the overlay, so a stale frame stays hidden until the async render catches
+    // up. The previous synchronous reset fed a render cascade
+    // (displayedFrame → comparisonTargetFrame → setState → displayedFrame …)
+    // that tripped React's "maximum update depth".
 
     const renderPendingSplitAfter = async () => {
       if (splitAfterRenderInFlightRef.current) return
