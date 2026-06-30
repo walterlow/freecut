@@ -46,6 +46,10 @@ interface ProResPreviewState {
   decodeChain: Promise<unknown>
   /** The frame index the latest render asked for; used to drop superseded draws. */
   currentFrameIndex: number
+  /** Whether any frame has been painted yet (so the first frame always paints). */
+  hasDrawn: boolean
+  /** The frame index currently on the canvas; lets catch-up decodes paint forward. */
+  lastDrawnIndex: number
 }
 
 interface ProResPreviewInnerProps {
@@ -171,9 +175,23 @@ const ProResPreviewCanvasInner = memo<ProResPreviewInnerProps>(
 
         try {
           const sample = await decodeFrame(state, frameIndex)
-          // A newer render superseded this one, or we were torn down mid-decode: don't
-          // paint a stale frame (it stays cached for whoever needs it).
-          if (state.disposed || state.currentFrameIndex !== frameIndex) return
+          if (state.disposed) return
+          // Decide whether to paint this just-decoded frame. During playback the playhead
+          // advances while the decode is in flight, so by the time it resolves a newer
+          // frame is usually the "current" target. The old guard skipped any non-current
+          // frame — which, on entry with a cold cache, dropped EVERY in-flight decode and
+          // left the canvas black until throughput caught the moving playhead (while a
+          // paused seek, with a still playhead, painted fine). Instead: always paint the
+          // first frame, and thereafter paint the current target OR any frame that
+          // advances in the playback direction. This keeps the canvas moving forward
+          // through the catch-up instead of black, and still never flickers backward.
+          if (state.hasDrawn) {
+            const isCurrent = frameIndex === state.currentFrameIndex
+            const advances = isReversed
+              ? frameIndex < state.lastDrawnIndex
+              : frameIndex > state.lastDrawnIndex
+            if (!isCurrent && !advances) return
+          }
 
           const canvas = canvasRef.current
           if (sample && canvas) {
@@ -189,7 +207,11 @@ const ProResPreviewCanvasInner = memo<ProResPreviewInnerProps>(
             if (canvas.width !== drawWidth) canvas.width = drawWidth
             if (canvas.height !== drawHeight) canvas.height = drawHeight
             const ctx = canvas.getContext('2d')
-            if (ctx) sample.draw(ctx, 0, 0, drawWidth, drawHeight)
+            if (ctx) {
+              sample.draw(ctx, 0, 0, drawWidth, drawHeight)
+              state.hasDrawn = true
+              state.lastDrawnIndex = frameIndex
+            }
           }
 
           // Warm the next frames in the playback direction so the upcoming ticks hit the
@@ -240,6 +262,8 @@ const ProResPreviewCanvasInner = memo<ProResPreviewInnerProps>(
         inflight: new Map(),
         decodeChain: Promise.resolve(),
         currentFrameIndex: -1,
+        hasDrawn: false,
+        lastDrawnIndex: -1,
       }
       stateRef.current = state
 
