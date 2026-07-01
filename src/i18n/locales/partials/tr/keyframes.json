@@ -89,7 +89,11 @@
       "filterAll": "Tümü",
       "filterIn": "Giriş",
       "filterOut": "Çıkış",
-      "filterInOut": "Giriş/Çıkış"
+      "filterInOut": "Giriş/Çıkış",
+      "positionPreview": "Konum önizlemesi",
+      "duration": "Süre",
+      "play": "Oynat",
+      "pause": "Duraklat"
     }
   },
   "keyframes": {

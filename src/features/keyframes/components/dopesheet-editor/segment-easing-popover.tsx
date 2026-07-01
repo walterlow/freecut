@@ -16,6 +16,7 @@ import {
   effectiveBezier,
   findMatchingPreset,
   presetDirection,
+  presetMatchesEasing,
   presetToEasing,
 } from './easings-dev-presets'
 import { EasingCurveEditor } from './easing-curve-editor'
@@ -79,6 +80,9 @@ export function SegmentEasingPopover({
   const [open, setOpen] = useState(false)
   const [presetType, setPresetType] = useState<PresetType>('Easing')
   const [direction, setDirection] = useState<DirectionFilter>('all')
+  // The user's last explicit preset pick, used to disambiguate identical-curve
+  // presets (e.g. Snappy Out vs Out Expo) when highlighting the active one.
+  const [pickedName, setPickedName] = useState<string | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -104,7 +108,18 @@ export function SegmentEasingPopover({
   const bandLeft = left + inset
   const bandWidth = Math.max(2, width - inset * 2)
 
-  const activePreset = mixed ? null : findMatchingPreset(easing, easingConfig)
+  // Prefer the user's explicit pick when its curve still matches the segment, so
+  // an identical-curve twin (e.g. Snappy Out vs Out Expo) can't steal the
+  // highlight; otherwise fall back to the first matching preset.
+  const pickedPreset =
+    pickedName != null
+      ? [...EASING_PRESETS, ...SPRING_PRESETS].find((preset) => preset.name === pickedName)
+      : undefined
+  const activePresetName = mixed
+    ? null
+    : pickedPreset && presetMatchesEasing(pickedPreset, easing, easingConfig)
+      ? pickedPreset.name
+      : (findMatchingPreset(easing, easingConfig)?.name ?? null)
   const isHold = easing === 'hold'
 
   const filteredPresets =
@@ -115,6 +130,7 @@ export function SegmentEasingPopover({
         )
 
   const applyPreset = (preset: EasingPreset) => {
+    setPickedName(preset.name)
     onChange(refs, presetToEasing(preset))
   }
 
@@ -186,7 +202,7 @@ export function SegmentEasingPopover({
             <span className="truncate text-xs font-medium text-foreground">
               {mixed
                 ? t('timeline.keyframeEditor.mixedCurves')
-                : (activePreset?.name ??
+                : (activePresetName ??
                   (isHold
                     ? t('timeline.keyframeEditor.easing.hold')
                     : t('timeline.keyframeEditor.custom')))}
@@ -274,7 +290,7 @@ export function SegmentEasingPopover({
                   <PresetChip
                     key={preset.name}
                     label={preset.name}
-                    active={preset.name === activePreset?.name}
+                    active={preset.name === activePresetName}
                     onClick={() => applyPreset(preset)}
                     thumb={<PresetThumb preset={preset} />}
                   />

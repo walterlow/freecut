@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
@@ -65,6 +66,7 @@ export function EasingCurveEditor({
   onDragStart,
   onDragEnd,
 }: EasingCurveEditorProps) {
+  const { t } = useTranslation()
   const [duration, setDuration] = useState(1)
 
   const setField = useCallback(
@@ -94,7 +96,7 @@ export function EasingCurveEditor({
           />
         ))}
         <SliderRow
-          label="Duration"
+          label={t('timeline.keyframeEditor.duration', { defaultValue: 'Duration' })}
           value={duration}
           min={0.2}
           max={3}
@@ -216,6 +218,7 @@ function PositionPreview({
   bezier: BezierControlPoints
   duration: number
 }) {
+  const { t } = useTranslation()
   const [playing, setPlaying] = useState(true)
   const [pos, setPos] = useState(0)
   const bezierRef = useRef(bezier)
@@ -240,13 +243,15 @@ function PositionPreview({
   return (
     <div className="mt-1 flex flex-col gap-1">
       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-        <span>Position Preview</span>
+        <span>{t('timeline.keyframeEditor.positionPreview', { defaultValue: 'Position Preview' })}</span>
         <button
           type="button"
           className="rounded px-1 hover:text-foreground"
           onClick={() => setPlaying((p) => !p)}
         >
-          {playing ? 'Pause' : 'Play'}
+          {playing
+            ? t('timeline.keyframeEditor.pause', { defaultValue: 'Pause' })
+            : t('timeline.keyframeEditor.play', { defaultValue: 'Play' })}
         </button>
       </div>
       <div className="relative h-9 overflow-hidden rounded-md border border-border/60 bg-black/40">

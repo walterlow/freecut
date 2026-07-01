@@ -131,33 +131,46 @@ function near(a: number, b: number): boolean {
   return Math.abs(a - b) < EPS
 }
 
-/** The catalog preset matching the current easing, or null (custom / hold). */
+/** Whether a specific catalog preset produces the given easing + config. */
+export function presetMatchesEasing(
+  preset: EasingPreset,
+  easing: EasingType,
+  config: EasingConfig | undefined,
+): boolean {
+  if (easing === 'hold') return false
+
+  if (preset.type === 'Spring') {
+    if (config?.type !== 'spring' || !config.spring) return false
+    const s = config.spring
+    return (
+      near(preset.spring!.tension, s.tension) &&
+      near(preset.spring!.friction, s.friction) &&
+      near(preset.spring!.mass, s.mass)
+    )
+  }
+
+  if (config?.type === 'spring') return false
+  const b = effectiveBezier(easing, config)
+  return (
+    near(preset.bezier!.x1, b.x1) &&
+    near(preset.bezier!.y1, b.y1) &&
+    near(preset.bezier!.x2, b.x2) &&
+    near(preset.bezier!.y2, b.y2)
+  )
+}
+
+/**
+ * The catalog preset matching the current easing, or null (custom / hold).
+ *
+ * Some easings.dev presets share identical curves (e.g. `Snappy Out` and
+ * `Out Expo` are both `[0.19, 1, 0.22, 1]`), so this returns whichever comes
+ * first in source order. Callers that know the user's explicit pick should
+ * prefer it via `presetMatchesEasing` to avoid an identical-curve twin stealing
+ * the active-preset highlight.
+ */
 export function findMatchingPreset(
   easing: EasingType,
   config: EasingConfig | undefined,
 ): EasingPreset | null {
-  if (easing === 'hold') return null
-
-  if (config?.type === 'spring' && config.spring) {
-    const s = config.spring
-    return (
-      SPRING_PRESETS.find(
-        (p) =>
-          near(p.spring!.tension, s.tension) &&
-          near(p.spring!.friction, s.friction) &&
-          near(p.spring!.mass, s.mass),
-      ) ?? null
-    )
-  }
-
-  const b = effectiveBezier(easing, config)
-  return (
-    EASING_PRESETS.find(
-      (p) =>
-        near(p.bezier!.x1, b.x1) &&
-        near(p.bezier!.y1, b.y1) &&
-        near(p.bezier!.x2, b.x2) &&
-        near(p.bezier!.y2, b.y2),
-    ) ?? null
-  )
+  return EASINGS_DEV_PRESETS.find((preset) => presetMatchesEasing(preset, easing, config)) ?? null
 }

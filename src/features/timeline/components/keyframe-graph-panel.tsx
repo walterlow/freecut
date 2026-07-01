@@ -1024,6 +1024,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
         })),
       )
     },
+    // `timelineActions` is an `import * as` module namespace — a stable, immutable
+    // reference, so it's intentionally not a dependency (consistent with the
+    // other keyframe handlers in this file).
     [_updateKeyframe],
   )
 

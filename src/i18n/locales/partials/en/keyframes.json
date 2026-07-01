@@ -89,7 +89,11 @@
       "filterAll": "All",
       "filterIn": "In",
       "filterOut": "Out",
-      "filterInOut": "In-Out"
+      "filterInOut": "In-Out",
+      "positionPreview": "Position Preview",
+      "duration": "Duration",
+      "play": "Play",
+      "pause": "Pause"
     }
   },
   "keyframes": {

@@ -5,6 +5,7 @@ import {
   SPRING_PRESETS,
   effectiveBezier,
   findMatchingPreset,
+  presetMatchesEasing,
   presetToEasing,
 } from './easings-dev-presets'
 
@@ -51,6 +52,40 @@ describe('findMatchingPreset', () => {
 
   it('matches the legacy named "linear" easing to the Linear preset', () => {
     expect(findMatchingPreset('linear', undefined)?.name).toBe('Linear')
+  })
+})
+
+describe('presetMatchesEasing (identical-curve disambiguation)', () => {
+  it('matches every preset sharing a curve — the picker uses this to keep the right one highlighted', () => {
+    // easings.dev ships two presets with the same curve.
+    const config = {
+      type: 'cubic-bezier' as const,
+      bezier: { x1: 0.19, y1: 1, x2: 0.22, y2: 1 },
+    }
+    const snappyOut = EASING_PRESETS.find((p) => p.name === 'Snappy Out')!
+    const outExpo = EASING_PRESETS.find((p) => p.name === 'Out Expo')!
+    expect(presetMatchesEasing(snappyOut, 'cubic-bezier', config)).toBe(true)
+    expect(presetMatchesEasing(outExpo, 'cubic-bezier', config)).toBe(true)
+    // findMatchingPreset can only return one (source order), which is why the
+    // popover prefers the user's explicit pick instead.
+    expect(findMatchingPreset('cubic-bezier', config)?.name).toBe('Snappy Out')
+  })
+
+  it('does not match a bezier preset against a spring config, or vice versa', () => {
+    const snappyOut = EASING_PRESETS.find((p) => p.name === 'Snappy Out')!
+    const spring = SPRING_PRESETS[0]!
+    expect(
+      presetMatchesEasing(snappyOut, 'spring', {
+        type: 'spring',
+        spring: spring.spring!,
+      }),
+    ).toBe(false)
+    expect(
+      presetMatchesEasing(spring, 'cubic-bezier', {
+        type: 'cubic-bezier',
+        bezier: { x1: 0.19, y1: 1, x2: 0.22, y2: 1 },
+      }),
+    ).toBe(false)
   })
 })
 

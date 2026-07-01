@@ -89,7 +89,11 @@
       "filterAll": "すべて",
       "filterIn": "イン",
       "filterOut": "アウト",
-      "filterInOut": "イン/アウト"
+      "filterInOut": "イン/アウト",
+      "positionPreview": "位置プレビュー",
+      "duration": "長さ",
+      "play": "再生",
+      "pause": "一時停止"
     }
   },
   "keyframes": {

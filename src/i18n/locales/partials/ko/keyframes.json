@@ -89,7 +89,11 @@
       "filterAll": "전체",
       "filterIn": "인",
       "filterOut": "아웃",
-      "filterInOut": "인/아웃"
+      "filterInOut": "인/아웃",
+      "positionPreview": "위치 미리보기",
+      "duration": "길이",
+      "play": "재생",
+      "pause": "일시정지"
     }
   },
   "keyframes": {

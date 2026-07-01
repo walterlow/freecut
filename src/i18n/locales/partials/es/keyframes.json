@@ -89,7 +89,11 @@
       "filterAll": "Todo",
       "filterIn": "Entrada",
       "filterOut": "Salida",
-      "filterInOut": "Entrada/Salida"
+      "filterInOut": "Entrada/Salida",
+      "positionPreview": "Vista previa de posición",
+      "duration": "Duración",
+      "play": "Reproducir",
+      "pause": "Pausar"
     }
   },
   "keyframes": {

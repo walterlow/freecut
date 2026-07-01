@@ -89,7 +89,11 @@
       "filterAll": "全部",
       "filterIn": "缓入",
       "filterOut": "缓出",
-      "filterInOut": "缓入缓出"
+      "filterInOut": "缓入缓出",
+      "positionPreview": "位置预览",
+      "duration": "时长",
+      "play": "播放",
+      "pause": "暂停"
     }
   },
   "keyframes": {

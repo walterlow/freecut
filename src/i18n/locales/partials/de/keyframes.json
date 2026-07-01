@@ -89,7 +89,11 @@
       "filterAll": "Alle",
       "filterIn": "Ein",
       "filterOut": "Aus",
-      "filterInOut": "Ein/Aus"
+      "filterInOut": "Ein/Aus",
+      "positionPreview": "Positionsvorschau",
+      "duration": "Dauer",
+      "play": "Abspielen",
+      "pause": "Pause"
     }
   },
   "keyframes": {
