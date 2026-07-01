@@ -11,94 +11,19 @@
  *     meta.json - { width, height, status, createdAt, version, sourceWidth, sourceHeight }
  */
 
-import type { InputVideoTrack } from 'mediabunny'
-import type { ProResFrameInfo } from '@/infrastructure/browser/prores-frame-header'
-import {
-  BACKGROUND_DECODE_WORKERS,
-  createProResSampleSink,
-  detectProResTrack,
-} from '@/infrastructure/browser/prores-sample-sink'
+import { ensureProResDecoderRegistered } from '@/infrastructure/browser/register-prores-decoder'
 import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants'
 
-type MediabunnyModule = typeof import('mediabunny')
-
 /**
- * A unit of proxy work that writes to an output target. Implemented either by
- * mediabunny's `Conversion` (decodable codecs) or by a turbores decode→encode loop
- * (ProRes), so the surrounding generation envelope is shared by both.
+ * A unit of proxy work that writes to an output target. Wraps mediabunny's `Conversion`
+ * so the surrounding generation envelope (stream vs buffer target, cancel handling) can
+ * stay independent of the conversion details.
  */
 interface ProxyJob {
   readonly isValid: boolean
   readonly discardedTracks: ReadonlyArray<{ track: { type?: string | null }; reason: string }>
   execute(onProgress: (progress: number) => void): Promise<void>
   cancel(): Promise<void>
-}
-
-/**
- * Builds a proxy job that decodes a ProRes track via turbores and re-encodes it to the
- * H.264 proxy. Each decoded frame is drawn to a proxy-sized canvas (downscale) and fed
- * to a mediabunny `CanvasSource`. ProRes is all-intra, so frames decode in order with
- * no GOP handling.
- */
-function buildProResProxyJob(
-  mb: MediabunnyModule,
-  output: InstanceType<MediabunnyModule['Output']>,
-  input: InstanceType<MediabunnyModule['Input']>,
-  videoTrack: InputVideoTrack,
-  proResInfo: ProResFrameInfo,
-  proxyDimensions: { width: number; height: number },
-): ProxyJob {
-  let cancelled = false
-  return {
-    isValid: true,
-    discardedTracks: [],
-    cancel: async () => {
-      cancelled = true
-    },
-    async execute(onProgress) {
-      const { width, height } = proxyDimensions
-      const canvas = new OffscreenCanvas(width, height)
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        throw new Error('Failed to acquire 2D context for ProRes proxy generation')
-      }
-      const source = new mb.CanvasSource(canvas, {
-        codec: 'avc',
-        bitrate: mb.QUALITY_LOW,
-        keyFrameInterval: PROXY_KEYFRAME_INTERVAL_SECONDS,
-      })
-      output.addVideoTrack(source)
-      await output.start()
-
-      const sink = createProResSampleSink(mb, videoTrack, proResInfo, {
-        maxWorkers: BACKGROUND_DECODE_WORKERS,
-      })
-      const totalDuration = await input.computeDuration().catch(() => 0)
-      try {
-        for await (const sample of sink.samples()) {
-          if (cancelled) {
-            sample.close()
-            break
-          }
-          // Draw scales the visible frame into the proxy box (AR-preserved dims).
-          sample.draw(ctx, 0, 0, width, height)
-          const timestamp = sample.timestamp
-          await source.add(timestamp, sample.duration || 1 / 30)
-          sample.close()
-          if (totalDuration > 0) {
-            onProgress(Math.min(1, timestamp / totalDuration))
-          }
-        }
-        if (cancelled) {
-          await output.cancel()
-          return
-        }
-        await output.finalize()
-      } finally {
-        await sink.close()
-      }
-    },
-  }
 }
 
 const PROXY_WIDTH = 960
@@ -258,7 +183,7 @@ function calculateProxyDimensions(
 async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   const { mediaId, source, sourceOpfsPath, sourceMimeType, sourceWidth, sourceHeight } = request
 
-  const mb = await loadMediabunny()
+  const [mb] = await Promise.all([loadMediabunny(), ensureProResDecoderRegistered()])
   const {
     Input,
     BlobSource,
@@ -301,17 +226,8 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     formats: [MP4, QTFF, WEBM, MATROSKA],
   })
 
-  // ProRes (and other codecs mediabunny can't decode via WebCodecs) must be decoded
-  // through turbores instead of mediabunny's Conversion API.
-  const videoTrack = await input.getPrimaryVideoTrack()
-  let proResInfo: Awaited<ReturnType<typeof detectProResTrack>> = null
-  if (videoTrack && typeof videoTrack.canDecode === 'function') {
-    const decodable = await videoTrack.canDecode().catch(() => true)
-    if (!decodable) {
-      proResInfo = await detectProResTrack(mb, videoTrack)
-    }
-  }
-
+  // ProRes decodes through the registered @mediabunny/prores decoder, so Conversion
+  // transcodes it to the H.264 proxy directly — no bespoke decode→encode loop needed.
   let job: ProxyJob | null = null
   let streamedToFile = false
   let bufferTarget: InstanceType<typeof BufferTarget> | null = null
@@ -326,10 +242,6 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
         format: new Mp4OutputFormat({ fastStart: useInMemoryFastStart ? 'in-memory' : false }),
         target: outputTarget,
       })
-
-      if (proResInfo && videoTrack) {
-        return buildProResProxyJob(mb, output, input!, videoTrack, proResInfo, proxyDimensions)
-      }
 
       const conversion = await Conversion.init({
         input,

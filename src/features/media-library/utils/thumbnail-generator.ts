@@ -6,11 +6,7 @@
  * Audio files get a generated waveform placeholder.
  */
 
-import {
-  BACKGROUND_DECODE_WORKERS,
-  createProResSampleSink,
-  detectProResTrack,
-} from '@/infrastructure/browser/prores-sample-sink'
+import { ensureProResDecoderRegistered } from '@/infrastructure/browser/register-prores-decoder'
 import { getMimeType } from './validation'
 
 interface ThumbnailOptions {
@@ -35,7 +31,7 @@ const loadMediabunny = () => import('mediabunny')
 async function generateVideoThumbnail(file: File, options: ThumbnailOptions = {}): Promise<Blob> {
   const opts = { ...DEFAULT_THUMBNAIL_OPTIONS, ...options }
 
-  const mb = await loadMediabunny()
+  const [mb] = await Promise.all([loadMediabunny(), ensureProResDecoderRegistered()])
   const { Input, BlobSource, CanvasSink, ALL_FORMATS } = mb
   let input: InstanceType<typeof Input> | null = null
   let sink: InstanceType<typeof CanvasSink> | null = null
@@ -61,34 +57,8 @@ async function generateVideoThumbnail(file: File, options: ThumbnailOptions = {}
     const duration = await input.computeDuration()
     const timestamp = Math.min(opts.timestamp, Math.max(0, duration - 0.1))
 
-    // ProRes (undecodable by WebCodecs/CanvasSink) is decoded via turbores instead.
-    const decodable =
-      typeof videoTrack.canDecode === 'function'
-        ? await videoTrack.canDecode().catch(() => true)
-        : true
-    const proResInfo = decodable ? null : await detectProResTrack(mb, videoTrack)
-    if (proResInfo) {
-      const proResSink = createProResSampleSink(mb, videoTrack, proResInfo, {
-        maxWorkers: BACKGROUND_DECODE_WORKERS,
-      })
-      try {
-        const { value: sample } = await proResSink.samplesAtTimestamps([timestamp]).next()
-        if (!sample) {
-          throw new Error('Failed to extract ProRes frame')
-        }
-        const canvas = new OffscreenCanvas(width, height)
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          throw new Error('Failed to acquire 2D context for ProRes thumbnail')
-        }
-        sample.draw(ctx, 0, 0, width, height)
-        sample.close()
-        return await canvas.convertToBlob({ type: 'image/webp', quality: opts.quality })
-      } finally {
-        await proResSink.close()
-      }
-    }
-
+    // ProRes decodes through the registered @mediabunny/prores decoder like any other
+    // codec, so CanvasSink handles it directly.
     sink = new CanvasSink(videoTrack, {
       width,
       height,

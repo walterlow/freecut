@@ -9,12 +9,7 @@
  */
 
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
-import type { ProResFrameInfo } from '@/infrastructure/browser/prores-frame-header'
-import {
-  createProResSampleSink,
-  detectProResTrack,
-  type ProResSampleSink,
-} from '@/infrastructure/browser/prores-sample-sink'
+import { ensureProResDecoderRegistered } from '@/infrastructure/browser/register-prores-decoder'
 import { createLogger } from '@/shared/logging/logger'
 import { getAdaptiveStreamStart } from '@/shared/utils/keyframe-index-registry'
 
@@ -78,8 +73,6 @@ export class VideoFrameExtractor {
   private static readonly FORWARD_JUMP_RESTART_SECONDS = 3.0
 
   private sink: MediabunnySink | null = null
-  /** Set when the source is ProRes decoded via turbores; retained so dispose() can release the decoder. */
-  private proResSink: ProResSampleSink | null = null
   private input: MediabunnyInput | null = null
   private videoTrack: MediabunnyVideoTrack | null = null
   private duration: number = 0
@@ -112,7 +105,7 @@ export class VideoFrameExtractor {
    */
   async init(): Promise<boolean> {
     try {
-      const mb = await import('mediabunny')
+      const [mb] = await Promise.all([import('mediabunny'), ensureProResDecoderRegistered()])
       const source = createMediabunnyInputSource(mb, this.src)
 
       // Prefer direct file-backed reads for OPFS / file handles, with BlobSource
@@ -129,47 +122,27 @@ export class VideoFrameExtractor {
         return false
       }
 
-      // mediabunny cannot decode ProRes (it reports the track as undecodable). When
-      // that happens, check whether the track is ProRes and, if so, decode it via
-      // turbores instead of bailing out.
-      let proResInfo: ProResFrameInfo | null = null
+      // Bail out if the track is genuinely undecodable. ProRes decodes through the
+      // registered @mediabunny/prores decoder, so canDecode() reports it as decodable
+      // and VideoSampleSink handles it like any other codec.
       if (typeof this.videoTrack.canDecode === 'function') {
         const decodable = await this.videoTrack.canDecode()
         if (!decodable) {
-          const mbTrack = this.videoTrack as unknown as Parameters<typeof detectProResTrack>[1]
-          proResInfo = await detectProResTrack(mb, mbTrack)
-          if (!proResInfo) {
-            this.logInitFailure(
-              'Video track is not decodable via mediabunny/WebCodecs',
-              {
-                itemId: this.itemId,
-              },
-              'warn',
-            )
-            return false
-          }
+          this.logInitFailure(
+            'Video track is not decodable via mediabunny/WebCodecs',
+            { itemId: this.itemId },
+            'warn',
+          )
+          return false
         }
       }
 
       // Get duration
       this.duration = await this.input!.computeDuration()
 
-      // Create the sample sink for frame extraction. ProRes routes through turbores;
-      // everything else uses mediabunny's WebCodecs-backed sink.
-      if (proResInfo) {
-        const mbTrack = this.videoTrack as unknown as Parameters<typeof createProResSampleSink>[1]
-        this.proResSink = createProResSampleSink(mb, mbTrack, proResInfo)
-        this.sink = this.proResSink
-        log.debug('Using turbores ProRes decoder', {
-          itemId: this.itemId,
-          fourCc: proResInfo.fourCc,
-          chromaFormat: proResInfo.chromaFormat,
-        })
-      } else {
-        this.sink = new mb.VideoSampleSink(
-          this.videoTrack as unknown as ConstructorParameters<typeof mb.VideoSampleSink>[0],
-        )
-      }
+      this.sink = new mb.VideoSampleSink(
+        this.videoTrack as unknown as ConstructorParameters<typeof mb.VideoSampleSink>[0],
+      )
 
       this.ready = true
       log.debug('Initialized', {
@@ -698,12 +671,6 @@ export class VideoFrameExtractor {
    */
   dispose(): void {
     this.closeStreamState()
-
-    if (this.proResSink) {
-      // Release the turbores decoder and its workers (fire-and-forget).
-      void this.proResSink.close().catch(() => undefined)
-      this.proResSink = null
-    }
 
     try {
       // mediabunny Input lifecycle API is dispose(); close() is not guaranteed.

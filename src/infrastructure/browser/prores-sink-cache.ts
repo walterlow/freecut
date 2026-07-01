@@ -1,37 +1,42 @@
 /**
- * Warm-decoder cache for ProRes preview sinks.
+ * Warm-decoder cache for ProRes preview sessions.
  *
- * A {@link ProResSampleSink} owns a turbores decoder whose worker pool is expensive to
- * spawn (~100ms) and whose first decode pays container-open + first-packet cost on top.
- * The preview canvas mounts a clip's sink only when the playhead enters the clip and
- * closes it when the playhead leaves — so crossing into a ProRes clip during playback
- * cold-starts the decoder and shows black until the first frame arrives, even though a
- * paused seek onto the same clip (which has time to wait for the decode) looks fine.
+ * A {@link ProResPreviewSession} owns a mediabunny `VideoSampleSink` whose ProRes decoder
+ * (a TurboRes worker pool) is expensive to spawn (~100ms) and whose first decode pays
+ * container-open + first-packet cost on top. The preview canvas mounts a clip's session
+ * only when the playhead enters the clip and disposes it when the playhead leaves — so
+ * crossing into a ProRes clip during playback cold-starts the decoder and shows black until
+ * the first frame arrives, even though a paused seek onto the same clip (which has time to
+ * wait for the decode) looks fine.
  *
- * This cache keeps the sink (and its warm decoder) alive across unmounts, keyed by the
- * source URL and reference-counted. After a clip has been seeked to or played once, a
- * later crossing reuses the warm sink and paints immediately. Idle sinks are closed after
- * a cooldown, and at most {@link MAX_WARM_ENTRIES} idle sinks are retained, to bound the
- * number of live decoder worker pools.
+ * This cache keeps the session (and its warm decoder stream) alive across unmounts, keyed
+ * by the source URL and reference-counted. After a clip has been seeked to or played once,
+ * a later crossing reuses the warm session and paints immediately. Idle sessions are closed
+ * after a cooldown, and at most {@link MAX_WARM_ENTRIES} idle sessions are retained, to
+ * bound the number of live decoder worker pools.
+ *
+ * Concurrent consumers of the same source (e.g. the premount prewarm and the active canvas)
+ * share one session; the session serializes access internally so the shared forward-stream
+ * cursor is never advanced concurrently.
  */
 
 import { createLogger } from '@/shared/logging/logger'
 import { createMediabunnyInputSource } from './mediabunny-input-source'
 import {
-  createProResSampleSink,
-  detectProResTrack,
-  type ProResSampleSink,
-} from './prores-sample-sink'
+  createProResPreviewSession,
+  type ProResPreviewSession,
+} from './prores-preview-session'
+import { ensureProResDecoderRegistered } from './register-prores-decoder'
 
 const log = createLogger('ProResSinkCache')
 
-/** How long a sink with no active consumers is kept warm before its decoder is closed. */
+/** How long a session with no active consumers is kept warm before its decoder is closed. */
 const IDLE_CLOSE_MS = 20_000
-/** Maximum idle (refCount 0) sinks kept warm, to cap live turbores worker pools. */
+/** Maximum idle (refCount 0) sessions kept warm, to cap live decoder worker pools. */
 const MAX_WARM_ENTRIES = 2
 
-interface OpenedSink {
-  sink: ProResSampleSink
+interface OpenedSession {
+  session: ProResPreviewSession
   dispose: () => Promise<void>
 }
 
@@ -40,13 +45,13 @@ interface CacheEntry {
   refCount: number
   lastUsed: number
   idleTimer: ReturnType<typeof setTimeout> | null
-  opened: Promise<OpenedSink | null>
+  opened: Promise<OpenedSession | null>
 }
 
 const entries = new Map<string, CacheEntry>()
 
-async function openSink(src: string): Promise<OpenedSink | null> {
-  const mb = await import('mediabunny')
+async function openSession(src: string): Promise<OpenedSession | null> {
+  const [mb] = await Promise.all([import('mediabunny'), ensureProResDecoderRegistered()])
   const input = new mb.Input({
     formats: mb.ALL_FORMATS,
     source: createMediabunnyInputSource(mb, src),
@@ -54,15 +59,11 @@ async function openSink(src: string): Promise<OpenedSink | null> {
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track) throw new Error('No video track in ProRes source')
-    const info = await detectProResTrack(mb, track)
-    if (!info) throw new Error('Source is not a recognized ProRes track')
-    const sink = createProResSampleSink(mb, track, info)
+    const session = createProResPreviewSession(mb, input, track)
     return {
-      sink,
-      dispose: async () => {
-        await sink.close()
-        input.dispose()
-      },
+      session,
+      // The session owns and disposes the input.
+      dispose: () => session.dispose(),
     }
   } catch (error) {
     input.dispose()
@@ -91,19 +92,19 @@ function evictExcessIdle(): void {
   }
 }
 
-export interface ProResSinkLease {
-  /** Resolves to the shared sink, or null if the source could not be opened. */
-  sink: Promise<ProResSampleSink | null>
-  /** Release this consumer's hold; the sink stays warm briefly for the next crossing. */
+export interface ProResSessionLease {
+  /** Resolves to the shared session, or null if the source could not be opened. */
+  session: Promise<ProResPreviewSession | null>
+  /** Release this consumer's hold; the session stays warm briefly for the next crossing. */
   release: () => void
 }
 
 /**
- * Acquire a warm ProRes sink for `src`, opening one if needed. Reference-counted: call
- * {@link ProResSinkLease.release} on unmount. The underlying decoder is kept warm for a
- * short cooldown after the last consumer releases, so re-entering the clip is instant.
+ * Acquire a warm ProRes preview session for `src`, opening one if needed. Reference-counted:
+ * call {@link ProResSessionLease.release} on unmount. The underlying decoder is kept warm for
+ * a short cooldown after the last consumer releases, so re-entering the clip is instant.
  */
-export function acquireProResSink(src: string): ProResSinkLease {
+export function acquireProResSession(src: string): ProResSessionLease {
   let entry = entries.get(src)
   if (!entry) {
     const created: CacheEntry = {
@@ -111,9 +112,9 @@ export function acquireProResSink(src: string): ProResSinkLease {
       refCount: 0,
       lastUsed: Date.now(),
       idleTimer: null,
-      opened: openSink(src).catch((error) => {
+      opened: openSession(src).catch((error) => {
         // Drop a failed entry so a later acquire can retry the open.
-        log.warn('Failed to open ProRes sink', { src, error })
+        log.warn('Failed to open ProRes session', { src, error })
         entries.delete(src)
         return null
       }),
@@ -144,7 +145,7 @@ export function acquireProResSink(src: string): ProResSinkLease {
   }
 
   return {
-    sink: entry.opened.then((opened) => opened?.sink ?? null),
+    session: entry.opened.then((opened) => opened?.session ?? null),
     release,
   }
 }

@@ -38,7 +38,7 @@ import {
 } from '../utils/transition-scene'
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup'
 import { createLogger } from '@/shared/logging/logger'
-import { acquireProResSink } from '@/infrastructure/browser/prores-sink-cache'
+import { acquireProResSession } from '@/infrastructure/browser/prores-sink-cache'
 import { useMediaLibraryStore } from '@/runtime/composition-runtime/deps/stores'
 import { appendResolvedAudioEqSources, getAudioEqSettings } from '@/shared/utils/audio-eq'
 import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
@@ -160,16 +160,14 @@ HiddenShadowVideoBridge.displayName = 'HiddenShadowVideoBridge'
 const ProResDecoderPrewarm: React.FC<{ src: string }> = ({ src }) => {
   useEffect(() => {
     let cancelled = false
-    const lease = acquireProResSink(src)
-    void lease.sink
-      .then((sink) => {
-        if (cancelled || !sink) return
-        // Decode one frame so the worker pool is fully warm before the active canvas
-        // requests the entering frame.
-        return sink
-          .samplesAtTimestamps([0])
-          .next()
-          .then((r) => r.value?.close())
+    const lease = acquireProResSession(src)
+    void lease.session
+      .then((session) => {
+        if (cancelled || !session) return
+        // Decode one frame so the decoder worker pool is fully warm before the active
+        // canvas requests the entering frame. The sample is borrowed (owned by the shared
+        // session), so we don't close it here.
+        return session.getSampleForTime(0)
       })
       .catch(() => {
         // Best-effort; the active canvas surfaces real open/decode failures.

@@ -9,11 +9,7 @@
  * This prevents UI blocking when importing media files.
  */
 
-import {
-  BACKGROUND_DECODE_WORKERS,
-  createProResSampleSink,
-  detectProResTrack,
-} from '@/infrastructure/browser/prores-sample-sink'
+import { ensureProResDecoderRegistered } from '@/infrastructure/browser/register-prores-decoder'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
 
@@ -177,7 +173,8 @@ function isAudioCodecSupported(codec: string | undefined): boolean {
 let mediabunnyModule: MediabunnyModule | null = null
 async function getMediabunny(): Promise<MediabunnyModule> {
   if (!mediabunnyModule) {
-    mediabunnyModule = (await import('mediabunny')) as unknown as MediabunnyModule
+    const [mb] = await Promise.all([import('mediabunny'), ensureProResDecoderRegistered()])
+    mediabunnyModule = mb as unknown as MediabunnyModule
   }
   return mediabunnyModule
 }
@@ -448,11 +445,18 @@ async function extractVideoMetadata(
 
     const audioCodec = audioTrack?.codec
     const audioCodecSupported = isAudioCodecSupported(audioCodec)
-    // ProRes and other codecs WebCodecs can't decode report canDecode() === false;
-    // these require a proxy to be viewable. Assume supported if the probe is absent or throws.
-    const videoCodecSupported = videoTrack.canDecode
-      ? await videoTrack.canDecode().catch(() => true)
-      : true
+    // `videoCodecSupported` means "a browser <video> element can play this" — it routes
+    // preview between the pooled <video> element and the live-decode canvas. ProRes is
+    // decodable by us (via the registered @mediabunny/prores decoder, which flips
+    // canDecode() to true) but is NOT playable in a <video> element, so it must be forced
+    // false here. Other codecs WebCodecs can't decode still report canDecode() === false.
+    // Assume supported if the probe is absent or throws.
+    const videoCodecSupported =
+      videoTrack.codec === 'prores'
+        ? false
+        : videoTrack.canDecode
+          ? await videoTrack.canDecode().catch(() => true)
+          : true
 
     // Compute average GOP interval from keyframe timestamps
     let gopInterval: number | undefined
@@ -595,37 +599,8 @@ async function generateVideoThumbnail(
     const duration = await input.computeDuration()
     const clampedTimestamp = Math.min(timestamp, Math.max(0, duration - 0.1))
 
-    // ProRes (undecodable by WebCodecs/CanvasSink) is decoded via turbores instead.
-    const decodable = videoTrack.canDecode ? await videoTrack.canDecode().catch(() => true) : true
-    const mbModule = mb as unknown as Parameters<typeof detectProResTrack>[0]
-    const proResInfo = decodable
-      ? null
-      : await detectProResTrack(mbModule, videoTrack as Parameters<typeof detectProResTrack>[1])
-    if (proResInfo) {
-      const proResSink = createProResSampleSink(
-        mbModule,
-        videoTrack as Parameters<typeof createProResSampleSink>[1],
-        proResInfo,
-        { maxWorkers: BACKGROUND_DECODE_WORKERS },
-      )
-      try {
-        const { value: sample } = await proResSink.samplesAtTimestamps([clampedTimestamp]).next()
-        if (!sample) {
-          throw new Error('Failed to extract ProRes frame')
-        }
-        const canvas = new OffscreenCanvas(width, height)
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          throw new Error('Failed to acquire 2D context for ProRes thumbnail')
-        }
-        sample.draw(ctx, 0, 0, width, height)
-        sample.close()
-        return await canvas.convertToBlob({ type: 'image/webp', quality })
-      } finally {
-        await proResSink.close()
-      }
-    }
-
+    // ProRes decodes through the registered @mediabunny/prores decoder (getMediabunny
+    // registers it), so CanvasSink handles it directly like any other codec.
     sink = new mb.CanvasSink(videoTrack, {
       width,
       height,
