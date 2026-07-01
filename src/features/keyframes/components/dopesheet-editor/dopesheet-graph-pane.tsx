@@ -12,6 +12,7 @@ import type {
   KeyframeRef,
 } from '@/types/keyframe'
 import type { BlockedFrameRange } from '../../utils/transition-region'
+import type { ProceduralPreviewInput } from '@/features/keyframes/utils/procedural-preview'
 import { EmbeddedValueGraphEditor } from '../value-graph-editor'
 import { PROPERTY_COLUMN_WIDTH, RULER_HEIGHT } from './dopesheet-constants'
 import { DopesheetEmptyState } from './dopesheet-empty-state'
@@ -21,6 +22,7 @@ interface DopesheetGraphPaneProps {
   hasRows: boolean
   emptyStateMessage: string
   showEmptyGuidance: boolean
+  proceduralHint?: string
   propertyColumnElements: ReactNode
   propertyColumnWidth?: number
   graphPaneRef: React.RefObject<HTMLDivElement | null>
@@ -58,6 +60,7 @@ interface DopesheetGraphPaneProps {
   onRemoveKeyframes?: (refs: KeyframeRef[]) => void
   onNavigateToKeyframe?: (frame: number) => void
   transitionBlockedRanges?: BlockedFrameRange[]
+  proceduralPreview?: ProceduralPreviewInput
   snapEnabled: boolean
   graphHandleVisibility: 'selected' | 'all'
   graphRulerUnit: 'frames' | 'seconds'
@@ -73,6 +76,7 @@ export function DopesheetGraphPane({
   hasRows,
   emptyStateMessage,
   showEmptyGuidance,
+  proceduralHint,
   propertyColumnElements,
   propertyColumnWidth = PROPERTY_COLUMN_WIDTH,
   graphPaneRef,
@@ -108,6 +112,7 @@ export function DopesheetGraphPane({
   onRemoveKeyframes,
   onNavigateToKeyframe,
   transitionBlockedRanges,
+  proceduralPreview,
   snapEnabled,
   graphHandleVisibility,
   graphRulerUnit,
@@ -117,7 +122,11 @@ export function DopesheetGraphPane({
 }: DopesheetGraphPaneProps) {
   if (!hasRows) {
     return (
-      <DopesheetEmptyState showGuidance={showEmptyGuidance} fallbackMessage={emptyStateMessage} />
+      <DopesheetEmptyState
+        showGuidance={showEmptyGuidance}
+        fallbackMessage={emptyStateMessage}
+        proceduralHint={proceduralHint}
+      />
     )
   }
 
@@ -165,6 +174,7 @@ export function DopesheetGraphPane({
             onRemoveKeyframes={onRemoveKeyframes}
             onNavigateToKeyframe={onNavigateToKeyframe}
             transitionBlockedRanges={transitionBlockedRanges}
+            proceduralPreview={proceduralPreview}
             snapEnabled={snapEnabled}
             handleVisibility={graphHandleVisibility}
             rulerUnit={graphRulerUnit}

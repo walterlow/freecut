@@ -1020,8 +1020,11 @@ export class EffectsPipeline {
     this.poolMode = false
     this.outputPool = []
     this.batchIndex = 0
+    // `uniformBuffers` is indexed by effect position, so a skipped or
+    // uniform-less effect leaves a hole. `for...of` yields `undefined` for
+    // sparse holes (unlike `.forEach`), so guard before destroying.
     for (const buf of this.uniformBuffers) {
-      buf.destroy()
+      buf?.destroy()
     }
     this.uniformBuffers = []
     for (const entry of this.dataTextureCache.values()) {

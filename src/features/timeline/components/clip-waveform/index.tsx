@@ -166,11 +166,18 @@ export const ClipWaveform = memo(function ClipWaveform({
         const media = await mediaLibraryService.getMedia(mediaId)
         if (!mounted) return
 
+        // A video clip with no audio track has no waveform to draw. Skip generation
+        // entirely — otherwise we'd request a pointless decode of a silent clip, which
+        // also trips a worker source error. (Audio-type media always has audio.)
+        const isAudioMedia = media?.mimeType.startsWith('audio/') ?? false
+        if (media && !isAudioMedia && media.audioCodec == null) {
+          setAudioCodecSupported(false)
+          return
+        }
+
         // AC-3/E-AC-3 can still generate waveform via mediabunny even if old metadata
         // marked codec unsupported before custom decode was added.
-        const previewAudioCodec = media?.mimeType.startsWith('audio/')
-          ? media.codec
-          : (media?.audioCodec ?? media?.codec)
+        const previewAudioCodec = isAudioMedia ? media?.codec : (media?.audioCodec ?? media?.codec)
         const requiresCustomDecode = needsCustomAudioDecoder(previewAudioCodec)
         const codecSupported = media
           ? media.audioCodecSupported !== false || requiresCustomDecode

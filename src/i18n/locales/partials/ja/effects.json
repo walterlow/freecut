@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "ストップを追加",
+    "removeStop": "ストップを削除"
+  },
   "categories": {
     "color": "色",
     "blur": "ぼかし",
@@ -49,129 +53,21 @@
     "midtones": "中間調",
     "highlights": "ハイライト"
   },
-  "definitions": {
-    "gpu-brightness": {
-      "name": "明るさ"
-    },
-    "gpu-color-wheels": {
-      "name": "カラーホイール"
-    },
-    "gpu-contrast": {
-      "name": "コントラスト"
-    },
-    "gpu-curves": {
-      "name": "カーブ"
-    },
-    "gpu-dither": {
-      "name": "ディザ"
-    },
-    "gpu-threshold": {
-      "name": "しきい値"
-    },
-    "gpu-glow": {
-      "name": "グロー"
-    },
-    "gpu-grain": {
-      "name": "フィルムグレイン"
-    },
-    "gpu-blur": {
-      "name": "ぼかし"
-    },
-    "gpu-exposure": {
-      "name": "露出"
-    },
-    "gpu-grayscale": {
-      "name": "グレースケール"
-    },
-    "gpu-hue-shift": {
-      "name": "色相シフト"
-    },
-    "gpu-invert": {
-      "name": "反転"
-    },
-    "gpu-levels": {
-      "name": "レベル"
-    },
-    "gpu-saturation": {
-      "name": "彩度"
-    },
-    "gpu-sepia": {
-      "name": "セピア"
-    },
-    "gpu-temperature": {
-      "name": "色温度"
-    },
-    "gpu-vibrance": {
-      "name": "バイブランス"
-    },
-    "gpu-box-blur": {
-      "name": "ボックスぼかし"
-    },
-    "gpu-gaussian-blur": {
-      "name": "ガウスぼかし"
-    },
-    "gpu-motion-blur": {
-      "name": "モーションブラー"
-    },
-    "gpu-radial-blur": {
-      "name": "放射状ぼかし"
-    },
-    "gpu-zoom-blur": {
-      "name": "ズームぼかし"
-    },
-    "gpu-bulge": {
-      "name": "膨張/収縮"
-    },
-    "gpu-fluted-glass": {
-      "name": "溝付きガラス"
-    },
-    "gpu-kaleidoscope": {
-      "name": "万華鏡"
-    },
-    "gpu-mirror": {
-      "name": "ミラー"
-    },
-    "gpu-pixelate": {
-      "name": "ピクセル化"
-    },
-    "gpu-rgb-split": {
-      "name": "RGB分離"
-    },
-    "gpu-twirl": {
-      "name": "ねじれ"
-    },
-    "gpu-wave": {
-      "name": "波"
-    },
-    "gpu-ascii": {
-      "name": "ASCII"
-    },
-    "gpu-color-glitch": {
-      "name": "カラーグリッチ"
-    },
-    "gpu-edge-detect": {
-      "name": "エッジ検出"
-    },
-    "gpu-halftone": {
-      "name": "ハーフトーン"
-    },
-    "gpu-posterize": {
-      "name": "ポスタリゼーション"
-    },
-    "gpu-scanlines": {
-      "name": "走査線"
-    },
-    "gpu-sharpen": {
-      "name": "シャープ"
-    },
-    "gpu-vignette": {
-      "name": "ビネット"
-    },
-    "gpu-chroma-key": {
-      "name": "クロマキー"
-    }
-  },
   "params": {
+    "flow": "フロー",
+    "span": "範囲",
+    "preset": "パレット",
+    "customStops": "カスタムストップ",
+    "mix": "ミックス",
+    "font": "フォント",
+    "customChars": "カスタム文字",
+    "transparentBg": "透明背景",
+    "edgeDetect": "エッジ検出",
+    "coverage": "カバレッジ",
+    "blockSize": "ブロックサイズ",
+    "curvature": "曲率",
+    "scanlines": "走査線",
+    "vignette": "ビネット",
     "amount": "量",
     "angle": "Angle",
     "radius": "Radius",
@@ -248,6 +144,12 @@
     "amplitudeY": "Vertical Amp",
     "frequencyX": "Horizontal Freq",
     "frequencyY": "Vertical Freq",
+    "frequency": "周波数",
+    "decay": "減衰",
+    "phase": "位相",
+    "chroma": "クロマ",
+    "scanlineMix": "走査線",
+    "glowColor": "グローの色",
     "colorFront": "Front Color",
     "originalColors": "Original Colors",
     "inverted": "Inverted",
@@ -258,6 +160,16 @@
     "threshold": "しきい値"
   },
   "options": {
+    "fire": "ファイア",
+    "ice": "アイス",
+    "sunset": "サンセット",
+    "grayscale": "グレースケール",
+    "monospace": "等幅",
+    "ascii": "ASCIIランプ",
+    "dense": "高密度",
+    "binary": "バイナリ",
+    "symbols": "記号",
+    "custom": "カスタム",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

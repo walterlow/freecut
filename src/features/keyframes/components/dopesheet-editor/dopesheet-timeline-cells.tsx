@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/shared/ui/cn'
 import type { AnimatableProperty, Keyframe } from '@/types/keyframe'
 import type { BlockedFrameRange } from '../../utils/transition-region'
+import type { ProceduralBand } from '@/features/keyframes/utils/procedural-preview'
 import { getKeyframeGroupLabel } from '@/features/keyframes/utils/property-i18n'
 import { getDisplayedGroupFrameGroups } from './sheet-preview-frame-groups'
 import type { DopesheetPropertyGroupStructure } from './dopesheet-helpers'
@@ -21,6 +22,78 @@ import type { KeyframeMeta } from './dopesheet-types'
 
 type FrameGroup = DopesheetPropertyGroupStructure['frameGroups'][number]
 type StructureRow = { property: AnimatableProperty; keyframes: Keyframe[] }
+
+interface ConnectorSegment {
+  key: string
+  left: number
+  width: number
+  /** True when the value is held across the span (no interpolation). */
+  held: boolean
+}
+
+/**
+ * Build the horizontal segments drawn between consecutive keyframes. A segment
+ * communicates that a property is *animating* across that span; a `held`
+ * segment (the `from` keyframe uses `hold` easing) is dashed to show the value
+ * is parked until the next keyframe.
+ */
+function buildConnectorSegments(
+  points: Array<{ id: string; frame: number; x: number; held: boolean }>,
+): ConnectorSegment[] {
+  const sorted = [...points].sort((a, b) => a.frame - b.frame)
+  return sorted.flatMap((point, index) => {
+    const next = sorted[index + 1]
+    if (!next) return []
+    const left = Math.min(point.x, next.x)
+    const width = Math.abs(next.x - point.x)
+    if (width <= 0) return []
+    return [{ key: point.id, left, width, held: point.held }]
+  })
+}
+
+function KeyframeConnectors({ segments }: { segments: ConnectorSegment[] }) {
+  return segments.map((segment) => (
+    <div
+      key={segment.key}
+      className={cn(
+        'pointer-events-none absolute z-0 -translate-y-1/2',
+        segment.held
+          ? 'border-t border-dashed border-neutral-500/50'
+          : 'h-px bg-neutral-400/50',
+      )}
+      style={{ left: segment.left, width: segment.width, top: '50%' }}
+    />
+  ))
+}
+
+// Hatched fill marks a span as generated/procedural (distinct from solid
+// connector lines and diamonds).
+const PROCEDURAL_HATCH =
+  'repeating-linear-gradient(45deg, rgba(56,189,248,0.25) 0 2px, transparent 2px 5px)'
+
+/**
+ * A non-keyframe band marking that a property is driven by a procedural motion
+ * generator over a frame range. Sky-tinted to match the timeline Waves cue.
+ */
+function ProceduralBandView({
+  band,
+  frameToX,
+  title,
+}: {
+  band: ProceduralBand
+  frameToX: (frame: number) => number
+  title: string
+}) {
+  const left = frameToX(band.fromFrame)
+  const width = Math.max(3, frameToX(band.toFrame) - left)
+  return (
+    <div
+      className="pointer-events-none absolute top-1/2 z-0 h-2 -translate-y-1/2 overflow-hidden rounded-sm border border-sky-400/40 bg-sky-400/10"
+      style={{ left, width, backgroundImage: PROCEDURAL_HATCH }}
+      title={title}
+    />
+  )
+}
 
 interface GroupTimelineCellProps {
   groupId: string
@@ -66,6 +139,22 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
     sheetPreviewFrames,
     sheetPreviewDuplicateKeyframeIds,
   })
+  const renderedFrameGroups = sheetPreviewDuplicateKeyframeIds ? frameGroups : displayedFrameGroups
+  const connectorSegments = buildConnectorSegments(
+    renderedFrameGroups.flatMap((frameGroup) => {
+      const x = getRenderedKeyframeX(frameGroup.frame)
+      if (x === null) return []
+      return [
+        {
+          id: `${groupId}-${frameGroup.frame}`,
+          frame: frameGroup.frame,
+          x,
+          // A group span only "holds" if every property parks across it.
+          held: frameGroup.keyframes.every(({ keyframe }) => keyframe.easing === 'hold'),
+        },
+      ]
+    }),
+  )
 
   return (
     <div
@@ -76,11 +165,13 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
         <div
           key={`${groupId}-tick-${frame}`}
           className="absolute inset-y-0 border-l border-border/30 pointer-events-none"
-          style={{ left: frameToX(frame) }}
+          style={{ left: Math.round(frameToX(frame)) }}
         />
       ))}
 
-      {(sheetPreviewDuplicateKeyframeIds ? frameGroups : displayedFrameGroups).map((frameGroup) => {
+      <KeyframeConnectors segments={connectorSegments} />
+
+      {renderedFrameGroups.map((frameGroup) => {
         const renderedX = getRenderedKeyframeX(frameGroup.frame)
         if (renderedX === null) {
           return null
@@ -161,6 +252,8 @@ interface PropertyTimelineCellProps {
   getRenderedKeyframeX: (frame: number) => number | null
   renderedKeyframeXById: Map<string, number>
   transitionBlockedRanges: BlockedFrameRange[]
+  /** Procedural generator band for this property (when not keyframed). */
+  proceduralBand?: ProceduralBand
   selectedKeyframeIds: Set<string>
   disabled: boolean
   onRowPointerDown: (
@@ -187,6 +280,7 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
   getRenderedKeyframeX,
   renderedKeyframeXById,
   transitionBlockedRanges,
+  proceduralBand,
   selectedKeyframeIds,
   disabled,
   onRowPointerDown,
@@ -198,6 +292,14 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
 }: PropertyTimelineCellProps) {
   const { t } = useTranslation()
 
+  const connectorSegments = buildConnectorSegments(
+    keyframes.flatMap((keyframe) => {
+      const x = renderedKeyframeXById.get(keyframe.id)
+      if (x === undefined) return []
+      return [{ id: keyframe.id, frame: keyframe.frame, x, held: keyframe.easing === 'hold' }]
+    }),
+  )
+
   return (
     <div
       className="relative border-l border-border/60 overflow-hidden"
@@ -207,7 +309,7 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
         <div
           key={frame}
           className="absolute inset-y-0 border-l border-border/30 pointer-events-none"
-          style={{ left: frameToX(frame) }}
+          style={{ left: Math.round(frameToX(frame)) }}
         />
       ))}
 
@@ -221,6 +323,16 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
           }}
         />
       ))}
+
+      {proceduralBand && (
+        <ProceduralBandView
+          band={proceduralBand}
+          frameToX={frameToX}
+          title={t('timeline.keyframeEditor.proceduralBand')}
+        />
+      )}
+
+      <KeyframeConnectors segments={connectorSegments} />
 
       {keyframes.map((keyframe) => {
         const renderedX = renderedKeyframeXById.get(keyframe.id)

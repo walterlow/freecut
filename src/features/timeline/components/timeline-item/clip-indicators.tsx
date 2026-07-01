@@ -1,12 +1,14 @@
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link2Off, Diamond } from 'lucide-react'
+import { Link2Off, Diamond, Waves } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
 
 interface ClipIndicatorsProps {
   /** Whether the item has keyframe animations */
   hasKeyframes: boolean
+  /** Whether the item has procedural motion (modulators / audio pulse) */
+  hasMotion: boolean
   /** Current playback speed (1 = normal) */
   currentSpeed: number
   /** Whether media playback is reversed */
@@ -35,6 +37,7 @@ interface ClipIndicatorsProps {
  */
 export const ClipIndicators = memo(function ClipIndicators({
   hasKeyframes,
+  hasMotion,
   currentSpeed,
   isReversed,
   reverseConformStatus,
@@ -52,6 +55,7 @@ export const ClipIndicators = memo(function ClipIndicators({
     <>
       {/* Label-row badges ââ‚¬” single container to prevent overlap */}
       {(hasKeyframes ||
+        hasMotion ||
         (isShape && isMask) ||
         showSpeedBadge ||
         isReversed ||
@@ -64,6 +68,11 @@ export const ClipIndicators = memo(function ClipIndicators({
           {hasKeyframes && (
             <span title={t('timeline.clipIndicators.hasKeyframes')}>
               <Diamond className="w-3 h-3 text-amber-500 fill-amber-500/50" />
+            </span>
+          )}
+          {hasMotion && (
+            <span title={t('timeline.clipIndicators.hasMotion')}>
+              <Waves className="w-3 h-3 text-sky-400" />
             </span>
           )}
           {isShape && isMask && (

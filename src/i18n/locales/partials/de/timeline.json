@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Hat Keyframes",
+      "hasMotion": "Hat kontinuierliche Bewegung",
       "mask": "Maske",
       "mediaMissing": "Medien fehlt",
       "preparingReversed": "Vorbereiten ruckwarts",
@@ -206,7 +207,19 @@
         "easeOut": "Ausklang",
         "easeIn": "Einklang",
         "easeInOut": "Ein/Ausklang",
-        "overshoot": "Überschwingen"
+        "overshoot": "Überschwingen",
+        "snap": "Snap",
+        "outCubic": "Ausklang Cubic",
+        "outQuart": "Ausklang Quart",
+        "outQuint": "Ausklang Quint",
+        "outExpo": "Ausklang Expo",
+        "outCirc": "Ausklang Circ",
+        "inOutCubic": "Ein/Ausklang Cubic",
+        "inOutQuart": "Ein/Ausklang Quart",
+        "inOutExpo": "Ein/Ausklang Expo",
+        "inCubic": "Einklang Cubic",
+        "inQuart": "Einklang Quart",
+        "inExpo": "Einklang Expo"
       },
       "custom": "Benutzerdefiniert",
       "dragHandlesHint": "Ziehe die Griffe, um die Kurve zu formen.",

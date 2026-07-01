@@ -12,6 +12,8 @@ const KIND_CLASS: Record<Exclude<MotionThumbnail['kind'], 'scale'>, string> = {
   shake: 'mp-shake',
   wobble: 'mp-wobble',
   wiggle: 'mp-wiggle',
+  drift: 'mp-drift',
+  'micro-shake': 'mp-micro-shake',
 }
 
 interface AngleStyle extends CSSProperties {

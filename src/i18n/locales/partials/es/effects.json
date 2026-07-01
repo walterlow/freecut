@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Añadir parada",
+    "removeStop": "Eliminar parada"
+  },
   "categories": {
     "color": "Color",
     "blur": "Desenfoque",
@@ -49,126 +53,21 @@
     "midtones": "Medios tonos",
     "highlights": "Altas luces"
   },
-  "definitions": {
-    "gpu-brightness": {
-      "name": "Brillo"
-    },
-    "gpu-color-wheels": {
-      "name": "Ruedas de color"
-    },
-    "gpu-contrast": {
-      "name": "Contraste"
-    },
-    "gpu-curves": {
-      "name": "Curvas"
-    },
-    "gpu-exposure": {
-      "name": "Exposicion"
-    },
-    "gpu-grayscale": {
-      "name": "Escala de grises"
-    },
-    "gpu-hue-shift": {
-      "name": "Cambio de tono"
-    },
-    "gpu-invert": {
-      "name": "Invertir"
-    },
-    "gpu-levels": {
-      "name": "Niveles"
-    },
-    "gpu-saturation": {
-      "name": "Saturacion"
-    },
-    "gpu-sepia": {
-      "name": "Sepia"
-    },
-    "gpu-temperature": {
-      "name": "Temperatura"
-    },
-    "gpu-vibrance": {
-      "name": "Intensidad"
-    },
-    "gpu-box-blur": {
-      "name": "Desenfoque de caja"
-    },
-    "gpu-gaussian-blur": {
-      "name": "Desenfoque gaussiano"
-    },
-    "gpu-motion-blur": {
-      "name": "Desenfoque de movimiento"
-    },
-    "gpu-radial-blur": {
-      "name": "Desenfoque radial"
-    },
-    "gpu-zoom-blur": {
-      "name": "Desenfoque de zoom"
-    },
-    "gpu-bulge": {
-      "name": "Abultar/Pellizcar"
-    },
-    "gpu-fluted-glass": {
-      "name": "Vidrio estriado"
-    },
-    "gpu-kaleidoscope": {
-      "name": "Caleidoscopio"
-    },
-    "gpu-mirror": {
-      "name": "Espejo"
-    },
-    "gpu-pixelate": {
-      "name": "Pixelar"
-    },
-    "gpu-rgb-split": {
-      "name": "Separacion RGB"
-    },
-    "gpu-twirl": {
-      "name": "Remolino"
-    },
-    "gpu-wave": {
-      "name": "Onda"
-    },
-    "gpu-ascii": {
-      "name": "ASCII"
-    },
-    "gpu-color-glitch": {
-      "name": "Glitch de color"
-    },
-    "gpu-dither": {
-      "name": "Tramado"
-    },
-    "gpu-edge-detect": {
-      "name": "Detectar bordes"
-    },
-    "gpu-glow": {
-      "name": "Resplandor"
-    },
-    "gpu-grain": {
-      "name": "Grano de pelicula"
-    },
-    "gpu-halftone": {
-      "name": "Semitono"
-    },
-    "gpu-posterize": {
-      "name": "Posterizar"
-    },
-    "gpu-scanlines": {
-      "name": "Lineas de barrido"
-    },
-    "gpu-sharpen": {
-      "name": "Enfocar"
-    },
-    "gpu-threshold": {
-      "name": "Umbral"
-    },
-    "gpu-vignette": {
-      "name": "Vineta"
-    },
-    "gpu-chroma-key": {
-      "name": "Croma"
-    }
-  },
   "params": {
+    "flow": "Flujo",
+    "span": "Rango",
+    "preset": "Paleta",
+    "customStops": "Paradas personalizadas",
+    "mix": "Mezcla",
+    "font": "Fuente",
+    "customChars": "Caracteres personalizados",
+    "transparentBg": "Fondo transparente",
+    "edgeDetect": "Detección de bordes",
+    "coverage": "Cobertura",
+    "blockSize": "Tamaño de bloque",
+    "curvature": "Curvatura",
+    "scanlines": "Líneas de escaneo",
+    "vignette": "Viñeta",
     "amount": "Cantidad",
     "angle": "Angle",
     "radius": "Radius",
@@ -245,6 +144,12 @@
     "amplitudeY": "Vertical Amp",
     "frequencyX": "Horizontal Freq",
     "frequencyY": "Vertical Freq",
+    "frequency": "Frecuencia",
+    "decay": "Caída",
+    "phase": "Fase",
+    "chroma": "Croma",
+    "scanlineMix": "Líneas de escaneo",
+    "glowColor": "Color de brillo",
     "colorFront": "Front Color",
     "originalColors": "Original Colors",
     "inverted": "Inverted",
@@ -255,6 +160,16 @@
     "threshold": "Umbral"
   },
   "options": {
+    "fire": "Fuego",
+    "ice": "Hielo",
+    "sunset": "Atardecer",
+    "grayscale": "Escala de grises",
+    "monospace": "Monoespaciada",
+    "ascii": "Rampa ASCII",
+    "dense": "Denso",
+    "binary": "Binario",
+    "symbols": "Símbolos",
+    "custom": "Personalizado",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

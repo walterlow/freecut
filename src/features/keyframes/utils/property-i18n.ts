@@ -20,9 +20,7 @@ export function getKeyframePropertyLabel(t: TFunction, property: AnimatablePrope
   const definition = getGpuEffect(parsed.gpuEffectType)
   const param = definition?.params[parsed.paramKey]
   if (definition && param) {
-    const paramLabel = t(`effects.definitions.${definition.id}.params.${parsed.paramKey}`, {
-      defaultValue: t(`effects.params.${parsed.paramKey}`, { defaultValue: param.label }),
-    })
+    const paramLabel = t(`effects.params.${parsed.paramKey}`, { defaultValue: param.label })
     return `${definition.name}: ${paramLabel}`
   }
 

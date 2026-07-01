@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Has images cles",
+      "hasMotion": "A un mouvement continu",
       "mask": "Masque",
       "mediaMissing": "Media manquant",
       "preparingReversed": "Preparation inverse",
@@ -206,7 +207,19 @@
         "easeOut": "Sortie douce",
         "easeIn": "Entrée douce",
         "easeInOut": "Entrée/Sortie",
-        "overshoot": "Dépassement"
+        "overshoot": "Dépassement",
+        "snap": "Snap",
+        "outCubic": "Sortie Cubic",
+        "outQuart": "Sortie Quart",
+        "outQuint": "Sortie Quint",
+        "outExpo": "Sortie Expo",
+        "outCirc": "Sortie Circ",
+        "inOutCubic": "Entrée/sortie Cubic",
+        "inOutQuart": "Entrée/sortie Quart",
+        "inOutExpo": "Entrée/sortie Expo",
+        "inCubic": "Entrée Cubic",
+        "inQuart": "Entrée Quart",
+        "inExpo": "Entrée Expo"
       },
       "custom": "Personnalise",
       "dragHandlesHint": "Faites glisser les poignées pour modeler la courbe.",

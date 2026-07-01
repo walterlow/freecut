@@ -1,13 +1,35 @@
 import { useTranslation } from 'react-i18next'
-import { Timer } from 'lucide-react'
+import { Timer, Waves } from 'lucide-react'
 
 interface DopesheetEmptyStateProps {
   showGuidance: boolean
   fallbackMessage: string
+  /** Shown when the clip has procedural motion (modulators/audio pulse) but no
+   *  keyframes — explains why the sheet is empty even though it's animated.
+   *  Takes precedence over `showGuidance`: when set, the procedural hint is
+   *  rendered instead of the default guidance/fallback UI. */
+  proceduralHint?: string
 }
 
-export function DopesheetEmptyState({ showGuidance, fallbackMessage }: DopesheetEmptyStateProps) {
+export function DopesheetEmptyState({
+  showGuidance,
+  fallbackMessage,
+  proceduralHint,
+}: DopesheetEmptyStateProps) {
   const { t } = useTranslation()
+
+  // Procedural hint overrides both the guidance and fallback branches below.
+  if (proceduralHint) {
+    return (
+      <div
+        data-testid="dopesheet-empty-state-procedural"
+        className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center"
+      >
+        <Waves className="h-4 w-4 text-primary" aria-hidden="true" />
+        <p className="max-w-sm text-xs text-muted-foreground">{proceduralHint}</p>
+      </div>
+    )
+  }
 
   if (!showGuidance) {
     return (

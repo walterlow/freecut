@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Ana kareler var",
+      "hasMotion": "Sürekli harekete sahip",
       "mask": "Maske",
       "mediaMissing": "Medya eksik",
       "preparingReversed": "Ters oynatma hazırlanıyor",
@@ -206,7 +207,19 @@
         "easeOut": "Yavaşlayarak",
         "easeIn": "Hızlanarak",
         "easeInOut": "Yavaş/Hızlı",
-        "overshoot": "Aşma"
+        "overshoot": "Aşma",
+        "snap": "Snap",
+        "outCubic": "Çıkış Cubic",
+        "outQuart": "Çıkış Quart",
+        "outQuint": "Çıkış Quint",
+        "outExpo": "Çıkış Expo",
+        "outCirc": "Çıkış Circ",
+        "inOutCubic": "Giriş/Çıkış Cubic",
+        "inOutQuart": "Giriş/Çıkış Quart",
+        "inOutExpo": "Giriş/Çıkış Expo",
+        "inCubic": "Giriş Cubic",
+        "inQuart": "Giriş Quart",
+        "inExpo": "Giriş Expo"
       },
       "custom": "Özel",
       "dragHandlesHint": "Eğriyi şekillendirmek için tutamaçları sürükleyin.",

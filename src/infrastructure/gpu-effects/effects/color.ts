@@ -1,4 +1,4 @@
-import type { EffectParam, GpuEffectDefinition } from '../types'
+import type { EffectDataTexturePayload, EffectParam, GpuEffectDefinition } from '../types'
 import {
   GPU_CURVES_CHANNELS,
   GPU_CURVES_LUT_WIDTH,
@@ -16,6 +16,28 @@ function readNumberParam(
 ): number {
   const value = params[key]
   return typeof value === 'number' ? value : fallback
+}
+
+function parseHexColorRgb(
+  color: string,
+  fallback: [number, number, number],
+): [number, number, number] {
+  if (typeof color !== 'string' || !color.startsWith('#')) return fallback
+  const hex = color.slice(1)
+  const full =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : hex
+  // Strict format check: reject anything but exactly 6 hex digits (after 3-digit
+  // shorthand expansion), so invalid/extra chars ("#0g0000", "#ffffff00") fall back.
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return fallback
+  const r = parseInt(full.slice(0, 2), 16) / 255
+  const g = parseInt(full.slice(2, 4), 16) / 255
+  const b = parseInt(full.slice(4, 6), 16) / 255
+  return [r, g, b].every(Number.isFinite) ? [r, g, b] : fallback
 }
 
 export const brightness: GpuEffectDefinition = {
@@ -144,7 +166,7 @@ export const hueShift: GpuEffectDefinition = {
   entryPoint: 'hueShiftFragment',
   uniformSize: 16,
   shader: /* wgsl */ `
-struct HueShiftParams { shift: f32, _p1: f32, _p2: f32, _p3: f32 };
+struct HueShiftParams { shift: f32, span: f32, flow: f32, time: f32 };
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: HueShiftParams;
@@ -152,7 +174,10 @@ struct HueShiftParams { shift: f32, _p1: f32, _p2: f32, _p3: f32 };
 fn hueShiftFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = textureSample(inputTex, texSampler, input.uv);
   var hsv = rgb2hsv(color.rgb);
-  hsv.x = fract(hsv.x + params.shift);
+  // span compresses (<1) or expands (>1) the hue range around the shift offset;
+  // span = 1 is a plain hue rotation (backward compatible), span = 0 maps every
+  // pixel to a single hue (monochrome tint). flow cycles the offset over time.
+  hsv.x = fract(params.shift + params.flow * params.time + hsv.x * params.span);
   return vec4f(hsv2rgb(hsv), color.a);
 }`,
   params: {
@@ -165,8 +190,32 @@ fn hueShiftFragment(input: VertexOutput) -> @location(0) vec4f {
       step: 0.01,
       animatable: true,
     },
+    span: {
+      type: 'number',
+      label: 'Span',
+      default: 1,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+    flow: {
+      type: 'number',
+      label: 'Flow',
+      default: 0,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      animatable: false,
+    },
   },
-  packUniforms: (p) => new Float32Array([(p.shift as number) ?? 0, 0, 0, 0]),
+  packUniforms: (p) =>
+    new Float32Array([
+      (p.shift as number) ?? 0,
+      (p.span as number) ?? 1,
+      (p.flow as number) ?? 0,
+      performance.now() / 1000,
+    ]),
 }
 
 export const invert: GpuEffectDefinition = {
@@ -1371,4 +1420,123 @@ fn vibranceFragment(input: VertexOutput) -> @location(0) vec4f {
     },
   },
   packUniforms: (p) => new Float32Array([(p.amount as number) ?? 0, 0, 0, 0]),
+}
+
+// Built-in N-stop colormaps (hex stops, ordered dark -> light). 'custom' uses the
+// comma-separated customStops param instead.
+export const GRADIENT_MAP_PRESETS: Record<string, string[]> = {
+  inferno: ['#000004', '#420a68', '#932667', '#dd513a', '#fca50a', '#f0f921'],
+  magma: ['#000004', '#3b0f70', '#8c2981', '#de4968', '#fe9f6d', '#fcfdbf'],
+  plasma: ['#0d0887', '#6a00a8', '#b12a90', '#e16462', '#fca636', '#f0f921'],
+  viridis: ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'],
+  turbo: ['#30123b', '#4675ed', '#1bcfd4', '#a4fc3b', '#fe9b2d', '#cb2a04', '#7a0403'],
+  fire: ['#000000', '#7a0000', '#ff4800', '#ffd000', '#ffffff'],
+  ice: ['#000010', '#003b6f', '#1b78c2', '#7ec8ff', '#ffffff'],
+  sunset: ['#241634', '#c2456b', '#ffd9a0'],
+  grayscale: ['#000000', '#ffffff'],
+}
+
+const GRADIENT_MAP_DEFAULT_CUSTOM = GRADIENT_MAP_PRESETS.inferno!.join(', ')
+
+/** Resolve a preset/custom selection to an ordered list of normalized RGB stops. */
+function gradientMapStops(preset: string, customStops: string): [number, number, number][] {
+  const hexes =
+    preset === 'custom'
+      ? customStops
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+      : (GRADIENT_MAP_PRESETS[preset] ?? GRADIENT_MAP_PRESETS.inferno!)
+  const stops = hexes.map((h) => parseHexColorRgb(h, [0, 0, 0]))
+  if (stops.length === 0) return [[0, 0, 0], [1, 1, 1]]
+  if (stops.length === 1) return [stops[0]!, stops[0]!]
+  return stops
+}
+
+/** Build a 256x1 RGBA8 LUT by linearly interpolating the stops across luminance. */
+function buildGradientMapLut(stops: [number, number, number][]): EffectDataTexturePayload {
+  const width = 256
+  const data = new Uint8Array(width * 4)
+  const segments = stops.length - 1
+  for (let i = 0; i < width; i++) {
+    const t = i / (width - 1)
+    const scaled = t * segments
+    const idx = Math.min(Math.floor(scaled), segments - 1)
+    const f = scaled - idx
+    const a = stops[idx]!
+    const b = stops[idx + 1]!
+    data[i * 4] = Math.round((a[0] + (b[0] - a[0]) * f) * 255)
+    data[i * 4 + 1] = Math.round((a[1] + (b[1] - a[1]) * f) * 255)
+    data[i * 4 + 2] = Math.round((a[2] + (b[2] - a[2]) * f) * 255)
+    data[i * 4 + 3] = 255
+  }
+  return { width, height: 1, depth: 1, data }
+}
+
+export const gradientMap: GpuEffectDefinition = {
+  id: 'gpu-gradient-map',
+  name: 'Gradient Map',
+  category: 'color',
+  entryPoint: 'gradientMapFragment',
+  uniformSize: 16,
+  shader: /* wgsl */ `
+struct GradientMapParams { mix: f32, _p1: f32, _p2: f32, _p3: f32 };
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: GradientMapParams;
+@group(0) @binding(3) var gradientLut: texture_2d<f32>;
+@fragment
+fn gradientMapFragment(input: VertexOutput) -> @location(0) vec4f {
+  let color = textureSample(inputTex, texSampler, input.uv);
+  let lum = clamp(luminance601(color.rgb), 0.0, 1.0);
+  let mapped = textureSampleLevel(gradientLut, texSampler, vec2f(lum, 0.5), 0.0).rgb;
+  let outRgb = mix(color.rgb, mapped, clamp(params.mix, 0.0, 1.0));
+  return vec4f(outRgb, color.a);
+}`,
+  params: {
+    preset: {
+      type: 'select',
+      label: 'Palette',
+      default: 'inferno',
+      options: [
+        { value: 'inferno', label: 'Inferno' },
+        { value: 'magma', label: 'Magma' },
+        { value: 'plasma', label: 'Plasma' },
+        { value: 'viridis', label: 'Viridis' },
+        { value: 'turbo', label: 'Turbo' },
+        { value: 'fire', label: 'Fire' },
+        { value: 'ice', label: 'Ice' },
+        { value: 'sunset', label: 'Sunset' },
+        { value: 'grayscale', label: 'Grayscale' },
+        { value: 'custom', label: 'Custom' },
+      ],
+    },
+    customStops: {
+      type: 'text',
+      label: 'Custom Stops',
+      default: GRADIENT_MAP_DEFAULT_CUSTOM,
+      visibleWhen: (params) => params.preset === 'custom',
+    },
+    mix: {
+      type: 'number',
+      label: 'Mix',
+      default: 1,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+  },
+  packUniforms: (p) => new Float32Array([readNumberParam(p, 'mix', 1), 0, 0, 0]),
+  dataTexture: {
+    dimension: '2d',
+    key: (p) => {
+      const preset = (p.preset as string) ?? 'inferno'
+      return preset === 'custom' ? `custom:${(p.customStops as string) ?? ''}` : `preset:${preset}`
+    },
+    build: (p) =>
+      buildGradientMapLut(
+        gradientMapStops((p.preset as string) ?? 'inferno', (p.customStops as string) ?? ''),
+      ),
+  },
 }

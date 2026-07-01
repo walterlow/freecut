@@ -46,7 +46,9 @@ const EditorProjectIdRoute = EditorProjectIdRouteImport.update({
   id: '/editor/$projectId',
   path: '/editor/$projectId',
   getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/editor/$projectId.lazy').then((d) => d.Route))
+} as any).lazy(() =>
+  import('./routes/editor/$projectId.lazy').then((d) => d.Route),
+)
 const DocsSlugRoute = DocsSlugRouteImport.update({
   id: '/docs/$slug',
   path: '/docs/$slug',

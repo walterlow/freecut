@@ -37,6 +37,17 @@ export { getDefaultActiveTrackId } from '../utils/default-active-track'
 export { resolveEffectiveTrackStates } from '../utils/group-utils'
 export { linkItems } from '../stores/actions/item-actions'
 export { applyAnimationPreset } from '../stores/actions/preset-actions'
+export { applyMotionPresetKeyframes } from '../stores/actions/keyframe-actions'
+export type { MotionPresetClear } from '../stores/actions/keyframe-actions'
+export {
+  applyMotionModifierToItems,
+  updateMotionModifiersLive,
+  beginMotionModifierEdit,
+  commitMotionModifierEdit,
+  removeMotionModifierFromItems,
+  setEffectAudioPulse,
+  bakeMotionToKeyframes,
+} from '../stores/actions/motion-modifier-actions'
 export { captureAnimationFromItem, getPresetCompatibility } from '../deps/keyframe-editors'
 export { rateStretchItemWithoutHistory } from '../stores/actions/item-edit-actions'
 export { setInOutPointsWithoutHistory } from '../stores/actions/marker-actions'

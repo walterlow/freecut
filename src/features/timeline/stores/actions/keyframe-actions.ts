@@ -68,6 +68,71 @@ export function addKeyframes(payloads: KeyframeAddPayload[]): string[] {
   )
 }
 
+/**
+ * One property to clear before a preset applies. With `fromFrame`/`toFrame` only
+ * keyframes inside that window are removed (region-aware Replace — a new entrance
+ * preset clears the entrance window across all preset-owned properties while an
+ * exit at the other end survives); without a range the whole property is cleared.
+ */
+export interface MotionPresetClear {
+  itemId: string
+  property: AnimatableProperty
+  fromFrame?: number
+  toFrame?: number
+}
+
+/**
+ * Apply a motion preset's keyframes, optionally clearing target properties first
+ * so reapplying a preset REPLACES the previous one instead of silently
+ * overwriting only the frames that collide. The clear + add run inside a single
+ * undo block so one Ctrl+Z reverts the whole apply.
+ */
+export function applyMotionPresetKeyframes(
+  payloads: KeyframeAddPayload[],
+  clearProperties: MotionPresetClear[] = [],
+): string[] {
+  if (payloads.length === 0) return []
+
+  const validPayloads = payloads.filter((p) => canAddKeyframeAtFrame(p.itemId, p.frame))
+  // All-or-nothing: if ANY payload is blocked (e.g. lands in a transition
+  // region), abort before the clear loop runs. The clear windows are derived
+  // from the pre-filtered set, so clearing while only some replacements survive
+  // would silently delete keyframes we can't re-add. A partial apply must be a
+  // no-op instead.
+  if (validPayloads.length < payloads.length) {
+    getLogger().warn('Preset keyframes blocked by transition regions; skipping apply', {
+      originalCount: payloads.length,
+      validCount: validPayloads.length,
+    })
+    return []
+  }
+
+  return execute(
+    'APPLY_MOTION_PRESET_KEYFRAMES',
+    () => {
+      const keyframesStore = useKeyframesStore.getState()
+      for (const clear of clearProperties) {
+        if (clear.fromFrame === undefined || clear.toFrame === undefined) {
+          keyframesStore._removeKeyframesForProperty(clear.itemId, clear.property)
+          continue
+        }
+        const group = keyframesStore.keyframesByItemId[clear.itemId]?.properties.find(
+          (entry) => entry.property === clear.property,
+        )
+        if (!group) continue
+        const refs = group.keyframes
+          .filter((kf) => kf.frame >= clear.fromFrame! && kf.frame <= clear.toFrame!)
+          .map((kf) => ({ itemId: clear.itemId, property: clear.property, keyframeId: kf.id }))
+        if (refs.length > 0) keyframesStore._removeKeyframes(refs)
+      }
+      const ids = keyframesStore._addKeyframes(validPayloads)
+      useTimelineSettingsStore.getState().markDirty()
+      return ids
+    },
+    { count: validPayloads.length, cleared: clearProperties.length },
+  )
+}
+
 export function updateKeyframe(
   itemId: string,
   property: AnimatableProperty,

@@ -34,3 +34,28 @@ export {
   type MotionPresetCategory,
   type MotionThumbnail,
 } from '@/features/keyframes/utils/motion-presets'
+export {
+  DEFAULT_MOTION_GENERATOR_SETTINGS,
+  applyMotionGeneratorSettings,
+  type MotionGeneratorSettings,
+} from '@/features/keyframes/utils/motion-generator'
+export {
+  MOTION_MODULATORS,
+  type MotionModulator,
+} from '@/features/keyframes/utils/motion-modulators'
+export {
+  createMotionModifier,
+  getMotionModifierSettings,
+  updateMotionModifierSettings,
+} from '@/features/keyframes/utils/motion-modifier-eval'
+export {
+  bakeMotionModifiersToKeyframes,
+  bakeAudioPulseToKeyframes,
+  buildBakeMotionPlan,
+} from '@/features/keyframes/utils/bake-motion'
+export {
+  TRIGGER_WAVE_MOTION_LAYER_LABEL,
+  createAudioPulseModulation,
+  buildTriggerWaveMotionLayerKeyframes,
+  createTriggerWaveMotionLayerEffects,
+} from '@/features/keyframes/utils/trigger-wave-motion-layer'

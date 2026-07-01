@@ -8,5 +8,6 @@ export {
   getEffectPropertyBaseValue,
   captureAnimationFromItem,
   getPresetCompatibility,
+  buildBakeMotionPlan,
 } from './keyframes-contract'
-export type { PresetIncompatibilityReason } from './keyframes-contract'
+export type { PresetIncompatibilityReason, ProceduralPreviewInput } from './keyframes-contract'

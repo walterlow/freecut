@@ -9,6 +9,7 @@
  */
 
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
+import { ensureProResDecoderRegistered } from '@/infrastructure/browser/register-prores-decoder'
 import { createLogger } from '@/shared/logging/logger'
 import { getAdaptiveStreamStart } from '@/shared/utils/keyframe-index-registry'
 
@@ -104,7 +105,7 @@ export class VideoFrameExtractor {
    */
   async init(): Promise<boolean> {
     try {
-      const mb = await import('mediabunny')
+      const [mb] = await Promise.all([import('mediabunny'), ensureProResDecoderRegistered()])
       const source = createMediabunnyInputSource(mb, this.src)
 
       // Prefer direct file-backed reads for OPFS / file handles, with BlobSource
@@ -121,14 +122,15 @@ export class VideoFrameExtractor {
         return false
       }
 
+      // Bail out if the track is genuinely undecodable. ProRes decodes through the
+      // registered @mediabunny/prores decoder, so canDecode() reports it as decodable
+      // and VideoSampleSink handles it like any other codec.
       if (typeof this.videoTrack.canDecode === 'function') {
         const decodable = await this.videoTrack.canDecode()
         if (!decodable) {
           this.logInitFailure(
             'Video track is not decodable via mediabunny/WebCodecs',
-            {
-              itemId: this.itemId,
-            },
+            { itemId: this.itemId },
             'warn',
           )
           return false
@@ -138,7 +140,6 @@ export class VideoFrameExtractor {
       // Get duration
       this.duration = await this.input!.computeDuration()
 
-      // Create video sample sink for frame extraction
       this.sink = new mb.VideoSampleSink(
         this.videoTrack as unknown as ConstructorParameters<typeof mb.VideoSampleSink>[0],
       )

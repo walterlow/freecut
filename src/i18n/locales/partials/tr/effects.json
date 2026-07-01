@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Durak Ekle",
+    "removeStop": "Durağı kaldır"
+  },
   "categories": {
     "color": "Renk",
     "blur": "Bulanıklık",
@@ -49,126 +53,21 @@
     "midtones": "Orta tonlar",
     "highlights": "Parlak alanlar"
   },
-  "definitions": {
-    "gpu-brightness": {
-      "name": "Parlaklık"
-    },
-    "gpu-color-wheels": {
-      "name": "Renk Tekerlekleri"
-    },
-    "gpu-contrast": {
-      "name": "Kontrast"
-    },
-    "gpu-curves": {
-      "name": "Eğriler"
-    },
-    "gpu-exposure": {
-      "name": "Pozlama"
-    },
-    "gpu-grayscale": {
-      "name": "Gri Tonlama"
-    },
-    "gpu-hue-shift": {
-      "name": "Ton Kaydırma"
-    },
-    "gpu-invert": {
-      "name": "Ters Çevir"
-    },
-    "gpu-levels": {
-      "name": "Seviyeler"
-    },
-    "gpu-saturation": {
-      "name": "Doygunluk"
-    },
-    "gpu-sepia": {
-      "name": "Sepya"
-    },
-    "gpu-temperature": {
-      "name": "Sıcaklık"
-    },
-    "gpu-vibrance": {
-      "name": "Canlılık"
-    },
-    "gpu-box-blur": {
-      "name": "Kutu Bulanıklığı"
-    },
-    "gpu-gaussian-blur": {
-      "name": "Gauss Bulanıklığı"
-    },
-    "gpu-motion-blur": {
-      "name": "Hareket Bulanıklığı"
-    },
-    "gpu-radial-blur": {
-      "name": "Radyal Bulanıklık"
-    },
-    "gpu-zoom-blur": {
-      "name": "Yakınlaştırma Bulanıklığı"
-    },
-    "gpu-bulge": {
-      "name": "Şişir/Sıkıştır"
-    },
-    "gpu-fluted-glass": {
-      "name": "Oluklu Cam"
-    },
-    "gpu-kaleidoscope": {
-      "name": "Kaleydoskop"
-    },
-    "gpu-mirror": {
-      "name": "Ayna"
-    },
-    "gpu-pixelate": {
-      "name": "Pikselleştir"
-    },
-    "gpu-rgb-split": {
-      "name": "RGB Ayırma"
-    },
-    "gpu-twirl": {
-      "name": "Girdap"
-    },
-    "gpu-wave": {
-      "name": "Dalga"
-    },
-    "gpu-ascii": {
-      "name": "ASCII"
-    },
-    "gpu-color-glitch": {
-      "name": "Renk Bozulması"
-    },
-    "gpu-dither": {
-      "name": "Titreşimli Tarama"
-    },
-    "gpu-edge-detect": {
-      "name": "Kenar Algılama"
-    },
-    "gpu-glow": {
-      "name": "Parlama"
-    },
-    "gpu-grain": {
-      "name": "Film Greni"
-    },
-    "gpu-halftone": {
-      "name": "Yarı Ton"
-    },
-    "gpu-posterize": {
-      "name": "Posterize"
-    },
-    "gpu-scanlines": {
-      "name": "Tarama Çizgileri"
-    },
-    "gpu-sharpen": {
-      "name": "Keskinleştir"
-    },
-    "gpu-threshold": {
-      "name": "Eşik"
-    },
-    "gpu-vignette": {
-      "name": "Vinyet"
-    },
-    "gpu-chroma-key": {
-      "name": "Chroma Key"
-    }
-  },
   "params": {
+    "flow": "Akış",
+    "span": "Aralık",
+    "preset": "Palet",
+    "customStops": "Özel Duraklar",
+    "mix": "Karışım",
+    "font": "Yazı Tipi",
+    "customChars": "Özel Karakterler",
+    "transparentBg": "Şeffaf Arka Plan",
+    "edgeDetect": "Kenar Algılama",
+    "coverage": "Kapsama",
+    "blockSize": "Blok Boyutu",
+    "curvature": "Eğrilik",
+    "scanlines": "Tarama Çizgileri",
+    "vignette": "Vinyet",
     "amount": "Miktar",
     "angle": "Açı",
     "radius": "Yarıçap",
@@ -245,6 +144,12 @@
     "amplitudeY": "Dikey Genlik",
     "frequencyX": "Yatay Frekans",
     "frequencyY": "Dikey Frekans",
+    "frequency": "Frekans",
+    "decay": "Sönüm",
+    "phase": "Faz",
+    "chroma": "Kroma",
+    "scanlineMix": "Tarama Çizgileri",
+    "glowColor": "Parıltı Rengi",
     "colorFront": "Ön Renk",
     "originalColors": "Özgün Renkler",
     "inverted": "Ters Çevrilmiş",
@@ -253,6 +158,16 @@
     "grainSize": "Gren Boyutu"
   },
   "options": {
+    "fire": "Ateş",
+    "ice": "Buz",
+    "sunset": "Gün Batımı",
+    "grayscale": "Gri Tonlama",
+    "monospace": "Eşaralıklı",
+    "ascii": "ASCII Rampası",
+    "dense": "Yoğun",
+    "binary": "İkili",
+    "symbols": "Semboller",
+    "custom": "Özel",
     "standard": "Standart",
     "simple": "Basit",
     "blocks": "Bloklar",

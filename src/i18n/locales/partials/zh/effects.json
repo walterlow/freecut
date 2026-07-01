@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "添加色标",
+    "removeStop": "删除色标"
+  },
   "categories": {
     "color": "色彩",
     "blur": "模糊",
@@ -49,126 +53,21 @@
     "midtones": "中间调",
     "highlights": "高光"
   },
-  "definitions": {
-    "gpu-brightness": {
-      "name": "亮度"
-    },
-    "gpu-color-wheels": {
-      "name": "色轮"
-    },
-    "gpu-contrast": {
-      "name": "对比度"
-    },
-    "gpu-curves": {
-      "name": "曲线"
-    },
-    "gpu-dither": {
-      "name": "抖动"
-    },
-    "gpu-threshold": {
-      "name": "阈值"
-    },
-    "gpu-glow": {
-      "name": "发光"
-    },
-    "gpu-grain": {
-      "name": "胶片颗粒"
-    },
-    "gpu-exposure": {
-      "name": "曝光"
-    },
-    "gpu-grayscale": {
-      "name": "灰度"
-    },
-    "gpu-hue-shift": {
-      "name": "色相偏移"
-    },
-    "gpu-invert": {
-      "name": "反相"
-    },
-    "gpu-levels": {
-      "name": "色阶"
-    },
-    "gpu-saturation": {
-      "name": "饱和度"
-    },
-    "gpu-sepia": {
-      "name": "棕褐色"
-    },
-    "gpu-temperature": {
-      "name": "色温"
-    },
-    "gpu-vibrance": {
-      "name": "自然饱和度"
-    },
-    "gpu-box-blur": {
-      "name": "方框模糊"
-    },
-    "gpu-gaussian-blur": {
-      "name": "高斯模糊"
-    },
-    "gpu-motion-blur": {
-      "name": "运动模糊"
-    },
-    "gpu-radial-blur": {
-      "name": "径向模糊"
-    },
-    "gpu-zoom-blur": {
-      "name": "缩放模糊"
-    },
-    "gpu-bulge": {
-      "name": "凸出/挤压"
-    },
-    "gpu-fluted-glass": {
-      "name": "凹槽玻璃"
-    },
-    "gpu-kaleidoscope": {
-      "name": "万花筒"
-    },
-    "gpu-mirror": {
-      "name": "镜像"
-    },
-    "gpu-pixelate": {
-      "name": "像素化"
-    },
-    "gpu-rgb-split": {
-      "name": "RGB 分离"
-    },
-    "gpu-twirl": {
-      "name": "旋转"
-    },
-    "gpu-wave": {
-      "name": "波浪"
-    },
-    "gpu-ascii": {
-      "name": "ASCII"
-    },
-    "gpu-color-glitch": {
-      "name": "色彩故障"
-    },
-    "gpu-edge-detect": {
-      "name": "边缘检测"
-    },
-    "gpu-halftone": {
-      "name": "半色调"
-    },
-    "gpu-posterize": {
-      "name": "色调分离"
-    },
-    "gpu-scanlines": {
-      "name": "扫描线"
-    },
-    "gpu-sharpen": {
-      "name": "锐化"
-    },
-    "gpu-vignette": {
-      "name": "暗角"
-    },
-    "gpu-chroma-key": {
-      "name": "色度键"
-    }
-  },
   "params": {
+    "flow": "流动",
+    "span": "跨度",
+    "preset": "调色板",
+    "customStops": "自定义色标",
+    "mix": "混合",
+    "font": "字体",
+    "customChars": "自定义字符",
+    "transparentBg": "透明背景",
+    "edgeDetect": "边缘检测",
+    "coverage": "覆盖范围",
+    "blockSize": "块大小",
+    "curvature": "曲率",
+    "scanlines": "扫描线",
+    "vignette": "暗角",
     "amount": "数量",
     "angle": "Angle",
     "radius": "Radius",
@@ -245,6 +144,12 @@
     "amplitudeY": "Vertical Amp",
     "frequencyX": "Horizontal Freq",
     "frequencyY": "Vertical Freq",
+    "frequency": "频率",
+    "decay": "衰减",
+    "phase": "相位",
+    "chroma": "色度",
+    "scanlineMix": "扫描线",
+    "glowColor": "辉光颜色",
     "colorFront": "Front Color",
     "originalColors": "Original Colors",
     "inverted": "Inverted",
@@ -255,6 +160,16 @@
     "threshold": "阈值"
   },
   "options": {
+    "fire": "火焰",
+    "ice": "冰",
+    "sunset": "日落",
+    "grayscale": "灰度",
+    "monospace": "等宽",
+    "ascii": "ASCII 渐变",
+    "dense": "密集",
+    "binary": "二进制",
+    "symbols": "符号",
+    "custom": "自定义",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

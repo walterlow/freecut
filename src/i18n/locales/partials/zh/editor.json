@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "动画时间线",
-      "noClip": "没有可动画的片段"
+      "noClip": "没有可动画的片段",
+      "animatedClip": "有动画"
     },
     "animatePresets": {
       "title": "预设",
@@ -17,6 +18,7 @@
       "savedToast": "已保存“{{name}}”",
       "appliedToast": "已应用“{{name}}”",
       "applyFailed": "无法应用预设",
+      "transitionBlocked": "无法应用：动画落在转场区域内。",
       "saveFailed": "无法保存预设",
       "deleteLabel": "删除预设",
       "incompatibleType": "需要 {{type}} 片段",
@@ -34,13 +36,49 @@
         "cancel": "取消"
       }
     },
+    "animateStages": {
+      "presetsHint": "预设会生成可编辑的关键帧 — 可在图表中进行细调。",
+      "continuousTitle": "连续运动",
+      "continuousHint": "在烘焙之前以实时且非破坏性的方式运行。",
+      "liveBadge": "实时",
+      "appliedTitle": "已应用",
+      "keyframedChip": "{{count}} 个关键帧属性",
+      "clearKeyframes": "清除关键帧",
+      "removeModulator": "移除 {{name}}",
+      "audioPulseChip": "音频脉冲",
+      "onApply": "应用时",
+      "applyMode": {
+        "replace": "替换",
+        "add": "添加"
+      }
+    },
+    "motionGenerator": {
+      "title": "生成器",
+      "intensity": "强度",
+      "duration": "时长",
+      "modulatorsTitle": "调制器",
+      "modulatorApplied": "已将 {{name}} 应用到 {{count}} 个片段",
+      "modulatorRemoved": "已移除 {{name}}",
+      "modulatorApplyFailed": "无法应用调制器",
+      "bakeToKeyframes": "烘焙为关键帧",
+      "bakeToKeyframesHint": "将所选片段的程序化运动平铺为可编辑的关键帧",
+      "bakeNoMotion": "所选内容中没有可烘焙的程序化运动",
+      "motionBaked": "已在 {{count}} 个片段上烘焙运动",
+      "modulators": {
+        "floatDrift": "浮动漂移",
+        "breathPulse": "呼吸脉冲",
+        "microShake": "微抖动",
+        "sway": "摇摆",
+        "spin": "旋转"
+      },
+      "removeAction": "移除"
+    },
     "motionPresets": {
       "textIncompatible": "不适用于文本",
       "categories": {
         "entrance": "入场",
         "exit": "出场",
-        "emphasis": "强调",
-        "loop": "循环"
+        "emphasis": "强调"
       },
       "items": {
         "fadeIn": "淡入",
@@ -62,12 +100,7 @@
         "pulse": "脉冲",
         "shake": "抖动",
         "wobble": "摇摆",
-        "flash": "闪烁",
-        "float": "漂浮",
-        "sway": "摆动",
-        "breathe": "呼吸",
-        "spin": "旋转",
-        "wiggle": "扭动"
+        "flash": "闪烁"
       }
     },
     "shortcutsDialog": {
@@ -382,6 +415,7 @@
     },
     "editor": {
       "appLabel": "FreeCut 视频编辑器",
+      "upgrading": "正在升级项目…",
       "backupCreated": "升级前已创建备份",
       "backupFailed": "升级前创建备份失败",
       "tryAgain": "请重试。",

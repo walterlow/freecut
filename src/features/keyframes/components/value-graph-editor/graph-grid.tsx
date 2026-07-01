@@ -87,11 +87,14 @@ export const GraphGrid = memo(function GraphGrid({
   // Generate vertical grid lines (X axis - frames)
   const xLines = useMemo(() => {
     const lines: Array<{ x: number; frame: number; isMajor: boolean }> = []
-    const minorInterval = xMajorInterval / 5
+    // Never draw sub-frame minor lines — keyframes are integer frames, so a
+    // fractional interval (e.g. 0.2) just adds noise that reads as an uneven grid.
+    const minorInterval = Math.max(1, xMajorInterval / 5)
     const firstFrame = Math.ceil(startFrame / minorInterval) * minorInterval
 
     for (let frame = firstFrame; frame <= endFrame; frame += minorInterval) {
-      const x = graphLeft + ((frame - startFrame) / frameRange) * graphWidth
+      // Round to whole pixels so every line is crisp and evenly spaced.
+      const x = Math.round(graphLeft + ((frame - startFrame) / frameRange) * graphWidth)
       const isMajor = Math.abs(frame % xMajorInterval) < 0.01
       lines.push({ x, frame, isMajor })
     }
@@ -116,7 +119,7 @@ export const GraphGrid = memo(function GraphGrid({
       const snappedValue = Math.round(value / minorInterval) * minorInterval
       if (snappedValue < minValue - epsilon || snappedValue > maxValue + epsilon) continue
 
-      const y = graphTop + (1 - (snappedValue - minValue) / valueRange) * graphHeight
+      const y = Math.round(graphTop + (1 - (snappedValue - minValue) / valueRange) * graphHeight)
       // Check if major: value is a multiple of major interval
       const isMajor =
         Math.abs(Math.round(snappedValue / yMajorInterval) * yMajorInterval - snappedValue) <

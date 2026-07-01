@@ -53,6 +53,11 @@ export interface MediaMetadata {
    */
   audioCodecSupported?: boolean
   /**
+   * Whether the browser can decode the video track via WebCodecs.
+   * False for codecs like ProRes that require a transcoded proxy to be viewable.
+   */
+  videoCodecSupported?: boolean
+  /**
    * Conformed preview-audio asset path for custom-decoded codecs.
    * Kept under the legacy name for compatibility, but now points to the
    * workspace-backed persisted WAV path.

@@ -8,6 +8,8 @@
 
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
 import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-url-registry'
+import { ensureProResDecoderRegistered } from '@/infrastructure/browser/register-prores-decoder'
+
 const IMAGE_FORMAT = 'image/jpeg'
 const IMAGE_QUALITY = 0.7 // JPEG is substantially faster to encode for tiny thumbnails
 const FRAME_RATE = 1 // 1fps for filmstrip thumbnails
@@ -171,7 +173,8 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
   }
 
   // Load mediabunny
-  const { Input, CanvasSink, ALL_FORMATS } = await loadMediabunny()
+  const [mb] = await Promise.all([loadMediabunny(), ensureProResDecoderRegistered()])
+  const { Input, CanvasSink, ALL_FORMATS } = mb
 
   let input: InstanceType<typeof Input> | null = null
   let sink: InstanceType<typeof CanvasSink> | null = null
@@ -179,7 +182,7 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
   try {
     // Create input from blob URL
     input = new Input({
-      source: createMediabunnyInputSource(await loadMediabunny(), blobUrl, {
+      source: createMediabunnyInputSource(mb, blobUrl, {
         metadata: sourceMetadata,
         fallbackBlob: blob,
       }),
@@ -192,14 +195,18 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
       throw new Error('No video track found')
     }
 
-    // Create CanvasSink with poolSize matching our parallel save capacity
-    // This keeps VRAM constant and prevents allocation/deallocation churn
+    // ProRes decodes through the registered @mediabunny/prores decoder, so CanvasSink
+    // handles it directly like any other codec.
+    // CanvasSink poolSize matches our parallel save capacity to keep VRAM constant
+    // and prevent allocation/deallocation churn.
     sink = new CanvasSink(videoTrack, {
       width,
       height,
       fit: 'cover',
       poolSize: 4, // Reduced for 1fps extraction
     })
+    const canvasIterable: AsyncIterable<{ canvas: OffscreenCanvas | HTMLCanvasElement } | null> =
+      sink.canvasesAtTimestamps(timestampGenerator())
 
     // Track extracted frames
     let extractedCount = initialCompletedCount
@@ -231,7 +238,7 @@ async function extractAndSave(request: ExtractRequest, state: { aborted: boolean
       savedSinceLastReport.push({ index: frameIndex, blob })
     }
 
-    for await (const wrapped of sink.canvasesAtTimestamps(timestampGenerator())) {
+    for await (const wrapped of canvasIterable) {
       if (state.aborted) break
 
       const frame = framesToExtract[frameListIndex]

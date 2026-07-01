@@ -26,7 +26,16 @@ import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('AddAdjustmentLayer')
 
-export function addAdjustmentLayer(effects?: VisualEffect[], label?: string): boolean {
+interface AddAdjustmentLayerOptions {
+  from?: number
+  durationInFrames?: number
+}
+
+export function addAdjustmentLayer(
+  effects?: VisualEffect[],
+  label?: string,
+  options: AddAdjustmentLayerOptions = {},
+): boolean {
   // Read all needed state from stores directly to avoid subscriptions
   const { tracks, items, fps } = useTimelineStore.getState()
   const { activeTrackId, selectItems } = useSelectionStore.getState()
@@ -43,14 +52,20 @@ export function addAdjustmentLayer(effects?: VisualEffect[], label?: string): bo
     return false
   }
 
-  const durationInFrames = getDefaultGeneratedLayerDurationInFrames(fps)
+  const durationInFrames =
+    typeof options.durationInFrames === 'number' && Number.isFinite(options.durationInFrames)
+      ? Math.max(1, Math.round(options.durationInFrames))
+      : getDefaultGeneratedLayerDurationInFrames(fps)
 
   const videoTracks = tracks
     .filter((track) => !track.isGroup && getTrackKind(track) === 'video' && !track.locked)
     .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
   const topVideoTrack = videoTracks[0] ?? referenceTrack
 
-  const proposedPosition = usePlaybackStore.getState().currentFrame
+  const proposedPosition =
+    typeof options.from === 'number' && Number.isFinite(options.from)
+      ? Math.max(0, Math.round(options.from))
+      : usePlaybackStore.getState().currentFrame
   const topTrackPosition = findNearestAvailableSpace(
     proposedPosition,
     durationInFrames,

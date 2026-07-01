@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "애니메이트 타임라인",
-      "noClip": "애니메이트할 클립이 없습니다"
+      "noClip": "애니메이트할 클립이 없습니다",
+      "animatedClip": "애니메이션 있음"
     },
     "animatePresets": {
       "title": "프리셋",
@@ -17,6 +18,7 @@
       "savedToast": "“{{name}}”을(를) 저장했습니다",
       "appliedToast": "“{{name}}”을(를) 적용했습니다",
       "applyFailed": "프리셋을 적용할 수 없습니다",
+      "transitionBlocked": "적용할 수 없습니다: 애니메이션이 전환 구간에 들어갑니다.",
       "saveFailed": "프리셋을 저장할 수 없습니다",
       "deleteLabel": "프리셋 삭제",
       "incompatibleType": "{{type}} 클립이 필요합니다",
@@ -34,13 +36,49 @@
         "cancel": "취소"
       }
     },
+    "animateStages": {
+      "presetsHint": "프리셋은 편집 가능한 키프레임을 생성합니다 — 그래프에서 다듬으세요.",
+      "continuousTitle": "연속 모션",
+      "continuousHint": "베이크하기 전까지 라이브로 비파괴적으로 동작합니다.",
+      "liveBadge": "라이브",
+      "appliedTitle": "적용됨",
+      "keyframedChip": "{{count}}개 키프레임",
+      "clearKeyframes": "키프레임 지우기",
+      "removeModulator": "{{name}} 제거",
+      "audioPulseChip": "오디오 펄스",
+      "onApply": "적용 시",
+      "applyMode": {
+        "replace": "교체",
+        "add": "추가"
+      }
+    },
+    "motionGenerator": {
+      "title": "제너레이터",
+      "intensity": "강도",
+      "duration": "길이",
+      "modulatorsTitle": "모듈레이터",
+      "modulatorApplied": "{{name}}을(를) {{count}}개 클립에 적용했습니다",
+      "modulatorRemoved": "{{name}}을(를) 제거했습니다",
+      "modulatorApplyFailed": "모듈레이터를 적용할 수 없습니다",
+      "bakeToKeyframes": "키프레임으로 베이크",
+      "bakeToKeyframesHint": "선택한 클립의 프로시저럴 모션을 편집 가능한 키프레임으로 평탄화합니다",
+      "bakeNoMotion": "선택 항목에 베이크할 프로시저럴 모션이 없습니다",
+      "motionBaked": "{{count}}개 클립의 모션을 베이크했습니다",
+      "modulators": {
+        "floatDrift": "플로트 드리프트",
+        "breathPulse": "브레스 펄스",
+        "microShake": "마이크로 셰이크",
+        "sway": "스웨이",
+        "spin": "스핀"
+      },
+      "removeAction": "제거"
+    },
     "motionPresets": {
       "textIncompatible": "텍스트에는 부적합",
       "categories": {
         "entrance": "등장",
         "exit": "퇴장",
-        "emphasis": "강조",
-        "loop": "반복"
+        "emphasis": "강조"
       },
       "items": {
         "fadeIn": "페이드 인",
@@ -62,12 +100,7 @@
         "pulse": "펄스",
         "shake": "흔들기",
         "wobble": "흔들림",
-        "flash": "플래시",
-        "float": "떠오르기",
-        "sway": "흔들거림",
-        "breathe": "숨쉬기",
-        "spin": "회전",
-        "wiggle": "꿈틀거림"
+        "flash": "플래시"
       }
     },
     "shortcutsDialog": {
@@ -382,6 +415,7 @@
     },
     "editor": {
       "appLabel": "FreeCut 비디오 편집기",
+      "upgrading": "프로젝트 업그레이드 중…",
       "backupCreated": "업그레이드 전 백업이 생성되었습니다",
       "backupFailed": "업그레이드 전 백업 생성에 실패했습니다",
       "tryAgain": "다시 시도하세요.",

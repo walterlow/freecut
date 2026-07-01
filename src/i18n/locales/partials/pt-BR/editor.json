@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Linha do tempo de animação",
-      "noClip": "Nenhum clipe para animar"
+      "noClip": "Nenhum clipe para animar",
+      "animatedClip": "Animado"
     },
     "animatePresets": {
       "title": "Predefinições",
@@ -17,6 +18,7 @@
       "savedToast": "“{{name}}” salvo",
       "appliedToast": "“{{name}}” aplicado",
       "applyFailed": "Não foi possível aplicar a predefinição",
+      "transitionBlocked": "Não foi possível aplicar: a animação cai dentro de uma região de transição.",
       "saveFailed": "Não foi possível salvar a predefinição",
       "deleteLabel": "Excluir predefinição",
       "incompatibleType": "Requer um clipe do tipo {{type}}",
@@ -34,13 +36,49 @@
         "cancel": "Cancelar"
       }
     },
+    "animateStages": {
+      "presetsHint": "As predefinições criam quadros-chave editáveis — refine-os no gráfico.",
+      "continuousTitle": "Movimento contínuo",
+      "continuousHint": "Executa ao vivo e de forma não destrutiva até ser consolidado.",
+      "liveBadge": "Ao vivo",
+      "appliedTitle": "Aplicado",
+      "keyframedChip": "{{count}} com quadros-chave",
+      "clearKeyframes": "Limpar quadros-chave",
+      "removeModulator": "Remover {{name}}",
+      "audioPulseChip": "Pulso de áudio",
+      "onApply": "Ao aplicar",
+      "applyMode": {
+        "replace": "Substituir",
+        "add": "Adicionar"
+      }
+    },
+    "motionGenerator": {
+      "title": "Gerador",
+      "intensity": "Intensidade",
+      "duration": "Duração",
+      "modulatorsTitle": "Moduladores",
+      "modulatorApplied": "{{name}} aplicado a {{count}} clipe(s)",
+      "modulatorRemoved": "{{name}} removido",
+      "modulatorApplyFailed": "Não foi possível aplicar o modulador",
+      "bakeToKeyframes": "Consolidar em quadros-chave",
+      "bakeToKeyframesHint": "Achata o movimento procedural dos clipes selecionados em quadros-chave editáveis",
+      "bakeNoMotion": "Nenhum movimento procedural para consolidar na seleção",
+      "motionBaked": "Movimento consolidado em {{count}} clipe(s)",
+      "modulators": {
+        "floatDrift": "Deriva flutuante",
+        "breathPulse": "Pulso de respiração",
+        "microShake": "Microtremor",
+        "sway": "Balanço",
+        "spin": "Giro"
+      },
+      "removeAction": "Remover"
+    },
     "motionPresets": {
       "textIncompatible": "Não indicado para texto",
       "categories": {
         "entrance": "Entrada",
         "exit": "Saída",
-        "emphasis": "Ênfase",
-        "loop": "Repetição"
+        "emphasis": "Ênfase"
       },
       "items": {
         "fadeIn": "Surgir",
@@ -62,12 +100,7 @@
         "pulse": "Pulsar",
         "shake": "Sacudir",
         "wobble": "Cambalear",
-        "flash": "Lampejo",
-        "float": "Flutuar",
-        "sway": "Balançar",
-        "breathe": "Respirar",
-        "spin": "Girar",
-        "wiggle": "Tremer"
+        "flash": "Lampejo"
       }
     },
     "shortcutsDialog": {
@@ -382,6 +415,7 @@
     },
     "editor": {
       "appLabel": "Editor de vídeo FreeCut",
+      "upgrading": "Atualizando projeto…",
       "backupCreated": "Backup criado antes da atualização",
       "backupFailed": "Falha ao criar backup antes da atualização",
       "tryAgain": "Tente novamente.",

@@ -1,33 +1,57 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, Plus, Trash2, WandSparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { useShallow } from 'zustand/react/shallow'
 import type { CanvasSettings } from '@/types/transform'
 import type { AnimatableProperty } from '@/types/keyframe'
+import type { TimelineItem } from '@/types/timeline'
+import type { MotionModifierType } from '@/types/motion'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { SliderInput } from '@/shared/ui/property-controls'
 import { useSelectionStore } from '@/shared/state/selection'
+import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog'
 import { useProjectStore } from '@/features/editor/deps/projects'
 import {
   applyAnimationPreset,
+  applyMotionPresetKeyframes,
+  applyMotionModifierToItems,
+  updateMotionModifiersLive,
+  beginMotionModifierEdit,
+  commitMotionModifierEdit,
+  removeMotionModifierFromItems,
+  bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
   useItemsStore,
   useKeyframesStore,
   useTimelineStore,
+  type MotionPresetClear,
 } from '@/features/editor/deps/timeline-store'
 import { getSourceDimensions, resolveTransform } from '@/features/editor/deps/composition-runtime'
 import {
   getAnimatablePropertiesForItem,
   getMotionPresetAnchorFrame,
+  MOTION_MODULATORS,
   MOTION_PRESET_CATEGORIES,
   MOTION_PRESETS,
   motionPresetScalesBox,
+  DEFAULT_MOTION_GENERATOR_SETTINGS,
+  applyMotionGeneratorSettings,
+  createMotionModifier,
+  getMotionModifierSettings,
+  updateMotionModifierSettings,
+  buildBakeMotionPlan,
   resolveAnimatedTransform,
   type MotionPreset,
   type MotionPresetCategory,
+  type MotionModulator,
 } from '@/features/editor/deps/keyframes'
 import {
   readAnimationPresets,
@@ -37,6 +61,13 @@ import {
 import { MotionPresetThumbnail } from './motion-preset-thumbnail'
 import { SaveAnimationPresetDialog } from './save-animation-preset-dialog'
 
+// Every transform/opacity property any built-in motion preset can write. In
+// Replace mode we clear these (within the new preset's frame window) so a fresh
+// preset fully supersedes whatever animation occupied that region.
+const MOTION_PRESET_PROPERTIES: AnimatableProperty[] = Array.from(
+  new Set(MOTION_PRESETS.flatMap((preset) => preset.properties)),
+)
+
 const presetsByCategory = MOTION_PRESET_CATEGORIES.reduce(
   (map, category) => {
     map[category] = MOTION_PRESETS.filter((preset) => preset.category === category)
@@ -44,6 +75,180 @@ const presetsByCategory = MOTION_PRESET_CATEGORIES.reduce(
   },
   {} as Record<MotionPresetCategory, MotionPreset[]>,
 )
+
+function isTimelineItem(item: TimelineItem | undefined): item is TimelineItem {
+  return Boolean(item)
+}
+
+interface ModifierEditSettings {
+  intensityScale?: number
+  durationScale?: number
+}
+
+interface ContinuousMotionRowProps {
+  modulator: MotionModulator
+  active: boolean
+  /** Disabled reason (incompatible selection) or null. */
+  reason: string | null
+  /** Live settings of the applied modifier (seeds the flyout sliders). */
+  settings: { intensityScale: number; durationScale: number } | null
+  onApply: () => void
+  onRemove: () => void
+  onLiveEdit: (settings: ModifierEditSettings) => void
+  onCommitEdit: (settings: ModifierEditSettings) => void
+  t: (key: string, options?: Record<string, unknown>) => string
+}
+
+/**
+ * One continuous-motion generator, rendered as an animated tile (the glyph
+ * demonstrates the motion on hover, mirroring the keyframe-preset grid). Not
+ * applied → click applies it with sensible defaults. Applied → the tile is a
+ * flyout (popover) whose Intensity/Duration sliders tune the LIVE modifier on
+ * the clip (preview updates as you drag, one undo per gesture) and remove it. No
+ * tuning happens before applying.
+ */
+const ContinuousMotionRow = memo(function ContinuousMotionRow({
+  modulator,
+  active,
+  reason,
+  settings,
+  onApply,
+  onRemove,
+  onLiveEdit,
+  onCommitEdit,
+  t,
+}: ContinuousMotionRowProps) {
+  const label = t(`editor.motionGenerator.modulators.${modulator.labelKey}`)
+  const tileBody = (
+    <>
+      <MotionPresetThumbnail thumbnail={modulator.thumbnail} />
+      <span className="w-full truncate text-center leading-tight">{label}</span>
+    </>
+  )
+
+  if (!active) {
+    const tile = (
+      <button
+        type="button"
+        disabled={reason !== null}
+        onClick={onApply}
+        className={cn(
+          'group flex h-full w-full flex-col items-center gap-1 rounded-md border border-border/60 p-1.5 text-[10px]',
+          reason !== null
+            ? 'cursor-not-allowed text-muted-foreground/50'
+            : 'text-muted-foreground hover:border-border hover:bg-secondary/40 hover:text-foreground',
+        )}
+      >
+        {tileBody}
+      </button>
+    )
+    if (!reason) return tile
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div>{tile}</div>
+        </TooltipTrigger>
+        <TooltipContent>{reason}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  const intensity = settings?.intensityScale ?? 1
+  const duration = settings?.durationScale ?? 1
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={t('editor.animateStages.liveBadge') + ' — ' + label}
+          className="group relative flex h-full w-full flex-col items-center gap-1 rounded-md border border-primary/60 bg-secondary/30 p-1.5 text-[10px] text-foreground hover:bg-secondary/50"
+        >
+          {/* Active dot — the tile is "live"; the flyout holds the controls. */}
+          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary shadow ring-1 ring-background" />
+          {tileBody}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="left" align="start" className="w-56 space-y-2 p-2">
+        <div className="text-[11px] font-medium text-foreground">{label}</div>
+        <div className="flex flex-col gap-1.5">
+          <SliderInput
+            label={t('editor.motionGenerator.intensity')}
+            value={intensity}
+            min={0}
+            max={2}
+            step={0.05}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
+            onChange={(v) => onCommitEdit({ intensityScale: v })}
+            onLiveChange={(v) => onLiveEdit({ intensityScale: v })}
+          />
+          <SliderInput
+            label={t('editor.motionGenerator.duration')}
+            value={duration}
+            min={0.25}
+            max={3}
+            step={0.05}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
+            onChange={(v) => onCommitEdit({ durationScale: v })}
+            onLiveChange={(v) => onLiveEdit({ durationScale: v })}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 w-full justify-start gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          {t('editor.motionGenerator.removeAction')}
+        </Button>
+      </PopoverContent>
+    </Popover>
+  )
+})
+
+interface StageSectionProps {
+  /** Uppercase stage label (e.g. "Adjust", "Continuous motion"). */
+  title: string
+  /** One-line description of what the stage does / how it behaves. */
+  hint?: string
+  defaultOpen?: boolean
+  children: ReactNode
+}
+
+/**
+ * Collapsible workflow stage. The Animate panel reads top-to-bottom as a funnel
+ * — Presets (declarative) → Continuous motion (procedural) — and the secondary
+ * stage collapses so preset-only users keep a clean panel.
+ */
+const StageSection = memo(function StageSection({
+  title,
+  hint,
+  defaultOpen = true,
+  children,
+}: StageSectionProps) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="flex flex-col gap-2">
+      <CollapsibleTrigger className="group flex items-center justify-between gap-2 text-left">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          {title}
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform',
+            !open && '-rotate-90',
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-2">
+        {hint && <p className="text-[10px] leading-snug text-muted-foreground/70">{hint}</p>}
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+})
 
 interface MotionPresetSectionProps {
   category: MotionPresetCategory
@@ -78,7 +283,7 @@ const MotionPresetSection = memo(function MotionPresetSection({
               disabled={disabled}
               onClick={() => onApply(preset)}
               className={cn(
-                'group flex flex-col items-center gap-1 rounded-md border border-border/60 p-1.5 text-[10px]',
+                'group flex h-full w-full flex-col items-center gap-1 rounded-md border border-border/60 p-1.5 text-[10px]',
                 disabled
                   ? 'cursor-not-allowed text-muted-foreground/50'
                   : 'text-muted-foreground hover:border-border hover:bg-secondary/40 hover:text-foreground',
@@ -119,27 +324,39 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
   const { t } = useTranslation()
   const projectId = useProjectStore((s) => s.currentProject?.id ?? null)
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
-  const selectedItem = useItemsStore(
-    useCallback(
-      (s) => {
-        for (const id of selectedItemIds) {
-          const item = s.itemById[id]
-          if (item) return item
-        }
-        return null
-      },
-      [selectedItemIds],
+  const selectedItems = useItemsStore(
+    useShallow(
+      useCallback(
+        (s) => {
+          const orderByTrack = new Map(s.tracks.map((track) => [track.id, track.order ?? 0]))
+          return selectedItemIds
+            .map((id) => s.itemById[id])
+            .filter(isTimelineItem)
+            .sort((left, right) => {
+              const frameDelta = left.from - right.from
+              if (frameDelta !== 0) return frameDelta
+              return (orderByTrack.get(left.trackId) ?? 0) - (orderByTrack.get(right.trackId) ?? 0)
+            })
+        },
+        [selectedItemIds],
+      ),
     ),
   )
+  const selectedItem = selectedItems[0] ?? null
   const selectedItemKeyframes = useKeyframesStore(
     useCallback(
       (s) => (selectedItem ? (s.keyframesByItemId[selectedItem.id] ?? null) : null),
       [selectedItem],
     ),
   )
+  const keyframesByItemId = useKeyframesStore((s) => s.keyframesByItemId)
+  const openClearKeyframes = useClearKeyframesDialogStore((s) => s.openClearAll)
 
   const [presets, setPresets] = useState<AnimationPreset[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
+  // 'replace' (default) clears a preset's target properties before applying so
+  // reapplying an entrance/exit preset swaps it; 'add' layers onto what's there.
+  const [applyMode, setApplyMode] = useState<'replace' | 'add'>('replace')
 
   useEffect(() => {
     if (!projectId) {
@@ -191,7 +408,9 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
         toast.warning(t('editor.animatePresets.selectClipFirst'))
         return
       }
-      const result = applyAnimationPreset(selectedItem.id, preset, 0)
+      const result = applyAnimationPreset(selectedItem.id, preset, 0, {
+        replace: applyMode === 'replace',
+      })
       // Report failure only when nothing was committed. An effect can be added
       // even if every keyframe clamped out — that still mutated the clip.
       if (result.incompatible || (result.applied === 0 && result.addedEffects === 0)) {
@@ -200,7 +419,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
       }
       toast.success(t('editor.animatePresets.appliedToast', { name: preset.name }))
     },
-    [selectedItem, t],
+    [applyMode, selectedItem, t],
   )
 
   // Built-in motion presets resolve the clip's resting transform, build their
@@ -208,63 +427,284 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
   // the text-animation presets.
   const addKeyframes = useTimelineStore((s) => s.addKeyframes)
 
-  const motionPropertySet = useMemo(
+  const motionPropertySets = useMemo(
     () =>
-      selectedItem
-        ? new Set<AnimatableProperty>(getAnimatablePropertiesForItem(selectedItem))
-        : null,
-    [selectedItem],
+      new Map(
+        selectedItems.map((item) => [
+          item.id,
+          new Set<AnimatableProperty>(getAnimatablePropertiesForItem(item)),
+        ]),
+      ),
+    [selectedItems],
   )
 
   // Disabled reason for a motion preset on the current selection, or null when
   // it can apply. Scale presets reflow text, so they are gated for text clips.
   const motionReason = useCallback(
     (preset: MotionPreset): string | null => {
-      if (!selectedItem || !motionPropertySet) return t('editor.animatePresets.selectClipFirst')
-      if (selectedItem.type === 'text' && motionPresetScalesBox(preset)) {
-        return t('editor.motionPresets.textIncompatible')
-      }
-      if (!preset.properties.every((property) => motionPropertySet.has(property))) {
-        return t('editor.animatePresets.incompatibleProperty')
+      if (selectedItems.length === 0) return t('editor.animatePresets.selectClipFirst')
+      for (const item of selectedItems) {
+        const motionPropertySet = motionPropertySets.get(item.id)
+        if (item.type === 'text' && motionPresetScalesBox(preset)) {
+          return t('editor.motionPresets.textIncompatible')
+        }
+        if (
+          !motionPropertySet ||
+          !preset.properties.every((property) => motionPropertySet.has(property))
+        ) {
+          return t('editor.animatePresets.incompatibleProperty')
+        }
       }
       return null
     },
-    [motionPropertySet, selectedItem, t],
+    [motionPropertySets, selectedItems, t],
+  )
+
+  const modulatorReason = useCallback(
+    (modulator: MotionModulator): string | null => {
+      if (selectedItems.length === 0) return t('editor.animatePresets.selectClipFirst')
+      for (const item of selectedItems) {
+        const motionPropertySet = motionPropertySets.get(item.id)
+        if (item.type === 'text' && modulator.scalesBox) {
+          return t('editor.motionPresets.textIncompatible')
+        }
+        if (
+          !motionPropertySet ||
+          !modulator.properties.every((property) => motionPropertySet.has(property))
+        ) {
+          return t('editor.animatePresets.incompatibleProperty')
+        }
+      }
+      return null
+    },
+    [motionPropertySets, selectedItems, t],
   )
 
   const handleApplyMotion = useCallback(
     (preset: MotionPreset) => {
-      if (!selectedItem) {
+      if (selectedItems.length === 0) {
         toast.warning(t('editor.animatePresets.selectClipFirst'))
         return
       }
-      const base = resolveTransform(selectedItem, canvas, getSourceDimensions(selectedItem))
-      const anchorFrame = getMotionPresetAnchorFrame(
-        preset.category,
-        selectedItem.durationInFrames,
-        canvas.fps,
-      )
-      const anchor = resolveAnimatedTransform(base, selectedItemKeyframes ?? undefined, anchorFrame)
-      const built = preset.build({
-        anchor,
-        durationInFrames: selectedItem.durationInFrames,
-        fps: canvas.fps,
-        frameWidth: canvas.width,
-        frameHeight: canvas.height,
+      const replace = applyMode === 'replace'
+      const clearSet = new Set<AnimatableProperty>(MOTION_PRESET_PROPERTIES)
+      const payloads: Array<{ itemId: string } & ReturnType<typeof applyMotionGeneratorSettings>[number]> =
+        []
+      const clears: MotionPresetClear[] = []
+
+      selectedItems.forEach((item, index) => {
+        const itemKeyframes = keyframesByItemId[item.id]
+        // In Replace mode the preset defines this clip's animation, so anchor the
+        // resting pose off the BASE transform, ignoring existing keyframes on any
+        // preset-owned property (they're about to be cleared in this region).
+        const anchorKeyframes =
+          replace && itemKeyframes
+            ? {
+                ...itemKeyframes,
+                properties: itemKeyframes.properties.filter(
+                  (entry) => !clearSet.has(entry.property),
+                ),
+              }
+            : itemKeyframes
+        const base = resolveTransform(item, canvas, getSourceDimensions(item))
+        const anchorFrame = getMotionPresetAnchorFrame(
+          preset.category,
+          item.durationInFrames,
+          canvas.fps,
+        )
+        const anchor = resolveAnimatedTransform(base, anchorKeyframes, anchorFrame)
+        const ctx = {
+          anchor,
+          durationInFrames: item.durationInFrames,
+          fps: canvas.fps,
+          frameWidth: canvas.width,
+          frameHeight: canvas.height,
+        }
+        const built = applyMotionGeneratorSettings(
+          preset,
+          preset.build(ctx),
+          ctx,
+          DEFAULT_MOTION_GENERATOR_SETTINGS,
+          index,
+        )
+        if (built.length === 0) return
+        for (const keyframe of built) payloads.push({ itemId: item.id, ...keyframe })
+
+        if (replace) {
+          // Clear every preset-owned property within THIS preset's frame window,
+          // so a new entrance wipes a previous entrance (whatever properties it
+          // used) while an exit at the other end of the clip is left intact.
+          const frames = built.map((keyframe) => keyframe.frame)
+          const fromFrame = Math.min(...frames)
+          const toFrame = Math.max(...frames)
+          for (const property of MOTION_PRESET_PROPERTIES) {
+            clears.push({ itemId: item.id, property, fromFrame, toFrame })
+          }
+        }
       })
-      if (built.length === 0) {
+
+      if (payloads.length === 0) {
         toast.warning(t('editor.animatePresets.applyFailed'))
         return
       }
-      addKeyframes(built.map((keyframe) => ({ itemId: selectedItem.id, ...keyframe })))
+      // The action drops keyframes that land inside a transition region; if every
+      // keyframe was dropped nothing was applied, so don't claim success.
+      const appliedIds = replace
+        ? applyMotionPresetKeyframes(payloads, clears)
+        : addKeyframes(payloads)
+      if (appliedIds.length === 0) {
+        toast.warning(t('editor.animatePresets.transitionBlocked'))
+        return
+      }
       toast.success(
         t('editor.animatePresets.appliedToast', {
           name: t(`editor.motionPresets.items.${preset.labelKey}`),
         }),
       )
     },
-    [addKeyframes, canvas, selectedItem, selectedItemKeyframes, t],
+    [addKeyframes, applyMode, canvas, keyframesByItemId, selectedItems, t],
   )
+
+  // A modulator is "active" when every selected clip already carries it — used
+  // to drive the toggle-off behavior and the button's pressed state.
+  const activeModulatorIds = useMemo(() => {
+    const active = new Set<string>()
+    if (selectedItems.length === 0) return active
+    for (const modulator of MOTION_MODULATORS) {
+      const onEvery = selectedItems.every((item) =>
+        item.motionModifiers?.some((entry) => entry.type === modulator.id && entry.enabled),
+      )
+      if (onEvery) active.add(modulator.id)
+    }
+    return active
+  }, [selectedItems])
+
+  // Apply-on-click: attach a parametric modifier with sensible defaults. It runs
+  // live at render time (non-destructive); the per-row flyout tunes it afterward.
+  // Per-item index staggers phase/seed across a multi-clip selection.
+  const handleApplyModulator = useCallback(
+    (modulator: MotionModulator) => {
+      const reason = modulatorReason(modulator)
+      if (reason) {
+        toast.warning(reason)
+        return
+      }
+      const assignments = selectedItems.map((item, index) => ({
+        itemId: item.id,
+        modifier: createMotionModifier(modulator.id, DEFAULT_MOTION_GENERATOR_SETTINGS, index),
+      }))
+      const applied = applyMotionModifierToItems(assignments)
+      if (applied === 0) {
+        toast.warning(t('editor.motionGenerator.modulatorApplyFailed'))
+        return
+      }
+      toast.success(
+        t('editor.motionGenerator.modulatorApplied', {
+          name: t(`editor.motionGenerator.modulators.${modulator.labelKey}`),
+          count: applied,
+        }),
+      )
+    },
+    [modulatorReason, selectedItems, t],
+  )
+
+  const handleRemoveModulator = useCallback(
+    (modulator: MotionModulator) => {
+      if (selectedItems.length === 0) return
+      removeMotionModifierFromItems(
+        selectedItems.map((item) => item.id),
+        modulator.id,
+      )
+      toast.success(
+        t('editor.motionGenerator.modulatorRemoved', {
+          name: t(`editor.motionGenerator.modulators.${modulator.labelKey}`),
+        }),
+      )
+    },
+    [selectedItems, t],
+  )
+
+  // Live settings of each applied modulator on the first selected clip — seeds
+  // the flyout sliders so they open showing the modifier's current values.
+  const modulatorSettingsByType = useMemo(() => {
+    const map = new Map<MotionModifierType, { intensityScale: number; durationScale: number }>()
+    for (const modifier of selectedItem?.motionModifiers ?? []) {
+      if (modifier.enabled) map.set(modifier.type, getMotionModifierSettings(modifier))
+    }
+    return map
+  }, [selectedItem])
+
+  // One coalesced undo per flyout drag: snapshot on the first live change, commit
+  // on release. A plain click (no drag) commits directly. Only one flyout opens
+  // at a time, so a single ref tracks the active gesture.
+  const modifierEditRef = useRef<ReturnType<typeof beginMotionModifierEdit> | null>(null)
+  const buildModifierEditAssignments = useCallback(
+    (type: MotionModifierType, settings: ModifierEditSettings) =>
+      selectedItems.flatMap((item) => {
+        const existing = item.motionModifiers?.find((m) => m.type === type && m.enabled)
+        return existing
+          ? [{ itemId: item.id, modifier: updateMotionModifierSettings(existing, settings) }]
+          : []
+      }),
+    [selectedItems],
+  )
+  const handleModulatorLiveEdit = useCallback(
+    (type: MotionModifierType, settings: ModifierEditSettings) => {
+      const assignments = buildModifierEditAssignments(type, settings)
+      if (assignments.length === 0) return
+      if (!modifierEditRef.current) modifierEditRef.current = beginMotionModifierEdit()
+      updateMotionModifiersLive(assignments)
+    },
+    [buildModifierEditAssignments],
+  )
+  const handleModulatorCommitEdit = useCallback(
+    (type: MotionModifierType, settings: ModifierEditSettings) => {
+      const assignments = buildModifierEditAssignments(type, settings)
+      if (assignments.length === 0) return
+      if (modifierEditRef.current) {
+        updateMotionModifiersLive(assignments)
+        commitMotionModifierEdit(modifierEditRef.current, {
+          type,
+          itemIds: assignments.map((assignment) => assignment.itemId),
+        })
+        modifierEditRef.current = null
+      } else {
+        applyMotionModifierToItems(assignments)
+      }
+    },
+    [buildModifierEditAssignments],
+  )
+
+  // Bake bridge: any selected clip carrying procedural motion can be flattened
+  // to editable keyframes (drift/breath/shake transforms + audio-pulse effects).
+  const hasBakeableMotion = useMemo(
+    () =>
+      selectedItems.some(
+        (item) =>
+          item.motionModifiers?.some((modifier) => modifier.enabled) ||
+          item.effects?.some((effect) => effect.audioPulse?.enabled),
+      ),
+    [selectedItems],
+  )
+
+  const handleBakeMotion = useCallback(() => {
+    const plan = buildBakeMotionPlan({
+      items: selectedItems,
+      keyframesByItemId,
+      fps: canvas.fps,
+      frameWidth: canvas.width,
+      frameHeight: canvas.height,
+      resolveBase: (item) => resolveTransform(item, canvas, getSourceDimensions(item)),
+    })
+
+    if (plan.length === 0) {
+      toast.warning(t('editor.motionGenerator.bakeNoMotion'))
+      return
+    }
+
+    const baked = bakeMotionToKeyframes(plan)
+    toast.success(t('editor.motionGenerator.motionBaked', { count: baked }))
+  }, [canvas, keyframesByItemId, selectedItems, t])
 
   const handleDelete = useCallback(
     async (preset: AnimationPreset) => {
@@ -304,9 +744,32 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
     [compatibilityByPresetId, selectedItem, t],
   )
 
+  // --- "Applied to this clip" summary (state the panel otherwise hides) ---
+  const keyframedPropertyCount = useMemo(
+    () =>
+      selectedItemKeyframes?.properties.filter((property) => property.keyframes.length > 0).length ??
+      0,
+    [selectedItemKeyframes],
+  )
+  const activeModulators = useMemo(
+    () => MOTION_MODULATORS.filter((modulator) => activeModulatorIds.has(modulator.id)),
+    [activeModulatorIds],
+  )
+  const hasAudioPulse = useMemo(
+    () => !!selectedItem?.effects?.some((effect) => effect.audioPulse?.enabled),
+    [selectedItem],
+  )
+  const hasAnyAnimation =
+    keyframedPropertyCount > 0 || activeModulators.length > 0 || hasAudioPulse
+
+  const handleClearKeyframes = useCallback(() => {
+    if (selectedItemIds.length === 0) return
+    openClearKeyframes(selectedItemIds)
+  }, [openClearKeyframes, selectedItemIds])
+
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex h-full w-60 min-w-0 flex-col border-l border-border bg-background">
+      <div className="flex h-full w-72 min-w-0 flex-col border-l border-border bg-background">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-xs font-medium text-muted-foreground">
             {t('editor.animatePresets.title')}
@@ -333,7 +796,87 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
         </div>
 
         <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-4 p-3">
+          {/* Extra right padding clears the overlay scrollbar so values aren't clipped. */}
+          <div className="flex flex-col gap-4 p-3 pr-4">
+            {/* ── Applied state for the selected clip — keyframes, live
+                modulators, audio pulse. Each removable thing carries an ✕. ── */}
+            {hasAnyAnimation && (
+              <section className="flex flex-col gap-2 rounded-md border border-border/60 bg-secondary/20 p-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  {t('editor.animateStages.appliedTitle')}
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {keyframedPropertyCount > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 py-0.5 pl-1.5 pr-0.5 text-[10px] text-amber-200">
+                      {t('editor.animateStages.keyframedChip', { count: keyframedPropertyCount })}
+                      <button
+                        type="button"
+                        aria-label={t('editor.animateStages.clearKeyframes')}
+                        className="rounded p-0.5 hover:bg-amber-500/20"
+                        onClick={handleClearKeyframes}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  )}
+                  {activeModulators.map((modulator) => (
+                    <span
+                      key={modulator.id}
+                      className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 py-0.5 pl-1.5 pr-0.5 text-[10px] text-primary"
+                    >
+                      {t(`editor.motionGenerator.modulators.${modulator.labelKey}`)}
+                      <button
+                        type="button"
+                        aria-label={t('editor.animateStages.removeModulator', {
+                          name: t(`editor.motionGenerator.modulators.${modulator.labelKey}`),
+                        })}
+                        className="rounded p-0.5 hover:bg-primary/20"
+                        onClick={() => handleRemoveModulator(modulator)}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  ))}
+                  {hasAudioPulse && (
+                    <span className="inline-flex items-center rounded border border-border bg-secondary/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {t('editor.animateStages.audioPulseChip')}
+                    </span>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* ── Start: presets (declarative). Picking one fills the dopesheet
+                with editable keyframes — the cue points users at the graph. ── */}
+            <p className="rounded-md bg-secondary/30 px-2 py-1.5 text-[10px] leading-snug text-muted-foreground">
+              {t('editor.animateStages.presetsHint')}
+            </p>
+
+            {/* On-apply behavior: Replace swaps a preset's properties, Add layers. */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-muted-foreground">
+                {t('editor.animateStages.onApply')}
+              </span>
+              <div className="inline-flex overflow-hidden rounded-md border border-border/60">
+                {(['replace', 'add'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={applyMode === mode}
+                    onClick={() => setApplyMode(mode)}
+                    className={cn(
+                      'px-2 py-0.5 text-[10px] font-medium',
+                      applyMode === mode
+                        ? 'bg-secondary text-foreground'
+                        : 'text-muted-foreground hover:bg-secondary/40',
+                    )}
+                  >
+                    {t(`editor.animateStages.applyMode.${mode}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {MOTION_PRESET_CATEGORIES.map((category) => (
               <MotionPresetSection
                 key={category}
@@ -345,6 +888,55 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
               />
             ))}
 
+            <Separator />
+
+            {/* ── Procedural generators. Click applies with defaults (runs live,
+                non-destructive); the per-row flyout tunes the live modifier and
+                Bake flattens them into keyframes. ── */}
+            <StageSection
+              title={t('editor.animateStages.continuousTitle')}
+              hint={t('editor.animateStages.continuousHint')}
+            >
+              <div className="grid grid-cols-3 gap-1.5">
+                {MOTION_MODULATORS.map((modulator) => (
+                  <ContinuousMotionRow
+                    key={modulator.id}
+                    modulator={modulator}
+                    active={activeModulatorIds.has(modulator.id)}
+                    reason={modulatorReason(modulator)}
+                    settings={modulatorSettingsByType.get(modulator.id) ?? null}
+                    onApply={() => handleApplyModulator(modulator)}
+                    onRemove={() => handleRemoveModulator(modulator)}
+                    onLiveEdit={(settings) => handleModulatorLiveEdit(modulator.id, settings)}
+                    onCommitEdit={(settings) => handleModulatorCommitEdit(modulator.id, settings)}
+                    t={t}
+                  />
+                ))}
+              </div>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-full justify-start gap-1.5 px-2 text-[11px]"
+                      disabled={!hasBakeableMotion}
+                      onClick={handleBakeMotion}
+                    >
+                      <WandSparkles className="h-3.5 w-3.5" />
+                      {t('editor.motionGenerator.bakeToKeyframes')}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{t('editor.motionGenerator.bakeToKeyframesHint')}</TooltipContent>
+              </Tooltip>
+            </StageSection>
+
+            <Separator />
+
+            {/* ── Saved animations — user-captured presets, also declarative ── */}
             <section className="flex flex-col gap-1">
               <h3 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 {t('editor.animatePresets.animationsHeading')}

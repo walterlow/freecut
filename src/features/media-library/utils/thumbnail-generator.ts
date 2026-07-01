@@ -6,6 +6,7 @@
  * Audio files get a generated waveform placeholder.
  */
 
+import { ensureProResDecoderRegistered } from '@/infrastructure/browser/register-prores-decoder'
 import { getMimeType } from './validation'
 
 interface ThumbnailOptions {
@@ -30,7 +31,8 @@ const loadMediabunny = () => import('mediabunny')
 async function generateVideoThumbnail(file: File, options: ThumbnailOptions = {}): Promise<Blob> {
   const opts = { ...DEFAULT_THUMBNAIL_OPTIONS, ...options }
 
-  const { Input, BlobSource, CanvasSink, ALL_FORMATS } = await loadMediabunny()
+  const [mb] = await Promise.all([loadMediabunny(), ensureProResDecoderRegistered()])
+  const { Input, BlobSource, CanvasSink, ALL_FORMATS } = mb
   let input: InstanceType<typeof Input> | null = null
   let sink: InstanceType<typeof CanvasSink> | null = null
 
@@ -51,15 +53,17 @@ async function generateVideoThumbnail(file: File, options: ThumbnailOptions = {}
     const width = dw > dh ? opts.maxSize : Math.floor((opts.maxSize * dw) / dh)
     const height = dh > dw ? opts.maxSize : Math.floor((opts.maxSize * dh) / dw)
 
+    // Get timestamp, clamped to valid range
+    const duration = await input.computeDuration()
+    const timestamp = Math.max(0, Math.min(opts.timestamp, duration - 0.1))
+
+    // ProRes decodes through the registered @mediabunny/prores decoder like any other
+    // codec, so CanvasSink handles it directly.
     sink = new CanvasSink(videoTrack, {
       width,
       height,
       fit: 'fill',
     })
-
-    // Get timestamp, clamped to valid range
-    const duration = await input.computeDuration()
-    const timestamp = Math.min(opts.timestamp, Math.max(0, duration - 0.1))
 
     const wrapped = await sink.getCanvas(timestamp)
     if (!wrapped) {

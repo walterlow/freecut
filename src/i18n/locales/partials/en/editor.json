@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Animate timeline",
-      "noClip": "No clips to animate"
+      "noClip": "No clips to animate",
+      "animatedClip": "Animated"
     },
     "animatePresets": {
       "title": "Presets",
@@ -17,6 +18,7 @@
       "savedToast": "Saved “{{name}}”",
       "appliedToast": "Applied “{{name}}”",
       "applyFailed": "Could not apply preset",
+      "transitionBlocked": "Couldn’t apply: the animation falls inside a transition region.",
       "saveFailed": "Could not save preset",
       "deleteLabel": "Delete preset",
       "incompatibleType": "Needs a {{type}} clip",
@@ -34,13 +36,49 @@
         "cancel": "Cancel"
       }
     },
+    "animateStages": {
+      "presetsHint": "Presets drop editable keyframes — refine them in the graph.",
+      "continuousTitle": "Continuous motion",
+      "continuousHint": "Runs live and non-destructive until baked.",
+      "liveBadge": "Live",
+      "appliedTitle": "Applied",
+      "keyframedChip": "{{count}} keyframed",
+      "clearKeyframes": "Clear keyframes",
+      "removeModulator": "Remove {{name}}",
+      "audioPulseChip": "Audio pulse",
+      "onApply": "On apply",
+      "applyMode": {
+        "replace": "Replace",
+        "add": "Add"
+      }
+    },
+    "motionGenerator": {
+      "title": "Generator",
+      "intensity": "Intensity",
+      "duration": "Duration",
+      "modulatorsTitle": "Modulators",
+      "modulatorApplied": "Applied {{name}} to {{count}} clip(s)",
+      "modulatorRemoved": "Removed {{name}}",
+      "modulatorApplyFailed": "Could not apply modulator",
+      "bakeToKeyframes": "Bake to keyframes",
+      "bakeToKeyframesHint": "Flatten procedural motion on the selected clips into editable keyframes",
+      "bakeNoMotion": "No procedural motion to bake on the selection",
+      "motionBaked": "Baked motion on {{count}} clip(s)",
+      "modulators": {
+        "floatDrift": "Float drift",
+        "breathPulse": "Breath pulse",
+        "microShake": "Micro shake",
+        "sway": "Sway",
+        "spin": "Spin"
+      },
+      "removeAction": "Remove"
+    },
     "motionPresets": {
       "textIncompatible": "Not suited for text",
       "categories": {
         "entrance": "Entrance",
         "exit": "Exit",
-        "emphasis": "Emphasis",
-        "loop": "Loop"
+        "emphasis": "Emphasis"
       },
       "items": {
         "fadeIn": "Fade In",
@@ -62,12 +100,7 @@
         "pulse": "Pulse",
         "shake": "Shake",
         "wobble": "Wobble",
-        "flash": "Flash",
-        "float": "Float",
-        "sway": "Sway",
-        "breathe": "Breathe",
-        "spin": "Spin",
-        "wiggle": "Wiggle"
+        "flash": "Flash"
       }
     },
     "shortcutsDialog": {
@@ -382,6 +415,7 @@
     },
     "editor": {
       "appLabel": "FreeCut Video Editor",
+      "upgrading": "Upgrading project…",
       "backupCreated": "Backup created before upgrade",
       "backupFailed": "Failed to create backup before upgrade",
       "tryAgain": "Please try again.",

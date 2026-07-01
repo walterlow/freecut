@@ -45,6 +45,11 @@ import { getGraphDimensions } from './use-graph-viewport'
 import { KeyframeSvgMarquee } from '../keyframe-marquee'
 import type { BlockedFrameRange } from '../../utils/transition-region'
 import { getCombinedGraphValueRange } from './value-range-utils'
+import {
+  sampleProceduralCurve,
+  type ProceduralPreviewInput,
+} from '@/features/keyframes/utils/procedural-preview'
+import type { TransformAnimatableProperty } from '@/types/keyframe'
 
 const OVERLAY_COLORS = ['#6366f1', '#22d3ee', '#a3e635', '#f472b6', '#fb923c', '#a78bfa', '#34d399']
 
@@ -109,6 +114,8 @@ interface ValueGraphEditorSharedProps {
   onNavigateToKeyframe?: (frame: number) => void
   /** Transition-blocked frame ranges (keyframes cannot be placed here) */
   transitionBlockedRanges?: BlockedFrameRange[]
+  /** Procedural generator inputs for dashed ghost curves (base + modifiers). */
+  proceduralPreview?: ProceduralPreviewInput
   /** Controls whether snapping is enabled */
   snapEnabled?: boolean
   /** Which bezier handles should be visible */
@@ -180,6 +187,7 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
   onRemoveKeyframes,
   onNavigateToKeyframe,
   transitionBlockedRanges = [],
+  proceduralPreview,
   snapEnabled: controlledSnapEnabled,
   handleVisibility = 'selected',
   rulerUnit = 'frames',
@@ -412,6 +420,57 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
     if (!displayProperty) return []
     return createPointsForProperty(displayProperty)
   }, [createPointsForProperty, displayProperty])
+
+  // Dashed ghost curves for procedural generators (drift/breath/shake/audio),
+  // sampled analytically across the viewport — non-interactive, until baked.
+  const proceduralCurvePaths = useMemo((): Array<{
+    property: AnimatableProperty
+    d: string
+    primary: boolean
+  }> => {
+    if (!proceduralPreview || proceduralPreview.modifiers.length === 0) return []
+    const { graphLeft, graphTop, graphWidth, graphHeight, frameRange } = getGraphDimensions(
+      viewport,
+      padding,
+    )
+    const valueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue)
+    const fromFrame = Math.max(0, Math.floor(viewport.startFrame))
+    const toFrame = Math.ceil(viewport.endFrame)
+    // ~1 sample per 2px keeps the curve smooth without oversampling.
+    const step = Math.max(1, Math.round((toFrame - fromFrame) / Math.max(1, graphWidth / 2)))
+
+    const candidates = [displayProperty, ...(overlayProperties ?? [])].filter(
+      (property): property is AnimatableProperty => property != null,
+    )
+    const seen = new Set<AnimatableProperty>()
+    const result: Array<{ property: AnimatableProperty; d: string; primary: boolean }> = []
+    for (const property of candidates) {
+      if (seen.has(property)) continue
+      seen.add(property)
+      const samples = sampleProceduralCurve({
+        property: property as TransformAnimatableProperty,
+        base: proceduralPreview.base,
+        keyframes: undefined,
+        modifiers: proceduralPreview.modifiers,
+        fromFrame,
+        toFrame,
+        step,
+        fps,
+        frameWidth: proceduralPreview.frameWidth,
+        frameHeight: proceduralPreview.frameHeight,
+      })
+      if (samples.length < 2) continue
+      const d = samples
+        .map((sample, index) => {
+          const x = graphLeft + ((sample.frame - viewport.startFrame) / frameRange) * graphWidth
+          const y = graphTop + (1 - (sample.value - viewport.minValue) / valueRange) * graphHeight
+          return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)},${y.toFixed(2)}`
+        })
+        .join(' ')
+      result.push({ property, d, primary: property === displayProperty })
+    }
+    return result
+  }, [proceduralPreview, viewport, padding, displayProperty, overlayProperties, fps])
 
   // Generate overlay points for additional properties (visual-only curves)
   const overlayPointSets = useMemo((): Array<{
@@ -1228,6 +1287,23 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
             viewport={viewport}
             padding={padding}
           />
+
+          {/* Procedural ghost curves (dashed, non-interactive) — drawn behind
+              keyframe curves; sky-tinted to match the generator cues. */}
+          {proceduralCurvePaths.map(({ property: prop, d, primary }) => (
+            <path
+              key={`procedural-${prop}`}
+              d={d}
+              fill="none"
+              stroke="#38bdf8"
+              strokeWidth={primary ? 1.5 : 1}
+              strokeDasharray="4 3"
+              strokeOpacity={primary ? 0.85 : 0.4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ pointerEvents: 'none' }}
+            />
+          ))}
 
           {/* Overlay curves for additional properties (rendered first, behind primary) */}
           {overlayPointSetsWithDragState.map(({ property: prop, points: overlayPts, color }) => (

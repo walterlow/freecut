@@ -38,6 +38,7 @@ import {
 } from '../utils/transition-scene'
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup'
 import { createLogger } from '@/shared/logging/logger'
+import { acquireProResSession } from '@/infrastructure/browser/prores-sink-cache'
 import { useMediaLibraryStore } from '@/runtime/composition-runtime/deps/stores'
 import { appendResolvedAudioEqSources, getAudioEqSettings } from '@/shared/utils/audio-eq'
 import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
@@ -147,6 +148,38 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
 
 HiddenShadowVideoBridge.displayName = 'HiddenShadowVideoBridge'
 
+/**
+ * Invisible side-effect component: warms the turbores decoder for an upcoming ProRes clip
+ * during the premount window. ProRes can't decode through a `<video>` element, so the
+ * preview canvas only mounts (and cold-starts its decoder) when the clip goes active —
+ * crossing into it during playback then shows black until the ~100ms worker spawn +
+ * first decode complete. Holding a warm sink lease here (and decoding one frame) ahead of
+ * time means the active canvas reuses the warm decoder and paints within a frame. Renders
+ * nothing, so it never shows the clip's start frame during premount.
+ */
+const ProResDecoderPrewarm: React.FC<{ src: string }> = ({ src }) => {
+  useEffect(() => {
+    let cancelled = false
+    const lease = acquireProResSession(src)
+    void lease.session
+      .then((session) => {
+        if (cancelled || !session) return
+        // Decode one frame so the decoder worker pool is fully warm before the active
+        // canvas requests the entering frame. The sample is borrowed (owned by the shared
+        // session), so we don't close it here.
+        return session.getSampleForTime(0)
+      })
+      .catch(() => {
+        // Best-effort; the active canvas surfaces real open/decode failures.
+      })
+    return () => {
+      cancelled = true
+      lease.release()
+    }
+  }, [src])
+  return null
+}
+
 const GroupRenderer: React.FC<{
   group: StableVideoGroup<StableVideoSequenceItem>
   transitionWindows?: ResolvedTransitionWindow<TimelineItem>[]
@@ -165,6 +198,19 @@ const GroupRenderer: React.FC<{
 
   // Convert to global frame for comparison with item.from (which is global)
   const globalFrame = localFrame + group.minFrom
+
+  // During premount, warm the decoder for an upcoming ProRes clip so crossing into it
+  // during playback paints immediately instead of cold-starting to black. Returns the
+  // src of the nearest upcoming browser-undecodable (ProRes) clip, or null.
+  const prewarmSrc = useMemo(() => {
+    if (!isPremounted) return null
+    const mediaById = useMediaLibraryStore.getState().mediaById
+    const upcoming = group.items
+      .filter((it) => it.src && it.mediaId && it.from + it.durationInFrames > globalFrame)
+      .sort((a, b) => a.from - b.from)[0]
+    if (!upcoming?.mediaId || !upcoming.src) return null
+    return mediaById[upcoming.mediaId]?.videoCodecSupported === false ? upcoming.src : null
+  }, [isPremounted, group.items, globalFrame])
 
   // Find the active item ID for current frame
   // During premount, don't find any active item - we shouldn't render.
@@ -375,6 +421,7 @@ const GroupRenderer: React.FC<{
     <>
       {renderedContent}
       {shadowContent}
+      {prewarmSrc ? <ProResDecoderPrewarm src={prewarmSrc} /> : null}
     </>
   )
 }, areGroupPropsEqual)

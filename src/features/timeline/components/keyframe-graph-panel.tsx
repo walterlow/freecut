@@ -8,11 +8,12 @@
 import { memo, useState, useCallback, useMemo, useRef, useEffect, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
-import { X } from 'lucide-react'
+import { SlidersHorizontal, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { ErrorBoundary } from '@/app/error-boundary'
 import {
@@ -34,7 +35,10 @@ import {
   DopesheetEditor,
   getAnimatablePropertiesForItem,
   getEffectPropertyBaseValue,
+  buildBakeMotionPlan,
+  type ProceduralPreviewInput,
 } from '@/features/timeline/deps/keyframe-editors'
+import { bakeMotionToKeyframes } from '../stores/actions/motion-modifier-actions'
 import { resolveTransform, getSourceDimensions } from '@/features/timeline/deps/composition-runtime'
 import { useProjectStore } from '@/features/timeline/deps/projects'
 import {
@@ -87,16 +91,6 @@ const MAX_CONTENT_HEIGHT_FALLBACK = 500
 
 /** Maximum ratio the panel can occupy of its parent container */
 const MAX_PARENT_RATIO = 0.8
-
-/**
- * Fixed height of the advanced-easing controls strip (single row of h-7
- * controls + vertical padding + border). Reserved permanently while an item is
- * loaded so the editor below it never resizes when a keyframe is selected — a
- * measured/conditional strip caused a visible layout shift on selection.
- */
-const ADVANCED_EASING_STRIP_HEIGHT = 42
-/** Strip height plus its `mb-2` gap above the editor. */
-const ADVANCED_EASING_STRIP_RESERVED = ADVANCED_EASING_STRIP_HEIGHT + 8
 
 interface KeyframeGraphPanelProps {
   /** Whether the panel is open */
@@ -161,6 +155,67 @@ const BEZIER_PRESETS = [
     value: 'overshoot',
     labelKey: 'timeline.keyframeEditor.bezierPreset.overshoot',
     points: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 },
+  },
+  {
+    value: 'snap',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.snap',
+    points: { x1: 0.19, y1: 1, x2: 0.22, y2: 1 },
+  },
+  // Standard easing library (Penner / easings.net cubic-bezier approximations).
+  {
+    value: 'out-cubic',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.outCubic',
+    points: { x1: 0.33, y1: 1, x2: 0.68, y2: 1 },
+  },
+  {
+    value: 'out-quart',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.outQuart',
+    points: { x1: 0.25, y1: 1, x2: 0.5, y2: 1 },
+  },
+  {
+    value: 'out-quint',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.outQuint',
+    points: { x1: 0.22, y1: 1, x2: 0.36, y2: 1 },
+  },
+  {
+    value: 'out-expo',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.outExpo',
+    points: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
+  },
+  {
+    value: 'out-circ',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.outCirc',
+    points: { x1: 0, y1: 0.55, x2: 0.45, y2: 1 },
+  },
+  {
+    value: 'in-out-cubic',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.inOutCubic',
+    points: { x1: 0.65, y1: 0, x2: 0.35, y2: 1 },
+  },
+  {
+    value: 'in-out-quart',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.inOutQuart',
+    points: { x1: 0.76, y1: 0, x2: 0.24, y2: 1 },
+  },
+  {
+    value: 'in-out-expo',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.inOutExpo',
+    points: { x1: 0.87, y1: 0, x2: 0.13, y2: 1 },
+  },
+  {
+    value: 'in-cubic',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.inCubic',
+    points: { x1: 0.32, y1: 0, x2: 0.67, y2: 0 },
+  },
+  {
+    value: 'in-quart',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.inQuart',
+    points: { x1: 0.5, y1: 0, x2: 0.75, y2: 0 },
+  },
+  {
+    value: 'in-expo',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.inExpo',
+    points: { x1: 0.7, y1: 0, x2: 0.84, y2: 0 },
   },
 ] as const
 const BEZIER_INPUT_KEYS = ['x1', 'y1', 'x2', 'y2'] as const
@@ -394,6 +449,11 @@ interface AdvancedEasingControlsProps {
   applySpring: (spring: SpringParameters) => void
 }
 
+/**
+ * Fine-tune inputs for the curve types that need them — bezier control points
+ * (with a named-preset dropdown) and spring physics. Shown in a popover next to
+ * the interpolation-type row, only when bezier or spring easing is selected.
+ */
 function AdvancedEasingControls({
   selectedBezierPoints,
   selectedBezierPreset,
@@ -500,15 +560,12 @@ function AdvancedEasingControls({
   )
 
   return (
-    <div
-      className="mb-2 flex items-center overflow-x-auto rounded-md border border-border bg-secondary/20 px-2"
-      style={{ height: ADVANCED_EASING_STRIP_HEIGHT }}
-    >
+    <div className="flex items-center gap-3 overflow-x-auto">
       {selectedBezierPoints && (
         <div className="flex w-max items-center gap-2 text-xs">
           <span className="font-medium text-foreground">{t('timeline.keyframeEditor.bezier')}</span>
           <Select value={selectedBezierPreset} onValueChange={handleBezierPresetChange}>
-            <SelectTrigger className="h-7 w-[130px] text-xs focus:ring-0 focus:ring-offset-0">
+            <SelectTrigger className="h-7 w-[150px] text-xs focus:ring-0 focus:ring-offset-0">
               <SelectValue placeholder={t('timeline.keyframeEditor.preset')} />
             </SelectTrigger>
             <SelectContent>
@@ -837,6 +894,44 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     () => (selectedItemForEditor ? getAnimatablePropertiesForItem(selectedItemForEditor) : []),
     [selectedItemForEditor],
   )
+
+  // Inputs for the dopesheet/graph to draw procedural generators (dashed ghost
+  // curves) before they're baked — base transform + active modifiers + canvas.
+  const proceduralPreview = useMemo<ProceduralPreviewInput | undefined>(() => {
+    if (!selectedItemForEditor) return undefined
+    const modifiers =
+      selectedItemForEditor.motionModifiers?.filter(
+        (modifier) => modifier.enabled && modifier.amplitude > 0,
+      ) ?? []
+    if (modifiers.length === 0) return undefined
+    return {
+      base: resolveTransform(selectedItemForEditor, canvas, getSourceDimensions(selectedItemForEditor)),
+      modifiers,
+      frameWidth: canvas.width,
+      frameHeight: canvas.height,
+    }
+  }, [selectedItemForEditor, canvas])
+
+  // The edited clip can be baked when it carries any procedural motion.
+  const canBakeProceduralMotion =
+    !!selectedItemForEditor &&
+    ((selectedItemForEditor.motionModifiers?.some((modifier) => modifier.enabled) ?? false) ||
+      (selectedItemForEditor.effects?.some((effect) => effect.audioPulse?.enabled) ?? false))
+
+  const handleBakeProceduralMotion = useCallback(() => {
+    if (!selectedItemForEditor) return
+    const plan = buildBakeMotionPlan({
+      items: [selectedItemForEditor],
+      keyframesByItemId: useKeyframesStore.getState().keyframesByItemId,
+      fps: canvas.fps,
+      frameWidth: canvas.width,
+      frameHeight: canvas.height,
+      resolveBase: (item) => resolveTransform(item, canvas, getSourceDimensions(item)),
+    })
+    if (plan.length === 0) return
+    const baked = bakeMotionToKeyframes(plan)
+    toast.success(t('timeline.keyframeEditor.motionBaked', { count: baked }))
+  }, [selectedItemForEditor, canvas, t])
   const effectiveSelectedProperty = useMemo(
     () =>
       selectedProperty && availableProperties.includes(selectedProperty) ? selectedProperty : null,
@@ -1099,7 +1194,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   }, [cutSelectedKeyframes, selectedEditorKeyframes.length])
 
   const handleSelectedKeyframeEasingChange = useCallback(
-    (value: string) => {
+    (value: string, easingConfig?: EasingConfig) => {
       if (selectedEditorKeyframes.length === 0) return
 
       const easing = value as EasingType
@@ -1110,7 +1205,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
           keyframeId: ref.keyframeId,
           updates: {
             easing,
-            easingConfig: buildEasingConfig(easing, keyframe.easingConfig),
+            easingConfig: easingConfig ?? buildEasingConfig(easing, keyframe.easingConfig),
           },
         })),
       )
@@ -1531,14 +1626,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   const editorWidth = Math.max(0, containerWidth - 16)
   const showBezierControls = selectedEditorEasing === 'cubic-bezier'
   const showSpringControls = selectedEditorEasing === 'spring'
-  // The easing strip only carries bezier/spring controls now — the old
-  // "select a keyframe" hint banner is dropped. Render (and reserve height for)
-  // the strip only when there are actual controls to show, so the editor
-  // reclaims that space the rest of the time.
-  const showEasingControls = Boolean(
-    (showBezierControls && selectedBezierPoints) ||
-    (showSpringControls && selectedSpringParameters),
-  )
+  // The interpolation-type row is the single easing selector; only bezier/spring
+  // need the extra fine-tune popover.
+  const showDetailControls = showBezierControls || showSpringControls
   const advancedControlsKey = useMemo(
     () =>
       selectedEditorKeyframes
@@ -1554,10 +1644,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
         .join('|'),
     [selectedEditorKeyframes],
   )
-  const editorHeight = Math.max(
-    0,
-    resolvedContentHeight - 16 - (showEasingControls ? ADVANCED_EASING_STRIP_RESERVED : 0),
-  )
+  const editorHeight = Math.max(0, resolvedContentHeight - 16)
   // Only render the docked editor when explicitly opened from the toolbar/hotkey.
   // Selecting a clip should not surface the docked panel by itself.
   if (!isOpen) {
@@ -1705,18 +1792,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
         >
           {selectedItemForEditor && containerWidth > 0 ? (
             <>
-              {showEasingControls && (
-                <AdvancedEasingControls
-                  key={advancedControlsKey}
-                  selectedBezierPoints={showBezierControls ? selectedBezierPoints : null}
-                  selectedBezierPreset={selectedBezierPreset}
-                  hasMixedBezierConfig={hasMixedBezierConfig}
-                  selectedSpringParameters={showSpringControls ? selectedSpringParameters : null}
-                  hasMixedSpringConfig={hasMixedSpringConfig}
-                  applyBezier={applyBezierToSelection}
-                  applySpring={applySpringToSelection}
-                />
-              )}
               <ErrorBoundary level="component">
                 <DopesheetEditor
                   itemId={selectedItemForEditor.id}
@@ -1755,8 +1830,47 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                   interpolationOptions={easingOptions}
                   onInterpolationChange={handleSelectedKeyframeEasingChange}
                   interpolationDisabled={selectedEditorKeyframes.length === 0}
+                  easingControls={
+                    showDetailControls ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-6 gap-1 px-1.5 text-[11px]"
+                            title={t('timeline.keyframeEditor.editCurve', {
+                              defaultValue: 'Edit curve',
+                            })}
+                          >
+                            <SlidersHorizontal className="h-3 w-3" />
+                            {showSpringControls
+                              ? t('timeline.keyframeEditor.spring')
+                              : t('timeline.keyframeEditor.bezier')}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-auto p-2">
+                          <AdvancedEasingControls
+                            key={advancedControlsKey}
+                            selectedBezierPoints={showBezierControls ? selectedBezierPoints : null}
+                            selectedBezierPreset={selectedBezierPreset}
+                            hasMixedBezierConfig={hasMixedBezierConfig}
+                            selectedSpringParameters={
+                              showSpringControls ? selectedSpringParameters : null
+                            }
+                            hasMixedSpringConfig={hasMixedSpringConfig}
+                            applyBezier={applyBezierToSelection}
+                            applySpring={applySpringToSelection}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    ) : null
+                  }
                   onNavigateToKeyframe={handleNavigateToKeyframe}
                   transitionBlockedRanges={transitionBlockedRanges}
+                  proceduralPreview={proceduralPreview}
+                  canBakeMotion={canBakeProceduralMotion}
+                  onBakeMotion={handleBakeProceduralMotion}
                   visualizationMode={effectiveEditorMode}
                   spacious={splitView}
                 />

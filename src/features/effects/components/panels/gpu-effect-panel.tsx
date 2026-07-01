@@ -1,6 +1,7 @@
-import { memo } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -15,10 +16,69 @@ import {
   getEffectOptionLabel,
   getEffectParamLabel,
 } from '@/features/effects/utils/effect-i18n'
+import { getGpuEffectKeyframeValue } from '@/features/effects/utils/effect-keyframes'
 import { EffectPanelHeaderActions } from './effect-panel-header-actions'
-import type { GpuKeyframePanelProps } from './panel-props'
+import type { GpuKeyframePanelProps, GpuParamValue } from './panel-props'
 
 type GpuEffectPanelProps = GpuKeyframePanelProps
+
+interface TextParamRowProps {
+  effectId: string
+  paramKey: string
+  label: string
+  value: string
+  disabled: boolean
+  className?: string
+  onParamChange: (effectId: string, paramKey: string, value: GpuParamValue) => void
+  onParamLiveChange: (effectId: string, paramKey: string, value: GpuParamValue) => void
+}
+
+/**
+ * Text param row. Mirrors the number/color rows' live-then-commit pattern: the
+ * input drives a local draft + live preview on each keystroke and only commits
+ * to history on blur, instead of committing on every keystroke.
+ */
+const TextParamRow = memo(function TextParamRow({
+  effectId,
+  paramKey,
+  label,
+  value,
+  disabled,
+  className,
+  onParamChange,
+  onParamLiveChange,
+}: TextParamRowProps) {
+  const [draft, setDraft] = useState(value)
+  const isEditingRef = useRef(false)
+
+  // Keep the draft in sync with external updates (undo/redo, keyframes, reset)
+  // while the field isn't being actively edited.
+  useEffect(() => {
+    if (!isEditingRef.current) setDraft(value)
+  }, [value])
+
+  return (
+    <PropertyRow label={label} className={className}>
+      <Input
+        value={draft}
+        onFocus={() => {
+          isEditingRef.current = true
+        }}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          onParamLiveChange(effectId, paramKey, e.target.value)
+        }}
+        onBlur={() => {
+          isEditingRef.current = false
+          if (draft !== value) onParamChange(effectId, paramKey, draft)
+        }}
+        disabled={disabled}
+        className="h-6 text-xs flex-1 min-w-0"
+        spellCheck={false}
+      />
+    </PropertyRow>
+  )
+})
 
 export const GpuEffectPanel = memo(function GpuEffectPanel({
   itemIds,
@@ -206,6 +266,8 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
         }
 
         if (param.type === 'color') {
+          const keyframeProperty = getKeyframeProperty(effect.id, key)
+          const keyframeValue = getGpuEffectKeyframeValue(effect, key, currentValue)
           return (
             <PropertyRow
               key={key}
@@ -218,7 +280,31 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 onLiveChange={(v) => onParamLiveChange(effect.id, key, v)}
                 disabled={!paramEnabled}
               />
+              {keyframeProperty && keyframeValue !== null ? (
+                <KeyframeToggle
+                  itemIds={itemIds}
+                  property={keyframeProperty}
+                  currentValue={keyframeValue}
+                  disabled={!paramEnabled}
+                />
+              ) : null}
             </PropertyRow>
+          )
+        }
+
+        if (param.type === 'text') {
+          return (
+            <TextParamRow
+              key={key}
+              effectId={effect.id}
+              paramKey={key}
+              label={getEffectParamLabel(t, definition, key)}
+              value={currentValue as string}
+              disabled={!paramEnabled}
+              className={!paramEnabled ? 'opacity-50' : undefined}
+              onParamChange={onParamChange}
+              onParamLiveChange={onParamLiveChange}
+            />
           )
         }
 

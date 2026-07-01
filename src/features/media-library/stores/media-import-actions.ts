@@ -117,6 +117,9 @@ function setupImportedVideoProxy(metadata: MediaMetadata): void {
     return
   }
 
+  // ProRes and other browser-undecodable codecs are previewed via live turbores
+  // decode (full fidelity), not an auto-generated proxy. A proxy remains an opt-in
+  // scrub-performance aid via the media library UI, so we still map its key here.
   proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata))
 }
 

@@ -4,10 +4,21 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
-import { ChevronDown, ChevronLeft, ChevronRight, LineChart, Lock, Timer, X } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  LineChart,
+  Lock,
+  Sparkles,
+  Timer,
+  X,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -77,9 +88,21 @@ import type {
 import { getDopesheetRowControlState } from './row-controls'
 import { getPropertyAccordionGroups } from './property-groups'
 import { getCombinedGraphValueRange } from '../value-graph-editor/value-range-utils'
-import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges'
+import {
+  PROPERTY_VALUE_RANGES,
+  isColorAnimatableProperty,
+} from '@/features/keyframes/property-value-ranges'
+import {
+  colorStringToKeyframeValue,
+  keyframeValueToHexColor,
+} from '@/features/keyframes/utils/color-keyframes'
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
+import { useItemsStore } from '@/features/keyframes/deps/timeline'
+import {
+  getProceduralBands,
+  type ProceduralPreviewInput,
+} from '@/features/keyframes/utils/procedural-preview'
 import { clampFrame } from './frame-utils'
 import {
   buildSelectionFramePreview as buildSelectionFramePreviewState,
@@ -186,6 +209,12 @@ interface DopesheetEditorProps {
   onNavigateToKeyframe?: (frame: number) => void
   /** Transition-blocked frame ranges (keyframes cannot be placed here) */
   transitionBlockedRanges?: BlockedFrameRange[]
+  /** Procedural generator inputs for dashed ghost curves in the graph. */
+  proceduralPreview?: ProceduralPreviewInput
+  /** Whether the edited clip carries bakeable procedural motion. */
+  canBakeMotion?: boolean
+  /** Flatten the clip's procedural motion into editable keyframes. */
+  onBakeMotion?: () => void
   /** Whether the editor is disabled */
   disabled?: boolean
   /** Which visualization to render on the right side. `split` shows both the
@@ -195,6 +224,8 @@ interface DopesheetEditorProps {
   /** Use the wider property column + value inputs (Animate workspace, where
    *  there is room). Defaults to the compact sidebar sizing. */
   spacious?: boolean
+  /** Named easing-preset controls rendered inline in the Parameters bar. */
+  easingControls?: ReactNode
   /** Additional class name */
   className?: string
 }
@@ -247,9 +278,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   interpolationDisabled = false,
   onNavigateToKeyframe,
   transitionBlockedRanges = [],
+  proceduralPreview,
+  canBakeMotion = false,
+  onBakeMotion,
   disabled = false,
   visualizationMode = 'dopesheet',
   spacious = false,
+  easingControls = null,
   className,
 }: DopesheetEditorProps) {
   const { t } = useTranslation()
@@ -283,9 +318,23 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     string[] | null
   >(null)
 
+  const keyframeFrameBounds = useMemo(() => {
+    let min = Infinity
+    let max = -Infinity
+    for (const list of Object.values(keyframesByProperty)) {
+      for (const keyframe of list ?? []) {
+        if (keyframe.frame < min) min = keyframe.frame
+        if (keyframe.frame > max) max = keyframe.frame
+      }
+    }
+    return max >= min ? { min, max } : null
+  }, [keyframesByProperty])
+
   const { viewport, updateViewport, normalizeViewport, contentFrameMax, minViewportFrames } =
     useDopesheetViewport({
+      itemId,
       totalFrames,
+      keyframeFrameBounds,
       frameViewport,
       onFrameViewportChange,
     })
@@ -295,6 +344,14 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const availableProperties = useMemo(
     () => Object.keys(keyframesByProperty) as AnimatableProperty[],
     [keyframesByProperty],
+  )
+  // Properties with an actual curve to draw (>= 2 keyframes). The graph picks a
+  // default from these so it isn't blank when the selected/first property only
+  // has a single keyframe.
+  const graphableProperties = useMemo(
+    () =>
+      availableProperties.filter((property) => (keyframesByProperty[property]?.length ?? 0) >= 2),
+    [availableProperties, keyframesByProperty],
   )
   const allPropertyGroups = useMemo(
     () => getPropertyAccordionGroups(availableProperties),
@@ -331,6 +388,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   } = useGraphViewState({
     itemId,
     availableProperties,
+    graphableProperties,
     selectedProperty,
     onPropertyChange,
     onActivePropertyChange,
@@ -451,6 +509,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const formatPropertyValue = useCallback(
     (property: AnimatableProperty, value: number | undefined) => {
       if (value === undefined || Number.isNaN(value)) return ''
+      if (isColorAnimatableProperty(property)) return keyframeValueToHexColor(value)
       const decimals = PROPERTY_VALUE_RANGES[property]?.decimals ?? 2
       return decimals === 0 ? String(Math.round(value)) : value.toFixed(decimals)
     },
@@ -838,6 +897,23 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [transitionBlockedRanges, currentFrame],
   )
 
+  // Procedural motion (drift / breath / shake) isn't keyed, so show it as a band
+  // per driven property instead of diamonds, until baked.
+  const itemMotionModifiers = useItemsStore((s) => s.itemById[itemId]?.motionModifiers)
+  const proceduralBandByProperty = useMemo(
+    () => getProceduralBands(itemMotionModifiers, totalFrames),
+    [itemMotionModifiers, totalFrames],
+  )
+
+  // Adds inside a transition region are rejected by the action layer; surface
+  // that instead of failing silently. A fixed toast id prevents stacking on
+  // repeated clicks.
+  const notifyKeyframeBlocked = useCallback(() => {
+    toast.warning(t('timeline.keyframeEditor.transitionBlocked'), {
+      id: 'keyframe-transition-blocked',
+    })
+  }, [t])
+
   const snapFrameTargets = useMemo(() => {
     const targets: number[] = [0, currentFrame]
     for (const { keyframe } of visibleKeyframes) {
@@ -1128,6 +1204,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       const entries = buildGroupAddEntries(group.rows, currentFrame, canAddKeyframeForRow)
 
       if (entries.length === 0) {
+        // Nothing added: explain when the cause is the playhead being in a
+        // transition (vs. every row already keyed at this frame).
+        if (isCurrentFrameBlocked) notifyKeyframeBlocked()
         return
       }
 
@@ -1140,7 +1219,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         onAddKeyframe?.(entry.property, entry.frame)
       }
     },
-    [canAddKeyframeForRow, currentFrame, disabled, onAddKeyframe, onAddKeyframes],
+    [
+      canAddKeyframeForRow,
+      currentFrame,
+      disabled,
+      isCurrentFrameBlocked,
+      notifyKeyframeBlocked,
+      onAddKeyframe,
+      onAddKeyframes,
+    ],
   )
 
   const handleClearGroup = useCallback(
@@ -1220,12 +1307,17 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         return
       }
 
-      if (isCurrentFrameBlocked || !onAddKeyframe) return
+      if (isCurrentFrameBlocked) {
+        notifyKeyframeBlocked()
+        return
+      }
+      if (!onAddKeyframe) return
       onAddKeyframe(property, currentFrame)
     },
     [
       currentFrame,
       isCurrentFrameBlocked,
+      notifyKeyframeBlocked,
       itemId,
       onAddKeyframe,
       onRemoveKeyframes,
@@ -1268,9 +1360,11 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     (property: AnimatableProperty, options?: { allowCreate?: boolean }) => {
       if (isPropertyLocked(property)) return
       const range = PROPERTY_VALUE_RANGES[property]
-      const parsed = Number(valueDrafts[property])
+      const parsed = isColorAnimatableProperty(property)
+        ? colorStringToKeyframeValue(valueDrafts[property] ?? '')
+        : Number(valueDrafts[property])
 
-      if (!Number.isFinite(parsed)) {
+      if (parsed === null || !Number.isFinite(parsed)) {
         setValueDrafts((prev) => ({
           ...prev,
           [property]: formatPropertyValue(property, propertyValues[property]),
@@ -1727,34 +1821,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [flushPendingRulerScrub, onScrubEnd],
   )
 
+  // Standard scroll model, shared by the sheet-only and split-sheet panes:
+  // - Ctrl/Cmd+wheel zooms the time axis about the cursor.
+  // - Shift+wheel / trackpad horizontal swipe pans the time axis.
+  // - Plain vertical wheel is left to bubble so the property rows scroll
+  //   natively (their container is `overflow-auto`); it never hijacks the time
+  //   axis.
   const handleWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      if (disabled) return
-      event.preventDefault()
-      if (event.ctrlKey || event.metaKey) {
-        const pivotFrame = getFrameFromClientX(event.clientX)
-        if (event.deltaY > 0) {
-          zoomAroundFrame(pivotFrame, ZOOM_OUT_FACTOR)
-        } else {
-          zoomAroundFrame(pivotFrame, ZOOM_IN_FACTOR)
-        }
-        return
-      }
-
-      const deltaFrames = Math.round((event.deltaY / effectiveTimelineWidth) * frameRange)
-      panFrames(deltaFrames)
-    },
-    [disabled, getFrameFromClientX, zoomAroundFrame, panFrames, effectiveTimelineWidth, frameRange],
-  )
-
-  // Split-view sheet wheel. The two panes share one horizontal time axis but
-  // scroll differently on the vertical axis: the sheet scrolls property rows,
-  // the graph zooms its value axis. So over the sheet a plain vertical wheel
-  // must scroll rows (not hijack the shared time axis), while time zoom/pan
-  // stays reachable via Ctrl (zoom) and horizontal intent (Shift / trackpad
-  // swipe). Only when the rows can't travel further do we fall back to panning
-  // time, so the gesture never dead-ends.
-  const handleSplitSheetWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
       if (disabled) return
 
@@ -1772,30 +1845,34 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         return
       }
 
-      const node = scrollAreaRef.current
-      if (node && node.scrollHeight > node.clientHeight + 1) {
-        const atTop = node.scrollTop <= 0
-        const atBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 1
-        const pastBound = (event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)
-        if (!pastBound) {
-          // Let the inner overflow-auto scroll the rows natively.
-          return
-        }
-      }
-
-      event.preventDefault()
-      panFrames(Math.round((event.deltaY / effectiveTimelineWidth) * frameRange))
+      // Plain vertical wheel: let the rows scroll natively (no preventDefault).
     },
     [disabled, getFrameFromClientX, zoomAroundFrame, panFrames, effectiveTimelineWidth, frameRange],
   )
 
   const graphDisplayProperty = useMemo(() => {
     if (graphVisibleProperties.size === 0) return null
+    const graphableSet = new Set(graphableProperties)
+    // Honour the selection when it has a drawable curve.
+    if (
+      activeSelectedProperty &&
+      graphVisibleProperties.has(activeSelectedProperty) &&
+      graphableSet.has(activeSelectedProperty)
+    ) {
+      return activeSelectedProperty
+    }
+    // Otherwise show the first visible property that actually has a curve, so the
+    // graph isn't blank when the selection is a single-keyframe property.
+    const graphableVisible = [...graphVisibleProperties].find((property) =>
+      graphableSet.has(property),
+    )
+    if (graphableVisible) return graphableVisible
+    // Fall back to the selection even without a full curve.
     if (activeSelectedProperty && graphVisibleProperties.has(activeSelectedProperty)) {
       return activeSelectedProperty
     }
     return null
-  }, [activeSelectedProperty, graphVisibleProperties])
+  }, [activeSelectedProperty, graphVisibleProperties, graphableProperties])
   const graphDisplayPropertyLocked = graphDisplayProperty
     ? isPropertyLocked(graphDisplayProperty)
     : false
@@ -1921,7 +1998,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         <div
           key={frame}
           className="absolute inset-y-0 border-l border-border/60"
-          style={{ left: frameToX(frame) }}
+          style={{ left: Math.round(frameToX(frame)) }}
         >
           <span className="absolute top-0.5 left-1 text-[10px] text-muted-foreground">
             {formatRulerTick(frame)}
@@ -2070,7 +2147,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
           </div>
           <div className="ml-auto flex items-center gap-0">
             <Input
-              type="number"
+              type={isColorAnimatableProperty(row.property) ? 'text' : 'number'}
               value={valueDrafts[row.property] ?? ''}
               onChange={(event) => handleRowValueChange(row.property, event.target.value)}
               onFocus={() => {
@@ -2105,14 +2182,28 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                   event.currentTarget.blur()
                 }
               }}
-              step={(PROPERTY_VALUE_RANGES[row.property]?.decimals ?? 2) === 0 ? 1 : 0.1}
-              min={PROPERTY_VALUE_RANGES[row.property]?.min}
-              max={PROPERTY_VALUE_RANGES[row.property]?.max}
-              inputMode="decimal"
+              step={
+                isColorAnimatableProperty(row.property)
+                  ? undefined
+                  : (PROPERTY_VALUE_RANGES[row.property]?.decimals ?? 2) === 0
+                    ? 1
+                    : 0.1
+              }
+              min={
+                isColorAnimatableProperty(row.property)
+                  ? undefined
+                  : PROPERTY_VALUE_RANGES[row.property]?.min
+              }
+              max={
+                isColorAnimatableProperty(row.property)
+                  ? undefined
+                  : PROPERTY_VALUE_RANGES[row.property]?.max
+              }
+              inputMode={isColorAnimatableProperty(row.property) ? 'text' : 'decimal'}
               className={cn(
                 'h-[18px] border-border/70 bg-background/85 px-1 py-0 text-right text-[9px] leading-none tabular-nums md:text-[9px]',
                 '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
-                spacious ? 'w-[64px]' : 'w-[44px]',
+                isColorAnimatableProperty(row.property) ? 'w-[68px]' : spacious ? 'w-[64px]' : 'w-[44px]',
               )}
               disabled={
                 disabled ||
@@ -2165,26 +2256,30 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                     (isCurrentFrameBlocked || !onAddKeyframe))
                 }
                 title={
-                  row.controls.hasKeyframeAtCurrentFrame
-                    ? t('timeline.keyframeEditor.removePropertyKeyframeAtPlayhead', {
-                        property: rowLabel,
-                        defaultValue: `Remove ${rowLabel} keyframe at playhead`,
-                      })
-                    : t('timeline.keyframeEditor.togglePropertyKeyframeAtPlayhead', {
-                        property: rowLabel,
-                        defaultValue: `Toggle ${rowLabel} keyframe at playhead`,
-                      })
+                  !row.controls.hasKeyframeAtCurrentFrame && isCurrentFrameBlocked
+                    ? t('timeline.keyframeEditor.transitionBlocked')
+                    : row.controls.hasKeyframeAtCurrentFrame
+                      ? t('timeline.keyframeEditor.removePropertyKeyframeAtPlayhead', {
+                          property: rowLabel,
+                          defaultValue: `Remove ${rowLabel} keyframe at playhead`,
+                        })
+                      : t('timeline.keyframeEditor.togglePropertyKeyframeAtPlayhead', {
+                          property: rowLabel,
+                          defaultValue: `Toggle ${rowLabel} keyframe at playhead`,
+                        })
                 }
                 aria-label={
-                  row.controls.hasKeyframeAtCurrentFrame
-                    ? t('timeline.keyframeEditor.removePropertyKeyframeAtPlayhead', {
-                        property: rowLabel,
-                        defaultValue: `Remove ${rowLabel} keyframe at playhead`,
-                      })
-                    : t('timeline.keyframeEditor.togglePropertyKeyframeAtPlayhead', {
-                        property: rowLabel,
-                        defaultValue: `Toggle ${rowLabel} keyframe at playhead`,
-                      })
+                  !row.controls.hasKeyframeAtCurrentFrame && isCurrentFrameBlocked
+                    ? t('timeline.keyframeEditor.transitionBlocked')
+                    : row.controls.hasKeyframeAtCurrentFrame
+                      ? t('timeline.keyframeEditor.removePropertyKeyframeAtPlayhead', {
+                          property: rowLabel,
+                          defaultValue: `Remove ${rowLabel} keyframe at playhead`,
+                        })
+                      : t('timeline.keyframeEditor.togglePropertyKeyframeAtPlayhead', {
+                          property: rowLabel,
+                          defaultValue: `Toggle ${rowLabel} keyframe at playhead`,
+                        })
                 }
               >
                 <span
@@ -2655,6 +2750,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               getRenderedKeyframeX={getRenderedKeyframeX}
               renderedKeyframeXById={renderedKeyframeXById}
               transitionBlockedRanges={transitionBlockedRanges}
+              proceduralBand={proceduralBandByProperty.get(row.property)}
               selectedKeyframeIds={selectedKeyframeIds}
               disabled={disabled}
               onRowPointerDown={handleRowPointerDown}
@@ -2683,6 +2779,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       ticks,
       frameToX,
       transitionBlockedRanges,
+      proceduralBandByProperty,
       renderedKeyframeXById,
       selectedKeyframeIds,
       sheetPreviewDuplicateKeyframeIds,
@@ -2724,6 +2821,20 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     ? t('timeline.keyframeEditor.noParametersMatch')
     : t('timeline.keyframeEditor.noKeyframesToDisplay')
   const showEmptyGuidance = !hasPropertyFilters
+  // A clip can be animated by procedural modulators / audio pulse yet have no
+  // keyframes — the sheet would otherwise look empty and "unanimated".
+  const hasProceduralMotion = useItemsStore((s) => {
+    const target = s.itemById[itemId]
+    if (!target) return false
+    return (
+      (target.motionModifiers?.some((modifier) => modifier.enabled) ?? false) ||
+      (target.effects?.some((effect) => effect.audioPulse?.enabled) ?? false)
+    )
+  })
+  const proceduralHint =
+    showEmptyGuidance && hasProceduralMotion
+      ? t('timeline.keyframeEditor.proceduralMotionHint')
+      : undefined
 
   // Hoisted so the graph pane and sheet body can be composed once and reused
   // across the exclusive (`graph`/`dopesheet`) and the `split` placements.
@@ -2794,6 +2905,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       hasRows={sheetRows.length > 0}
       emptyStateMessage={emptyStateMessage}
       showEmptyGuidance={showEmptyGuidance}
+      proceduralHint={proceduralHint}
       rowElements={rowElements}
       marqueeRect={marqueeRect}
       marqueeJustEnded={marqueeJustEndedRef.current}
@@ -2806,6 +2918,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       hasRows={propertyRows.length > 0}
       emptyStateMessage={emptyStateMessage}
       showEmptyGuidance={showEmptyGuidance}
+      proceduralHint={proceduralHint}
       propertyColumnElements={propertyColumnElements}
       propertyColumnWidth={columnWidth}
       graphPaneRef={graphPaneRef}
@@ -2841,6 +2954,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       onRemoveKeyframes={onRemoveKeyframes}
       onNavigateToKeyframe={onNavigateToKeyframe}
       transitionBlockedRanges={transitionBlockedRanges}
+      proceduralPreview={proceduralPreview}
       snapEnabled={snapEnabled}
       graphHandleVisibility={showAllGraphHandles ? 'all' : 'selected'}
       graphRulerUnit={graphRulerUnit}
@@ -2893,6 +3007,29 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             {t('timeline.keyframeEditor.keyframes', { count: visibleKeyframes.length })}
           </span>
 
+          {isCurrentFrameBlocked && (
+            <span
+              className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300"
+              title={t('timeline.keyframeEditor.transitionBlocked')}
+            >
+              {t('timeline.keyframeEditor.transitionBlockedPill')}
+            </span>
+          )}
+
+          {canBakeMotion && onBakeMotion && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-1.5 text-[11px] text-sky-300 hover:text-sky-200"
+              onClick={onBakeMotion}
+              title={t('timeline.keyframeEditor.bakeMotionHint')}
+            >
+              <Sparkles className="h-3 w-3" />
+              {t('timeline.keyframeEditor.bakeMotion')}
+            </Button>
+          )}
+
           <DopesheetHeaderFrameInputs
             disabled={disabled}
             inputsEnabled={
@@ -2914,14 +3051,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {showGraphPane && (
-            <DopesheetInterpolationButtons
-              options={interpolationOptions}
-              selected={selectedInterpolation}
-              disabled={disabled || interpolationDisabled}
-              onSelect={onInterpolationChange}
-            />
-          )}
+          <DopesheetInterpolationButtons
+            options={interpolationOptions}
+            selected={selectedInterpolation}
+            disabled={disabled || interpolationDisabled}
+            onSelect={onInterpolationChange}
+          />
+          {easingControls}
           <DopesheetClipboardActions
             disabled={disabled}
             hasSelection={selectedRefs.length > 0}
@@ -2973,10 +3109,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             {/* Sheet on top, curve/graph below, with ONE shared playhead line
                 ({splitPlayheadOverlayElement}) drawn over both panes so they
                 stay identical in position and appearance. */}
-            <div
-              className="relative min-h-0 flex-1 overflow-hidden"
-              onWheel={handleSplitSheetWheel}
-            >
+            <div className="relative min-h-0 flex-1 overflow-hidden" onWheel={handleWheel}>
               {sheetBodyElement}
             </div>
             <div className="min-h-0 flex-1 overflow-hidden border-t border-border/60">

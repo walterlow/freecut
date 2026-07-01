@@ -253,6 +253,188 @@ fn waveFragment(input: VertexOutput) -> @location(0) vec4f {
     ]),
 }
 
+export const triggerWave: GpuEffectDefinition = {
+  id: 'gpu-trigger-wave',
+  name: 'Trigger Wave',
+  category: 'distort',
+  entryPoint: 'triggerWaveFragment',
+  uniformSize: 64,
+  shader: /* wgsl */ `
+struct TriggerWaveParams {
+  settingsA: vec4f,
+  settingsB: vec4f,
+  settingsC: vec4f,
+  settingsD: vec4f,
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: TriggerWaveParams;
+
+@fragment
+fn triggerWaveFragment(input: VertexOutput) -> @location(0) vec4f {
+  let strength = params.settingsA.x;
+  let radius = max(params.settingsA.y, 0.001);
+  let frequency = max(params.settingsA.z, 0.001);
+  let decay = max(params.settingsA.w, 0.001);
+
+  let center = vec2f(params.settingsB.x, params.settingsB.y);
+  let phase = fract(params.settingsB.z + params.settingsB.w * params.settingsC.z);
+  let chroma = params.settingsC.x;
+  let scanlineMix = clamp(params.settingsC.y, 0.0, 1.0);
+  let aspect = max(params.settingsC.w, 0.001);
+  let glowColor = params.settingsD.rgb * params.settingsD.a;
+
+  let aspectDelta = vec2f((input.uv.x - center.x) * aspect, input.uv.y - center.y);
+  let dist = length(aspectDelta);
+  let safeDist = max(dist, 0.0001);
+  let direction = vec2f(aspectDelta.x / aspect, aspectDelta.y) / safeDist;
+
+  let ringRadius = phase * radius;
+  let band = exp(-abs(dist - ringRadius) / decay);
+  let tail = 1.0 - smoothstep(0.2, 1.0, phase);
+  let carrier = sin((dist - ringRadius) * frequency * TAU);
+  let force = carrier * band * tail * strength;
+  let warpedUv = input.uv + direction * force;
+
+  var color = textureSample(inputTex, texSampler, warpedUv);
+  if (chroma > 0.0) {
+    let chromaOffset = direction * chroma * band * (0.25 + abs(strength) * 20.0);
+    let red = textureSample(inputTex, texSampler, warpedUv + chromaOffset).r;
+    let blue = textureSample(inputTex, texSampler, warpedUv - chromaOffset).b;
+    color = vec4f(red, color.g, blue, color.a);
+  }
+
+  if (scanlineMix > 0.0) {
+    let line = 0.78 + 0.22 * sin(input.position.y * 2.4 + phase * TAU * 8.0);
+    color = vec4f(mix(color.rgb, color.rgb * line, scanlineMix), color.a);
+  }
+
+  let glow = band * tail * clamp(abs(strength) * 12.0, 0.0, 1.0);
+  color = vec4f(color.rgb + glowColor * glow, color.a);
+  return vec4f(clamp(color.rgb, vec3f(0.0), vec3f(1.0)), color.a);
+}`,
+  params: {
+    strength: {
+      type: 'number',
+      label: 'Strength',
+      default: 0.035,
+      min: -0.15,
+      max: 0.15,
+      step: 0.001,
+      animatable: true,
+    },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 0.85,
+      min: 0.1,
+      max: 1.5,
+      step: 0.01,
+      animatable: true,
+    },
+    frequency: {
+      type: 'number',
+      label: 'Frequency',
+      default: 18,
+      min: 2,
+      max: 64,
+      step: 1,
+      animatable: true,
+    },
+    decay: {
+      type: 'number',
+      label: 'Decay',
+      default: 0.08,
+      min: 0.01,
+      max: 0.3,
+      step: 0.01,
+      animatable: true,
+    },
+    phase: {
+      type: 'number',
+      label: 'Phase',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    speed: {
+      type: 'number',
+      label: 'Speed',
+      default: 1,
+      min: 0,
+      max: 4,
+      step: 0.1,
+      animatable: false,
+    },
+    centerX: {
+      type: 'number',
+      label: 'Center X',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerY: {
+      type: 'number',
+      label: 'Center Y',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    chroma: {
+      type: 'number',
+      label: 'Chroma',
+      default: 0.006,
+      min: 0,
+      max: 0.05,
+      step: 0.001,
+      animatable: true,
+    },
+    scanlineMix: {
+      type: 'number',
+      label: 'Scanlines',
+      default: 0.18,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    glowColor: {
+      type: 'color',
+      label: 'Glow Color',
+      default: '#2e6b8c',
+      animatable: true,
+    },
+  },
+  packUniforms: (p, w, h) => {
+    const time = performance.now() / 1000
+    const glowColor = parseHexColor((p.glowColor as string) ?? '#2e6b8c', [0.18, 0.42, 0.55, 1])
+    return new Float32Array([
+      (p.strength as number) ?? 0.035,
+      (p.radius as number) ?? 0.85,
+      (p.frequency as number) ?? 18,
+      (p.decay as number) ?? 0.08,
+      (p.centerX as number) ?? 0.5,
+      (p.centerY as number) ?? 0.5,
+      (p.phase as number) ?? 0,
+      (p.speed as number) ?? 1,
+      (p.chroma as number) ?? 0.006,
+      (p.scanlineMix as number) ?? 0.18,
+      time,
+      w / Math.max(h, 1),
+      glowColor[0],
+      glowColor[1],
+      glowColor[2],
+      glowColor[3],
+    ])
+  },
+}
+
 export const bulge: GpuEffectDefinition = {
   id: 'gpu-bulge',
   name: 'Bulge/Pinch',
@@ -973,4 +1155,196 @@ fn flutedGlassFragment(input: VertexOutput) -> @location(0) vec4f {
       marginBottom,
     ])
   },
+}
+
+export const blocks: GpuEffectDefinition = {
+  id: 'gpu-blocks',
+  name: 'Blocks',
+  category: 'distort',
+  entryPoint: 'blocksFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct BlocksParams {
+  size: f32, depth: f32, studSize: f32, gap: f32,
+  width: f32, height: f32, pad0: f32, pad1: f32
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: BlocksParams;
+@fragment
+fn blocksFragment(input: VertexOutput) -> @location(0) vec4f {
+  let cellX = max(params.size, 1.0) / params.width;
+  let cellY = max(params.size, 1.0) / params.height;
+  let cellIndex = vec2f(floor(input.uv.x / cellX), floor(input.uv.y / cellY));
+  let cellCenter = vec2f((cellIndex.x + 0.5) * cellX, (cellIndex.y + 0.5) * cellY);
+  let color = textureSample(inputTex, texSampler, cellCenter);
+
+  // local position within the cell, centered at 0 (range -0.5..0.5)
+  let local = vec2f(fract(input.uv.x / cellX), fract(input.uv.y / cellY)) - vec2f(0.5);
+  let edge = max(abs(local.x), abs(local.y));
+
+  // bevel: light from top-left, shadow toward bottom-right
+  let shade = (-local.x - local.y) * params.depth;
+
+  // raised stud at the cell center with its own bevel
+  let studR = clamp(params.studSize, 0.0, 1.0) * 0.4;
+  let stud = smoothstep(studR, studR - 0.03, length(local));
+  let studShade = stud * ((-local.x - local.y) * params.depth * 2.0 + params.depth * 0.18);
+
+  var rgb = color.rgb * (1.0 + shade) + color.rgb * studShade;
+
+  // darken the mortar gap between blocks
+  let gapMask = step(edge, 0.5 - clamp(params.gap, 0.0, 0.4));
+  rgb = rgb * mix(0.55, 1.0, gapMask);
+
+  return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), color.a);
+}`,
+  params: {
+    size: {
+      type: 'number',
+      label: 'Block Size',
+      default: 24,
+      min: 4,
+      max: 120,
+      step: 1,
+      animatable: true,
+    },
+    depth: {
+      type: 'number',
+      label: 'Depth',
+      default: 0.5,
+      min: 0,
+      max: 1.5,
+      step: 0.01,
+      animatable: true,
+    },
+    studSize: {
+      type: 'number',
+      label: 'Stud Size',
+      default: 0.55,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    gap: {
+      type: 'number',
+      label: 'Gap',
+      default: 0.06,
+      min: 0,
+      max: 0.4,
+      step: 0.01,
+      animatable: true,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.size as number) ?? 24,
+      (p.depth as number) ?? 0.5,
+      (p.studSize as number) ?? 0.55,
+      (p.gap as number) ?? 0.06,
+      w,
+      h,
+      0,
+      0,
+    ]),
+}
+
+export const droste: GpuEffectDefinition = {
+  id: 'gpu-droste',
+  name: 'Droste',
+  category: 'distort',
+  entryPoint: 'drosteFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct DrosteParams {
+  strength: f32, scale: f32, centerX: f32, centerY: f32,
+  spin: f32, width: f32, height: f32, pad: f32
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: DrosteParams;
+@fragment
+fn drosteFragment(input: VertexOutput) -> @location(0) vec4f {
+  let aspect = params.width / max(params.height, 1.0);
+  let center = vec2f(params.centerX, params.centerY);
+  let p = (input.uv - center) * vec2f(aspect, 1.0);
+
+  let r = max(length(p), 1e-4);
+  let a = atan2(p.y, p.x);
+  var z = vec2f(log(r), a);
+
+  let period = log(max(params.scale, 1.0001));
+  // Escher twist; strength dials from plain recursive zoom (0) to full spiral
+  let alpha = atan2(period, TAU) * clamp(params.strength, 0.0, 2.0);
+  let co = max(cos(alpha), 1e-3);
+  let si = sin(alpha);
+  z = vec2f(z.x * co - z.y * si, z.x * si + z.y * co) / co;
+
+  // tile the log-radius into a single repeating band
+  z.x = z.x - period * floor(z.x / period);
+
+  let er = exp(z.x);
+  let na = z.y + params.spin;
+  let uv = center + vec2f(cos(na), sin(na)) * er / vec2f(aspect, 1.0);
+  return textureSample(inputTex, texSampler, fract(uv));
+}`,
+  params: {
+    strength: {
+      type: 'number',
+      label: 'Spiral',
+      default: 1,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+    scale: {
+      type: 'number',
+      label: 'Scale',
+      default: 2,
+      min: 1.1,
+      max: 6,
+      step: 0.05,
+      animatable: true,
+    },
+    centerX: {
+      type: 'number',
+      label: 'Center X',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    centerY: {
+      type: 'number',
+      label: 'Center Y',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    spin: {
+      type: 'number',
+      label: 'Spin',
+      default: 0,
+      min: -6.28318,
+      max: 6.28318,
+      step: 0.01,
+      animatable: true,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.strength as number) ?? 1,
+      (p.scale as number) ?? 2,
+      (p.centerX as number) ?? 0.5,
+      (p.centerY as number) ?? 0.5,
+      (p.spin as number) ?? 0,
+      w,
+      h,
+      0,
+    ]),
 }

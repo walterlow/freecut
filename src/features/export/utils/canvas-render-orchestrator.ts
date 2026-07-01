@@ -199,7 +199,7 @@ async function tryPacketRemuxComposition(
   let conversion: {
     cancel: () => Promise<void>
     isValid: boolean
-    onProgress?: (progress: number) => unknown
+    onProgress?: (progress: number, processedTime: number) => unknown
     execute: () => Promise<void>
   } | null = null
   const cancelConversion = () => {

@@ -1,6 +1,6 @@
 export interface EffectParam {
   /** 'json' params hold structured data as a JSON string (custom panels only — no generic UI) */
-  type: 'number' | 'boolean' | 'select' | 'color' | 'point' | 'json'
+  type: 'number' | 'boolean' | 'select' | 'color' | 'point' | 'json' | 'text'
   label: string
   default: number | boolean | string
   min?: number

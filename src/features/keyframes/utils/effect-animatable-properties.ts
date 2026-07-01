@@ -1,3 +1,4 @@
+import { getGpuEffect } from '@/infrastructure/gpu-effects'
 import { getPropertyKeyframes, interpolatePropertyValue } from './interpolation'
 import {
   buildEffectAnimatableProperty,
@@ -7,6 +8,69 @@ import {
 } from '@/types/keyframe'
 import type { GpuEffect, ItemEffect } from '@/types/effects'
 import type { TimelineItem } from '@/types/timeline'
+import {
+  colorStringToKeyframeValue,
+  interpolateColorKeyframesToHex,
+  keyframeValueToHexColor,
+} from './color-keyframes'
+import {
+  evaluateAudioPulseParams,
+  type AudioPulseFrameValues,
+} from './trigger-wave-motion-layer'
+
+/**
+ * Evaluate a trigger-wave effect's audio-pulse frame values once (or null when
+ * the entry has no active pulse). Hoist this out of per-param loops so the
+ * envelope math runs once per effect/frame rather than once per param.
+ */
+function evaluateEffectAudioPulse(
+  effectEntry: ItemEffect,
+  relativeFrame: number,
+): AudioPulseFrameValues | null {
+  const modulation = effectEntry.audioPulse
+  if (
+    !modulation?.enabled ||
+    effectEntry.effect.type !== 'gpu-effect' ||
+    effectEntry.effect.gpuEffectType !== 'gpu-trigger-wave'
+  ) {
+    return null
+  }
+  return evaluateAudioPulseParams(modulation, relativeFrame)
+}
+
+/** Map already-evaluated audio-pulse values to a single param's override. */
+function audioPulseParamValue(
+  values: AudioPulseFrameValues,
+  paramKey: string,
+): number | string | null {
+  switch (paramKey) {
+    case 'strength':
+      return values.strength
+    case 'chroma':
+      return values.chroma
+    case 'phase':
+      return values.phase
+    case 'glowColor':
+      return keyframeValueToHexColor(values.glowColor)
+    default:
+      return null
+  }
+}
+
+/**
+ * Procedural audio-pulse override for a trigger-wave param at a frame.
+ * Returns null when the entry has no active pulse or the param isn't driven,
+ * so callers fall through to keyframe/base resolution.
+ */
+function getAudioPulseParamOverride(
+  effectEntry: ItemEffect,
+  relativeFrame: number,
+  paramKey: string,
+): number | string | null {
+  const values = evaluateEffectAudioPulse(effectEntry, relativeFrame)
+  if (!values) return null
+  return audioPulseParamValue(values, paramKey)
+}
 
 const NON_ANIMATABLE_GPU_NUMBER_PARAMS: Record<string, ReadonlySet<string>> = {
   'gpu-gaussian-blur': new Set(['samples']),
@@ -17,6 +81,7 @@ const NON_ANIMATABLE_GPU_NUMBER_PARAMS: Record<string, ReadonlySet<string>> = {
   'gpu-glow': new Set(['rings', 'samplesPerRing']),
   'gpu-scanlines': new Set(['speed']),
   'gpu-color-glitch': new Set(['speed']),
+  'gpu-block-glitch': new Set(['speed']),
 }
 
 function isGpuEffectParamVisible(
@@ -47,6 +112,22 @@ function isAnimatableGpuNumberParam(effect: GpuEffect, paramKey: string): boolea
   )
 }
 
+export function isAnimatableGpuColorParam(effect: GpuEffect, paramKey: string): boolean {
+  const definition = getGpuEffect(effect.gpuEffectType)
+  const param = definition?.params[paramKey]
+  const value = effect.params[paramKey]
+  return (
+    param?.type === 'color' &&
+    param.animatable === true &&
+    typeof value === 'string' &&
+    colorStringToKeyframeValue(value) !== null
+  )
+}
+
+function isAnimatableGpuEffectParam(effect: GpuEffect, paramKey: string): boolean {
+  return isAnimatableGpuNumberParam(effect, paramKey) || isAnimatableGpuColorParam(effect, paramKey)
+}
+
 function getNumericGpuEffectParamValue(effect: GpuEffect, paramKey: string): number | null {
   const rawValue = effect.params[paramKey]
 
@@ -55,6 +136,15 @@ function getNumericGpuEffectParamValue(effect: GpuEffect, paramKey: string): num
   }
 
   return null
+}
+
+function getColorGpuEffectParamValue(effect: GpuEffect, paramKey: string): string | null {
+  const rawValue = effect.params[paramKey]
+  if (typeof rawValue !== 'string') {
+    return null
+  }
+
+  return colorStringToKeyframeValue(rawValue) === null ? null : rawValue
 }
 
 function getKeyframedEffectParamKeys(
@@ -95,7 +185,10 @@ export function getAnimatableEffectPropertiesForItem(item: TimelineItem): Animat
     const gpuEffect = effectEntry.effect
 
     for (const [paramKey, value] of Object.entries(gpuEffect.params)) {
-      if (typeof value !== 'number' || !isAnimatableGpuNumberParam(gpuEffect, paramKey)) {
+      if (
+        (typeof value !== 'number' && typeof value !== 'string') ||
+        !isAnimatableGpuEffectParam(gpuEffect, paramKey)
+      ) {
         continue
       }
 
@@ -131,10 +224,6 @@ export function getEffectPropertyBaseValue(
     return null
   }
 
-  if (!isAnimatableGpuNumberParam(effectEntry.effect, parsed.paramKey)) {
-    return null
-  }
-
   if (
     !isGpuEffectParamVisible(
       effectEntry.effect.gpuEffectType,
@@ -142,6 +231,15 @@ export function getEffectPropertyBaseValue(
       parsed.paramKey,
     )
   ) {
+    return null
+  }
+
+  if (isAnimatableGpuColorParam(effectEntry.effect, parsed.paramKey)) {
+    const value = getColorGpuEffectParamValue(effectEntry.effect, parsed.paramKey)
+    return value === null ? null : colorStringToKeyframeValue(value)
+  }
+
+  if (!isAnimatableGpuNumberParam(effectEntry.effect, parsed.paramKey)) {
     return null
   }
 
@@ -153,12 +251,42 @@ export function getResolvedAnimatedEffectParamValue(
   itemKeyframes: ItemKeyframes | undefined,
   relativeFrame: number,
   paramKey: string,
-): number | null {
+): number | string | null {
   if (effectEntry.effect.type !== 'gpu-effect') {
     return null
   }
 
   const gpuEffect = effectEntry.effect
+
+  // Procedural audio-pulse takes precedence over keyframes/base for its params.
+  const pulseOverride = getAudioPulseParamOverride(effectEntry, relativeFrame, paramKey)
+  if (pulseOverride !== null) {
+    return pulseOverride
+  }
+
+  if (isAnimatableGpuColorParam(gpuEffect, paramKey)) {
+    const baseValue = getColorGpuEffectParamValue(gpuEffect, paramKey)
+    if (baseValue === null) {
+      return null
+    }
+
+    if (!isGpuEffectParamVisible(gpuEffect.gpuEffectType, gpuEffect.params, paramKey)) {
+      return baseValue
+    }
+
+    const property = buildEffectAnimatableProperty(
+      gpuEffect.gpuEffectType,
+      effectEntry.id,
+      paramKey,
+    )
+    const keyframes = getPropertyKeyframes(itemKeyframes, property)
+    if (keyframes.length === 0) {
+      return baseValue
+    }
+
+    return interpolateColorKeyframesToHex(keyframes, relativeFrame, baseValue)
+  }
+
   if (!isAnimatableGpuNumberParam(gpuEffect, paramKey)) {
     return getNumericGpuEffectParamValue(gpuEffect, paramKey)
   }
@@ -186,7 +314,8 @@ export function resolveAnimatedGpuEffects(
   itemKeyframes: ItemKeyframes | undefined,
   relativeFrame: number,
 ): ItemEffect[] | undefined {
-  if (!effects || effects.length === 0 || !itemKeyframes) {
+  const hasAudioPulse = effects?.some((entry) => entry.audioPulse?.enabled) ?? false
+  if (!effects || effects.length === 0 || (!itemKeyframes && !hasAudioPulse)) {
     return effects
   }
 
@@ -201,13 +330,16 @@ export function resolveAnimatedGpuEffects(
     let nextParams = gpuEffect.params
     let paramsChanged = false
 
+    // Evaluate the audio-pulse envelope once per effect (not once per param).
+    const audioPulseValues = evaluateEffectAudioPulse(effectEntry, relativeFrame)
+
     const paramKeys = new Set([
       ...Object.keys(gpuEffect.params),
       ...getKeyframedEffectParamKeys(effectEntry, itemKeyframes),
     ])
 
     for (const paramKey of paramKeys) {
-      if (!isAnimatableGpuNumberParam(gpuEffect, paramKey)) {
+      if (!isAnimatableGpuEffectParam(gpuEffect, paramKey)) {
         continue
       }
 
@@ -215,22 +347,41 @@ export function resolveAnimatedGpuEffects(
         continue
       }
 
-      const baseValue = getNumericGpuEffectParamValue(gpuEffect, paramKey)
-      if (baseValue === null) {
+      // Procedural audio-pulse wins over keyframes/base for its driven params.
+      const pulseOverride = audioPulseValues
+        ? audioPulseParamValue(audioPulseValues, paramKey)
+        : null
+      const value =
+        pulseOverride !== null
+          ? pulseOverride
+          : (() => {
+              const property = buildEffectAnimatableProperty(
+                gpuEffect.gpuEffectType,
+                effectEntry.id,
+                paramKey,
+              )
+              const keyframes = getPropertyKeyframes(itemKeyframes, property)
+              if (keyframes.length === 0) {
+                return null
+              }
+              return isAnimatableGpuColorParam(gpuEffect, paramKey)
+                ? (() => {
+                    const baseValue = getColorGpuEffectParamValue(gpuEffect, paramKey)
+                    return baseValue === null
+                      ? null
+                      : interpolateColorKeyframesToHex(keyframes, relativeFrame, baseValue)
+                  })()
+                : (() => {
+                    const baseValue = getNumericGpuEffectParamValue(gpuEffect, paramKey)
+                    return baseValue === null
+                      ? null
+                      : interpolatePropertyValue(keyframes, relativeFrame, baseValue)
+                  })()
+            })()
+      if (value === null) {
         continue
       }
 
-      const property = buildEffectAnimatableProperty(
-        gpuEffect.gpuEffectType,
-        effectEntry.id,
-        paramKey,
-      )
-      const keyframes = getPropertyKeyframes(itemKeyframes, property)
-      if (keyframes.length === 0) {
-        continue
-      }
-
-      const value = interpolatePropertyValue(keyframes, relativeFrame, baseValue)
       if (nextParams[paramKey] === value) {
         continue
       }

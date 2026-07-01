@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "정지점 추가",
+    "removeStop": "정지점 제거"
+  },
   "categories": {
     "color": "색상",
     "blur": "블러",
@@ -49,126 +53,21 @@
     "midtones": "중간톤",
     "highlights": "밝은 영역"
   },
-  "definitions": {
-    "gpu-brightness": {
-      "name": "밝기"
-    },
-    "gpu-color-wheels": {
-      "name": "컬러 휠"
-    },
-    "gpu-contrast": {
-      "name": "대비"
-    },
-    "gpu-curves": {
-      "name": "곡선"
-    },
-    "gpu-dither": {
-      "name": "디더"
-    },
-    "gpu-threshold": {
-      "name": "임계값"
-    },
-    "gpu-glow": {
-      "name": "글로우"
-    },
-    "gpu-grain": {
-      "name": "필름 그레인"
-    },
-    "gpu-exposure": {
-      "name": "노출"
-    },
-    "gpu-grayscale": {
-      "name": "그레이스케일"
-    },
-    "gpu-hue-shift": {
-      "name": "색조 이동"
-    },
-    "gpu-invert": {
-      "name": "반전"
-    },
-    "gpu-levels": {
-      "name": "레벨"
-    },
-    "gpu-saturation": {
-      "name": "채도"
-    },
-    "gpu-sepia": {
-      "name": "세피아"
-    },
-    "gpu-temperature": {
-      "name": "색온도"
-    },
-    "gpu-vibrance": {
-      "name": "선명도"
-    },
-    "gpu-box-blur": {
-      "name": "박스 블러"
-    },
-    "gpu-gaussian-blur": {
-      "name": "가우시안 블러"
-    },
-    "gpu-motion-blur": {
-      "name": "모션 블러"
-    },
-    "gpu-radial-blur": {
-      "name": "방사형 블러"
-    },
-    "gpu-zoom-blur": {
-      "name": "줌 블러"
-    },
-    "gpu-bulge": {
-      "name": "팽창/수축"
-    },
-    "gpu-fluted-glass": {
-      "name": "골판 유리"
-    },
-    "gpu-kaleidoscope": {
-      "name": "만화경"
-    },
-    "gpu-mirror": {
-      "name": "거울"
-    },
-    "gpu-pixelate": {
-      "name": "픽셀화"
-    },
-    "gpu-rgb-split": {
-      "name": "RGB 분리"
-    },
-    "gpu-twirl": {
-      "name": "소용돌이"
-    },
-    "gpu-wave": {
-      "name": "파동"
-    },
-    "gpu-ascii": {
-      "name": "ASCII"
-    },
-    "gpu-color-glitch": {
-      "name": "컬러 글리치"
-    },
-    "gpu-edge-detect": {
-      "name": "엣지 감지"
-    },
-    "gpu-halftone": {
-      "name": "하프톤"
-    },
-    "gpu-posterize": {
-      "name": "포스터화"
-    },
-    "gpu-scanlines": {
-      "name": "스캔라인"
-    },
-    "gpu-sharpen": {
-      "name": "선명하게"
-    },
-    "gpu-vignette": {
-      "name": "비네트"
-    },
-    "gpu-chroma-key": {
-      "name": "크로마 키"
-    }
-  },
   "params": {
+    "flow": "흐름",
+    "span": "폭",
+    "preset": "팔레트",
+    "customStops": "사용자 정지점",
+    "mix": "혼합",
+    "font": "글꼴",
+    "customChars": "사용자 문자",
+    "transparentBg": "투명 배경",
+    "edgeDetect": "엣지 감지",
+    "coverage": "범위",
+    "blockSize": "블록 크기",
+    "curvature": "곡률",
+    "scanlines": "스캔라인",
+    "vignette": "비네트",
     "amount": "양",
     "angle": "Angle",
     "radius": "Radius",
@@ -245,6 +144,12 @@
     "amplitudeY": "Vertical Amp",
     "frequencyX": "Horizontal Freq",
     "frequencyY": "Vertical Freq",
+    "frequency": "주파수",
+    "decay": "감쇠",
+    "phase": "위상",
+    "chroma": "크로마",
+    "scanlineMix": "스캔라인",
+    "glowColor": "글로우 색상",
     "colorFront": "Front Color",
     "originalColors": "Original Colors",
     "inverted": "Inverted",
@@ -255,6 +160,16 @@
     "threshold": "임계값"
   },
   "options": {
+    "fire": "불",
+    "ice": "얼음",
+    "sunset": "노을",
+    "grayscale": "그레이스케일",
+    "monospace": "고정폭",
+    "ascii": "ASCII 램프",
+    "dense": "조밀",
+    "binary": "이진",
+    "symbols": "기호",
+    "custom": "사용자 지정",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

@@ -15,18 +15,14 @@ export function getEffectParamLabel(
   paramKey: string,
 ): string {
   const fallback = definition.params[paramKey]?.label ?? paramKey
-  return t(`effects.definitions.${definition.id}.params.${paramKey}`, {
-    defaultValue: t(`effects.params.${paramKey}`, { defaultValue: fallback }),
-  })
+  return t(`effects.params.${paramKey}`, { defaultValue: fallback })
 }
 
 export function getEffectOptionLabel(
   t: TFunction,
-  definition: GpuEffectDefinition,
-  paramKey: string,
+  _definition: GpuEffectDefinition,
+  _paramKey: string,
   option: { value: string; label: string },
 ): string {
-  return t(`effects.definitions.${definition.id}.options.${paramKey}.${option.value}`, {
-    defaultValue: t(`effects.options.${option.value}`, { defaultValue: option.label }),
-  })
+  return t(`effects.options.${option.value}`, { defaultValue: option.label })
 }

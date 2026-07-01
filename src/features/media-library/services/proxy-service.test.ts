@@ -316,6 +316,38 @@ describe('proxyService.loadExistingProxies', () => {
     )
   })
 
+  it('skips (but keeps) a ready proxy whose codec this machine cannot play', async () => {
+    // jsdom's HTMLMediaElement.canPlayType returns '' for HEVC, so an HEVC proxy (e.g.
+    // generated on another machine) is treated as unplayable here.
+    const removeEntry = vi.fn(async () => undefined)
+    installProxyStorageFixture({
+      proxyKey: 'proxy-hevc',
+      files: {
+        'meta.json': createJsonFile({
+          version: 4,
+          width: 960,
+          height: 540,
+          sourceWidth: 3840,
+          sourceHeight: 2160,
+          status: 'ready',
+          createdAt: 1,
+          codec: 'hevc',
+        }),
+        'proxy.mp4': createBinaryFile(2048),
+      },
+      onRemoveEntry: removeEntry,
+    })
+
+    const { proxyService } = await import('./proxy-service')
+    proxyService.setProxyKey('video-hevc', 'proxy-hevc')
+
+    // Not treated as stale, not loaded, and NOT removed (kept for machines that can play it).
+    await expect(proxyService.loadExistingProxies(['video-hevc'])).resolves.toEqual([])
+    expect(objectUrlRegistryMocks.registerObjectUrl).not.toHaveBeenCalled()
+    expect(removeEntry).not.toHaveBeenCalled()
+    expect(proxyService.hasProxy('video-hevc')).toBe(false)
+  })
+
   it('exposes centralized OPFS proxy path strings byte-for-byte', async () => {
     const { proxyOpfsFilePath, proxyOpfsMetaPath } = await import('../proxy-constants')
 

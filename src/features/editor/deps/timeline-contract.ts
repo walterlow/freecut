@@ -4,12 +4,21 @@
 
 export type {
   FilmstripFrame,
+  MotionPresetClear,
   TimelineActions,
   TimelineState,
   TranscriptSearchMatch,
 } from '@/features/timeline/contracts/editor'
 export {
   applyAnimationPreset,
+  applyMotionPresetKeyframes,
+  applyMotionModifierToItems,
+  updateMotionModifiersLive,
+  beginMotionModifierEdit,
+  commitMotionModifierEdit,
+  removeMotionModifierFromItems,
+  setEffectAudioPulse,
+  bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
   captureSnapshot,

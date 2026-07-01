@@ -222,7 +222,7 @@ describe('DopesheetEditor property groups', () => {
     expect(screen.getAllByRole('slider')).toHaveLength(2)
   })
 
-  it('shows interpolation icon controls only in graph view', () => {
+  it('shows interpolation icon controls in both graph and sheet views', () => {
     const interpolationOptions = [
       { value: 'linear' as const, label: 'Linear' },
       { value: 'ease-in' as const, label: 'Ease In' },
@@ -265,7 +265,9 @@ describe('DopesheetEditor property groups', () => {
       />,
     )
 
-    expect(screen.queryByRole('button', { name: /set interpolation to linear/i })).toBeNull()
+    // The type selector is the single easing control, so it stays visible in
+    // sheet view too (it used to be graph-only).
+    expect(screen.getByRole('button', { name: /set interpolation to linear/i })).toBeTruthy()
   })
 
   it('deletes selected keyframes from the graph pane without bubbling to parent shortcuts', () => {
@@ -535,6 +537,9 @@ describe('DopesheetEditor property groups', () => {
           propertyValues={{ x: 100, y: 200 }}
           currentFrame={12}
           totalFrames={100}
+          // Pin the viewport so the pixel↔frame mapping is independent of the
+          // fit-to-keyframes default (which would otherwise zoom in on [8,16]).
+          frameViewport={{ startFrame: 0, endFrame: 100 }}
           width={640}
           height={240}
           selectedKeyframeIds={selection}

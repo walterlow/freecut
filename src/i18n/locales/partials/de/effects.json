@@ -1,4 +1,8 @@
 {
+  "gradientMap": {
+    "addStop": "Stopp hinzufügen",
+    "removeStop": "Stopp entfernen"
+  },
   "categories": {
     "color": "Farbe",
     "blur": "Weichzeichnen",
@@ -49,126 +53,21 @@
     "midtones": "Mittentoene",
     "highlights": "Lichter"
   },
-  "definitions": {
-    "gpu-brightness": {
-      "name": "Helligkeit"
-    },
-    "gpu-color-wheels": {
-      "name": "Farbkreise"
-    },
-    "gpu-contrast": {
-      "name": "Kontrast"
-    },
-    "gpu-curves": {
-      "name": "Kurven"
-    },
-    "gpu-exposure": {
-      "name": "Belichtung"
-    },
-    "gpu-grayscale": {
-      "name": "Graustufen"
-    },
-    "gpu-hue-shift": {
-      "name": "Farbtonverschiebung"
-    },
-    "gpu-invert": {
-      "name": "Invertieren"
-    },
-    "gpu-levels": {
-      "name": "Tonwerte"
-    },
-    "gpu-saturation": {
-      "name": "Saettigung"
-    },
-    "gpu-sepia": {
-      "name": "Sepia"
-    },
-    "gpu-temperature": {
-      "name": "Temperatur"
-    },
-    "gpu-vibrance": {
-      "name": "Dynamik"
-    },
-    "gpu-box-blur": {
-      "name": "Box-Weichzeichnung"
-    },
-    "gpu-gaussian-blur": {
-      "name": "Gaussian-Weichzeichnung"
-    },
-    "gpu-motion-blur": {
-      "name": "Bewegungsunschaerfe"
-    },
-    "gpu-radial-blur": {
-      "name": "Radiale Unschaerfe"
-    },
-    "gpu-zoom-blur": {
-      "name": "Zoom-Unschaerfe"
-    },
-    "gpu-bulge": {
-      "name": "Woelben/Kneifen"
-    },
-    "gpu-fluted-glass": {
-      "name": "Riffelglas"
-    },
-    "gpu-kaleidoscope": {
-      "name": "Kaleidoskop"
-    },
-    "gpu-mirror": {
-      "name": "Spiegeln"
-    },
-    "gpu-pixelate": {
-      "name": "Pixeln"
-    },
-    "gpu-rgb-split": {
-      "name": "RGB-Trennung"
-    },
-    "gpu-twirl": {
-      "name": "Wirbel"
-    },
-    "gpu-wave": {
-      "name": "Welle"
-    },
-    "gpu-ascii": {
-      "name": "ASCII"
-    },
-    "gpu-color-glitch": {
-      "name": "Farbglitch"
-    },
-    "gpu-dither": {
-      "name": "Dithering"
-    },
-    "gpu-edge-detect": {
-      "name": "Kanten erkennen"
-    },
-    "gpu-glow": {
-      "name": "Leuchten"
-    },
-    "gpu-grain": {
-      "name": "Filmkoernung"
-    },
-    "gpu-halftone": {
-      "name": "Halbton"
-    },
-    "gpu-posterize": {
-      "name": "Posterisieren"
-    },
-    "gpu-scanlines": {
-      "name": "Scanlines"
-    },
-    "gpu-sharpen": {
-      "name": "Schaerfen"
-    },
-    "gpu-threshold": {
-      "name": "Schwellenwert"
-    },
-    "gpu-vignette": {
-      "name": "Vignette"
-    },
-    "gpu-chroma-key": {
-      "name": "Chroma-Key"
-    }
-  },
   "params": {
+    "flow": "Fluss",
+    "span": "Spanne",
+    "preset": "Palette",
+    "customStops": "Eigene Stopps",
+    "mix": "Mischung",
+    "font": "Schriftart",
+    "customChars": "Eigene Zeichen",
+    "transparentBg": "Transparenter Hintergrund",
+    "edgeDetect": "Kantenerkennung",
+    "coverage": "Abdeckung",
+    "blockSize": "Blockgröße",
+    "curvature": "Krümmung",
+    "scanlines": "Scanlinien",
+    "vignette": "Vignette",
     "amount": "Staerke",
     "angle": "Angle",
     "radius": "Radius",
@@ -245,6 +144,12 @@
     "amplitudeY": "Vertical Amp",
     "frequencyX": "Horizontal Freq",
     "frequencyY": "Vertical Freq",
+    "frequency": "Frequenz",
+    "decay": "Abklingen",
+    "phase": "Phase",
+    "chroma": "Chroma",
+    "scanlineMix": "Scanlinien",
+    "glowColor": "Leuchtfarbe",
     "colorFront": "Front Color",
     "originalColors": "Original Colors",
     "inverted": "Inverted",
@@ -254,6 +159,16 @@
     "threshold": "Schwelle"
   },
   "options": {
+    "fire": "Feuer",
+    "ice": "Eis",
+    "sunset": "Sonnenuntergang",
+    "grayscale": "Graustufen",
+    "monospace": "Monospace",
+    "ascii": "ASCII-Verlauf",
+    "dense": "Dicht",
+    "binary": "Binär",
+    "symbols": "Symbole",
+    "custom": "Benutzerdefiniert",
     "standard": "Standard",
     "simple": "Simple",
     "blocks": "Blocks",

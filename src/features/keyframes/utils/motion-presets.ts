@@ -28,7 +28,7 @@ import {
   SPRING_SETTLE,
 } from './animation-easing'
 
-export type MotionPresetCategory = 'entrance' | 'exit' | 'emphasis' | 'loop'
+export type MotionPresetCategory = 'entrance' | 'exit' | 'emphasis'
 
 export type MotionPresetId =
   // entrance
@@ -54,12 +54,6 @@ export type MotionPresetId =
   | 'shake'
   | 'wobble'
   | 'flash'
-  // loop
-  | 'float'
-  | 'sway'
-  | 'breathe'
-  | 'spin'
-  | 'wiggle'
 
 /**
  * Visual descriptor the sidebar uses to render an animated thumbnail. Kept
@@ -67,7 +61,18 @@ export type MotionPresetId =
  * (e.g. all four slide directions reuse the `slide` thumbnail with an angle).
  */
 export interface MotionThumbnail {
-  kind: 'fade' | 'slide' | 'scale' | 'spin' | 'bounce' | 'pulse' | 'shake' | 'wobble' | 'wiggle'
+  kind:
+    | 'fade'
+    | 'slide'
+    | 'scale'
+    | 'spin'
+    | 'bounce'
+    | 'pulse'
+    | 'shake'
+    | 'wobble'
+    | 'wiggle'
+    | 'drift'
+    | 'micro-shake'
   /** Direction in degrees for `slide` (0 = →, 90 = ↓, 180 = ←, 270 = ↑). */
   angle?: number
   /** `1` grows, `-1` shrinks — for `scale`. */
@@ -131,8 +136,8 @@ const EMPHASIS_SECONDS = 0.6
 
 /**
  * The frame at which the clip sits at its resting transform for `category`.
- * Entrance settles at the end of its window; exit starts settled; emphasis and
- * loops rest at the clip's first frame.
+ * Entrance settles at the end of its window; exit starts settled; emphasis
+ * rests at the clip's first frame.
  */
 export function getMotionPresetAnchorFrame(
   category: MotionPresetCategory,
@@ -146,7 +151,6 @@ export function getMotionPresetAnchorFrame(
     case 'exit':
       return Math.max(0, maxFrame - windowFrames(ENTRANCE_SECONDS, durationInFrames, fps))
     case 'emphasis':
-    case 'loop':
       return 0
   }
 }
@@ -194,12 +198,6 @@ function slideTravel(frameSize: number): number {
   return clamp(frameSize * 0.25, 80, 600)
 }
 
-/** Deterministic [-1, 1] noise from an integer seed — for baked wiggle. */
-function hashNoise(seed: number): number {
-  const x = Math.sin(seed * 12.9898) * 43758.5453
-  return (x - Math.floor(x)) * 2 - 1
-}
-
 // --- Builders ---------------------------------------------------------------
 
 function buildEntrance(
@@ -232,35 +230,6 @@ function buildEmphasis(
   return frames(0, mid, len)
 }
 
-/** Number of full oscillation cycles to bake for a loop preset. */
-function loopCycles(ctx: MotionPresetBuildContext): number {
-  const seconds = ctx.durationInFrames / ctx.fps
-  return clamp(Math.round(seconds / 2), 1, 8)
-}
-
-/**
- * Bake a sine-driven loop on one property: `samples` keyframes per cycle across
- * the whole clip, oscillating `rest ± amplitude`.
- */
-function buildSineLoop(
-  ctx: MotionPresetBuildContext,
-  property: AnimatableProperty,
-  rest: number,
-  amplitude: number,
-  samplesPerCycle = 4,
-): MotionPresetKeyframePayload[] {
-  const last = ctx.durationInFrames - 1
-  if (last <= 1) return []
-  const cycles = loopCycles(ctx)
-  const total = cycles * samplesPerCycle
-  const payloads: MotionPresetKeyframePayload[] = []
-  for (let i = 0; i <= total; i++) {
-    const frame = Math.round((i / total) * last)
-    const value = rest + amplitude * Math.sin((i / samplesPerCycle) * Math.PI * 2)
-    payloads.push(kf(property, frame, value, EASE_IN_OUT))
-  }
-  return payloads
-}
 
 export const MOTION_PRESETS: MotionPreset[] = [
   // --- Entrance ---
@@ -569,89 +538,13 @@ export const MOTION_PRESETS: MotionPreset[] = [
         kf('opacity', e, ctx.anchor.opacity, 'ease-in'),
       ]),
   },
-
-  // --- Loop ---
-  {
-    id: 'float',
-    category: 'loop',
-    labelKey: 'float',
-    thumbnail: { kind: 'slide', angle: 90, loop: true },
-    properties: ['y'],
-    build: (ctx) => buildSineLoop(ctx, 'y', ctx.anchor.y, clamp(ctx.frameHeight * 0.015, 6, 24)),
-  },
-  {
-    id: 'sway',
-    category: 'loop',
-    labelKey: 'sway',
-    thumbnail: { kind: 'wobble', loop: true },
-    properties: ['rotation'],
-    build: (ctx) => buildSineLoop(ctx, 'rotation', ctx.anchor.rotation, 4),
-  },
-  {
-    id: 'breathe',
-    category: 'loop',
-    labelKey: 'breathe',
-    thumbnail: { kind: 'pulse', loop: true },
-    properties: ['width', 'height'],
-    build: (ctx) => {
-      const w = buildSineLoop(ctx, 'width', ctx.anchor.width, ctx.anchor.width * 0.04)
-      const h = buildSineLoop(ctx, 'height', ctx.anchor.height, ctx.anchor.height * 0.04)
-      return [...w, ...h]
-    },
-  },
-  {
-    id: 'spin',
-    category: 'loop',
-    labelKey: 'spin',
-    thumbnail: { kind: 'spin', loop: true },
-    properties: ['rotation'],
-    build: (ctx) => {
-      const last = ctx.durationInFrames - 1
-      if (last <= 1) return []
-      const cycles = loopCycles(ctx)
-      const steps = cycles * 4
-      const payloads: MotionPresetKeyframePayload[] = []
-      for (let i = 0; i <= steps; i++) {
-        const frame = Math.round((i / steps) * last)
-        const value = ctx.anchor.rotation + (i / steps) * 360 * cycles
-        payloads.push(kf('rotation', frame, value, LINEAR))
-      }
-      return payloads
-    },
-  },
-  {
-    id: 'wiggle',
-    category: 'loop',
-    labelKey: 'wiggle',
-    thumbnail: { kind: 'wiggle', loop: true },
-    properties: ['x', 'y'],
-    build: (ctx) => {
-      const last = ctx.durationInFrames - 1
-      if (last <= 1) return []
-      const ampX = clamp(ctx.frameWidth * 0.015, 6, 30)
-      const ampY = clamp(ctx.frameHeight * 0.015, 6, 30)
-      const stepFrames = Math.max(2, Math.round(ctx.fps / 6))
-      const payloads: MotionPresetKeyframePayload[] = []
-      for (let frame = 0, i = 0; frame <= last; frame += stepFrames, i++) {
-        const f = Math.min(frame, last)
-        payloads.push(kf('x', f, ctx.anchor.x + hashNoise(i * 2 + 1) * ampX, EASE_IN_OUT))
-        payloads.push(kf('y', f, ctx.anchor.y + hashNoise(i * 2 + 2) * ampY, EASE_IN_OUT))
-      }
-      return payloads
-    },
-  },
 ]
 
 export const MOTION_PRESETS_BY_ID: Record<MotionPresetId, MotionPreset> = Object.fromEntries(
   MOTION_PRESETS.map((preset) => [preset.id, preset]),
 ) as Record<MotionPresetId, MotionPreset>
 
-export const MOTION_PRESET_CATEGORIES: MotionPresetCategory[] = [
-  'entrance',
-  'exit',
-  'emphasis',
-  'loop',
-]
+export const MOTION_PRESET_CATEGORIES: MotionPresetCategory[] = ['entrance', 'exit', 'emphasis']
 
 /**
  * Whether a preset animates the clip box (`width`/`height`). On text clips this

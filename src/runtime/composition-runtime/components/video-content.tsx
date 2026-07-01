@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from
 import { useSequenceContext } from '@/runtime/composition-runtime/deps/player'
 import { usePlaybackStore } from '@/runtime/composition-runtime/deps/stores'
 import { useGizmoStore } from '@/runtime/composition-runtime/deps/stores'
+import { useMediaLibraryStore } from '@/runtime/composition-runtime/deps/stores'
 import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat'
 import { useClock } from '@/runtime/composition-runtime/deps/player'
 import type { ResolvedAudioEqSettings } from '@/types/audio'
@@ -26,6 +27,7 @@ import {
   unregisterDomVideoElement,
 } from '../utils/dom-video-element-registry'
 import { subscribeToWarmupActivity } from '../utils/activity-rewarm'
+import { ProResPreviewCanvas } from './prores-preview-canvas'
 import {
   applyVideoElementAudioState,
   useVideoAudioState,
@@ -36,6 +38,32 @@ import {
 
 const videoLog = createLogger('NativePreviewVideo')
 const contentLog = createLogger('VideoContent')
+
+// Media IDs discovered to be undecodable by a <video> element (e.g. ProRes). Once a
+// clip fails and falls back to live turbores decode, we remember it for the session so
+// later mounts skip the doomed <video> entirely — avoiding a remount → error → retry →
+// re-resolve flicker loop.
+const liveDecodeMediaIds = new Set<string>()
+
+// Whether a media item must skip the <video> element and decode live (ProRes and other
+// browser-undecodable codecs). Consulted both when initializing state and when the active
+// item changes on a pooled VideoContent lane, so a fresh item recomputes its decode path
+// instead of inheriting the previous clip's fallback state.
+function shouldUseLiveDecodeForMedia(mediaId: string | undefined): boolean {
+  if (mediaId === undefined) return false
+  if (liveDecodeMediaIds.has(mediaId)) return true
+  // Detect browser-undecodable codecs (ProRes) up front from the import-time codec probe, so
+  // we skip mounting the <video> element that would error, invalidate the blob URL, and flash
+  // "Media not loaded" while it re-resolves and falls back. Older media without the flag
+  // (undefined) keep the error-driven fallback path.
+  const media = useMediaLibraryStore.getState().mediaById[mediaId]
+  if (media?.videoCodecSupported === false) {
+    liveDecodeMediaIds.add(mediaId)
+    return true
+  }
+  return false
+}
+
 videoLog.setLevel(2) // WARN — suppress noisy per-frame debug logs
 const POOL_RELEASE_STICKY_MS = 400
 
@@ -136,6 +164,9 @@ const NativePreviewVideo: React.FC<{
   const audioEqStagesRef = useRef(audioEqStages)
   const onErrorRef = useRef(onError)
   const lastSyncTimeRef = useRef<number>(Date.now())
+  // Timestamp of the last drift-correction seek, for the seek cooldown that prevents
+  // re-seeking a heavy clip into a decode-stall loop.
+  const lastSeekTimeRef = useRef<number>(0)
   const needsInitialSyncRef = useRef<boolean>(true)
   const lastFrameRef = useRef<number>(-1)
   const registeredElementRef = useRef<HTMLVideoElement | null>(null)
@@ -888,11 +919,14 @@ const NativePreviewVideo: React.FC<{
         targetTime: clamped,
         nominalRate,
         readyState: v.readyState,
+        lastSeekTimeMs: lastSeekTimeRef.current,
+        nowMs: Date.now(),
       })
 
       if (correctionPlan.kind === 'seek') {
         try {
           v.currentTime = correctionPlan.seekTo
+          lastSeekTimeRef.current = Date.now()
           if (correctionPlan.shouldUpdateLastSyncTime) {
             lastSyncTimeRef.current = Date.now()
           }
@@ -1002,12 +1036,32 @@ export const VideoContent: React.FC<{
   // from the crossfade renderer.
   const audioVolume = item._sharedTransitionSync ? 0 : baseAudioVolume
   const [hasError, setHasError] = useState(false)
+  // ProRes (and other browser-undecodable codecs) can't play through a <video>
+  // element, so on failure we fall back to live turbores decode painted to a canvas.
+  // Initialize from the session set so a known-undecodable clip never mounts a <video>.
+  const [useLiveDecode, setUseLiveDecode] = useState(() => shouldUseLiveDecodeForMedia(item.mediaId))
+  const liveDecodeTriedRef = useRef(false)
   // One-shot per-item retry: on first failure, invalidate the blob URL so
   // the upstream resolver (driven by `useBlobUrlVersion`) produces a fresh
   // one. Fixes `ERR_UPLOAD_FILE_CHANGED` / "Format error" when a blob URL
   // was captured before a concurrent mirror-write completed, which manifests
   // as "works on refresh, fails on direct URL first load".
   const retriedRef = useRef(false)
+
+  // VideoContent instances are reused across clips on a pooled lane (the item prop swaps
+  // without a remount — see the pooled-handoff test). Re-key the decode/error state to the
+  // active media so handoffs don't carry over stale fallback state: a previously failed
+  // ProRes clip must not force a decodable next item into live decode, and a newly
+  // unsupported item must still enter the upfront live-decode flow. Adjusting state during
+  // render (React's documented pattern) avoids a stale-state flash before an effect fires.
+  const [activeMediaId, setActiveMediaId] = useState(item.mediaId)
+  if (activeMediaId !== item.mediaId) {
+    setActiveMediaId(item.mediaId)
+    setHasError(false)
+    setUseLiveDecode(shouldUseLiveDecodeForMedia(item.mediaId))
+    liveDecodeTriedRef.current = false
+    retriedRef.current = false
+  }
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -1017,16 +1071,45 @@ export const VideoContent: React.FC<{
     (error: Error) => {
       contentLog.warn(`Media error for item ${item.id}:`, error.message)
 
-      if (isRecoverableVideoLoadError(error.message) && !retriedRef.current && item.mediaId) {
+      // Skip the blob-refresh retry for media already known to need live decode — the
+      // failure is the codec, not a stale blob, so re-resolving just causes churn.
+      const knownLiveDecode = item.mediaId !== undefined && liveDecodeMediaIds.has(item.mediaId)
+      if (
+        !knownLiveDecode &&
+        isRecoverableVideoLoadError(error.message) &&
+        !retriedRef.current &&
+        item.mediaId
+      ) {
         retriedRef.current = true
         contentLog.info(`Retrying item ${item.id} with fresh blob URL for media ${item.mediaId}`)
         blobUrlManager.invalidate(item.mediaId)
         return
       }
 
+      // The <video> element can't decode this source. Before giving up, try live
+      // turbores decode (ProRes). If that also fails, the canvas reports back and we
+      // show the unavailable state.
+      if (!liveDecodeTriedRef.current) {
+        liveDecodeTriedRef.current = true
+        if (item.mediaId) {
+          liveDecodeMediaIds.add(item.mediaId)
+        }
+        contentLog.info(`Falling back to live decode for item ${item.id}`)
+        setUseLiveDecode(true)
+        return
+      }
+
       setHasError(true)
     },
     [item.id, item.mediaId],
+  )
+
+  const handleLiveDecodeError = useCallback(
+    (error: Error) => {
+      contentLog.warn(`Live decode failed for item ${item.id}:`, error.message)
+      setHasError(true)
+    },
+    [item.id],
   )
 
   // Show error state if media failed to load
@@ -1044,6 +1127,23 @@ export const VideoContent: React.FC<{
       >
         <p style={{ color: '#666', fontSize: 14 }}>Media unavailable</p>
       </div>
+    )
+  }
+
+  // ProRes and other browser-undecodable codecs: decode live via turbores to a canvas.
+  if (useLiveDecode) {
+    return (
+      <ProResPreviewCanvas
+        itemId={item.id}
+        src={item.src!}
+        safeTrimBefore={safeTrimBefore}
+        sequenceFrameOffset={item._sequenceFrameOffset ?? 0}
+        sourceFps={sourceFps}
+        playbackRate={playbackRate}
+        isReversed={isReversed}
+        reverseSourceEnd={reverseSourceEnd}
+        onError={handleLiveDecodeError}
+      />
     )
   }
 

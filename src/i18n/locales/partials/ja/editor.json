@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "アニメーションタイムライン",
-      "noClip": "アニメーション対象のクリップがありません"
+      "noClip": "アニメーション対象のクリップがありません",
+      "animatedClip": "アニメーション付き"
     },
     "animatePresets": {
       "title": "プリセット",
@@ -17,6 +18,7 @@
       "savedToast": "「{{name}}」を保存しました",
       "appliedToast": "「{{name}}」を適用しました",
       "applyFailed": "プリセットを適用できませんでした",
+      "transitionBlocked": "適用できません: アニメーションがトランジション領域に重なっています。",
       "saveFailed": "プリセットを保存できませんでした",
       "deleteLabel": "プリセットを削除",
       "incompatibleType": "{{type}}クリップが必要です",
@@ -34,13 +36,49 @@
         "cancel": "キャンセル"
       }
     },
+    "animateStages": {
+      "presetsHint": "プリセットは編集可能なキーフレームを生成します。グラフで調整できます。",
+      "continuousTitle": "連続モーション",
+      "continuousHint": "ベイクするまでライブかつ非破壊で動作します。",
+      "liveBadge": "ライブ",
+      "appliedTitle": "適用済み",
+      "keyframedChip": "{{count}} 件キーフレーム",
+      "clearKeyframes": "キーフレームを消去",
+      "removeModulator": "{{name}} を削除",
+      "audioPulseChip": "オーディオパルス",
+      "onApply": "適用時",
+      "applyMode": {
+        "replace": "置換",
+        "add": "追加"
+      }
+    },
+    "motionGenerator": {
+      "title": "ジェネレーター",
+      "intensity": "強度",
+      "duration": "長さ",
+      "modulatorsTitle": "モジュレーター",
+      "modulatorApplied": "{{name}} を {{count}} 件のクリップに適用しました",
+      "modulatorRemoved": "{{name}} を削除しました",
+      "modulatorApplyFailed": "モジュレーターを適用できませんでした",
+      "bakeToKeyframes": "キーフレームにベイク",
+      "bakeToKeyframesHint": "選択したクリップのプロシージャルモーションを編集可能なキーフレームに平坦化します",
+      "bakeNoMotion": "選択範囲にベイクするプロシージャルモーションがありません",
+      "motionBaked": "{{count}} 件のクリップでモーションをベイクしました",
+      "modulators": {
+        "floatDrift": "フロートドリフト",
+        "breathPulse": "ブレスパルス",
+        "microShake": "マイクロシェイク",
+        "sway": "スウェイ",
+        "spin": "スピン"
+      },
+      "removeAction": "削除"
+    },
     "motionPresets": {
       "textIncompatible": "テキストには不向き",
       "categories": {
         "entrance": "イン",
         "exit": "アウト",
-        "emphasis": "強調",
-        "loop": "ループ"
+        "emphasis": "強調"
       },
       "items": {
         "fadeIn": "フェードイン",
@@ -62,12 +100,7 @@
         "pulse": "パルス",
         "shake": "シェイク",
         "wobble": "ウォブル",
-        "flash": "フラッシュ",
-        "float": "フロート",
-        "sway": "スウェイ",
-        "breathe": "ブリーズ",
-        "spin": "スピン",
-        "wiggle": "ウィグル"
+        "flash": "フラッシュ"
       }
     },
     "shortcutsDialog": {
@@ -382,6 +415,7 @@
     },
     "editor": {
       "appLabel": "FreeCut ビデオエディター",
+      "upgrading": "プロジェクトをアップグレード中…",
       "backupCreated": "アップグレード前にバックアップを作成しました",
       "backupFailed": "アップグレード前のバックアップ作成に失敗しました",
       "tryAgain": "もう一度お試しください。",

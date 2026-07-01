@@ -61,6 +61,32 @@ interface ProxyMetadata {
   sourceHeight?: number
   status: string
   createdAt: number
+  /** Video codec the proxy was encoded with ('avc' | 'hevc'); absent on legacy H.264 proxies. */
+  codec?: string
+}
+
+// A proxy's codec is recorded in its metadata. A proxy generated on one machine (e.g. an
+// HEVC proxy) may not be playable on another (HEVC support is platform-dependent); using it
+// would break preview. Gate on `<video>` playback support so an unplayable proxy is skipped
+// and the source is used instead. H.264 — and legacy proxies with no recorded codec — are
+// universally playable.
+let hevcVideoPlayable: boolean | null = null
+function canPlayProxyCodec(codec: string | undefined): boolean {
+  if (!codec || codec === 'avc') return true
+  if (codec === 'hevc') {
+    if (hevcVideoPlayable === null) {
+      try {
+        hevcVideoPlayable =
+          typeof document !== 'undefined' &&
+          document.createElement('video').canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') ===
+            'probably'
+      } catch {
+        hevcVideoPlayable = false
+      }
+    }
+    return hevcVideoPlayable
+  }
+  return true // Unknown codec — don't block; best effort.
 }
 
 type ProxyStatusListener = (
@@ -485,6 +511,16 @@ class ProxyService {
             continue
           }
 
+          // Skip (but keep) a proxy this machine can't play — e.g. an HEVC proxy generated
+          // on another machine. Preview falls back to the source; the file stays for
+          // machines that can use it.
+          if (!canPlayProxyCodec(metadata.codec)) {
+            logger.debug(
+              `Skipping proxy ${proxyKey}: codec '${metadata.codec}' not playable here; using source`,
+            )
+            continue
+          }
+
           // Load proxy file and create blob URL
           const proxyHandle = await mediaDir.getFileHandle(PROXY_FILE_NAME)
           const proxyFile = await proxyHandle.getFile()
@@ -551,6 +587,9 @@ class ProxyService {
 
       if (metadata.status !== 'ready') return false
       if (metadata.version !== PROXY_SCHEMA_VERSION) return false
+      // Don't hydrate a proxy this machine can't play (e.g. HEVC on a non-HEVC machine);
+      // the source is used instead.
+      if (!canPlayProxyCodec(metadata.codec)) return false
 
       // Back-fill OPFS with both files so subsequent local reads are fast
       // and stay co-located with the rest of the proxy pipeline.

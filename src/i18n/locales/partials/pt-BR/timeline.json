@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Tem keyframes",
+      "hasMotion": "Tem movimento contínuo",
       "mask": "Mascara",
       "mediaMissing": "Midia ausente",
       "preparingReversed": "Preparando reverso",
@@ -206,7 +207,19 @@
         "easeOut": "Saída suave",
         "easeIn": "Entrada suave",
         "easeInOut": "Entrada/Saída",
-        "overshoot": "Ultrapassagem"
+        "overshoot": "Ultrapassagem",
+        "snap": "Snap",
+        "outCubic": "Saída Cubic",
+        "outQuart": "Saída Quart",
+        "outQuint": "Saída Quint",
+        "outExpo": "Saída Expo",
+        "outCirc": "Saída Circ",
+        "inOutCubic": "Entrada/saída Cubic",
+        "inOutQuart": "Entrada/saída Quart",
+        "inOutExpo": "Entrada/saída Expo",
+        "inCubic": "Entrada Cubic",
+        "inQuart": "Entrada Quart",
+        "inExpo": "Entrada Expo"
       },
       "custom": "Personalizado",
       "dragHandlesHint": "Arraste as alças para moldar a curva.",

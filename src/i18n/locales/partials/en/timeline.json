@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "Has Keyframes",
+      "hasMotion": "Has continuous motion",
       "mask": "Mask",
       "mediaMissing": "Media Missing",
       "preparingReversed": "Preparing Reversed",
@@ -210,7 +211,19 @@
         "easeOut": "Ease Out",
         "easeIn": "Ease In",
         "easeInOut": "Ease In/Out",
-        "overshoot": "Overshoot"
+        "overshoot": "Overshoot",
+        "snap": "Snap",
+        "outCubic": "Out Cubic",
+        "outQuart": "Out Quart",
+        "outQuint": "Out Quint",
+        "outExpo": "Out Expo",
+        "outCirc": "Out Circ",
+        "inOutCubic": "In/Out Cubic",
+        "inOutQuart": "In/Out Quart",
+        "inOutExpo": "In/Out Expo",
+        "inCubic": "In Cubic",
+        "inQuart": "In Quart",
+        "inExpo": "In Expo"
       },
       "custom": "Custom",
       "dragHandlesHint": "Drag the handles to shape the curve.",

@@ -208,4 +208,40 @@ describe('planVideoFrameCallbackCorrection', () => {
     }
     expect(plan.playbackRate).toBe(1)
   })
+
+  it('rate-corrects instead of re-seeking for large drift within the seek cooldown', () => {
+    const plan = planVideoFrameCallbackCorrection({
+      currentTime: 1.5,
+      targetTime: 1,
+      nominalRate: 1,
+      readyState: 4,
+      lastSeekTimeMs: 1000,
+      nowMs: 1100, // 100ms since last seek < cooldown
+    })
+
+    expect(plan.kind).toBe('adjust_rate')
+    if (plan.kind !== 'adjust_rate') {
+      throw new Error('Expected rate adjustment plan')
+    }
+    // video ahead of target -> slow down
+    expect(plan.playbackRate).toBeLessThan(1)
+  })
+
+  it('hard seeks for large drift once the seek cooldown has elapsed', () => {
+    expect(
+      planVideoFrameCallbackCorrection({
+        currentTime: 1.5,
+        targetTime: 1,
+        nominalRate: 1,
+        readyState: 4,
+        lastSeekTimeMs: 0,
+        nowMs: 1000, // well past the cooldown
+      }),
+    ).toEqual({
+      kind: 'seek',
+      seekTo: 1,
+      playbackRate: 1,
+      shouldUpdateLastSyncTime: true,
+    })
+  })
 })

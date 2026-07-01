@@ -41,6 +41,7 @@ coverage
 .hermes/
 
 *.mp4
+*.mov
 
 # DevTools performance trace exports
 Trace-*.json
@@ -95,3 +96,5 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules
 .design-sync/freecut-tailwind.css
+
+artifacts/

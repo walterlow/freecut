@@ -3,7 +3,7 @@
  * Editor modules should import timeline store types/selectors from here.
  */
 
-export type { TimelineState, TimelineActions } from './timeline-contract'
+export type { TimelineState, TimelineActions, MotionPresetClear } from './timeline-contract'
 export {
   importWaveformCache,
   rateStretchItemWithoutHistory,
@@ -17,6 +17,14 @@ export {
   executeTimelineCommand,
   captureSnapshot,
   applyAnimationPreset,
+  applyMotionPresetKeyframes,
+  applyMotionModifierToItems,
+  updateMotionModifiersLive,
+  beginMotionModifierEdit,
+  commitMotionModifierEdit,
+  removeMotionModifierFromItems,
+  setEffectAudioPulse,
+  bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
 } from './timeline-contract'

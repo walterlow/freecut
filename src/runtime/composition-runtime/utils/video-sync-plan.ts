@@ -216,17 +216,42 @@ export function planPausedVideoFrameSync(input: {
   }
 }
 
+/**
+ * After a drift-correction seek, prefer rate-based correction (no seek) for this long.
+ * Seeking forces a keyframe re-decode that, on heavy footage (e.g. 4K60p high-bitrate
+ * HEVC), stalls playback long enough to push drift back over the seek threshold — so an
+ * un-debounced corrector re-seeks into the same stall, producing a visible mid-clip hang.
+ * The cooldown lets rate correction converge between seeks instead.
+ */
+const DRIFT_SEEK_COOLDOWN_MS = 600
+
 export function planVideoFrameCallbackCorrection(input: {
   currentTime: number
   targetTime: number
   nominalRate: number
   readyState: number
+  /** Timestamp of the last drift-correction seek; omit to disable the cooldown. */
+  lastSeekTimeMs?: number
+  /** Current time; omit to disable the cooldown. */
+  nowMs?: number
 }): VideoFrameCallbackCorrectionPlan {
   const drift = input.currentTime - input.targetTime
   const absDrift = Math.abs(drift)
 
   if (absDrift > 0.2) {
     if (input.readyState >= 1) {
+      const sinceSeekMs =
+        input.lastSeekTimeMs != null && input.nowMs != null
+          ? input.nowMs - input.lastSeekTimeMs
+          : Number.POSITIVE_INFINITY
+      // Within the cooldown, don't re-seek (it would stall the decoder again); nudge the
+      // rate hard toward the target instead so we converge without another keyframe seek.
+      if (sinceSeekMs < DRIFT_SEEK_COOLDOWN_MS) {
+        return {
+          kind: 'adjust_rate',
+          playbackRate: drift > 0 ? input.nominalRate * 0.95 : input.nominalRate * 1.05,
+        }
+      }
       return {
         kind: 'seek',
         seekTo: input.targetTime,

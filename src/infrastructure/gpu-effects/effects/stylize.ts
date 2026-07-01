@@ -1,4 +1,4 @@
-import type { GpuEffectDefinition } from '../types'
+import type { EffectDataTexturePayload, GpuEffectDefinition } from '../types'
 
 export const vignette: GpuEffectDefinition = {
   id: 'gpu-vignette',
@@ -87,7 +87,11 @@ fn grainNoise(uv: vec2f, t: f32) -> f32 {
 fn grainFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = textureSample(inputTex, texSampler, input.uv);
   let grainUV = input.uv * (100.0 / params.size);
-  let noise = grainNoise(grainUV, params.time * params.speed) * 2.0 - 1.0;
+  // Wrap the time seed: the sin() inside grainNoise loses precision once the
+  // unbounded (time * speed) term grows large, freezing the grain over long
+  // sessions. The 600s period is imperceptible but keeps the seed bounded.
+  let gt = params.time * params.speed;
+  let noise = grainNoise(grainUV, gt - floor(gt / 600.0) * 600.0) * 2.0 - 1.0;
   let luma = luminance(color.rgb);
   let grainIntensity = params.amount * (1.0 - luma * 0.5);
   let grainColor = color.rgb + vec3f(noise * grainIntensity);
@@ -453,15 +457,45 @@ struct ColorGlitchParams { intensity: f32, speed: f32, time: f32, _pad: f32 };
 @group(0) @binding(2) var<uniform> params: ColorGlitchParams;
 @fragment
 fn colorGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
-  let color = textureSample(inputTex, texSampler, input.uv);
-  let t = params.time * params.speed;
-  let glitchNoise = hash(vec2f(floor(t * 8.0), floor(input.uv.y * 20.0)));
-  let shouldGlitch = step(1.0 - params.intensity, glitchNoise);
-  let hueShift = hash(vec2f(floor(t * 12.0), 0.0)) * shouldGlitch;
-  var hsv = rgb2hsv(color.rgb);
-  hsv.x = fract(hsv.x + hueShift);
-  let glitched = hsv2rgb(hsv);
-  return vec4f(mix(color.rgb, glitched, shouldGlitch * params.intensity), color.a);
+  let uv = input.uv;
+  let amt = clamp(params.intensity, 0.0, 1.0);
+
+  // Discrete time steps give the stuttering digital-glitch cadence and keep the
+  // look readable even when playback is paused (the seed stays fixed per step).
+  // The seed MUST be wrapped into a small range: the shared sin() hash loses all
+  // precision with large inputs, so an unbounded (time * speed) seed collapses
+  // bandNoise to a constant at higher speeds / long sessions and the effect looks
+  // frozen. Wrapping keeps the seed usable at any speed.
+  let rawStep = floor(params.time * params.speed * 12.0);
+  let t = rawStep - floor(rawStep / 64.0) * 64.0;
+
+  // Tear the frame into horizontal bands; each band glitches independently.
+  let band = floor(uv.y * 28.0);
+  let bandNoise = hash(vec2f(band, t));
+
+  // More bands corrupt as intensity rises (full frame at intensity = 1).
+  let glitchOn = step(1.0 - amt, bandNoise);
+
+  // Per-band horizontal block displacement.
+  let shift = (hash(vec2f(band * 1.7, t + 3.0)) - 0.5) * 0.15 * amt * glitchOn;
+
+  // RGB channel separation — the signature colour-glitch fringing, scaled so even
+  // a single still frame reads clearly.
+  let split = (0.004 + 0.02 * amt) * glitchOn;
+  let baseUv = vec2f(uv.x + shift, uv.y);
+  let r = textureSample(inputTex, texSampler, baseUv + vec2f(split, 0.0)).r;
+  let g = textureSample(inputTex, texSampler, baseUv).g;
+  let b = textureSample(inputTex, texSampler, baseUv - vec2f(split, 0.0)).b;
+  let a = textureSample(inputTex, texSampler, baseUv).a;
+  var rgb = vec3f(r, g, b);
+
+  // Hard hue corruption on the strongest bands for the "colour" in colour glitch.
+  let hueHit = step(0.82, bandNoise) * glitchOn;
+  var hsv = rgb2hsv(rgb);
+  hsv.x = fract(hsv.x + hash(vec2f(band, t + 7.0)));
+  rgb = mix(rgb, hsv2rgb(hsv), hueHit);
+
+  return vec4f(rgb, a);
 }`,
   params: {
     intensity: {
@@ -487,6 +521,218 @@ fn colorGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
     const time = performance.now() / 1000
     return new Float32Array([(p.intensity as number) ?? 0.5, (p.speed as number) ?? 1, time, 0])
   },
+}
+
+export const blockGlitch: GpuEffectDefinition = {
+  id: 'gpu-block-glitch',
+  name: 'Block Glitch',
+  category: 'stylize',
+  entryPoint: 'blockGlitchFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct BlockGlitchParams {
+  coverage: f32, intensity: f32, blockSize: f32, speed: f32,
+  time: f32, width: f32, height: f32, pad: f32
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: BlockGlitchParams;
+@fragment
+fn blockGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
+  let uv = input.uv;
+  let amt = clamp(params.intensity, 0.0, 1.0);
+  let cov = clamp(params.coverage, 0.0, 1.0);
+
+  // Discrete, wrapped time step — keeps the sin() hash seed in its precise range
+  // so the glitch stays alive at any speed / session length.
+  let rawStep = floor(params.time * params.speed * 8.0);
+  let t = rawStep - floor(rawStep / 64.0) * 64.0;
+
+  // Block grid in pixels.
+  let cell = max(params.blockSize, 2.0);
+  let cols = max(params.width / cell, 1.0);
+  let rows = max(params.height / cell, 1.0);
+  let block = vec2f(floor(uv.x * cols), floor(uv.y * rows));
+
+  // Per-block, per-step decision: does this block glitch?
+  let r1 = hash(vec2f(block.x + block.y * 3.0, t));
+  let glitchOn = step(1.0 - cov, r1);
+
+  // Block displacement: a horizontal datamosh slab plus a smaller vertical jump.
+  let dispX = (hash(vec2f(block.y, t + 5.0)) - 0.5) * 0.25 * amt * glitchOn;
+  let vJump = step(0.6, hash(vec2f(block.x + block.y, t + 13.0)));
+  let dispY = (hash(vec2f(block.x, t + 9.0)) - 0.5) * 0.06 * amt * glitchOn * vJump;
+  let srcUv = vec2f(uv.x + dispX, uv.y + dispY);
+
+  // RGB channel split on glitched blocks.
+  let split = (0.01 + 0.03 * amt) * glitchOn;
+  let rr = textureSample(inputTex, texSampler, srcUv + vec2f(split, 0.0)).r;
+  let gg = textureSample(inputTex, texSampler, srcUv).g;
+  let bb = textureSample(inputTex, texSampler, srcUv - vec2f(split, 0.0)).b;
+  let aa = textureSample(inputTex, texSampler, srcUv).a;
+  let rgb = vec3f(rr, gg, bb);
+
+  // Digital corruption on a subset of glitched blocks: channel rotate / invert /
+  // posterize. Sampling already done above, so this control flow is safe.
+  let corrupt = step(0.7, hash(vec2f(block.x * 1.3 + block.y, t + 21.0))) * glitchOn;
+  let mode = hash(vec2f(block.y * 2.1 + block.x, t + 27.0));
+  var c = rgb;
+  if (mode < 0.34) {
+    c = rgb.gbr;
+  } else if (mode < 0.67) {
+    c = vec3f(1.0) - rgb;
+  } else {
+    c = floor(rgb * 4.0) / 4.0;
+  }
+
+  return vec4f(mix(rgb, c, corrupt), aa);
+}`,
+  params: {
+    coverage: {
+      type: 'number',
+      label: 'Coverage',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    intensity: {
+      type: 'number',
+      label: 'Intensity',
+      default: 0.6,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    blockSize: {
+      type: 'number',
+      label: 'Block Size',
+      default: 40,
+      min: 8,
+      max: 200,
+      step: 1,
+      animatable: true,
+    },
+    speed: {
+      type: 'number',
+      label: 'Speed',
+      default: 1,
+      min: 0.1,
+      max: 5,
+      step: 0.1,
+      animatable: false,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.coverage as number) ?? 0.3,
+      (p.intensity as number) ?? 0.6,
+      (p.blockSize as number) ?? 40,
+      (p.speed as number) ?? 1,
+      performance.now() / 1000,
+      w,
+      h,
+      0,
+    ]),
+}
+
+export const crt: GpuEffectDefinition = {
+  id: 'gpu-crt',
+  name: 'CRT',
+  category: 'stylize',
+  entryPoint: 'crtFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct CrtParams {
+  curvature: f32, scanlines: f32, vignette: f32, chroma: f32,
+  width: f32, height: f32, pad0: f32, pad1: f32
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: CrtParams;
+@fragment
+fn crtFragment(input: VertexOutput) -> @location(0) vec4f {
+  // Barrel-warp the sampling coordinate around the screen centre.
+  let curveAmt = clamp(params.curvature, 0.0, 1.0) * 0.35;
+  let cc = input.uv * 2.0 - 1.0;
+  let r2 = dot(cc, cc);
+  let warped = cc * (1.0 + r2 * curveAmt);
+  let cuv = warped * 0.5 + 0.5;
+
+  // Soft black border where the warped image leaves the tube.
+  let edge = 0.004 + curveAmt * 0.02;
+  let mask = smoothstep(0.0, edge, cuv.x) * smoothstep(0.0, edge, 1.0 - cuv.x)
+           * smoothstep(0.0, edge, cuv.y) * smoothstep(0.0, edge, 1.0 - cuv.y);
+
+  // Chromatic aberration that grows toward the edges.
+  let ca = params.chroma * 0.012 * r2;
+  let dir = normalize(cc + vec2f(0.00001, 0.00001));
+  let rC = textureSample(inputTex, texSampler, cuv + dir * ca).r;
+  let gC = textureSample(inputTex, texSampler, cuv).g;
+  let bC = textureSample(inputTex, texSampler, cuv - dir * ca).b;
+  let aC = textureSample(inputTex, texSampler, cuv).a;
+  var rgb = vec3f(rC, gC, bC);
+
+  // Scanlines (resolution-independent line count).
+  let sl = 0.5 + 0.5 * sin(cuv.y * 320.0 * PI);
+  rgb = rgb * (1.0 - clamp(params.scanlines, 0.0, 1.0) * (1.0 - sl));
+
+  // Vignette toward the corners.
+  rgb = rgb * (1.0 - clamp(params.vignette, 0.0, 1.0) * smoothstep(0.35, 1.5, r2));
+
+  return vec4f(rgb * mask, aC);
+}`,
+  params: {
+    curvature: {
+      type: 'number',
+      label: 'Curvature',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    scanlines: {
+      type: 'number',
+      label: 'Scanlines',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    vignette: {
+      type: 'number',
+      label: 'Vignette',
+      default: 0.3,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    chroma: {
+      type: 'number',
+      label: 'Chroma',
+      default: 0.4,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.curvature as number) ?? 0.3,
+      (p.scanlines as number) ?? 0.3,
+      (p.vignette as number) ?? 0.3,
+      (p.chroma as number) ?? 0.4,
+      w,
+      h,
+      0,
+      0,
+    ]),
 }
 
 function clamp01(value: number): number {
@@ -1081,6 +1327,77 @@ const ASCII_CHARSET_MAP: Record<string, number> = {
   minimal: 4,
 }
 
+// Atlas-based character sets render real glyphs (vs the procedural masks of the
+// legacy charsets above). Ramps are ordered DENSE -> LIGHT so a dark pixel maps
+// to the densest glyph and a bright pixel to the lightest (trailing space).
+const ASCII_ATLAS_RAMPS: Record<string, string> = {
+  ascii: '@%#*+=-:. ',
+  dense: '@WB#$oahkbn+=-:. ',
+  binary: '01',
+  symbols: '#@&$%*+!=;:-. ',
+}
+
+const ASCII_ATLAS_CELL = 24
+const ASCII_ATLAS_MAX_GLYPHS = 64
+
+// CSS font-family stacks per font option. All fall back to generic monospace so
+// the atlas still rasterizes even where the named font is unavailable (e.g. the
+// export Web Worker, which may not resolve system fonts).
+const ASCII_FONT_STACK: Record<string, string> = {
+  monospace: 'monospace',
+  courier: '"Courier New", Courier, monospace',
+  consolas: 'Consolas, "Lucida Console", monospace',
+  lucida: '"Lucida Console", Monaco, monospace',
+}
+
+/** Ordered glyph ramp for atlas charsets, or null for the procedural-mask path. */
+function asciiAtlasRamp(charSet: string, customChars: string): string | null {
+  if (charSet === 'custom') {
+    const chars = [...customChars].slice(0, ASCII_ATLAS_MAX_GLYPHS)
+    return chars.length > 0 ? chars.join('') : null
+  }
+  return ASCII_ATLAS_RAMPS[charSet] ?? null
+}
+
+/** Rasterize the ramp into a horizontal-strip glyph atlas (one cell per glyph). */
+function buildAsciiAtlas(ramp: string, font: string): EffectDataTexturePayload {
+  const chars = [...ramp].slice(0, ASCII_ATLAS_MAX_GLYPHS)
+  const cell = ASCII_ATLAS_CELL
+  const n = Math.max(chars.length, 1)
+  const width = n * cell
+  const height = cell
+  const data = new Uint8Array(width * height * 4)
+
+  const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(width, height) : null
+  const ctx = canvas?.getContext('2d', { willReadFrequently: true }) as
+    | OffscreenCanvasRenderingContext2D
+    | null
+    | undefined
+  if (!ctx) {
+    data.fill(255) // No canvas available: solid coverage so the effect still draws.
+    return { width, height, depth: 1, data }
+  }
+
+  const fontStack = ASCII_FONT_STACK[font] ?? ASCII_FONT_STACK.monospace
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `${Math.round(cell * 0.82)}px ${fontStack}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (let i = 0; i < chars.length; i++) {
+    ctx.fillText(chars[i]!, i * cell + cell / 2, cell / 2 + 1)
+  }
+  const img = ctx.getImageData(0, 0, width, height).data
+  for (let i = 0; i < width * height; i++) {
+    const a = img[i * 4 + 3] ?? 0 // rendered alpha = glyph coverage, stored in every channel
+    data[i * 4] = a
+    data[i * 4 + 1] = a
+    data[i * 4 + 2] = a
+    data[i * 4 + 3] = a
+  }
+  return { width, height, depth: 1, data }
+}
+
 export const dither: GpuEffectDefinition = {
   id: 'gpu-dither',
   name: 'Dither',
@@ -1486,13 +1803,14 @@ struct AsciiParams {
   fontSize: f32, letterSpacing: f32, lineHeight: f32, charsetKind: f32,
   matchSourceColor: f32, invert: f32, asciiOpacity: f32, originalOpacity: f32,
   contrast: f32, brightness: f32, saturation: f32, width: f32,
-  height: f32, _pad0: f32, _pad1: f32, _pad2: f32,
+  height: f32, transparentBg: f32, edgeDetect: f32, glyphCount: f32,
   textColor: vec4f,
   bgColor: vec4f,
 };
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: AsciiParams;
+@group(0) @binding(3) var asciiAtlas: texture_2d<f32>;
 
 fn asciiClampTexelCoord(coord: vec2i, texSize: vec2i) -> vec2i {
   return vec2i(
@@ -1686,6 +2004,24 @@ fn asciiGlyphIndex(brightness: f32, charsetKind: i32) -> i32 {
   return i32(clamp(scaled, 0.0, f32(maxIndex)));
 }
 
+// Sobel edge magnitude sampled at cell scale (steps = one cell), used to drive
+// glyph density in edge-detection mode so glyphs trace contours instead of tone.
+fn asciiEdgeStrength(centerPx: vec2f, texSize: vec2i, stepX: f32, stepY: f32) -> f32 {
+  let sx = max(stepX, 1.0);
+  let sy = max(stepY, 1.0);
+  let tl = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(-sx, -sy)), texSize).rgb);
+  let tc = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(0.0, -sy)), texSize).rgb);
+  let tr = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(sx, -sy)), texSize).rgb);
+  let ml = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(-sx, 0.0)), texSize).rgb);
+  let mr = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(sx, 0.0)), texSize).rgb);
+  let bl = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(-sx, sy)), texSize).rgb);
+  let bc = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(0.0, sy)), texSize).rgb);
+  let br = luminance601(asciiLoadTexel(vec2i(centerPx + vec2f(sx, sy)), texSize).rgb);
+  let gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
+  let gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
+  return clamp(length(vec2f(gx, gy)), 0.0, 1.0);
+}
+
 @fragment
 fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
   let texSize = vec2f(params.width, params.height);
@@ -1707,12 +2043,19 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
   let gridSize = vec2f(cols * cellWidth, rows * cellHeight);
   let origin = (texSize - gridSize) * 0.5;
 
+  let transparent = params.transparentBg >= 0.5;
+
   if (
     pixelPos.x < origin.x ||
     pixelPos.y < origin.y ||
     pixelPos.x >= origin.x + gridSize.x ||
     pixelPos.y >= origin.y + gridSize.y
   ) {
+    // Border (grid letterboxing): no glyphs here. Transparent mode shows only the
+    // original at its opacity; opaque mode shows the filled background.
+    if (transparent) {
+      return vec4f(adjustedBase, base.a * params.originalOpacity);
+    }
     return vec4f(background, base.a);
   }
 
@@ -1723,36 +2066,88 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
   let sampleColor = asciiLoadTexel(vec2i(samplePos), texSizeI);
   let adjustedSample = asciiAdjustColor(sampleColor.rgb, params.contrast, params.brightness);
 
-  var brightness = luminance601(adjustedSample);
+  // Glyph density is driven by tone, or by edge magnitude in edge-detection mode.
+  var density = luminance601(adjustedSample);
+  if (params.edgeDetect >= 0.5) {
+    density = asciiEdgeStrength(samplePos, texSizeI, cellWidth, cellHeight);
+  }
   if (params.invert >= 0.5) {
-    brightness = 1.0 - brightness;
+    density = 1.0 - density;
   }
 
-  let charsetKind = i32(params.charsetKind + 0.5);
-  let glyphIndex = asciiGlyphIndex(brightness, charsetKind);
-  let blur = max(0.5 / min(cellWidth, cellHeight), 0.002);
-  let mask = asciiGlyphMask(charsetKind, glyphIndex, localUv, blur);
+  // Atlas charsets (glyphCount > 0) sample real glyphs; otherwise fall back to
+  // the procedural mask shapes of the legacy charsets.
+  var mask = 0.0;
+  if (params.glyphCount > 0.5) {
+    let n = i32(params.glyphCount + 0.5);
+    let gi = clamp(i32(floor(density * f32(n))), 0, n - 1);
+    let lx = clamp(localUv.x, 0.04, 0.96);
+    let atlasUv = vec2f((f32(gi) + lx) / f32(n), localUv.y);
+    mask = textureSampleLevel(asciiAtlas, texSampler, atlasUv, 0.0).a;
+  } else {
+    let charsetKind = i32(params.charsetKind + 0.5);
+    let glyphIndex = asciiGlyphIndex(density, charsetKind);
+    let blur = max(0.5 / min(cellWidth, cellHeight), 0.002);
+    mask = asciiGlyphMask(charsetKind, glyphIndex, localUv, blur);
+  }
 
   var glyphColor = params.textColor.rgb;
   if (params.matchSourceColor >= 0.5) {
     glyphColor = asciiApplySaturation(adjustedSample, params.saturation);
   }
 
-  let color = mix(background, glyphColor, clamp(mask * params.asciiOpacity, 0.0, 1.0));
+  let inkAlpha = clamp(mask * params.asciiOpacity, 0.0, 1.0);
+
+  if (transparent) {
+    // Composite glyph ink over the (optional) original underlay over transparency.
+    let underA = params.originalOpacity * (1.0 - inkAlpha);
+    let outA = inkAlpha + underA;
+    let outRGB = (glyphColor * inkAlpha + adjustedBase * underA) / max(outA, 0.0001);
+    return vec4f(outRGB, base.a * outA);
+  }
+
+  let color = mix(background, glyphColor, inkAlpha);
   return vec4f(color, base.a);
 }`,
   params: {
     charSet: {
       type: 'select',
       label: 'Character Set',
-      default: 'standard',
+      default: 'ascii',
       options: [
-        { value: 'standard', label: 'Standard' },
-        { value: 'simple', label: 'Simple' },
-        { value: 'blocks', label: 'Blocks' },
-        { value: 'dots', label: 'Dots' },
-        { value: 'minimal', label: 'Minimal' },
+        { value: 'ascii', label: 'ASCII Ramp' },
+        { value: 'dense', label: 'Dense' },
+        { value: 'binary', label: 'Binary' },
+        { value: 'symbols', label: 'Symbols' },
+        { value: 'custom', label: 'Custom' },
+        { value: 'standard', label: 'Standard (shapes)' },
+        { value: 'simple', label: 'Simple (shapes)' },
+        { value: 'blocks', label: 'Blocks (shapes)' },
+        { value: 'dots', label: 'Dots (shapes)' },
+        { value: 'minimal', label: 'Minimal (shapes)' },
       ],
+    },
+    customChars: {
+      type: 'text',
+      label: 'Custom Characters',
+      default: 'FREECUT 01',
+      visibleWhen: (params) => params.charSet === 'custom',
+    },
+    font: {
+      type: 'select',
+      label: 'Font',
+      default: 'monospace',
+      options: [
+        { value: 'monospace', label: 'Monospace' },
+        { value: 'courier', label: 'Courier' },
+        { value: 'consolas', label: 'Consolas' },
+        { value: 'lucida', label: 'Lucida Console' },
+      ],
+      visibleWhen: (params) =>
+        asciiAtlasRamp(
+          (params.charSet as string) ?? 'ascii',
+          (params.customChars as string) ?? '',
+        ) !== null,
     },
     fontSize: {
       type: 'number',
@@ -1788,7 +2183,14 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       default: '#ffffff',
       visibleWhen: (params) => params.matchSourceColor !== true,
     },
-    bgColor: { type: 'color', label: 'Background', default: '#0a0a0f' },
+    bgColor: {
+      type: 'color',
+      label: 'Background',
+      default: '#0a0a0f',
+      visibleWhen: (params) => params.transparentBg !== true,
+    },
+    transparentBg: { type: 'boolean', label: 'Transparent Background', default: false },
+    edgeDetect: { type: 'boolean', label: 'Edge Detection', default: false },
     colorSaturation: {
       type: 'number',
       label: 'Saturation',
@@ -1845,6 +2247,8 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       15 / 255,
       1,
     ])
+    const ramp = asciiAtlasRamp((p.charSet as string) ?? 'ascii', (p.customChars as string) ?? '')
+    const glyphCount = ramp ? [...ramp].length : 0
     return new Float32Array([
       (p.fontSize as number) ?? 8,
       (p.letterSpacing as number) ?? 0,
@@ -1859,9 +2263,9 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       ((p.colorSaturation as number) ?? 100) / 100,
       w,
       h,
-      0,
-      0,
-      0,
+      p.transparentBg === true ? 1 : 0,
+      p.edgeDetect === true ? 1 : 0,
+      glyphCount,
       textColor[0],
       textColor[1],
       textColor[2],
@@ -1871,6 +2275,18 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
       bgColor[2],
       bgColor[3],
     ])
+  },
+  dataTexture: {
+    dimension: '2d',
+    key: (p) => {
+      const ramp = asciiAtlasRamp((p.charSet as string) ?? 'ascii', (p.customChars as string) ?? '')
+      return ramp ? `${ramp}|${(p.font as string) ?? 'monospace'}` : ''
+    },
+    build: (p) => {
+      const ramp = asciiAtlasRamp((p.charSet as string) ?? 'ascii', (p.customChars as string) ?? '')
+      if (!ramp) return { width: 1, height: 1, depth: 1, data: new Uint8Array([0, 0, 0, 0]) }
+      return buildAsciiAtlas(ramp, (p.font as string) ?? 'monospace')
+    },
   },
 }
 
@@ -1904,4 +2320,117 @@ fn thresholdFragment(input: VertexOutput) -> @location(0) vec4f {
     },
   },
   packUniforms: (p) => new Float32Array([(p.level as number) ?? 0.5, 0, 0, 0]),
+}
+
+export const vhs: GpuEffectDefinition = {
+  id: 'gpu-vhs',
+  name: 'VHS',
+  category: 'stylize',
+  entryPoint: 'vhsFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct VhsParams {
+  bleed: f32, waviness: f32, noise: f32, scanline: f32,
+  time: f32, width: f32, height: f32, pad: f32
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: VhsParams;
+@fragment
+fn vhsFragment(input: VertexOutput) -> @location(0) vec4f {
+  let t = params.time;
+  var uv = input.uv;
+
+  // horizontal tracking wobble (sin-based, stable at any phase)
+  let wave = (sin(uv.y * 120.0 + t * 5.0) + sin(uv.y * 17.0 - t * 2.3)) * 0.5;
+  uv.x = uv.x + wave * params.waviness * 0.015;
+
+  // occasional tracking-band jump. Wrap every time-derived term before it feeds
+  // hash() — the sin()-based hash collapses to a constant once the unbounded
+  // (time * speed) seed grows large, killing the jumps over a session / at speed.
+  let bandScroll = (t * 0.7) - floor((t * 0.7) / 64.0) * 64.0;
+  let jumpStep = floor(t * 3.0) - floor(floor(t * 3.0) / 64.0) * 64.0;
+  let bandId = floor(uv.y * 6.0 + bandScroll);
+  let bandHit = step(0.92, hash(vec2f(bandId, jumpStep)));
+  uv.x = uv.x + bandHit * (hash(vec2f(bandId, 7.0)) - 0.5) * 0.06;
+
+  // chroma bleed (luma/chroma drift)
+  let off = params.bleed * 0.012;
+  let r = textureSample(inputTex, texSampler, vec2f(uv.x + off, uv.y)).r;
+  let g = textureSample(inputTex, texSampler, uv).g;
+  let b = textureSample(inputTex, texSampler, vec2f(uv.x - off, uv.y)).b;
+  let a = textureSample(inputTex, texSampler, uv).a;
+  var rgb = vec3f(r, g, b);
+
+  // scanlines
+  let sl = 0.82 + 0.18 * sin(input.position.y * PI);
+  rgb = mix(rgb, rgb * sl, clamp(params.scanline, 0.0, 1.0));
+
+  // tape noise — wrap the (unbounded) time addends so the per-pixel seed stays
+  // bounded and the noise doesn't go static after ~30min of playback.
+  let tnx = (t * 120.0) - floor((t * 120.0) / 512.0) * 512.0;
+  let tny = (t * 60.0) - floor((t * 60.0) / 512.0) * 512.0;
+  let n = hash(uv * vec2f(params.width, params.height) * 0.5 + vec2f(tnx, tny)) - 0.5;
+  rgb = rgb + n * params.noise * 0.5;
+
+  return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), a);
+}`,
+  params: {
+    bleed: {
+      type: 'number',
+      label: 'Chroma Bleed',
+      default: 0.4,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+    waviness: {
+      type: 'number',
+      label: 'Tracking',
+      default: 0.3,
+      min: 0,
+      max: 2,
+      step: 0.01,
+      animatable: true,
+    },
+    noise: {
+      type: 'number',
+      label: 'Tape Noise',
+      default: 0.25,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    scanline: {
+      type: 'number',
+      label: 'Scanlines',
+      default: 0.35,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    speed: {
+      type: 'number',
+      label: 'Speed',
+      default: 1,
+      min: 0,
+      max: 4,
+      step: 0.1,
+      animatable: false,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.bleed as number) ?? 0.4,
+      (p.waviness as number) ?? 0.3,
+      (p.noise as number) ?? 0.25,
+      (p.scanline as number) ?? 0.35,
+      (performance.now() / 1000) * ((p.speed as number) ?? 1),
+      w,
+      h,
+      0,
+    ]),
 }

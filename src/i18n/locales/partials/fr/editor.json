@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Chronologie d'animation",
-      "noClip": "Aucun clip à animer"
+      "noClip": "Aucun clip à animer",
+      "animatedClip": "Animé"
     },
     "animatePresets": {
       "title": "Préréglages",
@@ -17,6 +18,7 @@
       "savedToast": "« {{name}} » enregistré",
       "appliedToast": "« {{name}} » appliqué",
       "applyFailed": "Impossible d'appliquer le préréglage",
+      "transitionBlocked": "Impossible d’appliquer : l’animation tombe dans une zone de transition.",
       "saveFailed": "Impossible d'enregistrer le préréglage",
       "deleteLabel": "Supprimer le préréglage",
       "incompatibleType": "Nécessite un clip de type {{type}}",
@@ -34,13 +36,49 @@
         "cancel": "Annuler"
       }
     },
+    "animateStages": {
+      "presetsHint": "Les préréglages créent des images clés modifiables — affinez-les dans le graphique.",
+      "continuousTitle": "Mouvement continu",
+      "continuousHint": "S’exécute en direct et de façon non destructive jusqu’à la conversion.",
+      "liveBadge": "Direct",
+      "appliedTitle": "Appliqué",
+      "keyframedChip": "{{count}} avec images clés",
+      "clearKeyframes": "Effacer les images clés",
+      "removeModulator": "Supprimer {{name}}",
+      "audioPulseChip": "Impulsion audio",
+      "onApply": "À l’application",
+      "applyMode": {
+        "replace": "Remplacer",
+        "add": "Ajouter"
+      }
+    },
+    "motionGenerator": {
+      "title": "Générateur",
+      "intensity": "Intensité",
+      "duration": "Durée",
+      "modulatorsTitle": "Modulateurs",
+      "modulatorApplied": "{{name}} appliqué à {{count}} clip(s)",
+      "modulatorRemoved": "{{name}} supprimé",
+      "modulatorApplyFailed": "Impossible d’appliquer le modulateur",
+      "bakeToKeyframes": "Cuire en images clés",
+      "bakeToKeyframesHint": "Aplatit le mouvement procédural des clips sélectionnés en images clés modifiables",
+      "bakeNoMotion": "Aucun mouvement procédural à cuire dans la sélection",
+      "motionBaked": "Mouvement cuit sur {{count}} clip(s)",
+      "modulators": {
+        "floatDrift": "Dérive flottante",
+        "breathPulse": "Pulsation de respiration",
+        "microShake": "Micro-secousse",
+        "sway": "Balancement",
+        "spin": "Rotation"
+      },
+      "removeAction": "Supprimer"
+    },
     "motionPresets": {
       "textIncompatible": "Inadapté au texte",
       "categories": {
         "entrance": "Entrée",
         "exit": "Sortie",
-        "emphasis": "Accent",
-        "loop": "Boucle"
+        "emphasis": "Accent"
       },
       "items": {
         "fadeIn": "Apparition en fondu",
@@ -62,12 +100,7 @@
         "pulse": "Pulsation",
         "shake": "Secousse",
         "wobble": "Oscillation",
-        "flash": "Flash",
-        "float": "Flottement",
-        "sway": "Balancement",
-        "breathe": "Respiration",
-        "spin": "Rotation",
-        "wiggle": "Frétillement"
+        "flash": "Flash"
       }
     },
     "shortcutsDialog": {
@@ -382,6 +415,7 @@
     },
     "editor": {
       "appLabel": "Éditeur vidéo FreeCut",
+      "upgrading": "Mise à niveau du projet…",
       "backupCreated": "Sauvegarde créée avant la mise à jour",
       "backupFailed": "Échec de la création de la sauvegarde avant la mise à jour",
       "tryAgain": "Veuillez réessayer.",

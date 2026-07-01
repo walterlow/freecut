@@ -1,9 +1,16 @@
 import { getGpuEffect } from '@/infrastructure/gpu-effects'
-import { getResolvedAnimatedEffectParamValue } from '@/features/effects/deps/keyframes-contract'
+import {
+  getResolvedAnimatedEffectParamValue,
+  colorStringToKeyframeValue,
+} from '@/features/effects/deps/keyframes-contract'
 import { buildEffectAnimatableProperty, type AnimatableProperty } from '@/types/keyframe'
 import type { GpuEffect, ItemEffect } from '@/types/effects'
 import type { ItemKeyframes } from '@/types/keyframe'
 import type { TimelineItem } from '@/types/timeline'
+
+function isKeyframableEffectParamType(type: string): boolean {
+  return type === 'number' || type === 'color'
+}
 
 export function getGpuEffectKeyframeProperty(
   entry: ItemEffect,
@@ -12,8 +19,31 @@ export function getGpuEffectKeyframeProperty(
   if (entry.effect.type !== 'gpu-effect') return null
   const definition = getGpuEffect(entry.effect.gpuEffectType)
   const param = definition?.params[paramKey]
-  if (!definition || param?.type !== 'number' || !param.animatable) return null
+  if (!definition || !param || !isKeyframableEffectParamType(param.type) || !param.animatable) {
+    return null
+  }
   return buildEffectAnimatableProperty(entry.effect.gpuEffectType, entry.id, paramKey)
+}
+
+export function getGpuEffectKeyframeValue(
+  entry: ItemEffect,
+  paramKey: string,
+  value: number | boolean | string,
+): number | null {
+  if (entry.effect.type !== 'gpu-effect') return null
+  const definition = getGpuEffect(entry.effect.gpuEffectType)
+  const param = definition?.params[paramKey]
+  if (!definition || !param?.animatable) return null
+
+  if (param.type === 'number' && typeof value === 'number') {
+    return value
+  }
+
+  if (param.type === 'color' && typeof value === 'string') {
+    return colorStringToKeyframeValue(value)
+  }
+
+  return null
 }
 
 export function getResolvedGpuEffectForFrame(
@@ -31,7 +61,7 @@ export function getResolvedGpuEffectForFrame(
   let changed = false
 
   for (const [paramKey, param] of Object.entries(definition.params)) {
-    if (param.type !== 'number' || !param.animatable) continue
+    if (!isKeyframableEffectParamType(param.type) || !param.animatable) continue
 
     const value = getResolvedAnimatedEffectParamValue(entry, itemKeyframes, relativeFrame, paramKey)
     if (value === null || nextParams[paramKey] === value) continue

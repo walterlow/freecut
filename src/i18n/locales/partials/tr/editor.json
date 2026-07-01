@@ -7,7 +7,8 @@
     },
     "animateTimeline": {
       "label": "Animasyon zaman çizelgesi",
-      "noClip": "Animasyon için klip yok"
+      "noClip": "Animasyon için klip yok",
+      "animatedClip": "Animasyonlu"
     },
     "animatePresets": {
       "title": "Hazır ayarlar",
@@ -17,6 +18,7 @@
       "savedToast": "“{{name}}” kaydedildi",
       "appliedToast": "“{{name}}” uygulandı",
       "applyFailed": "Hazır ayar uygulanamadı",
+      "transitionBlocked": "Uygulanamadı: animasyon bir geçiş bölgesine denk geliyor.",
       "saveFailed": "Hazır ayar kaydedilemedi",
       "deleteLabel": "Hazır ayarı sil",
       "incompatibleType": "{{type}} türünde bir klip gerekiyor",
@@ -34,13 +36,49 @@
         "cancel": "İptal"
       }
     },
+    "animateStages": {
+      "presetsHint": "Hazır ayarlar düzenlenebilir kareler oluşturur — bunları grafikte iyileştirin.",
+      "continuousTitle": "Sürekli hareket",
+      "continuousHint": "Pişirilene kadar canlı ve tahribatsız çalışır.",
+      "liveBadge": "Canlı",
+      "appliedTitle": "Uygulanan",
+      "keyframedChip": "{{count}} anahtar kareli",
+      "clearKeyframes": "Anahtar kareleri temizle",
+      "removeModulator": "{{name}} kaldır",
+      "audioPulseChip": "Ses darbesi",
+      "onApply": "Uygularken",
+      "applyMode": {
+        "replace": "Değiştir",
+        "add": "Ekle"
+      }
+    },
+    "motionGenerator": {
+      "title": "Üreteç",
+      "intensity": "Yoğunluk",
+      "duration": "Süre",
+      "modulatorsTitle": "Modülatörler",
+      "modulatorApplied": "{{name}}, {{count}} klibe uygulandı",
+      "modulatorRemoved": "{{name}} kaldırıldı",
+      "modulatorApplyFailed": "Modülatör uygulanamadı",
+      "bakeToKeyframes": "Anahtar karelere pişir",
+      "bakeToKeyframesHint": "Seçili kliplerdeki prosedürel hareketi düzenlenebilir anahtar karelere düzleştirir",
+      "bakeNoMotion": "Seçimde pişirilecek prosedürel hareket yok",
+      "motionBaked": "{{count}} klipte hareket pişirildi",
+      "modulators": {
+        "floatDrift": "Süzülme kayması",
+        "breathPulse": "Nefes darbesi",
+        "microShake": "Mikro sarsıntı",
+        "sway": "Sallanma",
+        "spin": "Dönme"
+      },
+      "removeAction": "Kaldır"
+    },
     "motionPresets": {
       "textIncompatible": "Metin için uygun değil",
       "categories": {
         "entrance": "Giriş",
         "exit": "Çıkış",
-        "emphasis": "Vurgu",
-        "loop": "Döngü"
+        "emphasis": "Vurgu"
       },
       "items": {
         "fadeIn": "Belirme",
@@ -62,12 +100,7 @@
         "pulse": "Nabız",
         "shake": "Sallama",
         "wobble": "Yalpalama",
-        "flash": "Parlama",
-        "float": "Süzülme",
-        "sway": "Sallanma",
-        "breathe": "Nefes alma",
-        "spin": "Dönme",
-        "wiggle": "Titreşme"
+        "flash": "Parlama"
       }
     },
     "shortcutsDialog": {
@@ -382,6 +415,7 @@
     },
     "editor": {
       "appLabel": "FreeCut Video Editörü",
+      "upgrading": "Proje yükseltiliyor…",
       "backupCreated": "Yükseltmeden önce yedek oluşturuldu",
       "backupFailed": "Yükseltmeden önce yedek oluşturulamadı",
       "tryAgain": "Lütfen tekrar deneyin.",

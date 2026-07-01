@@ -46,6 +46,7 @@
     },
     "clipIndicators": {
       "hasKeyframes": "키프레임 있음",
+      "hasMotion": "연속 모션 있음",
       "mask": "마스크",
       "mediaMissing": "미디어 없음",
       "preparingReversed": "역방향 준비 중",
@@ -206,7 +207,19 @@
         "easeOut": "이즈 아웃",
         "easeIn": "이즈 인",
         "easeInOut": "이즈 인/아웃",
-        "overshoot": "오버슈트"
+        "overshoot": "오버슈트",
+        "snap": "Snap",
+        "outCubic": "아웃 Cubic",
+        "outQuart": "아웃 Quart",
+        "outQuint": "아웃 Quint",
+        "outExpo": "아웃 Expo",
+        "outCirc": "아웃 Circ",
+        "inOutCubic": "인아웃 Cubic",
+        "inOutQuart": "인아웃 Quart",
+        "inOutExpo": "인아웃 Expo",
+        "inCubic": "인 Cubic",
+        "inQuart": "인 Quart",
+        "inExpo": "인 Expo"
       },
       "custom": "사용자 지정",
       "dragHandlesHint": "핸들을 드래그하여 곡선을 조정하세요.",
