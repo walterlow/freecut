@@ -860,9 +860,13 @@ export async function createCompositionRenderer(
                   'error',
                   () => {
                     clearTimeout(timeout)
-                    getLog().error('Video load error', {
+                    // Non-fatal: this is only the HTML5 fallback <video> preload.
+                    // Rendering goes through mediabunny; the fallback is a backup
+                    // for clips whose extractor fails mid-export. A revoked/empty
+                    // blob here (e.g. a blob-URL lifecycle race) doesn't affect the
+                    // exported frames, so warn rather than error.
+                    getLog().warn('Fallback video preload failed (non-fatal)', {
                       itemId,
-                      src: video.currentSrc || video.src,
                       mediaErrorCode: video.error?.code,
                       mediaErrorMessage: video.error?.message,
                     })
