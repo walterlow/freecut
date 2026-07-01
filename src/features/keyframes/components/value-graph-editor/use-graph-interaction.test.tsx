@@ -501,7 +501,7 @@ describe('useGraphInteraction marquee selection', () => {
     expect(maxValue).toBe(100)
   })
 
-  it('uses regular wheel to pan the frame viewport', () => {
+  it('uses shift+wheel to pan the frame viewport', () => {
     render(<WheelPanGraph />)
 
     const svg = screen.getByTestId('pan-wheel-graph') as unknown as SVGSVGElement
@@ -509,6 +509,7 @@ describe('useGraphInteraction marquee selection', () => {
 
     fireEvent.wheel(svg, {
       deltaY: 120,
+      shiftKey: true,
       clientX: 300,
       clientY: 150,
     })
