@@ -34,7 +34,7 @@ Separate packages (future CLI/API) get their own semver and their own changelog 
 
 ## Preconditions (run before any mode)
 
-Two checks block all other work. Both must pass before drafting, appending, or rolling up.
+Three checks block all other work. All must pass before drafting, appending, or rolling up.
 
 ### 1. Current must not span past weeks
 
@@ -42,11 +42,17 @@ Two checks block all other work. Both must pass before drafting, appending, or r
 
 Compute this week's Monday from today (in repo-local time): `monday = today - ((today.getDay() + 6) % 7)`. If `current.date` is not in `[monday, monday+6]`, **stop and run rollup mode first**, even if the user asked for append. Do not append into a stale `current` — it merges this week's bullets with last week's and corrupts both.
 
-If `current` spans multiple closed weeks (the bullets were appended across several Mondays without rollup), do **partitioning rollup**: walk the git log per week and re-split the bullets into the correct `[YYYY.MM.DD]` releases, then start a fresh `current` for this week.
+If `current` spans multiple closed weeks (the bullets were appended across several Mondays without rollup), do **partitioning rollup**. Do **not** merely re-split the bullets already in `current` — those bullets are only what someone happened to append, and a skipped week means they are incomplete (this is how the 2026-06-15 transcription and Color-workspace launches were nearly lost: they landed after the last append and were absent from `current` entirely). Instead, **re-derive each week from git**: walk `git log <branch> --no-merges` per Monday–Sunday window from the last release forward, curate each week's commits independently, then reconcile that against the existing `current` bullets (the existing bullets are a hint, not the source of truth). Emit one `[YYYY.MM.DD]` release per closed week and start a fresh `current` for this week.
 
 ### 2. CHANGELOG.md heading must match `current.date`
 
 The markdown header `## [Current] — week of YYYY-MM-DD` is a literal string and does not auto-derive from JSON. Any time you write `current` (append, rollup, partition), recompute the heading as `## [Current] — week of <Monday-of-current.date>` and update it. Never leave the heading frozen at an old Monday — that is the bug that caused the 2026-04-13→2026-05-02 drift.
+
+### 3. `current` + releases must fully cover the git log since the last release
+
+The skill's default mode is incremental *append*, which trusts `current` to already hold everything prior and only adds newly-mentioned commits. That trust breaks silently when a week (or an append) is skipped: those commits never enter the changelog and nothing flags them — the outcome then depends on how often someone remembers to run the skill. Close that gap by reconciling against git on **every** run, so infrequent triggering is lossless instead of lossy.
+
+Before drafting/appending/rolling up, walk `git log <branch> --no-merges --since=<date-of-last-release>` and confirm every user-facing commit (after curation rules) is represented in either `current` or an existing release. Surface anything missing to the user and fold it in — do not assume `current` is complete just because it has bullets. This is the check that would have caught the missing 2026-06-15 launches at append time instead of three weeks later. The reconciliation is against the curated git log, not a raw commit count: dropped noise (chore/ci/test/refactor, same-week regressions, follow-ups) is expected to be absent and is not a gap.
 
 ## Modes
 

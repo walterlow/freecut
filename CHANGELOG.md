@@ -4,11 +4,45 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 
 <!-- Entries below are generated via the `changelog` skill. Newest first. -->
 
-## [Current] — week of 2026-06-15
+## [Current] — week of 2026-06-29
+
+### Added
+- Edit ProRes footage — import, preview, thumbnails, and export
+- Procedural motion modifiers — drift, breath, shake, sway, and spin, with one-click bake to keyframes
+- Audio-reactive motion that animates from your clip's sound
+- New GPU effects: gradient map, VHS, CRT, Droste, and block glitch
+- ASCII effect now supports custom text, fonts, and glyph character sets
+
+### Fixed
+- Fixed an export crash triggered by certain layered effects
+- Preview no longer hangs mid-clip during playback
+
+### Improved
+- Keyframe graph editor gains fit-to-view, a grid, and smoother scrolling
+- Clearer Animate workflow with procedural and keyframe state indicators
+
+## [2026.06.22] — week of 2026-06-22 to 2026-06-28
+
+### Added
+- Reorder tracks by dragging the track header — clip rows follow along
+
+### Fixed
+- Track reordering no longer drops transitions between composition clips
+- Audio now plays for MKV and other non-native file containers
+- Timeline momentum scrolling stays consistent across display refresh rates
+
+### Improved
+- Clips start faster when the playhead reaches them (pre-mounted ahead of time)
+- Snappier tooltips and tactile press feedback, with reduced-motion support
+- AI models are cached on disk so they don't re-download each session
+
+## [2026.06.15] — week of 2026-06-15 to 2026-06-21
 
 ### Added
 - New Animate workspace — keyframe animation with a dopesheet, curve (graph) editor, and side-by-side split view
-- Save, reuse, and apply animation presets, with a built-in motion-preset library that travels with exported projects
+- Save, reuse, and apply animation presets, with a library that travels with exported projects
+- On-device transcription with the new Parakeet engine (Whisper fallback) — auto-caption clips, then search and edit transcripts in a dedicated panel
+- Redesigned Color workspace — grade, effects, and keyframes in three columns with a reworked navigator
 - Live animated A/B previews in the transition picker, rendered through real GPU shaders
 - Live GPU-rendered previews in the effect picker
 - Drag text and shape presets straight onto the preview canvas as overlay layers
@@ -18,25 +52,39 @@ All notable changes to FreeCut. Weekly CalVer: `YYYY.MM.DD` = the Monday of the 
 ### Fixed
 - Ctrl+click now reliably toggles clip selection
 - Middle-click pans the timeline instead of starting a clip drag
+- Delete/Backspace no longer deletes clips while editing a transcript
 - Fixed decoder and video-source memory leaks during long editing sessions
 
 ### Improved
 - Smoother playback of clips with keyframe animation
-- Smoother scrubbing — preview now reuses zero-copy video frames and cached text and warps
+- Smoother scrubbing — preview reuses zero-copy video frames and cached text and warps
 
 ## [2026.06.08] — week of 2026-06-08 to 2026-06-14
 
 ### Added
 - DaVinci-style Color workspace — color wheels, curves, LUT import, grade presets, bypass, and copy/paste grading
 - Video scopes in the Color workspace — waveform, vectorscope, and histogram
+- Switch between Edit and Color workspaces, with your layout remembered
 - In-app user guide, linked from the toolbar
+
+### Fixed
+- Project list no longer breaks when a project file is corrupt
+
+### Improved
+- Keyframe editor — guided empty state, mode legend, and clearer draggable controls
+- Faster playback cold-start when returning to a backgrounded tab
 
 ## [2026.06.01] — week of 2026-06-01 to 2026-06-07
 
 ### Added
 - Audio clips show an interactive waveform instead of a flat placeholder
 - Hear audio while you scrub and skim the timeline
+- Searchable keyboard-shortcut editor with conflict detection and reset
+- Projects scan for missing media on load and flag what's broken
 - Export dialog warns before risky, very long renders
+
+### Improved
+- Auto-save is now on by default, with clearer onboarding and import feedback
 
 ## [2026.05.25] — week of 2026-05-25 to 2026-05-31
 

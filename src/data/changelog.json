@@ -1,53 +1,134 @@
 {
   "current": {
     "version": "current",
-    "date": "2026-06-20",
+    "date": "2026-07-01",
     "groups": {
       "added": [
         {
-          "title": "New Animate workspace — keyframe animation with a dopesheet, curve (graph) editor, and side-by-side split view"
+          "title": "Edit ProRes footage — import, preview, thumbnails, and export"
         },
         {
-          "title": "Save, reuse, and apply animation presets, with a built-in motion-preset library that travels with exported projects"
+          "title": "Procedural motion modifiers — drift, breath, shake, sway, and spin, with one-click bake to keyframes"
         },
         {
-          "title": "Live animated A/B previews in the transition picker, rendered through real GPU shaders"
+          "title": "Audio-reactive motion that animates from your clip's sound"
         },
         {
-          "title": "Live GPU-rendered previews in the effect picker"
+          "title": "New GPU effects: gradient map, VHS, CRT, Droste, and block glitch"
         },
         {
-          "title": "Drag text and shape presets straight onto the preview canvas as overlay layers"
-        },
-        {
-          "title": "Track-size and add-track controls in the timeline header"
-        },
-        {
-          "title": "Color picker hex input with live preview"
+          "title": "ASCII effect now supports custom text, fonts, and glyph character sets"
         }
       ],
       "fixed": [
         {
-          "title": "Ctrl+click now reliably toggles clip selection"
+          "title": "Fixed an export crash triggered by certain layered effects"
         },
         {
-          "title": "Middle-click pans the timeline instead of starting a clip drag"
-        },
-        {
-          "title": "Fixed decoder and video-source memory leaks during long editing sessions"
+          "title": "Preview no longer hangs mid-clip during playback"
         }
       ],
       "improved": [
         {
-          "title": "Smoother playback of clips with keyframe animation"
+          "title": "Keyframe graph editor gains fit-to-view, a grid, and smoother scrolling"
         },
         {
-          "title": "Smoother scrubbing — preview now reuses zero-copy video frames and cached text and warps"
+          "title": "Clearer Animate workflow with procedural and keyframe state indicators"
         }
       ]
     }
   },
   "releases": [
+    {
+      "version": "2026.06.22",
+      "date": "2026-06-22",
+      "groups": {
+        "added": [
+          {
+            "title": "Reorder tracks by dragging the track header — clip rows follow along"
+          }
+        ],
+        "fixed": [
+          {
+            "title": "Track reordering no longer drops transitions between composition clips"
+          },
+          {
+            "title": "Audio now plays for MKV and other non-native file containers"
+          },
+          {
+            "title": "Timeline momentum scrolling stays consistent across display refresh rates"
+          }
+        ],
+        "improved": [
+          {
+            "title": "Clips start faster when the playhead reaches them (pre-mounted ahead of time)"
+          },
+          {
+            "title": "Snappier tooltips and tactile press feedback, with reduced-motion support"
+          },
+          {
+            "title": "AI models are cached on disk so they don't re-download each session"
+          }
+        ]
+      }
+    },
+    {
+      "version": "2026.06.15",
+      "date": "2026-06-15",
+      "groups": {
+        "added": [
+          {
+            "title": "New Animate workspace — keyframe animation with a dopesheet, curve (graph) editor, and side-by-side split view"
+          },
+          {
+            "title": "Save, reuse, and apply animation presets, with a library that travels with exported projects"
+          },
+          {
+            "title": "On-device transcription with the new Parakeet engine (Whisper fallback) — auto-caption clips, then search and edit transcripts in a dedicated panel"
+          },
+          {
+            "title": "Redesigned Color workspace — grade, effects, and keyframes in three columns with a reworked navigator"
+          },
+          {
+            "title": "Live animated A/B previews in the transition picker, rendered through real GPU shaders"
+          },
+          {
+            "title": "Live GPU-rendered previews in the effect picker"
+          },
+          {
+            "title": "Drag text and shape presets straight onto the preview canvas as overlay layers"
+          },
+          {
+            "title": "Track-size and add-track controls in the timeline header"
+          },
+          {
+            "title": "Color picker hex input with live preview"
+          }
+        ],
+        "fixed": [
+          {
+            "title": "Ctrl+click now reliably toggles clip selection"
+          },
+          {
+            "title": "Middle-click pans the timeline instead of starting a clip drag"
+          },
+          {
+            "title": "Delete/Backspace no longer deletes clips while editing a transcript"
+          },
+          {
+            "title": "Fixed decoder and video-source memory leaks during long editing sessions"
+          }
+        ],
+        "improved": [
+          {
+            "title": "Smoother playback of clips with keyframe animation"
+          },
+          {
+            "title": "Smoother scrubbing — preview reuses zero-copy video frames and cached text and warps"
+          }
+        ]
+      }
+    },
     {
       "version": "2026.06.08",
       "date": "2026-06-08",
@@ -60,7 +141,23 @@
             "title": "Video scopes in the Color workspace — waveform, vectorscope, and histogram"
           },
           {
+            "title": "Switch between Edit and Color workspaces, with your layout remembered"
+          },
+          {
             "title": "In-app user guide, linked from the toolbar"
+          }
+        ],
+        "fixed": [
+          {
+            "title": "Project list no longer breaks when a project file is corrupt"
+          }
+        ],
+        "improved": [
+          {
+            "title": "Keyframe editor — guided empty state, mode legend, and clearer draggable controls"
+          },
+          {
+            "title": "Faster playback cold-start when returning to a backgrounded tab"
           }
         ]
       }
@@ -77,7 +174,18 @@
             "title": "Hear audio while you scrub and skim the timeline"
           },
           {
+            "title": "Searchable keyboard-shortcut editor with conflict detection and reset"
+          },
+          {
+            "title": "Projects scan for missing media on load and flag what's broken"
+          },
+          {
             "title": "Export dialog warns before risky, very long renders"
+          }
+        ],
+        "improved": [
+          {
+            "title": "Auto-save is now on by default, with clearer onboarding and import feedback"
           }
         ]
       }
