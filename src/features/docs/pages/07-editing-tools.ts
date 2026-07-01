@@ -4,34 +4,71 @@ const page = {
   order: 7,
   slug: 'editing-tools',
   title: 'Editing Tools',
-  description: 'Selection, razor, trim, ripple, rolling, slip, slide, and rate stretch.',
+  description:
+    'Selection, razor, trim, slip, slide, rate stretch, and the ripple and rolling trim behaviors.',
   category: 'Core Editing',
+  related: ['timeline', 'keyboard-shortcuts', 'properties'],
   sections: [
     {
-      title: 'Core tools',
-      items: [
-        'Selection Tool moves, selects, and arranges clips.',
-        'Razor Tool cuts clips directly on the timeline.',
-        'Trim Edit Tool adjusts clip edges.',
-        'Rate Stretch Tool changes duration by changing playback speed.',
+      title: 'The core tools',
+      blocks: [
+        {
+          kind: 'table',
+          headers: ['Tool', 'Key', 'Use'],
+          rows: [
+            ['Selection', '`V`', 'Select, move, and arrange clips.'],
+            ['Trim edit', '`T`', 'Drag a clip edge to change where it starts or ends.'],
+            ['Razor', '`C`', 'Cut a clip wherever you click.'],
+            ['Rate stretch', '`R`', 'Change duration by changing playback speed.'],
+            ['Slip', '`Y`', 'Change the source frames inside a clip without moving it.'],
+            ['Slide', '`U`', 'Move a clip while adjusting the neighboring cuts.'],
+          ],
+        },
       ],
     },
     {
-      title: 'Trim modes',
-      items: [
-        'Ripple edit changes an edit and shifts later material.',
-        'Rolling edit moves the cut between neighboring clips.',
-        'Slip edit changes the source frames inside a clip without moving the clip.',
-        'Slide edit moves a clip while adjusting adjacent edit points.',
+      title: 'Trim behaviors',
+      blocks: [
+        {
+          kind: 'list',
+          items: [
+            'A **ripple** trim changes an edit and shifts all later material, so the total duration changes.',
+            'A **rolling** trim moves the cut between two neighboring clips, with no change to overall duration.',
+            'A **slip** edit changes which source frames appear inside a clip without moving the clip or its neighbors.',
+            'A **slide** edit moves a clip along the track while automatically adjusting the neighboring cuts.',
+          ],
+        },
+        {
+          kind: 'note',
+          tone: 'info',
+          text: 'Ripple and rolling are behaviors of the **Trim edit** tool, not separate tools with their own shortcut.',
+        },
       ],
     },
     {
-      title: 'Advanced edit actions',
-      items: [
-        'Insert freeze frames at the playhead.',
-        'Link and unlink clips when audio/video relationships need to change.',
-        'Create compound clips for grouped sections.',
-        'Use Bento layout to arrange selected visual clips into structured grids.',
+      title: 'Keep clips in sync',
+      blocks: [
+        {
+          kind: 'list',
+          items: [
+            '**Linked selection** moves a video clip and its audio together; toggle it with `Shift+L`.',
+            'Link clips with `Ctrl+Alt+L` and unlink them with `Alt+Shift+L` when a relationship needs to change.',
+            '**Sync lock** on a track keeps timing aligned during ripple-style edits.',
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Structural edits',
+      blocks: [
+        {
+          kind: 'list',
+          items: [
+            'Insert a **freeze frame** at the playhead with `Shift+F` to hold a single frame.',
+            'Group a run of clips into a **compound clip** to reuse or simplify a busy section.',
+            'Use the **Bento layout** dialog to arrange selected visual clips into a structured grid.',
+          ],
+        },
       ],
     },
   ],
