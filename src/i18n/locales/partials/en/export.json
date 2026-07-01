@@ -84,7 +84,18 @@
       "selectFormat": "Select format",
       "selectQuality": "Select quality",
       "selectResolution": "Select resolution",
-      "video": "Video"
+      "video": "Video",
+      "subtitles": "Subtitles",
+      "subtitleMode": {
+        "off": "Off",
+        "burn": "Burn in",
+        "sidecar": "Sidecar .srt",
+        "embedded": "Embedded track",
+        "offDescription": "No captions in the exported video.",
+        "burnDescription": "Captions are drawn into the video — visible in every player.",
+        "sidecarDescription": "Clean video plus a separate .srt subtitle file.",
+        "embeddedDescription": "A soft, toggleable subtitle track (WebM/MKV)."
+      }
     },
     "videoContainer": {
       "mp4": "Widely supported, great for sharing",

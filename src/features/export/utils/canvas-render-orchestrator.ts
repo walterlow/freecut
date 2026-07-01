@@ -11,7 +11,7 @@
  * progress reporting and cancellation.
  */
 
-import type { CompositionInputProps } from '@/types/export'
+import type { CompositionInputProps, SubtitleExportMode } from '@/types/export'
 import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline'
 import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer'
 import { createOutputFormat, getDefaultAudioCodec, getMimeType } from './client-renderer'
@@ -433,35 +433,33 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     target,
   })
 
-  const transcriptSubtitleVtt = settings.embedSubtitles
-    ? buildTranscriptSubtitleWebVtt(composition)
-    : null
+  // Subtitle handling per mode:
+  // - `burn`   : keep the transcript items so they render into the frames.
+  // - `off`    : drop them (no captions).
+  // - `sidecar`: drop them here — the clean video is muxed; the .srt file is
+  //              generated and downloaded on the main thread.
+  // - `embedded`: mux a soft WebVTT track, but ONLY for Matroska (WebM/MKV).
+  //   mediabunny never starts its ISOBMFF subtitle `auxWriter`, so WebVTT-into-
+  //   MP4/MOV asserts ("Assertion failed") via an uncatchable floating rejection;
+  //   there we fall back to burning captions in so they aren't silently lost.
+  const subtitleMode: SubtitleExportMode = settings.subtitleMode ?? 'burn'
   const supportsWebVttSubtitles = format.getSupportedSubtitleCodecs().includes('webvtt')
-  // mediabunny 1.50.0 never starts its ISOBMFF subtitle `auxWriter`, so muxing a
-  // WebVTT cue into MP4/MOV asserts ("Assertion failed") and aborts the export
-  // via a floating rejection we can't catch. Skip soft-embedding for those
-  // containers until the upstream bug is patched; Matroska (WebM/MKV) uses a
-  // different muxer and is unaffected. Captions still render through the normal
-  // path (they are only omitted when we actually soft-embed).
   const isIsobmffContainer = settings.container === 'mp4' || settings.container === 'mov'
-  const webVttSubtitlesUsable = supportsWebVttSubtitles && !isIsobmffContainer
-  const embedTranscriptSubtitles = transcriptSubtitleVtt !== null && webVttSubtitlesUsable
-  const renderCompositionInput = embedTranscriptSubtitles
-    ? omitTranscriptSubtitleItemsForSoftSubtitleExport(composition)
-    : composition
+  const transcriptSubtitleVtt =
+    subtitleMode === 'embedded' ? buildTranscriptSubtitleWebVtt(composition) : null
+  const embedTranscriptSubtitles =
+    transcriptSubtitleVtt !== null && supportsWebVttSubtitles && !isIsobmffContainer
+  const burnInSubtitles =
+    subtitleMode === 'burn' || (subtitleMode === 'embedded' && !embedTranscriptSubtitles)
+  const renderCompositionInput = burnInSubtitles
+    ? composition
+    : omitTranscriptSubtitleItemsForSoftSubtitleExport(composition)
 
-  if (transcriptSubtitleVtt !== null && !webVttSubtitlesUsable) {
-    if (supportsWebVttSubtitles && isIsobmffContainer) {
-      getLog().warn(
-        'Embedded MP4/MOV subtitles are temporarily unavailable (mediabunny bug); ' +
-          'exporting with captions rendered in-frame instead.',
-      )
-    } else {
-      throw new Error(
-        `${settings.container.toUpperCase()} export does not support embedded transcript subtitles. ` +
-          'Use MP4, WebM, or MKV for embedded subtitles.',
-      )
-    }
+  if (subtitleMode === 'embedded' && transcriptSubtitleVtt !== null && !embedTranscriptSubtitles) {
+    getLog().warn(
+      `${settings.container.toUpperCase()} can't embed a soft subtitle track; ` +
+        'burning captions into the video instead.',
+    )
   }
 
   let transcriptSubtitleSource: InstanceType<typeof TextSubtitleSource> | null = null

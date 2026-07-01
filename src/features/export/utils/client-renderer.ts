@@ -12,7 +12,7 @@
  * 5. Finalize and return the video blob
  */
 
-import type { ExportSettings, ExtendedExportSettings } from '@/types/export'
+import type { ExportSettings, ExtendedExportSettings, SubtitleExportMode } from '@/types/export'
 import { DEFAULT_PROJECT_HEIGHT } from '@/shared/projects/defaults'
 
 // Codec mapping for mediabunny
@@ -42,7 +42,7 @@ export interface ClientExportSettings {
   audioBitrate?: number
   videoBitrate?: number
   sampleRate?: number // For audio exports (default: 48000)
-  embedSubtitles?: boolean
+  subtitleMode?: SubtitleExportMode
 }
 
 export interface RenderProgress {
@@ -58,6 +58,8 @@ export interface ClientRenderResult {
   mimeType: string
   duration: number
   fileSize: number
+  /** Separate subtitle file to download alongside the video (sidecar mode). */
+  subtitleSidecar?: { filename: string; content: string }
 }
 
 export interface CodecSupportCheckOptions {
@@ -163,11 +165,10 @@ export function mapToClientSettings(
 ): ClientExportSettings {
   const codec = mapExportCodecToClientCodec(settings.codec)
   const container = getPreferredContainerForCodec(codec)
-  // `embedSubtitles` only lives on the extended settings — a base
-  // ExportSettings caller leaves it undefined which downstream code reads
-  // as "do not embed".
-  const embedSubtitles =
-    'embedSubtitles' in settings ? (settings as ExtendedExportSettings).embedSubtitles : undefined
+  // `subtitleMode` only lives on the extended settings — a base ExportSettings
+  // caller leaves it undefined which downstream code reads as the default.
+  const subtitleMode =
+    'subtitleMode' in settings ? (settings as ExtendedExportSettings).subtitleMode : undefined
 
   return {
     mode: 'video',
@@ -178,7 +179,7 @@ export function mapToClientSettings(
     fps,
     videoBitrate: getVideoBitrateForQuality(settings.quality),
     audioBitrate: 192_000, // 192 kbps
-    embedSubtitles,
+    subtitleMode,
   }
 }
 

@@ -84,7 +84,18 @@
       "selectFormat": "Selecione um formato",
       "selectQuality": "Selecione uma qualidade",
       "selectResolution": "Selecione uma resolução",
-      "video": "Vídeo"
+      "video": "Vídeo",
+      "subtitles": "Legendas",
+      "subtitleMode": {
+        "off": "Desativado",
+        "burn": "Embutir",
+        "sidecar": "Arquivo .srt",
+        "embedded": "Faixa incorporada",
+        "offDescription": "Sem legendas no vídeo exportado.",
+        "burnDescription": "As legendas são gravadas no vídeo — visíveis em qualquer player.",
+        "sidecarDescription": "Vídeo limpo mais um arquivo de legendas .srt separado.",
+        "embeddedDescription": "Uma faixa de legendas alternável (WebM/MKV)."
+      }
     },
     "videoContainer": {
       "mp4": "Amplo suporte, ideal para compartilhar",

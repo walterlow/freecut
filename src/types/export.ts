@@ -10,6 +10,17 @@ export type ExportMode = 'video' | 'audio'
 export type VideoContainer = 'mp4' | 'mov' | 'webm' | 'mkv'
 export type AudioContainer = 'mp3' | 'aac' | 'wav'
 
+/**
+ * How timeline transcript subtitles are handled on export:
+ * - `off`: no captions in the output.
+ * - `burn`: rendered into the video frames (hardsub) — universal.
+ * - `sidecar`: clean video + a separate `.srt` file downloaded alongside.
+ * - `embedded`: soft, toggleable subtitle track. Only usable for containers
+ *   whose muxer supports it (WebM/MKV); MP4/MOV can't (mediabunny WebVTT bug +
+ *   poor player support), so the dialog doesn't offer it there.
+ */
+export type SubtitleExportMode = 'off' | 'burn' | 'sidecar' | 'embedded'
+
 export interface ExportSettings {
   codec: 'h264' | 'h265' | 'vp8' | 'vp9' | 'av1' | 'prores'
   quality: 'low' | 'medium' | 'high' | 'ultra'
@@ -27,8 +38,8 @@ export interface ExtendedExportSettings extends ExportSettings {
   mode: ExportMode
   videoContainer?: VideoContainer
   audioContainer?: AudioContainer
-  /** Embed timeline subtitle segments as a soft subtitle track when the container supports it. */
-  embedSubtitles?: boolean
+  /** How timeline transcript subtitles are handled (defaults to `burn`). */
+  subtitleMode?: SubtitleExportMode
   /** When true, ignores in/out points and exports the full timeline */
   renderWholeProject?: boolean
 }

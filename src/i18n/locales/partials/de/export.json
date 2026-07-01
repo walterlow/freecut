@@ -84,7 +84,18 @@
       "selectFormat": "Format auswählen",
       "selectQuality": "Qualität auswählen",
       "selectResolution": "Auflösung auswählen",
-      "video": "Video"
+      "video": "Video",
+      "subtitles": "Untertitel",
+      "subtitleMode": {
+        "off": "Aus",
+        "burn": "Einbrennen",
+        "sidecar": "Separate .srt",
+        "embedded": "Eingebettete Spur",
+        "offDescription": "Keine Untertitel im exportierten Video.",
+        "burnDescription": "Untertitel werden ins Video eingebrannt – in jedem Player sichtbar.",
+        "sidecarDescription": "Sauberes Video plus separate .srt-Untertiteldatei.",
+        "embeddedDescription": "Eine umschaltbare Untertitelspur (WebM/MKV)."
+      }
     },
     "videoContainer": {
       "mp4": "Breite Unterstützung, ideal zum Teilen",

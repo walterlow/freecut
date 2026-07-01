@@ -84,7 +84,18 @@
       "selectFormat": "형식 선택",
       "selectQuality": "품질 선택",
       "selectResolution": "해상도 선택",
-      "video": "동영상"
+      "video": "동영상",
+      "subtitles": "자막",
+      "subtitleMode": {
+        "off": "끄기",
+        "burn": "굽기",
+        "sidecar": "사이드카 .srt",
+        "embedded": "내장 트랙",
+        "offDescription": "내보낸 영상에 자막이 없습니다.",
+        "burnDescription": "자막을 영상에 새겨 넣습니다 — 모든 플레이어에서 보입니다.",
+        "sidecarDescription": "자막 없는 영상과 별도의 .srt 자막 파일.",
+        "embeddedDescription": "켜고 끌 수 있는 자막 트랙 (WebM/MKV)."
+      }
     },
     "videoContainer": {
       "mp4": "광범위한 지원, 공유에 적합",

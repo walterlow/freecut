@@ -70,7 +70,7 @@ export async function resolveClientSettings(
   const exportMode = extended ? settings.mode : 'video'
   const videoContainer = extended ? settings.videoContainer : undefined
   const audioContainer = extended ? settings.audioContainer : undefined
-  const embedSubtitles = extended ? (settings.embedSubtitles ?? false) : false
+  const subtitleMode = extended ? (settings.subtitleMode ?? 'burn') : 'burn'
   const renderWholeProject = extended ? (settings.renderWholeProject ?? false) : false
 
   const clientSettings = mapToClientSettings(settings, fps)
@@ -86,7 +86,7 @@ export async function resolveClientSettings(
   }
 
   clientSettings.mode = exportMode
-  clientSettings.embedSubtitles = exportMode === 'video' ? embedSubtitles : false
+  clientSettings.subtitleMode = exportMode === 'video' ? subtitleMode : 'off'
 
   let codecFallback: ClientCodec | undefined
 

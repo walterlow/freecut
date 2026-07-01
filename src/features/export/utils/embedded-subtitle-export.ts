@@ -6,7 +6,12 @@ function isTranscriptSubtitleItem(item: TimelineItem): item is SubtitleSegmentIt
   return item.type === 'subtitle' && item.source.type === 'transcript'
 }
 
-export function buildTranscriptSubtitleWebVtt(composition: CompositionInputProps): string | null {
+/**
+ * Collect transcript subtitle cues from the (export-trimmed) composition,
+ * offset to the export timeline and clamped to its duration. Returns [] when
+ * there are none. Shared by the soft-embed (VTT) and sidecar (SRT) paths.
+ */
+export function buildTranscriptSubtitleCues(composition: CompositionInputProps): SubtitleCue[] {
   const fps = composition.fps
   const durationSeconds =
     composition.durationInFrames !== undefined ? composition.durationInFrames / fps : Infinity
@@ -42,11 +47,16 @@ export function buildTranscriptSubtitleWebVtt(composition: CompositionInputProps
     }
   }
 
-  if (cues.length === 0) return null
-  // Items can be processed track-by-track in any order, but VTT consumers
-  // expect cues sorted chronologically. Sort by start time, breaking ties
-  // by end time so deterministically-overlapping cues don't reorder.
+  // Items can be processed track-by-track in any order, but subtitle consumers
+  // expect cues sorted chronologically. Sort by start time, breaking ties by
+  // end time so deterministically-overlapping cues don't reorder.
   cues.sort((a, b) => a.startSeconds - b.startSeconds || a.endSeconds - b.endSeconds)
+  return cues
+}
+
+export function buildTranscriptSubtitleWebVtt(composition: CompositionInputProps): string | null {
+  const cues = buildTranscriptSubtitleCues(composition)
+  if (cues.length === 0) return null
   return serializeVtt(cues)
 }
 

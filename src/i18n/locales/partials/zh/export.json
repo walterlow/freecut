@@ -84,7 +84,18 @@
       "selectFormat": "选择格式",
       "selectQuality": "选择画质",
       "selectResolution": "选择分辨率",
-      "video": "视频"
+      "video": "视频",
+      "subtitles": "字幕",
+      "subtitleMode": {
+        "off": "关闭",
+        "burn": "烧录",
+        "sidecar": "独立 .srt",
+        "embedded": "内嵌轨道",
+        "offDescription": "导出的视频中不含字幕。",
+        "burnDescription": "字幕烧录进视频，任何播放器都能显示。",
+        "sidecarDescription": "干净的视频加一个独立的 .srt 字幕文件。",
+        "embeddedDescription": "可开关的软字幕轨道（WebM/MKV）。"
+      }
     },
     "videoContainer": {
       "mp4": "兼容性广，适合分享",
