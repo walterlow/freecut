@@ -4,38 +4,64 @@ const page = {
   order: 23,
   slug: 'reference',
   title: 'Reference',
-  description: 'Supported formats, terms, controls, preflight messages, and glossary.',
+  description: 'Supported formats and a glossary of the terms used across this guide.',
   category: 'Reference',
+  related: ['concepts', 'keyboard-shortcuts'],
   sections: [
     {
-      title: 'Format reference',
-      items: [
-        'Import categories include video, audio, image, GIF, SVG, generated assets, and compound clips.',
-        'Export containers include MP4, MOV, WebM, and MKV.',
-        'Audio exports include MP3, AAC, and WAV.',
-        'Codec support depends on browser decode and encode capabilities.',
+      title: 'Formats',
+      blocks: [
+        {
+          kind: 'table',
+          headers: ['Use', 'Types'],
+          rows: [
+            ['Import', 'Video, audio, image, GIF, SVG, generated assets, compound clips'],
+            ['Video export', 'MP4, MOV, WebM, MKV'],
+            ['Audio export', 'MP3, AAC, WAV'],
+          ],
+        },
+        {
+          kind: 'note',
+          tone: 'info',
+          text: 'Codec support depends on what your browser can decode and encode.',
+        },
       ],
     },
     {
-      title: 'Editor glossary',
-      items: [
-        'Ripple edit: edit that closes or opens timeline space by shifting later material.',
-        'Rolling edit: edit that moves the cut between two neighboring clips.',
-        'Slip edit: edit that changes source timing inside a clip without moving the clip.',
-        'Slide edit: edit that moves a clip while adjusting neighboring cuts.',
-        'In/out range: marked start and end used for source or export ranges.',
-        'Proxy: lighter generated media used for easier preview playback.',
+      title: 'Editing terms',
+      blocks: [
+        {
+          kind: 'table',
+          headers: ['Term', 'Meaning'],
+          rows: [
+            ['In/out range', 'A marked start and end used for source edits and export ranges.'],
+            ['Source handle', 'Spare frames beyond a clip edge, needed for trims and transitions.'],
+            ['Ripple edit', 'An edit that shifts later material to open or close timeline space.'],
+            ['Rolling edit', 'An edit that moves the cut between two neighboring clips.'],
+            ['Slip edit', 'Changes the source frames inside a clip without moving the clip.'],
+            ['Slide edit', 'Moves a clip while adjusting its neighboring cuts.'],
+          ],
+        },
       ],
     },
     {
-      title: 'Feature glossary',
-      items: [
-        'LUT: lookup table used for color transforms.',
-        'Keyframe: value at a specific time used to animate a property.',
-        'Compound clip: grouped timeline content represented as reusable media.',
-        'Adjustment layer: visual layer whose effects apply to items below.',
-        'Render queue: ordered list of exports saved to the workspace.',
-        'Preflight: export readiness check before rendering starts.',
+      title: 'Feature terms',
+      blocks: [
+        {
+          kind: 'table',
+          headers: ['Term', 'Meaning'],
+          rows: [
+            ['Workspace', 'The folder FreeCut reads from and writes to.'],
+            ['Proxy', 'A lighter generated copy of heavy media used for smoother playback.'],
+            ['Compound clip', 'A section of timeline grouped into a single reusable media item.'],
+            ['Adjustment layer', 'A layer whose effects and grade apply to the clips below it.'],
+            ['Keyframe', 'A value set at a specific time to animate a property.'],
+            ['LUT', 'A lookup table (.cube) that applies a color transform.'],
+            ['Patch target', 'The timeline track a source-monitor edit is sent to.'],
+            ['Render queue', 'An ordered list of exports that render one at a time.'],
+            ['Preflight', 'The readiness check that runs before an export starts.'],
+          ],
+        },
       ],
     },
   ],

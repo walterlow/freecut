@@ -4,35 +4,55 @@ const page = {
   order: 21,
   slug: 'settings',
   title: 'Settings',
-  description: 'General, timeline, AI, storage, language, and shortcut preferences.',
+  description:
+    'The General, Timeline, AI, and Storage tabs, plus where language and shortcuts are set.',
   category: 'Reference',
+  related: ['keyboard-shortcuts', 'workspaces'],
   sections: [
     {
-      title: 'General settings',
-      items: [
-        'Turn Auto-save on or off.',
-        'Set the auto-save interval.',
-        'Set undo history depth.',
-        'Choose the interface language.',
+      title: 'The four tabs',
+      blocks: [
+        {
+          kind: 'table',
+          headers: ['Tab', 'What you set'],
+          rows: [
+            [
+              'General',
+              'Auto-save on/off and interval (5–30 min); undo history depth (10–200 steps).',
+            ],
+            [
+              'Timeline',
+              'Snap by default; show waveforms and filmstrips; extract filmstrips on import.',
+            ],
+            ['AI', 'Caption sample interval (seconds or frames); default caption style.'],
+            [
+              'Storage',
+              'Generate missing proxies; clear project cache; regenerate thumbnails; delete proxies; manage Local AI.',
+            ],
+          ],
+        },
+        {
+          kind: 'note',
+          tone: 'info',
+          text: 'Clearing the project cache removes regenerated data (waveforms, filmstrips, GIF frames, decoded audio); it never deletes source media. Use **Reset** in the dialog header to restore defaults.',
+        },
       ],
     },
     {
-      title: 'Timeline settings',
-      items: [
-        'Choose whether Snap is enabled by default.',
-        'Show or hide waveforms.',
-        'Show or hide filmstrips.',
-        'Enable or disable filmstrip extraction during import and display.',
-      ],
-    },
-    {
-      title: 'AI and storage settings',
-      items: [
-        'Set AI caption sample interval.',
-        'Choose the default caption style.',
-        'Generate missing proxies.',
-        'Clear project cache, regenerate thumbnails, or delete proxies.',
-        'Inspect, clear, or unload local AI model cache and runtimes.',
+      title: 'Set elsewhere',
+      blocks: [
+        {
+          kind: 'list',
+          items: [
+            'Interface **language** is a separate control in the toolbar, not part of this dialog; FreeCut ships in 9 languages.',
+            'Keyboard shortcuts are customized in their own **Keyboard Shortcuts** panel.',
+          ],
+        },
+        {
+          kind: 'note',
+          tone: 'info',
+          text: 'FreeCut currently uses a single dark theme; there is no theme selector.',
+        },
       ],
     },
   ],

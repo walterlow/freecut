@@ -1,9 +1,34 @@
-export interface DocSection {
-  title: string
-  items: string[]
+export type DocCategory = 'Start' | 'Core Editing' | 'Creative Tools' | 'Output' | 'Reference'
+
+export interface DocFigure {
+  /** Imported asset URL (import the image in the page module and pass it here). */
+  src: string
+  /** Required alt text for accessibility. */
+  alt: string
+  /** Optional caption shown under the image. */
+  caption?: string
 }
 
-export type DocCategory = 'Start' | 'Core Editing' | 'Creative Tools' | 'Output' | 'Reference'
+/**
+ * Rich content blocks a section can render. Text in `paragraph`, `list`, `steps`,
+ * and `note` supports inline markup: `**bold**` for UI labels and `` `code` `` for
+ * keys and file names (see RichText in docs-shell).
+ */
+export type DocBlock =
+  | { kind: 'paragraph'; text: string }
+  | { kind: 'list'; items: string[] }
+  | { kind: 'steps'; items: string[] }
+  | { kind: 'note'; tone?: 'tip' | 'warning' | 'info'; text: string }
+  | { kind: 'table'; headers: string[]; rows: string[][] }
+  | { kind: 'figure'; figure: DocFigure }
+
+export interface DocSection {
+  title: string
+  /** Shorthand: rendered as a bullet list. Ignored when `blocks` is provided. */
+  items?: string[]
+  /** Richer content. Takes precedence over `items` when present. */
+  blocks?: DocBlock[]
+}
 
 export interface DocPage {
   slug: string
@@ -11,6 +36,8 @@ export interface DocPage {
   description: string
   category: DocCategory
   sections: DocSection[]
+  /** Slugs of related pages, shown as links at the foot of the article. */
+  related?: string[]
 }
 
 export interface DocPageContent extends DocPage {
