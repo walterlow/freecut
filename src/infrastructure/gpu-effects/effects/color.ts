@@ -31,7 +31,9 @@ function parseHexColorRgb(
           .map((c) => c + c)
           .join('')
       : hex
-  if (full.length < 6) return fallback
+  // Strict format check: reject anything but exactly 6 hex digits (after 3-digit
+  // shorthand expansion), so invalid/extra chars ("#0g0000", "#ffffff00") fall back.
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return fallback
   const r = parseInt(full.slice(0, 2), 16) / 255
   const g = parseInt(full.slice(2, 4), 16) / 255
   const b = parseInt(full.slice(4, 6), 16) / 255

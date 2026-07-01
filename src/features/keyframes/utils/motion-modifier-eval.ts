@@ -167,6 +167,12 @@ function evaluateOne(
       return evaluateSway(modifier, ctx, out)
     case 'spin':
       return evaluateSpin(modifier, ctx, out)
+    default: {
+      // Compile-time exhaustiveness: adding a MotionModifierType without a
+      // handler here becomes a type error instead of a silent no-op.
+      const _exhaustive: never = modifier.type
+      return _exhaustive
+    }
   }
 }
 

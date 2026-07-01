@@ -94,9 +94,15 @@ export function applyMotionPresetKeyframes(
   if (payloads.length === 0) return []
 
   const validPayloads = payloads.filter((p) => canAddKeyframeAtFrame(p.itemId, p.frame))
-  if (validPayloads.length === 0) {
-    getLogger().warn('All preset keyframes blocked by transition regions', {
+  // All-or-nothing: if ANY payload is blocked (e.g. lands in a transition
+  // region), abort before the clear loop runs. The clear windows are derived
+  // from the pre-filtered set, so clearing while only some replacements survive
+  // would silently delete keyframes we can't re-add. A partial apply must be a
+  // no-op instead.
+  if (validPayloads.length < payloads.length) {
+    getLogger().warn('Preset keyframes blocked by transition regions; skipping apply', {
       originalCount: payloads.length,
+      validCount: validPayloads.length,
     })
     return []
   }

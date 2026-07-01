@@ -597,7 +597,7 @@ async function generateVideoThumbnail(
 
     // Clamp timestamp to valid range
     const duration = await input.computeDuration()
-    const clampedTimestamp = Math.min(timestamp, Math.max(0, duration - 0.1))
+    const clampedTimestamp = Math.max(0, Math.min(timestamp, duration - 0.1))
 
     // ProRes decodes through the registered @mediabunny/prores decoder (getMediabunny
     // registers it), so CanvasSink handles it directly like any other codec.

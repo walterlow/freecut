@@ -52,6 +52,27 @@
         "add": "Hinzufügen"
       }
     },
+    "motionGenerator": {
+      "title": "Generator",
+      "intensity": "Intensität",
+      "duration": "Dauer",
+      "modulatorsTitle": "Modulatoren",
+      "modulatorApplied": "{{name}} auf {{count}} Clip(s) angewendet",
+      "modulatorRemoved": "{{name}} entfernt",
+      "modulatorApplyFailed": "Modulator konnte nicht angewendet werden",
+      "bakeToKeyframes": "In Keyframes backen",
+      "bakeToKeyframesHint": "Wandelt die prozedurale Bewegung der ausgewählten Clips in bearbeitbare Keyframes um",
+      "bakeNoMotion": "Keine prozedurale Bewegung zum Backen in der Auswahl",
+      "motionBaked": "Bewegung auf {{count}} Clip(s) gebacken",
+      "modulators": {
+        "floatDrift": "Schwebende Drift",
+        "breathPulse": "Atempuls",
+        "microShake": "Mikro-Wackeln",
+        "sway": "Schwanken",
+        "spin": "Drehung"
+      },
+      "removeAction": "Entfernen"
+    },
     "motionPresets": {
       "textIncompatible": "Für Text ungeeignet",
       "categories": {

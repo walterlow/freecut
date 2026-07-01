@@ -78,7 +78,7 @@ function canPlayProxyCodec(codec: string | undefined): boolean {
       try {
         hevcVideoPlayable =
           typeof document !== 'undefined' &&
-          document.createElement('video').canPlayType('video/mp4; codecs="hvc1.1.6.L93.90"') ===
+          document.createElement('video').canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') ===
             'probably'
       } catch {
         hevcVideoPlayable = false

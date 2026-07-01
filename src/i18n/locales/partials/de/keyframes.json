@@ -28,7 +28,8 @@
       "proceduralBand": "Generierte Bewegung — backe sie, um sie als Keyframes zu bearbeiten",
       "bakeMotion": "Bewegung backen",
       "bakeMotionHint": "Wandelt die generierte Bewegung dieses Clips in bearbeitbare Keyframes um",
-      "motionBaked": "Bewegung auf {{count}} Clip(s) gebacken",
+      "motionBaked_one": "Bewegung auf {{count}} Clip gebacken",
+      "motionBaked_other": "Bewegung auf {{count}} Clips gebacken",
       "transitionBlocked": "In einem Übergang können keine Keyframes hinzugefügt werden — bewege den Abspielkopf aus dem markierten Bereich.",
       "transitionBlockedPill": "Im Übergang",
       "emptyState": {

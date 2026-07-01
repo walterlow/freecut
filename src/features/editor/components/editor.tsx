@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { createLogger } from '@/shared/logging/logger'
+import { createLogger, createOperationId } from '@/shared/logging/logger'
 import { i18n } from '@/i18n'
 import type { ImperativePanelHandle } from 'react-resizable-panels'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
@@ -178,11 +178,15 @@ interface EditorProps {
 }
 
 /**
- * Tracks projects whose upgrade backup has already been started this session.
- * Module-scoped so it survives StrictMode's double effect invocation and any
- * remount — without it the auto-backup runs twice and creates duplicate backups.
+ * Tracks the in-flight (or completed) upgrade-backup job per project. Module-
+ * scoped so it survives StrictMode's double effect invocation and any remount —
+ * the async create can't be cancelled once started, so without this the
+ * auto-backup would run twice and create duplicate backups. Keyed by projectId
+ * so a re-running effect for the same still-pending project reuses the existing
+ * job and can transition out of the pending state, instead of a one-shot guard
+ * that would leave the project stuck on the "upgrading" placeholder forever.
  */
-const startedUpgradeBackups = new Set<string>()
+const startedUpgradeBackups = new Map<string, Promise<void>>()
 
 /**
  * Video Editor entrypoint.
@@ -190,12 +194,18 @@ const startedUpgradeBackups = new Set<string>()
  * snapshotted first (best-effort safety net), then the editor loads. No prompt.
  */
 export const Editor = memo(function Editor({ projectId, project, migration }: EditorProps) {
+  const { t } = useTranslation()
   const [upgradeApproved, setUpgradeApproved] = useState(!migration.requiresUpgrade)
   const backupName = formatProjectUpgradeBackupName(
     project.name,
     migration.storedSchemaVersion,
     migration.currentSchemaVersion,
   )
+
+  // Latest projectId, so a backup that finishes after the user navigated away
+  // only approves the project it was actually started for.
+  const currentProjectIdRef = useRef(projectId)
+  currentProjectIdRef.current = projectId
 
   useEffect(() => {
     setUpgradeApproved(!migration.requiresUpgrade)
@@ -205,28 +215,51 @@ export const Editor = memo(function Editor({ projectId, project, migration }: Ed
   // original schema; loading proceeds regardless so the user is never blocked.
   useEffect(() => {
     if (!migration.requiresUpgrade || upgradeApproved) return
-    // Guard against duplicate backups (StrictMode re-invokes effects, and the
-    // async create can't be cancelled once started).
-    if (startedUpgradeBackups.has(projectId)) return
-    startedUpgradeBackups.add(projectId)
 
-    void (async () => {
-      try {
-        const backup = await createProjectUpgradeBackup(projectId, {
+    // Reuse this project's in-flight job (StrictMode re-invokes effects, and the
+    // async create can't be cancelled once started) rather than bailing out
+    // permanently — re-running the effect for the same still-pending project
+    // must still be able to transition out of the placeholder state.
+    const jobProjectId = projectId
+    let job = startedUpgradeBackups.get(jobProjectId)
+    if (!job) {
+      job = (async () => {
+        const opId = createOperationId()
+        const event = logger.startEvent('project.upgradeBackup', opId)
+        event.merge({
+          projectId: jobProjectId,
           fromVersion: migration.storedSchemaVersion,
           toVersion: migration.currentSchemaVersion,
-          backupName,
         })
-        toast.success(i18n.t('editor.editor.backupCreated'), { description: backup.name })
-      } catch (error) {
-        logger.error('Failed to create upgrade backup:', error)
-        toast.error(i18n.t('editor.editor.backupFailed'), {
-          description: error instanceof Error ? error.message : i18n.t('editor.editor.tryAgain'),
-        })
-      } finally {
+        try {
+          const backup = await createProjectUpgradeBackup(jobProjectId, {
+            fromVersion: migration.storedSchemaVersion,
+            toVersion: migration.currentSchemaVersion,
+            backupName,
+          })
+          event.success({ status: 'created', backupName: backup.name })
+          toast.success(t('editor.editor.backupCreated'), { description: backup.name })
+        } catch (error) {
+          event.failure(error, { status: 'failed' })
+          toast.error(t('editor.editor.backupFailed'), {
+            description: error instanceof Error ? error.message : t('editor.editor.tryAgain'),
+          })
+        }
+      })()
+      startedUpgradeBackups.set(jobProjectId, job)
+    }
+
+    let active = true
+    void job.then(() => {
+      // Only approve the upgrade for the project this job was started for; a late
+      // completion after navigation must not unblock a different project.
+      if (active && currentProjectIdRef.current === jobProjectId) {
         setUpgradeApproved(true)
       }
-    })()
+    })
+    return () => {
+      active = false
+    }
   }, [
     migration.requiresUpgrade,
     migration.storedSchemaVersion,
@@ -234,13 +267,14 @@ export const Editor = memo(function Editor({ projectId, project, migration }: Ed
     upgradeApproved,
     projectId,
     backupName,
+    t,
   ])
 
   if (!upgradeApproved) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-sm text-muted-foreground">
-          {i18n.t('editor.editor.upgrading', { defaultValue: 'Upgrading project…' })}
+          {t('editor.editor.upgrading', { defaultValue: 'Upgrading project…' })}
         </div>
       </div>
     )

@@ -99,6 +99,11 @@ export function createProResPreviewSession(
 
   const resetIterator = (startTime: number): void => {
     closeStream()
+    // Drop the sample from the previous cursor so the fresh stream starts with no carried-over
+    // frame — otherwise advanceTo would keep returning (or skip lookahead acceptance of) a stale
+    // sample that belongs to the old iterator position.
+    closeSample(currentSample)
+    currentSample = null
     // ProRes is all-intra, so every frame is a keyframe: starting the stream exactly at the
     // requested time yields the covering frame first with no backtracking.
     iterator = sink.samples(Math.max(0, startTime), Infinity)

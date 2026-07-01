@@ -17,6 +17,13 @@ import { useTimelineCommandStore } from '../timeline-command-store'
 import { captureSnapshot } from '../commands/snapshot'
 import type { TimelineSnapshot } from '../commands/types'
 import { execute, canAddKeyframeAtFrame } from './shared'
+import { createLogger, createOperationId } from '@/shared/logging/logger'
+
+// Function declaration (not a module-scope const) to avoid temporal dead zone
+// errors in production chunk ordering — see CLAUDE.md gotchas / shared.ts.
+function getLog() {
+  return createLogger('MotionModifierActions')
+}
 
 export interface MotionModifierAssignment {
   itemId: string
@@ -38,26 +45,39 @@ function withModifier(
 export function applyMotionModifierToItems(assignments: MotionModifierAssignment[]): number {
   if (assignments.length === 0) return 0
 
-  return execute(
-    'APPLY_MOTION_MODIFIERS',
-    () => {
-      const store = useItemsStore.getState()
-      let updated = 0
-      for (const { itemId, modifier } of assignments) {
-        const item = store.itemById[itemId]
-        if (!item) continue
-        store._updateItem(itemId, {
-          motionModifiers: withModifier(item.motionModifiers, modifier),
-        })
-        updated += 1
-      }
-      if (updated > 0) {
-        useTimelineSettingsStore.getState().markDirty()
-      }
-      return updated
-    },
-    { count: assignments.length },
-  )
+  const event = getLog().startEvent('applyMotionModifiers', createOperationId())
+  event.merge({
+    requested: assignments.length,
+    modifierTypes: [...new Set(assignments.map((a) => a.modifier.type))],
+  })
+
+  try {
+    const updated = execute(
+      'APPLY_MOTION_MODIFIERS',
+      () => {
+        const store = useItemsStore.getState()
+        let count = 0
+        for (const { itemId, modifier } of assignments) {
+          const item = store.itemById[itemId]
+          if (!item) continue
+          store._updateItem(itemId, {
+            motionModifiers: withModifier(item.motionModifiers, modifier),
+          })
+          count += 1
+        }
+        if (count > 0) {
+          useTimelineSettingsStore.getState().markDirty()
+        }
+        return count
+      },
+      { count: assignments.length },
+    )
+    event.success({ updated })
+    return updated
+  } catch (error) {
+    event.failure(error)
+    throw error
+  }
 }
 
 /**
@@ -86,10 +106,18 @@ export function beginMotionModifierEdit(): TimelineSnapshot {
  * Close a live modifier-edit gesture: record a single undo entry spanning the
  * whole drag (against the pre-drag `before` snapshot) and mark the project dirty.
  */
-export function commitMotionModifierEdit(before: TimelineSnapshot): void {
+export function commitMotionModifierEdit(
+  before: TimelineSnapshot,
+  meta?: { type?: MotionModifierType; itemIds?: string[] },
+): void {
+  // Thread the gesture's modifier type + edited items into the command payload so
+  // the undo entry carries context (and `ids` feeds the count in its label).
+  const payload: Record<string, unknown> = {}
+  if (meta?.type) payload.modifierType = meta.type
+  if (meta?.itemIds && meta.itemIds.length > 0) payload.ids = meta.itemIds
   useTimelineCommandStore
     .getState()
-    .addUndoEntry({ type: 'UPDATE_MOTION_MODIFIERS', payload: {} }, before)
+    .addUndoEntry({ type: 'UPDATE_MOTION_MODIFIERS', payload }, before)
   useTimelineSettingsStore.getState().markDirty()
 }
 
@@ -113,52 +141,70 @@ export interface BakeMotionPlanEntry {
 export function bakeMotionToKeyframes(plan: BakeMotionPlanEntry[]): number {
   if (plan.length === 0) return 0
 
-  return execute(
-    'BAKE_MOTION_TO_KEYFRAMES',
-    () => {
-      const itemsStore = useItemsStore.getState()
-      const keyframesStore = useKeyframesStore.getState()
-      let baked = 0
+  const event = getLog().startEvent('bakeMotionToKeyframes', createOperationId())
+  event.merge({
+    plannedItems: plan.length,
+    plannedKeyframes: plan.reduce((sum, entry) => sum + entry.keyframes.length, 0),
+    clearedProperties: plan.reduce((sum, entry) => sum + entry.clearProperties.length, 0),
+  })
 
-      for (const entry of plan) {
-        const item = itemsStore.itemById[entry.itemId]
-        if (!item) continue
+  try {
+    let addedKeyframes = 0
+    let blockedKeyframes = 0
+    const baked = execute(
+      'BAKE_MOTION_TO_KEYFRAMES',
+      () => {
+        const itemsStore = useItemsStore.getState()
+        const keyframesStore = useKeyframesStore.getState()
+        let count = 0
 
-        for (const property of entry.clearProperties) {
-          keyframesStore._removeKeyframesForProperty(entry.itemId, property)
-        }
+        for (const entry of plan) {
+          const item = itemsStore.itemById[entry.itemId]
+          if (!item) continue
 
-        const valid = entry.keyframes.filter((payload) =>
-          canAddKeyframeAtFrame(payload.itemId, payload.frame),
-        )
-        if (valid.length > 0) {
-          keyframesStore._addKeyframes(valid)
-        }
+          for (const property of entry.clearProperties) {
+            keyframesStore._removeKeyframesForProperty(entry.itemId, property)
+          }
 
-        const updates: Partial<TimelineItem> = {}
-        if (entry.clearMotionModifiers) {
-          updates.motionModifiers = []
-        }
-        if (entry.clearAudioPulseEffectIds.length > 0 && item.effects) {
-          const ids = new Set(entry.clearAudioPulseEffectIds)
-          updates.effects = item.effects.map((effect) =>
-            ids.has(effect.id) ? { ...effect, audioPulse: undefined } : effect,
+          const valid = entry.keyframes.filter((payload) =>
+            canAddKeyframeAtFrame(payload.itemId, payload.frame),
           )
-        }
-        if (Object.keys(updates).length > 0) {
-          itemsStore._updateItem(entry.itemId, updates)
+          blockedKeyframes += entry.keyframes.length - valid.length
+          if (valid.length > 0) {
+            keyframesStore._addKeyframes(valid)
+            addedKeyframes += valid.length
+          }
+
+          const updates: Partial<TimelineItem> = {}
+          if (entry.clearMotionModifiers) {
+            updates.motionModifiers = []
+          }
+          if (entry.clearAudioPulseEffectIds.length > 0 && item.effects) {
+            const ids = new Set(entry.clearAudioPulseEffectIds)
+            updates.effects = item.effects.map((effect) =>
+              ids.has(effect.id) ? { ...effect, audioPulse: undefined } : effect,
+            )
+          }
+          if (Object.keys(updates).length > 0) {
+            itemsStore._updateItem(entry.itemId, updates)
+          }
+
+          count += 1
         }
 
-        baked += 1
-      }
-
-      if (baked > 0) {
-        useTimelineSettingsStore.getState().markDirty()
-      }
-      return baked
-    },
-    { count: plan.length },
-  )
+        if (count > 0) {
+          useTimelineSettingsStore.getState().markDirty()
+        }
+        return count
+      },
+      { count: plan.length },
+    )
+    event.success({ baked, addedKeyframes, blockedKeyframes })
+    return baked
+  } catch (error) {
+    event.failure(error)
+    throw error
+  }
 }
 
 /**

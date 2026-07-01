@@ -28,7 +28,8 @@
       "proceduralBand": "Movimiento generado: hornéalo para editarlo como fotogramas clave",
       "bakeMotion": "Hornear movimiento",
       "bakeMotionHint": "Convierte el movimiento generado de este clip en fotogramas clave editables",
-      "motionBaked": "Movimiento horneado en {{count}} clip(s)",
+      "motionBaked_one": "Movimiento horneado en {{count}} clip",
+      "motionBaked_other": "Movimiento horneado en {{count}} clips",
       "transitionBlocked": "No se pueden añadir fotogramas clave dentro de una transición: mueve el cabezal fuera de la región resaltada.",
       "transitionBlockedPill": "En transición",
       "emptyState": {

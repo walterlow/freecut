@@ -52,6 +52,27 @@
         "add": "Adicionar"
       }
     },
+    "motionGenerator": {
+      "title": "Gerador",
+      "intensity": "Intensidade",
+      "duration": "Duração",
+      "modulatorsTitle": "Moduladores",
+      "modulatorApplied": "{{name}} aplicado a {{count}} clipe(s)",
+      "modulatorRemoved": "{{name}} removido",
+      "modulatorApplyFailed": "Não foi possível aplicar o modulador",
+      "bakeToKeyframes": "Consolidar em quadros-chave",
+      "bakeToKeyframesHint": "Achata o movimento procedural dos clipes selecionados em quadros-chave editáveis",
+      "bakeNoMotion": "Nenhum movimento procedural para consolidar na seleção",
+      "motionBaked": "Movimento consolidado em {{count}} clipe(s)",
+      "modulators": {
+        "floatDrift": "Deriva flutuante",
+        "breathPulse": "Pulso de respiração",
+        "microShake": "Microtremor",
+        "sway": "Balanço",
+        "spin": "Giro"
+      },
+      "removeAction": "Remover"
+    },
     "motionPresets": {
       "textIncompatible": "Não indicado para texto",
       "categories": {

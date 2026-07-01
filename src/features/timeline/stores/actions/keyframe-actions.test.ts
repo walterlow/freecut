@@ -239,6 +239,30 @@ describe('keyframe actions', () => {
       expect(getKeyframes('a', 'opacity').map((kf) => kf.frame)).toEqual([0])
     })
 
+    it('aborts without clearing when any payload is blocked (all-or-nothing)', () => {
+      // fade dur 12, alignment 0.5 → frames [54, 60) of clip a are blocked.
+      useTransitionsStore.getState().setTransitions([makeFade()])
+      // Existing keyframe sits inside the clear window [0, 10].
+      addKeyframes([{ itemId: 'a', property: 'opacity', frame: 5, value: 0.2 }])
+      const undoDepth = useTimelineCommandStore.getState().undoStack.length
+
+      // One replacement lands in the blocked transition region, so the whole
+      // apply must be a no-op — the existing frame-5 keyframe must survive rather
+      // than be wiped by a clear window it can't fully replace.
+      const ids = applyMotionPresetKeyframes(
+        [
+          { itemId: 'a', property: 'opacity', frame: 0, value: 1 },
+          { itemId: 'a', property: 'opacity', frame: 56, value: 0 },
+        ],
+        [{ itemId: 'a', property: 'opacity', fromFrame: 0, toFrame: 10 }],
+      )
+
+      expect(ids).toEqual([])
+      expect(getKeyframes('a', 'opacity').map((kf) => kf.frame)).toEqual([5])
+      // No mutation ⇒ no undo entry pushed.
+      expect(useTimelineCommandStore.getState().undoStack.length).toBe(undoDepth)
+    })
+
     it('applies clear + add as a single undo entry', () => {
       addKeyframes([{ itemId: 'a', property: 'opacity', frame: 5, value: 0.2 }])
       const undoDepth = useTimelineCommandStore.getState().undoStack.length

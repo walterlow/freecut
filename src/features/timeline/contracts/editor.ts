@@ -38,6 +38,7 @@ export { resolveEffectiveTrackStates } from '../utils/group-utils'
 export { linkItems } from '../stores/actions/item-actions'
 export { applyAnimationPreset } from '../stores/actions/preset-actions'
 export { applyMotionPresetKeyframes } from '../stores/actions/keyframe-actions'
+export type { MotionPresetClear } from '../stores/actions/keyframe-actions'
 export {
   applyMotionModifierToItems,
   updateMotionModifiersLive,

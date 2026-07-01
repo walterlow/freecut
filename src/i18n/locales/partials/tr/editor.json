@@ -52,6 +52,27 @@
         "add": "Ekle"
       }
     },
+    "motionGenerator": {
+      "title": "Üreteç",
+      "intensity": "Yoğunluk",
+      "duration": "Süre",
+      "modulatorsTitle": "Modülatörler",
+      "modulatorApplied": "{{name}}, {{count}} klibe uygulandı",
+      "modulatorRemoved": "{{name}} kaldırıldı",
+      "modulatorApplyFailed": "Modülatör uygulanamadı",
+      "bakeToKeyframes": "Anahtar karelere pişir",
+      "bakeToKeyframesHint": "Seçili kliplerdeki prosedürel hareketi düzenlenebilir anahtar karelere düzleştirir",
+      "bakeNoMotion": "Seçimde pişirilecek prosedürel hareket yok",
+      "motionBaked": "{{count}} klipte hareket pişirildi",
+      "modulators": {
+        "floatDrift": "Süzülme kayması",
+        "breathPulse": "Nefes darbesi",
+        "microShake": "Mikro sarsıntı",
+        "sway": "Sallanma",
+        "spin": "Dönme"
+      },
+      "removeAction": "Kaldır"
+    },
     "motionPresets": {
       "textIncompatible": "Metin için uygun değil",
       "categories": {

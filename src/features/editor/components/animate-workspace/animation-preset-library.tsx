@@ -32,6 +32,7 @@ import {
   useItemsStore,
   useKeyframesStore,
   useTimelineStore,
+  type MotionPresetClear,
 } from '@/features/editor/deps/timeline-store'
 import { getSourceDimensions, resolveTransform } from '@/features/editor/deps/composition-runtime'
 import {
@@ -489,12 +490,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
       const clearSet = new Set<AnimatableProperty>(MOTION_PRESET_PROPERTIES)
       const payloads: Array<{ itemId: string } & ReturnType<typeof applyMotionGeneratorSettings>[number]> =
         []
-      const clears: Array<{
-        itemId: string
-        property: AnimatableProperty
-        fromFrame: number
-        toFrame: number
-      }> = []
+      const clears: MotionPresetClear[] = []
 
       selectedItems.forEach((item, index) => {
         const itemKeyframes = keyframesByItemId[item.id]
@@ -667,7 +663,10 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
       if (assignments.length === 0) return
       if (modifierEditRef.current) {
         updateMotionModifiersLive(assignments)
-        commitMotionModifierEdit(modifierEditRef.current)
+        commitMotionModifierEdit(modifierEditRef.current, {
+          type,
+          itemIds: assignments.map((assignment) => assignment.itemId),
+        })
         modifierEditRef.current = null
       } else {
         applyMotionModifierToItems(assignments)

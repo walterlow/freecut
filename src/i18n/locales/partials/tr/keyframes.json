@@ -28,7 +28,8 @@
       "proceduralBand": "Üretilen hareket — anahtar kare olarak düzenlemek için pişirin",
       "bakeMotion": "Hareketi pişir",
       "bakeMotionHint": "Bu klibin üretilen hareketini düzenlenebilir karelere dönüştürür",
-      "motionBaked": "{{count}} klipte hareket pişirildi",
+      "motionBaked_one": "{{count}} klipte hareket pişirildi",
+      "motionBaked_other": "{{count}} klipte hareket pişirildi",
       "transitionBlocked": "Bir geçişin içine anahtar kare eklenemez — oynatma kafasını vurgulanan bölgenin dışına taşıyın.",
       "transitionBlockedPill": "Geçişte",
       "emptyState": {

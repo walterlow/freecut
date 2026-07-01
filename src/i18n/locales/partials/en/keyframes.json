@@ -28,7 +28,8 @@
       "proceduralBand": "Generated motion — bake to edit as keyframes",
       "bakeMotion": "Bake motion",
       "bakeMotionHint": "Flatten this clip’s generated motion into editable keyframes",
-      "motionBaked": "Baked motion on {{count}} clip(s)",
+      "motionBaked_one": "Baked motion on {{count}} clip",
+      "motionBaked_other": "Baked motion on {{count}} clips",
       "transitionBlocked": "Keyframes can’t be added inside a transition — move the playhead out of the highlighted region.",
       "transitionBlockedPill": "In transition",
       "emptyState": {

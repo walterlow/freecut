@@ -22,6 +22,7 @@ import {
 import { resolveAnimatedTransform } from './animated-transform-resolver'
 import { applyMotionModifiers } from './motion-modifier-eval'
 import { evaluateAudioPulseParams } from './trigger-wave-motion-layer'
+import { clamp } from '@/shared/utils/math'
 
 export interface BakedKeyframe {
   property: AnimatableProperty
@@ -36,10 +37,6 @@ const MODIFIER_PROPERTIES: Record<MotionModifierType, TransformAnimatablePropert
   'micro-shake': ['x', 'y', 'rotation'],
   sway: ['rotation'],
   spin: ['rotation'],
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
 }
 
 /**

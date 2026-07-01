@@ -4,6 +4,7 @@
 
 export type {
   FilmstripFrame,
+  MotionPresetClear,
   TimelineActions,
   TimelineState,
   TranscriptSearchMatch,

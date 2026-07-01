@@ -52,6 +52,27 @@
         "add": "追加"
       }
     },
+    "motionGenerator": {
+      "title": "ジェネレーター",
+      "intensity": "強度",
+      "duration": "長さ",
+      "modulatorsTitle": "モジュレーター",
+      "modulatorApplied": "{{name}} を {{count}} 件のクリップに適用しました",
+      "modulatorRemoved": "{{name}} を削除しました",
+      "modulatorApplyFailed": "モジュレーターを適用できませんでした",
+      "bakeToKeyframes": "キーフレームにベイク",
+      "bakeToKeyframesHint": "選択したクリップのプロシージャルモーションを編集可能なキーフレームに平坦化します",
+      "bakeNoMotion": "選択範囲にベイクするプロシージャルモーションがありません",
+      "motionBaked": "{{count}} 件のクリップでモーションをベイクしました",
+      "modulators": {
+        "floatDrift": "フロートドリフト",
+        "breathPulse": "ブレスパルス",
+        "microShake": "マイクロシェイク",
+        "sway": "スウェイ",
+        "spin": "スピン"
+      },
+      "removeAction": "削除"
+    },
     "motionPresets": {
       "textIncompatible": "テキストには不向き",
       "categories": {

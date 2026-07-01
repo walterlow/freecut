@@ -7,6 +7,7 @@ import {
 import type { AudioPulseModulation, VisualEffect } from '@/types/effects'
 import type { MotionGeneratorSettings } from './motion-generator'
 import { colorStringToKeyframeValue } from './color-keyframes'
+import { clamp } from '@/shared/utils/math'
 
 export const TRIGGER_WAVE_MOTION_LAYER_LABEL = 'Trigger Wave Motion'
 
@@ -27,10 +28,6 @@ export interface AudioReactiveBeat {
 const SNAP_OUT: EasingConfig = {
   type: 'cubic-bezier',
   bezier: { x1: 0.19, y1: 1, x2: 0.22, y2: 1 },
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
 }
 
 function getTriggerWaveColor(settings: MotionGeneratorSettings): string {
@@ -116,8 +113,11 @@ export function buildTriggerWaveMotionLayerKeyframes(params: {
   settings: MotionGeneratorSettings
 }): TriggerWaveMotionLayerKeyframePayload[] {
   const { itemId, effectId, durationInFrames, fps, settings } = params
-  const maxFrame = Math.max(0, durationInFrames - 1)
-  if (maxFrame <= 0) return []
+  if (durationInFrames <= 1) return []
+  // Mirror createAudioPulseModulation: keep the upper clamp bound >= 2 so a very
+  // short clip can't invert the clamp (min 2 > max) and push generated frames
+  // past the clip end.
+  const maxFrame = Math.max(2, durationInFrames - 1)
 
   const durationFrames = clamp(
     Math.round(fps * 1.2 * clamp(settings.durationScale, 0.25, 3)),

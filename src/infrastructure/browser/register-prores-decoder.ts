@@ -26,9 +26,16 @@ let registerPromise: Promise<void> | null = null
 
 export function ensureProResDecoderRegistered(): Promise<void> {
   if (!registerPromise) {
-    registerPromise = import('@mediabunny/prores').then(({ registerProresDecoder }) => {
-      registerProresDecoder()
-    })
+    registerPromise = import('@mediabunny/prores')
+      .then(({ registerProresDecoder }) => {
+        registerProresDecoder()
+      })
+      .catch((error: unknown) => {
+        // Clear the guard so a transient failure (e.g. a failed dynamic import) doesn't
+        // permanently block ProRes decoding in this realm — the next call can retry.
+        registerPromise = null
+        throw error
+      })
   }
   return registerPromise
 }

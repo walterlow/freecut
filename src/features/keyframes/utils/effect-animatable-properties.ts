@@ -13,18 +13,20 @@ import {
   interpolateColorKeyframesToHex,
   keyframeValueToHexColor,
 } from './color-keyframes'
-import { evaluateAudioPulseParams } from './trigger-wave-motion-layer'
+import {
+  evaluateAudioPulseParams,
+  type AudioPulseFrameValues,
+} from './trigger-wave-motion-layer'
 
 /**
- * Procedural audio-pulse override for a trigger-wave param at a frame.
- * Returns null when the entry has no active pulse or the param isn't driven,
- * so callers fall through to keyframe/base resolution.
+ * Evaluate a trigger-wave effect's audio-pulse frame values once (or null when
+ * the entry has no active pulse). Hoist this out of per-param loops so the
+ * envelope math runs once per effect/frame rather than once per param.
  */
-function getAudioPulseParamOverride(
+function evaluateEffectAudioPulse(
   effectEntry: ItemEffect,
   relativeFrame: number,
-  paramKey: string,
-): number | string | null {
+): AudioPulseFrameValues | null {
   const modulation = effectEntry.audioPulse
   if (
     !modulation?.enabled ||
@@ -33,10 +35,14 @@ function getAudioPulseParamOverride(
   ) {
     return null
   }
+  return evaluateAudioPulseParams(modulation, relativeFrame)
+}
 
-  const values = evaluateAudioPulseParams(modulation, relativeFrame)
-  if (!values) return null
-
+/** Map already-evaluated audio-pulse values to a single param's override. */
+function audioPulseParamValue(
+  values: AudioPulseFrameValues,
+  paramKey: string,
+): number | string | null {
   switch (paramKey) {
     case 'strength':
       return values.strength
@@ -49,6 +55,21 @@ function getAudioPulseParamOverride(
     default:
       return null
   }
+}
+
+/**
+ * Procedural audio-pulse override for a trigger-wave param at a frame.
+ * Returns null when the entry has no active pulse or the param isn't driven,
+ * so callers fall through to keyframe/base resolution.
+ */
+function getAudioPulseParamOverride(
+  effectEntry: ItemEffect,
+  relativeFrame: number,
+  paramKey: string,
+): number | string | null {
+  const values = evaluateEffectAudioPulse(effectEntry, relativeFrame)
+  if (!values) return null
+  return audioPulseParamValue(values, paramKey)
 }
 
 const NON_ANIMATABLE_GPU_NUMBER_PARAMS: Record<string, ReadonlySet<string>> = {
@@ -309,6 +330,9 @@ export function resolveAnimatedGpuEffects(
     let nextParams = gpuEffect.params
     let paramsChanged = false
 
+    // Evaluate the audio-pulse envelope once per effect (not once per param).
+    const audioPulseValues = evaluateEffectAudioPulse(effectEntry, relativeFrame)
+
     const paramKeys = new Set([
       ...Object.keys(gpuEffect.params),
       ...getKeyframedEffectParamKeys(effectEntry, itemKeyframes),
@@ -324,7 +348,9 @@ export function resolveAnimatedGpuEffects(
       }
 
       // Procedural audio-pulse wins over keyframes/base for its driven params.
-      const pulseOverride = getAudioPulseParamOverride(effectEntry, relativeFrame, paramKey)
+      const pulseOverride = audioPulseValues
+        ? audioPulseParamValue(audioPulseValues, paramKey)
+        : null
       const value =
         pulseOverride !== null
           ? pulseOverride

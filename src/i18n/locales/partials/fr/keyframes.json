@@ -28,7 +28,8 @@
       "proceduralBand": "Mouvement généré — cuisez-le pour l’éditer en images clés",
       "bakeMotion": "Cuire le mouvement",
       "bakeMotionHint": "Convertit le mouvement généré de ce clip en images clés modifiables",
-      "motionBaked": "Mouvement cuit sur {{count}} clip(s)",
+      "motionBaked_one": "Mouvement cuit sur {{count}} clip",
+      "motionBaked_other": "Mouvement cuit sur {{count}} clips",
       "transitionBlocked": "Impossible d’ajouter des images clés dans une transition — déplacez la tête de lecture hors de la zone surlignée.",
       "transitionBlockedPill": "Dans la transition",
       "emptyState": {

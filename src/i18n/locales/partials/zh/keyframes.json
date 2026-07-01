@@ -28,7 +28,8 @@
       "proceduralBand": "生成的运动 — 烘焙后可作为关键帧编辑",
       "bakeMotion": "烘焙运动",
       "bakeMotionHint": "将此片段生成的运动转换为可编辑的关键帧",
-      "motionBaked": "已在 {{count}} 个片段上烘焙运动",
+      "motionBaked_one": "已在 {{count}} 个片段上烘焙运动",
+      "motionBaked_other": "已在 {{count}} 个片段上烘焙运动",
       "transitionBlocked": "无法在转场区域内添加关键帧——请将播放头移出高亮区域。",
       "transitionBlockedPill": "转场区域",
       "emptyState": {

@@ -52,6 +52,27 @@
         "add": "추가"
       }
     },
+    "motionGenerator": {
+      "title": "제너레이터",
+      "intensity": "강도",
+      "duration": "길이",
+      "modulatorsTitle": "모듈레이터",
+      "modulatorApplied": "{{name}}을(를) {{count}}개 클립에 적용했습니다",
+      "modulatorRemoved": "{{name}}을(를) 제거했습니다",
+      "modulatorApplyFailed": "모듈레이터를 적용할 수 없습니다",
+      "bakeToKeyframes": "키프레임으로 베이크",
+      "bakeToKeyframesHint": "선택한 클립의 프로시저럴 모션을 편집 가능한 키프레임으로 평탄화합니다",
+      "bakeNoMotion": "선택 항목에 베이크할 프로시저럴 모션이 없습니다",
+      "motionBaked": "{{count}}개 클립의 모션을 베이크했습니다",
+      "modulators": {
+        "floatDrift": "플로트 드리프트",
+        "breathPulse": "브레스 펄스",
+        "microShake": "마이크로 셰이크",
+        "sway": "스웨이",
+        "spin": "스핀"
+      },
+      "removeAction": "제거"
+    },
     "motionPresets": {
       "textIncompatible": "텍스트에는 부적합",
       "categories": {

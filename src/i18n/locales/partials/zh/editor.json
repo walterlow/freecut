@@ -52,6 +52,27 @@
         "add": "添加"
       }
     },
+    "motionGenerator": {
+      "title": "生成器",
+      "intensity": "强度",
+      "duration": "时长",
+      "modulatorsTitle": "调制器",
+      "modulatorApplied": "已将 {{name}} 应用到 {{count}} 个片段",
+      "modulatorRemoved": "已移除 {{name}}",
+      "modulatorApplyFailed": "无法应用调制器",
+      "bakeToKeyframes": "烘焙为关键帧",
+      "bakeToKeyframesHint": "将所选片段的程序化运动平铺为可编辑的关键帧",
+      "bakeNoMotion": "所选内容中没有可烘焙的程序化运动",
+      "motionBaked": "已在 {{count}} 个片段上烘焙运动",
+      "modulators": {
+        "floatDrift": "浮动漂移",
+        "breathPulse": "呼吸脉冲",
+        "microShake": "微抖动",
+        "sway": "摇摆",
+        "spin": "旋转"
+      },
+      "removeAction": "移除"
+    },
     "motionPresets": {
       "textIncompatible": "不适用于文本",
       "categories": {

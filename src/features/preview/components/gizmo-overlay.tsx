@@ -43,7 +43,7 @@ import {
   GIZMO_ANIMATABLE_PROPS,
   type AutoKeyframeOperation,
 } from '@/features/preview/deps/keyframes'
-import type { TransformAnimatableProperty } from '@/types/keyframe'
+import type { ItemKeyframes, TransformAnimatableProperty } from '@/types/keyframe'
 import type { TimelineItem } from '@/types/timeline'
 import type { BoundingBox, CoordinateParams, Transform, Point } from '../types/gizmo'
 import type { TransformProperties } from '@/types/transform'
@@ -290,6 +290,16 @@ export function GizmoOverlay({
     ),
   )
 
+  // Associate keyframes with items by id rather than array position so
+  // consumers stay correct if the selection ordering changes.
+  const selectedItemKeyframesById = useMemo(() => {
+    const map = new Map<string, ItemKeyframes | null>()
+    selectedVisibleItemIds.forEach((itemId, index) => {
+      map.set(itemId, selectedItemKeyframes[index] ?? null)
+    })
+    return map
+  }, [selectedVisibleItemIds, selectedItemKeyframes])
+
   // Get unselected visible items (for click-to-select, use Set for O(1) lookups)
   const unselectedItems = useMemo(() => {
     return visibleItems.filter((item) => !selectedItemIdsSet.has(item.id))
@@ -320,13 +330,34 @@ export function GizmoOverlay({
       projectSize,
     })
 
+  // Motion paths describe the whole clip and are independent of the current
+  // preview frame, but `selectedItems` gets a fresh array identity on every
+  // paused/skimming frame. Derive a stable signature from only the fields
+  // `buildMotionPathPoints` actually reads (id, from, durationInFrames,
+  // transform, motionModifiers) so the expensive rebuild runs only when those
+  // change. The items themselves are read via ref to avoid the identity churn.
+  const motionPathSignature = useMemo(
+    () =>
+      selectedItems
+        .map(
+          (item) =>
+            `${item.id}:${item.from}:${item.durationInFrames}:${JSON.stringify(
+              item.transform ?? null,
+            )}:${JSON.stringify(item.motionModifiers ?? null)}`,
+        )
+        .join('|'),
+    [selectedItems],
+  )
+  const selectedItemsRef = useRef(selectedItems)
+  selectedItemsRef.current = selectedItems
+
   const motionPaths = useMemo(() => {
     if (!coordParams || isCornerPinEditing || isMaskEditing) return []
     const canvas = { width: projectSize.width, height: projectSize.height, fps }
-    return selectedItems.flatMap((item, index) => {
+    return selectedItemsRef.current.flatMap((item) => {
       const points = buildMotionPathPoints({
         item,
-        itemKeyframes: selectedItemKeyframes[index] ?? undefined,
+        itemKeyframes: selectedItemKeyframesById.get(item.id) ?? undefined,
         canvas,
       })
       if (points.length === 0) return []
@@ -337,6 +368,10 @@ export function GizmoOverlay({
         },
       ]
     })
+    // `selectedItemsRef` is intentionally read via ref; `motionPathSignature`
+    // captures the item fields that affect the result so the rebuild still
+    // reruns when the selection's motion data changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     coordParams,
     fps,
@@ -344,8 +379,8 @@ export function GizmoOverlay({
     isMaskEditing,
     projectSize.height,
     projectSize.width,
-    selectedItemKeyframes,
-    selectedItems,
+    motionPathSignature,
+    selectedItemKeyframesById,
   ])
 
   // Get visual transforms for all visible items (base + keyframes + preview).
