@@ -33,6 +33,10 @@ function pageSearchText(page: DocPage): string {
       if (block.kind === 'paragraph' || block.kind === 'note') parts.push(block.text)
       else if (block.kind === 'list' || block.kind === 'steps') parts.push(...block.items)
       else if (block.kind === 'table') parts.push(...block.headers, ...block.rows.flat())
+      else if (block.kind === 'figure') {
+        parts.push(block.figure.alt)
+        if (block.figure.caption) parts.push(block.figure.caption)
+      }
     }
   }
   return parts.join(' ').toLowerCase()
@@ -94,7 +98,7 @@ function DocsNavigation({ currentSlug }: { currentSlug?: string }) {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search docs"
           aria-label="Search documentation"
-          className="w-full rounded-md border border-border bg-background py-2 pl-8 pr-2 text-sm outline-none focus:border-primary/60"
+          className="w-full rounded-md border border-border bg-background py-2 pl-8 pr-8 text-sm outline-none focus:border-primary/60"
         />
       </div>
 
@@ -375,7 +379,7 @@ function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
           <tr className="border-b border-border bg-muted/40 text-left">
             {headers.map((header, index) => (
               <th key={index} className="px-3 py-2 font-medium text-foreground">
-                {header}
+                <RichText text={header} />
               </th>
             ))}
           </tr>
