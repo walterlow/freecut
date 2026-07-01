@@ -48,6 +48,7 @@ import type {
   ExportMode,
   ExtendedExportSettings,
   CompositionInputProps,
+  SubtitleExportMode,
 } from '@/types/export'
 import { useClientRender } from '../hooks/use-client-render'
 import {
@@ -321,7 +322,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   const [view, setView] = useState<DialogView>('settings')
   const [startTime, setStartTime] = useState<number | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
-  const [embedSubtitles, setEmbedSubtitles] = useState(true)
+  const [subtitleMode, setSubtitleMode] = useState<SubtitleExportMode>('burn')
   const [renderWholeProject, setRenderWholeProject] = useState(false)
   const wasOpenRef = useRef(false)
 
@@ -344,8 +345,19 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
       ),
     [items],
   )
-  const containerSupportsEmbeddedSubtitles =
-    videoContainer === 'mp4' || videoContainer === 'webm' || videoContainer === 'mkv'
+  // Soft (toggleable) subtitle tracks only work for Matroska (WebM/MKV). MP4/MOV
+  // can't — mediabunny's WebVTT-in-ISOBMFF muxing is broken and players barely
+  // support it anyway — so the "Embedded track" option is hidden there.
+  const containerSupportsSoftSubtitles = videoContainer === 'webm' || videoContainer === 'mkv'
+  const subtitleModeOptions = useMemo<SubtitleExportMode[]>(
+    () =>
+      containerSupportsSoftSubtitles
+        ? ['off', 'burn', 'embedded', 'sidecar']
+        : ['off', 'burn', 'sidecar'],
+    [containerSupportsSoftSubtitles],
+  )
+  // Coerce away a now-unavailable mode (e.g. "embedded" after switching to MP4).
+  const effectiveSubtitleMode = subtitleModeOptions.includes(subtitleMode) ? subtitleMode : 'burn'
 
   // Calculate export range
   const exportRange = useMemo(() => {
@@ -482,10 +494,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
     mode: exportMode,
     videoContainer: exportMode === 'video' ? videoContainer : undefined,
     audioContainer: exportMode === 'audio' ? audioContainer : undefined,
-    embedSubtitles:
-      exportMode === 'video' && hasTranscriptSubtitles && containerSupportsEmbeddedSubtitles
-        ? embedSubtitles
-        : false,
+    subtitleMode: exportMode === 'video' ? effectiveSubtitleMode : undefined,
     renderWholeProject,
   })
 
@@ -568,7 +577,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
       setExportMode('video')
       setVideoContainer('mp4')
       setAudioContainer('mp3')
-      setEmbedSubtitles(true)
+      setSubtitleMode('burn')
       setRenderWholeProject(false)
       setSettings({
         codec: getDefaultCodecForFormat('mp4'),
@@ -704,10 +713,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
       mode: exportMode,
       videoContainer: exportMode === 'video' ? videoContainer : undefined,
       audioContainer: exportMode === 'audio' ? audioContainer : undefined,
-      embedSubtitles:
-        exportMode === 'video' && hasTranscriptSubtitles && containerSupportsEmbeddedSubtitles
-          ? embedSubtitles
-          : false,
+      subtitleMode: exportMode === 'video' ? effectiveSubtitleMode : undefined,
       renderWholeProject,
     }
 
@@ -728,12 +734,11 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   }, [
     audioContainer,
     brokenMediaIds,
-    embedSubtitles,
+    effectiveSubtitleMode,
     exportMode,
     exportRange.duration,
     fps,
     hasTranscriptSubtitles,
-    containerSupportsEmbeddedSubtitles,
     open,
     preflightComposition,
     renderWholeProject,
@@ -1093,41 +1098,33 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                         </div>
                       </div>
 
-                      <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
-                        <div className="space-y-1">
-                          <Label htmlFor="embed-subtitles" className="text-sm font-medium">
-                            {t('export.settings.embedSubtitles')}
+                      <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <Label htmlFor="subtitle-mode" className="text-sm font-medium">
+                            {t('export.settings.subtitles', { defaultValue: 'Subtitles' })}
                           </Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t('export.settings.embedSubtitlesDescription')}
-                          </p>
-                          {hasTranscriptSubtitles && !containerSupportsEmbeddedSubtitles && (
-                            <p className="text-xs text-muted-foreground">
-                              {t('export.settings.embedSubtitlesUnsupported', {
-                                container: videoContainer.toUpperCase(),
-                              })}
-                            </p>
-                          )}
-                          {embedSubtitles &&
-                            hasTranscriptSubtitles &&
-                            containerSupportsEmbeddedSubtitles &&
-                            videoContainer === 'mp4' && (
-                              <p className="text-xs text-muted-foreground">
-                                {t('export.settings.embedSubtitlesMp4Note')}
-                              </p>
-                            )}
-                          {!hasTranscriptSubtitles && (
-                            <p className="text-xs text-muted-foreground">
-                              {t('export.settings.noTranscriptSegments')}
-                            </p>
-                          )}
+                          <Select
+                            value={effectiveSubtitleMode}
+                            onValueChange={(value) => setSubtitleMode(value as SubtitleExportMode)}
+                            disabled={!hasTranscriptSubtitles}
+                          >
+                            <SelectTrigger id="subtitle-mode" className="w-[160px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {subtitleModeOptions.map((mode) => (
+                                <SelectItem key={mode} value={mode}>
+                                  {t(`export.settings.subtitleMode.${mode}`)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
-                        <Switch
-                          id="embed-subtitles"
-                          checked={embedSubtitles && containerSupportsEmbeddedSubtitles}
-                          disabled={!hasTranscriptSubtitles || !containerSupportsEmbeddedSubtitles}
-                          onCheckedChange={setEmbedSubtitles}
-                        />
+                        <p className="text-xs text-muted-foreground">
+                          {hasTranscriptSubtitles
+                            ? t(`export.settings.subtitleMode.${effectiveSubtitleMode}Description`)
+                            : t('export.settings.noTranscriptSegments')}
+                        </p>
                       </div>
                     </div>
                   </>

@@ -60,6 +60,8 @@
         "easeInOut": "Entrada/salida suave",
         "easeOut": "Salida suave"
       },
+      "holdHint": "El valor se mantiene hasta el siguiente fotograma clave.",
+      "unhold": "No mantener",
       "legend": {
         "trigger": "¿Qué significan estos iconos?",
         "title": "Guía del editor",
@@ -79,7 +81,19 @@
         "rowLabel": "Fotograma clave en el frame {{frame}}: arrastra para reubicar, Alt+arrastrar para duplicar",
         "groupLabel": "Fotograma clave de {{group}} en el frame {{frame}}: arrastra para reubicar, Alt+arrastrar para duplicar",
         "locked": "Fotograma clave en el frame {{frame}} (fila bloqueada)"
-      }
+      },
+      "presets": "Ajustes",
+      "edit": "Editar",
+      "easingSection": "Suavizado",
+      "cubicEasing": "Suavizado cúbico",
+      "filterAll": "Todo",
+      "filterIn": "Entrada",
+      "filterOut": "Salida",
+      "filterInOut": "Entrada/Salida",
+      "positionPreview": "Vista previa de posición",
+      "duration": "Duración",
+      "play": "Reproducir",
+      "pause": "Pausar"
     }
   },
   "keyframes": {

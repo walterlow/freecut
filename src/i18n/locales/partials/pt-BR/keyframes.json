@@ -60,6 +60,8 @@
         "easeInOut": "Entrada/saída suave",
         "easeOut": "Saída suave"
       },
+      "holdHint": "O valor é mantido até o próximo quadro-chave.",
+      "unhold": "Não manter",
       "legend": {
         "trigger": "O que significam estes ícones?",
         "title": "Guia do editor",
@@ -79,7 +81,19 @@
         "rowLabel": "Quadro-chave no frame {{frame}} — arraste para reposicionar, Alt+arrastar para duplicar",
         "groupLabel": "Quadro-chave de {{group}} no frame {{frame}} — arraste para reposicionar, Alt+arrastar para duplicar",
         "locked": "Quadro-chave no frame {{frame}} (linha bloqueada)"
-      }
+      },
+      "presets": "Predefinições",
+      "edit": "Editar",
+      "easingSection": "Suavização",
+      "cubicEasing": "Cúbica",
+      "filterAll": "Tudo",
+      "filterIn": "Entrada",
+      "filterOut": "Saída",
+      "filterInOut": "Entrada/Saída",
+      "positionPreview": "Prévia de posição",
+      "duration": "Duração",
+      "play": "Reproduzir",
+      "pause": "Pausar"
     }
   },
   "keyframes": {

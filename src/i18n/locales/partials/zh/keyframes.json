@@ -60,6 +60,8 @@
         "easeInOut": "缓入缓出",
         "easeOut": "缓出"
       },
+      "holdHint": "保持该值直到下一个关键帧。",
+      "unhold": "取消保持",
       "legend": {
         "trigger": "这些图标是什么意思？",
         "title": "编辑器指南",
@@ -79,7 +81,19 @@
         "rowLabel": "第 {{frame}} 帧的关键帧 — 拖动可调整时间，按住 Alt 拖动可复制",
         "groupLabel": "第 {{frame}} 帧的 {{group}} 关键帧 — 拖动可调整时间，按住 Alt 拖动可复制",
         "locked": "第 {{frame}} 帧的关键帧（行已锁定）"
-      }
+      },
+      "presets": "预设",
+      "edit": "编辑",
+      "easingSection": "缓动",
+      "cubicEasing": "三次缓动",
+      "filterAll": "全部",
+      "filterIn": "缓入",
+      "filterOut": "缓出",
+      "filterInOut": "缓入缓出",
+      "positionPreview": "位置预览",
+      "duration": "时长",
+      "play": "播放",
+      "pause": "暂停"
     }
   },
   "keyframes": {

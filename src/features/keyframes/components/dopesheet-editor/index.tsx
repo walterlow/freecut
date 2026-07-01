@@ -62,6 +62,7 @@ import {
 } from './dopesheet-helpers'
 import type { DopesheetPropertyGroupStructure } from './dopesheet-helpers'
 import { GroupTimelineCell, PropertyTimelineCell } from './dopesheet-timeline-cells'
+import type { SegmentEasingChange } from './segment-easing-popover'
 import { DopesheetPlayheadLine } from './dopesheet-playhead-line'
 import {
   DRAG_THRESHOLD,
@@ -153,6 +154,12 @@ interface DopesheetEditorProps {
   onKeyframeMove?: (ref: KeyframeRef, newFrame: number, newValue: number) => void
   /** Callback when bezier handles are moved in graph view */
   onBezierHandleMove?: (ref: KeyframeRef, bezier: BezierControlPoints) => void
+  /**
+   * Apply an easing change to explicit keyframe refs from the sheet's per-segment
+   * easing popover. `commit: false` = live (no undo) drag frame; the default
+   * commits with undo. Live drags are bracketed by `onDragStart`/`onDragEnd`.
+   */
+  onSegmentEasingChange?: SegmentEasingChange
   /** Callback when selection changes */
   onSelectionChange?: (keyframeIds: Set<string>) => void
   /** Callback when property selection changes */
@@ -253,6 +260,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   height = 260,
   onKeyframeMove,
   onBezierHandleMove,
+  onSegmentEasingChange,
   onSelectionChange,
   onPropertyChange,
   onActivePropertyChange,
@@ -2711,6 +2719,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             >
               {renderGroupHeaderContent(entry.group)}
               <GroupTimelineCell
+                itemId={itemId}
                 groupId={entry.group.id}
                 groupLabel={entry.group.label}
                 frameGroups={
@@ -2725,6 +2734,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 isPropertyLocked={isPropertyLocked}
                 onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
                 onBackgroundPointerDown={handleTimelineBackgroundPointerDown}
+                onSegmentEasingChange={onSegmentEasingChange}
+                onSegmentDragStart={onDragStart}
+                onSegmentDragEnd={onDragEnd}
                 sheetPreviewFrames={sheetPreviewFrames}
                 sheetPreviewDuplicateKeyframeIds={sheetPreviewDuplicateKeyframeIds}
               />
@@ -2742,6 +2754,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
           >
             {renderPropertyRowContent(row, { indented: true })}
             <PropertyTimelineCell
+              itemId={itemId}
               property={row.property}
               keyframes={rowKeyframesByProperty.get(row.property) ?? EMPTY_KEYFRAMES}
               locked={rowLocked}
@@ -2755,6 +2768,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               disabled={disabled}
               onRowPointerDown={handleRowPointerDown}
               onKeyframePointerDown={handleKeyframePointerDown}
+              onSegmentEasingChange={onSegmentEasingChange}
+              onSegmentDragStart={onDragStart}
+              onSegmentDragEnd={onDragEnd}
               setKeyframeButtonRef={setKeyframeButtonRef}
               keyframeMetaByIdRef={keyframeMetaByIdRef}
               sheetPreviewFrames={sheetPreviewFrames}
@@ -2787,6 +2803,10 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       handleKeyframePointerDown,
       setKeyframeButtonRef,
       keyframeMetaByIdRef,
+      itemId,
+      onSegmentEasingChange,
+      onDragStart,
+      onDragEnd,
     ],
   )
   const propertyColumnElements = useMemo(

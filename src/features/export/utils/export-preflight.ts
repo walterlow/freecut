@@ -137,8 +137,7 @@ async function resolveSettingsForPreflight(
   const exportMode = settings.mode
   const clientSettings = mapToClientSettings(settings, fps)
   clientSettings.mode = exportMode
-  clientSettings.embedSubtitles =
-    exportMode === 'video' ? (settings.embedSubtitles ?? false) : false
+  clientSettings.subtitleMode = exportMode === 'video' ? (settings.subtitleMode ?? 'burn') : 'off'
 
   if (exportMode === 'audio') {
     resolveAudioSettings(clientSettings, settings)

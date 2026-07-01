@@ -24,12 +24,18 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  getBezierPresetForEasing,
   getCropPropertyValue,
   getTransitionBlockedRanges,
   interpolatePropertyValue,
   getTextAnimatableBaseValue,
   isTextAnimatableProperty,
+  BEZIER_PRESETS,
+  areBezierPointsEqual,
+  findMatchingBezierPreset,
+  clampBezierValue,
+  clampSpringValue,
+  buildEasingConfig,
+  type BezierPresetValue,
 } from '@/features/timeline/deps/keyframes'
 import {
   DopesheetEditor,
@@ -130,100 +136,11 @@ const EASING_OPTIONS: Array<{ value: EasingType; labelKey: string; defaultLabel:
   { value: 'cubic-bezier', labelKey: 'timeline.keyframeEditor.bezier', defaultLabel: 'Bezier' },
   { value: 'spring', labelKey: 'timeline.keyframeEditor.spring', defaultLabel: 'Spring' },
 ]
-const BEZIER_PRESETS = [
-  {
-    value: 'soft',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.soft',
-    points: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 },
-  },
-  {
-    value: 'ease-out',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.easeOut',
-    points: { x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 },
-  },
-  {
-    value: 'ease-in',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.easeIn',
-    points: { x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19 },
-  },
-  {
-    value: 'ease-in-out',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.easeInOut',
-    points: { x1: 0.645, y1: 0.045, x2: 0.355, y2: 1 },
-  },
-  {
-    value: 'overshoot',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.overshoot',
-    points: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 },
-  },
-  {
-    value: 'snap',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.snap',
-    points: { x1: 0.19, y1: 1, x2: 0.22, y2: 1 },
-  },
-  // Standard easing library (Penner / easings.net cubic-bezier approximations).
-  {
-    value: 'out-cubic',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.outCubic',
-    points: { x1: 0.33, y1: 1, x2: 0.68, y2: 1 },
-  },
-  {
-    value: 'out-quart',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.outQuart',
-    points: { x1: 0.25, y1: 1, x2: 0.5, y2: 1 },
-  },
-  {
-    value: 'out-quint',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.outQuint',
-    points: { x1: 0.22, y1: 1, x2: 0.36, y2: 1 },
-  },
-  {
-    value: 'out-expo',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.outExpo',
-    points: { x1: 0.16, y1: 1, x2: 0.3, y2: 1 },
-  },
-  {
-    value: 'out-circ',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.outCirc',
-    points: { x1: 0, y1: 0.55, x2: 0.45, y2: 1 },
-  },
-  {
-    value: 'in-out-cubic',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.inOutCubic',
-    points: { x1: 0.65, y1: 0, x2: 0.35, y2: 1 },
-  },
-  {
-    value: 'in-out-quart',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.inOutQuart',
-    points: { x1: 0.76, y1: 0, x2: 0.24, y2: 1 },
-  },
-  {
-    value: 'in-out-expo',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.inOutExpo',
-    points: { x1: 0.87, y1: 0, x2: 0.13, y2: 1 },
-  },
-  {
-    value: 'in-cubic',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.inCubic',
-    points: { x1: 0.32, y1: 0, x2: 0.67, y2: 0 },
-  },
-  {
-    value: 'in-quart',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.inQuart',
-    points: { x1: 0.5, y1: 0, x2: 0.75, y2: 0 },
-  },
-  {
-    value: 'in-expo',
-    labelKey: 'timeline.keyframeEditor.bezierPreset.inExpo',
-    points: { x1: 0.7, y1: 0, x2: 0.84, y2: 0 },
-  },
-] as const
 const BEZIER_INPUT_KEYS = ['x1', 'y1', 'x2', 'y2'] as const
 const SPRING_INPUT_KEYS = ['tension', 'friction', 'mass'] as const
 
 type BezierInputKey = (typeof BEZIER_INPUT_KEYS)[number]
 type SpringInputKey = (typeof SPRING_INPUT_KEYS)[number]
-type BezierPresetValue = (typeof BEZIER_PRESETS)[number]['value'] | 'custom'
 
 function clampFrameToBlockedRanges(
   frame: number,
@@ -275,63 +192,6 @@ function getBaseKeyframeValue(
 
   const resolved = resolveTransform(item, canvas, getSourceDimensions(item))
   return property in resolved ? resolved[property as keyof typeof resolved] : 0
-}
-
-function buildEasingConfig(
-  easing: EasingType,
-  existingConfig?: EasingConfig,
-): EasingConfig | undefined {
-  const presetBezier = getBezierPresetForEasing(easing)
-  if (presetBezier) {
-    return {
-      type: 'cubic-bezier',
-      bezier: presetBezier,
-    }
-  }
-
-  if (easing === 'cubic-bezier') {
-    return {
-      type: 'cubic-bezier',
-      bezier:
-        existingConfig?.type === 'cubic-bezier' && existingConfig.bezier
-          ? existingConfig.bezier
-          : { ...DEFAULT_BEZIER_POINTS },
-    }
-  }
-
-  if (easing === 'spring') {
-    return {
-      type: 'spring',
-      spring:
-        existingConfig?.type === 'spring' && existingConfig.spring
-          ? existingConfig.spring
-          : { ...DEFAULT_SPRING_PARAMS },
-    }
-  }
-
-  return undefined
-}
-
-function areBezierPointsEqual(a: BezierControlPoints, b: BezierControlPoints): boolean {
-  return a.x1 === b.x1 && a.y1 === b.y1 && a.x2 === b.x2 && a.y2 === b.y2
-}
-
-function clampBezierValue(key: BezierInputKey, value: number): number {
-  if (key === 'x1' || key === 'x2') {
-    return Math.max(0, Math.min(1, value))
-  }
-  return Math.max(-2, Math.min(3, value))
-}
-
-function clampSpringValue(key: SpringInputKey, value: number): number {
-  switch (key) {
-    case 'tension':
-      return Math.max(1, Math.min(500, value))
-    case 'friction':
-      return Math.max(1, Math.min(100, value))
-    case 'mass':
-      return Math.max(0.1, Math.min(10, value))
-  }
 }
 
 function toBezierDraft(points: BezierControlPoints): Record<BezierInputKey, string> {
@@ -1018,11 +878,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
   const selectedBezierPreset = useMemo<BezierPresetValue>(() => {
     if (!selectedBezierPoints) return 'custom'
-
-    const match = BEZIER_PRESETS.find((preset) =>
-      areBezierPointsEqual(preset.points, selectedBezierPoints),
-    )
-    return match?.value ?? 'custom'
+    return findMatchingBezierPreset(selectedBezierPoints)
   }, [selectedBezierPoints])
 
   const hasMixedBezierConfig = useMemo(() => {
@@ -1138,6 +994,40 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       })
     },
     [_updateKeyframe, selectedItemKeyframes],
+  )
+
+  // Apply an easing change from the dopesheet's per-segment popover to explicit
+  // keyframe refs. Live drag frames (`commit: false`) go through the no-undo
+  // path and are bracketed by handleDragStart/handleDragEnd; everything else
+  // commits its own undo entry.
+  const handleSegmentEasingChange = useCallback(
+    (
+      refs: KeyframeRef[],
+      updates: { easing: EasingType; easingConfig?: EasingConfig },
+      options?: { commit?: boolean },
+    ) => {
+      if (refs.length === 0) return
+
+      if (options?.commit === false) {
+        for (const ref of refs) {
+          _updateKeyframe(ref.itemId, ref.property, ref.keyframeId, updates)
+        }
+        return
+      }
+
+      timelineActions.updateKeyframes(
+        refs.map((ref) => ({
+          itemId: ref.itemId,
+          property: ref.property,
+          keyframeId: ref.keyframeId,
+          updates,
+        })),
+      )
+    },
+    // `timelineActions` is an `import * as` module namespace — a stable, immutable
+    // reference, so it's intentionally not a dependency (consistent with the
+    // other keyframe handlers in this file).
+    [_updateKeyframe],
   )
 
   // Handle selection change in graph editor
@@ -1808,6 +1698,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                   height={editorHeight}
                   onKeyframeMove={handleKeyframeMove}
                   onBezierHandleMove={handleBezierHandleMove}
+                  onSegmentEasingChange={handleSegmentEasingChange}
                   onSelectionChange={handleSelectionChange}
                   onPropertyChange={handlePropertyChange}
                   onActivePropertyChange={setSelectedProperty}

@@ -60,6 +60,8 @@
         "easeInOut": "Ease In/Out",
         "easeOut": "Ease Out"
       },
+      "holdHint": "Value holds until the next keyframe.",
+      "unhold": "Unhold",
       "legend": {
         "trigger": "What do these icons mean?",
         "title": "Editor guide",
@@ -79,7 +81,19 @@
         "rowLabel": "Keyframe at frame {{frame}} — drag to retime, Alt-drag to duplicate",
         "groupLabel": "{{group}} keyframe at frame {{frame}} — drag to retime, Alt-drag to duplicate",
         "locked": "Keyframe at frame {{frame}} (row locked)"
-      }
+      },
+      "presets": "Presets",
+      "edit": "Edit",
+      "easingSection": "Easing",
+      "cubicEasing": "Cubic Easing",
+      "filterAll": "All",
+      "filterIn": "In",
+      "filterOut": "Out",
+      "filterInOut": "In-Out",
+      "positionPreview": "Position Preview",
+      "duration": "Duration",
+      "play": "Play",
+      "pause": "Pause"
     }
   },
   "keyframes": {

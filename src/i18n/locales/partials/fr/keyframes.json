@@ -60,6 +60,8 @@
         "easeInOut": "Entrée/sortie progressive",
         "easeOut": "Sortie progressive"
       },
+      "holdHint": "La valeur est maintenue jusqu'à l'image clé suivante.",
+      "unhold": "Ne plus maintenir",
       "legend": {
         "trigger": "Que signifient ces icônes ?",
         "title": "Guide de l'éditeur",
@@ -79,7 +81,19 @@
         "rowLabel": "Image clé à l’image {{frame}} — glissez pour redéfinir le timing, Alt+glisser pour dupliquer",
         "groupLabel": "Image clé {{group}} à l’image {{frame}} — glissez pour redéfinir le timing, Alt+glisser pour dupliquer",
         "locked": "Image clé à l’image {{frame}} (ligne verrouillée)"
-      }
+      },
+      "presets": "Préréglages",
+      "edit": "Modifier",
+      "easingSection": "Accélération",
+      "cubicEasing": "Cubique",
+      "filterAll": "Tout",
+      "filterIn": "Entrée",
+      "filterOut": "Sortie",
+      "filterInOut": "Entrée/Sortie",
+      "positionPreview": "Aperçu de position",
+      "duration": "Durée",
+      "play": "Lecture",
+      "pause": "Pause"
     }
   },
   "keyframes": {

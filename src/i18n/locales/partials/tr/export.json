@@ -84,7 +84,18 @@
       "selectFormat": "Biçim seçin",
       "selectQuality": "Kalite seçin",
       "selectResolution": "Çözünürlük seçin",
-      "video": "Video"
+      "video": "Video",
+      "subtitles": "Altyazılar",
+      "subtitleMode": {
+        "off": "Kapalı",
+        "burn": "Göm",
+        "sidecar": ".srt dosyası",
+        "embedded": "Gömülü parça",
+        "offDescription": "Dışa aktarılan videoda altyazı yok.",
+        "burnDescription": "Altyazılar videoya işlenir — her oynatıcıda görünür.",
+        "sidecarDescription": "Temiz video ve ayrı bir .srt altyazı dosyası.",
+        "embeddedDescription": "Açılıp kapatılabilir altyazı parçası (WebM/MKV)."
+      }
     },
     "videoContainer": {
       "mp4": "Geniş uyumluluk, paylaşmak için ideal",

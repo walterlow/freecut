@@ -12,13 +12,42 @@ import { memo } from 'react'
 import type { MutableRefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/shared/ui/cn'
-import type { AnimatableProperty, Keyframe } from '@/types/keyframe'
+import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe'
 import type { BlockedFrameRange } from '../../utils/transition-region'
 import type { ProceduralBand } from '@/features/keyframes/utils/procedural-preview'
 import { getKeyframeGroupLabel } from '@/features/keyframes/utils/property-i18n'
 import { getDisplayedGroupFrameGroups } from './sheet-preview-frame-groups'
 import type { DopesheetPropertyGroupStructure } from './dopesheet-helpers'
 import type { KeyframeMeta } from './dopesheet-types'
+import { SegmentEasingPopover, type SegmentEasingChange } from './segment-easing-popover'
+
+/**
+ * A clickable span between two consecutive keyframes, carrying the "from" datum
+ * whose outgoing easing governs the interpolation across it.
+ */
+interface SegmentSpan<T> {
+  from: T
+  left: number
+  width: number
+}
+
+/** Build clickable spans between consecutive plotted points, sorted by frame. */
+export function buildSegmentSpans<T>(
+  entries: Array<{ from: T; frame: number; x: number }>,
+): SegmentSpan<T>[] {
+  const sorted = [...entries].sort((a, b) => a.frame - b.frame)
+  const spans: SegmentSpan<T>[] = []
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i]!
+    const b = sorted[i + 1]!
+    const left = Math.min(a.x, b.x)
+    const width = Math.abs(b.x - a.x)
+    if (width > 0) {
+      spans.push({ from: a.from, left, width })
+    }
+  }
+  return spans
+}
 
 type FrameGroup = DopesheetPropertyGroupStructure['frameGroups'][number]
 type StructureRow = { property: AnimatableProperty; keyframes: Keyframe[] }
@@ -96,6 +125,7 @@ function ProceduralBandView({
 }
 
 interface GroupTimelineCellProps {
+  itemId: string
   groupId: string
   groupLabel: string
   /** Stable, frame-independent grouped keyframes. */
@@ -113,11 +143,15 @@ interface GroupTimelineCellProps {
     event: React.PointerEvent<HTMLButtonElement>,
   ) => void
   onBackgroundPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
+  onSegmentEasingChange?: SegmentEasingChange
+  onSegmentDragStart?: () => void
+  onSegmentDragEnd?: () => void
   sheetPreviewFrames: Record<string, number> | null
   sheetPreviewDuplicateKeyframeIds: string[] | null
 }
 
 export const GroupTimelineCell = memo(function GroupTimelineCell({
+  itemId,
   groupId,
   groupLabel,
   frameGroups,
@@ -130,6 +164,9 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
   isPropertyLocked,
   onGroupKeyframePointerDown,
   onBackgroundPointerDown,
+  onSegmentEasingChange,
+  onSegmentDragStart,
+  onSegmentDragEnd,
   sheetPreviewFrames,
   sheetPreviewDuplicateKeyframeIds,
 }: GroupTimelineCellProps) {
@@ -156,6 +193,19 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
     }),
   )
 
+  // Clickable easing spans between consecutive group keyframes. Suppressed while
+  // a drag preview is active so it doesn't fight the ghost markers.
+  const segmentSpans =
+    onSegmentEasingChange && !disabled && !sheetPreviewDuplicateKeyframeIds
+      ? buildSegmentSpans(
+          renderedFrameGroups.flatMap((frameGroup) => {
+            const x = getRenderedKeyframeX(frameGroup.frame)
+            if (x === null) return []
+            return [{ from: frameGroup, frame: frameGroup.frame, x }]
+          }),
+        )
+      : []
+
   return (
     <div
       className="relative border-l border-border/60 bg-muted/20 overflow-hidden"
@@ -170,6 +220,38 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
       ))}
 
       <KeyframeConnectors segments={connectorSegments} />
+
+      {onSegmentEasingChange &&
+        segmentSpans.map((span) => {
+          const editable = span.from.keyframes.filter(
+            ({ property }) => !isPropertyLocked(property),
+          )
+          if (editable.length === 0) return null
+          const first = editable[0]!
+          const mixed = editable.some(
+            ({ keyframe }) => keyframe.easing !== first.keyframe.easing,
+          )
+          const refs: KeyframeRef[] = editable.map(({ property, keyframe }) => ({
+            itemId,
+            property,
+            keyframeId: keyframe.id,
+          }))
+          return (
+            <SegmentEasingPopover
+              key={`group-seg-${groupId}-${first.keyframe.id}`}
+              left={span.left}
+              width={span.width}
+              refs={refs}
+              easing={first.keyframe.easing}
+              easingConfig={first.keyframe.easingConfig}
+              mixed={mixed}
+              held={editable.every(({ keyframe }) => keyframe.easing === 'hold')}
+              onChange={onSegmentEasingChange}
+              onDragStart={onSegmentDragStart}
+              onDragEnd={onSegmentDragEnd}
+            />
+          )
+        })}
 
       {renderedFrameGroups.map((frameGroup) => {
         const renderedX = getRenderedKeyframeX(frameGroup.frame)
@@ -243,6 +325,7 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
 })
 
 interface PropertyTimelineCellProps {
+  itemId: string
   property: AnimatableProperty
   /** Stable, frame-independent sorted keyframes for this property. */
   keyframes: Keyframe[]
@@ -265,6 +348,9 @@ interface PropertyTimelineCellProps {
     keyframeId: string,
     event: React.PointerEvent<HTMLButtonElement>,
   ) => void
+  onSegmentEasingChange?: SegmentEasingChange
+  onSegmentDragStart?: () => void
+  onSegmentDragEnd?: () => void
   setKeyframeButtonRef: (keyframeId: string, node: HTMLButtonElement | null) => void
   keyframeMetaByIdRef: MutableRefObject<Map<string, KeyframeMeta>>
   sheetPreviewFrames: Record<string, number> | null
@@ -272,6 +358,7 @@ interface PropertyTimelineCellProps {
 }
 
 export const PropertyTimelineCell = memo(function PropertyTimelineCell({
+  itemId,
   property,
   keyframes,
   locked,
@@ -285,6 +372,9 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
   disabled,
   onRowPointerDown,
   onKeyframePointerDown,
+  onSegmentEasingChange,
+  onSegmentDragStart,
+  onSegmentDragEnd,
   setKeyframeButtonRef,
   keyframeMetaByIdRef,
   sheetPreviewFrames,
@@ -299,6 +389,19 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
       return [{ id: keyframe.id, frame: keyframe.frame, x, held: keyframe.easing === 'hold' }]
     }),
   )
+
+  // Clickable easing spans between consecutive keyframes (skipped while locked or
+  // during a drag preview, which owns pointer interaction on this row).
+  const segmentSpans =
+    onSegmentEasingChange && !locked && !disabled && !sheetPreviewDuplicateKeyframeIds
+      ? buildSegmentSpans(
+          keyframes.flatMap((keyframe) => {
+            const x = renderedKeyframeXById.get(keyframe.id)
+            if (x === undefined) return []
+            return [{ from: keyframe, frame: keyframe.frame, x }]
+          }),
+        )
+      : []
 
   return (
     <div
@@ -333,6 +436,22 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
       )}
 
       <KeyframeConnectors segments={connectorSegments} />
+
+      {onSegmentEasingChange &&
+        segmentSpans.map((span) => (
+          <SegmentEasingPopover
+            key={`seg-${span.from.id}`}
+            left={span.left}
+            width={span.width}
+            refs={[{ itemId, property, keyframeId: span.from.id }]}
+            easing={span.from.easing}
+            easingConfig={span.from.easingConfig}
+            held={span.from.easing === 'hold'}
+            onChange={onSegmentEasingChange}
+            onDragStart={onSegmentDragStart}
+            onDragEnd={onSegmentDragEnd}
+          />
+        ))}
 
       {keyframes.map((keyframe) => {
         const renderedX = renderedKeyframeXById.get(keyframe.id)

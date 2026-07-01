@@ -11,7 +11,7 @@
  * progress reporting and cancellation.
  */
 
-import type { CompositionInputProps } from '@/types/export'
+import type { CompositionInputProps, SubtitleExportMode } from '@/types/export'
 import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline'
 import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer'
 import { createOutputFormat, getDefaultAudioCodec, getMimeType } from './client-renderer'
@@ -433,19 +433,32 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     target,
   })
 
-  const transcriptSubtitleVtt = settings.embedSubtitles
-    ? buildTranscriptSubtitleWebVtt(composition)
-    : null
+  // Subtitle handling per mode:
+  // - `burn`   : keep the transcript items so they render into the frames.
+  // - `off`    : drop them (no captions).
+  // - `sidecar`: drop them here — the clean video is muxed; the .srt file is
+  //              generated and downloaded on the main thread.
+  // - `embedded`: mux a soft WebVTT track, but ONLY for Matroska (WebM/MKV).
+  //   mediabunny never starts its ISOBMFF subtitle `auxWriter`, so WebVTT-into-
+  //   MP4/MOV asserts ("Assertion failed") via an uncatchable floating rejection;
+  //   there we fall back to burning captions in so they aren't silently lost.
+  const subtitleMode: SubtitleExportMode = settings.subtitleMode ?? 'burn'
   const supportsWebVttSubtitles = format.getSupportedSubtitleCodecs().includes('webvtt')
-  const embedTranscriptSubtitles = transcriptSubtitleVtt !== null && supportsWebVttSubtitles
-  const renderCompositionInput = embedTranscriptSubtitles
-    ? omitTranscriptSubtitleItemsForSoftSubtitleExport(composition)
-    : composition
+  const isIsobmffContainer = settings.container === 'mp4' || settings.container === 'mov'
+  const transcriptSubtitleVtt =
+    subtitleMode === 'embedded' ? buildTranscriptSubtitleWebVtt(composition) : null
+  const embedTranscriptSubtitles =
+    transcriptSubtitleVtt !== null && supportsWebVttSubtitles && !isIsobmffContainer
+  const burnInSubtitles =
+    subtitleMode === 'burn' || (subtitleMode === 'embedded' && !embedTranscriptSubtitles)
+  const renderCompositionInput = burnInSubtitles
+    ? composition
+    : omitTranscriptSubtitleItemsForSoftSubtitleExport(composition)
 
-  if (transcriptSubtitleVtt !== null && !supportsWebVttSubtitles) {
-    throw new Error(
-      `${settings.container.toUpperCase()} export does not support embedded transcript subtitles. ` +
-        'Use MP4, WebM, or MKV for embedded subtitles.',
+  if (subtitleMode === 'embedded' && transcriptSubtitleVtt !== null && !embedTranscriptSubtitles) {
+    getLog().warn(
+      `${settings.container.toUpperCase()} can't embed a soft subtitle track; ` +
+        'burning captions into the video instead.',
     )
   }
 

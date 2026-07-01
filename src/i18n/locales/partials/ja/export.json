@@ -84,7 +84,18 @@
       "selectFormat": "形式を選択",
       "selectQuality": "品質を選択",
       "selectResolution": "解像度を選択",
-      "video": "動画"
+      "video": "動画",
+      "subtitles": "字幕",
+      "subtitleMode": {
+        "off": "オフ",
+        "burn": "焼き込み",
+        "sidecar": "外部 .srt",
+        "embedded": "埋め込みトラック",
+        "offDescription": "書き出した動画に字幕は入りません。",
+        "burnDescription": "字幕を動画に焼き込みます。すべてのプレーヤーで表示されます。",
+        "sidecarDescription": "字幕なしの動画と別の .srt 字幕ファイル。",
+        "embeddedDescription": "オン/オフ切り替え可能な字幕トラック（WebM/MKV）。"
+      }
     },
     "videoContainer": {
       "mp4": "対応プレーヤーが多く、共有に最適",

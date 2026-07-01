@@ -21,6 +21,8 @@ import {
 } from '../utils/client-renderer'
 import { isExtendedSettings, resolveClientSettings, runRender } from '../utils/render-pipeline'
 import { convertTimelineToComposition } from '../utils/timeline-to-composition'
+import { buildTranscriptSubtitleCues } from '../utils/embedded-subtitle-export'
+import { serializeSrt } from '@/shared/utils/subtitles'
 import { useTimelineStore } from '@/features/export/deps/timeline'
 import { useProjectStore } from '@/features/export/deps/projects'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
@@ -155,7 +157,7 @@ export function useClientRender(): UseClientRenderReturn {
           projectResolution: `${projectWidth}x${projectHeight}`,
           videoContainer: extended ? settings.videoContainer : undefined,
           audioContainer: extended ? settings.audioContainer : undefined,
-          embedSubtitles: clientSettings.embedSubtitles,
+          subtitleMode: clientSettings.subtitleMode,
           projectId: currentProject?.id,
           codec: clientSettings.codec,
           container: clientSettings.container,
@@ -239,7 +241,22 @@ export function useClientRender(): UseClientRenderReturn {
         })
         if (fallbackReason) event.set('workerFallbackReason', fallbackReason)
 
-        setResult(renderResult)
+        // Sidecar mode: the video is muxed clean; build the .srt from the same
+        // (export-trimmed) composition on the main thread and attach it so the
+        // dialog can offer it as a second download.
+        let finalResult = renderResult
+        if (clientSettings.subtitleMode === 'sidecar') {
+          const cues = buildTranscriptSubtitleCues(composition)
+          if (cues.length > 0) {
+            finalResult = {
+              ...renderResult,
+              subtitleSidecar: { filename: 'subtitles.srt', content: serializeSrt(cues) },
+            }
+            event.set('subtitleSidecarCues', cues.length)
+          }
+        }
+
+        setResult(finalResult)
         setStatus('completed')
         setProgress(100)
 
@@ -301,13 +318,29 @@ export function useClientRender(): UseClientRenderReturn {
     else if (mime.includes('audio/wav') || mime.includes('wave')) extension = 'wav'
     else if (mime.includes('audio/aac') || mime.includes('adts')) extension = 'aac'
 
-    a.download = `export-${Date.now()}.${extension}`
+    const baseName = `export-${Date.now()}`
+    a.download = `${baseName}.${extension}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
 
     // Revoke during idle — download has already started by then
     requestIdleCallback(() => URL.revokeObjectURL(url))
+
+    // Sidecar mode: download the .srt alongside, sharing the video's base name.
+    const sidecar = result.subtitleSidecar
+    if (sidecar) {
+      const sidecarExt = sidecar.filename.split('.').pop() ?? 'srt'
+      const sidecarBlob = new Blob([sidecar.content], { type: 'text/plain;charset=utf-8' })
+      const sidecarUrl = URL.createObjectURL(sidecarBlob)
+      const sidecarLink = document.createElement('a')
+      sidecarLink.href = sidecarUrl
+      sidecarLink.download = `${baseName}.${sidecarExt}`
+      document.body.appendChild(sidecarLink)
+      sidecarLink.click()
+      document.body.removeChild(sidecarLink)
+      requestIdleCallback(() => URL.revokeObjectURL(sidecarUrl))
+    }
   }, [result])
 
   /**
