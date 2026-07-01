@@ -142,6 +142,7 @@ async function saveMetadata(
     sourceHeight: number
     status: string
     createdAt: number
+    codec?: string
   },
 ): Promise<void> {
   const fileHandle = await dir.getFileHandle('meta.json', { create: true })
@@ -197,6 +198,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     QTFF,
     WEBM,
     MATROSKA,
+    canEncodeVideo,
   } = mb
 
   const dir = await getProxyDir(mediaId)
@@ -210,6 +212,24 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     throw new Error('Proxy source unavailable')
   }
 
+  // Proxy codec: prefer HEVC where the platform can hardware-encode it — measured on
+  // WebCodecs to be both faster to encode AND meaningfully smaller than H.264, and HEVC
+  // decode is available wherever HEVC encode is. Fall back to H.264 (universally
+  // hardware-accelerated) when HEVC encode isn't supported, so proxy generation never
+  // regresses on machines without an HEVC encoder. The chosen codec is recorded in the
+  // metadata so the consumer can skip a proxy this machine can't play (cross-machine safe).
+  let proxyCodec: 'hevc' | 'avc' = 'avc'
+  try {
+    const hevcOk = await canEncodeVideo('hevc', {
+      width: proxyDimensions.width,
+      height: proxyDimensions.height,
+      hardwareAcceleration: 'prefer-hardware',
+    })
+    if (hevcOk) proxyCodec = 'hevc'
+  } catch {
+    // canEncodeVideo unavailable/threw — keep the H.264 default.
+  }
+
   // Save initial metadata
   await saveMetadata(dir, {
     version: PROXY_SCHEMA_VERSION,
@@ -219,6 +239,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     sourceHeight,
     status: 'generating',
     createdAt,
+    codec: proxyCodec,
   })
 
   input = new Input({
@@ -227,7 +248,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   })
 
   // ProRes decodes through the registered @mediabunny/prores decoder, so Conversion
-  // transcodes it to the H.264 proxy directly — no bespoke decode→encode loop needed.
+  // transcodes it to the proxy directly — no bespoke decode→encode loop needed.
   let job: ProxyJob | null = null
   let streamedToFile = false
   let bufferTarget: InstanceType<typeof BufferTarget> | null = null
@@ -250,7 +271,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
           width: proxyDimensions.width,
           height: proxyDimensions.height,
           fit: 'contain',
-          codec: 'avc',
+          codec: proxyCodec,
           // Faster proxy generation preset.
           bitrate: QUALITY_LOW,
           hardwareAcceleration: 'prefer-hardware',
@@ -369,6 +390,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       sourceHeight,
       status: 'ready',
       createdAt,
+      codec: proxyCodec,
     })
 
     self.postMessage({
@@ -394,6 +416,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       sourceHeight,
       status: 'error',
       createdAt,
+      codec: proxyCodec,
     }).catch(() => undefined)
 
     throw error
