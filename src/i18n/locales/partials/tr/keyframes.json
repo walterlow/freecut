@@ -60,6 +60,8 @@
         "easeInOut": "Yavaş Giriş/Çıkış",
         "easeOut": "Yavaş Çıkış"
       },
+      "holdHint": "Değer bir sonraki anahtar kareye kadar korunur.",
+      "unhold": "Tutmayı bırak",
       "legend": {
         "trigger": "Bu simgeler ne anlama geliyor?",
         "title": "Düzenleyici kılavuzu",
@@ -79,7 +81,15 @@
         "rowLabel": "{{frame}}. karedeki anahtar kare — zamanlamayı değiştirmek için sürükleyin, çoğaltmak için Alt+sürükleyin",
         "groupLabel": "{{frame}}. karedeki {{group}} anahtar karesi — zamanlamayı değiştirmek için sürükleyin, çoğaltmak için Alt+sürükleyin",
         "locked": "{{frame}}. karedeki anahtar kare (satır kilitli)"
-      }
+      },
+      "presets": "Ön ayarlar",
+      "edit": "Düzenle",
+      "easingSection": "Yumuşatma",
+      "cubicEasing": "Kübik",
+      "filterAll": "Tümü",
+      "filterIn": "Giriş",
+      "filterOut": "Çıkış",
+      "filterInOut": "Giriş/Çıkış"
     }
   },
   "keyframes": {

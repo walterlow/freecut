@@ -60,6 +60,8 @@
         "easeInOut": "イーズイン/アウト",
         "easeOut": "イーズアウト"
       },
+      "holdHint": "次のキーフレームまで値を保持します。",
+      "unhold": "ホールド解除",
       "legend": {
         "trigger": "これらのアイコンの意味は？",
         "title": "エディターガイド",
@@ -79,7 +81,15 @@
         "rowLabel": "フレーム {{frame}} のキーフレーム — ドラッグでタイミング変更、Alt+ドラッグで複製",
         "groupLabel": "フレーム {{frame}} の {{group}} キーフレーム — ドラッグでタイミング変更、Alt+ドラッグで複製",
         "locked": "フレーム {{frame}} のキーフレーム（行はロック中）"
-      }
+      },
+      "presets": "プリセット",
+      "edit": "編集",
+      "easingSection": "イージング",
+      "cubicEasing": "キュービック",
+      "filterAll": "すべて",
+      "filterIn": "イン",
+      "filterOut": "アウト",
+      "filterInOut": "イン/アウト"
     }
   },
   "keyframes": {

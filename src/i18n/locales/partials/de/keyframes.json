@@ -60,6 +60,8 @@
         "easeInOut": "Ease In/Out",
         "easeOut": "Ease Out"
       },
+      "holdHint": "Der Wert wird bis zum nächsten Keyframe gehalten.",
+      "unhold": "Halten aufheben",
       "legend": {
         "trigger": "Was bedeuten diese Symbole?",
         "title": "Editor-Leitfaden",
@@ -79,7 +81,15 @@
         "rowLabel": "Keyframe bei Frame {{frame}} — ziehen zum Verschieben, Alt+Ziehen zum Duplizieren",
         "groupLabel": "{{group}}-Keyframe bei Frame {{frame}} — ziehen zum Verschieben, Alt+Ziehen zum Duplizieren",
         "locked": "Keyframe bei Frame {{frame}} (Zeile gesperrt)"
-      }
+      },
+      "presets": "Vorlagen",
+      "edit": "Bearbeiten",
+      "easingSection": "Beschleunigung",
+      "cubicEasing": "Kubisch",
+      "filterAll": "Alle",
+      "filterIn": "Ein",
+      "filterOut": "Aus",
+      "filterInOut": "Ein/Aus"
     }
   },
   "keyframes": {

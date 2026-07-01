@@ -60,6 +60,8 @@
         "easeInOut": "이즈 인/아웃",
         "easeOut": "이즈 아웃"
       },
+      "holdHint": "다음 키프레임까지 값을 유지합니다.",
+      "unhold": "고정 해제",
       "legend": {
         "trigger": "이 아이콘들은 무슨 뜻인가요?",
         "title": "편집기 가이드",
@@ -79,7 +81,15 @@
         "rowLabel": "{{frame}} 프레임의 키프레임 — 드래그하여 타이밍 변경, Alt+드래그하여 복제",
         "groupLabel": "{{frame}} 프레임의 {{group}} 키프레임 — 드래그하여 타이밍 변경, Alt+드래그하여 복제",
         "locked": "{{frame}} 프레임의 키프레임 (행 잠김)"
-      }
+      },
+      "presets": "프리셋",
+      "edit": "편집",
+      "easingSection": "이징",
+      "cubicEasing": "큐빅",
+      "filterAll": "전체",
+      "filterIn": "인",
+      "filterOut": "아웃",
+      "filterInOut": "인/아웃"
     }
   },
   "keyframes": {

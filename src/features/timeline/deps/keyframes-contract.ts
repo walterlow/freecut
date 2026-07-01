@@ -10,7 +10,15 @@ export {
   getTextAnimatableBaseValue,
   isTextAnimatableProperty,
 } from '@/features/keyframes/utils/animated-text-item'
-export { getBezierPresetForEasing } from '@/features/keyframes/utils/easing-presets'
+export {
+  BEZIER_PRESETS,
+  areBezierPointsEqual,
+  findMatchingBezierPreset,
+  clampBezierValue,
+  clampSpringValue,
+  buildEasingConfig,
+} from '@/features/keyframes/utils/easing-presets'
+export type { BezierPresetValue } from '@/features/keyframes/utils/easing-presets'
 export {
   getTransitionBlockedRanges,
   isFrameInTransitionRegion,
