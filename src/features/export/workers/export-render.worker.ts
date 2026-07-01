@@ -21,6 +21,25 @@ if (typeof workerGlobal.window === 'undefined') {
 
 const log = createLogger('ExportRenderWorker')
 
+// Capture floating rejections / uncaught errors with their stack. Bare
+// mediabunny asserts surface only "Assertion failed"; without the stack the
+// failing call site is invisible, so log it explicitly here.
+self.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason
+  log.error('Export worker unhandled rejection', {
+    error: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  })
+})
+self.addEventListener('error', (event) => {
+  log.error('Export worker uncaught error', {
+    error: event.message,
+    stack: event.error instanceof Error ? event.error.stack : undefined,
+    filename: event.filename,
+    lineno: event.lineno,
+  })
+})
+
 const activeRequests = new Map<string, AbortController>()
 
 function compositionHasAnimatedImage(
@@ -130,7 +149,10 @@ self.onmessage = async (event: MessageEvent<ExportRenderWorkerRequest>) => {
     }
 
     const messageText = error instanceof Error ? error.message : String(error)
-    log.error('Export worker failed', { requestId, error: messageText })
+    const stack = error instanceof Error ? error.stack : undefined
+    // Surface the stack: bare mediabunny asserts report only "Assertion failed",
+    // so without the stack the failing call site is invisible on the main thread.
+    log.error('Export worker failed', { requestId, error: messageText, stack })
     const failure: ExportRenderWorkerResponse = {
       type: 'error',
       requestId,

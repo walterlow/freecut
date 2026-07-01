@@ -437,16 +437,31 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     ? buildTranscriptSubtitleWebVtt(composition)
     : null
   const supportsWebVttSubtitles = format.getSupportedSubtitleCodecs().includes('webvtt')
-  const embedTranscriptSubtitles = transcriptSubtitleVtt !== null && supportsWebVttSubtitles
+  // mediabunny 1.50.0 never starts its ISOBMFF subtitle `auxWriter`, so muxing a
+  // WebVTT cue into MP4/MOV asserts ("Assertion failed") and aborts the export
+  // via a floating rejection we can't catch. Skip soft-embedding for those
+  // containers until the upstream bug is patched; Matroska (WebM/MKV) uses a
+  // different muxer and is unaffected. Captions still render through the normal
+  // path (they are only omitted when we actually soft-embed).
+  const isIsobmffContainer = settings.container === 'mp4' || settings.container === 'mov'
+  const webVttSubtitlesUsable = supportsWebVttSubtitles && !isIsobmffContainer
+  const embedTranscriptSubtitles = transcriptSubtitleVtt !== null && webVttSubtitlesUsable
   const renderCompositionInput = embedTranscriptSubtitles
     ? omitTranscriptSubtitleItemsForSoftSubtitleExport(composition)
     : composition
 
-  if (transcriptSubtitleVtt !== null && !supportsWebVttSubtitles) {
-    throw new Error(
-      `${settings.container.toUpperCase()} export does not support embedded transcript subtitles. ` +
-        'Use MP4, WebM, or MKV for embedded subtitles.',
-    )
+  if (transcriptSubtitleVtt !== null && !webVttSubtitlesUsable) {
+    if (supportsWebVttSubtitles && isIsobmffContainer) {
+      getLog().warn(
+        'Embedded MP4/MOV subtitles are temporarily unavailable (mediabunny bug); ' +
+          'exporting with captions rendered in-frame instead.',
+      )
+    } else {
+      throw new Error(
+        `${settings.container.toUpperCase()} export does not support embedded transcript subtitles. ` +
+          'Use MP4, WebM, or MKV for embedded subtitles.',
+      )
+    }
   }
 
   let transcriptSubtitleSource: InstanceType<typeof TextSubtitleSource> | null = null
