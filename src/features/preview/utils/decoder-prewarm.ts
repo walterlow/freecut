@@ -104,8 +104,10 @@ const decoderPrewarmMetrics: DecoderPrewarmMetricsSnapshot = {
  *  a pending worker decode instead of falling through to a blocking main-thread decode. */
 const inflightPreseekBySrc = new Map<string, InflightPreseek[]>()
 
-// Dev: expose cache for debugging
-if (import.meta.env.DEV) {
+// Dev: expose cache for debugging. Guard `window` — this module is also pulled
+// into worker bundles (e.g. via the export deps barrel), where `window` is
+// undefined and touching it throws at module-eval time.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   ;(window as unknown as Record<string, unknown>).__PREWARM_CACHE__ = bitmapCache
 }
 
