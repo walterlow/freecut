@@ -35,18 +35,34 @@ export function PropertySection({
     }
   }, [])
 
+  const setAllSectionsOpen = (next: boolean) => {
+    for (const setSectionOpen of openStateSubscribers) setSectionOpen(next)
+  }
+
   const handleTriggerClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (!event.shiftKey) return
     // Radix skips its own toggle when the click is default-prevented, so this
     // header is driven by the broadcast like every other one.
     event.preventDefault()
-    for (const setSectionOpen of openStateSubscribers) setSectionOpen(!open)
+    setAllSectionsOpen(!open)
+  }
+
+  // Activating the button by key synthesizes a click, but only carries shiftKey
+  // if Shift is still held when that click is dispatched — and Space dispatches
+  // it on keyup. Read the modifier off the keydown, where it is unambiguous, and
+  // suppress the activation so no click follows.
+  const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!event.shiftKey || event.repeat) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    setAllSectionsOpen(!open)
   }
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger
         onClick={handleTriggerClick}
+        onKeyDown={handleTriggerKeyDown}
         className="flex items-center gap-2 w-full py-2 hover:bg-secondary/50 rounded-md px-2 -mx-2 transition-colors"
       >
         <ChevronRight
