@@ -3,7 +3,11 @@
  */
 
 export type {
+  AudiobookMusicBedPlacement,
+  CinematicDepthLayerPlacement,
   FilmstripFrame,
+  InsertAudiobookMusicBedResult,
+  InsertCinematicDepthLayersResult,
   MotionPresetClear,
   TimelineActions,
   TimelineState,
@@ -11,6 +15,8 @@ export type {
 } from '@/features/timeline/contracts/editor'
 export {
   applyAnimationPreset,
+  applyCinematicCameraToSelectedImages,
+  applyDocumentaryCameraToSelectedImages,
   applyMotionPresetKeyframes,
   applyMotionModifierToItems,
   updateMotionModifiersLive,
@@ -55,6 +61,7 @@ export {
   resolveEffectiveTrackStates,
   resolveTransitionTargetFromSelection,
   searchTimelineTranscript,
+  sourceSecondsToTimelineFrame,
   sourceToTimelineFrames,
   Timeline,
   TranscriptEditorPanel,

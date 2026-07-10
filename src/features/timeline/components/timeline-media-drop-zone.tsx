@@ -55,6 +55,7 @@ import {
   type DroppedMediaEntry,
 } from '../utils/drop-execution'
 import { prewarmDroppedTimelineAudio } from '../utils/drop-audio-prewarm'
+import { applyAutoCameraToNewImageItems } from '../stores/actions/auto-camera-actions'
 import {
   type ExternalDragPreviewEntry,
   isDroppableMediaType,
@@ -1038,6 +1039,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
             partialFailureLabel: t('timeline.track.droppedMediaItems'),
             requestedCount: entries.length,
             setTracks: useTimelineStore.getState().setTracks,
+            onItemsPlaced: applyAutoCameraToNewImageItems,
           })
           return
         } catch (error) {
@@ -1070,6 +1072,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         partialFailureLabel: t('timeline.track.droppedFiles'),
         requestedCount: droppedEntries.length,
         setTracks: useTimelineStore.getState().setTracks,
+        onItemsPlaced: applyAutoCameraToNewImageItems,
       })
     },
     [

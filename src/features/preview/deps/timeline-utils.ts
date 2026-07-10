@@ -5,6 +5,7 @@
 
 export { resolveEffectiveTrackStates } from './timeline-contract'
 export {
+  applyAutoCameraToNewImageItems,
   findBestCanvasDropPlacement,
   buildDroppedMediaTimelineItem,
   createClassicTrack,

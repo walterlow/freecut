@@ -28,6 +28,7 @@ describe('text style presets', () => {
       'breaking-update',
       'event-card',
       'launch-stack',
+      'karaoke-subtitle',
       'badge',
     ])
   })

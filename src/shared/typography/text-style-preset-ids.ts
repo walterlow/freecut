@@ -11,6 +11,7 @@ export const TEXT_STYLE_PRESET_IDS = [
   'breaking-update',
   'event-card',
   'launch-stack',
+  'karaoke-subtitle',
   'badge',
 ] as const
 

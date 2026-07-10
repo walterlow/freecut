@@ -25,3 +25,4 @@ export {
 } from '@/runtime/composition-runtime/utils/corner-pin'
 export { clearPreviewAudioCache } from '@/runtime/composition-runtime/utils/audio-decode-cache'
 export { deletePreviewAudioConform } from '@/runtime/composition-runtime/utils/preview-audio-conform'
+export { audioBufferToWavBlob } from '@/runtime/composition-runtime/utils/audio-buffer-wav'

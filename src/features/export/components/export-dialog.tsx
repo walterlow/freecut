@@ -57,6 +57,7 @@ import {
   rangesFromFixedDuration,
   rangesFromMarkers,
 } from '../utils/build-render-job'
+import { convertTimelineToComposition } from '../utils/timeline-to-composition'
 import { useRenderQueueStore, type RenderJob } from '../stores/render-queue-store'
 import { useProjectStore } from '@/features/export/deps/projects'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
@@ -74,6 +75,27 @@ import {
 } from '../utils/client-renderer'
 import { ExportPreviewPlayer } from './export-preview-player'
 import { useBrokenMediaIds } from '../deps/media-library'
+import {
+  sampleRenderedVideoQuality,
+  type CinematicFrameQualityScore,
+} from '../utils/cinematic-frame-quality'
+import {
+  sampleRenderedAudioQuality,
+  type CinematicAudioQualityScore,
+} from '../utils/cinematic-audio-quality'
+import {
+  scoreCinematicDeliveryReadiness,
+  type CinematicDeliveryReadinessScore,
+} from '../utils/cinematic-delivery-readiness'
+import {
+  scoreCinematicEditReadiness,
+  type CinematicEditReadinessScore,
+} from '../utils/cinematic-edit-readiness'
+import {
+  cinematic4KResolution,
+  scaledResolution,
+  type ExportResolution,
+} from '../utils/export-resolution-presets'
 
 export interface ExportDialogProps {
   open: boolean
@@ -83,6 +105,38 @@ export interface ExportDialogProps {
 }
 
 type DialogView = 'settings' | 'progress' | 'complete' | 'error' | 'cancelled'
+type QualityAnalysisStatus = 'idle' | 'analyzing' | 'complete' | 'unavailable'
+type ExportQualityGrade = 'excellent' | 'strong' | 'fair' | 'weak'
+
+function isTerminalQualityStatus(status: QualityAnalysisStatus): boolean {
+  return status === 'complete' || status === 'unavailable'
+}
+
+function resolveDeliveryAnalysisStatus(params: {
+  view: DialogView
+  isVideoResult: boolean
+  qualityStatus: QualityAnalysisStatus
+  audioQualityStatus: QualityAnalysisStatus
+}): QualityAnalysisStatus {
+  if (params.view !== 'complete') return 'idle'
+  if (params.audioQualityStatus === 'analyzing') return 'analyzing'
+  if (params.isVideoResult && params.qualityStatus === 'analyzing') return 'analyzing'
+
+  const frameReady = !params.isVideoResult || isTerminalQualityStatus(params.qualityStatus)
+  return frameReady && isTerminalQualityStatus(params.audioQualityStatus) ? 'complete' : 'idle'
+}
+
+interface ExportQualityPanelScore {
+  score: number
+  grade: ExportQualityGrade
+  summary: string
+  issues: Array<{ id: string; message: string }>
+}
+
+interface ExportQualityMetric {
+  label: string
+  value: string
+}
 
 type VideoContainerOption = {
   value: ClientVideoContainer
@@ -125,36 +179,64 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
-/**
- * Scale a dimension and round to the nearest even number (encoders require
- * even dimensions). Shared by the resolution dropdown and the quick presets so
- * preset detection compares against identical values.
- */
-function scaleDimension(value: number, scale: number): number {
-  const scaled = Math.round(value * scale)
-  return scaled % 2 === 0 ? scaled : scaled + 1
+type ExportPreset =
+  | {
+      id: 'cinema4k'
+      labelKey: string
+      container: ClientVideoContainer
+      codec: ExportSettings['codec']
+      quality: ExportSettings['quality']
+      resolution: 'cinematic4k'
+    }
+  | {
+      id: 'max' | 'recommended' | 'balanced' | 'small'
+      labelKey: string
+      container: ClientVideoContainer
+      codec: ExportSettings['codec']
+      quality: ExportSettings['quality']
+      scale: number
+    }
+
+type ExportResolutionOption = {
+  value: string
+  label: string
+  resolution: ExportResolution
 }
 
-function scaledResolution(projectWidth: number, projectHeight: number, scale: number) {
-  return {
-    width: scaleDimension(projectWidth, scale),
-    height: scaleDimension(projectHeight, scale),
-  }
+function presetResolution(
+  preset: ExportPreset,
+  projectWidth: number,
+  projectHeight: number,
+): ExportResolution {
+  return preset.id === 'cinema4k'
+    ? cinematic4KResolution(projectWidth, projectHeight)
+    : scaledResolution(projectWidth, projectHeight, preset.scale)
 }
 
-type ExportPreset = {
-  id: 'max' | 'recommended' | 'balanced' | 'small'
-  labelKey: string
-  container: ClientVideoContainer
-  codec: ExportSettings['codec']
-  quality: ExportSettings['quality']
-  scale: number
+function resolutionValue(resolution: ExportResolution): string {
+  return `${resolution.width}x${resolution.height}`
 }
 
-// One-click targets that bundle container/codec/quality/resolution. All keep the
-// project's aspect ratio (scale only) so output is never distorted; they vary the
-// quality/size tradeoff, which is the part users shouldn't need codec knowledge for.
+function uniqueResolutionOptions(options: ExportResolutionOption[]): ExportResolutionOption[] {
+  const seen = new Set<string>()
+  return options.filter((option) => {
+    if (seen.has(option.value)) return false
+    seen.add(option.value)
+    return true
+  })
+}
+
+// One-click targets that bundle container/codec/quality/resolution. They keep
+// the project's aspect ratio so high-end upscales do not distort the image.
 const EXPORT_PRESETS: ExportPreset[] = [
+  {
+    id: 'cinema4k',
+    labelKey: 'export.settings.presetCinema4k',
+    container: 'mp4',
+    codec: 'h264',
+    quality: 'ultra',
+    resolution: 'cinematic4k',
+  },
   {
     id: 'max',
     labelKey: 'export.settings.presetMax',
@@ -197,9 +279,9 @@ function getResolutionOptions(
   projectHeight: number,
   t: (key: string, options?: Record<string, unknown>) => string,
 ) {
+  const cinema4k = cinematic4KResolution(projectWidth, projectHeight)
   const scales = [1, 0.666, 0.5]
-
-  return scales.map((scale) => {
+  const scaledOptions = scales.map((scale) => {
     const { width, height } = scaledResolution(projectWidth, projectHeight, scale)
 
     const label =
@@ -207,8 +289,20 @@ function getResolutionOptions(
         ? t('export.settings.resolutionSameAsProject', { width, height })
         : t('export.settings.resolutionScaled', { p: Math.min(width, height), width, height })
 
-    return { value: `${width}x${height}`, label }
+    return { value: `${width}x${height}`, label, resolution: { width, height } }
   })
+
+  return uniqueResolutionOptions([
+    {
+      value: resolutionValue(cinema4k),
+      label: t('export.settings.resolutionCinema4k', {
+        width: cinema4k.width,
+        height: cinema4k.height,
+      }),
+      resolution: cinema4k,
+    },
+    ...scaledOptions,
+  ])
 }
 
 function getDefaultCodecForFormat(format: 'mp4' | 'webm'): ExportSettings['codec'] {
@@ -226,6 +320,236 @@ function preflightIconClass(severity: ReturnType<typeof summarizePreflightSeveri
     case 'ok':
       return 'text-green-500'
   }
+}
+
+function qualityGradeClass(grade: ExportQualityGrade): string {
+  switch (grade) {
+    case 'excellent':
+      return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-50'
+    case 'strong':
+      return 'border-sky-500/40 bg-sky-500/10 text-sky-50'
+    case 'fair':
+      return 'border-amber-500/40 bg-amber-500/10 text-amber-50'
+    case 'weak':
+      return 'border-destructive/40 bg-destructive/10 text-destructive'
+  }
+}
+
+function qualityBarClass(grade: ExportQualityGrade): string {
+  switch (grade) {
+    case 'excellent':
+      return 'bg-emerald-400'
+    case 'strong':
+      return 'bg-sky-400'
+    case 'fair':
+      return 'bg-amber-400'
+    case 'weak':
+      return 'bg-destructive'
+  }
+}
+
+function ExportQualityPanel({
+  title,
+  analyzingText,
+  unavailableText,
+  metrics,
+  score,
+  status,
+}: {
+  title: string
+  analyzingText: string
+  unavailableText: string
+  metrics: ExportQualityMetric[]
+  score: ExportQualityPanelScore | null
+  status: QualityAnalysisStatus
+}) {
+  if (status === 'idle') return null
+
+  if (status === 'analyzing') {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        {analyzingText}
+      </div>
+    )
+  }
+
+  if (status === 'unavailable' || !score) {
+    return (
+      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+        {unavailableText}
+      </div>
+    )
+  }
+
+  return (
+    <div className={`space-y-2 rounded-lg border p-3 text-xs ${qualityGradeClass(score.grade)}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{title}</span>
+        <span className="font-mono text-[11px]">{score.score.toFixed(1)}/10</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-background/45">
+        <div
+          className={`h-full rounded-full transition-[width] duration-300 ${qualityBarClass(
+            score.grade,
+          )}`}
+          style={{ width: `${Math.round(score.score * 10)}%` }}
+        />
+      </div>
+      <p className="leading-relaxed opacity-90">{score.summary}</p>
+      <div className="grid grid-cols-3 gap-1.5 text-[11px] opacity-90">
+        {metrics.map((metric) => (
+          <span key={metric.label}>
+            {metric.label}: {metric.value}
+          </span>
+        ))}
+      </div>
+      {score.issues.length > 0 && (
+        <div className="space-y-1 pt-0.5">
+          {score.issues.slice(0, 3).map((qualityIssue) => (
+            <p key={qualityIssue.id} className="leading-snug opacity-90">
+              {qualityIssue.message}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QualityAnalysisPanel({
+  score,
+  status,
+}: {
+  score: CinematicFrameQualityScore | null
+  status: QualityAnalysisStatus
+}) {
+  const { t } = useTranslation()
+  const metrics = score
+    ? [
+        {
+          label: t('export.quality.sharpness', { defaultValue: 'Sharpness' }),
+          value: score.metrics.averageSharpness.toFixed(1),
+        },
+        {
+          label: t('export.quality.blacks', { defaultValue: 'Blacks' }),
+          value: `${Math.round(score.metrics.crushedBlackRatio * 100)}%`,
+        },
+        {
+          label: t('export.quality.motion', { defaultValue: 'Motion' }),
+          value: score.metrics.averageFrameDelta.toFixed(1),
+        },
+        {
+          label: t('export.quality.path', { defaultValue: 'Path' }),
+          value: score.metrics.averageMotionMagnitude.toFixed(1),
+        },
+        {
+          label: t('export.quality.drama', { defaultValue: 'Drama' }),
+          value: `${score.metrics.referenceMotionScore.toFixed(1)}/10`,
+        },
+      ]
+    : []
+
+  return (
+    <ExportQualityPanel
+      title={t('export.quality.title', { defaultValue: 'Cinematic quality check' })}
+      analyzingText={t('export.quality.analyzing', {
+        defaultValue: 'Reviewing rendered frames',
+      })}
+      unavailableText={t('export.quality.unavailable', {
+        defaultValue: 'Rendered-frame quality could not be sampled. Review the preview manually.',
+      })}
+      score={score}
+      status={status}
+      metrics={metrics}
+    />
+  )
+}
+
+function AudioQualityAnalysisPanel({
+  score,
+  status,
+}: {
+  score: CinematicAudioQualityScore | null
+  status: QualityAnalysisStatus
+}) {
+  const { t } = useTranslation()
+  const metrics = score
+    ? [
+        {
+          label: t('export.audioQuality.loudness', { defaultValue: 'Loudness' }),
+          value: `${score.metrics.rmsDb.toFixed(1)} dB`,
+        },
+        {
+          label: t('export.audioQuality.peak', { defaultValue: 'Peak' }),
+          value: `${score.metrics.peakDb.toFixed(1)} dB`,
+        },
+        {
+          label: t('export.audioQuality.dynamics', { defaultValue: 'Dynamics' }),
+          value: `${score.metrics.dynamicRangeDb.toFixed(1)} dB`,
+        },
+      ]
+    : []
+
+  return (
+    <ExportQualityPanel
+      title={t('export.audioQuality.title', { defaultValue: 'Cinematic audio check' })}
+      analyzingText={t('export.audioQuality.analyzing', {
+        defaultValue: 'Reviewing exported audio mix',
+      })}
+      unavailableText={t('export.audioQuality.unavailable', {
+        defaultValue: 'Exported audio could not be decoded for automatic review.',
+      })}
+      score={score}
+      status={status}
+      metrics={metrics}
+    />
+  )
+}
+
+function DeliveryReadinessPanel({
+  score,
+  status,
+}: {
+  score: CinematicDeliveryReadinessScore | null
+  status: QualityAnalysisStatus
+}) {
+  const { t } = useTranslation()
+  const metrics = score
+    ? [
+        {
+          label: t('export.delivery.edit', { defaultValue: 'Edit' }),
+          value: `${score.metrics.editReadinessScore.toFixed(1)}/10`,
+        },
+        {
+          label: t('export.delivery.visual', { defaultValue: 'Visual' }),
+          value: `${score.metrics.frameQualityScore.toFixed(1)}/10`,
+        },
+        {
+          label: t('export.delivery.audio', { defaultValue: 'Audio' }),
+          value: `${score.metrics.audioQualityScore.toFixed(1)}/10`,
+        },
+        {
+          label: t('export.delivery.export', { defaultValue: 'Export' }),
+          value: `${score.metrics.exportPreflightScore.toFixed(1)}/10`,
+        },
+      ]
+    : []
+
+  return (
+    <ExportQualityPanel
+      title={t('export.delivery.title', { defaultValue: 'Cinematic delivery verdict' })}
+      analyzingText={t('export.delivery.analyzing', {
+        defaultValue: 'Combining export, frame, and audio checks',
+      })}
+      unavailableText={t('export.delivery.unavailable', {
+        defaultValue: 'Delivery readiness could not be calculated.',
+      })}
+      score={score}
+      status={status}
+      metrics={metrics}
+    />
+  )
 }
 
 function ExportPreflightPanel({ preflight }: { preflight: ExportPreflightResult | null }) {
@@ -368,16 +692,35 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   }, [hasInOutPoints, inPoint, outPoint, renderWholeProject, timelineDurationFrames])
 
   const preflightComposition = useMemo<CompositionInputProps>(
-    () => ({
+    () =>
+      convertTimelineToComposition(
+        tracks,
+        items,
+        transitions,
+        fps,
+        projectWidth,
+        projectHeight,
+        renderWholeProject || !hasInOutPoints ? null : inPoint,
+        renderWholeProject || !hasInOutPoints ? null : outPoint,
+        keyframes,
+      ),
+    [
       fps,
-      durationInFrames: exportRange.duration,
-      width: projectWidth,
-      height: projectHeight,
+      hasInOutPoints,
+      inPoint,
+      items,
+      keyframes,
+      outPoint,
+      projectHeight,
+      projectWidth,
+      renderWholeProject,
       tracks,
       transitions,
-      keyframes,
-    }),
-    [exportRange.duration, fps, keyframes, projectHeight, projectWidth, tracks, transitions],
+    ],
+  )
+  const cinematicEditReadiness = useMemo<CinematicEditReadinessScore>(
+    () => scoreCinematicEditReadiness(preflightComposition),
+    [preflightComposition],
   )
 
   const resolutionOptions = useMemo(
@@ -388,7 +731,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   // Which preset (if any) the current settings exactly match. null = "Custom".
   const activePresetId = useMemo(() => {
     const match = EXPORT_PRESETS.find((preset) => {
-      const res = scaledResolution(projectWidth, projectHeight, preset.scale)
+      const res = presetResolution(preset, projectWidth, projectHeight)
       return (
         videoContainer === preset.container &&
         settings.codec === preset.codec &&
@@ -414,7 +757,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
       ...prev,
       codec: preset.codec,
       quality: preset.quality,
-      resolution: scaledResolution(projectWidth, projectHeight, preset.scale),
+      resolution: presetResolution(preset, projectWidth, projectHeight),
     }))
   }
 
@@ -446,6 +789,12 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   const [isCheckingVideoSupport, setIsCheckingVideoSupport] = useState(false)
   const [videoSupportError, setVideoSupportError] = useState<string | null>(null)
   const [preflight, setPreflight] = useState<ExportPreflightResult | null>(null)
+  const [qualityStatus, setQualityStatus] = useState<QualityAnalysisStatus>('idle')
+  const [qualityScore, setQualityScore] = useState<CinematicFrameQualityScore | null>(null)
+  const [audioQualityStatus, setAudioQualityStatus] = useState<QualityAnalysisStatus>('idle')
+  const [audioQualityScore, setAudioQualityScore] = useState<CinematicAudioQualityScore | null>(
+    null,
+  )
 
   // Track elapsed time
   useEffect(() => {
@@ -757,6 +1106,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
   const preventClose = view === 'progress' || view === 'complete'
   const fileSize = clientRender.result?.fileSize
+  const resultBlob = clientRender.result?.blob
 
   // Preview blob URL for completed exports
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -773,6 +1123,94 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   }, [clientRender.result?.blob])
 
   const isVideoResult = clientRender.result?.mimeType?.startsWith('video/') ?? false
+
+  useEffect(() => {
+    if (!previewUrl || !isVideoResult || view !== 'complete') {
+      setQualityStatus('idle')
+      setQualityScore(null)
+      return
+    }
+
+    let cancelled = false
+    setQualityStatus('analyzing')
+    setQualityScore(null)
+
+    void sampleRenderedVideoQuality(previewUrl)
+      .then((score) => {
+        if (cancelled) return
+        setQualityScore(score)
+        setQualityStatus('complete')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setQualityScore(null)
+        setQualityStatus('unavailable')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isVideoResult, previewUrl, view])
+
+  useEffect(() => {
+    if (!resultBlob || view !== 'complete') {
+      setAudioQualityStatus('idle')
+      setAudioQualityScore(null)
+      return
+    }
+
+    let cancelled = false
+    setAudioQualityStatus('analyzing')
+    setAudioQualityScore(null)
+
+    void sampleRenderedAudioQuality(resultBlob)
+      .then((score) => {
+        if (cancelled) return
+        setAudioQualityScore(score)
+        setAudioQualityStatus('complete')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setAudioQualityScore(null)
+        setAudioQualityStatus('unavailable')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [resultBlob, view])
+
+  const deliveryAnalysisStatus = useMemo<QualityAnalysisStatus>(
+    () =>
+      resolveDeliveryAnalysisStatus({
+        view,
+        isVideoResult,
+        qualityStatus,
+        audioQualityStatus,
+      }),
+    [audioQualityStatus, isVideoResult, qualityStatus, view],
+  )
+
+  const deliveryReadinessScore = useMemo(
+    () =>
+      deliveryAnalysisStatus === 'complete'
+        ? scoreCinematicDeliveryReadiness({
+            preflight,
+            editReadiness: isVideoResult ? cinematicEditReadiness : null,
+            frameQuality: isVideoResult ? qualityScore : null,
+            audioQuality: audioQualityScore,
+            mode: isVideoResult ? 'video' : 'audio',
+          })
+        : null,
+    [
+      audioQualityScore,
+      cinematicEditReadiness,
+      deliveryAnalysisStatus,
+      isVideoResult,
+      preflight,
+      qualityScore,
+    ],
+  )
 
   // Dynamic title and description
   const getTitle = () => {
@@ -1294,6 +1732,12 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
         {view === 'complete' && (
           <div className="space-y-4 py-4">
             {previewUrl && <ExportPreviewPlayer src={previewUrl} isVideo={isVideoResult} />}
+            <DeliveryReadinessPanel
+              score={deliveryReadinessScore}
+              status={deliveryAnalysisStatus}
+            />
+            {isVideoResult && <QualityAnalysisPanel score={qualityScore} status={qualityStatus} />}
+            <AudioQualityAnalysisPanel score={audioQualityScore} status={audioQualityStatus} />
 
             <Alert className="border-green-900 bg-green-950">
               <CheckCircle2 className="h-4 w-4 text-green-500" />

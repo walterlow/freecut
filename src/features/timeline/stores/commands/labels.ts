@@ -1,5 +1,27 @@
 import type { TimelineCommand } from './types'
 
+const TRANSFORM_COMMAND_TYPES = new Set(['UPDATE_TRANSFORM', 'UPDATE_TRANSFORMS'])
+
+const TRANSFORM_OPERATION_LABELS: Record<string, (noun: string) => string> = {
+  move: (noun) => `Move ${noun}`,
+  resize: (noun) => `Resize ${noun}`,
+  rotate: (noun) => `Rotate ${noun}`,
+  opacity: (noun) => `Adjust opacity (${noun})`,
+  corner_radius: (noun) => `Adjust corner radius (${noun})`,
+}
+
+const SIMPLE_COMMAND_LABELS: Record<string, string> = {
+  SET_IN_POINT: 'Set In point',
+  SET_OUT_POINT: 'Set Out point',
+  CLEAR_IN_OUT_POINTS: 'Clear In/Out points',
+  CLEAR_MARKERS: 'Clear markers',
+  CLEAR_TIMELINE: 'Clear timeline',
+  REMOVE_FILLER_WORDS: 'Remove filler words',
+  MATCH_IMAGES_TO_AUDIO: 'Match images to audio',
+  APPLY_AUDIO_DUCKING: 'Apply audio ducking',
+  INSERT_AUDIOBOOK_SFX: 'Add audiobook sound effects',
+}
+
 function toTitleCaseWords(input: string): string {
   return input
     .toLowerCase()
@@ -32,79 +54,56 @@ function formatTransformLabel(command: TimelineCommand): string {
   const operation = typeof payload?.operation === 'string' ? payload.operation : 'transform'
   const count = readCount(payload)
   const noun = count === null || count === 1 ? 'item' : `${count} items`
+  const formatter = TRANSFORM_OPERATION_LABELS[operation]
 
-  switch (operation) {
-    case 'move':
-      return `Move ${noun}`
-    case 'resize':
-      return `Resize ${noun}`
-    case 'rotate':
-      return `Rotate ${noun}`
-    case 'opacity':
-      return `Adjust opacity (${noun})`
-    case 'corner_radius':
-      return `Adjust corner radius (${noun})`
-    default:
-      return `Transform ${noun}`
-  }
+  return formatter ? formatter(noun) : `Transform ${noun}`
 }
 
-export function formatTimelineCommandLabel(command: TimelineCommand): string {
-  if (command.type === 'UPDATE_TRANSFORM' || command.type === 'UPDATE_TRANSFORMS') {
-    return formatTransformLabel(command)
-  }
+function getPayloadFields(payload: Record<string, unknown> | undefined): Set<string> {
+  const fields = Array.isArray(payload?.fields)
+    ? payload.fields.filter((field): field is string => typeof field === 'string')
+    : []
+  return new Set(fields)
+}
 
-  if (command.type === 'UPDATE_PROJECT_METADATA') {
-    const fields = Array.isArray(command.payload?.fields)
-      ? command.payload.fields.filter((field): field is string => typeof field === 'string')
-      : []
+function formatProjectMetadataLabel(command: TimelineCommand): string {
+  const fields = getPayloadFields(command.payload)
+  const resized = fields.has('width') || fields.has('height')
 
-    if (fields.includes('fps') && (fields.includes('width') || fields.includes('height'))) {
-      return 'Resize canvas and change frame rate'
-    }
+  if (fields.has('fps') && resized) return 'Resize canvas and change frame rate'
+  if (resized) return 'Resize canvas'
+  if (fields.has('fps')) return 'Change frame rate'
+  if (fields.has('backgroundColor')) return 'Change canvas background'
+  return 'Update project settings'
+}
 
-    if (fields.includes('width') || fields.includes('height')) {
-      return 'Resize canvas'
-    }
-
-    if (fields.includes('fps')) {
-      return 'Change frame rate'
-    }
-
-    if (fields.includes('backgroundColor')) {
-      return 'Change canvas background'
-    }
-
-    return 'Update project settings'
-  }
-
+function formatCountedCommandLabel(command: TimelineCommand): string | null {
+  const count = readCount(command.payload)
   if (command.type === 'APPLY_AUTO_KEYFRAME_OPERATIONS') {
-    const count = readCount(command.payload)
-    if (count !== null) {
-      return `Auto-keyframe ${count} ${count === 1 ? 'property' : 'properties'}`
-    }
-    return 'Auto-keyframe properties'
+    return count === null
+      ? 'Auto-keyframe properties'
+      : `Auto-keyframe ${count} ${count === 1 ? 'property' : 'properties'}`
   }
 
   if (command.type === 'APPLY_BENTO_LAYOUT') {
-    const count = readCount(command.payload)
-    if (count !== null) {
-      return `Apply bento layout (${count} ${count === 1 ? 'item' : 'items'})`
-    }
-    return 'Apply bento layout'
+    return count === null
+      ? 'Apply bento layout'
+      : `Apply bento layout (${count} ${count === 1 ? 'item' : 'items'})`
   }
 
-  if (command.type === 'SET_IN_POINT') return 'Set In point'
-  if (command.type === 'SET_OUT_POINT') return 'Set Out point'
-  if (command.type === 'CLEAR_IN_OUT_POINTS') return 'Clear In/Out points'
-  if (command.type === 'CLEAR_MARKERS') return 'Clear markers'
-  if (command.type === 'CLEAR_TIMELINE') return 'Clear timeline'
-  if (command.type === 'REMOVE_FILLER_WORDS') return 'Remove filler words'
+  return null
+}
 
+function formatFallbackCommandLabel(command: TimelineCommand): string {
   const count = readCount(command.payload)
   const base = toTitleCaseWords(command.type)
-  if (count !== null && count > 1) {
-    return `${base} (${count})`
-  }
-  return base
+  return count !== null && count > 1 ? `${base} (${count})` : base
+}
+
+export function formatTimelineCommandLabel(command: TimelineCommand): string {
+  if (TRANSFORM_COMMAND_TYPES.has(command.type)) return formatTransformLabel(command)
+  if (command.type === 'UPDATE_PROJECT_METADATA') return formatProjectMetadataLabel(command)
+
+  const countedLabel = formatCountedCommandLabel(command)
+  return countedLabel ?? SIMPLE_COMMAND_LABELS[command.type] ?? formatFallbackCommandLabel(command)
 }

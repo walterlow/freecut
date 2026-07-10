@@ -5,6 +5,7 @@ import type { MediaMetadata } from '@/types/storage'
 const mocks = vi.hoisted(() => ({
   addItem: vi.fn(),
   addItemOnNewTrack: vi.fn(),
+  applyAutoCameraToNewImageItems: vi.fn(),
   setActiveTrack: vi.fn(),
   selectItems: vi.fn(),
   findBestCanvasDropPlacement: vi.fn(() => ({ trackId: 'track-1', from: 24 })),
@@ -114,6 +115,7 @@ vi.mock('@/features/preview/deps/timeline-store', () => ({
 }))
 
 vi.mock('@/features/preview/deps/timeline-utils', () => ({
+  applyAutoCameraToNewImageItems: mocks.applyAutoCameraToNewImageItems,
   findBestCanvasDropPlacement: mocks.findBestCanvasDropPlacement,
   getDroppedMediaDurationInFrames: mocks.getDroppedMediaDurationInFrames,
   buildDroppedMediaTimelineItem: mocks.buildDroppedMediaTimelineItem,

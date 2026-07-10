@@ -1,4 +1,10 @@
-import type { TimelineTrack, TimelineItem, ProjectMarker, VideoItem } from '@/types/timeline'
+import type {
+  TimelineTrack,
+  TimelineItem,
+  ProjectMarker,
+  VideoItem,
+  AudioItem,
+} from '@/types/timeline'
 import type { TransformProperties } from '@/types/transform'
 import type { ItemEffect, VisualEffect } from '@/types/effects'
 import type {
@@ -50,12 +56,108 @@ export interface TimelineState {
   isDirty: boolean // Track unsaved changes
 }
 
+export interface ImageAudioMatchResult {
+  status: 'matched' | 'no-images' | 'no-audio'
+  imageCount: number
+  audioStartFrame?: number
+  audioEndFrame?: number
+}
+
+export interface AudioDuckingResult {
+  status: 'ducked' | 'no-targets' | 'no-dialogue'
+  targetCount: number
+  dialogueCount: number
+  keyframeCount: number
+}
+
+export interface CinematicImageMotionResult {
+  status: 'applied' | 'no-images' | 'no-project' | 'blocked'
+  imageCount: number
+  keyframeCount: number
+}
+
+export interface CinematicDepthLayerAsset {
+  mediaId: string
+  src: string
+  label: string
+  sourceWidth?: number
+  sourceHeight?: number
+  thumbnailUrl?: string | null
+}
+
+export interface CinematicDepthLayerPlacement {
+  sourceItemId: string
+  depthSourceId?: string
+  depthQuality?: number
+  backgroundAsset?: CinematicDepthLayerAsset
+  subjectAsset?: CinematicDepthLayerAsset
+  depthMapAsset?: CinematicDepthLayerAsset
+}
+
+export interface InsertCinematicDepthLayersResult {
+  status: 'inserted' | 'empty' | 'no-images'
+  sourceImageCount: number
+  layerCount: number
+  trackCount: number
+  itemIds: string[]
+  sourceItemIds: string[]
+  visibleItemIds: string[]
+}
+
+export interface AudiobookSoundEffectPlacement {
+  mediaId: string
+  src: string
+  label: string
+  audiobookSfxRole?: AudioItem['audiobookSfxRole']
+  startFrame: number
+  durationInFrames: number
+  sourceDurationFrames?: number
+  sourceFps?: number
+  volume?: number
+}
+
+export interface AudiobookMusicBedPlacement {
+  mediaId: string
+  src: string
+  label: string
+  startFrame: number
+  durationInFrames: number
+  sourceDurationFrames: number
+  sourceFps?: number
+  volume?: number
+}
+
+export interface InsertAudiobookSoundEffectsResult {
+  status: 'inserted' | 'empty'
+  itemCount: number
+  trackCount: number
+}
+
+export interface InsertAudiobookMusicBedResult {
+  status: 'inserted' | 'empty'
+  itemCount: number
+  trackCount: number
+  itemIds: string[]
+}
+
 export interface TimelineActions {
   setTracks: (tracks: TimelineTrack[]) => void
   addItem: (item: TimelineItem) => void
   addItems: (items: TimelineItem[]) => void
   addItemWithLinkedAudio: (video: VideoItem) => void
   addItemOnNewTrack: (item: TimelineItem, tracks: TimelineTrack[]) => void
+  insertAudiobookSoundEffects: (
+    placements: AudiobookSoundEffectPlacement[],
+  ) => InsertAudiobookSoundEffectsResult
+  insertAudiobookMusicBed: (placement: AudiobookMusicBedPlacement) => InsertAudiobookMusicBedResult
+  insertCinematicDepthLayers: (
+    placements: CinematicDepthLayerPlacement[],
+  ) => InsertCinematicDepthLayersResult
+  matchSelectedImagesToAudio: (selectedItemIds?: string[]) => ImageAudioMatchResult
+  applySelectedAudioDucking: (
+    selectedItemIds?: string[],
+    options?: { duckDb?: number; attackSeconds?: number; releaseSeconds?: number },
+  ) => AudioDuckingResult
   updateItem: (id: string, updates: Partial<TimelineItem>) => void
   removeItems: (ids: string[]) => void
   rippleDeleteItems: (ids: string[]) => void

@@ -4,6 +4,7 @@
 
 export type { DroppableMediaType, SubComposition } from '@/features/timeline/contracts/preview'
 export {
+  applyAutoCameraToNewImageItems,
   buildDroppedMediaTimelineItem,
   createNewVideoZoneTrack,
   createTimelineTemplateItem,

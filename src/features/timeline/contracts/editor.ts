@@ -2,7 +2,14 @@
  * Timeline contract consumed by editor feature adapters.
  */
 
-export type { TimelineState, TimelineActions } from '../types'
+export type {
+  AudiobookMusicBedPlacement,
+  CinematicDepthLayerPlacement,
+  InsertAudiobookMusicBedResult,
+  InsertCinematicDepthLayersResult,
+  TimelineActions,
+  TimelineState,
+} from '../types'
 export { useTimelineStore } from '../stores/timeline-store'
 export { useTimelineSettingsStore } from '../stores/timeline-settings-store'
 export { useItemsStore } from '../stores/items-store'
@@ -37,6 +44,10 @@ export { getDefaultActiveTrackId } from '../utils/default-active-track'
 export { resolveEffectiveTrackStates } from '../utils/group-utils'
 export { linkItems } from '../stores/actions/item-actions'
 export { applyAnimationPreset } from '../stores/actions/preset-actions'
+export {
+  applyCinematicCameraToSelectedImages,
+  applyDocumentaryCameraToSelectedImages,
+} from '../stores/actions/auto-camera-actions'
 export { applyMotionPresetKeyframes } from '../stores/actions/keyframe-actions'
 export type { MotionPresetClear } from '../stores/actions/keyframe-actions'
 export {
@@ -58,6 +69,7 @@ export {
 export { captureAnimationFromItem, getPresetCompatibility } from '../deps/keyframe-editors'
 export { rateStretchItemWithoutHistory } from '../stores/actions/item-edit-actions'
 export { setInOutPointsWithoutHistory } from '../stores/actions/marker-actions'
+export { sourceSecondsToTimelineFrame } from '../utils/media-item-frames'
 export { timelineToSourceFrames, sourceToTimelineFrames } from '../utils/source-calculations'
 export { searchTimelineTranscript } from '../utils/transcript-search'
 export type { TranscriptSearchMatch } from '../utils/transcript-search'

@@ -27,6 +27,7 @@ export {
 } from '../utils/generated-layer-items'
 export { createNewVideoZoneTrack } from '../utils/new-track-zone-media'
 export { performInsertEdit, performOverwriteEdit } from '../stores/actions/source-edit-actions'
+export { applyAutoCameraToNewImageItems } from '../stores/actions/auto-camera-actions'
 export { resolveSourceEditTrackTargets } from '../utils/source-edit-targeting'
 export { getTrackKind } from '../utils/classic-tracks'
 export { createClassicTrack } from '../utils/classic-tracks'

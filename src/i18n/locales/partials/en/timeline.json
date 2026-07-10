@@ -194,7 +194,21 @@
       "zoomOutTooltip": "Zoom Out",
       "zoomSlider": "Zoom Slider",
       "zoomToFit": "Zoom To Fit",
-      "zoomToFitTooltip": "Zoom To Fit"
+      "zoomToFitTooltip": "Zoom To Fit",
+      "enableAutoCamera": "Enable Auto Camera Motion for Stills",
+      "disableAutoCamera": "Disable Auto Camera Motion for Stills",
+      "autoCameraEnabled": "Auto Camera Motion On — stills get a cinematic move",
+      "autoCameraDisabled": "Auto Camera Motion Off",
+      "matchImagesToAudio": "Match Images To Audio",
+      "matchImagesToAudioTooltip": "Retimes selected still images across selected audio. If no audio is selected, uses the full audio bed.",
+      "matchImagesToAudioSuccess": "Matched {{count}} images to audio.",
+      "matchImagesToAudioNoImages": "Select at least one still image.",
+      "matchImagesToAudioNoAudio": "Add or select an audio clip to match against.",
+      "autoDuckMusic": "Auto Duck Music",
+      "autoDuckMusicTooltip": "Select music clip(s); FreeCut writes volume keyframes under overlapping dialogue.",
+      "autoDuckMusicSuccess": "Ducked {{count}} music clip(s) with {{keyframes}} volume keyframes.",
+      "autoDuckMusicNoTargets": "Select the music audio clip(s) you want to duck.",
+      "autoDuckMusicNoDialogue": "No overlapping dialogue audio was found."
     },
     "itemActions": {
       "appliedEffectToClips": "Applied Effect To Clips",

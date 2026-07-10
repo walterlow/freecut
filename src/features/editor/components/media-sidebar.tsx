@@ -240,6 +240,23 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
     )
   }
 
+  if (preset.previewKind === 'karaoke') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-end justify-center`}>
+        <div className="w-full rounded-sm bg-slate-950 px-1.5 py-1 text-center shadow-[0_0_10px_rgba(250,204,21,0.18)]">
+          <div className="text-[7px] font-bold leading-tight text-slate-50">
+            <span>{copy.eyebrow}</span>
+            <span className="text-yellow-300"> {copy.title} </span>
+            <span>{copy.subtitle}</span>
+          </div>
+          <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-slate-700">
+            <div className="h-full w-1/2 bg-yellow-300" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (preset.previewKind === 'badge') {
     return (
       <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex items-center justify-center px-1.5`}>

@@ -65,6 +65,7 @@
       "noTranscriptSegments": "No transcript captions available to embed.",
       "out": "Out",
       "presetBalanced": "Balanced",
+      "presetCinema4k": "Cinema 4K",
       "presetCustom": "Custom",
       "presetLabel": "Preset",
       "presetMax": "Maximum",
@@ -78,6 +79,7 @@
       "quicktimeMov": "QuickTime MOV",
       "renderWholeProject": "Render whole project",
       "resolution": "Resolution",
+      "resolutionCinema4k": "Cinema 4K ({{width}}×{{height}})",
       "resolutionSameAsProject": "Same as project ({{width}}×{{height}})",
       "resolutionScaled": "{{p}}p ({{width}}×{{height}})",
       "selectCodec": "Select codec",
@@ -138,6 +140,36 @@
           "title": "Video codec supported",
           "detail": "{{codec}} can be encoded as {{container}} in this browser."
         },
+        "cinematic-resolution-below-4k": {
+          "title": "Below Cinema 4K",
+          "detail": "This export is {{width}}×{{height}}, so it may not match the high-end 4K reference look.",
+          "fix": "Choose the Cinema 4K preset before exporting the final master."
+        },
+        "cinematic-quality-not-ultra": {
+          "title": "Not using Ultra quality",
+          "detail": "The selected quality is {{quality}}, which may soften fine image motion and parallax detail.",
+          "fix": "Use Ultra quality for the final cinematic master."
+        },
+        "cinematic-edit-readiness-weak": {
+          "title": "Edit is not cinematic-ready",
+          "detail": "The timeline edit readiness score is {{score}}/10. {{issue}}",
+          "fix": "Run the cinematic automation pass again or add more multi-axis motion, staged camera beats, depth prep, music, and role-balanced SFX."
+        },
+        "cinematic-edit-readiness-fair": {
+          "title": "Edit may need more polish",
+          "detail": "The timeline edit readiness score is {{score}}/10. {{issue}}",
+          "fix": "Improve the timeline before the final master if you want a stronger reference-style result."
+        },
+        "cinematic-reference-camera-gap": {
+          "title": "Reference camera motion missing",
+          "detail": "Only {{percent}} of stills have overlapping zoom-plus-pan/tilt movement. {{issue}}",
+          "fix": "Apply the dramatic cinematic camera pass again so each still carries simultaneous push and directional movement."
+        },
+        "cinematic-shot-rhythm-gap": {
+          "title": "Shot rhythm feels too flat",
+          "detail": "Average still shot is {{average}} with {{variation}} timing variation. {{issue}}",
+          "fix": "Rematch images to narration cues or vary still durations so the edit follows story beats instead of even slideshow timing."
+        },
         "worker-unavailable-fallback": {
           "title": "Worker export unavailable",
           "detail": "This browser/session cannot start export workers, so rendering will run on the main thread.",
@@ -174,6 +206,16 @@
           "detail": "The export worker can render this composition without a known main-thread fallback."
         }
       }
+    },
+    "quality": {
+      "analyzing": "Reviewing rendered frames",
+      "blacks": "Blacks",
+      "drama": "Drama",
+      "motion": "Motion",
+      "path": "Path",
+      "sharpness": "Sharpness",
+      "title": "Cinematic quality check",
+      "unavailable": "Rendered-frame quality could not be sampled. Review the preview manually."
     }
   }
 }

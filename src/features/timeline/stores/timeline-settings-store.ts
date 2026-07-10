@@ -10,6 +10,8 @@ interface TimelineSettingsState {
   scrollPosition: number
   snapEnabled: boolean
   audioSkimmingEnabled: boolean
+  /** Auto-apply a cinematic camera move (Ken Burns) to stills added to the timeline. */
+  autoCameraOnStills: boolean
   isDirty: boolean
   /** True while loadTimeline() is in progress - used to coordinate initial player sync */
   isTimelineLoading: boolean
@@ -22,6 +24,8 @@ interface TimelineSettingsActions {
   toggleSnap: () => void
   setAudioSkimmingEnabled: (enabled: boolean) => void
   toggleAudioSkimming: () => void
+  setAutoCameraOnStills: (enabled: boolean) => void
+  toggleAutoCameraOnStills: () => void
   setIsDirty: (dirty: boolean) => void
   markDirty: () => void
   markClean: () => void
@@ -35,6 +39,7 @@ export const useTimelineSettingsStore = create<TimelineSettingsState & TimelineS
     scrollPosition: 0,
     snapEnabled: true,
     audioSkimmingEnabled: true,
+    autoCameraOnStills: true,
     isDirty: false,
     isTimelineLoading: true, // Start true - set false after loadTimeline completes
 
@@ -46,6 +51,9 @@ export const useTimelineSettingsStore = create<TimelineSettingsState & TimelineS
     setAudioSkimmingEnabled: (enabled) => set({ audioSkimmingEnabled: enabled }),
     toggleAudioSkimming: () =>
       set((state) => ({ audioSkimmingEnabled: !state.audioSkimmingEnabled })),
+    setAutoCameraOnStills: (enabled) => set({ autoCameraOnStills: enabled }),
+    toggleAutoCameraOnStills: () =>
+      set((state) => ({ autoCameraOnStills: !state.autoCameraOnStills })),
     setIsDirty: (dirty) => set({ isDirty: dirty }),
     markDirty: () => {
       if (!get().isDirty) set({ isDirty: true })

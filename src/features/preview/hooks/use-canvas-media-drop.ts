@@ -5,6 +5,7 @@ import { useSelectionStore } from '@/shared/state/selection'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useTimelineStore } from '@/features/preview/deps/timeline-store'
 import {
+  applyAutoCameraToNewImageItems,
   buildDroppedMediaTimelineItem,
   createNewVideoZoneTrack,
   createTimelineTemplateItem,
@@ -334,6 +335,7 @@ export function useCanvasMediaDrop({ coordParams, projectSize }: UseCanvasMediaD
       } else {
         timelineState.addItem(placedItem)
       }
+      applyAutoCameraToNewImageItems([placedItem])
       selectionState.setActiveTrack(placement.trackId)
       selectionState.selectItems([placedItem.id])
     },

@@ -4,6 +4,11 @@
  */
 
 export type { AutoKeyframeOperation } from '@/features/keyframes/utils/auto-keyframe'
+export {
+  MOTION_PRESETS_BY_ID,
+  pickAutoCameraPresetId,
+  pickCinematicStoryCameraPresetId,
+} from '@/features/keyframes/utils/motion-presets'
 export { getCropPropertyValue } from '@/features/keyframes/utils/animated-crop-resolver'
 export { interpolatePropertyValue } from '@/features/keyframes/utils/interpolation'
 export {
@@ -19,10 +24,7 @@ export {
   buildEasingConfig,
 } from '@/features/keyframes/utils/easing-presets'
 export type { BezierPresetValue } from '@/features/keyframes/utils/easing-presets'
-export {
-  getTransitionBlockedRanges,
-  isFrameInTransitionRegion,
-} from '@/features/keyframes/utils/transition-region'
+export { getTransitionBlockedRanges } from '@/features/keyframes/utils/transition-region'
 export { DopesheetEditor } from '@/features/keyframes/components/dopesheet-editor'
 export { getAnimatablePropertiesForItem } from '@/features/keyframes/utils/animatable-properties'
 export type { ProceduralPreviewInput } from '@/features/keyframes/utils/procedural-preview'

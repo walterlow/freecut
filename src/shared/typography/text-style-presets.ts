@@ -18,6 +18,7 @@ export type TextStylePresetPreviewKind =
   | 'breaking'
   | 'launch'
   | 'event'
+  | 'karaoke'
   | 'badge'
 
 export type TextStylePresetLayout = 'single' | 'two' | 'three'
@@ -425,6 +426,36 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
       },
     },
   },
+  'karaoke-subtitle': {
+    id: 'karaoke-subtitle',
+    label: 'Karaoke',
+    previewKind: 'karaoke',
+    layout: 'three',
+    sample: { eyebrow: 'Steel rails', title: 'run through', subtitle: 'summer leaves' },
+    style: {
+      fontFamily: 'Inter Tight',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      underline: false,
+      size: { token: 'title', multiplier: 0.78 },
+      color: '#facc15',
+      backgroundColor: '#020617',
+      backgroundRadius: 'lg',
+      textAlign: 'center',
+      verticalAlign: 'bottom',
+      lineHeight: 1,
+      letterSpacing: 'normal',
+      textPadding: 'xl',
+      textShadow: {
+        token: 'glow',
+        color: '#020617',
+      },
+      stroke: {
+        width: 2,
+        color: '#020617',
+      },
+    },
+  },
   badge: {
     id: 'badge',
     label: 'Badge',
@@ -780,6 +811,32 @@ export function buildTextStylePresetTemplate(
           fontWeight: 'semibold',
           color: '#bfdbfe',
           letterSpacing: 1,
+        },
+      ]
+
+      return {
+        ...styles,
+        label: preset.label,
+        text: buildTemplateTextFromSpans(spans),
+        textSpans: spans,
+      }
+    }
+    case 'karaoke-subtitle': {
+      const spans: TextSpan[] = [
+        {
+          text: preset.sample.eyebrow ?? 'Steel rails',
+          fontWeight: 'bold',
+          color: '#ffffff',
+        },
+        {
+          text: preset.sample.title,
+          fontWeight: 'bold',
+          color: '#facc15',
+        },
+        {
+          text: preset.sample.subtitle ?? 'summer leaves',
+          fontWeight: 'bold',
+          color: '#ffffff',
         },
       ]
 

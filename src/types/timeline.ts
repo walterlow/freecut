@@ -37,6 +37,15 @@ export interface TimelineTranscriptCaptions {
   style?: TimelineTranscriptCaptionStyle
 }
 
+export type AudiobookSfxRole = 'ambience' | 'foreground' | 'impact' | 'transition'
+export type CinematicDepthRole =
+  | 'flat'
+  | 'subject'
+  | 'foreground'
+  | 'midground'
+  | 'background'
+  | 'depth-map'
+
 // Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
   id: string
@@ -124,6 +133,10 @@ type BaseTimelineItem = {
   audioEqHighCutEnabled?: boolean // Enable high cut / low-pass filter
   audioEqHighCutFrequencyHz?: number // High cut frequency in Hz
   audioEqHighCutSlopeDbPerOct?: 6 | 12 | 18 | 24 // High cut slope
+  audiobookSfxRole?: AudiobookSfxRole // Role assigned by automatic audiobook SFX generation
+  cinematicDepthRole?: CinematicDepthRole // Depth role for 2.5D/parallax automation
+  cinematicDepthSourceId?: string // Shared source id for subject/background/depth-map layer groups
+  cinematicDepthQuality?: number // 0-1 confidence/quality estimate for generated depth prep
   // Video properties (for video items)
   fadeIn?: number // Video fade in duration in seconds (default: 0)
   fadeOut?: number // Video fade out duration in seconds (default: 0)

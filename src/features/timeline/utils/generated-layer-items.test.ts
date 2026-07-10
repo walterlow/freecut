@@ -152,6 +152,48 @@ describe('createTimelineTemplateItem', () => {
     })
   })
 
+  it('creates a karaoke subtitle template with an active highlighted phrase', () => {
+    const item = createTimelineTemplateItem({
+      template: {
+        type: 'timeline-template',
+        itemType: 'text',
+        label: 'Karaoke',
+        textStylePresetId: 'karaoke-subtitle',
+      },
+      placement: {
+        trackId: 'track-1',
+        from: 50,
+        durationInFrames: 120,
+        canvasWidth: 1920,
+        canvasHeight: 1080,
+        fps: 30,
+      },
+    })
+
+    if (item.type !== 'text') throw new Error('Expected text item')
+    expect(item).toMatchObject({
+      label: 'Karaoke',
+      text: 'Steel rails\nrun through\nsummer leaves',
+      textStylePresetId: 'karaoke-subtitle',
+      color: '#facc15',
+      backgroundColor: '#020617',
+      verticalAlign: 'bottom',
+    })
+    expect(item.textSpans).toHaveLength(3)
+    expect(item.textSpans?.[0]).toMatchObject({
+      text: 'Steel rails',
+      color: '#ffffff',
+    })
+    expect(item.textSpans?.[1]).toMatchObject({
+      text: 'run through',
+      color: '#facc15',
+    })
+    expect(item.textSpans?.[2]).toMatchObject({
+      text: 'summer leaves',
+      color: '#ffffff',
+    })
+  })
+
   it('creates an adjustment item with carried effects', () => {
     const item = createTimelineTemplateItem({
       template: {

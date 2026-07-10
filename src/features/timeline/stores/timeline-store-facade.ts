@@ -25,6 +25,9 @@ import { getEffectiveTimelineMaxFrame, sanitizeInOutPoints } from '../utils/in-o
 
 // Actions
 import * as timelineActions from './timeline-actions'
+import { applySelectedAudioDucking, matchSelectedImagesToAudio } from './actions/audio-sync-actions'
+import { insertAudiobookMusicBed, insertAudiobookSoundEffects } from './actions/audiobook-actions'
+import { insertCinematicDepthLayers } from './actions/cinematic-depth-actions'
 import { loadTimeline, saveTimeline } from './timeline-persistence'
 
 // =============================================================================
@@ -112,6 +115,11 @@ function getSnapshot(): TimelineState & TimelineActions {
       addItems: timelineActions.addItems,
       addItemWithLinkedAudio: timelineActions.addItemWithLinkedAudio,
       addItemOnNewTrack: timelineActions.addItemOnNewTrack,
+      insertAudiobookSoundEffects,
+      insertAudiobookMusicBed,
+      insertCinematicDepthLayers,
+      matchSelectedImagesToAudio,
+      applySelectedAudioDucking,
       updateItem: timelineActions.updateItem,
       removeItems: timelineActions.removeItems,
       rippleDeleteItems: timelineActions.rippleDeleteItems,

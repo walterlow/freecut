@@ -64,6 +64,7 @@ import {
   resolveDroppedMediaEntriesFromPayload,
   type DroppedMediaEntry,
 } from '../utils/drop-execution'
+import { applyAutoCameraToNewImageItems } from '../stores/actions/auto-camera-actions'
 import { prewarmDroppedTimelineAudio } from '../utils/drop-audio-prewarm'
 import { toast } from 'sonner'
 import {
@@ -1206,6 +1207,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           partialFailureLabel: t('timeline.track.droppedMediaItems'),
           requestedCount: entries.length,
           setTracks: useTimelineStore.getState().setTracks,
+          onItemsPlaced: applyAutoCameraToNewImageItems,
         })
         return
       } catch (error) {
@@ -1238,6 +1240,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       partialFailureLabel: t('timeline.track.droppedFiles'),
       requestedCount: droppedEntries.length,
       setTracks: useTimelineStore.getState().setTracks,
+      onItemsPlaced: applyAutoCameraToNewImageItems,
     })
   }
 

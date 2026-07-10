@@ -13,6 +13,9 @@ import {
   getAudioBitrateForQuality,
   estimateFileSize,
 } from './client-renderer'
+import { scoreCinematicEditReadiness } from './cinematic-edit-readiness'
+
+const CINEMATIC_EXPORT_SHORT_EDGE = 2160
 
 export type ExportPreflightSeverity = 'ok' | 'info' | 'warning' | 'error'
 
@@ -110,6 +113,117 @@ function describeCodec(codec: ClientCodec): string {
       return 'VP9'
     case 'av1':
       return 'AV1'
+  }
+}
+
+function getShortEdge(resolution: { width: number; height: number }): number {
+  return Math.min(resolution.width, resolution.height)
+}
+
+function addCinematicVideoExportChecks(
+  checks: ExportPreflightCheck[],
+  settings: ExtendedExportSettings,
+  clientSettings: ClientExportSettings,
+): void {
+  if (clientSettings.mode !== 'video') return
+
+  const shortEdge = getShortEdge(clientSettings.resolution)
+  if (shortEdge < CINEMATIC_EXPORT_SHORT_EDGE) {
+    checks.push({
+      id: 'cinematic-resolution-below-4k',
+      severity: 'warning',
+      titleKey: 'export.preflight.checks.cinematic-resolution-below-4k.title',
+      detailKey: 'export.preflight.checks.cinematic-resolution-below-4k.detail',
+      detailParams: {
+        width: clientSettings.resolution.width,
+        height: clientSettings.resolution.height,
+      },
+      fixKey: 'export.preflight.checks.cinematic-resolution-below-4k.fix',
+    })
+  }
+
+  if (settings.quality !== 'ultra') {
+    checks.push({
+      id: 'cinematic-quality-not-ultra',
+      severity: 'info',
+      titleKey: 'export.preflight.checks.cinematic-quality-not-ultra.title',
+      detailKey: 'export.preflight.checks.cinematic-quality-not-ultra.detail',
+      detailParams: { quality: settings.quality },
+      fixKey: 'export.preflight.checks.cinematic-quality-not-ultra.fix',
+    })
+  }
+}
+
+function addCinematicEditReadinessChecks(
+  checks: ExportPreflightCheck[],
+  composition: CompositionInputProps,
+  clientSettings: ClientExportSettings,
+): void {
+  if (clientSettings.mode !== 'video') return
+
+  const editReadiness = scoreCinematicEditReadiness(composition)
+  if (editReadiness.score < 5) {
+    checks.push({
+      id: 'cinematic-edit-readiness-weak',
+      severity: 'warning',
+      titleKey: 'export.preflight.checks.cinematic-edit-readiness-weak.title',
+      detailKey: 'export.preflight.checks.cinematic-edit-readiness-weak.detail',
+      detailParams: {
+        score: editReadiness.score.toFixed(1),
+        issue: editReadiness.issues[0]?.message,
+      },
+      fixKey: 'export.preflight.checks.cinematic-edit-readiness-weak.fix',
+    })
+    return
+  }
+
+  if (editReadiness.score < 7) {
+    checks.push({
+      id: 'cinematic-edit-readiness-fair',
+      severity: 'info',
+      titleKey: 'export.preflight.checks.cinematic-edit-readiness-fair.title',
+      detailKey: 'export.preflight.checks.cinematic-edit-readiness-fair.detail',
+      detailParams: {
+        score: editReadiness.score.toFixed(1),
+        issue: editReadiness.issues[0]?.message,
+      },
+      fixKey: 'export.preflight.checks.cinematic-edit-readiness-fair.fix',
+    })
+  }
+
+  const referenceCameraIssue = editReadiness.issues.find(
+    (issue) => issue.id === 'edit-reference-camera-low',
+  )
+  if (referenceCameraIssue) {
+    checks.push({
+      id: 'cinematic-reference-camera-gap',
+      severity: 'warning',
+      titleKey: 'export.preflight.checks.cinematic-reference-camera-gap.title',
+      detailKey: 'export.preflight.checks.cinematic-reference-camera-gap.detail',
+      detailParams: {
+        percent: `${Math.round(editReadiness.metrics.referenceStyleCameraPct)}%`,
+        issue: referenceCameraIssue.message,
+      },
+      fixKey: 'export.preflight.checks.cinematic-reference-camera-gap.fix',
+    })
+  }
+
+  const shotRhythmIssue = editReadiness.issues.find(
+    (issue) => issue.id === 'edit-shot-too-long' || issue.id === 'edit-shot-rhythm-flat',
+  )
+  if (shotRhythmIssue) {
+    checks.push({
+      id: 'cinematic-shot-rhythm-gap',
+      severity: 'warning',
+      titleKey: 'export.preflight.checks.cinematic-shot-rhythm-gap.title',
+      detailKey: 'export.preflight.checks.cinematic-shot-rhythm-gap.detail',
+      detailParams: {
+        average: `${editReadiness.metrics.averageImageShotSeconds.toFixed(1)}s`,
+        variation: `${editReadiness.metrics.imageShotDurationStdDevSeconds.toFixed(1)}s`,
+        issue: shotRhythmIssue.message,
+      },
+      fixKey: 'export.preflight.checks.cinematic-shot-rhythm-gap.fix',
+    })
   }
 }
 
@@ -308,6 +422,9 @@ export async function assessExportPreflight({
       },
     })
   }
+
+  addCinematicVideoExportChecks(checks, settings, resolved.clientSettings)
+  addCinematicEditReadinessChecks(checks, composition, resolved.clientSettings)
 
   let predictedRenderPath: ExportPreflightResult['predictedRenderPath'] = 'worker'
 

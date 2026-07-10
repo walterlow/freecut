@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -27,11 +28,19 @@ import {
   FlagOff,
   Link2,
   Volume2,
+  Clapperboard,
+  ImagePlay,
+  Music2,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { formatHotkeyBinding } from '@/config/hotkeys'
 import { useTimelineZoom } from '../hooks/use-timeline-zoom'
 import { useTimelineStore } from '../stores/timeline-store'
+import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
+import {
+  applySelectedAudioDucking,
+  matchSelectedImagesToAudio,
+} from '../stores/actions/audio-sync-actions'
 import { useTimelineCommandStore } from '../stores/timeline-command-store'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useEditorStore } from '@/shared/state/editor'
@@ -85,6 +94,8 @@ export const TimelineHeader = memo(function TimelineHeader({
   const toggleSnap = useTimelineStore((s) => s.toggleSnap)
   const audioSkimmingEnabled = useTimelineStore((s) => s.audioSkimmingEnabled)
   const toggleAudioSkimming = useTimelineStore((s) => s.toggleAudioSkimming)
+  const autoCameraOnStills = useTimelineSettingsStore((s) => s.autoCameraOnStills)
+  const toggleAutoCameraOnStills = useTimelineSettingsStore((s) => s.toggleAutoCameraOnStills)
   const inPoint = useTimelineStore((s) => s.inPoint)
   const outPoint = useTimelineStore((s) => s.outPoint)
   const setInPoint = useTimelineStore((s) => s.setInPoint)
@@ -237,6 +248,37 @@ export const TimelineHeader = memo(function TimelineHeader({
   const handleRedo = () => {
     useTimelineStore.temporal.getState().redo()
   }
+
+  const handleMatchImagesToAudio = useCallback(() => {
+    const result = matchSelectedImagesToAudio()
+    if (result.status === 'matched') {
+      toast.success(t('timeline.header.matchImagesToAudioSuccess', { count: result.imageCount }))
+      return
+    }
+    if (result.status === 'no-images') {
+      toast.error(t('timeline.header.matchImagesToAudioNoImages'))
+      return
+    }
+    toast.error(t('timeline.header.matchImagesToAudioNoAudio'))
+  }, [t])
+
+  const handleApplyAudioDucking = useCallback(() => {
+    const result = applySelectedAudioDucking()
+    if (result.status === 'ducked') {
+      toast.success(
+        t('timeline.header.autoDuckMusicSuccess', {
+          count: result.targetCount,
+          keyframes: result.keyframeCount,
+        }),
+      )
+      return
+    }
+    if (result.status === 'no-targets') {
+      toast.error(t('timeline.header.autoDuckMusicNoTargets'))
+      return
+    }
+    toast.error(t('timeline.header.autoDuckMusicNoDialogue'))
+  }, [t])
 
   return (
     <div
@@ -545,6 +587,51 @@ export const TimelineHeader = memo(function TimelineHeader({
             }
           >
             <Volume2 className="w-3.5 h-3.5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            style={btnSize}
+            className={
+              autoCameraOnStills ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+            }
+            onClick={toggleAutoCameraOnStills}
+            aria-label={
+              autoCameraOnStills
+                ? t('timeline.header.disableAutoCamera')
+                : t('timeline.header.enableAutoCamera')
+            }
+            aria-pressed={autoCameraOnStills}
+            data-tooltip={
+              autoCameraOnStills
+                ? t('timeline.header.autoCameraEnabled')
+                : t('timeline.header.autoCameraDisabled')
+            }
+          >
+            <Clapperboard className="w-3.5 h-3.5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            style={btnSize}
+            onClick={handleMatchImagesToAudio}
+            aria-label={t('timeline.header.matchImagesToAudio')}
+            data-tooltip={t('timeline.header.matchImagesToAudioTooltip')}
+          >
+            <ImagePlay className="w-3.5 h-3.5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            style={btnSize}
+            onClick={handleApplyAudioDucking}
+            aria-label={t('timeline.header.autoDuckMusic')}
+            data-tooltip={t('timeline.header.autoDuckMusicTooltip')}
+          >
+            <Music2 className="w-3.5 h-3.5" />
           </Button>
 
           <Separator orientation="vertical" className="h-5 mx-1.5" />

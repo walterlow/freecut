@@ -45,6 +45,8 @@ interface ApplyResolvedTimelineDropOptions<TTracks> {
   partialFailureLabel: string
   requestedCount: number
   setTracks: (tracks: TTracks) => void
+  /** Invoked with the placed items after a successful drop (e.g. auto camera moves). */
+  onItemsPlaced?: (items: TimelineItem[]) => void
 }
 
 function isParsedMediaItemPayload(payload: unknown): payload is {
@@ -217,6 +219,7 @@ export function applyResolvedTimelineDrop<TTracks>({
   partialFailureLabel,
   requestedCount,
   setTracks,
+  onItemsPlaced,
 }: ApplyResolvedTimelineDropOptions<TTracks>): boolean {
   if (dropResult.items.length === 0) {
     notify.error(
@@ -249,6 +252,8 @@ export function applyResolvedTimelineDrop<TTracks>({
   } else {
     addItems(dropResult.items)
   }
+
+  onItemsPlaced?.(dropResult.items)
 
   return true
 }

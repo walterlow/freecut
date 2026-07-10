@@ -28,9 +28,62 @@ import {
   SPRING_SETTLE,
 } from './animation-easing'
 
-export type MotionPresetCategory = 'entrance' | 'exit' | 'emphasis'
+export type MotionPresetCategory = 'entrance' | 'exit' | 'emphasis' | 'camera'
 
 export type MotionPresetId =
+  // camera — full-clip cinematic moves for stills (Ken Burns family)
+  | 'push-in-slow'
+  | 'push-in'
+  | 'push-in-fast'
+  | 'pull-back-slow'
+  | 'pull-back'
+  | 'pull-back-fast'
+  | 'pan-left'
+  | 'pan-right'
+  | 'pan-left-slow'
+  | 'pan-right-slow'
+  | 'tilt-up'
+  | 'tilt-down'
+  | 'tilt-up-slow'
+  | 'tilt-down-slow'
+  | 'kb-in-up-left'
+  | 'kb-in-up-right'
+  | 'kb-in-down-left'
+  | 'kb-in-down-right'
+  | 'kb-out-up-left'
+  | 'kb-out-up-right'
+  | 'kb-out-down-left'
+  | 'kb-out-down-right'
+  | 'push-pan-left'
+  | 'push-pan-right'
+  | 'stage-push-pan-left'
+  | 'stage-push-pan-right'
+  | 'stage-push-tilt-up'
+  | 'stage-push-tilt-down'
+  | 'surge-down-right'
+  | 'surge-down-left'
+  | 'surge-up-right'
+  | 'surge-up-left'
+  | 'surge-dutch-right'
+  | 'surge-dutch-left'
+  | 'pull-pan-left'
+  | 'pull-pan-right'
+  | 'push-tilt-up'
+  | 'push-tilt-down'
+  | 'pull-tilt-up'
+  | 'pull-tilt-down'
+  | 'roll-cw'
+  | 'roll-ccw'
+  | 'dutch-push-cw'
+  | 'dutch-push-ccw'
+  | 'arc-left'
+  | 'arc-right'
+  | 'crash-in'
+  | 'crash-out'
+  | 'creep-in'
+  | 'creep-out'
+  | 'float'
+  | 'handheld'
   // entrance
   | 'fade-in'
   | 'slide-in-left'
@@ -129,6 +182,24 @@ const BOUNCE: EasingConfig = {
 const LINEAR: EasingType = 'linear'
 const EASE_IN_OUT: EasingType = 'ease-in-out'
 
+// Camera-move curves. A camera operator never snaps a move — these are tuned
+// so the start/stop of a full-clip move is imperceptible ("seamless").
+/** Sinusoidal S-curve — the default glide for dolly/pan/tilt moves. */
+const CAMERA_GLIDE: EasingConfig = {
+  type: 'cubic-bezier',
+  bezier: { x1: 0.37, y1: 0, x2: 0.63, y2: 1 },
+}
+/** Long decelerating settle — crash-out / whip-settle moves. */
+const CAMERA_SETTLE: EasingConfig = {
+  type: 'cubic-bezier',
+  bezier: { x1: 0.22, y1: 1, x2: 0.36, y2: 1 },
+}
+/** Accelerating ramp — dramatic crash-in push. */
+const CAMERA_RAMP: EasingConfig = {
+  type: 'cubic-bezier',
+  bezier: { x1: 0.64, y1: 0, x2: 0.78, y2: 0.2 },
+}
+
 // --- Geometry / timing constants --------------------------------------------
 
 const ENTRANCE_SECONDS = 0.5
@@ -151,6 +222,7 @@ export function getMotionPresetAnchorFrame(
     case 'exit':
       return Math.max(0, maxFrame - windowFrames(ENTRANCE_SECONDS, durationInFrames, fps))
     case 'emphasis':
+    case 'camera':
       return 0
   }
 }
@@ -230,8 +302,735 @@ function buildEmphasis(
   return frames(0, mid, len)
 }
 
+// --- Camera moves (Ken Burns engine) -----------------------------------------
+// Full-clip virtual-camera moves designed for still images. Scale amplitudes
+// stay in the 3–35% range so pixels never visibly soften; pans/tilts carry a
+// locked "cover" zoom so the image edge is never revealed mid-move. All moves
+// run frame 0 → last frame, so a cut lands mid-motion — the classic seamless
+// documentary feel.
+
+interface CameraMoveSpec {
+  /** Scale multiplier on the resting size at the first frame (default 1). */
+  scaleFrom?: number
+  /** Scale multiplier at the last frame (defaults to `scaleFrom` = locked). */
+  scaleTo?: number
+  /** Total horizontal travel as a fraction of frame width (+ drifts right). */
+  panX?: number
+  /** Total vertical travel as a fraction of frame height (+ drifts down). */
+  panY?: number
+  /** Rotation offset in degrees at the first frame. */
+  rollFrom?: number
+  /** Rotation offset in degrees at the last frame (defaults to `rollFrom`). */
+  rollTo?: number
+  /** Segment curve; camera glide unless overridden. */
+  easing?: EasingConfig | 'linear'
+}
+
+interface StagedCameraMoveSpec {
+  /** Tiny cover zoom at the first frame so the later move never exposes edges. */
+  scaleFrom?: number
+  /** End of the fast push-in beat. */
+  scaleMid?: number
+  /** Final scale after the secondary camera direction finishes. */
+  scaleTo?: number
+  /** Final horizontal travel as a fraction of frame width (+ drifts right). */
+  panX?: number
+  /** Final vertical travel as a fraction of frame height (+ drifts down). */
+  panY?: number
+  /** Optional final roll in degrees. */
+  rollTo?: number
+  /** Fraction of the clip used by the first push-in beat. */
+  split?: number
+}
+
+function cameraPair(
+  property: AnimatableProperty,
+  lastFrame: number,
+  from: number,
+  to: number,
+  easing: EasingConfig | 'linear',
+): MotionPresetKeyframePayload[] {
+  return easing === 'linear'
+    ? [kf(property, 0, from, LINEAR), kf(property, lastFrame, to, LINEAR)]
+    : [kf(property, 0, from, 'cubic-bezier', easing), kf(property, lastFrame, to, LINEAR)]
+}
+
+function buildCameraScaleKeyframes(
+  ctx: MotionPresetBuildContext,
+  spec: CameraMoveSpec,
+  lastFrame: number,
+  easing: EasingConfig | 'linear',
+): MotionPresetKeyframePayload[] {
+  const scaleFrom = spec.scaleFrom ?? 1
+  const scaleTo = spec.scaleTo ?? scaleFrom
+  if (scaleFrom === 1 && scaleTo === 1) return []
+
+  return [
+    ...cameraPair(
+      'width',
+      lastFrame,
+      ctx.anchor.width * scaleFrom,
+      ctx.anchor.width * scaleTo,
+      easing,
+    ),
+    ...cameraPair(
+      'height',
+      lastFrame,
+      ctx.anchor.height * scaleFrom,
+      ctx.anchor.height * scaleTo,
+      easing,
+    ),
+  ]
+}
+
+function buildCameraPanKeyframes(
+  property: 'x' | 'y',
+  anchorValue: number,
+  frameSize: number,
+  travelRatio: number,
+  lastFrame: number,
+  easing: EasingConfig | 'linear',
+): MotionPresetKeyframePayload[] {
+  if (travelRatio === 0) return []
+  const travel = frameSize * travelRatio
+  return cameraPair(property, lastFrame, anchorValue - travel / 2, anchorValue + travel / 2, easing)
+}
+
+function buildCameraRollKeyframes(
+  ctx: MotionPresetBuildContext,
+  spec: CameraMoveSpec,
+  lastFrame: number,
+  easing: EasingConfig | 'linear',
+): MotionPresetKeyframePayload[] {
+  const rollFrom = spec.rollFrom ?? 0
+  const rollTo = spec.rollTo ?? rollFrom
+  if (rollFrom === 0 && rollTo === 0) return []
+
+  return cameraPair(
+    'rotation',
+    lastFrame,
+    ctx.anchor.rotation + rollFrom,
+    ctx.anchor.rotation + rollTo,
+    easing,
+  )
+}
+
+function buildCameraMove(
+  ctx: MotionPresetBuildContext,
+  spec: CameraMoveSpec,
+): MotionPresetKeyframePayload[] {
+  const last = ctx.durationInFrames - 1
+  if (last <= 0) return []
+  const easing = spec.easing ?? CAMERA_GLIDE
+
+  return [
+    ...buildCameraScaleKeyframes(ctx, spec, last, easing),
+    ...buildCameraPanKeyframes('x', ctx.anchor.x, ctx.frameWidth, spec.panX ?? 0, last, easing),
+    ...buildCameraPanKeyframes('y', ctx.anchor.y, ctx.frameHeight, spec.panY ?? 0, last, easing),
+    ...buildCameraRollKeyframes(ctx, spec, last, easing),
+  ]
+}
+
+function stagedFrame(lastFrame: number, split: number): number {
+  return clamp(Math.round(lastFrame * split), 1, Math.max(1, lastFrame - 1))
+}
+
+function stagedScaleKeyframes(
+  ctx: MotionPresetBuildContext,
+  spec: StagedCameraMoveSpec,
+  midFrame: number,
+  lastFrame: number,
+): MotionPresetKeyframePayload[] {
+  const scaleFrom = spec.scaleFrom ?? 1.03
+  const scaleMid = spec.scaleMid ?? 1.15
+  const scaleTo = spec.scaleTo ?? 1.2
+  return [
+    kf('width', 0, ctx.anchor.width * scaleFrom, 'cubic-bezier', CAMERA_RAMP),
+    kf('width', midFrame, ctx.anchor.width * scaleMid, 'cubic-bezier', CAMERA_GLIDE),
+    kf('width', lastFrame, ctx.anchor.width * scaleTo, LINEAR),
+    kf('height', 0, ctx.anchor.height * scaleFrom, 'cubic-bezier', CAMERA_RAMP),
+    kf('height', midFrame, ctx.anchor.height * scaleMid, 'cubic-bezier', CAMERA_GLIDE),
+    kf('height', lastFrame, ctx.anchor.height * scaleTo, LINEAR),
+  ]
+}
+
+function stagedTravelKeyframes(
+  property: 'x' | 'y',
+  anchorValue: number,
+  frameSize: number,
+  travelRatio: number,
+  midFrame: number,
+  lastFrame: number,
+): MotionPresetKeyframePayload[] {
+  if (travelRatio === 0) return []
+  return [
+    kf(property, 0, anchorValue, 'cubic-bezier', CAMERA_RAMP),
+    kf(property, midFrame, anchorValue, 'cubic-bezier', CAMERA_GLIDE),
+    kf(property, lastFrame, anchorValue + frameSize * travelRatio, LINEAR),
+  ]
+}
+
+function stagedRollKeyframes(
+  ctx: MotionPresetBuildContext,
+  spec: StagedCameraMoveSpec,
+  midFrame: number,
+  lastFrame: number,
+): MotionPresetKeyframePayload[] {
+  if (!spec.rollTo) return []
+  return [
+    kf('rotation', 0, ctx.anchor.rotation, 'cubic-bezier', CAMERA_RAMP),
+    kf('rotation', midFrame, ctx.anchor.rotation, 'cubic-bezier', CAMERA_GLIDE),
+    kf('rotation', lastFrame, ctx.anchor.rotation + spec.rollTo, LINEAR),
+  ]
+}
+
+function buildStagedCameraMove(
+  ctx: MotionPresetBuildContext,
+  spec: StagedCameraMoveSpec,
+): MotionPresetKeyframePayload[] {
+  const last = ctx.durationInFrames - 1
+  if (last <= 0) return []
+  if (last < 2) {
+    return buildCameraMove(ctx, {
+      scaleFrom: spec.scaleFrom ?? 1.03,
+      scaleTo: spec.scaleTo ?? 1.2,
+      panX: spec.panX,
+      panY: spec.panY,
+      rollTo: spec.rollTo,
+      easing: CAMERA_GLIDE,
+    })
+  }
+
+  const mid = stagedFrame(last, spec.split ?? 0.45)
+  return [
+    ...stagedScaleKeyframes(ctx, spec, mid, last),
+    ...stagedTravelKeyframes('x', ctx.anchor.x, ctx.frameWidth, spec.panX ?? 0, mid, last),
+    ...stagedTravelKeyframes('y', ctx.anchor.y, ctx.frameHeight, spec.panY ?? 0, mid, last),
+    ...stagedRollKeyframes(ctx, spec, mid, last),
+  ]
+}
+
+function surgeTravelKeyframes(
+  property: 'x' | 'y',
+  anchorValue: number,
+  frameSize: number,
+  travelRatio: number,
+  midFrame: number,
+  lastFrame: number,
+): MotionPresetKeyframePayload[] {
+  if (travelRatio === 0) return []
+  const travel = frameSize * travelRatio
+  return [
+    kf(property, 0, anchorValue - travel * 0.18, 'cubic-bezier', CAMERA_RAMP),
+    kf(property, midFrame, anchorValue + travel * 0.42, 'cubic-bezier', CAMERA_GLIDE),
+    kf(property, lastFrame, anchorValue + travel, LINEAR),
+  ]
+}
+
+function surgeRollKeyframes(
+  ctx: MotionPresetBuildContext,
+  spec: StagedCameraMoveSpec,
+  midFrame: number,
+  lastFrame: number,
+): MotionPresetKeyframePayload[] {
+  if (!spec.rollTo) return []
+  return [
+    kf('rotation', 0, ctx.anchor.rotation - spec.rollTo * 0.3, 'cubic-bezier', CAMERA_RAMP),
+    kf(
+      'rotation',
+      midFrame,
+      ctx.anchor.rotation + spec.rollTo * 0.45,
+      'cubic-bezier',
+      CAMERA_GLIDE,
+    ),
+    kf('rotation', lastFrame, ctx.anchor.rotation + spec.rollTo, LINEAR),
+  ]
+}
+
+function buildSurgeCameraMove(
+  ctx: MotionPresetBuildContext,
+  spec: StagedCameraMoveSpec,
+): MotionPresetKeyframePayload[] {
+  const last = ctx.durationInFrames - 1
+  if (last <= 0) return []
+  if (last < 2) {
+    return buildCameraMove(ctx, {
+      scaleFrom: spec.scaleFrom ?? 1.04,
+      scaleTo: spec.scaleTo ?? 1.26,
+      panX: spec.panX,
+      panY: spec.panY,
+      rollTo: spec.rollTo,
+      easing: CAMERA_GLIDE,
+    })
+  }
+
+  const mid = stagedFrame(last, spec.split ?? 0.38)
+  return [
+    ...stagedScaleKeyframes(ctx, spec, mid, last),
+    ...surgeTravelKeyframes('x', ctx.anchor.x, ctx.frameWidth, spec.panX ?? 0, mid, last),
+    ...surgeTravelKeyframes('y', ctx.anchor.y, ctx.frameHeight, spec.panY ?? 0, mid, last),
+    ...surgeRollKeyframes(ctx, spec, mid, last),
+  ]
+}
+
+function cameraSpecProperties(spec: CameraMoveSpec): AnimatableProperty[] {
+  const properties: AnimatableProperty[] = []
+  const scaleFrom = spec.scaleFrom ?? 1
+  const scaleTo = spec.scaleTo ?? scaleFrom
+  if (scaleFrom !== 1 || scaleTo !== 1) properties.push('width', 'height')
+  if (spec.panX) properties.push('x')
+  if (spec.panY) properties.push('y')
+  if (spec.rollFrom || spec.rollTo) properties.push('rotation')
+  return properties
+}
+
+function stagedCameraProperties(spec: StagedCameraMoveSpec): AnimatableProperty[] {
+  const properties: AnimatableProperty[] = ['width', 'height']
+  if (spec.panX) properties.push('x')
+  if (spec.panY) properties.push('y')
+  if (spec.rollTo) properties.push('rotation')
+  return properties
+}
+
+function cameraPreset(
+  id: MotionPresetId,
+  labelKey: string,
+  thumbnail: MotionThumbnail,
+  spec: CameraMoveSpec,
+): MotionPreset {
+  return {
+    id,
+    category: 'camera',
+    labelKey,
+    thumbnail,
+    properties: cameraSpecProperties(spec),
+    build: (ctx) => buildCameraMove(ctx, spec),
+  }
+}
+
+function stagedCameraPreset(
+  id: MotionPresetId,
+  labelKey: string,
+  thumbnail: MotionThumbnail,
+  spec: StagedCameraMoveSpec,
+): MotionPreset {
+  return {
+    id,
+    category: 'camera',
+    labelKey,
+    thumbnail,
+    properties: stagedCameraProperties(spec),
+    build: (ctx) => buildStagedCameraMove(ctx, spec),
+  }
+}
+
+function surgeCameraPreset(
+  id: MotionPresetId,
+  labelKey: string,
+  thumbnail: MotionThumbnail,
+  spec: StagedCameraMoveSpec,
+): MotionPreset {
+  return {
+    id,
+    category: 'camera',
+    labelKey,
+    thumbnail,
+    properties: stagedCameraProperties(spec),
+    build: (ctx) => buildSurgeCameraMove(ctx, spec),
+  }
+}
+
+/** Locked cover-zoom keyframes so organic moves never reveal the image edge. */
+function cameraLockScale(
+  ctx: MotionPresetBuildContext,
+  scale: number,
+  lastFrame: number,
+): MotionPresetKeyframePayload[] {
+  return [
+    kf('width', 0, ctx.anchor.width * scale, LINEAR),
+    kf('width', lastFrame, ctx.anchor.width * scale, LINEAR),
+    kf('height', 0, ctx.anchor.height * scale, LINEAR),
+    kf('height', lastFrame, ctx.anchor.height * scale, LINEAR),
+  ]
+}
+
+/** Slow organic float — a gentle S-shaped wander, like a camera on a soft jib. */
+function buildFloat(ctx: MotionPresetBuildContext): MotionPresetKeyframePayload[] {
+  const last = ctx.durationInFrames - 1
+  if (last <= 0) return []
+  const ax = ctx.frameWidth * 0.008
+  const ay = ctx.frameHeight * 0.01
+  const at = (p: number) => Math.round(last * p)
+  return [
+    ...cameraLockScale(ctx, 1.08, last),
+    kf('x', 0, ctx.anchor.x, EASE_IN_OUT),
+    kf('x', at(1 / 3), ctx.anchor.x + ax, EASE_IN_OUT),
+    kf('x', at(2 / 3), ctx.anchor.x - ax, EASE_IN_OUT),
+    kf('x', last, ctx.anchor.x, LINEAR),
+    kf('y', 0, ctx.anchor.y, EASE_IN_OUT),
+    kf('y', at(0.25), ctx.anchor.y - ay * 0.6, EASE_IN_OUT),
+    kf('y', at(0.75), ctx.anchor.y + ay * 0.6, EASE_IN_OUT),
+    kf('y', last, ctx.anchor.y, LINEAR),
+  ]
+}
+
+/** Deterministic hash noise in [-0.5, 0.5) — same clip always bakes the same. */
+function cameraHashNoise(seed: number): number {
+  const s = Math.sin(seed * 127.1) * 43758.5453
+  return s - Math.floor(s) - 0.5
+}
+
+/** Baked micro-jitter — documentary handheld energy at a locked cover zoom. */
+function buildHandheld(ctx: MotionPresetBuildContext): MotionPresetKeyframePayload[] {
+  const last = ctx.durationInFrames - 1
+  if (last <= 0) return []
+  const step = Math.max(2, Math.round(ctx.fps / 2))
+  const ax = ctx.frameWidth * 0.004
+  const ay = ctx.frameHeight * 0.005
+  const payloads = cameraLockScale(ctx, 1.06, last)
+  for (let frame = 0, i = 0; frame < last; frame += step, i++) {
+    // Taper toward zero at both ends so the clip cuts in and out at rest.
+    const taper = Math.min(1, Math.min(frame, last - frame) / (step * 2))
+    payloads.push(
+      kf('x', frame, ctx.anchor.x + cameraHashNoise(i * 2 + 1) * 2 * ax * taper, EASE_IN_OUT),
+      kf('y', frame, ctx.anchor.y + cameraHashNoise(i * 2 + 2) * 2 * ay * taper, EASE_IN_OUT),
+    )
+  }
+  payloads.push(kf('x', last, ctx.anchor.x, LINEAR), kf('y', last, ctx.anchor.y, LINEAR))
+  return payloads
+}
+
+const CAMERA_PRESETS: MotionPreset[] = [
+  // Push / pull (dolly)
+  cameraPreset('push-in-slow', 'pushInSlow', { kind: 'scale', direction: 1 }, { scaleTo: 1.05 }),
+  cameraPreset('push-in', 'pushIn', { kind: 'scale', direction: 1 }, { scaleTo: 1.12 }),
+  cameraPreset('push-in-fast', 'pushInFast', { kind: 'scale', direction: 1 }, { scaleTo: 1.25 }),
+  cameraPreset(
+    'pull-back-slow',
+    'pullBackSlow',
+    { kind: 'scale', direction: -1 },
+    { scaleFrom: 1.05, scaleTo: 1 },
+  ),
+  cameraPreset(
+    'pull-back',
+    'pullBack',
+    { kind: 'scale', direction: -1 },
+    { scaleFrom: 1.12, scaleTo: 1 },
+  ),
+  cameraPreset(
+    'pull-back-fast',
+    'pullBackFast',
+    { kind: 'scale', direction: -1 },
+    { scaleFrom: 1.25, scaleTo: 1 },
+  ),
+  // Pans (locked cover zoom)
+  cameraPreset(
+    'pan-left',
+    'panLeft',
+    { kind: 'slide', angle: 180 },
+    { scaleFrom: 1.12, panX: -0.06 },
+  ),
+  cameraPreset(
+    'pan-right',
+    'panRight',
+    { kind: 'slide', angle: 0 },
+    { scaleFrom: 1.12, panX: 0.06 },
+  ),
+  cameraPreset(
+    'pan-left-slow',
+    'panLeftSlow',
+    { kind: 'slide', angle: 180 },
+    { scaleFrom: 1.08, panX: -0.03, easing: 'linear' },
+  ),
+  cameraPreset(
+    'pan-right-slow',
+    'panRightSlow',
+    { kind: 'slide', angle: 0 },
+    { scaleFrom: 1.08, panX: 0.03, easing: 'linear' },
+  ),
+  // Tilts
+  cameraPreset(
+    'tilt-up',
+    'tiltUp',
+    { kind: 'slide', angle: 270 },
+    { scaleFrom: 1.12, panY: -0.06 },
+  ),
+  cameraPreset(
+    'tilt-down',
+    'tiltDown',
+    { kind: 'slide', angle: 90 },
+    { scaleFrom: 1.12, panY: 0.06 },
+  ),
+  cameraPreset(
+    'tilt-up-slow',
+    'tiltUpSlow',
+    { kind: 'slide', angle: 270 },
+    { scaleFrom: 1.08, panY: -0.03, easing: 'linear' },
+  ),
+  cameraPreset(
+    'tilt-down-slow',
+    'tiltDownSlow',
+    { kind: 'slide', angle: 90 },
+    { scaleFrom: 1.08, panY: 0.03, easing: 'linear' },
+  ),
+  // Ken Burns diagonals (push/pull + drift)
+  cameraPreset(
+    'kb-in-up-left',
+    'kenBurnsInUpLeft',
+    { kind: 'slide', angle: 225 },
+    { scaleTo: 1.14, panX: -0.04, panY: -0.04 },
+  ),
+  cameraPreset(
+    'kb-in-up-right',
+    'kenBurnsInUpRight',
+    { kind: 'slide', angle: 315 },
+    { scaleTo: 1.14, panX: 0.04, panY: -0.04 },
+  ),
+  cameraPreset(
+    'kb-in-down-left',
+    'kenBurnsInDownLeft',
+    { kind: 'slide', angle: 135 },
+    { scaleTo: 1.14, panX: -0.04, panY: 0.04 },
+  ),
+  cameraPreset(
+    'kb-in-down-right',
+    'kenBurnsInDownRight',
+    { kind: 'slide', angle: 45 },
+    { scaleTo: 1.14, panX: 0.04, panY: 0.04 },
+  ),
+  cameraPreset(
+    'kb-out-up-left',
+    'kenBurnsOutUpLeft',
+    { kind: 'slide', angle: 225 },
+    { scaleFrom: 1.14, scaleTo: 1, panX: -0.04, panY: -0.04 },
+  ),
+  cameraPreset(
+    'kb-out-up-right',
+    'kenBurnsOutUpRight',
+    { kind: 'slide', angle: 315 },
+    { scaleFrom: 1.14, scaleTo: 1, panX: 0.04, panY: -0.04 },
+  ),
+  cameraPreset(
+    'kb-out-down-left',
+    'kenBurnsOutDownLeft',
+    { kind: 'slide', angle: 135 },
+    { scaleFrom: 1.14, scaleTo: 1, panX: -0.04, panY: 0.04 },
+  ),
+  cameraPreset(
+    'kb-out-down-right',
+    'kenBurnsOutDownRight',
+    { kind: 'slide', angle: 45 },
+    { scaleFrom: 1.14, scaleTo: 1, panX: 0.04, panY: 0.04 },
+  ),
+  // Push/pull + pan
+  cameraPreset(
+    'push-pan-left',
+    'pushPanLeft',
+    { kind: 'slide', angle: 180 },
+    { scaleTo: 1.15, panX: -0.05 },
+  ),
+  cameraPreset(
+    'push-pan-right',
+    'pushPanRight',
+    { kind: 'slide', angle: 0 },
+    { scaleTo: 1.15, panX: 0.05 },
+  ),
+  stagedCameraPreset(
+    'stage-push-pan-left',
+    'stagePushPanLeft',
+    { kind: 'slide', angle: 180 },
+    { panX: -0.075 },
+  ),
+  stagedCameraPreset(
+    'stage-push-pan-right',
+    'stagePushPanRight',
+    { kind: 'slide', angle: 0 },
+    { panX: 0.075 },
+  ),
+  stagedCameraPreset(
+    'stage-push-tilt-up',
+    'stagePushTiltUp',
+    { kind: 'slide', angle: 270 },
+    { panY: -0.075 },
+  ),
+  stagedCameraPreset(
+    'stage-push-tilt-down',
+    'stagePushTiltDown',
+    { kind: 'slide', angle: 90 },
+    { panY: 0.075 },
+  ),
+  surgeCameraPreset(
+    'surge-down-right',
+    'surgeDownRight',
+    { kind: 'slide', angle: 45 },
+    { scaleFrom: 1.06, scaleMid: 1.24, scaleTo: 1.36, panX: 0.095, panY: 0.085, split: 0.3 },
+  ),
+  surgeCameraPreset(
+    'surge-down-left',
+    'surgeDownLeft',
+    { kind: 'slide', angle: 135 },
+    { scaleFrom: 1.06, scaleMid: 1.24, scaleTo: 1.36, panX: -0.095, panY: 0.085, split: 0.3 },
+  ),
+  surgeCameraPreset(
+    'surge-up-right',
+    'surgeUpRight',
+    { kind: 'slide', angle: 315 },
+    { scaleFrom: 1.06, scaleMid: 1.23, scaleTo: 1.34, panX: 0.09, panY: -0.08, split: 0.32 },
+  ),
+  surgeCameraPreset(
+    'surge-up-left',
+    'surgeUpLeft',
+    { kind: 'slide', angle: 225 },
+    { scaleFrom: 1.06, scaleMid: 1.23, scaleTo: 1.34, panX: -0.09, panY: -0.08, split: 0.32 },
+  ),
+  surgeCameraPreset(
+    'surge-dutch-right',
+    'surgeDutchRight',
+    { kind: 'wobble' },
+    {
+      scaleFrom: 1.07,
+      scaleMid: 1.25,
+      scaleTo: 1.38,
+      panX: 0.085,
+      panY: -0.065,
+      rollTo: -1.8,
+      split: 0.28,
+    },
+  ),
+  surgeCameraPreset(
+    'surge-dutch-left',
+    'surgeDutchLeft',
+    { kind: 'wobble' },
+    {
+      scaleFrom: 1.07,
+      scaleMid: 1.25,
+      scaleTo: 1.38,
+      panX: -0.085,
+      panY: -0.065,
+      rollTo: 1.8,
+      split: 0.28,
+    },
+  ),
+  cameraPreset(
+    'pull-pan-left',
+    'pullPanLeft',
+    { kind: 'slide', angle: 180 },
+    { scaleFrom: 1.15, scaleTo: 1, panX: -0.05 },
+  ),
+  cameraPreset(
+    'pull-pan-right',
+    'pullPanRight',
+    { kind: 'slide', angle: 0 },
+    { scaleFrom: 1.15, scaleTo: 1, panX: 0.05 },
+  ),
+  // Push/pull + tilt
+  cameraPreset(
+    'push-tilt-up',
+    'pushTiltUp',
+    { kind: 'slide', angle: 270 },
+    { scaleTo: 1.15, panY: -0.05 },
+  ),
+  cameraPreset(
+    'push-tilt-down',
+    'pushTiltDown',
+    { kind: 'slide', angle: 90 },
+    { scaleTo: 1.15, panY: 0.05 },
+  ),
+  cameraPreset(
+    'pull-tilt-up',
+    'pullTiltUp',
+    { kind: 'slide', angle: 270 },
+    { scaleFrom: 1.15, scaleTo: 1, panY: -0.05 },
+  ),
+  cameraPreset(
+    'pull-tilt-down',
+    'pullTiltDown',
+    { kind: 'slide', angle: 90 },
+    { scaleFrom: 1.15, scaleTo: 1, panY: 0.05 },
+  ),
+  // Roll / dutch
+  cameraPreset(
+    'roll-cw',
+    'rollClockwise',
+    { kind: 'spin' },
+    { scaleFrom: 1.16, rollFrom: -1.2, rollTo: 1.2 },
+  ),
+  cameraPreset(
+    'roll-ccw',
+    'rollCounterClockwise',
+    { kind: 'spin' },
+    { scaleFrom: 1.16, rollFrom: 1.2, rollTo: -1.2 },
+  ),
+  cameraPreset(
+    'dutch-push-cw',
+    'dutchPushClockwise',
+    { kind: 'spin' },
+    { scaleTo: 1.18, rollTo: 2 },
+  ),
+  cameraPreset(
+    'dutch-push-ccw',
+    'dutchPushCounterClockwise',
+    { kind: 'spin' },
+    { scaleTo: 1.18, rollTo: -2 },
+  ),
+  // Simulated arcs (pan + counter-tilt + subtle roll)
+  cameraPreset(
+    'arc-left',
+    'arcLeft',
+    { kind: 'wobble' },
+    { scaleFrom: 1.14, panX: -0.05, panY: -0.015, rollTo: 1.2 },
+  ),
+  cameraPreset(
+    'arc-right',
+    'arcRight',
+    { kind: 'wobble' },
+    { scaleFrom: 1.14, panX: 0.05, panY: -0.015, rollTo: -1.2 },
+  ),
+  // Specialty
+  cameraPreset(
+    'crash-in',
+    'crashIn',
+    { kind: 'scale', direction: 1 },
+    { scaleTo: 1.35, easing: CAMERA_RAMP },
+  ),
+  cameraPreset(
+    'crash-out',
+    'crashOut',
+    { kind: 'scale', direction: -1 },
+    { scaleFrom: 1.3, scaleTo: 1, easing: CAMERA_SETTLE },
+  ),
+  cameraPreset(
+    'creep-in',
+    'creepIn',
+    { kind: 'scale', direction: 1 },
+    { scaleTo: 1.03, easing: 'linear' },
+  ),
+  cameraPreset(
+    'creep-out',
+    'creepOut',
+    { kind: 'scale', direction: -1 },
+    { scaleFrom: 1.03, scaleTo: 1, easing: 'linear' },
+  ),
+  {
+    id: 'float',
+    category: 'camera',
+    labelKey: 'floatDrift',
+    thumbnail: { kind: 'drift' },
+    properties: ['x', 'y', 'width', 'height'],
+    build: buildFloat,
+  },
+  {
+    id: 'handheld',
+    category: 'camera',
+    labelKey: 'handheld',
+    thumbnail: { kind: 'micro-shake' },
+    properties: ['x', 'y', 'width', 'height'],
+    build: buildHandheld,
+  },
+]
 
 export const MOTION_PRESETS: MotionPreset[] = [
+  ...CAMERA_PRESETS,
   // --- Entrance ---
   {
     id: 'fade-in',
@@ -544,7 +1343,73 @@ export const MOTION_PRESETS_BY_ID: Record<MotionPresetId, MotionPreset> = Object
   MOTION_PRESETS.map((preset) => [preset.id, preset]),
 ) as Record<MotionPresetId, MotionPreset>
 
-export const MOTION_PRESET_CATEGORIES: MotionPresetCategory[] = ['entrance', 'exit', 'emphasis']
+export const MOTION_PRESET_CATEGORIES: MotionPresetCategory[] = [
+  'camera',
+  'entrance',
+  'exit',
+  'emphasis',
+]
+
+export const CAMERA_MOTION_PRESETS: MotionPreset[] = CAMERA_PRESETS
+
+/**
+ * Curated rotation used when auto-animating a batch of stills. Ordered like a
+ * cinematographer covers a scene: zoom direction flips on every cut and pan
+ * direction never repeats back-to-back, so consecutive images always read as
+ * fresh coverage rather than a repeated gimmick.
+ */
+export const AUTO_CAMERA_SEQUENCE: MotionPresetId[] = [
+  'push-in-slow',
+  'pan-right-slow',
+  'pull-back-slow',
+  'pan-left-slow',
+  'kb-in-up-right',
+  'tilt-up-slow',
+  'kb-out-down-left',
+  'push-in',
+  'tilt-down-slow',
+  'kb-in-down-right',
+  'pull-back',
+  'kb-out-up-left',
+]
+
+/**
+ * More dramatic sequence for story/audiobook stills. Every move combines at
+ * least two camera axes (zoom + pan/tilt/roll) so a generated scene never reads
+ * as a plain one-direction slideshow move.
+ */
+export const CINEMATIC_STORY_CAMERA_SEQUENCE: MotionPresetId[] = [
+  'surge-down-right',
+  'surge-up-left',
+  'surge-down-left',
+  'surge-up-right',
+  'surge-dutch-right',
+  'surge-dutch-left',
+  'stage-push-pan-right',
+  'stage-push-tilt-down',
+  'stage-push-pan-left',
+  'stage-push-tilt-up',
+  'arc-right',
+  'push-pan-right',
+  'dutch-push-cw',
+  'kb-in-down-right',
+  'arc-left',
+  'dutch-push-ccw',
+  'pull-pan-right',
+  'kb-out-down-left',
+]
+
+/** Deterministic pick from the auto-camera rotation for the nth still added. */
+export function pickAutoCameraPresetId(index: number): MotionPresetId {
+  const length = AUTO_CAMERA_SEQUENCE.length
+  return AUTO_CAMERA_SEQUENCE[((index % length) + length) % length]!
+}
+
+/** Deterministic pick from the dramatic story-camera rotation. */
+export function pickCinematicStoryCameraPresetId(index: number): MotionPresetId {
+  const length = CINEMATIC_STORY_CAMERA_SEQUENCE.length
+  return CINEMATIC_STORY_CAMERA_SEQUENCE[((index % length) + length) % length]!
+}
 
 /**
  * Whether a preset animates the clip box (`width`/`height`). On text clips this

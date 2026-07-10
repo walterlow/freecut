@@ -3,7 +3,15 @@
  * Editor modules should import timeline store types/selectors from here.
  */
 
-export type { TimelineState, TimelineActions, MotionPresetClear } from './timeline-contract'
+export type {
+  AudiobookMusicBedPlacement,
+  CinematicDepthLayerPlacement,
+  InsertAudiobookMusicBedResult,
+  InsertCinematicDepthLayersResult,
+  MotionPresetClear,
+  TimelineActions,
+  TimelineState,
+} from './timeline-contract'
 export {
   importWaveformCache,
   rateStretchItemWithoutHistory,
@@ -17,6 +25,8 @@ export {
   executeTimelineCommand,
   captureSnapshot,
   applyAnimationPreset,
+  applyCinematicCameraToSelectedImages,
+  applyDocumentaryCameraToSelectedImages,
   applyMotionPresetKeyframes,
   applyMotionModifierToItems,
   updateMotionModifiersLive,

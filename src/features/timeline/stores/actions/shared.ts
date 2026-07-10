@@ -15,7 +15,7 @@ import { useKeyframesStore } from '../keyframes-store'
 import { useCompositionsStore, type SubComposition } from '../compositions-store'
 import { useCompositionNavigationStore } from '../composition-navigation-store'
 import { repairTransitions } from '../../utils/transition-auto-repair'
-import { isFrameInTransitionRegion } from '@/features/timeline/deps/keyframes'
+import { calculateTransitionPortions } from '@/shared/timeline/transitions/transition-planner'
 
 // Use function declarations (not const) to avoid temporal dead zone errors
 // in production chunk ordering — see CLAUDE.md gotchas.
@@ -72,8 +72,47 @@ export function canAddKeyframeAtFrame(itemId: string, frame: number): boolean {
   if (!item) return false
 
   const transitions = useTransitionsStore.getState().transitions
-  const blocked = isFrameInTransitionRegion(frame, itemId, item, transitions)
-  return blocked === undefined
+  return !isFrameInTransitionRegion(frame, itemId, item, transitions)
+}
+
+function getTransitionPortionForItem(transition: Transition, itemId: string): number {
+  const portions = calculateTransitionPortions(transition.durationInFrames, transition.alignment)
+  if (transition.leftClipId === itemId) return portions.leftPortion
+  if (transition.rightClipId === itemId) return portions.rightPortion
+  return 0
+}
+
+function getTransitionBlockedRanges(
+  itemId: string,
+  item: TimelineItem,
+  transitions: Transition[],
+): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  for (const transition of transitions) {
+    const portion = getTransitionPortionForItem(transition, itemId)
+    if (portion <= 0) continue
+
+    if (transition.rightClipId === itemId) {
+      ranges.push([0, Math.min(portion, item.durationInFrames)])
+    } else if (transition.leftClipId === itemId) {
+      ranges.push([
+        Math.max(0, item.durationInFrames - portion),
+        Math.max(0, item.durationInFrames),
+      ])
+    }
+  }
+  return ranges
+}
+
+function isFrameInTransitionRegion(
+  frame: number,
+  itemId: string,
+  item: TimelineItem,
+  transitions: Transition[],
+): boolean {
+  return getTransitionBlockedRanges(itemId, item, transitions).some(
+    ([start, end]) => frame >= start && frame < end,
+  )
 }
 
 // --- Shared timeline snapshot helpers ---
