@@ -133,6 +133,49 @@ test("search caches results and excludes incompatible licences", async () => {
   assert.match(requestedUrl, /\/apiv2\/search\/text\//);
 });
 
+test("cinematic quality mode keeps only stereo 48 kHz recordings with real bit depth", async () => {
+  const service = new FreesoundService(
+    { apiKey: "test-key", clientId: "", clientSecret: "", callbackUrl: "" },
+    {
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                id: 11,
+                name: "Cinema impact",
+                username: "studio",
+                license: "https://creativecommons.org/publicdomain/zero/1.0/",
+                previews: { "preview-hq-mp3": "https://cdn.freesound.org/cinema.mp3" },
+                tags: ["cinematic", "impact"],
+                duration: 4,
+                samplerate: 48000,
+                bitdepth: 24,
+                channels: 2,
+              },
+              {
+                id: 12,
+                name: "Phone impact",
+                username: "mobile",
+                license: "https://creativecommons.org/publicdomain/zero/1.0/",
+                previews: { "preview-hq-mp3": "https://cdn.freesound.org/phone.mp3" },
+                tags: ["impact"],
+                duration: 4,
+                samplerate: 44100,
+                bitdepth: 16,
+                channels: 1,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    },
+  );
+
+  const results = await service.search({ query: "cinematic impact", quality: "cinematic" });
+  assert.deepEqual(results.map((sound) => sound.id), [11]);
+});
+
 test("failed and throttled API requests surface retry information", async () => {
   const service = new FreesoundService(
     { apiKey: "test-key", clientId: "", clientSecret: "", callbackUrl: "" },

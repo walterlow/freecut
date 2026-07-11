@@ -70,6 +70,7 @@ export interface PixabayBrollAssetMetadata {
   editorsChoice: boolean
   variant: string
   score: number
+  qualityTier: 'native-4k' | 'hd'
 }
 
 export interface PixabayBrollSourceMetadata {
@@ -85,6 +86,9 @@ export interface PixabayBrollSourceMetadata {
   sceneId: string
   variant: string
   score: number
+  sourceWidth: number
+  sourceHeight: number
+  qualityTier: 'native-4k' | 'hd'
 }
 
 export interface PixabayBrollBeat {

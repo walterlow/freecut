@@ -5,12 +5,14 @@ import {
   CAMERA_MOTION_PRESETS,
   CINEMATIC_STORY_CAMERA_SEQUENCE,
   COMPOUND_PARALLAX_CAMERA_SEQUENCE,
+  MAGNATES_3D_CAMERA_SEQUENCE,
   MOTION_PRESETS,
   MOTION_PRESETS_BY_ID,
   getMotionPresetAnchorFrame,
   pickAutoCameraPresetId,
   pickCinematicStoryCameraPresetId,
   pickCompoundParallaxCameraPresetId,
+  pickMagnates3dCameraPresetId,
   type MotionPresetBuildContext,
 } from './motion-presets'
 
@@ -96,8 +98,8 @@ describe('motion presets', () => {
 })
 
 describe('camera presets', () => {
-  it('ships the full 60-move cinematic catalog', () => {
-    expect(CAMERA_MOTION_PRESETS.length).toBe(60)
+  it('ships the full 64-move cinematic catalog', () => {
+    expect(CAMERA_MOTION_PRESETS.length).toBe(64)
     for (const preset of CAMERA_MOTION_PRESETS) {
       expect(preset.category).toBe('camera')
     }
@@ -216,6 +218,25 @@ describe('camera presets', () => {
     expect(pickCompoundParallaxCameraPresetId(0)).toBe('compound-push-pan-right')
     expect(pickCompoundParallaxCameraPresetId(COMPOUND_PARALLAX_CAMERA_SEQUENCE.length)).toBe(
       COMPOUND_PARALLAX_CAMERA_SEQUENCE[0],
+    )
+  })
+
+  it('magnates 3D moves animate four camera channels without edge-revealing pauses', () => {
+    for (const id of MAGNATES_3D_CAMERA_SEQUENCE.slice(0, 4)) {
+      const keys = MOTION_PRESETS_BY_ID[id]!.build(ctx())
+      const properties = new Set(keys.map((keyframe) => keyframe.property))
+      expect(properties).toEqual(new Set(['width', 'height', 'x', 'y', 'rotation']))
+      for (const property of properties) {
+        expect(
+          keys
+            .filter((keyframe) => keyframe.property === property)
+            .map((keyframe) => keyframe.frame),
+        ).toEqual([0, 89])
+      }
+    }
+    expect(pickMagnates3dCameraPresetId(0)).toBe('magnates-orbit-right')
+    expect(pickMagnates3dCameraPresetId(MAGNATES_3D_CAMERA_SEQUENCE.length)).toBe(
+      MAGNATES_3D_CAMERA_SEQUENCE[0],
     )
   })
 })

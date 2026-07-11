@@ -2,7 +2,19 @@
 
 ## Optional Pixabay B-roll
 
-Studio Production can automatically divide narration into visual beats and match each beat to Pixabay. The option is off by default. When enabled, it searches HD horizontal video first, falls back to a still image, downloads the chosen media into project storage, mutes embedded stock audio, and places editable clips on a dedicated `Pixabay B-roll` track. Still-image fallbacks receive the compound parallax camera preset.
+Studio Production can automatically divide narration into visual beats and match each beat to Pixabay. The option is off by default. When enabled, it searches horizontal video first, falls back to a still image, downloads the chosen media into project storage, mutes embedded stock audio, and places editable clips on a dedicated `Pixabay B-roll` track. Still-image fallbacks are passed through the same depth preparation, camera direction, transition, and finishing pipeline as user-supplied images.
+
+`Strict native 4K sources` rejects assets below 3840x2160 using both provider metadata and the dimensions of the imported file. The `Magnates 3D documentary` profile forces this gate on, prefers still images so they can become 2.5D scenes, and falls back only to native 4K video when Pixabay does not expose an original-resolution photo URL.
+
+The Magnates profile automatically applies:
+
+- subject/background separation with an inpainted background when depth preparation is available;
+- simultaneous dolly, horizontal travel, vertical travel, and restrained roll keyframes;
+- eased multi-property motion selected from four alternating camera directions;
+- 3D scene-orbit or lens-warp transitions chosen from the narration beat;
+- kinetic editorial cards with masked entrances and word-based exits;
+- a lifted, detail-preserving grade with role-aware depth finishing;
+- cinematic Freesound filtering that requires stereo, at least 48 kHz, and real bit depth.
 
 Configure `PIXABAY_API_KEY` in `.env.local`. The key is read only by the local backend and is never sent to the browser. Search responses are cached for 24 hours, downloaded asset URLs are constrained to Pixabay's CDN, and each timeline clip stores its source page, contributor, query, variant, score, retrieval time, and Pixabay Content License URL.
 

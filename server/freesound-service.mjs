@@ -93,6 +93,14 @@ function normalizeResult(sound, score) {
   }
 }
 
+function meetsCinematicQuality(sound) {
+  return (
+    numberOrZero(sound.samplerate) >= 48_000 &&
+    numberOrZero(sound.bitdepth) >= 16 &&
+    numberOrZero(sound.channels) >= 2
+  )
+}
+
 function createApiError(response, body) {
   const message = [body?.detail, body?.error_description, body?.error, response.statusText].find(
     Boolean,
@@ -197,12 +205,18 @@ export class FreesoundService {
   }
 
   // fallow-ignore-next-line complexity
-  async search({ query, policy = 'youtube-safe', targetDuration = 6, pageSize = 15 }) {
+  async search({
+    query,
+    policy = 'youtube-safe',
+    targetDuration = 6,
+    pageSize = 15,
+    quality = 'standard',
+  }) {
     requireValue(this.config.apiKey, 'FREESOUND_API_KEY is not configured')
     const safeQuery = normalizeQuery(query)
     if (!safeQuery) return []
     const safePageSize = clamp(Number(pageSize) || 15, 1, 30)
-    const cacheKey = JSON.stringify([safeQuery, policy, targetDuration, safePageSize])
+    const cacheKey = JSON.stringify([safeQuery, policy, targetDuration, safePageSize, quality])
     const cached = this.cache.get(cacheKey)
     if (cached && cached.expiresAt > Date.now()) return cached.value
 
@@ -217,13 +231,14 @@ export class FreesoundService {
     const data = await readApiResponse(response)
     const results = (data.results || [])
       .filter((sound) => sound.previews && isAllowedFreesoundLicense(sound.license, policy))
+      .filter((sound) => quality !== 'cinematic' || meetsCinematicQuality(sound))
       .map((sound) => normalizeResult(sound, rankSound(sound, safeQuery, targetDuration)))
       .sort((left, right) => right.score - left.score)
     this.cache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, value: results })
     return results
   }
 
-  async matchCues(cues, policy = 'youtube-safe') {
+  async matchCues(cues, policy = 'youtube-safe', quality = 'standard') {
     const matches = []
     const usedIds = new Set()
     for (const cue of cues.slice(0, 48)) {
@@ -232,6 +247,7 @@ export class FreesoundService {
         policy,
         targetDuration: cue.targetDuration,
         pageSize: 18,
+        quality,
       })
       const selected = candidates.find((candidate) => !usedIds.has(candidate.id)) || null
       if (selected) usedIds.add(selected.id)

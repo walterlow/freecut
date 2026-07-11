@@ -61,6 +61,19 @@ describe('cinematic finishing', () => {
     expect(next[1]?.effect.params).toMatchObject({ amount: 0.5 })
   })
 
+  it('uses a sharp lifted Magnates finish with restrained texture', () => {
+    const next = buildCinematicFinishingEffectStack([], () => 'magnates', 'magnates-3d')
+
+    expect(next.map((entry) => entry.effect.gpuEffectType)).toEqual([
+      'gpu-color-wheels',
+      'gpu-sharpen',
+      'gpu-grain',
+      'gpu-vignette',
+    ])
+    expect(next[0]?.effect.params).toMatchObject({ lift: 0.028, contrast: 1.075, midDetail: 14 })
+    expect(next[1]?.effect.params).toMatchObject({ amount: 0.78 })
+  })
+
   it('replaces prior automated finishing entries on rerun', () => {
     const previous = effect('cinematic-finish:grade-1:old', 'gpu-color-wheels', { lift: 0.5 })
     const next = buildCinematicFinishingEffectStack([previous], () => 'new')
@@ -150,5 +163,42 @@ describe('cinematic finishing', () => {
 
     expect(updates.map((update) => update.itemId)).toEqual(['background', 'subject'])
     expect(updates.every((update) => update.effects.length >= 3)).toBe(true)
+  })
+
+  it('adds depth atmosphere only to the appropriate Magnates layers', () => {
+    const updates = buildCinematicFinishingUpdates(
+      [
+        {
+          id: 'background',
+          trackId: 'track',
+          type: 'image',
+          from: 0,
+          durationInFrames: 30,
+          label: 'Background',
+          src: 'blob:bg',
+          cinematicDepthRole: 'background',
+        },
+        {
+          id: 'subject',
+          trackId: 'track',
+          type: 'image',
+          from: 0,
+          durationInFrames: 30,
+          label: 'Subject',
+          src: 'blob:subject',
+          cinematicDepthRole: 'subject',
+        },
+      ],
+      ['background', 'subject'],
+      () => 'fx',
+      'magnates-3d',
+    )
+
+    expect(
+      updates[0]?.effects.some((entry) => entry.effect.gpuEffectType === 'gpu-gaussian-blur'),
+    ).toBe(true)
+    expect(updates[1]?.effects.some((entry) => entry.effect.gpuEffectType === 'gpu-glow')).toBe(
+      true,
+    )
   })
 })

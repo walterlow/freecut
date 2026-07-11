@@ -61,6 +61,7 @@ import {
   applyCinematicCameraToSelectedImages,
   applyCompoundParallaxCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
+  applyMagnates3dCameraToSelectedImages,
   buildDroppedMediaTimelineItem,
   type AudiobookMusicBedPlacement,
   type CinematicDepthLayerPlacement,
@@ -157,7 +158,10 @@ import { planCinematicStoryTransitions } from '../utils/cinematic-transition-pla
 import {
   isCinematicEditingProfile,
   type CinematicEditingProfile,
+  usesMagnates3dGrammar,
+  usesStudioDocumentaryGrammar,
 } from '../utils/cinematic-editing-profile'
+import { describeSourceResolution, isNative4kSource } from '../utils/cinematic-source-quality'
 import { planStudioDocumentaryCards } from '../utils/studio-documentary-cards'
 import {
   collectStudioAudioCredits,
@@ -1216,7 +1220,9 @@ function applyAudiobookCinematicMotionIfNeeded(params: {
     ...(params.depthPrepResult?.inserted.visibleItemIds ?? []),
   ]
   if (animatedIds.length > 0) {
-    if (params.profile === 'documentary') {
+    if (usesMagnates3dGrammar(params.profile)) {
+      applyMagnates3dCameraToSelectedImages(animatedIds)
+    } else if (params.profile === 'documentary') {
       applyDocumentaryCameraToSelectedImages(animatedIds)
     } else if (params.profile === 'compound-parallax') {
       applyCompoundParallaxCameraToSelectedImages(animatedIds)
@@ -1309,7 +1315,7 @@ interface InsertPixabayBrollResult {
   mediaIds: string[]
 }
 
-async function insertAutomaticPixabayBroll(params: {
+interface InsertPixabayBrollParams {
   shouldInsert: boolean
   transcript: MediaTranscript
   narrationItem: AudioItem
@@ -1317,19 +1323,93 @@ async function insertAutomaticPixabayBroll(params: {
   projectWidth: number
   projectHeight: number
   fps: number
+  strict4k: boolean
+  preferImages: boolean
   mediaLibraryService: PixabayMediaImporter
   signal: AbortSignal
   onProgress: (message: string, fraction?: number | null) => void
-}): Promise<InsertPixabayBrollResult> {
+}
+
+function requireNative4kPixabayMedia(
+  media: MediaMetadata,
+  match: PixabayBrollMatch,
+  strict4k: boolean,
+): void {
+  if (!strict4k || isNative4kSource({ width: media.width, height: media.height })) return
+  throw new Error(
+    `Pixabay returned ${describeSourceResolution({ width: media.width, height: media.height })} for "${match.selected.title}". Magnates 3D requires a native 4K source.`,
+  )
+}
+
+async function importAutomaticPixabayBrollItem(params: {
+  match: PixabayBrollMatch
+  index: number
+  total: number
+  trackId: string
+  context: InsertPixabayBrollParams
+}): Promise<{ item: TimelineItem; mediaId: string }> {
+  const { match, context } = params
+  context.signal.throwIfAborted()
+  context.onProgress(
+    `Downloading Pixabay B-roll ${params.index + 1}/${params.total}: ${match.selected.title}`,
+    params.index / params.total,
+  )
+  const media = await context.mediaLibraryService.importMediaFromUrl(
+    pixabayBrollService.assetUrl(match.selected),
+    context.projectId,
+  )
+  requireNative4kPixabayMedia(media, match, context.strict4k)
+  const blobUrl = await resolveMediaUrl(media.id)
+  const thumbnailUrl = await context.mediaLibraryService.getThumbnailBlobUrl(media.id)
+  const item = buildDroppedMediaTimelineItem({
+    media,
+    mediaId: media.id,
+    mediaType: match.selected.kind,
+    label: `Pixabay: ${match.selected.title}`,
+    timelineFps: context.fps,
+    blobUrl,
+    thumbnailUrl,
+    canvasWidth: context.projectWidth,
+    canvasHeight: context.projectHeight,
+    placement: {
+      trackId: params.trackId,
+      from: context.narrationItem.from + Math.round(match.beat.startSeconds * context.fps),
+      durationInFrames: Math.max(
+        1,
+        Math.round((match.beat.endSeconds - match.beat.startSeconds) * context.fps),
+      ),
+    },
+  })
+  return {
+    item: {
+      ...item,
+      ...(item.type === 'video' ? { embeddedAudioMuted: true } : {}),
+      pixabayBrollSource: pixabayBrollService.sourceMetadata(match),
+    },
+    mediaId: media.id,
+  }
+}
+
+async function insertAutomaticPixabayBroll(
+  params: InsertPixabayBrollParams,
+): Promise<InsertPixabayBrollResult> {
   const empty = { matches: [], itemIds: [], imageItemIds: [], mediaIds: [] }
   if (!params.shouldInsert) return empty
 
   const beats = planPixabayBroll(params.transcript)
   if (beats.length === 0) return empty
   params.onProgress('Matching narration to Pixabay B-roll', null)
-  const matches = await pixabayBrollService.matchBeats(beats, params.signal)
+  const matches = await pixabayBrollService.matchBeats(
+    beats,
+    { strict4k: params.strict4k, preferImages: params.preferImages },
+    params.signal,
+  )
   if (matches.length === 0)
-    throw new Error('Pixabay could not find suitable HD B-roll for this narration.')
+    throw new Error(
+      params.strict4k
+        ? 'Pixabay could not find native 4K B-roll for this narration.'
+        : 'Pixabay could not find suitable HD B-roll for this narration.',
+    )
 
   const timeline = useTimelineStore.getState()
   const topOrder = Math.min(0, ...timeline.tracks.map((track) => track.order)) - 1
@@ -1341,43 +1421,15 @@ async function insertAutomaticPixabayBroll(params: {
   const mediaIds: string[] = []
 
   for (const [index, match] of matches.entries()) {
-    params.signal.throwIfAborted()
-    params.onProgress(
-      `Downloading Pixabay B-roll ${index + 1}/${matches.length}: ${match.selected.title}`,
-      index / matches.length,
-    )
-    const media = await params.mediaLibraryService.importMediaFromUrl(
-      pixabayBrollService.assetUrl(match.selected),
-      params.projectId,
-    )
-    const blobUrl = await resolveMediaUrl(media.id)
-    const thumbnailUrl = await params.mediaLibraryService.getThumbnailBlobUrl(media.id)
-    const durationInFrames = Math.max(
-      1,
-      Math.round((match.beat.endSeconds - match.beat.startSeconds) * params.fps),
-    )
-    const item = buildDroppedMediaTimelineItem({
-      media,
-      mediaId: media.id,
-      mediaType: match.selected.kind,
-      label: `Pixabay: ${match.selected.title}`,
-      timelineFps: params.fps,
-      blobUrl,
-      thumbnailUrl,
-      canvasWidth: params.projectWidth,
-      canvasHeight: params.projectHeight,
-      placement: {
-        trackId: track.id,
-        from: params.narrationItem.from + Math.round(match.beat.startSeconds * params.fps),
-        durationInFrames,
-      },
+    const imported = await importAutomaticPixabayBrollItem({
+      match,
+      index,
+      total: matches.length,
+      trackId: track.id,
+      context: params,
     })
-    items.push({
-      ...item,
-      ...(item.type === 'video' ? { embeddedAudioMuted: true } : {}),
-      pixabayBrollSource: pixabayBrollService.sourceMetadata(match),
-    })
-    mediaIds.push(media.id)
+    items.push(imported.item)
+    mediaIds.push(imported.mediaId)
   }
 
   const first = items.shift()
@@ -1450,7 +1502,7 @@ function insertStudioDocumentaryCardsIfNeeded(params: {
   narrationItemId: string
   fps: number
 }): number {
-  if (params.profile !== 'documentary') return 0
+  if (!usesStudioDocumentaryGrammar(params.profile)) return 0
 
   const timeline = useTimelineStore.getState()
   const narrationItem = timeline.items.find(
@@ -1478,10 +1530,12 @@ function insertStudioDocumentaryCardsIfNeeded(params: {
       kind: 'video',
       order: topOrder,
     }),
-    name: 'Studio Documentary Titles',
+    name: usesMagnates3dGrammar(params.profile)
+      ? 'Magnates Kinetic Titles'
+      : 'Studio Documentary Titles',
   }
-  const items = cards.map((card) =>
-    createTextTemplateItem({
+  const items = cards.map((card, index) => {
+    const item = createTextTemplateItem({
       placement: {
         trackId: titleTrack.id,
         from: card.from,
@@ -1493,8 +1547,35 @@ function insertStudioDocumentaryCardsIfNeeded(params: {
       label: `Studio card: ${card.text}`,
       text: card.text,
       textStylePresetId: 'cinematic',
-    }),
-  )
+    })
+    return usesMagnates3dGrammar(params.profile)
+      ? {
+          ...item,
+          textMotion: {
+            in: {
+              presetId: 'slide-mask' as const,
+              durationFrames: 14,
+              staggerFrames: 4,
+              intensity: 0.85,
+              order: 'forward' as const,
+              easing: 'ease-out' as const,
+              seed: index,
+              unit: 'line' as const,
+            },
+            out: {
+              presetId: 'blur-out' as const,
+              durationFrames: 12,
+              staggerFrames: 2,
+              intensity: 0.65,
+              order: 'forward' as const,
+              easing: 'ease-in' as const,
+              seed: index,
+              unit: 'word' as const,
+            },
+          },
+        }
+      : item
+  })
   const first = items.shift()
   if (!first) return 0
   timeline.addItemOnNewTrack(first, [...timeline.tracks, titleTrack])
@@ -2288,6 +2369,7 @@ export const AiPanel = memo(function AiPanel() {
   const [audiobookUseSfxLibrary, setAudiobookUseSfxLibrary] = useState(false)
   const [audiobookUseFreesound, setAudiobookUseFreesound] = useState(true)
   const [audiobookUsePixabayBroll, setAudiobookUsePixabayBroll] = useState(false)
+  const [audiobookStrict4kSources, setAudiobookStrict4kSources] = useState(true)
   const [freesoundLicensePolicy, setFreesoundLicensePolicy] = useState<StudioAudioLicensePolicy>(
     () => currentProject?.studioAudioProduction?.licensePolicy ?? 'cc0-only',
   )
@@ -3011,6 +3093,27 @@ export const AiPanel = memo(function AiPanel() {
       const plan = await buildAudiobookCuePlan()
       if (!plan) return
       activePlan = plan
+      const strict4kSources =
+        audiobookStrict4kSources || usesMagnates3dGrammar(audiobookEditingProfile)
+      const preferImages = usesMagnates3dGrammar(audiobookEditingProfile)
+
+      if (strict4kSources) {
+        const below4k = selectedImageItems.filter((item) => {
+          const media = item.mediaId ? mediaById[item.mediaId] : undefined
+          return !isNative4kSource({
+            width: item.sourceWidth ?? media?.width,
+            height: item.sourceHeight ?? media?.height,
+          })
+        })
+        if (below4k.length > 0) {
+          const first = below4k[0]
+          if (!first) throw new Error('Strict native 4K source validation failed.')
+          const media = first.mediaId ? mediaById[first.mediaId] : undefined
+          throw new Error(
+            `Strict native 4K rejected ${below4k.length} selected image${below4k.length === 1 ? '' : 's'}. "${first.label}" is ${describeSourceResolution({ width: first.sourceWidth ?? media?.width, height: first.sourceHeight ?? media?.height })}; use 3840x2160 or larger.`,
+          )
+        }
+      }
 
       if (audiobookUseFreesound && !freesoundStatus?.searchConfigured) {
         throw new Error(
@@ -3033,6 +3136,8 @@ export const AiPanel = memo(function AiPanel() {
         projectWidth: currentProject?.metadata.width ?? 1920,
         projectHeight: currentProject?.metadata.height ?? 1080,
         fps: timelineFps,
+        strict4k: strict4kSources,
+        preferImages,
         mediaLibraryService,
         signal: abortController.signal,
         onProgress: (message, fraction) => {
@@ -3040,16 +3145,14 @@ export const AiPanel = memo(function AiPanel() {
           setAudiobookProgressPct(fraction ?? null)
         },
       })
-      if (audiobookApplyCinematicMotion && pixabayBroll.imageItemIds.length > 0) {
-        applyCompoundParallaxCameraToSelectedImages(pixabayBroll.imageItemIds)
-      }
-      applyAudiobookCinematicFinishingIfNeeded({
-        shouldFinish: audiobookApplyFinishing,
-        profile: audiobookEditingProfile,
-        selectedItemIds: pixabayBroll.itemIds,
-        depthPrepResult: null,
-      })
       const productionVisualItemIds = [...new Set([...selectedItemIds, ...pixabayBroll.itemIds])]
+      const pixabayImageItems = useTimelineStore
+        .getState()
+        .items.filter(
+          (item): item is ImageItem =>
+            pixabayBroll.imageItemIds.includes(item.id) && isStillImageTimelineItem(item),
+        )
+      const productionImageItems = [...selectedImageItems, ...pixabayImageItems]
 
       const storedRecovery = getCompatibleStudioAudioRecovery(
         currentProject?.studioAudioProduction,
@@ -3072,13 +3175,13 @@ export const AiPanel = memo(function AiPanel() {
       })
 
       const depthPrepResult = await prepareAudiobookImagesAndMotion({
-        shouldMatch: audiobookMatchImages,
+        shouldMatch: audiobookMatchImages && pixabayBroll.itemIds.length === 0,
         shouldPrepareDepth: audiobookPrepareDepth,
         shouldAnimate: audiobookApplyCinematicMotion,
         shouldFinish: audiobookApplyFinishing,
         profile: audiobookEditingProfile,
         projectId: readiness.projectId,
-        selectedImageItems,
+        selectedImageItems: productionImageItems,
         mediaLibraryService,
         signal: abortController.signal,
         trackObjectUrl: (url) => generationUrlsRef.current.add(url),
@@ -3152,6 +3255,7 @@ export const AiPanel = memo(function AiPanel() {
           freesoundMatches = await freesoundStudioAudioService.matchCues(
             pendingCues.filter((cue) => !locallyMatchedCueIds.has(cue.id)),
             freesoundLicensePolicy,
+            strict4kSources ? 'cinematic' : 'standard',
             abortController.signal,
           )
         } catch (error) {
@@ -3366,6 +3470,7 @@ export const AiPanel = memo(function AiPanel() {
     audiobookUseSfxLibrary,
     audiobookUseFreesound,
     audiobookUsePixabayBroll,
+    audiobookStrict4kSources,
     audiobookAuditionSfx,
     audiobookMusicBedCount,
     audiobookNarrationItem,
@@ -3383,6 +3488,7 @@ export const AiPanel = memo(function AiPanel() {
     isMusicSupported,
     loadMediaItems,
     mediaItems,
+    mediaById,
     musicModel,
     selectMedia,
     selectedImageItems,
@@ -3895,7 +4001,7 @@ export const AiPanel = memo(function AiPanel() {
               >
                 <SelectTrigger
                   id="ai-audiobook-editing-profile"
-                  className="h-7 w-[10.5rem] text-xs"
+                  className="h-7 w-[13.5rem] max-w-full text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -3913,6 +4019,11 @@ export const AiPanel = memo(function AiPanel() {
                   <SelectItem value="documentary">
                     {t('editor.aiPanel.audiobookProfileDocumentary', {
                       defaultValue: 'Studio documentary',
+                    })}
+                  </SelectItem>
+                  <SelectItem value="magnates-3d">
+                    {t('editor.aiPanel.audiobookProfileMagnates3d', {
+                      defaultValue: 'Magnates 3D documentary',
                     })}
                   </SelectItem>
                 </SelectContent>
@@ -3961,8 +4072,31 @@ export const AiPanel = memo(function AiPanel() {
               </div>
               <p className="text-[11px] text-muted-foreground">
                 {freesoundStatus?.pixabayConfigured
-                  ? 'Narration matched automatically, videos first with HD still fallback'
+                  ? usesMagnates3dGrammar(audiobookEditingProfile)
+                    ? 'Narration matched to native 4K stills for automatic depth animation'
+                    : 'Narration matched automatically, videos first with still fallback'
                   : 'Backend API key required'}
+              </p>
+            </div>
+
+            <div className="space-y-1 rounded-lg border border-border bg-secondary/20 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="ai-audiobook-strict-4k" className="text-xs">
+                  {t('editor.aiPanel.audiobookStrict4kSources', {
+                    defaultValue: 'Strict native 4K sources',
+                  })}
+                </Label>
+                <Switch
+                  id="ai-audiobook-strict-4k"
+                  checked={
+                    audiobookStrict4kSources || usesMagnates3dGrammar(audiobookEditingProfile)
+                  }
+                  onCheckedChange={setAudiobookStrict4kSources}
+                  disabled={isAudiobookGenerating || usesMagnates3dGrammar(audiobookEditingProfile)}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Rejects images and video below 3840x2160; always on for Magnates 3D
               </p>
             </div>
 
@@ -4112,7 +4246,10 @@ export const AiPanel = memo(function AiPanel() {
                 id="ai-audiobook-match-images"
                 checked={audiobookMatchImages}
                 onCheckedChange={setAudiobookMatchImages}
-                disabled={isAudiobookGenerating || selectedImageItems.length === 0}
+                disabled={
+                  isAudiobookGenerating ||
+                  (selectedImageItems.length === 0 && !audiobookUsePixabayBroll)
+                }
               />
             </div>
 
@@ -4126,7 +4263,10 @@ export const AiPanel = memo(function AiPanel() {
                 id="ai-audiobook-cinematic-motion"
                 checked={audiobookApplyCinematicMotion}
                 onCheckedChange={setAudiobookApplyCinematicMotion}
-                disabled={isAudiobookGenerating || selectedImageItems.length === 0}
+                disabled={
+                  isAudiobookGenerating ||
+                  (selectedImageItems.length === 0 && !audiobookUsePixabayBroll)
+                }
               />
             </div>
 
@@ -4140,7 +4280,7 @@ export const AiPanel = memo(function AiPanel() {
                 id="ai-audiobook-cinematic-transitions"
                 checked={audiobookApplyTransitions}
                 onCheckedChange={setAudiobookApplyTransitions}
-                disabled={isAudiobookGenerating || selectedImageItems.length < 2}
+                disabled={isAudiobookGenerating}
               />
             </div>
 
@@ -4156,7 +4296,7 @@ export const AiPanel = memo(function AiPanel() {
                 onCheckedChange={setAudiobookPrepareDepth}
                 disabled={
                   isAudiobookGenerating ||
-                  selectedImageItems.length === 0 ||
+                  (selectedImageItems.length === 0 && !audiobookUsePixabayBroll) ||
                   !cinematicDepthPrepService.isSupported()
                 }
               />
@@ -4172,7 +4312,10 @@ export const AiPanel = memo(function AiPanel() {
                 id="ai-audiobook-finishing"
                 checked={audiobookApplyFinishing}
                 onCheckedChange={setAudiobookApplyFinishing}
-                disabled={isAudiobookGenerating || selectedImageItems.length === 0}
+                disabled={
+                  isAudiobookGenerating ||
+                  (selectedImageItems.length === 0 && !audiobookUsePixabayBroll)
+                }
               />
             </div>
 

@@ -53,6 +53,7 @@ export type BuiltinTransitionPresentation =
   | 'lensWarpZoom'
   | 'lightLeakBurn'
   | 'filmGateSlip'
+  | 'sceneOrbit'
   | 'arrowIris'
   | 'crossIris'
   | 'diamondIris'

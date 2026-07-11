@@ -48,6 +48,7 @@ export { applyAnimationPreset } from '../stores/actions/preset-actions'
 export {
   applyCinematicCameraToSelectedImages,
   applyCompoundParallaxCameraToSelectedImages,
+  applyMagnates3dCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
 } from '../stores/actions/auto-camera-actions'
 export { applyMotionPresetKeyframes } from '../stores/actions/keyframe-actions'

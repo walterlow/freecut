@@ -72,6 +72,7 @@ export const freesoundStudioAudioService = {
   async matchCues(
     cues: AudiobookSfxCue[],
     policy: StudioAudioLicensePolicy,
+    quality: 'standard' | 'cinematic' = 'standard',
     signal?: AbortSignal,
   ): Promise<FreesoundCueMatch[]> {
     if (cues.length === 0) return []
@@ -80,6 +81,7 @@ export const freesoundStudioAudioService = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         policy,
+        quality,
         cues: cues.map((cue) => ({
           id: cue.id,
           query: buildStudioAudioSearchKeywords(cue).join(' '),

@@ -9,6 +9,7 @@ export {
   pickAutoCameraPresetId,
   pickCinematicStoryCameraPresetId,
   pickCompoundParallaxCameraPresetId,
+  pickMagnates3dCameraPresetId,
 } from '@/features/keyframes/utils/motion-presets'
 export { getCropPropertyValue } from '@/features/keyframes/utils/animated-crop-resolver'
 export { interpolatePropertyValue } from '@/features/keyframes/utils/interpolation'

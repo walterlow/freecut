@@ -74,6 +74,10 @@ export type MotionPresetId =
   | 'compound-pull-pan-right'
   | 'compound-pull-tilt-up'
   | 'compound-pull-tilt-down'
+  | 'magnates-orbit-left'
+  | 'magnates-orbit-right'
+  | 'magnates-rise-left'
+  | 'magnates-dive-right'
   | 'pull-pan-left'
   | 'pull-pan-right'
   | 'push-tilt-up'
@@ -974,6 +978,64 @@ const CAMERA_PRESETS: MotionPreset[] = [
     { kind: 'slide', angle: 90 },
     { scaleFrom: 1.28, scaleTo: 1.12, panY: 0.075, easing: CAMERA_COMPOUND_DRIVE },
   ),
+  // Magnates-style 3D documentary moves. Four camera channels travel together
+  // so separated foreground/background layers read as a directed virtual set.
+  cameraPreset(
+    'magnates-orbit-left',
+    'magnatesOrbitLeft',
+    { kind: 'wobble' },
+    {
+      scaleFrom: 1.1,
+      scaleTo: 1.34,
+      panX: -0.09,
+      panY: -0.038,
+      rollFrom: 0.45,
+      rollTo: -1.35,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
+  cameraPreset(
+    'magnates-orbit-right',
+    'magnatesOrbitRight',
+    { kind: 'wobble' },
+    {
+      scaleFrom: 1.1,
+      scaleTo: 1.34,
+      panX: 0.09,
+      panY: -0.038,
+      rollFrom: -0.45,
+      rollTo: 1.35,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
+  cameraPreset(
+    'magnates-rise-left',
+    'magnatesRiseLeft',
+    { kind: 'slide', angle: 225 },
+    {
+      scaleFrom: 1.32,
+      scaleTo: 1.12,
+      panX: -0.075,
+      panY: -0.07,
+      rollFrom: -1.1,
+      rollTo: 0.35,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
+  cameraPreset(
+    'magnates-dive-right',
+    'magnatesDiveRight',
+    { kind: 'slide', angle: 45 },
+    {
+      scaleFrom: 1.12,
+      scaleTo: 1.31,
+      panX: 0.078,
+      panY: 0.068,
+      rollFrom: 0.9,
+      rollTo: -0.4,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
   cameraPreset(
     'pull-pan-left',
     'pullPanLeft',
@@ -1478,6 +1540,15 @@ export const COMPOUND_PARALLAX_CAMERA_SEQUENCE: MotionPresetId[] = [
   'compound-pull-tilt-up',
 ]
 
+export const MAGNATES_3D_CAMERA_SEQUENCE: MotionPresetId[] = [
+  'magnates-orbit-right',
+  'magnates-rise-left',
+  'magnates-orbit-left',
+  'magnates-dive-right',
+  'surge-down-left',
+  'surge-up-right',
+]
+
 /** Deterministic pick from the auto-camera rotation for the nth still added. */
 export function pickAutoCameraPresetId(index: number): MotionPresetId {
   const length = AUTO_CAMERA_SEQUENCE.length
@@ -1494,6 +1565,11 @@ export function pickCinematicStoryCameraPresetId(index: number): MotionPresetId 
 export function pickCompoundParallaxCameraPresetId(index: number): MotionPresetId {
   const length = COMPOUND_PARALLAX_CAMERA_SEQUENCE.length
   return COMPOUND_PARALLAX_CAMERA_SEQUENCE[((index % length) + length) % length]!
+}
+
+export function pickMagnates3dCameraPresetId(index: number): MotionPresetId {
+  const length = MAGNATES_3D_CAMERA_SEQUENCE.length
+  return MAGNATES_3D_CAMERA_SEQUENCE[((index % length) + length) % length]!
 }
 
 /**

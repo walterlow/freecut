@@ -14,6 +14,7 @@ import {
   applyCinematicCameraToSelectedImages,
   applyCompoundParallaxCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
+  applyMagnates3dCameraToSelectedImages,
 } from './auto-camera-actions'
 
 function makeImageItem(overrides: Partial<ImageItem> = {}): ImageItem {
@@ -132,6 +133,20 @@ describe('auto camera actions', () => {
     expect(x.map((keyframe) => keyframe.frame)).toEqual([0, 89])
     expect(width[0]?.value).not.toBe(width[1]?.value)
     expect(x[0]?.value).not.toBe(x[1]?.value)
+  })
+
+  it('applies simultaneous orbit, lift, dolly, and roll for Magnates scenes', () => {
+    useItemsStore.getState().setItems([makeImageItem({ id: 'image-1' })])
+
+    const result = applyMagnates3dCameraToSelectedImages(['image-1'])
+    const properties = ['width', 'height', 'x', 'y', 'rotation'] as const
+
+    expect(result).toMatchObject({ status: 'applied', imageCount: 1 })
+    for (const property of properties) {
+      const keys = useKeyframesStore.getState().getAllKeyframesForProperty('image-1', property)
+      expect(keys.map((keyframe) => keyframe.frame)).toEqual([0, 89])
+      expect(keys[0]?.value).not.toBe(keys[1]?.value)
+    }
   })
 
   it('keeps depth-layer scenes on one preset with stronger foreground motion', () => {

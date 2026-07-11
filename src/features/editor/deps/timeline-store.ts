@@ -27,6 +27,7 @@ export {
   applyAnimationPreset,
   applyCinematicCameraToSelectedImages,
   applyCompoundParallaxCameraToSelectedImages,
+  applyMagnates3dCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
   applyMotionPresetKeyframes,
   applyMotionModifierToItems,

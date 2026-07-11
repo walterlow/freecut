@@ -139,4 +139,20 @@ describe('planCinematicStoryTransitions', () => {
       durationInFrames: 4,
     })
   })
+
+  it('uses perspective scene travel for Magnates 3D edits', () => {
+    const items = [image('a', 'base', 0), image('b', 'base', 90), image('c', 'base', 180)]
+    const plan = planCinematicStoryTransitions({
+      items,
+      selectedImageIds: items.map((item) => item.id),
+      existingTransitions: [],
+      narrationItem: narration(),
+      fps: 30,
+      profile: 'magnates-3d',
+    })
+
+    expect(plan).toHaveLength(2)
+    expect(plan[0]).toMatchObject({ presentation: 'sceneOrbit', durationInFrames: 14 })
+    expect(plan[1]).toMatchObject({ presentation: 'sceneOrbit', durationInFrames: 11 })
+  })
 })

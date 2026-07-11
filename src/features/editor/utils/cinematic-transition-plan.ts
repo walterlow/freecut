@@ -103,25 +103,36 @@ function storyTextNearCut(
     .join(' ')
 }
 
-function directionForCut(params: {
+interface CutDirectionParams {
   cutFrame: number
   cutIndex: number
   cutCount: number
   narrationItem?: AudioItem | null
   fps: number
   profile: CinematicEditingProfile
-}): CutDirection | null {
-  const storyText = storyTextNearCut(params.narrationItem, params.cutFrame, params.fps)
-  if (params.profile === 'documentary') {
-    // Documentary rhythm is mostly hard cuts. A very short blend is reserved
-    // for chapter turns, dates, and major factual reveals.
-    if (!DOCUMENTARY_TRANSITION_PATTERN.test(storyText)) return null
-    return {
-      presentation: 'smoothCut',
-      durationInFrames: Math.max(3, Math.round(params.fps * 0.14)),
-      emphasis: 'documentary',
-    }
+}
+
+function magnatesDirection(params: CutDirectionParams, storyText: string): CutDirection {
+  const isImpact = DRAMATIC_CUT_PATTERN.test(storyText) || FANTASY_CUT_PATTERN.test(storyText)
+  return {
+    presentation: isImpact && params.cutIndex % 2 === 1 ? 'lensWarpZoom' : 'sceneOrbit',
+    durationInFrames: Math.max(7, Math.round(params.fps * (isImpact ? 0.46 : 0.38))),
+    emphasis: 'story',
   }
+}
+
+function documentaryDirection(params: CutDirectionParams, storyText: string): CutDirection | null {
+  // Documentary rhythm is mostly hard cuts. A very short blend is reserved
+  // for chapter turns, dates, and major factual reveals.
+  if (!DOCUMENTARY_TRANSITION_PATTERN.test(storyText)) return null
+  return {
+    presentation: 'smoothCut',
+    durationInFrames: Math.max(3, Math.round(params.fps * 0.14)),
+    emphasis: 'documentary',
+  }
+}
+
+function storyDirection(params: CutDirectionParams, storyText: string): CutDirection | null {
   if (FANTASY_CUT_PATTERN.test(storyText)) {
     return {
       presentation: 'lightLeakBurn',
@@ -136,7 +147,6 @@ function directionForCut(params: {
       emphasis: 'story',
     }
   }
-
   const isContinuityCut = params.cutCount === 1 || params.cutIndex % 3 === 1
   if (!isContinuityCut) return null
   return {
@@ -144,6 +154,13 @@ function directionForCut(params: {
     durationInFrames: Math.max(4, Math.round(params.fps * 0.2)),
     emphasis: 'continuity',
   }
+}
+
+function directionForCut(params: CutDirectionParams): CutDirection | null {
+  const storyText = storyTextNearCut(params.narrationItem, params.cutFrame, params.fps)
+  if (params.profile === 'magnates-3d') return magnatesDirection(params, storyText)
+  if (params.profile === 'documentary') return documentaryDirection(params, storyText)
+  return storyDirection(params, storyText)
 }
 
 export function planCinematicStoryTransitions(

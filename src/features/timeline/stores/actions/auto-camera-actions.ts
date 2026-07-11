@@ -20,6 +20,7 @@ import {
   pickAutoCameraPresetId,
   pickCinematicStoryCameraPresetId,
   pickCompoundParallaxCameraPresetId,
+  pickMagnates3dCameraPresetId,
 } from '../../deps/keyframes'
 import type { CinematicImageMotionResult } from '../../types'
 import { useSelectionStore } from '@/shared/state/selection'
@@ -260,6 +261,13 @@ export function applyCompoundParallaxCameraToSelectedImages(
   selectedItemIds?: string[],
 ): CinematicImageMotionResult {
   return applyCameraPresetSequence(selectedItemIds, pickCompoundParallaxCameraPresetId)
+}
+
+/** Apply a four-axis virtual-camera move tuned for separated 2.5D documentary scenes. */
+export function applyMagnates3dCameraToSelectedImages(
+  selectedItemIds?: string[],
+): CinematicImageMotionResult {
+  return applyCameraPresetSequence(selectedItemIds, pickMagnates3dCameraPresetId)
 }
 
 /**

@@ -83,6 +83,61 @@ const DOCUMENTARY_FINISH_TEXTURE: VisualEffect[] = [
   },
 ]
 
+const MAGNATES_FINISH_GRADE: VisualEffect[] = [
+  {
+    type: 'gpu-effect',
+    gpuEffectType: 'gpu-color-wheels',
+    params: {
+      exposure: 0.09,
+      contrast: 1.075,
+      pivot: 0.49,
+      lift: 0.028,
+      gamma: 1.04,
+      gain: 1.06,
+      blackPoint: 0,
+      whitePoint: 1.015,
+      temperature: -1,
+      saturation: 3,
+      shadows: 10,
+      highlights: 1,
+      midDetail: 14,
+      colorBoost: 5,
+      hue: 50,
+      lumMix: 100,
+    },
+  },
+]
+
+const MAGNATES_FINISH_TEXTURE: VisualEffect[] = [
+  {
+    type: 'gpu-effect',
+    gpuEffectType: 'gpu-sharpen',
+    params: { amount: 0.78, radius: 0.82 },
+  },
+  {
+    type: 'gpu-effect',
+    gpuEffectType: 'gpu-grain',
+    params: { amount: 0.014, size: 1.25, speed: 0.38 },
+  },
+  {
+    type: 'gpu-effect',
+    gpuEffectType: 'gpu-vignette',
+    params: { amount: 0.14, size: 0.72, softness: 0.54, roundness: 1.18 },
+  },
+]
+
+const MAGNATES_BACKGROUND_DEPTH: VisualEffect = {
+  type: 'gpu-effect',
+  gpuEffectType: 'gpu-gaussian-blur',
+  params: { radius: 1.25, samples: 5 },
+}
+
+const MAGNATES_SUBJECT_LIGHT_WRAP: VisualEffect = {
+  type: 'gpu-effect',
+  gpuEffectType: 'gpu-glow',
+  params: { amount: 0.12, threshold: 0.78, radius: 9, softness: 0.6, rings: 2, samplesPerRing: 8 },
+}
+
 function cloneVisualEffect(effect: VisualEffect): VisualEffect {
   return {
     ...effect,
@@ -129,8 +184,18 @@ export function buildCinematicFinishingEffectStack(
   )
   const nextEffects = [...preservedEffects]
 
-  const grade = profile === 'documentary' ? DOCUMENTARY_FINISH_GRADE : CINEMATIC_FINISH_GRADE
-  const texture = profile === 'documentary' ? DOCUMENTARY_FINISH_TEXTURE : CINEMATIC_FINISH_TEXTURE
+  const grade =
+    profile === 'documentary'
+      ? DOCUMENTARY_FINISH_GRADE
+      : profile === 'magnates-3d'
+        ? MAGNATES_FINISH_GRADE
+        : CINEMATIC_FINISH_GRADE
+  const texture =
+    profile === 'documentary'
+      ? DOCUMENTARY_FINISH_TEXTURE
+      : profile === 'magnates-3d'
+        ? MAGNATES_FINISH_TEXTURE
+        : CINEMATIC_FINISH_TEXTURE
 
   if (!hasManualGrade(preservedEffects)) {
     for (const [index, effect] of grade.entries()) {
@@ -157,8 +222,17 @@ export function buildCinematicFinishingUpdates(
 
   return items
     .filter((item) => targetIds.has(item.id) && shouldApplyCinematicFinishing(item))
-    .map((item) => ({
-      itemId: item.id,
-      effects: buildCinematicFinishingEffectStack(item.effects, createId, profile),
-    }))
+    .map((item) => {
+      const nextId = createId ?? (() => crypto.randomUUID())
+      const effects = buildCinematicFinishingEffectStack(item.effects, nextId, profile)
+      if (profile === 'magnates-3d' && item.cinematicDepthRole === 'background') {
+        effects.push(createFinishingEntry(MAGNATES_BACKGROUND_DEPTH, 'depth-background', nextId))
+      }
+      if (profile === 'magnates-3d' && item.cinematicDepthRole === 'subject') {
+        effects.push(
+          createFinishingEntry(MAGNATES_SUBJECT_LIGHT_WRAP, 'subject-light-wrap', nextId),
+        )
+      }
+      return { itemId: item.id, effects }
+    })
 }

@@ -728,6 +728,8 @@
       "defaultTtsPrompt": "Welcome to freecut. This voice was generated locally in the browser.",
       "audiobookAutoMusicBed": "Auto cinematic score bed",
       "audiobookUsePixabayBroll": "Automatic Pixabay B-roll",
+      "audiobookStrict4kSources": "Strict native 4K sources",
+      "audiobookProfileMagnates3d": "Magnates 3D documentary",
       "audiobookUseSfxLibrary": "Use imported SFX first",
       "audiobookAuditionSfx": "Audition stronger SFX takes",
       "musicPresets": {

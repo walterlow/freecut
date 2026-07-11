@@ -10,6 +10,11 @@ export interface PixabayBrollMatch {
   alternatives: PixabayBrollAssetMetadata[]
 }
 
+interface PixabayBrollMatchOptions {
+  strict4k?: boolean
+  preferImages?: boolean
+}
+
 const API_ROOT =
   (import.meta.env.VITE_STUDIO_AUDIO_API_URL as string | undefined)?.replace(/\/$/, '') ||
   'http://127.0.0.1:8787/api/studio-audio'
@@ -21,12 +26,16 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export const pixabayBrollService = {
-  async matchBeats(beats: PixabayBrollBeat[], signal?: AbortSignal): Promise<PixabayBrollMatch[]> {
+  async matchBeats(
+    beats: PixabayBrollBeat[],
+    options: PixabayBrollMatchOptions = {},
+    signal?: AbortSignal,
+  ): Promise<PixabayBrollMatch[]> {
     if (beats.length === 0) return []
     const response = await fetch(`${API_ROOT}/pixabay/match`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ beats }),
+      body: JSON.stringify({ beats, ...options }),
       signal,
     })
     const data = await readJson<{
@@ -61,6 +70,9 @@ export const pixabayBrollService = {
       sceneId: match.beat.id,
       variant: match.selected.variant,
       score: match.selected.score,
+      sourceWidth: match.selected.width,
+      sourceHeight: match.selected.height,
+      qualityTier: match.selected.qualityTier,
     }
   },
 }

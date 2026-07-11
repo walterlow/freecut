@@ -223,6 +223,29 @@ describe('GPU transition registry', () => {
     ])
   })
 
+  it('registers and packs the Magnates-style 3D scene orbit transition', () => {
+    const def = getGpuTransition('sceneOrbit')
+
+    expect(getGpuTransitionIds()).toContain('sceneOrbit')
+    expect(def).toMatchObject({
+      id: 'sceneOrbit',
+      name: '3D Scene Orbit',
+      entryPoint: 'sceneOrbitFragment',
+      hasDirection: true,
+      uniformSize: 32,
+    })
+    expect(Array.from(def!.packUniforms(0.5, 3840, 2160, 1))).toEqual([
+      0.5,
+      3840,
+      2160,
+      1,
+      expect.closeTo(0.72),
+      expect.closeTo(0.64),
+      expect.closeTo(0.16),
+      expect.closeTo(0.42),
+    ])
+  })
+
   it('exposes every transition with shader metadata and valid default uniforms', () => {
     expect(GPU_TRANSITION_REGISTRY.size).toBeGreaterThan(0)
 

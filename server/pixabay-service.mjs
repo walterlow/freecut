@@ -14,6 +14,12 @@ function number(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function isNative4k(asset) {
+  const shortEdge = Math.min(asset.width, asset.height)
+  const longEdge = Math.max(asset.width, asset.height)
+  return shortEdge >= 2160 && longEdge >= 3840 && asset.width * asset.height >= 8_294_400
+}
+
 function qualityScore(asset, query) {
   const haystack = `${asset.tags} ${asset.pageUrl}`.toLowerCase()
   const relevance = cleanQuery(query)
@@ -56,12 +62,16 @@ function normalizeVideo(hit, query) {
     editorsChoice: Boolean(hit.editors_choice),
     variant: variant.name,
   }
-  return { ...asset, score: qualityScore(asset, query) }
+  return {
+    ...asset,
+    qualityTier: isNative4k(asset) ? 'native-4k' : 'hd',
+    score: qualityScore(asset, query),
+  }
 }
 
 // fallow-ignore-next-line complexity
 function normalizeImage(hit, query) {
-  const downloadUrl = hit.fullHDURL || hit.largeImageURL || hit.webformatURL
+  const downloadUrl = hit.imageURL || hit.fullHDURL || hit.largeImageURL || hit.webformatURL
   if (!downloadUrl) return null
   const asset = {
     assetKey: `image-${hit.id}`,
@@ -79,9 +89,13 @@ function normalizeImage(hit, query) {
     downloads: number(hit.downloads),
     likes: number(hit.likes),
     editorsChoice: Boolean(hit.editors_choice),
-    variant: hit.fullHDURL ? 'full-hd' : hit.largeImageURL ? 'large' : 'web',
+    variant: hit.imageURL ? 'original' : hit.fullHDURL ? 'full-hd' : hit.largeImageURL ? 'large' : 'web',
   }
-  return { ...asset, score: qualityScore(asset, query) }
+  return {
+    ...asset,
+    qualityTier: isNative4k(asset) && Boolean(hit.imageURL) ? 'native-4k' : 'hd',
+    score: qualityScore(asset, query),
+  }
 }
 
 // fallow-ignore-next-line complexity
@@ -98,6 +112,10 @@ function publicAsset(asset) {
   return metadata
 }
 
+function preferredMediaKinds(preferImages) {
+  return preferImages ? ['image', 'video'] : ['video', 'image']
+}
+
 export class PixabayService {
   constructor(config, dependencies = {}) {
     this.apiKey = config.pixabayApiKey || ''
@@ -112,11 +130,12 @@ export class PixabayService {
   }
 
   // fallow-ignore-next-line complexity
-  async search(query, kind = 'video') {
+  async search(query, kind = 'video', options = {}) {
     if (!this.isConfigured()) throw Object.assign(new Error('Pixabay API key is not configured'), { status: 503 })
     const cleaned = cleanQuery(query)
     if (!cleaned) return []
-    const cacheKey = `${kind}:${cleaned.toLowerCase()}`
+    const strict4k = options.strict4k === true
+    const cacheKey = `${kind}:${strict4k ? '4k' : 'hd'}:${cleaned.toLowerCase()}`
     const cached = this.cache.get(cacheKey)
     if (cached && this.now() - cached.createdAt < CACHE_TTL_MS) return cached.assets
 
@@ -128,8 +147,8 @@ export class PixabayService {
     url.searchParams.set('safesearch', 'true')
     url.searchParams.set('order', 'popular')
     url.searchParams.set('per_page', '20')
-    url.searchParams.set('min_width', '1280')
-    url.searchParams.set('min_height', '720')
+    url.searchParams.set('min_width', strict4k ? '3840' : '1280')
+    url.searchParams.set('min_height', strict4k ? '2160' : '720')
     if (kind === 'image') {
       url.searchParams.set('image_type', 'photo')
       url.searchParams.set('orientation', 'horizontal')
@@ -145,23 +164,25 @@ export class PixabayService {
       .map((hit) => normalizer(hit, cleaned))
       .filter(Boolean)
       .filter((asset) => asset.width >= 1280 && asset.height >= 720)
+      .filter((asset) => !strict4k || asset.qualityTier === 'native-4k')
       .sort((left, right) => right.score - left.score)
     for (const asset of assets) this.assets.set(asset.assetKey, asset)
     this.cache.set(cacheKey, { createdAt: this.now(), assets })
     return assets
   }
 
-  async matchBeats(beats) {
+  async matchBeats(beats, options = {}) {
     const used = new Set()
     const matches = []
+    const preferredKinds = preferredMediaKinds(options.preferImages)
     for (const beat of beats.slice(0, 12)) {
       const query = cleanQuery(beat.query)
-      let candidates = await this.search(query, 'video')
-      let selected = candidates.find((asset) => !used.has(asset.assetKey))
-      if (!selected) {
-        candidates = await this.search(query, 'image')
-        selected = candidates.find((asset) => !used.has(asset.assetKey))
-      }
+      const { candidates, selected } = await this.findUniqueAsset(
+        query,
+        preferredKinds,
+        used,
+        options.strict4k === true,
+      )
       if (!selected) continue
       used.add(selected.assetKey)
       matches.push({
@@ -172,6 +193,16 @@ export class PixabayService {
       })
     }
     return matches
+  }
+
+  async findUniqueAsset(query, preferredKinds, used, strict4k) {
+    let candidates = []
+    for (const kind of preferredKinds) {
+      candidates = await this.search(query, kind, { strict4k })
+      const selected = candidates.find((asset) => !used.has(asset.assetKey))
+      if (selected) return { candidates, selected }
+    }
+    return { candidates, selected: null }
   }
 
   // fallow-ignore-next-line complexity

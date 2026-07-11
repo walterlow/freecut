@@ -63,14 +63,21 @@ async function handleExchange(request, response) {
 async function handleMatch(request, response) {
   const body = await readJson(request)
   sendJson(response, 200, {
-    matches: await freesound.matchCues(Array.isArray(body.cues) ? body.cues : [], body.policy),
+    matches: await freesound.matchCues(
+      Array.isArray(body.cues) ? body.cues : [],
+      body.policy,
+      body.quality,
+    ),
   })
 }
 
 async function handlePixabayMatch(request, response) {
   const body = await readJson(request)
   sendJson(response, 200, {
-    matches: await pixabay.matchBeats(Array.isArray(body.beats) ? body.beats : []),
+    matches: await pixabay.matchBeats(Array.isArray(body.beats) ? body.beats : [], {
+      strict4k: body.strict4k === true,
+      preferImages: body.preferImages === true,
+    }),
   })
 }
 

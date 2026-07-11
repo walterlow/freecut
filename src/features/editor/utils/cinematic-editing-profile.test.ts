@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vite-plus/test'
 import {
   isCinematicEditingProfile,
   usesStudioDocumentaryGrammar,
+  usesMagnates3dGrammar,
 } from './cinematic-editing-profile'
 
 describe('cinematic editing profiles', () => {
@@ -9,11 +10,14 @@ describe('cinematic editing profiles', () => {
     expect(isCinematicEditingProfile('story')).toBe(true)
     expect(isCinematicEditingProfile('compound-parallax')).toBe(true)
     expect(isCinematicEditingProfile('documentary')).toBe(true)
+    expect(isCinematicEditingProfile('magnates-3d')).toBe(true)
     expect(isCinematicEditingProfile('music-video')).toBe(false)
   })
 
   it('keeps documentary grammar opt-in', () => {
     expect(usesStudioDocumentaryGrammar('story')).toBe(false)
     expect(usesStudioDocumentaryGrammar('documentary')).toBe(true)
+    expect(usesStudioDocumentaryGrammar('magnates-3d')).toBe(true)
+    expect(usesMagnates3dGrammar('magnates-3d')).toBe(true)
   })
 })

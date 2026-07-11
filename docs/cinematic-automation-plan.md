@@ -226,6 +226,11 @@ The automatic `Studio documentary` editing profile is now available in `Cinemati
 1. It uses restrained coverage-style camera moves instead of the dramatic two-axis story-camera rotation.
 2. It keeps hard cuts by default and uses very short smooth cuts only at dates, chapter turns, and major factual reveals.
 3. It applies a neutral lifted documentary finish with controlled sharpening and lighter grain.
-4. It reads the narration transcript and places sparse all-caps date, statistic, and thesis cards on a dedicated `Studio Documentary Titles` track.
+
+## Magnates 3D Reference Profile
+
+The tutorial-reference pass adds a dedicated `Magnates 3D documentary` profile for still-led factual sequences. The reference grammar is treated as a coordinated system rather than a stronger Ken Burns preset: true subject/background plates, foreground occlusion, multiple camera properties moving on every frame, eased acceleration, perspective scene transitions, restrained kinetic type, and sound accents placed on movement or reveal beats.
+
+The automatic profile enforces native 4K inputs, sends downloaded Pixabay stills back through depth preparation, rotates among four compound camera directions, and applies simultaneous scale, X, Y, and roll keyframes. It also adds a WebGPU `3D Scene Orbit` transition, narration-directed kinetic cards, a sharper lifted finishing stack, and a Freesound technical gate requiring stereo 48 kHz assets. Provider metadata is not trusted by itself: the imported media dimensions are checked again before the shot is accepted. 4. It reads the narration transcript and places sparse all-caps date, statistic, and thesis cards on a dedicated `Studio Documentary Titles` track.
 
 This makes the workflow capable of building a Rolex-style first assembly automatically from narration and correctly labeled images/video. It still cannot invent the production's licensed archive footage, product macros, brand graphics, or human editorial taste from arbitrary stills; those assets remain the quality ceiling for a final studio master.
