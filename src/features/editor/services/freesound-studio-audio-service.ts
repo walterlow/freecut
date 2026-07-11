@@ -85,6 +85,7 @@ export const freesoundStudioAudioService = {
         cues: cues.map((cue) => ({
           id: cue.id,
           query: buildStudioAudioSearchKeywords(cue).join(' '),
+          role: cue.role,
           targetDuration: Math.max(1, cue.endSeconds - cue.startSeconds),
         })),
       }),
@@ -136,6 +137,7 @@ export const freesoundStudioAudioService = {
   buildSourceMetadata(
     match: FreesoundCueMatch,
     sourceKind: 'preview' | 'original',
+    layerRole?: StudioAudioSourceMetadata['layerRole'],
   ): StudioAudioSourceMetadata {
     return {
       provider: 'freesound',
@@ -153,6 +155,7 @@ export const freesoundStudioAudioService = {
       approval: match.selected.licenseCode === 'cc0' ? 'approved' : 'recommended',
       locked: false,
       sceneId: match.cue.id,
+      ...(layerRole ? { layerRole } : {}),
     }
   },
 }

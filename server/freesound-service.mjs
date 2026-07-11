@@ -122,6 +122,33 @@ function requireValue(value, message) {
   return value
 }
 
+function cinematicLayerQueries(cue, quality) {
+  if (quality !== 'cinematic' || cue.role === 'ambience') return [cue.query]
+  if (cue.role === 'foreground') {
+    return [cue.query, `${cue.query} tactile texture close foley`]
+  }
+  return [
+    cue.query,
+    `${cue.query} reverse whoosh riser air`,
+    `${cue.query} debris room tail cinematic`,
+  ]
+}
+
+function orderLayeredCandidates(groups, usedIds) {
+  const [body = [], ...layers] = groups
+  const prioritized = [
+    body.find((candidate) => !usedIds.has(candidate.id)),
+    ...layers.map((group) => group.find((candidate) => !usedIds.has(candidate.id))),
+    ...body,
+  ].filter(Boolean)
+  const seen = new Set()
+  return prioritized.filter((candidate) => {
+    if (seen.has(candidate.id)) return false
+    seen.add(candidate.id)
+    return true
+  })
+}
+
 export class FreesoundService {
   constructor(config, options = {}) {
     this.config = config
@@ -242,13 +269,18 @@ export class FreesoundService {
     const matches = []
     const usedIds = new Set()
     for (const cue of cues.slice(0, 48)) {
-      const candidates = await this.search({
-        query: cue.query,
-        policy,
-        targetDuration: cue.targetDuration,
-        pageSize: 18,
-        quality,
-      })
+      const candidateGroups = await Promise.all(
+        cinematicLayerQueries(cue, quality).map((query) =>
+          this.search({
+            query,
+            policy,
+            targetDuration: cue.targetDuration,
+            pageSize: 18,
+            quality,
+          }),
+        ),
+      )
+      const candidates = orderLayeredCandidates(candidateGroups, usedIds)
       const selected = candidates.find((candidate) => !usedIds.has(candidate.id)) || null
       if (selected) usedIds.add(selected.id)
       matches.push({

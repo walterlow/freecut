@@ -24,4 +24,26 @@ describe('planPixabayBroll', () => {
     expect(beats[0]?.query).toContain('lighthouse')
     expect(beats[1]?.query).toContain('sunrise')
   })
+
+  it('splits long narration into varied cinematic coverage', () => {
+    const beats = planPixabayBroll(
+      {
+        ...transcript,
+        segments: [
+          {
+            start: 0,
+            end: 10,
+            text: 'A lighthouse watched the storm while a ship crossed the dangerous harbor.',
+          },
+        ],
+      },
+      { maxBeatSeconds: 3, maxBeats: 8, coverageStyle: 'cinematic' },
+    )
+
+    expect(beats).toHaveLength(4)
+    expect(beats.map((beat) => beat.endSeconds - beat.startSeconds)).toEqual([2.5, 2.5, 2.5, 2.5])
+    expect(beats[0]?.query).toContain('wide establishing')
+    expect(beats[2]?.query).toContain('close up detail')
+    expect(beats[3]?.query).toContain('macro texture')
+  })
 })

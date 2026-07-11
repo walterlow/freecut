@@ -112,11 +112,13 @@ interface CutDirectionParams {
   profile: CinematicEditingProfile
 }
 
-function magnatesDirection(params: CutDirectionParams, storyText: string): CutDirection {
+function magnatesDirection(params: CutDirectionParams, storyText: string): CutDirection | null {
   const isImpact = DRAMATIC_CUT_PATTERN.test(storyText) || FANTASY_CUT_PATTERN.test(storyText)
+  const isChapterTurn = DOCUMENTARY_TRANSITION_PATTERN.test(storyText)
+  if (!isImpact && !isChapterTurn && params.cutIndex % 4 !== 2) return null
   return {
-    presentation: isImpact && params.cutIndex % 2 === 1 ? 'lensWarpZoom' : 'sceneOrbit',
-    durationInFrames: Math.max(7, Math.round(params.fps * (isImpact ? 0.46 : 0.38))),
+    presentation: isImpact ? 'lensWarpZoom' : 'sceneOrbit',
+    durationInFrames: Math.max(7, Math.round(params.fps * (isImpact ? 0.36 : 0.3))),
     emphasis: 'story',
   }
 }
@@ -191,7 +193,11 @@ export function planCinematicStoryTransitions(
     if (direction) directionByCut.set(cutFrame, direction)
   })
 
-  if (directionByCut.size === 0 && (input.profile ?? 'story') !== 'documentary') {
+  if (
+    directionByCut.size === 0 &&
+    (input.profile ?? 'story') !== 'documentary' &&
+    (input.profile ?? 'story') !== 'magnates-3d'
+  ) {
     const middleCut = cutFrames[Math.floor(cutFrames.length / 2)]!
     directionByCut.set(middleCut, {
       presentation: 'smoothCut',

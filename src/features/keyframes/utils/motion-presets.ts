@@ -78,6 +78,12 @@ export type MotionPresetId =
   | 'magnates-orbit-right'
   | 'magnates-rise-left'
   | 'magnates-dive-right'
+  | 'magnates-establishing'
+  | 'magnates-medium-push'
+  | 'magnates-detail-left'
+  | 'magnates-macro-right'
+  | 'magnates-pull-reveal'
+  | 'magnates-foreground-sweep'
   | 'pull-pan-left'
   | 'pull-pan-right'
   | 'push-tilt-up'
@@ -1037,6 +1043,90 @@ const CAMERA_PRESETS: MotionPreset[] = [
     },
   ),
   cameraPreset(
+    'magnates-establishing',
+    'magnatesEstablishing',
+    { kind: 'slide', angle: 315 },
+    {
+      scaleFrom: 1.035,
+      scaleTo: 1.13,
+      panX: 0.034,
+      panY: -0.024,
+      rollFrom: 0.18,
+      rollTo: -0.18,
+      easing: CAMERA_GLIDE,
+    },
+  ),
+  cameraPreset(
+    'magnates-medium-push',
+    'magnatesMediumPush',
+    { kind: 'slide', angle: 0 },
+    {
+      scaleFrom: 1.16,
+      scaleTo: 1.38,
+      panX: 0.064,
+      panY: -0.032,
+      rollFrom: -0.35,
+      rollTo: 0.28,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
+  cameraPreset(
+    'magnates-detail-left',
+    'magnatesDetailLeft',
+    { kind: 'slide', angle: 180 },
+    {
+      scaleFrom: 1.42,
+      scaleTo: 1.64,
+      panX: -0.095,
+      panY: 0.052,
+      rollFrom: 0.48,
+      rollTo: -0.52,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
+  cameraPreset(
+    'magnates-macro-right',
+    'magnatesMacroRight',
+    { kind: 'slide', angle: 45 },
+    {
+      scaleFrom: 1.72,
+      scaleTo: 2.02,
+      panX: 0.082,
+      panY: 0.062,
+      rollFrom: -0.44,
+      rollTo: 0.6,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
+  cameraPreset(
+    'magnates-pull-reveal',
+    'magnatesPullReveal',
+    { kind: 'slide', angle: 225 },
+    {
+      scaleFrom: 1.52,
+      scaleTo: 1.13,
+      panX: -0.058,
+      panY: -0.055,
+      rollFrom: -0.72,
+      rollTo: 0.18,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
+  cameraPreset(
+    'magnates-foreground-sweep',
+    'magnatesForegroundSweep',
+    { kind: 'slide', angle: 0 },
+    {
+      scaleFrom: 1.24,
+      scaleTo: 1.5,
+      panX: 0.14,
+      panY: 0.028,
+      rollFrom: 0.75,
+      rollTo: -0.65,
+      easing: CAMERA_COMPOUND_DRIVE,
+    },
+  ),
+  cameraPreset(
     'pull-pan-left',
     'pullPanLeft',
     { kind: 'slide', angle: 180 },
@@ -1541,12 +1631,16 @@ export const COMPOUND_PARALLAX_CAMERA_SEQUENCE: MotionPresetId[] = [
 ]
 
 export const MAGNATES_3D_CAMERA_SEQUENCE: MotionPresetId[] = [
+  'magnates-establishing',
+  'magnates-medium-push',
+  'magnates-detail-left',
+  'magnates-macro-right',
+  'magnates-pull-reveal',
+  'magnates-foreground-sweep',
   'magnates-orbit-right',
   'magnates-rise-left',
   'magnates-orbit-left',
   'magnates-dive-right',
-  'surge-down-left',
-  'surge-up-right',
 ]
 
 /** Deterministic pick from the auto-camera rotation for the nth still added. */

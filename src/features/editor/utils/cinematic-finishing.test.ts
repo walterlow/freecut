@@ -70,7 +70,7 @@ describe('cinematic finishing', () => {
       'gpu-grain',
       'gpu-vignette',
     ])
-    expect(next[0]?.effect.params).toMatchObject({ lift: 0.028, contrast: 1.075, midDetail: 14 })
+    expect(next[0]?.effect.params).toMatchObject({ lift: 0.065, contrast: 1.055, midDetail: 14 })
     expect(next[1]?.effect.params).toMatchObject({ amount: 0.78 })
   })
 

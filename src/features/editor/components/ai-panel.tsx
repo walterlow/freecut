@@ -154,6 +154,10 @@ import {
 } from '../utils/audiobook-sfx-library'
 import { createCinematicDepthSourceId } from '../utils/cinematic-depth-prep'
 import { buildCinematicFinishingUpdates } from '../utils/cinematic-finishing'
+import {
+  planCinematicFreesoundLayers,
+  type CinematicFreesoundLayer,
+} from '../utils/cinematic-sound-layering'
 import { planCinematicStoryTransitions } from '../utils/cinematic-transition-plan'
 import {
   isCinematicEditingProfile,
@@ -1396,7 +1400,12 @@ async function insertAutomaticPixabayBroll(
   const empty = { matches: [], itemIds: [], imageItemIds: [], mediaIds: [] }
   if (!params.shouldInsert) return empty
 
-  const beats = planPixabayBroll(params.transcript)
+  const beats = planPixabayBroll(
+    params.transcript,
+    params.preferImages
+      ? { maxBeatSeconds: 3.2, maxBeats: 18, coverageStyle: 'cinematic' }
+      : undefined,
+  )
   if (beats.length === 0) return empty
   params.onProgress('Matching narration to Pixabay B-roll', null)
   const matches = await pixabayBrollService.matchBeats(
@@ -1994,6 +2003,7 @@ async function resolveAudiobookLibraryCue(params: {
 
 async function resolveAudiobookFreesoundCue(params: {
   match: FreesoundCueMatch
+  layer?: CinematicFreesoundLayer
   preferOriginal: boolean
   projectId: string
   mediaLibraryService: GeneratedAudioImporter
@@ -2011,6 +2021,7 @@ async function resolveAudiobookFreesoundCue(params: {
   const source = freesoundStudioAudioService.buildSourceMetadata(
     params.match,
     downloaded.sourceKind,
+    params.layer?.role,
   )
   const media = await params.mediaLibraryService.importGeneratedAudio(
     downloaded.file,
@@ -2027,19 +2038,23 @@ async function resolveAudiobookFreesoundCue(params: {
   )
   const objectUrl = URL.createObjectURL(downloaded.blob)
   params.trackObjectUrl(objectUrl)
+  const placement = buildAudiobookLibraryPlacement({
+    cue: params.match.cue,
+    media,
+    objectUrl,
+    narrationItem: params.narrationItem,
+    timelineFps: params.timelineFps,
+    requestedDuration: params.requestedDuration,
+  })
+  const offsetFrames = Math.round((params.layer?.offsetSeconds ?? 0) * params.timelineFps)
   return {
     mediaId: media.id,
     source: 'freesound',
     placement: {
-      ...buildAudiobookLibraryPlacement({
-        cue: params.match.cue,
-        media,
-        objectUrl,
-        narrationItem: params.narrationItem,
-        timelineFps: params.timelineFps,
-        requestedDuration: params.requestedDuration,
-      }),
-      label: `${params.match.cue.label} - ${params.match.selected.name}`,
+      ...placement,
+      startFrame: Math.max(params.narrationItem.from, placement.startFrame + offsetFrames),
+      volume: placement.volume + (params.layer?.gainDb ?? 0),
+      label: `${params.match.cue.label} ${params.layer ? `[${params.layer.role}]` : ''} - ${params.match.selected.name}`,
       studioAudioSource: source,
     },
   }
@@ -2180,7 +2195,7 @@ async function resolveExistingAudiobookCue(params: {
   onCueStart: (source: 'library' | 'freesound') => void
   onCueProgress: (fraction: number) => void
   trackObjectUrl: (url: string) => void
-}): Promise<GeneratedAudiobookCue | null> {
+}): Promise<GeneratedAudiobookCue[] | null> {
   if (params.libraryMatch) {
     params.onCueStart('library')
     const cue = await resolveAudiobookLibraryCue({
@@ -2190,25 +2205,36 @@ async function resolveExistingAudiobookCue(params: {
       timelineFps: params.timelineFps,
     })
     params.onCueProgress(cue ? 1 : 0)
-    if (cue) return cue
+    if (cue) return [cue]
   }
   if (!params.freesoundMatch) return null
 
   params.onCueStart('freesound')
   try {
-    const cue = await resolveAudiobookFreesoundCue({
-      match: params.freesoundMatch,
-      preferOriginal: params.preferFreesoundOriginals,
-      projectId: params.projectId,
-      mediaLibraryService: params.mediaLibraryService,
-      narrationItem: params.narrationItem,
-      timelineFps: params.timelineFps,
-      requestedDuration: params.requestedDuration,
-      signal: params.signal,
-      trackObjectUrl: params.trackObjectUrl,
-    })
-    params.onCueProgress(1)
-    return cue
+    const layers = planCinematicFreesoundLayers(params.freesoundMatch)
+    const cues: GeneratedAudiobookCue[] = []
+    for (const [index, layer] of layers.entries()) {
+      cues.push(
+        await resolveAudiobookFreesoundCue({
+          match: {
+            ...params.freesoundMatch,
+            selected: layer.asset,
+            alternatives: [],
+          },
+          layer,
+          preferOriginal: params.preferFreesoundOriginals,
+          projectId: params.projectId,
+          mediaLibraryService: params.mediaLibraryService,
+          narrationItem: params.narrationItem,
+          timelineFps: params.timelineFps,
+          requestedDuration: params.requestedDuration,
+          signal: params.signal,
+          trackObjectUrl: params.trackObjectUrl,
+        }),
+      )
+      params.onCueProgress((index + 1) / layers.length)
+    }
+    return cues
   } catch {
     params.onCueProgress(0)
     return null
@@ -2257,7 +2283,7 @@ async function generateAudiobookCueBatch(params: {
       throw new DOMException('Audiobook sound effect generation cancelled', 'AbortError')
     }
 
-    const existingCue = await resolveExistingAudiobookCue({
+    const existingCues = await resolveExistingAudiobookCue({
       libraryMatch: libraryMatchesByCueId.get(cue.id),
       freesoundMatch: freesoundMatchesByCueId.get(cue.id),
       preferFreesoundOriginals: params.preferFreesoundOriginals,
@@ -2271,12 +2297,14 @@ async function generateAudiobookCueBatch(params: {
       onCueProgress: (fraction) => params.onCueProgress(index, params.cues.length, fraction),
       trackObjectUrl: params.trackObjectUrl,
     })
-    if (existingCue) {
-      if (existingCue.source === 'library') result.libraryMatchCount += 1
-      if (existingCue.source === 'freesound') result.freesoundMatchCount += 1
-      result.savedMediaIds.push(existingCue.mediaId)
-      result.placements.push(existingCue.placement)
-      await params.onCueCompleted?.(cue, existingCue)
+    if (existingCues && existingCues.length > 0) {
+      result.libraryMatchCount += existingCues.filter((entry) => entry.source === 'library').length
+      result.freesoundMatchCount += existingCues.filter(
+        (entry) => entry.source === 'freesound',
+      ).length
+      result.savedMediaIds.push(...existingCues.map((entry) => entry.mediaId))
+      result.placements.push(...existingCues.map((entry) => entry.placement))
+      await params.onCueCompleted?.(cue, existingCues[0]!)
       continue
     }
 

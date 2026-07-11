@@ -176,6 +176,30 @@ test("cinematic quality mode keeps only stereo 48 kHz recordings with real bit d
   assert.deepEqual(results.map((sound) => sound.id), [11]);
 });
 
+test("cinematic cue matching reserves distinct pre-motion and tail layers", async () => {
+  const service = new FreesoundService({ apiKey: "secret" });
+  const queries = [];
+  service.search = async ({ query }) => {
+    queries.push(query);
+    return [{ id: queries.length, name: query, score: 90 }];
+  };
+
+  const [match] = await service.matchCues(
+    [{ id: "impact", query: "cinematic impact", role: "impact", targetDuration: 3 }],
+    "cc0-only",
+    "cinematic",
+  );
+
+  assert.equal(queries.length, 3);
+  assert.match(queries[1], /reverse whoosh riser air/);
+  assert.match(queries[2], /debris room tail/);
+  assert.equal(match.selected.id, 1);
+  assert.deepEqual(
+    match.alternatives.map((asset) => asset.id),
+    [2, 3],
+  );
+});
+
 test("failed and throttled API requests surface retry information", async () => {
   const service = new FreesoundService(
     { apiKey: "test-key", clientId: "", clientSecret: "", callbackUrl: "" },

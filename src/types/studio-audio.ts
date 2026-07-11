@@ -51,6 +51,7 @@ export interface StudioAudioSourceMetadata {
   approval: StudioAudioApproval
   locked: boolean
   sceneId?: string
+  layerRole?: 'body' | 'pre-motion' | 'texture' | 'tail'
 }
 
 export interface PixabayBrollAssetMetadata {

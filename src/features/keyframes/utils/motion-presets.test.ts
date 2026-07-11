@@ -98,8 +98,8 @@ describe('motion presets', () => {
 })
 
 describe('camera presets', () => {
-  it('ships the full 64-move cinematic catalog', () => {
-    expect(CAMERA_MOTION_PRESETS.length).toBe(64)
+  it('ships the full 70-move cinematic catalog', () => {
+    expect(CAMERA_MOTION_PRESETS.length).toBe(70)
     for (const preset of CAMERA_MOTION_PRESETS) {
       expect(preset.category).toBe('camera')
     }
@@ -234,7 +234,7 @@ describe('camera presets', () => {
         ).toEqual([0, 89])
       }
     }
-    expect(pickMagnates3dCameraPresetId(0)).toBe('magnates-orbit-right')
+    expect(pickMagnates3dCameraPresetId(0)).toBe('magnates-establishing')
     expect(pickMagnates3dCameraPresetId(MAGNATES_3D_CAMERA_SEQUENCE.length)).toBe(
       MAGNATES_3D_CAMERA_SEQUENCE[0],
     )
