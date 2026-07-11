@@ -4,11 +4,13 @@ import {
   AUTO_CAMERA_SEQUENCE,
   CAMERA_MOTION_PRESETS,
   CINEMATIC_STORY_CAMERA_SEQUENCE,
+  COMPOUND_PARALLAX_CAMERA_SEQUENCE,
   MOTION_PRESETS,
   MOTION_PRESETS_BY_ID,
   getMotionPresetAnchorFrame,
   pickAutoCameraPresetId,
   pickCinematicStoryCameraPresetId,
+  pickCompoundParallaxCameraPresetId,
   type MotionPresetBuildContext,
 } from './motion-presets'
 
@@ -94,8 +96,8 @@ describe('motion presets', () => {
 })
 
 describe('camera presets', () => {
-  it('ships the full 52-move cinematic catalog', () => {
-    expect(CAMERA_MOTION_PRESETS.length).toBe(52)
+  it('ships the full 60-move cinematic catalog', () => {
+    expect(CAMERA_MOTION_PRESETS.length).toBe(60)
     for (const preset of CAMERA_MOTION_PRESETS) {
       expect(preset.category).toBe('camera')
     }
@@ -196,5 +198,24 @@ describe('camera presets', () => {
       CINEMATIC_STORY_CAMERA_SEQUENCE[0],
     )
     expect(pickCinematicStoryCameraPresetId(-1)).toBe(CINEMATIC_STORY_CAMERA_SEQUENCE.at(-1))
+  })
+
+  it('compound parallax keeps zoom and one direction moving for the full shot', () => {
+    for (const id of COMPOUND_PARALLAX_CAMERA_SEQUENCE) {
+      const keys = MOTION_PRESETS_BY_ID[id]!.build(ctx())
+      const widthKeys = keys.filter((keyframe) => keyframe.property === 'width')
+      const directionKeys = keys.filter(
+        (keyframe) => keyframe.property === 'x' || keyframe.property === 'y',
+      )
+
+      expect(widthKeys.map((keyframe) => keyframe.frame)).toEqual([0, 89])
+      expect(directionKeys.map((keyframe) => keyframe.frame)).toEqual([0, 89])
+      expect(widthKeys[0]!.value).not.toBe(widthKeys[1]!.value)
+      expect(directionKeys[0]!.value).not.toBe(directionKeys[1]!.value)
+    }
+    expect(pickCompoundParallaxCameraPresetId(0)).toBe('compound-push-pan-right')
+    expect(pickCompoundParallaxCameraPresetId(COMPOUND_PARALLAX_CAMERA_SEQUENCE.length)).toBe(
+      COMPOUND_PARALLAX_CAMERA_SEQUENCE[0],
+    )
   })
 })

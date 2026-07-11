@@ -1,4 +1,4 @@
-const CINEMATIC_EDITING_PROFILES = ['story', 'documentary'] as const
+const CINEMATIC_EDITING_PROFILES = ['story', 'compound-parallax', 'documentary'] as const
 
 export type CinematicEditingProfile = (typeof CINEMATIC_EDITING_PROFILES)[number]
 

@@ -66,6 +66,14 @@ export type MotionPresetId =
   | 'surge-up-left'
   | 'surge-dutch-right'
   | 'surge-dutch-left'
+  | 'compound-push-pan-left'
+  | 'compound-push-pan-right'
+  | 'compound-push-tilt-up'
+  | 'compound-push-tilt-down'
+  | 'compound-pull-pan-left'
+  | 'compound-pull-pan-right'
+  | 'compound-pull-tilt-up'
+  | 'compound-pull-tilt-down'
   | 'pull-pan-left'
   | 'pull-pan-right'
   | 'push-tilt-up'
@@ -198,6 +206,11 @@ const CAMERA_SETTLE: EasingConfig = {
 const CAMERA_RAMP: EasingConfig = {
   type: 'cubic-bezier',
   bezier: { x1: 0.64, y1: 0, x2: 0.78, y2: 0.2 },
+}
+/** Decisive high-end move: quick intent followed by a controlled cinematic settle. */
+const CAMERA_COMPOUND_DRIVE: EasingConfig = {
+  type: 'cubic-bezier',
+  bezier: { x1: 0.28, y1: 0.05, x2: 0.22, y2: 1 },
 }
 
 // --- Geometry / timing constants --------------------------------------------
@@ -911,6 +924,56 @@ const CAMERA_PRESETS: MotionPreset[] = [
       split: 0.28,
     },
   ),
+  // High-end compound moves. Scale and one directional axis travel together
+  // for the entire shot, keeping two camera actions active on every frame.
+  cameraPreset(
+    'compound-push-pan-left',
+    'compoundPushPanLeft',
+    { kind: 'slide', angle: 180 },
+    { scaleFrom: 1.12, scaleTo: 1.28, panX: -0.075, easing: CAMERA_COMPOUND_DRIVE },
+  ),
+  cameraPreset(
+    'compound-push-pan-right',
+    'compoundPushPanRight',
+    { kind: 'slide', angle: 0 },
+    { scaleFrom: 1.12, scaleTo: 1.28, panX: 0.075, easing: CAMERA_COMPOUND_DRIVE },
+  ),
+  cameraPreset(
+    'compound-push-tilt-up',
+    'compoundPushTiltUp',
+    { kind: 'slide', angle: 270 },
+    { scaleFrom: 1.12, scaleTo: 1.28, panY: -0.075, easing: CAMERA_COMPOUND_DRIVE },
+  ),
+  cameraPreset(
+    'compound-push-tilt-down',
+    'compoundPushTiltDown',
+    { kind: 'slide', angle: 90 },
+    { scaleFrom: 1.12, scaleTo: 1.28, panY: 0.075, easing: CAMERA_COMPOUND_DRIVE },
+  ),
+  cameraPreset(
+    'compound-pull-pan-left',
+    'compoundPullPanLeft',
+    { kind: 'slide', angle: 180 },
+    { scaleFrom: 1.28, scaleTo: 1.12, panX: -0.075, easing: CAMERA_COMPOUND_DRIVE },
+  ),
+  cameraPreset(
+    'compound-pull-pan-right',
+    'compoundPullPanRight',
+    { kind: 'slide', angle: 0 },
+    { scaleFrom: 1.28, scaleTo: 1.12, panX: 0.075, easing: CAMERA_COMPOUND_DRIVE },
+  ),
+  cameraPreset(
+    'compound-pull-tilt-up',
+    'compoundPullTiltUp',
+    { kind: 'slide', angle: 270 },
+    { scaleFrom: 1.28, scaleTo: 1.12, panY: -0.075, easing: CAMERA_COMPOUND_DRIVE },
+  ),
+  cameraPreset(
+    'compound-pull-tilt-down',
+    'compoundPullTiltDown',
+    { kind: 'slide', angle: 90 },
+    { scaleFrom: 1.28, scaleTo: 1.12, panY: 0.075, easing: CAMERA_COMPOUND_DRIVE },
+  ),
   cameraPreset(
     'pull-pan-left',
     'pullPanLeft',
@@ -1399,6 +1462,22 @@ export const CINEMATIC_STORY_CAMERA_SEQUENCE: MotionPresetId[] = [
   'kb-out-down-left',
 ]
 
+/**
+ * Premium compound rotation. Each preset continuously combines a dolly move
+ * with exactly one pan or tilt axis, while alternating direction and zoom
+ * polarity between cuts for varied coverage.
+ */
+export const COMPOUND_PARALLAX_CAMERA_SEQUENCE: MotionPresetId[] = [
+  'compound-push-pan-right',
+  'compound-push-tilt-down',
+  'compound-pull-pan-left',
+  'compound-push-tilt-up',
+  'compound-pull-pan-right',
+  'compound-push-pan-left',
+  'compound-pull-tilt-down',
+  'compound-pull-tilt-up',
+]
+
 /** Deterministic pick from the auto-camera rotation for the nth still added. */
 export function pickAutoCameraPresetId(index: number): MotionPresetId {
   const length = AUTO_CAMERA_SEQUENCE.length
@@ -1409,6 +1488,12 @@ export function pickAutoCameraPresetId(index: number): MotionPresetId {
 export function pickCinematicStoryCameraPresetId(index: number): MotionPresetId {
   const length = CINEMATIC_STORY_CAMERA_SEQUENCE.length
   return CINEMATIC_STORY_CAMERA_SEQUENCE[((index % length) + length) % length]!
+}
+
+/** Deterministic pick from the high-end compound parallax rotation. */
+export function pickCompoundParallaxCameraPresetId(index: number): MotionPresetId {
+  const length = COMPOUND_PARALLAX_CAMERA_SEQUENCE.length
+  return COMPOUND_PARALLAX_CAMERA_SEQUENCE[((index % length) + length) % length]!
 }
 
 /**

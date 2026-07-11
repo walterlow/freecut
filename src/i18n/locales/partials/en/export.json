@@ -191,6 +191,18 @@
           "detail_other": "{{count}} referenced media files are missing or need permission.",
           "fix": "Relink missing media from the Media Library before exporting."
         },
+        "studio-audio-license-block": {
+          "title": "Audio licence check failed",
+          "detail": "{{count}} Studio Audio clip has missing or incompatible licence metadata.",
+          "detail_other": "{{count}} Studio Audio clips have missing or incompatible licence metadata.",
+          "fix": "Replace or remove the affected sound before exporting a monetized video."
+        },
+        "studio-audio-attribution-required": {
+          "title": "Audio attribution required",
+          "detail": "{{count}} CC BY sound must be included in the published credits.",
+          "detail_other": "{{count}} CC BY sounds must be included in the published credits.",
+          "fix": "Use Copy YouTube credits or download the UTF-8 credits file from Studio Audio."
+        },
         "large-file-risk": {
           "title": "Large export file expected",
           "detail": "This export is estimated around {{size}} before container variance.",

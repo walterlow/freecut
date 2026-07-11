@@ -238,6 +238,7 @@ export function insertAudiobookSoundEffects(
       durationInFrames,
       label: placement.label,
       audiobookSfxRole: placement.audiobookSfxRole,
+      studioAudioSource: placement.studioAudioSource,
       mediaId: placement.mediaId,
       originId: crypto.randomUUID(),
       src: placement.src,

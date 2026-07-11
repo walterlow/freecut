@@ -166,6 +166,13 @@ export function convertTimelineToComposition(
               ...cue,
               startSeconds: Math.max(0, cue.startSeconds - trimStartSeconds),
               endSeconds: Math.min(trimmedDurationSeconds, cue.endSeconds - trimStartSeconds),
+              words: cue.words
+                ?.map((word) => ({
+                  ...word,
+                  startSeconds: Math.max(0, word.startSeconds - trimStartSeconds),
+                  endSeconds: Math.min(trimmedDurationSeconds, word.endSeconds - trimStartSeconds),
+                }))
+                .filter((word) => word.endSeconds > word.startSeconds),
             }))
             .filter((cue) => cue.text.trim().length > 0 && cue.endSeconds > cue.startSeconds)
         }

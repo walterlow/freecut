@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { temporal } from 'zundo'
 import type { Project } from '@/types/project'
+import type { StudioAudioProductionState } from '@/types/studio-audio'
 import type { ProjectFormData } from '../utils/validation'
 import { useSettingsStore } from '@/features/projects/deps/settings-contract'
 import {
@@ -46,6 +47,7 @@ interface ProjectActions {
   loadProject: (id: string) => Promise<Project | null>
   createProject: (data: ProjectFormData) => Promise<Project>
   updateProject: (id: string, data: Partial<ProjectFormData>) => Promise<Project>
+  updateStudioAudioProduction: (id: string, state: StudioAudioProductionState) => Promise<Project>
   /**
    * Soft-delete: moves the project to the workspace trash (marker file;
    * content preserved). Returns the trash state so the caller can surface
@@ -229,6 +231,38 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
             const errorMessage = error instanceof Error ? error.message : 'Failed to update project'
             set({ error: errorMessage })
+            throw error
+          }
+        },
+
+        updateStudioAudioProduction: async (id, studioAudioProduction) => {
+          const currentProject = get().currentProject
+          const existingProject =
+            currentProject?.id === id
+              ? currentProject
+              : (get().projects.find((project) => project.id === id) ?? null)
+          if (!existingProject) throw new Error(`Project not found: ${id}`)
+          const updatedProject: Project = {
+            ...existingProject,
+            studioAudioProduction,
+            updatedAt: Date.now(),
+          }
+          set((state) => ({
+            currentProject: state.currentProject?.id === id ? updatedProject : state.currentProject,
+            projects: state.projects.map((project) =>
+              project.id === id ? updatedProject : project,
+            ),
+          }))
+          try {
+            return await updateProjectDB(id, { studioAudioProduction, updatedAt: Date.now() })
+          } catch (error) {
+            set((state) => ({
+              currentProject:
+                state.currentProject?.id === id ? existingProject : state.currentProject,
+              projects: state.projects.map((project) =>
+                project.id === id ? existingProject : project,
+              ),
+            }))
             throw error
           }
         },

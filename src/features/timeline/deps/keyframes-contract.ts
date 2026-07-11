@@ -8,6 +8,7 @@ export {
   MOTION_PRESETS_BY_ID,
   pickAutoCameraPresetId,
   pickCinematicStoryCameraPresetId,
+  pickCompoundParallaxCameraPresetId,
 } from '@/features/keyframes/utils/motion-presets'
 export { getCropPropertyValue } from '@/features/keyframes/utils/animated-crop-resolver'
 export { interpolatePropertyValue } from '@/features/keyframes/utils/interpolation'

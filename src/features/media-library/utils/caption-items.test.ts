@@ -161,7 +161,14 @@ describe('caption-items', () => {
   it('maps imported subtitle cues to standalone caption text items', () => {
     const items = buildSubtitleTextItems({
       trackId: 'track-captions',
-      cues: [{ id: 'cue-1', startSeconds: 1, endSeconds: 2.5, text: 'Imported\ncaption' }],
+      cues: [
+        {
+          id: 'cue-1',
+          startSeconds: 1,
+          endSeconds: 2.5,
+          text: 'Imported\ncaption',
+        },
+      ],
       timelineFps: 30,
       canvasWidth: 1920,
       canvasHeight: 1080,
@@ -463,9 +470,19 @@ describe('caption-items', () => {
     const items = buildSubtitleTextItemsForClip({
       trackId: 'track-captions',
       cues: [
-        { id: 'cue-1', startSeconds: 25.734, endSeconds: 27.527, text: 'Where do you think?' },
+        {
+          id: 'cue-1',
+          startSeconds: 25.734,
+          endSeconds: 27.527,
+          text: 'Where do you think?',
+        },
         // Outside clip's source window — must be dropped.
-        { id: 'cue-out', startSeconds: 99999, endSeconds: 100000, text: 'Past end' },
+        {
+          id: 'cue-out',
+          startSeconds: 99999,
+          endSeconds: 100000,
+          text: 'Past end',
+        },
       ],
       clip,
       timelineFps: 30,
@@ -479,7 +496,11 @@ describe('caption-items', () => {
     expect(items[0]).toMatchObject({
       from: 33540 + Math.floor(25.734 * 30),
       mediaId: 'media-squid',
-      captionSource: { type: 'embedded-subtitles', clipId: 'clip-anchor', mediaId: 'media-squid' },
+      captionSource: {
+        type: 'embedded-subtitles',
+        clipId: 'clip-anchor',
+        mediaId: 'media-squid',
+      },
       text: 'Where do you think?',
     })
   })
@@ -727,6 +748,48 @@ describe('caption-items', () => {
     expect(segment?.linkedGroupId).toBe('pair-1')
   })
 
+  it('preserves measured word timing when transcript cues become subtitle segments', () => {
+    const clip: VideoItem = {
+      id: 'timed-clip',
+      type: 'video',
+      trackId: 'track-v',
+      from: 90,
+      durationInFrames: 180,
+      label: 'Timed narration',
+      mediaId: 'media-timed',
+      src: 'blob:test',
+      sourceFps: 30,
+    }
+    const segment = buildSubtitleSegmentForClip({
+      trackId: 'track-captions',
+      cues: [
+        {
+          id: 'timed-cue',
+          startSeconds: 0.5,
+          endSeconds: 1.5,
+          text: 'Clock turns',
+          words: [
+            { text: 'Clock', startSeconds: 0.5, endSeconds: 0.86 },
+            { text: 'turns', startSeconds: 0.92, endSeconds: 1.5 },
+          ],
+        },
+      ],
+      clip,
+      timelineFps: 30,
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      source: { type: 'transcript', mediaId: 'media-timed', clipId: clip.id },
+    })
+
+    expect(segment?.from).toBe(105)
+    const words = segment?.cues[0]?.words
+    expect(words?.map((word) => word.text)).toEqual(['Clock', 'turns'])
+    expect(words?.[0]?.startSeconds).toBeCloseTo(0)
+    expect(words?.[0]?.endSeconds).toBeCloseTo(0.36)
+    expect(words?.[1]?.startSeconds).toBeCloseTo(0.42)
+    expect(words?.[1]?.endSeconds).toBeCloseTo(1)
+  })
+
   it('omits linkedGroupId when the source clip is solo (not linked to A/V pair)', () => {
     const clip: VideoItem = {
       id: 'video-solo',
@@ -790,7 +853,12 @@ describe('caption-items', () => {
             enabled: true,
             updatedAt: 1,
             cues: [
-              { id: 'before', startSeconds: 0, endSeconds: 0.5, text: 'Before' },
+              {
+                id: 'before',
+                startSeconds: 0,
+                endSeconds: 0.5,
+                text: 'Before',
+              },
               { id: 'active', startSeconds: 1, endSeconds: 2, text: 'Active' },
             ],
           },

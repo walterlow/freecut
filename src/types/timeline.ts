@@ -5,6 +5,7 @@ import type { BlendMode } from './blend-modes'
 import type { AudioEqSettings } from './audio'
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids'
 import type { TextMotionSpec } from './text-motion'
+import type { PixabayBrollSourceMetadata, StudioAudioSourceMetadata } from './studio-audio'
 import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 
 export interface TimelineItemCornerPin {
@@ -21,6 +22,13 @@ export interface TimelineTranscriptCaptionCue {
   startSeconds: number
   endSeconds: number
   text: string
+  words?: TimelineTranscriptCaptionWord[]
+}
+
+export interface TimelineTranscriptCaptionWord {
+  text: string
+  startSeconds: number
+  endSeconds: number
 }
 
 export type TimelineTranscriptCaptionStyle = TextStyleFields & {
@@ -134,6 +142,8 @@ type BaseTimelineItem = {
   audioEqHighCutFrequencyHz?: number // High cut frequency in Hz
   audioEqHighCutSlopeDbPerOct?: 6 | 12 | 18 | 24 // High cut slope
   audiobookSfxRole?: AudiobookSfxRole // Role assigned by automatic audiobook SFX generation
+  studioAudioSource?: StudioAudioSourceMetadata // Provider, selection rationale and exact licence metadata
+  pixabayBrollSource?: PixabayBrollSourceMetadata // Search rationale and source provenance for automatic B-roll
   cinematicDepthRole?: CinematicDepthRole // Depth role for 2.5D/parallax automation
   cinematicDepthSourceId?: string // Shared source id for subject/background/depth-map layer groups
   cinematicDepthQuality?: number // 0-1 confidence/quality estimate for generated depth prep
@@ -277,6 +287,7 @@ export interface SubtitleSegmentCue {
   startSeconds: number
   endSeconds: number
   text: string
+  words?: TimelineTranscriptCaptionWord[]
 }
 
 /**

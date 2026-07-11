@@ -19,6 +19,7 @@ import {
   MOTION_PRESETS_BY_ID,
   pickAutoCameraPresetId,
   pickCinematicStoryCameraPresetId,
+  pickCompoundParallaxCameraPresetId,
 } from '../../deps/keyframes'
 import type { CinematicImageMotionResult } from '../../types'
 import { useSelectionStore } from '@/shared/state/selection'
@@ -176,6 +177,31 @@ function buildCameraPayloadsForItems(
   return { payloads, clearProperties }
 }
 
+function applyCameraPresetSequence(
+  selectedItemIds: string[] | undefined,
+  pickPresetId: (index: number) => keyof typeof MOTION_PRESETS_BY_ID,
+): CinematicImageMotionResult {
+  const selection = selectedItemIds ?? useSelectionStore.getState().selectedItemIds
+  const selectedIdSet = new Set(selection)
+  const stills = sortByTrackThenTime(
+    useItemsStore
+      .getState()
+      .items.filter((item) => selectedIdSet.has(item.id) && isStillImage(item)),
+  )
+  if (stills.length === 0) return { status: 'no-images', imageCount: 0, keyframeCount: 0 }
+
+  const canvas = currentCanvas()
+  if (!canvas) return { status: 'no-project', imageCount: stills.length, keyframeCount: 0 }
+
+  const { payloads, clearProperties } = buildCameraPayloadsForItems(stills, canvas, pickPresetId)
+  const keyframeIds = applyMotionPresetKeyframes(payloads, clearProperties)
+  return {
+    status: keyframeIds.length > 0 ? 'applied' : 'blocked',
+    imageCount: stills.length,
+    keyframeCount: keyframeIds.length,
+  }
+}
+
 /**
  * Apply an automatic cinematic camera move to freshly added still images.
  * No-op unless the `autoCameraOnStills` timeline setting is enabled.
@@ -222,35 +248,18 @@ export function applyAutoCameraToNewImageItems(items: TimelineItem[]): void {
 export function applyCinematicCameraToSelectedImages(
   selectedItemIds?: string[],
 ): CinematicImageMotionResult {
-  const selection = selectedItemIds ?? useSelectionStore.getState().selectedItemIds
-  const selectedIdSet = new Set(selection)
-  const stills = sortByTrackThenTime(
-    useItemsStore
-      .getState()
-      .items.filter((item) => selectedIdSet.has(item.id) && isStillImage(item)),
-  )
+  return applyCameraPresetSequence(selectedItemIds, pickCinematicStoryCameraPresetId)
+}
 
-  if (stills.length === 0) {
-    return { status: 'no-images', imageCount: 0, keyframeCount: 0 }
-  }
-
-  const canvas = currentCanvas()
-  if (!canvas) {
-    return { status: 'no-project', imageCount: stills.length, keyframeCount: 0 }
-  }
-
-  const { payloads, clearProperties } = buildCameraPayloadsForItems(
-    stills,
-    canvas,
-    pickCinematicStoryCameraPresetId,
-  )
-  const keyframeIds = applyMotionPresetKeyframes(payloads, clearProperties)
-
-  return {
-    status: keyframeIds.length > 0 ? 'applied' : 'blocked',
-    imageCount: stills.length,
-    keyframeCount: keyframeIds.length,
-  }
+/**
+ * Replace selected still keyframes with synchronized dolly plus pan/tilt
+ * motion. Both camera actions remain active across the complete shot, while
+ * separated depth layers receive progressively stronger travel.
+ */
+export function applyCompoundParallaxCameraToSelectedImages(
+  selectedItemIds?: string[],
+): CinematicImageMotionResult {
+  return applyCameraPresetSequence(selectedItemIds, pickCompoundParallaxCameraPresetId)
 }
 
 /**
@@ -261,33 +270,5 @@ export function applyCinematicCameraToSelectedImages(
 export function applyDocumentaryCameraToSelectedImages(
   selectedItemIds?: string[],
 ): CinematicImageMotionResult {
-  const selection = selectedItemIds ?? useSelectionStore.getState().selectedItemIds
-  const selectedIdSet = new Set(selection)
-  const stills = sortByTrackThenTime(
-    useItemsStore
-      .getState()
-      .items.filter((item) => selectedIdSet.has(item.id) && isStillImage(item)),
-  )
-
-  if (stills.length === 0) {
-    return { status: 'no-images', imageCount: 0, keyframeCount: 0 }
-  }
-
-  const canvas = currentCanvas()
-  if (!canvas) {
-    return { status: 'no-project', imageCount: stills.length, keyframeCount: 0 }
-  }
-
-  const { payloads, clearProperties } = buildCameraPayloadsForItems(
-    stills,
-    canvas,
-    pickAutoCameraPresetId,
-  )
-  const keyframeIds = applyMotionPresetKeyframes(payloads, clearProperties)
-
-  return {
-    status: keyframeIds.length > 0 ? 'applied' : 'blocked',
-    imageCount: stills.length,
-    keyframeCount: keyframeIds.length,
-  }
+  return applyCameraPresetSequence(selectedItemIds, pickAutoCameraPresetId)
 }

@@ -12,6 +12,7 @@ import { useTimelineSettingsStore } from '../timeline-settings-store'
 import { useTransitionsStore } from '../transitions-store'
 import {
   applyCinematicCameraToSelectedImages,
+  applyCompoundParallaxCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
 } from './auto-camera-actions'
 
@@ -117,6 +118,20 @@ describe('auto camera actions', () => {
     expect(result).toMatchObject({ status: 'applied', imageCount: 1 })
     expect(width.map((keyframe) => keyframe.frame)).toEqual([0, 89])
     expect(width[1]?.value).toBeGreaterThan(width[0]?.value ?? 0)
+  })
+
+  it('applies simultaneous full-shot zoom and pan for compound parallax', () => {
+    useItemsStore.getState().setItems([makeImageItem({ id: 'image-1' })])
+
+    const result = applyCompoundParallaxCameraToSelectedImages(['image-1'])
+    const width = useKeyframesStore.getState().getAllKeyframesForProperty('image-1', 'width')
+    const x = useKeyframesStore.getState().getAllKeyframesForProperty('image-1', 'x')
+
+    expect(result).toMatchObject({ status: 'applied', imageCount: 1 })
+    expect(width.map((keyframe) => keyframe.frame)).toEqual([0, 89])
+    expect(x.map((keyframe) => keyframe.frame)).toEqual([0, 89])
+    expect(width[0]?.value).not.toBe(width[1]?.value)
+    expect(x[0]?.value).not.toBe(x[1]?.value)
   })
 
   it('keeps depth-layer scenes on one preset with stronger foreground motion', () => {

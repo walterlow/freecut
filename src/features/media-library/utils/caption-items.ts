@@ -887,6 +887,13 @@ export function buildSubtitleSegmentForClip(
       startSeconds: cueStartTimeline,
       endSeconds: cueEndTimeline,
       text: cue.text,
+      words: cue.words
+        ?.filter((word) => word.endSeconds > overlapStartSec && word.startSeconds < overlapEndSec)
+        .map((word) => ({
+          text: word.text,
+          startSeconds: (Math.max(word.startSeconds, overlapStartSec) - sourceStartSeconds) / speed,
+          endSeconds: (Math.min(word.endSeconds, overlapEndSec) - sourceStartSeconds) / speed,
+        })),
     })
     if (cueStartFrames < firstFromOffset) firstFromOffset = cueStartFrames
     if (cueEndFrames > lastEndOffset) lastEndOffset = cueEndFrames
@@ -908,6 +915,11 @@ export function buildSubtitleSegmentForClip(
     startSeconds: cue.startSeconds - segmentFromOffset / timelineFps,
     endSeconds: cue.endSeconds - segmentFromOffset / timelineFps,
     text: cue.text,
+    words: cue.words?.map((word) => ({
+      ...word,
+      startSeconds: word.startSeconds - segmentFromOffset / timelineFps,
+      endSeconds: word.endSeconds - segmentFromOffset / timelineFps,
+    })),
   }))
 
   const defaultStyle = {

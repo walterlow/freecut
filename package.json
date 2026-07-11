@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vp dev --host",
+    "dev:studio": "node scripts/run-studio-audio-dev.mjs",
+    "studio-audio:server": "node server/studio-audio-server.mjs",
     "dev:quiet": "vp dev --host --mode perf",
     "dev:compare": "node scripts/run-dev-and-perf.mjs",
     "build": "vp build",
@@ -33,6 +35,7 @@
     "routes": "tsr generate",
     "test": "vp test",
     "test:run": "vp test run",
+    "test:studio-audio-server": "node --test server/*.test.mjs",
     "test:preview-sync": "vp test run src/features/preview/components/video-preview.sync.test.tsx",
     "test:preview-sync:stress": "node scripts/preview-sync-stress.mjs --runs 20",
     "test:coverage": "vp test run --coverage",

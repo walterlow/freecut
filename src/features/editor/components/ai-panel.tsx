@@ -12,7 +12,10 @@ import { useTranslation } from 'react-i18next'
 import {
   CheckCircle2,
   ChevronDown,
+  ClipboardCopy,
   Download,
+  ExternalLink,
+  FileDown,
   Info,
   ListPlus,
   Loader2,
@@ -26,6 +29,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
@@ -55,7 +59,9 @@ import {
 } from '@/features/editor/deps/media-library'
 import {
   applyCinematicCameraToSelectedImages,
+  applyCompoundParallaxCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
+  buildDroppedMediaTimelineItem,
   type AudiobookMusicBedPlacement,
   type CinematicDepthLayerPlacement,
   type InsertAudiobookMusicBedResult,
@@ -78,6 +84,12 @@ import type {
   TimelineTranscriptCaptionCue,
 } from '@/types/timeline'
 import type { MediaMetadata, MediaTranscript } from '@/types/storage'
+import type {
+  StudioAudioLicensePolicy,
+  StudioAudioProductionState,
+  StudioAudioRecoveredCue,
+  StudioAudioSourceMetadata,
+} from '@/types/studio-audio'
 import {
   KOKORO_TTS_BEST_MODEL,
   KOKORO_TTS_VOICE_OPTIONS,
@@ -93,6 +105,7 @@ import {
   mossTtsService,
   type MossTtsVoice,
 } from '../services/moss-tts-service'
+import { analyzeStudioAudioScenes } from '../utils/studio-audio-scene-analysis'
 import {
   SUPERTONIC_TTS_EXPRESSIVE_TAG_OPTIONS,
   SUPERTONIC_TTS_LANGUAGE_OPTIONS,
@@ -108,6 +121,12 @@ import {
   type MusicgenModelId,
 } from '../services/musicgen-service'
 import { cinematicDepthPrepService } from '../services/cinematic-depth-prep-service'
+import {
+  freesoundStudioAudioService,
+  type FreesoundCueMatch,
+  type FreesoundProviderStatus,
+} from '../services/freesound-studio-audio-service'
+import { pixabayBrollService, type PixabayBrollMatch } from '../services/pixabay-broll-service'
 import {
   scoreCinematicReadiness,
   type CinematicReadinessGrade,
@@ -140,6 +159,14 @@ import {
   type CinematicEditingProfile,
 } from '../utils/cinematic-editing-profile'
 import { planStudioDocumentaryCards } from '../utils/studio-documentary-cards'
+import {
+  collectStudioAudioCredits,
+  downloadStudioAudioCredits,
+  formatYouTubeStudioAudioCredits,
+} from '../utils/studio-audio-credits'
+import { mapAudiobookCuesToStudioAudioPlan } from '../utils/studio-audio-plan'
+import { isStudioAudioLicenseAllowed } from '../utils/studio-audio-licensing'
+import { planPixabayBroll } from '../utils/pixabay-broll-plan'
 import { useProjectStore } from '../deps/projects'
 import { getLanguageDisplayName, insertTextAtCursor } from '../utils/tts-ui-helpers'
 
@@ -539,6 +566,7 @@ interface AudiobookSfxPlacement {
   sourceDurationFrames: number
   sourceFps: number
   volume: number
+  studioAudioSource?: StudioAudioSourceMetadata
 }
 
 interface AudiobookSfxTimelineInsertResult {
@@ -567,7 +595,7 @@ interface GeneratedAudiobookCue {
   generation?: AudioGeneration
   mediaId: string
   placement: AudiobookSfxPlacement
-  source: 'generated' | 'library'
+  source: 'generated' | 'library' | 'freesound'
 }
 
 interface GeneratedAudiobookCueCandidate {
@@ -584,6 +612,133 @@ interface AudiobookCueBatchResult {
   placements: AudiobookSfxPlacement[]
   savedMediaIds: string[]
   libraryMatchCount: number
+  freesoundMatchCount: number
+}
+
+function getStudioAudioJobProgress(
+  stage: StudioAudioProductionState['job']['stage'],
+  completedCount: number,
+  totalCount: number,
+): number {
+  return stage === 'ready' ? 1 : completedCount / Math.max(1, totalCount)
+}
+
+function createStudioAudioJobState(params: {
+  cues: AudiobookSfxCue[]
+  stage: StudioAudioProductionState['job']['stage']
+  completedCueIds?: string[]
+  failedCueIds?: string[]
+  error?: string
+}): StudioAudioProductionState['job'] {
+  const completedCueIds = params.completedCueIds ?? []
+  return {
+    id: `studio-audio:${params.cues[0]?.id ?? 'empty'}`,
+    stage: params.stage,
+    completedCueIds,
+    failedCueIds: params.failedCueIds ?? [],
+    progress: getStudioAudioJobProgress(params.stage, completedCueIds.length, params.cues.length),
+    updatedAt: Date.now(),
+    ...(params.error ? { error: params.error } : {}),
+  }
+}
+
+function createStudioAudioScenes(transcript?: MediaTranscript) {
+  return transcript ? analyzeStudioAudioScenes(transcript) : []
+}
+
+function createStudioAudioProductionState(params: {
+  cues: AudiobookSfxCue[]
+  transcript?: MediaTranscript
+  policy: StudioAudioLicensePolicy
+  credits?: StudioAudioProductionState['credits']
+  recoveredCues?: StudioAudioRecoveredCue[]
+  stage: StudioAudioProductionState['job']['stage']
+  completedCueIds?: string[]
+  failedCueIds?: string[]
+  error?: string
+}): StudioAudioProductionState {
+  return {
+    schemaVersion: 1,
+    licensePolicy: params.policy,
+    plan: mapAudiobookCuesToStudioAudioPlan(params.cues),
+    scenes: createStudioAudioScenes(params.transcript),
+    credits: params.credits ?? [],
+    recoveredCues: params.recoveredCues ?? [],
+    job: createStudioAudioJobState(params),
+    mixPreset: 'cinematic-story',
+    narrationLoudnessLufs: -16,
+    truePeakDbtp: -1,
+    updatedAt: Date.now(),
+  }
+}
+
+function createStudioAudioRecoveredCue(
+  cue: AudiobookSfxCue,
+  generatedCue: GeneratedAudiobookCue,
+): StudioAudioRecoveredCue {
+  const { placement } = generatedCue
+  return {
+    cueId: cue.id,
+    mediaId: generatedCue.mediaId,
+    label: placement.label,
+    audiobookSfxRole: placement.audiobookSfxRole,
+    startFrame: placement.startFrame,
+    durationInFrames: placement.durationInFrames,
+    sourceDurationFrames: placement.sourceDurationFrames,
+    sourceFps: placement.sourceFps,
+    volume: placement.volume,
+    ...(placement.studioAudioSource ? { studioAudioSource: placement.studioAudioSource } : {}),
+  }
+}
+
+async function restoreStudioAudioRecoveredPlacements(
+  recoveredCues: StudioAudioRecoveredCue[],
+): Promise<Array<{ cueId: string; placement: AudiobookSfxPlacement }>> {
+  const placements = await Promise.all(
+    recoveredCues.map(
+      async (
+        cue,
+      ): Promise<{
+        cueId: string
+        placement: AudiobookSfxPlacement
+      } | null> => {
+        const src = await resolveMediaUrl(cue.mediaId)
+        if (!src) return null
+        return {
+          cueId: cue.cueId,
+          placement: {
+            mediaId: cue.mediaId,
+            src,
+            label: cue.label,
+            audiobookSfxRole: cue.audiobookSfxRole,
+            startFrame: cue.startFrame,
+            durationInFrames: cue.durationInFrames,
+            sourceDurationFrames: cue.sourceDurationFrames,
+            sourceFps: cue.sourceFps,
+            volume: cue.volume,
+            ...(cue.studioAudioSource ? { studioAudioSource: cue.studioAudioSource } : {}),
+          },
+        }
+      },
+    ),
+  )
+  return placements.filter(
+    (placement): placement is { cueId: string; placement: AudiobookSfxPlacement } =>
+      placement !== null,
+  )
+}
+
+function getCompatibleStudioAudioRecovery(
+  production: StudioAudioProductionState | undefined,
+  cues: AudiobookSfxCue[],
+): StudioAudioRecoveredCue[] {
+  if (!production || production.job.stage === 'ready') return []
+  const plannedIds = production.plan.map((event) => event.id)
+  if (plannedIds.length !== cues.length || plannedIds.some((id, index) => id !== cues[index]?.id)) {
+    return []
+  }
+  const cueIds = new Set(cues.map((cue) => cue.id))
+  return production.recoveredCues.filter((cue) => cueIds.has(cue.cueId))
 }
 
 type AudiobookGenerateReadiness =
@@ -683,7 +838,11 @@ function buildAudiobookLibraryPlacement(params: {
   const sourceDurationSeconds =
     media.duration > 0
       ? media.duration
-      : getAudiobookLibraryPlacementDurationSeconds({ cue, media, requestedDuration })
+      : getAudiobookLibraryPlacementDurationSeconds({
+          cue,
+          media,
+          requestedDuration,
+        })
   const placementDurationSeconds = getAudiobookLibraryPlacementDurationSeconds({
     cue,
     media,
@@ -775,6 +934,11 @@ function buildTimelineTranscriptCues(transcript: MediaTranscript): TimelineTrans
       startSeconds: Math.max(0, segment.start),
       endSeconds: Math.max(segment.start, segment.end),
       text: segment.text.trim(),
+      words: segment.words?.map((word) => ({
+        text: word.text,
+        startSeconds: Math.max(segment.start, word.start),
+        endSeconds: Math.max(word.start, word.end),
+      })),
     }))
     .filter((cue) => cue.text && cue.endSeconds > cue.startSeconds)
 }
@@ -925,7 +1089,10 @@ async function prepareAudiobookDepthLayer(params: {
   trackObjectUrl: (url: string) => void
   onProgress: (message: string, fraction?: number | null) => void
   t: typeof i18n.t
-}): Promise<{ placement: CinematicDepthLayerPlacement; savedMediaIds: string[] } | null> {
+}): Promise<{
+  placement: CinematicDepthLayerPlacement
+  savedMediaIds: string[]
+} | null> {
   throwIfDepthPrepAborted(params.signal)
   params.onProgress(
     params.t('editor.aiPanel.audiobookPreparingDepth', {
@@ -1051,6 +1218,8 @@ function applyAudiobookCinematicMotionIfNeeded(params: {
   if (animatedIds.length > 0) {
     if (params.profile === 'documentary') {
       applyDocumentaryCameraToSelectedImages(animatedIds)
+    } else if (params.profile === 'compound-parallax') {
+      applyCompoundParallaxCameraToSelectedImages(animatedIds)
     } else {
       applyCinematicCameraToSelectedImages(animatedIds)
     }
@@ -1128,6 +1297,102 @@ function applyAudiobookCinematicFinishingIfNeeded(params: {
   return updates.length
 }
 
+interface PixabayMediaImporter {
+  importMediaFromUrl(url: string, projectId: string): Promise<MediaMetadata>
+  getThumbnailBlobUrl(mediaId: string): Promise<string | null>
+}
+
+interface InsertPixabayBrollResult {
+  matches: PixabayBrollMatch[]
+  itemIds: string[]
+  imageItemIds: string[]
+  mediaIds: string[]
+}
+
+async function insertAutomaticPixabayBroll(params: {
+  shouldInsert: boolean
+  transcript: MediaTranscript
+  narrationItem: AudioItem
+  projectId: string
+  projectWidth: number
+  projectHeight: number
+  fps: number
+  mediaLibraryService: PixabayMediaImporter
+  signal: AbortSignal
+  onProgress: (message: string, fraction?: number | null) => void
+}): Promise<InsertPixabayBrollResult> {
+  const empty = { matches: [], itemIds: [], imageItemIds: [], mediaIds: [] }
+  if (!params.shouldInsert) return empty
+
+  const beats = planPixabayBroll(params.transcript)
+  if (beats.length === 0) return empty
+  params.onProgress('Matching narration to Pixabay B-roll', null)
+  const matches = await pixabayBrollService.matchBeats(beats, params.signal)
+  if (matches.length === 0)
+    throw new Error('Pixabay could not find suitable HD B-roll for this narration.')
+
+  const timeline = useTimelineStore.getState()
+  const topOrder = Math.min(0, ...timeline.tracks.map((track) => track.order)) - 1
+  const track = {
+    ...createClassicTrack({ tracks: timeline.tracks, kind: 'video', order: topOrder }),
+    name: 'Pixabay B-roll',
+  }
+  const items: TimelineItem[] = []
+  const mediaIds: string[] = []
+
+  for (const [index, match] of matches.entries()) {
+    params.signal.throwIfAborted()
+    params.onProgress(
+      `Downloading Pixabay B-roll ${index + 1}/${matches.length}: ${match.selected.title}`,
+      index / matches.length,
+    )
+    const media = await params.mediaLibraryService.importMediaFromUrl(
+      pixabayBrollService.assetUrl(match.selected),
+      params.projectId,
+    )
+    const blobUrl = await resolveMediaUrl(media.id)
+    const thumbnailUrl = await params.mediaLibraryService.getThumbnailBlobUrl(media.id)
+    const durationInFrames = Math.max(
+      1,
+      Math.round((match.beat.endSeconds - match.beat.startSeconds) * params.fps),
+    )
+    const item = buildDroppedMediaTimelineItem({
+      media,
+      mediaId: media.id,
+      mediaType: match.selected.kind,
+      label: `Pixabay: ${match.selected.title}`,
+      timelineFps: params.fps,
+      blobUrl,
+      thumbnailUrl,
+      canvasWidth: params.projectWidth,
+      canvasHeight: params.projectHeight,
+      placement: {
+        trackId: track.id,
+        from: params.narrationItem.from + Math.round(match.beat.startSeconds * params.fps),
+        durationInFrames,
+      },
+    })
+    items.push({
+      ...item,
+      ...(item.type === 'video' ? { embeddedAudioMuted: true } : {}),
+      pixabayBrollSource: pixabayBrollService.sourceMetadata(match),
+    })
+    mediaIds.push(media.id)
+  }
+
+  const first = items.shift()
+  if (!first) return empty
+  timeline.addItemOnNewTrack(first, [...timeline.tracks, track])
+  if (items.length > 0) useTimelineStore.getState().addItems(items)
+  const inserted = [first, ...items]
+  return {
+    matches,
+    itemIds: inserted.map((item) => item.id),
+    imageItemIds: inserted.filter((item) => item.type === 'image').map((item) => item.id),
+    mediaIds,
+  }
+}
+
 async function prepareAudiobookImagesAndMotion(params: {
   shouldMatch: boolean
   shouldPrepareDepth: boolean
@@ -1199,14 +1464,20 @@ function insertStudioDocumentaryCardsIfNeeded(params: {
       .filter((item): item is TextItem => item.type === 'text')
       .map((item) => item.label),
   )
-  const cards = planStudioDocumentaryCards({ narrationItem, fps: params.fps, maxCards: 10 }).filter(
-    (card) => !existingLabels.has(`Studio card: ${card.text}`),
-  )
+  const cards = planStudioDocumentaryCards({
+    narrationItem,
+    fps: params.fps,
+    maxCards: 10,
+  }).filter((card) => !existingLabels.has(`Studio card: ${card.text}`))
   if (cards.length === 0) return 0
 
   const topOrder = Math.min(0, ...timeline.tracks.map((track) => track.order)) - 1
   const titleTrack = {
-    ...createClassicTrack({ tracks: timeline.tracks, kind: 'video', order: topOrder }),
+    ...createClassicTrack({
+      tracks: timeline.tracks,
+      kind: 'video',
+      order: topOrder,
+    }),
     name: 'Studio Documentary Titles',
   }
   const items = cards.map((card) =>
@@ -1640,6 +1911,59 @@ async function resolveAudiobookLibraryCue(params: {
   }
 }
 
+async function resolveAudiobookFreesoundCue(params: {
+  match: FreesoundCueMatch
+  preferOriginal: boolean
+  projectId: string
+  mediaLibraryService: GeneratedAudioImporter
+  narrationItem: AudioItem
+  timelineFps: number
+  requestedDuration: number
+  signal: AbortSignal
+  trackObjectUrl: (url: string) => void
+}): Promise<GeneratedAudiobookCue> {
+  const downloaded = await freesoundStudioAudioService.downloadMatch(
+    params.match,
+    params.preferOriginal,
+    params.signal,
+  )
+  const source = freesoundStudioAudioService.buildSourceMetadata(
+    params.match,
+    downloaded.sourceKind,
+  )
+  const media = await params.mediaLibraryService.importGeneratedAudio(
+    downloaded.file,
+    params.projectId,
+    {
+      tags: [
+        'studio-audio',
+        'freesound',
+        `freesound-id:${source.soundId}`,
+        `license:${source.licenseCode}`,
+        `creator:${source.creator}`,
+      ],
+    },
+  )
+  const objectUrl = URL.createObjectURL(downloaded.blob)
+  params.trackObjectUrl(objectUrl)
+  return {
+    mediaId: media.id,
+    source: 'freesound',
+    placement: {
+      ...buildAudiobookLibraryPlacement({
+        cue: params.match.cue,
+        media,
+        objectUrl,
+        narrationItem: params.narrationItem,
+        timelineFps: params.timelineFps,
+        requestedDuration: params.requestedDuration,
+      }),
+      label: `${params.match.cue.label} - ${params.match.selected.name}`,
+      studioAudioSource: source,
+    },
+  }
+}
+
 async function generateAndSaveAudiobookMusicBed(params: {
   transcript: MediaTranscript
   modelLabel: string
@@ -1762,9 +2086,59 @@ async function generateAndInsertAudiobookMusicBedIfNeeded(params: {
   }
 }
 
+async function resolveExistingAudiobookCue(params: {
+  libraryMatch?: AudiobookSfxLibraryMatch
+  freesoundMatch?: FreesoundCueMatch
+  preferFreesoundOriginals: boolean
+  projectId: string
+  mediaLibraryService: GeneratedAudioImporter
+  narrationItem: AudioItem
+  timelineFps: number
+  requestedDuration: number
+  signal: AbortSignal
+  onCueStart: (source: 'library' | 'freesound') => void
+  onCueProgress: (fraction: number) => void
+  trackObjectUrl: (url: string) => void
+}): Promise<GeneratedAudiobookCue | null> {
+  if (params.libraryMatch) {
+    params.onCueStart('library')
+    const cue = await resolveAudiobookLibraryCue({
+      match: params.libraryMatch,
+      requestedDuration: params.requestedDuration,
+      narrationItem: params.narrationItem,
+      timelineFps: params.timelineFps,
+    })
+    params.onCueProgress(cue ? 1 : 0)
+    if (cue) return cue
+  }
+  if (!params.freesoundMatch) return null
+
+  params.onCueStart('freesound')
+  try {
+    const cue = await resolveAudiobookFreesoundCue({
+      match: params.freesoundMatch,
+      preferOriginal: params.preferFreesoundOriginals,
+      projectId: params.projectId,
+      mediaLibraryService: params.mediaLibraryService,
+      narrationItem: params.narrationItem,
+      timelineFps: params.timelineFps,
+      requestedDuration: params.requestedDuration,
+      signal: params.signal,
+      trackObjectUrl: params.trackObjectUrl,
+    })
+    params.onCueProgress(1)
+    return cue
+  } catch {
+    params.onCueProgress(0)
+    return null
+  }
+}
+
 async function generateAudiobookCueBatch(params: {
   cues: AudiobookSfxCue[]
   libraryMatches: AudiobookSfxLibraryMatch[]
+  freesoundMatches: FreesoundCueMatch[]
+  preferFreesoundOriginals: boolean
   modelLabel: string
   musicModel: MusicgenModelId
   requestedDuration: number
@@ -1778,9 +2152,10 @@ async function generateAudiobookCueBatch(params: {
     cue: AudiobookSfxCue,
     index: number,
     total: number,
-    source: 'generated' | 'library',
+    source: 'generated' | 'library' | 'freesound',
   ) => void
   onCueProgress: (index: number, total: number, fraction: number | null) => void
+  onCueCompleted?: (cue: AudiobookSfxCue, generatedCue: GeneratedAudiobookCue) => Promise<void>
   trackObjectUrl: (url: string) => void
   untrackObjectUrl: (url: string) => void
 }): Promise<AudiobookCueBatchResult> {
@@ -1789,30 +2164,39 @@ async function generateAudiobookCueBatch(params: {
     placements: [],
     savedMediaIds: [],
     libraryMatchCount: 0,
+    freesoundMatchCount: 0,
   }
   const libraryMatchesByCueId = new Map(params.libraryMatches.map((match) => [match.cue.id, match]))
+  const freesoundMatchesByCueId = new Map(
+    params.freesoundMatches.map((match) => [match.cue.id, match]),
+  )
 
   for (const [index, cue] of params.cues.entries()) {
     if (params.signal.aborted) {
       throw new DOMException('Audiobook sound effect generation cancelled', 'AbortError')
     }
 
-    const libraryMatch = libraryMatchesByCueId.get(cue.id)
-    if (libraryMatch) {
-      params.onCueStart(cue, index, params.cues.length, 'library')
-      const libraryCue = await resolveAudiobookLibraryCue({
-        match: libraryMatch,
-        requestedDuration: params.requestedDuration,
-        narrationItem: params.narrationItem,
-        timelineFps: params.timelineFps,
-      })
-      params.onCueProgress(index, params.cues.length, libraryCue ? 1 : 0)
-      if (libraryCue) {
-        result.libraryMatchCount += 1
-        result.savedMediaIds.push(libraryCue.mediaId)
-        result.placements.push(libraryCue.placement)
-        continue
-      }
+    const existingCue = await resolveExistingAudiobookCue({
+      libraryMatch: libraryMatchesByCueId.get(cue.id),
+      freesoundMatch: freesoundMatchesByCueId.get(cue.id),
+      preferFreesoundOriginals: params.preferFreesoundOriginals,
+      projectId: params.projectId,
+      mediaLibraryService: params.mediaLibraryService,
+      narrationItem: params.narrationItem,
+      timelineFps: params.timelineFps,
+      requestedDuration: params.requestedDuration,
+      signal: params.signal,
+      onCueStart: (source) => params.onCueStart(cue, index, params.cues.length, source),
+      onCueProgress: (fraction) => params.onCueProgress(index, params.cues.length, fraction),
+      trackObjectUrl: params.trackObjectUrl,
+    })
+    if (existingCue) {
+      if (existingCue.source === 'library') result.libraryMatchCount += 1
+      if (existingCue.source === 'freesound') result.freesoundMatchCount += 1
+      result.savedMediaIds.push(existingCue.mediaId)
+      result.placements.push(existingCue.placement)
+      await params.onCueCompleted?.(cue, existingCue)
+      continue
     }
 
     params.onCueStart(cue, index, params.cues.length, 'generated')
@@ -1835,6 +2219,7 @@ async function generateAudiobookCueBatch(params: {
     result.savedMediaIds.push(generatedCue.mediaId)
     if (generatedCue.generation) result.generations.push(generatedCue.generation)
     result.placements.push(generatedCue.placement)
+    await params.onCueCompleted?.(cue, generatedCue)
   }
 
   return result
@@ -1854,6 +2239,8 @@ export const AiPanel = memo(function AiPanel() {
   const timelineTransitions = useTimelineStore((state) => state.transitions)
   const timelineFps = useTimelineStore((state) => state.fps)
   const selectedItemIds = useSelectionStore((state) => state.selectedItemIds)
+  const currentProject = useProjectStore((state) => state.currentProject)
+  const updateStudioAudioProduction = useProjectStore((state) => state.updateStudioAudioProduction)
 
   const [ttsText, setTtsText] = useState(() => t('editor.aiPanel.defaultTtsPrompt'))
   const [ttsEngine, setTtsEngine] = useState<StoredTtsEngine>(() => getStoredTtsEngine())
@@ -1898,7 +2285,16 @@ export const AiPanel = memo(function AiPanel() {
   const [audiobookPrepareDepth, setAudiobookPrepareDepth] = useState(true)
   const [audiobookApplyFinishing, setAudiobookApplyFinishing] = useState(true)
   const [audiobookAutoMusicBed, setAudiobookAutoMusicBed] = useState(true)
-  const [audiobookUseSfxLibrary, setAudiobookUseSfxLibrary] = useState(true)
+  const [audiobookUseSfxLibrary, setAudiobookUseSfxLibrary] = useState(false)
+  const [audiobookUseFreesound, setAudiobookUseFreesound] = useState(true)
+  const [audiobookUsePixabayBroll, setAudiobookUsePixabayBroll] = useState(false)
+  const [freesoundLicensePolicy, setFreesoundLicensePolicy] = useState<StudioAudioLicensePolicy>(
+    () => currentProject?.studioAudioProduction?.licensePolicy ?? 'cc0-only',
+  )
+  const [freesoundStatus, setFreesoundStatus] = useState<FreesoundProviderStatus | null>(null)
+  const [freesoundStatusError, setFreesoundStatusError] = useState<string | null>(null)
+  const [freesoundOauthCode, setFreesoundOauthCode] = useState('')
+  const [isFreesoundConnecting, setIsFreesoundConnecting] = useState(false)
   const [audiobookAuditionSfx, setAudiobookAuditionSfx] = useState(true)
   const [audiobookPlan, setAudiobookPlan] = useState<AudiobookSfxCue[]>([])
   const [audiobookReadiness, setAudiobookReadiness] = useState<CinematicReadinessScore | null>(null)
@@ -1945,6 +2341,28 @@ export const AiPanel = memo(function AiPanel() {
   useEffect(() => {
     setStoredTtsEngine(ttsEngine)
   }, [ttsEngine])
+
+  useEffect(() => {
+    if (!audiobookSectionOpen) return
+    let cancelled = false
+    void freesoundStudioAudioService
+      .getStatus()
+      .then((status) => {
+        if (cancelled) return
+        setFreesoundStatus(status)
+        setFreesoundStatusError(null)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setFreesoundStatus(null)
+        setFreesoundStatusError(
+          error instanceof Error ? error.message : 'Studio Audio backend is unavailable.',
+        )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [audiobookSectionOpen])
 
   const isKokoroSupported = kokoroTtsService.isSupported()
   const isMossSupported = mossTtsService.isSupported()
@@ -2004,6 +2422,14 @@ export const AiPanel = memo(function AiPanel() {
         !/audiobook\s*sfx|sfx/i.test(item.label ?? ''),
     ).length
   }, [audiobookNarrationItem, timelineItems])
+  const studioAudioCredits = useMemo(
+    () => collectStudioAudioCredits(timelineItems, currentProjectId ?? '', timelineFps),
+    [currentProjectId, timelineFps, timelineItems],
+  )
+  const studioAudioItems = useMemo(
+    () => timelineItems.filter((item) => item.type === 'audio' && item.studioAudioSource),
+    [timelineItems],
+  )
   const audiobookTimelineAudit = useMemo<TimelineCinematicAuditScore | null>(() => {
     if (!audiobookNarrationItem) return null
 
@@ -2427,6 +2853,18 @@ export const AiPanel = memo(function AiPanel() {
     try {
       const plan = await buildAudiobookCuePlan()
       if (plan) {
+        if (currentProjectId) {
+          await updateStudioAudioProduction(
+            currentProjectId,
+            createStudioAudioProductionState({
+              cues: plan.cues,
+              transcript: plan.transcript,
+              policy: freesoundLicensePolicy,
+              credits: studioAudioCredits,
+              stage: 'planning',
+            }),
+          )
+        }
         setAudiobookProgress(
           t('editor.aiPanel.audiobookPlanReady', {
             defaultValue: `Planned ${plan.cues.length} sound effects`,
@@ -2446,11 +2884,89 @@ export const AiPanel = memo(function AiPanel() {
       setAudiobookReadiness(null)
       setAudiobookProgress(null)
     }
-  }, [audiobookNarrationItem, buildAudiobookCuePlan, t])
+  }, [
+    audiobookNarrationItem,
+    buildAudiobookCuePlan,
+    currentProjectId,
+    freesoundLicensePolicy,
+    studioAudioCredits,
+    t,
+    updateStudioAudioProduction,
+  ])
 
   const handleAudiobookCancel = useCallback(() => {
     audiobookAbortRef.current?.abort()
   }, [])
+
+  const refreshFreesoundStatus = useCallback(async () => {
+    const status = await freesoundStudioAudioService.getStatus()
+    setFreesoundStatus(status)
+    setFreesoundStatusError(null)
+  }, [])
+
+  const handleFreesoundAuthorize = useCallback(async () => {
+    setFreesoundStatusError(null)
+    try {
+      const authorization = await freesoundStudioAudioService.getAuthorization()
+      window.open(authorization.authorizeUrl, '_blank', 'noopener,noreferrer')
+    } catch (error) {
+      setFreesoundStatusError(
+        error instanceof Error ? error.message : 'Could not start Freesound authorization.',
+      )
+    }
+  }, [])
+
+  const handleFreesoundExchange = useCallback(async () => {
+    const code = freesoundOauthCode.trim()
+    if (!code) return
+    setIsFreesoundConnecting(true)
+    setFreesoundStatusError(null)
+    try {
+      await freesoundStudioAudioService.exchangeCode(code)
+      setFreesoundOauthCode('')
+      await refreshFreesoundStatus()
+    } catch (error) {
+      setFreesoundStatusError(
+        error instanceof Error ? error.message : 'Could not connect Freesound.',
+      )
+    } finally {
+      setIsFreesoundConnecting(false)
+    }
+  }, [freesoundOauthCode, refreshFreesoundStatus])
+
+  const handleCopyStudioAudioCredits = useCallback(async () => {
+    await navigator.clipboard.writeText(formatYouTubeStudioAudioCredits(studioAudioCredits))
+    showNotification({
+      type: 'success',
+      message: 'Audio credits copied for YouTube.',
+    })
+  }, [showNotification, studioAudioCredits])
+
+  const handleApproveSafeStudioAudio = useCallback(() => {
+    for (const item of studioAudioItems) {
+      const source = item.studioAudioSource
+      if (!source || !isStudioAudioLicenseAllowed(source, freesoundLicensePolicy)) continue
+      useTimelineStore.getState().updateItem(item.id, {
+        studioAudioSource: { ...source, approval: 'approved' },
+      })
+    }
+    showNotification({
+      type: 'success',
+      message: 'Safe Studio Audio recommendations approved.',
+    })
+  }, [freesoundLicensePolicy, showNotification, studioAudioItems])
+
+  const handleReduceStudioAudio = useCallback(() => {
+    for (const item of studioAudioItems) {
+      useTimelineStore.getState().updateItem(item.id, {
+        volume: Math.max(-60, (item.volume ?? 0) - 3),
+      })
+    }
+    showNotification({
+      type: 'success',
+      message: 'Studio Audio effects reduced by 3 dB.',
+    })
+  }, [showNotification, studioAudioItems])
 
   // fallow-ignore-next-line complexity
   const handleAudiobookGenerate = useCallback(async () => {
@@ -2484,11 +3000,66 @@ export const AiPanel = memo(function AiPanel() {
     )
     setAudiobookProgressPct(null)
 
+    let activePlan: {
+      transcript: MediaTranscript
+      cues: AudiobookSfxCue[]
+    } | null = null
+    let checkpointRecoveredCues: StudioAudioRecoveredCue[] = []
+    let checkpointCompletedCueIds: string[] = []
+
     try {
       const plan = await buildAudiobookCuePlan()
       if (!plan) return
+      activePlan = plan
+
+      if (audiobookUseFreesound && !freesoundStatus?.searchConfigured) {
+        throw new Error(
+          'Licensed Freesound SFX is enabled, but the backend API key is not connected.',
+        )
+      }
+      if (audiobookUsePixabayBroll && !freesoundStatus?.pixabayConfigured) {
+        throw new Error(
+          'Automatic Pixabay B-roll is enabled, but the backend API key is not connected.',
+        )
+      }
 
       const { mediaLibraryService } = await importMediaLibraryService()
+
+      const pixabayBroll = await insertAutomaticPixabayBroll({
+        shouldInsert: audiobookUsePixabayBroll,
+        transcript: plan.transcript,
+        narrationItem: readiness.narrationItem,
+        projectId: readiness.projectId,
+        projectWidth: currentProject?.metadata.width ?? 1920,
+        projectHeight: currentProject?.metadata.height ?? 1080,
+        fps: timelineFps,
+        mediaLibraryService,
+        signal: abortController.signal,
+        onProgress: (message, fraction) => {
+          setAudiobookProgress(message)
+          setAudiobookProgressPct(fraction ?? null)
+        },
+      })
+      if (audiobookApplyCinematicMotion && pixabayBroll.imageItemIds.length > 0) {
+        applyCompoundParallaxCameraToSelectedImages(pixabayBroll.imageItemIds)
+      }
+      applyAudiobookCinematicFinishingIfNeeded({
+        shouldFinish: audiobookApplyFinishing,
+        profile: audiobookEditingProfile,
+        selectedItemIds: pixabayBroll.itemIds,
+        depthPrepResult: null,
+      })
+      const productionVisualItemIds = [...new Set([...selectedItemIds, ...pixabayBroll.itemIds])]
+
+      const storedRecovery = getCompatibleStudioAudioRecovery(
+        currentProject?.studioAudioProduction,
+        plan.cues,
+      )
+      const restoredRecovery = await restoreStudioAudioRecoveredPlacements(storedRecovery)
+      const restoredCueIds = new Set(restoredRecovery.map((entry) => entry.cueId))
+      checkpointRecoveredCues = storedRecovery.filter((cue) => restoredCueIds.has(cue.cueId))
+      checkpointCompletedCueIds = [...restoredCueIds]
+      const pendingCues = plan.cues.filter((cue) => !restoredCueIds.has(cue.id))
 
       await captionAudiobookImagesForStoryIfNeeded({
         shouldCaption: audiobookMatchImages,
@@ -2516,12 +3087,12 @@ export const AiPanel = memo(function AiPanel() {
           setAudiobookProgressPct(fraction ?? null)
         },
         t,
-        selectedItemIds,
+        selectedItemIds: productionVisualItemIds,
       })
       const transitionLayerCount = applyAudiobookCinematicTransitionsIfNeeded({
         shouldApply: audiobookApplyTransitions,
         profile: audiobookEditingProfile,
-        selectedItemIds,
+        selectedItemIds: productionVisualItemIds,
         depthPrepResult,
         narrationItemId: readiness.narrationItem.id,
         fps: timelineFps,
@@ -2552,7 +3123,7 @@ export const AiPanel = memo(function AiPanel() {
         untrackObjectUrl: (url) => generationUrlsRef.current.delete(url),
       })
       const libraryMatches = audiobookUseSfxLibrary
-        ? matchAudiobookSfxLibraryAssets(plan.cues, mediaItems, {
+        ? matchAudiobookSfxLibraryAssets(pendingCues, mediaItems, {
             excludeMediaIds: readiness.narrationItem.mediaId
               ? [readiness.narrationItem.mediaId]
               : [],
@@ -2568,9 +3139,45 @@ export const AiPanel = memo(function AiPanel() {
         setAudiobookProgressPct(null)
       }
 
+      const locallyMatchedCueIds = new Set(libraryMatches.map((match) => match.cue.id))
+      let freesoundMatches: FreesoundCueMatch[] = []
+      if (audiobookUseFreesound && freesoundStatus?.searchConfigured) {
+        setAudiobookProgress(
+          t('editor.aiPanel.audiobookSearchingFreesound', {
+            defaultValue: 'Searching the licensed Freesound studio library',
+          }),
+        )
+        setAudiobookProgressPct(null)
+        try {
+          freesoundMatches = await freesoundStudioAudioService.matchCues(
+            pendingCues.filter((cue) => !locallyMatchedCueIds.has(cue.id)),
+            freesoundLicensePolicy,
+            abortController.signal,
+          )
+        } catch (error) {
+          setFreesoundStatusError(
+            error instanceof Error
+              ? `${error.message} No synthetic replacements were inserted.`
+              : 'Freesound search failed. No synthetic replacements were inserted.',
+          )
+          throw error
+        }
+        const matchedCueIds = new Set(freesoundMatches.map((match) => match.cue.id))
+        const unmatchedCues = pendingCues.filter(
+          (cue) => !locallyMatchedCueIds.has(cue.id) && !matchedCueIds.has(cue.id),
+        )
+        if (unmatchedCues.length > 0) {
+          throw new Error(
+            `Freesound could not find a CC0 studio recording for ${unmatchedCues.length} planned cue${unmatchedCues.length === 1 ? '' : 's'}. No synthetic replacement was inserted.`,
+          )
+        }
+      }
+
       const batch = await generateAudiobookCueBatch({
-        cues: plan.cues,
+        cues: pendingCues,
         libraryMatches,
+        freesoundMatches,
+        preferFreesoundOriginals: Boolean(freesoundStatus?.oauthConnected),
         modelLabel,
         musicModel,
         requestedDuration: audiobookSfxDuration,
@@ -2584,7 +3191,9 @@ export const AiPanel = memo(function AiPanel() {
           const defaultValue =
             source === 'library'
               ? `Using library SFX ${index + 1}/${total}: ${cue.label}`
-              : `Generating SFX ${index + 1}/${total}: ${cue.label}`
+              : source === 'freesound'
+                ? `Downloading licensed Freesound ${index + 1}/${total}: ${cue.label}`
+                : `Generating SFX ${index + 1}/${total}: ${cue.label}`
           setAudiobookProgress(
             t('editor.aiPanel.audiobookGeneratingCue', {
               defaultValue,
@@ -2599,25 +3208,68 @@ export const AiPanel = memo(function AiPanel() {
         onCueProgress: (index, total, fraction) => {
           setAudiobookProgressPct((index + (fraction ?? 0)) / total)
         },
+        onCueCompleted: async (cue, generatedCue) => {
+          checkpointCompletedCueIds = [...new Set([...checkpointCompletedCueIds, cue.id])]
+          checkpointRecoveredCues = [
+            ...checkpointRecoveredCues.filter((entry) => entry.cueId !== cue.id),
+            createStudioAudioRecoveredCue(cue, generatedCue),
+          ]
+          await updateStudioAudioProduction(
+            readiness.projectId,
+            createStudioAudioProductionState({
+              cues: plan.cues,
+              transcript: plan.transcript,
+              policy: freesoundLicensePolicy,
+              stage: 'downloading',
+              completedCueIds: checkpointCompletedCueIds,
+              recoveredCues: checkpointRecoveredCues,
+            }),
+          )
+        },
         trackObjectUrl: (url) => generationUrlsRef.current.add(url),
         untrackObjectUrl: (url) => generationUrlsRef.current.delete(url),
       })
 
       await loadMediaItems()
-      selectMedia(getAudiobookGeneratedMediaIds({ depthPrepResult, musicBedResult, batch }))
+      selectMedia(
+        getAudiobookGeneratedMediaIds({
+          depthPrepResult,
+          musicBedResult,
+          batch,
+        }),
+      )
       setMusicGenerations((previous) => [
         ...getAudiobookGeneratedAudioHistoryEntries({ musicBedResult, batch }),
         ...previous,
       ])
 
       const result = insertAudiobookSfxAndDuckMusic({
-        placements: batch.placements,
+        placements: [...restoredRecovery.map((entry) => entry.placement), ...batch.placements],
         narrationItemId: readiness.narrationItem.id,
       })
+      const completedStudioAudioCredits = collectStudioAudioCredits(
+        useTimelineStore.getState().items,
+        readiness.projectId,
+        timelineFps,
+      )
+      await updateStudioAudioProduction(
+        readiness.projectId,
+        createStudioAudioProductionState({
+          cues: plan.cues,
+          transcript: plan.transcript,
+          policy: freesoundLicensePolicy,
+          credits: completedStudioAudioCredits,
+          stage: 'ready',
+          completedCueIds: plan.cues.map((cue) => cue.id),
+        }),
+      )
       useSelectionStore
         .getState()
         .selectItems([
-          ...new Set([...selectedItemIds, ...(depthPrepResult?.inserted.visibleItemIds ?? [])]),
+          ...new Set([
+            ...productionVisualItemIds,
+            ...(depthPrepResult?.inserted.visibleItemIds ?? []),
+          ]),
         ])
       const insertedMusicBedCount = musicBedResult?.insertResult.itemCount ?? 0
       const insertedProgress = formatAudiobookInsertedProgressWithDepth(
@@ -2627,12 +3279,16 @@ export const AiPanel = memo(function AiPanel() {
         transitionLayerCount,
       )
       const insertedProgressWithSources =
-        batch.libraryMatchCount > 0
-          ? `${insertedProgress} (${batch.libraryMatchCount} from imported SFX)`
+        batch.libraryMatchCount + batch.freesoundMatchCount > 0
+          ? `${insertedProgress} (${batch.libraryMatchCount} imported, ${batch.freesoundMatchCount} licensed Freesound)`
           : insertedProgress
+      const insertedProgressWithBroll =
+        pixabayBroll.itemIds.length > 0
+          ? `${insertedProgressWithSources} (${pixabayBroll.itemIds.length} automatic Pixabay B-roll clips)`
+          : insertedProgressWithSources
       setAudiobookProgress(
         t('editor.aiPanel.audiobookInserted', {
-          defaultValue: insertedProgressWithSources,
+          defaultValue: insertedProgressWithBroll,
           count: result.itemCount,
           depthLayerCount: depthPrepResult?.inserted.layerCount ?? 0,
           scoreCount: insertedMusicBedCount,
@@ -2642,8 +3298,8 @@ export const AiPanel = memo(function AiPanel() {
       setAudiobookProgressPct(1)
       const notificationMessage = formatAudiobookInsertedNotification(result, insertedMusicBedCount)
       const notificationMessageWithSources =
-        batch.libraryMatchCount > 0
-          ? `${notificationMessage} Used ${batch.libraryMatchCount} imported SFX.`
+        batch.libraryMatchCount + batch.freesoundMatchCount > 0
+          ? `${notificationMessage} Used ${batch.libraryMatchCount} imported SFX and ${batch.freesoundMatchCount} licensed Freesound recordings.`
           : notificationMessage
       const completedNotification =
         transitionLayerCount > 0
@@ -2663,6 +3319,29 @@ export const AiPanel = memo(function AiPanel() {
         }),
       })
     } catch (error) {
+      if (activePlan) {
+        const isCancelled = error instanceof DOMException && error.name === 'AbortError'
+        try {
+          await updateStudioAudioProduction(
+            readiness.projectId,
+            createStudioAudioProductionState({
+              cues: activePlan.cues,
+              transcript: activePlan.transcript,
+              policy: freesoundLicensePolicy,
+              stage: isCancelled ? 'cancelled' : 'failed',
+              completedCueIds: checkpointCompletedCueIds,
+              recoveredCues: checkpointRecoveredCues,
+              ...(isCancelled
+                ? {}
+                : {
+                    error: error instanceof Error ? error.message : 'Studio Audio job failed',
+                  }),
+            }),
+          )
+        } catch {
+          // Preserve the original generation error when checkpoint persistence also fails.
+        }
+      }
       applyAudiobookGenerateFailure({
         error,
         fallback: t('editor.aiPanel.audiobookGenerateFailed', {
@@ -2685,13 +3364,22 @@ export const AiPanel = memo(function AiPanel() {
     audiobookEditingProfile,
     audiobookAutoMusicBed,
     audiobookUseSfxLibrary,
+    audiobookUseFreesound,
+    audiobookUsePixabayBroll,
     audiobookAuditionSfx,
     audiobookMusicBedCount,
     audiobookNarrationItem,
     audiobookNarrationDuration,
     audiobookSfxDuration,
     buildAudiobookCuePlan,
+    currentProject?.studioAudioProduction,
+    currentProject?.metadata.height,
+    currentProject?.metadata.width,
     currentProjectId,
+    freesoundLicensePolicy,
+    freesoundStatus?.oauthConnected,
+    freesoundStatus?.searchConfigured,
+    freesoundStatus?.pixabayConfigured,
     isMusicSupported,
     loadMediaItems,
     mediaItems,
@@ -2702,6 +3390,7 @@ export const AiPanel = memo(function AiPanel() {
     showNotification,
     t,
     timelineFps,
+    updateStudioAudioProduction,
   ])
 
   const updateGenerationInList = useCallback(
@@ -3216,6 +3905,11 @@ export const AiPanel = memo(function AiPanel() {
                       defaultValue: 'Cinematic story',
                     })}
                   </SelectItem>
+                  <SelectItem value="compound-parallax">
+                    {t('editor.aiPanel.audiobookProfileCompoundParallax', {
+                      defaultValue: 'High-end compound parallax',
+                    })}
+                  </SelectItem>
                   <SelectItem value="documentary">
                     {t('editor.aiPanel.audiobookProfileDocumentary', {
                       defaultValue: 'Studio documentary',
@@ -3249,6 +3943,121 @@ export const AiPanel = memo(function AiPanel() {
                 unit="s"
                 disabled={isAudiobookGenerating}
               />
+            </div>
+
+            <div className="space-y-1 rounded-lg border border-border bg-secondary/20 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="ai-audiobook-use-pixabay" className="text-xs">
+                  {t('editor.aiPanel.audiobookUsePixabayBroll', {
+                    defaultValue: 'Automatic Pixabay B-roll',
+                  })}
+                </Label>
+                <Switch
+                  id="ai-audiobook-use-pixabay"
+                  checked={audiobookUsePixabayBroll}
+                  onCheckedChange={setAudiobookUsePixabayBroll}
+                  disabled={isAudiobookGenerating || !freesoundStatus?.pixabayConfigured}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {freesoundStatus?.pixabayConfigured
+                  ? 'Narration matched automatically, videos first with HD still fallback'
+                  : 'Backend API key required'}
+              </p>
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border bg-secondary/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="ai-audiobook-use-freesound" className="text-xs">
+                  {t('editor.aiPanel.audiobookUseFreesound', {
+                    defaultValue: 'Licensed Freesound studio SFX',
+                  })}
+                </Label>
+                <Switch
+                  id="ai-audiobook-use-freesound"
+                  checked={audiobookUseFreesound}
+                  onCheckedChange={setAudiobookUseFreesound}
+                  disabled={isAudiobookGenerating}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-muted-foreground">
+                  {freesoundStatus?.searchConfigured
+                    ? freesoundStatus.oauthConnected
+                      ? 'Original files connected'
+                      : 'High-quality previews ready'
+                    : 'Backend API key required'}
+                </span>
+                <Select
+                  value={freesoundLicensePolicy}
+                  onValueChange={(value) => {
+                    if (value === 'youtube-safe' || value === 'cc0-only') {
+                      setFreesoundLicensePolicy(value)
+                    }
+                  }}
+                  disabled={isAudiobookGenerating}
+                >
+                  <SelectTrigger
+                    className="h-7 w-[8.5rem] text-xs"
+                    aria-label="Freesound licence policy"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="youtube-safe">CC0 + CC BY</SelectItem>
+                    <SelectItem value="cc0-only">CC0 only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {freesoundStatus?.oauthConfigured && !freesoundStatus.oauthConnected && (
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      void handleFreesoundAuthorize()
+                    }}
+                    className="h-7 shrink-0 gap-1.5"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Connect
+                  </Button>
+                  <Input
+                    value={freesoundOauthCode}
+                    onChange={(event) => setFreesoundOauthCode(event.target.value)}
+                    placeholder="Authorization code"
+                    aria-label="Freesound authorization code"
+                    className="h-7 min-w-0 text-xs"
+                    disabled={isFreesoundConnecting}
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      void handleFreesoundExchange()
+                    }}
+                    disabled={!freesoundOauthCode.trim() || isFreesoundConnecting}
+                    className="h-7 w-7 shrink-0"
+                    aria-label="Submit Freesound authorization code"
+                  >
+                    {isFreesoundConnecting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {freesoundStatusError && (
+                <p className="text-[11px] leading-relaxed text-destructive">
+                  {freesoundStatusError}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/20 px-3 py-2">
@@ -3390,7 +4199,9 @@ export const AiPanel = memo(function AiPanel() {
                       'h-full rounded-full transition-[width] duration-300',
                       getCinematicReadinessBarClass(audiobookReadiness.grade),
                     )}
-                    style={{ width: `${Math.round(audiobookReadiness.score * 10)}%` }}
+                    style={{
+                      width: `${Math.round(audiobookReadiness.score * 10)}%`,
+                    }}
                   />
                 </div>
                 <p className="leading-relaxed opacity-90">{audiobookReadiness.summary}</p>
@@ -3521,7 +4332,9 @@ export const AiPanel = memo(function AiPanel() {
                       'h-full rounded-full transition-[width] duration-300',
                       getCinematicReadinessBarClass(audiobookTimelineAudit.grade),
                     )}
-                    style={{ width: `${Math.round(audiobookTimelineAudit.score * 10)}%` }}
+                    style={{
+                      width: `${Math.round(audiobookTimelineAudit.score * 10)}%`,
+                    }}
                   />
                 </div>
                 <p className="leading-relaxed opacity-90">{audiobookTimelineAudit.summary}</p>
@@ -3759,6 +4572,103 @@ export const AiPanel = memo(function AiPanel() {
                       </p>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {studioAudioCredits.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-border bg-secondary/20 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">
+                    {t('editor.aiPanel.studioAudioCredits', {
+                      defaultValue: 'Audio credits',
+                    })}
+                  </span>
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {studioAudioCredits.length}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleApproveSafeStudioAudio}
+                    className="h-7 flex-1 gap-1.5"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Approve safe
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleReduceStudioAudio}
+                    className="h-7 shrink-0"
+                  >
+                    -3 dB
+                  </Button>
+                </div>
+                <div className="space-y-1.5">
+                  {studioAudioItems.slice(0, 6).map((item) => {
+                    const source = item.studioAudioSource!
+                    return (
+                      <div
+                        key={item.id}
+                        className="space-y-1 rounded border border-border bg-background/35 px-2 py-1.5 text-[11px]"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-medium">{source.title}</span>
+                          <span className="shrink-0 font-mono text-muted-foreground">
+                            {formatTime(item.from / Math.max(1, timelineFps))}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-muted-foreground">
+                          <span className="truncate">
+                            {source.creator} / {source.licenseCode.toUpperCase()}
+                          </span>
+                          <a
+                            href={source.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="shrink-0 text-primary hover:underline"
+                          >
+                            Source
+                          </a>
+                        </div>
+                        <p className="line-clamp-2 text-muted-foreground">{source.reason}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      void handleCopyStudioAudioCredits()
+                    }}
+                    className="h-7 flex-1 gap-1.5"
+                  >
+                    <ClipboardCopy className="h-3.5 w-3.5" />
+                    Copy YouTube credits
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() =>
+                      downloadStudioAudioCredits(
+                        studioAudioCredits,
+                        currentProject?.name ?? 'freecut-project',
+                      )
+                    }
+                    className="h-7 w-7 shrink-0"
+                    aria-label="Download audio credits"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
             )}

@@ -68,6 +68,22 @@ describe('audiobook actions', () => {
         sourceDurationFrames: 180,
         sourceFps: 30,
         volume: -3,
+        studioAudioSource: {
+          provider: 'freesound',
+          soundId: 123,
+          title: 'Room ambience',
+          creator: 'recordist',
+          sourceUrl: 'https://freesound.org/s/123/',
+          license: 'CC0 1.0',
+          licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
+          licenseCode: 'cc0',
+          retrievedAt: '2026-07-10T00:00:00.000Z',
+          sourceKind: 'preview',
+          reason: 'The scene is indoors.',
+          confidence: 0.9,
+          approval: 'approved',
+          locked: true,
+        },
       },
       {
         mediaId: 'media-hit',
@@ -112,5 +128,11 @@ describe('audiobook actions', () => {
     ])
     expect(sfxItems.find((item) => item.label === 'Story hit')?.audioFadeIn).toBe(0.005)
     expect(sfxItems.find((item) => item.label === 'Scene ambience')?.audioFadeIn).toBe(0.45)
+    expect(
+      sfxItems.find((item) => item.label === 'Scene ambience')?.studioAudioSource,
+    ).toMatchObject({
+      soundId: 123,
+      licenseCode: 'cc0',
+    })
   })
 })

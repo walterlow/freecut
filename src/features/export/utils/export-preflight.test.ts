@@ -615,4 +615,76 @@ describe('assessExportPreflight', () => {
       }),
     )
   })
+
+  it('blocks export for incompatible Studio Audio licences', async () => {
+    const result = await assessExportPreflight({
+      settings: baseSettings,
+      fps: 30,
+      composition: composition([
+        audioItem({
+          studioAudioSource: {
+            provider: 'freesound',
+            soundId: 5,
+            title: 'Restricted sound',
+            creator: 'recordist',
+            sourceUrl: 'https://freesound.org/s/5/',
+            license: 'CC BY-NC 4.0',
+            licenseUrl: 'https://creativecommons.org/licenses/by-nc/4.0/',
+            licenseCode: 'non-commercial',
+            retrievedAt: '2026-07-10T00:00:00.000Z',
+            sourceKind: 'preview',
+            reason: 'Test',
+            confidence: 0.9,
+            approval: 'recommended',
+            locked: false,
+          },
+        }),
+      ]),
+      durationFrames: 300,
+      supportedVideoCodecs: ['avc'],
+      workerAvailable: true,
+      offlineAudioContextAvailable: true,
+    })
+
+    expect(result.canExport).toBe(false)
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: 'studio-audio-license-block', severity: 'error' }),
+    )
+  })
+
+  it('warns when CC BY Studio Audio needs publishing attribution', async () => {
+    const result = await assessExportPreflight({
+      settings: baseSettings,
+      fps: 30,
+      composition: composition([
+        audioItem({
+          studioAudioSource: {
+            provider: 'freesound',
+            soundId: 6,
+            title: 'Attributed sound',
+            creator: 'recordist',
+            sourceUrl: 'https://freesound.org/s/6/',
+            license: 'CC BY 4.0',
+            licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+            licenseCode: 'cc-by',
+            retrievedAt: '2026-07-10T00:00:00.000Z',
+            sourceKind: 'preview',
+            reason: 'Test',
+            confidence: 0.9,
+            approval: 'approved',
+            locked: true,
+          },
+        }),
+      ]),
+      durationFrames: 300,
+      supportedVideoCodecs: ['avc'],
+      workerAvailable: true,
+      offlineAudioContextAvailable: true,
+    })
+
+    expect(result.canExport).toBe(true)
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: 'studio-audio-attribution-required', severity: 'warning' }),
+    )
+  })
 })

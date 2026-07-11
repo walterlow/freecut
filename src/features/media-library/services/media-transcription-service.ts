@@ -119,7 +119,10 @@ interface QueuedTranscriptionJob {
   resolve: (value: MediaTranscript) => void
   reject: (reason?: unknown) => void
   state: QueueState
-  stream: { collect(): Promise<TranscriptSegment[]>; cancel(message?: string): void } | null
+  stream: {
+    collect(): Promise<TranscriptSegment[]>
+    cancel(message?: string): void
+  } | null
   cancelled: boolean
   cancelMessage: string
 }
@@ -494,7 +497,13 @@ class MediaTranscriptionService {
   }
 
   private async resolveTranscriptionBlob(
-    media: { id: string; fileName: string; mimeType: string; codec: string; audioCodec?: string },
+    media: {
+      id: string
+      fileName: string
+      mimeType: string
+      codec: string
+      audioCodec?: string
+    },
     sourceBlob: Blob,
   ): Promise<Blob> {
     const transcriptionCodec = media.mimeType.startsWith('audio/')
@@ -597,6 +606,11 @@ class MediaTranscriptionService {
           startSeconds: segment.start,
           endSeconds: segment.end,
           text: segment.text,
+          words: segment.words?.map((word) => ({
+            text: word.text,
+            startSeconds: word.start,
+            endSeconds: word.end,
+          })),
         })),
         clip,
         timelineFps: timeline.fps,

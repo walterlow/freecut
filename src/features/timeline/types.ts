@@ -24,6 +24,7 @@ import type {
 } from '@/types/keyframe'
 import type { MaskVertex } from '@/types/masks'
 import type { AutoKeyframeOperation } from '@/features/timeline/deps/keyframes'
+import type { StudioAudioSourceMetadata } from '@/types/studio-audio'
 
 export type TransformHistoryOperation =
   | 'move'
@@ -114,6 +115,7 @@ export interface AudiobookSoundEffectPlacement {
   sourceDurationFrames?: number
   sourceFps?: number
   volume?: number
+  studioAudioSource?: StudioAudioSourceMetadata
 }
 
 export interface AudiobookMusicBedPlacement {

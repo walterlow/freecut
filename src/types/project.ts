@@ -5,6 +5,7 @@ import type { CropSettings } from './transform'
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids'
 import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 import type { TextMotionSpec } from './text-motion'
+import type { StudioAudioProductionState, StudioAudioSourceMetadata } from './studio-audio'
 
 export interface Project {
   id: string
@@ -33,6 +34,8 @@ export interface Project {
    * Updated when rootFolderHandle is set.
    */
   rootFolderName?: string
+  /** Resumable Studio Audio plan, licence credits, approvals and mix settings. */
+  studioAudioProduction?: StudioAudioProductionState
 }
 
 export interface ProjectTimeline {
@@ -150,6 +153,7 @@ export interface ProjectTimeline {
       audioFadeOutCurveX?: number
       audioPitchSemitones?: number
       audioPitchCents?: number
+      studioAudioSource?: StudioAudioSourceMetadata
       audioEqOutputGainDb?: number
       audioEqBand1Enabled?: boolean
       audioEqBand1Type?: import('./audio').AudioEqBand1Type

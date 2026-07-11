@@ -8,7 +8,7 @@
  * `fillText`/`strokeText` per line reproduces CSS — no per-character drawing.
  */
 
-import type { SubtitleSegmentItem, TextItem } from '@/types/timeline'
+import type { SubtitleSegmentItem, TextItem, TextSpan } from '@/types/timeline'
 import { parseSubtitleCueText } from '@/shared/utils/subtitle-cue-format'
 import {
   layoutTextBlock,
@@ -319,8 +319,7 @@ function paintTextBlockWithMotion(
       // can't rotate in the GPU path, so drop rotation here too for parity.
       const representative = lineUnits?.find((unit) => unit !== null) ?? null
       const state = evaluate(representative, line.fontSize)
-      const underlineMotion =
-        state && state.rotation !== 0 ? { ...state, rotation: 0 } : state
+      const underlineMotion = state && state.rotation !== 0 ? { ...state, rotation: 0 } : state
       if (!underlineMotion || underlineMotion.alpha > 0) {
         ctx.save()
         if (underlineMotion) {
@@ -403,7 +402,16 @@ export function renderTextItem(
       ctx.rect(itemLeft, itemTop, transform.width, transform.height)
       ctx.clip()
     }
-    paintTextBlockWithMotion(ctx, item, transform.width, transform.height, itemLeft, itemTop, rctx, motion)
+    paintTextBlockWithMotion(
+      ctx,
+      item,
+      transform.width,
+      transform.height,
+      itemLeft,
+      itemTop,
+      rctx,
+      motion,
+    )
     ctx.restore()
     return
   }
@@ -465,6 +473,11 @@ export function renderSubtitleSegmentItem(
   if (!activeCue) return
   const parsed = parseSubtitleCueText(activeCue.text)
   if (parsed.isEmpty) return
+  const karaokeSpans = buildKaraokeSpans(activeCue, secondsIntoSegment)
+  const renderedSpans = karaokeSpans ?? parsed.spans
+  const renderedText = karaokeSpans
+    ? karaokeSpans.map((span) => span.text).join('')
+    : parsed.plainText
 
   const ephemeralText: TextItem = {
     id: item.id,
@@ -474,8 +487,8 @@ export function renderSubtitleSegmentItem(
     durationInFrames: item.durationInFrames,
     label: item.label,
     mediaId: item.mediaId,
-    text: parsed.plainText,
-    textSpans: parsed.spans,
+    text: renderedText,
+    textSpans: renderedSpans,
     fontSize: item.fontSize,
     fontFamily: item.fontFamily,
     fontWeight: item.fontWeight,
@@ -494,6 +507,22 @@ export function renderSubtitleSegmentItem(
     transform: item.transform,
   }
   renderTextItem(ctx, ephemeralText, transform, rctx)
+}
+
+function buildKaraokeSpans(
+  cue: SubtitleSegmentItem['cues'][number],
+  seconds: number,
+): TextSpan[] | null {
+  if (!cue.words || cue.words.length === 0) return null
+  const tokens = cue.text.match(/\S+/g) ?? []
+  const activeIndex = cue.words.findIndex(
+    (word) => seconds >= word.startSeconds && seconds < word.endSeconds,
+  )
+  return tokens.map((token, index) => ({
+    text: index === 0 ? token : ` ${token}`,
+    fontWeight: 'bold',
+    color: index === activeIndex ? '#facc15' : '#ffffff',
+  }))
 }
 
 function findActiveSubtitleCue<T extends { startSeconds: number; endSeconds: number }>(

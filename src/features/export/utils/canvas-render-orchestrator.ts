@@ -186,7 +186,9 @@ async function tryPacketRemuxComposition(
   const mediabunny: MediabunnyModule = await import('mediabunny')
   const { Input, Output, BufferTarget, Conversion, ALL_FORMATS } = mediabunny
 
-  const format = (await createOutputFormat(settings.container, { fastStart: true })) as {
+  const format = (await createOutputFormat(settings.container, {
+    fastStart: true,
+  })) as {
     getSupportedVideoCodecs?: () => string[]
     getSupportedAudioCodecs?: () => string[]
   }
@@ -289,7 +291,9 @@ async function tryPacketRemuxComposition(
         throw new Error('No output buffer generated')
       }
 
-      const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) })
+      const blob = new Blob([buffer], {
+        type: getMimeType(settings.container, settings.codec),
+      })
 
       onProgress({
         phase: 'finalizing',
@@ -323,7 +327,9 @@ async function tryPacketRemuxComposition(
       throw new DOMException('Render cancelled', 'AbortError')
     }
 
-    getLog().warn('Packet remux path failed; falling back to frame render', { error })
+    getLog().warn('Packet remux path failed; falling back to frame render', {
+      error,
+    })
     return null
   } finally {
     signal?.removeEventListener('abort', cancelConversion)
@@ -400,7 +406,11 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   })
 
   // Process audio in parallel with setup
-  let audioData: { samples: Float32Array[]; sampleRate: number; channels: number } | null = null
+  let audioData: {
+    samples: Float32Array[]
+    sampleRate: number
+    channels: number
+  } | null = null
   if (await canvasAudio.hasAudioContent(composition)) {
     try {
       audioData = await canvasAudio.processAudio(composition, signal)
@@ -410,7 +420,9 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
         channels: audioData?.channels,
       })
     } catch (error) {
-      getLog().error('Audio processing failed, continuing without audio', { error })
+      getLog().error('Audio processing failed, continuing without audio', {
+        error,
+      })
     }
   }
 
@@ -422,7 +434,9 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   })
 
   // Create output format
-  const format = await createOutputFormat(settings.container, { fastStart: true })
+  const format = await createOutputFormat(settings.container, {
+    fastStart: true,
+  })
 
   // Create buffer target to collect the output
   const target = new BufferTarget()
@@ -525,6 +539,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     bitrate: settings.videoBitrate ?? 10_000_000,
     keyFrameInterval: 2, // Keyframe every 2 seconds for better seeking
     latencyMode: 'quality', // Enables B-frames and consistent frame quality for offline encoding
+    hardwareAcceleration: 'prefer-hardware',
   })
 
   // Add video track
@@ -651,7 +666,10 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
       // Snapshot canvas pixels into a VideoSample. The constructor copies
       // pixel data immediately — the canvas is free for the next render.
-      const sample = new VideoSample(outputCanvas, { timestamp, duration: frameDuration })
+      const sample = new VideoSample(outputCanvas, {
+        timestamp,
+        duration: frameDuration,
+      })
 
       // Kick off encoding in the background. NOT awaited here — it runs
       // concurrently with the next iteration's renderFrame().
@@ -712,7 +730,9 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
       throw new Error('No output buffer generated')
     }
 
-    const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) })
+    const blob = new Blob([buffer], {
+      type: getMimeType(settings.container, settings.codec),
+    })
 
     onProgress({
       phase: 'finalizing',
@@ -912,7 +932,9 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
   })
 
   // Create output format
-  const format = await createOutputFormat(settings.container, { fastStart: true })
+  const format = await createOutputFormat(settings.container, {
+    fastStart: true,
+  })
 
   // Create buffer target to collect the output
   const target = new BufferTarget()

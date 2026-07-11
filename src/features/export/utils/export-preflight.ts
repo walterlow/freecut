@@ -95,6 +95,62 @@ function collectTimelineMediaIds(tracks: TimelineTrack[]): Set<string> {
   return mediaIds
 }
 
+type StudioAudioLicenseStatus = 'none' | 'missing' | 'incompatible' | 'attribution' | 'clear'
+
+function getStudioAudioLicenseStatus(
+  item: NonNullable<TimelineTrack['items']>[number],
+): StudioAudioLicenseStatus {
+  const source = item.studioAudioSource
+  if (!source) return 'none'
+  if (!source.license || !source.licenseUrl || !source.creator || !source.sourceUrl)
+    return 'missing'
+  if (source.licenseCode === 'cc-by') return 'attribution'
+  return source.licenseCode === 'cc0' ? 'clear' : 'incompatible'
+}
+
+function countStudioAudioLicenseStatuses(
+  tracks: TimelineTrack[],
+): Map<StudioAudioLicenseStatus, number> {
+  const counts = new Map<StudioAudioLicenseStatus, number>()
+  for (const item of tracks.flatMap((track) => track.items ?? [])) {
+    const status = getStudioAudioLicenseStatus(item)
+    counts.set(status, (counts.get(status) ?? 0) + 1)
+  }
+  return counts
+}
+
+function addStudioAudioLicenseChecks(
+  checks: ExportPreflightCheck[],
+  tracks: TimelineTrack[],
+): void {
+  const counts = countStudioAudioLicenseStatuses(tracks)
+  const attributedCount = counts.get('attribution') ?? 0
+  const incompatibleCount = counts.get('incompatible') ?? 0
+  const missingMetadataCount = counts.get('missing') ?? 0
+
+  if (missingMetadataCount + incompatibleCount > 0) {
+    checks.push({
+      id: 'studio-audio-license-block',
+      severity: 'error',
+      titleKey: 'export.preflight.checks.studio-audio-license-block.title',
+      detailKey: 'export.preflight.checks.studio-audio-license-block.detail',
+      detailParams: { count: missingMetadataCount + incompatibleCount },
+      fixKey: 'export.preflight.checks.studio-audio-license-block.fix',
+    })
+  }
+
+  if (attributedCount > 0) {
+    checks.push({
+      id: 'studio-audio-attribution-required',
+      severity: 'warning',
+      titleKey: 'export.preflight.checks.studio-audio-attribution-required.title',
+      detailKey: 'export.preflight.checks.studio-audio-attribution-required.detail',
+      detailParams: { count: attributedCount },
+      fixKey: 'export.preflight.checks.studio-audio-attribution-required.fix',
+    })
+  }
+}
+
 function formatEstimatedBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -425,6 +481,7 @@ export async function assessExportPreflight({
 
   addCinematicVideoExportChecks(checks, settings, resolved.clientSettings)
   addCinematicEditReadinessChecks(checks, composition, resolved.clientSettings)
+  addStudioAudioLicenseChecks(checks, tracks)
 
   let predictedRenderPath: ExportPreflightResult['predictedRenderPath'] = 'worker'
 

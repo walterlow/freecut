@@ -7,6 +7,7 @@ import {
 describe('cinematic editing profiles', () => {
   it('recognizes the supported automatic editing modes', () => {
     expect(isCinematicEditingProfile('story')).toBe(true)
+    expect(isCinematicEditingProfile('compound-parallax')).toBe(true)
     expect(isCinematicEditingProfile('documentary')).toBe(true)
     expect(isCinematicEditingProfile('music-video')).toBe(false)
   })

@@ -39,6 +39,7 @@ export {
   getDefaultGeneratedLayerDurationInFrames,
 } from '../utils/generated-layer-items'
 export { findCompatibleTrackForItemType } from '../utils/track-item-compatibility'
+export { buildDroppedMediaTimelineItem } from '../utils/dropped-media'
 export { createClassicTrack, getTrackKind } from '../utils/classic-tracks'
 export { getDefaultActiveTrackId } from '../utils/default-active-track'
 export { resolveEffectiveTrackStates } from '../utils/group-utils'
@@ -46,6 +47,7 @@ export { linkItems } from '../stores/actions/item-actions'
 export { applyAnimationPreset } from '../stores/actions/preset-actions'
 export {
   applyCinematicCameraToSelectedImages,
+  applyCompoundParallaxCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
 } from '../stores/actions/auto-camera-actions'
 export { applyMotionPresetKeyframes } from '../stores/actions/keyframe-actions'

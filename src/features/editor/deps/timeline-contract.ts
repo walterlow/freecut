@@ -16,6 +16,7 @@ export type {
 export {
   applyAnimationPreset,
   applyCinematicCameraToSelectedImages,
+  applyCompoundParallaxCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
   applyMotionPresetKeyframes,
   applyMotionModifierToItems,
@@ -39,6 +40,7 @@ export {
   shouldCommitScrubFrame,
   createDefaultShapeItem,
   createTextTemplateItem,
+  buildDroppedMediaTimelineItem,
   executeTimelineCommand,
   findCompatibleTrackForItemType,
   findNearestAvailableSpace,

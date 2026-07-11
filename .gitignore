@@ -27,6 +27,7 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.studio-audio/
 
 # Build outputs
 build

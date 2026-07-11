@@ -26,6 +26,7 @@ export {
   captureSnapshot,
   applyAnimationPreset,
   applyCinematicCameraToSelectedImages,
+  applyCompoundParallaxCameraToSelectedImages,
   applyDocumentaryCameraToSelectedImages,
   applyMotionPresetKeyframes,
   applyMotionModifierToItems,
@@ -42,4 +43,5 @@ export {
   bakeMotionToKeyframes,
   captureAnimationFromItem,
   getPresetCompatibility,
+  buildDroppedMediaTimelineItem,
 } from './timeline-contract'

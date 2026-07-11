@@ -5,6 +5,11 @@ export interface SubtitleCue {
   startSeconds: number
   endSeconds: number
   text: string
+  words?: Array<{
+    text: string
+    startSeconds: number
+    endSeconds: number
+  }>
 }
 
 export interface SubtitleParseResult {
