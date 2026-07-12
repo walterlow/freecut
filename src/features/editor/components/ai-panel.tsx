@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import {
   CheckCircle2,
   ChevronDown,
+  Clapperboard,
   ClipboardCopy,
   Download,
   ExternalLink,
@@ -22,7 +23,6 @@ import {
   Pause,
   Play,
   Trash2,
-  Volume2,
   WandSparkles,
   X,
 } from 'lucide-react'
@@ -165,6 +165,10 @@ import {
   usesMagnates3dGrammar,
   usesStudioDocumentaryGrammar,
 } from '../utils/cinematic-editing-profile'
+import {
+  DIRECTOR_4K_PRODUCTION_SETTINGS,
+  isDirector4kProductionMode,
+} from '../utils/cinematic-production-mode'
 import { describeSourceResolution, isNative4kSource } from '../utils/cinematic-source-quality'
 import { planStudioDocumentaryCards } from '../utils/studio-documentary-cards'
 import {
@@ -2574,6 +2578,47 @@ export const AiPanel = memo(function AiPanel() {
 
   const anyTtsSaving = ttsGenerations.some((generation) => generation.saving)
   const anyMusicSaving = musicGenerations.some((generation) => generation.saving)
+  const director4kModeActive = isDirector4kProductionMode({
+    editingProfile: audiobookEditingProfile,
+    maxCues: audiobookMaxCues,
+    sfxDuration: audiobookSfxDuration,
+    matchImages: audiobookMatchImages,
+    applyCinematicMotion: audiobookApplyCinematicMotion,
+    applyTransitions: audiobookApplyTransitions,
+    prepareDepth: audiobookPrepareDepth,
+    applyFinishing: audiobookApplyFinishing,
+    autoMusicBed: audiobookAutoMusicBed,
+    useSfxLibrary: audiobookUseSfxLibrary,
+    useFreesound: audiobookUseFreesound,
+    usePixabayBroll: audiobookUsePixabayBroll,
+    strict4kSources: audiobookStrict4kSources,
+    auditionSfx: audiobookAuditionSfx,
+  })
+  const handleApplyDirector4kMode = useCallback(() => {
+    const settings = DIRECTOR_4K_PRODUCTION_SETTINGS
+    setAudiobookSectionOpen(true)
+    setAudiobookEditingProfile(settings.editingProfile)
+    setAudiobookMaxCues(settings.maxCues)
+    setAudiobookSfxDuration(
+      Math.min(
+        currentMusicModel.maxDurationSeconds,
+        Math.max(currentMusicModel.minDurationSeconds, settings.sfxDuration),
+      ),
+    )
+    setAudiobookMatchImages(settings.matchImages)
+    setAudiobookApplyCinematicMotion(settings.applyCinematicMotion)
+    setAudiobookApplyTransitions(settings.applyTransitions)
+    setAudiobookPrepareDepth(settings.prepareDepth)
+    setAudiobookApplyFinishing(settings.applyFinishing)
+    setAudiobookAutoMusicBed(settings.autoMusicBed)
+    setAudiobookUseSfxLibrary(settings.useSfxLibrary)
+    setAudiobookUseFreesound(settings.useFreesound)
+    setAudiobookUsePixabayBroll(settings.usePixabayBroll)
+    setAudiobookStrict4kSources(settings.strict4kSources)
+    setAudiobookAuditionSfx(settings.auditionSfx)
+    setAudiobookReadiness(null)
+    setAudiobookError(null)
+  }, [currentMusicModel.maxDurationSeconds, currentMusicModel.minDurationSeconds])
   const text = ttsText
   const setText = setTtsText
   const voice =
@@ -3952,7 +3997,7 @@ export const AiPanel = memo(function AiPanel() {
                 }
               >
                 <h2 className="flex items-center gap-1.5 text-sm font-medium">
-                  <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Clapperboard className="h-3.5 w-3.5 text-muted-foreground" />
                   {t('editor.aiPanel.audiobookSfx', {
                     defaultValue: 'Cinematic Story Edit',
                   })}
@@ -4012,6 +4057,48 @@ export const AiPanel = memo(function AiPanel() {
                   </span>
                 </div>
               )}
+            </div>
+
+            <div
+              className="space-y-2 border-y border-border bg-secondary/15 py-3"
+              data-testid="director-4k-production-mode"
+            >
+              <div className="flex items-center justify-between gap-3 px-1">
+                <span className="flex items-center gap-1.5 text-xs font-medium">
+                  <Clapperboard className="h-3.5 w-3.5" />
+                  {t('editor.aiPanel.productionMode', {
+                    defaultValue: 'Production mode',
+                  })}
+                </span>
+                <span
+                  className={cn(
+                    'flex items-center gap-1 text-[11px]',
+                    director4kModeActive ? 'text-emerald-400' : 'text-muted-foreground',
+                  )}
+                >
+                  {director4kModeActive && <CheckCircle2 className="h-3 w-3" />}
+                  {director4kModeActive
+                    ? t('editor.aiPanel.productionModeActive', { defaultValue: 'Active' })
+                    : t('editor.aiPanel.productionModeCustom', { defaultValue: 'Custom' })}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant={director4kModeActive ? 'secondary' : 'default'}
+                size="sm"
+                className="h-8 w-full gap-2"
+                onClick={handleApplyDirector4kMode}
+                disabled={isAudiobookGenerating}
+              >
+                <WandSparkles className="h-3.5 w-3.5" />
+                {t('editor.aiPanel.director4k', { defaultValue: 'Director 4K' })}
+              </Button>
+              <div className="grid grid-cols-4 gap-1 px-1 text-center text-[10px] text-muted-foreground">
+                <span>4K</span>
+                <span>2.5D</span>
+                <span>{t('editor.aiPanel.productionCoverage', { defaultValue: 'Coverage' })}</span>
+                <span>{t('editor.aiPanel.productionSound', { defaultValue: 'Layered SFX' })}</span>
+              </div>
             </div>
 
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/20 px-3 py-2">
@@ -4538,6 +4625,13 @@ export const AiPanel = memo(function AiPanel() {
                     })}
                     :{' '}
                     {`${audiobookTimelineAudit.metrics.directedTransitionCutCount}/${audiobookTimelineAudit.metrics.imageCutCount}`}
+                  </span>
+                  <span>
+                    {t('editor.aiPanel.timelineAuditSources', {
+                      defaultValue: 'Sources',
+                    })}
+                    :{' '}
+                    {`${audiobookTimelineAudit.metrics.uniqueVisualSourceCount}/${audiobookTimelineAudit.metrics.visualCoverageShotCount}`}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-1.5 text-[11px] opacity-90">

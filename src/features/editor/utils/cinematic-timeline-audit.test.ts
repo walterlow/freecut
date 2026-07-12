@@ -63,6 +63,7 @@ function image(
     cinematicDepthRole?: CinematicDepthRole
     cinematicDepthSourceId?: string
     cinematicDepthQuality?: number
+    mediaId?: string
   } = {},
 ): ImageItem {
   return {
@@ -76,6 +77,7 @@ function image(
     cinematicDepthRole: options.cinematicDepthRole,
     cinematicDepthSourceId: options.cinematicDepthSourceId,
     cinematicDepthQuality: options.cinematicDepthQuality,
+    mediaId: options.mediaId,
   }
 }
 
@@ -280,6 +282,31 @@ describe('scoreCinematicTimelineAudit', () => {
         'timeline-no-sfx',
         'timeline-reference-not-ready',
       ]),
+    )
+  })
+
+  it('flags repeated crops when coverage relies on too few distinct visual sources', () => {
+    const duration = 48 * FPS
+    const images = Array.from({ length: 8 }, (_, index) =>
+      image(`coverage-${index}`, index * 180, 180, {
+        mediaId: `source-${index % 2}`,
+      }),
+    )
+
+    const audit = scoreCinematicTimelineAudit({
+      items: [audio('narration', 'narration', 'Narration', 0, duration), ...images],
+      tracks,
+      keyframes: [],
+      fps: FPS,
+      narrationItemId: 'narration',
+    })
+
+    expect(audit.metrics.visualCoverageShotCount).toBe(8)
+    expect(audit.metrics.uniqueVisualSourceCount).toBe(2)
+    expect(audit.metrics.visualSourceReusePct).toBe(75)
+    expect(audit.metrics.visualSourceDiversityScore).toBeLessThan(7)
+    expect(audit.issues.map((issue) => issue.id)).toContain(
+      'timeline-visual-sources-repetitive',
     )
   })
 

@@ -37,6 +37,10 @@ export interface TimelineCinematicAuditScore {
   metrics: {
     storyDurationSeconds: number
     imageCount: number
+    visualCoverageShotCount: number
+    uniqueVisualSourceCount: number
+    visualSourceReusePct: number
+    visualSourceDiversityScore: number
     imageCoveragePct: number
     animatedImageCount: number
     multiAxisImageCount: number
@@ -128,6 +132,13 @@ interface ImageStoryMatchMetrics {
   imageStoryMatchedCount: number
   imageStoryMeasurableCount: number
   imageStoryMatchPct: number
+}
+
+interface VisualSourceDiversityMetrics {
+  visualCoverageShotCount: number
+  uniqueVisualSourceCount: number
+  visualSourceReusePct: number
+  visualSourceDiversityScore: number
 }
 
 const CAMERA_PROPERTIES: AnimatableProperty[] = ['x', 'y', 'width', 'height', 'rotation']
@@ -621,6 +632,7 @@ function calculateReferenceReadinessScore(params: {
   shotRhythm: ShotRhythmMetrics
   imageStoryMatch: ImageStoryMatchMetrics
   storyBeatSfxCoverage: StoryBeatSfxCoverageMetrics
+  visualSourceDiversity: VisualSourceDiversityMetrics
 }): number {
   if (params.imageCount === 0) return 0
 
@@ -643,18 +655,24 @@ function calculateReferenceReadinessScore(params: {
     params.storyBeatSfxCoverage.storyBeatCount === 0
       ? 1
       : clamp(params.storyBeatSfxCoverage.storyBeatSfxCoveragePct / 100, 0, 1)
+  const visualSourceDiversityScore = clamp(
+    params.visualSourceDiversity.visualSourceDiversityScore / 10,
+    0,
+    1,
+  )
 
   return roundToTenth(
-    (params.imageCoveragePct * 0.1 +
-      multiAxisRatio * 0.11 +
-      stagedRatio * 0.14 +
-      depthScore * 0.16 +
-      stemScore * 0.14 +
+    (params.imageCoveragePct * 0.08 +
+      multiAxisRatio * 0.1 +
+      stagedRatio * 0.13 +
+      depthScore * 0.15 +
+      stemScore * 0.13 +
       shotRhythmScore * 0.09 +
       sfxRoleScore * 0.07 +
       storyBeatSfxScore * 0.09 +
       imageStoryMatchScore * 0.04 +
-      musicScore * 0.06) *
+      musicScore * 0.04 +
+      visualSourceDiversityScore * 0.08) *
       10,
   )
 }
@@ -1121,6 +1139,39 @@ function selectedOrOverlappingImages(params: {
   )
 }
 
+function calculateVisualSourceDiversity(images: ImageItem[]): VisualSourceDiversityMetrics {
+  const coverageImages = images.filter(
+    (image) =>
+      !image.cinematicDepthRole ||
+      image.cinematicDepthRole === 'flat' ||
+      image.cinematicDepthRole === 'background',
+  )
+  const candidates = coverageImages.length > 0 ? coverageImages : images
+  const sourceKeys = candidates.map(
+    (image) =>
+      image.cinematicDepthSourceId ??
+      image.originId ??
+      image.mediaId ??
+      image.src ??
+      image.label ??
+      image.id,
+  )
+  const uniqueVisualSourceCount = new Set(sourceKeys).size
+  const visualCoverageShotCount = candidates.length
+  const uniqueRatio = uniqueVisualSourceCount / Math.max(1, visualCoverageShotCount)
+  const visualSourceReusePct =
+    visualCoverageShotCount > 0 ? roundToTenth((1 - uniqueRatio) * 100) : 0
+  const visualSourceDiversityScore =
+    visualCoverageShotCount === 0 ? 0 : roundToTenth(clamp(uniqueRatio / 0.7, 0, 1) * 10)
+
+  return {
+    visualCoverageShotCount,
+    uniqueVisualSourceCount,
+    visualSourceReusePct,
+    visualSourceDiversityScore,
+  }
+}
+
 function auditResult(
   penalty: number,
   auditIssue: TimelineCinematicAuditIssue,
@@ -1154,6 +1205,21 @@ function imageCoverageIssue(imageCoveragePct: number) {
       'timeline-image-gaps',
       'warning',
       'Still images do not cover most of the narration span.',
+    ),
+  )
+}
+
+function visualSourceDiversityIssue(metrics: VisualSourceDiversityMetrics) {
+  if (metrics.visualCoverageShotCount < 4 || metrics.visualSourceDiversityScore >= 7) {
+    return noAuditIssue()
+  }
+
+  return auditResult(
+    0.9,
+    issue(
+      'timeline-visual-sources-repetitive',
+      'warning',
+      `Only ${metrics.uniqueVisualSourceCount}/${metrics.visualCoverageShotCount} coverage shots use distinct visual sources; repeated crops may still feel like a slideshow.`,
     ),
   )
 }
@@ -1517,12 +1583,14 @@ function buildAuditIssues(params: {
   shotRhythm: ShotRhythmMetrics
   imageStoryMatch: ImageStoryMatchMetrics
   storyBeatSfxCoverage: StoryBeatSfxCoverageMetrics
+  visualSourceDiversity: VisualSourceDiversityMetrics
   referenceReadinessScore: number
 }): { penalty: number; issues: TimelineCinematicAuditIssue[] } {
   const minimumImages = clamp(Math.ceil(params.storyDurationSeconds / 18), 1, 48)
   const results = [
     imageCountIssue(params.imageCount, minimumImages),
     imageCoverageIssue(params.imageCoveragePct),
+    visualSourceDiversityIssue(params.visualSourceDiversity),
     cameraMotionIssue(params.imageCount, params.multiAxisImageCount),
     stagedCameraMotionIssue(params.imageCount, params.stagedCameraImageCount),
     depthPrepIssue(params.imageCount, params.depthPrep),
@@ -1558,6 +1626,10 @@ export function scoreCinematicTimelineAudit(
       metrics: {
         storyDurationSeconds: 0,
         imageCount: 0,
+        visualCoverageShotCount: 0,
+        uniqueVisualSourceCount: 0,
+        visualSourceReusePct: 0,
+        visualSourceDiversityScore: 0,
         imageCoveragePct: 0,
         animatedImageCount: 0,
         multiAxisImageCount: 0,
@@ -1632,6 +1704,7 @@ export function scoreCinematicTimelineAudit(
     fps: input.fps,
   })
   const imageCoveragePct = coveragePct(images, span)
+  const visualSourceDiversity = calculateVisualSourceDiversity(images)
   const duckedMusicBedCount = musicBeds.filter((item) =>
     hasDuckingKeyframes(item, input.keyframes),
   ).length
@@ -1662,6 +1735,7 @@ export function scoreCinematicTimelineAudit(
     shotRhythm,
     imageStoryMatch,
     storyBeatSfxCoverage,
+    visualSourceDiversity,
   })
   const audit = buildAuditIssues({
     storyDurationSeconds,
@@ -1678,6 +1752,7 @@ export function scoreCinematicTimelineAudit(
     shotRhythm,
     imageStoryMatch,
     storyBeatSfxCoverage,
+    visualSourceDiversity,
     referenceReadinessScore,
   })
   const score = roundToTenth(clamp(10 - audit.penalty, 0, 10))
@@ -1691,6 +1766,7 @@ export function scoreCinematicTimelineAudit(
     metrics: {
       storyDurationSeconds: roundToTenth(storyDurationSeconds),
       imageCount: images.length,
+      ...visualSourceDiversity,
       imageCoveragePct: roundToTenth(imageCoveragePct * 100),
       animatedImageCount: motionStats.animatedImageCount,
       multiAxisImageCount: motionStats.multiAxisImageCount,
