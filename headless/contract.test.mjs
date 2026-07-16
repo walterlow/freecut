@@ -85,6 +85,14 @@ test('every published edit discriminator has a valid strict schema', () => {
   )
   assert.equal(
     editOpSchema.safeParse({
+      op: 'updateTrack',
+      id: 'v',
+      updates: { height: 96 },
+    }).success,
+    false,
+  )
+  assert.equal(
+    editOpSchema.safeParse({
       op: 'setMasterAudio',
       busAudioEq: { lowCutEnabled: 'yes' },
     }).success,

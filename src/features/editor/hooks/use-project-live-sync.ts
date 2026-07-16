@@ -43,6 +43,39 @@ interface UseProjectLiveSyncOptions {
   enabled: boolean
 }
 
+function isActiveProjectGeneration(isMounted: boolean, current: object, expected: object): boolean {
+  return isMounted && current === expected
+}
+
+function queueRefetchAfterApply(
+  isActive: boolean,
+  refetchAfterApplyRef: { current: boolean },
+  scheduleFetchRef: { current: () => void },
+): void {
+  if (!isActive || !refetchAfterApplyRef.current) return
+  refetchAfterApplyRef.current = false
+  window.queueMicrotask(() => scheduleFetchRef.current())
+}
+
+async function requestProjectSnapshot(
+  baseUrl: string,
+  projectId: string,
+  controller: AbortController,
+  isMounted: () => boolean,
+): Promise<ProjectSnapshot | null> {
+  const response = await fetch(`${baseUrl}/v1/projects/${encodeURIComponent(projectId)}/snapshot`, {
+    signal: controller.signal,
+  })
+  if (controller.signal.aborted || !isMounted()) return null
+  if (!response.ok) throw new Error(`Snapshot request failed: ${response.status}`)
+  const snapshot = (await response.json()) as ProjectSnapshot
+  return controller.signal.aborted || !isMounted() ? null : snapshot
+}
+
+function isAbortedSnapshotRequest(error: unknown, controller: AbortController): boolean {
+  return controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')
+}
+
 export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLiveSyncOptions): {
   autoSaveEnabled: boolean
   conflictPending: boolean
@@ -61,6 +94,13 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
   const conflictPendingRef = useRef(false)
   const applyingRef = useRef(false)
   const publishingRef = useRef(false)
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
   const projectGenerationRef = useRef({ projectId, generation: 0 })
   if (projectGenerationRef.current.projectId !== projectId) {
     projectGenerationRef.current = {
@@ -97,7 +137,8 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
     }
     applyingRef.current = true
     const generation = projectGenerationRef.current
-    const isCurrentProjectGeneration = () => projectGenerationRef.current === generation
+    const isCurrentProjectGeneration = () =>
+      isActiveProjectGeneration(isMountedRef.current, projectGenerationRef.current, generation)
     const playback = usePlaybackStore.getState()
     const timelineSettings = useTimelineSettingsStore.getState()
     const previousFrame = playback.currentFrame
@@ -214,10 +255,7 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
         useTimelineSettingsStore.getState().setTimelineLoading(false)
       }
       applyingRef.current = false
-      if (refetchAfterApplyRef.current) {
-        refetchAfterApplyRef.current = false
-        window.queueMicrotask(() => scheduleFetchRef.current())
-      }
+      queueRefetchAfterApply(isCurrentProjectGeneration(), refetchAfterApplyRef, scheduleFetchRef)
     }
   }, [])
 
@@ -229,12 +267,13 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
     const baseUrl =
       (import.meta.env.VITE_FREECUT_HEADLESS_URL as string | undefined) ?? DEFAULT_HEADLESS_URL
     try {
-      const response = await fetch(
-        `${baseUrl}/v1/projects/${encodeURIComponent(projectId)}/snapshot`,
-        { signal: controller.signal },
+      const snapshot = await requestProjectSnapshot(
+        baseUrl,
+        projectId,
+        controller,
+        () => isMountedRef.current,
       )
-      if (!response.ok) throw new Error(`Snapshot request failed: ${response.status}`)
-      const snapshot = (await response.json()) as ProjectSnapshot
+      if (!snapshot) return
       if (snapshot.revision === revisionRef.current) return
       const contentSignature = snapshotContentSignature(snapshot)
       if (contentSignature === contentSignatureRef.current) {
@@ -257,11 +296,13 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
       }
       await applySnapshot(snapshot)
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
+      if (isAbortedSnapshotRequest(error, controller)) return
       logger.debug('Live project snapshot unavailable', {
         projectId,
         error: error instanceof Error ? error.message : String(error),
       })
+    } finally {
+      if (fetchControllerRef.current === controller) fetchControllerRef.current = null
     }
   }, [applySnapshot, enabled, projectId])
 
@@ -312,6 +353,8 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
       const snapshot = queuedSnapshotRef.current
       if (!snapshot) throw new Error('No external project revision is waiting')
       publishingRef.current = true
+      fetchControllerRef.current?.abort()
+      fetchControllerRef.current = null
       let completed = false
       try {
         const baseUrl =

@@ -90,9 +90,23 @@ vi.mock('@/infrastructure/browser/blob-url-manager', () => ({
   blobUrlManager: { invalidate: vi.fn() },
 }))
 
+const eventSources: FakeEventSource[] = []
+
 class FakeEventSource {
-  addEventListener = vi.fn()
+  private projectChangedListener: EventListener | null = null
+
+  constructor() {
+    eventSources.push(this)
+  }
+
+  addEventListener = vi.fn((type: string, listener: EventListener) => {
+    if (type === 'project.changed') this.projectChangedListener = listener
+  })
   close = vi.fn()
+
+  emitProjectChanged(): void {
+    this.projectChangedListener?.(new Event('project.changed'))
+  }
 }
 
 const project = {
@@ -110,6 +124,7 @@ const project = {
 describe('useProjectLiveSync', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    eventSources.length = 0
     vi.stubGlobal('fetch', fetchMock)
     vi.stubGlobal('EventSource', FakeEventSource)
     hydrateTimeline.mockResolvedValue(undefined)
@@ -178,6 +193,72 @@ describe('useProjectLiveSync', () => {
     unmount()
   })
 
+  it('aborts an in-flight snapshot fetch before publishing the editor version', async () => {
+    let getCount = 0
+    let staleSignal: AbortSignal | undefined
+    let resolveStaleFetch:
+      | ((response: { ok: true; json: () => Promise<unknown> }) => void)
+      | undefined
+    fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => {
+      if (options?.method === 'PUT') {
+        return {
+          ok: true,
+          json: async () => ({ revision: 'sha256:published' }),
+        }
+      }
+      getCount++
+      if (getCount === 1) {
+        return {
+          ok: true,
+          json: async () => ({
+            revision: 'sha256:external',
+            projectRevision: 'sha256:external-project',
+            project,
+            media: [],
+            missingMediaIds: [],
+          }),
+        }
+      }
+      if (getCount === 2) {
+        staleSignal = options?.signal ?? undefined
+        return new Promise((resolve) => {
+          resolveStaleFetch = resolve
+        })
+      }
+      return { ok: false, status: 404 }
+    })
+    const { result, unmount } = renderHook(() =>
+      useProjectLiveSync({ projectId: project.id, isDirty: true, enabled: true }),
+    )
+
+    await waitFor(() => expect(result.current.conflictPending).toBe(true))
+    act(() => eventSources[0]?.emitProjectChanged())
+    await waitFor(() => expect(getCount).toBe(2))
+
+    await act(async () => {
+      await result.current.publishEditorVersion({ ...project, name: 'Editor wins' }, vi.fn())
+    })
+
+    expect(staleSignal?.aborted).toBe(true)
+    await act(async () => {
+      resolveStaleFetch?.({
+        ok: true,
+        json: async () => ({
+          revision: 'sha256:stale',
+          projectRevision: 'sha256:stale-project',
+          project: { ...project, name: 'Stale external version' },
+          media: [],
+          missingMediaIds: [],
+        }),
+      })
+      await Promise.resolve()
+    })
+
+    expect(setCurrentProject).not.toHaveBeenCalled()
+    expect(result.current.lastAppliedRevision).toBeNull()
+    unmount()
+  })
+
   it('does not finish applying a snapshot after the active project changes', async () => {
     let finishHydration: (() => void) | undefined
     hydrateTimeline.mockImplementation(
@@ -212,5 +293,24 @@ describe('useProjectLiveSync', () => {
     expect(result.current.appliedRevisionCount).toBe(0)
     expect(setCurrentProject).not.toHaveBeenCalled()
     unmount()
+  })
+
+  it('does not finish applying a snapshot after the editor unmounts', async () => {
+    let finishHydration: (() => void) | undefined
+    hydrateTimeline.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishHydration = resolve
+        }),
+    )
+    const { unmount } = renderHook(() =>
+      useProjectLiveSync({ projectId: project.id, isDirty: false, enabled: true }),
+    )
+
+    await waitFor(() => expect(hydrateTimeline).toHaveBeenCalledOnce())
+    unmount()
+    await act(async () => finishHydration?.())
+
+    expect(setCurrentProject).not.toHaveBeenCalled()
   })
 })

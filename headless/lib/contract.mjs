@@ -179,7 +179,6 @@ const audioEq = z
 const trackUpdates = z
   .object({
     name: z.string().min(1).optional(),
-    height: finite.positive().optional(),
     locked: z.boolean().optional(),
     syncLock: z.boolean().optional(),
     visible: z.boolean().optional(),

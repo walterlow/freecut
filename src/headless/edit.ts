@@ -373,10 +373,14 @@ function applyOp(op: EditOp): unknown {
         throw new Error('updateTrack requires an `updates` object')
       }
       const raw = updates
+      if ('height' in raw) {
+        throw new Error(
+          'updateTrack does not support `height`; track height is a local editor preference',
+        )
+      }
       const next: TimelineTrack = {
         ...existing,
         ...(asString(raw.name) !== undefined && { name: asString(raw.name)! }),
-        ...(asNumber(raw.height) !== undefined && { height: asNumber(raw.height)! }),
         ...(asBoolean(raw.locked) !== undefined && { locked: asBoolean(raw.locked)! }),
         ...(asBoolean(raw.syncLock) !== undefined && { syncLock: asBoolean(raw.syncLock)! }),
         ...(asBoolean(raw.visible) !== undefined && { visible: asBoolean(raw.visible)! }),
