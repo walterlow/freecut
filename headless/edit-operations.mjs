@@ -258,12 +258,17 @@ const cases = [
   },
   {
     name: 'removeTrack',
-    op: { op: 'removeTrack', id: 'audio-1' },
-    assert: (project) =>
+    op: { op: 'removeTrack', id: 'video-1' },
+    assert: (project) => {
       assert.equal(
-        project.timeline.tracks.some((candidate) => candidate.id === 'audio-1'),
+        project.timeline.tracks.some((candidate) => candidate.id === 'video-1'),
         false,
-      ),
+      )
+      assert.equal(
+        project.timeline.items.some((candidate) => candidate.trackId === 'video-1'),
+        false,
+      )
+    },
     failure: { op: 'removeTrack', id: 'missing' },
   },
   {

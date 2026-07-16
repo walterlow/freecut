@@ -547,7 +547,7 @@ export const LoadedEditor = memo(function LoadedEditor({
     conflictPending,
     pendingRevision,
     applyPendingExternal,
-    keepEditorVersion,
+    publishEditorVersion,
   } = useProjectLiveSync({
     projectId,
     isDirty,
@@ -682,10 +682,20 @@ export const LoadedEditor = memo(function LoadedEditor({
 
   const handleUseEditor = useCallback(() => {
     void runSyncConflictResolution(async () => {
-      await handleSave()
-      keepEditorVersion()
+      const currentProject = useProjectStore.getState().currentProject
+      if (!currentProject) throw new Error('Current project is unavailable')
+      const { rootFolderHandle, ...serializableProject } = currentProject
+      void rootFolderHandle
+      await publishEditorVersion(
+        {
+          ...serializableProject,
+          timeline: buildTimelineFromStores(),
+          updatedAt: Date.now(),
+        },
+        handleSave,
+      )
     })
-  }, [handleSave, keepEditorVersion, runSyncConflictResolution])
+  }, [handleSave, publishEditorVersion, runSyncConflictResolution])
 
   const handleExport = useCallback(() => {
     // Pause playback when opening export dialog

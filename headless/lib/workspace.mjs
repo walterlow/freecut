@@ -22,8 +22,9 @@ function readProject(projectJsonPath) {
   if (!fs.existsSync(projectJsonPath)) {
     throw new Error(`Project file not found: ${projectJsonPath}`)
   }
-  const project = JSON.parse(fs.readFileSync(projectJsonPath, 'utf8'))
-  return { project, projectJsonPath }
+  const projectText = fs.readFileSync(projectJsonPath, 'utf8')
+  const project = JSON.parse(projectText)
+  return { project, projectJsonPath, projectText }
 }
 
 /** CLI-only direct file loader. Direct paths must never be accepted by the HTTP service. */
@@ -230,8 +231,12 @@ export function reconcileProjectMediaLinks(workspaceDir, project, projectDirecto
   return [...existing]
 }
 
-/** Upsert the lightweight project entry used by FreeCut's project list. */
-function upsertWorkspaceIndex(workspaceDir, project, projectDirectoryId = project.id) {
+/** Upsert the project list while the caller holds the workspace writer lock. */
+function upsertWorkspaceIndexUnderWriterLock(
+  workspaceDir,
+  project,
+  projectDirectoryId = project.id,
+) {
   const indexPath = path.join(workspaceDir, 'index.json')
   const index = readJsonOr(indexPath, { version: '1.0', updatedAt: 0, projects: [] })
   const entry = {
@@ -253,7 +258,15 @@ function upsertWorkspaceIndex(workspaceDir, project, projectDirectoryId = projec
 }
 
 /** Persist a Headless edit and repair the derived workspace files it affects. */
-export function persistEditedProject(workspaceDir, projectJsonPath, editedProject) {
+export function persistEditedProject(
+  workspaceDir,
+  projectJsonPath,
+  editedProject,
+  { writerLockHeld = false } = {},
+) {
+  if (!writerLockHeld) {
+    throw new Error('persistEditedProject requires the workspace writer lock')
+  }
   const project = { ...editedProject, updatedAt: Date.now() }
   writeJsonAtomic(projectJsonPath, project)
   const projectsRoot = path.resolve(workspaceDir, 'projects')
@@ -266,7 +279,7 @@ export function persistEditedProject(workspaceDir, projectJsonPath, editedProjec
     !relativeDirectory.includes(path.sep)
   if (isWorkspaceProject) {
     reconcileProjectMediaLinks(workspaceDir, project, relativeDirectory)
-    upsertWorkspaceIndex(workspaceDir, project, relativeDirectory)
+    upsertWorkspaceIndexUnderWriterLock(workspaceDir, project, relativeDirectory)
   }
   return project
 }
@@ -300,7 +313,7 @@ function findMediaThumbnail(workspaceDir, mediaId) {
 
 /** Build the coherent project+media snapshot consumed by a live editor. */
 export function buildProjectSnapshot(workspaceDir, projectId) {
-  const { project, projectJsonPath } = loadProjectById(workspaceDir, projectId)
+  const { project, projectText } = loadProjectById(workspaceDir, projectId)
   const mediaIds = readProjectMediaIds(workspaceDir, project, projectId)
   const media = []
   const missingMediaIds = []
@@ -335,9 +348,9 @@ export function buildProjectSnapshot(workspaceDir, projectId) {
     fingerprints.push(`${mediaId}:${fingerprint}`)
   }
 
-  const projectText = fs.readFileSync(projectJsonPath, 'utf8')
   const linksPath = mediaLinksPath(workspaceDir, projectId)
   const linksText = fs.existsSync(linksPath) ? fs.readFileSync(linksPath, 'utf8') : ''
+  const projectRevision = `sha256:${crypto.createHash('sha256').update(projectText).digest('hex')}`
   const revision = `sha256:${crypto
     .createHash('sha256')
     .update(projectText)
@@ -347,7 +360,7 @@ export function buildProjectSnapshot(workspaceDir, projectId) {
     .update(fingerprints.sort().join('\n'))
     .digest('hex')}`
 
-  return { revision, project, media, missingMediaIds }
+  return { revision, projectRevision, project, media, missingMediaIds }
 }
 
 export function listProjectIdsUsingMedia(workspaceDir, mediaId) {

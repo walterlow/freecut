@@ -160,7 +160,7 @@ vi.mock('../hooks/use-project-live-sync', () => ({
     lastAppliedRevision: null,
     appliedRevisionCount: 0,
     applyPendingExternal: vi.fn().mockResolvedValue(undefined),
-    keepEditorVersion: vi.fn(),
+    publishEditorVersion: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 

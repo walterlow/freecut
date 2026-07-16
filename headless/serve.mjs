@@ -106,6 +106,42 @@ export function resolveHost(args = {}, env = process.env) {
   return host.trim()
 }
 
+export function installWorkspaceChangeMonitor({
+  workspace,
+  onChange,
+  onPoll,
+  watch = fs.watch,
+  setIntervalFn = setInterval,
+  clearIntervalFn = clearInterval,
+  warn = console.warn,
+}) {
+  let watcher = null
+  let pollTimer = null
+  const startPolling = (reason) => {
+    if (pollTimer) return
+    watcher?.close()
+    watcher = null
+    warn(`${reason}; using revision polling`)
+    pollTimer = setIntervalFn(onPoll, 750)
+  }
+  try {
+    watcher = watch(
+      workspace,
+      { recursive: true, persistent: false },
+      (_eventType, fileName) => onChange(fileName),
+    )
+    watcher.on('error', (error) => {
+      startPolling(`Workspace watcher failed: ${error.message}`)
+    })
+  } catch (error) {
+    startPolling(`Recursive workspace watcher unavailable: ${error.message}`)
+  }
+  return () => {
+    if (pollTimer) clearIntervalFn(pollTimer)
+    watcher?.close()
+  }
+}
+
 function sendJson(res, status, obj) {
   const body = JSON.stringify(obj)
   res.writeHead(status, { 'Content-Type': 'application/json' })
@@ -787,33 +823,20 @@ async function main() {
     }
   }
 
-  let workspaceWatcher = null
-  let pollTimer = null
-  try {
-    workspaceWatcher = fs.watch(
-      workspace,
-      { recursive: true, persistent: false },
-      (_eventType, fileName) => handleWorkspaceChange(fileName),
-    )
-    workspaceWatcher.on('error', (error) => {
-      console.warn(`Workspace watcher failed: ${error.message}`)
-    })
-  } catch (error) {
-    console.warn(
-      `Recursive workspace watcher unavailable; using revision polling: ${error.message}`,
-    )
-    pollTimer = setInterval(() => {
+  const stopWorkspaceChangeMonitor = installWorkspaceChangeMonitor({
+    workspace,
+    onChange: handleWorkspaceChange,
+    onPoll: () => {
       for (const project of listProjects(workspace)) scheduleProjectChange(project.id, 'poll')
-    }, 750)
-  }
+    },
+  })
 
   let shuttingDown
   const shutdown = () =>
     (shuttingDown ??= (async () => {
       console.log('\nShutting down...')
       clearTimeout(watchDebounce)
-      if (pollTimer) clearInterval(pollTimer)
-      workspaceWatcher?.close()
+      stopWorkspaceChangeMonitor()
       for (const clients of eventClients.values()) {
         for (const client of clients) client.end()
       }

@@ -393,8 +393,13 @@ function applyOp(op: EditOp): unknown {
       if (!id) throw new Error('removeTrack requires `id`')
       const all = tracks()
       if (!all.some((track) => track.id === id)) throw new Error(`removeTrack: unknown track ${id}`)
+      const itemIds = useItemsStore
+        .getState()
+        .items.filter((item) => item.trackId === id)
+        .map((item) => item.id)
+      if (itemIds.length > 0) removeItems(itemIds)
       setTracks(all.filter((track) => track.id !== id))
-      return { id }
+      return { id, removedItemIds: itemIds }
     }
     case 'addClip': {
       const mediaId = asString(op.mediaId)

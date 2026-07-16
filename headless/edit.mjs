@@ -35,6 +35,7 @@ import { loadProject, collectAddClipMedia, persistEditedProject } from './lib/wo
 import { parseArgs } from './lib/cli.mjs'
 import { startHarness } from './lib/render-core.mjs'
 import { editRequestSchema, validate } from './lib/contract.mjs'
+import { acquireWriterLock } from './lib/lifecycle-store.mjs'
 
 const EDIT_OPTIONS = new Set([
   'workspace',
@@ -69,6 +70,7 @@ async function main() {
   if (!args.workspace) throw new Error('Missing --workspace <dir>')
   if (!args.project) throw new Error('Missing --project <id|project.json>')
 
+  const releaseWriterLock = args['in-place'] ? await acquireWriterLock(args.workspace) : null
   const ops = validate(editRequestSchema, { project: args.project, ops: loadOps(args) }).ops
   const { project, projectJsonPath } = loadProject(args.workspace, args.project)
   if (!args.json) console.log(`Project: ${project.name ?? project.id} (${projectJsonPath})`)
@@ -133,7 +135,9 @@ async function main() {
 
   let writtenProject
   if (args['in-place']) {
-    writtenProject = persistEditedProject(args.workspace, projectJsonPath, edited)
+    writtenProject = persistEditedProject(args.workspace, projectJsonPath, edited, {
+      writerLockHeld: true,
+    })
   } else {
     writtenProject = { ...edited, updatedAt: Date.now() }
     fs.writeFileSync(outPath, `${JSON.stringify(writtenProject, null, 2)}\n`)
@@ -141,6 +145,7 @@ async function main() {
   if (args.json)
     console.log(JSON.stringify({ ...result, project: writtenProject, written: outPath }))
   else console.log(`\nWrote: ${outPath}`)
+  await releaseWriterLock?.()
 }
 
 main().catch((e) => {

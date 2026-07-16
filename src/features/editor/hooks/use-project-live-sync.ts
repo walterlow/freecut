@@ -25,6 +25,7 @@ const DEFAULT_HEADLESS_URL = 'http://127.0.0.1:8787'
 
 interface ProjectSnapshot {
   revision: string
+  projectRevision: string
   project: Project
   media: Array<{
     metadata: MediaMetadata
@@ -49,7 +50,7 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
   lastAppliedRevision: string | null
   appliedRevisionCount: number
   applyPendingExternal: () => Promise<void>
-  keepEditorVersion: () => void
+  publishEditorVersion: (project: Project, persistLocal: () => Promise<void>) => Promise<void>
 } {
   const dirtyRef = useRef(isDirty)
   dirtyRef.current = isDirty
@@ -59,6 +60,7 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
   const queuedSnapshotRef = useRef<ProjectSnapshot | null>(null)
   const conflictPendingRef = useRef(false)
   const applyingRef = useRef(false)
+  const publishingRef = useRef(false)
   const refetchAfterApplyRef = useRef(false)
   const scheduleFetchRef = useRef<() => void>(() => undefined)
   const fetchControllerRef = useRef<AbortController | null>(null)
@@ -206,7 +208,7 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
   }, [])
 
   const fetchLatest = useCallback(async () => {
-    if (!enabled) return
+    if (!enabled || publishingRef.current) return
     fetchControllerRef.current?.abort()
     const controller = new AbortController()
     fetchControllerRef.current = controller
@@ -291,13 +293,47 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
     await applySnapshot(snapshot)
   }, [applySnapshot])
 
-  const keepEditorVersion = useCallback(() => {
-    queuedSnapshotRef.current = null
-    conflictPendingRef.current = false
-    setConflictPending(false)
-    setPendingRevision(null)
-    scheduleFetch()
-  }, [scheduleFetch])
+  const publishEditorVersion = useCallback(
+    async (project: Project, persistLocal: () => Promise<void>) => {
+      const snapshot = queuedSnapshotRef.current
+      if (!snapshot) throw new Error('No external project revision is waiting')
+      publishingRef.current = true
+      let completed = false
+      try {
+        const baseUrl =
+          (import.meta.env.VITE_FREECUT_HEADLESS_URL as string | undefined) ?? DEFAULT_HEADLESS_URL
+        const response = await fetch(`${baseUrl}/v1/projects/${encodeURIComponent(projectId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project,
+            expectedRevision: snapshot.projectRevision,
+          }),
+        })
+        if (!response.ok) {
+          throw new Error(`Headless project save failed: ${response.status}`)
+        }
+        const saved = (await response.json()) as { revision?: string }
+        if (saved.revision && queuedSnapshotRef.current) {
+          queuedSnapshotRef.current = {
+            ...queuedSnapshotRef.current,
+            projectRevision: saved.revision,
+          }
+        }
+        await persistLocal()
+        dirtyRef.current = false
+        queuedSnapshotRef.current = null
+        conflictPendingRef.current = false
+        setConflictPending(false)
+        setPendingRevision(null)
+        completed = true
+      } finally {
+        publishingRef.current = false
+      }
+      if (completed) scheduleFetch()
+    },
+    [projectId, scheduleFetch],
+  )
 
   return {
     autoSaveEnabled: !conflictPending,
@@ -306,7 +342,7 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
     lastAppliedRevision,
     appliedRevisionCount,
     applyPendingExternal,
-    keepEditorVersion,
+    publishEditorVersion,
   }
 }
 
