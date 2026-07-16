@@ -59,6 +59,7 @@ import {
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject as getMediaForProjectDB,
+  getCopiedMediaReadUrl,
   deleteTranscript,
   readAiOutput,
   saveCaptions,
@@ -66,6 +67,7 @@ import {
   deleteScenes,
   hasMediaSource,
   readMediaSource,
+  removeWorkspaceCacheEntry,
   writeMediaSource,
 } from '@/features/media-library/deps/storage'
 import {
@@ -80,6 +82,7 @@ import { enqueueBackgroundMediaWork } from './background-media-work'
 import {
   getGeneratedImageDimensions,
   getThumbnailDimensions,
+  persistAdoptedMediaAsset,
   persistGeneratedMediaAsset,
 } from './media-asset-helpers'
 import { validateMediaFileContent, getMimeType, isLottieMime } from '../utils/validation'
@@ -884,6 +887,99 @@ class MediaLibraryService {
   async getMedia(id: string): Promise<MediaMetadata | null> {
     const media = await getMediaDB(id)
     return media || null
+  }
+
+  /**
+   * Finalize a file already copied into the workspace by the Electron main
+   * process. Video/audio probing uses the bridge's Range URL, so source bytes
+   * never cross IPC or enter the renderer as one giant Blob.
+   */
+  async importCopiedWorkspaceMedia(
+    input: {
+      name: string
+      path: readonly string[]
+      stat: { size: number; modifiedAt: number }
+    },
+    projectId: string,
+  ): Promise<MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }> {
+    const existing = (await getMediaForProjectDB(projectId)).find(
+      (media) => media.fileName === input.name && media.fileSize === input.stat.size,
+    )
+    if (existing) {
+      await removeWorkspaceCacheEntry([...input.path])
+      return { ...existing, isDuplicate: true }
+    }
+
+    const mimeType = getMimeType(new File([], input.name))
+    if (!mimeType) {
+      await removeWorkspaceCacheEntry([...input.path])
+      throw new Error(`Unsupported media type: ${input.name}`)
+    }
+
+    try {
+      const sourceUrl = await getCopiedMediaReadUrl(input.path)
+      const { metadata, thumbnail } = await mediaProcessorService.processMediaUrl(
+        {
+          url: sourceUrl,
+          name: input.name,
+          size: input.stat.size,
+          lastModified: input.stat.modifiedAt,
+        },
+        mimeType,
+        { thumbnailTimestamp: 1, fastMetadata: true },
+      )
+      const mediaId = crypto.randomUUID()
+      const createdAt = Date.now()
+      const codecCheck = mediaProcessorService.hasUnsupportedAudioCodec(metadata)
+      const thumbnailDimensions = thumbnail
+        ? metadata.type === 'audio'
+          ? { width: 320, height: 180 }
+          : getThumbnailDimensions(
+              Math.max(1, 'width' in metadata ? metadata.width || 1 : 1),
+              Math.max(1, 'height' in metadata ? metadata.height || 1 : 1),
+              320,
+            )
+        : undefined
+      const mediaMetadata: MediaMetadata = {
+        id: mediaId,
+        storageType: 'workspace',
+        fileName: input.name,
+        fileSize: input.stat.size,
+        fileLastModified: input.stat.modifiedAt,
+        mimeType,
+        duration: 'duration' in metadata ? metadata.duration : 0,
+        width: 'width' in metadata ? metadata.width : 0,
+        height: 'height' in metadata ? metadata.height : 0,
+        fps: metadata.type === 'video' ? metadata.fps : 0,
+        codec:
+          metadata.type === 'video'
+            ? metadata.codec
+            : metadata.type === 'audio'
+              ? metadata.codec || 'unknown'
+              : 'unknown',
+        bitrate: 'bitrate' in metadata ? (metadata.bitrate ?? 0) : 0,
+        audioCodec: metadata.type === 'video' ? metadata.audioCodec : undefined,
+        audioCodecSupported: metadata.type === 'video' ? metadata.audioCodecSupported : true,
+        videoCodecSupported: metadata.type === 'video' ? metadata.videoCodecSupported : true,
+        keyframeTimestamps: metadata.type === 'video' ? metadata.keyframeTimestamps : undefined,
+        gopInterval: metadata.type === 'video' ? metadata.gopInterval : undefined,
+        tags: [],
+        createdAt,
+        updatedAt: createdAt,
+      }
+      const persisted = await persistAdoptedMediaAsset({
+        stagedPath: input.path,
+        projectId,
+        mediaMetadata,
+        thumbnailBlob: thumbnail,
+        thumbnailWidth: thumbnailDimensions?.width,
+        thumbnailHeight: thumbnailDimensions?.height,
+      })
+      return { ...persisted, hasUnsupportedCodec: codecCheck.unsupported }
+    } catch (error) {
+      await removeWorkspaceCacheEntry([...input.path])
+      throw error
+    }
   }
 
   /**

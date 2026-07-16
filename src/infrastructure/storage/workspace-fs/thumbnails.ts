@@ -23,12 +23,7 @@ import { createLogger } from '@/shared/logging/logger'
 
 import { requireWorkspaceRoot } from './root'
 import { readBlob, removeEntry, writeBlob } from './fs-primitives'
-import {
-  MEDIA_DIR,
-  MEDIA_THUMBNAIL_FILENAME,
-  mediaThumbnailPath,
-  projectThumbnailPath,
-} from './paths'
+import { mediaThumbnailPath, projectThumbnailPath } from './paths'
 import { blobToArrayBuffer } from './blob-utils'
 import { mapWithConcurrency } from '@/shared/utils/async-utils'
 
@@ -91,25 +86,13 @@ export async function getThumbnailsByMediaIds(mediaIds: string[]): Promise<Map<s
   const result = new Map<string, Blob>()
   if (mediaIds.length === 0) return result
 
-  const root = requireWorkspaceRoot()
-  let mediaDirHandle: FileSystemDirectoryHandle
-  try {
-    mediaDirHandle = await root.getDirectoryHandle(MEDIA_DIR, { create: false })
-  } catch (error) {
-    // No media/ directory yet — nothing to prefetch.
-    if (error instanceof DOMException && error.name === 'NotFoundError') return result
-    logger.warn('getThumbnailsByMediaIds: failed to open media directory', error)
-    return result
-  }
-
   const reads = await mapWithConcurrency(
     mediaIds,
     THUMBNAIL_READ_CONCURRENCY,
     async (mediaId): Promise<{ mediaId: string; blob: Blob } | null> => {
       try {
-        const dir = await mediaDirHandle.getDirectoryHandle(mediaId, { create: false })
-        const fileHandle = await dir.getFileHandle(MEDIA_THUMBNAIL_FILENAME, { create: false })
-        return { mediaId, blob: await fileHandle.getFile() }
+        const blob = await readBlob(requireWorkspaceRoot(), mediaThumbnailPath(mediaId))
+        return blob ? { mediaId, blob } : null
       } catch (error) {
         // A media dir without a thumbnail (or removed mid-read) is expected — skip.
         if (error instanceof DOMException && error.name === 'NotFoundError') return null

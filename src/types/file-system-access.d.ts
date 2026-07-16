@@ -121,6 +121,10 @@ interface FileSystemDirectoryHandle {
   [Symbol.asyncIterator](): AsyncIterableIterator<[string, FileSystemHandle]>
 }
 
+interface Window {
+  electronLocalDirectory?: import('@/infrastructure/storage/local-directory/types').ElectronLocalDirectoryBridge
+}
+
 /**
  * Extends DataTransferItem to support getAsFileSystemHandle()
  * Only supported in Chrome/Edge 86+

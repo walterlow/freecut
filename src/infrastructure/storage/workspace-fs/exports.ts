@@ -8,7 +8,14 @@
  */
 
 import { getWorkspaceRoot, requireWorkspaceRoot } from './root'
-import { exists, readBlob, readDirectoryFiles, removeEntry, writeBlob } from './fs-primitives'
+import {
+  exists,
+  readBlob,
+  readDirectoryFiles,
+  removeEntry,
+  writeBlob,
+  type WorkspaceRootInput,
+} from './fs-primitives'
 import {
   EXPORTS_DIR,
   PROJECTS_DIR,
@@ -44,7 +51,7 @@ function suffixFileName(fileName: string, n: number): string {
 }
 
 async function uniqueFileName(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   pathOf: (name: string) => string[],
   fileName: string,
 ): Promise<string> {

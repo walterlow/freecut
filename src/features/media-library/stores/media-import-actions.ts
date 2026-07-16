@@ -7,6 +7,7 @@ import { getSharedProxyKey } from '../utils/proxy-key'
 import { hasMediaFilePickerSupport, showMediaFilePicker } from '../utils/media-file-picker'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 import { useMediaPreparationStore } from './media-preparation-store'
+import { getWorkspaceRoot } from '../deps/storage'
 
 const logger = createLogger('MediaImport')
 
@@ -448,6 +449,58 @@ export function createImportActions(
       event.set('projectId', currentProjectId)
 
       try {
+        const workspaceRoot = getWorkspaceRoot()
+        if (workspaceRoot?.kind === 'electron-directory') {
+          const batchId = crypto.randomUUID()
+          const copiedFiles = await workspaceRoot.selectAndCopyFiles(['cache', 'imports', batchId])
+          event.set('fileCount', copiedFiles.length)
+          const { mediaLibraryService } = await loadMediaLibraryService()
+          const settled = await Promise.allSettled(
+            copiedFiles.map((file) =>
+              mediaLibraryService.importCopiedWorkspaceMedia(file, currentProjectId),
+            ),
+          )
+          const results: MediaMetadata[] = []
+          const duplicateNames: string[] = []
+          const unsupportedCodecFiles: UnsupportedCodecFile[] = []
+          let failedCount = 0
+          for (const result of settled) {
+            if (result.status === 'rejected') {
+              failedCount += 1
+              logger.error('Failed to import Electron-copied media', result.reason)
+              continue
+            }
+            const metadata = result.value
+            if (metadata.isDuplicate) {
+              duplicateNames.push(metadata.fileName)
+              continue
+            }
+            prependImportedMedia(set, metadata)
+            setupImportedVideoProxy(metadata)
+            results.push(metadata)
+            if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
+              unsupportedCodecFiles.push({
+                fileName: metadata.fileName,
+                audioCodec: metadata.audioCodec,
+              })
+            }
+          }
+          showImportNotifications(
+            results.length,
+            duplicateNames,
+            unsupportedCodecFiles,
+            failedCount,
+            get,
+          )
+          event.success({
+            imported: results.length,
+            duplicates: duplicateNames.length,
+            failed: failedCount,
+            unsupportedCodecs: unsupportedCodecFiles.length,
+          })
+          return results
+        }
+
         // Open file picker
         const handles = await showMediaFilePicker({ multiple: true })
 

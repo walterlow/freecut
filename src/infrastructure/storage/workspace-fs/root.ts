@@ -1,34 +1,37 @@
 /**
  * Active workspace root owner.
  *
- * Holds the single FileSystemDirectoryHandle the entire app writes to.
- * `setWorkspaceRoot` is called once by WorkspaceGate after the user picks
- * (or re-grants) their workspace folder. Every storage module calls
- * `requireWorkspaceRoot()` to get the handle.
+ * Holds the active local-directory backend the app writes to.
+ * The backend is either the standard File System Access API or the generic
+ * Electron local-directory bridge.
  *
  * Kept deliberately minimal — no React, no Zustand. This is the lowest
  * layer: pure getter/setter + permission-lost signaling.
  */
 
 import { createLogger } from '@/shared/logging/logger'
+import { FileSystemAccessDirectoryBackend } from '@/infrastructure/storage/local-directory/file-system-access-backend'
+import type { LocalDirectoryBackend } from '@/infrastructure/storage/local-directory/types'
 
 const logger = createLogger('WorkspaceRoot')
 
-let activeRoot: FileSystemDirectoryHandle | null = null
+let activeRoot: LocalDirectoryBackend | null = null
 
 type PermissionLostListener = () => void
 const permissionLostListeners = new Set<PermissionLostListener>()
 
-export function setWorkspaceRoot(handle: FileSystemDirectoryHandle | null): void {
-  activeRoot = handle
-  if (handle) {
-    logger.info(`Workspace root set: ${handle.name}`)
+export function setWorkspaceRoot(
+  root: FileSystemDirectoryHandle | LocalDirectoryBackend | null,
+): void {
+  activeRoot = root ? toBackend(root) : null
+  if (activeRoot) {
+    logger.info(`Workspace root set: ${activeRoot.name}`, { backend: activeRoot.kind })
   } else {
     logger.info('Workspace root cleared')
   }
 }
 
-export function getWorkspaceRoot(): FileSystemDirectoryHandle | null {
+export function getWorkspaceRoot(): LocalDirectoryBackend | null {
   return activeRoot
 }
 
@@ -37,13 +40,27 @@ export function getWorkspaceRoot(): FileSystemDirectoryHandle | null {
  * Throwing is correct: if WorkspaceGate did its job, a storage op can
  * never run without an active root.
  */
-export function requireWorkspaceRoot(): FileSystemDirectoryHandle {
+export function requireWorkspaceRoot(): LocalDirectoryBackend {
   if (!activeRoot) {
     throw new Error(
       'Workspace root is not set. The app must render <WorkspaceGate> before any storage operation runs.',
     )
   }
   return activeRoot
+}
+
+function toBackend(root: FileSystemDirectoryHandle | LocalDirectoryBackend): LocalDirectoryBackend {
+  if (isLocalDirectoryBackend(root)) {
+    return root
+  }
+  return new FileSystemAccessDirectoryBackend(root)
+}
+
+function isLocalDirectoryBackend(
+  root: FileSystemDirectoryHandle | LocalDirectoryBackend,
+): root is LocalDirectoryBackend {
+  const kind = (root as { kind?: unknown }).kind
+  return kind === 'file-system-access' || kind === 'electron-directory'
 }
 
 /**

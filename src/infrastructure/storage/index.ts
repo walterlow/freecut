@@ -7,6 +7,8 @@
  */
 
 // Projects
+export { getWorkspaceRoot } from '@/infrastructure/storage/workspace-fs/root'
+
 export {
   getAllProjects,
   getProject,
@@ -109,7 +111,10 @@ export {
 
 // Media source files
 export {
+  adoptCopiedMediaSource,
+  getCopiedMediaReadUrl,
   hasMediaSource,
+  getMediaSourceReadUrl,
   readMediaSource,
   writeMediaSource,
 } from '@/infrastructure/storage/workspace-fs/media-source'

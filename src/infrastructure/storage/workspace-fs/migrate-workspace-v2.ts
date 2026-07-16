@@ -44,6 +44,7 @@ import {
   removeEntry,
   writeBlob,
   writeJsonAtomic,
+  type WorkspaceRootInput,
 } from './fs-primitives'
 import { withKeyLock } from './with-key-lock'
 import type { WorkspaceMarker } from './bootstrap'
@@ -76,9 +77,7 @@ export interface MigrationReport {
  * marker already claims v2 or is missing (fresh workspace will get a v2
  * marker written by bootstrap).
  */
-export async function migrateWorkspaceV2(
-  root: FileSystemDirectoryHandle,
-): Promise<MigrationReport> {
+export async function migrateWorkspaceV2(root: WorkspaceRootInput): Promise<MigrationReport> {
   const start = performance.now()
   const report: MigrationReport = {
     ran: false,
@@ -164,7 +163,7 @@ export async function migrateWorkspaceV2(
   return report
 }
 
-async function collectProjectIds(root: FileSystemDirectoryHandle): Promise<Set<string>> {
+async function collectProjectIds(root: WorkspaceRootInput): Promise<Set<string>> {
   const entries = await listDirectory(root, [PROJECTS_DIR])
   const ids = new Set<string>()
   for (const entry of entries) {
@@ -175,10 +174,7 @@ async function collectProjectIds(root: FileSystemDirectoryHandle): Promise<Set<s
 
 /* ──────────────────────────── filmstrips ─────────────────────────────── */
 
-async function migrateFilmstrips(
-  root: FileSystemDirectoryHandle,
-  errors: string[],
-): Promise<number> {
+async function migrateFilmstrips(root: WorkspaceRootInput, errors: string[]): Promise<number> {
   const entries = await listDirectory(root, [LEGACY_FILMSTRIPS_DIR])
   let migrated = 0
   for (const entry of entries) {
@@ -208,10 +204,7 @@ async function migrateFilmstrips(
 
 /* ──────────────────────────── waveform-bin ───────────────────────────── */
 
-async function migrateWaveformBins(
-  root: FileSystemDirectoryHandle,
-  errors: string[],
-): Promise<number> {
+async function migrateWaveformBins(root: WorkspaceRootInput, errors: string[]): Promise<number> {
   const entries = await listDirectory(root, [LEGACY_WAVEFORM_BIN_DIR])
   let migrated = 0
   for (const entry of entries) {
@@ -241,10 +234,7 @@ async function migrateWaveformBins(
  * Legacy layout is two-level sharded: `preview-audio/<hex2>/<hex2>/<mediaId>.wav`.
  * Walk the shards and pull every `.wav` up to `media/<id>/cache/preview-audio.wav`.
  */
-async function migratePreviewAudio(
-  root: FileSystemDirectoryHandle,
-  errors: string[],
-): Promise<number> {
+async function migratePreviewAudio(root: WorkspaceRootInput, errors: string[]): Promise<number> {
   const shard1Entries = await listDirectory(root, [LEGACY_PREVIEW_AUDIO_DIR])
   let migrated = 0
   for (const shard1 of shard1Entries) {
@@ -285,7 +275,7 @@ async function migratePreviewAudio(
 
 /* ──────────────────────────── proxies ────────────────────────────────── */
 
-async function migrateProxies(root: FileSystemDirectoryHandle, errors: string[]): Promise<number> {
+async function migrateProxies(root: WorkspaceRootInput, errors: string[]): Promise<number> {
   const entries = await listDirectory(root, [LEGACY_PROXIES_DIR])
   let migrated = 0
   for (const entry of entries) {
@@ -316,7 +306,7 @@ async function migrateProxies(root: FileSystemDirectoryHandle, errors: string[])
 /* ──────────────────────────── thumbnail.meta sidecars ────────────────── */
 
 async function dropThumbnailMetaSidecars(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   errors: string[],
 ): Promise<number> {
   const entries = await listDirectory(root, [MEDIA_DIR])
@@ -348,7 +338,7 @@ async function dropThumbnailMetaSidecars(
  * with a project id.
  */
 async function fixProjectThumbnailContamination(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   knownProjectIds: Set<string>,
   errors: string[],
 ): Promise<number> {
@@ -397,17 +387,11 @@ async function fixProjectThumbnailContamination(
 
 /* ──────────────────────────── helpers ────────────────────────────────── */
 
-async function removeTopLevelDirIfEmpty(
-  root: FileSystemDirectoryHandle,
-  dir: string,
-): Promise<void> {
+async function removeTopLevelDirIfEmpty(root: WorkspaceRootInput, dir: string): Promise<void> {
   await removeDirIfEmpty(root, [dir])
 }
 
-async function removeDirIfEmpty(
-  root: FileSystemDirectoryHandle,
-  segments: string[],
-): Promise<void> {
+async function removeDirIfEmpty(root: WorkspaceRootInput, segments: string[]): Promise<void> {
   const entries = await listDirectory(root, segments)
   if (entries.length > 0) return
   try {

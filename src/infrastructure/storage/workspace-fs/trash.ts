@@ -34,6 +34,7 @@ import {
   readJson,
   writeJsonAtomic,
   WorkspaceFileCorruptError,
+  type WorkspaceRootInput,
 } from './fs-primitives'
 import { PROJECTS_DIR, projectJsonPath, projectTrashedMarkerPath } from './paths'
 import { writeWorkspaceIndex, type WorkspaceIndexEntry } from './workspace-index'
@@ -64,14 +65,11 @@ export interface TrashedProjectEntry {
 
 /* ────────────────────────────── Helpers ────────────────────────────── */
 
-async function readMarker(
-  root: FileSystemDirectoryHandle,
-  id: string,
-): Promise<TrashMarker | null> {
+async function readMarker(root: WorkspaceRootInput, id: string): Promise<TrashMarker | null> {
   return readJson<TrashMarker>(root, projectTrashedMarkerPath(id))
 }
 
-async function markerExists(root: FileSystemDirectoryHandle, id: string): Promise<boolean> {
+async function markerExists(root: WorkspaceRootInput, id: string): Promise<boolean> {
   return exists(root, projectTrashedMarkerPath(id))
 }
 
@@ -80,7 +78,7 @@ async function markerExists(root: FileSystemDirectoryHandle, id: string): Promis
  * Used by soft-delete and restore to keep the index in sync without
  * touching live-project code paths.
  */
-async function rebuildAndWriteIndex(root: FileSystemDirectoryHandle): Promise<void> {
+async function rebuildAndWriteIndex(root: WorkspaceRootInput): Promise<void> {
   const entries = await listDirectory(root, [PROJECTS_DIR])
   const indexEntries: WorkspaceIndexEntry[] = []
   for (const entry of entries) {

@@ -270,7 +270,3 @@ export async function requestHandlePermission(
     return 'denied'
   }
 }
-
-export function isFileSystemAccessSupported(): boolean {
-  return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function'
-}

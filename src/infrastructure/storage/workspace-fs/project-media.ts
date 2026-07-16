@@ -18,7 +18,7 @@ import type { MediaMetadata } from '@/types/storage'
 import { createLogger } from '@/shared/logging/logger'
 
 import { requireWorkspaceRoot } from './root'
-import { readJson, writeJsonAtomic } from './fs-primitives'
+import { readJson, writeJsonAtomic, type WorkspaceRootInput } from './fs-primitives'
 import { projectMediaLinksPath, PROJECTS_DIR } from './paths'
 import { listDirectory } from './fs-primitives'
 import { getProject } from './projects'
@@ -65,17 +65,14 @@ interface ProjectMediaLinks {
   mediaIds: LinkEntry[]
 }
 
-async function readLinks(
-  root: FileSystemDirectoryHandle,
-  projectId: string,
-): Promise<ProjectMediaLinks> {
+async function readLinks(root: WorkspaceRootInput, projectId: string): Promise<ProjectMediaLinks> {
   const existing = await readJson<ProjectMediaLinks>(root, projectMediaLinksPath(projectId))
   if (existing && Array.isArray(existing.mediaIds)) return existing
   return { version: LINKS_VERSION, mediaIds: [] }
 }
 
 async function writeLinks(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   projectId: string,
   links: ProjectMediaLinks,
 ): Promise<void> {

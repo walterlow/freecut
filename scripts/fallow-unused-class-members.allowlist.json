@@ -143,6 +143,113 @@
       ]
     },
     {
+      "path": "src/infrastructure/storage/local-directory/electron-directory-backend.ts",
+      "reason": "ElectronDirectoryBackend implements the LocalDirectoryBackend interface; these methods are invoked through the selected workspace backend abstraction.",
+      "members": [
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "readFile",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "getReadUrl",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "writeFile",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "listDirectory",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "createDirectory",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "exists",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "stat",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "move",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "remove",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "selectAndCopyFiles",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "ElectronDirectoryBackend",
+          "memberName": "subscribe",
+          "kind": "class_method"
+        }
+      ]
+    },
+    {
+      "path": "src/infrastructure/storage/local-directory/file-system-access-backend.ts",
+      "reason": "FileSystemAccessDirectoryBackend implements the LocalDirectoryBackend interface; these methods are invoked through the selected workspace backend abstraction.",
+      "members": [
+        {
+          "parentName": "FileSystemAccessDirectoryBackend",
+          "memberName": "getReadUrl",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "FileSystemAccessDirectoryBackend",
+          "memberName": "writeFile",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "FileSystemAccessDirectoryBackend",
+          "memberName": "listDirectory",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "FileSystemAccessDirectoryBackend",
+          "memberName": "createDirectory",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "FileSystemAccessDirectoryBackend",
+          "memberName": "exists",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "FileSystemAccessDirectoryBackend",
+          "memberName": "move",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "FileSystemAccessDirectoryBackend",
+          "memberName": "selectAndCopyFiles",
+          "kind": "class_method"
+        },
+        {
+          "parentName": "FileSystemAccessDirectoryBackend",
+          "memberName": "subscribe",
+          "kind": "class_method"
+        }
+      ]
+    },
+    {
       "path": "src/infrastructure/gpu-compositor/compositor-pipeline.ts",
       "reason": "Audited as a live GPU compositor API reached through typed render contexts.",
       "members": [

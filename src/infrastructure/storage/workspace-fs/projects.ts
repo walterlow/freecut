@@ -22,6 +22,7 @@ import {
   removeEntry,
   writeJsonAtomic,
   WorkspaceFileCorruptError,
+  type WorkspaceRootInput,
 } from './fs-primitives'
 import { PROJECTS_DIR, projectDir, projectJsonPath, projectTrashedMarkerPath } from './paths'
 import { describeStorageEnvironment } from './storage-environment'
@@ -81,11 +82,11 @@ async function restoreRootFolderHandle(serialized: SerializedProject): Promise<P
   return serialized as Project
 }
 
-async function isTrashed(root: FileSystemDirectoryHandle, id: string): Promise<boolean> {
+async function isTrashed(root: WorkspaceRootInput, id: string): Promise<boolean> {
   return exists(root, projectTrashedMarkerPath(id))
 }
 
-async function rebuildIndex(root: FileSystemDirectoryHandle): Promise<WorkspaceIndexEntry[]> {
+async function rebuildIndex(root: WorkspaceRootInput): Promise<WorkspaceIndexEntry[]> {
   const entries = await listDirectory(root, [PROJECTS_DIR])
   const indexEntries: WorkspaceIndexEntry[] = []
   for (const entry of entries) {
@@ -125,7 +126,7 @@ async function rebuildIndex(root: FileSystemDirectoryHandle): Promise<WorkspaceI
  *    instead of failing the whole load.
  */
 async function refreshIndex(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   persist: 'required' | 'best-effort' = 'required',
 ): Promise<WorkspaceIndexEntry[]> {
   return withKeyLock(INDEX_LOCK_KEY, async () => {
@@ -158,7 +159,7 @@ async function refreshIndex(
  * entries. On the common warm path the index is non-empty and this stays O(1).
  */
 async function upsertIndexEntry(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   entry: WorkspaceIndexEntry,
 ): Promise<void> {
   await withKeyLock(INDEX_LOCK_KEY, async () => {

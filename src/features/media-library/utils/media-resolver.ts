@@ -5,6 +5,7 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
 import { registerKeyframeIndex } from '@/shared/utils/keyframe-index-registry'
 import type { TimelineTrack } from '@/types/timeline'
 import { createLogger } from '@/shared/logging/logger'
+import { getMediaSourceReadUrl } from '@/infrastructure/storage'
 
 const logger = createLogger('MediaResolver')
 
@@ -44,6 +45,14 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
       if (!media) {
         logger.warn(`Media not found: ${mediaId}`)
         return '' // Fallback: empty string (Composition will skip)
+      }
+
+      if (media.storageType === 'workspace') {
+        const streamedUrl = await getMediaSourceReadUrl(mediaId)
+        if (streamedUrl) {
+          useMediaLibraryStore.getState().markMediaHealthy(mediaId)
+          return blobUrlManager.registerUrl(mediaId, streamedUrl)
+        }
       }
 
       // Get the source blob without an extra validation pass; getMediaFile

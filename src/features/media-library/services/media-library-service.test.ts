@@ -28,6 +28,9 @@ const indexedDbMocks = vi.hoisted(() => ({
   deleteScenes: vi.fn(async () => undefined),
   hasMediaSource: vi.fn(async () => false),
   readMediaSource: vi.fn(async () => null),
+  getCopiedMediaReadUrl: vi.fn(async () => 'http://127.0.0.1:9999/media-token/video.mp4'),
+  adoptCopiedMediaSource: vi.fn(async () => undefined),
+  removeWorkspaceCacheEntry: vi.fn(async () => undefined),
   writeMediaSource: vi.fn(async () => undefined),
 }))
 
@@ -50,6 +53,7 @@ const proxyMocks = vi.hoisted(() => ({
 
 const mediaProcessorMocks = vi.hoisted(() => ({
   processMedia: vi.fn(),
+  processMediaUrl: vi.fn(),
   hasUnsupportedAudioCodec: vi.fn(),
 }))
 
@@ -213,6 +217,7 @@ describe('MediaLibraryService', () => {
     indexedDbMocks.getAllMedia.mockResolvedValue([])
     indexedDbMocks.getAllMediaMetadata.mockImplementation(() => indexedDbMocks.getAllMedia())
     indexedDbMocks.getProjectMediaIds.mockResolvedValue([])
+    indexedDbMocks.getMediaForProject.mockResolvedValue([])
     indexedDbMocks.readAiOutput.mockResolvedValue(undefined)
   })
 
@@ -241,6 +246,67 @@ describe('MediaLibraryService', () => {
 
       const result = await mediaLibraryService.getMedia('nonexistent')
       expect(result).toBeNull()
+    })
+  })
+
+  describe('importCopiedWorkspaceMedia', () => {
+    it('probes Electron-copied video through a Range URL and adopts the existing bytes', async () => {
+      mediaProcessorMocks.processMediaUrl.mockResolvedValue({
+        metadata: {
+          type: 'video',
+          duration: 12,
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          codec: 'avc1',
+          bitrate: 0,
+          audioCodec: 'aac',
+          audioCodecSupported: true,
+          videoCodecSupported: true,
+        },
+        thumbnail: new Blob(['thumbnail'], { type: 'image/webp' }),
+      })
+      mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false })
+
+      const result = await mediaLibraryService.importCopiedWorkspaceMedia(
+        {
+          name: 'video.mp4',
+          path: ['cache', 'imports', 'batch-1', 'video.mp4'],
+          stat: { size: 1024, modifiedAt: 123 },
+        },
+        'project-1',
+      )
+
+      expect(indexedDbMocks.getCopiedMediaReadUrl).toHaveBeenCalledWith([
+        'cache',
+        'imports',
+        'batch-1',
+        'video.mp4',
+      ])
+      expect(mediaProcessorMocks.processMediaUrl).toHaveBeenCalledWith(
+        {
+          url: 'http://127.0.0.1:9999/media-token/video.mp4',
+          name: 'video.mp4',
+          size: 1024,
+          lastModified: 123,
+        },
+        'application/octet-stream',
+        { thumbnailTimestamp: 1, fastMetadata: true },
+      )
+      expect(indexedDbMocks.adoptCopiedMediaSource).toHaveBeenCalledWith(
+        ['cache', 'imports', 'batch-1', 'video.mp4'],
+        result.id,
+        'video.mp4',
+      )
+      expect(indexedDbMocks.writeMediaSource).not.toHaveBeenCalled()
+      expect(result).toMatchObject({
+        storageType: 'workspace',
+        fileName: 'video.mp4',
+        fileSize: 1024,
+        duration: 12,
+        width: 1920,
+        height: 1080,
+      })
     })
   })
 

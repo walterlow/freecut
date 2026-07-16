@@ -10,6 +10,7 @@ import { createManagedWorker, rejectAndDeletePendingRequests } from '@/shared/ut
 import type {
   ProcessMediaRequest,
   ProcessMediaResponse,
+  UrlMediaSource,
   VideoMetadata,
   AudioMetadata,
   ImageMetadata,
@@ -112,6 +113,34 @@ class MediaProcessorService {
       fastMetadata?: boolean
     },
   ): Promise<ProcessMediaResult> {
+    return this.processRequest({
+      file,
+      mimeType,
+      options,
+    })
+  }
+
+  async processMediaUrl(
+    source: UrlMediaSource,
+    mimeType: string,
+    options?: {
+      thumbnailMaxSize?: number
+      thumbnailQuality?: number
+      thumbnailTimestamp?: number
+      generateThumbnail?: boolean
+      fastMetadata?: boolean
+    },
+  ): Promise<ProcessMediaResult> {
+    return this.processRequest({
+      source,
+      mimeType,
+      options,
+    })
+  }
+
+  private async processRequest(
+    input: Pick<ProcessMediaRequest, 'file' | 'source' | 'mimeType' | 'options'>,
+  ): Promise<ProcessMediaResult> {
     const worker = this.ensureWorker()
     const requestId = `media-${++this.requestId}`
 
@@ -142,9 +171,7 @@ class MediaProcessorService {
       const request: ProcessMediaRequest = {
         type: 'process',
         requestId,
-        file,
-        mimeType,
-        options,
+        ...input,
       }
 
       worker.postMessage(request)

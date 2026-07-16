@@ -19,7 +19,14 @@ import type {
 import { createLogger } from '@/shared/logging/logger'
 
 import { requireWorkspaceRoot } from './root'
-import { readArrayBuffer, readJson, removeEntry, writeBlob, writeJsonAtomic } from './fs-primitives'
+import {
+  readArrayBuffer,
+  readJson,
+  removeEntry,
+  writeBlob,
+  writeJsonAtomic,
+  type WorkspaceRootInput,
+} from './fs-primitives'
 import { decodedAudioBinPath, decodedAudioDir } from './paths'
 
 const logger = createLogger('WorkspaceFS:DecodedAudio')
@@ -54,7 +61,7 @@ function decodedAudioBinMetaPath(mediaId: string, binIndex: number): string[] {
 type StoredBinMeta = Omit<DecodedPreviewAudioBin, 'left' | 'right'>
 
 async function readMeta(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   mediaId: string,
 ): Promise<DecodedPreviewAudioMeta | undefined> {
   const meta = await readJson<DecodedPreviewAudioMeta>(root, decodedAudioMetaPath(mediaId))
@@ -62,7 +69,7 @@ async function readMeta(
 }
 
 async function readBin(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   mediaId: string,
   binIndex: number,
 ): Promise<DecodedPreviewAudioBin | undefined> {
@@ -96,7 +103,7 @@ export async function getDecodedPreviewAudio(id: string): Promise<DecodedPreview
  * was handed the workspace root (which has no module-global root of its own).
  */
 export async function writeDecodedPreviewAudioToRoot(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   data: DecodedPreviewAudio,
 ): Promise<void> {
   try {

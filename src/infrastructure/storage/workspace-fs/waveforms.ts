@@ -19,7 +19,14 @@ import type { WaveformBin, WaveformData, WaveformMeta, WaveformRecord } from '@/
 import { createLogger } from '@/shared/logging/logger'
 
 import { requireWorkspaceRoot } from './root'
-import { readArrayBuffer, readJson, removeEntry, writeBlob, writeJsonAtomic } from './fs-primitives'
+import {
+  readArrayBuffer,
+  readJson,
+  removeEntry,
+  writeBlob,
+  writeJsonAtomic,
+  type WorkspaceRootInput,
+} from './fs-primitives'
 import { waveformDir, waveformBinPath } from './paths'
 
 const logger = createLogger('WorkspaceFS:Waveforms')
@@ -61,7 +68,7 @@ type StoredMeta = WaveformMeta
 type StoredBinMeta = Omit<WaveformBin, 'peaks'>
 
 async function readLegacy(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   mediaId: string,
 ): Promise<WaveformData | undefined> {
   const meta = await readJson<StoredLegacy>(root, waveformLegacyPath(mediaId))
@@ -72,7 +79,7 @@ async function readLegacy(
 }
 
 async function readMeta(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   mediaId: string,
 ): Promise<WaveformMeta | undefined> {
   const meta = await readJson<StoredMeta>(root, waveformMetaPath(mediaId))
@@ -80,7 +87,7 @@ async function readMeta(
 }
 
 async function readBin(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   mediaId: string,
   binIndex: number,
 ): Promise<WaveformBin | undefined> {

@@ -24,7 +24,7 @@
 
 import { createLogger } from '@/shared/logging/logger'
 import { requireWorkspaceRoot } from './root'
-import { listDirectory } from './fs-primitives'
+import { listDirectory, type WorkspaceRootInput } from './fs-primitives'
 import { MEDIA_DIR } from './paths'
 
 const logger = createLogger('WorkspaceFS:OrphanSweep')
@@ -42,7 +42,7 @@ export interface OrphanSweepOptions {
   dryRun?: boolean
 }
 
-async function countLiveMedia(root: FileSystemDirectoryHandle): Promise<number> {
+async function countLiveMedia(root: WorkspaceRootInput): Promise<number> {
   const entries = await listDirectory(root, [MEDIA_DIR])
   return entries.filter((e) => e.kind === 'directory').length
 }

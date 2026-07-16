@@ -89,7 +89,7 @@ const PROJECT_ANIMATION_PRESETS_FILENAME = 'animation-presets.json'
 const PROJECT_TRASHED_MARKER_FILENAME = '.freecut-trashed.json'
 
 const MEDIA_METADATA_FILENAME = 'metadata.json'
-export const MEDIA_THUMBNAIL_FILENAME = 'thumbnail.jpg'
+const MEDIA_THUMBNAIL_FILENAME = 'thumbnail.jpg'
 const MEDIA_CACHE_DIR = 'cache'
 
 const CACHE_WAVEFORM_DIR = 'waveform'

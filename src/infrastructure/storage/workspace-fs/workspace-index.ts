@@ -8,7 +8,12 @@
 
 import { createLogger } from '@/shared/logging/logger'
 import { INDEX_FILENAME } from './paths'
-import { readJson, writeJsonAtomic, WorkspaceFileCorruptError } from './fs-primitives'
+import {
+  readJson,
+  writeJsonAtomic,
+  WorkspaceFileCorruptError,
+  type WorkspaceRootInput,
+} from './fs-primitives'
 
 const INDEX_VERSION = '1.0'
 
@@ -26,7 +31,7 @@ export interface WorkspaceIndex {
   projects: WorkspaceIndexEntry[]
 }
 
-export async function readWorkspaceIndex(root: FileSystemDirectoryHandle): Promise<WorkspaceIndex> {
+export async function readWorkspaceIndex(root: WorkspaceRootInput): Promise<WorkspaceIndex> {
   let existing: WorkspaceIndex | null = null
   try {
     existing = await readJson<WorkspaceIndex>(root, [INDEX_FILENAME])
@@ -48,7 +53,7 @@ export function sortIndexEntries(entries: WorkspaceIndexEntry[]): WorkspaceIndex
 }
 
 export async function writeWorkspaceIndex(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   entries: WorkspaceIndexEntry[],
 ): Promise<void> {
   const index: WorkspaceIndex = {

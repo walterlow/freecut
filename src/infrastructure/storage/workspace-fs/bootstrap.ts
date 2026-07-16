@@ -23,6 +23,7 @@ import {
 } from './fs-primitives'
 import { migrateWorkspaceV2 } from './migrate-workspace-v2'
 import readmeTemplate from './README.template.md?raw'
+import type { LocalDirectoryBackend } from '@/infrastructure/storage/local-directory/types'
 
 const logger = createLogger('WorkspaceBootstrap')
 
@@ -45,22 +46,17 @@ export interface WorkspaceMarker {
  * Anything else in the workspace (user's own files) is left alone.
  */
 async function sweepStrandedTmpFiles(
-  root: FileSystemDirectoryHandle,
+  root: LocalDirectoryBackend | FileSystemDirectoryHandle,
   dirNames: string[],
 ): Promise<number> {
   let removed = 0
 
-  async function recurse(dir: FileSystemDirectoryHandle): Promise<void> {
-    // Collect entries first because we mutate the dir while iterating.
-    const entries: { name: string; kind: 'file' | 'directory' }[] = []
-    for await (const entry of dir.values()) {
-      entries.push({ name: entry.name, kind: entry.kind })
-    }
+  async function recurse(segments: string[]): Promise<void> {
+    const entries = await listDirectory(root, segments)
     for (const entry of entries) {
       if (entry.kind === 'directory') {
         try {
-          const sub = await dir.getDirectoryHandle(entry.name, { create: false })
-          await recurse(sub)
+          await recurse([...segments, entry.name])
         } catch (error) {
           logger.debug('sweepStrandedTmpFiles: subdir skipped', { name: entry.name, error })
         }
@@ -68,7 +64,7 @@ async function sweepStrandedTmpFiles(
       }
       if (entry.name.endsWith('.tmp')) {
         try {
-          await dir.removeEntry(entry.name)
+          await removeEntry(root, [...segments, entry.name])
           removed++
         } catch (error) {
           logger.debug('sweepStrandedTmpFiles: remove failed', { name: entry.name, error })
@@ -79,8 +75,7 @@ async function sweepStrandedTmpFiles(
 
   for (const name of dirNames) {
     try {
-      const sub = await root.getDirectoryHandle(name, { create: false })
-      await recurse(sub)
+      await recurse([name])
     } catch {
       // Directory missing (fresh workspace) — nothing to sweep.
     }
@@ -98,7 +93,9 @@ const PROXY_KEY_TAG_PATTERN = /^[hof]-/
  * expose a cross-browser rename. If both old and new names exist (e.g. a
  * partial prior run), the new name wins and the prefixed one is removed.
  */
-async function stripProxyKeyPrefixes(root: FileSystemDirectoryHandle): Promise<number> {
+async function stripProxyKeyPrefixes(
+  root: LocalDirectoryBackend | FileSystemDirectoryHandle,
+): Promise<number> {
   const entries = await listDirectory(root, proxiesRoot())
   let renamed = 0
   for (const entry of entries) {
@@ -170,7 +167,9 @@ async function stripProxyKeyPrefixes(root: FileSystemDirectoryHandle): Promise<n
   return renamed
 }
 
-export async function bootstrapWorkspace(root: FileSystemDirectoryHandle): Promise<void> {
+export async function bootstrapWorkspace(
+  root: LocalDirectoryBackend | FileSystemDirectoryHandle,
+): Promise<void> {
   // README: only write when missing — never overwrite user edits.
   if (!(await exists(root, [README_FILENAME]))) {
     try {

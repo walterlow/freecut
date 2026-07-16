@@ -3,6 +3,7 @@
 // Keep direct workspace-fs imports out of media-library services; this facade is
 // intentionally thin and behavior-preserving.
 export {
+  adoptCopiedMediaSource,
   associateMediaWithProject,
   createMedia,
   decrementContentRef,
@@ -12,6 +13,8 @@ export {
   deleteScenes,
   deleteThumbnailsByMediaId,
   deleteTranscript,
+  getCopiedMediaReadUrl,
+  getWorkspaceRoot,
   getAllMedia,
   getAllMediaMetadata,
   getMedia,

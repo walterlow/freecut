@@ -24,7 +24,11 @@ export function getSupportedMediaFormatLabels(): string[] {
 }
 
 export function hasMediaFilePickerSupport(): boolean {
-  return typeof window !== 'undefined' && 'showOpenFilePicker' in window
+  return (
+    typeof window !== 'undefined' &&
+    (typeof window.showOpenFilePicker === 'function' ||
+      window.electronLocalDirectory?.runtime === 'electron')
+  )
 }
 
 export async function showMediaFilePicker(options?: {

@@ -24,12 +24,15 @@ import { useTranslation } from 'react-i18next'
 import {
   ensureKnownWorkspaceForCurrent,
   getWorkspaceHandleRecord,
-  isFileSystemAccessSupported,
   queryHandlePermission,
   requestHandlePermission,
   saveWorkspaceHandleRecord,
 } from '@/infrastructure/storage/handles-db'
 import { onPermissionLost, setWorkspaceRoot } from '@/infrastructure/storage/workspace-fs/root'
+import { ElectronDirectoryBackend } from '@/infrastructure/storage/local-directory/electron-directory-backend'
+import { getElectronLocalDirectoryBridge } from '@/infrastructure/storage/local-directory/electron-directory-backend'
+import type { LocalDirectoryBackend } from '@/infrastructure/storage/local-directory/types'
+import { selectLocalDirectoryBackendKind } from '@/infrastructure/storage/local-directory/select-backend'
 import { createLogger } from '@/shared/logging/logger'
 import { WorkspaceGateSplash } from './workspace-gate-splash'
 import { usePathname } from './use-pathname'
@@ -44,6 +47,7 @@ function isStorageProtectedPath(pathname: string): boolean {
 }
 
 const logger = createLogger('WorkspaceGate')
+const ELECTRON_GRANT_STORAGE_KEY = 'freecut:electron-directory-grant'
 
 type GateStatus =
   | { kind: 'initializing' }
@@ -59,11 +63,11 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const needsWorkspace = isStorageProtectedPath(pathname)
 
-  const activate = useCallback(async (handle: FileSystemDirectoryHandle) => {
-    setWorkspaceRoot(handle)
+  const activate = useCallback(async (root: FileSystemDirectoryHandle | LocalDirectoryBackend) => {
+    setWorkspaceRoot(root)
     try {
       const { bootstrapWorkspace } = await import('@/infrastructure/storage/workspace-fs/bootstrap')
-      await bootstrapWorkspace(handle)
+      await bootstrapWorkspace(root)
     } catch (error) {
       logger.warn('bootstrapWorkspace failed', error)
     }
@@ -83,27 +87,41 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      if (!isFileSystemAccessSupported()) {
+      if (selectLocalDirectoryBackendKind(window) === 'file-system-access') {
+        // Promote any legacy `workspace:current` into a proper known-workspace
+        // record before we read it, so the indicator's list includes it.
+        await ensureKnownWorkspaceForCurrent()
+        const record = await getWorkspaceHandleRecord()
+        if (!record) {
+          if (!cancelled) setStatus({ kind: 'pick' })
+          return
+        }
+        const handle = record.handle as FileSystemDirectoryHandle
+        const permission = await queryHandlePermission(handle)
+        if (cancelled) return
+        if (permission === 'granted') {
+          await activate(handle)
+        } else {
+          setStatus({ kind: 'reconnect', handleName: record.name })
+        }
+        return
+      }
+
+      const bridge = getElectronLocalDirectoryBridge()
+      if (!bridge) {
         if (!cancelled) setStatus({ kind: 'unavailable' })
         return
       }
-      // Promote any legacy `workspace:current` into a proper known-workspace
-      // record before we read it, so the indicator's "known workspaces" list
-      // includes the one the user is about to use.
-      await ensureKnownWorkspaceForCurrent()
-      const record = await getWorkspaceHandleRecord()
-      if (!record) {
-        if (!cancelled) setStatus({ kind: 'pick' })
+      const savedGrantId = localStorage.getItem(ELECTRON_GRANT_STORAGE_KEY)
+      const restored = savedGrantId ? await bridge.restoreGrant(savedGrantId) : null
+      const grant = restored ?? (await bridge.listGrants())[0] ?? null
+      if (cancelled) return
+      if (!grant) {
+        setStatus({ kind: 'pick' })
         return
       }
-      const handle = record.handle as FileSystemDirectoryHandle
-      const permission = await queryHandlePermission(handle)
-      if (cancelled) return
-      if (permission === 'granted') {
-        await activate(handle)
-      } else {
-        setStatus({ kind: 'reconnect', handleName: record.name })
-      }
+      localStorage.setItem(ELECTRON_GRANT_STORAGE_KEY, grant.grantId)
+      await activate(new ElectronDirectoryBackend(bridge, grant))
     })().catch((error) => {
       logger.error('Gate initialization failed', error)
       if (!cancelled) setStatus({ kind: 'pick' })
@@ -129,21 +147,34 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   const handlePick = useCallback(async () => {
     setError(null)
     try {
-      const handle = await window.showDirectoryPicker({
-        id: 'freecut-workspace',
-        mode: 'readwrite',
-        startIn: 'documents',
-      })
-      const queryState = await queryHandlePermission(handle)
-      const finalState =
-        queryState === 'granted' ? queryState : await requestHandlePermission(handle)
-      if (finalState !== 'granted') {
-        setError(t('projects.workspaceGate.folderPermissionDenied'))
-        setStatus({ kind: 'reconnect', handleName: handle.name })
+      if (selectLocalDirectoryBackendKind(window) === 'file-system-access') {
+        const handle = await window.showDirectoryPicker({
+          id: 'freecut-workspace',
+          mode: 'readwrite',
+          startIn: 'documents',
+        })
+        const queryState = await queryHandlePermission(handle)
+        const finalState =
+          queryState === 'granted' ? queryState : await requestHandlePermission(handle)
+        if (finalState !== 'granted') {
+          setError(t('projects.workspaceGate.folderPermissionDenied'))
+          setStatus({ kind: 'reconnect', handleName: handle.name })
+          return
+        }
+        await saveWorkspaceHandleRecord(handle)
+        await activate(handle)
         return
       }
-      await saveWorkspaceHandleRecord(handle)
-      await activate(handle)
+
+      const bridge = getElectronLocalDirectoryBridge()
+      if (!bridge) {
+        setStatus({ kind: 'unavailable' })
+        return
+      }
+      const grant = await bridge.pickDirectory({ mode: 'readwrite' })
+      if (!grant) return
+      localStorage.setItem(ELECTRON_GRANT_STORAGE_KEY, grant.grantId)
+      await activate(new ElectronDirectoryBackend(bridge, grant))
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         // User cancelled the picker; stay on splash.
@@ -156,6 +187,21 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
 
   const handleReconnect = useCallback(async () => {
     setError(null)
+    if (selectLocalDirectoryBackendKind(window) !== 'file-system-access') {
+      const bridge = getElectronLocalDirectoryBridge()
+      const grantId = localStorage.getItem(ELECTRON_GRANT_STORAGE_KEY)
+      if (!bridge || !grantId) {
+        setStatus({ kind: 'pick' })
+        return
+      }
+      const grant = await bridge.restoreGrant(grantId)
+      if (!grant) {
+        setStatus({ kind: 'pick' })
+        return
+      }
+      await activate(new ElectronDirectoryBackend(bridge, grant))
+      return
+    }
     const record = await getWorkspaceHandleRecord()
     if (!record) {
       setStatus({ kind: 'pick' })

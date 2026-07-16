@@ -87,6 +87,7 @@ interface MediabunnyModule {
   Input: new (config: { formats: unknown; source: unknown }) => MediabunnyInput
   ALL_FORMATS: unknown
   BlobSource: new (blob: Blob) => unknown
+  UrlSource: new (url: string) => unknown
   CanvasSink: new (
     track: MediabunnyVideoTrack,
     options: { width: number; height: number; fit: string },
@@ -98,7 +99,8 @@ interface MediabunnyModule {
 export interface ProcessMediaRequest {
   type: 'process'
   requestId: string
-  file: File
+  file?: File
+  source?: UrlMediaSource
   mimeType: string
   options?: {
     thumbnailMaxSize?: number
@@ -108,6 +110,15 @@ export interface ProcessMediaRequest {
     fastMetadata?: boolean
   }
 }
+
+export interface UrlMediaSource {
+  url: string
+  name: string
+  size: number
+  lastModified: number
+}
+
+type MediaProcessSource = File | UrlMediaSource
 
 export interface ProcessMediaResponse {
   type: 'complete' | 'error'
@@ -177,6 +188,25 @@ async function getMediabunny(): Promise<MediabunnyModule> {
     mediabunnyModule = mb as unknown as MediabunnyModule
   }
   return mediabunnyModule
+}
+
+function isUrlMediaSource(source: MediaProcessSource): source is UrlMediaSource {
+  return !(source instanceof File)
+}
+
+function createMediabunnySource(mb: MediabunnyModule, source: MediaProcessSource): unknown {
+  return isUrlMediaSource(source) ? new mb.UrlSource(source.url) : new mb.BlobSource(source)
+}
+
+function mediaSourceName(source: MediaProcessSource): string {
+  return source.name
+}
+
+async function mediaSourceBlob(source: MediaProcessSource): Promise<Blob> {
+  if (!isUrlMediaSource(source)) return source
+  const response = await fetch(source.url)
+  if (!response.ok) throw new Error(`Failed to read imported media: ${response.status}`)
+  return await response.blob()
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -409,14 +439,14 @@ async function extractKeyframeTimestamps(
  * Extract video metadata using mediabunny
  */
 async function extractVideoMetadata(
-  file: File,
+  source: MediaProcessSource,
   options: { fastMetadata?: boolean } = {},
 ): Promise<VideoMetadata> {
   const mb = await getMediabunny()
 
   const input = new mb.Input({
     formats: mb.ALL_FORMATS,
-    source: new mb.BlobSource(file),
+    source: createMediabunnySource(mb, source),
   })
 
   try {
@@ -487,12 +517,12 @@ async function extractVideoMetadata(
 /**
  * Extract audio metadata using mediabunny
  */
-async function extractAudioMetadata(file: File): Promise<AudioMetadata> {
+async function extractAudioMetadata(source: MediaProcessSource): Promise<AudioMetadata> {
   const mb = await getMediabunny()
 
   const input = new mb.Input({
     formats: mb.ALL_FORMATS,
-    source: new mb.BlobSource(file),
+    source: createMediabunnySource(mb, source),
   })
 
   try {
@@ -545,9 +575,13 @@ function parseSvgDimensions(svgText: string): { width: number; height: number } 
  * Falls back to SVG XML parsing for SVG files (createImageBitmap
  * doesn't support SVGs in web workers).
  */
-async function extractImageMetadata(file: File, mimeType: string): Promise<ImageMetadata> {
+async function extractImageMetadata(
+  source: MediaProcessSource,
+  mimeType: string,
+): Promise<ImageMetadata> {
+  const blob = await mediaSourceBlob(source)
   if (mimeType === 'image/svg+xml') {
-    const text = await file.text()
+    const text = await blob.text()
     const dims = parseSvgDimensions(text)
     return {
       type: 'image',
@@ -556,7 +590,7 @@ async function extractImageMetadata(file: File, mimeType: string): Promise<Image
     }
   }
 
-  const bitmap = await createImageBitmap(file)
+  const bitmap = await createImageBitmap(blob)
   const metadata: ImageMetadata = {
     type: 'image',
     width: bitmap.width,
@@ -570,7 +604,7 @@ async function extractImageMetadata(file: File, mimeType: string): Promise<Image
  * Generate video thumbnail using mediabunny
  */
 async function generateVideoThumbnail(
-  file: File,
+  source: MediaProcessSource,
   maxSize: number,
   quality: number,
   timestamp: number,
@@ -578,7 +612,7 @@ async function generateVideoThumbnail(
   const mb = await getMediabunny()
 
   const input = new mb.Input({
-    source: new mb.BlobSource(file),
+    source: createMediabunnySource(mb, source),
     formats: mb.ALL_FORMATS,
   })
   let sink: MediabunnyCanvasSink | null = null
@@ -624,7 +658,7 @@ async function generateVideoThumbnail(
  * Generate image thumbnail using OffscreenCanvas
  */
 async function generateImageThumbnail(
-  file: File,
+  source: MediaProcessSource,
   maxSize: number,
   quality: number,
   mimeType: string,
@@ -635,7 +669,7 @@ async function generateImageThumbnail(
     throw new Error('SVG thumbnail generation not supported in worker')
   }
 
-  const bitmap = await createImageBitmap(file)
+  const bitmap = await createImageBitmap(await mediaSourceBlob(source))
 
   // Calculate dimensions preserving aspect ratio
   const width =
@@ -659,7 +693,11 @@ async function generateImageThumbnail(
 /**
  * Generate audio thumbnail (waveform placeholder)
  */
-async function generateAudioThumbnail(file: File, maxSize: number, quality: number): Promise<Blob> {
+async function generateAudioThumbnail(
+  source: MediaProcessSource,
+  maxSize: number,
+  quality: number,
+): Promise<Blob> {
   const width = maxSize
   const height = Math.round(maxSize * (9 / 16))
 
@@ -697,7 +735,8 @@ async function generateAudioThumbnail(file: File, maxSize: number, quality: numb
   ctx.font = 'bold 14px sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const displayName = file.name.length > 30 ? file.name.substring(0, 27) + '...' : file.name
+  const name = mediaSourceName(source)
+  const displayName = name.length > 30 ? name.substring(0, 27) + '...' : name
   ctx.fillText(displayName, width / 2, height - 20)
 
   return canvas.convertToBlob({ type: 'image/webp', quality })
@@ -707,7 +746,7 @@ async function generateAudioThumbnail(file: File, maxSize: number, quality: numb
  * Process a media file - extract metadata and generate thumbnail
  */
 async function processMedia(
-  file: File,
+  source: MediaProcessSource,
   mimeType: string,
   options: ProcessMediaRequest['options'] = {},
 ): Promise<{ metadata: VideoMetadata | AudioMetadata | ImageMetadata; thumbnail?: Blob }> {
@@ -724,11 +763,11 @@ async function processMedia(
 
   if (mimeType.startsWith('video/')) {
     // Video: extract metadata and generate thumbnail in parallel after metadata
-    metadata = await extractVideoMetadata(file, { fastMetadata })
+    metadata = await extractVideoMetadata(source, { fastMetadata })
     if (generateThumbnail) {
       try {
         thumbnail = await withTimeout(
-          generateVideoThumbnail(file, thumbnailMaxSize, thumbnailQuality, thumbnailTimestamp),
+          generateVideoThumbnail(source, thumbnailMaxSize, thumbnailQuality, thumbnailTimestamp),
           THUMBNAIL_TIMEOUT_MS,
           'Video thumbnail generation',
         )
@@ -739,9 +778,9 @@ async function processMedia(
   } else if (mimeType.startsWith('audio/')) {
     // Audio: metadata and thumbnail are independent
     const [audioMeta, audioThumb] = await Promise.all([
-      extractAudioMetadata(file),
+      extractAudioMetadata(source),
       generateThumbnail
-        ? generateAudioThumbnail(file, thumbnailMaxSize, thumbnailQuality).catch(() => undefined)
+        ? generateAudioThumbnail(source, thumbnailMaxSize, thumbnailQuality).catch(() => undefined)
         : Promise.resolve(undefined),
     ])
     metadata = audioMeta
@@ -749,9 +788,9 @@ async function processMedia(
   } else if (mimeType.startsWith('image/')) {
     // Image: metadata and thumbnail can run in parallel
     const [imageMeta, imageThumb] = await Promise.all([
-      extractImageMetadata(file, mimeType),
+      extractImageMetadata(source, mimeType),
       generateThumbnail
-        ? generateImageThumbnail(file, thumbnailMaxSize, thumbnailQuality, mimeType).catch(
+        ? generateImageThumbnail(source, thumbnailMaxSize, thumbnailQuality, mimeType).catch(
             () => undefined,
           )
         : Promise.resolve(undefined),
@@ -771,7 +810,9 @@ self.onmessage = async (e: MessageEvent<ProcessMediaRequest>) => {
 
   if (msg.type === 'process') {
     try {
-      const result = await processMedia(msg.file, msg.mimeType, msg.options)
+      const source = msg.file ?? msg.source
+      if (!source) throw new Error('Media processor request is missing a source')
+      const result = await processMedia(source, msg.mimeType, msg.options)
 
       const response: ProcessMediaResponse = {
         type: 'complete',

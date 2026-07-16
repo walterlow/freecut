@@ -19,6 +19,7 @@ import {
   removeEntry,
   writeJsonAtomic,
   WorkspaceFileCorruptError,
+  type WorkspaceRootInput,
 } from './fs-primitives'
 import { MEDIA_DIR, mediaDir, mediaMetadataPath } from './paths'
 
@@ -132,7 +133,7 @@ type MediaReadResult =
   | { kind: 'error'; error: unknown }
 
 async function readAllSerializedMedia(
-  root: FileSystemDirectoryHandle,
+  root: WorkspaceRootInput,
   context: string,
 ): Promise<SerializedMedia[]> {
   const dirs = await listDirectory(root, [MEDIA_DIR])

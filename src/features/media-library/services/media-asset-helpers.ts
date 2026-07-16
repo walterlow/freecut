@@ -1,6 +1,7 @@
 import type { MediaMetadata } from '@/types/storage'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 import {
+  adoptCopiedMediaSource,
   associateMediaWithProject,
   createMedia as createMediaDB,
   deleteMedia as deleteMediaDB,
@@ -100,6 +101,69 @@ interface PersistGeneratedMediaOptions {
   thumbnailBlob?: Blob
   thumbnailWidth?: number
   thumbnailHeight?: number
+}
+
+interface PersistAdoptedMediaOptions {
+  stagedPath: readonly string[]
+  projectId: string
+  mediaMetadata: MediaMetadata
+  thumbnailBlob?: Blob
+  thumbnailWidth?: number
+  thumbnailHeight?: number
+}
+
+export async function persistAdoptedMediaAsset({
+  stagedPath,
+  projectId,
+  mediaMetadata,
+  thumbnailBlob,
+  thumbnailWidth,
+  thumbnailHeight,
+}: PersistAdoptedMediaOptions): Promise<MediaMetadata> {
+  let sourceAdopted = false
+  let thumbnailSaved = false
+  try {
+    await adoptCopiedMediaSource(stagedPath, mediaMetadata.id, mediaMetadata.fileName)
+    sourceAdopted = true
+
+    const rawWidth = Number(thumbnailWidth)
+    const rawHeight = Number(thumbnailHeight)
+    if (
+      thumbnailBlob &&
+      Number.isFinite(rawWidth) &&
+      rawWidth > 0 &&
+      Number.isFinite(rawHeight) &&
+      rawHeight > 0
+    ) {
+      const thumbnailId = crypto.randomUUID()
+      await saveThumbnailDB({
+        id: thumbnailId,
+        mediaId: mediaMetadata.id,
+        blob: thumbnailBlob,
+        timestamp: 0,
+        width: Math.max(1, Math.floor(Math.abs(rawWidth))),
+        height: Math.max(1, Math.floor(Math.abs(rawHeight))),
+      })
+      mediaMetadata.thumbnailId = thumbnailId
+      thumbnailSaved = true
+    }
+
+    await createMediaDB(mediaMetadata)
+    await associateMediaWithProject(projectId, mediaMetadata.id)
+    return mediaMetadata
+  } catch (error) {
+    if (sourceAdopted) {
+      await deleteMediaDB(mediaMetadata.id).catch((cleanupError) => {
+        logger.warn(`Failed to roll back adopted media ${mediaMetadata.id}:`, cleanupError)
+      })
+    }
+    if (thumbnailSaved) {
+      await deleteThumbnailsByMediaId(mediaMetadata.id).catch((cleanupError) => {
+        logger.warn(`Failed to roll back adopted thumbnail ${mediaMetadata.id}:`, cleanupError)
+      })
+    }
+    throw error
+  }
 }
 
 export async function persistGeneratedMediaAsset({
