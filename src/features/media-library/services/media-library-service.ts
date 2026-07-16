@@ -940,7 +940,19 @@ class MediaLibraryService {
       media.fileName === input.name &&
       media.fileSize === input.stat.size &&
       media.fileLastModified === input.stat.modifiedAt
-    const existing = workspaceMedia.find(isSameCopiedFile) ?? projectMedia.find(isSameCopiedFile)
+    const duplicateCandidates = [
+      ...workspaceMedia.filter(isSameCopiedFile),
+      ...projectMedia.filter(isSameCopiedFile),
+    ]
+    let existing: MediaMetadata | undefined
+    for (const candidate of duplicateCandidates) {
+      if (candidate.storageType !== 'workspace') continue
+      const source = await getMediaSourceReadUrl(candidate.id).catch(() => null)
+      if (source) {
+        existing = candidate
+        break
+      }
+    }
     if (existing) {
       const alreadyInThisProject = projectMedia.some((media) => media.id === existing.id)
       if (!alreadyInThisProject) {

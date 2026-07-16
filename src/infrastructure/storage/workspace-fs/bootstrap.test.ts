@@ -95,4 +95,14 @@ describe('bootstrapWorkspace atomic recovery', () => {
       ),
     ).toBeNull()
   })
+
+  it('preserves unrelated tmp files in owned directories', async () => {
+    const root = createRoot('workspace', 'NotSupportedError')
+    await writeRawText(root, ['media', 'render.tmp'], 'user-owned temporary file')
+
+    await bootstrapWorkspace(asHandle(root))
+
+    expect(await readFileText(root, 'media', 'render.tmp')).toBe('user-owned temporary file')
+    expect(await readFileText(root, 'media', 'render')).toBeNull()
+  })
 })

@@ -35,11 +35,27 @@ export interface WorkspaceMarker {
 }
 
 const ATOMIC_TEMP_JOURNAL_PATTERN = /^(.*)\.freecut-[0-9a-f-]+\.tmp$/u
+const LEGACY_ATOMIC_JOURNAL_TARGET_PATTERNS = [
+  /^\.freecut-workspace\.json$/u,
+  /^index\.json$/u,
+  /^projects\/[^/]+\/(?:project|media-links|render-queue|animation-presets)\.json$/u,
+  /^projects\/[^/]+\/\.freecut-trashed\.json$/u,
+  /^media\/[^/]+\/metadata\.json$/u,
+  /^content\/.+\/(?:refs|meta)\.json$/u,
+]
 
-function atomicJournalTargetName(name: string): string | null {
+function atomicJournalTargetName(path: readonly string[]): string | null {
+  const name = path.at(-1)
+  if (!name) return null
   const randomJournal = ATOMIC_TEMP_JOURNAL_PATTERN.exec(name)
   if (randomJournal) return randomJournal[1] ?? null
-  return name.endsWith('.tmp') ? name.slice(0, -'.tmp'.length) : null
+  if (!name.endsWith('.tmp')) return null
+
+  const targetName = name.slice(0, -'.tmp'.length)
+  const targetPath = [...path.slice(0, -1), targetName].join('/')
+  return LEGACY_ATOMIC_JOURNAL_TARGET_PATTERNS.some((pattern) => pattern.test(targetPath))
+    ? targetName
+    : null
 }
 
 async function recoverRootAtomicJournals(
@@ -50,7 +66,7 @@ async function recoverRootAtomicJournals(
     const rootEntries = await listDirectory(root, [])
     for (const entry of rootEntries) {
       if (entry.kind !== 'file') continue
-      const targetName = atomicJournalTargetName(entry.name)
+      const targetName = atomicJournalTargetName([entry.name])
       if (targetName !== MARKER_FILENAME && targetName !== INDEX_FILENAME) continue
       await recover([entry.name])
     }
@@ -60,13 +76,12 @@ async function recoverRootAtomicJournals(
 }
 
 /**
- * Recover stranded `*.tmp` atomic-write journals.
+ * Recover stranded atomic-write journals.
  *
- * `writeJsonAtomic` creates `{name}.tmp` and then `.move()`s it (or writes
- * the target from the completed tmp bytes). A crash during the fallback copy
- * can leave a partial target, while the tmp remains the complete intended
- * replacement. Replaying the tmp before any workspace reads makes that
- * fallback crash-recoverable.
+ * Current writes use collision-resistant `{name}.freecut-{uuid}.tmp` names.
+ * A short allowlist also recognizes metadata journals produced by older
+ * versions that used `{name}.tmp`; unrelated user-owned `.tmp` files are
+ * deliberately preserved.
  *
  * We only inspect FreeCut's root metadata and owned directories.
  * Anything else in the workspace (user's own files) is left alone.
@@ -81,7 +96,7 @@ async function recoverStrandedTmpFiles(
     const staged = await readBlob(root, tmpPath)
     if (!staged) return
     const targetPath = [...tmpPath]
-    const targetName = atomicJournalTargetName(targetPath.at(-1)!)
+    const targetName = atomicJournalTargetName(targetPath)
     if (!targetName) return
     targetPath[targetPath.length - 1] = targetName
     await writeBlob(root, targetPath, staged)
@@ -100,9 +115,10 @@ async function recoverStrandedTmpFiles(
         }
         continue
       }
-      if (atomicJournalTargetName(entry.name)) {
+      const entryPath = [...segments, entry.name]
+      if (atomicJournalTargetName(entryPath)) {
         try {
-          await recover([...segments, entry.name])
+          await recover(entryPath)
         } catch (error) {
           logger.debug('recoverStrandedTmpFiles: recovery failed', { name: entry.name, error })
         }
