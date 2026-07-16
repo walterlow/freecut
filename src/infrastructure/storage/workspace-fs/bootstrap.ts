@@ -6,6 +6,7 @@
 import { createLogger } from '@/shared/logging/logger'
 import {
   CONTENT_DIR,
+  INDEX_FILENAME,
   MARKER_FILENAME,
   MEDIA_DIR,
   PROJECTS_DIR,
@@ -34,22 +35,32 @@ export interface WorkspaceMarker {
 }
 
 /**
- * Recursively remove stranded `*.tmp` files.
+ * Recover stranded `*.tmp` atomic-write journals.
  *
  * `writeJsonAtomic` creates `{name}.tmp` and then `.move()`s it (or writes
- * the target and removes the tmp). A crash between the tmp-write and the
- * move leaves the tmp-file behind. They're harmless — consumers only
- * read the non-tmp name — but they accumulate over time and clutter the
- * workspace when a user browses it externally.
+ * the target from the completed tmp bytes). A crash during the fallback copy
+ * can leave a partial target, while the tmp remains the complete intended
+ * replacement. Replaying the tmp before any workspace reads makes that
+ * fallback crash-recoverable.
  *
- * We only sweep the three directories we own (projects/media/content).
+ * We only inspect FreeCut's root metadata and owned directories.
  * Anything else in the workspace (user's own files) is left alone.
  */
-async function sweepStrandedTmpFiles(
+async function recoverStrandedTmpFiles(
   root: LocalDirectoryBackend | FileSystemDirectoryHandle,
   dirNames: string[],
 ): Promise<number> {
-  let removed = 0
+  let recovered = 0
+
+  async function recover(tmpPath: string[]): Promise<void> {
+    const staged = await readBlob(root, tmpPath)
+    if (!staged) return
+    const targetPath = [...tmpPath]
+    targetPath[targetPath.length - 1] = targetPath.at(-1)!.slice(0, -'.tmp'.length)
+    await writeBlob(root, targetPath, staged)
+    await removeEntry(root, tmpPath)
+    recovered++
+  }
 
   async function recurse(segments: string[]): Promise<void> {
     const entries = await listDirectory(root, segments)
@@ -64,12 +75,19 @@ async function sweepStrandedTmpFiles(
       }
       if (entry.name.endsWith('.tmp')) {
         try {
-          await removeEntry(root, [...segments, entry.name])
-          removed++
+          await recover([...segments, entry.name])
         } catch (error) {
-          logger.debug('sweepStrandedTmpFiles: remove failed', { name: entry.name, error })
+          logger.debug('recoverStrandedTmpFiles: recovery failed', { name: entry.name, error })
         }
       }
+    }
+  }
+
+  for (const name of [MARKER_FILENAME, INDEX_FILENAME]) {
+    try {
+      await recover([`${name}.tmp`])
+    } catch (error) {
+      logger.debug('recoverStrandedTmpFiles: root recovery failed', { name, error })
     }
   }
 
@@ -80,7 +98,7 @@ async function sweepStrandedTmpFiles(
       // Directory missing (fresh workspace) — nothing to sweep.
     }
   }
-  return removed
+  return recovered
 }
 
 const PROXY_KEY_TAG_PATTERN = /^[hof]-/
@@ -170,6 +188,17 @@ async function stripProxyKeyPrefixes(
 export async function bootstrapWorkspace(
   root: LocalDirectoryBackend | FileSystemDirectoryHandle,
 ): Promise<void> {
+  // Recover interrupted fallback commits before reading the marker, index, or
+  // project metadata. The tmp file is the complete intended replacement.
+  try {
+    const recovered = await recoverStrandedTmpFiles(root, [PROJECTS_DIR, MEDIA_DIR, CONTENT_DIR])
+    if (recovered > 0) {
+      logger.info(`Recovered ${recovered} stranded atomic write(s) from a prior crash`)
+    }
+  } catch (error) {
+    logger.warn('recoverStrandedTmpFiles failed', error)
+  }
+
   // README: only write when missing — never overwrite user edits.
   if (!(await exists(root, [README_FILENAME]))) {
     try {
@@ -227,15 +256,5 @@ export async function bootstrapWorkspace(
     }
   } catch (error) {
     logger.warn('stripProxyKeyPrefixes failed', error)
-  }
-
-  // Clean up any `.tmp` files stranded by a prior crash.
-  try {
-    const removed = await sweepStrandedTmpFiles(root, [PROJECTS_DIR, MEDIA_DIR, CONTENT_DIR])
-    if (removed > 0) {
-      logger.info(`Swept ${removed} stranded .tmp file(s) from prior crash`)
-    }
-  } catch (error) {
-    logger.warn('sweepStrandedTmpFiles failed', error)
   }
 }

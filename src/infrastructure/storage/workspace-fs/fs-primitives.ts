@@ -51,12 +51,33 @@ function isLocalDirectoryBackend(root: WorkspaceRootInput): root is LocalDirecto
 
 function wrap<T>(operation: string, fn: () => Promise<T>): Promise<T> {
   return fn().catch((error) => {
-    if (error instanceof DOMException && error.name === 'NotAllowedError') {
+    if (isPermissionLostError(error)) {
       notifyPermissionLost()
     }
     logger.warn(`${operation} failed`, error)
     throw error
   })
+}
+
+function isPermissionLostError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const value = error as { name?: unknown; code?: unknown; message?: unknown }
+  if (value.name === 'NotAllowedError' || value.name === 'SecurityError') return true
+  if (
+    value.code === 'EACCES' ||
+    value.code === 'EPERM' ||
+    value.code === 'ERR_ACCESS_DENIED' ||
+    value.code === 'LOCAL_DIRECTORY_GRANT_REVOKED' ||
+    value.code === 'LOCAL_DIRECTORY_PERMISSION_DENIED'
+  ) {
+    return true
+  }
+  return (
+    typeof value.message === 'string' &&
+    /(?:grant|permission).*(?:denied|revoked)|(?:denied|revoked).*(?:grant|permission)/i.test(
+      value.message,
+    )
+  )
 }
 
 export async function readJson<T>(root: WorkspaceRootInput, segments: string[]): Promise<T | null> {

@@ -917,10 +917,10 @@ class MediaLibraryService {
     }
 
     try {
-      const sourceUrl = await getCopiedMediaReadUrl(input.path)
+      const source = await getCopiedMediaReadUrl(input.path)
       const { metadata, thumbnail } = await mediaProcessorService.processMediaUrl(
         {
-          url: sourceUrl,
+          url: source.url,
           name: input.name,
           size: input.stat.size,
           lastModified: input.stat.modifiedAt,

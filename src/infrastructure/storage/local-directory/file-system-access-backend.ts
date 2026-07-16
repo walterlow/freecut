@@ -89,9 +89,14 @@ export class FileSystemAccessDirectoryBackend implements LocalDirectoryBackend {
       }
     }
 
+    // The completed tmp file is the recovery journal for filesystems that
+    // cannot rename. Copy from those staged bytes and only remove the journal
+    // after the live target has closed successfully. If the page or browser
+    // dies mid-copy, bootstrap will replay the still-complete tmp file.
+    const staged = await tmpHandle.getFile()
     const target = await parent.getFileHandle(fileName, { create: true })
     const targetWritable = await target.createWritable()
-    await targetWritable.write(data as FileSystemWriteChunkType)
+    await targetWritable.write(staged)
     await targetWritable.close()
     await parent.removeEntry(tmpName).catch((error) => {
       if (!isNotFound(error)) throw error

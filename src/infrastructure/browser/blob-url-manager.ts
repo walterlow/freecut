@@ -16,7 +16,11 @@ interface BlobUrlEntry {
   metadata?: ObjectUrlSourceMetadata
   /** True when this entry points at an externally-hosted URL (e.g. HTTP), not an object URL. */
   external?: boolean
+  /** Absolute expiry for an external URL. Blob URLs do not expire. */
+  expiresAt?: number
 }
+
+const EXTERNAL_URL_EXPIRY_SAFETY_MS = 5_000
 
 /**
  * Centralized Blob URL manager with reference counting.
@@ -80,13 +84,19 @@ class BlobUrlManager {
    * the media is range-streamed over HTTP instead of held fully in memory.
    * Reference-counted like acquire(); never used by the in-app flows.
    */
-  registerUrl(mediaId: string, url: string): string {
+  registerUrl(mediaId: string, url: string, options?: { expiresAt?: number }): string {
     const existing = this.entries.get(mediaId)
-    if (existing) {
+    if (existing && !this.isExpired(existing)) {
       existing.refCount++
       return existing.url
     }
-    this.entries.set(mediaId, { url, refCount: 1, external: true })
+    if (existing) this.entries.delete(mediaId)
+    this.entries.set(mediaId, {
+      url,
+      refCount: 1,
+      external: true,
+      expiresAt: options?.expiresAt,
+    })
     this.notify()
     return url
   }
@@ -96,7 +106,14 @@ class BlobUrlManager {
    * Returns null if no URL exists for this mediaId.
    */
   get(mediaId: string): string | null {
-    return this.entries.get(mediaId)?.url ?? null
+    const entry = this.entries.get(mediaId)
+    if (!entry) return null
+    if (this.isExpired(entry)) {
+      this.entries.delete(mediaId)
+      this.notify()
+      return null
+    }
+    return entry.url
   }
 
   /**
@@ -134,6 +151,14 @@ class BlobUrlManager {
     if (entry.external) return
     unregisterObjectUrl(entry.url)
     URL.revokeObjectURL(entry.url)
+  }
+
+  private isExpired(entry: BlobUrlEntry): boolean {
+    return (
+      entry.external === true &&
+      entry.expiresAt !== undefined &&
+      entry.expiresAt <= Date.now() + EXTERNAL_URL_EXPIRY_SAFETY_MS
+    )
   }
 
   /**

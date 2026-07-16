@@ -23,8 +23,10 @@ vi.mock('@/features/media-library/services/media-library-service', async () => {
 })
 
 const mockValidateMediaHandle = vi.fn()
+const mockGetMediaSourceReadUrl = vi.fn()
 vi.mock('@/infrastructure/storage', () => ({
   validateMediaHandle: (...args: unknown[]) => mockValidateMediaHandle(...args),
+  getMediaSourceReadUrl: (...args: unknown[]) => mockGetMediaSourceReadUrl(...args),
 }))
 
 vi.mock('@/features/media-library/services/proxy-service', () => ({
@@ -52,6 +54,7 @@ beforeEach(() => {
   blobUrlManager.releaseAll()
   cleanupBlobUrls()
   blobUrlCounter = 0
+  mockGetMediaSourceReadUrl.mockResolvedValue(null)
 
   vi.stubGlobal('URL', {
     ...URL,
@@ -242,6 +245,34 @@ describe('resolveMediaUrl', () => {
     const url2 = await resolveMediaUrl('media-1')
     expect(url2).toBe('blob:test-2') // new URL, not the cached one
     expect(mediaLibraryService.getMediaFile).toHaveBeenCalledTimes(2)
+  })
+
+  it('refreshes an expired Electron media URL instead of returning the cached token', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(10_000)
+    ;(mediaLibraryService.getMedia as Mock).mockResolvedValue({
+      id: 'media-1',
+      fileName: 'video.mp4',
+      storageType: 'workspace',
+    })
+    mockGetMediaSourceReadUrl
+      .mockResolvedValueOnce({
+        url: 'http://localhost/token-1',
+        expiresAt: 20_000,
+        stat: { kind: 'file', size: 1, modifiedAt: 1, etag: '1-1' },
+      })
+      .mockResolvedValueOnce({
+        url: 'http://localhost/token-2',
+        expiresAt: 40_000,
+        stat: { kind: 'file', size: 1, modifiedAt: 1, etag: '1-1' },
+      })
+
+    expect(await resolveMediaUrl('media-1')).toBe('http://localhost/token-1')
+
+    now.mockReturnValue(16_000)
+    expect(await resolveMediaUrl('media-1')).toBe('http://localhost/token-2')
+    expect(mockGetMediaSourceReadUrl).toHaveBeenCalledTimes(2)
+    expect(mediaLibraryService.getMediaFile).not.toHaveBeenCalled()
+    now.mockRestore()
   })
 
   it('deduplicates concurrent requests for same mediaId', async () => {

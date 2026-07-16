@@ -48,10 +48,12 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
       }
 
       if (media.storageType === 'workspace') {
-        const streamedUrl = await getMediaSourceReadUrl(mediaId)
-        if (streamedUrl) {
+        const streamedSource = await getMediaSourceReadUrl(mediaId)
+        if (streamedSource) {
           useMediaLibraryStore.getState().markMediaHealthy(mediaId)
-          return blobUrlManager.registerUrl(mediaId, streamedUrl)
+          return blobUrlManager.registerUrl(mediaId, streamedSource.url, {
+            expiresAt: streamedSource.expiresAt,
+          })
         }
       }
 

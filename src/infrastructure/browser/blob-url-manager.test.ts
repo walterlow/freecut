@@ -26,6 +26,21 @@ beforeEach(() => {
 })
 
 describe('BlobUrlManager', () => {
+  describe('registerUrl', () => {
+    it('drops an expired external URL so callers can register a fresh token', () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(10_000)
+      blobUrlManager.registerUrl('media-1', 'http://localhost/old', { expiresAt: 20_000 })
+
+      now.mockReturnValue(16_000)
+      expect(blobUrlManager.get('media-1')).toBeNull()
+
+      expect(
+        blobUrlManager.registerUrl('media-1', 'http://localhost/new', { expiresAt: 30_000 }),
+      ).toBe('http://localhost/new')
+      now.mockRestore()
+    })
+  })
+
   describe('acquire', () => {
     it('creates a new blob URL for a new mediaId', () => {
       const url = blobUrlManager.acquire('media-1', new Blob(['data']))

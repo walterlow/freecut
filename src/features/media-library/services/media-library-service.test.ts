@@ -28,7 +28,11 @@ const indexedDbMocks = vi.hoisted(() => ({
   deleteScenes: vi.fn(async () => undefined),
   hasMediaSource: vi.fn(async () => false),
   readMediaSource: vi.fn(async () => null),
-  getCopiedMediaReadUrl: vi.fn(async () => 'http://127.0.0.1:9999/media-token/video.mp4'),
+  getCopiedMediaReadUrl: vi.fn(async () => ({
+    url: 'http://127.0.0.1:9999/media-token/video.mp4',
+    expiresAt: Date.now() + 60_000,
+    stat: { kind: 'file', size: 1024, modifiedAt: 123, etag: '1024-123' },
+  })),
   adoptCopiedMediaSource: vi.fn(async () => undefined),
   removeWorkspaceCacheEntry: vi.fn(async () => undefined),
   writeMediaSource: vi.fn(async () => undefined),

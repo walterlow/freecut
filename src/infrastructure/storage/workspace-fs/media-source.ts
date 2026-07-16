@@ -15,6 +15,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger'
+import type { LocalReadUrl } from '@/infrastructure/storage/local-directory/types'
 
 import { requireWorkspaceRoot } from './root'
 import { listDirectory, readBlob, writeBlob, type WorkspaceRootInput } from './fs-primitives'
@@ -77,16 +78,16 @@ export async function hasMediaSource(mediaId: string): Promise<boolean> {
  * Return a range-capable URL for Electron-backed workspace media.
  * Standard File System Access callers keep using lazy File blobs.
  */
-export async function getMediaSourceReadUrl(mediaId: string): Promise<string | null> {
+export async function getMediaSourceReadUrl(mediaId: string): Promise<LocalReadUrl | null> {
   const root = requireWorkspaceRoot()
   if (root.kind !== 'electron-directory') return null
   const segments = await findSourceSegments(root, mediaId)
   if (!segments) return null
-  return (await root.getReadUrl(segments)).url
+  return root.getReadUrl(segments)
 }
 
-export async function getCopiedMediaReadUrl(stagedPath: readonly string[]): Promise<string> {
-  return (await requireWorkspaceRoot().getReadUrl(stagedPath)).url
+export async function getCopiedMediaReadUrl(stagedPath: readonly string[]): Promise<LocalReadUrl> {
+  return requireWorkspaceRoot().getReadUrl(stagedPath)
 }
 
 /**

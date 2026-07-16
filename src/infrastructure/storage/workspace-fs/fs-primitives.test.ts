@@ -2,6 +2,8 @@
 
 import { describe, expect, it, vi } from 'vite-plus/test'
 
+const notifyPermissionLost = vi.hoisted(() => vi.fn())
+
 vi.mock('@/shared/logging/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -17,10 +19,10 @@ vi.mock('@/shared/logging/logger', () => ({
 }))
 
 vi.mock('./root', () => ({
-  notifyPermissionLost: vi.fn(),
+  notifyPermissionLost,
 }))
 
-import { readJson, writeJsonAtomic, WorkspaceFileCorruptError } from './fs-primitives'
+import { readBlob, readJson, writeJsonAtomic, WorkspaceFileCorruptError } from './fs-primitives'
 import {
   asHandle,
   createRoot,
@@ -71,6 +73,20 @@ describe('fs-primitives readJson', () => {
     await writeJsonAtomic(asHandle(root), ['valid.json'], { hello: 'world' })
     const result = await readJson<{ hello: string }>(asHandle(root), ['valid.json'])
     expect(result).toEqual({ hello: 'world' })
+  })
+})
+
+describe('fs-primitives permission loss', () => {
+  it('recognizes a revoked Electron grant serialized as a plain Error', async () => {
+    notifyPermissionLost.mockClear()
+    const error = new Error('Electron IPC failed: LOCAL_DIRECTORY_GRANT_REVOKED')
+    const backend = {
+      kind: 'electron-directory',
+      readFile: vi.fn().mockRejectedValue(error),
+    } as unknown as import('@/infrastructure/storage/local-directory/types').LocalDirectoryBackend
+
+    await expect(readBlob(backend, ['index.json'])).rejects.toBe(error)
+    expect(notifyPermissionLost).toHaveBeenCalledTimes(1)
   })
 })
 
