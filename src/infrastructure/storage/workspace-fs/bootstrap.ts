@@ -34,6 +34,31 @@ export interface WorkspaceMarker {
   migratedFromLegacyAt?: number
 }
 
+const ATOMIC_TEMP_JOURNAL_PATTERN = /^(.*)\.freecut-[0-9a-f-]+\.tmp$/u
+
+function atomicJournalTargetName(name: string): string | null {
+  const randomJournal = ATOMIC_TEMP_JOURNAL_PATTERN.exec(name)
+  if (randomJournal) return randomJournal[1] ?? null
+  return name.endsWith('.tmp') ? name.slice(0, -'.tmp'.length) : null
+}
+
+async function recoverRootAtomicJournals(
+  root: LocalDirectoryBackend | FileSystemDirectoryHandle,
+  recover: (path: string[]) => Promise<void>,
+): Promise<void> {
+  try {
+    const rootEntries = await listDirectory(root, [])
+    for (const entry of rootEntries) {
+      if (entry.kind !== 'file') continue
+      const targetName = atomicJournalTargetName(entry.name)
+      if (targetName !== MARKER_FILENAME && targetName !== INDEX_FILENAME) continue
+      await recover([entry.name])
+    }
+  } catch (error) {
+    logger.debug('recoverStrandedTmpFiles: root scan failed', error)
+  }
+}
+
 /**
  * Recover stranded `*.tmp` atomic-write journals.
  *
@@ -56,7 +81,9 @@ async function recoverStrandedTmpFiles(
     const staged = await readBlob(root, tmpPath)
     if (!staged) return
     const targetPath = [...tmpPath]
-    targetPath[targetPath.length - 1] = targetPath.at(-1)!.slice(0, -'.tmp'.length)
+    const targetName = atomicJournalTargetName(targetPath.at(-1)!)
+    if (!targetName) return
+    targetPath[targetPath.length - 1] = targetName
     await writeBlob(root, targetPath, staged)
     await removeEntry(root, tmpPath)
     recovered++
@@ -73,7 +100,7 @@ async function recoverStrandedTmpFiles(
         }
         continue
       }
-      if (entry.name.endsWith('.tmp')) {
+      if (atomicJournalTargetName(entry.name)) {
         try {
           await recover([...segments, entry.name])
         } catch (error) {
@@ -90,6 +117,8 @@ async function recoverStrandedTmpFiles(
       logger.debug('recoverStrandedTmpFiles: root recovery failed', { name, error })
     }
   }
+
+  await recoverRootAtomicJournals(root, recover)
 
   for (const name of dirNames) {
     try {

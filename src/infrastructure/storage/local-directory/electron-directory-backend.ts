@@ -24,7 +24,7 @@ export class ElectronDirectoryBackend implements LocalDirectoryBackend {
 
   async readFile(path: LocalDirectoryPath): Promise<Blob | null> {
     const result = await this.#bridge.readFile({ grantId: this.grantId, path })
-    return result ? new Blob([result.data.slice().buffer as ArrayBuffer]) : null
+    return result ? new Blob([result.data as Uint8Array<ArrayBuffer>]) : null
   }
 
   getReadUrl(path: LocalDirectoryPath): Promise<LocalReadUrl> {

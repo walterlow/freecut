@@ -202,11 +202,19 @@ function mediaSourceName(source: MediaProcessSource): string {
   return source.name
 }
 
+const mediaSourceBlobCache = new WeakMap<UrlMediaSource, Promise<Blob>>()
+
 async function mediaSourceBlob(source: MediaProcessSource): Promise<Blob> {
   if (!isUrlMediaSource(source)) return source
-  const response = await fetch(source.url)
-  if (!response.ok) throw new Error(`Failed to read imported media: ${response.status}`)
-  return await response.blob()
+  let promise = mediaSourceBlobCache.get(source)
+  if (!promise) {
+    promise = fetch(source.url).then(async (response) => {
+      if (!response.ok) throw new Error(`Failed to read imported media: ${response.status}`)
+      return await response.blob()
+    })
+    mediaSourceBlobCache.set(source, promise)
+  }
+  return promise
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {

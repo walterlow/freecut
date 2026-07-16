@@ -51,9 +51,13 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
         const streamedSource = await getMediaSourceReadUrl(mediaId)
         if (streamedSource) {
           useMediaLibraryStore.getState().markMediaHealthy(mediaId)
-          return blobUrlManager.registerUrl(mediaId, streamedSource.url, {
+          const mediaUrl = blobUrlManager.registerUrl(mediaId, streamedSource.url, {
             expiresAt: streamedSource.expiresAt,
           })
+          if (media.keyframeTimestamps && media.keyframeTimestamps.length > 0) {
+            registerKeyframeIndex(mediaUrl, media.keyframeTimestamps)
+          }
+          return mediaUrl
         }
       }
 

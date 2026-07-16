@@ -5,10 +5,15 @@ import { createImportActions } from './media-import-actions'
 import { useMediaPreparationStore } from './media-preparation-store'
 
 const mediaLibraryServiceMocks = vi.hoisted(() => ({
+  importCopiedWorkspaceMedia: vi.fn(),
   importMediaWithHandle: vi.fn(),
   importMediaFromUrl: vi.fn(),
   waitForMediaPreparation: vi.fn(),
   getMediaFile: vi.fn(),
+}))
+
+const storageMocks = vi.hoisted(() => ({
+  getWorkspaceRoot: vi.fn(),
 }))
 
 const proxyServiceMocks = vi.hoisted(() => ({
@@ -47,6 +52,8 @@ vi.mock('./media-library-service-access', () => ({
 vi.mock('../services/proxy-service', () => ({
   proxyService: proxyServiceMocks,
 }))
+
+vi.mock('../deps/storage', () => storageMocks)
 
 vi.mock('../services/background-media-work', async () => {
   const { createBackgroundMediaWorkMocks } =
@@ -195,6 +202,7 @@ describe('createImportActions', () => {
     vi.clearAllMocks()
     useMediaPreparationStore.getState().clearAll()
     mediaLibraryServiceMocks.importMediaWithHandle.mockReset()
+    mediaLibraryServiceMocks.importCopiedWorkspaceMedia.mockReset()
     mediaLibraryServiceMocks.importMediaFromUrl.mockReset()
     mediaLibraryServiceMocks.waitForMediaPreparation.mockReset()
     mediaLibraryServiceMocks.waitForMediaPreparation.mockResolvedValue(undefined)
@@ -203,6 +211,7 @@ describe('createImportActions', () => {
       mimeType.startsWith('video/'),
     )
     proxyServiceMocks.hasProxy.mockReturnValue(false)
+    storageMocks.getWorkspaceRoot.mockReturnValue(null)
   })
 
   it('replaces optimistic placeholders with imported media', async () => {
@@ -546,6 +555,43 @@ describe('createImportActions', () => {
     } finally {
       vi.stubGlobal('window', originalWindow)
       vi.stubGlobal('navigator', originalNavigator)
+    }
+  })
+
+  it('limits concurrent Electron copied-file imports', async () => {
+    const originalWindow = globalThis.window
+    const copiedFiles = Array.from({ length: 5 }, (_, index) => ({
+      name: `clip-${index}.mp4`,
+      path: ['cache', 'imports', `clip-${index}.mp4`],
+      stat: { size: 1024, modifiedAt: index },
+    }))
+    storageMocks.getWorkspaceRoot.mockReturnValue({
+      kind: 'electron-directory',
+      selectAndCopyFiles: vi.fn().mockResolvedValue(copiedFiles),
+    })
+    vi.stubGlobal('window', {
+      electronLocalDirectory: { runtime: 'electron' },
+    } as Window & typeof globalThis)
+    let active = 0
+    let maxActive = 0
+    mediaLibraryServiceMocks.importCopiedWorkspaceMedia.mockImplementation(
+      async (file: { name: string }, _projectId: string) => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        active--
+        return makeMedia({ id: file.name, fileName: file.name })
+      },
+    )
+
+    try {
+      const result = await createImportActionsHarness().actions.importMedia()
+
+      expect(result).toHaveLength(5)
+      expect(mediaLibraryServiceMocks.importCopiedWorkspaceMedia).toHaveBeenCalledTimes(5)
+      expect(maxActive).toBeLessThanOrEqual(2)
+    } finally {
+      vi.stubGlobal('window', originalWindow)
     }
   })
 })

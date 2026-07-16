@@ -59,4 +59,40 @@ describe('bootstrapWorkspace atomic recovery', () => {
     )
     expect(await readFileText(root, 'projects', 'p1', 'project.json.tmp')).toBeNull()
   })
+
+  it('replays collision-resistant atomic journals', async () => {
+    const root = createRoot('workspace', 'NotSupportedError')
+    await writeRawText(
+      root,
+      ['.freecut-workspace.json.freecut-123e4567-e89b-12d3-a456-426614174000.tmp'],
+      JSON.stringify({ schemaVersion: '2.0', createdAt: 1 }),
+    )
+    await writeRawText(root, ['projects', 'p1', 'project.json'], '{partial')
+    await writeRawText(
+      root,
+      ['projects', 'p1', 'project.json.freecut-123e4567-e89b-12d3-a456-426614174001.tmp'],
+      JSON.stringify({ id: 'p1', name: 'Recovered random journal' }),
+    )
+
+    await bootstrapWorkspace(asHandle(root))
+
+    expect(await readFileText(root, '.freecut-workspace.json')).toContain('"schemaVersion":"2.0"')
+    expect(
+      await readFileText(
+        root,
+        '.freecut-workspace.json.freecut-123e4567-e89b-12d3-a456-426614174000.tmp',
+      ),
+    ).toBeNull()
+    expect(await readFileText(root, 'projects', 'p1', 'project.json')).toContain(
+      '"name":"Recovered random journal"',
+    )
+    expect(
+      await readFileText(
+        root,
+        'projects',
+        'p1',
+        'project.json.freecut-123e4567-e89b-12d3-a456-426614174001.tmp',
+      ),
+    ).toBeNull()
+  })
 })

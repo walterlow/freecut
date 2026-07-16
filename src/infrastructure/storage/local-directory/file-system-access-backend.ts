@@ -13,12 +13,14 @@ type MovableHandle = FileSystemFileHandle & {
 }
 
 const rootsRejectingMove = new WeakSet<FileSystemDirectoryHandle>()
+const ATOMIC_TEMP_TAG = '.freecut-'
 
 export class FileSystemAccessDirectoryBackend implements LocalDirectoryBackend {
   readonly kind = 'file-system-access' as const
   readonly grantId: string
   readonly name: string
   readonly #root: FileSystemDirectoryHandle
+  readonly #writeChains = new Map<string, Promise<unknown>>()
 
   constructor(root: FileSystemDirectoryHandle) {
     this.#root = root
@@ -51,12 +53,14 @@ export class FileSystemAccessDirectoryBackend implements LocalDirectoryBackend {
     path: LocalDirectoryPath,
     data: Blob | ArrayBuffer | Uint8Array | string,
   ): Promise<LocalFileStat> {
-    const { parent, fileName } = await this.#resolveFileParent(path, true)
-    const handle = await parent.getFileHandle(fileName, { create: true })
-    const writable = await handle.createWritable()
-    await writable.write(data as FileSystemWriteChunkType)
-    await writable.close()
-    return fileStat(await handle.getFile())
+    return this.#withWriteLock(path, async () => {
+      const { parent, fileName } = await this.#resolveFileParent(path, true)
+      const handle = await parent.getFileHandle(fileName, { create: true })
+      const writable = await handle.createWritable()
+      await writable.write(data as FileSystemWriteChunkType)
+      await writable.close()
+      return fileStat(await handle.getFile())
+    })
   }
 
   async writeFileAtomic(
@@ -64,24 +68,53 @@ export class FileSystemAccessDirectoryBackend implements LocalDirectoryBackend {
     data: Blob | ArrayBuffer | Uint8Array | string,
     options: { expectedEtag?: string } = {},
   ): Promise<LocalFileStat> {
-    const { parent, fileName } = await this.#resolveFileParent(path, true)
-    if (options.expectedEtag) {
-      const current = await this.stat(path)
-      if (!current || current.etag !== options.expectedEtag) {
-        throw new Error('LOCAL_DIRECTORY_ETAG_CONFLICT')
-      }
-    }
-    const tmpName = `${fileName}.tmp`
-    const tmpHandle = await parent.getFileHandle(tmpName, { create: true })
-    const writable = await tmpHandle.createWritable()
-    await writable.write(data as FileSystemWriteChunkType)
-    await writable.close()
+    return this.#withWriteLock(path, async () => {
+      const { parent, fileName } = await this.#resolveFileParent(path, true)
+      await this.#validateExpectedEtag(path, options.expectedEtag)
+      const { tmpName, tmpHandle } = await this.#createTemporaryFile(parent, fileName)
+      await this.#stageTemporaryFile(parent, tmpName, tmpHandle, data)
+      return this.#commitTemporaryFile(parent, fileName, tmpName, tmpHandle)
+    })
+  }
 
+  async #validateExpectedEtag(
+    path: LocalDirectoryPath,
+    expectedEtag: string | undefined,
+  ): Promise<void> {
+    if (!expectedEtag) return
+    const current = await this.stat(path)
+    if (!current || current.etag !== expectedEtag) {
+      throw new Error('LOCAL_DIRECTORY_ETAG_CONFLICT')
+    }
+  }
+
+  async #stageTemporaryFile(
+    parent: FileSystemDirectoryHandle,
+    tmpName: string,
+    tmpHandle: FileSystemFileHandle,
+    data: Blob | ArrayBuffer | Uint8Array | string,
+  ): Promise<void> {
+    try {
+      const writable = await tmpHandle.createWritable()
+      await writable.write(data as FileSystemWriteChunkType)
+      await writable.close()
+    } catch (error) {
+      await parent.removeEntry(tmpName).catch(() => undefined)
+      throw error
+    }
+  }
+
+  async #commitTemporaryFile(
+    parent: FileSystemDirectoryHandle,
+    fileName: string,
+    tmpName: string,
+    tmpHandle: FileSystemFileHandle,
+  ): Promise<LocalFileStat> {
     const movable = tmpHandle as MovableHandle
     if (!rootsRejectingMove.has(this.#root) && typeof movable.move === 'function') {
       try {
         await movable.move(parent, fileName)
-        const target = await parent.getFileHandle(fileName)
+        const target = await parent.getFileHandle(fileName, { create: false })
         return fileStat(await target.getFile())
       } catch (error) {
         if (!isNotSupported(error)) throw error
@@ -172,7 +205,7 @@ export class FileSystemAccessDirectoryBackend implements LocalDirectoryBackend {
 
   async move(from: LocalDirectoryPath, to: LocalDirectoryPath): Promise<void> {
     const blob = await this.readFile(from)
-    if (!blob) return
+    if (!blob) throw new DOMException('File not found', 'NotFoundError')
     await this.writeFileAtomic(to, blob)
     await this.remove(from)
   }
@@ -227,6 +260,50 @@ export class FileSystemAccessDirectoryBackend implements LocalDirectoryBackend {
       fileName: path.at(-1)!,
     }
   }
+
+  async #createTemporaryFile(
+    parent: FileSystemDirectoryHandle,
+    fileName: string,
+  ): Promise<{ tmpName: string; tmpHandle: FileSystemFileHandle }> {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const tmpName = `${fileName}${ATOMIC_TEMP_TAG}${crypto.randomUUID()}.tmp`
+      if (await entryExists(parent, tmpName)) continue
+      return {
+        tmpName,
+        tmpHandle: await parent.getFileHandle(tmpName, { create: true }),
+      }
+    }
+    throw new Error('Unable to allocate an atomic-write journal')
+  }
+
+  async #withWriteLock<T>(path: LocalDirectoryPath, operation: () => Promise<T>): Promise<T> {
+    const key = path.join('\0')
+    const previous = this.#writeChains.get(key) ?? Promise.resolve()
+    const result = previous.catch(() => undefined).then(operation)
+    const settled = result.catch(() => undefined)
+    this.#writeChains.set(key, settled)
+    try {
+      return await result
+    } finally {
+      if (this.#writeChains.get(key) === settled) this.#writeChains.delete(key)
+    }
+  }
+}
+
+async function entryExists(parent: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+  try {
+    await parent.getFileHandle(name, { create: false })
+    return true
+  } catch (error) {
+    if (!isNotFound(error) && !isTypeMismatch(error)) throw error
+  }
+  try {
+    await parent.getDirectoryHandle(name, { create: false })
+    return true
+  } catch (error) {
+    if (!isNotFound(error) && !isTypeMismatch(error)) throw error
+  }
+  return false
 }
 
 function fileStat(file: File | Blob): LocalFileStat {
@@ -245,4 +322,8 @@ function isNotFound(error: unknown): boolean {
 
 function isNotSupported(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'NotSupportedError'
+}
+
+function isTypeMismatch(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'TypeMismatchError'
 }

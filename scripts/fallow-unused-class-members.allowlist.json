@@ -214,11 +214,6 @@
         },
         {
           "parentName": "FileSystemAccessDirectoryBackend",
-          "memberName": "writeFile",
-          "kind": "class_method"
-        },
-        {
-          "parentName": "FileSystemAccessDirectoryBackend",
           "memberName": "listDirectory",
           "kind": "class_method"
         },
@@ -230,11 +225,6 @@
         {
           "parentName": "FileSystemAccessDirectoryBackend",
           "memberName": "exists",
-          "kind": "class_method"
-        },
-        {
-          "parentName": "FileSystemAccessDirectoryBackend",
-          "memberName": "move",
           "kind": "class_method"
         },
         {

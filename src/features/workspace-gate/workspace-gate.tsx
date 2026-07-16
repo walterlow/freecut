@@ -187,33 +187,40 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
 
   const handleReconnect = useCallback(async () => {
     setError(null)
-    if (selectLocalDirectoryBackendKind(window) !== 'file-system-access') {
-      const bridge = getElectronLocalDirectoryBridge()
-      const grantId = localStorage.getItem(ELECTRON_GRANT_STORAGE_KEY)
-      if (!bridge || !grantId) {
+    const backendKind = selectLocalDirectoryBackendKind(window)
+    if (backendKind === 'file-system-access') {
+      const record = await getWorkspaceHandleRecord()
+      if (!record) {
         setStatus({ kind: 'pick' })
         return
       }
-      const grant = await bridge.restoreGrant(grantId)
-      if (!grant) {
-        setStatus({ kind: 'pick' })
+      const handle = record.handle as FileSystemDirectoryHandle
+      const permission = await requestHandlePermission(handle)
+      if (permission === 'granted') {
+        await activate(handle)
         return
       }
-      await activate(new ElectronDirectoryBackend(bridge, grant))
+      setError(t('projects.workspaceGate.reconnectPermissionDenied'))
       return
     }
-    const record = await getWorkspaceHandleRecord()
-    if (!record) {
+
+    if (backendKind !== 'electron-directory') {
+      setStatus({ kind: 'unavailable' })
+      return
+    }
+
+    const bridge = getElectronLocalDirectoryBridge()
+    const grantId = localStorage.getItem(ELECTRON_GRANT_STORAGE_KEY)
+    if (!bridge || !grantId) {
       setStatus({ kind: 'pick' })
       return
     }
-    const handle = record.handle as FileSystemDirectoryHandle
-    const permission = await requestHandlePermission(handle)
-    if (permission === 'granted') {
-      await activate(handle)
+    const grant = await bridge.restoreGrant(grantId)
+    if (!grant) {
+      setStatus({ kind: 'pick' })
       return
     }
-    setError(t('projects.workspaceGate.reconnectPermissionDenied'))
+    await activate(new ElectronDirectoryBackend(bridge, grant))
   }, [activate, t])
 
   // Routes that don't touch storage never wait on the gate — no splash, no

@@ -34,6 +34,28 @@ interface CompletedImportTask extends ImportTask {
 
 type ImportStorageMode = 'copy' | 'link'
 
+async function runSettledWithImportConcurrency<T>(
+  tasks: Array<() => Promise<T>>,
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length)
+  let nextIndex = 0
+  const runNext = async (): Promise<void> => {
+    while (nextIndex < tasks.length) {
+      const index = nextIndex++
+      const task = tasks[index]
+      if (!task) continue
+      try {
+        results[index] = { status: 'fulfilled', value: await task() }
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason }
+      }
+    }
+  }
+  const workerCount = Math.min(IMPORT_PROCESSING_CONCURRENCY, tasks.length)
+  await Promise.all(Array.from({ length: workerCount }, runNext))
+  return results
+}
+
 function buildOptimisticMediaItem(
   handle: FileSystemFileHandle,
   file: File,
@@ -337,36 +359,16 @@ export function createImportActions(
     serviceModulePromise: ReturnType<typeof loadMediaLibraryService>,
     storageMode: ImportStorageMode,
   ): Promise<PromiseSettledResult<CompletedImportTask>[]> => {
-    const results: PromiseSettledResult<CompletedImportTask>[] = new Array(importTasks.length)
-    let nextIndex = 0
     const { mediaLibraryService } = await serviceModulePromise
-
-    const runNext = async (): Promise<void> => {
-      while (nextIndex < importTasks.length) {
-        const index = nextIndex++
-        const task = importTasks[index]
-        if (!task) {
-          continue
-        }
-
-        try {
-          markImportPreparationRunning(task.tempId)
-          const metadata = await mediaLibraryService.importMediaWithHandle(task.handle, projectId, {
-            storageMode,
-          })
-          results[index] = {
-            status: 'fulfilled',
-            value: { metadata, tempId: task.tempId, file: task.file, handle: task.handle },
-          }
-        } catch (reason) {
-          results[index] = { status: 'rejected', reason }
-        }
-      }
-    }
-
-    const workerCount = Math.min(IMPORT_PROCESSING_CONCURRENCY, importTasks.length)
-    await Promise.all(Array.from({ length: workerCount }, runNext))
-    return results
+    return runSettledWithImportConcurrency(
+      importTasks.map((task) => async () => {
+        markImportPreparationRunning(task.tempId)
+        const metadata = await mediaLibraryService.importMediaWithHandle(task.handle, projectId, {
+          storageMode,
+        })
+        return { metadata, tempId: task.tempId, file: task.file, handle: task.handle }
+      }),
+    )
   }
 
   const importHandlesInternal = async (
@@ -455,9 +457,10 @@ export function createImportActions(
           const copiedFiles = await workspaceRoot.selectAndCopyFiles(['cache', 'imports', batchId])
           event.set('fileCount', copiedFiles.length)
           const { mediaLibraryService } = await loadMediaLibraryService()
-          const settled = await Promise.allSettled(
-            copiedFiles.map((file) =>
-              mediaLibraryService.importCopiedWorkspaceMedia(file, currentProjectId),
+          const settled = await runSettledWithImportConcurrency(
+            copiedFiles.map(
+              (file) => () =>
+                mediaLibraryService.importCopiedWorkspaceMedia(file, currentProjectId),
             ),
           )
           const results: MediaMetadata[] = []
