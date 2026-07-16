@@ -111,7 +111,7 @@ async function recoverStrandedTmpFiles(
         try {
           await recurse([...segments, entry.name])
         } catch (error) {
-          logger.debug('sweepStrandedTmpFiles: subdir skipped', { name: entry.name, error })
+          logger.debug('recoverStrandedTmpFiles: subdir skipped', { name: entry.name, error })
         }
         continue
       }
