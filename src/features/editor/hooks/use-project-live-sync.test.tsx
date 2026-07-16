@@ -8,6 +8,8 @@ const toastWarning = vi.hoisted(() => vi.fn())
 const hydrateTimeline = vi.hoisted(() => vi.fn())
 const setCurrentProject = vi.hoisted(() => vi.fn())
 
+type DeferredSnapshotResponse = { ok: true; json: () => Promise<unknown> }
+
 vi.mock('sonner', () => ({
   toast: { warning: toastWarning },
 }))
@@ -196,9 +198,7 @@ describe('useProjectLiveSync', () => {
   it('aborts an in-flight snapshot fetch before publishing the editor version', async () => {
     let getCount = 0
     let staleSignal: AbortSignal | undefined
-    let resolveStaleFetch:
-      | ((response: { ok: true; json: () => Promise<unknown> }) => void)
-      | undefined
+    let resolveStaleFetch: ((response: DeferredSnapshotResponse) => void) | undefined
     fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => {
       if (options?.method === 'PUT') {
         return {
