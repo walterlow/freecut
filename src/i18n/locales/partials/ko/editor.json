@@ -542,7 +542,23 @@
       "tryAgain": "다시 시도하세요.",
       "projectSaved": "프로젝트가 저장되었습니다",
       "projectSaveFailed": "프로젝트 저장에 실패했습니다",
-      "projectBundle": "FreeCut 프로젝트 번들"
+      "projectBundle": "FreeCut 프로젝트 번들",
+      "syncConflict": {
+        "title": "외부 편집 내용이 대기 중입니다",
+        "description": "편집기에 저장되지 않은 변경 사항이 있고 더 새로운 Headless 또는 파일 시스템 버전이 있습니다. 계속할 방법을 선택할 때까지 자동 저장이 일시 중지됩니다.",
+        "revision": "외부 버전: {{revision}}",
+        "keepBoth": "둘 다 유지",
+        "keepBothHint": "편집기 상태를 충돌 사본으로 저장한 다음 외부 버전을 적용합니다.",
+        "useExternal": "Headless 사용",
+        "useExternalHint": "편집기의 저장되지 않은 변경 사항을 버리고 외부 버전을 적용합니다.",
+        "useEditor": "편집기 사용",
+        "useEditorHint": "현재 편집기 상태를 다음 프로젝트 버전으로 저장합니다.",
+        "later": "나중에 결정",
+        "copySaved": "충돌 사본이 저장되었습니다",
+        "copyFailed": "충돌 사본을 저장하지 못했습니다",
+        "resolutionFailed": "외부 편집 충돌을 해결하지 못했습니다",
+        "waiting": "외부 편집 내용이 대기 중입니다. 클릭하여 해결하세요"
+      }
     },
     "audioMeters": {
       "meters": "미터",

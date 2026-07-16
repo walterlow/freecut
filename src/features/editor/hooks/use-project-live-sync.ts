@@ -61,6 +61,13 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
   const conflictPendingRef = useRef(false)
   const applyingRef = useRef(false)
   const publishingRef = useRef(false)
+  const projectGenerationRef = useRef({ projectId, generation: 0 })
+  if (projectGenerationRef.current.projectId !== projectId) {
+    projectGenerationRef.current = {
+      projectId,
+      generation: projectGenerationRef.current.generation + 1,
+    }
+  }
   const refetchAfterApplyRef = useRef(false)
   const scheduleFetchRef = useRef<() => void>(() => undefined)
   const fetchControllerRef = useRef<AbortController | null>(null)
@@ -89,6 +96,8 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
       return
     }
     applyingRef.current = true
+    const generation = projectGenerationRef.current
+    const isCurrentProjectGeneration = () => projectGenerationRef.current === generation
     const playback = usePlaybackStore.getState()
     const timelineSettings = useTimelineSettingsStore.getState()
     const previousFrame = playback.currentFrame
@@ -121,6 +130,7 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
     }
 
     try {
+      if (!isCurrentProjectGeneration()) return
       playback.pause()
       playback.setPreviewFrame(null)
       timelineSettings.setTimelineLoading(true)
@@ -138,6 +148,11 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
         ]).catch((error) => logger.warn('Failed to clear changed media caches', error))
       }
 
+      await hydrateTimelineStoresFromProject(snapshot.project, {
+        shouldApply: isCurrentProjectGeneration,
+      })
+      if (!isCurrentProjectGeneration()) return
+
       useMediaLibraryStore.setState((state) => ({
         mediaItems,
         mediaById: Object.fromEntries(mediaItems.map((media) => [media.id, media])),
@@ -146,9 +161,6 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
         isLoading: false,
       }))
       useProjectStore.getState().setCurrentProject(snapshot.project)
-
-      await hydrateTimelineStoresFromProject(snapshot.project)
-
       restoreCompositionPath(snapshot.project, previousCompositionPath)
 
       const itemIds = new Set(useItemsStore.getState().items.map((item) => item.id))
@@ -198,7 +210,9 @@ export function useProjectLiveSync({ projectId, isDirty, enabled }: UseProjectLi
         mediaCount: mediaItems.length,
       })
     } finally {
-      useTimelineSettingsStore.getState().setTimelineLoading(false)
+      if (isCurrentProjectGeneration()) {
+        useTimelineSettingsStore.getState().setTimelineLoading(false)
+      }
       applyingRef.current = false
       if (refetchAfterApplyRef.current) {
         refetchAfterApplyRef.current = false

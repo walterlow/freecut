@@ -130,7 +130,52 @@ const effect = z
     params: params.default({}),
   })
   .strict()
-const audioEq = z.record(z.string(), z.union([finite, z.boolean(), z.string()]))
+const audioEqCutSlope = z.union([z.literal(6), z.literal(12), z.literal(18), z.literal(24)])
+const audioEq = z
+  .object({
+    enabled: z.boolean().optional(),
+    outputGainDb: finite.optional(),
+    band1Enabled: z.boolean().optional(),
+    band1Type: z.enum(['low-shelf', 'peaking', 'high-shelf', 'high-pass']).optional(),
+    band1FrequencyHz: finite.optional(),
+    band1GainDb: finite.optional(),
+    band1Q: finite.optional(),
+    band1SlopeDbPerOct: audioEqCutSlope.optional(),
+    lowCutEnabled: z.boolean().optional(),
+    lowCutFrequencyHz: finite.optional(),
+    lowCutSlopeDbPerOct: audioEqCutSlope.optional(),
+    lowEnabled: z.boolean().optional(),
+    lowType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
+    lowGainDb: finite.optional(),
+    lowFrequencyHz: finite.optional(),
+    lowQ: finite.optional(),
+    lowMidEnabled: z.boolean().optional(),
+    lowMidType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
+    lowMidGainDb: finite.optional(),
+    lowMidFrequencyHz: finite.optional(),
+    lowMidQ: finite.optional(),
+    midGainDb: finite.optional(),
+    highMidEnabled: z.boolean().optional(),
+    highMidType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
+    highMidGainDb: finite.optional(),
+    highMidFrequencyHz: finite.optional(),
+    highMidQ: finite.optional(),
+    highEnabled: z.boolean().optional(),
+    highType: z.enum(['low-shelf', 'peaking', 'high-shelf', 'notch']).optional(),
+    highGainDb: finite.optional(),
+    highFrequencyHz: finite.optional(),
+    highQ: finite.optional(),
+    band6Enabled: z.boolean().optional(),
+    band6Type: z.enum(['low-pass', 'low-shelf', 'peaking', 'high-shelf']).optional(),
+    band6FrequencyHz: finite.optional(),
+    band6GainDb: finite.optional(),
+    band6Q: finite.optional(),
+    band6SlopeDbPerOct: audioEqCutSlope.optional(),
+    highCutEnabled: z.boolean().optional(),
+    highCutFrequencyHz: finite.optional(),
+    highCutSlopeDbPerOct: audioEqCutSlope.optional(),
+  })
+  .strict()
 const trackUpdates = z
   .object({
     name: z.string().min(1).optional(),
@@ -681,6 +726,8 @@ export function capabilities() {
         'PUT /v1/projects/:id',
         'PATCH /v1/projects/:id',
         'POST /v1/projects/:id/edit',
+        'GET /v1/projects/:id/snapshot',
+        'GET /v1/events',
         'GET /v1/media',
         'GET /v1/media/:id',
         'POST /v1/media/:id/probe',

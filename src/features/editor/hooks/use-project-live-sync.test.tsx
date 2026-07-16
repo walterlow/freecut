@@ -5,6 +5,8 @@ import { useProjectLiveSync } from './use-project-live-sync'
 
 const fetchMock = vi.hoisted(() => vi.fn())
 const toastWarning = vi.hoisted(() => vi.fn())
+const hydrateTimeline = vi.hoisted(() => vi.fn())
+const setCurrentProject = vi.hoisted(() => vi.fn())
 
 vi.mock('sonner', () => ({
   toast: { warning: toastWarning },
@@ -19,13 +21,23 @@ vi.mock('@/shared/logging/logger', () => ({
 }))
 
 vi.mock('@/features/editor/deps/timeline-store', () => ({
-  hydrateTimelineStoresFromProject: vi.fn(),
-  useCompositionNavigationStore: { getState: vi.fn() },
-  useItemsStore: { getState: vi.fn() },
-  useMarkersStore: { getState: vi.fn() },
-  useTimelineSettingsStore: { getState: vi.fn() },
-  useTransitionsStore: { getState: vi.fn() },
-  useZoomStore: { getState: vi.fn() },
+  hydrateTimelineStoresFromProject: hydrateTimeline,
+  useCompositionNavigationStore: {
+    getState: () => ({ breadcrumbs: [], navigateToComposition: vi.fn() }),
+  },
+  useItemsStore: { getState: () => ({ items: [], tracks: [] }) },
+  useMarkersStore: { getState: () => ({ markers: [] }) },
+  useTimelineSettingsStore: {
+    getState: () => ({
+      scrollPosition: 0,
+      setTimelineLoading: vi.fn(),
+      setScrollPosition: vi.fn(),
+    }),
+  },
+  useTransitionsStore: { getState: () => ({ transitions: [] }) },
+  useZoomStore: {
+    getState: () => ({ level: 1, setZoomLevelSynchronized: vi.fn() }),
+  },
 }))
 
 vi.mock('@/features/editor/deps/timeline-cache', () => ({
@@ -38,7 +50,7 @@ vi.mock('@/features/editor/deps/media-library', () => ({
 }))
 
 vi.mock('@/features/editor/deps/projects', () => ({
-  useProjectStore: { getState: vi.fn() },
+  useProjectStore: { getState: () => ({ setCurrentProject }) },
 }))
 
 vi.mock('@/features/editor/deps/composition-runtime', () => ({
@@ -46,11 +58,32 @@ vi.mock('@/features/editor/deps/composition-runtime', () => ({
 }))
 
 vi.mock('@/shared/state/playback', () => ({
-  usePlaybackStore: { getState: vi.fn() },
+  usePlaybackStore: {
+    getState: () => ({
+      currentFrame: 0,
+      isPlaying: false,
+      pause: vi.fn(),
+      play: vi.fn(),
+      setPreviewFrame: vi.fn(),
+      setCurrentFrame: vi.fn(),
+    }),
+  },
 }))
 
 vi.mock('@/shared/state/selection', () => ({
-  useSelectionStore: { getState: vi.fn() },
+  useSelectionStore: {
+    getState: () => ({
+      selectedItemIds: [],
+      selectedTrackIds: [],
+      selectedMarkerId: null,
+      selectedTransitionId: null,
+      selectItems: vi.fn(),
+      selectTracks: vi.fn(),
+      selectMarker: vi.fn(),
+      selectTransition: vi.fn(),
+      clearSelection: vi.fn(),
+    }),
+  },
 }))
 
 vi.mock('@/infrastructure/browser/blob-url-manager', () => ({
@@ -79,6 +112,7 @@ describe('useProjectLiveSync', () => {
     vi.clearAllMocks()
     vi.stubGlobal('fetch', fetchMock)
     vi.stubGlobal('EventSource', FakeEventSource)
+    hydrateTimeline.mockResolvedValue(undefined)
     fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => {
       if (options?.method === 'PUT') {
         return {
@@ -141,6 +175,42 @@ describe('useProjectLiveSync', () => {
     })
     expect(order).toEqual(['publish', 'local'])
     expect(result.current.conflictPending).toBe(false)
+    unmount()
+  })
+
+  it('does not finish applying a snapshot after the active project changes', async () => {
+    let finishHydration: (() => void) | undefined
+    hydrateTimeline.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishHydration = resolve
+        }),
+    )
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('project-2')) return { ok: false, status: 404 }
+      return {
+        ok: true,
+        json: async () => ({
+          revision: 'sha256:project-1-snapshot',
+          projectRevision: 'sha256:project-1',
+          project,
+          media: [],
+          missingMediaIds: [],
+        }),
+      }
+    })
+    const { result, rerender, unmount } = renderHook(
+      ({ projectId }) => useProjectLiveSync({ projectId, isDirty: false, enabled: true }),
+      { initialProps: { projectId: 'project-1' } },
+    )
+
+    await waitFor(() => expect(hydrateTimeline).toHaveBeenCalledOnce())
+    rerender({ projectId: 'project-2' })
+    await act(async () => finishHydration?.())
+
+    expect(result.current.lastAppliedRevision).toBeNull()
+    expect(result.current.appliedRevisionCount).toBe(0)
+    expect(setCurrentProject).not.toHaveBeenCalled()
     unmount()
   })
 })

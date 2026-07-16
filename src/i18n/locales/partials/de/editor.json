@@ -542,7 +542,23 @@
       "tryAgain": "Bitte erneut versuchen.",
       "projectSaved": "Projekt gespeichert",
       "projectSaveFailed": "Projekt konnte nicht gespeichert werden",
-      "projectBundle": "FreeCut-Projektpaket"
+      "projectBundle": "FreeCut-Projektpaket",
+      "syncConflict": {
+        "title": "Externe Änderungen warten",
+        "description": "Dieser Editor enthält nicht gespeicherte Änderungen, und eine neuere Headless- oder Dateisystemversion ist verfügbar. Die automatische Speicherung bleibt pausiert, bis du auswählst, wie fortgefahren werden soll.",
+        "revision": "Externe Version: {{revision}}",
+        "keepBoth": "Beide behalten",
+        "keepBothHint": "Den Editor-Stand als Konfliktkopie speichern und anschließend die externe Version anwenden.",
+        "useExternal": "Headless verwenden",
+        "useExternalHint": "Nicht gespeicherte Änderungen im Editor verwerfen und die externe Version anwenden.",
+        "useEditor": "Editor verwenden",
+        "useEditorHint": "Den aktuellen Editor-Stand als nächste Projektversion speichern.",
+        "later": "Später entscheiden",
+        "copySaved": "Konfliktkopie gespeichert",
+        "copyFailed": "Konfliktkopie konnte nicht gespeichert werden",
+        "resolutionFailed": "Der Konflikt mit externen Änderungen konnte nicht gelöst werden",
+        "waiting": "Externe Änderungen warten – zum Lösen klicken"
+      }
     },
     "audioMeters": {
       "meters": "Pegelanzeigen",

@@ -90,7 +90,11 @@ export type EditOperationName =
   | 'setProjectSettings'
 
 /** A wire operation. Node validates its discriminator and fields before this browser boundary. */
-export type EditOp = Record<string, unknown> & { op: EditOperationName }
+export type EditOp = Record<string, unknown> & {
+  op: EditOperationName
+  updates?: Record<string, unknown> & { audioEq?: AudioEqSettings }
+  busAudioEq?: AudioEqSettings | null
+}
 
 export interface HeadlessEditInput {
   project: Project
@@ -368,7 +372,7 @@ function applyOp(op: EditOp): unknown {
       if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
         throw new Error('updateTrack requires an `updates` object')
       }
-      const raw = updates as Record<string, unknown>
+      const raw = updates
       const next: TimelineTrack = {
         ...existing,
         ...(asString(raw.name) !== undefined && { name: asString(raw.name)! }),
@@ -381,9 +385,7 @@ function applyOp(op: EditOp): unknown {
         ...(asNumber(raw.volume) !== undefined && { volume: asNumber(raw.volume)! }),
         ...(asString(raw.color) !== undefined && { color: asString(raw.color)! }),
         ...(asNumber(raw.order) !== undefined && { order: asNumber(raw.order)! }),
-        ...(raw.audioEq && typeof raw.audioEq === 'object'
-          ? { audioEq: raw.audioEq as AudioEqSettings }
-          : {}),
+        ...(raw.audioEq ? { audioEq: raw.audioEq } : {}),
       }
       setTracks(all.map((track) => (track.id === id ? next : track)))
       return { id }
@@ -608,11 +610,7 @@ function applyOp(op: EditOp): unknown {
       const masterBusDb = asNumber(op.masterBusDb)
       if (masterBusDb !== undefined) playback.setMasterBusDb(masterBusDb)
       if ('busAudioEq' in op) {
-        playback.setBusAudioEq(
-          op.busAudioEq && typeof op.busAudioEq === 'object'
-            ? (op.busAudioEq as AudioEqSettings)
-            : undefined,
-        )
+        playback.setBusAudioEq(op.busAudioEq ?? undefined)
       }
       return { masterBusDb, busAudioEq: op.busAudioEq }
     }

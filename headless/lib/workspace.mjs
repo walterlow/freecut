@@ -193,6 +193,14 @@ function readJsonOr(filePath, fallback) {
   }
 }
 
+function parseJsonOr(text, fallback) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return fallback
+  }
+}
+
 function collectTimelineMediaIds(project) {
   const ids = new Set()
   const collect = (items) => {
@@ -214,7 +222,7 @@ function mediaLinksPath(workspaceDir, projectId) {
 }
 
 /** Ensure media referenced by the timeline also appears in media-links.json. */
-export function reconcileProjectMediaLinks(workspaceDir, project, projectDirectoryId = project.id) {
+function reconcileProjectMediaLinks(workspaceDir, project, projectDirectoryId = project.id) {
   const linksPath = mediaLinksPath(workspaceDir, projectDirectoryId)
   const links = readJsonOr(linksPath, { version: '1.0', mediaIds: [] })
   const existing = new Set(
@@ -229,6 +237,20 @@ export function reconcileProjectMediaLinks(workspaceDir, project, projectDirecto
   }
   if (changed || !fs.existsSync(linksPath)) writeJsonAtomic(linksPath, links)
   return [...existing]
+}
+
+/** Best-effort repair after project.json has already committed. */
+export function reconcileProjectMediaLinksAfterCommit(
+  workspaceDir,
+  project,
+  projectDirectoryId = project.id,
+) {
+  try {
+    reconcileProjectMediaLinks(workspaceDir, project, projectDirectoryId)
+    return []
+  } catch {
+    return ['MEDIA_LINKS_REPAIR_REQUIRED']
+  }
 }
 
 /** Upsert the project list while the caller holds the workspace writer lock. */
@@ -277,11 +299,18 @@ export function persistEditedProject(
     !relativeDirectory.startsWith('..') &&
     !path.isAbsolute(relativeDirectory) &&
     !relativeDirectory.includes(path.sep)
+  const warnings = []
   if (isWorkspaceProject) {
-    reconcileProjectMediaLinks(workspaceDir, project, relativeDirectory)
-    upsertWorkspaceIndexUnderWriterLock(workspaceDir, project, relativeDirectory)
+    warnings.push(
+      ...reconcileProjectMediaLinksAfterCommit(workspaceDir, project, relativeDirectory),
+    )
+    try {
+      upsertWorkspaceIndexUnderWriterLock(workspaceDir, project, relativeDirectory)
+    } catch {
+      warnings.push('INDEX_REPAIR_REQUIRED')
+    }
   }
-  return project
+  return { project, warnings }
 }
 
 function statFingerprint(filePath) {
@@ -293,8 +322,7 @@ function statFingerprint(filePath) {
   }
 }
 
-function readProjectMediaIds(workspaceDir, project, projectDirectoryId = project.id) {
-  const links = readJsonOr(mediaLinksPath(workspaceDir, projectDirectoryId), { mediaIds: [] })
+function projectMediaIdsFromLinks(project, links) {
   const ids = new Set(
     Array.isArray(links.mediaIds) ? links.mediaIds.map((entry) => entry?.id).filter(Boolean) : [],
   )
@@ -302,19 +330,22 @@ function readProjectMediaIds(workspaceDir, project, projectDirectoryId = project
   return [...ids]
 }
 
-function findMediaThumbnail(workspaceDir, mediaId) {
-  assertSinglePathComponent(mediaId, 'media id')
-  const thumbnail = resolveContained(
-    path.join(workspaceDir, 'media'),
-    path.join(mediaId, 'thumbnail.jpg'),
-  )
-  return fs.existsSync(thumbnail) ? thumbnail : null
+function readProjectMediaIds(workspaceDir, project, projectDirectoryId = project.id) {
+  const links = readJsonOr(mediaLinksPath(workspaceDir, projectDirectoryId), { mediaIds: [] })
+  return projectMediaIdsFromLinks(project, links)
+}
+
+function contentFingerprint(text) {
+  return `sha256:${crypto.createHash('sha256').update(text).digest('hex')}`
 }
 
 /** Build the coherent project+media snapshot consumed by a live editor. */
 export function buildProjectSnapshot(workspaceDir, projectId) {
   const { project, projectText } = loadProjectById(workspaceDir, projectId)
-  const mediaIds = readProjectMediaIds(workspaceDir, project, projectId)
+  const linksPath = mediaLinksPath(workspaceDir, projectId)
+  const linksText = fs.existsSync(linksPath) ? fs.readFileSync(linksPath, 'utf8') : ''
+  const links = parseJsonOr(linksText, { mediaIds: [] })
+  const mediaIds = projectMediaIdsFromLinks(project, links)
   const media = []
   const missingMediaIds = []
   const fingerprints = []
@@ -324,19 +355,26 @@ export function buildProjectSnapshot(workspaceDir, projectId) {
       path.join(workspaceDir, 'media'),
       path.join(mediaId, 'metadata.json'),
     )
-    const metadata = readMediaMetadata(workspaceDir, mediaId)
+    let metadataText
+    try {
+      metadataText = fs.readFileSync(metadataPath, 'utf8')
+    } catch {
+      metadataText = null
+    }
+    const metadata = metadataText === null ? null : parseJsonOr(metadataText, null)
     if (!metadata) {
       missingMediaIds.push(mediaId)
       fingerprints.push(`${mediaId}:missing`)
       continue
     }
     const sourcePath = resolveMediaFile(workspaceDir, mediaId)
-    const thumbnailPath = findMediaThumbnail(workspaceDir, mediaId)
-    const metadataFingerprint = statFingerprint(metadataPath)
+    const thumbnailPath = resolveContained(
+      path.join(workspaceDir, 'media'),
+      path.join(mediaId, 'thumbnail.jpg'),
+    )
+    const metadataFingerprint = contentFingerprint(metadataText)
     const sourceFingerprint = sourcePath ? statFingerprint(sourcePath) : 'missing-source'
-    const thumbnailFingerprint = thumbnailPath
-      ? statFingerprint(thumbnailPath)
-      : 'missing-thumbnail'
+    const thumbnailFingerprint = statFingerprint(thumbnailPath)
     const fingerprint = [metadataFingerprint, sourceFingerprint, thumbnailFingerprint].join('|')
     media.push({
       metadata,
@@ -348,9 +386,7 @@ export function buildProjectSnapshot(workspaceDir, projectId) {
     fingerprints.push(`${mediaId}:${fingerprint}`)
   }
 
-  const linksPath = mediaLinksPath(workspaceDir, projectId)
-  const linksText = fs.existsSync(linksPath) ? fs.readFileSync(linksPath, 'utf8') : ''
-  const projectRevision = `sha256:${crypto.createHash('sha256').update(projectText).digest('hex')}`
+  const projectRevision = contentFingerprint(projectText)
   const revision = `sha256:${crypto
     .createHash('sha256')
     .update(projectText)

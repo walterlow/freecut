@@ -73,6 +73,11 @@ try {
     }
   }
   assert.equal(ready, true, serviceLog)
+  const missingEvents = await fetch(
+    `http://127.0.0.1:${port}/v1/events?projectId=missing-project`,
+  )
+  assert.equal(missingEvents.status, 404)
+  assert.equal((await missingEvents.json()).error.code, 'PROJECT_NOT_FOUND')
   const createOptions = {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'idempotency-key': 'create-demo' },

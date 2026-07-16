@@ -997,7 +997,11 @@ export async function saveTimeline(projectId: string): Promise<void> {
  * dialog side effects. {@link loadTimeline} calls this after reading +
  * migrating from storage; it then runs media validation on top.
  */
-export async function hydrateTimelineStoresFromProject(project: Project): Promise<void> {
+export async function hydrateTimelineStoresFromProject(
+  project: Project,
+  { shouldApply = () => true }: { shouldApply?: () => boolean } = {},
+): Promise<void> {
+  if (!shouldApply()) return
   // Unwind the outgoing runtime context before replacing any live domain
   // stores. If a Motion composition is active and root items are loaded first,
   // resetToRoot() mistakes those freshly loaded root items for composition
@@ -1040,6 +1044,32 @@ export async function hydrateTimelineStoresFromProject(project: Project): Promis
     const hydratedItems = await reverseConformService.hydrateItems(
       (t.items || []) as TimelineItem[],
     )
+    const hydratedCompositions =
+      t.compositions && t.compositions.length > 0
+        ? await Promise.all(
+            t.compositions.map(async (c) => ({
+              id: c.id,
+              name: c.name,
+              editorKind: (c.editorKind === 'composite-2d'
+                ? 'composite-2d'
+                : 'sequence') as CompositionEditorKind,
+              items: await reverseConformService.hydrateItems(c.items as TimelineItem[]),
+              tracks: c.tracks as TimelineTrack[],
+              transitions: (c.transitions ?? []) as Transition[],
+              keyframes: (c.keyframes ?? []) as ItemKeyframes[],
+              fps: c.fps,
+              width: c.width,
+              height: c.height,
+              durationInFrames: c.durationInFrames,
+              ...(c.backgroundColor && { backgroundColor: c.backgroundColor }),
+              ...(c.busAudioEq && { busAudioEq: c.busAudioEq }),
+              markers: c.markers ?? [],
+              inPoint: c.inPoint ?? null,
+              outPoint: c.outPoint ?? null,
+            })),
+          )
+        : []
+    if (!shouldApply()) return
     useItemsStore.getState().setTracks(sortedTracks as TimelineTrack[])
     useItemsStore.getState().setItems(hydratedItems)
     useTransitionsStore.getState().setTransitions((t.transitions || []) as Transition[])
@@ -1052,29 +1082,7 @@ export async function hydrateTimelineStoresFromProject(project: Project): Promis
     usePlaybackStore.getState().setMasterBusDb(t.masterBusDb ?? 0)
 
     // Restore sub-compositions
-    if (t.compositions && t.compositions.length > 0) {
-      const hydratedCompositions = await Promise.all(
-        t.compositions.map(async (c) => ({
-          id: c.id,
-          name: c.name,
-          editorKind: (c.editorKind === 'composite-2d'
-            ? 'composite-2d'
-            : 'sequence') as CompositionEditorKind,
-          items: await reverseConformService.hydrateItems(c.items as TimelineItem[]),
-          tracks: c.tracks as TimelineTrack[],
-          transitions: (c.transitions ?? []) as Transition[],
-          keyframes: (c.keyframes ?? []) as ItemKeyframes[],
-          fps: c.fps,
-          width: c.width,
-          height: c.height,
-          durationInFrames: c.durationInFrames,
-          ...(c.backgroundColor && { backgroundColor: c.backgroundColor }),
-          ...(c.busAudioEq && { busAudioEq: c.busAudioEq }),
-          markers: c.markers ?? [],
-          inPoint: c.inPoint ?? null,
-          outPoint: c.outPoint ?? null,
-        })),
-      )
+    if (hydratedCompositions.length > 0) {
       useCompositionsStore.getState().setCompositions(hydratedCompositions)
     } else {
       useCompositionsStore.getState().setCompositions([])

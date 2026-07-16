@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 const mocks = vi.hoisted(() => ({
@@ -30,13 +30,23 @@ const mocks = vi.hoisted(() => ({
   initTransitionChainSubscription: vi.fn(() => vi.fn()),
   createProjectUpgradeBackup: vi.fn(),
   resizablePanelGroup: vi.fn(),
+  useProjectLiveSync: vi.fn(() => ({
+    autoSaveEnabled: true,
+    conflictPending: false,
+    pendingRevision: null,
+    lastAppliedRevision: null,
+    appliedRevisionCount: 0,
+    applyPendingExternal: vi.fn().mockResolvedValue(undefined),
+    publishEditorVersion: vi.fn().mockResolvedValue(undefined),
+  })),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mocks.navigate,
-  useRouter: () => ({
-    invalidate: mocks.invalidate,
-  }),
+  useRouter: (() => {
+    const router = { invalidate: mocks.invalidate }
+    return () => router
+  })(),
 }))
 
 vi.mock('@/shared/logging/logger', () => ({
@@ -153,15 +163,7 @@ vi.mock('../hooks/use-auto-save', () => ({
 }))
 
 vi.mock('../hooks/use-project-live-sync', () => ({
-  useProjectLiveSync: () => ({
-    autoSaveEnabled: true,
-    conflictPending: false,
-    pendingRevision: null,
-    lastAppliedRevision: null,
-    appliedRevisionCount: 0,
-    applyPendingExternal: vi.fn().mockResolvedValue(undefined),
-    publishEditorVersion: vi.fn().mockResolvedValue(undefined),
-  }),
+  useProjectLiveSync: mocks.useProjectLiveSync,
 }))
 
 vi.mock('@/features/editor/deps/timeline-hooks', () => ({
@@ -416,6 +418,46 @@ describe('LoadedEditor migration metadata refresh', () => {
     expect(mocks.loadMediaItems).toHaveBeenCalledTimes(1)
 
     await waitFor(() => expect(mocks.invalidate).not.toHaveBeenCalled())
+  })
+
+  it('starts live sync only after the active project timeline finishes loading', async () => {
+    let finishLoading: (() => void) | undefined
+    mocks.loadTimeline.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishLoading = resolve
+        }),
+    )
+
+    render(
+      <LoadedEditor
+        projectId="project-1"
+        project={{
+          id: 'project-1',
+          name: 'Current Project',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+        }}
+        migration={{
+          storedSchemaVersion: 9,
+          currentSchemaVersion: 9,
+          requiresUpgrade: false,
+        }}
+      />,
+    )
+
+    expect(mocks.useProjectLiveSync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectId: 'project-1', enabled: false }),
+    )
+
+    await act(async () => finishLoading?.())
+
+    await waitFor(() =>
+      expect(mocks.useProjectLiveSync).toHaveBeenLastCalledWith(
+        expect.objectContaining({ projectId: 'project-1', enabled: true }),
+      ),
+    )
   })
 
   it('persists the timeline split layout in localStorage', async () => {

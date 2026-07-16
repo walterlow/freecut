@@ -30,7 +30,7 @@ import {
   listProjectIdsUsingMedia,
   listProjects,
   loadProjectById,
-  reconcileProjectMediaLinks,
+  reconcileProjectMediaLinksAfterCommit,
   resolveMediaFile,
 } from './lib/workspace.mjs'
 import { parseArgs, chromeLaunchArgs } from './lib/cli.mjs'
@@ -351,6 +351,7 @@ async function main() {
   }
 
   const handleEvents = async (req, res, projectId) => {
+    const snapshot = buildProjectSnapshot(workspace, projectId)
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
@@ -365,20 +366,15 @@ async function main() {
     }
     clients.add(res)
 
-    try {
-      const snapshot = buildProjectSnapshot(workspace, projectId)
-      writeSseEvent(res, {
-        eventId: `${Date.now()}-${++eventCounter}`,
-        type: 'project.changed',
-        projectId,
-        revision: snapshot.revision,
-        source: 'initial-snapshot',
-        changedPaths: [],
-        timestamp: Date.now(),
-      })
-    } catch (error) {
-      res.write(`event: project.error\ndata: ${JSON.stringify({ error: error.message })}\n\n`)
-    }
+    writeSseEvent(res, {
+      eventId: `${Date.now()}-${++eventCounter}`,
+      type: 'project.changed',
+      projectId,
+      revision: snapshot.revision,
+      source: 'initial-snapshot',
+      changedPaths: [],
+      timestamp: Date.now(),
+    })
 
     const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15_000)
     req.on('close', () => {
@@ -468,7 +464,9 @@ async function main() {
       throw new HttpError(400, 'PROJECT_ID_MISMATCH', 'Project body id must equal the path id')
     const project = await browserNormalize({ ...body.project, id })
     const resource = await saveProjectResource(workspace, id, project, body)
-    reconcileProjectMediaLinks(workspace, resource.project, id)
+    resource.warnings.push(
+      ...reconcileProjectMediaLinksAfterCommit(workspace, resource.project, id),
+    )
     publishCurrentProjectChange(id, 'headless-api', [
       ['projects', id, 'project.json'],
       ['projects', id, 'media-links.json'],
@@ -530,7 +528,9 @@ async function main() {
         }
       const project = await browserNormalize(result.project)
       const resource = await saveProjectResource(workspace, id, project, body)
-      reconcileProjectMediaLinks(workspace, resource.project, id)
+      resource.warnings.push(
+        ...reconcileProjectMediaLinksAfterCommit(workspace, resource.project, id),
+      )
       publishCurrentProjectChange(id, 'headless-api', [
         ['projects', id, 'project.json'],
         ['projects', id, 'media-links.json'],

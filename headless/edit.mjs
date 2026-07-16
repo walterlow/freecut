@@ -69,6 +69,9 @@ async function main() {
   }
   if (!args.workspace) throw new Error('Missing --workspace <dir>')
   if (!args.project) throw new Error('Missing --project <id|project.json>')
+  if (args.out && args['in-place']) {
+    throw new Error('--out and --in-place are mutually exclusive')
+  }
 
   const releaseWriterLock = args['in-place'] ? await acquireWriterLock(args.workspace) : null
   const ops = validate(editRequestSchema, { project: args.project, ops: loadOps(args) }).ops
@@ -134,16 +137,21 @@ async function main() {
   }
 
   let writtenProject
+  let warnings = []
   if (args['in-place']) {
-    writtenProject = persistEditedProject(args.workspace, projectJsonPath, edited, {
+    const persisted = persistEditedProject(args.workspace, projectJsonPath, edited, {
       writerLockHeld: true,
     })
+    writtenProject = persisted.project
+    warnings = persisted.warnings
   } else {
     writtenProject = { ...edited, updatedAt: Date.now() }
     fs.writeFileSync(outPath, `${JSON.stringify(writtenProject, null, 2)}\n`)
   }
   if (args.json)
-    console.log(JSON.stringify({ ...result, project: writtenProject, written: outPath }))
+    console.log(
+      JSON.stringify({ ...result, project: writtenProject, written: outPath, warnings }),
+    )
   else console.log(`\nWrote: ${outPath}`)
   await releaseWriterLock?.()
 }

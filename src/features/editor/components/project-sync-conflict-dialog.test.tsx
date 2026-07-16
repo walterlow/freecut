@@ -86,6 +86,6 @@ describe('ProjectSyncConflictDialog', () => {
   it('surfaces a resolution error without closing the dialog', () => {
     renderDialog({ error: 'Could not save the conflict copy' })
 
-    expect(screen.getByText('Could not save the conflict copy')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not save the conflict copy')
   })
 })

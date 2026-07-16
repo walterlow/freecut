@@ -542,7 +542,23 @@
       "tryAgain": "Veuillez réessayer.",
       "projectSaved": "Projet enregistré",
       "projectSaveFailed": "Échec de l'enregistrement du projet",
-      "projectBundle": "Paquet de projet FreeCut"
+      "projectBundle": "Paquet de projet FreeCut",
+      "syncConflict": {
+        "title": "Des modifications externes sont en attente",
+        "description": "Cet éditeur contient des modifications non enregistrées et une version Headless ou du système de fichiers plus récente est disponible. L’enregistrement automatique reste en pause jusqu’à ce que vous choisissiez comment continuer.",
+        "revision": "Version externe : {{revision}}",
+        "keepBoth": "Conserver les deux",
+        "keepBothHint": "Enregistrer l’état de l’éditeur comme copie de conflit, puis appliquer la version externe.",
+        "useExternal": "Utiliser Headless",
+        "useExternalHint": "Ignorer les modifications non enregistrées dans l’éditeur et appliquer la version externe.",
+        "useEditor": "Utiliser l’éditeur",
+        "useEditorHint": "Enregistrer l’état actuel de l’éditeur comme prochaine version du projet.",
+        "later": "Décider plus tard",
+        "copySaved": "Copie de conflit enregistrée",
+        "copyFailed": "Échec de l’enregistrement de la copie de conflit",
+        "resolutionFailed": "Échec de la résolution du conflit avec les modifications externes",
+        "waiting": "Des modifications externes sont en attente — cliquez pour les traiter"
+      }
     },
     "audioMeters": {
       "meters": "Vu-mètres",

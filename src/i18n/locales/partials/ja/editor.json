@@ -542,7 +542,23 @@
       "tryAgain": "もう一度お試しください。",
       "projectSaved": "プロジェクトを保存しました",
       "projectSaveFailed": "プロジェクトの保存に失敗しました",
-      "projectBundle": "FreeCut プロジェクトバンドル"
+      "projectBundle": "FreeCut プロジェクトバンドル",
+      "syncConflict": {
+        "title": "外部の編集内容が保留中です",
+        "description": "エディターに未保存の変更があり、より新しい Headless またはファイルシステムのバージョンが見つかりました。続行方法を選択するまで自動保存は一時停止します。",
+        "revision": "外部バージョン：{{revision}}",
+        "keepBoth": "両方を保持",
+        "keepBothHint": "エディターの状態を競合コピーとして保存してから、外部バージョンを適用します。",
+        "useExternal": "Headless を使用",
+        "useExternalHint": "エディターの未保存の変更を破棄し、外部バージョンを適用します。",
+        "useEditor": "エディターを使用",
+        "useEditorHint": "現在のエディターの状態を次のプロジェクトバージョンとして保存します。",
+        "later": "後で決める",
+        "copySaved": "競合コピーを保存しました",
+        "copyFailed": "競合コピーの保存に失敗しました",
+        "resolutionFailed": "外部編集との競合を解決できませんでした",
+        "waiting": "外部の編集内容が保留中です。クリックして解決してください"
+      }
     },
     "audioMeters": {
       "meters": "メーター",

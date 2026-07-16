@@ -542,7 +542,23 @@
       "tryAgain": "Inténtalo de nuevo.",
       "projectSaved": "Proyecto guardado",
       "projectSaveFailed": "Error al guardar el proyecto",
-      "projectBundle": "Paquete de proyecto FreeCut"
+      "projectBundle": "Paquete de proyecto FreeCut",
+      "syncConflict": {
+        "title": "Hay cambios externos pendientes",
+        "description": "Este editor tiene cambios sin guardar y hay disponible una versión más reciente de Headless o del sistema de archivos. El guardado automático permanecerá en pausa hasta que elijas cómo continuar.",
+        "revision": "Versión externa: {{revision}}",
+        "keepBoth": "Conservar ambas",
+        "keepBothHint": "Guardar el estado del editor como copia de conflicto y después aplicar la versión externa.",
+        "useExternal": "Usar Headless",
+        "useExternalHint": "Descartar los cambios sin guardar del editor y aplicar la versión externa.",
+        "useEditor": "Usar el editor",
+        "useEditorHint": "Guardar el estado actual del editor como la siguiente versión del proyecto.",
+        "later": "Decidir más tarde",
+        "copySaved": "Copia de conflicto guardada",
+        "copyFailed": "No se pudo guardar la copia de conflicto",
+        "resolutionFailed": "No se pudo resolver el conflicto con los cambios externos",
+        "waiting": "Hay cambios externos pendientes; haz clic para resolverlos"
+      }
     },
     "audioMeters": {
       "meters": "Medidores",

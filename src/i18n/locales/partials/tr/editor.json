@@ -542,7 +542,23 @@
       "tryAgain": "Lütfen tekrar deneyin.",
       "projectSaved": "Proje kaydedildi",
       "projectSaveFailed": "Proje kaydedilemedi",
-      "projectBundle": "FreeCut Proje Paketi"
+      "projectBundle": "FreeCut Proje Paketi",
+      "syncConflict": {
+        "title": "Harici düzenlemeler bekliyor",
+        "description": "Bu editörde kaydedilmemiş değişiklikler var ve daha yeni bir Headless veya dosya sistemi sürümü mevcut. Nasıl devam edeceğinizi seçene kadar otomatik kaydetme duraklatılır.",
+        "revision": "Harici sürüm: {{revision}}",
+        "keepBoth": "İkisini de koru",
+        "keepBothHint": "Editör durumunu çakışma kopyası olarak kaydedip ardından harici sürümü uygula.",
+        "useExternal": "Headless'ı kullan",
+        "useExternalHint": "Editördeki kaydedilmemiş değişiklikleri at ve harici sürümü uygula.",
+        "useEditor": "Editörü kullan",
+        "useEditorHint": "Mevcut editör durumunu projenin sonraki sürümü olarak kaydet.",
+        "later": "Daha sonra karar ver",
+        "copySaved": "Çakışma kopyası kaydedildi",
+        "copyFailed": "Çakışma kopyası kaydedilemedi",
+        "resolutionFailed": "Harici düzenleme çakışması çözülemedi",
+        "waiting": "Harici düzenlemeler bekliyor — çözmek için tıklayın"
+      }
     },
     "audioMeters": {
       "meters": "Sayaçlar",

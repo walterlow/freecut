@@ -75,6 +75,21 @@ test('every published edit discriminator has a valid strict schema', () => {
     editOpSchema.safeParse({ op: 'setTransform', id: 'i', transform: {} }).success,
     false,
   )
+  assert.equal(
+    editOpSchema.safeParse({
+      op: 'updateTrack',
+      id: 'v',
+      updates: { audioEq: { unsupportedBand: true } },
+    }).success,
+    false,
+  )
+  assert.equal(
+    editOpSchema.safeParse({
+      op: 'setMasterAudio',
+      busAudioEq: { lowCutEnabled: 'yes' },
+    }).success,
+    false,
+  )
 })
 
 test('edit request requires exactly one project source and nonempty valid ops', () => {
@@ -133,6 +148,8 @@ test('validation errors and capabilities are machine-readable and bounded', () =
   assert.equal(result.apiVersion, HEADLESS_API_VERSION)
   assert.deepEqual(result.operations, EDIT_OPERATION_NAMES)
   assert.ok(result.schemas.render)
+  assert.ok(result.lifecycle.routes.includes('GET /v1/projects/:id/snapshot'))
+  assert.ok(result.lifecycle.routes.includes('GET /v1/events'))
   assert.ok(JSON.stringify(result).length < 32_000)
 })
 

@@ -74,7 +74,13 @@ import { IoDragReadout } from '@/shared/timeline/io-range'
 import {
   associateMediaWithProject,
   createProject as createProjectInWorkspace,
+  getProject as getProjectFromWorkspace,
 } from '@/infrastructure/storage'
+import {
+  createConflictCopyProgress,
+  persistConflictCopy,
+  type ConflictCopyProgress,
+} from '../utils/project-sync-conflict-copy'
 const logger = createLogger('Editor')
 const LazyTimeline = lazy(() => importTimeline().then(({ Timeline }) => ({ default: Timeline })))
 const LazyAnimateLayout = lazy(() =>
@@ -402,8 +408,10 @@ export const LoadedEditor = memo(function LoadedEditor({
   const workspace = useEditorStore((s) => s.workspace)
   const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing)
   const hasRefreshedMigrationStateRef = useRef(false)
+  const conflictCopyProgressRef = useRef<ConflictCopyProgress | null>(null)
   const timelinePanelRef = useRef<ImperativePanelHandle>(null)
   const previousWorkspaceRef = useRef(workspace)
+  const [liveSyncReadyProjectId, setLiveSyncReadyProjectId] = useState<string | null>(null)
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false)
@@ -457,6 +465,7 @@ export const LoadedEditor = memo(function LoadedEditor({
 
   // Initialize timeline from project data (or create default tracks for new projects).
   useEffect(() => {
+    setLiveSyncReadyProjectId(null)
     const { setCurrentProject: setMediaProject, loadMediaItems } = useMediaLibraryStore.getState()
     const { setCurrentProject } = useProjectStore.getState()
     const playbackStore = usePlaybackStore.getState()
@@ -497,7 +506,10 @@ export const LoadedEditor = memo(function LoadedEditor({
       try {
         await loadTimeline(projectId, { allowProjectUpgrade: migration.requiresUpgrade })
 
-        if (cancelled || !migration.requiresUpgrade || hasRefreshedMigrationStateRef.current) {
+        if (cancelled) return
+        setLiveSyncReadyProjectId(projectId)
+
+        if (!migration.requiresUpgrade || hasRefreshedMigrationStateRef.current) {
           return
         }
 
@@ -540,8 +552,6 @@ export const LoadedEditor = memo(function LoadedEditor({
   // Track unsaved changes
   const isDirty = useTimelineStore((s: { isDirty: boolean }) => s.isDirty)
   const isTimelineLoading = useTimelineSettingsStore((s) => s.isTimelineLoading)
-  const liveSyncStartedRef = useRef(false)
-  if (!isTimelineLoading) liveSyncStartedRef.current = true
   const {
     autoSaveEnabled,
     conflictPending,
@@ -551,14 +561,18 @@ export const LoadedEditor = memo(function LoadedEditor({
   } = useProjectLiveSync({
     projectId,
     isDirty,
-    enabled: liveSyncStartedRef.current,
+    enabled: liveSyncReadyProjectId === projectId && !isTimelineLoading,
   })
   const [syncConflictOpen, setSyncConflictOpen] = useState(false)
   const [syncConflictBusy, setSyncConflictBusy] = useState(false)
   const [syncConflictError, setSyncConflictError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (conflictPending) setSyncConflictOpen(true)
+    setSyncConflictOpen(conflictPending)
+    if (!conflictPending) {
+      setSyncConflictError(null)
+      conflictCopyProgressRef.current = null
+    }
   }, [conflictPending])
 
   useEffect(() => {
@@ -633,26 +647,26 @@ export const LoadedEditor = memo(function LoadedEditor({
   const saveConflictCopy = useCallback(async () => {
     const source = useProjectStore.getState().currentProject
     if (!source) throw new Error('Current project is unavailable')
-    const now = Date.now()
-    const copy = {
-      ...source,
-      id: crypto.randomUUID(),
-      name: `${source.name} · Conflict ${new Date(now).toLocaleString()}`,
-      createdAt: now,
-      updatedAt: now,
-      timeline: buildTimelineFromStores(),
-      thumbnailId: undefined,
-      rootFolderHandle: undefined,
-      rootFolderName: undefined,
+    let progress = conflictCopyProgressRef.current
+    if (!progress || progress.conflictRevision !== pendingRevision) {
+      progress = createConflictCopyProgress({
+        source,
+        timeline: buildTimelineFromStores(),
+        mediaIds: useMediaLibraryStore.getState().mediaItems.map((media) => media.id),
+        conflictRevision: pendingRevision,
+        id: crypto.randomUUID(),
+        now: Date.now(),
+      })
+      conflictCopyProgressRef.current = progress
     }
-    await createProjectInWorkspace(copy)
-    const mediaIds = useMediaLibraryStore.getState().mediaItems.map((media) => media.id)
-    for (const mediaId of mediaIds) {
-      await associateMediaWithProject(copy.id, mediaId)
-    }
-    await useProjectStore.getState().loadProjects()
-    return copy
-  }, [])
+    await persistConflictCopy(progress, {
+      getProject: getProjectFromWorkspace,
+      createProject: createProjectInWorkspace,
+      associateMedia: associateMediaWithProject,
+      refreshProjects: () => useProjectStore.getState().loadProjects(),
+    })
+    return progress
+  }, [pendingRevision])
 
   const runSyncConflictResolution = useCallback(async (resolve: () => Promise<void>) => {
     setSyncConflictBusy(true)
@@ -670,9 +684,13 @@ export const LoadedEditor = memo(function LoadedEditor({
 
   const handleKeepBoth = useCallback(() => {
     void runSyncConflictResolution(async () => {
-      await saveConflictCopy()
-      toast.success(i18n.t('editor.editor.syncConflict.copySaved'))
+      const progress = await saveConflictCopy()
+      if (!progress.savedNotificationShown) {
+        toast.success(i18n.t('editor.editor.syncConflict.copySaved'))
+        progress.savedNotificationShown = true
+      }
       await applyPendingExternal()
+      conflictCopyProgressRef.current = null
     })
   }, [applyPendingExternal, runSyncConflictResolution, saveConflictCopy])
 
