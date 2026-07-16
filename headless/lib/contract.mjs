@@ -130,6 +130,31 @@ const effect = z
     params: params.default({}),
   })
   .strict()
+const audioEq = z.record(z.string(), z.union([finite, z.boolean(), z.string()]))
+const trackUpdates = z
+  .object({
+    name: z.string().min(1).optional(),
+    height: finite.positive().optional(),
+    locked: z.boolean().optional(),
+    syncLock: z.boolean().optional(),
+    visible: z.boolean().optional(),
+    muted: z.boolean().optional(),
+    solo: z.boolean().optional(),
+    volume: finite.optional(),
+    color: z.string().optional(),
+    order: finite.optional(),
+    audioEq: audioEq.optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'updates must not be empty')
+const markerUpdates = z
+  .object({
+    frame: frame.optional(),
+    color: z.string().optional(),
+    label: z.string().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'updates must not be empty')
 
 const opSchemas = [
   z
@@ -193,6 +218,8 @@ const opSchemas = [
       order: finite.optional(),
     })
     .strict(),
+  z.object({ op: z.literal('updateTrack'), id, updates: trackUpdates }).strict(),
+  z.object({ op: z.literal('removeTrack'), id }).strict(),
   z
     .object({
       op: z.literal('addClip'),
@@ -235,6 +262,49 @@ const opSchemas = [
       ),
     })
     .strict(),
+  z
+    .object({
+      op: z.literal('addMarker'),
+      frame,
+      color: z.string().optional(),
+      label: z.string().optional(),
+    })
+    .strict(),
+  z.object({ op: z.literal('updateMarker'), id, updates: markerUpdates }).strict(),
+  z.object({ op: z.literal('removeMarker'), id }).strict(),
+  z.object({ op: z.literal('setInPoint'), frame }).strict(),
+  z.object({ op: z.literal('setOutPoint'), frame }).strict(),
+  z.object({ op: z.literal('clearInOutPoints') }).strict(),
+  z
+    .object({
+      op: z.literal('setMasterAudio'),
+      masterBusDb: finite.optional(),
+      busAudioEq: audioEq.nullable().optional(),
+    })
+    .strict()
+    .refine(
+      (value) => value.masterBusDb !== undefined || value.busAudioEq !== undefined,
+      'master audio update must not be empty',
+    ),
+  z
+    .object({
+      op: z.literal('setProjectSettings'),
+      name: z.string().trim().min(1).max(100).optional(),
+      description: z.string().max(500).optional(),
+      duration: finite.nonnegative().optional(),
+      width: z.number().int().min(320).max(7680).optional(),
+      height: z.number().int().min(240).max(4320).optional(),
+      fps: z.number().int().min(1).max(240).optional(),
+      backgroundColor: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/)
+        .optional(),
+    })
+    .strict()
+    .refine(
+      (value) => Object.keys(value).some((key) => key !== 'op'),
+      'project settings update must not be empty',
+    ),
 ]
 
 export const EDIT_OPERATION_NAMES = [
@@ -248,12 +318,22 @@ export const EDIT_OPERATION_NAMES = [
   'trimEnd',
   'addTransition',
   'addTrack',
+  'updateTrack',
+  'removeTrack',
   'addClip',
   'addKeyframe',
   'removeKeyframes',
   'addEffect',
   'removeEffect',
   'setTransform',
+  'addMarker',
+  'updateMarker',
+  'removeMarker',
+  'setInPoint',
+  'setOutPoint',
+  'clearInOutPoints',
+  'setMasterAudio',
+  'setProjectSettings',
 ]
 const EDIT_OPERATION_DESCRIPTIONS = Object.fromEntries(
   EDIT_OPERATION_NAMES.map((name) => [name, samplesDescription(name)]),
@@ -271,12 +351,22 @@ function samplesDescription(name) {
     trimEnd: 'Trim frames from an item end',
     addTransition: 'Add a transition between clips',
     addTrack: 'Add a video or audio track',
+    updateTrack: 'Update an existing timeline track',
+    removeTrack: 'Remove an existing timeline track',
     addClip: 'Add workspace media as a clip',
     addKeyframe: 'Add a property keyframe',
     removeKeyframes: 'Remove keyframes for a property',
     addEffect: 'Add a registered GPU effect',
     removeEffect: 'Remove an existing item effect',
     setTransform: 'Update an item transform',
+    addMarker: 'Add a project marker',
+    updateMarker: 'Update a project marker',
+    removeMarker: 'Remove a project marker',
+    setInPoint: 'Set the project in point',
+    setOutPoint: 'Set the project out point',
+    clearInOutPoints: 'Clear the project in and out points',
+    setMasterAudio: 'Update master audio settings',
+    setProjectSettings: 'Update project metadata and settings',
   }
   return descriptions[name]
 }

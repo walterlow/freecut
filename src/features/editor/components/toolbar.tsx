@@ -41,6 +41,7 @@ import { LanguageSwitcher } from '@/shared/ui/language-switcher'
 import { useDebugStore } from '@/features/editor/stores/debug-store'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library'
+import { useProjectStore } from '@/features/editor/deps/projects'
 import { buildProjectMetadataSummary } from '@/features/editor/utils/project-metadata-summary'
 
 const SAVE_ANIMATION_MIN_MS = 1800
@@ -92,14 +93,16 @@ export const Toolbar = memo(function Toolbar({
   const saveAnimationTimeoutRef = useRef<number | undefined>(undefined)
   const timelineItems = useTimelineStore((state) => state.items)
   const brokenMediaIds = useMediaLibraryStore((state) => state.brokenMediaIds)
+  const liveProjectFps = useProjectStore((state) => state.currentProject?.metadata.fps)
+  const projectFps = liveProjectFps ?? project.fps
   const projectSummary = useMemo(
     () =>
       buildProjectMetadataSummary({
-        fps: project.fps,
+        fps: projectFps,
         items: timelineItems,
         brokenMediaIds,
       }),
-    [brokenMediaIds, project.fps, timelineItems],
+    [brokenMediaIds, projectFps, timelineItems],
   )
 
   useEffect(() => {

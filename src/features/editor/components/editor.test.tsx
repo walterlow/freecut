@@ -152,6 +152,18 @@ vi.mock('../hooks/use-auto-save', () => ({
   useAutoSave: vi.fn(),
 }))
 
+vi.mock('../hooks/use-project-live-sync', () => ({
+  useProjectLiveSync: () => ({
+    autoSaveEnabled: true,
+    conflictPending: false,
+    pendingRevision: null,
+    lastAppliedRevision: null,
+    appliedRevisionCount: 0,
+    applyPendingExternal: vi.fn().mockResolvedValue(undefined),
+    keepEditorVersion: vi.fn(),
+  }),
+}))
+
 vi.mock('@/features/editor/deps/timeline-hooks', () => ({
   useTimelineShortcuts: vi.fn(),
   useTransitionBreakageNotifications: vi.fn(),
@@ -174,7 +186,14 @@ vi.mock('@/features/editor/deps/timeline-store', () => {
     },
   )
 
-  return { useTimelineStore }
+  const useTimelineSettingsStore = (selector: (state: { isTimelineLoading: boolean }) => unknown) =>
+    selector({ isTimelineLoading: false })
+
+  return {
+    buildTimelineFromStores: vi.fn(() => ({ tracks: [], items: [] })),
+    useTimelineSettingsStore,
+    useTimelineStore,
+  }
 })
 
 vi.mock('@/features/editor/deps/project-bundle', () => ({

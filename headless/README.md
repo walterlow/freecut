@@ -179,23 +179,29 @@ Safe by default: with neither `--out` nor `--in-place` it's a dry run.
 
 `edits.json` is an array of ops (each `{ "op": "<name>", ... }`):
 
-| op                      | fields                                                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `addText`               | `text`, `from`, `durationInFrames`, `trackId?`, `color?`, `fontSize?`, `fontWeight?`, `textAlign?`, `verticalAlign?`                      |
-| `addItem`               | `item` (a full `TimelineItem`)                                                                                                            |
-| `updateItem`            | `id`, `updates` (partial `TimelineItem`)                                                                                                  |
-| `moveItem`              | `id`, `from`, `trackId?`                                                                                                                  |
-| `removeItems`           | `ids` (array)                                                                                                                             |
-| `split`                 | `id`, `frame`                                                                                                                             |
-| `trimStart` / `trimEnd` | `id`, `amount`                                                                                                                            |
-| `addTransition`         | `leftClipId`, `rightClipId`, `type?`, `durationInFrames?`                                                                                 |
-| `addClip`               | `mediaId`, `from`, `trackId?`, `durationInFrames?` (video adds a linked audio companion; source range computed from the media's metadata) |
-| `addTrack`              | `kind?` (`video`\|`audio`), `order?`                                                                                                      |
-| `addKeyframe`           | `itemId`, `property`, `frame`, `value`, `easing?`                                                                                         |
-| `removeKeyframes`       | `itemId`, `property`                                                                                                                      |
-| `addEffect`             | `itemId`, `gpuEffectType` + `params?` (or a full `effect` object)                                                                         |
-| `removeEffect`          | `itemId`, `effectId`                                                                                                                      |
-| `setTransform`          | `id`, `transform` (e.g. `{ "x": 0, "y": 150, "opacity": 0.5, "rotation": 0 }`)                                                            |
+| op                                                | fields                                                                                                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `addText`                                         | `text`, `from`, `durationInFrames`, `trackId?`, `color?`, `fontSize?`, `fontWeight?`, `textAlign?`, `verticalAlign?`                      |
+| `addItem`                                         | `item` (a full `TimelineItem`)                                                                                                            |
+| `updateItem`                                      | `id`, `updates` (partial `TimelineItem`)                                                                                                  |
+| `moveItem`                                        | `id`, `from`, `trackId?`                                                                                                                  |
+| `removeItems`                                     | `ids` (array)                                                                                                                             |
+| `split`                                           | `id`, `frame`                                                                                                                             |
+| `trimStart` / `trimEnd`                           | `id`, `amount`                                                                                                                            |
+| `addTransition`                                   | `leftClipId`, `rightClipId`, `type?`, `durationInFrames?`                                                                                 |
+| `addClip`                                         | `mediaId`, `from`, `trackId?`, `durationInFrames?` (video adds a linked audio companion; source range computed from the media's metadata) |
+| `addTrack`                                        | `kind?` (`video`\|`audio`), `order?`                                                                                                      |
+| `updateTrack`                                     | `id`, `updates` (`name`, `order`, `locked`, `syncLock`, `visible`, `muted`, `solo`, `volume`, `audioEq`, etc.)                            |
+| `removeTrack`                                     | `id`                                                                                                                                      |
+| `addKeyframe`                                     | `itemId`, `property`, `frame`, `value`, `easing?`                                                                                         |
+| `removeKeyframes`                                 | `itemId`, `property`                                                                                                                      |
+| `addEffect`                                       | `itemId`, `gpuEffectType` + `params?` (or a full `effect` object)                                                                         |
+| `removeEffect`                                    | `itemId`, `effectId`                                                                                                                      |
+| `setTransform`                                    | `id`, `transform` (e.g. `{ "x": 0, "y": 150, "opacity": 0.5, "rotation": 0 }`)                                                            |
+| `addMarker` / `updateMarker` / `removeMarker`     | marker frame/id and updates                                                                                                               |
+| `setInPoint` / `setOutPoint` / `clearInOutPoints` | timeline range                                                                                                                            |
+| `setMasterAudio`                                  | `masterBusDb?`, `busAudioEq?`                                                                                                             |
+| `setProjectSettings`                              | `name?`, `description?`, `duration?`, `width?`, `height?`, `fps?`, `backgroundColor?`                                                     |
 
 Operations are validated before Chrome starts. Item and track references must
 exist and be compatible. `removeItems` rejects the entire operation if any
@@ -231,13 +237,16 @@ curl -X POST localhost:8787/edit -H 'content-type: application/json' \
   -d '{"project":"<id>","ops":[{"op":"addText","text":"Hi","from":0}]}'
 ```
 
-| Route               | Body                                                                                                               | Returns                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| `GET /health`       | —                                                                                                                  | `{ ok, apiVersion, gpu: { available, vendor, architecture }, software, harnessUrl }` |
-| `GET /capabilities` | —                                                                                                                  | API version, operations, options, and JSON Schemas.                                  |
-| `GET /projects`     | —                                                                                                                  | `[{ id, projectId, name, updatedAt }]`; `id` is the actionable directory key.        |
-| `POST /render`      | `{ project\|projectObject, codec?, container?, resolution?, fps?, quality?, in?, outSec?, duration?, audioOnly? }` | the rendered file (attachment)                                                       |
-| `POST /edit`        | `{ project\|projectObject, ops, ... }`                                                                             | `{ ok, project, applied, results }`                                                  |
+| Route                                  | Body                                                                                                               | Returns                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `GET /health`                          | —                                                                                                                  | `{ ok, apiVersion, gpu: { available, vendor, architecture }, software, harnessUrl }` |
+| `GET /capabilities`                    | —                                                                                                                  | API version, operations, options, and JSON Schemas.                                  |
+| `GET /projects`                        | —                                                                                                                  | `[{ id, projectId, name, updatedAt }]`; `id` is the actionable directory key.        |
+| `POST /render`                         | `{ project\|projectObject, codec?, container?, resolution?, fps?, quality?, in?, outSec?, duration?, audioOnly? }` | the rendered file (attachment)                                                       |
+| `POST /edit`                           | `{ project\|projectObject, ops, ... }`                                                                             | `{ ok, project, applied, results }`                                                  |
+| `GET /v1/projects/:projectId/snapshot` | —                                                                                                                  | `{ revision, project, media, missingMediaIds }`                                      |
+| `POST /v1/projects/:projectId/edit`    | `{ ops, persist?, expectedRevision?, force? }`                                                                     | validated lifecycle edit; persisted edits return the saved project revision          |
+| `GET /v1/events?projectId=:projectId`  | —                                                                                                                  | SSE `project.changed` events                                                         |
 
 `project` is a workspace project id; `projectObject` is an inline Project JSON.
 Media is resolved from the service's workspace by id.

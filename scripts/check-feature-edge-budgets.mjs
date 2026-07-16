@@ -9,10 +9,11 @@ const ROOT_DIR = process.cwd();
 const REPORT_SCRIPT = path.join(ROOT_DIR, 'scripts', 'report-feature-edges.mjs');
 
 const EDGE_BUDGETS = [
-  // Re-baselined for the editor's intentionally split timeline adapter surface:
-  // store, hooks, UI, panels, motion, subscriptions, cache and test helpers all
-  // cross the feature boundary through dedicated deps/* contracts.
-  { edge: 'editor -> timeline', maxImports: 73, maxFiles: 11 },
+  // Re-baselined for the editor's intentionally split timeline adapter surface
+  // plus project live-sync state restoration. Store, hooks, UI, panels, motion,
+  // subscriptions, cache and test helpers all cross through dedicated deps/*
+  // contracts; the file count remains capped so this does not spread further.
+  { edge: 'editor -> timeline', maxImports: 78, maxFiles: 11 },
   // The editor preview contract added one supported preview export. Keep the
   // file budget tight so this remains consolidated behind the existing adapter.
   { edge: 'editor -> preview', maxImports: 16, maxFiles: 2 },

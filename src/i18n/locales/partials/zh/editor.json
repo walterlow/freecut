@@ -542,7 +542,23 @@
       "tryAgain": "请重试。",
       "projectSaved": "项目已保存",
       "projectSaveFailed": "保存项目失败",
-      "projectBundle": "FreeCut 项目包"
+      "projectBundle": "FreeCut 项目包",
+      "syncConflict": {
+        "title": "有外部编辑等待处理",
+        "description": "当前编辑器存在未保存修改，同时检测到更新的 Headless 或文件版本。选择处理方式前，自动保存会保持暂停。",
+        "revision": "外部版本：{{revision}}",
+        "keepBoth": "保留双方",
+        "keepBothHint": "先将当前编辑器状态保存为冲突副本，再应用外部版本。",
+        "useExternal": "以 Headless 为准",
+        "useExternalHint": "丢弃编辑器中未保存的修改，并应用外部版本。",
+        "useEditor": "以编辑器为准",
+        "useEditorHint": "保存当前编辑器状态，写入新的项目版本。",
+        "later": "暂不处理",
+        "copySaved": "冲突副本已保存",
+        "copyFailed": "保存冲突副本失败",
+        "resolutionFailed": "处理外部编辑冲突失败",
+        "waiting": "有外部编辑等待处理，点击选择处理方式"
+      }
     },
     "audioMeters": {
       "meters": "电平表",

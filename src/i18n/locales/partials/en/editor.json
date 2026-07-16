@@ -542,7 +542,23 @@
       "tryAgain": "Please try again.",
       "projectSaved": "Project saved",
       "projectSaveFailed": "Failed to save project",
-      "projectBundle": "FreeCut Project Bundle"
+      "projectBundle": "FreeCut Project Bundle",
+      "syncConflict": {
+        "title": "External edits are waiting",
+        "description": "This editor has unsaved changes and a newer Headless or file-system revision is available. Autosave stays paused until you choose how to continue.",
+        "revision": "External revision: {{revision}}",
+        "keepBoth": "Keep both",
+        "keepBothHint": "Save the editor state as a conflict copy, then apply the external revision.",
+        "useExternal": "Use Headless",
+        "useExternalHint": "Discard unsaved editor changes and apply the external revision.",
+        "useEditor": "Use editor",
+        "useEditorHint": "Save the current editor state as the next revision.",
+        "later": "Decide later",
+        "copySaved": "Conflict copy saved",
+        "copyFailed": "Failed to save the conflict copy",
+        "resolutionFailed": "Failed to resolve the external edit conflict",
+        "waiting": "External edits are waiting — click to resolve"
+      }
     },
     "audioMeters": {
       "meters": "Meters",

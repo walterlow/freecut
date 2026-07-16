@@ -115,6 +115,9 @@ function baseProject() {
       ],
       transitions: [],
       keyframes: [],
+      markers: [],
+      inPoint: null,
+      outPoint: null,
       compositions: [],
     },
   }
@@ -241,6 +244,29 @@ const cases = [
     schemaFailure: { op: 'addTrack', kind: 'data' },
   },
   {
+    name: 'updateTrack',
+    op: {
+      op: 'updateTrack',
+      id: 'video-1',
+      updates: { name: 'Primary', locked: true, order: 4 },
+    },
+    assert: (project) => {
+      const track = project.timeline.tracks.find((candidate) => candidate.id === 'video-1')
+      assert.deepEqual([track?.name, track?.locked, track?.order], ['Primary', true, 4])
+    },
+    failure: { op: 'updateTrack', id: 'missing', updates: { name: 'Nope' } },
+  },
+  {
+    name: 'removeTrack',
+    op: { op: 'removeTrack', id: 'audio-1' },
+    assert: (project) =>
+      assert.equal(
+        project.timeline.tracks.some((candidate) => candidate.id === 'audio-1'),
+        false,
+      ),
+    failure: { op: 'removeTrack', id: 'missing' },
+  },
+  {
     name: 'addClip',
     op: {
       op: 'addClip',
@@ -338,6 +364,103 @@ const cases = [
         [0.4, 12],
       ),
     failure: { op: 'setTransform', id: 'missing', transform: { opacity: 0.4 } },
+  },
+  {
+    name: 'addMarker',
+    op: { op: 'addMarker', frame: 12, color: '#ff0000', label: 'Beat' },
+    assert: (project) =>
+      assert.ok(
+        project.timeline.markers.some(
+          (marker) => marker.frame === 12 && marker.color === '#ff0000' && marker.label === 'Beat',
+        ),
+      ),
+    schemaFailure: { op: 'addMarker', frame: -1 },
+  },
+  {
+    name: 'updateMarker',
+    setup: async (page) =>
+      (await edit(page, baseProject(), [{ op: 'addMarker', frame: 12, label: 'Before' }])).project,
+    opFrom: (project) => ({
+      op: 'updateMarker',
+      id: project.timeline.markers[0].id,
+      updates: { frame: 18, label: 'After' },
+    }),
+    op: { op: 'updateMarker', id: 'marker-id', updates: { label: 'After' } },
+    assert: (project) =>
+      assert.deepEqual(
+        [project.timeline.markers[0]?.frame, project.timeline.markers[0]?.label],
+        [18, 'After'],
+      ),
+    failure: { op: 'updateMarker', id: 'missing', updates: { label: 'Nope' } },
+  },
+  {
+    name: 'removeMarker',
+    setup: async (page) =>
+      (await edit(page, baseProject(), [{ op: 'addMarker', frame: 12, label: 'Remove' }])).project,
+    opFrom: (project) => ({ op: 'removeMarker', id: project.timeline.markers[0].id }),
+    op: { op: 'removeMarker', id: 'marker-id' },
+    assert: (project) => assert.equal(project.timeline.markers?.length ?? 0, 0),
+    failure: { op: 'removeMarker', id: 'missing' },
+  },
+  {
+    name: 'setInPoint',
+    op: { op: 'setInPoint', frame: 10 },
+    assert: (project) =>
+      assert.deepEqual([project.timeline.inPoint, project.timeline.outPoint], [10, 300]),
+    schemaFailure: { op: 'setInPoint', frame: -1 },
+  },
+  {
+    name: 'setOutPoint',
+    op: { op: 'setOutPoint', frame: 60 },
+    assert: (project) =>
+      assert.deepEqual([project.timeline.inPoint, project.timeline.outPoint], [0, 60]),
+    schemaFailure: { op: 'setOutPoint', frame: -1 },
+  },
+  {
+    name: 'clearInOutPoints',
+    ops: [{ op: 'setInPoint', frame: 10 }, { op: 'clearInOutPoints' }],
+    op: { op: 'clearInOutPoints' },
+    assert: (project) =>
+      assert.deepEqual(
+        [project.timeline.inPoint ?? null, project.timeline.outPoint ?? null],
+        [null, null],
+      ),
+    schemaFailure: { op: 'clearInOutPoints', frame: 1 },
+  },
+  {
+    name: 'setMasterAudio',
+    op: { op: 'setMasterAudio', masterBusDb: -3, busAudioEq: { enabled: true } },
+    assert: (project) =>
+      assert.deepEqual(
+        [project.timeline.masterBusDb, project.timeline.busAudioEq?.enabled],
+        [-3, true],
+      ),
+    schemaFailure: { op: 'setMasterAudio' },
+  },
+  {
+    name: 'setProjectSettings',
+    op: {
+      op: 'setProjectSettings',
+      name: 'Renamed',
+      duration: 240,
+      width: 1920,
+      height: 1080,
+      fps: 24,
+      backgroundColor: '#112233',
+    },
+    assert: (project) =>
+      assert.deepEqual(
+        [
+          project.name,
+          project.duration,
+          project.metadata.width,
+          project.metadata.height,
+          project.metadata.fps,
+          project.metadata.backgroundColor,
+        ],
+        ['Renamed', 240, 1920, 1080, 24, '#112233'],
+      ),
+    schemaFailure: { op: 'setProjectSettings', fps: 0 },
   },
 ]
 

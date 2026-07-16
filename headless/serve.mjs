@@ -25,9 +25,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
-  loadProjectById,
-  listProjects,
+  buildProjectSnapshot,
   collectAddClipMedia,
+  listProjectIdsUsingMedia,
+  listProjects,
+  loadProjectById,
+  reconcileProjectMediaLinks,
   resolveMediaFile,
 } from './lib/workspace.mjs'
 import { parseArgs, chromeLaunchArgs } from './lib/cli.mjs'
@@ -109,6 +112,24 @@ function sendJson(res, status, obj) {
   res.end(body)
 }
 
+function applyCors(req, res) {
+  const origin = req.headers.origin
+  if (!origin) return
+  try {
+    const url = new URL(origin)
+    if (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1')
+    ) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+      res.setHeader('Access-Control-Allow-Headers', 'content-type,idempotency-key,last-event-id')
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,OPTIONS')
+      res.setHeader('Vary', 'Origin')
+    }
+  } catch {
+    // Invalid Origin is treated as untrusted: no CORS headers.
+  }
+}
 /** Heuristic: is this a software (CPU) WebGPU adapter rather than a real GPU? */
 function isSoftwareGpu(gpu) {
   if (!gpu?.available) return true
@@ -198,6 +219,43 @@ async function main() {
   const tmpDir = path.join(os.tmpdir(), 'freecut-serve')
   fs.mkdirSync(tmpDir, { recursive: true })
   let counter = 0
+  let eventCounter = 0
+  const eventClients = new Map()
+  const lastPublishedRevision = new Map()
+
+  const writeSseEvent = (res, event) => {
+    res.write(`id: ${event.eventId}\n`)
+    res.write(`event: project.changed\n`)
+    res.write(`data: ${JSON.stringify(event)}\n\n`)
+  }
+
+  const publishProjectChange = (projectId, snapshot, source, changedPaths = []) => {
+    if (lastPublishedRevision.get(projectId) === snapshot.revision) return
+    lastPublishedRevision.set(projectId, snapshot.revision)
+    const event = {
+      eventId: `${Date.now()}-${++eventCounter}`,
+      type: 'project.changed',
+      projectId,
+      revision: snapshot.revision,
+      source,
+      changedPaths,
+      timestamp: Date.now(),
+    }
+    for (const res of eventClients.get(projectId) ?? []) writeSseEvent(res, event)
+  }
+
+  const publishCurrentProjectChange = (projectId, source, changedPaths = []) => {
+    try {
+      publishProjectChange(
+        projectId,
+        buildProjectSnapshot(workspace, projectId),
+        source,
+        changedPaths,
+      )
+    } catch (error) {
+      console.warn(`Unable to publish project change for ${projectId}: ${error.message ?? error}`)
+    }
+  }
 
   const handleRender = async (req, res, { normalizeInline = false } = {}) => {
     let body = validate(renderRequestSchema, await readJsonBody(req))
@@ -250,6 +308,48 @@ async function main() {
       { timeoutMs: editTimeoutMs, kind: 'edit' },
     )
     sendJson(res, 200, result)
+  }
+
+  const handleSnapshot = async (res, projectId) => {
+    sendJson(res, 200, buildProjectSnapshot(workspace, projectId))
+  }
+
+  const handleEvents = async (req, res, projectId) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    res.write(': connected\n\n')
+    let clients = eventClients.get(projectId)
+    if (!clients) {
+      clients = new Set()
+      eventClients.set(projectId, clients)
+    }
+    clients.add(res)
+
+    try {
+      const snapshot = buildProjectSnapshot(workspace, projectId)
+      writeSseEvent(res, {
+        eventId: `${Date.now()}-${++eventCounter}`,
+        type: 'project.changed',
+        projectId,
+        revision: snapshot.revision,
+        source: 'initial-snapshot',
+        changedPaths: [],
+        timestamp: Date.now(),
+      })
+    } catch (error) {
+      res.write(`event: project.error\ndata: ${JSON.stringify({ error: error.message })}\n\n`)
+    }
+
+    const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15_000)
+    req.on('close', () => {
+      clearInterval(heartbeat)
+      clients.delete(res)
+      if (clients.size === 0) eventClients.delete(projectId)
+    })
   }
 
   const browserNormalize = (project) =>
@@ -313,6 +413,9 @@ async function main() {
           { timeoutMs: editTimeoutMs, kind: 'project-create' },
         )
         const resource = await createProjectResource(workspace, project)
+        publishCurrentProjectChange(resource.id, 'headless-api', [
+          ['projects', resource.id, 'project.json'],
+        ])
         return { status: 201, response: resourceEnvelope(resource) }
       },
     )
@@ -329,6 +432,11 @@ async function main() {
       throw new HttpError(400, 'PROJECT_ID_MISMATCH', 'Project body id must equal the path id')
     const project = await browserNormalize({ ...body.project, id })
     const resource = await saveProjectResource(workspace, id, project, body)
+    reconcileProjectMediaLinks(workspace, resource.project, id)
+    publishCurrentProjectChange(id, 'headless-api', [
+      ['projects', id, 'project.json'],
+      ['projects', id, 'media-links.json'],
+    ])
     sendJson(res, 200, resourceEnvelope(resource))
   }
 
@@ -353,6 +461,7 @@ async function main() {
       },
     })
     const resource = await saveProjectResource(workspace, id, project, body)
+    publishCurrentProjectChange(id, 'headless-api', [['projects', id, 'project.json']])
     sendJson(res, 200, resourceEnvelope(resource))
   }
 
@@ -385,6 +494,11 @@ async function main() {
         }
       const project = await browserNormalize(result.project)
       const resource = await saveProjectResource(workspace, id, project, body)
+      reconcileProjectMediaLinks(workspace, resource.project, id)
+      publishCurrentProjectChange(id, 'headless-api', [
+        ['projects', id, 'project.json'],
+        ['projects', id, 'media-links.json'],
+      ])
       return {
         status: 200,
         response: {
@@ -444,6 +558,9 @@ async function main() {
       return
     }
     const saved = await updateMediaMetadata(workspace, id, probe, body)
+    for (const projectId of listProjectIdsUsingMedia(workspace, id)) {
+      publishCurrentProjectChange(projectId, 'headless-api', [['media', id, 'metadata.json']])
+    }
     sendJson(res, 200, {
       ok: true,
       apiVersion: HEADLESS_API_VERSION,
@@ -456,102 +573,120 @@ async function main() {
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
+    applyCors(req, res)
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204)
+      res.end()
+      return
+    }
     const route = `${req.method} ${url.pathname}`
     const projectMatch = /^\/v1\/projects\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})$/.exec(url.pathname)
     const projectEditMatch = /^\/v1\/projects\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/edit$/.exec(
       url.pathname,
     )
+    const projectSnapshotMatch =
+      /^\/v1\/projects\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/snapshot$/.exec(url.pathname)
     const mediaMatch = /^\/v1\/media\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})$/.exec(url.pathname)
     const mediaProbeMatch = /^\/v1\/media\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/probe$/.exec(
       url.pathname,
     )
     const handler =
-      route === 'GET /health'
-        ? async () => {
-            sendJson(res, 200, {
-              ok: true,
-              apiVersion: HEADLESS_API_VERSION,
-              gpu,
-              software: isSoftwareGpu(gpu),
-              harnessUrl,
-            })
-          }
-        : route === 'GET /capabilities'
-          ? async () => sendJson(res, 200, capabilities())
-          : route === 'GET /v1/capabilities'
-            ? async () => sendJson(res, 200, { ok: true, ...capabilities() })
-            : route === 'POST /v1/projects'
-              ? () => handleV1ProjectCreate(req, res)
-              : route === 'GET /v1/projects'
-                ? () => handleV1ProjectList(url, res)
-                : projectEditMatch && req.method === 'POST'
-                  ? () =>
-                      handleV1ProjectEdit(
-                        req,
-                        res,
-                        assertPortableId(projectEditMatch[1], 'project id'),
-                      )
-                  : projectMatch && req.method === 'GET'
-                    ? async () =>
-                        sendJson(
-                          res,
-                          200,
-                          resourceEnvelope(
-                            await getProjectResource(
-                              workspace,
-                              assertPortableId(projectMatch[1], 'project id'),
-                            ),
-                          ),
-                        )
-                    : projectMatch && req.method === 'PUT'
+      projectSnapshotMatch && req.method === 'GET'
+        ? () => handleSnapshot(res, assertPortableId(projectSnapshotMatch[1], 'project id'))
+        : route === 'GET /v1/events'
+          ? () => {
+              const projectId = url.searchParams.get('projectId')
+              if (!projectId) {
+                throw new HttpError(400, 'VALIDATION_ERROR', 'Missing projectId')
+              }
+              return handleEvents(req, res, assertPortableId(projectId, 'project id'))
+            }
+          : route === 'GET /health'
+            ? async () => {
+                sendJson(res, 200, {
+                  ok: true,
+                  apiVersion: HEADLESS_API_VERSION,
+                  gpu,
+                  software: isSoftwareGpu(gpu),
+                  harnessUrl,
+                })
+              }
+            : route === 'GET /capabilities'
+              ? async () => sendJson(res, 200, capabilities())
+              : route === 'GET /v1/capabilities'
+                ? async () => sendJson(res, 200, { ok: true, ...capabilities() })
+                : route === 'POST /v1/projects'
+                  ? () => handleV1ProjectCreate(req, res)
+                  : route === 'GET /v1/projects'
+                    ? () => handleV1ProjectList(url, res)
+                    : projectEditMatch && req.method === 'POST'
                       ? () =>
-                          handleV1ProjectSave(
+                          handleV1ProjectEdit(
                             req,
                             res,
-                            assertPortableId(projectMatch[1], 'project id'),
+                            assertPortableId(projectEditMatch[1], 'project id'),
                           )
-                      : projectMatch && req.method === 'PATCH'
-                        ? () =>
-                            handleV1ProjectUpdate(
-                              req,
+                      : projectMatch && req.method === 'GET'
+                        ? async () =>
+                            sendJson(
                               res,
-                              assertPortableId(projectMatch[1], 'project id'),
+                              200,
+                              resourceEnvelope(
+                                await getProjectResource(
+                                  workspace,
+                                  assertPortableId(projectMatch[1], 'project id'),
+                                ),
+                              ),
                             )
-                        : route === 'GET /v1/media'
-                          ? async () =>
-                              sendJson(res, 200, {
-                                ok: true,
-                                apiVersion: HEADLESS_API_VERSION,
-                                media: await listMediaResources(workspace),
-                              })
-                          : mediaProbeMatch && req.method === 'POST'
+                        : projectMatch && req.method === 'PUT'
+                          ? () =>
+                              handleV1ProjectSave(
+                                req,
+                                res,
+                                assertPortableId(projectMatch[1], 'project id'),
+                              )
+                          : projectMatch && req.method === 'PATCH'
                             ? () =>
-                                handleV1MediaProbe(
+                                handleV1ProjectUpdate(
                                   req,
                                   res,
-                                  assertPortableId(mediaProbeMatch[1], 'media id'),
+                                  assertPortableId(projectMatch[1], 'project id'),
                                 )
-                            : mediaMatch && req.method === 'GET'
+                            : route === 'GET /v1/media'
                               ? async () =>
-                                  sendJson(
-                                    res,
-                                    200,
-                                    resourceEnvelope(
-                                      await getMediaResource(
-                                        workspace,
-                                        assertPortableId(mediaMatch[1], 'media id'),
-                                      ),
-                                    ),
-                                  )
-                              : route === 'POST /v1/render'
-                                ? () => handleRender(req, res, { normalizeInline: true })
-                                : route === 'GET /projects'
-                                  ? async () => sendJson(res, 200, listProjects(workspace))
-                                  : route === 'POST /render'
-                                    ? () => handleRender(req, res)
-                                    : route === 'POST /edit'
-                                      ? () => handleEdit(req, res)
-                                      : null
+                                  sendJson(res, 200, {
+                                    ok: true,
+                                    apiVersion: HEADLESS_API_VERSION,
+                                    media: await listMediaResources(workspace),
+                                  })
+                              : mediaProbeMatch && req.method === 'POST'
+                                ? () =>
+                                    handleV1MediaProbe(
+                                      req,
+                                      res,
+                                      assertPortableId(mediaProbeMatch[1], 'media id'),
+                                    )
+                                : mediaMatch && req.method === 'GET'
+                                  ? async () =>
+                                      sendJson(
+                                        res,
+                                        200,
+                                        resourceEnvelope(
+                                          await getMediaResource(
+                                            workspace,
+                                            assertPortableId(mediaMatch[1], 'media id'),
+                                          ),
+                                        ),
+                                      )
+                                  : route === 'POST /v1/render'
+                                    ? () => handleRender(req, res, { normalizeInline: true })
+                                    : route === 'GET /projects'
+                                      ? async () => sendJson(res, 200, listProjects(workspace))
+                                      : route === 'POST /render'
+                                        ? () => handleRender(req, res)
+                                        : route === 'POST /edit'
+                                          ? () => handleEdit(req, res)
+                                          : null
     if (!handler) {
       sendJson(res, 404, { error: `No route: ${route}` })
       return
@@ -598,12 +733,90 @@ async function main() {
   // Network exposure must be an explicit CLI/environment configuration choice.
   await new Promise((resolve) => server.listen(port, host, resolve))
   console.log(`FreeCut render service on http://${host}:${port}  (workspace: ${workspace})`)
-  console.log(`  GET /health  GET /capabilities  GET /projects  POST /render  POST /edit`)
+  console.log(
+    `  GET /health  GET /capabilities  GET /projects  POST /render  POST /edit  ` +
+      `GET /v1/projects/:id/snapshot  GET /v1/events`,
+  )
+
+  const pendingProjectPaths = new Map()
+  let watchDebounce = null
+  const scheduleProjectChange = (projectId, changedPath) => {
+    let paths = pendingProjectPaths.get(projectId)
+    if (!paths) {
+      paths = new Set()
+      pendingProjectPaths.set(projectId, paths)
+    }
+    paths.add(changedPath)
+    clearTimeout(watchDebounce)
+    watchDebounce = setTimeout(() => {
+      const pending = [...pendingProjectPaths.entries()]
+      pendingProjectPaths.clear()
+      for (const [id, changed] of pending) {
+        try {
+          const snapshot = buildProjectSnapshot(workspace, id)
+          publishProjectChange(
+            id,
+            snapshot,
+            'external-filesystem',
+            [...changed].map((value) => value.split('/').filter(Boolean)),
+          )
+        } catch {
+          // Project may have been removed between the event and the debounce.
+        }
+      }
+    }, 250)
+  }
+
+  const handleWorkspaceChange = (fileName) => {
+    if (!fileName) return
+    const relative = String(fileName).replaceAll('\\', '/')
+    if (relative.includes('/cache/')) return
+    const parts = relative.split('/').filter(Boolean)
+    if (parts[0] === 'projects' && parts[1]) {
+      scheduleProjectChange(parts[1], relative)
+      return
+    }
+    if (parts[0] === 'media' && parts[1]) {
+      for (const projectId of listProjectIdsUsingMedia(workspace, parts[1])) {
+        scheduleProjectChange(projectId, relative)
+      }
+      return
+    }
+    if (relative === 'index.json') {
+      for (const project of listProjects(workspace)) scheduleProjectChange(project.id, relative)
+    }
+  }
+
+  let workspaceWatcher = null
+  let pollTimer = null
+  try {
+    workspaceWatcher = fs.watch(
+      workspace,
+      { recursive: true, persistent: false },
+      (_eventType, fileName) => handleWorkspaceChange(fileName),
+    )
+    workspaceWatcher.on('error', (error) => {
+      console.warn(`Workspace watcher failed: ${error.message}`)
+    })
+  } catch (error) {
+    console.warn(
+      `Recursive workspace watcher unavailable; using revision polling: ${error.message}`,
+    )
+    pollTimer = setInterval(() => {
+      for (const project of listProjects(workspace)) scheduleProjectChange(project.id, 'poll')
+    }, 750)
+  }
 
   let shuttingDown
   const shutdown = () =>
     (shuttingDown ??= (async () => {
       console.log('\nShutting down...')
+      clearTimeout(watchDebounce)
+      if (pollTimer) clearInterval(pollTimer)
+      workspaceWatcher?.close()
+      for (const clients of eventClients.values()) {
+        for (const client of clients) client.end()
+      }
       const serverClosed = new Promise((resolve) => server.close(resolve))
       try {
         await queue.shutdown(shutdownTimeoutMs)

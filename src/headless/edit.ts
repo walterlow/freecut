@@ -20,6 +20,7 @@ import type { MediaMetadata } from '@/types/storage'
 import type { AnimatableProperty, EasingType } from '@/types/keyframe'
 import type { VisualEffect } from '@/types/effects'
 import type { TransformProperties } from '@/types/transform'
+import type { AudioEqSettings } from '@/types/audio'
 
 import { createLogger } from '@/shared/logging/logger'
 import { migrateProject } from '@/shared/projects/migrations'
@@ -28,8 +29,10 @@ import {
   buildTimelineFromStores,
 } from '@/features/timeline/stores/timeline-persistence'
 import { useItemsStore } from '@/features/timeline/stores/items-store'
+import { useMarkersStore } from '@/features/timeline/stores/markers-store'
 import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store'
+import { usePlaybackStore } from '@/shared/state/playback'
 import { createClassicTrack } from '@/features/timeline/utils/classic-tracks'
 import { seedMediaLibrary } from './seed-media'
 import {
@@ -47,6 +50,12 @@ import {
   addEffect,
   removeEffect,
   updateItemTransform,
+  addMarker,
+  updateMarker,
+  removeMarker,
+  setInPoint,
+  setOutPoint,
+  clearInOutPoints,
 } from '@/features/timeline/stores/timeline-actions'
 import { getGpuEffect } from '@/infrastructure/gpu-effects'
 
@@ -63,12 +72,22 @@ export type EditOperationName =
   | 'trimEnd'
   | 'addTransition'
   | 'addTrack'
+  | 'updateTrack'
+  | 'removeTrack'
   | 'addClip'
   | 'addKeyframe'
   | 'removeKeyframes'
   | 'addEffect'
   | 'removeEffect'
   | 'setTransform'
+  | 'addMarker'
+  | 'updateMarker'
+  | 'removeMarker'
+  | 'setInPoint'
+  | 'setOutPoint'
+  | 'clearInOutPoints'
+  | 'setMasterAudio'
+  | 'setProjectSettings'
 
 /** A wire operation. Node validates its discriminator and fields before this browser boundary. */
 export type EditOp = Record<string, unknown> & { op: EditOperationName }
@@ -103,6 +122,7 @@ function resolvePointer(value: unknown, pointer: string): unknown {
 
 const REFERENCE_ID_FIELDS = new Set([
   'id',
+  'ids',
   'itemId',
   'trackId',
   'leftClipId',
@@ -147,6 +167,8 @@ const asString = (value: unknown, fallback?: string): string | undefined =>
   typeof value === 'string' ? value : fallback
 const asNumber = (value: unknown, fallback?: number): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : fallback
+const asBoolean = (value: unknown, fallback?: boolean): boolean | undefined =>
+  typeof value === 'boolean' ? value : fallback
 
 function tracks(): TimelineTrack[] {
   return useItemsStore.getState().tracks
@@ -336,6 +358,44 @@ function applyOp(op: EditOp): unknown {
       setTracks([...all, track])
       return { trackId: track.id, name: track.name }
     }
+    case 'updateTrack': {
+      const id = asString(op.id)
+      if (!id) throw new Error('updateTrack requires `id`')
+      const all = tracks()
+      const existing = all.find((track) => track.id === id)
+      if (!existing) throw new Error(`updateTrack: unknown track ${id}`)
+      const updates = op.updates
+      if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+        throw new Error('updateTrack requires an `updates` object')
+      }
+      const raw = updates as Record<string, unknown>
+      const next: TimelineTrack = {
+        ...existing,
+        ...(asString(raw.name) !== undefined && { name: asString(raw.name)! }),
+        ...(asNumber(raw.height) !== undefined && { height: asNumber(raw.height)! }),
+        ...(asBoolean(raw.locked) !== undefined && { locked: asBoolean(raw.locked)! }),
+        ...(asBoolean(raw.syncLock) !== undefined && { syncLock: asBoolean(raw.syncLock)! }),
+        ...(asBoolean(raw.visible) !== undefined && { visible: asBoolean(raw.visible)! }),
+        ...(asBoolean(raw.muted) !== undefined && { muted: asBoolean(raw.muted)! }),
+        ...(asBoolean(raw.solo) !== undefined && { solo: asBoolean(raw.solo)! }),
+        ...(asNumber(raw.volume) !== undefined && { volume: asNumber(raw.volume)! }),
+        ...(asString(raw.color) !== undefined && { color: asString(raw.color)! }),
+        ...(asNumber(raw.order) !== undefined && { order: asNumber(raw.order)! }),
+        ...(raw.audioEq && typeof raw.audioEq === 'object'
+          ? { audioEq: raw.audioEq as AudioEqSettings }
+          : {}),
+      }
+      setTracks(all.map((track) => (track.id === id ? next : track)))
+      return { id }
+    }
+    case 'removeTrack': {
+      const id = asString(op.id)
+      if (!id) throw new Error('removeTrack requires `id`')
+      const all = tracks()
+      if (!all.some((track) => track.id === id)) throw new Error(`removeTrack: unknown track ${id}`)
+      setTracks(all.filter((track) => track.id !== id))
+      return { id }
+    }
     case 'addClip': {
       const mediaId = asString(op.mediaId)
       if (!mediaId) throw new Error('addClip requires `mediaId`')
@@ -494,6 +554,63 @@ function applyOp(op: EditOp): unknown {
       updateItemTransform(id, op.transform as Partial<TransformProperties>)
       return { id }
     }
+    case 'addMarker': {
+      const frame = asNumber(op.frame)
+      if (frame === undefined) throw new Error('addMarker requires `frame`')
+      addMarker(frame, asString(op.color), asString(op.label))
+      return { frame }
+    }
+    case 'updateMarker': {
+      const id = asString(op.id)
+      if (!id) throw new Error('updateMarker requires `id`')
+      if (!useMarkersStore.getState().markers.some((marker) => marker.id === id)) {
+        throw new Error(`updateMarker: unknown marker ${id}`)
+      }
+      const updates = op.updates
+      if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+        throw new Error('updateMarker requires an `updates` object')
+      }
+      updateMarker(id, updates as Parameters<typeof updateMarker>[1])
+      return { id }
+    }
+    case 'removeMarker': {
+      const id = asString(op.id)
+      if (!id) throw new Error('removeMarker requires `id`')
+      if (!useMarkersStore.getState().markers.some((marker) => marker.id === id)) {
+        throw new Error(`removeMarker: unknown marker ${id}`)
+      }
+      removeMarker(id)
+      return { id }
+    }
+    case 'setInPoint': {
+      const frame = asNumber(op.frame)
+      if (frame === undefined) throw new Error('setInPoint requires `frame`')
+      setInPoint(frame)
+      return { frame }
+    }
+    case 'setOutPoint': {
+      const frame = asNumber(op.frame)
+      if (frame === undefined) throw new Error('setOutPoint requires `frame`')
+      setOutPoint(frame)
+      return { frame }
+    }
+    case 'clearInOutPoints': {
+      clearInOutPoints()
+      return {}
+    }
+    case 'setMasterAudio': {
+      const playback = usePlaybackStore.getState()
+      const masterBusDb = asNumber(op.masterBusDb)
+      if (masterBusDb !== undefined) playback.setMasterBusDb(masterBusDb)
+      if ('busAudioEq' in op) {
+        playback.setBusAudioEq(
+          op.busAudioEq && typeof op.busAudioEq === 'object'
+            ? (op.busAudioEq as AudioEqSettings)
+            : undefined,
+        )
+      }
+      return { masterBusDb, busAudioEq: op.busAudioEq }
+    }
     default:
       throw new Error(`Unknown edit op: ${String(op.op)}`)
   }
@@ -501,7 +618,8 @@ function applyOp(op: EditOp): unknown {
 
 export async function editProject(input: HeadlessEditInput): Promise<HeadlessEditResult> {
   const { project: migrated } = migrateProject(input.project)
-  await hydrateTimelineStoresFromProject(migrated)
+  let workingProject = migrated
+  await hydrateTimelineStoresFromProject(workingProject)
   seedMediaLibrary(input.media)
 
   log.info('Headless edit starting', { ops: input.ops.length })
@@ -514,7 +632,33 @@ export async function editProject(input: HeadlessEditInput): Promise<HeadlessEdi
     const callerId = asString(rawOp.callerId)
     const op = resolveOperationRefs(rawOp, prior)
     try {
-      const detail = applyOp(op)
+      let detail: unknown
+      if (op.op === 'setProjectSettings') {
+        const name = asString(op.name)
+        const description = asString(op.description)
+        const duration = asNumber(op.duration)
+        const width = asNumber(op.width)
+        const height = asNumber(op.height)
+        const fps = asNumber(op.fps)
+        const backgroundColor = asString(op.backgroundColor)
+        workingProject = {
+          ...workingProject,
+          ...(name !== undefined && { name }),
+          ...(description !== undefined && { description }),
+          ...(duration !== undefined && { duration }),
+          metadata: {
+            ...workingProject.metadata,
+            ...(width !== undefined && { width }),
+            ...(height !== undefined && { height }),
+            ...(fps !== undefined && { fps }),
+            ...(backgroundColor !== undefined && { backgroundColor }),
+          },
+        }
+        if (fps !== undefined) useTimelineSettingsStore.getState().setFps(fps)
+        detail = { name, description, duration, width, height, fps, backgroundColor }
+      } else {
+        detail = applyOp(op)
+      }
       const result = { ...(callerId ? { callerId } : {}), op: op.op, ok: true as const, detail }
       results.push(result)
       if (callerId) prior.set(callerId, result)
@@ -536,7 +680,7 @@ export async function editProject(input: HeadlessEditInput): Promise<HeadlessEdi
 
   return {
     ok: true,
-    project: { ...migrated, timeline },
+    project: { ...workingProject, updatedAt: Date.now(), timeline },
     applied: results.length,
     results,
   }

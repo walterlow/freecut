@@ -9,11 +9,18 @@ export { useItemsStore } from '../stores/items-store'
 export { useKeyframesStore } from '../stores/keyframes-store'
 export { useKeyframeSelectionStore } from '../stores/keyframe-selection-store'
 export { useCompositionsStore } from '../stores/compositions-store'
+export { useMarkersStore } from '../stores/markers-store'
+export { useTransitionsStore } from '../stores/transitions-store'
 export {
   getActiveTabId,
   useCompositionNavigationStore,
 } from '../stores/composition-navigation-store'
 export { useTimelineCommandStore } from '../stores/timeline-command-store'
+export { useZoomStore } from '../stores/zoom-store'
+export {
+  buildTimelineFromStores,
+  hydrateTimelineStoresFromProject,
+} from '../stores/timeline-persistence'
 export { useBentoLayoutDialogStore } from '../components/bento-layout-dialog-store'
 export { useReverseConformDialogStore } from '../stores/reverse-conform-dialog-store'
 export { useSilenceRemovalDialogStore } from '../stores/silence-removal-dialog-store'

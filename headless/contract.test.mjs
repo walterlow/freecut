@@ -30,6 +30,8 @@ const samples = {
   trimEnd: { op: 'trimEnd', id: 'i', amount: 1 },
   addTransition: { op: 'addTransition', leftClipId: 'a', rightClipId: 'b', type: 'crossfade' },
   addTrack: { op: 'addTrack', kind: 'audio', order: 2 },
+  updateTrack: { op: 'updateTrack', id: 'v', updates: { name: 'Video', locked: true } },
+  removeTrack: { op: 'removeTrack', id: 'v' },
   addClip: { op: 'addClip', mediaId: 'm', from: 0 },
   addKeyframe: {
     op: 'addKeyframe',
@@ -48,6 +50,14 @@ const samples = {
   },
   removeEffect: { op: 'removeEffect', itemId: 'i', effectId: 'e' },
   setTransform: { op: 'setTransform', id: 'i', transform: { opacity: 0.5, rotation: 2 } },
+  addMarker: { op: 'addMarker', frame: 10, label: 'Beat' },
+  updateMarker: { op: 'updateMarker', id: 'marker', updates: { frame: 12 } },
+  removeMarker: { op: 'removeMarker', id: 'marker' },
+  setInPoint: { op: 'setInPoint', frame: 5 },
+  setOutPoint: { op: 'setOutPoint', frame: 60 },
+  clearInOutPoints: { op: 'clearInOutPoints' },
+  setMasterAudio: { op: 'setMasterAudio', masterBusDb: -3 },
+  setProjectSettings: { op: 'setProjectSettings', name: 'Renamed', fps: 24 },
 }
 
 test('every published edit discriminator has a valid strict schema', () => {

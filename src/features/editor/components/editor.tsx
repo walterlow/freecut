@@ -7,6 +7,7 @@ import type { ImperativePanelHandle } from 'react-resizable-panels'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { ErrorBoundary } from '@/app/error-boundary'
 import { Toolbar } from './toolbar'
+import { ProjectSyncConflictDialog } from './project-sync-conflict-dialog'
 import { MediaSidebar } from './media-sidebar'
 import { PropertiesSidebar } from './properties-sidebar'
 import { PreviewArea } from './preview-area'
@@ -27,12 +28,17 @@ import {
 import { toast } from 'sonner'
 import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys'
 import { useAutoSave } from '../hooks/use-auto-save'
+import { useProjectLiveSync } from '../hooks/use-project-live-sync'
 import {
   useTimelineShortcuts,
   useTransitionBreakageNotifications,
 } from '@/features/editor/deps/timeline-hooks'
 import { initTransitionChainSubscription } from '@/features/editor/deps/timeline-subscriptions'
-import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import {
+  buildTimelineFromStores,
+  useTimelineSettingsStore,
+  useTimelineStore,
+} from '@/features/editor/deps/timeline-store'
 import { importBundleExportDialog } from '@/features/editor/deps/project-bundle'
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library'
 import { useSettingsStore } from '@/features/editor/deps/settings'
@@ -65,6 +71,10 @@ import {
   useSubtitleScanProgressStore,
 } from '@/features/editor/deps/media-library'
 import { IoDragReadout } from '@/shared/timeline/io-range'
+import {
+  associateMediaWithProject,
+  createProject as createProjectInWorkspace,
+} from '@/infrastructure/storage'
 const logger = createLogger('Editor')
 const LazyTimeline = lazy(() => importTimeline().then(({ Timeline }) => ({ default: Timeline })))
 const LazyAnimateLayout = lazy(() =>
@@ -529,6 +539,27 @@ export const LoadedEditor = memo(function LoadedEditor({
 
   // Track unsaved changes
   const isDirty = useTimelineStore((s: { isDirty: boolean }) => s.isDirty)
+  const isTimelineLoading = useTimelineSettingsStore((s) => s.isTimelineLoading)
+  const liveSyncStartedRef = useRef(false)
+  if (!isTimelineLoading) liveSyncStartedRef.current = true
+  const {
+    autoSaveEnabled,
+    conflictPending,
+    pendingRevision,
+    applyPendingExternal,
+    keepEditorVersion,
+  } = useProjectLiveSync({
+    projectId,
+    isDirty,
+    enabled: liveSyncStartedRef.current,
+  })
+  const [syncConflictOpen, setSyncConflictOpen] = useState(false)
+  const [syncConflictBusy, setSyncConflictBusy] = useState(false)
+  const [syncConflictError, setSyncConflictError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (conflictPending) setSyncConflictOpen(true)
+  }, [conflictPending])
 
   useEffect(() => {
     syncSidebarLayout(editorLayout)
@@ -599,6 +630,63 @@ export const LoadedEditor = memo(function LoadedEditor({
     }
   }, [projectId])
 
+  const saveConflictCopy = useCallback(async () => {
+    const source = useProjectStore.getState().currentProject
+    if (!source) throw new Error('Current project is unavailable')
+    const now = Date.now()
+    const copy = {
+      ...source,
+      id: crypto.randomUUID(),
+      name: `${source.name} · Conflict ${new Date(now).toLocaleString()}`,
+      createdAt: now,
+      updatedAt: now,
+      timeline: buildTimelineFromStores(),
+      thumbnailId: undefined,
+      rootFolderHandle: undefined,
+      rootFolderName: undefined,
+    }
+    await createProjectInWorkspace(copy)
+    const mediaIds = useMediaLibraryStore.getState().mediaItems.map((media) => media.id)
+    for (const mediaId of mediaIds) {
+      await associateMediaWithProject(copy.id, mediaId)
+    }
+    await useProjectStore.getState().loadProjects()
+    return copy
+  }, [])
+
+  const runSyncConflictResolution = useCallback(async (resolve: () => Promise<void>) => {
+    setSyncConflictBusy(true)
+    setSyncConflictError(null)
+    try {
+      await resolve()
+      setSyncConflictOpen(false)
+    } catch (error) {
+      logger.error('Failed to resolve project sync conflict', error)
+      setSyncConflictError(i18n.t('editor.editor.syncConflict.resolutionFailed'))
+    } finally {
+      setSyncConflictBusy(false)
+    }
+  }, [])
+
+  const handleKeepBoth = useCallback(() => {
+    void runSyncConflictResolution(async () => {
+      await saveConflictCopy()
+      toast.success(i18n.t('editor.editor.syncConflict.copySaved'))
+      await applyPendingExternal()
+    })
+  }, [applyPendingExternal, runSyncConflictResolution, saveConflictCopy])
+
+  const handleUseExternal = useCallback(() => {
+    void runSyncConflictResolution(applyPendingExternal)
+  }, [applyPendingExternal, runSyncConflictResolution])
+
+  const handleUseEditor = useCallback(() => {
+    void runSyncConflictResolution(async () => {
+      await handleSave()
+      keepEditorVersion()
+    })
+  }, [handleSave, keepEditorVersion, runSyncConflictResolution])
+
   const handleExport = useCallback(() => {
     // Pause playback when opening export dialog
     usePlaybackStore.getState().pause()
@@ -653,6 +741,7 @@ export const LoadedEditor = memo(function LoadedEditor({
   useAutoSave({
     isDirty,
     onSave: handleSave,
+    enabled: autoSaveEnabled,
   })
 
   // Enable timeline shortcuts (space, cut tool, rate tool, etc.)
@@ -675,6 +764,7 @@ export const LoadedEditor = memo(function LoadedEditor({
       style={editorLayoutCssVars as import('react').CSSProperties}
       role="application"
       aria-label={t('editor.editor.appLabel')}
+      data-testid="freecut-editor-root"
     >
       {/* Top Toolbar */}
       <InteractionLockRegion locked={isMaskEditingActive}>
@@ -689,6 +779,16 @@ export const LoadedEditor = memo(function LoadedEditor({
           renderQueueCount={renderQueueActiveCount}
         />
       </InteractionLockRegion>
+
+      {conflictPending && !syncConflictOpen ? (
+        <button
+          type="button"
+          className="fixed left-1/2 top-14 z-40 -translate-x-1/2 rounded-full border border-amber-500/40 bg-background/95 px-4 py-2 text-sm font-medium text-amber-700 shadow-lg backdrop-blur dark:text-amber-300"
+          onClick={() => setSyncConflictOpen(true)}
+        >
+          {t('editor.editor.syncConflict.waiting')}
+        </button>
+      ) : null}
 
       {/* Main Layout: Full-height sidebar + vertical split */}
       <div className="flex-1 flex overflow-hidden">
@@ -851,6 +951,18 @@ export const LoadedEditor = memo(function LoadedEditor({
 
       <EditorDialogHost projectId={projectId} />
       <TimelineDialogHost />
+
+      <ProjectSyncConflictDialog
+        open={syncConflictOpen}
+        revision={pendingRevision}
+        busy={syncConflictBusy}
+        error={syncConflictError}
+        onOpenChange={setSyncConflictOpen}
+        onKeepBoth={handleKeepBoth}
+        onUseExternal={handleUseExternal}
+        onUseEditor={handleUseEditor}
+        onLater={() => setSyncConflictOpen(false)}
+      />
 
       {/* Single global cursor-readout for IO (in/out) drags across all surfaces. */}
       <IoDragReadout />
