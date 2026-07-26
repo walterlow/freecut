@@ -161,7 +161,7 @@ vi.mock('../utils/proxy-key', () => ({
   getSharedProxyKey: vi.fn((media: { id: string }) => `proxy-${media.id}`),
 }))
 
-vi.mock('@/features/utils/telegram-download', () => telegramDownloadMocks)
+vi.mock('../utils/telegram-download', () => telegramDownloadMocks)
 
 import { mediaLibraryService, FileAccessError } from './media-library-service'
 import type { MediaMetadata } from '@/types/storage'

@@ -4,7 +4,7 @@ import { mapWithConcurrency } from '@/shared/utils/async-utils'
 import {
   fetchTelegramMediaThroughLocalDownloader,
   isTelegramPostUrl,
-} from '@/features/utils/telegram-download'
+} from '../utils/telegram-download'
 
 const logger = createLogger('MediaLibraryService')
 
