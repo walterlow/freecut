@@ -91,6 +91,11 @@ const backgroundMediaWorkMocks = vi.hoisted(() => ({
   }),
 }))
 
+const telegramDownloadMocks = vi.hoisted(() => ({
+  fetchTelegramMediaThroughLocalDownloader: vi.fn(),
+  isTelegramPostUrl: vi.fn(() => false),
+}))
+
 vi.mock('@/infrastructure/storage', () => indexedDbMocks)
 
 vi.mock('./opfs-service', () => ({
@@ -156,6 +161,8 @@ vi.mock('../utils/proxy-key', () => ({
   getSharedProxyKey: vi.fn((media: { id: string }) => `proxy-${media.id}`),
 }))
 
+vi.mock('@/features/utils/telegram-download', () => telegramDownloadMocks)
+
 import { mediaLibraryService, FileAccessError } from './media-library-service'
 import type { MediaMetadata } from '@/types/storage'
 import { useMediaPreparationStore } from '../stores/media-preparation-store'
@@ -196,6 +203,9 @@ describe('MediaLibraryService', () => {
     vi.clearAllMocks()
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
+    telegramDownloadMocks.fetchTelegramMediaThroughLocalDownloader.mockReset()
+    telegramDownloadMocks.isTelegramPostUrl.mockReset()
+    telegramDownloadMocks.isTelegramPostUrl.mockReturnValue(false)
     useMediaPreparationStore.getState().clearAll()
     compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(false)
     compositionRuntimeMocks.startPreviewAudioStartupWarm.mockResolvedValue(undefined)
@@ -632,6 +642,50 @@ describe('MediaLibraryService', () => {
           'project-1',
         ),
       ).rejects.toThrow(/YouTube and similar page URLs/)
+    })
+
+    it('uses local Telegram downloader for telegram post URLs', async () => {
+      const remoteBlob = new Blob(['remote-video'], { type: 'video/mp4' })
+      telegramDownloadMocks.isTelegramPostUrl.mockReturnValue(true)
+      telegramDownloadMocks.fetchTelegramMediaThroughLocalDownloader.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: 'https://cdn.example.com/assets/from-telegram.mp4',
+        headers: new Headers({
+          'content-type': 'video/mp4',
+        }),
+        blob: vi.fn().mockResolvedValue(remoteBlob),
+      } satisfies Partial<Response>)
+
+      mediaProcessorMocks.processMedia.mockResolvedValue({
+        metadata: {
+          type: 'video',
+          duration: 10,
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          codec: 'avc1',
+          audioCodec: 'aac',
+          audioCodecSupported: true,
+          bitrate: 5000,
+        },
+        thumbnail: new Blob(['thumb'], { type: 'image/webp' }),
+      })
+      mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false })
+      indexedDbMocks.getMediaForProject.mockResolvedValue([])
+      indexedDbMocks.createMedia.mockImplementation(async (metadata) => metadata)
+
+      const result = await mediaLibraryService.importMediaFromUrl(
+        'https://t.me/channel/123',
+        'project-1',
+      )
+
+      expect(telegramDownloadMocks.fetchTelegramMediaThroughLocalDownloader).toHaveBeenCalledWith(
+        'https://t.me/channel/123',
+      )
+      expect(fetchMock).not.toHaveBeenCalledWith('https://t.me/channel/123')
+      expect(result.fileName).toBe('from-telegram.mp4')
     })
   })
 

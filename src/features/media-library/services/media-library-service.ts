@@ -1,6 +1,10 @@
 import type { MediaAttribution, MediaMetadata, ThumbnailData } from '@/types/storage'
 import { createLogger } from '@/shared/logging/logger'
 import { mapWithConcurrency } from '@/shared/utils/async-utils'
+import {
+  fetchTelegramMediaThroughLocalDownloader,
+  isTelegramPostUrl,
+} from '@/features/utils/telegram-download'
 
 const logger = createLogger('MediaLibraryService')
 
@@ -825,13 +829,17 @@ class MediaLibraryService {
     const parsedUrl = parseMediaImportUrl(url.trim())
 
     let response: Response
-    try {
-      response = await fetch(parsedUrl.toString())
-    } catch (error) {
-      logger.warn(`Failed to fetch media URL "${parsedUrl.toString()}":`, error)
-      throw new Error(
-        'Could not download that URL. The site may block cross-origin downloads, require sign-in, or need a direct file link.',
-      )
+    if (isTelegramPostUrl(parsedUrl)) {
+      response = await fetchTelegramMediaThroughLocalDownloader(parsedUrl.toString())
+    } else {
+      try {
+        response = await fetch(parsedUrl.toString())
+      } catch (error) {
+        logger.warn(`Failed to fetch media URL "${parsedUrl.toString()}":`, error)
+        throw new Error(
+          'Could not download that URL. The site may block cross-origin downloads, require sign-in, or need a direct file link.',
+        )
+      }
     }
 
     if (!response.ok) {
