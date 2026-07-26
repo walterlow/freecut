@@ -215,6 +215,44 @@ function parseMediaImportUrl(input: string): URL {
   return parsedUrl
 }
 
+async function fetchImportResponse(parsedUrl: URL): Promise<Response> {
+  if (isTelegramPostUrl(parsedUrl)) {
+    return fetchTelegramMediaThroughLocalDownloader(parsedUrl.toString())
+  }
+
+  try {
+    return await fetch(parsedUrl.toString())
+  } catch (error) {
+    logger.warn(`Failed to fetch media URL "${parsedUrl.toString()}":`, error)
+    throw new Error(
+      'Could not download that URL. The site may block cross-origin downloads, require sign-in, or need a direct file link.',
+    )
+  }
+}
+
+function assertImportResponseIsMedia(parsedUrl: URL, response: Response): void {
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download media (${response.status}${response.statusText ? ` ${response.statusText}` : ''}).`,
+    )
+  }
+
+  const responseMimeType = normalizeMimeType(response.headers.get('content-type'))
+  if (!isPageMimeType(responseMimeType)) {
+    return
+  }
+
+  if (isKnownMediaPageHost(parsedUrl.hostname)) {
+    throw new Error(
+      'YouTube and similar page URLs are not direct media files here yet. Paste a direct MP4/MP3/image URL, or download the media first.',
+    )
+  }
+
+  throw new Error(
+    'That URL points to a web page, not a media file. Paste the direct file URL instead.',
+  )
+}
+
 /**
  * Turn a provider-supplied animation title into a safe base file name.
  * Strips filesystem-hostile characters, collapses whitespace, and caps the
@@ -827,44 +865,15 @@ class MediaLibraryService {
 
   private async fetchMediaFromUrl(url: string): Promise<File> {
     const parsedUrl = parseMediaImportUrl(url.trim())
-
-    let response: Response
-    if (isTelegramPostUrl(parsedUrl)) {
-      response = await fetchTelegramMediaThroughLocalDownloader(parsedUrl.toString())
-    } else {
-      try {
-        response = await fetch(parsedUrl.toString())
-      } catch (error) {
-        logger.warn(`Failed to fetch media URL "${parsedUrl.toString()}":`, error)
-        throw new Error(
-          'Could not download that URL. The site may block cross-origin downloads, require sign-in, or need a direct file link.',
-        )
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to download media (${response.status}${response.statusText ? ` ${response.statusText}` : ''}).`,
-      )
-    }
-
-    const responseMimeType = normalizeMimeType(response.headers.get('content-type'))
-    if (isPageMimeType(responseMimeType)) {
-      if (isKnownMediaPageHost(parsedUrl.hostname)) {
-        throw new Error(
-          'YouTube and similar page URLs are not direct media files here yet. Paste a direct MP4/MP3/image URL, or download the media first.',
-        )
-      }
-      throw new Error(
-        'That URL points to a web page, not a media file. Paste the direct file URL instead.',
-      )
-    }
+    const response = await fetchImportResponse(parsedUrl)
+    assertImportResponseIsMedia(parsedUrl, response)
 
     const blob = await response.blob()
     if (blob.size === 0) {
       throw new Error('The downloaded file was empty.')
     }
 
+    const responseMimeType = normalizeMimeType(response.headers.get('content-type'))
     const mimeType = normalizeMimeType(blob.type) || responseMimeType
     const fileName = buildImportedUrlFileName(
       parsedUrl.toString(),
