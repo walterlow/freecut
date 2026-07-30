@@ -10,6 +10,31 @@ interface UseAutoTranscriptCaptionsParams {
   isBroken: boolean
 }
 
+function shouldSkipCaptionRefresh({
+  canManageCaptions,
+  mediaHasTranscript,
+  hasGeneratedCaptions,
+  isBroken,
+  transcriptCaptionsEnabled,
+  itemType,
+}: {
+  canManageCaptions: boolean
+  mediaHasTranscript: boolean
+  hasGeneratedCaptions: boolean
+  isBroken: boolean
+  transcriptCaptionsEnabled: boolean | undefined
+  itemType: TimelineItemType['type']
+}): boolean {
+  return (
+    !canManageCaptions ||
+    !mediaHasTranscript ||
+    hasGeneratedCaptions ||
+    transcriptCaptionsEnabled !== true ||
+    isBroken ||
+    (itemType !== 'video' && itemType !== 'audio')
+  )
+}
+
 /**
  * Refreshes transcript-backed captions only when they are already enabled on the
  * clip. Fresh transcripts no longer auto-enable captions; users opt in via the
@@ -24,26 +49,29 @@ export function useAutoTranscriptCaptions({
   const attemptRef = useRef<string | null>(null)
 
   useEffect(() => {
+    const mediaId = item.mediaId
     if (
-      !caption.canManageCaptions ||
-      !caption.mediaHasTranscript ||
-      hasGeneratedCaptions ||
-      item.transcriptCaptions?.enabled !== true ||
-      isBroken ||
-      (item.type !== 'video' && item.type !== 'audio') ||
-      !item.mediaId
+      !mediaId ||
+      shouldSkipCaptionRefresh({
+        canManageCaptions: caption.canManageCaptions,
+        mediaHasTranscript: caption.mediaHasTranscript,
+        hasGeneratedCaptions,
+        isBroken,
+        transcriptCaptionsEnabled: item.transcriptCaptions?.enabled,
+        itemType: item.type,
+      })
     ) {
       return
     }
 
-    const attemptKey = `${item.id}:${item.mediaId}`
+    const attemptKey = `${item.id}:${mediaId}`
     if (attemptRef.current === attemptKey) {
       return
     }
     attemptRef.current = attemptKey
 
     void mediaTranscriptionService
-      .enableTranscriptCaptions(item.mediaId, {
+      .enableTranscriptCaptions(mediaId, {
         clipIds: [item.id],
         replaceExisting: false,
         selectUpdatedClips: false,

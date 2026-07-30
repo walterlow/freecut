@@ -6,6 +6,7 @@ import { getMimeType } from '../utils/validation'
 import { getSharedProxyKey } from '../utils/proxy-key'
 import { hasMediaFilePickerSupport, showMediaFilePicker } from '../utils/media-file-picker'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
+import type { WideEvent } from '@/shared/logging/logger'
 import { useMediaPreparationStore } from './media-preparation-store'
 
 const logger = createLogger('MediaImport')
@@ -200,6 +201,24 @@ function processImportResults(
 
 function pluralFile(count: number): string {
   return count === 1 ? 'file' : 'files'
+}
+
+function tagImportUrlHost(event: WideEvent, url: string): void {
+  try {
+    event.set('urlHost', new URL(url).hostname)
+  } catch {
+    event.set('urlHost', 'invalid')
+  }
+}
+
+function unsupportedCodecEntries(metadata: {
+  fileName: string
+  audioCodec?: string
+  hasUnsupportedCodec?: boolean
+}): UnsupportedCodecFile[] {
+  return metadata.hasUnsupportedCodec && metadata.audioCodec
+    ? [{ fileName: metadata.fileName, audioCodec: metadata.audioCodec }]
+    : []
 }
 
 function formatNameList(names: string[]): string {
@@ -521,13 +540,7 @@ export function createImportActions(
       const event = logger.startEvent('import', opId)
       event.set('source', 'url')
       event.set('projectId', currentProjectId)
-
-      try {
-        const parsedUrl = new URL(trimmedUrl)
-        event.set('urlHost', parsedUrl.hostname)
-      } catch {
-        event.set('urlHost', 'invalid')
-      }
+      tagImportUrlHost(event, trimmedUrl)
 
       try {
         const { mediaLibraryService } = await loadMediaLibraryService()
@@ -549,10 +562,7 @@ export function createImportActions(
         prependImportedMedia(set, metadata)
         setupImportedVideoProxy(metadata)
 
-        const unsupportedCodecFiles =
-          metadata.hasUnsupportedCodec && metadata.audioCodec
-            ? [{ fileName: metadata.fileName, audioCodec: metadata.audioCodec }]
-            : []
+        const unsupportedCodecFiles = unsupportedCodecEntries(metadata)
         showImportNotifications(1, [], unsupportedCodecFiles, 0, get)
 
         event.success({

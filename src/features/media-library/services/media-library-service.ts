@@ -10,7 +10,7 @@ import {
 
 const logger = createLogger('MediaLibraryService')
 
-export interface UrlImportPreviewItem {
+interface UrlImportPreviewItem {
   id: string
   mediaType: string
   thumbnailUrl: string | null

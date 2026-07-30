@@ -369,52 +369,71 @@ function endsWithShortWord(tokens: readonly TimedToken[]): boolean {
   return trailingWord.length > 0 && trailingWord.length <= 2
 }
 
+/**
+ * When a group must break, prefer leaving a dangling short word ("to", "a") to
+ * open the next layer rather than ending the current one with it. Returns the
+ * group split into a committable remainder and the carried trailing word, or
+ * null when the group has no short trailing word to carve out.
+ */
+function carveOutShortTrailingWord(group: TimedToken[]): {
+  committed: TimedToken[]
+  carried: TimedToken[]
+} | null {
+  const trailing = group.at(-1)
+  if (group.length <= 1 || !trailing || !endsWithShortWord(group)) {
+    return null
+  }
+  return { committed: group.slice(0, -1), carried: [trailing] }
+}
+
+/**
+ * The candidate text overflowed, so the current group must break before
+ * `tokenPart`. Commits the group (possibly around a carved-out short trailing
+ * word) into `groups` and returns the next in-progress group.
+ */
+function breakGroupAtOverflow(
+  groups: TimedToken[][],
+  current: TimedToken[],
+  tokenPart: TimedToken,
+): TimedToken[] {
+  const carveOut = carveOutShortTrailingWord(current)
+  if (!carveOut) {
+    groups.push(current)
+    return [tokenPart]
+  }
+
+  groups.push(carveOut.committed)
+  const carriedText = joinTranscriptWords([...carveOut.carried, tokenPart].map((item) => item.text))
+  if (carriedText.length <= MAX_TRANSCRIPT_TEXT_LAYER_CHARS) {
+    return [...carveOut.carried, tokenPart]
+  }
+  groups.push(carveOut.carried)
+  return [tokenPart]
+}
+
 function groupTimedTokensForTextLayers(tokens: readonly TimedToken[]): TimedToken[][] {
   const groups: TimedToken[][] = []
   let current: TimedToken[] = []
 
-  const commitGroup = (group: TimedToken[]): void => {
-    if (group.length === 0) return
-    groups.push(group)
-  }
-
   for (const token of tokens) {
     const normalizedTokenParts = splitLongTimedToken(token, MAX_TRANSCRIPT_TEXT_LAYER_CHARS)
     for (const tokenPart of normalizedTokenParts) {
-      const candidate = [...current, tokenPart]
-      const candidateText = joinTranscriptWords(candidate.map((item) => item.text))
+      const candidateText = joinTranscriptWords([...current, tokenPart].map((item) => item.text))
       if (current.length > 0 && candidateText.length > MAX_TRANSCRIPT_TEXT_LAYER_CHARS) {
-        if (endsWithShortWord(current) && current.length > 1) {
-          const trailing = current.pop()
-          if (trailing) {
-            commitGroup(current)
-            current = [trailing]
-
-            const trailingCandidate = joinTranscriptWords([trailing.text, tokenPart.text])
-            if (trailingCandidate.length <= MAX_TRANSCRIPT_TEXT_LAYER_CHARS) {
-              current.push(tokenPart)
-            } else {
-              commitGroup(current)
-              current = [tokenPart]
-            }
-            continue
-          }
-        }
-        commitGroup(current)
-        current = [tokenPart]
+        current = breakGroupAtOverflow(groups, current, tokenPart)
       } else {
         current.push(tokenPart)
       }
     }
   }
 
+  const carveOut = carveOutShortTrailingWord(current)
+  if (carveOut) {
+    groups.push(carveOut.committed)
+    current = carveOut.carried
+  }
   if (current.length > 0) {
-    if (endsWithShortWord(current) && current.length > 1) {
-      const trailing = current.pop()
-      commitGroup(current)
-      current = trailing ? [trailing] : []
-    }
-    commitGroup(current)
+    groups.push(current)
   }
 
   return groups.filter((group) => group.length > 0)
@@ -1014,44 +1033,14 @@ class MediaTranscriptionService {
     const { track: textLayersTrack, isNew: isNewTextLayersTrack } =
       this.resolveTextLayersTrack(tracks)
 
-    const transcriptByMediaId = new Map<string, MediaTranscript>()
-    const insertedItems: TextItem[] = []
-
-    for (const clip of targetClips) {
-      const mediaId = clip.mediaId
-      let transcript = transcriptByMediaId.get(mediaId)
-      if (!transcript) {
-        transcript = await getTranscript(mediaId)
-        if (!transcript) {
-          continue
-        }
-        transcriptByMediaId.set(mediaId, transcript)
-      }
-
-      const layeredSegments = segmentTranscriptForTextLayers(transcript.segments)
-      if (layeredSegments.length === 0) {
-        continue
-      }
-
-      const clipTextItems = buildCaptionTextItems({
-        mediaId,
-        trackId: textLayersTrack.id,
-        segments: layeredSegments,
-        clip,
-        timelineFps: timeline.fps,
-        canvasWidth,
-        canvasHeight,
-        styleTemplate: circeStyleTemplate as CaptionTextItemTemplate,
-        sourceType: 'transcript',
-      }).map((item) => ({
-        ...item,
-        label: item.text,
-        textStylePresetId: 'circe-bold' as const,
-        textStyleScale: 1,
-      }))
-
-      insertedItems.push(...clipTextItems)
-    }
+    const insertedItems = await this.buildTextLayerItemsForClips({
+      targetClips,
+      trackId: textLayersTrack.id,
+      timelineFps: timeline.fps,
+      canvasWidth,
+      canvasHeight,
+      styleTemplate: circeStyleTemplate as CaptionTextItemTemplate,
+    })
 
     if (insertedItems.length > 0 && isNewTextLayersTrack) {
       tracks.sort((a, b) => a.order - b.order)
@@ -1205,6 +1194,73 @@ class MediaTranscriptionService {
     }
 
     return []
+  }
+
+  private async buildTextLayerItemsForClips({
+    targetClips,
+    trackId,
+    timelineFps,
+    canvasWidth,
+    canvasHeight,
+    styleTemplate,
+  }: {
+    targetClips: Array<CaptionableClip & { mediaId: string }>
+    trackId: string
+    timelineFps: number
+    canvasWidth: number
+    canvasHeight: number
+    styleTemplate: CaptionTextItemTemplate
+  }): Promise<TextItem[]> {
+    const transcriptByMediaId = new Map<string, MediaTranscript>()
+    const insertedItems: TextItem[] = []
+
+    for (const clip of targetClips) {
+      const transcript = await this.loadTranscriptCached(transcriptByMediaId, clip.mediaId)
+      if (!transcript) {
+        continue
+      }
+
+      const layeredSegments = segmentTranscriptForTextLayers(transcript.segments)
+      if (layeredSegments.length === 0) {
+        continue
+      }
+
+      const clipTextItems = buildCaptionTextItems({
+        mediaId: clip.mediaId,
+        trackId,
+        segments: layeredSegments,
+        clip,
+        timelineFps,
+        canvasWidth,
+        canvasHeight,
+        styleTemplate,
+        sourceType: 'transcript',
+      }).map((item) => ({
+        ...item,
+        label: item.text,
+        textStylePresetId: 'circe-bold' as const,
+        textStyleScale: 1,
+      }))
+
+      insertedItems.push(...clipTextItems)
+    }
+
+    return insertedItems
+  }
+
+  private async loadTranscriptCached(
+    cache: Map<string, MediaTranscript>,
+    mediaId: string,
+  ): Promise<MediaTranscript | undefined> {
+    const cached = cache.get(mediaId)
+    if (cached) {
+      return cached
+    }
+    const transcript = await getTranscript(mediaId)
+    if (transcript) {
+      cache.set(mediaId, transcript)
+    }
+    return transcript
   }
 
   /**

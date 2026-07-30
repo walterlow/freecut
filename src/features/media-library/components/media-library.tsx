@@ -427,38 +427,48 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         return
       }
 
-      setIsImportUrlSubmitting(true)
-      try {
-        if (telegramPreviewItems.length > 0) {
-          const selectedMediaId =
-            selectedTelegramPreviewId !== null
-              ? Number.parseInt(selectedTelegramPreviewId, 10)
-              : NaN
-          if (!Number.isSafeInteger(selectedMediaId) || selectedMediaId <= 0) {
-            showNotification({
-              type: 'warning',
-              message: t('media.library.telegramPreviewSelectWarning', {
-                defaultValue: 'Select a Telegram file to download.',
-              }),
-            })
-            return
-          }
-
-          await importMediaFromUrl(trimmedUrl, { telegramMediaId: selectedMediaId })
-        } else {
-          setIsImportUrlPreviewing(true)
-          const { mediaLibraryService } = await importMediaLibraryService()
-          const previewItems = await mediaLibraryService.previewImportFromUrl(trimmedUrl)
-          if (previewItems && previewItems.length > 0) {
-            setTelegramPreviewItems(previewItems)
-            setSelectedTelegramPreviewId(previewItems[0]?.id ?? null)
-            return
-          }
-
-          await importMediaFromUrl(trimmedUrl)
+      // Returns true when an import was actually attempted (so the dialog can
+      // close on success), false when the flow bailed out early (preview shown
+      // or an invalid Telegram selection).
+      const importSelectedTelegramPreview = async (): Promise<boolean> => {
+        const selectedMediaId =
+          selectedTelegramPreviewId !== null ? Number.parseInt(selectedTelegramPreviewId, 10) : NaN
+        if (!Number.isSafeInteger(selectedMediaId) || selectedMediaId <= 0) {
+          showNotification({
+            type: 'warning',
+            message: t('media.library.telegramPreviewSelectWarning', {
+              defaultValue: 'Select a Telegram file to download.',
+            }),
+          })
+          return false
         }
 
-        if (!useMediaLibraryStore.getState().error) {
+        await importMediaFromUrl(trimmedUrl, { telegramMediaId: selectedMediaId })
+        return true
+      }
+
+      const previewOrImport = async (): Promise<boolean> => {
+        setIsImportUrlPreviewing(true)
+        const { mediaLibraryService } = await importMediaLibraryService()
+        const previewItems = await mediaLibraryService.previewImportFromUrl(trimmedUrl)
+        if (previewItems && previewItems.length > 0) {
+          setTelegramPreviewItems(previewItems)
+          setSelectedTelegramPreviewId(previewItems[0]?.id ?? null)
+          return false
+        }
+
+        await importMediaFromUrl(trimmedUrl)
+        return true
+      }
+
+      setIsImportUrlSubmitting(true)
+      try {
+        const attempted =
+          telegramPreviewItems.length > 0
+            ? await importSelectedTelegramPreview()
+            : await previewOrImport()
+
+        if (attempted && !useMediaLibraryStore.getState().error) {
           setShowImportUrlDialog(false)
           setImportUrlValue('')
           setTelegramPreviewItems([])
