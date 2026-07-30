@@ -20,6 +20,7 @@ import {
   Scissors,
   Search,
   Trash2,
+  Type as TypeIcon,
   Undo2,
   X,
 } from 'lucide-react'
@@ -259,6 +260,7 @@ export interface TranscriptEditorPanelProps {
   active: boolean
 }
 
+// fallow-ignore-next-line unused-export, complexity
 export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
   const { t } = useTranslation()
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
@@ -712,61 +714,64 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
     return status === 'loading' || status === 'transcribing'
   })
 
-  const handleTranscribe = useCallback((values: TranscribeDialogValues) => {
-    const targets = uniqueMediaIds.filter((id) => {
-      const status = mediaState[id]?.status
-      return status === 'needs' || status === 'error'
-    })
-    if (targets.length === 0) return
+  const handleTranscribe = useCallback(
+    (values: TranscribeDialogValues) => {
+      const targets = uniqueMediaIds.filter((id) => {
+        const status = mediaState[id]?.status
+        return status === 'needs' || status === 'error'
+      })
+      if (targets.length === 0) return
 
-    setTranscribeDialogOpen(false)
+      setTranscribeDialogOpen(false)
 
-    for (const id of targets) requestedRef.current.add(id)
-    setMediaState((prev) => {
-      const next = { ...prev }
-      for (const id of targets) next[id] = { status: 'transcribing' }
-      return next
-    })
+      for (const id of targets) requestedRef.current.add(id)
+      setMediaState((prev) => {
+        const next = { ...prev }
+        for (const id of targets) next[id] = { status: 'transcribing' }
+        return next
+      })
 
-    void Promise.all(
-      targets.map(async (mediaId) => {
-        try {
-          const result = await runMediaTranscriptionJob(mediaId, {
-            ...values,
-            onModelFallback: () => {
-              toast.info(t('transcript.largeTurboFallback'))
-            },
-          })
-          if (!mountedRef.current) return
-          if (result.status === 'cancelled') {
-            setMediaState((prev) => ({ ...prev, [mediaId]: { status: 'needs' } }))
-            return
-          }
-          const { transcript } = result
-          setMediaState((prev) => ({
-            ...prev,
-            [mediaId]: hasWordTimings(transcript)
-              ? { status: 'ready', transcript }
-              : { status: 'needs' },
-          }))
-        } catch (error) {
-          logger.warn('Transcription failed', { mediaId, error })
-          const errorMessage = isTranscriptionOutOfMemoryError(error)
-            ? TRANSCRIPTION_OOM_HINT
-            : error instanceof Error && error.message.trim().length > 0
-              ? error.message
-              : t('transcript.toastTranscribeFailed')
-          if (mountedRef.current) {
+      void Promise.all(
+        targets.map(async (mediaId) => {
+          try {
+            const result = await runMediaTranscriptionJob(mediaId, {
+              ...values,
+              onModelFallback: () => {
+                toast.info(t('transcript.largeTurboFallback'))
+              },
+            })
+            if (!mountedRef.current) return
+            if (result.status === 'cancelled') {
+              setMediaState((prev) => ({ ...prev, [mediaId]: { status: 'needs' } }))
+              return
+            }
+            const { transcript } = result
             setMediaState((prev) => ({
               ...prev,
-              [mediaId]: { status: 'error', errorMessage },
+              [mediaId]: hasWordTimings(transcript)
+                ? { status: 'ready', transcript }
+                : { status: 'needs' },
             }))
+          } catch (error) {
+            logger.warn('Transcription failed', { mediaId, error })
+            const errorMessage = isTranscriptionOutOfMemoryError(error)
+              ? TRANSCRIPTION_OOM_HINT
+              : error instanceof Error && error.message.trim().length > 0
+                ? error.message
+                : t('transcript.toastTranscribeFailed')
+            if (mountedRef.current) {
+              setMediaState((prev) => ({
+                ...prev,
+                [mediaId]: { status: 'error', errorMessage },
+              }))
+            }
+            toast.error(errorMessage)
           }
-          toast.error(errorMessage)
-        }
-      }),
-    )
-  }, [uniqueMediaIds, mediaState, t])
+        }),
+      )
+    },
+    [uniqueMediaIds, mediaState, t],
+  )
 
   const transcriptionError = useMemo(
     () =>
@@ -791,6 +796,21 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
   }, [needsTranscription, transcriptableItems, t])
 
   const selectionCount = selectedKeys.size
+  const handleCreateTextLayers = useCallback(async () => {
+    try {
+      const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+        clipIds: transcriptableItems.map((item) => item.id),
+      })
+      if (result.insertedItemCount === 0) {
+        toast.info(t('transcript.toastNoTextLayers'))
+        return
+      }
+      toast.success(t('transcript.toastTextLayersCreated', { count: result.insertedItemCount }))
+    } catch (error) {
+      logger.warn('Text layer creation failed', error)
+      toast.error(t('transcript.toastTextLayersFailed'))
+    }
+  }, [t, transcriptableItems])
 
   return (
     <div
@@ -1082,6 +1102,24 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
               {selectionAllIgnored
                 ? t('transcript.restoreSelection', { defaultValue: 'Restore' })
                 : t('transcript.ignoreSelection', { defaultValue: 'Mark for delete' })}
+            </span>
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="gap-1.5"
+            onClick={() => {
+              void handleCreateTextLayers()
+            }}
+            disabled={isBusy}
+            aria-label={t('transcript.createTextLayers', { defaultValue: 'Text Layers' })}
+            data-tooltip={t('transcript.createTextLayersHint', {
+              defaultValue: 'Create timeline text items from transcript phrases',
+            })}
+          >
+            <TypeIcon className="h-3.5 w-3.5" />
+            <span className="hidden @[340px]:inline">
+              {t('transcript.createTextLayers', { defaultValue: 'Text Layers' })}
             </span>
           </Button>
         </div>

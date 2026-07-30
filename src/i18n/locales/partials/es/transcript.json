@@ -20,9 +20,16 @@
     "wordsSelected_other": "{{count}} palabras seleccionadas",
     "selectHint": "Haz clic en una palabra para saltar ahí; arrastra para seleccionar.",
     "deleteSelection": "Eliminar",
+    "createTextLayers": "Capas de texto",
+    "createTextLayersHint": "Crear elementos de texto en la línea de tiempo desde frases de la transcripción",
     "toastRemoved": "Se eliminaron {{count}} clip(s)",
     "toastNothingRemoved": "No se eliminó nada",
     "toastRemoveFailed": "No se pudieron eliminar las palabras seleccionadas",
-    "toastTranscribeFailed": "La transcripción falló"
+    "toastTranscribeFailed": "La transcripción falló",
+    "toastNoTranscriptReady": "Primero genera la transcripción de al menos un clip seleccionado.",
+    "toastNoTextLayers": "Ninguna frase de la transcripción se superpone con los clips seleccionados.",
+    "toastTextLayersFailed": "No se pudieron crear capas de texto desde la transcripción.",
+    "toastTextLayersCreated": "Se crearon {{count}} capas de texto",
+    "toastClipCaptionsDisabled": "Se desactivaron {{count}} capa(s) de subtítulos del clip"
   }
 }

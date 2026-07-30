@@ -11,6 +11,18 @@ export const DEFAULT_TEXT_FONT_FAMILY = 'Inter'
 
 export const FONT_CATALOG: readonly FontCatalogEntry[] = [
   {
+    value: 'Charter',
+    label: 'Charter',
+    family: 'Charter',
+    weights: [400],
+  },
+  {
+    value: 'Circe Bold',
+    label: 'Circe Bold',
+    family: 'Circe Bold',
+    weights: [700],
+  },
+  {
     value: 'Roboto',
     label: 'Roboto',
     family: 'Roboto',

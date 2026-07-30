@@ -245,6 +245,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const [showImportUrlDialog, setShowImportUrlDialog] = useState(false)
   const [importUrlValue, setImportUrlValue] = useState('')
   const [isImportUrlSubmitting, setIsImportUrlSubmitting] = useState(false)
+  const [isImportUrlPreviewing, setIsImportUrlPreviewing] = useState(false)
+  const [telegramPreviewItems, setTelegramPreviewItems] = useState<
+    Array<{ id: string; mediaType: string; thumbnailUrl: string | null; label: string }>
+  >([])
+  const [selectedTelegramPreviewId, setSelectedTelegramPreviewId] = useState<string | null>(null)
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId)
   const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject)
@@ -413,24 +418,69 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const handleImportUrl = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      if (isImportUrlSubmitting) {
+      if (isImportUrlSubmitting || isImportUrlPreviewing) {
+        return
+      }
+
+      const trimmedUrl = importUrlValue.trim()
+      if (trimmedUrl.length === 0) {
         return
       }
 
       setIsImportUrlSubmitting(true)
       try {
-        await importMediaFromUrl(importUrlValue)
+        if (telegramPreviewItems.length > 0) {
+          const selectedMediaId =
+            selectedTelegramPreviewId !== null
+              ? Number.parseInt(selectedTelegramPreviewId, 10)
+              : NaN
+          if (!Number.isSafeInteger(selectedMediaId) || selectedMediaId <= 0) {
+            showNotification({
+              type: 'warning',
+              message: t('media.library.telegramPreviewSelectWarning', {
+                defaultValue: 'Select a Telegram file to download.',
+              }),
+            })
+            return
+          }
+
+          await importMediaFromUrl(trimmedUrl, { telegramMediaId: selectedMediaId })
+        } else {
+          setIsImportUrlPreviewing(true)
+          const { mediaLibraryService } = await importMediaLibraryService()
+          const previewItems = await mediaLibraryService.previewImportFromUrl(trimmedUrl)
+          if (previewItems && previewItems.length > 0) {
+            setTelegramPreviewItems(previewItems)
+            setSelectedTelegramPreviewId(previewItems[0]?.id ?? null)
+            return
+          }
+
+          await importMediaFromUrl(trimmedUrl)
+        }
+
         if (!useMediaLibraryStore.getState().error) {
           setShowImportUrlDialog(false)
           setImportUrlValue('')
+          setTelegramPreviewItems([])
+          setSelectedTelegramPreviewId(null)
         }
       } catch (error) {
         logger.error('Import from URL failed:', error)
       } finally {
+        setIsImportUrlPreviewing(false)
         setIsImportUrlSubmitting(false)
       }
     },
-    [importMediaFromUrl, importUrlValue, isImportUrlSubmitting],
+    [
+      importMediaFromUrl,
+      importUrlValue,
+      isImportUrlPreviewing,
+      isImportUrlSubmitting,
+      selectedTelegramPreviewId,
+      showNotification,
+      t,
+      telegramPreviewItems.length,
+    ],
   )
 
   // Import files from drag-drop handles - memoized to prevent MediaGrid re-renders
@@ -821,6 +871,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           setShowImportUrlDialog(open)
           if (!open && !isImportUrlSubmitting) {
             setImportUrlValue('')
+            setTelegramPreviewItems([])
+            setSelectedTelegramPreviewId(null)
           }
         }}
       >
@@ -838,15 +890,88 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 inputMode="url"
                 placeholder="https://example.com/video.mp4"
                 value={importUrlValue}
-                onChange={(event) => setImportUrlValue(event.target.value)}
-                disabled={isImportUrlSubmitting}
+                onChange={(event) => {
+                  setImportUrlValue(event.target.value)
+                  if (telegramPreviewItems.length > 0) {
+                    setTelegramPreviewItems([])
+                    setSelectedTelegramPreviewId(null)
+                  }
+                }}
+                disabled={isImportUrlSubmitting || isImportUrlPreviewing}
               />
               <p className="text-xs text-muted-foreground">
                 {t('media.library.importFromUrlHint')}
               </p>
             </div>
 
+            {telegramPreviewItems.length > 0 && (
+              <div className="space-y-2 rounded-md border border-border bg-secondary/20 p-2">
+                <p className="text-xs text-muted-foreground">
+                  {t('media.library.telegramPreviewTitle', {
+                    defaultValue: 'Select a Telegram media file to download',
+                  })}
+                </p>
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {telegramPreviewItems.map((item) => {
+                    const selected = item.id === selectedTelegramPreviewId
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setSelectedTelegramPreviewId(item.id)}
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-md border px-2 py-1.5 text-left transition-colors',
+                          selected
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border bg-background hover:bg-secondary/60',
+                        )}
+                      >
+                        <div className="h-12 w-20 overflow-hidden rounded-sm border border-border bg-muted">
+                          {item.thumbnailUrl ? (
+                            <img
+                              src={item.thumbnailUrl}
+                              alt={item.label}
+                              className="h-full w-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                              {t('media.library.telegramPreviewNoImage', {
+                                defaultValue: 'No preview',
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-foreground">
+                            {item.label}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {t('media.library.telegramPreviewType', { defaultValue: 'Type' })}:{' '}
+                            {item.mediaType}
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <DialogFooter>
+              {telegramPreviewItems.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setTelegramPreviewItems([])
+                    setSelectedTelegramPreviewId(null)
+                  }}
+                  disabled={isImportUrlSubmitting}
+                >
+                  {t('media.library.telegramPreviewBack', { defaultValue: 'Change URL' })}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -854,20 +979,29 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   if (!isImportUrlSubmitting) {
                     setShowImportUrlDialog(false)
                     setImportUrlValue('')
+                    setTelegramPreviewItems([])
+                    setSelectedTelegramPreviewId(null)
                   }
                 }}
-                disabled={isImportUrlSubmitting}
+                disabled={isImportUrlSubmitting || isImportUrlPreviewing}
               >
                 {t('common.cancel')}
               </Button>
               <Button
                 type="submit"
                 disabled={
-                  !currentProjectId || importUrlValue.trim().length === 0 || isImportUrlSubmitting
+                  !currentProjectId ||
+                  importUrlValue.trim().length === 0 ||
+                  isImportUrlSubmitting ||
+                  isImportUrlPreviewing
                 }
               >
-                {isImportUrlSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {t('media.library.import')}
+                {(isImportUrlSubmitting || isImportUrlPreviewing) && (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                )}
+                {telegramPreviewItems.length > 0
+                  ? t('media.library.telegramPreviewImport', { defaultValue: 'Download Selected' })
+                  : t('media.library.import')}
               </Button>
             </DialogFooter>
           </form>

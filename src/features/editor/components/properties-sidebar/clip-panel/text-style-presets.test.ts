@@ -55,6 +55,26 @@ describe('text style presets', () => {
     })
   })
 
+  it('builds the Circe and Charter presets with the requested typography', () => {
+    expect(buildTextStylePresetUpdates('circe-bold', canvas)).toMatchObject({
+      fontFamily: 'Circe Bold',
+      fontStyle: 'normal',
+      fontSize: 70,
+      textAlign: 'center',
+      lineHeight: 1.2,
+      textShadow: undefined,
+    })
+
+    expect(buildTextStylePresetUpdates('charter-italic', canvas)).toMatchObject({
+      fontFamily: 'Charter',
+      fontStyle: 'italic',
+      fontSize: 70,
+      textAlign: 'center',
+      lineHeight: 1.2,
+      textShadow: undefined,
+    })
+  })
+
   it('builds a shared text scale from the canvas', () => {
     const scale = buildTextScale(canvas)
 

@@ -20,9 +20,16 @@
     "wordsSelected_other": "{{count}}개 단어 선택됨",
     "selectHint": "단어를 클릭하면 해당 위치로 이동하고, 드래그하면 선택됩니다.",
     "deleteSelection": "삭제",
+    "createTextLayers": "텍스트 레이어",
+    "createTextLayersHint": "전사 구문에서 타임라인 텍스트 항목 만들기",
     "toastRemoved": "클립 {{count}}개를 제거했습니다",
     "toastNothingRemoved": "제거된 항목이 없습니다",
     "toastRemoveFailed": "선택한 단어를 제거할 수 없습니다",
-    "toastTranscribeFailed": "전사에 실패했습니다"
+    "toastTranscribeFailed": "전사에 실패했습니다",
+    "toastNoTranscriptReady": "먼저 선택한 클립 중 최소 하나에 대해 전사를 생성하세요.",
+    "toastNoTextLayers": "선택한 클립과 겹치는 전사 구문이 없습니다.",
+    "toastTextLayersFailed": "전사에서 텍스트 레이어를 만들 수 없습니다.",
+    "toastTextLayersCreated": "텍스트 레이어 {{count}}개를 만들었습니다",
+    "toastClipCaptionsDisabled": "클립 자막 레이어 {{count}}개를 비활성화했습니다"
   }
 }

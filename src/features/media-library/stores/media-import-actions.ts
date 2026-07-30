@@ -501,7 +501,7 @@ export function createImportActions(
       }
     },
 
-    importMediaFromUrl: async (url: string) => {
+    importMediaFromUrl: async (url: string, options?: { telegramMediaId?: number }) => {
       const { currentProjectId } = get()
       const trimmedUrl = url.trim()
 
@@ -531,7 +531,9 @@ export function createImportActions(
 
       try {
         const { mediaLibraryService } = await loadMediaLibraryService()
-        const metadata = await mediaLibraryService.importMediaFromUrl(trimmedUrl, currentProjectId)
+        const metadata = options
+          ? await mediaLibraryService.importMediaFromUrl(trimmedUrl, currentProjectId, options)
+          : await mediaLibraryService.importMediaFromUrl(trimmedUrl, currentProjectId)
 
         if (metadata.isDuplicate) {
           showImportNotifications(0, [metadata.fileName], [], 0, get)

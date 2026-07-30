@@ -379,6 +379,20 @@ describe('createImportActions', () => {
     expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('remote-1', 'proxy-remote-1')
   })
 
+  it('passes Telegram preview selection media_id to URL import service', async () => {
+    const imported = makeMedia({ id: 'remote-tg-1', storageType: 'opfs', fileName: 'telegram.mp4' })
+    mediaLibraryServiceMocks.importMediaFromUrl.mockResolvedValue(imported)
+
+    const harness = createImportActionsHarness()
+    await harness.actions.importMediaFromUrl('https://t.me/channel/123', { telegramMediaId: 202 })
+
+    expect(mediaLibraryServiceMocks.importMediaFromUrl).toHaveBeenCalledWith(
+      'https://t.me/channel/123',
+      'project-1',
+      { telegramMediaId: 202 },
+    )
+  })
+
   it('shows an info notification when a URL import resolves to an existing media item', async () => {
     const duplicate = makeMedia({ id: 'existing-1', storageType: 'opfs', fileName: 'clip.mp4' })
     mediaLibraryServiceMocks.importMediaFromUrl.mockResolvedValue({

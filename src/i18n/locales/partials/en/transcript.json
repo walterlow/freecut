@@ -20,9 +20,16 @@
     "wordsSelected_other": "{{count}} words selected",
     "selectHint": "Click a word to jump there; drag to select.",
     "deleteSelection": "Delete",
+    "createTextLayers": "Text Layers",
+    "createTextLayersHint": "Create timeline text items from transcript phrases",
     "toastRemoved": "Removed {{count}} clip(s)",
     "toastNothingRemoved": "Nothing was removed",
     "toastRemoveFailed": "Could not remove the selected words",
-    "toastTranscribeFailed": "Transcription failed"
+    "toastTranscribeFailed": "Transcription failed",
+    "toastNoTranscriptReady": "Generate transcript first for at least one selected clip.",
+    "toastNoTextLayers": "No transcript phrases overlap the selected clips.",
+    "toastTextLayersFailed": "Could not create text layers from transcript.",
+    "toastTextLayersCreated": "Created {{count}} text layers",
+    "toastClipCaptionsDisabled": "Disabled {{count}} clip caption layer(s)"
   }
 }

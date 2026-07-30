@@ -20,9 +20,16 @@
     "wordsSelected_other": "{{count}} kelime seçildi",
     "selectHint": "Bir kelimeye gitmek için tıklayın; seçmek için sürükleyin.",
     "deleteSelection": "Sil",
+    "createTextLayers": "Metin Katmanları",
+    "createTextLayersHint": "Transkript ifadelerinden zaman çizelgesinde metin öğeleri oluştur",
     "toastRemoved": "{{count}} klip kaldırıldı",
     "toastNothingRemoved": "Hiçbir şey kaldırılmadı",
     "toastRemoveFailed": "Seçili kelimeler kaldırılamadı",
-    "toastTranscribeFailed": "Yazıya dökme başarısız oldu"
+    "toastTranscribeFailed": "Yazıya dökme başarısız oldu",
+    "toastNoTranscriptReady": "Önce seçili en az bir klip için transkript oluşturun.",
+    "toastNoTextLayers": "Seçili kliplerle çakışan transkript ifadesi yok.",
+    "toastTextLayersFailed": "Transkriptten metin katmanları oluşturulamadı.",
+    "toastTextLayersCreated": "{{count}} metin katmanı oluşturuldu",
+    "toastClipCaptionsDisabled": "{{count}} klip altyazı katmanı devre dışı bırakıldı"
   }
 }

@@ -12,7 +12,7 @@ import {
   type TextStylePresetId,
 } from '@/shared/typography/text-style-presets'
 
-export const DEFAULT_GENERATED_LAYER_DURATION_SECONDS = 60
+export const DEFAULT_GENERATED_LAYER_DURATION_SECONDS = 10
 
 export interface TimelineTemplateDragData {
   type: 'timeline-template'

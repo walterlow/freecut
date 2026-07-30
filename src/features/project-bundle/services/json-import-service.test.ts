@@ -171,7 +171,7 @@ describe('validateSnapshotData', () => {
               label: 'Poster',
               text: 'Tonight',
               color: '#ffffff',
-              textStylePresetId: 'poster',
+              textStylePresetId: 'charter-italic',
             },
           ],
           zoomLevel: 1,

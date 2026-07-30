@@ -5,6 +5,22 @@
 /* Feature-specific theme extensions */
 @import './features/timeline/theme.css';
 
+@font-face {
+  font-family: 'Circe Bold';
+  src: url('/fonts/Circe%20Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Charter';
+  src: url('/fonts/Charter.ttc') format('truetype-collection');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 body.canvas-translate-cursor-not-allowed,
 body.canvas-translate-cursor-not-allowed * {
   cursor: not-allowed !important;

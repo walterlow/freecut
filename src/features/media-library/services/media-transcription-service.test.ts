@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { waitFor } from '@testing-library/react'
 import type { MediaTranscript } from '@/types/storage'
-import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import type { AudioItem, TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
 
 const saveTranscriptMock = vi.fn()
 const getTranscriptMock = vi.fn()
@@ -465,6 +465,619 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     })
     if (insertedItems[0]?.type === 'subtitle') {
       expect(insertedItems[0].cues.map((cue) => cue.text)).toEqual(['Fresh one', 'Fresh two'])
+    }
+  })
+})
+
+describe('mediaTranscriptionService.insertTranscriptAsTextLayers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    usePlaybackStoreGetStateMock.mockReturnValue({ currentFrame: 0 })
+    useProjectStoreGetStateMock.mockReturnValue({
+      currentProject: {
+        metadata: {
+          width: 1920,
+          height: 1080,
+        },
+      },
+    })
+    useSelectionStoreGetStateMock.mockReturnValue({
+      selectedItemIds: [],
+      selectItems: selectItemsMock,
+    })
+  })
+
+  it('creates transcript text layers on a dedicated track with Circe styling', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      speed: 1,
+    }
+
+    const setTracks = vi.fn()
+    const addItems = vi.fn()
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [makeTrack('track-video', 1)],
+      items: [clip],
+      setTracks,
+      addItems,
+    })
+
+    const words = [
+      'This',
+      'is',
+      'proper',
+      'subtitle',
+      'line',
+      'for',
+      'today',
+      'another',
+      'strong',
+      'sentence',
+    ]
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: words.join(' '),
+      segments: [
+        {
+          text: words.join(' '),
+          start: 0,
+          end: 4,
+          words: words.map((text, index) => ({
+            text,
+            start: index * 0.3,
+            end: (index + 1) * 0.3,
+          })),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+      clipIds: ['clip-1'],
+    })
+
+    expect(result.insertedItemCount).toBeGreaterThan(0)
+    expect(setTracks).toHaveBeenCalledTimes(1)
+    const createdTracks = (setTracks.mock.calls[0]![0] as TimelineTrack[]).filter(
+      (track) => track.name === 'Text Layers',
+    )
+    expect(createdTracks.length).toBe(1)
+
+    expect(addItems).toHaveBeenCalledTimes(1)
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    expect(insertedItems.length).toBe(result.insertedItemCount)
+    const uniqueTrackIds = new Set(insertedItems.map((item) => item.trackId))
+    expect(uniqueTrackIds.size).toBe(1)
+    for (const item of insertedItems) {
+      if (item.type !== 'text') {
+        throw new Error('Expected text item')
+      }
+      expect(item.text.length).toBeLessThanOrEqual(25)
+      expect(item.fontFamily).toBe('Circe Bold')
+      expect(item.fontSize).toBe(70)
+      expect(item.fontStyle).toBe('normal')
+      expect(item.textStylePresetId).toBe('circe-bold')
+      expect(item.transform?.y).toBe(420)
+      expect(item.text).not.toMatch(/(?:^|\s)[\p{L}\p{N}]{1,2}[.!?,;:'"”’)]?$/u)
+    }
+  })
+
+  it('rebalances phrase boundaries so layers do not end with short words', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      speed: 1,
+    }
+
+    const setTracks = vi.fn()
+    const addItems = vi.fn()
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [
+        makeTrack('track-video', 1),
+        { ...makeTrack('track-text-layers', 2), name: 'Text Layers' },
+      ],
+      items: [clip],
+      setTracks,
+      addItems,
+    })
+
+    const words = ['alpha', 'bravo', 'charlie', 'to', 'market', 'quickly', 'again', 'today']
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: words.join(' '),
+      segments: [
+        {
+          text: words.join(' '),
+          start: 0,
+          end: 4,
+          words: words.map((text, index) => ({
+            text,
+            start: index * 0.4,
+            end: (index + 1) * 0.4,
+          })),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+      clipIds: ['clip-1'],
+    })
+
+    expect(result.insertedItemCount).toBeGreaterThan(0)
+    expect(setTracks).toHaveBeenCalledTimes(1)
+    const createdTracks = (setTracks.mock.calls[0]![0] as TimelineTrack[]).filter(
+      (track) => track.name === 'Text Layers',
+    )
+    expect(createdTracks.length).toBe(2)
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    const uniqueTrackIds = new Set(insertedItems.map((item) => item.trackId))
+    expect(uniqueTrackIds.size).toBe(1)
+    for (const item of insertedItems) {
+      if (item.type !== 'text') {
+        throw new Error('Expected text item')
+      }
+      expect(item.text.length).toBeLessThanOrEqual(25)
+      expect(item.text).not.toMatch(/(?:^|\s)[\p{L}\p{N}]{1,2}[.!?,;:'"”’)]?$/u)
+    }
+  })
+
+  it('keeps the 25-char cap when moving a short trailing word to the next layer', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      speed: 1,
+    }
+
+    const setTracks = vi.fn()
+    const addItems = vi.fn()
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [makeTrack('track-video', 1)],
+      items: [clip],
+      setTracks,
+      addItems,
+    })
+
+    const words = ['alpha', 'bravo', 'charlie', 'delta', 'to', 'extraordinary']
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: words.join(' '),
+      segments: [
+        {
+          text: words.join(' '),
+          start: 0,
+          end: 4,
+          words: words.map((text, index) => ({
+            text,
+            start: index * 0.4,
+            end: (index + 1) * 0.4,
+          })),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+      clipIds: ['clip-1'],
+    })
+
+    expect(result.insertedItemCount).toBeGreaterThan(0)
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    for (const item of insertedItems) {
+      if (item.type !== 'text') {
+        throw new Error('Expected text item')
+      }
+      expect(item.text.length).toBeLessThanOrEqual(25)
+    }
+    expect(insertedItems.some((item) => item.type === 'text' && item.text === 'to')).toBe(false)
+  })
+
+  it('dedupes a linked video/audio pair so layers are created only from the audio clip', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      speed: 1,
+      linkedGroupId: 'av-1',
+    }
+    const linkedAudio: AudioItem = {
+      id: 'audio-1',
+      type: 'audio',
+      trackId: 'track-audio',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Audio',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      linkedGroupId: 'av-1',
+    }
+
+    const setTracks = vi.fn()
+    const addItems = vi.fn()
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [makeTrack('track-video', 1), makeTrack('track-audio', 2)],
+      items: [clip, linkedAudio],
+      setTracks,
+      addItems,
+    })
+
+    const words = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: words.join(' '),
+      segments: [
+        {
+          text: words.join(' '),
+          start: 0,
+          end: 2.4,
+          words: words.map((text, index) => ({
+            text,
+            start: index * 0.4,
+            end: (index + 1) * 0.4,
+          })),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+      clipIds: ['clip-1', 'audio-1'],
+    })
+
+    expect(result.insertedItemCount).toBeGreaterThan(0)
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    const signatures = insertedItems.map(
+      (item) => `${item.from}:${item.durationInFrames}:${item.type === 'text' ? item.text : ''}`,
+    )
+    expect(new Set(signatures).size).toBe(signatures.length)
+    for (const item of insertedItems) {
+      if (item.type !== 'text') {
+        throw new Error('Expected text item')
+      }
+      expect(item.captionSource?.clipId).toBe('audio-1')
+    }
+  })
+
+  it('still processes distinct timeline placements of the same media', async () => {
+    const firstClip: AudioItem = {
+      id: 'audio-a',
+      type: 'audio',
+      trackId: 'track-audio',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Audio A',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+    }
+    const secondClip: AudioItem = {
+      ...firstClip,
+      id: 'audio-b',
+      from: 500,
+      label: 'Audio B',
+    }
+
+    const setTracks = vi.fn()
+    const addItems = vi.fn()
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [makeTrack('track-audio', 1)],
+      items: [firstClip, secondClip],
+      setTracks,
+      addItems,
+    })
+
+    const words = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: words.join(' '),
+      segments: [
+        {
+          text: words.join(' '),
+          start: 0,
+          end: 2.4,
+          words: words.map((text, index) => ({
+            text,
+            start: index * 0.4,
+            end: (index + 1) * 0.4,
+          })),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+      clipIds: ['audio-a', 'audio-b'],
+    })
+
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    const sourceClipIds = new Set(
+      insertedItems.map((item) => (item.type === 'text' ? item.captionSource?.clipId : undefined)),
+    )
+    expect(sourceClipIds).toEqual(new Set(['audio-a', 'audio-b']))
+    expect(result.insertedItemCount).toBe(insertedItems.length)
+  })
+
+  it('reuses an existing Text Layers track sitting on top instead of creating a new one', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      speed: 1,
+    }
+    const textLayersTrack = { ...makeTrack('track-text-layers', 0), name: 'Text Layers' }
+
+    const setTracks = vi.fn()
+    const addItems = vi.fn()
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [makeTrack('track-video', 1), textLayersTrack],
+      items: [clip],
+      setTracks,
+      addItems,
+    })
+
+    const words = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: words.join(' '),
+      segments: [
+        {
+          text: words.join(' '),
+          start: 0,
+          end: 2.4,
+          words: words.map((text, index) => ({
+            text,
+            start: index * 0.4,
+            end: (index + 1) * 0.4,
+          })),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+      clipIds: ['clip-1'],
+    })
+
+    expect(result.insertedItemCount).toBeGreaterThan(0)
+    expect(setTracks).not.toHaveBeenCalled()
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    expect(insertedItems.length).toBeGreaterThan(0)
+    for (const item of insertedItems) {
+      expect(item.trackId).toBe('track-text-layers')
+    }
+  })
+
+  it('creates the Text Layers track on top of all tracks when none exists', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      speed: 1,
+    }
+
+    const setTracks = vi.fn()
+    const addItems = vi.fn()
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [makeTrack('track-video', 1), makeTrack('track-audio', 2)],
+      items: [clip],
+      setTracks,
+      addItems,
+    })
+
+    const words = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: words.join(' '),
+      segments: [
+        {
+          text: words.join(' '),
+          start: 0,
+          end: 2.4,
+          words: words.map((text, index) => ({
+            text,
+            start: index * 0.4,
+            end: (index + 1) * 0.4,
+          })),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+      clipIds: ['clip-1'],
+    })
+
+    expect(result.insertedItemCount).toBeGreaterThan(0)
+    expect(setTracks).toHaveBeenCalledTimes(1)
+    const nextTracks = setTracks.mock.calls[0]![0] as TimelineTrack[]
+    const createdTrack = nextTracks.find((track) => track.name === 'Text Layers')
+    expect(createdTrack).toBeDefined()
+    expect(createdTrack!.order).toBe(Math.min(...nextTracks.map((track) => track.order)))
+
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    for (const item of insertedItems) {
+      expect(item.trackId).toBe(createdTrack!.id)
+    }
+  })
+
+  it('creates a fresh top track when a Text Layers track exists but sits lower in the stack', async () => {
+    const clip: VideoItem = {
+      id: 'clip-1',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 300,
+      label: 'Clip',
+      mediaId: 'media-1',
+      src: 'blob:test',
+      sourceStart: 0,
+      sourceEnd: 300,
+      sourceDuration: 300,
+      sourceFps: 30,
+      speed: 1,
+    }
+    const buriedTextLayersTrack = {
+      ...makeTrack('track-text-layers-buried', 2),
+      name: 'Text Layers',
+    }
+
+    const setTracks = vi.fn()
+    const addItems = vi.fn()
+    useTimelineStoreGetStateMock.mockReturnValue({
+      fps: 30,
+      tracks: [makeTrack('track-video', 1), buriedTextLayersTrack],
+      items: [clip],
+      setTracks,
+      addItems,
+    })
+
+    const words = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+    getTranscriptMock.mockResolvedValue({
+      id: 'media-1',
+      mediaId: 'media-1',
+      model: 'whisper-tiny',
+      language: 'auto',
+      quantization: 'q8',
+      text: words.join(' '),
+      segments: [
+        {
+          text: words.join(' '),
+          start: 0,
+          end: 2.4,
+          words: words.map((text, index) => ({
+            text,
+            start: index * 0.4,
+            end: (index + 1) * 0.4,
+          })),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } satisfies MediaTranscript)
+
+    const result = await mediaTranscriptionService.insertTranscriptAsTextLayers({
+      clipIds: ['clip-1'],
+    })
+
+    expect(result.insertedItemCount).toBeGreaterThan(0)
+    expect(setTracks).toHaveBeenCalledTimes(1)
+    const nextTracks = setTracks.mock.calls[0]![0] as TimelineTrack[]
+    const topTrack = nextTracks.find(
+      (track) => track.order === Math.min(...nextTracks.map((entry) => entry.order)),
+    )
+    expect(topTrack?.name).toBe('Text Layers')
+    expect(topTrack?.id).not.toBe('track-text-layers-buried')
+
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[]
+    for (const item of insertedItems) {
+      expect(item.trackId).toBe(topTrack!.id)
     }
   })
 })

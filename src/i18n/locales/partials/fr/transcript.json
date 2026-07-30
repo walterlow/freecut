@@ -20,9 +20,16 @@
     "wordsSelected_other": "{{count}} mots sélectionnés",
     "selectHint": "Cliquez sur un mot pour y accéder ; faites glisser pour sélectionner.",
     "deleteSelection": "Supprimer",
+    "createTextLayers": "Calques texte",
+    "createTextLayersHint": "Créer des éléments texte sur la timeline à partir des phrases de transcription",
     "toastRemoved": "{{count}} clip(s) supprimé(s)",
     "toastNothingRemoved": "Rien n’a été supprimé",
     "toastRemoveFailed": "Impossible de supprimer les mots sélectionnés",
-    "toastTranscribeFailed": "Échec de la transcription"
+    "toastTranscribeFailed": "Échec de la transcription",
+    "toastNoTranscriptReady": "Générez d’abord une transcription pour au moins un clip sélectionné.",
+    "toastNoTextLayers": "Aucune phrase de transcription ne chevauche les clips sélectionnés.",
+    "toastTextLayersFailed": "Impossible de créer des calques texte à partir de la transcription.",
+    "toastTextLayersCreated": "{{count}} calques texte créés",
+    "toastClipCaptionsDisabled": "{{count}} calque(s) de sous-titres du clip désactivé(s)"
   }
 }

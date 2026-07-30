@@ -157,6 +157,58 @@ describe('createTimelineTemplateItem', () => {
     })
   })
 
+  it('creates the new single-line text presets with y=420 and fixed size', () => {
+    const circe = createTimelineTemplateItem({
+      template: {
+        type: 'timeline-template',
+        itemType: 'text',
+        label: 'Circe',
+        textStylePresetId: 'circe-bold',
+      },
+      placement: {
+        trackId: 'track-1',
+        from: 50,
+        durationInFrames: 120,
+        canvasWidth: 1920,
+        canvasHeight: 1080,
+        fps: 30,
+      },
+    })
+
+    const charter = createTimelineTemplateItem({
+      template: {
+        type: 'timeline-template',
+        itemType: 'text',
+        label: 'Charter Italic',
+        textStylePresetId: 'charter-italic',
+      },
+      placement: {
+        trackId: 'track-1',
+        from: 60,
+        durationInFrames: 120,
+        canvasWidth: 1920,
+        canvasHeight: 1080,
+        fps: 30,
+      },
+    })
+
+    expect(circe).toMatchObject({
+      type: 'text',
+      fontFamily: 'Circe Bold',
+      fontStyle: 'normal',
+      fontSize: 70,
+      transform: { y: 420 },
+    })
+
+    expect(charter).toMatchObject({
+      type: 'text',
+      fontFamily: 'Charter',
+      fontStyle: 'italic',
+      fontSize: 70,
+      transform: { y: 420 },
+    })
+  })
+
   it('creates an adjustment item with carried effects', () => {
     const item = createTimelineTemplateItem({
       template: {

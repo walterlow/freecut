@@ -11,10 +11,9 @@ interface UseAutoTranscriptCaptionsParams {
 }
 
 /**
- * Auto-enables transcript-backed captions for a video/audio clip the first time
- * its media has a transcript and no captions yet. Runs once per item+media pair
- * (tracked by a ref) and stays silent on failure — the explicit "Generate
- * Captions" action remains the user-facing fallback.
+ * Refreshes transcript-backed captions only when they are already enabled on the
+ * clip. Fresh transcripts no longer auto-enable captions; users opt in via the
+ * explicit captions action.
  */
 export function useAutoTranscriptCaptions({
   item,
@@ -29,6 +28,7 @@ export function useAutoTranscriptCaptions({
       !caption.canManageCaptions ||
       !caption.mediaHasTranscript ||
       hasGeneratedCaptions ||
+      item.transcriptCaptions?.enabled !== true ||
       isBroken ||
       (item.type !== 'video' && item.type !== 'audio') ||
       !item.mediaId
@@ -58,6 +58,7 @@ export function useAutoTranscriptCaptions({
     isBroken,
     item.id,
     item.mediaId,
+    item.transcriptCaptions?.enabled,
     item.type,
   ])
 }

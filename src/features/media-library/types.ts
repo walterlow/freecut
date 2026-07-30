@@ -144,7 +144,10 @@ export interface MediaLibraryActions {
    * Import media from a direct URL into OPFS-backed storage.
    * Best for CORS-enabled direct media files (mp4, mp3, png, etc.).
    */
-  importMediaFromUrl: (url: string) => Promise<MediaMetadata[]>
+  importMediaFromUrl: (
+    url: string,
+    options?: { telegramMediaId?: number },
+  ) => Promise<MediaMetadata[]>
   /**
    * Import a Lottie animation from a provider (e.g. the LottieFiles browser)
    * into OPFS-backed storage, recording attribution. Returns the media when it

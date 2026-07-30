@@ -20,9 +20,16 @@
     "wordsSelected_other": "{{count}} 語を選択中",
     "selectHint": "単語をクリックするとその位置へ移動し、ドラッグで選択します。",
     "deleteSelection": "削除",
+    "createTextLayers": "テキストレイヤー",
+    "createTextLayersHint": "文字起こしのフレーズからタイムラインのテキスト項目を作成",
     "toastRemoved": "{{count}} 個のクリップを削除しました",
     "toastNothingRemoved": "削除されたものはありません",
     "toastRemoveFailed": "選択した単語を削除できませんでした",
-    "toastTranscribeFailed": "文字起こしに失敗しました"
+    "toastTranscribeFailed": "文字起こしに失敗しました",
+    "toastNoTranscriptReady": "先に選択したクリップのうち少なくとも1つで文字起こしを生成してください。",
+    "toastNoTextLayers": "選択したクリップと重なる文字起こしフレーズがありません。",
+    "toastTextLayersFailed": "文字起こしからテキストレイヤーを作成できませんでした。",
+    "toastTextLayersCreated": "{{count}} 個のテキストレイヤーを作成しました",
+    "toastClipCaptionsDisabled": "{{count}} 個のクリップ字幕レイヤーを無効にしました"
   }
 }

@@ -2,11 +2,20 @@ import type { MediaAttribution, MediaMetadata, ThumbnailData } from '@/types/sto
 import { createLogger } from '@/shared/logging/logger'
 import { mapWithConcurrency } from '@/shared/utils/async-utils'
 import {
+  fetchTelegramMediaPreview,
   fetchTelegramMediaThroughLocalDownloader,
   isTelegramPostUrl,
+  type TelegramMediaPreviewItem,
 } from '../utils/telegram-download'
 
 const logger = createLogger('MediaLibraryService')
+
+export interface UrlImportPreviewItem {
+  id: string
+  mediaType: string
+  thumbnailUrl: string | null
+  label: string
+}
 
 /**
  * Safe wrapper around workspace-fs readMediaSource that never throws —
@@ -215,9 +224,14 @@ function parseMediaImportUrl(input: string): URL {
   return parsedUrl
 }
 
-async function fetchImportResponse(parsedUrl: URL): Promise<Response> {
+async function fetchImportResponse(
+  parsedUrl: URL,
+  options?: { telegramMediaId?: number },
+): Promise<Response> {
   if (isTelegramPostUrl(parsedUrl)) {
-    return fetchTelegramMediaThroughLocalDownloader(parsedUrl.toString())
+    return options?.telegramMediaId !== undefined
+      ? fetchTelegramMediaThroughLocalDownloader(parsedUrl.toString(), options.telegramMediaId)
+      : fetchTelegramMediaThroughLocalDownloader(parsedUrl.toString())
   }
 
   try {
@@ -227,6 +241,24 @@ async function fetchImportResponse(parsedUrl: URL): Promise<Response> {
     throw new Error(
       'Could not download that URL. The site may block cross-origin downloads, require sign-in, or need a direct file link.',
     )
+  }
+}
+
+function normalizePreviewMediaType(mediaType: string): string {
+  const normalized = mediaType.toLowerCase()
+  if (normalized === 'video' || normalized === 'audio' || normalized === 'image') {
+    return normalized
+  }
+  return 'unknown'
+}
+
+function mapTelegramPreviewItemToUrlPreview(item: TelegramMediaPreviewItem): UrlImportPreviewItem {
+  const mediaType = normalizePreviewMediaType(item.mediaType)
+  return {
+    id: String(item.mediaId),
+    mediaType,
+    thumbnailUrl: item.thumbnailUrl,
+    label: `Media #${item.mediaId}`,
   }
 }
 
@@ -863,9 +895,12 @@ class MediaLibraryService {
     return persistedMedia
   }
 
-  private async fetchMediaFromUrl(url: string): Promise<File> {
+  private async fetchMediaFromUrl(
+    url: string,
+    options?: { telegramMediaId?: number },
+  ): Promise<File> {
     const parsedUrl = parseMediaImportUrl(url.trim())
-    const response = await fetchImportResponse(parsedUrl)
+    const response = await fetchImportResponse(parsedUrl, options)
     assertImportResponseIsMedia(parsedUrl, response)
 
     const blob = await response.blob()
@@ -1235,13 +1270,24 @@ class MediaLibraryService {
   async importMediaFromUrl(
     url: string,
     projectId: string,
+    options?: { telegramMediaId?: number },
   ): Promise<MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }> {
     if (!projectId) {
       throw new Error('No project selected')
     }
 
-    const file = await this.fetchMediaFromUrl(url)
+    const file = await this.fetchMediaFromUrl(url, options)
     return this.importMediaFileToOpfs(file, projectId)
+  }
+
+  async previewImportFromUrl(url: string): Promise<UrlImportPreviewItem[] | null> {
+    const parsedUrl = parseMediaImportUrl(url.trim())
+    if (!isTelegramPostUrl(parsedUrl)) {
+      return null
+    }
+
+    const previewItems = await fetchTelegramMediaPreview(parsedUrl.toString())
+    return previewItems.map(mapTelegramPreviewItemToUrlPreview)
   }
 
   /**

@@ -20,9 +20,16 @@
     "wordsSelected_other": "{{count}} Wörter ausgewählt",
     "selectHint": "Klicke auf ein Wort, um dorthin zu springen; ziehen zum Auswählen.",
     "deleteSelection": "Löschen",
+    "createTextLayers": "Textebenen",
+    "createTextLayersHint": "Timeline-Textelemente aus Transkriptphrasen erstellen",
     "toastRemoved": "{{count}} Clip(s) entfernt",
     "toastNothingRemoved": "Es wurde nichts entfernt",
     "toastRemoveFailed": "Die ausgewählten Wörter konnten nicht entfernt werden",
-    "toastTranscribeFailed": "Transkription fehlgeschlagen"
+    "toastTranscribeFailed": "Transkription fehlgeschlagen",
+    "toastNoTranscriptReady": "Erstelle zuerst für mindestens einen ausgewählten Clip ein Transkript.",
+    "toastNoTextLayers": "Keine Transkriptphrasen überschneiden sich mit den ausgewählten Clips.",
+    "toastTextLayersFailed": "Textebenen konnten nicht aus dem Transkript erstellt werden.",
+    "toastTextLayersCreated": "{{count}} Textebenen erstellt",
+    "toastClipCaptionsDisabled": "{{count}} Clip-Untertitel-Ebene(n) deaktiviert"
   }
 }

@@ -20,9 +20,16 @@
     "wordsSelected_other": "已选择 {{count}} 个词",
     "selectHint": "点击词语跳转到该处；拖动以选择。",
     "deleteSelection": "删除",
+    "createTextLayers": "文本图层",
+    "createTextLayersHint": "从字幕稿短语创建时间线文本项",
     "toastRemoved": "已移除 {{count}} 个片段",
     "toastNothingRemoved": "未移除任何内容",
     "toastRemoveFailed": "无法移除所选词语",
-    "toastTranscribeFailed": "转写失败"
+    "toastTranscribeFailed": "转写失败",
+    "toastNoTranscriptReady": "请先为至少一个已选片段生成字幕稿。",
+    "toastNoTextLayers": "没有与所选片段重叠的字幕稿短语。",
+    "toastTextLayersFailed": "无法从字幕稿创建文本图层。",
+    "toastTextLayersCreated": "已创建 {{count}} 个文本图层",
+    "toastClipCaptionsDisabled": "已禁用 {{count}} 个片段字幕图层"
   }
 }

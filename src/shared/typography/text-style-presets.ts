@@ -113,6 +113,54 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
       stroke: undefined,
     },
   },
+  'circe-bold': {
+    id: 'circe-bold',
+    label: 'Circe',
+    previewKind: 'clean',
+    layout: 'single',
+    sample: { title: 'Main', subtitle: 'Title' },
+    style: {
+      fontFamily: 'Circe Bold',
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      underline: false,
+      size: { token: 'title' },
+      color: '#ffffff',
+      backgroundColor: undefined,
+      backgroundRadius: 'none',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.2,
+      letterSpacing: 0,
+      textPadding: 'sm',
+      textShadow: undefined,
+      stroke: undefined,
+    },
+  },
+  'charter-italic': {
+    id: 'charter-italic',
+    label: 'Charter Italic',
+    previewKind: 'clean',
+    layout: 'single',
+    sample: { title: 'Main', subtitle: 'Title' },
+    style: {
+      fontFamily: 'Charter',
+      fontWeight: 'normal',
+      fontStyle: 'italic',
+      underline: false,
+      size: { token: 'title' },
+      color: '#ffffff',
+      backgroundColor: undefined,
+      backgroundRadius: 'none',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.2,
+      letterSpacing: 0,
+      textPadding: 'sm',
+      textShadow: undefined,
+      stroke: undefined,
+    },
+  },
   poster: {
     id: 'poster',
     label: 'Poster',
@@ -562,12 +610,17 @@ function buildResolvedPresetStyle(
     ? scale.shadows[preset.style.textShadow.token]
     : undefined
 
+  const resolvedFontSize =
+    presetId === 'circe-bold' || presetId === 'charter-italic'
+      ? Math.round(70 * styleScale)
+      : Math.round(resolveSize(scale, preset.style.size) * styleScale)
+
   return {
     fontFamily: preset.style.fontFamily,
     fontWeight: preset.style.fontWeight,
     fontStyle: preset.style.fontStyle,
     underline: preset.style.underline,
-    fontSize: Math.round(resolveSize(scale, preset.style.size) * styleScale),
+    fontSize: resolvedFontSize,
     color: preset.style.color,
     backgroundColor: preset.style.backgroundColor,
     backgroundRadius:
@@ -616,6 +669,36 @@ export function buildTextStylePresetTemplate(
   const baseFontSize = styles.fontSize ?? 60
 
   switch (presetId) {
+    case 'circe-bold':
+      return {
+        ...styles,
+        label: preset.label,
+        text: preset.sample.title,
+        textSpans: undefined,
+        transform: {
+          x: 0,
+          y: 420,
+          width: canvas.width * 0.8,
+          height: canvas.height * 0.3,
+          rotation: 0,
+          opacity: 1,
+        },
+      }
+    case 'charter-italic':
+      return {
+        ...styles,
+        label: preset.label,
+        text: preset.sample.title,
+        textSpans: undefined,
+        transform: {
+          x: 0,
+          y: 420,
+          width: canvas.width * 0.8,
+          height: canvas.height * 0.3,
+          rotation: 0,
+          opacity: 1,
+        },
+      }
     case 'speaker-card': {
       const spans: TextSpan[] = [
         {

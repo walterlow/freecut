@@ -20,9 +20,16 @@
     "wordsSelected_other": "{{count}} palavras selecionadas",
     "selectHint": "Clique em uma palavra para ir até ela; arraste para selecionar.",
     "deleteSelection": "Excluir",
+    "createTextLayers": "Camadas de texto",
+    "createTextLayersHint": "Criar itens de texto na linha do tempo a partir de frases da transcrição",
     "toastRemoved": "{{count}} clipe(s) removido(s)",
     "toastNothingRemoved": "Nada foi removido",
     "toastRemoveFailed": "Não foi possível remover as palavras selecionadas",
-    "toastTranscribeFailed": "Falha na transcrição"
+    "toastTranscribeFailed": "Falha na transcrição",
+    "toastNoTranscriptReady": "Gere a transcrição primeiro para pelo menos um clipe selecionado.",
+    "toastNoTextLayers": "Nenhuma frase da transcrição se sobrepõe aos clipes selecionados.",
+    "toastTextLayersFailed": "Não foi possível criar camadas de texto a partir da transcrição.",
+    "toastTextLayersCreated": "{{count}} camadas de texto criadas",
+    "toastClipCaptionsDisabled": "{{count}} camada(s) de legendas do clipe desativada(s)"
   }
 }

@@ -13,6 +13,7 @@ import type { MediaTranscript, MediaTranscriptModel, MediaTranscriptSegment } fr
 import type {
   AudioItem,
   SubtitleSegmentItem,
+  TextItem,
   TimelineTranscriptCaptionCue,
   TimelineItem,
   TimelineTrack,
@@ -25,6 +26,8 @@ import {
 } from '../transcription/registry'
 import { importMediaLibraryService } from './media-library-service-loader'
 import {
+  buildCaptionTextItems,
+  buildCaptionTrack,
   buildSubtitleSegmentForClip,
   getCaptionStyleTemplateFromPreset,
   buildCaptionTrackAbove,
@@ -35,6 +38,7 @@ import {
   getCaptionTextItemTemplate,
   getCaptionRangeForClip,
 } from '../utils/caption-items'
+import { buildTextStylePresetTemplate } from '@/shared/typography/text-style-presets'
 import { useProjectStore } from '@/features/media-library/deps/projects'
 import {
   removeTimelineItemsExact,
@@ -67,6 +71,8 @@ const TRANSCRIPT_CAPTION_BREAK_GAP_SECONDS = 0.18
 const TRANSCRIPT_CAPTION_TIMING_VERSION = 4
 const SENTENCE_END_PATTERN = /[.!?。！？]$/
 const DEFAULT_QUANTIZATION = DEFAULT_WHISPER_QUANTIZATION
+const MAX_TRANSCRIPT_TEXT_LAYER_CHARS = 25
+const TEXT_LAYERS_TRACK_NAME = 'Text Layers'
 
 type CaptionableClip = AudioItem | VideoItem
 interface InsertTranscriptAsCaptionsOptions {
@@ -78,6 +84,14 @@ interface InsertTranscriptAsCaptionsOptions {
 interface InsertTranscriptAsCaptionsResult {
   insertedItemCount: number
   removedItemCount: number
+}
+
+interface InsertTranscriptAsTextLayersOptions {
+  clipIds?: readonly string[]
+}
+
+interface InsertTranscriptAsTextLayersResult {
+  insertedItemCount: number
 }
 
 interface EnableTranscriptCaptionsResult {
@@ -274,6 +288,164 @@ function segmentTranscriptForCaptions(segments: TranscriptSegment[]): MediaTrans
   })
 
   return captionSegments.toSorted((left, right) => left.start - right.start)
+}
+
+interface TimedToken {
+  text: string
+  start: number
+  end: number
+}
+
+function normalizeTokenText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ')
+}
+
+function splitLongTimedToken(token: TimedToken, maxChars: number): TimedToken[] {
+  const normalized = normalizeTokenText(token.text)
+  if (normalized.length <= maxChars) {
+    return [{ ...token, text: normalized }]
+  }
+
+  const parts: TimedToken[] = []
+  const duration = Math.max(0.001, token.end - token.start)
+  let consumed = 0
+  while (consumed < normalized.length) {
+    const nextConsumed = Math.min(normalized.length, consumed + maxChars)
+    const startRatio = consumed / normalized.length
+    const endRatio = nextConsumed / normalized.length
+    parts.push({
+      text: normalized.slice(consumed, nextConsumed),
+      start: token.start + duration * startRatio,
+      end: token.start + duration * endRatio,
+    })
+    consumed = nextConsumed
+  }
+
+  return parts
+}
+
+function tokenizeTranscriptSegment(segment: MediaTranscriptSegment): TimedToken[] {
+  const fromWords =
+    segment.words
+      ?.map((word) => ({
+        text: normalizeTokenText(word.text),
+        start: word.start,
+        end: word.end,
+      }))
+      .filter(
+        (word) => word.text.length > 0 && Number.isFinite(word.start) && word.end > word.start,
+      ) ?? []
+  if (fromWords.length > 0) {
+    return fromWords
+  }
+
+  const words = normalizeTokenText(segment.text)
+    .split(' ')
+    .map((text) => text.trim())
+    .filter((text) => text.length > 0)
+  if (words.length === 0) {
+    return []
+  }
+
+  const segmentDuration = Math.max(0.001, segment.end - segment.start)
+  const perWord = segmentDuration / words.length
+  return words.map((text, index) => ({
+    text,
+    start: segment.start + perWord * index,
+    end: segment.start + perWord * (index + 1),
+  }))
+}
+
+function extractTrailingWord(text: string): string {
+  const pieces = text.trim().split(/\s+/)
+  const last = pieces.at(-1) ?? ''
+  return last.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+}
+
+function endsWithShortWord(tokens: readonly TimedToken[]): boolean {
+  const text = tokens.at(-1)?.text
+  if (!text) return false
+  const trailingWord = extractTrailingWord(text)
+  return trailingWord.length > 0 && trailingWord.length <= 2
+}
+
+function groupTimedTokensForTextLayers(tokens: readonly TimedToken[]): TimedToken[][] {
+  const groups: TimedToken[][] = []
+  let current: TimedToken[] = []
+
+  const commitGroup = (group: TimedToken[]): void => {
+    if (group.length === 0) return
+    groups.push(group)
+  }
+
+  for (const token of tokens) {
+    const normalizedTokenParts = splitLongTimedToken(token, MAX_TRANSCRIPT_TEXT_LAYER_CHARS)
+    for (const tokenPart of normalizedTokenParts) {
+      const candidate = [...current, tokenPart]
+      const candidateText = joinTranscriptWords(candidate.map((item) => item.text))
+      if (current.length > 0 && candidateText.length > MAX_TRANSCRIPT_TEXT_LAYER_CHARS) {
+        if (endsWithShortWord(current) && current.length > 1) {
+          const trailing = current.pop()
+          if (trailing) {
+            commitGroup(current)
+            current = [trailing]
+
+            const trailingCandidate = joinTranscriptWords([trailing.text, tokenPart.text])
+            if (trailingCandidate.length <= MAX_TRANSCRIPT_TEXT_LAYER_CHARS) {
+              current.push(tokenPart)
+            } else {
+              commitGroup(current)
+              current = [tokenPart]
+            }
+            continue
+          }
+        }
+        commitGroup(current)
+        current = [tokenPart]
+      } else {
+        current.push(tokenPart)
+      }
+    }
+  }
+
+  if (current.length > 0) {
+    if (endsWithShortWord(current) && current.length > 1) {
+      const trailing = current.pop()
+      commitGroup(current)
+      current = trailing ? [trailing] : []
+    }
+    commitGroup(current)
+  }
+
+  return groups.filter((group) => group.length > 0)
+}
+
+function segmentTranscriptForTextLayers(
+  segments: readonly MediaTranscriptSegment[],
+): MediaTranscriptSegment[] {
+  const timedTokens = segments
+    .flatMap(tokenizeTranscriptSegment)
+    .filter((token) => token.text.length > 0 && token.end > token.start)
+    .sort((left, right) => left.start - right.start)
+
+  if (timedTokens.length === 0) {
+    return []
+  }
+
+  return groupTimedTokensForTextLayers(timedTokens)
+    .map((group) => {
+      const first = group[0]
+      const last = group.at(-1)
+      if (!first || !last) return null
+      const text = joinTranscriptWords(group.map((token) => token.text)).trim()
+      if (text.length === 0 || text.length > MAX_TRANSCRIPT_TEXT_LAYER_CHARS) return null
+      return {
+        text,
+        start: first.start,
+        end: last.end,
+      } satisfies MediaTranscriptSegment
+    })
+    .filter((segment): segment is MediaTranscriptSegment => segment !== null)
 }
 
 function buildTimelineTranscriptCaptionCues(
@@ -627,12 +799,7 @@ class MediaTranscriptionService {
     // an older transcript snapshot.
     const compositionsState = useCompositionsStore.getState()
     for (const composition of compositionsState.compositions) {
-      const synced = syncTranscriptCaptionItems(
-        composition.items,
-        mediaId,
-        transcript,
-        sourceCues,
-      )
+      const synced = syncTranscriptCaptionItems(composition.items, mediaId, transcript, sourceCues)
       if (synced.updatedClipCount === 0) continue
       compositionsState.updateComposition(composition.id, { items: synced.items })
       updatedClipCount += synced.updatedClipCount
@@ -649,9 +816,7 @@ class MediaTranscriptionService {
       return synced.updatedClipCount > 0 ? { ...stash, items: synced.items } : stash
     }
     const nextStashStack = navigationState.stashStack.map(syncStash)
-    const nextMainHolder = navigationState.mainHolder
-      ? syncStash(navigationState.mainHolder)
-      : null
+    const nextMainHolder = navigationState.mainHolder ? syncStash(navigationState.mainHolder) : null
     if (updatedStashedClipCount > 0) {
       useCompositionNavigationStore.setState({
         stashStack: nextStashStack,
@@ -812,6 +977,97 @@ class MediaTranscriptionService {
     }
   }
 
+  async insertTranscriptAsTextLayers(
+    options: InsertTranscriptAsTextLayersOptions = {},
+  ): Promise<InsertTranscriptAsTextLayersResult> {
+    const timeline = useTimelineStore.getState()
+    const project = useProjectStore.getState().currentProject
+    const canvasWidth = project?.metadata.width ?? DEFAULT_PROJECT_WIDTH
+    const canvasHeight = project?.metadata.height ?? DEFAULT_PROJECT_HEIGHT
+    const targetClips = this.dedupeTextLayerTargetClips(
+      this.resolveCaptionTargetClips('', options.clipIds),
+    )
+
+    if (targetClips.length === 0) {
+      return { insertedItemCount: 0 }
+    }
+
+    const circeTemplate = buildTextStylePresetTemplate(
+      'circe-bold',
+      {
+        width: canvasWidth,
+        height: canvasHeight,
+        fps: timeline.fps,
+      },
+      1,
+    )
+    const {
+      text: _templateText,
+      label: _templateLabel,
+      textSpans: _templateSpans,
+      textStylePresetId: _templatePresetId,
+      textStyleScale: _templateScale,
+      ...circeStyleTemplate
+    } = circeTemplate
+
+    const tracks = [...timeline.tracks]
+    const { track: textLayersTrack, isNew: isNewTextLayersTrack } =
+      this.resolveTextLayersTrack(tracks)
+
+    const transcriptByMediaId = new Map<string, MediaTranscript>()
+    const insertedItems: TextItem[] = []
+
+    for (const clip of targetClips) {
+      const mediaId = clip.mediaId
+      let transcript = transcriptByMediaId.get(mediaId)
+      if (!transcript) {
+        transcript = await getTranscript(mediaId)
+        if (!transcript) {
+          continue
+        }
+        transcriptByMediaId.set(mediaId, transcript)
+      }
+
+      const layeredSegments = segmentTranscriptForTextLayers(transcript.segments)
+      if (layeredSegments.length === 0) {
+        continue
+      }
+
+      const clipTextItems = buildCaptionTextItems({
+        mediaId,
+        trackId: textLayersTrack.id,
+        segments: layeredSegments,
+        clip,
+        timelineFps: timeline.fps,
+        canvasWidth,
+        canvasHeight,
+        styleTemplate: circeStyleTemplate as CaptionTextItemTemplate,
+        sourceType: 'transcript',
+      }).map((item) => ({
+        ...item,
+        label: item.text,
+        textStylePresetId: 'circe-bold' as const,
+        textStyleScale: 1,
+      }))
+
+      insertedItems.push(...clipTextItems)
+    }
+
+    if (insertedItems.length > 0 && isNewTextLayersTrack) {
+      tracks.sort((a, b) => a.order - b.order)
+      timeline.setTracks(tracks)
+    }
+
+    if (insertedItems.length > 0) {
+      timeline.addItems(insertedItems)
+      useSelectionStore.getState().selectItems(insertedItems.map((item) => item.id))
+    }
+
+    return {
+      insertedItemCount: insertedItems.length,
+    }
+  }
+
   async enableTranscriptCaptions(
     mediaId: string,
     options: InsertTranscriptAsCaptionsOptions = {},
@@ -909,10 +1165,15 @@ class MediaTranscriptionService {
     const playheadFrame = usePlaybackStore.getState().currentFrame
 
     const matchingClips = timeline.items
-      .filter(
-        (item): item is CaptionableClip =>
-          (item.type === 'video' || item.type === 'audio') && item.mediaId === mediaId,
-      )
+      .filter((item): item is CaptionableClip => {
+        if (item.type !== 'video' && item.type !== 'audio') {
+          return false
+        }
+        if (mediaId.length === 0) {
+          return true
+        }
+        return item.mediaId === mediaId
+      })
       .sort((a, b) => a.from - b.from)
 
     if (matchingClips.length === 0) {
@@ -944,6 +1205,67 @@ class MediaTranscriptionService {
     }
 
     return []
+  }
+
+  /**
+   * A video dropped on the timeline spawns a linked audio companion sharing the
+   * same mediaId and timeline range. Processing both would emit identical text
+   * layers twice, so keep one clip per media + overlapping range — preferring
+   * the audio item, since the transcript is of the audio. Lone video clips (no
+   * audio companion) and distinct placements of the same media are still
+   * processed.
+   */
+  private dedupeTextLayerTargetClips(
+    clips: readonly CaptionableClip[],
+  ): Array<CaptionableClip & { mediaId: string }> {
+    const candidates = clips
+      .filter(
+        (clip): clip is CaptionableClip & { mediaId: string } =>
+          clip.mediaId !== undefined && clip.mediaId !== '',
+      )
+      .sort((a, b) => Number(a.type !== 'audio') - Number(b.type !== 'audio'))
+    const acceptedRangesByMedia = new Map<string, Array<{ from: number; to: number }>>()
+    const deduped: Array<CaptionableClip & { mediaId: string }> = []
+
+    for (const clip of candidates) {
+      const from = clip.from
+      const to = clip.from + clip.durationInFrames
+      const accepted = acceptedRangesByMedia.get(clip.mediaId) ?? []
+      if (accepted.some((other) => other.from < to && from < other.to)) continue
+      accepted.push({ from, to })
+      acceptedRangesByMedia.set(clip.mediaId, accepted)
+      deduped.push(clip)
+    }
+
+    return deduped.sort((a, b) => a.from - b.from)
+  }
+
+  /**
+   * The "Text Layers" track is canonical and sits on top of every other track
+   * (lower `order` = visually higher). Reuse it when the topmost track is that
+   * track; otherwise create it there. A same-named track buried lower in the
+   * stack does not qualify — its layers would render behind video.
+   */
+  private resolveTextLayersTrack(tracks: TimelineTrack[]): {
+    track: TimelineTrack
+    isNew: boolean
+  } {
+    const topTrack = tracks.reduce<TimelineTrack | null>(
+      (top, track) => (top === null || track.order < top.order ? track : top),
+      null,
+    )
+    if (topTrack?.name === TEXT_LAYERS_TRACK_NAME) {
+      return { track: topTrack, isNew: false }
+    }
+
+    const track = {
+      ...buildCaptionTrack(tracks),
+      id: `track-text-layers-${crypto.randomUUID()}`,
+      name: TEXT_LAYERS_TRACK_NAME,
+      order: (topTrack?.order ?? 0) - 1,
+    }
+    tracks.push(track)
+    return { track, isNew: true }
   }
 
   private resolvePreferredCaptionTrackId(
