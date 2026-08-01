@@ -3,9 +3,32 @@ import { createLogger } from '@/shared/logging/logger'
 const logger = createLogger('TelegramDownload')
 
 const TELEGRAM_HOSTS = new Set(['t.me', 'telegram.me', 'www.t.me', 'www.telegram.me'])
-const TELEGRAM_API_ORIGIN = 'http://localhost:8200'
-const TELEGRAM_PREVIEW_ENDPOINT = `${TELEGRAM_API_ORIGIN}/api/download/preview`
-const TELEGRAM_DOWNLOAD_ENDPOINT = `${TELEGRAM_API_ORIGIN}/api/download/single`
+const TELEGRAM_PREVIEW_PATH = '/api/download/preview'
+const TELEGRAM_DOWNLOAD_PATH = '/api/download/single'
+
+/**
+ * Origin of the Telegram download server. Defaults to an empty string so
+ * requests use relative paths (`/api/...`) — in dev the Vite proxy routes
+ * those, and in production nginx proxies them. Set VITE_TELEGRAM_DOWNLOADER_URL
+ * at build time only when the downloader lives on a different origin (CORS
+ * must then be enabled on the downloader side).
+ */
+function getTelegramApiOrigin(): string {
+  const configured =
+    typeof import.meta.env !== 'undefined'
+      ? import.meta.env.VITE_TELEGRAM_DOWNLOADER_URL
+      : undefined
+  if (typeof configured !== 'string' || configured.trim().length === 0) {
+    return ''
+  }
+  return configured.trim().replace(/\/+$/, '')
+}
+
+/** Full endpoint URL or a relative path when the origin is left unset. */
+function telegramEndpoint(path: string): string {
+  const origin = getTelegramApiOrigin()
+  return origin ? `${origin}${path}` : path
+}
 
 type DownloadSingleResponse = {
   url: string
@@ -25,14 +48,18 @@ export interface TelegramMediaPreviewItem {
   mediaType: string
 }
 
-function parseDownloadUrl(payload: DownloadSingleResponse): string | null {
+function parseDownloadUrl(payload: DownloadSingleResponse, apiOrigin: string): string | null {
   const candidate = payload.url
   if (typeof candidate !== 'string' || candidate.trim().length === 0) {
     return null
   }
 
+  const trimmed = candidate.trim()
+  if (!apiOrigin) {
+    return trimmed
+  }
   try {
-    return new URL(candidate.trim(), TELEGRAM_API_ORIGIN).toString()
+    return new URL(trimmed, apiOrigin).toString()
   } catch {
     return null
   }
@@ -57,34 +84,38 @@ export function extractTelegramPostId(url: URL): number {
   return postId
 }
 
-function normalizeThumbnailUrl(value: string | null | undefined): string | null {
+function normalizeThumbnailUrl(value: string | null | undefined, apiOrigin: string): string | null {
   if (typeof value !== 'string' || value.trim().length === 0) {
     return null
   }
+  const trimmed = value.trim()
+  if (!apiOrigin) {
+    return trimmed
+  }
   try {
-    const resolved = new URL(value.trim(), TELEGRAM_API_ORIGIN)
-    if (resolved.origin === TELEGRAM_API_ORIGIN) {
-      return `${resolved.pathname}${resolved.search}${resolved.hash}`
-    }
-    return resolved.toString()
+    return new URL(trimmed, apiOrigin).toString()
   } catch {
     return null
   }
 }
 
 export async function fetchTelegramMediaPreview(link: string): Promise<TelegramMediaPreviewItem[]> {
+  const apiOrigin = getTelegramApiOrigin()
+  const endpoint = telegramEndpoint(TELEGRAM_PREVIEW_PATH)
   let previewResponse: Response
   try {
-    previewResponse = await fetch(TELEGRAM_PREVIEW_ENDPOINT, {
+    previewResponse = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ link }),
     })
   } catch (error) {
     logger.warn(`Failed to reach Telegram preview endpoint for URL "${link}":`, error)
-    throw new Error('Could not reach Telegram preview at localhost:8200.')
+    throw new Error(
+      apiOrigin
+        ? `Could not reach Telegram preview at ${apiOrigin}.`
+        : 'Could not reach Telegram preview. Make sure the /api proxy is configured.',
+    )
   }
 
   if (!previewResponse.ok) {
@@ -112,7 +143,7 @@ export async function fetchTelegramMediaPreview(link: string): Promise<TelegramM
 
       return {
         mediaId: item.media_id,
-        thumbnailUrl: normalizeThumbnailUrl(item.thumbnail_url),
+        thumbnailUrl: normalizeThumbnailUrl(item.thumbnail_url, apiOrigin),
         mediaType:
           typeof item.media_type === 'string' && item.media_type.trim().length > 0
             ? item.media_type.trim().toLowerCase()
@@ -132,24 +163,27 @@ export async function fetchTelegramMediaThroughLocalDownloader(
   link: string,
   mediaIdOverride?: number,
 ): Promise<Response> {
+  const apiOrigin = getTelegramApiOrigin()
   const parsedUrl = new URL(link)
   const mediaId = mediaIdOverride ?? extractTelegramPostId(parsedUrl)
 
   let downloadResponse: Response
   try {
-    downloadResponse = await fetch(TELEGRAM_DOWNLOAD_ENDPOINT, {
+    downloadResponse = await fetch(telegramEndpoint(TELEGRAM_DOWNLOAD_PATH), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         link,
         media_id: mediaId,
       }),
     })
   } catch (error) {
-    logger.warn(`Failed to reach local Telegram downloader for URL "${link}":`, error)
-    throw new Error('Could not reach the local Telegram downloader at localhost:8200.')
+    logger.warn(`Failed to reach the Telegram downloader for URL "${link}":`, error)
+    throw new Error(
+      apiOrigin
+        ? `Could not reach the Telegram downloader at ${apiOrigin}.`
+        : 'Could not reach the Telegram downloader. Make sure the /api proxy is configured.',
+    )
   }
 
   if (!downloadResponse.ok) {
@@ -170,7 +204,7 @@ export async function fetchTelegramMediaThroughLocalDownloader(
     throw new Error('Telegram downloader returned invalid JSON.')
   }
 
-  const downloadUrl = parseDownloadUrl(payload)
+  const downloadUrl = parseDownloadUrl(payload, apiOrigin)
   if (!downloadUrl) {
     throw new Error('Telegram downloader response did not include a downloadable media URL.')
   }

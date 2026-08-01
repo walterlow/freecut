@@ -1,0 +1,21 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Empty = the app uses relative /api/… paths, routed through the
+        # nginx proxy (same-origin to browser → no COEP/CORS issues).
+        # Local dev (npm run dev) ignores this and reads VITE_* from .env
+        # directly — the app calls the downloader URL without a proxy.
+        VITE_TELEGRAM_DOWNLOADER_URL: ''
+    ports:
+      - '8080:80'
+    environment:
+      # Passed to the nginx entrypoint → proxy_pass target.
+      TELEGRAM_DOWNLOADER_URL: ${VITE_TELEGRAM_DOWNLOADER_URL:-http://localhost:8300}
+    extra_hosts:
+      # host.docker.internal is built into Docker Desktop; this line makes
+      # it work on plain Linux Docker hosts too.
+      - 'host.docker.internal:host-gateway'
+    restart: unless-stopped

@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import {
   extractTelegramPostId,
   fetchTelegramMediaPreview,
@@ -12,6 +12,11 @@ const fetchMock = vi.fn()
 beforeEach(() => {
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
+  vi.stubEnv('VITE_TELEGRAM_DOWNLOADER_URL', '')
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe('telegram-download', () => {
@@ -59,7 +64,7 @@ describe('telegram-download', () => {
 
       const result = await fetchTelegramMediaPreview('https://t.me/channel/123')
 
-      expect(fetchMock).toHaveBeenCalledWith('http://localhost:8200/api/download/preview', {
+      expect(fetchMock).toHaveBeenCalledWith('/api/download/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ link: 'https://t.me/channel/123' }),
@@ -76,6 +81,28 @@ describe('telegram-download', () => {
           thumbnailUrl: null,
         },
       ])
+    })
+  })
+
+  describe('downloader configuration', () => {
+    it('uses VITE_TELEGRAM_DOWNLOADER_URL as the api origin', async () => {
+      vi.stubEnv('VITE_TELEGRAM_DOWNLOADER_URL', 'https://tg.example.com/')
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: vi.fn().mockResolvedValue({
+          items: [{ media_id: 101, media_type: 'video', thumbnail_url: '/thumb.jpg' }],
+        }),
+      } satisfies Partial<Response>)
+
+      const result = await fetchTelegramMediaPreview('https://t.me/channel/123')
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://tg.example.com/api/download/preview',
+        expect.objectContaining({ method: 'POST' }),
+      )
+      expect(result[0]?.thumbnailUrl).toBe('https://tg.example.com/thumb.jpg')
     })
   })
 })

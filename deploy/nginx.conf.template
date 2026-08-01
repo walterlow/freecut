@@ -1,0 +1,32 @@
+server {
+  listen 80;
+  server_name _;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # Proxy Telegram downloader API — same-origin to the browser, so
+  # COEP / CORS are never involved. The target is substituted from
+  # TELEGRAM_DOWNLOADER_URL by the entrypoint script at container start.
+  location /api/ {
+    proxy_pass http://${TARGET}/api/;
+    proxy_set_header Host $host;
+    proxy_read_timeout 120s;
+  }
+
+  # Hashed build assets are immutable.
+  location /assets/ {
+    add_header Cross-Origin-Embedder-Policy "require-corp" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+
+  # SPA fallback: the client-side router owns every other path.
+  location / {
+    add_header Cross-Origin-Embedder-Policy "require-corp" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cache-Control "no-cache" always;
+    try_files $uri $uri/ /index.html;
+  }
+}
