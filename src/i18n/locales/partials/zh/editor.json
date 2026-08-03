@@ -697,7 +697,9 @@
       "penToolHint": "使用钢笔工具绘制自定义路径形状",
       "adjustmentLayer": "调整图层",
       "blankAdjustmentLayer": "空白调整图层",
-      "presets": "预设"
+      "presets": "预设",
+      "groupAdd": "Add",
+      "groupMore": "More"
     },
     "textSection": {
       "sectionTitle": "文本",

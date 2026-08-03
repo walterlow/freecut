@@ -61,6 +61,9 @@ interface AppSettings {
 
   // Keyboard shortcuts
   hotkeyOverrides: HotkeyOverrideMap
+
+  // Onboarding — whether the first-run guided tour has been shown (or skipped).
+  hasSeenGuide: boolean
 }
 
 export type CaptionSearchMode = 'keyword' | 'semantic'
@@ -168,6 +171,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 
   // Keyboard shortcuts
   hotkeyOverrides: {},
+
+  // Onboarding defaults to not-yet-seen so new users get the guided tour once.
+  hasSeenGuide: false,
 }
 
 /**
@@ -289,15 +295,17 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'freecut-settings',
-      version: 2,
+      version: 3,
       // v1: auto-save now defaults on. Enable it for anyone persisted under the old
       // default (0 = disabled) so a crashed or closed tab can't lose a long edit.
-      // After this one-time bump the user's choice is sticky again (toggle in
+      // After this one-time bump the user's choice becomes sticky again (toggle in
       // Settings → General).
       // v2: Parakeet TDT is the new default ASR engine (~10x faster than Whisper base
       // with native punctuation). Upgrade anyone still on the previous default
       // ('whisper-base') so the speed win applies without manual opt-in; deliberate
       // tiny/small/large choices are preserved.
+      // v3: introduced the first-run guided tour. Existing users haven't seen it and
+      // shouldn't be pestered, so mark it as seen for anything persisted before v3.
       migrate: (persistedState, version) => {
         let state = (persistedState as Partial<AppSettings> | undefined) ?? {}
         if (version < 1 && (state.autoSaveInterval == null || state.autoSaveInterval <= 0)) {
@@ -305,6 +313,10 @@ export const useSettingsStore = create<SettingsStore>()(
         }
         if (version < 2 && state.defaultWhisperModel === 'whisper-base') {
           state = { ...state, defaultWhisperModel: 'parakeet-tdt-v3' }
+        }
+        // Existing users (pre-v3) should not get the tour — only brand-new users do.
+        if (version < 3 && state.hasSeenGuide == null) {
+          state = { ...state, hasSeenGuide: true }
         }
         return state
       },

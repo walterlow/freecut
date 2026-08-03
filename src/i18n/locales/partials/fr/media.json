@@ -100,7 +100,8 @@
       "loadingSubtitle": "Préparation de vos médias…",
       "loadingTitle": "Chargement des médias…",
       "importButton": "Importer des médias",
-      "folderDropUnsupported": "Les dossiers ne sont pas encore pris en charge. Déposez directement les fichiers multimédias."
+      "folderDropUnsupported": "Les dossiers ne sont pas encore pris en charge. Déposez directement les fichiers multimédias.",
+      "dragDropHint": "or drag & drop a file anywhere to begin"
     },
     "info": {
       "codec": "Codec",

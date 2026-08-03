@@ -100,6 +100,7 @@
       "loadingSubtitle": "Loading Subtitle",
       "loadingTitle": "Loading media…",
       "importButton": "Import media",
+      "dragDropHint": "or drag & drop a file anywhere to begin",
       "folderDropUnsupported": "Folders are not supported yet. Drop media files directly."
     },
     "info": {

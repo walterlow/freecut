@@ -697,7 +697,9 @@
       "penToolHint": "ペンツールでカスタムパス図形を描画",
       "adjustmentLayer": "調整レイヤー",
       "blankAdjustmentLayer": "空の調整レイヤー",
-      "presets": "プリセット"
+      "presets": "プリセット",
+      "groupAdd": "Add",
+      "groupMore": "More"
     },
     "textSection": {
       "sectionTitle": "テキスト",

@@ -100,7 +100,8 @@
       "loadingSubtitle": "メディアを準備中…",
       "loadingTitle": "メディアを読み込み中…",
       "importButton": "メディアをインポート",
-      "folderDropUnsupported": "フォルダーはまだサポートされていません。メディアファイルを直接ドロップしてください。"
+      "folderDropUnsupported": "フォルダーはまだサポートされていません。メディアファイルを直接ドロップしてください。",
+      "dragDropHint": "or drag & drop a file anywhere to begin"
     },
     "info": {
       "codec": "コーデック",

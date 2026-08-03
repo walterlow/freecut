@@ -697,7 +697,9 @@
       "penToolHint": "Desenhe uma forma de caminho personalizada com a ferramenta caneta",
       "adjustmentLayer": "Camada de ajuste",
       "blankAdjustmentLayer": "Camada de ajuste em branco",
-      "presets": "Predefinições"
+      "presets": "Predefinições",
+      "groupAdd": "Add",
+      "groupMore": "More"
     },
     "textSection": {
       "sectionTitle": "Texto",

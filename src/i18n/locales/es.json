@@ -60,7 +60,10 @@
     "saveAria": "Guardar proyecto",
     "export": "Exportar",
     "exportVideo": "Exportar vídeo",
-    "downloadProjectZip": "Descargar proyecto (.zip)"
+    "downloadProjectZip": "Descargar proyecto (.zip)",
+    "moreMenu": "More",
+    "showGuides": "Show guides",
+    "userGuide": "User Guide"
   },
   "unsavedChanges": {
     "title": "Cambios sin guardar",

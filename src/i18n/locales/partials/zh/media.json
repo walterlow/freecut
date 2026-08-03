@@ -100,7 +100,8 @@
       "loadingSubtitle": "正在准备媒体…",
       "loadingTitle": "正在加载媒体…",
       "importButton": "导入媒体",
-      "folderDropUnsupported": "尚不支持文件夹。请直接拖放媒体文件。"
+      "folderDropUnsupported": "尚不支持文件夹。请直接拖放媒体文件。",
+      "dragDropHint": "or drag & drop a file anywhere to begin"
     },
     "info": {
       "codec": "编解码器",

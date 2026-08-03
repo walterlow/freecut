@@ -60,7 +60,10 @@
     "saveAria": "Save project",
     "export": "Export",
     "exportVideo": "Export Video",
-    "downloadProjectZip": "Download Project (.zip)"
+    "downloadProjectZip": "Download Project (.zip)",
+    "moreMenu": "More",
+    "showGuides": "Show guides",
+    "userGuide": "User Guide"
   },
   "unsavedChanges": {
     "title": "Unsaved Changes",

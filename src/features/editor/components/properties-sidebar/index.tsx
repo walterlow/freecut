@@ -254,6 +254,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
           tracks the pointer instead of easing behind it. */}
       <motion.div
         className="panel-bg border-l border-border shrink-0 relative h-full overflow-hidden"
+        data-guide-target="properties"
         initial={false}
         animate={{ width: rightSidebarOpen ? rightSidebarWidth : 0 }}
         transition={
@@ -303,16 +304,11 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
                 </Button>
                 <Settings2 className="w-3 h-3 shrink-0 text-muted-foreground" />
                 <h2 className="min-w-0 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                  <span className="shrink-0 uppercase tracking-wide">
-                    {headerLabel}
-                  </span>
+                  <span className="shrink-0 uppercase tracking-wide">{headerLabel}</span>
                   {headerContext && (
                     <>
                       <span className="shrink-0">-</span>
-                      <span
-                        className="truncate normal-case tracking-normal"
-                        title={headerTitle}
-                      >
+                      <span className="truncate normal-case tracking-normal" title={headerTitle}>
                         {headerContext}
                       </span>
                     </>

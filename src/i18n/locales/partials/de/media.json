@@ -100,7 +100,8 @@
       "loadingSubtitle": "Medien werden vorbereitet…",
       "loadingTitle": "Medien werden geladen…",
       "importButton": "Medien importieren",
-      "folderDropUnsupported": "Ordner werden noch nicht unterstützt. Lege Mediendateien direkt ab."
+      "folderDropUnsupported": "Ordner werden noch nicht unterstützt. Lege Mediendateien direkt ab.",
+      "dragDropHint": "or drag & drop a file anywhere to begin"
     },
     "info": {
       "codec": "Codec",

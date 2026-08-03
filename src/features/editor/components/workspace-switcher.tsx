@@ -31,6 +31,7 @@ export const WorkspaceSwitcher = memo(function WorkspaceSwitcher() {
       role="tablist"
       aria-label={t('toolbar.workspaces.label')}
       className="flex items-center gap-0.5 rounded-md bg-muted p-0.5"
+      data-guide-target="workspaces"
     >
       {WORKSPACE_ITEMS.map(({ id, icon: Icon, labelKey }) => {
         const isActive = workspace === id

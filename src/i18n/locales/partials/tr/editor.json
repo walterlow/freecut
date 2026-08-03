@@ -697,7 +697,9 @@
       "penToolHint": "Kalem aracıyla özel bir yol şekli çizin",
       "adjustmentLayer": "Ayar katmanı",
       "blankAdjustmentLayer": "Boş ayar katmanı",
-      "presets": "Ön Ayarlar"
+      "presets": "Ön Ayarlar",
+      "groupAdd": "Add",
+      "groupMore": "More"
     },
     "textSection": {
       "sectionTitle": "Metin",

@@ -100,7 +100,8 @@
       "loadingSubtitle": "Carregando subtitulo",
       "loadingTitle": "Carregando mídia…",
       "importButton": "Importar mídia",
-      "folderDropUnsupported": "Pastas ainda não são compatíveis. Solte arquivos de mídia diretamente."
+      "folderDropUnsupported": "Pastas ainda não são compatíveis. Solte arquivos de mídia diretamente.",
+      "dragDropHint": "or drag & drop a file anywhere to begin"
     },
     "info": {
       "codec": "Codificador",

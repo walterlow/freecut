@@ -100,7 +100,8 @@
       "loadingSubtitle": "Preparando tus medios…",
       "loadingTitle": "Cargando medios…",
       "importButton": "Importar medios",
-      "folderDropUnsupported": "Las carpetas aún no son compatibles. Suelta archivos multimedia directamente."
+      "folderDropUnsupported": "Las carpetas aún no son compatibles. Suelta archivos multimedia directamente.",
+      "dragDropHint": "or drag & drop a file anywhere to begin"
     },
     "info": {
       "codec": "Códec",

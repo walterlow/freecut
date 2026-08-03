@@ -27,6 +27,11 @@ describe('settings-store', () => {
       expect(useSettingsStore.getState().snapEnabled).toBe(false)
     })
 
+    it('persists the guided-tour seen flag', () => {
+      useSettingsStore.getState().setSetting('hasSeenGuide', true)
+      expect(useSettingsStore.getState().hasSeenGuide).toBe(true)
+    })
+
     it('updates string settings', () => {
       useSettingsStore.getState().setSetting('defaultWhisperLanguage', 'en')
       expect(useSettingsStore.getState().defaultWhisperLanguage).toBe('en')

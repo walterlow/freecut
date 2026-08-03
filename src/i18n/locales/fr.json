@@ -60,7 +60,10 @@
     "saveAria": "Enregistrer le projet",
     "export": "Exporter",
     "exportVideo": "Exporter la vidéo",
-    "downloadProjectZip": "Télécharger le projet (.zip)"
+    "downloadProjectZip": "Télécharger le projet (.zip)",
+    "moreMenu": "More",
+    "showGuides": "Show guides",
+    "userGuide": "User Guide"
   },
   "unsavedChanges": {
     "title": "Modifications non enregistrées",

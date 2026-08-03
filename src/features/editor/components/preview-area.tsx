@@ -519,6 +519,7 @@ export const PreviewArea = memo(function PreviewArea({
       className="flex-1 flex min-h-0 min-w-0 relative"
       role="region"
       aria-label="Preview area"
+      data-guide-target="preview"
     >
       {sourcePreviewMediaId && (
         <>

@@ -100,7 +100,8 @@
       "loadingSubtitle": "미디어를 준비하는 중…",
       "loadingTitle": "미디어를 불러오는 중…",
       "importButton": "미디어 가져오기",
-      "folderDropUnsupported": "폴더는 아직 지원되지 않습니다. 미디어 파일을 직접 놓으세요."
+      "folderDropUnsupported": "폴더는 아직 지원되지 않습니다. 미디어 파일을 직접 놓으세요.",
+      "dragDropHint": "or drag & drop a file anywhere to begin"
     },
     "info": {
       "codec": "코덱",

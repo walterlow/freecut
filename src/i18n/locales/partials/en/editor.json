@@ -677,6 +677,8 @@
       "speed": "Speed"
     },
     "mediaSidebar": {
+      "groupAdd": "Add",
+      "groupMore": "More",
       "media": "Media",
       "text": "Text",
       "shapes": "Shapes",

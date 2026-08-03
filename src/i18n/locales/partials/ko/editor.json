@@ -697,7 +697,9 @@
       "penToolHint": "펜 도구로 사용자 지정 경로 도형 그리기",
       "adjustmentLayer": "조정 레이어",
       "blankAdjustmentLayer": "빈 조정 레이어",
-      "presets": "프리셋"
+      "presets": "프리셋",
+      "groupAdd": "Add",
+      "groupMore": "More"
     },
     "textSection": {
       "sectionTitle": "텍스트",

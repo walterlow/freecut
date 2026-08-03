@@ -13,6 +13,7 @@ import { PreviewArea } from './preview-area'
 import { MotionPreviewArea, MotionTimelineDock } from './compose-workspace/compose-layout'
 import { InteractionLockRegion } from './interaction-lock-region'
 import { AudioMeterPanel } from './audio-meter-panel'
+import { GuidesTour } from './onboarding/guides-tour'
 import {
   importTimeline,
   importBentoLayoutDialog,
@@ -388,6 +389,8 @@ export const LoadedEditor = memo(function LoadedEditor({
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false)
   const [renderQueueOpen, setRenderQueueOpen] = useState(false)
+  // Re-open the first-run tour from the toolbar's "Show guides" item.
+  const [showGuides, setShowGuides] = useState(false)
   const renderQueueActiveCount = useRenderQueueStore(
     (s) => s.jobs.filter((j) => j.status === 'queued' || j.status === 'rendering').length,
   )
@@ -618,6 +621,11 @@ export const LoadedEditor = memo(function LoadedEditor({
     setRenderQueueOpen(true)
   }, [])
 
+  // Re-open the guided tour on demand, regardless of the hasSeenGuide flag.
+  const handleOpenGuides = useCallback(() => {
+    setShowGuides(true)
+  }, [])
+
   const handleExportBundle = useCallback(async () => {
     void preloadBundleExportDialog()
 
@@ -685,6 +693,7 @@ export const LoadedEditor = memo(function LoadedEditor({
           onExport={handleExport}
           onExportBundle={handleExportBundle}
           onOpenRenderQueue={handleOpenRenderQueue}
+          onOpenGuides={handleOpenGuides}
           renderQueueCount={renderQueueActiveCount}
         />
       </InteractionLockRegion>
@@ -779,7 +788,7 @@ export const LoadedEditor = memo(function LoadedEditor({
               <InteractionLockRegion locked={isMaskEditingActive} className="h-full">
                 <ErrorBoundary level="feature">
                   <div className="h-full flex overflow-hidden">
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1" data-guide-target="timeline">
                       {isMotionWorkspace ? (
                         <MotionTimelineDock project={project} />
                       ) : (
@@ -849,6 +858,11 @@ export const LoadedEditor = memo(function LoadedEditor({
 
       {/* Single global cursor-readout for IO (in/out) drags across all surfaces. */}
       <IoDragReadout />
+
+      {/* Guided tour — skips itself if already seen; "Show guides" forces it. */}
+      {!hidesDefaultSidebars && (
+        <GuidesTour force={showGuides} onComplete={() => setShowGuides(false)} />
+      )}
     </div>
   )
 })

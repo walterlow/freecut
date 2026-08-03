@@ -697,7 +697,9 @@
       "penToolHint": "Eine eigene Pfadform mit dem Stiftwerkzeug zeichnen",
       "adjustmentLayer": "Einstellungsebene",
       "blankAdjustmentLayer": "Leere Einstellungsebene",
-      "presets": "Vorgaben"
+      "presets": "Vorgaben",
+      "groupAdd": "Add",
+      "groupMore": "More"
     },
     "textSection": {
       "sectionTitle": "Text",

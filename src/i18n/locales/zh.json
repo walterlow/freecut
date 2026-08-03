@@ -60,7 +60,10 @@
     "saveAria": "保存项目",
     "export": "导出",
     "exportVideo": "导出视频",
-    "downloadProjectZip": "下载项目 (.zip)"
+    "downloadProjectZip": "下载项目 (.zip)",
+    "moreMenu": "More",
+    "showGuides": "Show guides",
+    "userGuide": "User Guide"
   },
   "unsavedChanges": {
     "title": "未保存的更改",

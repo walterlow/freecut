@@ -3,22 +3,15 @@ import { useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
-  BookOpen,
   Bug,
   ChevronDown,
   Download,
   FolderArchive,
-  Github,
-  Keyboard,
   ListVideo,
   Save,
-  Settings,
-  Sparkles,
   Video,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { DiscordIcon } from '@/components/brand/discord-icon'
-import { DISCORD_INVITE_URL } from '@/config/community'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,12 +25,12 @@ import { ProjectDebugPanel } from './project-debug-panel'
 import { SettingsDialog } from './settings-dialog'
 import { ShortcutsDialog } from './shortcuts-dialog'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
+import { MoreMenu } from './toolbar-more-menu'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { WhatsNewDialog } from './whats-new-dialog'
 import { hasUnseenChangelog } from './whats-new-seen'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
 import { cn } from '@/shared/ui/cn'
-import { LanguageSwitcher } from '@/shared/ui/language-switcher'
 import { useDebugStore } from '@/features/editor/stores/debug-store'
 import { useItemsStore, useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library'
@@ -71,6 +64,8 @@ interface ToolbarProps {
   onExport?: () => void
   onExportBundle?: () => void
   onOpenRenderQueue?: () => void
+  /** Re-open the first-run guided tour from the ⋯ menu. */
+  onOpenGuides?: () => void
   /** Number of queued + rendering jobs, shown as a badge on the queue button. */
   renderQueueCount?: number
 }
@@ -82,6 +77,7 @@ export const Toolbar = memo(function Toolbar({
   onExport,
   onExportBundle,
   onOpenRenderQueue,
+  onOpenGuides,
   renderQueueCount = 0,
 }: ToolbarProps) {
   const navigate = useNavigate()
@@ -98,18 +94,15 @@ export const Toolbar = memo(function Toolbar({
   const maxItemEndFrame = useItemsStore((state) => state.maxItemEndFrame)
   const mediaDependencyIds = useItemsStore((state) => state.mediaDependencyIds)
   const brokenMediaIds = useMediaLibraryStore((state) => state.brokenMediaIds)
-  const projectSummary = useMemo(
-    () => {
-      const projectMediaIds = new Set(mediaDependencyIds)
-      return {
-        durationSeconds: project.fps > 0 ? maxItemEndFrame / project.fps : 0,
-        clipCount: itemCount,
-        mediaCount: mediaDependencyIds.length,
-        brokenMediaCount: brokenMediaIds.filter((mediaId) => projectMediaIds.has(mediaId)).length,
-      }
-    },
-    [brokenMediaIds, itemCount, maxItemEndFrame, mediaDependencyIds, project.fps],
-  )
+  const projectSummary = useMemo(() => {
+    const projectMediaIds = new Set(mediaDependencyIds)
+    return {
+      durationSeconds: project.fps > 0 ? maxItemEndFrame / project.fps : 0,
+      clipCount: itemCount,
+      mediaCount: mediaDependencyIds.length,
+      brokenMediaCount: brokenMediaIds.filter((mediaId) => projectMediaIds.has(mediaId)).length,
+    }
+  }, [brokenMediaIds, itemCount, maxItemEndFrame, mediaDependencyIds, project.fps])
 
   useEffect(() => {
     setHasUnseenWhatsNew(hasUnseenChangelog())
@@ -229,87 +222,13 @@ export const Toolbar = memo(function Toolbar({
           <DebugPopover projectId={projectId} />
         )}
 
-        {/* Socials */}
-        <Button variant="outline" size="icon" className="h-7 w-7" asChild>
-          <a
-            href="https://github.com/walterlow/freecut"
-            target="_blank"
-            rel="noopener noreferrer"
-            data-tooltip={t('toolbar.viewOnGitHub')}
-            data-tooltip-side="bottom"
-            aria-label={t('toolbar.viewOnGitHub')}
-          >
-            <Github className="h-4 w-4" />
-          </a>
-        </Button>
-        <Button variant="outline" size="icon" className="h-7 w-7" asChild>
-          <a
-            href={DISCORD_INVITE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-tooltip={t('toolbar.joinDiscord')}
-            data-tooltip-side="bottom"
-            aria-label={t('toolbar.joinDiscord')}
-          >
-            <DiscordIcon className="h-4 w-4" />
-          </a>
-        </Button>
-
-        <Separator orientation="vertical" className="h-5" />
-
-        {/* Utility */}
-        <Button variant="outline" size="icon" className="h-7 w-7" asChild>
-          <a
-            href="/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            data-tooltip="User Guide"
-            data-tooltip-side="bottom"
-            aria-label="User Guide"
-          >
-            <BookOpen className="h-4 w-4" />
-          </a>
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7 relative"
-          onClick={openWhatsNew}
-          data-tooltip={t('toolbar.whatsNew')}
-          data-tooltip-side="bottom"
-          aria-label={t('toolbar.whatsNewAria')}
-        >
-          <Sparkles className="h-4 w-4" />
-          {hasUnseenWhatsNew && (
-            <span
-              className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary"
-              aria-hidden="true"
-            />
-          )}
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => setShowSettingsDialog(true)}
-          data-tooltip={t('toolbar.settings')}
-          data-tooltip-side="bottom"
-          aria-label={t('toolbar.settings')}
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => setShowShortcutsDialog(true)}
-          data-tooltip={t('toolbar.keyboardShortcuts')}
-          data-tooltip-side="bottom"
-          aria-label={t('toolbar.keyboardShortcutsAria')}
-        >
-          <Keyboard className="h-4 w-4" />
-        </Button>
-        <LanguageSwitcher size="sm" align="end" side="bottom" />
+        <MoreMenu
+          hasUnseenWhatsNew={hasUnseenWhatsNew}
+          onOpenWhatsNew={openWhatsNew}
+          onOpenSettings={() => setShowSettingsDialog(true)}
+          onOpenShortcuts={() => setShowShortcutsDialog(true)}
+          onOpenGuides={onOpenGuides}
+        />
 
         <Separator orientation="vertical" className="h-5" />
 
@@ -353,7 +272,7 @@ export const Toolbar = memo(function Toolbar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" className="gap-1.5 glow-primary-sm">
+            <Button size="sm" className="gap-1.5 glow-primary-sm" data-guide-target="export">
               <Download className="h-4 w-4" />
               {t('toolbar.export')}
               <ChevronDown className="h-3 w-3" />

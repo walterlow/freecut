@@ -286,6 +286,55 @@ const TEXT_TEMPLATE_GROUPS: ReadonlyArray<{
 const DEFAULT_TEXT_TEMPLATE_LABEL = 'Text'
 const ADD_TEXT_TEMPLATE_LABEL = 'Add Text'
 
+type CategoryItem = {
+  id: import('@/config/editor-workspaces').EditorSidebarTab
+  icon: import('lucide-react').LucideIcon
+  label: string
+}
+
+/** One labeled cluster of category icons shown in the rail (Add / More). */
+function CategoryGroup({
+  label,
+  items,
+  activeTab,
+  leftSidebarOpen,
+  onSelect,
+}: {
+  label: string
+  items: CategoryItem[]
+  activeTab: string
+  leftSidebarOpen: boolean
+  onSelect: (id: import('@/config/editor-workspaces').EditorSidebarTab) => void
+}) {
+  return (
+    <div className="flex flex-shrink-0 flex-col items-center gap-1 py-1.5">
+      <span className="mb-0.5 flex-shrink-0 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+        {label}
+      </span>
+      <div className="flex flex-col gap-1">
+        {items.map(({ id, icon: Icon, label }) => (
+          <button
+            key={id}
+            onClick={() => onSelect(id)}
+            className={`
+              w-9 h-9 rounded-lg flex items-center justify-center transition-[transform,background-color,color] duration-150 active:scale-95
+              ${
+                activeTab === id && leftSidebarOpen
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+              }
+            `}
+            data-tooltip={label}
+            data-tooltip-side="right"
+          >
+            <Icon className="w-4 h-4" />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export const MediaSidebar = memo(function MediaSidebar() {
   const { t } = useTranslation()
   const editorDensity = useSettingsStore((s) => s.editorDensity)
@@ -431,8 +480,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     const { tracks, fps, addItemOnNewTrack } = useTimelineStore.getState()
     const { activeTrackId, selectItems, setActiveTrack } = useSelectionStore.getState()
     const currentProject = useProjectStore.getState().currentProject
-    const activeCompositionId =
-      useCompositionNavigationStore.getState().activeCompositionId
+    const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId
     const activeComposition = activeCompositionId
       ? useCompositionsStore.getState().getComposition(activeCompositionId)
       : undefined
@@ -535,11 +583,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
   // Category items for the vertical nav
   const categories = [
+    // Add group — the everyday insertables.
     { id: 'media' as const, icon: Film, label: t('editor.mediaSidebar.media') },
     { id: 'text' as const, icon: Type, label: t('editor.mediaSidebar.text') },
     { id: 'shapes' as const, icon: Pentagon, label: t('editor.mediaSidebar.shapes') },
-    { id: 'effects' as const, icon: Layers, label: t('editor.mediaSidebar.effects') },
     { id: 'transitions' as const, icon: Blend, label: t('editor.mediaSidebar.transitions') },
+    // More group — advanced tools surfaced behind a label so the rail reads clearly.
+    { id: 'effects' as const, icon: Layers, label: t('editor.mediaSidebar.effects') },
     { id: 'lottie' as const, icon: Sticker, label: t('lottieBrowser.tabLabel') },
     { id: 'transcript' as const, icon: Captions, label: t('transcript.tabLabel') },
     { id: 'ai' as const, icon: WandSparkles, label: t('editor.mediaSidebar.ai') },
@@ -584,6 +634,22 @@ export const MediaSidebar = memo(function MediaSidebar() {
     }, 0)
   }, [])
 
+  // Shared handler for the grouped category rail: tapping the active tab
+  // collapses the panel; any other tab opens it and (for effects) triggers the
+  // GPU preview sweep. Extracted so the Add/More groups keep one behavior.
+  const handleCategorySelect = useCallback(
+    (id: import('@/config/editor-workspaces').EditorSidebarTab) => {
+      if (activeTab === id && leftSidebarOpen) {
+        toggleLeftSidebar()
+      } else {
+        setActiveTab(id)
+        if (!leftSidebarOpen) toggleLeftSidebar()
+        if (id === 'effects') triggerPreviews()
+      }
+    },
+    [activeTab, leftSidebarOpen, toggleLeftSidebar, setActiveTab, triggerPreviews],
+  )
+
   return (
     <div className="flex h-full flex-shrink-0">
       {/* Vertical Category Bar */}
@@ -618,34 +684,26 @@ export const MediaSidebar = memo(function MediaSidebar() {
           </button>
         </div>
 
-        {/* Category Icons */}
-        <div className="flex flex-col gap-1 py-1.5">
-          {categories.map(({ id, icon: Icon, label }) => (
-            <button
-              key={id}
-              onClick={() => {
-                if (activeTab === id && leftSidebarOpen) {
-                  toggleLeftSidebar()
-                } else {
-                  setActiveTab(id)
-                  if (!leftSidebarOpen) toggleLeftSidebar()
-                  if (id === 'effects') triggerPreviews()
-                }
-              }}
-              className={`
-                w-9 h-9 rounded-lg flex items-center justify-center transition-[transform,background-color,color] duration-150 active:scale-95
-                ${
-                  activeTab === id && leftSidebarOpen
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-                }
-              `}
-              data-tooltip={label}
-              data-tooltip-side="right"
-            >
-              <Icon className="w-4 h-4" />
-            </button>
-          ))}
+        {/* Category Icons — split into labeled Add / More groups so the rail
+            reads at a glance instead of an undifferentiated wall of icons. */}
+        <div
+          className="flex flex-col overflow-y-auto overflow-x-hidden"
+          data-guide-target="media-rail"
+        >
+          <CategoryGroup
+            label={t('editor.mediaSidebar.groupAdd')}
+            items={categories.slice(0, 4)}
+            activeTab={activeTab}
+            leftSidebarOpen={leftSidebarOpen}
+            onSelect={handleCategorySelect}
+          />
+          <CategoryGroup
+            label={t('editor.mediaSidebar.groupMore')}
+            items={categories.slice(4)}
+            activeTab={activeTab}
+            leftSidebarOpen={leftSidebarOpen}
+            onSelect={handleCategorySelect}
+          />
         </div>
       </div>
 

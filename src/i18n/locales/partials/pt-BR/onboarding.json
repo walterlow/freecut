@@ -1,0 +1,33 @@
+{
+  "onboarding": {
+    "dismiss": "Skip tour",
+    "prev": "Back",
+    "next": "Next",
+    "done": "Done",
+    "title": "Welcome to FreeCut",
+    "step1": {
+      "title": "Workspaces",
+      "body": "Switch between Edit, Color and Motion workspaces."
+    },
+    "step2": {
+      "title": "Add media",
+      "body": "Import media, text, shapes and transitions from here."
+    },
+    "step3": {
+      "title": "Preview",
+      "body": "Watch your edit here and scrub through the timeline."
+    },
+    "step4": {
+      "title": "Timeline",
+      "body": "Drag clips, trim, split and arrange your video."
+    },
+    "step5": {
+      "title": "Properties",
+      "body": "Select a clip to tune its properties, effects and audio."
+    },
+    "step6": {
+      "title": "Export",
+      "body": "Ready when you are — export your finished video."
+    }
+  }
+}

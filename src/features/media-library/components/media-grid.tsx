@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2, Upload, AlertTriangle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaGrid')
@@ -257,9 +258,16 @@ const MediaGridBase = memo(function MediaGridBase({
             <p className="text-sm text-muted-foreground font-light mb-4">
               {t('media.grid.emptyHint')}
             </p>
-            <span className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground mb-4">
+            <Button
+              type="button"
+              variant="default"
+              className="gap-2 mb-2"
+              onClick={handleEmptyStateClick}
+            >
+              <Upload className="w-4 h-4" />
               {t('media.grid.importButton')}
-            </span>
+            </Button>
+            <p className="text-xs text-muted-foreground/80 mb-4">{t('media.grid.dragDropHint')}</p>
             <div className="flex flex-wrap justify-center gap-2">
               {getSupportedMediaFormatLabels().map((label) => (
                 <span

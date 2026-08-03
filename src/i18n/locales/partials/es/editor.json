@@ -697,7 +697,9 @@
       "penToolHint": "Dibuja una forma de ruta personalizada con la herramienta pluma",
       "adjustmentLayer": "Capa de ajuste",
       "blankAdjustmentLayer": "Capa de ajuste en blanco",
-      "presets": "Preajustes"
+      "presets": "Preajustes",
+      "groupAdd": "Add",
+      "groupMore": "More"
     },
     "textSection": {
       "sectionTitle": "Texto",

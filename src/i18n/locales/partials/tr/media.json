@@ -100,7 +100,8 @@
       "loadingSubtitle": "Medya kitaplığı hazırlanıyor.",
       "loadingTitle": "Medya yükleniyor…",
       "importButton": "Medya içe aktar",
-      "folderDropUnsupported": "Klasörler henüz desteklenmiyor. Medya dosyalarını doğrudan bırakın."
+      "folderDropUnsupported": "Klasörler henüz desteklenmiyor. Medya dosyalarını doğrudan bırakın.",
+      "dragDropHint": "or drag & drop a file anywhere to begin"
     },
     "info": {
       "codec": "Kodek",

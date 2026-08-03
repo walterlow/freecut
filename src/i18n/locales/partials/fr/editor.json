@@ -697,7 +697,9 @@
       "penToolHint": "Dessiner une forme de tracé personnalisée avec l'outil plume",
       "adjustmentLayer": "Calque d'ajustement",
       "blankAdjustmentLayer": "Calque d'ajustement vide",
-      "presets": "Préréglages"
+      "presets": "Préréglages",
+      "groupAdd": "Add",
+      "groupMore": "More"
     },
     "textSection": {
       "sectionTitle": "Texte",
