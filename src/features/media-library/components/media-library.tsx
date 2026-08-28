@@ -1235,7 +1235,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
         {/* Drag overlay — absolute sibling, always covers the visible viewport */}
         {isDragging && (
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-background/95 bg-gradient-to-br from-primary/15 via-transparent to-primary/10 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
             <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-primary" />
             <div className="absolute top-2 right-2 w-6 h-6 border-r-2 border-t-2 border-primary" />
             <div className="absolute bottom-2 left-2 w-6 h-6 border-l-2 border-b-2 border-primary" />
