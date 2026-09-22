@@ -56,6 +56,12 @@ import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useElementSize } from './use-element-size'
 import { addWindowPointerListeners } from './dopesheet-pointer-listeners'
+import {
+  getDopesheetDragDelta,
+  getDopesheetDragPixelsPerFrame,
+  getMatchingDragState,
+  startDopesheetDrag,
+} from './dopesheet-drag-math'
 import { DopesheetHeaderFrameInputs } from './dopesheet-header-frame-inputs'
 import { DopesheetRulerHeader } from './dopesheet-ruler-header'
 import { DopesheetLiveRulerCanvas } from './dopesheet-live-ruler-canvas'
@@ -644,59 +650,6 @@ function buildExpressionDockContext(params: {
 
 const EMPTY_FRAME_GROUPS: DopesheetPropertyGroupStructure<StructureRow>['frameGroups'] = []
 
-function getMatchingDragState(
-  dragState: DragState | null,
-  event: PointerEvent,
-  disabled: boolean,
-): DragState | null {
-  if (disabled || !dragState || dragState.pointerId !== event.pointerId) return null
-  return dragState
-}
-
-function startDopesheetDrag(
-  dragState: DragState,
-  deltaX: number,
-  onDragStart: (() => void) | undefined,
-): boolean {
-  if (dragState.started) return true
-  if (Math.abs(deltaX) <= DRAG_THRESHOLD) return false
-  dragState.started = true
-  if (!dragState.duplicateOnCommit) onDragStart?.()
-  return true
-}
-
-function getDopesheetDragDelta(
-  dragState: DragState,
-  event: PointerEvent,
-  pixelsPerFrame: number,
-  totalFrames: number,
-  snapEnabled: boolean,
-  snapFrame: (frame: number) => number,
-): number {
-  const deltaX = event.clientX - dragState.startClientX
-  let deltaFrames = Math.round(deltaX / pixelsPerFrame)
-  if (!snapEnabled || event.ctrlKey || event.metaKey) return deltaFrames
-  const anchorInitialFrame = dragState.initialFrames.get(dragState.anchorKeyframeId)
-  if (anchorInitialFrame === undefined) return deltaFrames
-  const anchorCandidate = clampFrame(anchorInitialFrame + deltaFrames, totalFrames)
-  deltaFrames += snapFrame(anchorCandidate) - anchorCandidate
-  return deltaFrames
-}
-
-function getDopesheetDragPixelsPerFrame(
-  getLivePixelsPerSecond: (() => number) | undefined,
-  fallbackPixelsPerSecond: number,
-  fps: number,
-): number {
-  const livePixelsPerSecond = getLivePixelsPerSecond?.()
-  const pixelsPerSecond =
-    livePixelsPerSecond !== undefined &&
-    Number.isFinite(livePixelsPerSecond) &&
-    livePixelsPerSecond > 0
-      ? livePixelsPerSecond
-      : fallbackPixelsPerSecond
-  return pixelsPerSecond / Math.max(fps, 1)
-}
 
 
 
