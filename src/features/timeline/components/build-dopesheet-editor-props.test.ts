@@ -1,7 +1,10 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from 'vite-plus/test'
-import { buildDopesheetEditorProps } from './build-dopesheet-editor-props'
+import {
+  buildDopesheetEditorProps,
+  type DopesheetEditorPropsInput,
+} from './build-dopesheet-editor-props'
 import type { TimelineItem } from '@/types/timeline'
 
 function makeItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
@@ -19,7 +22,7 @@ function makeItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
 
 const noop = () => {}
 
-function makeInput(overrides: Record<string, unknown> = {}) {
+function makeInput(overrides: Partial<DopesheetEditorPropsInput> = {}): DopesheetEditorPropsInput {
   const item = makeItem()
   return {
     surface: 'edit',
@@ -47,7 +50,7 @@ function makeInput(overrides: Record<string, unknown> = {}) {
     propertyLinkSourceLabels: {},
     handlePropertyLinkPointerDown: noop,
     handleRemovePropertyLink: noop,
-    resolveExpressionReference: noop,
+    resolveExpressionReference: () => null,
     handleSetPropertyExpression: noop,
     handleRemovePropertyExpression: noop,
     hiddenVectorPropertyRows: undefined,
@@ -117,7 +120,7 @@ function makeInput(overrides: Record<string, unknown> = {}) {
 
 describe('buildDopesheetEditorProps', () => {
   it('sizes the docked editor from the container, without the floating inset', () => {
-    const props = buildDopesheetEditorProps(makeInput({ containerWidth: 800, resolvedContentHeight: 300 }) as never)
+    const props = buildDopesheetEditorProps(makeInput({ containerWidth: 800, resolvedContentHeight: 300 }) )
 
     expect(props.width).toBe(800)
     expect(props.height).toBe(300)
@@ -125,7 +128,7 @@ describe('buildDopesheetEditorProps', () => {
 
   it('insets the floating editor by its own gutter', () => {
     const props = buildDopesheetEditorProps(
-      makeInput({ surface: 'default', containerWidth: 800, resolvedContentHeight: 300 }) as never,
+      makeInput({ surface: 'default', containerWidth: 800, resolvedContentHeight: 300 }),
     )
 
     expect(props.width).toBe(784)
@@ -141,7 +144,7 @@ describe('buildDopesheetEditorProps', () => {
         editTimelineFps: 60,
         editTimelineGlobalFrameToPixels: globalFrameToPixels,
         handleEditTimelineEdgeScroll: onRulerEdgeScroll,
-      }) as never,
+      }),
     )
 
     expect(props.presentation).toBe('classic')
@@ -154,7 +157,7 @@ describe('buildDopesheetEditorProps', () => {
 
   it('keeps the value-graph workspaces floating and clamped to the item bounds', () => {
     const props = buildDopesheetEditorProps(
-      makeInput({ surface: 'default', editTimelineFps: 60 }) as never,
+      makeInput({ surface: 'default', editTimelineFps: 60 }),
     )
 
     expect(props.presentation).toBeUndefined()
@@ -170,7 +173,7 @@ describe('buildDopesheetEditorProps', () => {
 
   it('scrubs the docked sheet over the shared timeline span', () => {
     const props = buildDopesheetEditorProps(
-      makeInput({ surface: 'edit', maxItemEndFrame: 240, editTimelineFps: 30 }) as never,
+      makeInput({ surface: 'edit', maxItemEndFrame: 240, editTimelineFps: 30 }),
     )
 
     expect(props.playheadFrame).toBe(20)
@@ -184,17 +187,17 @@ describe('buildDopesheetEditorProps', () => {
   })
 
   it('maps the current frame to the item-local frame the editor scrolls by', () => {
-    const props = buildDopesheetEditorProps(makeInput({ currentFrame: 50, relativeFrame: 20 }) as never)
+    const props = buildDopesheetEditorProps(makeInput({ currentFrame: 50, relativeFrame: 20 }) )
 
     expect(props.currentFrame).toBe(20)
     expect(props.globalFrame).toBe(50)
   })
 
   it('hides the compound rows unless the clip can be transformed as a vector', () => {
-    const rows = { x: { label: 'X' } } as never
-    const video = buildDopesheetEditorProps(makeInput({ hiddenVectorPropertyRows: rows }) as never)
+    const rows = ['y'] as const
+    const video = buildDopesheetEditorProps(makeInput({ hiddenVectorPropertyRows: rows }) )
     const audio = buildDopesheetEditorProps(
-      makeInput({ selectedItemForEditor: makeItem({ type: 'audio' }), hiddenVectorPropertyRows: rows }) as never,
+      makeInput({ selectedItemForEditor: makeItem({ type: 'audio' }), hiddenVectorPropertyRows: rows }),
     )
 
     expect(video.hiddenPropertyRows).toBe(rows)
@@ -202,8 +205,8 @@ describe('buildDopesheetEditorProps', () => {
   })
 
   it('offers the add-keyframe shortcut only where the docked sheet owns it', () => {
-    const onEdit = buildDopesheetEditorProps(makeInput({ surface: 'edit' }) as never)
-    const onGraph = buildDopesheetEditorProps(makeInput({ surface: 'default' }) as never)
+    const onEdit = buildDopesheetEditorProps(makeInput({ surface: 'edit' }) )
+    const onGraph = buildDopesheetEditorProps(makeInput({ surface: 'default' }) )
 
     expect(onEdit.shortcuts?.addKeyframe).toBe('a')
     expect(onEdit.addKeyframeShortcutEnabled).toBe(true)
@@ -212,12 +215,16 @@ describe('buildDopesheetEditorProps', () => {
   })
 
   it('reports the clipboard state the toolbar buttons bind to', () => {
-    const empty = buildDopesheetEditorProps(makeInput() as never)
+    const empty = buildDopesheetEditorProps(makeInput() )
     const filled = buildDopesheetEditorProps(
       makeInput({
-        keyframeClipboard: { keyframes: [{ itemId: 'a', property: 'x', frame: 0, value: 1 }] },
+        keyframeClipboard: {
+          keyframes: [{ property: 'x', frame: 0, value: 1, easing: 'linear' }],
+          originFrame: 10,
+          sourceRefs: [{ itemId: 'a', property: 'x', keyframeId: 'k1' }],
+        },
         isKeyframeClipboardCut: true,
-      }) as never,
+      }),
     )
 
     expect(empty.hasKeyframeClipboard).toBe(false)

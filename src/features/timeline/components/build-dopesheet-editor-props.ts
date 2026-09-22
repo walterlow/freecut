@@ -85,7 +85,8 @@ const SURFACE_PROFILES: Record<KeyframeEditorSurface, EditorSurfaceProfile> = {
   },
 }
 
-interface DopesheetEditorPropsInput {
+/** Everything the panel injects into `buildDopesheetEditorProps`. */
+export interface DopesheetEditorPropsInput {
   /** Where the panel is docked; drives the classic/split presentation. */
   surface: KeyframeEditorSurface
   selectedItemForEditor: TimelineItem
