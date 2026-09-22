@@ -15,33 +15,45 @@ interface ShellStyleSignals {
 }
 
 /**
- * Shell style properties for this render. The drag translate reads the module
- * drag refs directly: a dragged clip that is not the anchor follows the cohort
- * offset, which lands after the anchor's own state updates.
+ * Drag translate. The refs are read directly: a dragged clip that is not the
+ * anchor follows the cohort offset, which lands after the anchor's own state
+ * updates. Respecting the order the ternaries evaluate in matters — the refs
+ * are only touched for an anchored, non-alt drag.
  */
-export function getTimelineItemShellStyle({
+function resolveShellDragTransform({
   itemId,
   isBeingDragged,
   isAltDrag,
   isDragging,
   dragOffset,
+}: ShellStyleSignals): CSSProperties['transform'] {
+  if (!isBeingDragged || isAltDrag) return undefined
+
+  const offset = isDragging
+    ? dragOffset
+    : (dragPreviewOffsetByItemRef.current[itemId] ?? dragOffsetRef.current)
+
+  return `translate(${offset.x}px, ${offset.y}px)`
+}
+
+function resolveShellOpacity({
   shouldDimForDrag,
   trackHidden,
   trackLocked,
-  isCompactShell,
-}: ShellStyleSignals): CSSProperties {
-  const followOffset =
-    isBeingDragged && !isAltDrag
-      ? isDragging
-        ? dragOffset
-        : (dragPreviewOffsetByItemRef.current[itemId] ?? dragOffsetRef.current)
-      : null
+}: ShellStyleSignals): CSSProperties['opacity'] {
+  if (shouldDimForDrag) return DRAG_OPACITY
+  if (trackHidden) return 0.3
+  if (trackLocked) return 0.6
+  return 1
+}
+
+/** Shell style properties for this render. */
+export function getTimelineItemShellStyle(signals: ShellStyleSignals): CSSProperties {
+  const { isBeingDragged, isCompactShell } = signals
 
   return {
-    transform: followOffset
-      ? `translate(${followOffset.x}px, ${followOffset.y}px)`
-      : undefined,
-    opacity: shouldDimForDrag ? DRAG_OPACITY : trackHidden ? 0.3 : trackLocked ? 0.6 : 1,
+    transform: resolveShellDragTransform(signals),
+    opacity: resolveShellOpacity(signals),
     pointerEvents: isBeingDragged ? 'none' : 'auto',
     zIndex: isBeingDragged ? 50 : undefined,
     transition: isBeingDragged ? 'none' : undefined,
