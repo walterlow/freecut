@@ -82,6 +82,14 @@ import { assessSmartCopyEligibility } from '../utils/smart-copy'
 import { resolveVideoBitrate } from '../deps/renderer'
 import { detectTranscriptSubtitles, getSubtitleModeOptions } from '../utils/export-subtitles'
 import {
+  findDominantVideoMediaId,
+  getExportRange,
+  getQueueRange,
+  getSegmentWindow,
+  getTimelineDurationFrames,
+  hasInOutRange,
+} from '../utils/export-range'
+import {
   EXPORT_PRESETS,
   findActivePresetId,
   getResolutionOptions,
@@ -251,24 +259,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   const [renderWholeProject, setRenderWholeProject] = useState(false)
   const wasOpenRef = useRef(false)
 
-  // Calculate timeline duration from items
-  const timelineDurationFrames = useMemo(() => {
-    if (items.length === 0) return 0
-    return Math.max(...items.map((item) => item.from + item.durationInFrames))
-  }, [items])
-
-  const dominantVideoMediaId = useMemo(() => {
-    let mediaId: string | undefined
-    let longestDuration = -1
-    for (const item of items) {
-      if (item.type !== 'video' || !item.mediaId) continue
-      if (item.durationInFrames > longestDuration) {
-        mediaId = item.mediaId
-        longestDuration = item.durationInFrames
-      }
-    }
-    return mediaId
-  }, [items])
+  const dominantVideoMediaId = useMemo(() => findDominantVideoMediaId(items), [items])
   const sourceMedia = useMediaMetadataById(dominantVideoMediaId)
   const sourceVideo = useMemo(
     () =>
@@ -283,7 +274,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   )
 
   // Check if in/out points are set
-  const hasInOutPoints = inPoint !== null && outPoint !== null && outPoint > inPoint
+  const hasInOutPoints = hasInOutRange(inPoint, outPoint)
   const hasTranscriptSubtitles = useMemo(() => detectTranscriptSubtitles(items), [items])
   // Soft (toggleable) subtitle tracks only work for Matroska (WebM/MKV). MP4/MOV
   // can't — mediabunny's WebVTT-in-ISOBMFF muxing is broken and players barely
@@ -293,12 +284,16 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   const effectiveSubtitleMode = subtitleModeOptions.includes(subtitleMode) ? subtitleMode : 'burn'
 
   // Calculate export range
-  const exportRange = useMemo(() => {
-    if (renderWholeProject || !hasInOutPoints) {
-      return { start: 0, end: timelineDurationFrames, duration: timelineDurationFrames }
-    }
-    return { start: inPoint, end: outPoint, duration: outPoint - inPoint }
-  }, [hasInOutPoints, inPoint, outPoint, renderWholeProject, timelineDurationFrames])
+  const exportRange = useMemo(
+    () =>
+      getExportRange({
+        renderWholeProject,
+        inPoint,
+        outPoint,
+        timelineDurationFrames: getTimelineDurationFrames(items),
+      }),
+    [items, inPoint, outPoint, renderWholeProject],
+  )
 
   const resolvedVideoBitrate = useMemo(
     () =>
@@ -496,24 +491,6 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
     await startExport(buildExtendedSettings())
   }
 
-  // The active render range for a sequence (whole timeline unless in/out set).
-  const queueRange = (
-    seq: ExportableSequence,
-  ): { inPoint: number | null; outPoint: number | null } =>
-    renderWholeProject ||
-    seq.inPoint === null ||
-    seq.outPoint === null ||
-    seq.outPoint <= seq.inPoint
-      ? { inPoint: null, outPoint: null }
-      : { inPoint: seq.inPoint, outPoint: seq.outPoint }
-
-  // The frame window segment generators split over: the active range, or the
-  // whole timeline when no in/out points are set.
-  const segmentWindow = (seq: ExportableSequence): { start: number; end: number } => {
-    const range = queueRange(seq)
-    return { start: range.inPoint ?? 0, end: range.outPoint ?? seq.durationFrames }
-  }
-
   // Close the export dialog and open the queue panel. Called BEFORE building
   // jobs so picking an option gives instant feedback while the (single) codec
   // probe + job assembly run.
@@ -547,13 +524,13 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   const handleAddCurrentRange = () => {
     const seq = captureSelection()
     void enqueueAndReveal(async (settings) => [
-      await buildRenderJob({ settings, ...queueRange(seq), sequence: seq }),
+      await buildRenderJob({ settings, ...getQueueRange(seq, renderWholeProject), sequence: seq }),
     ])
   }
 
   const handleAddMarkerSegments = () => {
     const seq = captureSelection()
-    const { start, end } = segmentWindow(seq)
+    const { start, end } = getSegmentWindow(seq, renderWholeProject)
     const ranges = rangesFromMarkers(seq.markers, start, end)
     if (ranges.length <= 1) {
       toast.info(t('export.renderQueue.noMarkers'))
@@ -571,7 +548,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
   const handleSplitChunks = (seconds: number) => {
     const seq = captureSelection()
-    const { start, end } = segmentWindow(seq)
+    const { start, end } = getSegmentWindow(seq, renderWholeProject)
     const ranges = rangesFromFixedDuration(start, end, Math.max(1, Math.round(seconds * seq.fps)))
     if (ranges.length === 0) {
       toast.info(t('export.renderQueue.nothingToRender'))
