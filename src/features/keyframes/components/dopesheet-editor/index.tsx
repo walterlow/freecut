@@ -52,6 +52,7 @@ import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
+import { useDopesheetPointerDispatch, useLinkedTimelineWheelForwarding } from './use-dopesheet-pointer-dispatch'
 import { useSelectionFrameActions } from './use-selection-frame-actions'
 import { usePropertyValueEditing } from './use-property-value-editing'
 import { useElementSize } from './use-element-size'
@@ -95,7 +96,6 @@ import {
 import type { DopesheetDimensionSeparationControl } from './dopesheet-group-options-menu'
 import type { CompoundPropertyInputConfig } from './compound-property-inputs'
 import { KeyframeTimingStrip } from './keyframe-timing-strip'
-import { setPointerCaptureSafely } from './dopesheet-utils'
 import { PickWhipOverlay } from '@/shared/ui/pick-whip-overlay'
 import type { ExpressionValue } from '@/features/keyframes/utils/property-expression'
 import {
@@ -1865,54 +1865,14 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const handleGroupKeyframePointerDown = keyframeDrag.handleGroupKeyframePointerDown
 
 
-  const handleRowPointerDown = useCallback(
-    (property: AnimatableProperty, event: React.PointerEvent<HTMLDivElement>) => {
-      if (disabled) return
-      if (isPropertyLocked(property)) return
-      if (event.button !== 0) return
-      event.preventDefault()
-      event.stopPropagation()
-      onActivePropertyChange?.(property)
-
-      beginMarqueeSelection(
-        event.pointerId,
-        event.clientX,
-        event.clientY,
-        getMarqueeModeFromPointerEvent(event),
-        new Set(selectedKeyframeIds),
-      )
-
-      setPointerCaptureSafely(event.currentTarget, event.pointerId)
-    },
-    [
-      beginMarqueeSelection,
-      disabled,
-      getMarqueeModeFromPointerEvent,
-      isPropertyLocked,
-      onActivePropertyChange,
-      selectedKeyframeIds,
-    ],
-  )
-
-  const handleTimelineBackgroundPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (disabled) return
-      if (event.button !== 0) return
-      event.preventDefault()
-      event.stopPropagation()
-
-      beginMarqueeSelection(
-        event.pointerId,
-        event.clientX,
-        event.clientY,
-        getMarqueeModeFromPointerEvent(event),
-        new Set(selectedKeyframeIds),
-      )
-
-      setPointerCaptureSafely(event.currentTarget, event.pointerId)
-    },
-    [beginMarqueeSelection, disabled, getMarqueeModeFromPointerEvent, selectedKeyframeIds],
-  )
+  const { handleRowPointerDown, handleTimelineBackgroundPointerDown } = useDopesheetPointerDispatch({
+    disabled,
+    isPropertyLocked,
+    selectedKeyframeIds,
+    onActivePropertyChange,
+    beginMarqueeSelection,
+    getMarqueeModeFromPointerEvent,
+  })
 
 
   const rulerScrub = useRulerScrub({
@@ -1950,51 +1910,11 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const handleRulerPointerUp = rulerScrub.handleRulerPointerUp
 
 
-  // Edit shares the main timeline axis and deliberately disables the local
-  // viewport mutators. Forward its navigation gestures to the main timeline's
-  // non-passive wheel listener so momentum, bounds, cursor anchoring, live DOM
-  // geometry, and store throttling remain one implementation.
-  useEffect(() => {
-    const root = pickWhipRootRef.current
-    const timeline = timelineScrollContainerRef?.current
-    if (!root || !timeline || viewportInteractionEnabled) return
-
-    const forwardLinkedTimelineWheel = (event: WheelEvent) => {
-      const isZoomGesture = event.ctrlKey || event.metaKey
-      // App.tsx prevents native browser zoom during document capture, so a
-      // Ctrl/Cmd-wheel event arrives here with defaultPrevented already set.
-      // It still needs to reach the main timeline's anchored zoom handler.
-      if ((!isZoomGesture && event.defaultPrevented) || event.shiftKey || event.altKey) return
-      event.preventDefault()
-      event.stopPropagation()
-      timeline.dispatchEvent(
-        new WheelEvent('wheel', {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          screenX: event.screenX,
-          screenY: event.screenY,
-          deltaX: event.deltaX,
-          deltaY: event.deltaY,
-          deltaZ: event.deltaZ,
-          deltaMode: event.deltaMode,
-          ctrlKey: event.ctrlKey,
-          metaKey: event.metaKey,
-          shiftKey: event.shiftKey,
-          altKey: event.altKey,
-          button: event.button,
-          buttons: event.buttons,
-        }),
-      )
-    }
-
-    root.addEventListener('wheel', forwardLinkedTimelineWheel, {
-      passive: false,
-    })
-    return () => root.removeEventListener('wheel', forwardLinkedTimelineWheel)
-  }, [timelineScrollContainerRef, viewportInteractionEnabled])
+  useLinkedTimelineWheelForwarding({
+    rootRef: pickWhipRootRef,
+    timelineScrollContainerRef,
+    viewportInteractionEnabled,
+  })
 
   const graphDisplayProperty = useMemo(() => {
     if (graphVisibleProperties.size === 0) return null
