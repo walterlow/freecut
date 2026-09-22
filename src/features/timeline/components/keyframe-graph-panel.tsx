@@ -62,19 +62,15 @@ import type { TimelineSnapshot } from '../stores/commands/types'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useEditorStore } from '@/shared/state/editor'
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
-import { useTimelineViewportStore } from '../stores/timeline-viewport-store'
-import { useZoomStore } from '../stores/zoom-store'
 import { perfMarkRender } from '@/shared/logging/perf-marks'
-import { notifyTimelineLiveScroll } from '@/shared/timeline/live-scroll-sync'
-import { getTextMotionTimelineBands } from '@/shared/timeline/text-motion-timeline'
 import { useKeyframeEditorPlaybackFrame } from './use-keyframe-editor-playback-frame'
 import {
   MIN_CONTENT_HEIGHT,
   RESIZE_HANDLE_HEIGHT,
   useKeyframeGraphPanelChrome,
 } from './use-keyframe-graph-panel-chrome'
-import { useSettledTimelineGeometry } from './use-settled-timeline-scroll-left'
-import { getContentBoundedEdgeScrollLeft } from '../utils/timeline-layout'
+import { useEditTimelineKeyframeGeometry } from './use-edit-timeline-keyframe-geometry'
+import { useKeyframeGraphTextMotion } from './use-keyframe-graph-text-motion'
 import type {
   AnimatableProperty,
   BezierControlPoints,
@@ -88,13 +84,7 @@ import type {
   VectorKeyframe,
 } from '@/types/keyframe'
 import type { CanvasSettings } from '@/types/transform'
-import type { TextMotionSlot } from '@/types/text-motion'
 import * as timelineActions from '../stores/timeline-actions'
-import {
-  beginTextMotionEdit,
-  commitTextMotionEdit,
-  updateTextMotionLive,
-} from '../stores/actions/text-motion-actions'
 import { HOTKEY_OPTIONS } from '@/config/hotkeys'
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings'
 import {
@@ -346,7 +336,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
   // Ref to store snapshot captured on drag start for undo batching
   const dragSnapshotRef = useRef<TimelineSnapshot | null>(null)
-  const textMotionDragSnapshotRef = useRef<TimelineSnapshot | null>(null)
   const dragSelectionSnapshotRef = useRef<KeyframeRef[] | null>(null)
   const valueScrubCreatedKeyframesRef = useRef(new Map<AnimatableProperty, string>())
   const promotedVectorDragIdsRef = useRef(new Map<string, string>())
@@ -421,158 +410,36 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     }),
     [currentProject],
   )
-  const editTimelineViewportWidth = useTimelineViewportStore((state) => state.viewportWidth)
-  // The expensive editor tree follows settled geometry. Live wheel zoom is
-  // applied by the dopesheet root's compositor axis transform instead.
-  const editTimelineContentPixelsPerSecond = useZoomStore((state) => state.contentPixelsPerSecond)
-  const editTimelineFps = useTimelineSettingsStore((state) => state.fps)
-  const editTimelineGeometry = useSettledTimelineGeometry(
-    timelineScrollContainerRef,
-    surface === 'edit' && isOpen,
-    editTimelineContentPixelsPerSecond,
-  )
-  const editTimelineScrollLeft = editTimelineGeometry.scrollLeft
-  const editTimelinePixelsPerSecond = editTimelineGeometry.pixelsPerSecond
-  const editTimelineFrameViewport = useMemo(() => {
-    if (
-      surface !== 'edit' ||
-      !selectedItemForEditor ||
-      editTimelineViewportWidth <= 0 ||
-      editTimelinePixelsPerSecond <= 0
-    ) {
-      return undefined
-    }
-    const startGlobalFrame =
-      (editTimelineScrollLeft / editTimelinePixelsPerSecond) * editTimelineFps
-    const endGlobalFrame =
-      ((editTimelineScrollLeft + editTimelineViewportWidth) / editTimelinePixelsPerSecond) *
-      editTimelineFps
-    return {
-      startFrame: startGlobalFrame - selectedItemForEditor.from,
-      endFrame: endGlobalFrame - selectedItemForEditor.from,
-    }
-  }, [
-    editTimelineFps,
-    editTimelinePixelsPerSecond,
-    editTimelineScrollLeft,
+  const {
     editTimelineViewportWidth,
-    selectedItemForEditor,
+    editTimelineFps,
+    editTimelineScrollLeft,
+    editTimelinePixelsPerSecond,
+    editTimelineFrameViewport,
+    editTimelineGlobalFrameToPixels,
+    getEditTimelineLivePixelsPerSecond,
+    handleEditTimelineEdgeScroll,
+  } = useEditTimelineKeyframeGeometry({
+    timelineScrollContainerRef,
     surface,
-  ])
-  const editTimelineGlobalFrameToPixels = useCallback(
-    (globalFrame: number) => {
-      // The main timeline content moves natively with scrollLeft on every frame,
-      // while the general viewport store is intentionally throttled for heavy
-      // culling subscribers. Playheads are lightweight, so read the live DOM
-      // axis here to keep the upper and lower lines in the same scroll frame.
-      const pixelsPerSecond = timelineScrollContainerRef?.current
-        ? useZoomStore.getState().pixelsPerSecond
-        : editTimelinePixelsPerSecond
-      const scrollLeft =
-        timelineScrollContainerRef?.current?.scrollLeft ??
-        useTimelineViewportStore.getState().scrollLeft
-      // Match TimelinePlayhead's whole-pixel frame position exactly. Keeping
-      // the lower line sub-pixel while the main line rounds makes an otherwise
-      // synchronized playhead look faintly doubled at some zoom levels.
-      return Math.round((globalFrame / editTimelineFps) * pixelsPerSecond) - scrollLeft
-    },
-    [editTimelineFps, editTimelinePixelsPerSecond, timelineScrollContainerRef],
-  )
-  const getEditTimelineLivePixelsPerSecond = useCallback(
-    () => useZoomStore.getState().pixelsPerSecond,
-    [],
-  )
-  const handleEditTimelineEdgeScroll = useCallback(
-    (deltaPixels: number) => {
-      if (surface !== 'edit') return 0
-      const container = timelineScrollContainerRef?.current
-      if (!container) return 0
-
-      const previousScrollLeft = container.scrollLeft
-      const pixelsPerSecond = useZoomStore.getState().pixelsPerSecond
-      const viewportWidth = useTimelineViewportStore.getState().viewportWidth
-      const contentDuration = Math.max(maxItemEndFrame / editTimelineFps, 10)
-      container.scrollLeft = getContentBoundedEdgeScrollLeft({
-        contentWidth: contentDuration * pixelsPerSecond,
-        viewportWidth,
-        scrollLeft: previousScrollLeft,
-        deltaPixels,
-      })
-      const nextScrollLeft = container.scrollLeft
-      const appliedPixels = nextScrollLeft - previousScrollLeft
-      if (appliedPixels !== 0) {
-        // Native scroll may arrive after the next paint. Broadcast the applied
-        // DOM position so both playheads consume this scrollLeft immediately.
-        notifyTimelineLiveScroll(container)
-        const timelineViewport = useTimelineViewportStore.getState()
-        timelineViewport.setViewportImmediate({
-          scrollLeft: nextScrollLeft,
-          scrollTop: timelineViewport.scrollTop,
-          viewportWidth: timelineViewport.viewportWidth,
-          viewportHeight: timelineViewport.viewportHeight,
-        })
-      }
-      return appliedPixels
-    },
-    [editTimelineFps, maxItemEndFrame, surface, timelineScrollContainerRef],
-  )
-
+    isOpen,
+    maxItemEndFrame,
+    selectedItemForEditor,
+  })
   const allAvailableProperties = useMemo(() => {
     if (!selectedItemForEditor) return []
     return getAnimatablePropertiesForItem(selectedItemForEditor)
   }, [selectedItemForEditor])
-  const editTextMotionBands = useMemo(
-    () =>
-      surface === 'edit' && selectedItemForEditor
-        ? getTextMotionTimelineBands(selectedItemForEditor).map((band) => ({
-            ...band,
-            fromFrame: band.fromFrame - selectedItemForEditor.from,
-            toFrame: band.toFrame - selectedItemForEditor.from,
-            clipFromFrame: band.clipFromFrame - selectedItemForEditor.from,
-            clipToFrame: band.clipToFrame - selectedItemForEditor.from,
-          }))
-        : [],
-    [selectedItemForEditor, surface],
-  )
-  const handleTextMotionDurationDragStart = useCallback(() => {
-    textMotionDragSnapshotRef.current = beginTextMotionEdit()
-  }, [])
-  const handleTextMotionDurationCommit = useCallback(
-    (slot: TextMotionSlot, durationFrames: number) => {
-      if (!selectedItemForEditor) return
-      const before = textMotionDragSnapshotRef.current ?? beginTextMotionEdit()
-      updateTextMotionLive([selectedItemForEditor.id], slot, { durationFrames })
-      commitTextMotionEdit(before, { slot, itemIds: [selectedItemForEditor.id] })
-      textMotionDragSnapshotRef.current = null
-    },
-    [selectedItemForEditor],
-  )
-  const handleTextMotionDurationCancel = useCallback(() => {
-    textMotionDragSnapshotRef.current = null
-  }, [])
-  const handleTextMotionOffsetDragStart = useCallback(() => {
-    textMotionDragSnapshotRef.current = beginTextMotionEdit()
-  }, [])
-  const handleTextMotionOffsetCommit = useCallback(
-    (slot: TextMotionSlot, offsetFrames: number) => {
-      if (!selectedItemForEditor || slot === 'loop') return
-      const before = textMotionDragSnapshotRef.current ?? beginTextMotionEdit()
-      updateTextMotionLive([selectedItemForEditor.id], slot, {
-        offsetFrames: offsetFrames > 0 ? offsetFrames : undefined,
-      })
-      commitTextMotionEdit(before, { slot, itemIds: [selectedItemForEditor.id] })
-      textMotionDragSnapshotRef.current = null
-    },
-    [selectedItemForEditor],
-  )
-  const handleTextMotionOffsetCancel = useCallback(() => {
-    textMotionDragSnapshotRef.current = null
-  }, [])
-  const handleTextMotionBandClick = useCallback((_slot: TextMotionSlot) => {
-    const editor = useEditorStore.getState()
-    editor.setRightSidebarOpen(true)
-    editor.setClipInspectorTab('motion')
-  }, [])
+  const {
+    editTextMotionBands,
+    handleTextMotionDurationDragStart,
+    handleTextMotionDurationCommit,
+    handleTextMotionDurationCancel,
+    handleTextMotionOffsetDragStart,
+    handleTextMotionOffsetCommit,
+    handleTextMotionOffsetCancel,
+    handleTextMotionBandClick,
+  } = useKeyframeGraphTextMotion({ selectedItemForEditor, surface })
   const availableProperties = useMemo(
     () =>
       surface !== 'edit' && supportsVectorTransform(selectedItemForEditor)
