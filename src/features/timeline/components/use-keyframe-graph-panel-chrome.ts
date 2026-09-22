@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type RefObje
 import type { KeyframeEditorSurface } from './keyframe-graph-panel-model'
 
 /** Height of the panel header bar in pixels */
-export const GRAPH_PANEL_HEADER_HEIGHT = 32
+const GRAPH_PANEL_HEADER_HEIGHT = 32
 
 /** Height of the resize handle in pixels */
 export const RESIZE_HANDLE_HEIGHT = 6
