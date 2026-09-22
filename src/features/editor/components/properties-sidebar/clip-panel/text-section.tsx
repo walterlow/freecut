@@ -1,20 +1,13 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Type, Palette, WandSparkles } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import type { TextItem, TextSpan, TimelineItem } from '@/types/timeline'
 import type { CanvasSettings } from '@/types/transform'
 import { updateItem } from '@/features/editor/deps/timeline-store'
 import { useGizmoStore, type ItemPropertiesPreview } from '@/features/editor/deps/preview'
 import { KeyframeToggle } from '@/features/editor/deps/keyframes'
 import { TextMotionSlotRows } from '../../text-motion/text-motion-slot-rows'
-import {
-  PropertySection,
-  PropertyRow,
-  NumberInput,
-  ColorPicker,
-  SliderInput,
-} from '../components'
+import { PropertySection, PropertyRow, SliderInput } from '../components'
 import {
   applyTextStylePresetToItem,
   buildTextStylePresetTemplate,
@@ -30,6 +23,7 @@ import {
 import { TextAlignControls } from './text-align-controls'
 import { TextColorControls } from './text-color-controls'
 import { TextBoxControls } from './text-box-controls'
+import { TextEffectsControls } from './text-effects-controls'
 import { TEXT_EFFECT_PRESETS } from './text-section-constants'
 import {
   cloneTextSpans,
@@ -900,123 +894,32 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
 
       {showEffectSection && (
         <PropertySection title={t('editor.textSection.style')} icon={Palette} defaultOpen={true}>
-          <PropertyRow label={t('editor.textSection.presets')} className="items-start">
-            <div className="grid w-full grid-cols-2 gap-1.5">
-              {TEXT_EFFECT_PRESETS.map((preset) => (
-                <Button
-                  key={preset.id}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px]"
-                  onClick={() => handleApplyTextEffectPreset(preset.id)}
-                >
-                  {t(`editor.textSection.effectPresets.${preset.labelKey}`)}
-                </Button>
-              ))}
-            </div>
-          </PropertyRow>
-
-          <ColorPicker
-            label={t('editor.textSection.shadow')}
-            color={sharedValues.shadowColor || '#000000'}
-            onChange={handleShadowColorChange}
-            onLiveChange={handleShadowColorLiveChange}
-            onReset={() => handleShadowColorChange('#000000')}
-            defaultColor="#000000"
-            allowAlpha
+          <TextEffectsControls
+            itemIds={itemIds}
+            shadowColor={sharedValues.shadowColor}
+            shadowOffsetX={shadowOffsetX}
+            shadowOffsetY={shadowOffsetY}
+            shadowBlur={shadowBlur}
+            strokeWidth={strokeWidth}
+            strokeColor={sharedValues.strokeColor}
+            shadowOffsetXCurrentValue={firstTextItem?.textShadow?.offsetX ?? 0}
+            shadowOffsetYCurrentValue={firstTextItem?.textShadow?.offsetY ?? 0}
+            shadowBlurCurrentValue={firstTextItem?.textShadow?.blur ?? 0}
+            strokeWidthCurrentValue={firstTextItem?.stroke?.width ?? 0}
+            onApplyPreset={handleApplyTextEffectPreset}
+            onShadowColorChange={handleShadowColorChange}
+            onShadowColorLiveChange={handleShadowColorLiveChange}
+            onShadowOffsetXChange={handleShadowOffsetXChange}
+            onShadowOffsetXLiveChange={handleShadowOffsetXLiveChange}
+            onShadowOffsetYChange={handleShadowOffsetYChange}
+            onShadowOffsetYLiveChange={handleShadowOffsetYLiveChange}
+            onShadowBlurChange={handleShadowBlurChange}
+            onShadowBlurLiveChange={handleShadowBlurLiveChange}
+            onStrokeWidthChange={handleStrokeWidthChange}
+            onStrokeWidthLiveChange={handleStrokeWidthLiveChange}
+            onStrokeColorChange={handleStrokeColorChange}
+            onStrokeColorLiveChange={handleStrokeColorLiveChange}
           />
-
-          <PropertyRow label={t('editor.textSection.shadowX')}>
-            <div className="flex items-center gap-1 min-w-0 w-full">
-              <NumberInput
-                value={shadowOffsetX}
-                onChange={handleShadowOffsetXChange}
-                onLiveChange={handleShadowOffsetXLiveChange}
-                min={-100}
-                max={100}
-                step={1}
-                unit="px"
-                className="flex-1 min-w-0"
-              />
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="textShadowOffsetX"
-                currentValue={firstTextItem?.textShadow?.offsetX ?? 0}
-              />
-            </div>
-          </PropertyRow>
-
-          <PropertyRow label={t('editor.textSection.shadowY')}>
-            <div className="flex items-center gap-1 min-w-0 w-full">
-              <NumberInput
-                value={shadowOffsetY}
-                onChange={handleShadowOffsetYChange}
-                onLiveChange={handleShadowOffsetYLiveChange}
-                min={-100}
-                max={100}
-                step={1}
-                unit="px"
-                className="flex-1 min-w-0"
-              />
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="textShadowOffsetY"
-                currentValue={firstTextItem?.textShadow?.offsetY ?? 0}
-              />
-            </div>
-          </PropertyRow>
-
-          <PropertyRow label={t('editor.textSection.shadowBlur')}>
-            <div className="flex items-center gap-1 min-w-0 w-full">
-              <NumberInput
-                value={shadowBlur}
-                onChange={handleShadowBlurChange}
-                onLiveChange={handleShadowBlurLiveChange}
-                min={0}
-                max={160}
-                step={1}
-                unit="px"
-                className="flex-1 min-w-0"
-              />
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="textShadowBlur"
-                currentValue={firstTextItem?.textShadow?.blur ?? 0}
-              />
-            </div>
-          </PropertyRow>
-
-          <PropertyRow label={t('editor.textSection.strokeWidth')}>
-            <div className="flex items-center gap-1 min-w-0 w-full">
-              <NumberInput
-                value={strokeWidth}
-                onChange={handleStrokeWidthChange}
-                onLiveChange={handleStrokeWidthLiveChange}
-                min={0}
-                max={24}
-                step={1}
-                unit="px"
-                className="flex-1 min-w-0"
-              />
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="strokeWidth"
-                currentValue={firstTextItem?.stroke?.width ?? 0}
-              />
-            </div>
-          </PropertyRow>
-
-          {(strokeWidth === 'mixed' || strokeWidth > 0) && (
-            <ColorPicker
-              label={t('editor.textSection.stroke')}
-              color={sharedValues.strokeColor || '#111827'}
-              onChange={handleStrokeColorChange}
-              onLiveChange={handleStrokeColorLiveChange}
-              onReset={() => handleStrokeColorChange('#111827')}
-              defaultColor="#111827"
-              allowAlpha
-            />
-          )}
         </PropertySection>
       )}
 
