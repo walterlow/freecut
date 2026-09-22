@@ -6,7 +6,6 @@ import { addEffects, updateItem } from '../../stores/timeline-actions'
 import { useItemsStore } from '../../stores/items-store'
 import { selectReplaceableCaptionClipIds } from '../../stores/items-store-indexes'
 import { useKeyframesStore } from '../../stores/keyframes-store'
-import { useEffectDropPreviewStore } from '../../stores/effect-drop-preview-store'
 import { useEditPreviewShifts } from './use-edit-preview-shifts'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useEditorStore } from '@/shared/state/editor'
@@ -66,6 +65,8 @@ import {
   getAudioVolumeCssVars,
 } from './timeline-item-css-vars'
 import { ClipFloatingLayer } from './clip-floating-layer'
+import { useEffectDropTarget } from './use-effect-drop-target'
+import { EffectDropOverlay } from './effect-drop-overlay'
 const EMPTY_SEGMENT_OVERLAYS = [] as const
 const EMPTY_LINKED_ITEMS: TimelineItemType[] = []
 
@@ -229,30 +230,7 @@ export const TimelineItem = memo(function TimelineItem({
   const rollHoverEdge = useRollHoverStore(
     useCallback((s) => (s.neighborItemId === item.id ? s.neighborEdge : null), [item.id]),
   )
-  // Single shallow read replaces three subscriptions on the same store.
-  const effectDropPreview = useEffectDropPreviewStore(
-    useShallow(
-      useCallback(
-        (state) => {
-          const targets = state.targetItemIds
-          const isTarget = targets.includes(item.id)
-          const isSingle = targets.length === 1 && targets[0] === item.id
-          const isMulti = isTarget && targets.length > 1
-          return {
-            isSingle,
-            isMulti,
-            hoveredMultiCount:
-              state.hoveredItemId === item.id && targets.length > 1 ? targets.length : 0,
-          }
-        },
-        [item.id],
-      ),
-    ),
-  )
-  const isSingleEffectDropTarget = effectDropPreview.isSingle
-  const isMultiEffectDropTarget = effectDropPreview.isMulti
-  const multiEffectDropTargetCount = effectDropPreview.hoveredMultiCount
-  const isEffectDropTarget = isSingleEffectDropTarget || isMultiEffectDropTarget
+  const { isEffectDropTarget, multiEffectDropTargetCount } = useEffectDropTarget(item.id)
 
   const { closerEdge, handleContextMenu } = useContextMenuState(item)
 
@@ -271,19 +249,6 @@ export const TimelineItem = memo(function TimelineItem({
     window.addEventListener('mouseup', handleMouseUp)
     return () => window.removeEventListener('mouseup', handleMouseUp)
   }, [pointerHint])
-
-  useEffect(() => {
-    if (!isEffectDropTarget) return
-
-    const clearEffectDropTarget = () => useEffectDropPreviewStore.getState().clearPreview()
-    window.addEventListener('dragend', clearEffectDropTarget)
-    window.addEventListener('drop', clearEffectDropTarget)
-
-    return () => {
-      window.removeEventListener('dragend', clearEffectDropTarget)
-      window.removeEventListener('drop', clearEffectDropTarget)
-    }
-  }, [isEffectDropTarget])
 
   const transformRef = useRef<HTMLDivElement>(null)
   const ghostRef = useRef<HTMLDivElement>(null)
@@ -971,13 +936,7 @@ export const TimelineItem = memo(function TimelineItem({
           )}
 
           {isEffectDropTarget && (
-            <div className="absolute inset-0 rounded pointer-events-none z-20 border border-dashed border-sky-300/90 bg-sky-400/15 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.35)]">
-              {multiEffectDropTargetCount > 1 && (
-                <div className="absolute top-1 right-1 rounded-full bg-sky-300/90 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-slate-950">
-                  {multiEffectDropTargetCount} clips
-                </div>
-              )}
-            </div>
+            <EffectDropOverlay multiDropCount={multiEffectDropTargetCount} />
           )}
 
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
