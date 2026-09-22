@@ -29,6 +29,7 @@ import {
 } from '@/shared/graphics/shapes/linear-gradient'
 import { getPathClosureUpdates, getShapeSectionControlVisibility } from './shape-section-visibility'
 import { getSharedShapeValues } from './shape-section-shared-values'
+import { ShapeFillControls } from './shape-fill-controls'
 import { ShapeKindControls } from './shape-kind-controls'
 import { demixValue } from '../utils'
 
@@ -653,91 +654,26 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         </>
       )}
 
-      {controlVisibility.showFill && (
-        <PropertyRow label={t('editor.shapeSection.fill')}>
-          <Button
-            variant={sharedValues.fillEnabled === true ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-7 text-xs flex-1"
-            disabled={sharedValues.fillEnabled === 'mixed'}
-            onClick={() => handleFillEnabledChange(sharedValues.fillEnabled !== true)}
-          >
-            {sharedValues.fillEnabled === true
-              ? t('editor.shapeSection.on')
-              : t('editor.shapeSection.off')}
-          </Button>
-        </PropertyRow>
-      )}
-
-      {/* Fill Color */}
-      {controlVisibility.showFill && sharedValues.fillEnabled !== false && (
-        <>
-          <PropertyRow label={t('editor.shapeSection.fillType')}>
-            <Select value={sharedValues.fillType} onValueChange={handleFillTypeChange}>
-              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                <SelectValue placeholder={t('editor.shapeSection.mixed')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="solid">{t('editor.shapeSection.fillTypeSolid')}</SelectItem>
-                <SelectItem value="linear">{t('editor.shapeSection.fillTypeLinear')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </PropertyRow>
-          {sharedValues.fillType === 'linear' ? (
-            <>
-              <ColorPicker
-                label={t('editor.shapeSection.gradientStartColor')}
-                color={sharedValues.gradientStartColor ?? sharedValues.fillColor ?? '#3b82f6'}
-                onChange={handleGradientStartColorChange}
-                onLiveChange={handleGradientStartColorLiveChange}
-                onReset={() => handleGradientStartColorChange('#3b82f6')}
-                defaultColor="#3b82f6"
-              />
-              <ColorPicker
-                label={t('editor.shapeSection.gradientEndColor')}
-                color={sharedValues.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR}
-                onChange={handleGradientEndColorChange}
-                onLiveChange={handleGradientEndColorLiveChange}
-                onReset={() => handleGradientEndColorChange(DEFAULT_SHAPE_GRADIENT_END_COLOR)}
-                defaultColor={DEFAULT_SHAPE_GRADIENT_END_COLOR}
-              />
-              <PropertyRow label={t('editor.shapeSection.gradientAngle')}>
-                <PropertySliderControl
-                  value={sharedValues.gradientAngle}
-                  onChange={handleGradientAngleChange}
-                  onLiveChange={handleGradientAngleLiveChange}
-                  min={-180}
-                  max={180}
-                  step={1}
-                  unit="°"
-                  onReset={() => handleGradientAngleChange(DEFAULT_SHAPE_GRADIENT_ANGLE)}
-                  resetLabel={t('editor.shapeSection.resetToDefault')}
-                />
-              </PropertyRow>
-              <PropertyRow label={t('editor.shapeSection.gradientColors')}>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 flex-1 text-xs"
-                  onClick={handleSwapGradientColors}
-                >
-                  {t('editor.shapeSection.swapGradientColors')}
-                </Button>
-              </PropertyRow>
-            </>
-          ) : sharedValues.fillType === 'solid' ? (
-            <ColorPicker
-              label={t('editor.shapeSection.fillColor')}
-              color={sharedValues.fillColor ?? '#3b82f6'}
-              onChange={handleFillColorChange}
-              onLiveChange={handleFillColorLiveChange}
-              onReset={() => handleFillColorChange('#3b82f6')}
-              defaultColor="#3b82f6"
-            />
-          ) : null}
-        </>
-      )}
+      <ShapeFillControls
+        visible={controlVisibility.showFill}
+        fillEnabled={sharedValues.fillEnabled}
+        fillType={sharedValues.fillType}
+        fillColor={sharedValues.fillColor}
+        gradientStartColor={sharedValues.gradientStartColor}
+        gradientEndColor={sharedValues.gradientEndColor}
+        gradientAngle={sharedValues.gradientAngle}
+        onFillEnabledChange={handleFillEnabledChange}
+        onFillTypeChange={handleFillTypeChange}
+        onFillColorChange={handleFillColorChange}
+        onFillColorLiveChange={handleFillColorLiveChange}
+        onGradientStartColorChange={handleGradientStartColorChange}
+        onGradientStartColorLiveChange={handleGradientStartColorLiveChange}
+        onGradientEndColorChange={handleGradientEndColorChange}
+        onGradientEndColorLiveChange={handleGradientEndColorLiveChange}
+        onGradientAngleChange={handleGradientAngleChange}
+        onGradientAngleLiveChange={handleGradientAngleLiveChange}
+        onSwapGradientColors={handleSwapGradientColors}
+      />
 
       {controlVisibility.showStroke && (
         <PropertyRow label={t('editor.shapeSection.stroke')}>
