@@ -27,9 +27,6 @@ import { ClipContent } from './clip-content'
 import { ClipIndicators } from './clip-indicators'
 import { TrimHandles } from './trim-handles'
 import { StretchHandles } from './stretch-handles'
-import { AudioFadeHandles } from './audio-fade-handles'
-import { VideoFadeHandles } from './video-fade-handles'
-import { AudioVolumeControl } from './audio-volume-control'
 import { ZoomGatedJoinIndicators } from './join-indicators'
 import { SegmentStatusOverlays } from './segment-status-overlays'
 import { getTimelineItemGestureMode } from './drag-visual-mode'
@@ -45,7 +42,6 @@ import { useRollHoverStore } from '../../stores/roll-hover-store'
 import { useTimelineItemBounds } from './use-timeline-item-bounds'
 import { useFadeEditors } from './use-fade-editors'
 import { useFadeMath } from './use-fade-math'
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
 import { getClipCursorClass } from './clip-cursor'
 import { areTimelineItemPropsEqual } from './timeline-item-memo-compare'
 import { useActiveGlobalCursor } from './use-active-global-cursor'
@@ -55,16 +51,18 @@ import { useLinkedSyncPreview } from './use-linked-sync-preview'
 import { useClipReadoutLabels } from './use-clip-readout-labels'
 import { useTimelineItemPointerHandlers } from './use-timeline-item-pointer-handlers'
 import { resolveTrimVisualState } from './timeline-item-view-model'
-import {
-  AUDIO_ENVELOPE_VIEWBOX_HEIGHT,
-  getAudioVolumeCssVars,
-} from './timeline-item-css-vars'
+import { getAudioVolumeCssVars } from './timeline-item-css-vars'
 import { ClipFloatingLayer } from './clip-floating-layer'
 import { useEffectDropTarget } from './use-effect-drop-target'
 import { EffectDropOverlay } from './effect-drop-overlay'
 import { useTransitionDropPreview } from './use-transition-drop-preview'
 import { TransitionDropZones } from './transition-drop-zones'
 import { buildTimelineItemContextMenuProps } from './build-context-menu-props'
+import {
+  AudioFadeHandleLayer,
+  FadeEnvelopeOverlay,
+  VideoFadeHandleLayer,
+} from './fade-envelope-overlay'
 const EMPTY_SEGMENT_OVERLAYS = [] as const
 const EMPTY_LINKED_ITEMS: TimelineItemType[] = []
 
@@ -94,7 +92,6 @@ function getTrackPushZoneStyle(gapFrames: number): string {
   const adaptiveWidth = `clamp(${TRACK_PUSH_MIN_PX}px, calc(${TRACK_PUSH_MAX_PX}px - (var(--timeline-percent-per-second, 0%) / ${zoomSlopeDivisor})), ${TRACK_PUSH_MAX_PX}px)`
   return `min(${gapWidth}, ${adaptiveWidth})`
 }
-const FADE_VIEWBOX_WIDTH = 1000
 
 interface TimelineItemProps {
   item: TimelineItemType
@@ -852,56 +849,23 @@ export const TimelineItem = memo(function TimelineItem({
               <>
                 <SegmentStatusOverlays overlays={segmentOverlays} />
 
-                {isVisualFadeItem && (
-                  <div
-                    ref={videoControlsRef}
-                    className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
-                    style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
-                  >
-                    <svg
-                      className="absolute inset-0 h-full w-full"
-                      viewBox={`0 0 ${FADE_VIEWBOX_WIDTH} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
-                      preserveAspectRatio="none"
-                    >
-                      {videoFadeInRatio > 0 && (
-                        <path d={videoFadeInPath} fill="rgba(15,23,42,0.46)" />
-                      )}
-                      {videoFadeOutRatio > 0 && (
-                        <path d={videoFadeOutPath} fill="rgba(15,23,42,0.46)" />
-                      )}
-                    </svg>
-                  </div>
-                )}
-
-                {item.type === 'audio' && (
-                  <div
-                    ref={audioControlsRef}
-                    className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
-                    style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
-                  >
-                    <div
-                      ref={volumeLineRef}
-                      className="absolute left-0 right-0 pointer-events-none"
-                      style={{
-                        height: '1px',
-                        top: `var(--timeline-audio-volume-line-y, ${audioVolumeLineYPercent}%)`,
-                        backgroundColor: audioVolumeLineStroke,
-                      }}
-                    />
-                    <svg
-                      className="absolute inset-0 h-full w-full"
-                      viewBox={`0 0 ${FADE_VIEWBOX_WIDTH} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
-                      preserveAspectRatio="none"
-                    >
-                      {audioFadeInRatio > 0 && (
-                        <path d={audioFadeInCurvePath} fill="rgba(0,0,0,0.5)" />
-                      )}
-                      {audioFadeOutRatio > 0 && (
-                        <path d={audioFadeOutCurvePath} fill="rgba(0,0,0,0.5)" />
-                      )}
-                    </svg>
-                  </div>
-                )}
+                <FadeEnvelopeOverlay
+                  itemType={item.type}
+                  isVisualFadeItem={isVisualFadeItem}
+                  videoControlsRef={videoControlsRef}
+                  audioControlsRef={audioControlsRef}
+                  volumeLineRef={volumeLineRef}
+                  videoFadeInRatio={videoFadeInRatio}
+                  videoFadeOutRatio={videoFadeOutRatio}
+                  videoFadeInPath={videoFadeInPath}
+                  videoFadeOutPath={videoFadeOutPath}
+                  audioFadeInRatio={audioFadeInRatio}
+                  audioFadeOutRatio={audioFadeOutRatio}
+                  audioFadeInCurvePath={audioFadeInCurvePath}
+                  audioFadeOutCurvePath={audioFadeOutCurvePath}
+                  audioVolumeLineYPercent={audioVolumeLineYPercent}
+                  audioVolumeLineStroke={audioVolumeLineStroke}
+                />
               </>
             )}
 
@@ -945,78 +909,48 @@ export const TimelineItem = memo(function TimelineItem({
             )}
           </div>
 
-          {!useCompactClipShell && isVisualFadeItem && (
-            <div
-              className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
-              style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
-            >
-              <VideoFadeHandles
-                trackLocked={trackLocked}
-                activeTool={activeTool}
-                lineYPercent={videoFadeLineYPercent}
-                fadeInPercent={videoFadeInRatio * 100}
-                fadeOutPercent={videoFadeOutRatio * 100}
-                isSelected={isSelected}
-                isEditing={videoFadeEdit !== null}
-                editingHandle={videoFadeEdit?.handle ?? null}
-                fadeInLabel={videoFadeInHoverLabel}
-                fadeOutLabel={videoFadeOutHoverLabel}
-                onFadeHandleMouseDown={handleVideoFadeHandleMouseDown}
-                onFadeHandleDoubleClick={handleVideoFadeHandleDoubleClick}
-              />
-            </div>
+          {!useCompactClipShell && (
+            <VideoFadeHandleLayer
+              isVisualFadeItem={isVisualFadeItem}
+              trackLocked={trackLocked}
+              activeTool={activeTool}
+              lineYPercent={videoFadeLineYPercent}
+              fadeInRatio={videoFadeInRatio}
+              fadeOutRatio={videoFadeOutRatio}
+              isSelected={isSelected}
+              videoFadeEdit={videoFadeEdit}
+              fadeInLabel={videoFadeInHoverLabel}
+              fadeOutLabel={videoFadeOutHoverLabel}
+              onFadeHandleMouseDown={handleVideoFadeHandleMouseDown}
+              onFadeHandleDoubleClick={handleVideoFadeHandleDoubleClick}
+            />
           )}
 
-          {/* Trim handles */}
-          {!useCompactClipShell && item.type === 'audio' && (
-            <div
-              className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
-              style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
-            >
-              <AudioFadeHandles
-                trackLocked={trackLocked}
-                activeTool={activeTool}
-                lineYPercent={audioVolumeLineYPercent}
-                fadeInPercent={audioFadeInRatio * 100}
-                fadeOutPercent={audioFadeOutRatio * 100}
-                isSelected={isSelected}
-                isEditing={audioFadeEdit !== null}
-                editingHandle={audioFadeEdit?.handle ?? null}
-                curveEditingHandle={audioFadeCurveEdit?.handle ?? null}
-                fadeInLabel={audioFadeInHoverLabel}
-                fadeOutLabel={audioFadeOutHoverLabel}
-                fadeInCurveDot={
-                  audioFadeInRatio > 0 && audioFadeInCurvePoint
-                    ? {
-                        xPercent: (audioFadeInCurvePoint.x / FADE_VIEWBOX_WIDTH) * 100,
-                        yPercent: audioFadeInCurvePoint.y,
-                      }
-                    : null
-                }
-                fadeOutCurveDot={
-                  audioFadeOutRatio > 0 && audioFadeOutCurvePoint
-                    ? {
-                        xPercent: (audioFadeOutCurvePoint.x / FADE_VIEWBOX_WIDTH) * 100,
-                        yPercent: audioFadeOutCurvePoint.y,
-                      }
-                    : null
-                }
-                onFadeHandleMouseDown={handleAudioFadeHandleMouseDown}
-                onFadeHandleDoubleClick={handleAudioFadeHandleDoubleClick}
-                onFadeCurveDotMouseDown={handleAudioFadeCurveDotMouseDown}
-                onFadeCurveDotDoubleClick={handleAudioFadeCurveDotDoubleClick}
-              />
-              <AudioVolumeControl
-                trackLocked={trackLocked}
-                activeTool={activeTool}
-                lineYPercent={audioVolumeLineYPercent}
-                isEditing={audioVolumeEdit !== null}
-                editLabel={audioVolumeEditLabel}
-                editLabelRef={audioVolumeEditLabelRef}
-                onVolumeMouseDown={handleAudioVolumeMouseDown}
-                onVolumeDoubleClick={handleAudioVolumeDoubleClick}
-              />
-            </div>
+          {!useCompactClipShell && (
+            <AudioFadeHandleLayer
+              itemType={item.type}
+              trackLocked={trackLocked}
+              activeTool={activeTool}
+              lineYPercent={audioVolumeLineYPercent}
+              fadeInRatio={audioFadeInRatio}
+              fadeOutRatio={audioFadeOutRatio}
+              isSelected={isSelected}
+              audioFadeEdit={audioFadeEdit}
+              audioFadeCurveEdit={audioFadeCurveEdit}
+              audioVolumeEdit={audioVolumeEdit}
+              fadeInLabel={audioFadeInHoverLabel}
+              fadeOutLabel={audioFadeOutHoverLabel}
+              fadeInCurvePoint={audioFadeInCurvePoint}
+              fadeOutCurvePoint={audioFadeOutCurvePoint}
+              volumeEditLabel={audioVolumeEditLabel}
+              volumeEditLabelRef={audioVolumeEditLabelRef}
+              onFadeHandleMouseDown={handleAudioFadeHandleMouseDown}
+              onFadeHandleDoubleClick={handleAudioFadeHandleDoubleClick}
+              onFadeCurveDotMouseDown={handleAudioFadeCurveDotMouseDown}
+              onFadeCurveDotDoubleClick={handleAudioFadeCurveDotDoubleClick}
+              onVolumeMouseDown={handleAudioVolumeMouseDown}
+              onVolumeDoubleClick={handleAudioVolumeDoubleClick}
+            />
           )}
 
           {/* Trim handles */}
