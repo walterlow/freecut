@@ -904,7 +904,11 @@ function setDocumentVisibility(hidden: boolean) {
   })
 }
 
-describe('VideoPreview sync behavior', () => {
+// These tests drive a real renderer through several awaited render/warm cycles; under
+// coverage instrumentation on a loaded runner the 5s default is a ceiling they hit while
+// doing correct work (not a target). Scoped to this suite so a hang elsewhere still fails
+// in five seconds.
+describe('VideoPreview sync behavior', { timeout: 15_000 }, () => {
   beforeEach(() => {
     mockedPlayerFrame = 0
     mockedPlayerIsPlaying = false
