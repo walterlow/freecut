@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Type,
-  Italic,
-  Underline,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -14,14 +12,6 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import type { TextItem, TextSpan, TimelineItem } from '@/types/timeline'
 import type { CanvasSettings } from '@/types/transform'
 import { updateItem } from '@/features/editor/deps/timeline-store'
@@ -31,26 +21,27 @@ import { TextMotionSlotRows } from '../../text-motion/text-motion-slot-rows'
 import {
   PropertySection,
   PropertyRow,
-  PropertyGroupHeader,
   NumberInput,
   ColorPicker,
   SliderInput,
 } from '../components'
 import {
   applyTextStylePresetToItem,
-  TEXT_STYLE_PRESETS,
   buildTextStylePresetTemplate,
   type TextStylePresetId,
 } from './text-style-presets'
-import { FontPicker } from './font-picker'
 import { useTextSectionSelection } from './use-text-section-selection'
 import { TextTypographyControls } from './text-typography-controls'
-import { FONT_WEIGHT_OPTIONS, TEXT_EFFECT_PRESETS } from './text-section-constants'
+import {
+  TextLayoutControls,
+  TextPlainEditor,
+  TextSpanEditors,
+} from './text-content-controls'
+import { TEXT_EFFECT_PRESETS } from './text-section-constants'
 import {
   cloneTextSpans,
   getLayoutDraftKey,
   buildSpanLayout,
-  getSpanEditorConfigs,
   normalizeTextShadow,
   normalizeTextStroke,
 } from './text-section-utils'
@@ -786,7 +777,6 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
   const hasAnyBackground = textItems.some((item) => item.backgroundColor !== undefined)
   const textPadding = sharedValues.textPadding
   const backgroundRadius = sharedValues.backgroundRadius
-  const spanEditorConfigs = getSpanEditorConfigs(activeEditorSpans.length, t)
   const showContentSection = slots.includes('content')
   const showEffectSection = slots.includes('effects')
   const showAnimationSection = slots.includes('animation')
@@ -802,190 +792,34 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
           {/* Content editors run full-width (no gutter label) directly under
               the TEXT section header — no redundant "Content" sub-header. */}
           <div className="flex w-full min-w-0 flex-col gap-2">
-            <div className="grid w-full grid-cols-3 gap-1.5">
-              <Button
-                variant={firstTextItem?.textSpans?.length ? 'outline' : 'secondary'}
-                size="sm"
-                className="h-7 text-[11px]"
-                onClick={() => handleApplySpanLayout('single')}
-              >
-                {t('editor.textSection.single')}
-              </Button>
-              <Button
-                variant={activeEditorSpans.length === 2 ? 'secondary' : 'outline'}
-                size="sm"
-                className="h-7 text-[11px]"
-                onClick={() => handleApplySpanLayout('two')}
-              >
-                {t('editor.textSection.twoSpans')}
-              </Button>
-              <Button
-                variant={activeEditorSpans.length >= 3 ? 'secondary' : 'outline'}
-                size="sm"
-                className="h-7 text-[11px]"
-                onClick={() => handleApplySpanLayout('three')}
-              >
-                {t('editor.textSection.threeSpans')}
-              </Button>
-            </div>
-            <Select
-              value={sharedValues.textStylePresetId}
-              onValueChange={(value) => handleApplyTextStylePreset(value as TextStylePresetId)}
-            >
-              <SelectTrigger className="h-7 text-xs w-full">
-                <SelectValue
-                  placeholder={
-                    sharedValues.textStylePresetId === undefined
-                      ? t('editor.textSection.mixedNone')
-                      : t('editor.textSection.selectPreset')
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {TEXT_STYLE_PRESETS.map((preset) => (
-                  <SelectItem key={preset.id} value={preset.id} className="text-xs">
-                    {preset.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <TextLayoutControls
+              hasStructuredSpans={Boolean(firstTextItem?.textSpans?.length)}
+              activeSpanCount={activeEditorSpans.length}
+              presetId={sharedValues.textStylePresetId}
+              onApplyLayout={handleApplySpanLayout}
+              onApplyStylePreset={handleApplyTextStylePreset}
+            />
             {firstTextItem?.textSpans?.length ? (
-              <div className="space-y-2">
-                {activeEditorSpans.map((span, index) => (
-                  <div
-                    key={`${index}:${span.text}`}
-                    className="rounded-md border border-border/70 p-2"
-                  >
-                    {(() => {
-                      const config = spanEditorConfigs[index] ?? {
-                        label: t('editor.textSection.span', { count: index + 1 }),
-                        placeholder: t('editor.textSection.spanText', { count: index + 1 }),
-                        rows: 2,
-                        allowItalic: true,
-                      }
-
-                      return (
-                        <>
-                          <PropertyGroupHeader className="pb-2">{config.label}</PropertyGroupHeader>
-                          <Textarea
-                            value={span.text}
-                            onChange={(e) => handleSpanTextChange(index, e.target.value)}
-                            placeholder={config.placeholder}
-                            className="min-h-[52px] text-xs"
-                            rows={config.rows}
-                          />
-                          <div className="mt-2">
-                            <FontPicker
-                              value={span.fontFamily ?? firstTextItem.fontFamily}
-                              placeholder={t('editor.textSection.selectFont')}
-                              previewText={span.text || config.label}
-                              onValueChange={(value) => handleSpanFontFamilyChange(index, value)}
-                            />
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2">
-                            <NumberInput
-                              label={t('editor.textSection.size')}
-                              value={span.fontSize ?? firstTextItem.fontSize ?? 60}
-                              onChange={(value) => handleSpanFontSizeChange(index, value)}
-                              onLiveChange={(value) => handleSpanFontSizeLiveChange(index, value)}
-                              min={8}
-                              max={500}
-                              step={1}
-                              unit="px"
-                              className="min-w-0"
-                            />
-                            <Select
-                              value={span.fontWeight ?? firstTextItem.fontWeight ?? 'normal'}
-                              onValueChange={(value) => handleSpanWeightChange(index, value)}
-                            >
-                              <SelectTrigger className="h-7 text-xs min-w-0">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {FONT_WEIGHT_OPTIONS.map((weight) => (
-                                  <SelectItem
-                                    key={weight.value}
-                                    value={weight.value}
-                                    className="text-xs"
-                                  >
-                                    {t(`editor.textSection.fontWeights.${weight.labelKey}`)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="mt-2">
-                            <NumberInput
-                              label={t('editor.textSection.spacing')}
-                              value={span.letterSpacing ?? firstTextItem.letterSpacing ?? 0}
-                              onChange={(value) => handleSpanLetterSpacingChange(index, value)}
-                              onLiveChange={(value) =>
-                                handleSpanLetterSpacingLiveChange(index, value)
-                              }
-                              min={-20}
-                              max={100}
-                              step={1}
-                              unit="px"
-                              className="min-w-0"
-                            />
-                          </div>
-                          <div className="mt-2 flex items-center gap-2">
-                            <div className="flex-1 min-w-0">
-                              <ColorPicker
-                                color={span.color ?? firstTextItem.color ?? '#ffffff'}
-                                onChange={(value) => handleSpanColorChange(index, value)}
-                                onLiveChange={(value) => handleSpanColorLiveChange(index, value)}
-                                allowAlpha
-                              />
-                            </div>
-                            {config.allowItalic ? (
-                              <Button
-                                variant={
-                                  (span.fontStyle ?? 'normal') === 'italic' ? 'secondary' : 'ghost'
-                                }
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => handleSpanItalicToggle(index)}
-                                title={t('editor.textSection.italicSpan', {
-                                  label: config.label,
-                                })}
-                              >
-                                <Italic className="w-3.5 h-3.5" />
-                              </Button>
-                            ) : null}
-                            <Button
-                              variant={
-                                (span.underline ?? firstTextItem.underline ?? false)
-                                  ? 'secondary'
-                                  : 'ghost'
-                              }
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => handleSpanUnderlineToggle(index)}
-                              title={t('editor.textSection.underlineSpan', {
-                                label: config.label,
-                              })}
-                            >
-                              <Underline className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </>
-                      )
-                    })()}
-                  </div>
-                ))}
-              </div>
+              <TextSpanEditors
+                spans={activeEditorSpans}
+                fallbackItem={firstTextItem}
+                onSpanTextChange={handleSpanTextChange}
+                onSpanFontFamilyChange={handleSpanFontFamilyChange}
+                onSpanFontSizeChange={handleSpanFontSizeChange}
+                onSpanFontSizeLiveChange={handleSpanFontSizeLiveChange}
+                onSpanWeightChange={handleSpanWeightChange}
+                onSpanLetterSpacingChange={handleSpanLetterSpacingChange}
+                onSpanLetterSpacingLiveChange={handleSpanLetterSpacingLiveChange}
+                onSpanColorChange={handleSpanColorChange}
+                onSpanColorLiveChange={handleSpanColorLiveChange}
+                onSpanItalicToggle={handleSpanItalicToggle}
+                onSpanUnderlineToggle={handleSpanUnderlineToggle}
+              />
             ) : (
-              <Textarea
+              <TextPlainEditor
                 value={sharedValues.text ?? ''}
+                isMixed={sharedValues.text === undefined}
                 onChange={handleTextChange}
-                placeholder={
-                  sharedValues.text === undefined
-                    ? t('editor.textSection.mixed')
-                    : t('editor.textSection.enterText')
-                }
-                className="min-h-[60px] text-xs flex-1 min-w-0"
-                rows={3}
               />
             )}
           </div>
