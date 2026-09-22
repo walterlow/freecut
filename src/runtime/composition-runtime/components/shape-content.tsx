@@ -12,10 +12,7 @@ import {
 } from '@/shared/graphics/shapes'
 import { flattenBezierPath } from '@/shared/graphics/shapes/bezier-path'
 import { hasActiveTaper } from '@/shared/graphics/shapes/taper-path'
-import {
-  getLinearGradientUnitEndpoints,
-  resolveShapeLinearGradient,
-} from '@/shared/graphics/shapes/linear-gradient'
+import { getLinearGradientUnitEndpoints } from '@/shared/graphics/shapes/linear-gradient'
 import {
   buildTaperedOutline,
   getTaperedOutlineFillPath,
@@ -28,43 +25,7 @@ import { useSequenceContext } from '@/runtime/composition-runtime/deps/player'
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context'
 import { KeyframesContext } from '../contexts/keyframes-context-core'
 import { resolveAnimatedShapeItem } from '@/runtime/composition-runtime/deps/keyframes'
-
-/**
- * Resolves one shape property with live-preview priority: gizmo preview
- * values win, then keyframe-resolved values, then the fallback. Key pairings
- * below are moved verbatim from the previous inline expressions.
- */
-function resolveShapeProp<
-  TPreview extends object,
-  TResolved extends object,
-  TPreviewKey extends keyof TPreview,
-  TResolvedKey extends keyof TResolved,
->(
-  preview: TPreview | undefined | null,
-  previewKey: TPreviewKey,
-  resolved: TResolved,
-  resolvedKey: TResolvedKey,
-  fallback: NonNullable<TPreview[TPreviewKey] | TResolved[TResolvedKey]>,
-): NonNullable<TPreview[TPreviewKey] | TResolved[TResolvedKey]> {
-  const previewValue = preview?.[previewKey]
-  const resolvedValue = resolved[resolvedKey]
-  return (previewValue ?? resolvedValue ?? fallback) as NonNullable<
-    TPreview[TPreviewKey] | TResolved[TResolvedKey]
-  >
-}
-
-/** Preview-over-resolved lookup without a fallback (result stays optional). */
-function resolveShapePropValue<
-  TPreview extends object,
-  TResolved extends object,
-  TKey extends keyof TPreview & keyof TResolved,
->(
-  preview: TPreview | undefined | null,
-  resolved: TResolved,
-  key: TKey,
-): TPreview[TKey] | TResolved[TKey] | undefined {
-  return preview?.[key] ?? resolved[key]
-}
+import { resolveShapePaint, resolveShapeRenderProps } from './shape-content-props'
 
 /**
  * Shape content with live property preview support.
@@ -112,153 +73,27 @@ export const ShapeContent: React.FC<{ item: ShapeItem & { _sequenceFrameOffset?:
   })
   const gradientId = `shape-gradient-${useId().replaceAll(':', '')}`
 
-  // Use preview values if available, otherwise use item's stored values
-  const shapePropsPreview = itemPreview?.properties
-  const fillColor = resolveShapeProp(
-    shapePropsPreview,
-    'fillColor',
-    resolvedItem,
-    'fillColor',
-    '#3b82f6',
-  )
-  const fillType = resolveShapeProp(
-    shapePropsPreview,
-    'fillType',
-    resolvedItem,
-    'fillType',
-    'solid',
-  )
-  const gradientStartColor = resolveShapePropValue(
-    shapePropsPreview,
-    resolvedItem,
-    'gradientStartColor',
-  )
-  const gradientEndColor = resolveShapePropValue(shapePropsPreview, resolvedItem, 'gradientEndColor')
-  const gradientAngle = resolveShapePropValue(shapePropsPreview, resolvedItem, 'gradientAngle')
-  const strokeColor = resolveShapePropValue(shapePropsPreview, resolvedItem, 'strokeColor')
-  const strokeWidth =
-    resolveShapeProp(shapePropsPreview, 'strokeWidth', resolvedItem, 'strokeWidth', 0) * renderScale
-  const cornerRadius =
-    resolveShapeProp(shapePropsPreview, 'cornerRadius', resolvedItem, 'cornerRadius', 0) *
-    renderScale
-  const direction = resolveShapeProp(
-    shapePropsPreview,
-    'direction',
-    resolvedItem,
-    'direction',
-    'up',
-  )
-  const points = resolveShapeProp(shapePropsPreview, 'points', resolvedItem, 'points', 5)
-  const innerRadius = resolveShapeProp(
-    shapePropsPreview,
-    'innerRadius',
-    resolvedItem,
-    'innerRadius',
-    0.5,
-  )
-  const shapeType = resolveShapePropValue(shapePropsPreview, resolvedItem, 'shapeType')
-  const pathClosed = resolveShapeProp(
-    shapePropsPreview,
-    'pathClosed',
-    resolvedItem,
-    'pathClosed',
-    true,
-  )
-  const fillEnabled =
-    shapeType === 'path' && !pathClosed
-      ? false
-      : resolveShapeProp(shapePropsPreview, 'fillEnabled', resolvedItem, 'fillEnabled', true)
-  const strokeEnabled = resolveShapeProp(
-    shapePropsPreview,
-    'strokeEnabled',
-    resolvedItem,
-    'strokeEnabled',
-    strokeWidth > 0 && strokeColor !== undefined,
-  )
-  const strokeLineCap = resolveShapeProp(
-    shapePropsPreview,
-    'strokeLineCap',
-    resolvedItem,
-    'strokeLineCap',
-    'butt',
-  )
-  const strokeLineJoin = resolveShapeProp(
-    shapePropsPreview,
-    'strokeLineJoin',
-    resolvedItem,
-    'strokeLineJoin',
-    'miter',
-  )
-  const strokeMiterLimit = resolveShapeProp(
-    shapePropsPreview,
-    'strokeMiterLimit',
-    resolvedItem,
-    'strokeMiterLimit',
-    4,
-  )
-  const trimPathStart = resolveShapeProp(
-    shapePropsPreview,
-    'trimPathStart',
-    resolvedItem,
-    'trimPathStart',
-    0,
-  )
-  const trimPathEnd = resolveShapeProp(
-    shapePropsPreview,
-    'trimPathEnd',
-    resolvedItem,
-    'trimPathEnd',
-    100,
-  )
-  const trimPathOffset = resolveShapeProp(
-    shapePropsPreview,
-    'trimPathOffset',
-    resolvedItem,
-    'trimPathOffset',
-    0,
-  )
-  const taperStartWidth = resolveShapeProp(
-    shapePropsPreview,
-    'taperStartWidth',
-    resolvedItem,
-    'taperStartWidth',
-    100,
-  )
-  const taperEndWidth = resolveShapeProp(
-    shapePropsPreview,
-    'taperEndWidth',
-    resolvedItem,
-    'taperEndWidth',
-    100,
-  )
-  const taperStartLength = resolveShapeProp(
-    shapePropsPreview,
-    'taperStartLength',
-    resolvedItem,
-    'taperStartLength',
-    0,
-  )
-  const taperEndLength = resolveShapeProp(
-    shapePropsPreview,
-    'taperEndLength',
-    resolvedItem,
-    'taperEndLength',
-    0,
-  )
-  const linearGradient = resolveShapeLinearGradient({
-    fillType,
-    fillColor,
-    gradientStartColor,
-    gradientEndColor,
-    gradientAngle,
-  })
+  const shapeProps = resolveShapeRenderProps(itemPreview?.properties, resolvedItem, renderScale)
+  const paint = resolveShapePaint(shapeProps, gradientId)
+  const { linearGradient, fillPaint, fallbackBackground } = paint
   const gradientEndpoints = linearGradient
     ? getLinearGradientUnitEndpoints(linearGradient.angle)
     : null
-  const fillPaint = fillEnabled ? (linearGradient ? `url(#${gradientId})` : fillColor) : 'none'
-  const fallbackBackground = linearGradient
-    ? `linear-gradient(${linearGradient.angle + 90}deg, ${linearGradient.startColor}, ${linearGradient.endColor})`
-    : fillColor
+  const {
+    shapeType,
+    pathClosed,
+    strokeEnabled,
+    strokeColor,
+    strokeWidth,
+    cornerRadius,
+    direction,
+    points,
+    innerRadius,
+    strokeLineCap,
+    strokePaint: strokeProps,
+    trimPath: trimPathProps,
+    taper: taperProps,
+  } = shapeProps
 
   // Get dimensions with preview support for real-time gizmo scaling
   // Priority: Unified preview (group/properties) > Single gizmo preview > Base transform
@@ -292,24 +127,6 @@ export const ShapeContent: React.FC<{ item: ShapeItem & { _sequenceFrameOffset?:
       </defs>
     ) : undefined
 
-  // Common stroke props
-  const strokeProps =
-    strokeEnabled && strokeWidth > 0 && strokeColor
-      ? {
-          stroke: strokeColor,
-          strokeWidth,
-          strokeLinecap: strokeLineCap,
-          strokeLinejoin: strokeLineJoin,
-          strokeMiterlimit: strokeMiterLimit,
-        }
-      : {}
-  const trimPathProps = { trimPathStart, trimPathEnd, trimPathOffset }
-  const taperProps = {
-    taperStartWidth,
-    taperEndWidth,
-    taperStartLength,
-    taperEndLength,
-  }
 
   // Check if aspect ratio is locked (for squish/squash behavior)
   // Read from preview transforms if available, otherwise from item
