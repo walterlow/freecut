@@ -31,12 +31,15 @@ import { getSharedShapeValues } from './shape-section-shared-values'
 import { ShapeFillControls } from './shape-fill-controls'
 import { ShapePathControls } from './shape-path-controls'
 import {
+  ShapeTrimTaperControls,
+  type StrokePathProperty,
+} from './shape-trim-taper-controls'
+import {
   ShapeStrokeControls,
   ShapeStrokeJoinControls,
 } from './shape-stroke-controls'
 import { MIN_ENABLED_STROKE_WIDTH, DEFAULT_STROKE_COLOR } from './shape-section-constants'
 import { ShapeKindControls } from './shape-kind-controls'
-import { demixValue } from '../utils'
 
 // Shape type options
 const SHAPE_TYPE_OPTIONS: { value: ShapeType; labelKey: string }[] = [
@@ -416,14 +419,6 @@ export function ShapeSection({ items }: ShapeSectionProps) {
     [updateShapeItems, clearPreview],
   )
 
-  type StrokePathProperty =
-    | 'trimPathStart'
-    | 'trimPathEnd'
-    | 'trimPathOffset'
-    | 'taperStartWidth'
-    | 'taperEndWidth'
-    | 'taperStartLength'
-    | 'taperEndLength'
 
   const previewStrokePathProperty = useCallback(
     (property: StrokePathProperty, value: number) => {
@@ -657,152 +652,21 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         onInnerRadiusReset={() => resetNumericProperty('innerRadius', 0.5)}
       />
 
-      {controlVisibility.showTrimPaths && (
-        <>
-          <div className="border-t border-border my-3" />
-
-          <div className="px-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {t('editor.shapeSection.trimPaths')}
-          </div>
-          <PropertyRow label={t('editor.shapeSection.trimStart')}>
-            <PropertySliderControl
-              value={sharedValues.trimPathStart}
-              onChange={(value) => commitStrokePathProperty('trimPathStart', value)}
-              onLiveChange={(value) => previewStrokePathProperty('trimPathStart', value)}
-              min={0}
-              max={100}
-              step={1}
-              unit="%"
-              keyframe={{
-                itemIds,
-                property: 'trimPathStart',
-                currentValue: demixValue(sharedValues.trimPathStart, 0),
-              }}
-              onReset={() => resetNumericProperty('trimPathStart', 0)}
-              resetLabel={t('editor.shapeSection.resetToDefault')}
-            />
-          </PropertyRow>
-          <PropertyRow label={t('editor.shapeSection.trimEnd')}>
-            <PropertySliderControl
-              value={sharedValues.trimPathEnd}
-              onChange={(value) => commitStrokePathProperty('trimPathEnd', value)}
-              onLiveChange={(value) => previewStrokePathProperty('trimPathEnd', value)}
-              min={0}
-              max={100}
-              step={1}
-              unit="%"
-              keyframe={{
-                itemIds,
-                property: 'trimPathEnd',
-                currentValue: demixValue(sharedValues.trimPathEnd, 100),
-              }}
-              onReset={() => resetNumericProperty('trimPathEnd', 100)}
-              resetLabel={t('editor.shapeSection.resetToDefault')}
-            />
-          </PropertyRow>
-          <PropertyRow label={t('editor.shapeSection.trimOffset')}>
-            <PropertySliderControl
-              value={sharedValues.trimPathOffset}
-              onChange={(value) => commitStrokePathProperty('trimPathOffset', value)}
-              onLiveChange={(value) => previewStrokePathProperty('trimPathOffset', value)}
-              min={-360}
-              max={360}
-              step={1}
-              unit="°"
-              liveChangeThrottleMs={0}
-              keyframe={{
-                itemIds,
-                property: 'trimPathOffset',
-                currentValue: demixValue(sharedValues.trimPathOffset, 0),
-              }}
-              onReset={() => resetNumericProperty('trimPathOffset', 0)}
-              resetLabel={t('editor.shapeSection.resetToDefault')}
-            />
-          </PropertyRow>
-        </>
-      )}
-
-      {controlVisibility.showTaper && (
-        <>
-          <div className="border-t border-border my-3" />
-
-          <div className="px-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {t('editor.shapeSection.taper')}
-          </div>
-          <PropertyRow label={t('editor.shapeSection.taperStartWidth')}>
-            <PropertySliderControl
-              value={sharedValues.taperStartWidth}
-              onChange={(value) => commitStrokePathProperty('taperStartWidth', value)}
-              onLiveChange={(value) => previewStrokePathProperty('taperStartWidth', value)}
-              min={0}
-              max={200}
-              step={1}
-              unit="%"
-              keyframe={{
-                itemIds,
-                property: 'taperStartWidth',
-                currentValue: demixValue(sharedValues.taperStartWidth, 100),
-              }}
-              onReset={() => resetNumericProperty('taperStartWidth', 100)}
-              resetLabel={t('editor.shapeSection.resetToDefault')}
-            />
-          </PropertyRow>
-          <PropertyRow label={t('editor.shapeSection.taperStartLength')}>
-            <PropertySliderControl
-              value={sharedValues.taperStartLength}
-              onChange={(value) => commitStrokePathProperty('taperStartLength', value)}
-              onLiveChange={(value) => previewStrokePathProperty('taperStartLength', value)}
-              min={0}
-              max={100}
-              step={1}
-              unit="%"
-              keyframe={{
-                itemIds,
-                property: 'taperStartLength',
-                currentValue: demixValue(sharedValues.taperStartLength, 0),
-              }}
-              onReset={() => resetNumericProperty('taperStartLength', 0)}
-              resetLabel={t('editor.shapeSection.resetToDefault')}
-            />
-          </PropertyRow>
-          <PropertyRow label={t('editor.shapeSection.taperEndWidth')}>
-            <PropertySliderControl
-              value={sharedValues.taperEndWidth}
-              onChange={(value) => commitStrokePathProperty('taperEndWidth', value)}
-              onLiveChange={(value) => previewStrokePathProperty('taperEndWidth', value)}
-              min={0}
-              max={200}
-              step={1}
-              unit="%"
-              keyframe={{
-                itemIds,
-                property: 'taperEndWidth',
-                currentValue: demixValue(sharedValues.taperEndWidth, 100),
-              }}
-              onReset={() => resetNumericProperty('taperEndWidth', 100)}
-              resetLabel={t('editor.shapeSection.resetToDefault')}
-            />
-          </PropertyRow>
-          <PropertyRow label={t('editor.shapeSection.taperEndLength')}>
-            <PropertySliderControl
-              value={sharedValues.taperEndLength}
-              onChange={(value) => commitStrokePathProperty('taperEndLength', value)}
-              onLiveChange={(value) => previewStrokePathProperty('taperEndLength', value)}
-              min={0}
-              max={100}
-              step={1}
-              unit="%"
-              keyframe={{
-                itemIds,
-                property: 'taperEndLength',
-                currentValue: demixValue(sharedValues.taperEndLength, 0),
-              }}
-              onReset={() => resetNumericProperty('taperEndLength', 0)}
-              resetLabel={t('editor.shapeSection.resetToDefault')}
-            />
-          </PropertyRow>
-        </>
-      )}
+      <ShapeTrimTaperControls
+        showTrimPaths={controlVisibility.showTrimPaths}
+        showTaper={controlVisibility.showTaper}
+        trimPathStart={sharedValues.trimPathStart}
+        trimPathEnd={sharedValues.trimPathEnd}
+        trimPathOffset={sharedValues.trimPathOffset}
+        taperStartWidth={sharedValues.taperStartWidth}
+        taperEndWidth={sharedValues.taperEndWidth}
+        taperStartLength={sharedValues.taperStartLength}
+        taperEndLength={sharedValues.taperEndLength}
+        itemIds={itemIds}
+        onPreviewProperty={previewStrokePathProperty}
+        onCommitProperty={commitStrokePathProperty}
+        onResetProperty={resetNumericProperty}
+      />
 
       {/* Mask Section Divider */}
       <div className="border-t border-border my-3" />
