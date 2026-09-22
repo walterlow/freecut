@@ -16,7 +16,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { KeyframeGraphPanelHeader } from './keyframe-graph-panel-header'
 import { toast } from 'sonner'
@@ -104,25 +103,29 @@ import {
 import { getDirectPropertyLinks, isTransformAnimatableProperty } from '@/types/keyframe'
 import { buildEffectPropertyResetPlan } from '@/features/timeline/utils/effect-property-reset'
 import { VectorSpeedGraph } from './vector-speed-graph'
-import {
-  resolveEditorScalarLane,
-  shouldShowSeparatedPosition,
-} from './edit-keyframe-panel-model'
+import { shouldShowSeparatedPosition } from './edit-keyframe-panel-model'
 import {
   applyKeyframeMoveEntry,
   applyVectorPromotion,
+  buildEditorKeyframesByProperty,
   buildKeyframePastePlan,
   buildLegacyVectorPromotionAtFrame,
   buildPasteSkipReasons,
+  buildVectorControlRows,
   clampFrameToBlockedRanges,
   duplicateVectorKeyframeEntry,
+  filterVectorControlRows,
+  getBezierEditorEasing,
   getEditableVectorProxy,
   pasteVectorKeyframePayload,
   promoteLegacyVectorEntryForMove,
   recordPromotedVectorDragIds,
+  supportsVectorTransform,
   VECTOR_COMPOUND_PRIMARY,
+  type KeyframeEditorSurface,
   type KeyframeMoveEntry,
   type PendingVectorMove,
+  type VectorEditorRow,
 } from './keyframe-graph-panel-model'
 
 /** Height of the panel header bar in pixels */
@@ -165,7 +168,7 @@ interface KeyframeGraphPanelProps {
   /** Toggle the Animate workspace's focused keyframe layout. */
   onFocusModeChange?: (isFocusMode: boolean) => void
   /** Motion workspace context: a dedicated selected-layer value-curve editor. */
-  surface?: 'default' | 'edit' | 'motion'
+  surface?: KeyframeEditorSurface
   /** Initial parameter groups shown by this workspace; users can change them from Parameters. */
   initialVisibleGroupIds?: readonly string[]
   /** Optional property-column width for workspace-specific layouts. */
@@ -208,21 +211,6 @@ const EASING_OPTIONS: Array<{
     defaultLabel: 'Ease Out',
   },
 ]
-
-function supportsVectorTransform(item: TimelineItem | null): item is TimelineItem {
-  return Boolean(item && item.type !== 'audio' && item.type !== 'adjustment')
-}
-
-const EASINGS_WITH_EDITABLE_BEZIER = new Set<EasingType>([
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'linear',
-])
-
-function getBezierEditorEasing(easing: EasingType | undefined): EasingType {
-  return easing && EASINGS_WITH_EDITABLE_BEZIER.has(easing) ? easing : 'cubic-bezier'
-}
 
 function updateStoredVectorKeyframe(params: {
   itemId: string
@@ -291,202 +279,6 @@ function promoteAndRemoveLegacyVectorRef(params: {
   applyVectorPromotion({ itemId: params.ref.itemId, plan: promotion.plan, commit: true })
   params.removedKeys.add(key)
   return true
-}
-
-interface VectorEditorRow {
-  property: VectorAnimatableProperty
-  proxyProperty: 'x' | 'width' | 'anchorX'
-  secondaryProxyProperty: 'y' | 'height' | 'anchorY'
-  label: string
-  value: { x: number; y: number }
-  preExpressionValue: { x: number; y: number }
-  unit: string
-  keyframes: NonNullable<ItemKeyframes['vectorProperties']>[number]['keyframes']
-  currentKeyframeId?: string
-  persisted: boolean
-}
-
-function getPersistedVectorLane(
-  itemKeyframes: ItemKeyframes | null | undefined,
-  property: VectorAnimatableProperty,
-) {
-  return itemKeyframes?.vectorProperties?.find((candidate) => candidate.property === property)
-}
-
-function getVectorEditorLane(
-  property: VectorAnimatableProperty,
-  itemKeyframes: ItemKeyframes | null | undefined,
-  baseTransform: ResolvedTransform,
-) {
-  return (
-    getPersistedVectorLane(itemKeyframes, property) ??
-    buildVectorPromotionPlan({
-      property,
-      itemKeyframes: itemKeyframes ?? undefined,
-      baseTransform,
-      createId: (frame) => `legacy-${property}-${frame}`,
-    }).vectorProperty
-  )
-}
-
-function addVectorProxyKeyframes(
-  result: Partial<Record<AnimatableProperty, Keyframe[]>>,
-  itemKeyframes: ItemKeyframes | null | undefined,
-  baseTransform: ResolvedTransform,
-) {
-  const lanes = {
-    position: getVectorEditorLane('position', itemKeyframes, baseTransform),
-    scale: getVectorEditorLane('scale', itemKeyframes, baseTransform),
-    anchor: getVectorEditorLane('anchor', itemKeyframes, baseTransform),
-  }
-  result.x = resolveEditorScalarLane(itemKeyframes, 'position', 'x', 'x', lanes.position.keyframes)
-  result.y = resolveEditorScalarLane(itemKeyframes, 'position', 'y', 'y', lanes.position.keyframes)
-  result.width = resolveEditorScalarLane(
-    itemKeyframes,
-    'scale',
-    'width',
-    'x',
-    lanes.scale.keyframes,
-  )
-  result.height = resolveEditorScalarLane(
-    itemKeyframes,
-    'scale',
-    'height',
-    'y',
-    lanes.scale.keyframes,
-  )
-  result.anchorX = resolveEditorScalarLane(
-    itemKeyframes,
-    'anchor',
-    'anchorX',
-    'x',
-    lanes.anchor.keyframes,
-  )
-  result.anchorY = resolveEditorScalarLane(
-    itemKeyframes,
-    'anchor',
-    'anchorY',
-    'y',
-    lanes.anchor.keyframes,
-  )
-}
-
-function trimEditorKeyframesToDuration(
-  result: Partial<Record<AnimatableProperty, Keyframe[]>>,
-  duration: number,
-) {
-  for (const property of Object.keys(result) as AnimatableProperty[]) {
-    result[property] = result[property]?.filter((keyframe) => keyframe.frame < duration) ?? []
-  }
-}
-
-function buildEditorKeyframesByProperty(params: {
-  properties: AnimatableProperty[]
-  item: TimelineItem | null
-  itemKeyframes: ItemKeyframes | null | undefined
-  canvas: CanvasSettings
-  trimToItemBounds: boolean
-}): Partial<Record<AnimatableProperty, Keyframe[]>> {
-  if (!params.item) return {}
-  const stored = new Map(
-    (params.itemKeyframes?.properties ?? []).map((property) => [
-      property.property,
-      property.keyframes,
-    ]),
-  )
-  const result = Object.fromEntries(
-    params.properties.map((property) => [property, stored.get(property) ?? []]),
-  ) as Partial<Record<AnimatableProperty, Keyframe[]>>
-  if (supportsVectorTransform(params.item)) {
-    addVectorProxyKeyframes(
-      result,
-      params.itemKeyframes,
-      resolveTransform(params.item, params.canvas, getSourceDimensions(params.item)),
-    )
-  }
-  if (params.trimToItemBounds) trimEditorKeyframesToDuration(result, params.item.durationInFrames)
-  return result
-}
-
-function buildVectorControlRows(params: {
-  itemKeyframes: ItemKeyframes | null | undefined
-  base: ResolvedTransform
-  resolved: ResolvedTransform
-  preExpression: ResolvedTransform
-  relativeFrame: number
-  t: TFunction
-}): VectorEditorRow[] {
-  const positionLane = getVectorEditorLane('position', params.itemKeyframes, params.base)
-  const scaleLane = getVectorEditorLane('scale', params.itemKeyframes, params.base)
-  const anchorLane = getVectorEditorLane('anchor', params.itemKeyframes, params.base)
-  return [
-    {
-      property: 'position',
-      proxyProperty: 'x',
-      secondaryProxyProperty: 'y',
-      label: params.t('editor.layoutSection.position', { defaultValue: 'Position' }),
-      value: { x: params.resolved.x, y: params.resolved.y },
-      preExpressionValue: { x: params.preExpression.x, y: params.preExpression.y },
-      unit: 'px',
-      keyframes: positionLane.keyframes,
-      currentKeyframeId: positionLane.keyframes.find(
-        (keyframe) => keyframe.frame === params.relativeFrame,
-      )?.id,
-      persisted: Boolean(getPersistedVectorLane(params.itemKeyframes, 'position')),
-    },
-    {
-      property: 'scale',
-      proxyProperty: 'width',
-      secondaryProxyProperty: 'height',
-      label: params.t('editor.textProperties.scale', { defaultValue: 'Scale' }),
-      value: {
-        x: toVectorScalePercent(params.resolved.width, params.base.width),
-        y: toVectorScalePercent(params.resolved.height, params.base.height),
-      },
-      preExpressionValue: {
-        x: toVectorScalePercent(params.preExpression.width, params.base.width),
-        y: toVectorScalePercent(params.preExpression.height, params.base.height),
-      },
-      unit: '%',
-      keyframes: scaleLane.keyframes,
-      currentKeyframeId: scaleLane.keyframes.find(
-        (keyframe) => keyframe.frame === params.relativeFrame,
-      )?.id,
-      persisted: Boolean(getPersistedVectorLane(params.itemKeyframes, 'scale')),
-    },
-    {
-      property: 'anchor',
-      proxyProperty: 'anchorX',
-      secondaryProxyProperty: 'anchorY',
-      label: params.t('editor.layoutSection.anchor', { defaultValue: 'Anchor' }),
-      value: { x: params.resolved.anchorX, y: params.resolved.anchorY },
-      preExpressionValue: {
-        x: params.preExpression.anchorX,
-        y: params.preExpression.anchorY,
-      },
-      unit: 'px',
-      keyframes: anchorLane.keyframes,
-      currentKeyframeId: anchorLane.keyframes.find(
-        (keyframe) => keyframe.frame === params.relativeFrame,
-      )?.id,
-      persisted: Boolean(getPersistedVectorLane(params.itemKeyframes, 'anchor')),
-    },
-  ]
-}
-
-function filterVectorControlRows(
-  rows: VectorEditorRow[],
-  itemKeyframes: ItemKeyframes | null | undefined,
-  surface: KeyframeGraphPanelProps['surface'],
-  positionDimensionsSeparated: boolean,
-): VectorEditorRow[] {
-  if (surface !== 'edit') return rows
-  const explicitlySeparated = new Set(itemKeyframes?.separatedVectorProperties ?? [])
-  return rows.filter(
-    (row) =>
-      !explicitlySeparated.has(row.property) &&
-      !(row.property === 'position' && positionDimensionsSeparated),
-  )
 }
 
 function selectPromotedVectorKeyframe(params: {
