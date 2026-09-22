@@ -137,7 +137,9 @@ function installProxyStorageFixture(options: {
   return { proxyDirectory, proxyRoot, removeEntry, root }
 }
 
-describe('proxyService.loadExistingProxies', () => {
+// Startup-scan suite: measured just over vitest's 5s default under v8 coverage on a
+// loaded runner. Scoped here so a hang elsewhere still fails fast.
+describe('proxyService.loadExistingProxies', { timeout: 15_000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()

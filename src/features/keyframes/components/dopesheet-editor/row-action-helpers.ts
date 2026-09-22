@@ -136,3 +136,86 @@ export function collectInitialFrames(
   }
   return initialFrames
 }
+
+export type PointerSelectionModifier = 'shift' | 'toggle' | 'replace'
+
+/** Which selection gesture a pointer-down carries, from its modifier keys alone. */
+export function getPointerSelectionModifier(event: {
+  shiftKey: boolean
+  ctrlKey: boolean
+  metaKey: boolean
+}): PointerSelectionModifier {
+  if (event.shiftKey && !event.ctrlKey && !event.metaKey) return 'shift'
+  if (event.ctrlKey || event.metaKey) return 'toggle'
+  return 'replace'
+}
+
+/**
+ * The selection a click lands on: the existing selection when the clicked keyframe
+ * is part of it, otherwise that keyframe alone. `selectedIdsForDrag` stays narrower
+ * than `baseSelection` for a click on an unselected keyframe, so the drag moves only
+ * what the click just selected.
+ */
+export function resolveClickSelection(
+  selected: ReadonlySet<string>,
+  keyframeId: string,
+): { baseSelection: Set<string>; selectedIdsForDrag: string[] } {
+  const isSelected = selected.has(keyframeId)
+  const baseSelection = isSelected ? new Set(selected) : new Set([keyframeId])
+  const selectedIdsForDrag = isSelected && baseSelection.size > 1 ? Array.from(baseSelection) : [keyframeId]
+  return { baseSelection, selectedIdsForDrag }
+}
+
+/** Group equivalent of {@link resolveClickSelection}: all-or-nothing per frame group. */
+export function resolveGroupClickSelection(
+  selected: ReadonlySet<string>,
+  keyframeIds: string[],
+): { baseSelection: Set<string>; selectedIdsForDrag: string[]; allSelected: boolean } {
+  const allSelected = keyframeIds.every((keyframeId) => selected.has(keyframeId))
+  const baseSelection = allSelected ? new Set(selected) : new Set(keyframeIds)
+  const selectedIdsForDrag =
+    allSelected && baseSelection.size > keyframeIds.length ? Array.from(baseSelection) : keyframeIds
+  return { baseSelection, selectedIdsForDrag, allSelected }
+}
+
+/** Modifier-driven selection for one keyframe; null when the gesture is a plain click. */
+export function resolveKeyframeModifierSelection(
+  modifier: PointerSelectionModifier,
+  selected: ReadonlySet<string>,
+  keyframeId: string,
+  rangeCandidates: Keyframe[] | undefined,
+  anchorId: string | undefined,
+): Set<string> | null {
+  if (modifier === 'replace') return null
+  return modifier === 'shift'
+    ? resolveShiftRangeSelection(rangeCandidates ?? [], keyframeId, anchorId, selected)
+    : toggleKeyframeInSelection(selected, keyframeId)
+}
+
+/** Modifier-driven selection for a frame group; null when the gesture is a plain click. */
+export function resolveGroupModifierSelection(
+  modifier: PointerSelectionModifier,
+  selected: ReadonlySet<string>,
+  keyframeIds: readonly string[],
+): Set<string> | null {
+  if (modifier === 'replace') return null
+  return modifier === 'shift'
+    ? new Set([...selected, ...keyframeIds])
+    : toggleKeyframesInSelection(selected, keyframeIds)
+}
+
+/** Whether a group pointer-down should be ignored outright (disabled row or non-primary button). */
+export function isGroupPointerDownIgnored(
+  disabled: boolean,
+  event: { button: number },
+): boolean {
+  return disabled || event.button !== 0
+}
+
+/** The frame-group entries a drag may move: those whose property is not locked. */
+export function getMovableGroupEntries<T extends { property: AnimatableProperty }>(
+  entries: T[],
+  isPropertyLocked: (property: AnimatableProperty) => boolean,
+): T[] {
+  return entries.filter(({ property }) => !isPropertyLocked(property))
+}

@@ -1,6 +1,7 @@
 import React from 'react'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, configure, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
+
 import type { TimelineItem } from '@/types/timeline'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
@@ -15,6 +16,12 @@ import { setTimelineState } from '@/features/preview/deps/timeline-test-helpers-
 import { useMediaLibraryStore } from '@/features/preview/deps/media-library'
 import { useGizmoStore } from '../stores/gizmo-store'
 import { useMaskEditorStore } from '../stores/mask-editor-store'
+
+// This suite's waits cover animation-frame chains plus async render work, which under
+// coverage instrumentation on a loaded runner legitimately exceed the 1s async-util
+// default. Scoped to this file: every other suite keeps the strict default, so an
+// unrelated async failure still fails within a second. Real hangs still fail, later.
+configure({ asyncUtilTimeout: 5_000 })
 
 const DEFAULT_PROJECT = { width: 1920, height: 1080, backgroundColor: '#000000' }
 

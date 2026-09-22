@@ -50,11 +50,15 @@ import { useGraphViewState } from './use-graph-view-state'
 import { useGroupExpansion } from './use-group-expansion'
 import { useHeaderFrameInputs } from './use-header-frame-inputs'
 import { usePropertyFilters } from './use-property-filters'
+import { useRulerScrub } from './use-ruler-scrub'
 import { useDopesheetMarquee } from './use-dopesheet-marquee'
 import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useElementSize } from './use-element-size'
-import { addWindowPointerListeners } from './dopesheet-pointer-listeners'
+import { useKeyframeDrag } from './use-keyframe-drag'
+import {
+  getDopesheetDragPixelsPerFrame,
+} from './dopesheet-drag-math'
 import { DopesheetHeaderFrameInputs } from './dopesheet-header-frame-inputs'
 import { DopesheetRulerHeader } from './dopesheet-ruler-header'
 import { DopesheetLiveRulerCanvas } from './dopesheet-live-ruler-canvas'
@@ -63,12 +67,8 @@ import { syncDopesheetLivePixelGeometry } from './dopesheet-live-pixel-geometry'
 import { perfMarkRender } from '@/shared/logging/perf-marks'
 import {
   TIMELINE_LIVE_SCROLL_EVENT,
-  getTimelineScrubViewportProgress,
-  notifyTimelineScrubVisualFrame,
 } from '@/shared/timeline/live-scroll-sync'
 import {
-  beginTimelineSkimmerScrub,
-  endTimelineSkimmerScrub,
 } from '@/shared/timeline/main-timeline-scrub'
 import { DopesheetSheetBody } from './dopesheet-sheet-body'
 
@@ -140,8 +140,6 @@ import { GroupTimelineCell, PropertyTimelineCell } from './dopesheet-timeline-ce
 import type { SegmentEasingChange } from './segment-easing-popover'
 
 import {
-  getEdgeScrollDelta,
-  getPlayheadEdgeScrollVelocity,
 } from '@/features/keyframes/deps/timeline-playhead'
 import {
   DRAG_THRESHOLD,
@@ -189,17 +187,13 @@ import {
 import {
   buildPropertyKeyframeRefs,
   buildRowKeyframeRefs,
-  collectInitialFrames,
   removeSelectionIds,
-  resolveShiftRangeSelection,
-  toggleKeyframeInSelection,
-  toggleKeyframesInSelection,
 } from './row-action-helpers'
 import {
   getKeyframeGroupLabel,
   getKeyframePropertyLabel,
 } from '@/features/keyframes/utils/property-i18n'
-import { useCoalescedScrub } from '../use-coalesced-scrub'
+
 import { getScrubbedPropertyValue } from './property-value-scrub'
 import { TextMotionTimelineRows } from './text-motion-timeline-rows'
 
@@ -649,89 +643,8 @@ function buildExpressionDockContext(params: {
 
 const EMPTY_FRAME_GROUPS: DopesheetPropertyGroupStructure<StructureRow>['frameGroups'] = []
 
-function getMatchingDragState(
-  dragState: DragState | null,
-  event: PointerEvent,
-  disabled: boolean,
-): DragState | null {
-  if (disabled || !dragState || dragState.pointerId !== event.pointerId) return null
-  return dragState
-}
 
-function startDopesheetDrag(
-  dragState: DragState,
-  deltaX: number,
-  onDragStart: (() => void) | undefined,
-): boolean {
-  if (dragState.started) return true
-  if (Math.abs(deltaX) <= DRAG_THRESHOLD) return false
-  dragState.started = true
-  if (!dragState.duplicateOnCommit) onDragStart?.()
-  return true
-}
 
-function getDopesheetDragDelta(
-  dragState: DragState,
-  event: PointerEvent,
-  pixelsPerFrame: number,
-  totalFrames: number,
-  snapEnabled: boolean,
-  snapFrame: (frame: number) => number,
-): number {
-  const deltaX = event.clientX - dragState.startClientX
-  let deltaFrames = Math.round(deltaX / pixelsPerFrame)
-  if (!snapEnabled || event.ctrlKey || event.metaKey) return deltaFrames
-  const anchorInitialFrame = dragState.initialFrames.get(dragState.anchorKeyframeId)
-  if (anchorInitialFrame === undefined) return deltaFrames
-  const anchorCandidate = clampFrame(anchorInitialFrame + deltaFrames, totalFrames)
-  deltaFrames += snapFrame(anchorCandidate) - anchorCandidate
-  return deltaFrames
-}
-
-function getDopesheetDragPixelsPerFrame(
-  getLivePixelsPerSecond: (() => number) | undefined,
-  fallbackPixelsPerSecond: number,
-  fps: number,
-): number {
-  const livePixelsPerSecond = getLivePixelsPerSecond?.()
-  const pixelsPerSecond =
-    livePixelsPerSecond !== undefined &&
-    Number.isFinite(livePixelsPerSecond) &&
-    livePixelsPerSecond > 0
-      ? livePixelsPerSecond
-      : fallbackPixelsPerSecond
-  return pixelsPerSecond / Math.max(fps, 1)
-}
-
-function getLiveRulerFrame({
-  viewportX,
-  fallbackFrame,
-  scrollContainer,
-  livePixelsPerSecond,
-  fps,
-  itemFrom,
-}: {
-  viewportX: number
-  fallbackFrame: number
-  scrollContainer: HTMLDivElement | null | undefined
-  livePixelsPerSecond: number | undefined
-  fps: number
-  itemFrom: number
-}): number {
-  if (!scrollContainer || !livePixelsPerSecond || livePixelsPerSecond <= 0) return fallbackFrame
-  return Math.round(
-    ((scrollContainer.scrollLeft + viewportX) / livePixelsPerSecond) * fps - itemFrom,
-  )
-}
-
-function getDopesheetTimelineClientBounds(
-  node: HTMLDivElement,
-  borderWidth: number,
-  timelineWidth: number,
-): { left: number; right: number } {
-  const left = node.getBoundingClientRect().left + borderWidth
-  return { left, right: left + timelineWidth }
-}
 
 const TimelineViewportCuller = memo(function TimelineViewportCuller({
   children,
@@ -2506,158 +2419,35 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       onSelectionPreviewChange: handleMarqueeSelectionPreviewChange,
     })
 
-  const handleKeyframePointerDown = useCallback(
-    (
-      property: AnimatableProperty,
-      keyframeId: string,
-      event: React.PointerEvent<HTMLButtonElement>,
-    ) => {
-      if (disabled) return
-      if (isPropertyLocked(property)) return
-      event.preventDefault()
-      event.stopPropagation()
-      onActivePropertyChange?.(property)
+  const keyframeDrag = useKeyframeDrag({
+    disabled,
+    totalFrames,
+    snapEnabled,
+    snapFrame,
+    isPropertyLocked,
+    selectedKeyframeIds,
+    rowKeyframesByProperty,
+    keyframeMetaByIdRef,
+    dragStateRef,
+    selectionAnchorByPropertyRef,
+    scheduleDragPreviewFrames,
+    buildSelectionFramePreview,
+    commitSelectionFramePreview,
+    duplicateSelectionFramePreview,
+    getLiveDragPixelsPerFrame,
+    onSelectionChange,
+    onActivePropertyChange,
+    onDragStart,
+    onDragEnd,
+    onDragCancel,
+    onSelectionFrameDelta,
+    onKeyframeMove,
+    onDuplicateKeyframes,
+  })
+  const handleKeyframePointerDown = keyframeDrag.handleKeyframePointerDown
+  const handleGroupKeyframePointerDown = keyframeDrag.handleGroupKeyframePointerDown
 
-      if (event.shiftKey && !event.ctrlKey && !event.metaKey) {
-        const propertyKeyframes = rowKeyframesByProperty.get(property) ?? []
-        const anchorId = selectionAnchorByPropertyRef.current.get(property)
-        const nextSelection = resolveShiftRangeSelection(
-          propertyKeyframes,
-          keyframeId,
-          anchorId,
-          selectedKeyframeIds,
-        )
-        onSelectionChange?.(nextSelection, { preserveExternalSelection: true })
-        selectionAnchorByPropertyRef.current.set(property, keyframeId)
-        return
-      }
 
-      if (event.ctrlKey || event.metaKey) {
-        const nextSelection = toggleKeyframeInSelection(selectedKeyframeIds, keyframeId)
-        onSelectionChange?.(nextSelection, { preserveExternalSelection: true })
-        selectionAnchorByPropertyRef.current.set(property, keyframeId)
-        return
-      }
-
-      const baseSelection = selectedKeyframeIds.has(keyframeId)
-        ? new Set(selectedKeyframeIds)
-        : new Set([keyframeId])
-
-      if (!selectedKeyframeIds.has(keyframeId)) {
-        onSelectionChange?.(baseSelection)
-      }
-      selectionAnchorByPropertyRef.current.set(property, keyframeId)
-
-      const selectedIdsForDrag =
-        baseSelection.has(keyframeId) && baseSelection.size > 1
-          ? Array.from(baseSelection)
-          : [keyframeId]
-
-      const initialFrames = new Map<string, number>()
-      for (const id of selectedIdsForDrag) {
-        const meta = keyframeMetaByIdRef.current.get(id)
-        if (!meta) continue
-        initialFrames.set(id, meta.keyframe.frame)
-      }
-
-      dragStateRef.current = {
-        anchorKeyframeId: keyframeId,
-        selectedKeyframeIds: selectedIdsForDrag,
-        initialFrames,
-        startClientX: event.clientX,
-        pointerId: event.pointerId,
-        started: false,
-        duplicateOnCommit: !!onDuplicateKeyframes && event.altKey,
-        appliedDeltaFrames: 0,
-      }
-      scheduleDragPreviewFrames(null)
-
-      setPointerCaptureSafely(event.currentTarget, event.pointerId)
-    },
-    [
-      disabled,
-      isPropertyLocked,
-      onDuplicateKeyframes,
-      onActivePropertyChange,
-      rowKeyframesByProperty,
-      scheduleDragPreviewFrames,
-      selectedKeyframeIds,
-      onSelectionChange,
-    ],
-  )
-  const handleGroupKeyframePointerDown = useCallback(
-    (
-      frameGroup: DopesheetPropertyGroup['frameGroups'][number],
-      event: React.PointerEvent<HTMLButtonElement>,
-    ) => {
-      if (disabled) return
-      if (event.button !== 0) return
-
-      const movableEntries = frameGroup.keyframes.filter(
-        ({ property }) => !isPropertyLocked(property),
-      )
-      if (movableEntries.length === 0) return
-
-      event.preventDefault()
-      event.stopPropagation()
-
-      const keyframeIds = movableEntries.map(({ keyframe }) => keyframe.id)
-      const anchorEntry = movableEntries[0]
-      if (!anchorEntry) return
-
-      if (event.shiftKey && !event.ctrlKey && !event.metaKey) {
-        onSelectionChange?.(new Set([...selectedKeyframeIds, ...keyframeIds]), {
-          preserveExternalSelection: true,
-        })
-        return
-      }
-
-      if (event.ctrlKey || event.metaKey) {
-        const nextSelection = toggleKeyframesInSelection(selectedKeyframeIds, keyframeIds)
-        onSelectionChange?.(nextSelection, { preserveExternalSelection: true })
-        return
-      }
-
-      const allSelected = keyframeIds.every((keyframeId) => selectedKeyframeIds.has(keyframeId))
-      const baseSelection = allSelected ? new Set(selectedKeyframeIds) : new Set(keyframeIds)
-      if (!allSelected) {
-        onSelectionChange?.(baseSelection)
-      }
-      onActivePropertyChange?.(anchorEntry.property)
-      for (const { property, keyframe } of movableEntries) {
-        selectionAnchorByPropertyRef.current.set(property, keyframe.id)
-      }
-
-      const selectedIdsForDrag =
-        allSelected && baseSelection.size > keyframeIds.length
-          ? Array.from(baseSelection)
-          : keyframeIds
-      const initialFrames = collectInitialFrames(selectedIdsForDrag, keyframeMetaByIdRef.current)
-
-      dragStateRef.current = {
-        anchorKeyframeId: anchorEntry.keyframe.id,
-        selectedKeyframeIds: selectedIdsForDrag,
-        initialFrames,
-        startClientX: event.clientX,
-        pointerId: event.pointerId,
-        started: false,
-        duplicateOnCommit: !!onDuplicateKeyframes && event.altKey,
-        appliedDeltaFrames: 0,
-      }
-      scheduleDragPreviewFrames(null)
-
-      setPointerCaptureSafely(event.currentTarget, event.pointerId)
-    },
-    [
-      disabled,
-      isPropertyLocked,
-      onDuplicateKeyframes,
-      onActivePropertyChange,
-      onSelectionChange,
-      scheduleDragPreviewFrames,
-      selectedKeyframeIds,
-    ],
-  )
   const handleRowPointerDown = useCallback(
     (property: AnimatableProperty, event: React.PointerEvent<HTMLDivElement>) => {
       if (disabled) return
@@ -2707,356 +2497,41 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [beginMarqueeSelection, disabled, getMarqueeModeFromPointerEvent, selectedKeyframeIds],
   )
 
-  useEffect(() => {
-    if (!onKeyframeMove && !onDuplicateKeyframes) return
 
-    const handlePointerMove = (event: PointerEvent) => {
-      const dragState = getMatchingDragState(dragStateRef.current, event, disabled)
-      if (!dragState) return
-
-      const deltaX = event.clientX - dragState.startClientX
-      if (!startDopesheetDrag(dragState, deltaX, onDragStart)) return
-      const deltaFrames = getDopesheetDragDelta(
-        dragState,
-        event,
-        getLiveDragPixelsPerFrame(),
-        totalFrames,
-        snapEnabled,
-        snapFrame,
-      )
-
-      const preview = buildSelectionFramePreview(dragState.selectedKeyframeIds, deltaFrames)
-      const externallyHandled =
-        !dragState.duplicateOnCommit && (onSelectionFrameDelta?.(deltaFrames, 'preview') ?? false)
-      dragState.appliedDeltaFrames = externallyHandled ? deltaFrames : preview.appliedDeltaFrames
-      if (!externallyHandled) scheduleDragPreviewFrames(preview.previewFrames)
-    }
-
-    const handlePointerUp = (event: PointerEvent) => {
-      const dragState = dragStateRef.current
-      if (!dragState || dragState.pointerId !== event.pointerId) return
-
-      if (dragState.started) {
-        const deltaFrames = getDopesheetDragDelta(
-          dragState,
-          event,
-          getLiveDragPixelsPerFrame(),
-          totalFrames,
-          snapEnabled,
-          snapFrame,
-        )
-        const preview = buildSelectionFramePreview(dragState.selectedKeyframeIds, deltaFrames)
-        if (dragState.duplicateOnCommit) {
-          duplicateSelectionFramePreview(dragState.selectedKeyframeIds, preview.previewFrames)
-        } else {
-          const externallyHandled = onSelectionFrameDelta?.(deltaFrames, 'commit') ?? false
-          if (!externallyHandled) {
-            commitSelectionFramePreview(dragState.selectedKeyframeIds, preview.previewFrames)
-          }
-          onDragEnd?.()
-        }
-      }
-      dragStateRef.current = null
-      scheduleDragPreviewFrames(null)
-    }
-
-    const handlePointerCancel = (event: PointerEvent) => {
-      const dragState = dragStateRef.current
-      if (!dragState || dragState.pointerId !== event.pointerId) return
-      if (dragState.started && !dragState.duplicateOnCommit) {
-        onSelectionFrameDelta?.(dragState.appliedDeltaFrames, 'cancel')
-        onDragCancel?.()
-      }
-      dragStateRef.current = null
-      scheduleDragPreviewFrames(null)
-    }
-
-    return addWindowPointerListeners(handlePointerMove, handlePointerUp, handlePointerCancel)
-  }, [
+  const rulerScrub = useRulerScrub({
     disabled,
-    buildSelectionFramePreview,
-    commitSelectionFramePreview,
-    duplicateSelectionFramePreview,
-    onKeyframeMove,
-    onDuplicateKeyframes,
-    onDragStart,
-    onDragEnd,
-    onDragCancel,
-    onSelectionFrameDelta,
-    getLiveDragPixelsPerFrame,
+    viewport,
+    effectiveTimelineWidth,
+    timelinePixelsPerSecond,
+    fps,
+    itemFrom,
     totalFrames,
-    snapEnabled,
-    snapFrame,
-    scheduleDragPreviewFrames,
-  ])
+    timelineEdgeInset,
+    timelineCellBorderWidth,
+    scrubClampToItemBounds,
+    scrubFrameBounds,
+    frameToX,
+    globalFrameToPixels,
+    getTimelineXFromClientX,
+    getFrameFromClientX,
+    getLiveDragPixelsPerFrame,
+    getTimelineLivePixelsPerSecond,
+    timelineRef,
+    timelineScrollContainerRef,
+    onScrub,
+    onScrubStart,
+    onScrubEnd,
+    onSkim,
+    onRulerEdgeScroll,
+  })
+  const isRulerScrubbing = rulerScrub.isRulerScrubbing
+  const rulerScrubActiveRef = rulerScrub.rulerScrubActiveRef
+  const rulerScrubHandoffFrameRef = rulerScrub.rulerScrubHandoffFrameRef
+  const handleRulerPointerDown = rulerScrub.handleRulerPointerDown
+  const handleRulerPointerMove = rulerScrub.handleRulerPointerMove
+  const handleRulerPointerLeave = rulerScrub.handleRulerPointerLeave
+  const handleRulerPointerUp = rulerScrub.handleRulerPointerUp
 
-  const scrubPointerIdRef = useRef<number | null>(null)
-  const rulerScrubActiveRef = useRef(false)
-  const rulerScrubHandoffFrameRef = useRef<number | null>(null)
-  const [isRulerScrubbing, setIsRulerScrubbing] = useState(false)
-  const lastScrubbedFrameRef = useRef<number | null>(null)
-  const rulerScrubClientXRef = useRef<number | null>(null)
-  const rulerScrubViewportRef = useRef(viewport)
-  const rulerEdgeScrollRafRef = useRef<number | null>(null)
-  const rulerEdgeScrollTimestampRef = useRef<number | null>(null)
-  const rulerEdgeScrollLoopRef = useRef<(timestamp: number) => void>(() => {})
-  const skimmerScrubOwnerRef = useRef({})
-  const getRulerFrameViewportX = useCallback(
-    (frame: number) => {
-      const mappedX = globalFrameToPixels ? globalFrameToPixels(itemFrom + frame) : frameToX(frame)
-      return Math.max(0, Math.min(effectiveTimelineWidth - 1, mappedX))
-    },
-    [effectiveTimelineWidth, frameToX, globalFrameToPixels, itemFrom],
-  )
-  const getRulerScrubVisualX = useCallback(
-    (clientX: number) => {
-      const pointerX = getTimelineXFromClientX(clientX)
-      if (scrubClampToItemBounds) {
-        return Math.max(
-          getRulerFrameViewportX(0),
-          Math.min(getRulerFrameViewportX(Math.max(0, totalFrames - 1)), pointerX),
-        )
-      }
-      if (scrubFrameBounds) {
-        return Math.max(
-          getRulerFrameViewportX(scrubFrameBounds.minFrame),
-          Math.min(getRulerFrameViewportX(scrubFrameBounds.maxFrame), pointerX),
-        )
-      }
-      return pointerX
-    },
-    [
-      getRulerFrameViewportX,
-      getTimelineXFromClientX,
-      scrubClampToItemBounds,
-      scrubFrameBounds,
-      totalFrames,
-    ],
-  )
-  const notifyLinkedTimelineScrubFrame = useCallback(
-    (frame: number, clientX: number) =>
-      notifyTimelineScrubVisualFrame(timelineScrollContainerRef?.current, {
-        frame: itemFrom + frame,
-        source: 'keyframe',
-        viewportProgress: getTimelineScrubViewportProgress(
-          getRulerScrubVisualX(clientX),
-          effectiveTimelineWidth - 1,
-        ),
-      }),
-    [effectiveTimelineWidth, getRulerScrubVisualX, itemFrom, timelineScrollContainerRef],
-  )
-  if (scrubPointerIdRef.current === null) rulerScrubViewportRef.current = viewport
-  const {
-    startScrub: startRulerScrub,
-    queueScrub: queueRulerScrub,
-    flushPendingScrub: flushPendingRulerScrub,
-  } = useCoalescedScrub(onScrub)
-  const getRulerScrubFrameFromClientX = useCallback(
-    (clientX: number) => {
-      const viewportX = getTimelineXFromClientX(clientX)
-      const fallbackFrame = getFrameFromAxisX(
-        viewportX,
-        rulerScrubViewportRef.current,
-        effectiveTimelineWidth,
-        timelineEdgeInset,
-      )
-      const frame = getLiveRulerFrame({
-        viewportX,
-        fallbackFrame,
-        scrollContainer: timelineScrollContainerRef?.current,
-        livePixelsPerSecond: getTimelineLivePixelsPerSecond?.(),
-        fps,
-        itemFrom,
-      })
-      if (scrubClampToItemBounds) return clampFrame(frame, totalFrames)
-      if (!scrubFrameBounds) return frame
-      return Math.max(scrubFrameBounds.minFrame, Math.min(scrubFrameBounds.maxFrame, frame))
-    },
-    [
-      effectiveTimelineWidth,
-      fps,
-      getTimelineLivePixelsPerSecond,
-      getTimelineXFromClientX,
-      itemFrom,
-      scrubClampToItemBounds,
-      scrubFrameBounds,
-      timelineEdgeInset,
-      timelineScrollContainerRef,
-      totalFrames,
-    ],
-  )
-  rulerEdgeScrollLoopRef.current = (timestamp: number) => {
-    rulerEdgeScrollRafRef.current = null
-    const clientX = rulerScrubClientXRef.current
-    const node = timelineRef.current
-    if (scrubPointerIdRef.current === null || clientX === null || !node || !onRulerEdgeScroll) {
-      return
-    }
-
-    const bounds = getDopesheetTimelineClientBounds(
-      node,
-      timelineCellBorderWidth,
-      effectiveTimelineWidth,
-    )
-    const velocity = getPlayheadEdgeScrollVelocity(clientX, bounds)
-    if (velocity !== 0) {
-      const previousTimestamp = rulerEdgeScrollTimestampRef.current ?? timestamp - 1000 / 60
-      const appliedPixels = onRulerEdgeScroll(
-        getEdgeScrollDelta(velocity, timestamp, previousTimestamp),
-      )
-      if (appliedPixels !== 0 && effectiveTimelineWidth > 0) {
-        const liveViewport = rulerScrubViewportRef.current
-        const frameDelta = appliedPixels / getLiveDragPixelsPerFrame()
-        rulerScrubViewportRef.current = {
-          startFrame: liveViewport.startFrame + frameDelta,
-          endFrame: liveViewport.endFrame + frameDelta,
-        }
-        const frame = getRulerScrubFrameFromClientX(clientX)
-        lastScrubbedFrameRef.current = frame
-        notifyLinkedTimelineScrubFrame(frame, clientX)
-        queueRulerScrub({
-          frame,
-          pointerX: getTimelineXFromClientX(clientX),
-          pixelsPerSecond: timelinePixelsPerSecond,
-        })
-      }
-      rulerEdgeScrollTimestampRef.current = timestamp
-    } else {
-      rulerEdgeScrollTimestampRef.current = null
-    }
-
-    rulerEdgeScrollRafRef.current = requestAnimationFrame((nextTimestamp) =>
-      rulerEdgeScrollLoopRef.current(nextTimestamp),
-    )
-  }
-  useEffect(() => {
-    const skimmerScrubOwner = skimmerScrubOwnerRef.current
-    return () => {
-      if (rulerEdgeScrollRafRef.current !== null) {
-        cancelAnimationFrame(rulerEdgeScrollRafRef.current)
-      }
-      if (scrubPointerIdRef.current !== null) {
-        rulerScrubActiveRef.current = false
-      }
-      endTimelineSkimmerScrub(skimmerScrubOwner)
-    }
-  }, [])
-  const handleRulerPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (disabled || event.button !== 0) return
-      event.preventDefault()
-      rulerScrubHandoffFrameRef.current = null
-      rulerScrubActiveRef.current = true
-      beginTimelineSkimmerScrub(skimmerScrubOwnerRef.current)
-      setIsRulerScrubbing(true)
-      scrubPointerIdRef.current = event.pointerId
-      rulerScrubClientXRef.current = event.clientX
-      rulerScrubViewportRef.current = viewport
-      rulerEdgeScrollTimestampRef.current = null
-      setPointerCaptureSafely(event.currentTarget, event.pointerId)
-      const frame = getRulerScrubFrameFromClientX(event.clientX)
-      lastScrubbedFrameRef.current = frame
-      notifyLinkedTimelineScrubFrame(frame, event.clientX)
-      onScrubStart?.()
-      startRulerScrub({
-        frame,
-        pointerX: getTimelineXFromClientX(event.clientX),
-        pixelsPerSecond: timelinePixelsPerSecond,
-      })
-      if (onRulerEdgeScroll && rulerEdgeScrollRafRef.current === null) {
-        rulerEdgeScrollRafRef.current = requestAnimationFrame((timestamp) =>
-          rulerEdgeScrollLoopRef.current(timestamp),
-        )
-      }
-    },
-    [
-      disabled,
-      getRulerScrubFrameFromClientX,
-      getTimelineXFromClientX,
-      notifyLinkedTimelineScrubFrame,
-      onRulerEdgeScroll,
-      onScrubStart,
-      startRulerScrub,
-      timelinePixelsPerSecond,
-      viewport,
-    ],
-  )
-
-  const handleRulerPointerMove = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (disabled) return
-      const frame = getFrameFromClientX(event.clientX)
-      onSkim?.(frame)
-      if (scrubPointerIdRef.current !== event.pointerId) return
-      rulerScrubClientXRef.current = event.clientX
-      const scrubFrame = getRulerScrubFrameFromClientX(event.clientX)
-      notifyLinkedTimelineScrubFrame(scrubFrame, event.clientX)
-      if (scrubFrame === lastScrubbedFrameRef.current) return
-      lastScrubbedFrameRef.current = scrubFrame
-      queueRulerScrub({
-        frame: scrubFrame,
-        pointerX: getTimelineXFromClientX(event.clientX),
-        pixelsPerSecond: timelinePixelsPerSecond,
-      })
-    },
-    [
-      disabled,
-      getFrameFromClientX,
-      getRulerScrubFrameFromClientX,
-      getTimelineXFromClientX,
-      notifyLinkedTimelineScrubFrame,
-      onSkim,
-      queueRulerScrub,
-      timelinePixelsPerSecond,
-    ],
-  )
-
-  const handleRulerPointerLeave = useCallback(() => {
-    if (scrubPointerIdRef.current === null) onSkim?.(null)
-  }, [onSkim])
-
-  const handleRulerPointerUp = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (scrubPointerIdRef.current !== event.pointerId) return
-      try {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      } catch {
-        // ignore pointer capture errors
-      }
-      const finalFrame = getRulerScrubFrameFromClientX(event.clientX)
-      rulerScrubHandoffFrameRef.current = finalFrame
-      notifyLinkedTimelineScrubFrame(finalFrame, event.clientX)
-      if (finalFrame !== lastScrubbedFrameRef.current) {
-        queueRulerScrub({
-          frame: finalFrame,
-          pointerX: getTimelineXFromClientX(event.clientX),
-          pixelsPerSecond: timelinePixelsPerSecond,
-        })
-      }
-      if (rulerEdgeScrollRafRef.current !== null) {
-        cancelAnimationFrame(rulerEdgeScrollRafRef.current)
-        rulerEdgeScrollRafRef.current = null
-      }
-      setIsRulerScrubbing(false)
-      scrubPointerIdRef.current = null
-      rulerScrubClientXRef.current = null
-      rulerEdgeScrollTimestampRef.current = null
-      lastScrubbedFrameRef.current = null
-      flushPendingRulerScrub(true)
-      rulerScrubActiveRef.current = false
-      onScrubEnd?.()
-      endTimelineSkimmerScrub(skimmerScrubOwnerRef.current)
-    },
-    [
-      flushPendingRulerScrub,
-      getRulerScrubFrameFromClientX,
-      getTimelineXFromClientX,
-      notifyLinkedTimelineScrubFrame,
-      onScrubEnd,
-      queueRulerScrub,
-      timelinePixelsPerSecond,
-    ],
-  )
 
   // Match the main timeline navigation model for standalone keyframe editors:
   // - Ctrl/Cmd+wheel zooms the time axis about the cursor.
