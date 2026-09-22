@@ -74,17 +74,14 @@ import type {
   BezierControlPoints,
   EasingConfig,
   EasingType,
-  ItemKeyframes,
   Keyframe,
   KeyframeRef,
   DirectLinkableProperty,
   TemporalEase,
   VectorAnimatableProperty,
   VectorKeyframe,
-  PropertyKeyframes,
 } from '@/types/keyframe'
-import type { CanvasSettings, ResolvedTransform } from '@/types/transform'
-import type { TimelineItem } from '@/types/timeline'
+import type { CanvasSettings } from '@/types/transform'
 import type { TextMotionSlot } from '@/types/text-motion'
 import * as timelineActions from '../stores/timeline-actions'
 import {
@@ -107,20 +104,28 @@ import { shouldShowSeparatedPosition } from './edit-keyframe-panel-model'
 import {
   applyKeyframeMoveEntry,
   applyVectorPromotion,
+  buildCurrentPropertyValues,
   buildEditorKeyframesByProperty,
   buildKeyframePastePlan,
   buildLegacyVectorPromotionAtFrame,
   buildPasteSkipReasons,
+  buildSeparatedPositionProperties,
   buildVectorControlRows,
   clampFrameToBlockedRanges,
+  commitScalarPropertyValue,
   duplicateVectorKeyframeEntry,
   filterVectorControlRows,
   getBezierEditorEasing,
   getEditableVectorProxy,
+  hasPositionDimensionAuthoringConflict,
   pasteVectorKeyframePayload,
+  promoteAndRemoveLegacyVectorRef,
   promoteLegacyVectorEntryForMove,
   recordPromotedVectorDragIds,
+  removeStoredVectorRef,
+  selectPromotedVectorKeyframe,
   supportsVectorTransform,
+  updateStoredVectorKeyframe,
   VECTOR_COMPOUND_PRIMARY,
   type KeyframeEditorSurface,
   type KeyframeMoveEntry,
@@ -211,225 +216,6 @@ const EASING_OPTIONS: Array<{
     defaultLabel: 'Ease Out',
   },
 ]
-
-function updateStoredVectorKeyframe(params: {
-  itemId: string
-  property: VectorAnimatableProperty
-  keyframeId: string
-  updates: Partial<Omit<VectorKeyframe, 'id'>>
-  commit: boolean
-}) {
-  if (params.commit) {
-    timelineActions.updateVectorKeyframe(
-      params.itemId,
-      params.property,
-      params.keyframeId,
-      params.updates,
-    )
-    return
-  }
-  useKeyframesStore
-    .getState()
-    ._updateVectorKeyframe(params.itemId, params.property, params.keyframeId, params.updates)
-}
-
-function removeStoredVectorRef(params: {
-  ref: KeyframeRef
-  proxy: { property: VectorAnimatableProperty; axis: 'x' | 'y' }
-  itemKeyframes: ItemKeyframes | undefined
-  removedKeys: Set<string>
-}): boolean {
-  const storedId = getStoredVectorKeyframeId(params.ref.keyframeId, params.proxy.axis)
-  const keyframe = findStoredVectorKeyframe(params.itemKeyframes, params.proxy.property, storedId)
-  if (!keyframe) return false
-  const key = `${params.proxy.property}:${storedId}`
-  if (params.removedKeys.has(key)) return true
-  timelineActions.removeVectorKeyframe(params.ref.itemId, params.proxy.property, storedId)
-  params.removedKeys.add(key)
-  return true
-}
-
-function promoteAndRemoveLegacyVectorRef(params: {
-  ref: KeyframeRef
-  proxy: { property: VectorAnimatableProperty; axis: 'x' | 'y' }
-  keyframesByProperty: Partial<Record<AnimatableProperty, Keyframe[]>>
-  itemKeyframes: ItemKeyframes | undefined
-  baseTransform: ReturnType<typeof resolveTransform>
-  removedKeys: Set<string>
-}): boolean {
-  const previewKeyframe = params.keyframesByProperty[params.ref.property]?.find(
-    (keyframe) => keyframe.id === params.ref.keyframeId,
-  )
-  if (!previewKeyframe) return false
-  const key = `${params.proxy.property}:frame:${previewKeyframe.frame}`
-  if (params.removedKeys.has(key)) return true
-  const promotion = buildLegacyVectorPromotionAtFrame({
-    property: params.proxy.property,
-    itemKeyframes: params.itemKeyframes,
-    baseTransform: params.baseTransform,
-    frame: previewKeyframe.frame,
-  })
-  if (!promotion) return false
-  promotion.plan.vectorProperty = {
-    ...promotion.plan.vectorProperty,
-    keyframes: promotion.plan.vectorProperty.keyframes.filter(
-      (keyframe) => keyframe.frame !== previewKeyframe.frame,
-    ),
-  }
-  applyVectorPromotion({ itemId: params.ref.itemId, plan: promotion.plan, commit: true })
-  params.removedKeys.add(key)
-  return true
-}
-
-function selectPromotedVectorKeyframe(params: {
-  identityRemap: ReturnType<typeof remapLegacyVectorPromotionIdentities>
-  itemId: string
-  ref: KeyframeRef
-  proxy: NonNullable<ReturnType<typeof getEditableVectorProxy>>
-  promotedKeyframe: VectorKeyframe
-  selectKeyframes: (refs: KeyframeRef[]) => void
-  selectKeyframe: (ref: KeyframeRef) => void
-}) {
-  if (params.identityRemap.selectedKeyframes.length > 0) {
-    params.selectKeyframes(params.identityRemap.selectedKeyframes)
-    return
-  }
-  params.selectKeyframe({
-    itemId: params.itemId,
-    property: params.ref.property,
-    keyframeId: getEditorVectorKeyframeId(params.promotedKeyframe.id, params.proxy.axis),
-  })
-}
-
-function hasPositionDimensionAuthoringConflict(
-  itemKeyframes: ItemKeyframes | undefined,
-  separated: boolean,
-): boolean {
-  const blockedProperties = separated
-    ? new Set<DirectLinkableProperty>(['position'])
-    : new Set<DirectLinkableProperty>(['x', 'y'])
-  if (
-    getDirectPropertyLinks(itemKeyframes).some((link) => blockedProperties.has(link.targetProperty))
-  ) {
-    return true
-  }
-  return (
-    itemKeyframes?.expressions?.some(
-      (expression) =>
-        expression.type === 'expression' && blockedProperties.has(expression.targetProperty),
-    ) ?? false
-  )
-}
-
-function buildSeparatedPositionProperties(
-  itemKeyframes: ItemKeyframes | undefined,
-  baseTransform: ResolvedTransform,
-): PropertyKeyframes[] | null {
-  const vectorProperty = buildVectorPromotionPlan({
-    property: 'position',
-    itemKeyframes,
-    baseTransform,
-  }).vectorProperty
-  if (vectorProperty.keyframes.some((keyframe) => keyframe.temporalEase || keyframe.spatial)) {
-    return null
-  }
-  return (['x', 'y'] as const).map((property) => ({
-    property,
-    keyframes: vectorProperty.keyframes.map((keyframe) => ({
-      id: crypto.randomUUID(),
-      frame: keyframe.frame,
-      value: keyframe.value[property],
-      easing: keyframe.easing,
-      easingConfig: keyframe.easingConfig,
-      source: keyframe.source,
-    })),
-  }))
-}
-
-type SelectedEditorKeyframe = { ref: KeyframeRef; keyframe: Keyframe }
-
-function commitScalarPropertyValue({
-  itemId,
-  property,
-  value,
-  relativeFrame,
-  allowCreate,
-  selectedKeyframes,
-  propertyKeyframes,
-  selectKeyframe,
-}: {
-  itemId: string
-  property: AnimatableProperty
-  value: number
-  relativeFrame: number
-  allowCreate: boolean
-  selectedKeyframes: SelectedEditorKeyframe[]
-  propertyKeyframes: Keyframe[] | undefined
-  selectKeyframe: (ref: KeyframeRef) => void
-}): void {
-  const selectedPropertyKeyframes = selectedKeyframes.filter(({ ref }) => ref.property === property)
-  if (selectedPropertyKeyframes.length > 0) {
-    timelineActions.updateKeyframes(
-      selectedPropertyKeyframes.map(({ ref }) => ({
-        itemId: ref.itemId,
-        property: ref.property,
-        keyframeId: ref.keyframeId,
-        updates: { value },
-      })),
-    )
-    return
-  }
-
-  const existingKeyframe = propertyKeyframes?.find((keyframe) => keyframe.frame === relativeFrame)
-  if (existingKeyframe) {
-    timelineActions.updateKeyframe(itemId, property, existingKeyframe.id, { value })
-    selectKeyframe({ itemId, property, keyframeId: existingKeyframe.id })
-    return
-  }
-
-  if (!allowCreate) return
-  const keyframeId = timelineActions.addKeyframe(itemId, property, relativeFrame, value)
-  if (keyframeId) selectKeyframe({ itemId, property, keyframeId })
-}
-
-function findSelectedPropertyValue(
-  selectedKeyframes: SelectedEditorKeyframe[],
-  property: AnimatableProperty,
-): number | undefined {
-  for (let index = selectedKeyframes.length - 1; index >= 0; index -= 1) {
-    const selected = selectedKeyframes[index]!
-    if (selected.ref.property === property) return selected.keyframe.value
-  }
-  return undefined
-}
-
-function buildCurrentPropertyValues(params: {
-  item: TimelineItem
-  properties: AnimatableProperty[]
-  keyframesByProperty: Partial<Record<AnimatableProperty, Keyframe[]>>
-  selectedKeyframes: SelectedEditorKeyframe[]
-  resolvedTransform: ResolvedTransform | null | undefined
-  relativeFrame: number
-  canvas: CanvasSettings
-}): Partial<Record<AnimatableProperty, number>> {
-  const values: Partial<Record<AnimatableProperty, number>> = {}
-  for (const property of params.properties) {
-    const selectedValue = findSelectedPropertyValue(params.selectedKeyframes, property)
-    const resolvedTransformValue =
-      params.resolvedTransform && isTransformAnimatableProperty(property)
-        ? params.resolvedTransform[property]
-        : undefined
-    values[property] =
-      selectedValue ??
-      resolvedTransformValue ??
-      interpolatePropertyValue(
-        params.keyframesByProperty[property] ?? [],
-        params.relativeFrame,
-        getAnimatablePropertyBaseValue(params.item, property, params.canvas),
-      )
-  }
-  return values
-}
 
 function useKeyframeEditorPlaybackFrame(
   selectedItemId: string | null,
