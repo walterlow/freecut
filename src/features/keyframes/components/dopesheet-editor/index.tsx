@@ -53,6 +53,7 @@ import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
 import { useSelectionFrameActions } from './use-selection-frame-actions'
+import { usePropertyValueEditing } from './use-property-value-editing'
 import { useElementSize } from './use-element-size'
 import { useKeyframeDrag } from './use-keyframe-drag'
 import {
@@ -137,7 +138,6 @@ import type { SegmentEasingChange } from './segment-easing-popover'
 import {
 } from '@/features/keyframes/deps/timeline-playhead'
 import {
-  DRAG_THRESHOLD,
   EMPTY_AUTO_KEY_ENABLED_BY_PROPERTY,
   GROUP_HEADER_HEIGHT,
   PROPERTY_COLUMN_WIDTH,
@@ -161,10 +161,7 @@ import {
   PROPERTY_VALUE_RANGES,
   isColorAnimatableProperty,
 } from '@/features/keyframes/property-value-ranges'
-import {
-  colorStringToKeyframeValue,
-  keyframeValueToHexColor,
-} from '@/features/keyframes/utils/color-keyframes'
+import { keyframeValueToHexColor } from '@/features/keyframes/utils/color-keyframes'
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
 import {
@@ -182,7 +179,6 @@ import {
   getKeyframePropertyLabel,
 } from '@/features/keyframes/utils/property-i18n'
 
-import { getScrubbedPropertyValue } from './property-value-scrub'
 import { TextMotionTimelineRows } from './text-motion-timeline-rows'
 
 interface DopesheetEditorProps {
@@ -727,8 +723,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const marqueePreviewTouchedIdsRef = useRef(new Set<string>())
   committedKeyframeSelectionRef.current = selectedKeyframeIds
   const snapEnabled = true
-  const [valueDrafts, setValueDrafts] = useState<Partial<Record<AnimatableProperty, string>>>({})
-  const [editingValueProperty, setEditingValueProperty] = useState<AnimatableProperty | null>(null)
   const pickWhipRootRef = useRef<HTMLDivElement>(null)
   const syncLivePixelGeometryRef = useRef<() => void>(() => {})
   const {
@@ -750,17 +744,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     ),
   )
   const toggleAutoKeyframeEnabled = useAutoKeyframeStore((state) => state.toggleAutoKeyframeEnabled)
-  const skipNextBlurCommitPropertyRef = useRef<AnimatableProperty | null>(null)
-  const valueDraftAtFocusRef = useRef<Partial<Record<AnimatableProperty, string>>>({})
-  const valueScrubRef = useRef<{
-    property: AnimatableProperty
-    pointerId: number
-    startX: number
-    startValue: number
-    lastValue: number
-    lastDisplay: string
-    didDrag: boolean
-  } | null>(null)
   const appliedDragPreviewFramesRef = useRef<Record<string, number> | null>(null)
   const [sheetPreviewFrames, setSheetPreviewFrames] = useState<Record<string, number> | null>(null)
   const [sheetPreviewDuplicateKeyframeIds, setSheetPreviewDuplicateKeyframeIds] = useState<
@@ -1028,23 +1011,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [],
   )
 
-  useEffect(() => {
-    setValueDrafts((prev) => {
-      let changed = false
-      const nextDrafts = { ...prev }
-
-      for (const property of propertyColumnProperties) {
-        if (editingValueProperty === property) continue
-        const nextValue = formatPropertyValue(property, propertyValues[property])
-        if (nextDrafts[property] !== nextValue) {
-          nextDrafts[property] = nextValue
-          changed = true
-        }
-      }
-
-      return changed ? nextDrafts : prev
-    })
-  }, [propertyColumnProperties, propertyValues, editingValueProperty, formatPropertyValue])
   const rowKeyframesByProperty = sheetKeyframesByProperty
 
   const keyframeMetaById = useMemo(() => {
@@ -1874,9 +1840,30 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     ],
   )
 
-  const handleRowValueChange = useCallback((property: AnimatableProperty, value: string) => {
-    setValueDrafts((prev) => ({ ...prev, [property]: value }))
-  }, [])
+  const {
+    valueDrafts,
+    setValueDrafts,
+    setEditingValueProperty,
+    valueDraftAtFocusRef,
+    skipNextBlurCommitPropertyRef,
+    handleRowValueChange,
+    handleRowValueCommit,
+    handleValueScrubStart,
+    handleValueScrubMove,
+    handleValueScrubEnd,
+    handleValueScrubCancel,
+  } = usePropertyValueEditing({
+    propertyColumnProperties,
+    propertyValues,
+    formatPropertyValue,
+    isPropertyLocked,
+    activateProperty,
+    onPropertyValueCommit,
+    onPropertyValuePreview,
+    onDragStart,
+    onDragEnd,
+    onDragCancel,
+  })
 
   const handleRowAutoKeyToggle = useCallback(
     (property: AnimatableProperty) => {
@@ -1887,119 +1874,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [activateProperty, isPropertyLocked, itemId, toggleAutoKeyframeEnabled],
   )
 
-  const handleRowValueCommit = useCallback(
-    (property: AnimatableProperty, options?: { allowCreate?: boolean }) => {
-      if (isPropertyLocked(property)) return
-      const range = PROPERTY_VALUE_RANGES[property]
-      const parsed = isColorAnimatableProperty(property)
-        ? colorStringToKeyframeValue(valueDrafts[property] ?? '')
-        : Number(valueDrafts[property])
-
-      if (parsed === null || !Number.isFinite(parsed)) {
-        setValueDrafts((prev) => ({
-          ...prev,
-          [property]: formatPropertyValue(property, propertyValues[property]),
-        }))
-        return
-      }
-
-      const clampedValue = Math.max(range?.min ?? parsed, Math.min(range?.max ?? parsed, parsed))
-      onPropertyValueCommit?.(property, clampedValue, options)
-      setValueDrafts((prev) => ({
-        ...prev,
-        [property]: formatPropertyValue(property, clampedValue),
-      }))
-    },
-    [formatPropertyValue, isPropertyLocked, onPropertyValueCommit, propertyValues, valueDrafts],
-  )
-
-  const handleValueScrubStart = useCallback(
-    (event: React.PointerEvent<HTMLInputElement>, property: AnimatableProperty) => {
-      if (event.button !== 0 || isColorAnimatableProperty(property)) return
-      const startValue = Number(valueDrafts[property] ?? propertyValues[property])
-      if (!Number.isFinite(startValue)) return
-
-      valueScrubRef.current = {
-        property,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startValue,
-        lastValue: startValue,
-        lastDisplay: String(startValue),
-        didDrag: false,
-      }
-      setPointerCaptureSafely(event.currentTarget, event.pointerId)
-    },
-    [propertyValues, valueDrafts],
-  )
-
-  const handleValueScrubMove = useCallback(
-    (event: React.PointerEvent<HTMLInputElement>, property: AnimatableProperty) => {
-      const scrub = valueScrubRef.current
-      if (!scrub || scrub.pointerId !== event.pointerId || scrub.property !== property) return
-      const deltaX = event.clientX - scrub.startX
-      if (!scrub.didDrag && Math.abs(deltaX) < DRAG_THRESHOLD) return
-
-      if (!scrub.didDrag) {
-        scrub.didDrag = true
-        activateProperty(property)
-        onDragStart?.()
-      }
-
-      event.preventDefault()
-      const range = PROPERTY_VALUE_RANGES[property]
-      const next = getScrubbedPropertyValue({
-        startValue: scrub.startValue,
-        deltaX,
-        decimals: range?.decimals ?? 2,
-        min: range?.min,
-        max: range?.max,
-        shiftKey: event.shiftKey,
-        altKey: event.altKey,
-      })
-      scrub.lastValue = next.value
-      scrub.lastDisplay = next.display
-      setValueDrafts((previous) => ({ ...previous, [property]: next.display }))
-      onPropertyValuePreview?.(property, next.value)
-    },
-    [activateProperty, onDragStart, onPropertyValuePreview],
-  )
-
-  const handleValueScrubEnd = useCallback(
-    (event: React.PointerEvent<HTMLInputElement>, property: AnimatableProperty) => {
-      const scrub = valueScrubRef.current
-      if (!scrub || scrub.pointerId !== event.pointerId || scrub.property !== property) return
-      valueScrubRef.current = null
-      if (!scrub.didDrag) return
-
-      event.preventDefault()
-      valueDraftAtFocusRef.current[property] = scrub.lastDisplay
-      if (onPropertyValuePreview) {
-        onDragEnd?.()
-      } else {
-        onPropertyValueCommit?.(property, scrub.lastValue, {
-          allowCreate: true,
-        })
-      }
-    },
-    [onDragEnd, onPropertyValueCommit, onPropertyValuePreview],
-  )
-
-  const handleValueScrubCancel = useCallback(
-    (event: React.PointerEvent<HTMLInputElement>, property: AnimatableProperty) => {
-      const scrub = valueScrubRef.current
-      if (!scrub || scrub.pointerId !== event.pointerId || scrub.property !== property) return
-      valueScrubRef.current = null
-      if (!scrub.didDrag) return
-
-      event.preventDefault()
-      const restoredDisplay = formatPropertyValue(property, scrub.startValue)
-      valueDraftAtFocusRef.current[property] = restoredDisplay
-      setValueDrafts((previous) => ({ ...previous, [property]: restoredDisplay }))
-      onDragCancel?.()
-    },
-    [formatPropertyValue, onDragCancel],
-  )
 
   const nudgeSelectedKeyframes = useCallback(
     (deltaFrames: number) => {
@@ -2779,9 +2653,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       selectedProperty,
       selectedCurveVisibleExternally,
       setAllRowsLocked,
+      setEditingValueProperty,
+      setValueDrafts,
+      skipNextBlurCommitPropertyRef,
       t,
       togglePropertyCurve,
       toggleLockedProperty,
+      valueDraftAtFocusRef,
       valueDrafts,
       showGraphPane,
       showSinglePropertyCurve,
