@@ -2,14 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { i18n } from '@/i18n'
 import { toast } from 'sonner'
-import {
-  Shapes,
-  ChevronUp,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  MousePointer2,
-} from 'lucide-react'
+import { Shapes, MousePointer2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -25,7 +18,6 @@ import { hasPathVertexKeyframes } from '@/features/editor/deps/keyframes'
 import {
   PropertySection,
   PropertyRow,
-  NumberInput,
   PropertySliderControl,
   ColorPicker,
 } from '../components'
@@ -37,6 +29,7 @@ import {
 } from '@/shared/graphics/shapes/linear-gradient'
 import { getPathClosureUpdates, getShapeSectionControlVisibility } from './shape-section-visibility'
 import { getSharedShapeValues } from './shape-section-shared-values'
+import { ShapeKindControls } from './shape-kind-controls'
 import { demixValue } from '../utils'
 
 // Shape type options
@@ -52,18 +45,6 @@ const SHAPE_TYPE_OPTIONS: { value: ShapeType; labelKey: string }[] = [
 
 const MIN_ENABLED_STROKE_WIDTH = 1
 const DEFAULT_STROKE_COLOR = '#3b82f6'
-
-// Triangle direction options
-const DIRECTION_OPTIONS: {
-  value: 'up' | 'down' | 'left' | 'right'
-  labelKey: string
-  icon: typeof ChevronUp
-}[] = [
-  { value: 'up', labelKey: 'editor.shapeSection.directionUp', icon: ChevronUp },
-  { value: 'down', labelKey: 'editor.shapeSection.directionDown', icon: ChevronDown },
-  { value: 'left', labelKey: 'editor.shapeSection.directionLeft', icon: ChevronLeft },
-  { value: 'right', labelKey: 'editor.shapeSection.directionRight', icon: ChevronRight },
-]
 
 interface ShapeSectionProps {
   items: TimelineItem[]
@@ -97,13 +78,6 @@ export function ShapeSection({ items }: ShapeSectionProps) {
   // Get shared values across selected shape items
   const sharedValues = useMemo(() => getSharedShapeValues(shapeItems), [shapeItems])
 
-  // Check which controls should be shown based on shape type
-  const showCornerRadius =
-    sharedValues?.shapeType &&
-    ['rectangle', 'triangle', 'star', 'polygon'].includes(sharedValues.shapeType)
-  const showDirection = sharedValues?.shapeType === 'triangle'
-  const showPoints = sharedValues?.shapeType && ['star', 'polygon'].includes(sharedValues.shapeType)
-  const showInnerRadius = sharedValues?.shapeType === 'star'
   const singlePathShape =
     shapeItems.length === 1 && shapeItems[0]?.shapeType === 'path' ? shapeItems[0] : null
   const singlePathKeyframes = useKeyframesStore((state) =>
@@ -886,73 +860,22 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         </>
       )}
 
-      {/* Corner Radius - shown for rectangle, triangle, star, polygon */}
-      {showCornerRadius && (
-        <PropertyRow label={t('editor.shapeSection.radius')}>
-          <PropertySliderControl
-            value={sharedValues.cornerRadius}
-            onChange={handleCornerRadiusChange}
-            onLiveChange={handleCornerRadiusLiveChange}
-            min={0}
-            max={100}
-            step={1}
-            unit="px"
-            onReset={() => resetNumericProperty('cornerRadius', 0)}
-            resetLabel={t('editor.shapeSection.resetToDefault')}
-          />
-        </PropertyRow>
-      )}
-
-      {/* Direction - shown for triangle only */}
-      {showDirection && (
-        <PropertyRow label={t('editor.shapeSection.direction')}>
-          <div className="flex gap-1">
-            {DIRECTION_OPTIONS.map((dir) => (
-              <Button
-                key={dir.value}
-                variant={sharedValues.direction === dir.value ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleDirectionChange(dir.value)}
-                title={t(dir.labelKey)}
-              >
-                <dir.icon className="w-3.5 h-3.5" />
-              </Button>
-            ))}
-          </div>
-        </PropertyRow>
-      )}
-
-      {/* Points - shown for star and polygon */}
-      {showPoints && (
-        <PropertyRow label={t('editor.shapeSection.points')}>
-          <NumberInput
-            value={sharedValues.points}
-            onChange={handlePointsChange}
-            onLiveChange={handlePointsLiveChange}
-            min={3}
-            max={12}
-            step={1}
-            className="flex-1 min-w-0"
-          />
-        </PropertyRow>
-      )}
-
-      {/* Inner Radius - shown for star only */}
-      {showInnerRadius && (
-        <PropertyRow label={t('editor.shapeSection.innerRadius')}>
-          <PropertySliderControl
-            value={sharedValues.innerRadius}
-            onChange={handleInnerRadiusChange}
-            onLiveChange={handleInnerRadiusLiveChange}
-            min={0.1}
-            max={0.9}
-            step={0.05}
-            onReset={() => resetNumericProperty('innerRadius', 0.5)}
-            resetLabel={t('editor.shapeSection.resetToDefault')}
-          />
-        </PropertyRow>
-      )}
+      <ShapeKindControls
+        shapeType={sharedValues.shapeType}
+        cornerRadius={sharedValues.cornerRadius}
+        direction={sharedValues.direction}
+        points={sharedValues.points}
+        innerRadius={sharedValues.innerRadius}
+        onCornerRadiusChange={handleCornerRadiusChange}
+        onCornerRadiusLiveChange={handleCornerRadiusLiveChange}
+        onCornerRadiusReset={() => resetNumericProperty('cornerRadius', 0)}
+        onDirectionChange={handleDirectionChange}
+        onPointsChange={handlePointsChange}
+        onPointsLiveChange={handlePointsLiveChange}
+        onInnerRadiusChange={handleInnerRadiusChange}
+        onInnerRadiusLiveChange={handleInnerRadiusLiveChange}
+        onInnerRadiusReset={() => resetNumericProperty('innerRadius', 0.5)}
+      />
 
       {controlVisibility.showTrimPaths && (
         <>
