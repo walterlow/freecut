@@ -17,12 +17,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
-import {
-  Scissors,
-} from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/shared/ui/cn'
-import { Button } from '@/components/ui/button'
 import type {
   AnimatableProperty,
   BezierControlPoints,
@@ -61,7 +56,11 @@ import { useSheetPreviewDom } from './sheet-preview-dom'
 import {
   getDopesheetDragPixelsPerFrame,
 } from './dopesheet-drag-math'
-import { DopesheetHeaderFrameInputs } from './dopesheet-header-frame-inputs'
+import {
+  DopesheetClassicPresentation,
+  DopesheetEditorPresentation,
+  DopesheetLanesPresentation,
+} from './dopesheet-presentation'
 import { DopesheetRulerHeader } from './dopesheet-ruler-header'
 import { DopesheetLiveRulerCanvas } from './dopesheet-live-ruler-canvas'
 import { syncDopesheetLivePixelGeometry } from './dopesheet-live-pixel-geometry'
@@ -96,7 +95,6 @@ import {
 import type { DopesheetDimensionSeparationControl } from './dopesheet-group-options-menu'
 import type { CompoundPropertyInputConfig } from './compound-property-inputs'
 import { KeyframeTimingStrip } from './keyframe-timing-strip'
-import { PickWhipOverlay } from '@/shared/ui/pick-whip-overlay'
 import type { ExpressionValue } from '@/features/keyframes/utils/property-expression'
 import {
   buildGroupedPropertyRows,
@@ -113,7 +111,6 @@ import {
   PROPERTY_COLUMN_WIDTH,
   SPACIOUS_PROPERTY_COLUMN_WIDTH,
   ROW_HEIGHT,
-  RULER_HEIGHT,
   SNAP_THRESHOLD_PX,
 } from './dopesheet-constants'
 import type {
@@ -2642,132 +2639,82 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       />
     ) : null
 
+  // The workspace toolbar and the classic shell render the same header frame
+  // inputs, so both build them from one source.
+  const headerFrameInputs = {
+    disabled,
+    inputsEnabled:
+      Boolean(onKeyframeMove) &&
+      selectedFrameSummary.hasSelection &&
+      !selectedFrameSummary.hasMixedFrames,
+    totalFrames,
+    globalFrame,
+    localFrameInputValue,
+    globalFrameInputValue,
+    setLocalFrameInputValue,
+    setGlobalFrameInputValue,
+    skipNextHeaderFrameBlurRef,
+    commitLocalFrameInput,
+    commitGlobalFrameInput,
+    handleHeaderFrameInputKeyDown,
+  }
+
   if (presentation === 'lanes') {
     return (
-      <div
-        ref={pickWhipRootRef}
-        data-testid="dopesheet-editor-root"
-        data-motion-shared-grid-divisions={timelineGridDivisions}
-        data-motion-shared-grid-border-width={
-          timelineGridDivisions ? timelineCellBorderWidth : undefined
-        }
-        className={cn(
-          'relative flex flex-col overflow-hidden',
-          disabled && 'opacity-60 pointer-events-none',
-          className,
-        )}
-        style={{ height, width: '100%' }}
-        onKeyDown={handleGraphPaneKeyDown}
-      >
-        <div className="relative min-h-0 flex-1 overflow-hidden" onWheel={handleWheel}>
-          <div
-            ref={timelineRef}
-            className="pointer-events-none absolute inset-y-0 right-0"
-            style={{ left: columnWidth }}
-          />
-          {showGraphPane ? graphPaneElement : sheetBodyElement}
-          {showSheetPane ? skimPlayheadOverlayElement : null}
-          {showSheetPane ? playheadOverlayElement : null}
-        </div>
-        {expressionDockElement}
-        {expressionReferenceDrag ? (
-          <PickWhipOverlay
-            presentation={expressionReferenceDrag.presentation}
-            testId="expression-reference-pick-whip"
-          />
-        ) : null}
-      </div>
+      <DopesheetLanesPresentation
+        pickWhipRootRef={pickWhipRootRef}
+        className={className}
+        height={height}
+        disabled={disabled}
+        handleWheel={handleWheel}
+        handleGraphPaneKeyDown={handleGraphPaneKeyDown}
+        timelineRef={timelineRef}
+        timelineGridDivisions={timelineGridDivisions}
+        timelineCellBorderWidth={timelineCellBorderWidth}
+        columnWidth={columnWidth}
+        showSheetPane={showSheetPane}
+        showGraphPane={showGraphPane}
+        graphPaneElement={graphPaneElement}
+        sheetBodyElement={sheetBodyElement}
+        skimPlayheadOverlayElement={skimPlayheadOverlayElement}
+        playheadOverlayElement={playheadOverlayElement}
+        expressionDockElement={expressionDockElement}
+        expressionReferenceDrag={expressionReferenceDrag}
+      />
     )
   }
 
   if (presentation === 'classic') {
     return (
-      <div
-        ref={pickWhipRootRef}
-        data-testid="dopesheet-editor-root"
-        className={cn('flex h-full flex-col gap-0.5 overflow-hidden', className)}
-        style={{ height, width }}
-      >
-        <div className="flex min-h-7 flex-shrink-0 items-center justify-between gap-2 px-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="whitespace-nowrap text-xs text-muted-foreground">
-              {t('timeline.keyframeEditor.keyframes', {
-                count: visibleKeyframes.length,
-              })}
-            </span>
-            {trimmedKeyframeCount > 0 && onTrimAnimation ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 px-1.5 text-[10px] text-amber-300 hover:text-amber-200"
-                onClick={onTrimAnimation}
-                title={t('timeline.keyframeEditor.trimAnimationHint', {
-                  count: trimmedKeyframeCount,
-                })}
-              >
-                <Scissors className="h-3 w-3" />
-                {t('timeline.keyframeEditor.trimmedKeyframes', {
-                  count: trimmedKeyframeCount,
-                })}
-              </Button>
-            ) : null}
-            <DopesheetHeaderFrameInputs
-              disabled={disabled}
-              inputsEnabled={
-                Boolean(onKeyframeMove) &&
-                selectedFrameSummary.hasSelection &&
-                !selectedFrameSummary.hasMixedFrames
-              }
-              totalFrames={totalFrames}
-              globalFrame={globalFrame}
-              localFrameInputValue={localFrameInputValue}
-              globalFrameInputValue={globalFrameInputValue}
-              setLocalFrameInputValue={setLocalFrameInputValue}
-              setGlobalFrameInputValue={setGlobalFrameInputValue}
-              skipNextHeaderFrameBlurRef={skipNextHeaderFrameBlurRef}
-              commitLocalFrameInput={commitLocalFrameInput}
-              commitGlobalFrameInput={commitGlobalFrameInput}
-              handleHeaderFrameInputKeyDown={handleHeaderFrameInputKeyDown}
-            />
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            'relative min-h-0 flex-1 overflow-hidden border border-border',
-            disabled && 'pointer-events-none opacity-60',
-          )}
-          onWheel={viewportInteractionEnabled ? handleWheel : undefined}
-        >
-          {affectedFrameRangeOverlayElement ? (
-            <div
-              data-motion-viewport-surface
-              data-motion-viewport-axis-width={effectiveTimelineWidth}
-              className="pointer-events-none absolute bottom-0 right-0 z-[5] overflow-hidden"
-              style={{ left: columnWidth, top: RULER_HEIGHT }}
-            >
-              {affectedFrameRangeOverlayElement}
-            </div>
-          ) : null}
-          {skimPlayheadOverlayElement}
-          {playheadOverlayElement}
-          {rulerHeaderElement}
-          {sheetBodyElement}
-        </div>
-      </div>
+      <DopesheetClassicPresentation
+        pickWhipRootRef={pickWhipRootRef}
+        className={className}
+        height={height}
+        width={width}
+        disabled={disabled}
+        t={t}
+        keyframeCount={visibleKeyframes.length}
+        trimmedKeyframeCount={trimmedKeyframeCount}
+        onTrimAnimation={onTrimAnimation}
+        headerFrameInputs={headerFrameInputs}
+        viewportInteractionEnabled={viewportInteractionEnabled}
+        handleWheel={handleWheel}
+        affectedFrameRangeOverlayElement={affectedFrameRangeOverlayElement}
+        effectiveTimelineWidth={effectiveTimelineWidth}
+        columnWidth={columnWidth}
+        skimPlayheadOverlayElement={skimPlayheadOverlayElement}
+        playheadOverlayElement={playheadOverlayElement}
+        rulerHeaderElement={rulerHeaderElement}
+        sheetBodyElement={sheetBodyElement}
+      />
     )
   }
 
-  return (
-    <div
-      ref={pickWhipRootRef}
-      data-testid="dopesheet-editor-root"
-      className={cn('flex h-full flex-col gap-0.5 overflow-hidden', className)}
-      style={{ height, width }}
-    >
+  // Workspace chrome: only the default shell renders these, so they are built
+  // after the two exclusive shells have already returned.
+  const { inputsEnabled: headerFrameInputsEnabled, ...headerFrameInputProps } = headerFrameInputs
+  const toolbarElement = (
       <DopesheetToolbar
-        disabled={disabled}
         hasAvailableProperties={availableProperties.length > 0}
         filterKeyframedOnly={filterKeyframedOnly}
         onToggleKeyframedOnly={() => setShowKeyframedOnly((prev) => !prev)}
@@ -2788,21 +2735,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         isCurrentFrameBlocked={isCurrentFrameBlocked}
         canBakeMotion={canBakeMotion}
         onBakeMotion={onBakeMotion}
-        headerFrameInputsEnabled={
-          Boolean(onKeyframeMove) &&
-          selectedFrameSummary.hasSelection &&
-          !selectedFrameSummary.hasMixedFrames
-        }
-        totalFrames={totalFrames}
-        globalFrame={globalFrame}
-        localFrameInputValue={localFrameInputValue}
-        globalFrameInputValue={globalFrameInputValue}
-        setLocalFrameInputValue={setLocalFrameInputValue}
-        setGlobalFrameInputValue={setGlobalFrameInputValue}
-        skipNextHeaderFrameBlurRef={skipNextHeaderFrameBlurRef}
-        commitLocalFrameInput={commitLocalFrameInput}
-        commitGlobalFrameInput={commitGlobalFrameInput}
-        handleHeaderFrameInputKeyDown={handleHeaderFrameInputKeyDown}
+        headerFrameInputsEnabled={headerFrameInputsEnabled}
+        {...headerFrameInputProps}
         interpolationOptions={interpolationOptions}
         selectedInterpolation={selectedInterpolation}
         interpolationDisabled={interpolationDisabled}
@@ -2830,52 +2764,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         autoZoomGraphHeight={autoZoomGraphHeight}
         onToggleAutoZoomGraphHeight={() => setAutoZoomGraphHeight((prev) => !prev)}
       />
-
-      <div
-        className={cn(
-          'border border-border rounded-md flex-1 min-h-0 overflow-hidden relative',
-          disabled && 'opacity-60 pointer-events-none',
-          isSplitView && 'flex flex-col',
-        )}
-        onWheel={visualizationMode === 'dopesheet' ? handleWheel : undefined}
-      >
-        {isSplitView ? (
-          <>
-            {rulerHeaderElement}
-            {/* Sheet on top, curve/graph below, with ONE shared playhead line
-                ({splitPlayheadOverlayElement}) drawn over both panes so they
-                stay identical in position and appearance. */}
-            <div
-              className="relative min-h-0 flex-1 overflow-hidden"
-              role="region"
-              aria-label={t('timeline.keyframeEditor.sheet')}
-              onWheel={handleWheel}
-            >
-              {sheetBodyElement}
-            </div>
-            <div
-              className="min-h-0 flex-1 overflow-hidden border-t border-border/60"
-              role="region"
-              aria-label={t('timeline.keyframeEditor.graph')}
-            >
-              {graphPaneElement}
-            </div>
-            {skimPlayheadOverlayElement}
-            {splitPlayheadOverlayElement}
-          </>
-        ) : (
-          <>
-            {/* Sheet mode only: the graph renders its own aligned playhead
-                (GraphPlayhead) using the graph's coordinate space. */}
-            {showSheetPane && skimPlayheadOverlayElement}
-            {showSheetPane && playheadOverlayElement}
-            {rulerHeaderElement}
-            {showGraphPane ? graphPaneElement : sheetBodyElement}
-          </>
-        )}
-      </div>
-      {expressionDockElement}
-      {showGraphPane && (
+  )
+  const timingStripElement = showGraphPane ? (
         <div className="grid" style={propertyGridStyle}>
           <div className="h-4 border-t border-r border-border/60 bg-background/80" />
           <div data-testid="keyframe-timing-strip-viewport-column">
@@ -2892,7 +2782,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             />
           </div>
         </div>
-      )}
+  ) : null
+  const navigatorElement = (
       <div className="grid" style={propertyGridStyle}>
         <div
           data-testid="keyframe-navigator-property-column"
@@ -2909,12 +2800,32 @@ export const DopesheetEditor = memo(function DopesheetEditor({
           />
         </div>
       </div>
-      {expressionReferenceDrag ? (
-        <PickWhipOverlay
-          presentation={expressionReferenceDrag.presentation}
-          testId="expression-reference-pick-whip"
-        />
-      ) : null}
-    </div>
+  )
+  return (
+    <DopesheetEditorPresentation
+      pickWhipRootRef={pickWhipRootRef}
+      className={className}
+      height={height}
+      width={width}
+      disabled={disabled}
+      t={t}
+      visualizationMode={visualizationMode}
+      isSplitView={isSplitView}
+      showSheetPane={showSheetPane}
+      showGraphPane={showGraphPane}
+      handleWheel={handleWheel}
+      propertyGridStyle={propertyGridStyle}
+      toolbarElement={toolbarElement}
+      rulerHeaderElement={rulerHeaderElement}
+      sheetBodyElement={sheetBodyElement}
+      graphPaneElement={graphPaneElement}
+      playheadOverlayElement={playheadOverlayElement}
+      splitPlayheadOverlayElement={splitPlayheadOverlayElement}
+      skimPlayheadOverlayElement={skimPlayheadOverlayElement}
+      expressionDockElement={expressionDockElement}
+      expressionReferenceDrag={expressionReferenceDrag}
+      timingStripElement={timingStripElement}
+      navigatorElement={navigatorElement}
+    />
   )
 })
