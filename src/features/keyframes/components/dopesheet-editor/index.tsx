@@ -55,12 +55,9 @@ import { useDopesheetMarquee } from './use-dopesheet-marquee'
 import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useElementSize } from './use-element-size'
-import { addWindowPointerListeners } from './dopesheet-pointer-listeners'
+import { useKeyframeDrag } from './use-keyframe-drag'
 import {
-  getDopesheetDragDelta,
   getDopesheetDragPixelsPerFrame,
-  getMatchingDragState,
-  startDopesheetDrag,
 } from './dopesheet-drag-math'
 import { DopesheetHeaderFrameInputs } from './dopesheet-header-frame-inputs'
 import { DopesheetRulerHeader } from './dopesheet-ruler-header'
@@ -190,11 +187,7 @@ import {
 import {
   buildPropertyKeyframeRefs,
   buildRowKeyframeRefs,
-  collectInitialFrames,
   removeSelectionIds,
-  resolveShiftRangeSelection,
-  toggleKeyframeInSelection,
-  toggleKeyframesInSelection,
 } from './row-action-helpers'
 import {
   getKeyframeGroupLabel,
@@ -2426,158 +2419,35 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       onSelectionPreviewChange: handleMarqueeSelectionPreviewChange,
     })
 
-  const handleKeyframePointerDown = useCallback(
-    (
-      property: AnimatableProperty,
-      keyframeId: string,
-      event: React.PointerEvent<HTMLButtonElement>,
-    ) => {
-      if (disabled) return
-      if (isPropertyLocked(property)) return
-      event.preventDefault()
-      event.stopPropagation()
-      onActivePropertyChange?.(property)
+  const keyframeDrag = useKeyframeDrag({
+    disabled,
+    totalFrames,
+    snapEnabled,
+    snapFrame,
+    isPropertyLocked,
+    selectedKeyframeIds,
+    rowKeyframesByProperty,
+    keyframeMetaByIdRef,
+    dragStateRef,
+    selectionAnchorByPropertyRef,
+    scheduleDragPreviewFrames,
+    buildSelectionFramePreview,
+    commitSelectionFramePreview,
+    duplicateSelectionFramePreview,
+    getLiveDragPixelsPerFrame,
+    onSelectionChange,
+    onActivePropertyChange,
+    onDragStart,
+    onDragEnd,
+    onDragCancel,
+    onSelectionFrameDelta,
+    onKeyframeMove,
+    onDuplicateKeyframes,
+  })
+  const handleKeyframePointerDown = keyframeDrag.handleKeyframePointerDown
+  const handleGroupKeyframePointerDown = keyframeDrag.handleGroupKeyframePointerDown
 
-      if (event.shiftKey && !event.ctrlKey && !event.metaKey) {
-        const propertyKeyframes = rowKeyframesByProperty.get(property) ?? []
-        const anchorId = selectionAnchorByPropertyRef.current.get(property)
-        const nextSelection = resolveShiftRangeSelection(
-          propertyKeyframes,
-          keyframeId,
-          anchorId,
-          selectedKeyframeIds,
-        )
-        onSelectionChange?.(nextSelection, { preserveExternalSelection: true })
-        selectionAnchorByPropertyRef.current.set(property, keyframeId)
-        return
-      }
 
-      if (event.ctrlKey || event.metaKey) {
-        const nextSelection = toggleKeyframeInSelection(selectedKeyframeIds, keyframeId)
-        onSelectionChange?.(nextSelection, { preserveExternalSelection: true })
-        selectionAnchorByPropertyRef.current.set(property, keyframeId)
-        return
-      }
-
-      const baseSelection = selectedKeyframeIds.has(keyframeId)
-        ? new Set(selectedKeyframeIds)
-        : new Set([keyframeId])
-
-      if (!selectedKeyframeIds.has(keyframeId)) {
-        onSelectionChange?.(baseSelection)
-      }
-      selectionAnchorByPropertyRef.current.set(property, keyframeId)
-
-      const selectedIdsForDrag =
-        baseSelection.has(keyframeId) && baseSelection.size > 1
-          ? Array.from(baseSelection)
-          : [keyframeId]
-
-      const initialFrames = new Map<string, number>()
-      for (const id of selectedIdsForDrag) {
-        const meta = keyframeMetaByIdRef.current.get(id)
-        if (!meta) continue
-        initialFrames.set(id, meta.keyframe.frame)
-      }
-
-      dragStateRef.current = {
-        anchorKeyframeId: keyframeId,
-        selectedKeyframeIds: selectedIdsForDrag,
-        initialFrames,
-        startClientX: event.clientX,
-        pointerId: event.pointerId,
-        started: false,
-        duplicateOnCommit: !!onDuplicateKeyframes && event.altKey,
-        appliedDeltaFrames: 0,
-      }
-      scheduleDragPreviewFrames(null)
-
-      setPointerCaptureSafely(event.currentTarget, event.pointerId)
-    },
-    [
-      disabled,
-      isPropertyLocked,
-      onDuplicateKeyframes,
-      onActivePropertyChange,
-      rowKeyframesByProperty,
-      scheduleDragPreviewFrames,
-      selectedKeyframeIds,
-      onSelectionChange,
-    ],
-  )
-  const handleGroupKeyframePointerDown = useCallback(
-    (
-      frameGroup: DopesheetPropertyGroup['frameGroups'][number],
-      event: React.PointerEvent<HTMLButtonElement>,
-    ) => {
-      if (disabled) return
-      if (event.button !== 0) return
-
-      const movableEntries = frameGroup.keyframes.filter(
-        ({ property }) => !isPropertyLocked(property),
-      )
-      if (movableEntries.length === 0) return
-
-      event.preventDefault()
-      event.stopPropagation()
-
-      const keyframeIds = movableEntries.map(({ keyframe }) => keyframe.id)
-      const anchorEntry = movableEntries[0]
-      if (!anchorEntry) return
-
-      if (event.shiftKey && !event.ctrlKey && !event.metaKey) {
-        onSelectionChange?.(new Set([...selectedKeyframeIds, ...keyframeIds]), {
-          preserveExternalSelection: true,
-        })
-        return
-      }
-
-      if (event.ctrlKey || event.metaKey) {
-        const nextSelection = toggleKeyframesInSelection(selectedKeyframeIds, keyframeIds)
-        onSelectionChange?.(nextSelection, { preserveExternalSelection: true })
-        return
-      }
-
-      const allSelected = keyframeIds.every((keyframeId) => selectedKeyframeIds.has(keyframeId))
-      const baseSelection = allSelected ? new Set(selectedKeyframeIds) : new Set(keyframeIds)
-      if (!allSelected) {
-        onSelectionChange?.(baseSelection)
-      }
-      onActivePropertyChange?.(anchorEntry.property)
-      for (const { property, keyframe } of movableEntries) {
-        selectionAnchorByPropertyRef.current.set(property, keyframe.id)
-      }
-
-      const selectedIdsForDrag =
-        allSelected && baseSelection.size > keyframeIds.length
-          ? Array.from(baseSelection)
-          : keyframeIds
-      const initialFrames = collectInitialFrames(selectedIdsForDrag, keyframeMetaByIdRef.current)
-
-      dragStateRef.current = {
-        anchorKeyframeId: anchorEntry.keyframe.id,
-        selectedKeyframeIds: selectedIdsForDrag,
-        initialFrames,
-        startClientX: event.clientX,
-        pointerId: event.pointerId,
-        started: false,
-        duplicateOnCommit: !!onDuplicateKeyframes && event.altKey,
-        appliedDeltaFrames: 0,
-      }
-      scheduleDragPreviewFrames(null)
-
-      setPointerCaptureSafely(event.currentTarget, event.pointerId)
-    },
-    [
-      disabled,
-      isPropertyLocked,
-      onDuplicateKeyframes,
-      onActivePropertyChange,
-      onSelectionChange,
-      scheduleDragPreviewFrames,
-      selectedKeyframeIds,
-    ],
-  )
   const handleRowPointerDown = useCallback(
     (property: AnimatableProperty, event: React.PointerEvent<HTMLDivElement>) => {
       if (disabled) return
@@ -2627,88 +2497,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [beginMarqueeSelection, disabled, getMarqueeModeFromPointerEvent, selectedKeyframeIds],
   )
 
-  useEffect(() => {
-    if (!onKeyframeMove && !onDuplicateKeyframes) return
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const dragState = getMatchingDragState(dragStateRef.current, event, disabled)
-      if (!dragState) return
-
-      const deltaX = event.clientX - dragState.startClientX
-      if (!startDopesheetDrag(dragState, deltaX, onDragStart)) return
-      const deltaFrames = getDopesheetDragDelta(
-        dragState,
-        event,
-        getLiveDragPixelsPerFrame(),
-        totalFrames,
-        snapEnabled,
-        snapFrame,
-      )
-
-      const preview = buildSelectionFramePreview(dragState.selectedKeyframeIds, deltaFrames)
-      const externallyHandled =
-        !dragState.duplicateOnCommit && (onSelectionFrameDelta?.(deltaFrames, 'preview') ?? false)
-      dragState.appliedDeltaFrames = externallyHandled ? deltaFrames : preview.appliedDeltaFrames
-      if (!externallyHandled) scheduleDragPreviewFrames(preview.previewFrames)
-    }
-
-    const handlePointerUp = (event: PointerEvent) => {
-      const dragState = dragStateRef.current
-      if (!dragState || dragState.pointerId !== event.pointerId) return
-
-      if (dragState.started) {
-        const deltaFrames = getDopesheetDragDelta(
-          dragState,
-          event,
-          getLiveDragPixelsPerFrame(),
-          totalFrames,
-          snapEnabled,
-          snapFrame,
-        )
-        const preview = buildSelectionFramePreview(dragState.selectedKeyframeIds, deltaFrames)
-        if (dragState.duplicateOnCommit) {
-          duplicateSelectionFramePreview(dragState.selectedKeyframeIds, preview.previewFrames)
-        } else {
-          const externallyHandled = onSelectionFrameDelta?.(deltaFrames, 'commit') ?? false
-          if (!externallyHandled) {
-            commitSelectionFramePreview(dragState.selectedKeyframeIds, preview.previewFrames)
-          }
-          onDragEnd?.()
-        }
-      }
-      dragStateRef.current = null
-      scheduleDragPreviewFrames(null)
-    }
-
-    const handlePointerCancel = (event: PointerEvent) => {
-      const dragState = dragStateRef.current
-      if (!dragState || dragState.pointerId !== event.pointerId) return
-      if (dragState.started && !dragState.duplicateOnCommit) {
-        onSelectionFrameDelta?.(dragState.appliedDeltaFrames, 'cancel')
-        onDragCancel?.()
-      }
-      dragStateRef.current = null
-      scheduleDragPreviewFrames(null)
-    }
-
-    return addWindowPointerListeners(handlePointerMove, handlePointerUp, handlePointerCancel)
-  }, [
-    disabled,
-    buildSelectionFramePreview,
-    commitSelectionFramePreview,
-    duplicateSelectionFramePreview,
-    onKeyframeMove,
-    onDuplicateKeyframes,
-    onDragStart,
-    onDragEnd,
-    onDragCancel,
-    onSelectionFrameDelta,
-    getLiveDragPixelsPerFrame,
-    totalFrames,
-    snapEnabled,
-    snapFrame,
-    scheduleDragPreviewFrames,
-  ])
 
   const rulerScrub = useRulerScrub({
     disabled,
