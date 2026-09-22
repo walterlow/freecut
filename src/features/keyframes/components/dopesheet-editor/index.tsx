@@ -486,11 +486,6 @@ function resolveGraphVisiblePropertyList(
     : visibleGraphProperties
 }
 
-/** Whether the sheet body has rows to show (classic also shows text-motion bands). */
-function hasSheetBodyRows(rowCount: number, presentation: string, bandCount: number): boolean {
-  return rowCount > 0 || (presentation === 'classic' && bandCount > 0)
-}
-
 
 const EMPTY_FRAME_GROUPS: DopesheetPropertyGroupStructure<StructureRow>['frameGroups'] = []
 
@@ -2879,7 +2874,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const sheetBodyElement = (
     <DopesheetSheetBody
       scrollAreaRef={scrollAreaRef}
-      hasRows={hasSheetBodyRows(sheetRows.length, presentation, textMotionBands.length)}
+      // Classic also lists text-motion bands, so bands alone give the body rows.
+      hasRows={sheetRows.length > 0 || (presentation === 'classic' && textMotionBands.length > 0)}
       emptyStateMessage={emptyStateMessage}
       showEmptyGuidance={showEmptyGuidance}
       proceduralHint={proceduralHint}
