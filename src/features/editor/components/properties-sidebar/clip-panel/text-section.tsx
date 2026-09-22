@@ -38,13 +38,29 @@ import {
   SliderInput,
 } from '../components'
 import { FontPicker } from './font-picker'
-import { FONT_CATALOG, FONT_WEIGHT_MAP } from '@/shared/typography/fonts'
+import { FONT_CATALOG } from '@/shared/typography/fonts'
 import {
   applyTextStylePresetToItem,
   TEXT_STYLE_PRESETS,
   buildTextStylePresetTemplate,
   type TextStylePresetId,
 } from './text-style-presets'
+import {
+  FONT_WEIGHT_OPTIONS,
+  FONT_WEIGHT_VALUES,
+  EMPTY_TEXT_SHADOW,
+  EMPTY_TEXT_STROKE,
+  TEXT_EFFECT_PRESETS,
+} from './text-section-constants'
+import {
+  areTextSpansEqual,
+  cloneTextSpans,
+  getLayoutDraftKey,
+  buildSpanLayout,
+  getSpanEditorConfigs,
+  normalizeTextShadow,
+  normalizeTextStroke,
+} from './text-section-utils'
 import {
   buildTextItemLabelFromText,
   getTextItemPlainText,
@@ -56,78 +72,7 @@ import {
   buildTextSingleLayoutDraft,
   cloneTextLayoutDrafts,
   getTextItemLayoutMode,
-  type TextLayoutMode,
 } from '@/shared/utils/text-layout-drafts'
-
-const FONT_WEIGHT_OPTIONS = [
-  { value: 'normal', labelKey: 'regular' },
-  { value: 'medium', labelKey: 'medium' },
-  { value: 'semibold', labelKey: 'semibold' },
-  { value: 'bold', labelKey: 'bold' },
-] as const
-
-const FONT_WEIGHT_VALUES = FONT_WEIGHT_MAP as Record<NonNullable<TextItem['fontWeight']>, number>
-const EMPTY_TEXT_SHADOW: NonNullable<TextItem['textShadow']> = {
-  offsetX: 0,
-  offsetY: 0,
-  blur: 0,
-  color: '#000000',
-}
-const EMPTY_TEXT_STROKE: NonNullable<TextItem['stroke']> = {
-  width: 0,
-  color: '#111827',
-}
-
-const TEXT_EFFECT_PRESETS = [
-  {
-    id: 'none',
-    labelKey: 'none',
-    getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
-      textShadow: undefined,
-      stroke: undefined,
-    }),
-  },
-  {
-    id: 'shadow',
-    labelKey: 'shadow',
-    getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
-      textShadow: {
-        offsetX: 4,
-        offsetY: 6,
-        blur: 12,
-        color: '#000000',
-      },
-      stroke: undefined,
-    }),
-  },
-  {
-    id: 'outline',
-    labelKey: 'outline',
-    getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
-      textShadow: undefined,
-      stroke: {
-        width: 3,
-        color: '#111827',
-      },
-    }),
-  },
-  {
-    id: 'glow',
-    labelKey: 'glow',
-    getUpdates: (color: string): Pick<TextItem, 'textShadow' | 'stroke'> => ({
-      textShadow: {
-        offsetX: 0,
-        offsetY: 0,
-        blur: 18,
-        color,
-      },
-      stroke: {
-        width: 1,
-        color,
-      },
-    }),
-  },
-] as const
 
 interface TextSectionProps {
   items: TimelineItem[]
@@ -138,144 +83,6 @@ type TextSectionSlot = 'content' | 'effects' | 'animation'
 
 interface TextSectionComposerProps extends TextSectionProps {
   slots: TextSectionSlot[]
-}
-
-function normalizeTextShadow(shadow: NonNullable<TextItem['textShadow']>): TextItem['textShadow'] {
-  if (shadow.offsetX === 0 && shadow.offsetY === 0 && shadow.blur === 0) {
-    return undefined
-  }
-
-  return shadow
-}
-
-function normalizeTextStroke(stroke: NonNullable<TextItem['stroke']>): TextItem['stroke'] {
-  if (stroke.width <= 0) {
-    return undefined
-  }
-
-  return stroke
-}
-
-function areTextSpansEqual(left: TextSpan[], right: TextSpan[]): boolean {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
-function cloneTextSpans(spans: TextSpan[]): TextSpan[] {
-  return spans.map((span) => ({ ...span }))
-}
-
-function getLayoutDraftKey(layout: Exclude<TextLayoutMode, 'single'>): 'twoSpans' | 'threeSpans' {
-  return layout === 'two' ? 'twoSpans' : 'threeSpans'
-}
-
-function buildSpanLayout(baseSpans: TextSpan[], item: TextItem, count: 2 | 3): TextSpan[] {
-  const existing = cloneTextSpans(baseSpans)
-  const hasStructuredSpans = Array.isArray(item.textSpans) && item.textSpans.length > 0
-  const primaryText = getTextItemPrimaryText(item)
-  const baseSize = item.fontSize ?? 60
-  const defaults: TextSpan[] =
-    count === 2
-      ? [
-          {
-            text: hasStructuredSpans
-              ? existing[0]?.text || primaryText || 'Headline'
-              : primaryText || 'Headline',
-          },
-          {
-            text: hasStructuredSpans ? existing[1]?.text || 'Subtitle' : 'Subtitle',
-            fontSize: Math.max(24, Math.round(baseSize * 0.48)),
-            fontWeight: 'medium',
-            color: '#cbd5e1',
-            letterSpacing: 1,
-          },
-        ]
-      : [
-          {
-            text: hasStructuredSpans ? existing[0]?.text || 'Tag' : 'Tag',
-            fontSize: Math.max(18, Math.round(baseSize * 0.3)),
-            fontWeight: 'semibold',
-            color: '#cbd5e1',
-            letterSpacing: 2,
-          },
-          {
-            text: hasStructuredSpans
-              ? existing[1]?.text || primaryText || 'Headline'
-              : primaryText || 'Headline',
-          },
-          {
-            text: hasStructuredSpans ? existing[2]?.text || 'Subtitle' : 'Subtitle',
-            fontSize: Math.max(22, Math.round(baseSize * 0.42)),
-            fontWeight: 'medium',
-            color: '#cbd5e1',
-            letterSpacing: 1,
-          },
-        ]
-
-  return defaults.map((span, index) => ({
-    ...span,
-    ...(existing[index] ?? {}),
-  }))
-}
-
-interface SpanEditorConfig {
-  label: string
-  placeholder: string
-  rows: number
-  allowItalic: boolean
-}
-
-function getSpanEditorConfigs(
-  spanCount: number,
-  t: ReturnType<typeof useTranslation>['t'],
-): SpanEditorConfig[] {
-  if (spanCount >= 3) {
-    return [
-      {
-        label: t('editor.textSection.eyebrow'),
-        placeholder: t('editor.textSection.eyebrowText'),
-        rows: 1,
-        allowItalic: false,
-      },
-      {
-        label: t('editor.textSection.title'),
-        placeholder: t('editor.textSection.titleText'),
-        rows: 2,
-        allowItalic: true,
-      },
-      {
-        label: t('editor.textSection.subtitle'),
-        placeholder: t('editor.textSection.subtitleText'),
-        rows: 2,
-        allowItalic: true,
-      },
-    ]
-  }
-
-  if (spanCount === 2) {
-    return [
-      {
-        label: t('editor.textSection.title'),
-        placeholder: t('editor.textSection.titleText'),
-        rows: 2,
-        allowItalic: true,
-      },
-      {
-        label: t('editor.textSection.subtitle'),
-        placeholder: t('editor.textSection.subtitleText'),
-        rows: 2,
-        allowItalic: true,
-      },
-    ]
-  }
-
-  return [
-    {
-      label: t('editor.textSection.text'),
-      placeholder: t('editor.textSection.enterText'),
-      rows: 3,
-      allowItalic: true,
-    },
-  ]
 }
 
 export function TextContentSection(props: TextSectionProps) {
