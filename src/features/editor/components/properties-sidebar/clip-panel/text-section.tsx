@@ -29,6 +29,7 @@ import {
 } from './text-content-controls'
 import { TextAlignControls } from './text-align-controls'
 import { TextColorControls } from './text-color-controls'
+import { TextBoxControls } from './text-box-controls'
 import { TEXT_EFFECT_PRESETS } from './text-section-constants'
 import {
   cloneTextSpans,
@@ -879,66 +880,21 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
             onLetterSpacingLiveChange={handleLetterSpacingLiveChange}
           />
 
-          {/* Line Height */}
-          <PropertyRow label={t('editor.textSection.lineHeightShort')}>
-            <div className="flex items-center gap-1 min-w-0 w-full">
-              <NumberInput
-                value={sharedValues.lineHeight}
-                onChange={handleLineHeightChange}
-                onLiveChange={handleLineHeightLiveChange}
-                min={0.5}
-                max={3}
-                step={0.1}
-                unit="x"
-                className="flex-1 min-w-0"
-              />
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="lineHeight"
-                currentValue={firstTextItem?.lineHeight ?? 1.2}
-              />
-            </div>
-          </PropertyRow>
-
-          <PropertyRow label={t('editor.textSection.padding')}>
-            <div className="flex items-center gap-1 min-w-0 w-full">
-              <NumberInput
-                value={textPadding}
-                onChange={handleTextPaddingChange}
-                onLiveChange={handleTextPaddingLiveChange}
-                min={0}
-                max={160}
-                step={1}
-                unit="px"
-                className="flex-1 min-w-0"
-              />
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="textPadding"
-                currentValue={firstTextItem?.textPadding ?? 16}
-              />
-            </div>
-          </PropertyRow>
-
-          <PropertyRow label={t('editor.textSection.radius')}>
-            <div className="flex items-center gap-1 min-w-0 w-full">
-              <NumberInput
-                value={backgroundRadius}
-                onChange={handleBackgroundRadiusChange}
-                onLiveChange={handleBackgroundRadiusLiveChange}
-                min={0}
-                max={200}
-                step={1}
-                unit="px"
-                className="flex-1 min-w-0"
-              />
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="backgroundRadius"
-                currentValue={firstTextItem?.backgroundRadius ?? 0}
-              />
-            </div>
-          </PropertyRow>
+          <TextBoxControls
+            lineHeight={sharedValues.lineHeight}
+            textPadding={textPadding}
+            backgroundRadius={backgroundRadius}
+            itemIds={itemIds}
+            lineHeightCurrentValue={firstTextItem?.lineHeight ?? 1.2}
+            textPaddingCurrentValue={firstTextItem?.textPadding ?? 16}
+            backgroundRadiusCurrentValue={firstTextItem?.backgroundRadius ?? 0}
+            onLineHeightChange={handleLineHeightChange}
+            onLineHeightLiveChange={handleLineHeightLiveChange}
+            onTextPaddingChange={handleTextPaddingChange}
+            onTextPaddingLiveChange={handleTextPaddingLiveChange}
+            onBackgroundRadiusChange={handleBackgroundRadiusChange}
+            onBackgroundRadiusLiveChange={handleBackgroundRadiusLiveChange}
+          />
         </PropertySection>
       )}
 
