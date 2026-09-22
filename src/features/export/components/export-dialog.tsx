@@ -69,11 +69,9 @@ import { formatTimecode, framesToSeconds } from '@/shared/utils/time-utils'
 import type { ExportPreflightResult } from '../utils/export-preflight'
 import { assessExportPreflight, summarizePreflightSeverity } from '../utils/export-preflight'
 import {
-  getCompatibleVideoCodecs,
   getDefaultVideoCodec,
   estimateFileSize,
   mapToClientSettings,
-  mapExportCodecToClientCodec,
   type ClientCodec,
   type ClientVideoContainer,
   type ClientAudioContainer,
@@ -82,6 +80,16 @@ import { ExportPreviewPlayer } from './export-preview-player'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
 import { resolveVideoBitrate } from '../deps/renderer'
+import { detectTranscriptSubtitles, getSubtitleModeOptions } from '../utils/export-subtitles'
+import {
+  EXPORT_PRESETS,
+  findActivePresetId,
+  getResolutionOptions,
+  getVideoCodecOptions,
+  getVideoContainerOptions,
+  scaledResolution,
+  type ExportPreset,
+} from '../utils/export-options'
 
 export interface ExportDialogProps {
   open: boolean
@@ -91,34 +99,6 @@ export interface ExportDialogProps {
 }
 
 type DialogView = 'settings' | 'progress' | 'complete' | 'error' | 'cancelled'
-
-type VideoContainerOption = {
-  value: ClientVideoContainer
-  label: string
-  description: string
-  supported: boolean
-}
-
-type VideoCodecOption = {
-  value: ExportSettings['codec']
-  label: string
-  supported: boolean
-}
-
-const VIDEO_CODEC_LABELS: Record<string, string> = {
-  h264: 'H.264',
-  h265: 'H.265/HEVC',
-  vp8: 'VP8',
-  vp9: 'VP9',
-  av1: 'AV1',
-}
-
-const VIDEO_CONTAINER_DESCRIPTION_KEYS: Record<ClientVideoContainer, string> = {
-  mp4: 'export.videoContainer.mp4',
-  mov: 'export.videoContainer.mov',
-  webm: 'export.videoContainer.webm',
-  mkv: 'export.videoContainer.mkv',
-}
 
 function formatTime(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`
@@ -132,92 +112,6 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-}
-
-/**
- * Scale a dimension and round to the nearest even number (encoders require
- * even dimensions). Shared by the resolution dropdown and the quick presets so
- * preset detection compares against identical values.
- */
-function scaleDimension(value: number, scale: number): number {
-  const scaled = Math.round(value * scale)
-  return scaled % 2 === 0 ? scaled : scaled + 1
-}
-
-function scaledResolution(projectWidth: number, projectHeight: number, scale: number) {
-  return {
-    width: scaleDimension(projectWidth, scale),
-    height: scaleDimension(projectHeight, scale),
-  }
-}
-
-type ExportPreset = {
-  id: 'max' | 'recommended' | 'balanced' | 'small'
-  labelKey: string
-  container: ClientVideoContainer
-  codec: ExportSettings['codec']
-  quality: ExportSettings['quality']
-  scale: number
-}
-
-// One-click targets that bundle container/codec/quality/resolution. All keep the
-// project's aspect ratio (scale only) so output is never distorted; they vary the
-// quality/size tradeoff, which is the part users shouldn't need codec knowledge for.
-const EXPORT_PRESETS: ExportPreset[] = [
-  {
-    id: 'max',
-    labelKey: 'export.settings.presetMax',
-    container: 'mp4',
-    codec: 'h264',
-    quality: 'ultra',
-    scale: 1,
-  },
-  {
-    id: 'recommended',
-    labelKey: 'export.settings.presetRecommended',
-    container: 'mp4',
-    codec: 'h264',
-    quality: 'medium',
-    scale: 1,
-  },
-  {
-    id: 'balanced',
-    labelKey: 'export.settings.presetBalanced',
-    container: 'mp4',
-    codec: 'h264',
-    quality: 'medium',
-    scale: 0.666,
-  },
-  {
-    id: 'small',
-    labelKey: 'export.settings.presetSmall',
-    container: 'mp4',
-    codec: 'h264',
-    quality: 'low',
-    scale: 0.5,
-  },
-]
-
-/**
- * Generate resolution options based on project dimensions.
- */
-function getResolutionOptions(
-  projectWidth: number,
-  projectHeight: number,
-  t: (key: string, options?: Record<string, unknown>) => string,
-) {
-  const scales = [1, 0.666, 0.5]
-
-  return scales.map((scale) => {
-    const { width, height } = scaledResolution(projectWidth, projectHeight, scale)
-
-    const label =
-      scale === 1
-        ? t('export.settings.resolutionSameAsProject', { width, height })
-        : t('export.settings.resolutionScaled', { p: Math.min(width, height), width, height })
-
-    return { value: `${width}x${height}`, label }
-  })
 }
 
 function getDefaultCodecForFormat(format: 'mp4' | 'webm'): ExportSettings['codec'] {
@@ -390,37 +284,11 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
   // Check if in/out points are set
   const hasInOutPoints = inPoint !== null && outPoint !== null && outPoint > inPoint
-  const hasTranscriptSubtitles = useMemo(() => {
-    const reversedClipIds = new Set(
-      items
-        .filter(
-          (item) =>
-            (item.type === 'video' || item.type === 'audio') && item.isReversed === true,
-        )
-        .map((item) => item.id),
-    )
-    return items.some(
-      (item) =>
-        (item.type === 'subtitle' &&
-          item.source.type === 'transcript' &&
-          !reversedClipIds.has(item.source.clipId)) ||
-        ((item.type === 'video' || item.type === 'audio') &&
-          item.isReversed !== true &&
-          item.transcriptCaptions?.enabled === true &&
-          item.transcriptCaptions.type === 'transcript'),
-    )
-  }, [items])
+  const hasTranscriptSubtitles = useMemo(() => detectTranscriptSubtitles(items), [items])
   // Soft (toggleable) subtitle tracks only work for Matroska (WebM/MKV). MP4/MOV
   // can't — mediabunny's WebVTT-in-ISOBMFF muxing is broken and players barely
   // support it anyway — so the "Embedded track" option is hidden there.
-  const containerSupportsSoftSubtitles = videoContainer === 'webm' || videoContainer === 'mkv'
-  const subtitleModeOptions = useMemo<SubtitleExportMode[]>(
-    () =>
-      containerSupportsSoftSubtitles
-        ? ['off', 'burn', 'embedded', 'sidecar']
-        : ['off', 'burn', 'sidecar'],
-    [containerSupportsSoftSubtitles],
-  )
+  const subtitleModeOptions = useMemo(() => getSubtitleModeOptions(videoContainer), [videoContainer])
   // Coerce away a now-unavailable mode (e.g. "embedded" after switching to MP4).
   const effectiveSubtitleMode = subtitleModeOptions.includes(subtitleMode) ? subtitleMode : 'burn'
 
@@ -522,29 +390,10 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   )
 
   // Which preset (if any) the current settings exactly match. null = "Custom".
-  const activePresetId = useMemo(() => {
-    const match = EXPORT_PRESETS.find((preset) => {
-      const res = scaledResolution(projectWidth, projectHeight, preset.scale)
-      return (
-        videoContainer === preset.container &&
-        settings.codec === preset.codec &&
-        settings.quality === preset.quality &&
-        (settings.rateControl ?? 'auto') === 'auto' &&
-        settings.resolution.width === res.width &&
-        settings.resolution.height === res.height
-      )
-    })
-    return match?.id ?? null
-  }, [
-    videoContainer,
-    settings.codec,
-    settings.quality,
-    settings.rateControl,
-    settings.resolution.width,
-    settings.resolution.height,
-    projectWidth,
-    projectHeight,
-  ])
+  const activePresetId = useMemo(
+    () => findActivePresetId(videoContainer, settings, projectWidth, projectHeight),
+    [videoContainer, settings, projectWidth, projectHeight],
+  )
 
   const applyPreset = (preset: ExportPreset) => {
     setVideoContainer(preset.container)
@@ -809,36 +658,15 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
     }
   }, [exportMode, getSupportedCodecs, open, resolvedVideoBitrate, settings.resolution, view, t])
 
-  const videoContainerOptions = useMemo<VideoContainerOption[]>(() => {
-    const allContainers: ClientVideoContainer[] = ['mp4', 'mov', 'webm', 'mkv']
+  const videoContainerOptions = useMemo(
+    () => getVideoContainerOptions(supportedVideoCodecs, t),
+    [supportedVideoCodecs, t],
+  )
 
-    return allContainers.map((container) => {
-      const supported =
-        supportedVideoCodecs === null
-          ? true
-          : getCompatibleVideoCodecs(container)
-              .map((codec) => mapExportCodecToClientCodec(codec))
-              .some((codec) => supportedVideoCodecs.includes(codec))
-
-      return {
-        value: container,
-        label: container === 'mov' ? t('export.settings.quicktimeMov') : container.toUpperCase(),
-        description: t(VIDEO_CONTAINER_DESCRIPTION_KEYS[container]),
-        supported,
-      }
-    })
-  }, [supportedVideoCodecs, t])
-
-  const codecOptions = useMemo<VideoCodecOption[]>(() => {
-    return getCompatibleVideoCodecs(videoContainer).map((codec) => ({
-      value: codec,
-      label: VIDEO_CODEC_LABELS[codec] ?? codec.toUpperCase(),
-      supported:
-        supportedVideoCodecs === null
-          ? true
-          : supportedVideoCodecs.includes(mapExportCodecToClientCodec(codec)),
-    }))
-  }, [supportedVideoCodecs, videoContainer])
+  const codecOptions = useMemo(
+    () => getVideoCodecOptions(supportedVideoCodecs, videoContainer),
+    [supportedVideoCodecs, videoContainer],
+  )
 
   const hasCapabilityData = supportedVideoCodecs !== null && !videoSupportError
   const hasSupportedVideoPath = videoContainerOptions.some((option) => option.supported)
