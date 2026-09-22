@@ -97,6 +97,74 @@ interface UseKeyframeDragCommandsParams {
   valueScrubCreatedKeyframesRef: RefObject<Map<AnimatableProperty, string>>
 }
 
+/**
+ * Materialize the vector half of a paste plan. Vector payloads need the clip's
+ * resolved base transform; without one they are skipped and the caller falls
+ * back to the scalar payloads.
+ */
+function insertVectorPastePayloads({
+  vectorPayloads,
+  item,
+  baseTransform,
+  canvas,
+  allItemsById,
+  allKeyframesByItemId,
+}: {
+  vectorPayloads: Parameters<typeof pasteVectorKeyframePayload>[0]['payload'][]
+  item: TimelineItem
+  baseTransform: ResolvedTransform | null
+  canvas: CanvasSettings
+  allItemsById: Record<string, TimelineItem>
+  allKeyframesByItemId: Record<string, ItemKeyframes>
+}): KeyframeRef[] {
+  if (!baseTransform) return []
+
+  const insertedRefs: KeyframeRef[] = []
+  for (const payload of vectorPayloads) {
+    const insertedRef = pasteVectorKeyframePayload({
+      payload,
+      item,
+      baseTransform,
+      canvas,
+      getItem: (itemId) => allItemsById[itemId],
+      getKeyframes: (itemId) => allKeyframesByItemId[itemId],
+    })
+    if (insertedRef) insertedRefs.push(insertedRef)
+  }
+  return insertedRefs
+}
+
+/** Report a finished paste: moved vs copied, plus any skipped keyframes. */
+function reportPasteOutcome({
+  t,
+  isCut,
+  pastedCount,
+  skippedCount,
+  skipReasons,
+}: {
+  t: TFunction
+  isCut: boolean
+  pastedCount: number
+  skippedCount: number
+  skipReasons: string[]
+}): void {
+  const summaryText = isCut
+    ? t('timeline.keyframeEditor.movedKeyframes', { count: pastedCount })
+    : t('timeline.keyframeEditor.pastedKeyframes', { count: pastedCount })
+
+  if (skippedCount > 0) {
+    toast.warning(summaryText, {
+      description: t('timeline.keyframeEditor.skippedDescription', {
+        count: skippedCount,
+        reasons: skipReasons.join('. '),
+      }),
+    })
+    return
+  }
+
+  toast.success(summaryText)
+}
+
 export function useKeyframeDragCommands({
   selectedItemForEditor,
   selectedItemKeyframes,
@@ -460,19 +528,14 @@ export function useKeyframeDragCommands({
       return
     }
 
-    const insertedVectorRefs: KeyframeRef[] = []
-    for (const payload of pastePlan.vectorPayloads) {
-      if (!vectorBaseTransform) continue
-      const insertedRef = pasteVectorKeyframePayload({
-        payload,
-        item: selectedItemForEditor,
-        baseTransform: vectorBaseTransform,
-        canvas,
-        getItem: (itemId) => allItemsById[itemId],
-        getKeyframes: (itemId) => allKeyframesByItemId[itemId],
-      })
-      if (insertedRef) insertedVectorRefs.push(insertedRef)
-    }
+    const insertedVectorRefs = insertVectorPastePayloads({
+      vectorPayloads: pastePlan.vectorPayloads,
+      item: selectedItemForEditor,
+      baseTransform: vectorBaseTransform,
+      canvas,
+      allItemsById,
+      allKeyframesByItemId,
+    })
 
     const insertedIds = timelineActions.addKeyframes(pastePlan.scalarPayloads)
     const insertedRefs = insertedIds.map((keyframeId, index) => ({
@@ -492,22 +555,13 @@ export function useKeyframeDragCommands({
       clearKeyframeClipboard()
     }
 
-    const pastedCount = nextSelection.length
-    const summaryText = isKeyframeClipboardCut
-      ? t('timeline.keyframeEditor.movedKeyframes', { count: pastedCount })
-      : t('timeline.keyframeEditor.pastedKeyframes', { count: pastedCount })
-
-    if (skippedCount > 0) {
-      toast.warning(summaryText, {
-        description: t('timeline.keyframeEditor.skippedDescription', {
-          count: skippedCount,
-          reasons: skipReasons.join('. '),
-        }),
-      })
-      return
-    }
-
-    toast.success(summaryText)
+    reportPasteOutcome({
+      t,
+      isCut: isKeyframeClipboardCut,
+      pastedCount: nextSelection.length,
+      skippedCount,
+      skipReasons,
+    })
   }, [
     availableProperties,
     allItemsById,

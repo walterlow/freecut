@@ -18,7 +18,10 @@ import {
 } from '@/features/timeline/deps/keyframes'
 import { getEditorVectorKeyframeId } from '@/features/timeline/deps/keyframes-contract'
 import { isTransformAnimatableProperty } from '@/types/keyframe'
-import { buildEffectPropertyResetPlan } from '@/features/timeline/utils/effect-property-reset'
+import {
+  buildEffectPropertyResetPlan,
+  type EffectPropertyResetPlan,
+} from '@/features/timeline/utils/effect-property-reset'
 import * as timelineActions from '../stores/timeline-actions'
 import { useItemsStore } from '../stores/items-store'
 import { useKeyframesStore } from '../stores/keyframes-store'
@@ -95,6 +98,32 @@ interface UseKeyframePropertyValuesParams {
   ) => string
   _removeKeyframesForProperty: (itemId: string, property: AnimatableProperty) => void
   valueScrubCreatedKeyframesRef: RefObject<Map<AnimatableProperty, string>>
+}
+
+/** Whether the clip already carries keyframes for any of these properties. */
+function hasKeyframesForProperties(
+  itemId: string,
+  properties: AnimatableProperty[],
+): boolean {
+  const keyframeState = useKeyframesStore.getState().keyframesByItemId[itemId]
+  return properties.some(
+    (property) =>
+      (keyframeState?.properties.find((entry) => entry.property === property)?.keyframes.length ??
+        0) > 0,
+  )
+}
+
+/**
+ * The effect/property reset plan for a clip, or null when none of the requested
+ * properties can actually be reset.
+ */
+function buildClipPropertyResetPlan(
+  itemId: string,
+  properties: AnimatableProperty[],
+): EffectPropertyResetPlan | null {
+  const effects = useItemsStore.getState().itemById[itemId]?.effects ?? []
+  const resetPlan = buildEffectPropertyResetPlan(effects, properties)
+  return resetPlan.resettableProperties.length === 0 ? null : resetPlan
 }
 
 export function useKeyframePropertyValues({
@@ -371,17 +400,11 @@ export function useKeyframePropertyValues({
   const handleResetPropertiesToDefault = useCallback(
     (properties: AnimatableProperty[]) => {
       if (!selectedItemForEditor || properties.length === 0) return
-      const effects = useItemsStore.getState().itemById[selectedItemForEditor.id]?.effects ?? []
-      const resetPlan = buildEffectPropertyResetPlan(effects, properties)
-      if (resetPlan.resettableProperties.length === 0) return
+      const resetPlan = buildClipPropertyResetPlan(selectedItemForEditor.id, properties)
+      if (!resetPlan) return
       const propertySet = new Set(resetPlan.resettableProperties)
 
-      const keyframeState = useKeyframesStore.getState().keyframesByItemId[selectedItemForEditor.id]
-      const hasKeyframes = properties.some(
-        (property) =>
-          (keyframeState?.properties.find((entry) => entry.property === property)?.keyframes
-            .length ?? 0) > 0,
-      )
+      const hasKeyframes = hasKeyframesForProperties(selectedItemForEditor.id, properties)
       const hasValueChanges = resetPlan.effectUpdates.length > 0
       if (!hasKeyframes && !hasValueChanges) return
 

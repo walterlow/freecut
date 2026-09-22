@@ -7,11 +7,12 @@
  * clipboard state) the conditional props are resolved from.
  *
  * Pure on purpose — the panel keeps the memos and the subscriptions, this
- * module only decides what the editor receives.
+ * module only decides what the editor receives. The parts that differ per
+ * surface live in the profile table and the guarded prop groups below, so the
+ * wiring itself stays a flat, branch-light pass-through.
  */
 
-import type { ComponentProps, Dispatch, SetStateAction } from 'react'
-import type { RefObject } from 'react'
+import type { ComponentProps, Dispatch, RefObject, SetStateAction } from 'react'
 import { DopesheetEditor } from '@/features/timeline/deps/keyframe-editors'
 import { getDirectPropertyLinks } from '@/types/keyframe'
 import {
@@ -33,8 +34,56 @@ import type { TimelineItem } from '@/types/timeline'
 
 type DopesheetProps = ComponentProps<typeof DopesheetEditor>
 
-/** The `inlinePropertyGroupIds` this panel's Animate workspace shows inline. */
+/** The `inlinePropertyGroupIds` the Animate workspace shows inline. */
 const MOTION_INLINE_PROPERTY_GROUP_IDS = ['transform'] as const
+
+/**
+ * What each editor surface resolves to regardless of the panel's inputs: the
+ * docked Edit sheet scrubs the shared timeline and presents as the classic
+ * sheet, while the value-graph workspaces clamp to the item and keep the
+ * add-keyframe shortcut for the workspace itself.
+ */
+interface EditorSurfaceProfile
+  extends Pick<
+    DopesheetProps,
+    | 'clampViewportToContent'
+    | 'viewportInteractionEnabled'
+    | 'playheadClampToItemBounds'
+    | 'scrubClampToItemBounds'
+    | 'addKeyframeShortcutEnabled'
+    | 'presentation'
+    | 'inlinePropertyGroupIds'
+  > {}
+
+const SURFACE_PROFILES: Record<KeyframeEditorSurface, EditorSurfaceProfile> = {
+  edit: {
+    clampViewportToContent: false,
+    viewportInteractionEnabled: false,
+    playheadClampToItemBounds: false,
+    scrubClampToItemBounds: false,
+    addKeyframeShortcutEnabled: true,
+    presentation: 'classic',
+    inlinePropertyGroupIds: undefined,
+  },
+  default: {
+    clampViewportToContent: true,
+    viewportInteractionEnabled: true,
+    playheadClampToItemBounds: true,
+    scrubClampToItemBounds: true,
+    addKeyframeShortcutEnabled: false,
+    presentation: undefined,
+    inlinePropertyGroupIds: undefined,
+  },
+  motion: {
+    clampViewportToContent: true,
+    viewportInteractionEnabled: true,
+    playheadClampToItemBounds: true,
+    scrubClampToItemBounds: true,
+    addKeyframeShortcutEnabled: false,
+    presentation: undefined,
+    inlinePropertyGroupIds: MOTION_INLINE_PROPERTY_GROUP_IDS,
+  },
+}
 
 interface DopesheetEditorPropsInput {
   /** Where the panel is docked; drives the classic/split presentation. */
@@ -146,6 +195,137 @@ interface DopesheetEditorPropsInput {
   }
 }
 
+/**
+ * The docked Edit sheet renders against the main timeline's ruler, so it needs
+ * the shared scroll mapping and pan plumbing. The floating workspaces own their
+ * viewport and leave all of it unset.
+ */
+function buildLinkedTimelineProps({
+  surface,
+  editTimelineGlobalFrameToPixels,
+  timelineScrollContainerRef,
+  editTimelineScrollLeft,
+  editTimelinePixelsPerSecond,
+  editTimelineViewportWidth,
+  getEditTimelineLivePixelsPerSecond,
+  handleEditTimelineEdgeScroll,
+}: Pick<
+  DopesheetEditorPropsInput,
+  | 'surface'
+  | 'editTimelineGlobalFrameToPixels'
+  | 'timelineScrollContainerRef'
+  | 'editTimelineScrollLeft'
+  | 'editTimelinePixelsPerSecond'
+  | 'editTimelineViewportWidth'
+  | 'getEditTimelineLivePixelsPerSecond'
+  | 'handleEditTimelineEdgeScroll'
+>): Pick<
+  DopesheetProps,
+  | 'globalFrameToPixels'
+  | 'timelineScrollContainerRef'
+  | 'timelinePanBaseScrollLeft'
+  | 'timelinePanBasePixelsPerSecond'
+  | 'linkedTimelineViewportWidth'
+  | 'getTimelineLivePixelsPerSecond'
+  | 'onRulerEdgeScroll'
+> {
+  if (surface !== 'edit') return {}
+
+  return {
+    globalFrameToPixels: editTimelineGlobalFrameToPixels,
+    timelineScrollContainerRef,
+    timelinePanBaseScrollLeft: editTimelineScrollLeft,
+    timelinePanBasePixelsPerSecond: editTimelinePixelsPerSecond,
+    linkedTimelineViewportWidth: editTimelineViewportWidth,
+    getTimelineLivePixelsPerSecond: getEditTimelineLivePixelsPerSecond,
+    onRulerEdgeScroll: handleEditTimelineEdgeScroll,
+  }
+}
+
+/**
+ * The docked Edit sheet scrubs the shared timeline rather than the item: its
+ * playhead, the frames its trims affect and its scrub span all come from the
+ * item's own bounds. The floating workspaces leave these to the editor.
+ */
+function buildDockedSheetProps({
+  surface,
+  currentFrame,
+  selectedItemForEditor,
+  maxItemEndFrame,
+  editTimelineFps,
+  handleTrimAnimation,
+  handleSkim,
+}: Pick<
+  DopesheetEditorPropsInput,
+  | 'surface'
+  | 'currentFrame'
+  | 'selectedItemForEditor'
+  | 'maxItemEndFrame'
+  | 'editTimelineFps'
+  | 'handleTrimAnimation'
+  | 'handleSkim'
+>): Pick<
+  DopesheetProps,
+  'playheadFrame' | 'affectedFrameRange' | 'onTrimAnimation' | 'scrubFrameBounds' | 'onSkim'
+> {
+  if (surface !== 'edit') return {}
+
+  const itemFrom = selectedItemForEditor.from
+  const totalFrames = selectedItemForEditor.durationInFrames
+
+  return {
+    playheadFrame: currentFrame - itemFrom,
+    affectedFrameRange: { fromFrame: 0, toFrame: totalFrames },
+    onTrimAnimation: handleTrimAnimation,
+    // The scrubbable span never shrinks below the ten-second floor.
+    scrubFrameBounds: {
+      minFrame: -itemFrom,
+      maxFrame: Math.floor(Math.max(maxItemEndFrame / editTimelineFps, 10) * editTimelineFps) -
+        itemFrom,
+    },
+    onSkim: handleSkim,
+  }
+}
+
+/** Keyboard wiring: only the docked sheet owns the add-keyframe shortcut. */
+function buildShortcutProps({
+  surface,
+  splitView,
+  hotkeys,
+  isPointerWithinEditor,
+  isFocusWithinEditor,
+}: Pick<
+  DopesheetEditorPropsInput,
+  'surface' | 'splitView' | 'hotkeys' | 'isPointerWithinEditor' | 'isFocusWithinEditor'
+>): Pick<DopesheetProps, 'shortcuts' | 'spacious' | 'shortcutsEnabled'> {
+  return {
+    shortcuts: {
+      addKeyframe: surface === 'edit' ? hotkeys.EDIT_KEYFRAME_ADD : '',
+      previousKeyframe: hotkeys.KEYFRAME_PREVIOUS,
+      nextKeyframe: hotkeys.KEYFRAME_NEXT,
+      toggleAutoKey: hotkeys.KEYFRAME_TOGGLE_AUTO,
+      fitKeyframes: hotkeys.KEYFRAME_FIT,
+    },
+    spacious: splitView || surface === 'motion',
+    shortcutsEnabled: isPointerWithinEditor || isFocusWithinEditor,
+  }
+}
+
+/** The enabled expressions the clip carries, if any. */
+function buildPropertyExpressions(
+  itemKeyframes: ItemKeyframes | null,
+): DopesheetProps['propertyExpressions'] {
+  return itemKeyframes?.expressions?.filter((expression) => expression.type === 'expression')
+}
+
+/** Compound rows are hidden only for clips that cannot be transformed as vectors. */
+function buildHiddenPropertyRows(
+  item: TimelineItem,
+  rows: DopesheetProps['hiddenPropertyRows'],
+): DopesheetProps['hiddenPropertyRows'] {
+  return supportsVectorTransform(item) ? rows : undefined
+}
+
 export function buildDopesheetEditorProps({
   surface,
   selectedItemForEditor,
@@ -245,8 +425,37 @@ export function buildDopesheetEditorProps({
   // scrollbar instead of subtracting a second gutter from the shared axis.
   const editorWidth = Math.max(0, containerWidth - editorInset)
   const editorHeight = Math.max(0, resolvedContentHeight - editorInset)
+  const profile = SURFACE_PROFILES[surface]
 
   return {
+    ...profile,
+    ...buildLinkedTimelineProps({
+      surface,
+      editTimelineGlobalFrameToPixels,
+      timelineScrollContainerRef,
+      editTimelineScrollLeft,
+      editTimelinePixelsPerSecond,
+      editTimelineViewportWidth,
+      getEditTimelineLivePixelsPerSecond,
+      handleEditTimelineEdgeScroll,
+    }),
+    ...buildDockedSheetProps({
+      surface,
+      currentFrame,
+      selectedItemForEditor,
+      maxItemEndFrame,
+      editTimelineFps,
+      handleTrimAnimation,
+      handleSkim,
+    }),
+    ...buildShortcutProps({
+      surface,
+      splitView,
+      hotkeys,
+      isPointerWithinEditor,
+      isFocusWithinEditor,
+    }),
+
     itemId: selectedItemForEditor.id,
     motionModifiers: selectedItemForEditor.motionModifiers,
     textMotionBands: editTextMotionBands,
@@ -259,24 +468,21 @@ export function buildDopesheetEditorProps({
     onTextMotionBandClick: handleTextMotionBandClick,
     hasProceduralMotion: canBakeProceduralMotion,
     frameViewport: editTimelineFrameViewport,
-    clampViewportToContent: surface !== 'edit',
-    viewportInteractionEnabled: surface !== 'edit',
     keyframesByProperty,
     propertyValues,
     preExpressionPropertyValues,
     propertyLinks: getDirectPropertyLinks(selectedItemKeyframes ?? undefined),
-    propertyExpressions: selectedItemKeyframes?.expressions?.filter(
-      (expression) => expression.type === 'expression',
-    ),
+    propertyExpressions: buildPropertyExpressions(selectedItemKeyframes),
     propertyLinkSourceLabels,
     onPropertyLinkPointerDown: handlePropertyLinkPointerDown,
     onRemovePropertyLink: handleRemovePropertyLink,
     resolveExpressionReference,
     onSetPropertyExpression: handleSetPropertyExpression,
     onRemovePropertyExpression: handleRemovePropertyExpression,
-    hiddenPropertyRows: supportsVectorTransform(selectedItemForEditor)
-      ? hiddenVectorPropertyRows
-      : undefined,
+    hiddenPropertyRows: buildHiddenPropertyRows(
+      selectedItemForEditor,
+      hiddenVectorPropertyRows,
+    ),
     compoundPropertyRows,
     compoundSecondaryProperties,
     dimensionSeparationByProperty,
@@ -284,15 +490,10 @@ export function buildDopesheetEditorProps({
     selectedProperty: effectiveSelectedProperty,
     selectedKeyframeIds,
     currentFrame: relativeFrame,
-    playheadFrame: surface === 'edit' ? currentFrame - itemFrom : undefined,
-    playheadClampToItemBounds: surface !== 'edit',
     globalFrame: currentFrame,
     itemFrom,
     totalFrames,
-    affectedFrameRange:
-      surface === 'edit' ? { fromFrame: 0, toFrame: totalFrames } : undefined,
     trimmedKeyframeCount: surface === 'edit' ? trimmedKeyframeCount : 0,
-    onTrimAnimation: surface === 'edit' ? handleTrimAnimation : undefined,
     fps: surface === 'edit' ? editTimelineFps : canvas.fps,
     width: editorWidth,
     height: editorHeight,
@@ -304,26 +505,6 @@ export function buildDopesheetEditorProps({
     onPropertyChange: handlePropertyChange,
     onActivePropertyChange: setSelectedProperty,
     onScrub: handleScrub,
-    onSkim: surface === 'edit' ? handleSkim : undefined,
-    globalFrameToPixels: surface === 'edit' ? editTimelineGlobalFrameToPixels : undefined,
-    timelineScrollContainerRef: surface === 'edit' ? timelineScrollContainerRef : undefined,
-    timelinePanBaseScrollLeft: surface === 'edit' ? editTimelineScrollLeft : undefined,
-    timelinePanBasePixelsPerSecond:
-      surface === 'edit' ? editTimelinePixelsPerSecond : undefined,
-    linkedTimelineViewportWidth: surface === 'edit' ? editTimelineViewportWidth : undefined,
-    getTimelineLivePixelsPerSecond:
-      surface === 'edit' ? getEditTimelineLivePixelsPerSecond : undefined,
-    onRulerEdgeScroll: surface === 'edit' ? handleEditTimelineEdgeScroll : undefined,
-    scrubClampToItemBounds: surface !== 'edit',
-    scrubFrameBounds:
-      surface === 'edit'
-        ? {
-            minFrame: -itemFrom,
-            maxFrame:
-              Math.floor(Math.max(maxItemEndFrame / editTimelineFps, 10) * editTimelineFps) -
-              itemFrom,
-          }
-        : undefined,
     onScrubStart: handleScrubStart,
     onScrubEnd: handleScrubEnd,
     onDragStart: handleDragStart,
@@ -350,22 +531,10 @@ export function buildDopesheetEditorProps({
     canBakeMotion: canBakeProceduralMotion,
     onBakeMotion: () => setBakeDialogOpen(true),
     visualizationMode: effectiveEditorMode,
-    presentation: surface === 'edit' ? 'classic' : undefined,
     graphMode: vectorGraphMode,
     onGraphModeChange: activeVectorRow ? setVectorGraphMode : undefined,
     speedGraphContent: vectorSpeedGraphContent,
-    spacious: splitView || surface === 'motion',
-    inlinePropertyGroupIds: surface === 'motion' ? MOTION_INLINE_PROPERTY_GROUP_IDS : undefined,
     initialVisibleGroupIds,
     propertyColumnWidth,
-    shortcutsEnabled: isPointerWithinEditor || isFocusWithinEditor,
-    addKeyframeShortcutEnabled: surface === 'edit',
-    shortcuts: {
-      addKeyframe: surface === 'edit' ? hotkeys.EDIT_KEYFRAME_ADD : '',
-      previousKeyframe: hotkeys.KEYFRAME_PREVIOUS,
-      nextKeyframe: hotkeys.KEYFRAME_NEXT,
-      toggleAutoKey: hotkeys.KEYFRAME_TOGGLE_AUTO,
-      fitKeyframes: hotkeys.KEYFRAME_FIT,
-    },
   }
 }
