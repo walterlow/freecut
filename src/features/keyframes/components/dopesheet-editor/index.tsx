@@ -52,6 +52,7 @@ import { useDopesheetMarquee } from './use-dopesheet-marquee'
 import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
+import { useSelectionFrameActions } from './use-selection-frame-actions'
 import { useElementSize } from './use-element-size'
 import { useKeyframeDrag } from './use-keyframe-drag'
 import {
@@ -171,11 +172,6 @@ import {
   type ProceduralPreviewInput,
 } from '@/features/keyframes/utils/procedural-preview'
 import { clampFrame } from './frame-utils'
-import {
-  buildSelectionFramePreview as buildSelectionFramePreviewState,
-  commitSelectionFramePreview as commitSelectionFramePreviewState,
-  duplicateSelectionFramePreview as duplicateSelectionFramePreviewState,
-} from './selection-frame-actions'
 import {
   buildPropertyKeyframeRefs,
   buildRowKeyframeRefs,
@@ -1678,53 +1674,30 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       frameRange,
     })
 
-  const handleRemoveKeyframes = useCallback(() => {
-    if (!onRemoveKeyframes || selectedRefs.length === 0) return
-    onRemoveKeyframes(selectedRefs)
-  }, [onRemoveKeyframes, selectedRefs])
+  const {
+    handleRemoveKeyframes,
+    buildSelectionFramePreview,
+    commitSelectionFramePreview,
+    duplicateSelectionFramePreview,
+    moveSelectedKeyframesByDelta,
+  } = useSelectionFrameActions({
+    selectedRefs,
+    selectedRefIds,
+    keyframeMetaByIdRef,
+    isPropertyLocked,
+    keyframesByProperty,
+    totalFrames,
+    transitionBlockedRanges,
+    itemId,
+    disabled,
+    onRemoveKeyframes,
+    onKeyframeMove,
+    onKeyframesMove,
+    onDuplicateKeyframes,
+    onDragStart,
+    onDragEnd,
+  })
 
-  const buildSelectionFramePreview = useCallback(
-    (selectionIds: Iterable<string>, requestedDeltaFrames: number) => {
-      return buildSelectionFramePreviewState({
-        selectionIds,
-        requestedDeltaFrames,
-        keyframeMetaById: keyframeMetaByIdRef.current,
-        isPropertyLocked,
-        keyframesByProperty,
-        totalFrames,
-        transitionBlockedRanges,
-      })
-    },
-    [isPropertyLocked, keyframesByProperty, totalFrames, transitionBlockedRanges],
-  )
-
-  const commitSelectionFramePreview = useCallback(
-    (selectionIds: Iterable<string>, previewFrames: Record<string, number> | null) => {
-      return commitSelectionFramePreviewState({
-        selectionIds,
-        previewFrames,
-        keyframeMetaById: keyframeMetaByIdRef.current,
-        isPropertyLocked,
-        itemId,
-        onKeyframeMove,
-        onKeyframesMove,
-      })
-    },
-    [isPropertyLocked, itemId, onKeyframeMove, onKeyframesMove],
-  )
-  const duplicateSelectionFramePreview = useCallback(
-    (selectionIds: Iterable<string>, previewFrames: Record<string, number> | null) => {
-      return duplicateSelectionFramePreviewState({
-        selectionIds,
-        previewFrames,
-        keyframeMetaById: keyframeMetaByIdRef.current,
-        isPropertyLocked,
-        itemId,
-        onDuplicateKeyframes,
-      })
-    },
-    [isPropertyLocked, itemId, onDuplicateKeyframes],
-  )
 
   const canClearRow = useCallback(
     (row: DopesheetPropertyRow) => {
@@ -1735,39 +1708,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [disabled, isPropertyLocked, onRemoveKeyframes],
   )
 
-  const moveSelectedKeyframesByDelta = useCallback(
-    (deltaFrames: number) => {
-      if (disabled || !onKeyframeMove || selectedRefIds.length === 0 || deltaFrames === 0) {
-        return { didMove: false, appliedDeltaFrames: 0 }
-      }
-
-      const preview = buildSelectionFramePreview(selectedRefIds, deltaFrames)
-      if (!preview.previewFrames) {
-        return { didMove: false, appliedDeltaFrames: 0 }
-      }
-
-      onDragStart?.()
-      const didMove = commitSelectionFramePreview(
-        preview.movableSelectionIds,
-        preview.previewFrames,
-      )
-      onDragEnd?.()
-
-      return {
-        didMove,
-        appliedDeltaFrames: preview.appliedDeltaFrames,
-      }
-    },
-    [
-      buildSelectionFramePreview,
-      commitSelectionFramePreview,
-      disabled,
-      onDragEnd,
-      onDragStart,
-      onKeyframeMove,
-      selectedRefIds,
-    ],
-  )
 
   const {
     localFrameInputValue,
