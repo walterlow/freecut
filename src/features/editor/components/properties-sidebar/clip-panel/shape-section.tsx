@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { i18n } from '@/i18n'
 import { toast } from 'sonner'
-import { Shapes, MousePointer2 } from 'lucide-react'
+import { Shapes } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -29,6 +29,7 @@ import {
 import { getPathClosureUpdates, getShapeSectionControlVisibility } from './shape-section-visibility'
 import { getSharedShapeValues } from './shape-section-shared-values'
 import { ShapeFillControls } from './shape-fill-controls'
+import { ShapePathControls } from './shape-path-controls'
 import {
   ShapeStrokeControls,
   ShapeStrokeJoinControls,
@@ -576,85 +577,19 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         </Select>
       </PropertyRow>
 
-      {singlePathShape && (
-        <>
-          <PropertyRow label={t('editor.shapeSection.path')}>
-            <div className="flex items-center gap-2 w-full">
-              <Button
-                variant={isEditingPathShape ? 'default' : 'outline'}
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                onClick={() => {
-                  if (isEditingPathShape) {
-                    stopEditing()
-                  } else {
-                    startEditing(singlePathShape.id)
-                  }
-                }}
-              >
-                <MousePointer2 className="w-3.5 h-3.5" />
-                {isEditingPathShape ? t('common.done') : t('editor.shapeSection.editPath')}
-              </Button>
-              {!controlVisibility.isMaskOnly && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={handleReversePath}
-                >
-                  {t('editor.shapeSection.reversePath')}
-                </Button>
-              )}
-            </div>
-          </PropertyRow>
-          {controlVisibility.showPathClosure && (
-            <>
-              <PropertyRow label={t('editor.shapeSection.pathClosure')}>
-                <div className="grid w-full grid-cols-2 gap-1">
-                  <Button
-                    variant={sharedValues.pathClosed === false ? 'secondary' : 'ghost'}
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => handlePathClosedChange(false)}
-                  >
-                    {t('editor.shapeSection.openPath')}
-                  </Button>
-                  <Button
-                    variant={sharedValues.pathClosed === true ? 'secondary' : 'ghost'}
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => handlePathClosedChange(true)}
-                  >
-                    {t('editor.shapeSection.closedPath')}
-                  </Button>
-                </div>
-              </PropertyRow>
-              <p className="px-1 pb-1 text-[10px] leading-4 text-muted-foreground">
-                {t(
-                  sharedValues.pathClosed === false
-                    ? 'editor.shapeSection.openPathHint'
-                    : 'editor.shapeSection.closedPathHint',
-                )}
-              </p>
-            </>
-          )}
-          {isEditingPathShape &&
-            !controlVisibility.isMaskOnly &&
-            sharedValues.pathClosed === true && (
-              <PropertyRow label={t('editor.shapeSection.firstVertex')}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
-                  disabled={selectedVertexIndex === null}
-                  onClick={handleSetFirstVertex}
-                >
-                  {t('editor.shapeSection.setSelectedFirst')}
-                </Button>
-              </PropertyRow>
-            )}
-        </>
-      )}
+      <ShapePathControls
+        pathItemId={singlePathShape?.id ?? null}
+        isEditingPath={isEditingPathShape}
+        isMaskOnly={controlVisibility.isMaskOnly}
+        showPathClosure={controlVisibility.showPathClosure}
+        pathClosed={sharedValues.pathClosed}
+        selectedVertexIndex={selectedVertexIndex}
+        startEditing={startEditing}
+        stopEditing={stopEditing}
+        onReversePath={handleReversePath}
+        onPathClosedChange={handlePathClosedChange}
+        onSetFirstVertex={handleSetFirstVertex}
+      />
 
       <ShapeFillControls
         visible={controlVisibility.showFill}
