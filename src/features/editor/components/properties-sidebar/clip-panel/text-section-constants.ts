@@ -8,6 +8,8 @@ export const FONT_WEIGHT_OPTIONS = [
   { value: 'bold', labelKey: 'bold' },
 ] as const
 
+export type FontWeightOption = (typeof FONT_WEIGHT_OPTIONS)[number]
+
 export const FONT_WEIGHT_VALUES = FONT_WEIGHT_MAP as Record<
   NonNullable<TextItem['fontWeight']>,
   number

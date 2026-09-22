@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Type,
@@ -38,23 +38,15 @@ import {
   SliderInput,
 } from '../components'
 import { FontPicker } from './font-picker'
-import { FONT_CATALOG } from '@/shared/typography/fonts'
 import {
   applyTextStylePresetToItem,
   TEXT_STYLE_PRESETS,
   buildTextStylePresetTemplate,
   type TextStylePresetId,
 } from './text-style-presets'
-import { getSharedTextValues } from './text-section-shared-values'
+import { useTextSectionSelection } from './use-text-section-selection'
+import { FONT_WEIGHT_OPTIONS, TEXT_EFFECT_PRESETS } from './text-section-constants'
 import {
-  FONT_WEIGHT_OPTIONS,
-  FONT_WEIGHT_VALUES,
-  EMPTY_TEXT_SHADOW,
-  EMPTY_TEXT_STROKE,
-  TEXT_EFFECT_PRESETS,
-} from './text-section-constants'
-import {
-  areTextSpansEqual,
   cloneTextSpans,
   getLayoutDraftKey,
   buildSpanLayout,
@@ -66,7 +58,6 @@ import {
   buildTextItemLabelFromText,
   getTextItemPlainText,
   getTextItemPrimaryText,
-  getTextItemSpans,
 } from '@/shared/utils/text-item-spans'
 import {
   buildEditableBaseSpans,
@@ -110,58 +101,17 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
   const setPropertiesPreviewNew = useGizmoStore((s) => s.setPropertiesPreviewNew)
   const clearPreview = useGizmoStore((s) => s.clearPreview)
 
-  // Filter to only text items
-  const textItems = useMemo(
-    () => items.filter((item): item is TextItem => item.type === 'text'),
-    [items],
-  )
-
-  // Memoize item IDs for stable callback dependencies
-  const itemIds = useMemo(() => textItems.map((item) => item.id), [textItems])
-  const baseShadow = useMemo(
-    () => ({ ...EMPTY_TEXT_SHADOW, ...(textItems[0]?.textShadow ?? {}) }),
-    [textItems],
-  )
-  const baseStroke = useMemo(
-    () => ({ ...EMPTY_TEXT_STROKE, ...(textItems[0]?.stroke ?? {}) }),
-    [textItems],
-  )
-  const sharedTextSpans = useMemo(() => {
-    if (textItems.length === 0) return undefined
-    const first = getTextItemSpans(textItems[0]!)
-    return textItems.every((item) => areTextSpansEqual(getTextItemSpans(item), first))
-      ? first
-      : undefined
-  }, [textItems])
-  const activeEditorSpans = useMemo(
-    () => sharedTextSpans ?? (textItems[0] ? getTextItemSpans(textItems[0]) : []),
-    [sharedTextSpans, textItems],
-  )
-  const firstTextItem = textItems[0]
-  const hasStructuredSpanEditor = Boolean(firstTextItem?.textSpans?.length)
-
-  // Get shared values across selected text items
-  const sharedValues = useMemo(() => getSharedTextValues(textItems), [textItems])
-
-  const supportedFontWeightOptions = useMemo(() => {
-    const selectedFontFamily = sharedValues?.fontFamily
-    if (!selectedFontFamily) {
-      return FONT_WEIGHT_OPTIONS
-    }
-
-    const selectedFont = FONT_CATALOG.find(
-      (font) => font.family === selectedFontFamily || font.value === selectedFontFamily,
-    )
-    if (!selectedFont) {
-      return FONT_WEIGHT_OPTIONS
-    }
-
-    const options = FONT_WEIGHT_OPTIONS.filter((weight) =>
-      selectedFont.weights.includes(FONT_WEIGHT_VALUES[weight.value]),
-    )
-
-    return options.length > 0 ? options : FONT_WEIGHT_OPTIONS
-  }, [sharedValues?.fontFamily])
+  const {
+    textItems,
+    itemIds,
+    sharedValues,
+    baseShadow,
+    baseStroke,
+    activeEditorSpans,
+    firstTextItem,
+    hasStructuredSpanEditor,
+    supportedFontWeightOptions,
+  } = useTextSectionSelection(items)
 
   const previousFontFamilyRef = useRef<string | undefined>(sharedValues?.fontFamily)
   const sharedFontWeightRef = useRef<TextItem['fontWeight'] | undefined>(sharedValues?.fontWeight)
