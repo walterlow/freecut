@@ -105,21 +105,13 @@ export function getSharedShapeValues(shapes: ShapeItem[]): ShapeSharedValues | n
     innerRadius: readSharedValue(shapes, (shape) => shape.innerRadius ?? 0.5, 'mixed' as const),
     trimPathStart: readSharedValue(shapes, (shape) => shape.trimPathStart ?? 0, 'mixed' as const),
     trimPathEnd: readSharedValue(shapes, (shape) => shape.trimPathEnd ?? 100, 'mixed' as const),
-    trimPathOffset: readSharedValue(
-      shapes,
-      (shape) => shape.trimPathOffset ?? 0,
-      'mixed' as const,
-    ),
+    trimPathOffset: readSharedValue(shapes, (shape) => shape.trimPathOffset ?? 0, 'mixed' as const),
     taperStartWidth: readSharedValue(
       shapes,
       (shape) => shape.taperStartWidth ?? 100,
       'mixed' as const,
     ),
-    taperEndWidth: readSharedValue(
-      shapes,
-      (shape) => shape.taperEndWidth ?? 100,
-      'mixed' as const,
-    ),
+    taperEndWidth: readSharedValue(shapes, (shape) => shape.taperEndWidth ?? 100, 'mixed' as const),
     taperStartLength: readSharedValue(
       shapes,
       (shape) => shape.taperStartLength ?? 0,

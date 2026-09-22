@@ -62,73 +62,73 @@ export function ShapeKindControls({
 
   return (
     <>
-    {/* Corner Radius - shown for rectangle, triangle, star, polygon */}
-    {showCornerRadius && (
-      <PropertyRow label={t('editor.shapeSection.radius')}>
-        <PropertySliderControl
-          value={cornerRadius}
-          onChange={onCornerRadiusChange}
-          onLiveChange={onCornerRadiusLiveChange}
-          min={0}
-          max={100}
-          step={1}
-          unit="px"
-          onReset={onCornerRadiusReset}
-          resetLabel={t('editor.shapeSection.resetToDefault')}
-        />
-      </PropertyRow>
-    )}
+      {/* Corner Radius - shown for rectangle, triangle, star, polygon */}
+      {showCornerRadius && (
+        <PropertyRow label={t('editor.shapeSection.radius')}>
+          <PropertySliderControl
+            value={cornerRadius}
+            onChange={onCornerRadiusChange}
+            onLiveChange={onCornerRadiusLiveChange}
+            min={0}
+            max={100}
+            step={1}
+            unit="px"
+            onReset={onCornerRadiusReset}
+            resetLabel={t('editor.shapeSection.resetToDefault')}
+          />
+        </PropertyRow>
+      )}
 
-    {/* Direction - shown for triangle only */}
-    {showDirection && (
-      <PropertyRow label={t('editor.shapeSection.direction')}>
-        <div className="flex gap-1">
-          {DIRECTION_OPTIONS.map((dir) => (
-            <Button
-              key={dir.value}
-              variant={direction === dir.value ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => onDirectionChange(dir.value)}
-              title={t(dir.labelKey)}
-            >
-              <dir.icon className="w-3.5 h-3.5" />
-            </Button>
-          ))}
-        </div>
-      </PropertyRow>
-    )}
+      {/* Direction - shown for triangle only */}
+      {showDirection && (
+        <PropertyRow label={t('editor.shapeSection.direction')}>
+          <div className="flex gap-1">
+            {DIRECTION_OPTIONS.map((dir) => (
+              <Button
+                key={dir.value}
+                variant={direction === dir.value ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => onDirectionChange(dir.value)}
+                title={t(dir.labelKey)}
+              >
+                <dir.icon className="w-3.5 h-3.5" />
+              </Button>
+            ))}
+          </div>
+        </PropertyRow>
+      )}
 
-    {/* Points - shown for star and polygon */}
-    {showPoints && (
-      <PropertyRow label={t('editor.shapeSection.points')}>
-        <NumberInput
-          value={points}
-          onChange={onPointsChange}
-          onLiveChange={onPointsLiveChange}
-          min={3}
-          max={12}
-          step={1}
-          className="flex-1 min-w-0"
-        />
-      </PropertyRow>
-    )}
+      {/* Points - shown for star and polygon */}
+      {showPoints && (
+        <PropertyRow label={t('editor.shapeSection.points')}>
+          <NumberInput
+            value={points}
+            onChange={onPointsChange}
+            onLiveChange={onPointsLiveChange}
+            min={3}
+            max={12}
+            step={1}
+            className="flex-1 min-w-0"
+          />
+        </PropertyRow>
+      )}
 
-    {/* Inner Radius - shown for star only */}
-    {showInnerRadius && (
-      <PropertyRow label={t('editor.shapeSection.innerRadius')}>
-        <PropertySliderControl
-          value={innerRadius}
-          onChange={onInnerRadiusChange}
-          onLiveChange={onInnerRadiusLiveChange}
-          min={0.1}
-          max={0.9}
-          step={0.05}
-          onReset={onInnerRadiusReset}
-          resetLabel={t('editor.shapeSection.resetToDefault')}
-        />
-      </PropertyRow>
-    )}
+      {/* Inner Radius - shown for star only */}
+      {showInnerRadius && (
+        <PropertyRow label={t('editor.shapeSection.innerRadius')}>
+          <PropertySliderControl
+            value={innerRadius}
+            onChange={onInnerRadiusChange}
+            onLiveChange={onInnerRadiusLiveChange}
+            min={0.1}
+            max={0.9}
+            step={0.05}
+            onReset={onInnerRadiusReset}
+            resetLabel={t('editor.shapeSection.resetToDefault')}
+          />
+        </PropertyRow>
+      )}
     </>
   )
 }

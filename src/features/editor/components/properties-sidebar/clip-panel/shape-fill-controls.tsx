@@ -62,91 +62,89 @@ export function ShapeFillControls({
 
   return (
     <>
-    {visible && (
-      <PropertyRow label={t('editor.shapeSection.fill')}>
-        <Button
-          variant={fillEnabled === true ? 'secondary' : 'ghost'}
-          size="sm"
-          className="h-7 text-xs flex-1"
-          disabled={fillEnabled === 'mixed'}
-          onClick={() => onFillEnabledChange(fillEnabled !== true)}
-        >
-          {fillEnabled === true
-            ? t('editor.shapeSection.on')
-            : t('editor.shapeSection.off')}
-        </Button>
-      </PropertyRow>
-    )}
-
-    {/* Fill Color */}
-    {visible && fillEnabled !== false && (
-      <>
-        <PropertyRow label={t('editor.shapeSection.fillType')}>
-          <Select value={fillType} onValueChange={onFillTypeChange}>
-            <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-              <SelectValue placeholder={t('editor.shapeSection.mixed')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="solid">{t('editor.shapeSection.fillTypeSolid')}</SelectItem>
-              <SelectItem value="linear">{t('editor.shapeSection.fillTypeLinear')}</SelectItem>
-            </SelectContent>
-          </Select>
+      {visible && (
+        <PropertyRow label={t('editor.shapeSection.fill')}>
+          <Button
+            variant={fillEnabled === true ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-7 text-xs flex-1"
+            disabled={fillEnabled === 'mixed'}
+            onClick={() => onFillEnabledChange(fillEnabled !== true)}
+          >
+            {fillEnabled === true ? t('editor.shapeSection.on') : t('editor.shapeSection.off')}
+          </Button>
         </PropertyRow>
-        {fillType === 'linear' ? (
-          <>
+      )}
+
+      {/* Fill Color */}
+      {visible && fillEnabled !== false && (
+        <>
+          <PropertyRow label={t('editor.shapeSection.fillType')}>
+            <Select value={fillType} onValueChange={onFillTypeChange}>
+              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                <SelectValue placeholder={t('editor.shapeSection.mixed')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="solid">{t('editor.shapeSection.fillTypeSolid')}</SelectItem>
+                <SelectItem value="linear">{t('editor.shapeSection.fillTypeLinear')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </PropertyRow>
+          {fillType === 'linear' ? (
+            <>
+              <ColorPicker
+                label={t('editor.shapeSection.gradientStartColor')}
+                color={gradientStartColor ?? fillColor ?? '#3b82f6'}
+                onChange={onGradientStartColorChange}
+                onLiveChange={onGradientStartColorLiveChange}
+                onReset={() => onGradientStartColorChange('#3b82f6')}
+                defaultColor="#3b82f6"
+              />
+              <ColorPicker
+                label={t('editor.shapeSection.gradientEndColor')}
+                color={gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR}
+                onChange={onGradientEndColorChange}
+                onLiveChange={onGradientEndColorLiveChange}
+                onReset={() => onGradientEndColorChange(DEFAULT_SHAPE_GRADIENT_END_COLOR)}
+                defaultColor={DEFAULT_SHAPE_GRADIENT_END_COLOR}
+              />
+              <PropertyRow label={t('editor.shapeSection.gradientAngle')}>
+                <PropertySliderControl
+                  value={gradientAngle}
+                  onChange={onGradientAngleChange}
+                  onLiveChange={onGradientAngleLiveChange}
+                  min={-180}
+                  max={180}
+                  step={1}
+                  unit="°"
+                  onReset={() => onGradientAngleChange(DEFAULT_SHAPE_GRADIENT_ANGLE)}
+                  resetLabel={t('editor.shapeSection.resetToDefault')}
+                />
+              </PropertyRow>
+              <PropertyRow label={t('editor.shapeSection.gradientColors')}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 flex-1 text-xs"
+                  onClick={onSwapGradientColors}
+                >
+                  {t('editor.shapeSection.swapGradientColors')}
+                </Button>
+              </PropertyRow>
+            </>
+          ) : fillType === 'solid' ? (
             <ColorPicker
-              label={t('editor.shapeSection.gradientStartColor')}
-              color={gradientStartColor ?? fillColor ?? '#3b82f6'}
-              onChange={onGradientStartColorChange}
-              onLiveChange={onGradientStartColorLiveChange}
-              onReset={() => onGradientStartColorChange('#3b82f6')}
+              label={t('editor.shapeSection.fillColor')}
+              color={fillColor ?? '#3b82f6'}
+              onChange={onFillColorChange}
+              onLiveChange={onFillColorLiveChange}
+              onReset={() => onFillColorChange('#3b82f6')}
               defaultColor="#3b82f6"
             />
-            <ColorPicker
-              label={t('editor.shapeSection.gradientEndColor')}
-              color={gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR}
-              onChange={onGradientEndColorChange}
-              onLiveChange={onGradientEndColorLiveChange}
-              onReset={() => onGradientEndColorChange(DEFAULT_SHAPE_GRADIENT_END_COLOR)}
-              defaultColor={DEFAULT_SHAPE_GRADIENT_END_COLOR}
-            />
-            <PropertyRow label={t('editor.shapeSection.gradientAngle')}>
-              <PropertySliderControl
-                value={gradientAngle}
-                onChange={onGradientAngleChange}
-                onLiveChange={onGradientAngleLiveChange}
-                min={-180}
-                max={180}
-                step={1}
-                unit="°"
-                onReset={() => onGradientAngleChange(DEFAULT_SHAPE_GRADIENT_ANGLE)}
-                resetLabel={t('editor.shapeSection.resetToDefault')}
-              />
-            </PropertyRow>
-            <PropertyRow label={t('editor.shapeSection.gradientColors')}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 flex-1 text-xs"
-                onClick={onSwapGradientColors}
-              >
-                {t('editor.shapeSection.swapGradientColors')}
-              </Button>
-            </PropertyRow>
-          </>
-        ) : fillType === 'solid' ? (
-          <ColorPicker
-            label={t('editor.shapeSection.fillColor')}
-            color={fillColor ?? '#3b82f6'}
-            onChange={onFillColorChange}
-            onLiveChange={onFillColorLiveChange}
-            onReset={() => onFillColorChange('#3b82f6')}
-            defaultColor="#3b82f6"
-          />
-        ) : null}
-      </>
-    )}
+          ) : null}
+        </>
+      )}
     </>
   )
 }

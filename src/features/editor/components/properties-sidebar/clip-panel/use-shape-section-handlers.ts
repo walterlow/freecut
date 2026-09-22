@@ -371,7 +371,6 @@ export function useShapeSectionHandlers({
     [updateShapeItems, clearPreview],
   )
 
-
   const previewStrokePathProperty = useCallback(
     (property: StrokePathProperty, value: number) => {
       const previews: Record<string, Partial<Record<StrokePathProperty, number>>> = {}

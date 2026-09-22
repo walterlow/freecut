@@ -37,71 +37,64 @@ export function ShapePathControls({
 
   return (
     <>
-    {pathItemId && (
-      <>
-        <PropertyRow label={t('editor.shapeSection.path')}>
-          <div className="flex items-center gap-2 w-full">
-            <Button
-              variant={isEditingPath ? 'default' : 'outline'}
-              size="sm"
-              className="h-7 text-xs gap-1.5"
-              onClick={() => {
-                if (isEditingPath) {
-                  stopEditing()
-                } else {
-                  startEditing(pathItemId)
-                }
-              }}
-            >
-              <MousePointer2 className="w-3.5 h-3.5" />
-              {isEditingPath ? t('common.done') : t('editor.shapeSection.editPath')}
-            </Button>
-            {!isMaskOnly && (
+      {pathItemId && (
+        <>
+          <PropertyRow label={t('editor.shapeSection.path')}>
+            <div className="flex items-center gap-2 w-full">
               <Button
-                variant="outline"
+                variant={isEditingPath ? 'default' : 'outline'}
                 size="sm"
-                className="h-7 text-xs"
-                onClick={onReversePath}
+                className="h-7 text-xs gap-1.5"
+                onClick={() => {
+                  if (isEditingPath) {
+                    stopEditing()
+                  } else {
+                    startEditing(pathItemId)
+                  }
+                }}
               >
-                {t('editor.shapeSection.reversePath')}
+                <MousePointer2 className="w-3.5 h-3.5" />
+                {isEditingPath ? t('common.done') : t('editor.shapeSection.editPath')}
               </Button>
-            )}
-          </div>
-        </PropertyRow>
-        {showPathClosure && (
-          <>
-            <PropertyRow label={t('editor.shapeSection.pathClosure')}>
-              <div className="grid w-full grid-cols-2 gap-1">
-                <Button
-                  variant={pathClosed === false ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => onPathClosedChange(false)}
-                >
-                  {t('editor.shapeSection.openPath')}
+              {!isMaskOnly && (
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onReversePath}>
+                  {t('editor.shapeSection.reversePath')}
                 </Button>
-                <Button
-                  variant={pathClosed === true ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => onPathClosedChange(true)}
-                >
-                  {t('editor.shapeSection.closedPath')}
-                </Button>
-              </div>
-            </PropertyRow>
-            <p className="px-1 pb-1 text-[10px] leading-4 text-muted-foreground">
-              {t(
-                pathClosed === false
-                  ? 'editor.shapeSection.openPathHint'
-                  : 'editor.shapeSection.closedPathHint',
               )}
-            </p>
-          </>
-        )}
-        {isEditingPath &&
-          !isMaskOnly &&
-          pathClosed === true && (
+            </div>
+          </PropertyRow>
+          {showPathClosure && (
+            <>
+              <PropertyRow label={t('editor.shapeSection.pathClosure')}>
+                <div className="grid w-full grid-cols-2 gap-1">
+                  <Button
+                    variant={pathClosed === false ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => onPathClosedChange(false)}
+                  >
+                    {t('editor.shapeSection.openPath')}
+                  </Button>
+                  <Button
+                    variant={pathClosed === true ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => onPathClosedChange(true)}
+                  >
+                    {t('editor.shapeSection.closedPath')}
+                  </Button>
+                </div>
+              </PropertyRow>
+              <p className="px-1 pb-1 text-[10px] leading-4 text-muted-foreground">
+                {t(
+                  pathClosed === false
+                    ? 'editor.shapeSection.openPathHint'
+                    : 'editor.shapeSection.closedPathHint',
+                )}
+              </p>
+            </>
+          )}
+          {isEditingPath && !isMaskOnly && pathClosed === true && (
             <PropertyRow label={t('editor.shapeSection.firstVertex')}>
               <Button
                 variant="outline"
@@ -114,8 +107,8 @@ export function ShapePathControls({
               </Button>
             </PropertyRow>
           )}
-      </>
-    )}
+        </>
+      )}
     </>
   )
 }
