@@ -9,7 +9,6 @@ import { useKeyframesStore } from '../../stores/keyframes-store'
 import { useEditPreviewShifts } from './use-edit-preview-shifts'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useEditorStore } from '@/shared/state/editor'
-import { usePlaybackStore } from '@/shared/state/playback'
 import { perfMarkRender } from '@/shared/logging/perf-marks'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useCaptionDialogState } from './use-caption-dialog-state'
@@ -65,6 +64,7 @@ import { useEffectDropTarget } from './use-effect-drop-target'
 import { EffectDropOverlay } from './effect-drop-overlay'
 import { useTransitionDropPreview } from './use-transition-drop-preview'
 import { TransitionDropZones } from './transition-drop-zones'
+import { buildTimelineItemContextMenuProps } from './build-context-menu-props'
 const EMPTY_SEGMENT_OVERLAYS = [] as const
 const EMPTY_LINKED_ITEMS: TimelineItemType[] = []
 
@@ -738,78 +738,45 @@ export const TimelineItem = memo(function TimelineItem({
   return (
     <>
       <ItemContextMenu
-        trackLocked={trackLocked}
-        joinActions={{
-          canJoinSelected: getCanJoinSelected(),
+        {...buildTimelineItemContextMenuProps({
+          item,
+          trackLocked,
+          isBroken,
+          isSelected,
+          hasSpeakableText,
+          hasGeneratedCaptions,
+          keyframedProperties,
+          closerEdge,
           hasJoinableLeft,
           hasJoinableRight,
-          closerEdge,
-          onJoinSelected: handleJoinSelected,
-          onJoinLeft: handleJoinLeft,
-          onJoinRight: handleJoinRight,
-        }}
-        linkActions={{
-          canLinkSelected: getCanLinkSelected(),
-          canUnlinkSelected: getCanUnlinkSelected(),
-          onLinkSelected: handleLinkSelected,
-          onUnlinkSelected: handleUnlinkSelected,
-        }}
-        keyframeActions={{
-          keyframedProperties,
-          onClearAllKeyframes: handleClearAllKeyframes,
-          onClearPropertyKeyframes: handleClearPropertyKeyframes,
-        }}
-        layoutActions={{
-          onBentoLayout: handleBentoLayout,
-        }}
-        mediaActions={{
-          canReverse: item.type === 'video' || item.type === 'audio',
-          isReversed: reverseMenuShowsUnreverse,
-          onReverse: handleReverseSelected,
-          isVideoItem: item.type === 'video',
-          playheadInBounds: (() => {
-            const frame = usePlaybackStore.getState().currentFrame
-            return frame > item.from && frame < item.from + item.durationInFrames
-          })(),
-          onFreezeFrame: handleFreezeFrame,
-          isTextItem: item.type === 'text' && hasSpeakableText,
-          onGenerateAudioFromText: handleGenerateAudioFromText,
-          canRemoveSilence:
-            (item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken,
-          onRemoveSilence: handleRemoveSilence,
-          canRemoveFillers:
-            (item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken,
+          reverseMenuShowsUnreverse,
           isRemovingFillers,
-          onRemoveFillers: handleRemoveFillers,
-        }}
-        captionActions={{
-          canManageCaptions: caption.canManageCaptions,
-          hasCaptions: hasGeneratedCaptions,
-          isGeneratingCaptions:
-            caption.transcriptStatus === 'queued' || caption.transcriptStatus === 'transcribing',
-          onOpenCaptionDialog: caption.openDialog,
-          canExtractEmbeddedSubtitles: caption.canExtractEmbeddedSubtitles,
-          onExtractEmbeddedSubtitles: caption.handleExtractEmbeddedSubtitles,
-          canConsolidateCaptionsToSegment: caption.hasConsolidatablePerCueCaptions,
-          onConsolidateCaptionsToSegment: caption.handleConsolidateCaptionsToSegment,
-        }}
-        compositionActions={{
           isCompositionItem,
-          onEnterComposition: handleEnterComposition,
-          onDissolveComposition: handleDissolveComposition,
-          canCreatePreComp: isSelected,
-          onCreatePreComp: handleCreatePreComp,
-        }}
-        sceneDetectionActions={{
-          canDetectScenes: item.type === 'video' && !!item.mediaId && !isBroken,
-          isDetectingScenes: isSceneDetectionActive,
-          onDetectScenes: handleDetectScenes,
-        }}
-        destructiveActions={{
-          isSelected,
-          onRippleDelete: handleRippleDelete,
-          onDelete: handleDelete,
-        }}
+          isSceneDetectionActive,
+          caption,
+          getCanJoinSelected,
+          getCanLinkSelected,
+          getCanUnlinkSelected,
+          handleJoinSelected,
+          handleJoinLeft,
+          handleJoinRight,
+          handleLinkSelected,
+          handleUnlinkSelected,
+          handleClearAllKeyframes,
+          handleClearPropertyKeyframes,
+          handleBentoLayout,
+          handleReverseSelected,
+          handleFreezeFrame,
+          handleGenerateAudioFromText,
+          handleRemoveSilence,
+          handleRemoveFillers,
+          handleCreatePreComp,
+          handleEnterComposition,
+          handleDissolveComposition,
+          handleDetectScenes,
+          handleRippleDelete,
+          handleDelete,
+        })}
       >
         <div
           ref={transformRef}

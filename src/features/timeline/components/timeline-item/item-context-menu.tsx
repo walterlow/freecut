@@ -135,7 +135,7 @@ type LayoutActionsConfig = {
   onBentoLayout?: () => void
 }
 
-interface ItemContextMenuProps {
+export interface ItemContextMenuProps {
   children: ReactNode
   trackLocked: boolean
   joinActions: JoinActionsConfig
