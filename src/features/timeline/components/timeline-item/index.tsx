@@ -12,16 +12,11 @@ import { useEditorStore } from '@/shared/state/editor'
 import { perfMarkRender } from '@/shared/logging/perf-marks'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useCaptionDialogState } from './use-caption-dialog-state'
-import {
-  useTimelineDrag,
-  dragOffsetRef,
-  dragPreviewOffsetByItemRef,
-} from '../../hooks/use-timeline-drag'
+import { useTimelineDrag } from '../../hooks/use-timeline-drag'
 import { useTimelineTrim } from '../../hooks/use-timeline-trim'
 import { useTrackPush } from '../../hooks/use-track-push'
 import { isRateStretchableItem, useRateStretch } from '../../hooks/use-rate-stretch'
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide'
-import { DRAG_OPACITY } from '../../constants'
 import { cn } from '@/shared/ui/cn'
 import { ClipContent } from './clip-content'
 import { ClipIndicators } from './clip-indicators'
@@ -63,6 +58,12 @@ import {
   FadeEnvelopeOverlay,
   VideoFadeHandleLayer,
 } from './fade-envelope-overlay'
+import {
+  resolveCompactClipInteraction,
+  shouldUseCompactClipShell,
+  useAudioVolumeEditLabel,
+} from './use-compact-shell'
+import { getTimelineItemShellStyle } from './get-shell-style'
 const EMPTY_SEGMENT_OVERLAYS = [] as const
 const EMPTY_LINKED_ITEMS: TimelineItemType[] = []
 
@@ -79,7 +80,6 @@ const ITEM_COLOR_CLASSES: Partial<Record<TimelineItemType['type'], string>> = {
   adjustment: 'bg-purple-500/30 border-purple-400',
   composition: 'bg-violet-600/40 border-violet-400',
 }
-const SPEED_BADGE_EPSILON = 0.005
 
 function getFramePositionStyle(frame: number): string {
   return `calc(${frame} * var(--timeline-percent-per-frame, 0%))`
@@ -614,11 +614,8 @@ export const TimelineItem = memo(function TimelineItem({
     transformRef,
     updateTimelineItem,
   })
-  // Hoisted before fade memos so the compact guard can account for active edits.
-  // Selection alone must not promote a narrow clip back to the rich shell: a
-  // large marquee would otherwise restore every fade control and its math at
-  // once. Active gestures still keep their controls alive while zoom changes.
-  const hasActiveClipInteraction = [
+  const { hasActiveClipInteraction, skipFadeComputation } = resolveCompactClipInteraction({
+    isCompactWidth,
     isBeingDragged,
     isPartOfDrag,
     isTrimming,
@@ -626,20 +623,19 @@ export const TimelineItem = memo(function TimelineItem({
     isSlipSlideActive,
     isTrackPushActive,
     isEffectDropTarget,
-    videoFadeEdit !== null,
-    audioFadeEdit !== null,
-    audioFadeCurveEdit !== null,
-    audioVolumeEdit !== null,
-    transitionDropGhost !== null,
-    draggedTransition !== null,
-    pointerHint !== null,
-    hoveredEdge !== null,
-    smartTrimIntent !== null,
-    smartBodyIntent !== null,
-    rollHoverEdge !== null,
-    activeEdges !== null,
-  ].some(Boolean)
-  const skipFadeComputation = isCompactWidth && !hasActiveClipInteraction
+    videoFadeEdit,
+    audioFadeEdit,
+    audioFadeCurveEdit,
+    audioVolumeEdit,
+    transitionDropGhost,
+    draggedTransition,
+    pointerHint,
+    hoveredEdge,
+    smartTrimIntent,
+    smartBodyIntent,
+    rollHoverEdge,
+    activeEdges,
+  })
   const clipFadeDurationFrames = Math.max(1, Math.round(visualWidthFrames))
   const {
     videoFadeInRatio,
@@ -678,11 +674,11 @@ export const TimelineItem = memo(function TimelineItem({
     displayedAudioFadeOutCurveX,
     displayedAudioVolumeDb,
   })
-  const audioVolumeEditLabel = useMemo(() => {
-    if (skipFadeComputation || !audioVolumeEdit) return null
-    const previewVolume = audioVolumePreviewRef.current
-    return `Volume ${previewVolume >= 0 ? '+' : ''}${previewVolume.toFixed(1)} dB`
-  }, [skipFadeComputation, audioVolumeEdit, audioVolumePreviewRef])
+  const audioVolumeEditLabel = useAudioVolumeEditLabel({
+    skipFadeComputation,
+    audioVolumeEdit,
+    audioVolumePreviewRef,
+  })
   const { contentVisualPreviewItem, linkedSyncOffsetFrames } = useLinkedSyncPreview({
     contentPreviewItem,
     videoFadeEdit,
@@ -709,15 +705,16 @@ export const TimelineItem = memo(function TimelineItem({
     moveDragPreviewFromDelta,
     linkedSyncPreviewUpdatesById,
   })
-  const hasDetailBadges =
-    hasKeyframes ||
-    isBroken ||
-    Math.abs(currentSpeed - 1) > SPEED_BADGE_EPSILON ||
-    linkedSyncOffsetFrames !== null ||
-    (item.type === 'shape' && (item.isMask ?? false))
-  // hasActiveClipInteraction is hoisted before fade memos (see above)
-  const useCompactClipShell =
-    activeTool === 'select' && isCompactWidth && !hasDetailBadges && !hasActiveClipInteraction
+  const useCompactClipShell = shouldUseCompactClipShell({
+    item,
+    isBroken,
+    hasKeyframes,
+    currentSpeed,
+    linkedSyncOffsetFrames,
+    activeTool,
+    isCompactWidth,
+    hasActiveClipInteraction,
+  })
   const { trimInfoLabel, moveInfoLabel } = useClipReadoutLabels({
     fps,
     isTrimming,
@@ -796,21 +793,17 @@ export const TimelineItem = memo(function TimelineItem({
             {
               left: getFramePositionStyle(visualLeftFrame),
               width: getFramePositionStyle(visualWidthFrames),
-              transform:
-                isBeingDragged && !isAltDrag
-                  ? `translate(${(isDragging ? dragOffset : (dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current)).x}px, ${(isDragging ? dragOffset : (dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current)).y}px)`
-                  : undefined,
-              opacity: shouldDimForDrag ? DRAG_OPACITY : trackHidden ? 0.3 : trackLocked ? 0.6 : 1,
-              pointerEvents: isBeingDragged ? 'none' : 'auto',
-              zIndex: isBeingDragged ? 50 : undefined,
-              transition: isBeingDragged ? 'none' : undefined,
-              // Compact shells already suppress rich content, and almost all
-              // of them are onscreen in a dense track. Avoid giving each one a
-              // paint-containment boundary that Layerize must revisit on every
-              // real-width zoom step. Full-detail buffered clips keep browser
-              // layout/paint skipping while offscreen.
-              contain: useCompactClipShell ? 'layout style' : 'layout style paint',
-              contentVisibility: useCompactClipShell ? 'visible' : 'auto',
+              ...getTimelineItemShellStyle({
+                itemId: item.id,
+                isBeingDragged,
+                isAltDrag,
+                isDragging,
+                dragOffset,
+                shouldDimForDrag,
+                trackHidden,
+                trackLocked,
+                isCompactShell: useCompactClipShell,
+              }),
               ...getAudioVolumeCssVars({
                 itemType: item.type,
                 audioVolumeEdit,
