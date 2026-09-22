@@ -1,12 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -21,7 +15,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
 import {
-  Loader2,
   CheckCircle2,
   AlertCircle,
   X,
@@ -52,6 +45,7 @@ import type {
   SubtitleExportMode,
 } from '@/types/export'
 import { useClientRender } from '../hooks/use-client-render'
+import { useExportDialogView } from '../hooks/use-export-dialog-view'
 import {
   buildRenderJob,
   buildSegmentJobs,
@@ -77,6 +71,7 @@ import {
   type ClientAudioContainer,
 } from '../deps/renderer'
 import { ExportPreviewPlayer } from './export-preview-player'
+import { ExportDialogHeading } from './export-dialog-heading'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
 import { resolveVideoBitrate } from '../deps/renderer'
@@ -111,8 +106,6 @@ export interface ExportDialogProps {
   /** Open the render queue panel (called after jobs are added to the queue). */
   onOpenRenderQueue?: () => void
 }
-
-type DialogView = 'settings' | 'progress' | 'complete' | 'error' | 'cancelled'
 
 function formatTime(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`
@@ -258,9 +251,6 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   const [exportMode, setExportMode] = useState<ExportMode>('video')
   const [videoContainer, setVideoContainer] = useState<ClientVideoContainer>('mp4')
   const [audioContainer, setAudioContainer] = useState<ClientAudioContainer>('mp3')
-  const [view, setView] = useState<DialogView>('settings')
-  const [startTime, setStartTime] = useState<number | null>(null)
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [subtitleMode, setSubtitleMode] = useState<SubtitleExportMode>('burn')
   const [renderWholeProject, setRenderWholeProject] = useState(false)
   const wasOpenRef = useRef(false)
@@ -439,45 +429,16 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   const [videoSupportError, setVideoSupportError] = useState<string | null>(null)
   const [preflight, setPreflight] = useState<ExportPreflightResult | null>(null)
 
-  // Track elapsed time
-  useEffect(() => {
-    if (view === 'progress' && !startTime) {
-      setStartTime(Date.now())
-    }
-    if (view === 'settings') {
-      setStartTime(null)
-      setElapsedSeconds(0)
-    }
-  }, [view, startTime])
-
-  useEffect(() => {
-    if (!startTime || view !== 'progress') return
-
-    const interval = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000))
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [startTime, view])
-
-  // Watch status changes to update view
-  useEffect(() => {
-    if (status === 'completed') {
-      setView('complete')
-    } else if (status === 'failed') {
-      setView('error')
-    } else if (status === 'cancelled') {
-      setView('cancelled')
-    }
-  }, [status])
-
-  // Handle close
-  const handleClose = () => {
-    if (view === 'progress') return // Prevent closing during export
-    setView('settings')
-    resetState()
-    onClose()
-  }
+  const {
+    view,
+    setView,
+    elapsedSeconds,
+    previewUrl,
+    isVideoResult,
+    preventClose,
+    handleClose,
+    resetView,
+  } = useExportDialogView({ status, result: clientRender.result, resetState, onClose })
 
   // Assemble the extended settings the render pipeline expects from the dialog
   // state. Shared by "Export now" and the "Add to queue" actions.
@@ -573,7 +534,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   // Reset when dialog closes
   useEffect(() => {
     if (open && !wasOpenRef.current) {
-      setView('settings')
+      resetView()
       setExportMode('video')
       setVideoContainer('mp4')
       setAudioContainer('mp3')
@@ -588,20 +549,16 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
       })
       resetState()
       setPreflight(null)
-      setStartTime(null)
-      setElapsedSeconds(0)
     }
 
     if (!open && wasOpenRef.current) {
-      setView('settings')
+      resetView()
       resetState()
       setPreflight(null)
-      setStartTime(null)
-      setElapsedSeconds(0)
     }
 
     wasOpenRef.current = open
-  }, [open, projectHeight, projectWidth, resetState])
+  }, [open, projectHeight, projectWidth, resetState, resetView])
 
   const getAudioContainerOptions = () => [
     { value: 'mp3', label: 'MP3', description: t('export.audioContainer.mp3') },
@@ -739,75 +696,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
     preflightBlocksExport,
   })
 
-  const preventClose = view === 'progress' || view === 'complete'
   const fileSize = clientRender.result?.fileSize
-
-  // Preview blob URL for completed exports
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    const blob = clientRender.result?.blob
-    if (!blob) {
-      setPreviewUrl(null)
-      return
-    }
-    const url = URL.createObjectURL(blob)
-    setPreviewUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [clientRender.result?.blob])
-
-  const isVideoResult = clientRender.result?.mimeType?.startsWith('video/') ?? false
-
-  // Dynamic title and description
-  const getTitle = () => {
-    switch (view) {
-      case 'settings':
-        return t('export.dialog.titleSettings')
-      case 'progress':
-        return (
-          <span className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            {t('export.dialog.titleProgress')}
-          </span>
-        )
-      case 'complete':
-        return (
-          <span className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-green-500" />
-            {t('export.dialog.titleComplete')}
-          </span>
-        )
-      case 'error':
-        return (
-          <span className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-destructive" />
-            {t('export.dialog.titleError')}
-          </span>
-        )
-      case 'cancelled':
-        return (
-          <span className="flex items-center gap-2">
-            <X className="h-5 w-5 text-muted-foreground" />
-            {t('export.dialog.titleCancelled')}
-          </span>
-        )
-    }
-  }
-
-  const getDescription = () => {
-    switch (view) {
-      case 'settings':
-        return t('export.dialog.descSettings')
-      case 'progress':
-        return t('export.dialog.descProgress')
-      case 'complete':
-        return t('export.dialog.descComplete')
-      case 'error':
-        return t('export.dialog.descError')
-      case 'cancelled':
-        return t('export.dialog.descCancelled')
-    }
-  }
 
   return (
     <Dialog open={open} onOpenChange={handleClose} modal>
@@ -823,10 +712,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
         onPointerDownOutside={(e) => preventClose && e.preventDefault()}
         onEscapeKeyDown={(e) => preventClose && e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>{getTitle()}</DialogTitle>
-          <DialogDescription>{getDescription()}</DialogDescription>
-        </DialogHeader>
+        <ExportDialogHeading view={view} />
 
         {/* Settings View */}
         {view === 'settings' && (
