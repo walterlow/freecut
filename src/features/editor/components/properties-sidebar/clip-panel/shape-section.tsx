@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { i18n } from '@/i18n'
 import { toast } from 'sonner'
 import { Shapes } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -15,11 +14,7 @@ import type { ShapeItem, ShapeType, TimelineItem } from '@/types/timeline'
 import { useKeyframesStore, updateItem } from '@/features/editor/deps/timeline-store'
 import { useGizmoStore, useMaskEditorStore } from '@/features/editor/deps/preview'
 import { hasPathVertexKeyframes } from '@/features/editor/deps/keyframes'
-import {
-  PropertySection,
-  PropertyRow,
-  PropertySliderControl,
-} from '../components'
+import { PropertySection, PropertyRow } from '../components'
 import { reversePathVertices, rotateClosedPathStart } from '@/shared/graphics/shapes/bezier-path'
 import {
   DEFAULT_SHAPE_GRADIENT_ANGLE,
@@ -30,6 +25,7 @@ import { getPathClosureUpdates, getShapeSectionControlVisibility } from './shape
 import { getSharedShapeValues } from './shape-section-shared-values'
 import { ShapeFillControls } from './shape-fill-controls'
 import { ShapePathControls } from './shape-path-controls'
+import { ShapeMaskControls } from './shape-mask-controls'
 import {
   ShapeTrimTaperControls,
   type StrokePathProperty,
@@ -668,105 +664,22 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         onResetProperty={resetNumericProperty}
       />
 
-      {/* Mask Section Divider */}
-      <div className="border-t border-border my-3" />
-
-      {/* Use as Mask Toggle */}
-      <PropertyRow label={t('editor.shapeSection.useAsMask')}>
-        <Button
-          variant={sharedValues.isMask === true ? 'secondary' : 'ghost'}
-          size="sm"
-          className="h-7 text-xs flex-1 min-w-0"
-          onClick={() => handleIsMaskChange(sharedValues.isMask !== true)}
-          disabled={sharedValues.isMask === 'mixed'}
-        >
-          {sharedValues.isMask === 'mixed'
-            ? t('editor.shapeSection.mixed')
-            : sharedValues.isMask
-              ? t('editor.shapeSection.on')
-              : t('editor.shapeSection.off')}
-        </Button>
-      </PropertyRow>
-
-      {/* Mask settings - only show when isMask is true */}
-      {(sharedValues.isMask === true || sharedValues.isMask === 'mixed') && (
-        <>
-          {/* Mask Type */}
-          <PropertyRow label={t('editor.shapeSection.maskType')}>
-            <Select
-              value={sharedValues.maskType}
-              onValueChange={handleMaskTypeChange}
-              disabled={sharedValues.isMask !== true}
-            >
-              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                <SelectValue
-                  placeholder={
-                    sharedValues.maskType === undefined
-                      ? t('editor.shapeSection.mixed')
-                      : t('editor.shapeSection.selectType')
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="clip" className="text-xs">
-                  {t('editor.shapeSection.maskTypeClip')}
-                </SelectItem>
-                <SelectItem value="alpha" className="text-xs">
-                  {t('editor.shapeSection.maskTypeAlpha')}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </PropertyRow>
-
-          {/* Feather - only show for alpha mask type */}
-          {sharedValues.maskType === 'alpha' && (
-            <PropertyRow label={t('editor.shapeSection.feather')}>
-              <PropertySliderControl
-                value={sharedValues.maskFeather}
-                onChange={handleMaskFeatherChange}
-                onLiveChange={handleMaskFeatherLiveChange}
-                min={0}
-                max={100}
-                step={1}
-                unit="px"
-                onReset={() => resetNumericProperty('maskFeather', 10)}
-                resetLabel={t('editor.shapeSection.resetToDefault')}
-              />
-            </PropertyRow>
-          )}
-
-          <PropertyRow label={t('editor.fillSection.opacity')}>
-            <PropertySliderControl
-              value={sharedValues.maskOpacity}
-              onChange={handleMaskOpacityChange}
-              onLiveChange={handleMaskOpacityLiveChange}
-              min={0}
-              max={100}
-              step={1}
-              unit="%"
-              onReset={() => resetNumericProperty('maskOpacity', 100)}
-              resetLabel={t('editor.shapeSection.resetToDefault')}
-            />
-          </PropertyRow>
-
-          {/* Invert Mask */}
-          <PropertyRow label={t('editor.shapeSection.invert')}>
-            <Button
-              variant={sharedValues.maskInvert === true ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 text-xs flex-1 min-w-0"
-              onClick={() => handleMaskInvertChange(sharedValues.maskInvert !== true)}
-              disabled={sharedValues.isMask !== true || sharedValues.maskInvert === 'mixed'}
-            >
-              {sharedValues.maskInvert === 'mixed'
-                ? t('editor.shapeSection.mixed')
-                : sharedValues.maskInvert
-                  ? t('editor.shapeSection.on')
-                  : t('editor.shapeSection.off')}
-            </Button>
-          </PropertyRow>
-        </>
-      )}
+      <ShapeMaskControls
+        isMask={sharedValues.isMask}
+        maskType={sharedValues.maskType}
+        maskFeather={sharedValues.maskFeather}
+        maskOpacity={sharedValues.maskOpacity}
+        maskInvert={sharedValues.maskInvert}
+        onIsMaskChange={handleIsMaskChange}
+        onMaskTypeChange={handleMaskTypeChange}
+        onMaskFeatherChange={handleMaskFeatherChange}
+        onMaskFeatherLiveChange={handleMaskFeatherLiveChange}
+        onMaskFeatherReset={() => resetNumericProperty('maskFeather', 10)}
+        onMaskOpacityChange={handleMaskOpacityChange}
+        onMaskOpacityLiveChange={handleMaskOpacityLiveChange}
+        onMaskOpacityReset={() => resetNumericProperty('maskOpacity', 100)}
+        onMaskInvertChange={handleMaskInvertChange}
+      />
     </PropertySection>
   )
 }
