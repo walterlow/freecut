@@ -34,7 +34,9 @@ const VIDEO_ITEM = makeTimelineVideoItem({
 })
 
 function getShell(container: HTMLElement): HTMLElement {
-  const shell = container.querySelector<HTMLElement>(`[data-timeline-item][data-item-id="${ITEM_ID}"]`)
+  const shell = container.querySelector<HTMLElement>(
+    `[data-timeline-item][data-item-id="${ITEM_ID}"]`,
+  )
   if (!shell) throw new Error('timeline item shell not rendered')
   return shell
 }
@@ -62,9 +64,7 @@ describe('TimelineItem shells', () => {
   })
 
   it('renders the detail-only layers at full width', () => {
-    const view = render(
-      <TimelineItem item={VIDEO_ITEM} isCompactWidth={false} isDetailEligible />,
-    )
+    const view = render(<TimelineItem item={VIDEO_ITEM} isCompactWidth={false} isDetailEligible />)
 
     const shell = getShell(view.container)
     expect(shell).not.toHaveAttribute('data-compact-clip')
@@ -86,9 +86,7 @@ describe('TimelineItem shells', () => {
   })
 
   it('reports selection on the shell', () => {
-    const view = render(
-      <TimelineItem item={VIDEO_ITEM} isCompactWidth={false} isDetailEligible />,
-    )
+    const view = render(<TimelineItem item={VIDEO_ITEM} isCompactWidth={false} isDetailEligible />)
     const shell = getShell(view.container)
     expect(shell).not.toHaveAttribute('data-selected')
 
@@ -110,9 +108,7 @@ describe('TimelineItem shells', () => {
     })
     dragOffsetRef.current = { x: 12, y: -4 }
 
-    const view = render(
-      <TimelineItem item={VIDEO_ITEM} isCompactWidth={false} isDetailEligible />,
-    )
+    const view = render(<TimelineItem item={VIDEO_ITEM} isCompactWidth={false} isDetailEligible />)
 
     const shell = getShell(view.container)
     expect(shell.style.transform).toBe('translate(12px, -4px)')

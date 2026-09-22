@@ -40,9 +40,7 @@ afterAll(() => {
 })
 
 function renderPanel({ isOpen = true, splitView = false } = {}) {
-  return render(
-    <KeyframeGraphPanel isOpen={isOpen} onClose={() => {}} splitView={splitView} />,
-  )
+  return render(<KeyframeGraphPanel isOpen={isOpen} onClose={() => {}} splitView={splitView} />)
 }
 
 describe('KeyframeGraphPanel surfaces', () => {
