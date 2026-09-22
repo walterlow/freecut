@@ -29,6 +29,56 @@ export interface UseSheetPreviewDomReturn {
   scheduleDragPreviewFrames: (nextPreviewFrames: Record<string, number> | null) => void
 }
 
+/** Duplicate-preview selection for the live drag, or null when it only moves keys. */
+function resolveDuplicatePreviewIds(
+  dragState: DragState | null,
+  nextPreviewFrames: Record<string, number> | null,
+): string[] | null {
+  if (!dragState?.duplicateOnCommit || !nextPreviewFrames) return null
+  return dragState.selectedKeyframeIds
+}
+
+/** Frame a keyframe button should show: its preview frame, else its committed frame. */
+function resolvePreviewFrame(
+  keyframeId: string,
+  previewFrames: Record<string, number> | null,
+  keyframeMetaById: Map<string, KeyframeMeta>,
+): number | undefined {
+  const previewFrame = previewFrames?.[keyframeId]
+  return previewFrame ?? keyframeMetaById.get(keyframeId)?.keyframe.frame
+}
+
+/** Move or hide every keyframe button touched by a drag preview change. */
+function writeDragPreviewPositions(
+  keyframeButtonRefs: Map<string, HTMLButtonElement>,
+  keyframeMetaById: Map<string, KeyframeMeta>,
+  previousPreviewFrames: Record<string, number> | null,
+  nextPreviewFrames: Record<string, number> | null,
+  getRenderedKeyframeX: (frame: number) => number | null,
+): void {
+  const keyframeIds = new Set([
+    ...Object.keys(previousPreviewFrames ?? {}),
+    ...Object.keys(nextPreviewFrames ?? {}),
+  ])
+
+  for (const keyframeId of keyframeIds) {
+    const button = keyframeButtonRefs.get(keyframeId)
+    if (!button) continue
+
+    const frame = resolvePreviewFrame(keyframeId, nextPreviewFrames, keyframeMetaById)
+    if (frame === undefined) continue
+
+    const renderedX = getRenderedKeyframeX(frame)
+    if (renderedX === null) {
+      button.style.visibility = 'hidden'
+      continue
+    }
+
+    button.style.left = `${renderedX}px`
+    button.style.visibility = 'visible'
+  }
+}
+
 export function useSheetPreviewDom({
   committedKeyframeSelectionRef,
   keyframeMetaByIdRef,
@@ -93,43 +143,28 @@ const applyDragPreviewFrames = useCallback(
       return
     }
 
-    const duplicatePreviewIds =
-      dragStateRef.current?.duplicateOnCommit && nextPreviewFrames
-        ? dragStateRef.current.selectedKeyframeIds
-        : null
+    const duplicatePreviewIds = resolveDuplicatePreviewIds(
+      dragStateRef.current,
+      nextPreviewFrames,
+    )
 
     flushSync(() => {
       setSheetPreviewFrames(nextPreviewFrames)
       setSheetPreviewDuplicateKeyframeIds(duplicatePreviewIds)
     })
 
-    const keyframeIds = new Set([
-      ...Object.keys(previousPreviewFrames ?? {}),
-      ...Object.keys(nextPreviewFrames ?? {}),
-    ])
-
     if (duplicatePreviewIds) {
       appliedDragPreviewFramesRef.current = nextPreviewFrames
       return
     }
 
-    for (const keyframeId of keyframeIds) {
-      const button = keyframeButtonRefs.current.get(keyframeId)
-      if (!button) continue
-
-      const previewFrame = nextPreviewFrames?.[keyframeId]
-      const frame = previewFrame ?? keyframeMetaByIdRef.current.get(keyframeId)?.keyframe.frame
-      if (frame === undefined) continue
-
-      const renderedX = getRenderedKeyframeX(frame)
-      if (renderedX === null) {
-        button.style.visibility = 'hidden'
-        continue
-      }
-
-      button.style.left = `${renderedX}px`
-      button.style.visibility = 'visible'
-    }
+    writeDragPreviewPositions(
+      keyframeButtonRefs.current,
+      keyframeMetaByIdRef.current,
+      previousPreviewFrames,
+      nextPreviewFrames,
+      getRenderedKeyframeX,
+    )
 
     appliedDragPreviewFramesRef.current = nextPreviewFrames
   },
