@@ -45,6 +45,7 @@ import {
   buildTextStylePresetTemplate,
   type TextStylePresetId,
 } from './text-style-presets'
+import { getSharedTextValues } from './text-section-shared-values'
 import {
   FONT_WEIGHT_OPTIONS,
   FONT_WEIGHT_VALUES,
@@ -140,99 +141,7 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
   const hasStructuredSpanEditor = Boolean(firstTextItem?.textSpans?.length)
 
   // Get shared values across selected text items
-  const sharedValues = useMemo(() => {
-    if (textItems.length === 0) return null
-
-    const first = textItems[0]!
-    return {
-      text: textItems.every((i) => getTextItemPlainText(i) === getTextItemPlainText(first))
-        ? getTextItemPlainText(first)
-        : undefined,
-      fontSize: textItems.every((i) => (i.fontSize ?? 60) === (first.fontSize ?? 60))
-        ? (first.fontSize ?? 60)
-        : ('mixed' as const),
-      fontFamily: textItems.every(
-        (i) => (i.fontFamily ?? 'Inter') === (first.fontFamily ?? 'Inter'),
-      )
-        ? (first.fontFamily ?? 'Inter')
-        : undefined,
-      fontWeight: textItems.every(
-        (i) => (i.fontWeight ?? 'normal') === (first.fontWeight ?? 'normal'),
-      )
-        ? (first.fontWeight ?? 'normal')
-        : undefined,
-      fontStyle: textItems.every((i) => (i.fontStyle ?? 'normal') === (first.fontStyle ?? 'normal'))
-        ? (first.fontStyle ?? 'normal')
-        : undefined,
-      underline: textItems.every((i) => (i.underline ?? false) === (first.underline ?? false))
-        ? (first.underline ?? false)
-        : undefined,
-      color: textItems.every((i) => i.color === first.color) ? first.color : undefined,
-      textStylePresetId: textItems.every(
-        (i) => (i.textStylePresetId ?? '') === (first.textStylePresetId ?? ''),
-      )
-        ? first.textStylePresetId
-        : undefined,
-      textStyleScale: textItems.every(
-        (i) => (i.textStyleScale ?? 1) === (first.textStyleScale ?? 1),
-      )
-        ? (first.textStyleScale ?? 1)
-        : ('mixed' as const),
-      backgroundColor: textItems.every(
-        (i) => (i.backgroundColor ?? '') === (first.backgroundColor ?? ''),
-      )
-        ? (first.backgroundColor ?? '')
-        : undefined,
-      backgroundRadius: textItems.every(
-        (i) => (i.backgroundRadius ?? 0) === (first.backgroundRadius ?? 0),
-      )
-        ? (first.backgroundRadius ?? 0)
-        : ('mixed' as const),
-      textAlign: textItems.every((i) => (i.textAlign ?? 'center') === (first.textAlign ?? 'center'))
-        ? (first.textAlign ?? 'center')
-        : undefined,
-      verticalAlign: textItems.every(
-        (i) => (i.verticalAlign ?? 'middle') === (first.verticalAlign ?? 'middle'),
-      )
-        ? (first.verticalAlign ?? 'middle')
-        : undefined,
-      letterSpacing: textItems.every((i) => (i.letterSpacing ?? 0) === (first.letterSpacing ?? 0))
-        ? (first.letterSpacing ?? 0)
-        : ('mixed' as const),
-      lineHeight: textItems.every((i) => (i.lineHeight ?? 1.2) === (first.lineHeight ?? 1.2))
-        ? (first.lineHeight ?? 1.2)
-        : ('mixed' as const),
-      textPadding: textItems.every((i) => (i.textPadding ?? 16) === (first.textPadding ?? 16))
-        ? (first.textPadding ?? 16)
-        : ('mixed' as const),
-      shadowColor: textItems.every(
-        (i) => (i.textShadow?.color ?? '') === (first.textShadow?.color ?? ''),
-      )
-        ? (first.textShadow?.color ?? '')
-        : undefined,
-      shadowOffsetX: textItems.every(
-        (i) => (i.textShadow?.offsetX ?? 0) === (first.textShadow?.offsetX ?? 0),
-      )
-        ? (first.textShadow?.offsetX ?? 0)
-        : ('mixed' as const),
-      shadowOffsetY: textItems.every(
-        (i) => (i.textShadow?.offsetY ?? 0) === (first.textShadow?.offsetY ?? 0),
-      )
-        ? (first.textShadow?.offsetY ?? 0)
-        : ('mixed' as const),
-      shadowBlur: textItems.every(
-        (i) => (i.textShadow?.blur ?? 0) === (first.textShadow?.blur ?? 0),
-      )
-        ? (first.textShadow?.blur ?? 0)
-        : ('mixed' as const),
-      strokeColor: textItems.every((i) => (i.stroke?.color ?? '') === (first.stroke?.color ?? ''))
-        ? (first.stroke?.color ?? '')
-        : undefined,
-      strokeWidth: textItems.every((i) => (i.stroke?.width ?? 0) === (first.stroke?.width ?? 0))
-        ? (first.stroke?.width ?? 0)
-        : ('mixed' as const),
-    }
-  }, [textItems])
+  const sharedValues = useMemo(() => getSharedTextValues(textItems), [textItems])
 
   const supportedFontWeightOptions = useMemo(() => {
     const selectedFontFamily = sharedValues?.fontFamily
