@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Type,
-  Bold,
   Italic,
   Underline,
   AlignLeft,
@@ -37,14 +36,15 @@ import {
   ColorPicker,
   SliderInput,
 } from '../components'
-import { FontPicker } from './font-picker'
 import {
   applyTextStylePresetToItem,
   TEXT_STYLE_PRESETS,
   buildTextStylePresetTemplate,
   type TextStylePresetId,
 } from './text-style-presets'
+import { FontPicker } from './font-picker'
 import { useTextSectionSelection } from './use-text-section-selection'
+import { TextTypographyControls } from './text-typography-controls'
 import { FONT_WEIGHT_OPTIONS, TEXT_EFFECT_PRESETS } from './text-section-constants'
 import {
   cloneTextSpans,
@@ -777,10 +777,6 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
 
   const fontPreviewText =
     sharedValues.text ?? (firstTextItem ? getTextItemPlainText(firstTextItem) : '')
-  const isBoldActive = sharedValues.fontWeight === 'bold'
-  const canUseBold = supportedFontWeightOptions.some((weight) => weight.value === 'bold')
-  const isItalicActive = sharedValues.fontStyle === 'italic'
-  const isUnderlineActive = sharedValues.underline === true
   const shadowOffsetX = sharedValues.shadowOffsetX
   const shadowOffsetY = sharedValues.shadowOffsetY
   const shadowBlur = sharedValues.shadowBlur
@@ -1015,110 +1011,25 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
             </PropertyRow>
           )}
 
-          {!hasStructuredSpanEditor && (
-            <PropertyRow label={t('editor.textSection.font')} className="items-start">
-              <FontPicker
-                value={sharedValues.fontFamily}
-                placeholder={
-                  sharedValues.fontFamily === undefined
-                    ? t('editor.textSection.mixed')
-                    : t('editor.textSection.selectFont')
-                }
-                previewText={fontPreviewText}
-                onValueChange={handleFontFamilyChange}
-              />
-            </PropertyRow>
-          )}
-
-          {!hasStructuredSpanEditor && (
-            <PropertyRow label={t('editor.textSection.size')}>
-              <div className="flex items-center gap-1 min-w-0 w-full">
-                <NumberInput
-                  value={sharedValues.fontSize}
-                  onChange={handleFontSizeChange}
-                  onLiveChange={handleFontSizeLiveChange}
-                  min={8}
-                  max={500}
-                  step={1}
-                  unit="px"
-                  className="flex-1 min-w-0"
-                />
-                <KeyframeToggle
-                  itemIds={itemIds}
-                  property="fontSize"
-                  currentValue={firstTextItem?.fontSize ?? 60}
-                />
-              </div>
-            </PropertyRow>
-          )}
-
-          {!hasStructuredSpanEditor && (
-            <PropertyRow label={t('editor.textSection.weight')}>
-              <Select value={sharedValues.fontWeight} onValueChange={handleFontWeightChange}>
-                <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                  <SelectValue
-                    placeholder={
-                      sharedValues.fontWeight === undefined
-                        ? t('editor.textSection.mixed')
-                        : t('editor.textSection.selectWeight')
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {supportedFontWeightOptions.map((weight) => (
-                    <SelectItem key={weight.value} value={weight.value} className="text-xs">
-                      {t(`editor.textSection.fontWeights.${weight.labelKey}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </PropertyRow>
-          )}
-
-          {!hasStructuredSpanEditor && (
-            <PropertyRow label={t('editor.textSection.style')}>
-              <div className="flex gap-1">
-                <Button
-                  variant={isBoldActive ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={handleBoldToggle}
-                  title={
-                    canUseBold
-                      ? t('editor.textSection.bold')
-                      : t('editor.textSection.boldUnavailable')
-                  }
-                  aria-label={t('editor.textSection.bold')}
-                  aria-pressed={isBoldActive}
-                  disabled={!canUseBold}
-                >
-                  <Bold className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant={isItalicActive ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={handleItalicToggle}
-                  title={t('editor.textSection.italic')}
-                  aria-label={t('editor.textSection.italic')}
-                  aria-pressed={isItalicActive}
-                >
-                  <Italic className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant={isUnderlineActive ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={handleUnderlineToggle}
-                  title={t('editor.textSection.underline')}
-                  aria-label={t('editor.textSection.underline')}
-                  aria-pressed={isUnderlineActive}
-                >
-                  <Underline className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </PropertyRow>
-          )}
+          <TextTypographyControls
+            enabled={!hasStructuredSpanEditor}
+            fontFamily={sharedValues.fontFamily}
+            fontSize={sharedValues.fontSize}
+            fontWeight={sharedValues.fontWeight}
+            fontStyle={sharedValues.fontStyle}
+            underline={sharedValues.underline}
+            fontPreviewText={fontPreviewText}
+            supportedFontWeightOptions={supportedFontWeightOptions}
+            itemIds={itemIds}
+            fontSizeCurrentValue={firstTextItem?.fontSize ?? 60}
+            onFontFamilyChange={handleFontFamilyChange}
+            onFontSizeChange={handleFontSizeChange}
+            onFontSizeLiveChange={handleFontSizeLiveChange}
+            onFontWeightChange={handleFontWeightChange}
+            onBoldToggle={handleBoldToggle}
+            onItalicToggle={handleItalicToggle}
+            onUnderlineToggle={handleUnderlineToggle}
+          />
 
           {/* Text Align */}
           <PropertyRow label={t('editor.textSection.align')}>
