@@ -85,31 +85,13 @@ import {
 } from './dopesheet-hotkeys'
 import { usePropertyExpressionEditor } from './use-property-expression-editor'
 import { buildExpressionDockContext, formatExpressionValue } from './expression-dock-context'
-import { PropertyRowKeyframeNav } from './property-row-keyframe-nav'
-import {
-  resolvePropertyRowExpressionError,
-  resolvePropertyRowLabels,
-  resolvePropertyRowLinkable,
-  resolvePropertyRowPreExpressionValue,
-  resolvePropertyRowResetState,
-  resolvePropertyRowShellClassName,
-} from './property-row-view-model'
-import {
-  PropertyRowAutoKeyButton,
-  PropertyRowAxisConstraintButton,
-  PropertyRowCompoundInput,
-  PropertyRowCurveButton,
-  PropertyRowExpressionButton,
-  PropertyRowLinkButton,
-  PropertyRowLockButton,
-  PropertyRowReset,
-  PropertyRowValueInput,
-} from './property-row-controls'
 
 import { DopesheetExpressionDock } from './dopesheet-expression-dock'
 import {
   DopesheetGroupHeader,
+  DopesheetPropertyRowContent,
   type DopesheetGroupHeaderProps,
+  type DopesheetPropertyRowContentProps,
 } from './dopesheet-row-renderers'
 import type { DopesheetDimensionSeparationControl } from './dopesheet-group-options-menu'
 import type { CompoundPropertyInputConfig } from './compound-property-inputs'
@@ -2366,228 +2348,25 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         rulerUnit={graphRulerUnit}
       />
     ) : null
-  const renderPropertyRowContent = useCallback(
-    (row: DopesheetPropertyRow, options?: { classic?: boolean; indented?: boolean }) => {
-      const classic = options?.classic ?? false
-      const rowLocked = isPropertyLocked(row.property)
-      const axisConstraint = axisConstraintByProperty[row.property]
-      const compoundRow = compoundPropertyRows[row.property]
-      const { rowLabel, rowDisplayLabel } = resolvePropertyRowLabels(
-        row.property,
-        propertyLabels,
-        compoundRow,
-        t,
-      )
-      const linkableProperty = resolvePropertyRowLinkable(row.property, compoundRow)
-      const propertyLink = linkableProperty
-        ? resolvedPropertyLinks.find((link) => link.targetProperty === linkableProperty)
-        : undefined
-      const propertyExpression = linkableProperty
-        ? propertyExpressions.find((expression) => expression.targetProperty === linkableProperty)
-        : undefined
-      const preExpressionValue = resolvePropertyRowPreExpressionValue(
-        row.property,
-        compoundRow,
-        preExpressionPropertyValues,
-        propertyValues,
-      )
-      const expressionError = resolvePropertyRowExpressionError({
-        linkableProperty,
-        preExpressionValue,
-        expressionEditor,
-        propertyExpression,
-        globalFrame,
-        itemFrom,
-        currentFrame,
-        fps,
-        resolveExpressionReference,
-      })
-      const { canResetEffectProperty, canResetRow, resetRowLabel } = resolvePropertyRowResetState({
-        property: row.property,
-        rowLabel,
-        hasResetToDefault: !!onResetPropertiesToDefault,
-        disabled,
-        rowLocked,
-        canClear: canClearRow(row),
-        t,
-      })
-
-      return (
-        <div
-          className={resolvePropertyRowShellClassName({
-            isLanes: presentation === 'lanes',
-            rowOptions: options,
-            hasKeyframeAtCurrentFrame: row.controls.hasKeyframeAtCurrentFrame,
-            showGraphPane,
-            selectedProperty,
-            property: row.property,
-            graphProperties: graphVisibleProperties,
-            rowLocked,
-          })}
-          data-expression-item-id={linkableProperty ? itemId : undefined}
-          data-expression-property={linkableProperty ?? undefined}
-          data-selected={selectedProperty === row.property ? 'true' : undefined}
-          aria-current={selectedProperty === row.property ? 'true' : undefined}
-          onClick={!rowLocked ? () => activateProperty(row.property) : undefined}
-        >
-          <div className="flex items-center gap-px self-stretch">
-              <PropertyRowCurveButton
-                property={row.property}
-                rowLabel={rowLabel}
-                singleCurveMode={singleCurveMode ?? false}
-                showGraphPane={showGraphPane}
-                selectedCurveVisibleExternally={selectedCurveVisibleExternally}
-                selectedProperty={selectedProperty}
-                graphProperties={graphVisibleProperties}
-                visible={!classic}
-                onCurveVisibilityChange={onCurveVisibilityChange}
-                showSinglePropertyCurve={showSinglePropertyCurve}
-                togglePropertyCurve={togglePropertyCurve}
-                t={t}
-              />
-            <PropertyRowLockButton
-              rowLocked={rowLocked}
-              property={row.property}
-              rowLabel={rowLabel}
-              visible={!classic}
-              setAllRowsLocked={setAllRowsLocked}
-              toggleLockedProperty={toggleLockedProperty}
-              t={t}
-            />
-            <PropertyRowAutoKeyButton
-              property={row.property}
-              rowLabel={rowLabel}
-              autoKeyEnabled={autoKeyEnabledByProperty[row.property]}
-              disabled={disabled}
-              rowLocked={rowLocked}
-              canCommit={!!onPropertyValueCommit}
-              onToggleAutoKey={handleRowAutoKeyToggle}
-              t={t}
-            />
-              <PropertyRowLinkButton
-                linkableProperty={linkableProperty}
-                rowLabel={rowLabel}
-                visible={!classic}
-                hasPropertyLink={!!propertyLink}
-                sourceLabels={resolvedPropertyLinkSourceLabels}
-                linkSource={propertyLink}
-                onBeginLink={beginPropertyLink}
-                onRemoveLink={removePropertyLink}
-                t={t}
-              />
-            <PropertyRowExpressionButton
-              linkableProperty={linkableProperty}
-              rowLabel={rowLabel}
-              visible={!classic}
-              canEdit={!!onSetPropertyExpression}
-                expressionError={expressionError}
-                disabled={disabled}
-              rowLocked={rowLocked}
-              propertyExpression={propertyExpression}
-              onOpenExpression={openPropertyExpressionEditor}
-            />
-          </div>
-          <div
-            className={cn(
-              'flex h-full min-w-0 items-center overflow-hidden pr-1 text-[9px] font-medium leading-none text-foreground/90',
-              compoundRow ? 'w-[54px] shrink-0 pl-1' : classic ? 'flex-1 pl-1' : 'flex-1 pl-[10px]',
-            )}
-            title={rowLabel}
-          >
-            <span className="min-w-0 truncate">{rowDisplayLabel}</span>
-            <PropertyRowAxisConstraintButton
-              axisConstraint={axisConstraint}
-              visible={classic}
-              disabled={disabled}
-              rowLocked={rowLocked}
-            />
-          </div>
-          <div className="ml-auto flex items-center gap-0">
-            {compoundRow ? (
-              <PropertyRowCompoundInput
-                property={row.property}
-                compoundRow={compoundRow}
-                compoundSecondaryProperties={compoundSecondaryProperties}
-                spacious={spacious}
-                disabled={disabled}
-                rowLocked={rowLocked}
-                hasPropertyLink={!!propertyLink}
-                hasKeyframeAtCurrentFrame={row.controls.hasKeyframeAtCurrentFrame}
-                isCurrentFrameBlocked={isCurrentFrameBlocked}
-                autoKeyEnabled={autoKeyEnabledByProperty[row.property] ?? false}
-                activateProperty={activateProperty}
-                onDragStart={onDragStart}
-                onDragEnd={onDragEnd}
-                onDragCancel={onDragCancel}
-                onPropertyValuePreview={onPropertyValuePreview}
-              />
-            ) : (
-              <PropertyRowValueInput
-                property={row.property}
-                rowLabel={rowLabel}
-                spacious={spacious}
-                hasPropertyLink={!!propertyLink}
-                disabled={disabled}
-                rowLocked={rowLocked}
-                canCommit={!!onPropertyValueCommit}
-                hasKeyframeAtCurrentFrame={row.controls.hasKeyframeAtCurrentFrame}
-                isCurrentFrameBlocked={isCurrentFrameBlocked}
-                autoKeyEnabled={autoKeyEnabledByProperty[row.property] ?? false}
-                propertyValues={propertyValues}
-                valueDrafts={valueDrafts}
-                valueDraftAtFocusRef={valueDraftAtFocusRef}
-                skipNextBlurCommitPropertyRef={skipNextBlurCommitPropertyRef}
-                onValueChange={handleRowValueChange}
-                onScrubStart={handleValueScrubStart}
-                onScrubMove={handleValueScrubMove}
-                onScrubEnd={handleValueScrubEnd}
-                onScrubCancel={handleValueScrubCancel}
-                onValueCommit={handleRowValueCommit}
-                onFocusProperty={activateProperty}
-                onEditingChange={setEditingValueProperty}
-                onDraftsChange={setValueDrafts}
-                formatDisplayValue={formatPropertyValue}
-                t={t}
-              />
-            )}
-            <PropertyRowKeyframeNav
-              property={row.property}
-              rowLabel={rowLabel}
-              prevKeyframe={row.controls.prevKeyframe}
-              nextKeyframe={row.controls.nextKeyframe}
-              currentKeyframes={row.controls.currentKeyframes}
-              hasKeyframeAtCurrentFrame={row.controls.hasKeyframeAtCurrentFrame}
-              disabled={disabled}
-              rowLocked={rowLocked}
-              isCurrentFrameBlocked={isCurrentFrameBlocked}
-              canNavigate={!!onNavigateToKeyframe}
-              canAddKeyframe={!!onAddKeyframe}
-              onNavigate={handleRowNavigate}
-              onToggleKeyframe={handleRowToggleKeyframe}
-              t={t}
-            />
-            <PropertyRowReset
-              classic={classic}
-              canResetRow={canResetRow}
-              resetRowLabel={resetRowLabel}
-              canResetEffectProperty={canResetEffectProperty}
-              property={row.property}
-              onResetToDefault={onResetPropertiesToDefault}
-              onClearProperty={handleClearProperty}
-            />
-          </div>
-        </div>
-      )
-    },
-    [
+  // Shared row props: the sheet rows and the property column render the same
+  // row content, which is now a memoized component instead of a callback.
+  const rowContentProps = useMemo<Omit<DopesheetPropertyRowContentProps, 'row' | 'options'>>(
+    () => ({
       activateProperty,
       axisConstraintByProperty,
+      autoKeyEnabledByProperty,
+      beginPropertyLink,
       canClearRow,
       compoundPropertyRows,
       compoundSecondaryProperties,
-      autoKeyEnabledByProperty,
+      itemId,
+      itemFrom,
+      currentFrame,
+      fps,
       disabled,
+      expressionEditor,
       formatPropertyValue,
+      globalFrame,
       graphVisibleProperties,
       handleClearProperty,
       handleRowAutoKeyToggle,
@@ -2599,7 +2378,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       handleValueScrubCancel,
       handleValueScrubMove,
       handleValueScrubStart,
-      itemId,
       isPropertyLocked,
       isCurrentFrameBlocked,
       onAddKeyframe,
@@ -2612,17 +2390,11 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       onPropertyValuePreview,
       resolvedPropertyLinks,
       resolvedPropertyLinkSourceLabels,
-      beginPropertyLink,
       removePropertyLink,
       propertyExpressions,
       propertyLabels,
       preExpressionPropertyValues,
-      expressionEditor,
       resolveExpressionReference,
-      globalFrame,
-      itemFrom,
-      currentFrame,
-      fps,
       onSetPropertyExpression,
       openPropertyExpressionEditor,
       onResetPropertiesToDefault,
@@ -2633,16 +2405,81 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       setAllRowsLocked,
       setEditingValueProperty,
       setValueDrafts,
+      showGraphPane,
+      showSinglePropertyCurve,
+      singleCurveMode,
       skipNextBlurCommitPropertyRef,
+      spacious,
       t,
       togglePropertyCurve,
       toggleLockedProperty,
       valueDraftAtFocusRef,
       valueDrafts,
+    }),
+    [
+      activateProperty,
+      axisConstraintByProperty,
+      autoKeyEnabledByProperty,
+      beginPropertyLink,
+      canClearRow,
+      compoundPropertyRows,
+      compoundSecondaryProperties,
+      itemId,
+      itemFrom,
+      currentFrame,
+      fps,
+      disabled,
+      expressionEditor,
+      formatPropertyValue,
+      globalFrame,
+      graphVisibleProperties,
+      handleClearProperty,
+      handleRowAutoKeyToggle,
+      handleRowNavigate,
+      handleRowToggleKeyframe,
+      handleRowValueChange,
+      handleRowValueCommit,
+      handleValueScrubEnd,
+      handleValueScrubCancel,
+      handleValueScrubMove,
+      handleValueScrubStart,
+      isPropertyLocked,
+      isCurrentFrameBlocked,
+      onAddKeyframe,
+      onNavigateToKeyframe,
+      onCurveVisibilityChange,
+      onDragCancel,
+      onDragEnd,
+      onDragStart,
+      onPropertyValueCommit,
+      onPropertyValuePreview,
+      resolvedPropertyLinks,
+      resolvedPropertyLinkSourceLabels,
+      removePropertyLink,
+      propertyExpressions,
+      propertyLabels,
+      preExpressionPropertyValues,
+      resolveExpressionReference,
+      onSetPropertyExpression,
+      openPropertyExpressionEditor,
+      onResetPropertiesToDefault,
+      propertyValues,
+      presentation,
+      selectedProperty,
+      selectedCurveVisibleExternally,
+      setAllRowsLocked,
+      setEditingValueProperty,
+      setValueDrafts,
       showGraphPane,
       showSinglePropertyCurve,
       singleCurveMode,
+      skipNextBlurCommitPropertyRef,
       spacious,
+      t,
+      togglePropertyCurve,
+      toggleLockedProperty,
+      valueDraftAtFocusRef,
+      valueDrafts,
     ],
   )
   // Shared group-header props: both the sheet rows and the property column
@@ -2810,14 +2647,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       if (entry.type !== 'row') continue
       content.set(
         entry.row.property,
-        renderPropertyRowContent(entry.row, {
-          classic: presentation === 'classic',
-          indented: entry.indented,
-        }),
+        <DopesheetPropertyRowContent
+          row={entry.row}
+          options={{ classic: presentation === 'classic', indented: entry.indented }}
+          {...rowContentProps}
+        />,
       )
     }
     return content
-  }, [presentation, renderPropertyRowContent, renderedSheetEntries.entries])
+  }, [presentation, renderedSheetEntries.entries, rowContentProps])
   const sheetGroupContentById = useMemo(() => {
     const content = new Map<string, React.ReactNode>()
     for (const entry of renderedSheetEntries.entries) {
@@ -2999,7 +2837,11 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             className="border-b border-border/60"
             style={{ height: ROW_HEIGHT }}
           >
-            {renderPropertyRowContent(row, { indented: !inline })}
+            <DopesheetPropertyRowContent
+              row={row}
+              options={{ indented: !inline }}
+              {...rowContentProps}
+            />
           </div>
         ))
         if (inline) {
@@ -3028,7 +2870,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       groupedPropertyRows,
       groupHeaderProps,
       inlinePropertyGroupIdSet,
-      renderPropertyRowContent,
+      rowContentProps,
     ],
   )
   const emptyStateMessage = hasPropertyFilters
