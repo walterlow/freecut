@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  Type,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  AlignStartHorizontal,
-  AlignCenterHorizontal,
-  AlignEndHorizontal,
-  Palette,
-  WandSparkles,
-} from 'lucide-react'
+import { Type, Palette, WandSparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { TextItem, TextSpan, TimelineItem } from '@/types/timeline'
 import type { CanvasSettings } from '@/types/transform'
@@ -37,6 +27,8 @@ import {
   TextPlainEditor,
   TextSpanEditors,
 } from './text-content-controls'
+import { TextAlignControls } from './text-align-controls'
+import { TextColorControls } from './text-color-controls'
 import { TEXT_EFFECT_PRESETS } from './text-section-constants'
 import {
   cloneTextSpans,
@@ -865,116 +857,27 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
             onUnderlineToggle={handleUnderlineToggle}
           />
 
-          {/* Text Align */}
-          <PropertyRow label={t('editor.textSection.align')}>
-            <div className="flex gap-1">
-              <Button
-                variant={sharedValues.textAlign === 'left' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleTextAlignChange('left')}
-                title={t('editor.textSection.alignLeft')}
-              >
-                <AlignLeft className="w-3.5 h-3.5" />
-              </Button>
-              <Button
-                variant={sharedValues.textAlign === 'center' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleTextAlignChange('center')}
-                title={t('editor.textSection.alignCenter')}
-              >
-                <AlignCenter className="w-3.5 h-3.5" />
-              </Button>
-              <Button
-                variant={sharedValues.textAlign === 'right' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleTextAlignChange('right')}
-                title={t('editor.textSection.alignRight')}
-              >
-                <AlignRight className="w-3.5 h-3.5" />
-              </Button>
-              <div className="w-px h-5 bg-border mx-1" />
-              <Button
-                variant={sharedValues.verticalAlign === 'top' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleVerticalAlignChange('top')}
-                title={t('editor.textSection.alignTop')}
-              >
-                <AlignStartHorizontal className="w-3.5 h-3.5" />
-              </Button>
-              <Button
-                variant={sharedValues.verticalAlign === 'middle' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleVerticalAlignChange('middle')}
-                title={t('editor.textSection.alignMiddle')}
-              >
-                <AlignCenterHorizontal className="w-3.5 h-3.5" />
-              </Button>
-              <Button
-                variant={sharedValues.verticalAlign === 'bottom' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleVerticalAlignChange('bottom')}
-                title={t('editor.textSection.alignBottom')}
-              >
-                <AlignEndHorizontal className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </PropertyRow>
+          <TextAlignControls
+            textAlign={sharedValues.textAlign}
+            verticalAlign={sharedValues.verticalAlign}
+            onTextAlignChange={handleTextAlignChange}
+            onVerticalAlignChange={handleVerticalAlignChange}
+          />
 
-          {!hasStructuredSpanEditor && (
-            <ColorPicker
-              label={t('editor.textSection.color')}
-              color={sharedValues.color ?? '#ffffff'}
-              onChange={handleColorChange}
-              onLiveChange={handleColorLiveChange}
-              onReset={() => handleColorChange('#ffffff')}
-              defaultColor="#ffffff"
-              allowAlpha
-            />
-          )}
-
-          <PropertyRow label={t('editor.textSection.background')}>
-            <div className="flex flex-1 min-w-0 gap-1">
-              <div className="flex-1 min-w-0">
-                <ColorPicker
-                  color={backgroundColorValue}
-                  onChange={handleBackgroundColorChange}
-                  onLiveChange={handleBackgroundColorLiveChange}
-                  allowAlpha
-                />
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-[11px]"
-                onClick={handleBackgroundColorClear}
-                disabled={!hasAnyBackground}
-                title={t('editor.textSection.clearBackground')}
-              >
-                {t('editor.textSection.clear')}
-              </Button>
-            </div>
-          </PropertyRow>
-
-          {!hasStructuredSpanEditor && (
-            <PropertyRow label={t('editor.textSection.spacing')}>
-              <NumberInput
-                value={sharedValues.letterSpacing}
-                onChange={handleLetterSpacingChange}
-                onLiveChange={handleLetterSpacingLiveChange}
-                min={-20}
-                max={100}
-                step={1}
-                unit="px"
-                className="flex-1 min-w-0"
-              />
-            </PropertyRow>
-          )}
+          <TextColorControls
+            enabled={!hasStructuredSpanEditor}
+            color={sharedValues.color}
+            backgroundColor={backgroundColorValue}
+            hasAnyBackground={hasAnyBackground}
+            letterSpacing={sharedValues.letterSpacing}
+            onColorChange={handleColorChange}
+            onColorLiveChange={handleColorLiveChange}
+            onBackgroundColorChange={handleBackgroundColorChange}
+            onBackgroundColorLiveChange={handleBackgroundColorLiveChange}
+            onBackgroundColorClear={handleBackgroundColorClear}
+            onLetterSpacingChange={handleLetterSpacingChange}
+            onLetterSpacingLiveChange={handleLetterSpacingLiveChange}
+          />
 
           {/* Line Height */}
           <PropertyRow label={t('editor.textSection.lineHeightShort')}>
