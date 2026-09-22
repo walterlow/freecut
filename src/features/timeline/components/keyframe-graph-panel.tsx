@@ -65,6 +65,7 @@ import { useVectorKeyframeEditing } from './use-vector-keyframe-editing'
 import { useKeyframeDragCommands } from './use-keyframe-drag-commands'
 import { useKeyframeScrubAdd } from './use-keyframe-scrub-add'
 import { useKeyframePropertyValues } from './use-keyframe-property-values'
+import { buildDopesheetEditorProps } from './build-dopesheet-editor-props'
 import type {
   AnimatableProperty,
   EasingType,
@@ -121,7 +122,6 @@ interface KeyframeGraphPanelProps {
 
 export type KeyframeEditorMode = 'graph' | 'dopesheet' | 'split'
 const KEYFRAME_EDITOR_MODE_STORAGE_KEY = 'timeline:keyframeEditorMode'
-const MOTION_INLINE_PROPERTY_GROUP_IDS = ['transform'] as const
 const EASING_OPTIONS: Array<{
   value: EasingType
   labelKey: string
@@ -917,12 +917,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     ? panelHeaderHeight + RESIZE_HANDLE_HEIGHT + clampedContentHeight
     : panelHeaderHeight
 
-  const editorInset = surface === 'edit' ? 0 : 16
-  // The docked editor spans the full timeline row. Its own 12px custom
-  // scrollbar then occupies the same right-edge column as the main timeline's
-  // scrollbar instead of subtracting a second gutter from the shared axis.
-  const editorWidth = Math.max(0, containerWidth - editorInset)
-  const editorHeight = Math.max(0, resolvedContentHeight - editorInset)
   // Only render the docked editor when explicitly opened from the toolbar/hotkey.
   // Selecting a clip should not surface the docked panel by itself.
   if (!isOpen) {
@@ -943,6 +937,102 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     </div>
   )
 
+  // The editor only renders for a selected item once the container has a
+  // measured width; the props it is passed are built under the same guard.
+  const dopesheetEditorProps =
+    selectedItemForEditor && containerWidth > 0
+      ? buildDopesheetEditorProps({
+          surface,
+          selectedItemForEditor,
+          containerWidth,
+          resolvedContentHeight,
+          maxItemEndFrame,
+          canvas,
+          currentFrame,
+          relativeFrame,
+          effectiveEditorMode,
+          effectiveSelectedProperty,
+          keyframesByProperty,
+          selectedItemKeyframes,
+          propertyValues,
+          preExpressionPropertyValues,
+          selectedKeyframeIds,
+          selectedEditorKeyframes,
+          selectedEditorEasing,
+          easingOptions,
+          trimmedKeyframeCount,
+          transitionBlockedRanges,
+          proceduralPreview,
+          canBakeProceduralMotion,
+          propertyLinkSourceLabels,
+          handlePropertyLinkPointerDown,
+          handleRemovePropertyLink,
+          resolveExpressionReference,
+          handleSetPropertyExpression,
+          handleRemovePropertyExpression,
+          hiddenVectorPropertyRows,
+          compoundPropertyRows,
+          compoundSecondaryProperties,
+          dimensionSeparationByProperty,
+          classicAxisConstraints,
+          activeVectorRow,
+          vectorGraphMode,
+          setVectorGraphMode,
+          vectorSpeedGraphContent,
+          editTextMotionBands,
+          handleTextMotionDurationDragStart,
+          handleTextMotionDurationCommit,
+          handleTextMotionDurationCancel,
+          handleTextMotionOffsetDragStart,
+          handleTextMotionOffsetCommit,
+          handleTextMotionOffsetCancel,
+          handleTextMotionBandClick,
+          editTimelineFps,
+          editTimelineFrameViewport,
+          editTimelineGlobalFrameToPixels,
+          editTimelineScrollLeft,
+          editTimelinePixelsPerSecond,
+          editTimelineViewportWidth,
+          getEditTimelineLivePixelsPerSecond,
+          handleEditTimelineEdgeScroll,
+          timelineScrollContainerRef,
+          handleTrimAnimation,
+          handleKeyframeMove,
+          handleKeyframesMove,
+          handleBezierHandleMove,
+          handleSegmentEasingChange,
+          handleSelectionChange,
+          handlePropertyChange,
+          setSelectedProperty,
+          handleScrub,
+          handleSkim,
+          handleScrubStart,
+          handleScrubEnd,
+          handleDragStart,
+          handleDragEnd,
+          handleDragCancel,
+          handleAddKeyframe,
+          handleDuplicateKeyframes,
+          handlePropertyValueCommit,
+          handlePropertyValuePreview,
+          handleResetPropertiesToDefault,
+          handleRemoveKeyframes,
+          handleCopyKeyframes,
+          handleCutKeyframes,
+          handlePasteKeyframes,
+          handleSelectedKeyframeEasingChange,
+          handleNavigateToKeyframe,
+          keyframeClipboard,
+          isKeyframeClipboardCut,
+          setBakeDialogOpen,
+          splitView,
+          initialVisibleGroupIds,
+          propertyColumnWidth,
+          isPointerWithinEditor,
+          isFocusWithinEditor,
+          hotkeys,
+        })
+      : null
   return (
     <div
       ref={panelRef}
@@ -1006,152 +1096,10 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
           className={cn('min-h-0', surface === 'edit' ? 'p-0' : 'p-2', isSidePlacement && 'flex-1')}
           style={isSidePlacement ? undefined : { height: clampedContentHeight }}
         >
-          {selectedItemForEditor && containerWidth > 0 ? (
+          {dopesheetEditorProps ? (
             <>
               <ErrorBoundary level="component">
-                <DopesheetEditor
-                  itemId={selectedItemForEditor.id}
-                  motionModifiers={selectedItemForEditor.motionModifiers}
-                  textMotionBands={editTextMotionBands}
-                  onTextMotionDurationDragStart={handleTextMotionDurationDragStart}
-                  onTextMotionDurationCommit={handleTextMotionDurationCommit}
-                  onTextMotionDurationCancel={handleTextMotionDurationCancel}
-                  onTextMotionOffsetDragStart={handleTextMotionOffsetDragStart}
-                  onTextMotionOffsetCommit={handleTextMotionOffsetCommit}
-                  onTextMotionOffsetCancel={handleTextMotionOffsetCancel}
-                  onTextMotionBandClick={handleTextMotionBandClick}
-                  hasProceduralMotion={canBakeProceduralMotion}
-                  frameViewport={editTimelineFrameViewport}
-                  clampViewportToContent={surface !== 'edit'}
-                  viewportInteractionEnabled={surface !== 'edit'}
-                  keyframesByProperty={keyframesByProperty}
-                  propertyValues={propertyValues}
-                  preExpressionPropertyValues={preExpressionPropertyValues}
-                  propertyLinks={getDirectPropertyLinks(selectedItemKeyframes ?? undefined)}
-                  propertyExpressions={selectedItemKeyframes?.expressions?.filter(
-                    (expression) => expression.type === 'expression',
-                  )}
-                  propertyLinkSourceLabels={propertyLinkSourceLabels}
-                  onPropertyLinkPointerDown={handlePropertyLinkPointerDown}
-                  onRemovePropertyLink={handleRemovePropertyLink}
-                  resolveExpressionReference={resolveExpressionReference}
-                  onSetPropertyExpression={handleSetPropertyExpression}
-                  onRemovePropertyExpression={handleRemovePropertyExpression}
-                  hiddenPropertyRows={
-                    supportsVectorTransform(selectedItemForEditor)
-                      ? hiddenVectorPropertyRows
-                      : undefined
-                  }
-                  compoundPropertyRows={compoundPropertyRows}
-                  compoundSecondaryProperties={compoundSecondaryProperties}
-                  dimensionSeparationByProperty={dimensionSeparationByProperty}
-                  axisConstraintByProperty={surface === 'edit' ? classicAxisConstraints : undefined}
-                  selectedProperty={effectiveSelectedProperty}
-                  selectedKeyframeIds={selectedKeyframeIds}
-                  currentFrame={relativeFrame}
-                  playheadFrame={
-                    surface === 'edit' ? currentFrame - selectedItemForEditor.from : undefined
-                  }
-                  playheadClampToItemBounds={surface !== 'edit'}
-                  globalFrame={currentFrame}
-                  itemFrom={selectedItemForEditor.from}
-                  totalFrames={selectedItemForEditor.durationInFrames}
-                  affectedFrameRange={
-                    surface === 'edit'
-                      ? { fromFrame: 0, toFrame: selectedItemForEditor.durationInFrames }
-                      : undefined
-                  }
-                  trimmedKeyframeCount={surface === 'edit' ? trimmedKeyframeCount : 0}
-                  onTrimAnimation={surface === 'edit' ? handleTrimAnimation : undefined}
-                  fps={surface === 'edit' ? editTimelineFps : canvas.fps}
-                  width={editorWidth}
-                  height={editorHeight}
-                  onKeyframeMove={handleKeyframeMove}
-                  onKeyframesMove={handleKeyframesMove}
-                  onBezierHandleMove={handleBezierHandleMove}
-                  onSegmentEasingChange={handleSegmentEasingChange}
-                  onSelectionChange={handleSelectionChange}
-                  onPropertyChange={handlePropertyChange}
-                  onActivePropertyChange={setSelectedProperty}
-                  onScrub={handleScrub}
-                  onSkim={surface === 'edit' ? handleSkim : undefined}
-                  globalFrameToPixels={
-                    surface === 'edit' ? editTimelineGlobalFrameToPixels : undefined
-                  }
-                  timelineScrollContainerRef={
-                    surface === 'edit' ? timelineScrollContainerRef : undefined
-                  }
-                  timelinePanBaseScrollLeft={
-                    surface === 'edit' ? editTimelineScrollLeft : undefined
-                  }
-                  timelinePanBasePixelsPerSecond={
-                    surface === 'edit' ? editTimelinePixelsPerSecond : undefined
-                  }
-                  linkedTimelineViewportWidth={
-                    surface === 'edit' ? editTimelineViewportWidth : undefined
-                  }
-                  getTimelineLivePixelsPerSecond={
-                    surface === 'edit' ? getEditTimelineLivePixelsPerSecond : undefined
-                  }
-                  onRulerEdgeScroll={surface === 'edit' ? handleEditTimelineEdgeScroll : undefined}
-                  scrubClampToItemBounds={surface !== 'edit'}
-                  scrubFrameBounds={
-                    surface === 'edit'
-                      ? {
-                          minFrame: -selectedItemForEditor.from,
-                          maxFrame:
-                            Math.floor(
-                              Math.max(maxItemEndFrame / editTimelineFps, 10) * editTimelineFps,
-                            ) - selectedItemForEditor.from,
-                        }
-                      : undefined
-                  }
-                  onScrubStart={handleScrubStart}
-                  onScrubEnd={handleScrubEnd}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragCancel={handleDragCancel}
-                  onAddKeyframe={handleAddKeyframe}
-                  onDuplicateKeyframes={handleDuplicateKeyframes}
-                  onPropertyValueCommit={handlePropertyValueCommit}
-                  onPropertyValuePreview={handlePropertyValuePreview}
-                  onResetPropertiesToDefault={handleResetPropertiesToDefault}
-                  onRemoveKeyframes={handleRemoveKeyframes}
-                  onCopyKeyframes={handleCopyKeyframes}
-                  onCutKeyframes={handleCutKeyframes}
-                  onPasteKeyframes={handlePasteKeyframes}
-                  hasKeyframeClipboard={Boolean(keyframeClipboard?.keyframes.length)}
-                  isKeyframeClipboardCut={isKeyframeClipboardCut}
-                  selectedInterpolation={selectedEditorEasing}
-                  interpolationOptions={easingOptions}
-                  onInterpolationChange={handleSelectedKeyframeEasingChange}
-                  interpolationDisabled={selectedEditorKeyframes.length === 0}
-                  onNavigateToKeyframe={handleNavigateToKeyframe}
-                  transitionBlockedRanges={transitionBlockedRanges}
-                  proceduralPreview={proceduralPreview}
-                  canBakeMotion={canBakeProceduralMotion}
-                  onBakeMotion={() => setBakeDialogOpen(true)}
-                  visualizationMode={effectiveEditorMode}
-                  presentation={surface === 'edit' ? 'classic' : undefined}
-                  graphMode={vectorGraphMode}
-                  onGraphModeChange={activeVectorRow ? setVectorGraphMode : undefined}
-                  speedGraphContent={vectorSpeedGraphContent}
-                  spacious={splitView || surface === 'motion'}
-                  inlinePropertyGroupIds={
-                    surface === 'motion' ? MOTION_INLINE_PROPERTY_GROUP_IDS : undefined
-                  }
-                  initialVisibleGroupIds={initialVisibleGroupIds}
-                  propertyColumnWidth={propertyColumnWidth}
-                  shortcutsEnabled={isPointerWithinEditor || isFocusWithinEditor}
-                  addKeyframeShortcutEnabled={surface === 'edit'}
-                  shortcuts={{
-                    addKeyframe: surface === 'edit' ? hotkeys.EDIT_KEYFRAME_ADD : '',
-                    previousKeyframe: hotkeys.KEYFRAME_PREVIOUS,
-                    nextKeyframe: hotkeys.KEYFRAME_NEXT,
-                    toggleAutoKey: hotkeys.KEYFRAME_TOGGLE_AUTO,
-                    fitKeyframes: hotkeys.KEYFRAME_FIT,
-                  }}
-                />
+                <DopesheetEditor {...dopesheetEditorProps} />
               </ErrorBoundary>
             </>
           ) : (
