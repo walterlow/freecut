@@ -32,6 +32,16 @@ export function getDopesheetRulerTickLayout({
   }
 }
 
+/** `m:ss.s` past a minute, otherwise seconds with a stable precision. */
+export function formatRulerSeconds(seconds: number): string {
+  if (seconds >= 60) {
+    const minutes = Math.floor(seconds / 60)
+    const remainder = seconds - minutes * 60
+    return `${minutes}:${remainder.toFixed(1).padStart(4, '0')}`
+  }
+  return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`
+}
+
 export function formatDopesheetRulerCanvasLabel(
   frame: number,
   fps: number,
@@ -39,11 +49,5 @@ export function formatDopesheetRulerCanvasLabel(
 ): string {
   if (rulerUnit === 'frames' || fps <= 0) return String(Math.round(frame))
 
-  const seconds = frame / fps
-  if (seconds >= 60) {
-    const minutes = Math.floor(seconds / 60)
-    const remainder = seconds - minutes * 60
-    return `${minutes}:${remainder.toFixed(1).padStart(4, '0')}`
-  }
-  return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`
+  return formatRulerSeconds(frame / fps)
 }

@@ -2044,68 +2044,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     scheduleDragPreviewFrames(timingStripPreviewFrames)
   }, [scheduleDragPreviewFrames, timingStripPreviewFrames, showSheetPane])
   const rulerLabelFrameOffset = timelineScrollContainerRef ? itemFrom : 0
-  const formatRulerTick = useCallback(
-    (frame: number): string => {
-      const displayFrame = frame + rulerLabelFrameOffset
-      if (graphRulerUnit === 'frames' || !fps || fps <= 0) {
-        return String(displayFrame)
-      }
-      const seconds = displayFrame / fps
-      if (seconds >= 60) {
-        const minutes = Math.floor(seconds / 60)
-        const remainder = seconds - minutes * 60
-        return `${minutes}:${remainder.toFixed(1).padStart(4, '0')}`
-      }
-      return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`
-    },
-    [graphRulerUnit, fps, rulerLabelFrameOffset],
-  )
-
-  const rulerTickElements = useMemo(() => {
-    if (hasLinkedTimelineAxis) return null
-
-    const firstTick = ticks[0]
-    const lastTick = ticks[ticks.length - 1]
-    const minorTickLayer =
-      firstTick !== undefined && lastTick !== undefined && ticks.length > 1
-        ? (() => {
-            const firstX = frameToX(firstTick)
-            const majorSpacing = Math.abs(frameToX(ticks[1]!) - firstX)
-            const minorSpacing = majorSpacing / 4
-            return (
-              <div
-                data-dopesheet-ruler-minor-ticks
-                className="pointer-events-none absolute bottom-0 h-1"
-                style={{
-                  left: Math.round(firstX),
-                  width: Math.ceil(frameToX(lastTick) - firstX + majorSpacing),
-                  backgroundImage:
-                    'linear-gradient(to right, rgba(255, 255, 255, 0.14) 1px, transparent 1px)',
-                  backgroundSize: `${minorSpacing}px 100%`,
-                }}
-              />
-            )
-          })()
-        : null
-
-    return (
-      <>
-        {minorTickLayer}
-        {ticks.map((frame) => (
-          <div
-            key={frame}
-            data-dopesheet-ruler-major-tick
-            className="pointer-events-none absolute bottom-0 h-2 border-l border-white/30"
-            style={{ left: Math.round(frameToX(frame)) }}
-          >
-            <span className="absolute bottom-[7px] left-1 whitespace-nowrap text-[10px] text-muted-foreground">
-              {formatRulerTick(frame)}
-            </span>
-          </div>
-        ))}
-      </>
-    )
-  }, [hasLinkedTimelineAxis, ticks, frameToX, formatRulerTick])
   const liveRulerCanvas =
     hasLinkedTimelineAxis && timelineScrollContainerRef ? (
       <DopesheetLiveRulerCanvas
@@ -2478,7 +2416,11 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       onRulerPointerMove={handleRulerPointerMove}
       onRulerPointerUp={handleRulerPointerUp}
       onRulerPointerLeave={handleRulerPointerLeave}
-      rulerTickElements={rulerTickElements}
+      ticks={ticks}
+      frameToX={frameToX}
+      fps={fps}
+      rulerUnit={graphRulerUnit}
+      rulerLabelFrameOffset={rulerLabelFrameOffset}
       liveRulerCanvas={liveRulerCanvas}
       reservedRightGutterWidth={reservedScrollbarGutterWidth}
       propertyFilter={filterKeyframedOnly ? 'keyframed' : 'all'}
