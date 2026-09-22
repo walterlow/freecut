@@ -51,6 +51,7 @@ import { useDopesheetMarquee } from './use-dopesheet-marquee'
 import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
+import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import { useSelectionFrameActions } from './use-selection-frame-actions'
 import { usePropertyValueEditing } from './use-property-value-editing'
 import { useElementSize } from './use-element-size'
@@ -88,8 +89,6 @@ import { buildExpressionDockContext, formatExpressionValue } from './expression-
 
 import { DopesheetExpressionDock } from './dopesheet-expression-dock'
 import {
-  DopesheetGroupHeader,
-  DopesheetPropertyRowContent,
   type DopesheetGroupHeaderProps,
   type DopesheetPropertyRowContentProps,
 } from './dopesheet-row-renderers'
@@ -104,8 +103,6 @@ import {
   buildGroupedPropertyStructure,
   getNiceTickStep,
 } from './dopesheet-helpers'
-import type { DopesheetPropertyGroupStructure } from './dopesheet-helpers'
-import { GroupTimelineCell, PropertyTimelineCell } from './dopesheet-timeline-cells'
 import type { SegmentEasingChange } from './segment-easing-popover'
 
 import {
@@ -149,7 +146,6 @@ import {
 } from './row-action-helpers'
 import { getKeyframePropertyLabel } from '@/features/keyframes/utils/property-i18n'
 
-import { TextMotionTimelineRows } from './text-motion-timeline-rows'
 
 interface DopesheetEditorProps {
   /** Shared time viewport when split mode needs synchronized frame zoom/pan */
@@ -453,11 +449,7 @@ interface DopesheetEditorProps {
   className?: string
 }
 
-type StructureRow = { property: AnimatableProperty; keyframes: Keyframe[] }
-
 // Stable empty fallbacks so memoized timeline cells don't see fresh `[]` refs.
-const EMPTY_KEYFRAMES: Keyframe[] = []
-const EMPTY_STRUCTURE_ROWS: StructureRow[] = []
 const EMPTY_PROPERTY_GROUP_IDS: readonly string[] = []
 const EMPTY_HIDDEN_PROPERTIES: readonly AnimatableProperty[] = []
 const EMPTY_COMPOUND_ROWS: Partial<Record<AnimatableProperty, CompoundPropertyInputConfig>> = {}
@@ -487,48 +479,6 @@ function resolveGraphVisiblePropertyList(
 }
 
 
-const EMPTY_FRAME_GROUPS: DopesheetPropertyGroupStructure<StructureRow>['frameGroups'] = []
-
-
-
-
-const TimelineViewportCuller = memo(function TimelineViewportCuller({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const rootRef = useRef<HTMLDivElement>(null)
-  const [isNearViewport, setIsNearViewport] = useState(true)
-
-  useEffect(() => {
-    const node = rootRef.current
-    if (!node || typeof IntersectionObserver === 'undefined') return
-    // Classic Edit has its own scroller. Observing against the browser viewport
-    // can report every row as hidden while the panel is opening and stay stale.
-    const scrollRoot =
-      node.closest('[data-dopesheet-scroll-viewport]') ??
-      node.closest('[data-testid="motion-layer-scroll-area"]')
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry) return
-        if (!entry.isIntersecting && node.contains(document.activeElement)) return
-        setIsNearViewport(entry.isIntersecting)
-      },
-      {
-        root: scrollRoot,
-        rootMargin: '96px 0px',
-      },
-    )
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
-
-  return (
-    <div ref={rootRef} className="min-w-0 overflow-hidden">
-      {isNearViewport ? children : null}
-    </div>
-  )
-})
 
 export const DopesheetEditor = memo(function DopesheetEditor({
   frameViewport,
@@ -2539,241 +2489,57 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       />
     ) : null
 
-  // The property controls are substantially heavier than the timeline cells,
-  // but their output does not depend on the time viewport. Cache those React
-  // nodes separately so zooming only reconciles keyframe/tick geometry.
-  const sheetPropertyContentByProperty = useMemo(() => {
-    const content = new Map<AnimatableProperty, React.ReactNode>()
-    for (const entry of renderedSheetEntries.entries) {
-      if (entry.type !== 'row') continue
-      content.set(
-        entry.row.property,
-        <DopesheetPropertyRowContent
-          row={entry.row}
-          options={{ classic: presentation === 'classic', indented: entry.indented }}
-          {...rowContentProps}
-        />,
-      )
-    }
-    return content
-  }, [presentation, renderedSheetEntries.entries, rowContentProps])
-  const sheetGroupContentById = useMemo(() => {
-    const content = new Map<string, React.ReactNode>()
-    for (const entry of renderedSheetEntries.entries) {
-      if (entry.type !== 'group') continue
-      content.set(entry.group.id, <DopesheetGroupHeader group={entry.group} {...groupHeaderProps} />)
-    }
-    return content
-  }, [groupHeaderProps, renderedSheetEntries.entries])
-  const groupTimelineRowStyle = useMemo(
-    () => ({
-      ...propertyGridStyle,
-      height: GROUP_HEADER_HEIGHT,
-      contentVisibility: presentation === 'lanes' ? ('auto' as const) : undefined,
-      containIntrinsicSize: presentation === 'lanes' ? `auto ${GROUP_HEADER_HEIGHT}px` : undefined,
-    }),
-    [presentation, propertyGridStyle],
-  )
-  const propertyTimelineRowStyle = useMemo(
-    () => ({
-      ...propertyGridStyle,
-      height: ROW_HEIGHT,
-      contentVisibility: presentation === 'lanes' ? ('auto' as const) : undefined,
-      containIntrinsicSize: presentation === 'lanes' ? `auto ${ROW_HEIGHT}px` : undefined,
-    }),
-    [presentation, propertyGridStyle],
-  )
-  const rowElements = useMemo(
-    () => [
-      ...(presentation === 'classic' && textMotionBands.length > 0
-        ? [
-            <TextMotionTimelineRows
-              key="text-motion"
-              bands={textMotionBands}
-              gridStyle={propertyTimelineRowStyle}
-              ticks={ticks}
-              axisWidth={effectiveTimelineWidth}
-              frameToX={frameToX}
-              getPixelsPerFrame={getLiveDragPixelsPerFrame}
-              disabled={disabled}
-              onBackgroundPointerDown={handleTimelineBackgroundPointerDown}
-              onDurationDragStart={onTextMotionDurationDragStart}
-              onDurationCommit={onTextMotionDurationCommit}
-              onDurationCancel={onTextMotionDurationCancel}
-              onOffsetDragStart={onTextMotionOffsetDragStart}
-              onOffsetCommit={onTextMotionOffsetCommit}
-              onOffsetCancel={onTextMotionOffsetCancel}
-              onBandClick={onTextMotionBandClick}
-            />,
-          ]
-        : []),
-      ...renderedSheetEntries.entries.map((entry) => {
-        if (entry.type === 'group') {
-          return (
-            <div
-              key={entry.group.id}
-              className="grid w-full border-b border-border/60"
-              style={groupTimelineRowStyle}
-            >
-              {sheetGroupContentById.get(entry.group.id)}
-              <TimelineViewportCuller>
-                <GroupTimelineCell
-                  groupId={entry.group.id}
-                  groupLabel={entry.group.label}
-                  expanded={expandedGroups[entry.group.id] ?? true}
-                  frameGroups={
-                    groupTimelineById.get(entry.group.id)?.frameGroups ?? EMPTY_FRAME_GROUPS
-                  }
-                  rows={groupTimelineById.get(entry.group.id)?.rows ?? EMPTY_STRUCTURE_ROWS}
-                  ticks={ticks}
-                  axisWidth={effectiveTimelineWidth}
-                  frameToX={frameToX}
-                  gridFrameToX={timelineGridDivisions ? sharedGridFrameToX : undefined}
-                  getRenderedKeyframeX={getRenderedKeyframeX}
-                  selectedKeyframeIds={selectedKeyframeIds}
-                  disabled={disabled}
-                  isPropertyLocked={isPropertyLocked}
-                  onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
-                  onBackgroundPointerDown={handleTimelineBackgroundPointerDown}
-                  sheetPreviewFrames={sheetPreviewFrames}
-                  sheetPreviewDuplicateKeyframeIds={sheetPreviewDuplicateKeyframeIds}
-                />
-              </TimelineViewportCuller>
-            </div>
-          )
-        }
-
-        const { row } = entry
-        const rowLocked = isPropertyLocked(row.property)
-        return (
-          <div
-            key={row.property}
-            className="grid border-b border-border/60"
-            style={propertyTimelineRowStyle}
-          >
-            {sheetPropertyContentByProperty.get(row.property)}
-            <TimelineViewportCuller>
-              <PropertyTimelineCell
-                itemId={itemId}
-                property={row.property}
-                keyframes={rowKeyframesByProperty.get(row.property) ?? EMPTY_KEYFRAMES}
-                locked={rowLocked}
-                ticks={ticks}
-                axisWidth={effectiveTimelineWidth}
-                frameToX={frameToX}
-                gridFrameToX={timelineGridDivisions ? sharedGridFrameToX : undefined}
-                getRenderedKeyframeX={getRenderedKeyframeX}
-                renderedKeyframeXById={renderedKeyframeXById}
-                transitionBlockedRanges={transitionBlockedRanges}
-                proceduralBand={proceduralBandByProperty.get(row.property)}
-                selectedKeyframeIds={selectedKeyframeIds}
-                disabled={disabled}
-                onRowPointerDown={handleRowPointerDown}
-                onKeyframePointerDown={handleKeyframePointerDown}
-                onSegmentEasingChange={onSegmentEasingChange}
-                onSegmentDragStart={onDragStart}
-                onSegmentDragEnd={onDragEnd}
-                setKeyframeButtonRef={setKeyframeButtonRef}
-                keyframeMetaByIdRef={keyframeMetaByIdRef}
-                sheetPreviewFrames={sheetPreviewFrames}
-                sheetPreviewDuplicateKeyframeIds={sheetPreviewDuplicateKeyframeIds}
-              />
-            </TimelineViewportCuller>
-          </div>
-        )
-      }),
-    ],
-    [
-      renderedSheetEntries.entries,
-      expandedGroups,
-      groupTimelineRowStyle,
-      propertyTimelineRowStyle,
-      groupTimelineById,
-      rowKeyframesByProperty,
-      handleRowPointerDown,
-      handleTimelineBackgroundPointerDown,
-      handleGroupKeyframePointerDown,
-      sheetGroupContentById,
-      sheetPropertyContentByProperty,
-      getRenderedKeyframeX,
-      isPropertyLocked,
-      disabled,
-      ticks,
-      effectiveTimelineWidth,
-      frameToX,
-      sharedGridFrameToX,
-      timelineGridDivisions,
-      transitionBlockedRanges,
-      proceduralBandByProperty,
-      renderedKeyframeXById,
-      selectedKeyframeIds,
-      sheetPreviewDuplicateKeyframeIds,
-      sheetPreviewFrames,
-      handleKeyframePointerDown,
-      setKeyframeButtonRef,
-      keyframeMetaByIdRef,
-      itemId,
-      onSegmentEasingChange,
-      onDragStart,
-      onDragEnd,
-      presentation,
-      textMotionBands,
-      getLiveDragPixelsPerFrame,
-      onTextMotionDurationDragStart,
-      onTextMotionDurationCommit,
-      onTextMotionDurationCancel,
-      onTextMotionOffsetDragStart,
-      onTextMotionOffsetCommit,
-      onTextMotionOffsetCancel,
-      onTextMotionBandClick,
-    ],
-  )
-  const propertyColumnElements = useMemo(
-    () =>
-      groupedPropertyRows.flatMap<React.ReactNode>((group): React.ReactNode[] => {
-        const inline = inlinePropertyGroupIdSet.has(group.id)
-        const propertyElements = group.rows.map((row) => (
-          <div
-            key={row.property}
-            className="border-b border-border/60"
-            style={{ height: ROW_HEIGHT }}
-          >
-            <DopesheetPropertyRowContent
-              row={row}
-              options={{ indented: !inline }}
-              {...rowContentProps}
-            />
-          </div>
-        ))
-        if (inline) {
-          return propertyElements
-        }
-
-        const groupOpen = expandedGroups[group.id] ?? true
-        const elements: React.ReactNode[] = [
-          <div
-            key={group.id}
-            className="border-b border-border/60"
-            style={{ height: GROUP_HEADER_HEIGHT }}
-          >
-            <DopesheetGroupHeader group={group} {...groupHeaderProps} />
-          </div>,
-        ]
-
-        if (!groupOpen) {
-          return elements
-        }
-
-        return elements.concat(propertyElements)
-      }),
-    [
-      expandedGroups,
-      groupedPropertyRows,
-      groupHeaderProps,
-      inlinePropertyGroupIdSet,
-      rowContentProps,
-    ],
-  )
+  // The row controls are substantially heavier than the timeline cells, and
+  // their output does not depend on the time viewport. The hook caches those
+  // nodes next to the elements it builds, so zooming only reconciles
+  // keyframe/tick geometry.
+  const { rowElements, propertyColumnElements } = useDopesheetSheetRows({
+    rowContentProps,
+    groupHeaderProps,
+    renderedSheetEntries,
+    groupTimelineById,
+    groupedPropertyRows,
+    expandedGroups,
+    inlinePropertyGroupIdSet,
+    rowKeyframesByProperty,
+    renderedKeyframeXById,
+    proceduralBandByProperty,
+    selectedKeyframeIds,
+    transitionBlockedRanges,
+    ticks,
+    frameToX,
+    sharedGridFrameToX,
+    getRenderedKeyframeX,
+    effectiveTimelineWidth,
+    timelineGridDivisions,
+    propertyGridStyle,
+    presentation,
+    disabled,
+    isPropertyLocked,
+    itemId,
+    textMotionBands,
+    getLiveDragPixelsPerFrame,
+    sheetPreviewFrames,
+    sheetPreviewDuplicateKeyframeIds,
+    keyframeMetaByIdRef,
+    setKeyframeButtonRef,
+    handleRowPointerDown,
+    handleTimelineBackgroundPointerDown,
+    handleKeyframePointerDown,
+    handleGroupKeyframePointerDown,
+    onSegmentEasingChange,
+    onDragStart,
+    onDragEnd,
+    textMotionHandlers: {
+      onDurationDragStart: onTextMotionDurationDragStart,
+      onDurationCommit: onTextMotionDurationCommit,
+      onDurationCancel: onTextMotionDurationCancel,
+      onOffsetDragStart: onTextMotionOffsetDragStart,
+      onOffsetCommit: onTextMotionOffsetCommit,
+      onOffsetCancel: onTextMotionOffsetCancel,
+      onBandClick: onTextMotionBandClick,
+    },
+  })
   const emptyStateMessage = hasPropertyFilters
     ? t('timeline.keyframeEditor.noParametersMatch')
     : t('timeline.keyframeEditor.noKeyframesToDisplay')
