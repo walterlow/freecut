@@ -13,9 +13,7 @@ export function normalizeTextShadow(
   return shadow
 }
 
-export function normalizeTextStroke(
-  stroke: NonNullable<TextItem['stroke']>,
-): TextItem['stroke'] {
+export function normalizeTextStroke(stroke: NonNullable<TextItem['stroke']>): TextItem['stroke'] {
   if (stroke.width <= 0) {
     return undefined
   }
@@ -31,7 +29,9 @@ export function cloneTextSpans(spans: TextSpan[]): TextSpan[] {
   return spans.map((span) => ({ ...span }))
 }
 
-export function getLayoutDraftKey(layout: Exclude<TextLayoutMode, 'single'>): 'twoSpans' | 'threeSpans' {
+export function getLayoutDraftKey(
+  layout: Exclude<TextLayoutMode, 'single'>,
+): 'twoSpans' | 'threeSpans' {
   return layout === 'two' ? 'twoSpans' : 'threeSpans'
 }
 

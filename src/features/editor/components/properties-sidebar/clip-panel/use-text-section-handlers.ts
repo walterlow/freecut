@@ -17,10 +17,7 @@ import {
   normalizeTextShadow,
   normalizeTextStroke,
 } from './text-section-utils'
-import {
-  buildTextItemLabelFromText,
-  getTextItemPrimaryText,
-} from '@/shared/utils/text-item-spans'
+import { buildTextItemLabelFromText, getTextItemPrimaryText } from '@/shared/utils/text-item-spans'
 import {
   buildEditableBaseSpans,
   buildTextSingleLayoutDraft,

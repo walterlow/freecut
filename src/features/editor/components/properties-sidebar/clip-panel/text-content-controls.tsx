@@ -218,7 +218,9 @@ export function TextSpanEditors({
                 </Button>
               ) : null}
               <Button
-                variant={(span.underline ?? fallbackItem.underline ?? false) ? 'secondary' : 'ghost'}
+                variant={
+                  (span.underline ?? fallbackItem.underline ?? false) ? 'secondary' : 'ghost'
+                }
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => onSpanUnderlineToggle(index)}
@@ -251,9 +253,7 @@ export function TextPlainEditor({ value, isMixed, onChange }: TextPlainEditorPro
     <Textarea
       value={value}
       onChange={onChange}
-      placeholder={
-        isMixed ? t('editor.textSection.mixed') : t('editor.textSection.enterText')
-      }
+      placeholder={isMixed ? t('editor.textSection.mixed') : t('editor.textSection.enterText')}
       className="min-h-[60px] text-xs flex-1 min-w-0"
       rows={3}
     />

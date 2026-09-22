@@ -11,11 +11,7 @@ import { getTextItemPlainText } from '@/shared/utils/text-item-spans'
 import { useTextSectionSelection } from './use-text-section-selection'
 import { useTextSectionHandlers } from './use-text-section-handlers'
 import { TextTypographyControls } from './text-typography-controls'
-import {
-  TextLayoutControls,
-  TextPlainEditor,
-  TextSpanEditors,
-} from './text-content-controls'
+import { TextLayoutControls, TextPlainEditor, TextSpanEditors } from './text-content-controls'
 import { TextAlignControls } from './text-align-controls'
 import { TextColorControls } from './text-color-controls'
 import { TextBoxControls } from './text-box-controls'
@@ -162,7 +158,6 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
 
     updateTextItems({ fontWeight: fallbackWeight })
   }, [sharedValues?.fontFamily, supportedFontWeightOptions, updateTextItems])
-
 
   if (textItems.length === 0 || !sharedValues) {
     return null

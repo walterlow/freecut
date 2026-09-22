@@ -96,7 +96,11 @@ export function TextTypographyControls({
             unit="px"
             className="flex-1 min-w-0"
           />
-          <KeyframeToggle itemIds={itemIds} property="fontSize" currentValue={fontSizeCurrentValue} />
+          <KeyframeToggle
+            itemIds={itemIds}
+            property="fontSize"
+            currentValue={fontSizeCurrentValue}
+          />
         </div>
       </PropertyRow>
 
