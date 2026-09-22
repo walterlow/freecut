@@ -20,7 +20,7 @@ import {
   type KeyframeEditorSurface,
   type VectorEditorRow,
 } from './keyframe-graph-panel-model'
-import type { KeyframeEditorMode } from './keyframe-graph-panel'
+import type { KeyframeEditorMode } from './use-keyframe-graph-panel-view-state'
 import type {
   AnimatableProperty,
   EasingType,
