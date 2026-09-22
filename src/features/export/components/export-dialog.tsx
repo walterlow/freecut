@@ -90,6 +90,12 @@ import {
   hasInOutRange,
 } from '../utils/export-range'
 import {
+  areExportActionsDisabled,
+  doesPreflightBlockExport,
+  resolveFallbackCodec,
+  resolveSupportedContainer,
+} from '../utils/export-capabilities'
+import {
   EXPORT_PRESETS,
   findActivePresetId,
   getResolutionOptions,
@@ -650,27 +656,22 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   useEffect(() => {
     if (exportMode !== 'video' || !hasCapabilityData) return
 
-    const firstSupportedContainer = videoContainerOptions.find((option) => option.supported)?.value
-    if (!firstSupportedContainer) return
-    if (
-      !videoContainerOptions.some((option) => option.value === videoContainer && option.supported)
-    ) {
-      setVideoContainer(firstSupportedContainer)
-    }
+    const nextContainer = resolveSupportedContainer(videoContainerOptions, videoContainer)
+    if (nextContainer === null) return
+
+    setVideoContainer(nextContainer)
   }, [exportMode, hasCapabilityData, videoContainer, videoContainerOptions])
 
+  // Codec the probe rules out: fall back to one it can encode, unless smart
+  // copy keeps the source bytes (and their codec) untouched.
+  const fallbackCodec = smartCopyWillRun
+    ? null
+    : resolveFallbackCodec(codecOptions, settings.codec)
   useEffect(() => {
-    if (smartCopyWillRun) return
-    const validCodecs = codecOptions
-      .filter((option) => option.supported)
-      .map((option) => option.value)
+    if (fallbackCodec === null) return
 
-    if (!validCodecs.includes(settings.codec)) {
-      const fallbackCodec = validCodecs[0] ?? codecOptions[0]?.value
-      if (!fallbackCodec) return
-      setSettings((prev) => ({ ...prev, codec: fallbackCodec as ExportSettings['codec'] }))
-    }
-  }, [codecOptions, settings.codec, smartCopyWillRun])
+    setSettings((prev) => ({ ...prev, codec: fallbackCodec }))
+  }, [fallbackCodec])
 
   useEffect(() => {
     if (!open || view !== 'settings') {
@@ -729,13 +730,14 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
     view,
   ])
 
-  const preflightBlocksExport =
-    preflight?.checks.some((check) => check.severity === 'error') ?? false
-  const exportActionsDisabled =
-    (exportMode === 'video' &&
-      !smartCopyWillRun &&
-      (!hasSupportedVideoPath || isCheckingVideoSupport)) ||
-    preflightBlocksExport
+  const preflightBlocksExport = doesPreflightBlockExport(preflight)
+  const exportActionsDisabled = areExportActionsDisabled({
+    exportMode,
+    smartCopyWillRun,
+    hasSupportedVideoPath,
+    isCheckingVideoSupport,
+    preflightBlocksExport,
+  })
 
   const preventClose = view === 'progress' || view === 'complete'
   const fileSize = clientRender.result?.fileSize

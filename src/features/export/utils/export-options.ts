@@ -13,14 +13,14 @@ import {
   type ClientVideoContainer,
 } from '../deps/renderer'
 
-type VideoContainerOption = {
+export type VideoContainerOption = {
   value: ClientVideoContainer
   label: string
   description: string
   supported: boolean
 }
 
-type VideoCodecOption = {
+export type VideoCodecOption = {
   value: ExportSettings['codec']
   label: string
   supported: boolean
