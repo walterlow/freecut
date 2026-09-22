@@ -67,6 +67,7 @@ import { useZoomStore } from '../stores/zoom-store'
 import { perfMarkRender } from '@/shared/logging/perf-marks'
 import { notifyTimelineLiveScroll } from '@/shared/timeline/live-scroll-sync'
 import { getTextMotionTimelineBands } from '@/shared/timeline/text-motion-timeline'
+import { useKeyframeEditorPlaybackFrame } from './use-keyframe-editor-playback-frame'
 import { useSettledTimelineGeometry } from './use-settled-timeline-scroll-left'
 import { getContentBoundedEdgeScrollLeft } from '../utils/timeline-layout'
 import type {
@@ -216,79 +217,6 @@ const EASING_OPTIONS: Array<{
     defaultLabel: 'Ease Out',
   },
 ]
-
-function useKeyframeEditorPlaybackFrame(
-  selectedItemId: string | null,
-  editorScrubbingRef: RefObject<boolean>,
-): number {
-  const [frame, setFrame] = useState(() => usePlaybackStore.getState().currentFrame)
-  const frameRef = useRef(frame)
-
-  useEffect(() => {
-    const nextFrame = usePlaybackStore.getState().currentFrame
-    frameRef.current = nextFrame
-    setFrame(nextFrame)
-  }, [selectedItemId])
-
-  useEffect(() => {
-    let wasPlaying = usePlaybackStore.getState().isPlaying
-    let rafId: number | null = null
-    let pendingFrame: number | null = null
-
-    // Coalesce rapid scrub updates to one commit per animation frame. Pointer
-    // moves can fire several store updates per frame; without this the keyframe
-    // editor (dopesheet/graph) re-renders multiple times per displayed frame.
-    const flush = () => {
-      rafId = null
-      if (pendingFrame === null) return
-      const nextFrame = pendingFrame
-      pendingFrame = null
-      if (frameRef.current === nextFrame) return
-      frameRef.current = nextFrame
-      setFrame(nextFrame)
-    }
-
-    const commitFrame = (nextFrame: number) => {
-      pendingFrame = nextFrame
-      if (rafId === null) {
-        rafId = requestAnimationFrame(flush)
-      }
-    }
-
-    const unsubscribe = usePlaybackStore.subscribe((state) => {
-      const nextFrame = state.currentFrame
-
-      if (state.isPlaying) {
-        // Keep the (relatively expensive) full editor re-render out of the
-        // playback hot path. The playhead line still tracks playback via a
-        // self-subscribing overlay (see DopesheetPlayheadLine / GraphPlayhead),
-        // which moves it by direct DOM without re-rendering the editor.
-        wasPlaying = true
-        return
-      }
-
-      if (wasPlaying) {
-        wasPlaying = false
-        commitFrame(nextFrame)
-        return
-      }
-
-      const isSettledSeek = state.previewFrame === null
-      if (isSettledSeek && !editorScrubbingRef.current) {
-        commitFrame(nextFrame)
-      }
-    })
-
-    return () => {
-      unsubscribe()
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
-      }
-    }
-  }, [editorScrubbingRef, selectedItemId])
-
-  return frame
-}
 
 function loadKeyframeEditorMode(): KeyframeEditorMode {
   try {
