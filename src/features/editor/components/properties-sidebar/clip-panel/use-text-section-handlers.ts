@@ -14,10 +14,11 @@ import {
   buildSpanLayout,
   cloneTextSpans,
   getLayoutDraftKey,
+  getSpanEditPlainText,
   normalizeTextShadow,
   normalizeTextStroke,
 } from './text-section-utils'
-import { buildTextItemLabelFromText, getTextItemPrimaryText } from '@/shared/utils/text-item-spans'
+import { buildTextItemLabelFromText } from '@/shared/utils/text-item-spans'
 import {
   buildEditableBaseSpans,
   buildTextSingleLayoutDraft,
@@ -88,13 +89,14 @@ export function useTextSectionHandlers({
         collapseToSingle?: boolean
       },
     ) => {
-      const sanitizedSpans = nextSpans?.map((span) => ({ ...span })) ?? undefined
-      const plainText = sanitizedSpans
-        ? sanitizedSpans.map((span) => span.text).join('\n')
-        : options?.collapseToSingle
-          ? (activeEditorSpans[0]?.text ??
-            (firstTextItem ? getTextItemPrimaryText(firstTextItem) : ''))
-          : (sharedValues?.text ?? firstTextItem?.text ?? '')
+      const sanitizedSpans = nextSpans ? cloneTextSpans(nextSpans) : undefined
+      const plainText = getSpanEditPlainText({
+        sanitizedSpans,
+        collapseToSingle: options?.collapseToSingle ?? false,
+        activeEditorSpans,
+        firstTextItem,
+        sharedText: sharedValues?.text,
+      })
       setTextPropertiesPreview({
         text: plainText,
         textSpans: sanitizedSpans,
@@ -114,13 +116,14 @@ export function useTextSectionHandlers({
         collapseToSingle?: boolean
       },
     ) => {
-      const sanitizedSpans = nextSpans?.map((span) => ({ ...span })) ?? undefined
-      const plainText = sanitizedSpans
-        ? sanitizedSpans.map((span) => span.text).join('\n')
-        : options?.collapseToSingle
-          ? (activeEditorSpans[0]?.text ??
-            (firstTextItem ? getTextItemPrimaryText(firstTextItem) : ''))
-          : (sharedValues?.text ?? firstTextItem?.text ?? '')
+      const sanitizedSpans = nextSpans ? cloneTextSpans(nextSpans) : undefined
+      const plainText = getSpanEditPlainText({
+        sanitizedSpans,
+        collapseToSingle: options?.collapseToSingle ?? false,
+        activeEditorSpans,
+        firstTextItem,
+        sharedText: sharedValues?.text,
+      })
       const label = buildTextItemLabelFromText(plainText)
       textItems.forEach((item) => {
         updateItem(item.id, {

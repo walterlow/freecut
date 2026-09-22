@@ -14,7 +14,11 @@ import type { TextItem, TextSpan } from '@/types/timeline'
 import { ColorPicker, NumberInput, PropertyGroupHeader } from '../components'
 import { FontPicker } from './font-picker'
 import { FONT_WEIGHT_OPTIONS } from './text-section-constants'
-import { getSpanEditorConfigs } from './text-section-utils'
+import {
+  getSpanEditorConfigs,
+  getSpanEditorEmphasis,
+  getSpanEditorTypography,
+} from './text-section-utils'
 import { TEXT_STYLE_PRESETS, type TextStylePresetId } from './text-style-presets'
 
 interface TextLayoutControlsProps {
@@ -135,6 +139,8 @@ export function TextSpanEditors({
           rows: 2,
           allowItalic: true,
         }
+        const typography = getSpanEditorTypography(span, fallbackItem)
+        const emphasis = getSpanEditorEmphasis(span, fallbackItem)
 
         return (
           <div key={`${index}:${span.text}`} className="rounded-md border border-border/70 p-2">
@@ -148,7 +154,7 @@ export function TextSpanEditors({
             />
             <div className="mt-2">
               <FontPicker
-                value={span.fontFamily ?? fallbackItem.fontFamily}
+                value={typography.fontFamily}
                 placeholder={t('editor.textSection.selectFont')}
                 previewText={span.text || config.label}
                 onValueChange={(value) => onSpanFontFamilyChange(index, value)}
@@ -157,7 +163,7 @@ export function TextSpanEditors({
             <div className="mt-2 grid grid-cols-2 gap-2">
               <NumberInput
                 label={t('editor.textSection.size')}
-                value={span.fontSize ?? fallbackItem.fontSize ?? 60}
+                value={typography.fontSize}
                 onChange={(value) => onSpanFontSizeChange(index, value)}
                 onLiveChange={(value) => onSpanFontSizeLiveChange(index, value)}
                 min={8}
@@ -167,7 +173,7 @@ export function TextSpanEditors({
                 className="min-w-0"
               />
               <Select
-                value={span.fontWeight ?? fallbackItem.fontWeight ?? 'normal'}
+                value={typography.fontWeight}
                 onValueChange={(value) => onSpanWeightChange(index, value)}
               >
                 <SelectTrigger className="h-7 text-xs min-w-0">
@@ -185,7 +191,7 @@ export function TextSpanEditors({
             <div className="mt-2">
               <NumberInput
                 label={t('editor.textSection.spacing')}
-                value={span.letterSpacing ?? fallbackItem.letterSpacing ?? 0}
+                value={typography.letterSpacing}
                 onChange={(value) => onSpanLetterSpacingChange(index, value)}
                 onLiveChange={(value) => onSpanLetterSpacingLiveChange(index, value)}
                 min={-20}
@@ -198,7 +204,7 @@ export function TextSpanEditors({
             <div className="mt-2 flex items-center gap-2">
               <div className="flex-1 min-w-0">
                 <ColorPicker
-                  color={span.color ?? fallbackItem.color ?? '#ffffff'}
+                  color={emphasis.color}
                   onChange={(value) => onSpanColorChange(index, value)}
                   onLiveChange={(value) => onSpanColorLiveChange(index, value)}
                   allowAlpha
@@ -206,7 +212,7 @@ export function TextSpanEditors({
               </div>
               {config.allowItalic ? (
                 <Button
-                  variant={(span.fontStyle ?? 'normal') === 'italic' ? 'secondary' : 'ghost'}
+                  variant={emphasis.isItalic ? 'secondary' : 'ghost'}
                   size="icon"
                   className="h-7 w-7"
                   onClick={() => onSpanItalicToggle(index)}
