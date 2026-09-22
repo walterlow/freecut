@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Shapes } from 'lucide-react'
 import {
@@ -8,14 +7,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { ShapeItem, TimelineItem } from '@/types/timeline'
-import { useKeyframesStore } from '@/features/editor/deps/timeline-store'
+import type { TimelineItem } from '@/types/timeline'
 import { useGizmoStore, useMaskEditorStore } from '@/features/editor/deps/preview'
-import { hasPathVertexKeyframes } from '@/features/editor/deps/keyframes'
 import { PropertySection, PropertyRow } from '../components'
-import { getShapeSectionControlVisibility } from './shape-section-visibility'
-import { getSharedShapeValues } from './shape-section-shared-values'
 import { SHAPE_TYPE_OPTIONS } from './shape-section-constants'
+import { useShapeSectionSelection } from './use-shape-section-selection'
 import { ShapeFillControls } from './shape-fill-controls'
 import { ShapeKindControls } from './shape-kind-controls'
 import { ShapePathControls } from './shape-path-controls'
@@ -44,27 +40,15 @@ export function ShapeSection({ items }: ShapeSectionProps) {
   const setPropertiesPreviewNew = useGizmoStore((s) => s.setPropertiesPreviewNew)
   const clearPreview = useGizmoStore((s) => s.clearPreview)
 
-  // Filter to only shape items
-  const shapeItems = useMemo(
-    () => items.filter((item): item is ShapeItem => item.type === 'shape'),
-    [items],
-  )
-
-  // Memoize item IDs for stable callback dependencies
-  const itemIds = useMemo(() => shapeItems.map((item) => item.id), [shapeItems])
-
-  // Get shared values across selected shape items
-  const sharedValues = useMemo(() => getSharedShapeValues(shapeItems), [shapeItems])
-
-  const singlePathShape =
-    shapeItems.length === 1 && shapeItems[0]?.shapeType === 'path' ? shapeItems[0] : null
-  const singlePathKeyframes = useKeyframesStore((state) =>
-    singlePathShape ? state.keyframesByItemId[singlePathShape.id] : undefined,
-  )
-  const pathTopologyLocked = hasPathVertexKeyframes(singlePathKeyframes)
-  const isEditingPathShape =
-    !!singlePathShape && isEditing && !penMode && editingItemId === singlePathShape.id
-  const controlVisibility = getShapeSectionControlVisibility(shapeItems)
+  const {
+    shapeItems,
+    itemIds,
+    sharedValues,
+    singlePathShape,
+    pathTopologyLocked,
+    isEditingPathShape,
+    controlVisibility,
+  } = useShapeSectionSelection({ items, isEditing, editingItemId, penMode })
 
   const {
     updateShapeItems,
