@@ -11,8 +11,6 @@ import { useSelectionStore } from '@/shared/state/selection'
 import { useEditorStore } from '@/shared/state/editor'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { perfMarkRender } from '@/shared/logging/perf-marks'
-import { useTransitionDragStore } from '@/shared/state/transition-drag'
-import { TRANSITION_CONFIGS } from '@/types/transition'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
 import { useCaptionDialogState } from './use-caption-dialog-state'
 import {
@@ -45,9 +43,7 @@ import { useSmartTrimHover } from './use-smart-trim-hover'
 import { useContextMenuState } from './use-context-menu-state'
 import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-store'
 import { useRollHoverStore } from '../../stores/roll-hover-store'
-import { frameToPixelsNow } from '../../utils/zoom-conversions'
 import { useTimelineItemBounds } from './use-timeline-item-bounds'
-import { getTransitionBridgeBounds } from '../../utils/transition-preview-geometry'
 import { useFadeEditors } from './use-fade-editors'
 import { useFadeMath } from './use-fade-math'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
@@ -67,6 +63,8 @@ import {
 import { ClipFloatingLayer } from './clip-floating-layer'
 import { useEffectDropTarget } from './use-effect-drop-target'
 import { EffectDropOverlay } from './effect-drop-overlay'
+import { useTransitionDropPreview } from './use-transition-drop-preview'
+import { TransitionDropZones } from './transition-drop-zones'
 const EMPTY_SEGMENT_OVERLAYS = [] as const
 const EMPTY_LINKED_ITEMS: TimelineItemType[] = []
 
@@ -84,8 +82,6 @@ const ITEM_COLOR_CLASSES: Partial<Record<TimelineItemType['type'], string>> = {
   composition: 'bg-violet-600/40 border-violet-400',
 }
 const SPEED_BADGE_EPSILON = 0.005
-const TRANSITION_DROP_HIT_MIN_WIDTH_PX = 72
-const TRANSITION_DROP_HIT_MAX_WIDTH_PX = 240
 
 function getFramePositionStyle(frame: number): string {
   return `calc(${frame} * var(--timeline-percent-per-frame, 0%))`
@@ -403,54 +399,8 @@ export const TimelineItem = memo(function TimelineItem({
   // Current speed for badge display
   const currentSpeed = previewBaseItem.speed || 1
 
-  const draggedTransition = useTransitionDragStore((s) => s.draggedTransition)
-  const transitionDragPreview = useTransitionDragStore(
-    useCallback(
-      (s) => {
-        if (!s.preview || s.preview.existingTransitionId) return null
-        return s.preview.leftClipId === item.id ? s.preview : null
-      },
-      [item.id],
-    ),
-  )
-  const transitionDragPreviewRightClip = useItemsStore(
-    useCallback(
-      (s) => {
-        if (!transitionDragPreview) return null
-        return s.itemById[transitionDragPreview.rightClipId] ?? null
-      },
-      [transitionDragPreview],
-    ),
-  )
-
-  const transitionDropGhost = useMemo(() => {
-    if (!transitionDragPreview || !transitionDragPreviewRightClip) return null
-
-    const bridge = getTransitionBridgeBounds(
-      previewBaseItem.from,
-      previewBaseItem.durationInFrames,
-      transitionDragPreviewRightClip.from,
-      transitionDragPreview.durationInFrames,
-      transitionDragPreview.alignment,
-    )
-    const leftPx = Math.round(frameToPixelsNow(bridge.leftFrame))
-    const rightPx = Math.round(frameToPixelsNow(bridge.rightFrame))
-    const cutPx = Math.round(frameToPixelsNow(transitionDragPreviewRightClip.from))
-    const naturalWidth = rightPx - leftPx
-    const minWidth = 32
-    const left = naturalWidth >= minWidth ? leftPx : leftPx - (minWidth - naturalWidth) / 2
-
-    return {
-      left,
-      width: Math.max(naturalWidth, minWidth),
-      cutOffset: cutPx - left,
-    }
-  }, [
-    previewBaseItem.durationInFrames,
-    previewBaseItem.from,
-    transitionDragPreview,
-    transitionDragPreviewRightClip,
-  ])
+  const { draggedTransition, transitionDropGhost, transitionDropHitWidth } =
+    useTransitionDropPreview({ itemId: item.id, previewBaseItem })
 
   const {
     left,
@@ -483,15 +433,6 @@ export const TimelineItem = memo(function TimelineItem({
     rippleEdgeDelta,
     trackPushOffset,
   })
-  const transitionDropHitWidth = Math.min(
-    TRANSITION_DROP_HIT_MAX_WIDTH_PX,
-    Math.max(
-      TRANSITION_DROP_HIT_MIN_WIDTH_PX,
-      Math.round(frameToPixelsNow(TRANSITION_CONFIGS.crossfade.defaultDuration) * 2),
-    ),
-  )
-  const transitionDropHalfHitWidth = transitionDropHitWidth / 2
-
   const toolOperationOverlay = useToolOperationOverlay({
     item,
     fps,
@@ -1161,33 +1102,16 @@ export const TimelineItem = memo(function TimelineItem({
             isBeingDragged={isBeingDragged}
           />
 
-          {!useCompactClipShell &&
-            draggedTransition &&
-            !trackLocked &&
-            (item.type === 'video' || item.type === 'image' || item.type === 'composition') && (
-              <>
-                <div
-                  className="absolute inset-y-0 z-40"
-                  style={{
-                    left: `${-transitionDropHalfHitWidth}px`,
-                    width: `${transitionDropHitWidth}px`,
-                  }}
-                  onDragOver={handleTransitionCutDragOver('left')}
-                  onDragLeave={handleTransitionCutDragLeave}
-                  onDrop={handleTransitionCutDrop('left')}
-                />
-                <div
-                  className="absolute inset-y-0 z-40"
-                  style={{
-                    left: `calc(100% - ${transitionDropHalfHitWidth}px)`,
-                    width: `${transitionDropHitWidth}px`,
-                  }}
-                  onDragOver={handleTransitionCutDragOver('right')}
-                  onDragLeave={handleTransitionCutDragLeave}
-                  onDrop={handleTransitionCutDrop('right')}
-                />
-              </>
-            )}
+          <TransitionDropZones
+            itemType={item.type}
+            trackLocked={trackLocked}
+            isCompactShell={useCompactClipShell}
+            isTransitionDragActive={draggedTransition !== null}
+            hitWidth={transitionDropHitWidth}
+            onCutDragOver={handleTransitionCutDragOver}
+            onCutDragLeave={handleTransitionCutDragLeave}
+            onCutDrop={handleTransitionCutDrop}
+          />
         </div>
       </ItemContextMenu>
 
