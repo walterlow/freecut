@@ -13,7 +13,6 @@ import { useTimelineTrim } from '../../hooks/use-timeline-trim'
 import { useTrackPush } from '../../hooks/use-track-push'
 import { isRateStretchableItem, useRateStretch } from '../../hooks/use-rate-stretch'
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide'
-import { cn } from '@/shared/ui/cn'
 import { ClipContent } from './clip-content'
 import { ClipIndicators } from './clip-indicators'
 import { TrimHandles } from './trim-handles'
@@ -40,10 +39,8 @@ import { useLinkedSyncPreview } from './use-linked-sync-preview'
 import { useClipReadoutLabels } from './use-clip-readout-labels'
 import { useTimelineItemPointerHandlers } from './use-timeline-item-pointer-handlers'
 import { resolveTrimVisualState } from './timeline-item-view-model'
-import { getAudioVolumeCssVars } from './timeline-item-css-vars'
 import { ClipFloatingLayer } from './clip-floating-layer'
 import { useEffectDropTarget } from './use-effect-drop-target'
-import { EffectDropOverlay } from './effect-drop-overlay'
 import { useTransitionDropPreview } from './use-transition-drop-preview'
 import { TransitionDropZones } from './transition-drop-zones'
 import { buildTimelineItemContextMenuProps } from './build-context-menu-props'
@@ -57,25 +54,9 @@ import {
   shouldUseCompactClipShell,
   useAudioVolumeEditLabel,
 } from './use-compact-shell'
-import { getTimelineItemShellStyle } from './get-shell-style'
 import { EMPTY_LINKED_ITEMS, useItemMetadata } from './use-item-metadata'
-
-// Track-push trigger zone: scale with zoom so it stays hittable when zoomed out
-const TRACK_PUSH_MIN_PX = 6
-const TRACK_PUSH_MAX_PX = 14
-const TRACK_PUSH_ZOOM_THRESHOLD = 120
-
-function getFramePositionStyle(frame: number): string {
-  return `calc(${frame} * var(--timeline-percent-per-frame, 0%))`
-}
-
-function getTrackPushZoneStyle(gapFrames: number): string {
-  const safeGapFrames = Math.max(0, gapFrames)
-  const gapWidth = `calc(${safeGapFrames} * var(--timeline-percent-per-frame, 0%))`
-  const zoomSlopeDivisor = TRACK_PUSH_ZOOM_THRESHOLD / (TRACK_PUSH_MAX_PX - TRACK_PUSH_MIN_PX)
-  const adaptiveWidth = `clamp(${TRACK_PUSH_MIN_PX}px, calc(${TRACK_PUSH_MAX_PX}px - (var(--timeline-percent-per-second, 0%) / ${zoomSlopeDivisor})), ${TRACK_PUSH_MAX_PX}px)`
-  return `min(${gapWidth}, ${adaptiveWidth})`
-}
+import { TimelineItemShell } from './timeline-item-shell'
+import { getFramePositionStyle, getTrackPushZoneStyle } from './timeline-item-geometry'
 
 interface TimelineItemProps {
   item: TimelineItemType
@@ -686,71 +667,43 @@ export const TimelineItem = memo(function TimelineItem({
           handleDelete,
         })}
       >
-        <div
-          ref={transformRef}
-          data-timeline-item
-          data-item-id={item.id}
-          data-timeline-start-frame={visualLeftFrame}
-          data-timeline-duration-frames={visualWidthFrames}
-          data-timeline-fps={fps}
-          data-timeline-content-inset-start-px={1}
-          data-timeline-content-inset-end-px={1}
-          data-selected={isSelected ? 'true' : undefined}
-          data-compact-clip={useCompactClipShell ? 'true' : undefined}
-          className={cn(
-            'timeline-item @container absolute inset-y-px rounded overflow-visible group/timeline-item',
-            itemColorClasses,
-            cursorClass,
-            !isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110',
-          )}
-          style={
-            {
-              left: getFramePositionStyle(visualLeftFrame),
-              width: getFramePositionStyle(visualWidthFrames),
-              ...getTimelineItemShellStyle({
-                itemId: item.id,
-                isBeingDragged,
-                isAltDrag,
-                isDragging,
-                dragOffset,
-                shouldDimForDrag,
-                trackHidden,
-                trackLocked,
-                isCompactShell: useCompactClipShell,
-              }),
-              ...getAudioVolumeCssVars({
-                itemType: item.type,
-                audioVolumeEdit,
-                audioVolumePreviewRef,
-                audioVolumeLineYPercent,
-                audioVisualizationScale,
-              }),
-            } as React.CSSProperties
-          }
+        <TimelineItemShell
+          transformRef={transformRef}
+          itemId={item.id}
+          itemType={item.type}
+          fps={fps}
+          visualLeftFrame={visualLeftFrame}
+          visualWidthFrames={visualWidthFrames}
+          isSelected={isSelected}
+          isCompactShell={useCompactClipShell}
+          isBeingDragged={isBeingDragged}
+          isStretching={isStretching}
+          isAltDrag={isAltDrag}
+          isDragging={isDragging}
+          dragOffset={dragOffset}
+          shouldDimForDrag={shouldDimForDrag}
+          trackHidden={trackHidden}
+          trackLocked={trackLocked}
+          itemColorClasses={itemColorClasses}
+          cursorClass={cursorClass}
+          audioVolumeEdit={audioVolumeEdit}
+          audioVolumePreviewRef={audioVolumePreviewRef}
+          audioVolumeLineYPercent={audioVolumeLineYPercent}
+          audioVisualizationScale={audioVisualizationScale}
+          isEffectDropTarget={isEffectDropTarget}
+          multiEffectDropTargetCount={multiEffectDropTargetCount}
+          onHoverChange={onHoverChange}
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
           onMouseDown={handleMouseDown}
-          onMouseEnter={() => onHoverChange?.(item.id, true)}
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => {
-            handleMouseLeave()
-            onHoverChange?.(item.id, false)
-          }}
+          onMouseLeave={handleMouseLeave}
           onContextMenu={handleContextMenu}
           onDragEnter={handleEffectDragEnter}
           onDragOver={handleEffectDragOver}
           onDragLeave={handleEffectDragLeave}
           onDrop={handleEffectDrop}
         >
-          {/* Keep selection visible throughout drag so the moving cohort stays legible. */}
-          {isSelected && !trackLocked && (
-            <div className="timeline-selection-indicator absolute inset-0 rounded pointer-events-none z-20 border border-primary" />
-          )}
-
-          {isEffectDropTarget && (
-            <EffectDropOverlay multiDropCount={multiEffectDropTargetCount} />
-          )}
-
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
             {!useCompactClipShell && (
               <>
@@ -863,6 +816,7 @@ export const TimelineItem = memo(function TimelineItem({
           {/* Trim handles */}
           {!useCompactClipShell && (
             <TrimHandles
+              isCompactShell={useCompactClipShell}
               trackLocked={trackLocked}
               isAnyDragActive={isAnyDragActiveRef.current}
               isTrimming={isTrimming}
@@ -887,6 +841,7 @@ export const TimelineItem = memo(function TimelineItem({
           {/* Rate stretch handles */}
           {!useCompactClipShell && (
             <StretchHandles
+              isCompactShell={useCompactClipShell}
               trackLocked={trackLocked}
               isAnyDragActive={isAnyDragActiveRef.current}
               isStretching={isStretching}
@@ -920,7 +875,7 @@ export const TimelineItem = memo(function TimelineItem({
             onCutDragLeave={handleTransitionCutDragLeave}
             onCutDrop={handleTransitionCutDrop}
           />
-        </div>
+        </TimelineItemShell>
       </ItemContextMenu>
 
       <ClipFloatingLayer
