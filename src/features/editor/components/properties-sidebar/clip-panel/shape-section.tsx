@@ -19,7 +19,6 @@ import {
   PropertySection,
   PropertyRow,
   PropertySliderControl,
-  ColorPicker,
 } from '../components'
 import { reversePathVertices, rotateClosedPathStart } from '@/shared/graphics/shapes/bezier-path'
 import {
@@ -30,6 +29,11 @@ import {
 import { getPathClosureUpdates, getShapeSectionControlVisibility } from './shape-section-visibility'
 import { getSharedShapeValues } from './shape-section-shared-values'
 import { ShapeFillControls } from './shape-fill-controls'
+import {
+  ShapeStrokeControls,
+  ShapeStrokeJoinControls,
+} from './shape-stroke-controls'
+import { MIN_ENABLED_STROKE_WIDTH, DEFAULT_STROKE_COLOR } from './shape-section-constants'
 import { ShapeKindControls } from './shape-kind-controls'
 import { demixValue } from '../utils'
 
@@ -44,8 +48,6 @@ const SHAPE_TYPE_OPTIONS: { value: ShapeType; labelKey: string }[] = [
   { value: 'heart', labelKey: 'editor.shapeSection.typeHeart' },
 ]
 
-const MIN_ENABLED_STROKE_WIDTH = 1
-const DEFAULT_STROKE_COLOR = '#3b82f6'
 
 interface ShapeSectionProps {
   items: TimelineItem[]
@@ -675,126 +677,33 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         onSwapGradientColors={handleSwapGradientColors}
       />
 
-      {controlVisibility.showStroke && (
-        <PropertyRow label={t('editor.shapeSection.stroke')}>
-          <Button
-            variant={sharedValues.strokeEnabled === true ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-7 text-xs flex-1"
-            disabled={sharedValues.strokeEnabled === 'mixed'}
-            onClick={() => handleStrokeEnabledChange(sharedValues.strokeEnabled !== true)}
-          >
-            {sharedValues.strokeEnabled === true
-              ? t('editor.shapeSection.on')
-              : t('editor.shapeSection.off')}
-          </Button>
-        </PropertyRow>
-      )}
+      <ShapeStrokeControls
+        showStroke={controlVisibility.showStroke}
+        showNoAppearanceNotice={controlVisibility.showNoAppearanceNotice}
+        strokeEnabled={sharedValues.strokeEnabled}
+        strokeWidth={sharedValues.strokeWidth}
+        strokeColor={sharedValues.strokeColor}
+        onStrokeEnabledChange={handleStrokeEnabledChange}
+        onStrokeWidthChange={handleStrokeWidthChange}
+        onStrokeWidthLiveChange={handleStrokeWidthLiveChange}
+        onStrokeWidthReset={() => resetNumericProperty('strokeWidth', singlePathShape ? 4 : 1)}
+        onStrokeColorChange={handleStrokeColorChange}
+        onStrokeColorLiveChange={handleStrokeColorLiveChange}
+      />
 
-      {controlVisibility.showNoAppearanceNotice && (
-        <div className="mx-1 my-1 flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
-          <span className="min-w-0 flex-1 text-[10px] leading-4 text-muted-foreground">
-            {t('editor.shapeSection.noVisibleAppearance')}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 flex-shrink-0 px-2 text-[10px]"
-            onClick={() => handleStrokeEnabledChange(true)}
-          >
-            {t('editor.shapeSection.enableStroke')}
-          </Button>
-        </div>
-      )}
-
-      {/* Stroke Width */}
-      {controlVisibility.showStroke && sharedValues.strokeEnabled !== false && (
-        <PropertyRow label={t('editor.shapeSection.strokeWidth')}>
-          <PropertySliderControl
-            value={sharedValues.strokeWidth}
-            onChange={handleStrokeWidthChange}
-            onLiveChange={handleStrokeWidthLiveChange}
-            min={MIN_ENABLED_STROKE_WIDTH}
-            max={50}
-            step={1}
-            unit="px"
-            onReset={() => resetNumericProperty('strokeWidth', singlePathShape ? 4 : 1)}
-            resetLabel={t('editor.shapeSection.resetToDefault')}
-          />
-        </PropertyRow>
-      )}
-
-      {/* Stroke Color - only show when stroke width > 0 */}
-      {controlVisibility.showStroke &&
-        sharedValues.strokeEnabled !== false &&
-        (sharedValues.strokeWidth === 'mixed' || sharedValues.strokeWidth > 0) && (
-          <ColorPicker
-            label={t('editor.shapeSection.strokeColor')}
-            color={sharedValues.strokeColor || DEFAULT_STROKE_COLOR}
-            onChange={handleStrokeColorChange}
-            onLiveChange={handleStrokeColorLiveChange}
-            onReset={() => handleStrokeColorChange('')}
-            defaultColor=""
-          />
-        )}
-
-      {controlVisibility.showStroke && sharedValues.strokeEnabled !== false && (
-        <>
-          {controlVisibility.showLineCap && (
-            <PropertyRow label={t('editor.shapeSection.lineCap')}>
-              <Select
-                value={sharedValues.strokeLineCap}
-                onValueChange={(value) =>
-                  updateShapeItems({ strokeLineCap: value as ShapeItem['strokeLineCap'] })
-                }
-              >
-                <SelectTrigger className="h-7 text-xs flex-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="butt">{t('editor.shapeSection.capButt')}</SelectItem>
-                  <SelectItem value="round">{t('editor.shapeSection.capRound')}</SelectItem>
-                  <SelectItem value="square">{t('editor.shapeSection.capSquare')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </PropertyRow>
-          )}
-          {controlVisibility.showLineJoin && (
-            <PropertyRow label={t('editor.shapeSection.lineJoin')}>
-              <Select
-                value={sharedValues.strokeLineJoin}
-                onValueChange={(value) =>
-                  updateShapeItems({ strokeLineJoin: value as ShapeItem['strokeLineJoin'] })
-                }
-              >
-                <SelectTrigger className="h-7 text-xs flex-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="miter">{t('editor.shapeSection.joinMiter')}</SelectItem>
-                  <SelectItem value="round">{t('editor.shapeSection.joinRound')}</SelectItem>
-                  <SelectItem value="bevel">{t('editor.shapeSection.joinBevel')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </PropertyRow>
-          )}
-          {controlVisibility.showLineJoin && sharedValues.strokeLineJoin === 'miter' && (
-            <PropertyRow label={t('editor.shapeSection.miterLimit')}>
-              <PropertySliderControl
-                value={sharedValues.strokeMiterLimit}
-                onChange={handleStrokeMiterLimitChange}
-                onLiveChange={handleStrokeMiterLimitLiveChange}
-                min={1}
-                max={20}
-                step={0.5}
-                onReset={() => resetNumericProperty('strokeMiterLimit', 4)}
-                resetLabel={t('editor.shapeSection.resetToDefault')}
-              />
-            </PropertyRow>
-          )}
-        </>
-      )}
+      <ShapeStrokeJoinControls
+        showStroke={controlVisibility.showStroke}
+        strokeEnabled={sharedValues.strokeEnabled}
+        showLineCap={controlVisibility.showLineCap}
+        showLineJoin={controlVisibility.showLineJoin}
+        strokeLineCap={sharedValues.strokeLineCap}
+        strokeLineJoin={sharedValues.strokeLineJoin}
+        strokeMiterLimit={sharedValues.strokeMiterLimit}
+        updateShapeItems={updateShapeItems}
+        onStrokeMiterLimitChange={handleStrokeMiterLimitChange}
+        onStrokeMiterLimitLiveChange={handleStrokeMiterLimitLiveChange}
+        onStrokeMiterLimitReset={() => resetNumericProperty('strokeMiterLimit', 4)}
+      />
 
       <ShapeKindControls
         shapeType={sharedValues.shapeType}
