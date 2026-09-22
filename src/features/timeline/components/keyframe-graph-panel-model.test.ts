@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
 import type { TFunction } from 'i18next'
 
-import type { ItemKeyframes, KeyframeClipboard } from '@/types/keyframe'
+import type { ItemKeyframes, KeyframeClipboard, KeyframeRef } from '@/types/keyframe'
 import type { TimelineItem } from '@/types/timeline'
 import {
   applyKeyframeMoveEntry,
@@ -25,7 +25,8 @@ const clip = (durationInFrames: number): TimelineItem =>
 
 const clipboard = (
   keyframes: KeyframeClipboard['keyframes'],
-): KeyframeClipboard => ({ keyframes, originFrame: 0 })
+  sourceRefs: KeyframeRef[] = [],
+): KeyframeClipboard => ({ keyframes, originFrame: 0, sourceRefs })
 
 describe('clampFrameToBlockedRanges', () => {
   it('leaves frames outside the transition region alone', () => {
