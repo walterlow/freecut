@@ -47,7 +47,10 @@ import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
-import { useDopesheetPointerDispatch, useLinkedTimelineWheelForwarding } from './use-dopesheet-pointer-dispatch'
+import {
+  useDopesheetPointerDispatch,
+  useLinkedTimelineWheelForwarding,
+} from './use-dopesheet-pointer-dispatch'
 import { useSelectionFrameActions } from './use-selection-frame-actions'
 import { usePropertyValueEditing } from './use-property-value-editing'
 import { useElementSize } from './use-element-size'
@@ -1862,14 +1865,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const handleGroupKeyframePointerDown = keyframeDrag.handleGroupKeyframePointerDown
 
 
-  const { handleRowPointerDown, handleTimelineBackgroundPointerDown } = useDopesheetPointerDispatch({
-    disabled,
-    isPropertyLocked,
-    selectedKeyframeIds,
-    onActivePropertyChange,
-    beginMarqueeSelection,
-    getMarqueeModeFromPointerEvent,
-  })
+  const { handleRowPointerDown, handleTimelineBackgroundPointerDown } =
+    useDopesheetPointerDispatch({
+      disabled,
+      isPropertyLocked,
+      selectedKeyframeIds,
+      onActivePropertyChange,
+      beginMarqueeSelection,
+      getMarqueeModeFromPointerEvent,
+    })
 
 
   const rulerScrub = useRulerScrub({
