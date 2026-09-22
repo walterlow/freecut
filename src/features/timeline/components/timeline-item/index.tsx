@@ -49,7 +49,6 @@ import { useRollHoverStore } from '../../stores/roll-hover-store'
 import { frameToPixelsNow } from '../../utils/zoom-conversions'
 import { useTimelineItemBounds } from './use-timeline-item-bounds'
 import { getTransitionBridgeBounds } from '../../utils/transition-preview-geometry'
-import { getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume'
 import { useFadeEditors } from './use-fade-editors'
 import { useFadeMath } from './use-fade-math'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
@@ -62,6 +61,10 @@ import { useLinkedSyncPreview } from './use-linked-sync-preview'
 import { useClipReadoutLabels } from './use-clip-readout-labels'
 import { useTimelineItemPointerHandlers } from './use-timeline-item-pointer-handlers'
 import { resolveTrimVisualState } from './timeline-item-view-model'
+import {
+  AUDIO_ENVELOPE_VIEWBOX_HEIGHT,
+  getAudioVolumeCssVars,
+} from './timeline-item-css-vars'
 import { ClipFloatingLayer } from './clip-floating-layer'
 const EMPTY_SEGMENT_OVERLAYS = [] as const
 const EMPTY_LINKED_ITEMS: TimelineItemType[] = []
@@ -94,7 +97,6 @@ function getTrackPushZoneStyle(gapFrames: number): string {
   const adaptiveWidth = `clamp(${TRACK_PUSH_MIN_PX}px, calc(${TRACK_PUSH_MAX_PX}px - (var(--timeline-percent-per-second, 0%) / ${zoomSlopeDivisor})), ${TRACK_PUSH_MAX_PX}px)`
   return `min(${gapWidth}, ${adaptiveWidth})`
 }
-const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100
 const FADE_VIEWBOX_WIDTH = 1000
 
 interface TimelineItemProps {
@@ -939,21 +941,13 @@ export const TimelineItem = memo(function TimelineItem({
               // layout/paint skipping while offscreen.
               contain: useCompactClipShell ? 'layout style' : 'layout style paint',
               contentVisibility: useCompactClipShell ? 'visible' : 'auto',
-              '--timeline-audio-volume-line-y': `${
-                item.type === 'audio' && audioVolumeEdit !== null
-                  ? (getAudioVolumeLineY(
-                      audioVolumePreviewRef.current,
-                      AUDIO_ENVELOPE_VIEWBOX_HEIGHT,
-                    ) /
-                      AUDIO_ENVELOPE_VIEWBOX_HEIGHT) *
-                    100
-                  : audioVolumeLineYPercent
-              }%`,
-              '--timeline-audio-waveform-scale': String(
-                item.type === 'audio' && audioVolumeEdit !== null
-                  ? getAudioVisualizationScale(audioVolumePreviewRef.current)
-                  : audioVisualizationScale,
-              ),
+              ...getAudioVolumeCssVars({
+                itemType: item.type,
+                audioVolumeEdit,
+                audioVolumePreviewRef,
+                audioVolumeLineYPercent,
+                audioVisualizationScale,
+              }),
             } as React.CSSProperties
           }
           onClick={handleClick}
