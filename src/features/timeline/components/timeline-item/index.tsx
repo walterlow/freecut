@@ -56,6 +56,7 @@ import {
 } from './use-compact-shell'
 import { EMPTY_LINKED_ITEMS, useItemMetadata } from './use-item-metadata'
 import { TimelineItemShell } from './timeline-item-shell'
+import { DetailOnlyLayers } from './detail-only-layers'
 import { getFramePositionStyle, getTrackPushZoneStyle } from './timeline-item-geometry'
 
 interface TimelineItemProps {
@@ -705,29 +706,27 @@ export const TimelineItem = memo(function TimelineItem({
           onDrop={handleEffectDrop}
         >
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
-            {!useCompactClipShell && (
-              <>
-                <SegmentStatusOverlays overlays={segmentOverlays} />
+            <DetailOnlyLayers isCompactShell={useCompactClipShell}>
+              <SegmentStatusOverlays overlays={segmentOverlays} />
 
-                <FadeEnvelopeOverlay
-                  itemType={item.type}
-                  isVisualFadeItem={isVisualFadeItem}
-                  videoControlsRef={videoControlsRef}
-                  audioControlsRef={audioControlsRef}
-                  volumeLineRef={volumeLineRef}
-                  videoFadeInRatio={videoFadeInRatio}
-                  videoFadeOutRatio={videoFadeOutRatio}
-                  videoFadeInPath={videoFadeInPath}
-                  videoFadeOutPath={videoFadeOutPath}
-                  audioFadeInRatio={audioFadeInRatio}
-                  audioFadeOutRatio={audioFadeOutRatio}
-                  audioFadeInCurvePath={audioFadeInCurvePath}
-                  audioFadeOutCurvePath={audioFadeOutCurvePath}
-                  audioVolumeLineYPercent={audioVolumeLineYPercent}
-                  audioVolumeLineStroke={audioVolumeLineStroke}
-                />
-              </>
-            )}
+              <FadeEnvelopeOverlay
+                itemType={item.type}
+                isVisualFadeItem={isVisualFadeItem}
+                videoControlsRef={videoControlsRef}
+                audioControlsRef={audioControlsRef}
+                volumeLineRef={volumeLineRef}
+                videoFadeInRatio={videoFadeInRatio}
+                videoFadeOutRatio={videoFadeOutRatio}
+                videoFadeInPath={videoFadeInPath}
+                videoFadeOutPath={videoFadeOutPath}
+                audioFadeInRatio={audioFadeInRatio}
+                audioFadeOutRatio={audioFadeOutRatio}
+                audioFadeInCurvePath={audioFadeInCurvePath}
+                audioFadeOutCurvePath={audioFadeOutCurvePath}
+                audioVolumeLineYPercent={audioVolumeLineYPercent}
+                audioVolumeLineStroke={audioVolumeLineStroke}
+              />
+            </DetailOnlyLayers>
 
             <ClipContent
               item={contentVisualPreviewItem}
@@ -742,8 +741,8 @@ export const TimelineItem = memo(function TimelineItem({
               isDetailEligible={isDetailEligible}
             />
 
-            {!useCompactClipShell && (
-              /* Status indicators */
+            {/* Status indicators */}
+            <DetailOnlyLayers isCompactShell={useCompactClipShell}>
               <ClipIndicators
                 hasKeyframes={hasKeyframes}
                 keyframesExpanded={keyframesExpanded}
@@ -766,10 +765,11 @@ export const TimelineItem = memo(function TimelineItem({
                   useEditorStore.getState().setClipInspectorTab('motion')
                 }}
               />
-            )}
+            </DetailOnlyLayers>
           </div>
 
-          {!useCompactClipShell && (
+          {/* Fade, trim and rate-stretch affordances */}
+          <DetailOnlyLayers isCompactShell={useCompactClipShell}>
             <VideoFadeHandleLayer
               isVisualFadeItem={isVisualFadeItem}
               trackLocked={trackLocked}
@@ -784,9 +784,7 @@ export const TimelineItem = memo(function TimelineItem({
               onFadeHandleMouseDown={handleVideoFadeHandleMouseDown}
               onFadeHandleDoubleClick={handleVideoFadeHandleDoubleClick}
             />
-          )}
 
-          {!useCompactClipShell && (
             <AudioFadeHandleLayer
               itemType={item.type}
               trackLocked={trackLocked}
@@ -811,12 +809,9 @@ export const TimelineItem = memo(function TimelineItem({
               onVolumeMouseDown={handleAudioVolumeMouseDown}
               onVolumeDoubleClick={handleAudioVolumeDoubleClick}
             />
-          )}
 
-          {/* Trim handles */}
-          {!useCompactClipShell && (
+            {/* Trim handles */}
             <TrimHandles
-              isCompactShell={useCompactClipShell}
               trackLocked={trackLocked}
               isAnyDragActive={isAnyDragActiveRef.current}
               isTrimming={isTrimming}
@@ -836,12 +831,9 @@ export const TimelineItem = memo(function TimelineItem({
               onJoinLeft={handleJoinLeft}
               onJoinRight={handleJoinRight}
             />
-          )}
 
-          {/* Rate stretch handles */}
-          {!useCompactClipShell && (
+            {/* Rate stretch handles */}
             <StretchHandles
-              isCompactShell={useCompactClipShell}
               trackLocked={trackLocked}
               isAnyDragActive={isAnyDragActiveRef.current}
               isStretching={isStretching}
@@ -850,7 +842,7 @@ export const TimelineItem = memo(function TimelineItem({
               isRateStretchItem={isRateStretchItem}
               onStretchStart={handleStretchStart}
             />
-          )}
+          </DetailOnlyLayers>
 
           {/* The zoom threshold is deferred at the track boundary so crossing
               it cannot synchronously rerender every full TimelineItem. */}
