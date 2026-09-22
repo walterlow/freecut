@@ -26,10 +26,8 @@ import { hasEnabledProceduralMotion } from '@/shared/timeline/procedural-motion'
 import { ErrorBoundary } from '@/components/error-boundary'
 import {
   getTransitionBlockedRanges,
-  buildVectorPromotionPlan,
   countTrimmedKeyframes,
   resolveAnimatedTransform,
-  resolveExpressionReferenceValue,
 } from '@/features/timeline/deps/keyframes'
 import {
   DopesheetEditor,
@@ -53,9 +51,7 @@ import { useKeyframesStore } from '../stores/keyframes-store'
 import { useTransitionsStore } from '../stores/transitions-store'
 import { useKeyframeSelectionStore } from '../stores/keyframe-selection-store'
 import { useTimelineCommandStore } from '../stores/timeline-command-store'
-import { captureSnapshot } from '../stores/commands/snapshot'
 import { useEditorStore } from '@/shared/state/editor'
-import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
 import { perfMarkRender } from '@/shared/logging/perf-marks'
 import { useKeyframeEditorPlaybackFrame } from './use-keyframe-editor-playback-frame'
 import {
@@ -68,6 +64,7 @@ import { useKeyframeGraphTextMotion } from './use-keyframe-graph-text-motion'
 import { useVectorKeyframeEditing } from './use-vector-keyframe-editing'
 import { useKeyframeDragCommands } from './use-keyframe-drag-commands'
 import { useKeyframeScrubAdd } from './use-keyframe-scrub-add'
+import { useKeyframePropertyValues } from './use-keyframe-property-values'
 import type {
   AnimatableProperty,
   EasingType,
@@ -80,17 +77,12 @@ import type { CanvasSettings } from '@/types/transform'
 import * as timelineActions from '../stores/timeline-actions'
 import { HOTKEY_OPTIONS } from '@/config/hotkeys'
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings'
-import { getEditorVectorKeyframeId } from '@/features/timeline/deps/keyframes-contract'
-import { getDirectPropertyLinks, isTransformAnimatableProperty } from '@/types/keyframe'
-import { buildEffectPropertyResetPlan } from '@/features/timeline/utils/effect-property-reset'
+import { getDirectPropertyLinks } from '@/types/keyframe'
 import { shouldShowSeparatedPosition } from './edit-keyframe-panel-model'
 import {
-  buildCurrentPropertyValues,
   buildEditorKeyframesByProperty,
   buildVectorControlRows,
-  commitScalarPropertyValue,
   filterVectorControlRows,
-  getEditableVectorProxy,
   supportsVectorTransform,
   type KeyframeEditorSurface,
   type VectorEditorRow,
@@ -873,286 +865,43 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     keyframeEditorScrubbingRef,
   })
 
-  const propertyValues = useMemo(() => {
-    if (!selectedItemForEditor) return {}
-    const values = buildCurrentPropertyValues({
-      item: selectedItemForEditor,
-      properties: availableProperties,
-      keyframesByProperty,
-      selectedKeyframes: selectedEditorKeyframes,
-      resolvedTransform: vectorResolvedTransform,
-      relativeFrame,
-      canvas,
-    })
-    if (surface === 'edit') {
-      for (const row of vectorControlRows) {
-        values[row.proxyProperty] = row.value.x
-        values[row.secondaryProxyProperty] = row.value.y
-      }
-    }
-    return values
-  }, [
-    availableProperties,
-    canvas,
-    keyframesByProperty,
-    relativeFrame,
-    selectedEditorKeyframes,
+  const {
+    propertyValues,
+    preExpressionPropertyValues,
+    resolveExpressionReference,
+    handleSetPropertyExpression,
+    handleRemovePropertyExpression,
+    handlePropertyValueCommit,
+    handlePropertyValuePreview,
+    handleResetPropertiesToDefault,
+  } = useKeyframePropertyValues({
     selectedItemForEditor,
-    surface,
+    selectedItemKeyframes,
+    selectedEditorKeyframes,
+    keyframesByProperty,
+    availableProperties,
     vectorControlRows,
     vectorResolvedTransform,
-  ])
-  const preExpressionPropertyValues = useMemo(() => {
-    if (!selectedItemForEditor) return {}
-    const values: Partial<Record<AnimatableProperty, number>> = {}
-    for (const property of availableProperties) {
-      const vectorRow =
-        surface === 'edit'
-          ? vectorControlRows.find(
-              (candidate) =>
-                candidate.proxyProperty === property ||
-                candidate.secondaryProxyProperty === property,
-            )
-          : undefined
-      if (vectorRow) {
-        values[property] =
-          vectorRow.proxyProperty === property
-            ? vectorRow.preExpressionValue.x
-            : vectorRow.preExpressionValue.y
-      } else if (vectorPreExpressionTransform && isTransformAnimatableProperty(property)) {
-        values[property] = vectorPreExpressionTransform[property]
-      } else {
-        values[property] = propertyValues[property]
-      }
-    }
-    return values
-  }, [
-    availableProperties,
-    propertyValues,
-    selectedItemForEditor,
-    surface,
-    vectorControlRows,
     vectorPreExpressionTransform,
-  ])
-  const resolveExpressionReference = useCallback(
-    (itemId: string, property: DirectLinkableProperty) =>
-      resolveExpressionReferenceValue(itemId, property, {
-        globalFrame: currentFrame,
-        canvas,
-        getItem: (candidateId) => allItemsById[candidateId],
-        getKeyframes: (candidateId) => allKeyframesByItemId[candidateId],
-      }),
-    [allItemsById, allKeyframesByItemId, canvas, currentFrame],
-  )
-  const handleSetPropertyExpression = useCallback(
-    (property: DirectLinkableProperty, source: string, enabled: boolean) => {
-      if (!selectedItemForEditor) return
-      timelineActions.setPropertyExpression(selectedItemForEditor.id, {
-        type: 'expression',
-        targetProperty: property,
-        source,
-        enabled,
-      })
-    },
-    [selectedItemForEditor],
-  )
-  const handleRemovePropertyExpression = useCallback(
-    (property: DirectLinkableProperty) => {
-      if (!selectedItemForEditor) return
-      timelineActions.removePropertyExpression(selectedItemForEditor.id, property)
-    },
-    [selectedItemForEditor],
-  )
-
-  const handlePropertyValueCommit = useCallback(
-    (property: AnimatableProperty, value: number, options?: { allowCreate?: boolean }) => {
-      if (!selectedItemForEditor) return
-      const vectorProxy = getEditableVectorProxy(property, selectedItemKeyframes)
-      if (surface === 'edit' && vectorProxy) {
-        handleVectorValueCommit(vectorProxy.property, vectorProxy.axis, value, {
-          allowCreate: options?.allowCreate !== false,
-        })
-        return
-      }
-
-      commitScalarPropertyValue({
-        itemId: selectedItemForEditor.id,
-        property,
-        value,
-        relativeFrame,
-        allowCreate: options?.allowCreate !== false,
-        selectedKeyframes: selectedEditorKeyframes,
-        propertyKeyframes: keyframesByProperty[property],
-        selectKeyframe,
-      })
-    },
-    [
-      keyframesByProperty,
-      handleVectorValueCommit,
-      relativeFrame,
-      selectKeyframe,
-      selectedEditorKeyframes,
-      selectedItemKeyframes,
-      selectedItemForEditor,
-      surface,
-    ],
-  )
-
-  const previewVectorPropertyValue = useCallback(
-    (property: AnimatableProperty, value: number): boolean => {
-      const proxy = getEditableVectorProxy(property, selectedItemKeyframes)
-      if (!proxy || !selectedItemForEditor || !vectorBaseTransform) return false
-      if (isVectorFrameBlocked(relativeFrame)) return true
-
-      const editorKeyframe = keyframesByProperty[property]?.find(
-        (keyframe) => keyframe.frame === relativeFrame,
-      )
-      if (editorKeyframe) {
-        const vector = ensureVectorKeyframeForLiveEdit({
-          itemId: selectedItemForEditor.id,
-          property,
-          keyframeId: editorKeyframe.id,
-        })
-        if (!vector) return true
-        useKeyframesStore
-          .getState()
-          ._updateVectorKeyframe(selectedItemForEditor.id, vector.property, vector.keyframe.id, {
-            value: getNextVectorAxisValue(
-              vector.property,
-              vector.keyframe.value,
-              vector.axis,
-              value,
-            ),
-          })
-        return true
-      }
-
-      const plan = buildVectorPromotionPlan({
-        property: proxy.property,
-        itemKeyframes: selectedItemKeyframes ?? undefined,
-        baseTransform: vectorBaseTransform,
-        includeFrame: relativeFrame,
-      })
-      const insertedKeyframe = plan.vectorProperty.keyframes.find(
-        (keyframe) => keyframe.frame === relativeFrame,
-      )
-      if (!insertedKeyframe) return true
-      plan.vectorProperty = {
-        ...plan.vectorProperty,
-        keyframes: plan.vectorProperty.keyframes.map((keyframe) =>
-          keyframe.id === insertedKeyframe.id
-            ? {
-                ...keyframe,
-                value: getNextVectorAxisValue(proxy.property, keyframe.value, proxy.axis, value),
-              }
-            : keyframe,
-        ),
-      }
-      useKeyframesStore
-        .getState()
-        ._replaceScalarPropertiesWithVectorProperty(
-          selectedItemForEditor.id,
-          plan.vectorProperty,
-          plan.removeScalarProperties,
-        )
-      selectKeyframe({
-        itemId: selectedItemForEditor.id,
-        property,
-        keyframeId: getEditorVectorKeyframeId(insertedKeyframe.id, proxy.axis),
-      })
-      return true
-    },
-    [
-      ensureVectorKeyframeForLiveEdit,
-      getNextVectorAxisValue,
-      isVectorFrameBlocked,
-      keyframesByProperty,
-      relativeFrame,
-      selectKeyframe,
-      selectedItemForEditor,
-      selectedItemKeyframes,
-      vectorBaseTransform,
-    ],
-  )
-
-  const handlePropertyValuePreview = useCallback(
-    (property: AnimatableProperty, value: number) => {
-      if (!selectedItemForEditor) return
-      if (surface === 'edit' && previewVectorPropertyValue(property, value)) return
-
-      const selectedRefs = selectedEditorKeyframes
-        .filter(({ ref }) => ref.property === property)
-        .map(({ ref }) => ref)
-      if (selectedRefs.length > 0) {
-        for (const ref of selectedRefs) {
-          _updateKeyframe(ref.itemId, ref.property, ref.keyframeId, { value })
-        }
-        return
-      }
-
-      const existing = keyframesByProperty[property]?.find(
-        (keyframe) => keyframe.frame === relativeFrame,
-      )
-      let keyframeId = existing?.id ?? valueScrubCreatedKeyframesRef.current.get(property)
-      if (!keyframeId) {
-        keyframeId = _addKeyframe(selectedItemForEditor.id, property, relativeFrame, value)
-        valueScrubCreatedKeyframesRef.current.set(property, keyframeId)
-        selectKeyframe({ itemId: selectedItemForEditor.id, property, keyframeId })
-      } else {
-        _updateKeyframe(selectedItemForEditor.id, property, keyframeId, { value })
-      }
-    },
-    [
-      _addKeyframe,
-      _updateKeyframe,
-      keyframesByProperty,
-      previewVectorPropertyValue,
-      relativeFrame,
-      selectKeyframe,
-      selectedEditorKeyframes,
-      selectedItemForEditor,
-      surface,
-    ],
-  )
-
-  const handleResetPropertiesToDefault = useCallback(
-    (properties: AnimatableProperty[]) => {
-      if (!selectedItemForEditor || properties.length === 0) return
-      const effects = useItemsStore.getState().itemById[selectedItemForEditor.id]?.effects ?? []
-      const resetPlan = buildEffectPropertyResetPlan(effects, properties)
-      if (resetPlan.resettableProperties.length === 0) return
-      const propertySet = new Set(resetPlan.resettableProperties)
-
-      const keyframeState = useKeyframesStore.getState().keyframesByItemId[selectedItemForEditor.id]
-      const hasKeyframes = properties.some(
-        (property) =>
-          (keyframeState?.properties.find((entry) => entry.property === property)?.keyframes
-            .length ?? 0) > 0,
-      )
-      const hasValueChanges = resetPlan.effectUpdates.length > 0
-      if (!hasKeyframes && !hasValueChanges) return
-
-      const beforeSnapshot = captureSnapshot()
-      for (const property of resetPlan.resettableProperties) {
-        _removeKeyframesForProperty(selectedItemForEditor.id, property)
-      }
-      for (const update of resetPlan.effectUpdates) {
-        useItemsStore.getState()._updateEffect(selectedItemForEditor.id, update.effectId, {
-          effect: update.effect,
-        })
-      }
-      selectKeyframes(selectedKeyframes.filter((ref) => !propertySet.has(ref.property)))
-      useTimelineCommandStore.getState().addUndoEntry(
-        {
-          type: 'RESET_EFFECT_PROPERTIES',
-          payload: { count: resetPlan.resettableProperties.length },
-        },
-        beforeSnapshot,
-      )
-      useTimelineSettingsStore.getState().markDirty()
-    },
-    [_removeKeyframesForProperty, selectKeyframes, selectedItemForEditor, selectedKeyframes],
-  )
+    vectorBaseTransform,
+    relativeFrame,
+    currentFrame,
+    canvas,
+    surface,
+    allItemsById,
+    allKeyframesByItemId,
+    selectedKeyframes,
+    isVectorFrameBlocked,
+    ensureVectorKeyframeForLiveEdit,
+    getNextVectorAxisValue,
+    handleVectorValueCommit,
+    selectKeyframe,
+    selectKeyframes,
+    _updateKeyframe,
+    _addKeyframe,
+    _removeKeyframesForProperty,
+    valueScrubCreatedKeyframesRef,
+  })
 
   const isSidePlacement = placement === 'side'
 
