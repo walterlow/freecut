@@ -36,6 +36,7 @@ import {
   getSwappedShapeLinearGradientColors,
 } from '@/shared/graphics/shapes/linear-gradient'
 import { getPathClosureUpdates, getShapeSectionControlVisibility } from './shape-section-visibility'
+import { getSharedShapeValues } from './shape-section-shared-values'
 import { demixValue } from '../utils'
 
 // Shape type options
@@ -94,135 +95,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
   const itemIds = useMemo(() => shapeItems.map((item) => item.id), [shapeItems])
 
   // Get shared values across selected shape items
-  const sharedValues = useMemo(() => {
-    if (shapeItems.length === 0) return null
-
-    const first = shapeItems[0]!
-    return {
-      shapeType: shapeItems.every((i) => i.shapeType === first.shapeType)
-        ? first.shapeType
-        : undefined,
-      fillColor: shapeItems.every((i) => i.fillColor === first.fillColor)
-        ? first.fillColor
-        : undefined,
-      fillEnabled: shapeItems.every((i) => (i.fillEnabled ?? true) === (first.fillEnabled ?? true))
-        ? (first.fillEnabled ?? true)
-        : ('mixed' as const),
-      fillType: shapeItems.every((i) => (i.fillType ?? 'solid') === (first.fillType ?? 'solid'))
-        ? (first.fillType ?? 'solid')
-        : undefined,
-      gradientStartColor: shapeItems.every(
-        (i) =>
-          (i.gradientStartColor ?? i.fillColor) === (first.gradientStartColor ?? first.fillColor),
-      )
-        ? (first.gradientStartColor ?? first.fillColor)
-        : undefined,
-      gradientEndColor: shapeItems.every(
-        (i) =>
-          (i.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR) ===
-          (first.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR),
-      )
-        ? (first.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR)
-        : undefined,
-      gradientAngle: shapeItems.every(
-        (i) =>
-          (i.gradientAngle ?? DEFAULT_SHAPE_GRADIENT_ANGLE) ===
-          (first.gradientAngle ?? DEFAULT_SHAPE_GRADIENT_ANGLE),
-      )
-        ? (first.gradientAngle ?? DEFAULT_SHAPE_GRADIENT_ANGLE)
-        : ('mixed' as const),
-      strokeColor: shapeItems.every((i) => (i.strokeColor ?? '') === (first.strokeColor ?? ''))
-        ? (first.strokeColor ?? '')
-        : undefined,
-      strokeWidth: shapeItems.every((i) => (i.strokeWidth ?? 0) === (first.strokeWidth ?? 0))
-        ? (first.strokeWidth ?? 0)
-        : ('mixed' as const),
-      strokeEnabled: shapeItems.every(
-        (i) =>
-          (i.strokeEnabled ?? ((i.strokeWidth ?? 0) > 0 && !!i.strokeColor)) ===
-          (first.strokeEnabled ?? ((first.strokeWidth ?? 0) > 0 && !!first.strokeColor)),
-      )
-        ? (first.strokeEnabled ?? ((first.strokeWidth ?? 0) > 0 && !!first.strokeColor))
-        : ('mixed' as const),
-      strokeLineCap: shapeItems.every(
-        (i) => (i.strokeLineCap ?? 'butt') === (first.strokeLineCap ?? 'butt'),
-      )
-        ? (first.strokeLineCap ?? 'butt')
-        : undefined,
-      strokeLineJoin: shapeItems.every(
-        (i) => (i.strokeLineJoin ?? 'miter') === (first.strokeLineJoin ?? 'miter'),
-      )
-        ? (first.strokeLineJoin ?? 'miter')
-        : undefined,
-      strokeMiterLimit: shapeItems.every(
-        (i) => (i.strokeMiterLimit ?? 4) === (first.strokeMiterLimit ?? 4),
-      )
-        ? (first.strokeMiterLimit ?? 4)
-        : ('mixed' as const),
-      cornerRadius: shapeItems.every((i) => (i.cornerRadius ?? 0) === (first.cornerRadius ?? 0))
-        ? (first.cornerRadius ?? 0)
-        : ('mixed' as const),
-      direction: shapeItems.every((i) => (i.direction ?? 'up') === (first.direction ?? 'up'))
-        ? (first.direction ?? 'up')
-        : undefined,
-      points: shapeItems.every((i) => (i.points ?? 5) === (first.points ?? 5))
-        ? (first.points ?? 5)
-        : ('mixed' as const),
-      innerRadius: shapeItems.every((i) => (i.innerRadius ?? 0.5) === (first.innerRadius ?? 0.5))
-        ? (first.innerRadius ?? 0.5)
-        : ('mixed' as const),
-      trimPathStart: shapeItems.every((i) => (i.trimPathStart ?? 0) === (first.trimPathStart ?? 0))
-        ? (first.trimPathStart ?? 0)
-        : ('mixed' as const),
-      trimPathEnd: shapeItems.every((i) => (i.trimPathEnd ?? 100) === (first.trimPathEnd ?? 100))
-        ? (first.trimPathEnd ?? 100)
-        : ('mixed' as const),
-      trimPathOffset: shapeItems.every(
-        (i) => (i.trimPathOffset ?? 0) === (first.trimPathOffset ?? 0),
-      )
-        ? (first.trimPathOffset ?? 0)
-        : ('mixed' as const),
-      taperStartWidth: shapeItems.every(
-        (i) => (i.taperStartWidth ?? 100) === (first.taperStartWidth ?? 100),
-      )
-        ? (first.taperStartWidth ?? 100)
-        : ('mixed' as const),
-      taperEndWidth: shapeItems.every(
-        (i) => (i.taperEndWidth ?? 100) === (first.taperEndWidth ?? 100),
-      )
-        ? (first.taperEndWidth ?? 100)
-        : ('mixed' as const),
-      taperStartLength: shapeItems.every(
-        (i) => (i.taperStartLength ?? 0) === (first.taperStartLength ?? 0),
-      )
-        ? (first.taperStartLength ?? 0)
-        : ('mixed' as const),
-      taperEndLength: shapeItems.every(
-        (i) => (i.taperEndLength ?? 0) === (first.taperEndLength ?? 0),
-      )
-        ? (first.taperEndLength ?? 0)
-        : ('mixed' as const),
-      pathClosed: shapeItems.every((i) => (i.pathClosed ?? true) === (first.pathClosed ?? true))
-        ? (first.pathClosed ?? true)
-        : ('mixed' as const),
-      // Mask properties
-      isMask: shapeItems.every((i) => (i.isMask ?? false) === (first.isMask ?? false))
-        ? (first.isMask ?? false)
-        : ('mixed' as const),
-      maskType: shapeItems.every((i) => (i.maskType ?? 'clip') === (first.maskType ?? 'clip'))
-        ? (first.maskType ?? 'clip')
-        : undefined,
-      maskFeather: shapeItems.every((i) => (i.maskFeather ?? 10) === (first.maskFeather ?? 10))
-        ? (first.maskFeather ?? 10)
-        : ('mixed' as const),
-      maskOpacity: shapeItems.every((i) => (i.maskOpacity ?? 100) === (first.maskOpacity ?? 100))
-        ? (first.maskOpacity ?? 100)
-        : ('mixed' as const),
-      maskInvert: shapeItems.every((i) => (i.maskInvert ?? false) === (first.maskInvert ?? false))
-        ? (first.maskInvert ?? false)
-        : ('mixed' as const),
-    }
-  }, [shapeItems])
+  const sharedValues = useMemo(() => getSharedShapeValues(shapeItems), [shapeItems])
 
   // Check which controls should be shown based on shape type
   const showCornerRadius =
