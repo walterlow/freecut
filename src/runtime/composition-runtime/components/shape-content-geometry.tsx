@@ -223,9 +223,7 @@ function PathShape({
   pathVertices,
 }: ShapeKindProps & { pathVertices: MaskVertex[] | undefined }) {
   if (!pathVertices || pathVertices.length < 2) {
-    return (
-      <div style={{ width: '100%', height: '100%', background: paint.fallbackBackground }} />
-    )
+    return <div style={{ width: '100%', height: '100%', background: paint.fallbackBackground }} />
   }
 
   const pathData = buildBezierPathData(

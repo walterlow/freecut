@@ -122,21 +122,9 @@ export function resolveShapeRenderProps(
     'strokeMiterLimit',
     4,
   )
-  const trimPathStart = resolveShapeProp(
-    preview,
-    'trimPathStart',
-    resolved,
-    'trimPathStart',
-    0,
-  )
+  const trimPathStart = resolveShapeProp(preview, 'trimPathStart', resolved, 'trimPathStart', 0)
   const trimPathEnd = resolveShapeProp(preview, 'trimPathEnd', resolved, 'trimPathEnd', 100)
-  const trimPathOffset = resolveShapeProp(
-    preview,
-    'trimPathOffset',
-    resolved,
-    'trimPathOffset',
-    0,
-  )
+  const trimPathOffset = resolveShapeProp(preview, 'trimPathOffset', resolved, 'trimPathOffset', 0)
   const taperStartWidth = resolveShapeProp(
     preview,
     'taperStartWidth',
@@ -144,13 +132,7 @@ export function resolveShapeRenderProps(
     'taperStartWidth',
     100,
   )
-  const taperEndWidth = resolveShapeProp(
-    preview,
-    'taperEndWidth',
-    resolved,
-    'taperEndWidth',
-    100,
-  )
+  const taperEndWidth = resolveShapeProp(preview, 'taperEndWidth', resolved, 'taperEndWidth', 100)
   const taperStartLength = resolveShapeProp(
     preview,
     'taperStartLength',
@@ -158,13 +140,7 @@ export function resolveShapeRenderProps(
     'taperStartLength',
     0,
   )
-  const taperEndLength = resolveShapeProp(
-    preview,
-    'taperEndLength',
-    resolved,
-    'taperEndLength',
-    0,
-  )
+  const taperEndLength = resolveShapeProp(preview, 'taperEndLength', resolved, 'taperEndLength', 0)
 
   return {
     fillColor: resolveShapeProp(preview, 'fillColor', resolved, 'fillColor', '#3b82f6'),

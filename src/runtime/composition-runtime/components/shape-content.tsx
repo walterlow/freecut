@@ -24,8 +24,11 @@ export const ShapeContent: React.FC<{ item: ShapeItem & { _sequenceFrameOffset?:
   item,
 }) => {
   const compositionSpace = useCompositionSpace()
-  const { scaleX: renderScaleX, scaleY: renderScaleY, scale: renderScale } =
-    resolveRenderScale(compositionSpace)
+  const {
+    scaleX: renderScaleX,
+    scaleY: renderScaleY,
+    scale: renderScale,
+  } = resolveRenderScale(compositionSpace)
   const visualTransform = useItemVisualTransform()
   const sequenceContext = useSequenceContext()
   const keyframesContext = useContext(KeyframesContext)

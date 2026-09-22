@@ -77,7 +77,8 @@ export interface ShapeSize {
 /** Base size at render scale: evaluated visual size, then item, then default. */
 function resolveBaseShapeSize(input: ShapeLayoutInput): ShapeSize {
   return {
-    width: (input.visualTransform?.width ?? input.item.transform?.width ?? 200) * input.renderScaleX,
+    width:
+      (input.visualTransform?.width ?? input.item.transform?.width ?? 200) * input.renderScaleX,
     height:
       (input.visualTransform?.height ?? input.item.transform?.height ?? 200) * input.renderScaleY,
   }
