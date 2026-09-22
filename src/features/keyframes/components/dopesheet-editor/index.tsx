@@ -37,9 +37,6 @@ import type {
 import type { MotionModifier } from '@/types/motion'
 import type { TextMotionSlot } from '@/types/text-motion'
 import type { TextMotionTimelineBand } from '@/shared/timeline/text-motion-timeline'
-import {
-  isLinkableAnimatableProperty,
-} from '@/types/keyframe'
 import type { BlockedFrameRange } from '../../utils/transition-region'
 import { HOTKEY_OPTIONS } from '@/config/hotkeys'
 import { getFrameAxisX, getFrameFromAxisX, getVisibleKeyframeX } from './layout'
@@ -84,7 +81,7 @@ import {
   resolveDopesheetHotkeys,
 } from './dopesheet-hotkeys'
 import { usePropertyExpressionEditor } from './use-property-expression-editor'
-import type { PropertyExpressionDraft } from './expression-reference-utils'
+import { buildExpressionDockContext, formatExpressionValue } from './expression-dock-context'
 import {
   GroupCurvesButton,
   GroupExpandButton,
@@ -124,11 +121,7 @@ import type { CompoundPropertyInputConfig } from './compound-property-inputs'
 import { KeyframeTimingStrip } from './keyframe-timing-strip'
 import { setPointerCaptureSafely } from './dopesheet-utils'
 import { PickWhipOverlay } from '@/shared/ui/pick-whip-overlay'
-import {
-  evaluatePropertyExpression,
-  isExpressionValueCompatible,
-  type ExpressionValue,
-} from '@/features/keyframes/utils/property-expression'
+import type { ExpressionValue } from '@/features/keyframes/utils/property-expression'
 import {
   arePreviewFramesEqual,
   buildGroupedPropertyRows,
@@ -523,15 +516,6 @@ function findGroupDimensionSeparation(
   return null
 }
 
-interface ExpressionDockContext {
-  property: DirectLinkableProperty
-  propertyLabel: string
-  preExpressionValue: ExpressionValue
-  postExpressionValue: ExpressionValue
-  error?: string
-  hasStoredExpression: boolean
-}
-
 /**
  * Properties shown in the graph pane: in single-curve mode only the selected
  * property (plus its compound secondary), otherwise all visible properties.
@@ -557,89 +541,6 @@ function hasSheetBodyRows(rowCount: number, presentation: string, bandCount: num
   return rowCount > 0 || (presentation === 'classic' && bandCount > 0)
 }
 
-function formatExpressionValue(value: ExpressionValue | undefined): string {
-  if (value === undefined) return '—'
-  if (typeof value === 'number') return Number.isFinite(value) ? value.toFixed(2) : '—'
-  return `[${value.x.toFixed(2)}, ${value.y.toFixed(2)}]`
-}
-
-function findExpressionTargetRow(
-  rows: readonly DopesheetPropertyRow[],
-  compoundRows: NonNullable<DopesheetEditorProps['compoundPropertyRows']>,
-  property: DirectLinkableProperty,
-): DopesheetPropertyRow | undefined {
-  return rows.find((candidate) => {
-    const compoundProperty = compoundRows[candidate.property]?.linkProperty
-    const scalarProperty = isLinkableAnimatableProperty(candidate.property)
-      ? candidate.property
-      : null
-    return (compoundProperty ?? scalarProperty) === property
-  })
-}
-
-function getPreExpressionValue(
-  rowProperty: AnimatableProperty,
-  compoundRows: NonNullable<DopesheetEditorProps['compoundPropertyRows']>,
-  preExpressionValues: NonNullable<DopesheetEditorProps['preExpressionPropertyValues']>,
-  propertyValues: NonNullable<DopesheetEditorProps['propertyValues']>,
-): ExpressionValue | undefined {
-  const compoundRow = compoundRows[rowProperty]
-  if (compoundRow) return compoundRow.preExpressionValue ?? compoundRow.value
-  return preExpressionValues[rowProperty] ?? propertyValues[rowProperty]
-}
-
-function getExpressionPreviewError(
-  property: DirectLinkableProperty,
-  preview: ReturnType<typeof evaluatePropertyExpression>,
-): string | undefined {
-  if (preview.error) return preview.error
-  return isExpressionValueCompatible(property, preview.value)
-    ? undefined
-    : 'Expression result has the wrong value type'
-}
-
-function buildExpressionDockContext(params: {
-  editor: PropertyExpressionDraft
-  rows: readonly DopesheetPropertyRow[]
-  compoundRows: NonNullable<DopesheetEditorProps['compoundPropertyRows']>
-  preExpressionValues: NonNullable<DopesheetEditorProps['preExpressionPropertyValues']>
-  propertyValues: NonNullable<DopesheetEditorProps['propertyValues']>
-  expressions: readonly PropertyExpression[]
-  currentGlobalFrame: number
-  fps: number
-  resolveExpressionReference: DopesheetEditorProps['resolveExpressionReference']
-  getPropertyLabel: (property: AnimatableProperty) => string
-}): ExpressionDockContext | null {
-  const row = findExpressionTargetRow(params.rows, params.compoundRows, params.editor.property)
-  if (!row) return null
-
-  const preExpressionValue = getPreExpressionValue(
-    row.property,
-    params.compoundRows,
-    params.preExpressionValues,
-    params.propertyValues,
-  )
-  if (preExpressionValue === undefined) return null
-
-  const preview = evaluatePropertyExpression(params.editor.source, {
-    preValue: preExpressionValue,
-    globalFrame: params.currentGlobalFrame,
-    fps: params.fps,
-    resolveProperty: (sourceItemId, sourceProperty) =>
-      params.resolveExpressionReference?.(sourceItemId, sourceProperty) ?? null,
-  })
-  const compoundRow = params.compoundRows[row.property]
-  return {
-    property: params.editor.property,
-    propertyLabel: compoundRow?.label ?? params.getPropertyLabel(row.property),
-    preExpressionValue,
-    postExpressionValue: params.editor.enabled ? preview.value : preExpressionValue,
-    error: getExpressionPreviewError(params.editor.property, preview),
-    hasStoredExpression: params.expressions.some(
-      (expression) => expression.targetProperty === params.editor.property,
-    ),
-  }
-}
 
 const EMPTY_FRAME_GROUPS: DopesheetPropertyGroupStructure<StructureRow>['frameGroups'] = []
 
