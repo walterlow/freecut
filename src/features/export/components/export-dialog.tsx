@@ -61,7 +61,7 @@ import {
 } from '@/features/export/deps/timeline-compositions'
 import { formatTimecode, framesToSeconds } from '@/shared/utils/time-utils'
 import type { ExportPreflightResult } from '../utils/export-preflight'
-import { assessExportPreflight, summarizePreflightSeverity } from '../utils/export-preflight'
+import { assessExportPreflight } from '../utils/export-preflight'
 import {
   getDefaultVideoCodec,
   estimateFileSize,
@@ -72,6 +72,7 @@ import {
 } from '../deps/renderer'
 import { ExportPreviewPlayer } from './export-preview-player'
 import { ExportDialogHeading } from './export-dialog-heading'
+import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
 import { resolveVideoBitrate } from '../deps/renderer'
@@ -123,83 +124,6 @@ function formatFileSize(bytes: number): string {
 
 function getDefaultCodecForFormat(format: 'mp4' | 'webm'): ExportSettings['codec'] {
   return getDefaultVideoCodec(format)
-}
-
-function preflightIconClass(severity: ReturnType<typeof summarizePreflightSeverity>): string {
-  switch (severity) {
-    case 'error':
-      return 'text-destructive'
-    case 'warning':
-      return 'text-amber-500'
-    case 'info':
-      return 'text-blue-500'
-    case 'ok':
-      return 'text-green-500'
-  }
-}
-
-function ExportPreflightPanel({ preflight }: { preflight: ExportPreflightResult | null }) {
-  const { t } = useTranslation()
-
-  if (!preflight) {
-    return (
-      <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-        {t('export.preflight.checking')}
-      </div>
-    )
-  }
-
-  const summarySeverity = summarizePreflightSeverity(preflight.checks)
-  const visibleChecks = preflight.checks.filter((check) => check.severity !== 'ok').slice(0, 4)
-  const checksToRender = visibleChecks.length > 0 ? visibleChecks : preflight.checks.slice(0, 2)
-
-  return (
-    <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          {summarySeverity === 'ok' ? (
-            <CheckCircle2 className={`h-4 w-4 ${preflightIconClass(summarySeverity)}`} />
-          ) : (
-            <AlertCircle className={`h-4 w-4 ${preflightIconClass(summarySeverity)}`} />
-          )}
-          <span className="text-sm font-medium">{t('export.preflight.title')}</span>
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {preflight.predictedRenderPath === 'smart-copy'
-            ? t('export.preflight.smartCopyPath')
-            : preflight.predictedRenderPath === 'worker'
-              ? t('export.preflight.workerPath')
-              : t('export.preflight.fallback')}
-        </span>
-      </div>
-      <div className="space-y-1.5">
-        {checksToRender.map((check) => (
-          <div key={check.id} className="text-xs leading-relaxed">
-            <span
-              className={
-                check.severity === 'error'
-                  ? 'text-destructive'
-                  : check.severity === 'warning'
-                    ? 'text-amber-500'
-                    : check.severity === 'info'
-                      ? 'text-blue-500'
-                      : 'text-green-500'
-              }
-            >
-              {t(check.titleKey, check.titleParams)}
-            </span>
-            <span className="text-muted-foreground">
-              {' '}
-              — {t(check.detailKey, check.detailParams)}
-            </span>
-            {check.fixKey && (
-              <span className="text-muted-foreground"> {t(check.fixKey, check.fixParams)}</span>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogProps) {
