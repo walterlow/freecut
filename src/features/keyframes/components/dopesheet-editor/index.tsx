@@ -15,7 +15,6 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
 import {
@@ -56,6 +55,7 @@ import { useSelectionFrameActions } from './use-selection-frame-actions'
 import { usePropertyValueEditing } from './use-property-value-editing'
 import { useElementSize } from './use-element-size'
 import { useKeyframeDrag } from './use-keyframe-drag'
+import { useSheetPreviewDom } from './sheet-preview-dom'
 import {
   getDopesheetDragPixelsPerFrame,
 } from './dopesheet-drag-math'
@@ -100,7 +100,6 @@ import { setPointerCaptureSafely } from './dopesheet-utils'
 import { PickWhipOverlay } from '@/shared/ui/pick-whip-overlay'
 import type { ExpressionValue } from '@/features/keyframes/utils/property-expression'
 import {
-  arePreviewFramesEqual,
   buildGroupedPropertyRows,
   buildGroupedPropertyStructure,
   getNiceTickStep,
@@ -677,10 +676,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const timelineRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const graphPaneRef = useRef<HTMLDivElement>(null)
-  const keyframeButtonRefs = useRef(new Map<string, HTMLButtonElement>())
   const committedKeyframeSelectionRef = useRef(selectedKeyframeIds)
-  const marqueePreviewSelectionRef = useRef<Set<string> | null>(null)
-  const marqueePreviewTouchedIdsRef = useRef(new Set<string>())
   committedKeyframeSelectionRef.current = selectedKeyframeIds
   const snapEnabled = true
   const pickWhipRootRef = useRef<HTMLDivElement>(null)
@@ -704,7 +700,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     ),
   )
   const toggleAutoKeyframeEnabled = useAutoKeyframeStore((state) => state.toggleAutoKeyframeEnabled)
-  const appliedDragPreviewFramesRef = useRef<Record<string, number> | null>(null)
   const [sheetPreviewFrames, setSheetPreviewFrames] = useState<Record<string, number> | null>(null)
   const [sheetPreviewDuplicateKeyframeIds, setSheetPreviewDuplicateKeyframeIds] = useState<
     string[] | null
@@ -1249,105 +1244,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     (frame: number) =>
       getVisibleKeyframeX(frame, viewport, effectiveTimelineWidth, timelineEdgeInset),
     [effectiveTimelineWidth, timelineEdgeInset, viewport],
-  )
-  const setKeyframeButtonRef = useCallback((keyframeId: string, node: HTMLButtonElement | null) => {
-    if (node) {
-      keyframeButtonRefs.current.set(keyframeId, node)
-      const previewSelection = marqueePreviewSelectionRef.current
-      if (previewSelection) {
-        const previewSelected = previewSelection.has(keyframeId)
-        if (previewSelected !== committedKeyframeSelectionRef.current.has(keyframeId)) {
-          node.dataset.marqueeSelected = String(previewSelected)
-          marqueePreviewTouchedIdsRef.current.add(keyframeId)
-        }
-      }
-    } else {
-      keyframeButtonRefs.current.delete(keyframeId)
-    }
-  }, [])
-  const handleMarqueeSelectionPreviewChange = useCallback((nextSelection: Set<string> | null) => {
-    const touchedIds = new Set(marqueePreviewTouchedIdsRef.current)
-    for (const keyframeId of committedKeyframeSelectionRef.current) touchedIds.add(keyframeId)
-    if (nextSelection) {
-      for (const keyframeId of nextSelection) touchedIds.add(keyframeId)
-    }
-
-    const nextTouchedIds = new Set<string>()
-    for (const keyframeId of touchedIds) {
-      const button = keyframeButtonRefs.current.get(keyframeId)
-      if (!button) continue
-      if (!nextSelection) {
-        delete button.dataset.marqueeSelected
-        continue
-      }
-
-      const previewSelected = nextSelection.has(keyframeId)
-      const committedSelected = committedKeyframeSelectionRef.current.has(keyframeId)
-      if (previewSelected === committedSelected) {
-        delete button.dataset.marqueeSelected
-      } else {
-        button.dataset.marqueeSelected = String(previewSelected)
-        nextTouchedIds.add(keyframeId)
-      }
-    }
-
-    marqueePreviewSelectionRef.current = nextSelection
-    marqueePreviewTouchedIdsRef.current = nextTouchedIds
-  }, [])
-  const applyDragPreviewFrames = useCallback(
-    (nextPreviewFrames: Record<string, number> | null) => {
-      const previousPreviewFrames = appliedDragPreviewFramesRef.current
-      if (arePreviewFramesEqual(previousPreviewFrames, nextPreviewFrames)) {
-        return
-      }
-
-      const duplicatePreviewIds =
-        dragStateRef.current?.duplicateOnCommit && nextPreviewFrames
-          ? dragStateRef.current.selectedKeyframeIds
-          : null
-
-      flushSync(() => {
-        setSheetPreviewFrames(nextPreviewFrames)
-        setSheetPreviewDuplicateKeyframeIds(duplicatePreviewIds)
-      })
-
-      const keyframeIds = new Set([
-        ...Object.keys(previousPreviewFrames ?? {}),
-        ...Object.keys(nextPreviewFrames ?? {}),
-      ])
-
-      if (duplicatePreviewIds) {
-        appliedDragPreviewFramesRef.current = nextPreviewFrames
-        return
-      }
-
-      for (const keyframeId of keyframeIds) {
-        const button = keyframeButtonRefs.current.get(keyframeId)
-        if (!button) continue
-
-        const previewFrame = nextPreviewFrames?.[keyframeId]
-        const frame = previewFrame ?? keyframeMetaByIdRef.current.get(keyframeId)?.keyframe.frame
-        if (frame === undefined) continue
-
-        const renderedX = getRenderedKeyframeX(frame)
-        if (renderedX === null) {
-          button.style.visibility = 'hidden'
-          continue
-        }
-
-        button.style.left = `${renderedX}px`
-        button.style.visibility = 'visible'
-      }
-
-      appliedDragPreviewFramesRef.current = nextPreviewFrames
-    },
-    [getRenderedKeyframeX],
-  )
-  const scheduleDragPreviewFrames = useCallback(
-    (nextPreviewFrames: Record<string, number> | null) => {
-      applyDragPreviewFrames(nextPreviewFrames)
-    },
-    [applyDragPreviewFrames],
   )
   const renderedKeyframeXById = useMemo(() => {
     const positions = new Map<string, number>()
@@ -1974,6 +1870,16 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const dragStateRef = useRef<DragState | null>(null)
   const selectionAnchorByPropertyRef = useRef(new Map<AnimatableProperty, string>())
+
+  const { setKeyframeButtonRef, handleMarqueeSelectionPreviewChange, scheduleDragPreviewFrames } =
+    useSheetPreviewDom({
+      committedKeyframeSelectionRef,
+      keyframeMetaByIdRef,
+      dragStateRef,
+      getRenderedKeyframeX,
+      setSheetPreviewFrames,
+      setSheetPreviewDuplicateKeyframeIds,
+    })
 
   const { marqueeOverlayRef, getMarqueeModeFromPointerEvent, beginMarqueeSelection } =
     useDopesheetMarquee({
