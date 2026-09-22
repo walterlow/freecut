@@ -1,3 +1,6 @@
+import type { AnimatableProperty } from '@/types/keyframe'
+import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges'
+
 interface PropertyValueScrubOptions {
   startValue: number
   deltaX: number
@@ -27,4 +30,38 @@ export function getScrubbedPropertyValue({
   const value = Number(clamped.toFixed(precision))
 
   return { value, display: value.toFixed(precision) }
+}
+
+/** Identity fields shared by every in-progress value scrub. */
+export interface ValueScrubPointer {
+  property: AnimatableProperty
+  pointerId: number
+}
+
+/** Whether a pointer event continues the in-progress scrub of `property`. */
+export function matchesValueScrubPointer<T extends ValueScrubPointer>(
+  scrub: T | null,
+  event: { pointerId: number },
+  property: AnimatableProperty,
+): scrub is T {
+  return scrub !== null && scrub.pointerId === event.pointerId && scrub.property === property
+}
+
+/** Next value/display for a scrub delta, using the property's own range policy. */
+export function getPropertyScrubbedValue(
+  property: AnimatableProperty,
+  startValue: number,
+  deltaX: number,
+  modifiers: { shiftKey: boolean; altKey: boolean },
+): { value: number; display: string } {
+  const range = PROPERTY_VALUE_RANGES[property]
+  return getScrubbedPropertyValue({
+    startValue,
+    deltaX,
+    decimals: range?.decimals ?? 2,
+    min: range?.min,
+    max: range?.max,
+    shiftKey: modifiers.shiftKey,
+    altKey: modifiers.altKey,
+  })
 }

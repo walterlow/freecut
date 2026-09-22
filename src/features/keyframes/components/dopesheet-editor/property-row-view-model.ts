@@ -26,6 +26,7 @@ import {
   isColorAnimatableProperty,
   PROPERTY_VALUE_RANGES,
 } from '@/features/keyframes/property-value-ranges'
+import { colorStringToKeyframeValue } from '@/features/keyframes/utils/color-keyframes'
 import type { CompoundPropertyInputConfig } from './compound-property-inputs'
 
 /** The expression editor draft when it targets the given linkable property. */
@@ -147,6 +148,20 @@ export function resolvePropertyRowLabels(
     rowDisplayLabel:
       propertyLabels[property] ?? compoundLabel ?? getKeyframePropertyShortLabel(t, property),
   }
+}
+
+/** Parse a row's raw value draft into a finite value clamped to its range. */
+export function resolvePropertyDraftValue(
+  property: AnimatableProperty,
+  draft: string | undefined,
+): number | null {
+  const parsed = isColorAnimatableProperty(property)
+    ? colorStringToKeyframeValue(draft ?? '')
+    : Number(draft)
+  if (parsed === null || !Number.isFinite(parsed)) return null
+  const range = PROPERTY_VALUE_RANGES[property]
+  if (!range) return parsed
+  return Math.max(range.min, Math.min(range.max, parsed))
 }
 
 /** Linkable property for a row: compound override or the property itself. */

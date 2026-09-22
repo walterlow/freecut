@@ -19,13 +19,22 @@ import {
 } from 'react'
 import { DRAG_THRESHOLD } from './dopesheet-constants'
 import { setPointerCaptureSafely } from './dopesheet-utils'
-import { getScrubbedPropertyValue } from './property-value-scrub'
+import { isColorAnimatableProperty } from '@/features/keyframes/property-value-ranges'
+import { resolvePropertyDraftValue } from './property-row-view-model'
 import {
-  PROPERTY_VALUE_RANGES,
-  isColorAnimatableProperty,
-} from '@/features/keyframes/property-value-ranges'
-import { colorStringToKeyframeValue } from '@/features/keyframes/utils/color-keyframes'
+  getPropertyScrubbedValue,
+  matchesValueScrubPointer,
+  type ValueScrubPointer,
+} from './property-value-scrub'
 import type { AnimatableProperty } from '@/types/keyframe'
+
+interface ValueScrubState extends ValueScrubPointer {
+  startX: number
+  startValue: number
+  lastValue: number
+  lastDisplay: string
+  didDrag: boolean
+}
 
 export interface UsePropertyValueEditingOptions {
   /** Properties currently shown in the value column, in column order. */
@@ -90,15 +99,7 @@ export function usePropertyValueEditing({
   const [editingValueProperty, setEditingValueProperty] = useState<AnimatableProperty | null>(null)
   const skipNextBlurCommitPropertyRef = useRef<AnimatableProperty | null>(null)
   const valueDraftAtFocusRef = useRef<Partial<Record<AnimatableProperty, string>>>({})
-  const valueScrubRef = useRef<{
-    property: AnimatableProperty
-    pointerId: number
-    startX: number
-    startValue: number
-    lastValue: number
-    lastDisplay: string
-    didDrag: boolean
-  } | null>(null)
+  const valueScrubRef = useRef<ValueScrubState | null>(null)
 
   useEffect(() => {
     setValueDrafts((prev) => {
@@ -125,12 +126,9 @@ export function usePropertyValueEditing({
   const handleRowValueCommit = useCallback(
     (property: AnimatableProperty, options?: { allowCreate?: boolean }) => {
       if (isPropertyLocked(property)) return
-      const range = PROPERTY_VALUE_RANGES[property]
-      const parsed = isColorAnimatableProperty(property)
-        ? colorStringToKeyframeValue(valueDrafts[property] ?? '')
-        : Number(valueDrafts[property])
+      const value = resolvePropertyDraftValue(property, valueDrafts[property])
 
-      if (parsed === null || !Number.isFinite(parsed)) {
+      if (value === null) {
         setValueDrafts((prev) => ({
           ...prev,
           [property]: formatPropertyValue(property, propertyValues[property]),
@@ -138,11 +136,10 @@ export function usePropertyValueEditing({
         return
       }
 
-      const clampedValue = Math.max(range?.min ?? parsed, Math.min(range?.max ?? parsed, parsed))
-      onPropertyValueCommit?.(property, clampedValue, options)
+      onPropertyValueCommit?.(property, value, options)
       setValueDrafts((prev) => ({
         ...prev,
-        [property]: formatPropertyValue(property, clampedValue),
+        [property]: formatPropertyValue(property, value),
       }))
     },
     [formatPropertyValue, isPropertyLocked, onPropertyValueCommit, propertyValues, valueDrafts],
@@ -171,7 +168,7 @@ export function usePropertyValueEditing({
   const handleValueScrubMove = useCallback(
     (event: ReactPointerEvent<HTMLInputElement>, property: AnimatableProperty) => {
       const scrub = valueScrubRef.current
-      if (!scrub || scrub.pointerId !== event.pointerId || scrub.property !== property) return
+      if (!matchesValueScrubPointer(scrub, event, property)) return
       const deltaX = event.clientX - scrub.startX
       if (!scrub.didDrag && Math.abs(deltaX) < DRAG_THRESHOLD) return
 
@@ -182,16 +179,7 @@ export function usePropertyValueEditing({
       }
 
       event.preventDefault()
-      const range = PROPERTY_VALUE_RANGES[property]
-      const next = getScrubbedPropertyValue({
-        startValue: scrub.startValue,
-        deltaX,
-        decimals: range?.decimals ?? 2,
-        min: range?.min,
-        max: range?.max,
-        shiftKey: event.shiftKey,
-        altKey: event.altKey,
-      })
+      const next = getPropertyScrubbedValue(property, scrub.startValue, deltaX, event)
       scrub.lastValue = next.value
       scrub.lastDisplay = next.display
       setValueDrafts((previous) => ({ ...previous, [property]: next.display }))
@@ -203,7 +191,7 @@ export function usePropertyValueEditing({
   const handleValueScrubEnd = useCallback(
     (event: ReactPointerEvent<HTMLInputElement>, property: AnimatableProperty) => {
       const scrub = valueScrubRef.current
-      if (!scrub || scrub.pointerId !== event.pointerId || scrub.property !== property) return
+      if (!matchesValueScrubPointer(scrub, event, property)) return
       valueScrubRef.current = null
       if (!scrub.didDrag) return
 
@@ -223,7 +211,7 @@ export function usePropertyValueEditing({
   const handleValueScrubCancel = useCallback(
     (event: ReactPointerEvent<HTMLInputElement>, property: AnimatableProperty) => {
       const scrub = valueScrubRef.current
-      if (!scrub || scrub.pointerId !== event.pointerId || scrub.property !== property) return
+      if (!matchesValueScrubPointer(scrub, event, property)) return
       valueScrubRef.current = null
       if (!scrub.didDrag) return
 
