@@ -4,7 +4,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { DopesheetEditor } from './index'
 import { EXPRESSION_DOCK_HEIGHT } from './dopesheet-expression-dock'
 
-describe('DopesheetEditor property groups', () => {
+// Renders the whole dopesheet repeatedly; measured ~6s under v8 coverage on a loaded
+// runner against vitest's 5s default. Scoped here so a hang elsewhere still fails fast.
+describe('DopesheetEditor property groups', { timeout: 15_000 }, () => {
   beforeAll(() => {
     class ResizeObserverMock {
       observe() {}

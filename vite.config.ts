@@ -80,11 +80,6 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
-    // Not a target, a ceiling: tests that render large components run ~5-6s under
-    // v8 coverage on a loaded runner (measured: property-groups-ui 5,998ms,
-    // proxy-service 5,017ms), so the 5s default turns slow-but-correct work into
-    // failures. Hung work still fails, just later.
-    testTimeout: 15_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

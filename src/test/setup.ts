@@ -1,14 +1,7 @@
 import '@testing-library/jest-dom'
-import { configure } from '@testing-library/react'
 import { afterEach } from 'vite-plus/test'
 import '@/i18n'
 import { resetAutoKeyframeStore } from '@/features/keyframes/stores/auto-keyframe-store'
-
-// Render-path tests wait on animation-frame chains and async render work. Under
-// coverage instrumentation on a shared runner those legitimately take longer than
-// the 1s default, which turned correct-but-slow waits into intermittent failures
-// (the preview-sync suite in particular). A real hang still fails, just later.
-configure({ asyncUtilTimeout: 5_000 })
 
 // Mock ImageData for Canvas operations
 type TestGlobalWithImageData = typeof globalThis & { ImageData?: typeof ImageData }
