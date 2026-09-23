@@ -59,9 +59,9 @@ import { DopesheetToolbar } from './dopesheet-toolbar'
 import { buildDopesheetPlayheadElements } from './dopesheet-playhead-elements'
 import { useDopesheetHotkeys } from './use-dopesheet-hotkeys'
 import { usePropertyExpressionEditor } from './use-property-expression-editor'
-import { buildExpressionDockContext, formatExpressionValue } from './expression-dock-context'
+import { buildExpressionDockContext } from './expression-dock-context'
 
-import { DopesheetExpressionDock } from './dopesheet-expression-dock'
+import { DopesheetExpressionDockLayer } from './dopesheet-expression-dock-layer'
 import type {
   DopesheetGroupHeaderProps,
   DopesheetPropertyRowContentProps,
@@ -1769,80 +1769,19 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const expressionDockElement =
     expressionEditor && expressionDockContext ? (
-      <DopesheetExpressionDock
-        property={expressionDockContext.property}
-        propertyLabel={expressionDockContext.propertyLabel}
-        source={expressionEditor.source}
-        enabled={expressionEditor.enabled}
-        preExpressionDisplay={formatExpressionValue(expressionDockContext.preExpressionValue)}
-        postExpressionDisplay={formatExpressionValue(expressionDockContext.postExpressionValue)}
-        error={expressionDockContext.error}
-        hasStoredExpression={expressionDockContext.hasStoredExpression}
+      <DopesheetExpressionDockLayer
+        context={expressionDockContext}
+        editor={expressionEditor}
         pickingReference={expressionReferencePick?.property === expressionDockContext.property}
+        itemId={itemId}
         rootRef={expressionDockRef}
         textareaRef={expressionTextareaRef}
-        onSourceChange={(source, selectionStart, selectionEnd) =>
-          setExpressionEditor((current) =>
-            current?.property === expressionDockContext.property
-              ? { ...current, source, selectionStart, selectionEnd }
-              : current,
-          )
-        }
-        onSelectionChange={(selectionStart, selectionEnd) =>
-          setExpressionEditor((current) =>
-            current?.property === expressionDockContext.property
-              ? { ...current, selectionStart, selectionEnd }
-              : current,
-          )
-        }
-        onToggleEnabled={() =>
-          setExpressionEditor((current) =>
-            current?.property === expressionDockContext.property
-              ? { ...current, enabled: !current.enabled }
-              : current,
-          )
-        }
-        onApplyPreset={(source) => applyExpressionPreset(expressionDockContext.property, source)}
-        onReferencePointerDown={(event, selectionStart, selectionEnd) => {
-          setExpressionReferencePick(null)
-          beginExpressionReferenceDrag(event, {
-            itemId,
-            property: expressionDockContext.property,
-            selectionStart,
-            selectionEnd,
-          })
-        }}
-        onToggleReferencePicking={(selectionStart, selectionEnd) =>
-          setExpressionReferencePick((current) =>
-            current?.property === expressionDockContext.property
-              ? null
-              : {
-                  itemId,
-                  property: expressionDockContext.property,
-                  selectionStart,
-                  selectionEnd,
-                },
-          )
-        }
-        onRemove={() => {
-          onRemovePropertyExpression?.(expressionDockContext.property)
-          setExpressionReferencePick(null)
-          setExpressionEditor(null)
-        }}
-        onCancel={() => {
-          setExpressionReferencePick(null)
-          setExpressionEditor(null)
-        }}
-        onApply={() => {
-          if (expressionDockContext.error) return
-          onSetPropertyExpression?.(
-            expressionDockContext.property,
-            expressionEditor.source,
-            expressionEditor.enabled,
-          )
-          setExpressionReferencePick(null)
-          setExpressionEditor(null)
-        }}
+        setEditor={setExpressionEditor}
+        setReferencePick={setExpressionReferencePick}
+        beginReferenceDrag={beginExpressionReferenceDrag}
+        applyPreset={applyExpressionPreset}
+        onSetPropertyExpression={onSetPropertyExpression}
+        onRemovePropertyExpression={onRemovePropertyExpression}
       />
     ) : null
 

@@ -15,7 +15,7 @@ import type { DopesheetPropertyRow } from './dopesheet-types'
 import type { PropertyExpressionDraft } from './expression-reference-utils'
 import { resolvePropertyRowPreExpressionValue } from './property-row-view-model'
 
-interface ExpressionDockContext {
+export interface ExpressionDockContext {
   property: DirectLinkableProperty
   propertyLabel: string
   preExpressionValue: ExpressionValue
