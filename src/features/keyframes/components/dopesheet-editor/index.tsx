@@ -31,6 +31,7 @@ import { useDopesheetNavigation } from './use-dopesheet-navigation'
 import { useDopesheetSheetMetrics } from './use-dopesheet-sheet-metrics'
 import { useDopesheetCoordinates } from './use-dopesheet-coordinates'
 import { useDopesheetSelectionMeta } from './use-dopesheet-selection-meta'
+import { useDopesheetGraphDisplay } from './use-dopesheet-graph-display'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
   useDopesheetPointerDispatch,
@@ -84,7 +85,6 @@ import {
 } from './dopesheet-constants'
 import type { DopesheetPropertyRow, DragState } from './dopesheet-types'
 import { getDopesheetRowControlState } from './row-controls'
-import { getCombinedGraphValueRange } from '../value-graph-editor/value-range-utils'
 import {
   PROPERTY_VALUE_RANGES,
   isColorAnimatableProperty,
@@ -600,35 +600,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     minViewportFrames,
     getTimelineLivePixelsPerSecond,
   })
-  const visibleGraphProperties = useMemo(() => {
-    const properties = new Set(graphVisibleProperties)
-    for (const property of graphVisibleProperties) {
-      const secondary = compoundSecondaryProperties[property]
-      if (secondary) properties.add(secondary)
-    }
-    return [...properties]
-  }, [compoundSecondaryProperties, graphVisibleProperties])
-  const graphBaseValueRange = useMemo(
-    () =>
-      getCombinedGraphValueRange(
-        visibleGraphProperties.map((property) => PROPERTY_VALUE_RANGES[property] ?? null),
-        visibleGraphProperties.map((property) => keyframesByProperty[property] ?? []),
-        autoZoomGraphHeight,
-      ),
-    [autoZoomGraphHeight, keyframesByProperty, visibleGraphProperties],
-  )
-  const graphBaseValueSpan = useMemo(
-    () => Math.max(0.0001, graphBaseValueRange.max - graphBaseValueRange.min),
-    [graphBaseValueRange],
-  )
-  const graphMinZoomValueSpan = useMemo(
-    () => Math.max(graphBaseValueSpan * 0.02, 0.0001),
-    [graphBaseValueSpan],
-  )
-  const verticalZoomRatioBase = useMemo(
-    () => Math.max(1, graphBaseValueSpan / graphMinZoomValueSpan),
-    [graphBaseValueSpan, graphMinZoomValueSpan],
-  )
 
   useLivePixelGeometrySync({
     syncLivePixelGeometryRef,
@@ -985,68 +956,27 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     viewportInteractionEnabled,
   })
 
-  const graphDisplayProperty = useMemo(() => {
-    if (graphVisibleProperties.size === 0) return null
-    const graphableSet = new Set(graphableProperties)
-    // Honour the selection when it has a drawable curve.
-    if (
-      activeSelectedProperty &&
-      graphVisibleProperties.has(activeSelectedProperty) &&
-      graphableSet.has(activeSelectedProperty)
-    ) {
-      return activeSelectedProperty
-    }
-    // Otherwise show the first visible property that actually has a curve, so the
-    // graph isn't blank when the selection is a single-keyframe property.
-    const graphableVisible = [...graphVisibleProperties].find((property) =>
-      graphableSet.has(property),
-    )
-    if (graphableVisible) return graphableVisible
-    // Fall back to the selection even without a full curve.
-    if (activeSelectedProperty && graphVisibleProperties.has(activeSelectedProperty)) {
-      return activeSelectedProperty
-    }
-    return null
-  }, [activeSelectedProperty, graphVisibleProperties, graphableProperties])
-  const graphDisplayPropertyLocked = graphDisplayProperty
-    ? isPropertyLocked(graphDisplayProperty)
-    : false
-  const focusGraphPane = useCallback(() => {
-    // `preventScroll` is essential: focusing a tabIndex={-1} element inside a
-    // scrollable container makes the browser scroll it into view. Without this,
-    // pressing a keyframe (which focuses the pane via onPointerDownCapture)
-    // shifts the entire dopesheet scroll.
-    graphPaneRef.current?.focus({ preventScroll: true })
-  }, [])
-  const handleGraphPaneKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (disabled || graphDisplayPropertyLocked || selectedRefs.length === 0) {
-        return
-      }
-
-      const hasModifier = event.ctrlKey || event.metaKey || event.altKey
-
-      if (!hasModifier && (event.key === 'Delete' || event.key === 'Backspace')) {
-        if (!onRemoveKeyframes) {
-          return
-        }
-
-        event.preventDefault()
-        event.stopPropagation()
-        onRemoveKeyframes(selectedRefs)
-        return
-      }
-
-      if (!hasModifier && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-        event.preventDefault()
-        event.stopPropagation()
-        nudgeSelectedKeyframes(
-          event.key === 'ArrowLeft' ? (event.shiftKey ? -10 : -1) : event.shiftKey ? 10 : 1,
-        )
-      }
-    },
-    [disabled, graphDisplayPropertyLocked, nudgeSelectedKeyframes, onRemoveKeyframes, selectedRefs],
-  )
+  const {
+    visibleGraphProperties,
+    verticalZoomRatioBase,
+    graphDisplayProperty,
+    graphDisplayPropertyLocked,
+    focusGraphPane,
+    handleGraphPaneKeyDown,
+  } = useDopesheetGraphDisplay({
+    graphPaneRef,
+    graphVisibleProperties,
+    compoundSecondaryProperties,
+    graphableProperties,
+    keyframesByProperty,
+    autoZoomGraphHeight,
+    activeSelectedProperty,
+    isPropertyLocked,
+    disabled,
+    selectedRefs,
+    nudgeSelectedKeyframes,
+    onRemoveKeyframes,
+  })
   const timingStripMarkers = useMemo(() => {
     if (showGraphPane) {
       if (!activeSelectedProperty) {
