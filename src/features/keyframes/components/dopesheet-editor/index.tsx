@@ -22,7 +22,6 @@ import { useHeaderFrameInputs } from './use-header-frame-inputs'
 import { usePropertyFilters } from './use-property-filters'
 import { useRulerScrub } from './use-ruler-scrub'
 import { useDopesheetMarquee } from './use-dopesheet-marquee'
-import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useDopesheetPropertyDerivations } from './use-dopesheet-property-derivations'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
@@ -34,6 +33,7 @@ import { useDopesheetSheetStructure } from './use-dopesheet-sheet-structure'
 import { useDopesheetExpressionDock } from './use-dopesheet-expression-dock'
 import { useDopesheetFrameTargets } from './use-dopesheet-frame-targets'
 import { useDopesheetRowProps } from './use-dopesheet-row-props'
+import { useDopesheetTimingStrip } from './use-dopesheet-timing-strip'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
   useDopesheetPointerDispatch,
@@ -79,7 +79,6 @@ import {
   isColorAnimatableProperty,
 } from '@/features/keyframes/property-value-ranges'
 import { keyframeValueToHexColor } from '@/features/keyframes/utils/color-keyframes'
-import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
 import type { DopesheetEditorProps } from './dopesheet-editor-props'
 
@@ -840,74 +839,33 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     nudgeSelectedKeyframes,
     onRemoveKeyframes,
   })
-  const timingStripMarkers = useMemo(() => {
-    if (showGraphPane) {
-      if (!activeSelectedProperty) {
-        return []
-      }
-
-      return (keyframesByProperty[activeSelectedProperty] ?? []).map((keyframe) => ({
-        id: keyframe.id,
-        frame: keyframe.frame,
-        selected: selectedKeyframeIds.has(keyframe.id),
-        draggable: !!onKeyframeMove && selectedRefIds.includes(keyframe.id),
-      }))
-    }
-
-    return visibleKeyframes
-      .filter(({ keyframe }) => selectedKeyframeIds.has(keyframe.id))
-      .map(({ property, keyframe }) => ({
-        id: keyframe.id,
-        frame: keyframe.frame,
-        selected: true,
-        draggable: !!onKeyframeMove && !isPropertyLocked(property),
-      }))
-  }, [
-    activeSelectedProperty,
-    isPropertyLocked,
-    keyframesByProperty,
-    onKeyframeMove,
-    selectedKeyframeIds,
-    selectedRefIds,
-    visibleKeyframes,
-    showGraphPane,
-  ])
-  const constrainGraphFrameDelta = useCallback(
-    (deltaFrames: number, draggedKeyframeIds: string[]) =>
-      constrainSelectedKeyframeDelta({
-        keyframesByProperty,
-        selectedKeyframeIds: new Set(draggedKeyframeIds),
-        totalFrames,
-        deltaFrames,
-      }),
-    [keyframesByProperty, totalFrames],
-  )
   const {
+    timingStripMarkers,
+    constrainGraphFrameDelta,
     timingStripPreviewFrames,
     handleTimingStripSelectionChange,
     handleTimingStripSlideStart,
     handleTimingStripSlideChange,
     handleTimingStripSlideEnd,
-  } = useTimingStripDrag({
-    disabled,
+  } = useDopesheetTimingStrip({
+    showGraphPane,
+    showSheetPane,
+    activeSelectedProperty,
+    keyframesByProperty,
+    visibleKeyframes,
+    selectedKeyframeIds,
+    selectedRefIds,
+    isPropertyLocked,
     onKeyframeMove,
+    disabled,
+    totalFrames,
     onSelectionChange,
     onDragStart,
     onDragEnd,
     buildSelectionFramePreview,
     commitSelectionFramePreview,
+    scheduleDragPreviewFrames,
   })
-
-  // Mirror timing-strip preview into the sheet drag preview. The sheet shows in
-  // both `dopesheet` and `split`, so mirror whenever the sheet pane is visible.
-  useEffect(() => {
-    if (!showSheetPane) {
-      scheduleDragPreviewFrames(null)
-      return
-    }
-
-    scheduleDragPreviewFrames(timingStripPreviewFrames)
-  }, [scheduleDragPreviewFrames, timingStripPreviewFrames, showSheetPane])
   const rulerLabelFrameOffset = timelineScrollContainerRef ? itemFrom : 0
   const liveRulerCanvas =
     hasLinkedTimelineAxis && timelineScrollContainerRef ? (
