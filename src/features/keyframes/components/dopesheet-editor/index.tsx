@@ -33,6 +33,7 @@ import { useRulerScrub } from './use-ruler-scrub'
 import { useDopesheetMarquee } from './use-dopesheet-marquee'
 import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
+import { useDopesheetPropertyDerivations } from './use-dopesheet-property-derivations'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
@@ -90,7 +91,6 @@ import {
 } from './dopesheet-constants'
 import type { DopesheetPropertyRow, DragState, KeyframeMeta } from './dopesheet-types'
 import { getDopesheetRowControlState } from './row-controls'
-import { getPropertyAccordionGroups } from './property-groups'
 import { getCombinedGraphValueRange } from '../value-graph-editor/value-range-utils'
 import {
   PROPERTY_VALUE_RANGES,
@@ -99,7 +99,6 @@ import {
 import { keyframeValueToHexColor } from '@/features/keyframes/utils/color-keyframes'
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
-import { getProceduralBands } from '@/features/keyframes/utils/procedural-preview'
 import { clampFrame } from './frame-utils'
 import { getKeyframePropertyLabel } from '@/features/keyframes/utils/property-i18n'
 import type { DopesheetEditorProps } from './dopesheet-editor-props'
@@ -336,53 +335,23 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     deps: [visualizationMode],
   })
 
-  const availableProperties = useMemo(
-    () => Object.keys(keyframesByProperty) as AnimatableProperty[],
-    [keyframesByProperty],
-  )
-  const hiddenPropertyRowSet = useMemo(
-    () => new Set<AnimatableProperty>(hiddenPropertyRows),
-    [hiddenPropertyRows],
-  )
-  // Properties with an actual curve to draw (>= 2 keyframes). The graph picks a
-  // default from these so it isn't blank when the selected/first property only
-  // has a single keyframe.
-  const graphableProperties = useMemo(
-    () =>
-      availableProperties.filter(
-        (property) =>
-          !isColorAnimatableProperty(property) && (keyframesByProperty[property]?.length ?? 0) >= 2,
-      ),
-    [availableProperties, keyframesByProperty],
-  )
-  const allPropertyGroups = useMemo(
-    () => getPropertyAccordionGroups(availableProperties),
-    [availableProperties],
-  )
-  const inlinePropertyGroupIdSet = useMemo(
-    () => new Set(inlinePropertyGroupIds),
-    [inlinePropertyGroupIds],
-  )
-  const propertyGroupIdByProperty = useMemo(() => {
-    const map = new Map<AnimatableProperty, string>()
-    for (const group of allPropertyGroups) {
-      for (const property of group.properties) {
-        map.set(property, group.id)
-      }
-    }
-    return map
-  }, [allPropertyGroups])
-  const keyframedPropertyIds = useMemo(
-    () =>
-      new Set(
-        availableProperties.filter((property) => (keyframesByProperty[property] ?? []).length > 0),
-      ),
-    [availableProperties, keyframesByProperty],
-  )
-  const proceduralBandByProperty = useMemo(
-    () => getProceduralBands(motionModifiers, proceduralDurationInFrames, proceduralFrameOffset),
-    [motionModifiers, proceduralDurationInFrames, proceduralFrameOffset],
-  )
+  const {
+    availableProperties,
+    hiddenPropertyRowSet,
+    graphableProperties,
+    allPropertyGroups,
+    inlinePropertyGroupIdSet,
+    propertyGroupIdByProperty,
+    keyframedPropertyIds,
+    proceduralBandByProperty,
+  } = useDopesheetPropertyDerivations({
+    keyframesByProperty,
+    hiddenPropertyRows,
+    inlinePropertyGroupIds,
+    motionModifiers,
+    proceduralDurationInFrames,
+    proceduralFrameOffset,
+  })
   const {
     graphVisibleProperties,
     setGraphVisibleProperties,
