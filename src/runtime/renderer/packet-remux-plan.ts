@@ -113,6 +113,57 @@ export function resolveRemuxTrimBounds(
   return { trimStartSeconds, trimEndSeconds }
 }
 
+/**
+ * Stream-level preflight for the fast path: the source's primary streams must
+ * already be what the export asked for, so `Conversion` can copy packets
+ * instead of transcoding them. The facts compared here are probed from the
+ * source file; the probes themselves (and every decoder, muxer and output
+ * resource) stay in the orchestrator.
+ */
+export interface RemuxSourceStream {
+  /** Codec of the primary stream, or null when the source has none. */
+  codec: string | null | undefined
+  /**
+   * Deferred so the probe keeps its original short-circuit: the container's
+   * codec list is only consulted for a stream that actually has a codec.
+   */
+  getSupportedCodecs: () => string[]
+}
+
+export interface RemuxSourceVideoStream extends RemuxSourceStream {
+  displayWidth: number
+  displayHeight: number
+}
+
+/** The export settings the video preflight compares the source against. */
+export type RemuxExpectedVideo = Pick<ClientExportSettings, 'codec' | 'resolution'>
+
+/**
+ * The source video stream must be a codec the container can mux and the codec
+ * the export requests, at the export resolution — anything else forces a
+ * transcode, so the fast path is off.
+ */
+export function isRemuxEligibleSourceVideo(
+  stream: RemuxSourceVideoStream,
+  settings: RemuxExpectedVideo,
+): boolean {
+  const codec = stream.codec
+  if (!codec) return false
+  return (
+    stream.getSupportedCodecs().includes(codec) &&
+    codec === settings.codec &&
+    stream.displayWidth === settings.resolution.width &&
+    stream.displayHeight === settings.resolution.height
+  )
+}
+
+/** Audio is optional: a source with no audio stream still remuxes. */
+export function isRemuxEligibleSourceAudio(stream: RemuxSourceStream): boolean {
+  const codec = stream.codec
+  if (!codec) return true
+  return stream.getSupportedCodecs().includes(codec)
+}
+
 export function getPacketRemuxPlan(
   settings: ClientExportSettings,
   composition: CompositionInputProps,

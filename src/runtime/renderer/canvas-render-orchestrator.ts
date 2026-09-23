@@ -18,7 +18,11 @@ import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny
 import { createLogger } from '@/shared/logging/logger'
 import { ensureAudioEncoderSupport } from '@/shared/media/audio-encoder-support'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
-import { getPacketRemuxPlan } from './packet-remux-plan'
+import {
+  getPacketRemuxPlan,
+  isRemuxEligibleSourceAudio,
+  isRemuxEligibleSourceVideo,
+} from './packet-remux-plan'
 import { createExportOutputTarget } from './export-output-target'
 import {
   resolveAudioOnlyCodec,
@@ -406,29 +410,29 @@ async function tryPacketRemuxComposition(
 
   try {
     const videoTrack = await input.getPrimaryVideoTrack()
-    if (!videoTrack?.codec) {
-      return null
-    }
-
-    const supportedVideoCodecs = validationFormat.getSupportedVideoCodecs?.() ?? []
-    if (!supportedVideoCodecs.includes(videoTrack.codec) || videoTrack.codec !== settings.codec) {
-      return null
-    }
-
     if (
-      videoTrack.displayWidth !== settings.resolution.width ||
-      videoTrack.displayHeight !== settings.resolution.height
+      !isRemuxEligibleSourceVideo(
+        {
+          codec: videoTrack?.codec ?? null,
+          displayWidth: videoTrack?.displayWidth ?? 0,
+          displayHeight: videoTrack?.displayHeight ?? 0,
+          getSupportedCodecs: () => validationFormat.getSupportedVideoCodecs?.() ?? [],
+        },
+        settings,
+      )
     ) {
       return null
     }
 
     if (plan.includeAudio) {
       const audioTrack = await input.getPrimaryAudioTrack()
-      if (audioTrack?.codec) {
-        const supportedAudioCodecs = validationFormat.getSupportedAudioCodecs?.() ?? []
-        if (!supportedAudioCodecs.includes(audioTrack.codec)) {
-          return null
-        }
+      if (
+        !isRemuxEligibleSourceAudio({
+          codec: audioTrack?.codec ?? null,
+          getSupportedCodecs: () => validationFormat.getSupportedAudioCodecs?.() ?? [],
+        })
+      ) {
+        return null
       }
     }
 
