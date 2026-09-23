@@ -73,7 +73,13 @@ import { filterAnimationPresetCandidates } from './animation-preset-filter'
 import { AppliedMotionSummary } from './applied-motion-summary'
 import { AnimationPresetLibraryEdit } from './animation-preset-library-edit'
 import { AnimationPresetToolbar } from './animation-preset-toolbar'
+import { ApplyModeSelector, type MotionApplyMode } from './apply-mode-selector'
 import { ContinuousMotionStage } from './continuous-motion-stage'
+import {
+  hasActiveMotionFilters,
+  hasVisibleMotionResults,
+  isMotionClipSelection,
+} from './motion-library-status'
 import { MotionPresetStages } from './motion-preset-stages'
 import { SavedAnimationList } from './saved-animation-list'
 import type { ModifierEditSettings } from './continuous-motion-row'
@@ -135,7 +141,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
   const [bakeDialogOpen, setBakeDialogOpen] = useState(false)
   // 'replace' (default) clears a preset's target properties before applying so
   // reapplying an entrance/exit preset swaps it; 'add' layers onto what's there.
-  const [applyMode, setApplyMode] = useState<'replace' | 'merge' | 'layer'>('replace')
+  const [applyMode, setApplyMode] = useState<MotionApplyMode>('replace')
   const [searchQuery, setSearchQuery] = useState('')
   const [compatibleOnly, setCompatibleOnly] = useState(false)
   // Keyframe-preset parameters are authoring inputs, not timeline state. Keep
@@ -740,12 +746,13 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
       ),
     [filteredMotionPresetsByCategory],
   )
-  const filtersActive = deferredSearchQuery.trim().length > 0 || compatibleOnly
-  const hasVisiblePresetResults =
-    visibleMotionPresetCount > 0 ||
-    filteredModulators.length > 0 ||
-    filteredSavedPresets.length > 0 ||
-    selectedTextItems.length > 0
+  const filtersActive = hasActiveMotionFilters(deferredSearchQuery, compatibleOnly)
+  const hasVisiblePresetResults = hasVisibleMotionResults(
+    visibleMotionPresetCount,
+    filteredModulators.length,
+    filteredSavedPresets.length,
+    selectedTextItems.length,
+  )
 
   // --- "Applied to this clip" summary (state the panel otherwise hides) ---
   const keyframeApplications = useMemo(() => {
@@ -932,10 +939,11 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
       ? state.compositionById[selectedItem.compositionId]?.editorKind
       : undefined,
   )
-  const isMotionClip =
-    selectedItems.length === 1 &&
-    selectedItem?.type === 'composition' &&
-    selectedCompositionKind === 'composite-2d'
+  const isMotionClip = isMotionClipSelection(
+    selectedItems.length,
+    selectedItem?.type,
+    selectedCompositionKind,
+  )
   const handleMotionClip = useCallback(() => {
     if (isMotionClip && selectedItem?.type === 'composition') {
       openComposition(selectedItem.compositionId, selectedItem.label, selectedItem.id)
@@ -1027,29 +1035,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
 
             {/* Keyframe presets can replace a region, merge diamonds into the
                 base lanes, or remain independent as a named additive layer. */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-muted-foreground">
-                {t('editor.animateStages.onApply')}
-              </span>
-              <div className="inline-flex overflow-hidden rounded-md border border-border/60">
-                {(['replace', 'merge', 'layer'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={applyMode === mode}
-                    onClick={() => setApplyMode(mode)}
-                    className={cn(
-                      'px-2 py-0.5 text-[10px] font-medium',
-                      applyMode === mode
-                        ? 'bg-secondary text-foreground'
-                        : 'text-muted-foreground hover:bg-secondary/40',
-                    )}
-                  >
-                    {t(`editor.animateStages.applyMode.${mode}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <ApplyModeSelector mode={applyMode} onChange={setApplyMode} t={t} />
 
             <MotionPresetControls onSettingsChange={handleMotionGeneratorSettingsChange} t={t} />
 
