@@ -61,7 +61,7 @@ import {
 import { DopesheetSheetBody } from './dopesheet-sheet-body'
 
 import { DopesheetToolbar } from './dopesheet-toolbar'
-import { DopesheetPlayheadOverlay } from './dopesheet-playhead-overlays'
+import { buildDopesheetPlayheadElements } from './dopesheet-playhead-elements'
 import {
   handleAddKeyframeHotkey,
   handleDeleteHotkey,
@@ -2115,67 +2115,28 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   // cell surfaces over that border, so its playhead must begin at the shared
   // main-timeline origin too.
   const timelineContentLeft = columnWidth + (hasLinkedTimelineAxis ? 0 : 1)
-  const playheadOverlayElement = showPlayhead ? (
-    <DopesheetPlayheadOverlay
-      variant="sheet"
-      left={timelineContentLeft}
-      playheadFrame={playheadFrame}
-      currentFrame={currentFrame}
-      itemFrom={itemFrom}
-      totalFrames={totalFrames}
-      clampToItemBounds={playheadClampToItemBounds}
-      followPreviewFrame={!onSkim}
-      localScrubActiveRef={rulerScrubActiveRef}
-      localScrubHandoffFrameRef={rulerScrubHandoffFrameRef}
-      frameToX={frameToX}
-      globalFrameToX={globalFrameToPixels}
-      positionSyncTargetRef={timelineScrollContainerRef}
-      maxLeft={effectiveTimelineWidth - 1}
-      fps={fps}
-      isRulerScrubbing={isRulerScrubbing}
-    />
-  ) : null
-  // Split view: one playhead element spans the ruler, sheet, and graph panes.
-  // The graph's own line is hidden via `hidePlayhead`.
-  const splitPlayheadOverlayElement = showPlayhead ? (
-    <DopesheetPlayheadOverlay
-      variant="split"
-      left={timelineContentLeft}
-      playheadFrame={playheadFrame}
-      currentFrame={currentFrame}
-      itemFrom={itemFrom}
-      totalFrames={totalFrames}
-      clampToItemBounds={playheadClampToItemBounds}
-      followPreviewFrame={!onSkim}
-      localScrubActiveRef={rulerScrubActiveRef}
-      localScrubHandoffFrameRef={rulerScrubHandoffFrameRef}
-      frameToX={frameToX}
-      globalFrameToX={globalFrameToPixels}
-      positionSyncTargetRef={timelineScrollContainerRef}
-      maxLeft={effectiveTimelineWidth - 1}
-      fps={fps}
-      isRulerScrubbing={isRulerScrubbing}
-    />
-  ) : null
-  const skimPlayheadOverlayElement = onSkim ? (
-    <DopesheetPlayheadOverlay
-      variant="skim"
-      left={timelineContentLeft}
-      currentFrame={currentFrame}
-      itemFrom={itemFrom}
-      totalFrames={totalFrames}
-      clampToItemBounds={playheadClampToItemBounds}
-      followPreviewFrame={!onSkim}
-      localScrubActiveRef={rulerScrubActiveRef}
-      localScrubHandoffFrameRef={rulerScrubHandoffFrameRef}
-      frameToX={frameToX}
-      globalFrameToX={globalFrameToPixels}
-      positionSyncTargetRef={timelineScrollContainerRef}
-      maxLeft={effectiveTimelineWidth - 1}
-      fps={fps}
-      isRulerScrubbing={isRulerScrubbing}
-    />
-  ) : null
+  const {
+    sheet: playheadOverlayElement,
+    split: splitPlayheadOverlayElement,
+    skim: skimPlayheadOverlayElement,
+  } = buildDopesheetPlayheadElements({
+    showPlayhead,
+    skim: Boolean(onSkim),
+    left: timelineContentLeft,
+    playheadFrame,
+    currentFrame,
+    itemFrom,
+    totalFrames,
+    clampToItemBounds: playheadClampToItemBounds,
+    localScrubActiveRef: rulerScrubActiveRef,
+    localScrubHandoffFrameRef: rulerScrubHandoffFrameRef,
+    frameToX,
+    globalFrameToX: globalFrameToPixels,
+    positionSyncTargetRef: timelineScrollContainerRef,
+    maxLeft: effectiveTimelineWidth - 1,
+    fps,
+    isRulerScrubbing,
+  })
   const sheetBodyElement = (
     <DopesheetSheetBody
       scrollAreaRef={scrollAreaRef}
