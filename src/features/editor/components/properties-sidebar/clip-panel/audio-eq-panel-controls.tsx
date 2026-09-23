@@ -7,14 +7,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/shared/ui/cn'
-import {
-  AUDIO_EQ_GAIN_DB_MAX,
-  AUDIO_EQ_GAIN_DB_MIN,
-  AUDIO_EQ_Q_MAX,
-  AUDIO_EQ_Q_MIN,
-} from '@/shared/utils/audio-eq'
-import { NumberInput } from '../components'
-import { RotaryKnob } from '@/shared/ui/property-controls/rotary-knob'
+import { AUDIO_EQ_GAIN_DB_MAX, AUDIO_EQ_GAIN_DB_MIN } from '@/shared/utils/audio-eq'
 import { demixValue } from '../utils/mixed-value'
 import { formatOutputGainDb, roundOutputGainDb } from './audio-eq-panel-values'
 import {
@@ -143,45 +136,6 @@ export function RangeButtons({
         </button>
       ))}
     </div>
-  )
-}
-
-export function QFactorControl({
-  value,
-  onChange,
-  onLiveChange,
-}: {
-  value: number | 'mixed'
-  onChange: (value: number) => void
-  onLiveChange: (value: number) => void
-}) {
-  return (
-    <>
-      <div className="text-[10px] text-zinc-500">Q Factor</div>
-      <div className="flex items-center gap-1.5">
-        <NumberInput
-          value={value}
-          onChange={onChange}
-          onLiveChange={onLiveChange}
-          min={AUDIO_EQ_Q_MIN}
-          max={AUDIO_EQ_Q_MAX}
-          step={0.05}
-          className="flex-1"
-        />
-        <RotaryKnob
-          value={value}
-          onChange={onChange}
-          onLiveChange={onLiveChange}
-          min={AUDIO_EQ_Q_MIN}
-          max={AUDIO_EQ_Q_MAX}
-          step={0.05}
-        />
-      </div>
-      <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600">
-        <span>{AUDIO_EQ_Q_MIN.toFixed(1)}</span>
-        <span>{AUDIO_EQ_Q_MAX.toFixed(1)}</span>
-      </div>
-    </>
   )
 }
 
