@@ -13,10 +13,8 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
 import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe'
-import { HOTKEY_OPTIONS } from '@/config/hotkeys'
 import { getFrameAxisX, getFrameFromAxisX, getVisibleKeyframeX } from './layout'
 import { CompactNavigator } from './compact-navigator'
 
@@ -62,15 +60,7 @@ import { DopesheetSheetBody } from './dopesheet-sheet-body'
 
 import { DopesheetToolbar } from './dopesheet-toolbar'
 import { buildDopesheetPlayheadElements } from './dopesheet-playhead-elements'
-import {
-  handleAddKeyframeHotkey,
-  handleDeleteHotkey,
-  handleFitKeyframesHotkey,
-  handleNavigateHotkey,
-  handleNudgeHotkey,
-  handleToggleAutoKeyHotkey,
-  resolveDopesheetHotkeys,
-} from './dopesheet-hotkeys'
+import { useDopesheetHotkeys } from './use-dopesheet-hotkeys'
 import { usePropertyExpressionEditor } from './use-property-expression-editor'
 import { buildExpressionDockContext, formatExpressionValue } from './expression-dock-context'
 
@@ -1362,132 +1352,22 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const activePropertyRow = selectedProperty
     ? propertyRowByProperty.get(selectedProperty)
     : undefined
-  const hotkeyBindings = resolveDopesheetHotkeys({
+  useDopesheetHotkeys({
     shortcutsEnabled,
     addKeyframeShortcutEnabled,
     disabled,
     shortcuts,
-    hasActivePropertyRow: !!activePropertyRow,
+    activePropertyRow,
     hasSelection: selectedRefs.length > 0,
-    canCommitValues: !!onPropertyValueCommit,
+    canCommitValues: Boolean(onPropertyValueCommit),
+    selectedRefs,
+    onRemoveKeyframes,
+    handleRowAddKeyframe,
+    handleRowNavigate,
+    handleRowAutoKeyToggle,
+    fitKeyframesInView,
+    nudgeSelectedKeyframes,
   })
-
-  useHotkeys(
-    hotkeyBindings.keys.add,
-    (event) => handleAddKeyframeHotkey(event, activePropertyRow, handleRowAddKeyframe),
-    {
-      ...HOTKEY_OPTIONS,
-      enabled: hotkeyBindings.enabled.add,
-    },
-    [
-      hotkeyBindings.keys.add,
-      hotkeyBindings.enabled.add,
-      activePropertyRow,
-      handleRowAddKeyframe,
-    ],
-  )
-
-  useHotkeys(
-    hotkeyBindings.keys.prev,
-    (event) =>
-      handleNavigateHotkey(
-        event,
-        activePropertyRow,
-        activePropertyRow?.controls.prevKeyframe ?? null,
-        handleRowNavigate,
-      ),
-    {
-      ...HOTKEY_OPTIONS,
-      enabled: hotkeyBindings.enabled.prev,
-    },
-    [
-      hotkeyBindings.keys.prev,
-      hotkeyBindings.enabled.prev,
-      activePropertyRow,
-      handleRowNavigate,
-    ],
-  )
-
-  useHotkeys(
-    hotkeyBindings.keys.next,
-    (event) =>
-      handleNavigateHotkey(
-        event,
-        activePropertyRow,
-        activePropertyRow?.controls.nextKeyframe ?? null,
-        handleRowNavigate,
-      ),
-    {
-      ...HOTKEY_OPTIONS,
-      enabled: hotkeyBindings.enabled.next,
-    },
-    [
-      hotkeyBindings.keys.next,
-      hotkeyBindings.enabled.next,
-      activePropertyRow,
-      handleRowNavigate,
-    ],
-  )
-
-  useHotkeys(
-    hotkeyBindings.keys.toggleAutoKey,
-    (event) => handleToggleAutoKeyHotkey(event, activePropertyRow, handleRowAutoKeyToggle),
-    {
-      ...HOTKEY_OPTIONS,
-      enabled: hotkeyBindings.enabled.toggleAutoKey,
-    },
-    [
-      hotkeyBindings.keys.toggleAutoKey,
-      hotkeyBindings.enabled.toggleAutoKey,
-      activePropertyRow,
-      handleRowAutoKeyToggle,
-    ],
-  )
-
-  useHotkeys(
-    hotkeyBindings.keys.fit,
-    (event) => handleFitKeyframesHotkey(event, fitKeyframesInView),
-    {
-      ...HOTKEY_OPTIONS,
-      enabled: hotkeyBindings.enabled.fit,
-    },
-    [hotkeyBindings.keys.fit, hotkeyBindings.enabled.fit, fitKeyframesInView],
-  )
-
-  useHotkeys(
-    'delete,backspace',
-    (event) => handleDeleteHotkey(event, selectedRefs, onRemoveKeyframes),
-    { ...HOTKEY_OPTIONS, enabled: hotkeyBindings.enabled.edit },
-    [hotkeyBindings.enabled.edit, selectedRefs, onRemoveKeyframes],
-  )
-
-  useHotkeys(
-    'left',
-    (event) => handleNudgeHotkey(event, -1, nudgeSelectedKeyframes),
-    { ...HOTKEY_OPTIONS, enabled: hotkeyBindings.enabled.edit },
-    [hotkeyBindings.enabled.edit, nudgeSelectedKeyframes],
-  )
-
-  useHotkeys(
-    'right',
-    (event) => handleNudgeHotkey(event, 1, nudgeSelectedKeyframes),
-    { ...HOTKEY_OPTIONS, enabled: hotkeyBindings.enabled.edit },
-    [hotkeyBindings.enabled.edit, nudgeSelectedKeyframes],
-  )
-
-  useHotkeys(
-    'shift+left',
-    (event) => handleNudgeHotkey(event, -10, nudgeSelectedKeyframes),
-    { ...HOTKEY_OPTIONS, enabled: hotkeyBindings.enabled.edit },
-    [hotkeyBindings.enabled.edit, nudgeSelectedKeyframes],
-  )
-
-  useHotkeys(
-    'shift+right',
-    (event) => handleNudgeHotkey(event, 10, nudgeSelectedKeyframes),
-    { ...HOTKEY_OPTIONS, enabled: hotkeyBindings.enabled.edit },
-    [hotkeyBindings.enabled.edit, nudgeSelectedKeyframes],
-  )
 
   const dragStateRef = useRef<DragState | null>(null)
   const selectionAnchorByPropertyRef = useRef(new Map<AnimatableProperty, string>())
