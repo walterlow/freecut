@@ -35,6 +35,7 @@ import { useTimingStripDrag } from './use-timing-strip-drag'
 import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useDopesheetPropertyDerivations } from './use-dopesheet-property-derivations'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
+import { useDopesheetSheetMetrics } from './use-dopesheet-sheet-metrics'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
   useDopesheetPointerDispatch,
@@ -46,9 +47,6 @@ import { useDopesheetRowActions } from './use-dopesheet-row-actions'
 import { useElementSize } from './use-element-size'
 import { useKeyframeDrag } from './use-keyframe-drag'
 import { useSheetPreviewDom } from './sheet-preview-dom'
-import {
-  getDopesheetDragPixelsPerFrame,
-} from './dopesheet-drag-math'
 import {
   DopesheetClassicPresentation,
   DopesheetEditorPresentation,
@@ -634,19 +632,31 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   )
 
   const frameRange = Math.max(1, viewport.endFrame - viewport.startFrame)
-  const horizontalZoomRatioBase = useMemo(
-    () => Math.max(1, contentFrameMax / Math.max(1, minViewportFrames)),
-    [contentFrameMax, minViewportFrames],
-  )
-  const horizontalZoomValue = useMemo(() => {
-    if (horizontalZoomRatioBase <= 1) {
-      return 0
-    }
-
-    const normalized =
-      Math.log(contentFrameMax / Math.max(1, frameRange)) / Math.log(horizontalZoomRatioBase)
-    return Math.max(0, Math.min(100, normalized * 100))
-  }, [contentFrameMax, frameRange, horizontalZoomRatioBase])
+  const {
+    horizontalZoomRatioBase,
+    horizontalZoomValue,
+    reservedScrollbarGutterWidth,
+    hasLinkedTimelineAxis,
+    timelineCellBorderWidth,
+    effectiveTimelineWidth,
+    timelineEdgeInset,
+    timelinePixelsPerSecond,
+    propertyGridStyle,
+    getLiveDragPixelsPerFrame,
+  } = useDopesheetSheetMetrics({
+    width,
+    columnWidth,
+    timelineWidth,
+    sheetScrollWidth,
+    showSheetPane,
+    presentation,
+    linkedTimelineViewportWidth,
+    frameRange,
+    fps,
+    contentFrameMax,
+    minViewportFrames,
+    getTimelineLivePixelsPerSecond,
+  })
   const visibleGraphProperties = useMemo(() => {
     const properties = new Set(graphVisibleProperties)
     for (const property of graphVisibleProperties) {
@@ -675,46 +685,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const verticalZoomRatioBase = useMemo(
     () => Math.max(1, graphBaseValueSpan / graphMinZoomValueSpan),
     [graphBaseValueSpan, graphMinZoomValueSpan],
-  )
-  const fallbackTimelineWidth = Math.max(width - columnWidth, 1)
-  const fullTimelineWidth = timelineWidth || fallbackTimelineWidth
-  const sheetTimelineWidth = Math.max(0, sheetScrollWidth - columnWidth)
-  const alignedTimelineWidth =
-    showSheetPane && sheetTimelineWidth > 0
-      ? Math.min(fullTimelineWidth, sheetTimelineWidth)
-      : fullTimelineWidth
-  const reservedScrollbarGutterWidth = Math.max(0, fullTimelineWidth - alignedTimelineWidth)
-  // The Edit lane shares the main timeline's axis. Its own grid is a couple of
-  // pixels narrower because of a border and scrollbar gutter, so using its
-  // measured width introduces a small but persistent time-to-pixel drift. Let
-  // the main viewport be authoritative whenever it is linked.
-  const hasLinkedTimelineAxis =
-    presentation === 'classic' &&
-    linkedTimelineViewportWidth !== undefined &&
-    linkedTimelineViewportWidth > 0
-  const timelineCellBorderWidth =
-    presentation === 'classic'
-      ? hasLinkedTimelineAxis
-        ? 0
-        : 1
-      : presentation === 'lanes'
-        ? 1
-        : 0
-  const effectiveTimelineWidth = Math.max(
-    hasLinkedTimelineAxis
-      ? linkedTimelineViewportWidth
-      : alignedTimelineWidth - timelineCellBorderWidth,
-    1,
-  )
-  const timelineEdgeInset = presentation === 'classic' ? 0 : undefined
-  const timelinePixelsPerSecond = useMemo(
-    () => (effectiveTimelineWidth / frameRange) * fps,
-    [effectiveTimelineWidth, frameRange, fps],
-  )
-  const getLiveDragPixelsPerFrame = useCallback(
-    () =>
-      getDopesheetDragPixelsPerFrame(getTimelineLivePixelsPerSecond, timelinePixelsPerSecond, fps),
-    [fps, getTimelineLivePixelsPerSecond, timelinePixelsPerSecond],
   )
 
   useLivePixelGeometrySync({
@@ -870,10 +840,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       timelineScrollContainerRef,
     ],
   )
-
-  const propertyGridStyle = useMemo(() => {
-    return { gridTemplateColumns: `${columnWidth}px 1fr` }
-  }, [columnWidth])
 
   const selectedRefs = useMemo(() => {
     const refs: KeyframeRef[] = []
