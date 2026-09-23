@@ -11,20 +11,22 @@
  * progress reporting and cancellation.
  */
 
-import type { CompositionInputProps, SubtitleExportMode } from '@/types/export'
+import type { CompositionInputProps } from '@/types/export'
 import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer'
-import { createOutputFormat, getDefaultAudioCodec, getMimeType } from './client-renderer'
+import { createOutputFormat, getMimeType } from './client-renderer'
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source'
 import { createLogger } from '@/shared/logging/logger'
 import { ensureAudioEncoderSupport } from '@/shared/media/audio-encoder-support'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
 import { getPacketRemuxPlan } from './packet-remux-plan'
-import {
-  buildTranscriptSubtitleWebVtt,
-  omitTranscriptSubtitleItemsForSoftSubtitleExport,
-  resolveSubtitleExportPlan,
-} from './embedded-subtitle-export'
 import { createExportOutputTarget } from './export-output-target'
+import {
+  resolveAudioOnlyCodec,
+  resolveMuxedAudioCodec,
+  resolveRenderScalePlan,
+  resolveTranscriptSubtitleExport,
+  shouldUseWindowedAudioProcessing,
+} from './render-export-policy'
 
 // Subsystems
 import { createCompositionRenderer } from './client-render-engine'
@@ -209,14 +211,6 @@ async function feedAudioPacketCopy(params: {
   }
 }
 
-function getAudioOnlyCodec(
-  container: ClientExportSettings['container'],
-): 'mp3' | 'aac' | 'pcm-s16' {
-  if (container === 'mp3') return 'mp3'
-  if (container === 'aac') return 'aac'
-  return 'pcm-s16'
-}
-
 async function registerMp3EncoderIfNeeded(container: ClientExportSettings['container']) {
   if (container !== 'mp3') return
   try {
@@ -245,6 +239,54 @@ async function assertAudioOnlyEncoderSupported(
     )
   }
   getLog().info(`Using ${codec.toUpperCase()} codec`)
+}
+
+/**
+ * Build the encoded audio track for a video export: pick the container's
+ * muxable codec, confirm this browser can encode it, then construct and
+ * register the sample source. The caller keeps ownership of the output target,
+ * so a failure here just throws into its existing discard-and-rethrow handling.
+ */
+async function addEncodedAudioTrack(params: {
+  output: InstanceType<MediabunnyModule['Output']>
+  AudioSampleSource: MediabunnyModule['AudioSampleSource']
+  settings: ClientExportSettings
+  durationSeconds: number
+  useWindowedAudio: boolean
+}): Promise<InstanceType<MediabunnyModule['AudioSampleSource']>> {
+  const { output, AudioSampleSource, settings, durationSeconds, useWindowedAudio } = params
+
+  // Select the container-compatible audio codec for the muxer.
+  const audioCodec = resolveMuxedAudioCodec(settings.container)
+  const supported = await ensureAudioEncoderSupport(audioCodec, {
+    bitrate: settings.audioBitrate ?? 192_000,
+    numberOfChannels: 2,
+    sampleRate: 48_000,
+  })
+  if (!supported) {
+    throw new Error(
+      `${audioCodec.toUpperCase()} audio encoding is not supported in this browser. ` +
+        'Choose WebM or MKV with Opus audio.',
+    )
+  }
+
+  // Create audio source for encoding
+  const audioSource = new AudioSampleSource({
+    codec: audioCodec,
+    bitrate: settings.audioBitrate ?? 192000,
+  })
+
+  // Add audio track to output (audio data fed after start())
+  output.addAudioTrack(audioSource)
+  getLog().info('Audio track added to output', {
+    duration: durationSeconds,
+    channels: 2,
+    sampleRate: 48_000,
+    codec: audioCodec,
+    windowed: useWindowedAudio,
+  })
+
+  return audioSource
 }
 
 export interface RenderEngineOptions {
@@ -506,10 +548,11 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   })
 
   const compositionHasAudio = await canvasAudio.hasAudioContent(composition)
-  const useWindowedAudio =
-    compositionHasAudio &&
-    durationInFrames / fps >= 5 * 60 &&
-    canvasAudio.supportsWindowedAudioProcessing(composition)
+  const useWindowedAudio = shouldUseWindowedAudioProcessing({
+    hasAudioContent: compositionHasAudio,
+    durationSeconds,
+    supportsWindowedProcessing: () => canvasAudio.supportsWindowedAudioProcessing(composition),
+  })
 
   onProgress({
     phase: 'preparing',
@@ -539,20 +582,17 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   })
 
   // Subtitle handling per mode — see resolveSubtitleExportPlan for the matrix.
-  const subtitleMode: SubtitleExportMode = settings.subtitleMode ?? 'burn'
-  const transcriptSubtitleVtt =
-    subtitleMode === 'embedded' ? buildTranscriptSubtitleWebVtt(composition) : null
-  const { embedTranscriptSubtitles, burnInSubtitles, fallbackToBurnIn } = resolveSubtitleExportPlan(
-    {
-      subtitleMode,
-      container: settings.container,
-      supportsWebVttSubtitles: format.getSupportedSubtitleCodecs().includes('webvtt'),
-      hasTranscriptVtt: transcriptSubtitleVtt !== null,
-    },
-  )
-  const renderCompositionInput = burnInSubtitles
-    ? composition
-    : omitTranscriptSubtitleItemsForSoftSubtitleExport(composition)
+  const {
+    embedTranscriptSubtitles,
+    fallbackToBurnIn,
+    transcriptSubtitleVtt,
+    renderCompositionInput,
+  } = resolveTranscriptSubtitleExport({
+    composition,
+    subtitleMode: settings.subtitleMode,
+    container: settings.container,
+    supportsWebVttSubtitles: format.getSupportedSubtitleCodecs().includes('webvtt'),
+  })
 
   if (fallbackToBurnIn) {
     getLog().warn(
@@ -576,16 +616,10 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     })
   }
 
-  // Get composition (project) resolution – this is what we render at
-  const compositionWidth = renderCompositionInput.width ?? settings.resolution.width
-  const compositionHeight = renderCompositionInput.height ?? settings.resolution.height
-
-  // Export resolution – this is what we output (may be different from composition)
-  const exportWidth = settings.resolution.width
-  const exportHeight = settings.resolution.height
-
-  // Check if we need to scale (export resolution differs from composition)
-  const needsScaling = exportWidth !== compositionWidth || exportHeight !== compositionHeight
+  // Get composition (project) resolution – this is what we render at, and the
+  // export resolution we output, plus whether the two differ.
+  const { compositionWidth, compositionHeight, exportWidth, exportHeight, needsScaling } =
+    resolveRenderScalePlan(renderCompositionInput, settings.resolution)
 
   getLog().info('Resolution settings', {
     composition: { width: compositionWidth, height: compositionHeight },
@@ -652,39 +686,12 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     getLog().info('Audio will be copied without decoding or re-encoding')
   } else if (compositionHasAudio) {
     try {
-      // Select the container-compatible audio codec for the muxer.
-      const audioCodec = getDefaultAudioCodec(settings.container)
-      if (audioCodec !== 'aac' && audioCodec !== 'opus') {
-        throw new Error(
-          `Unsupported audio codec ${audioCodec} for ${settings.container.toUpperCase()} export`,
-        )
-      }
-      const supported = await ensureAudioEncoderSupport(audioCodec, {
-        bitrate: settings.audioBitrate ?? 192_000,
-        numberOfChannels: 2,
-        sampleRate: 48_000,
-      })
-      if (!supported) {
-        throw new Error(
-          `${audioCodec.toUpperCase()} audio encoding is not supported in this browser. ` +
-            'Choose WebM or MKV with Opus audio.',
-        )
-      }
-
-      // Create audio source for encoding
-      audioSource = new AudioSampleSource({
-        codec: audioCodec,
-        bitrate: settings.audioBitrate ?? 192000,
-      })
-
-      // Add audio track to output (audio data fed after start())
-      output.addAudioTrack(audioSource)
-      getLog().info('Audio track added to output', {
-        duration: durationInFrames / fps,
-        channels: 2,
-        sampleRate: 48_000,
-        codec: audioCodec,
-        windowed: useWindowedAudio,
+      audioSource = await addEncodedAudioTrack({
+        output,
+        AudioSampleSource,
+        settings,
+        durationSeconds,
+        useWindowedAudio,
       })
     } catch (error) {
       getLog().error('Failed to setup audio track', { error })
@@ -1023,8 +1030,12 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     throw new Error('No audio content found in composition')
   }
 
-  const useWindowedAudio =
-    durationSeconds >= 5 * 60 && canvasAudio.supportsWindowedAudioProcessing(composition)
+  // Audio content was validated above, so only the duration/windowing gates remain.
+  const useWindowedAudio = shouldUseWindowedAudioProcessing({
+    hasAudioContent: true,
+    durationSeconds,
+    supportsWindowedProcessing: () => canvasAudio.supportsWindowedAudioProcessing(composition),
+  })
 
   onProgress({
     phase: 'preparing',
@@ -1033,7 +1044,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     message: 'Creating encoder...',
   })
 
-  const audioCodec = getAudioOnlyCodec(settings.container)
+  const audioCodec = resolveAudioOnlyCodec(settings.container)
   const audioBitrate = settings.audioBitrate ?? 192_000
   await assertAudioOnlyEncoderSupported(audioCodec, audioBitrate)
 
