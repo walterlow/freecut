@@ -19,12 +19,21 @@ import { cn } from '@/shared/ui/cn'
 import { updateItem } from '@/features/editor/deps/timeline-store'
 import { useGizmoStore } from '@/features/editor/deps/preview'
 import { type TimelineItem } from '@/types/timeline'
-import type { ResolvedAudioEqSettings } from '@/types/audio'
 import { NumberInput } from '../components'
 import { RotaryKnob } from '@/shared/ui/property-controls/rotary-knob'
-import { demixValue, getMixedValue } from '../utils/mixed-value'
+import { demixValue } from '../utils/mixed-value'
 import { AudioEqCurveEditor, type AudioEqPatch } from './audio-eq-curve-editor'
 import { getAudioSectionItems } from './audio-section-utils'
+import {
+  formatFrequencyRangeLabel,
+  formatOutputGainDb,
+  getEffectiveGainBandControlRangeId,
+  getEqControlsDisabled,
+  getEqPresetPlaceholder,
+  hasMixedEqDisplayValues,
+  resolveEqDisplayValues,
+  roundOutputGainDb,
+} from './audio-eq-panel-values'
 import {
   AUDIO_EQ_BAND1_FILTER_OPTIONS,
   AUDIO_EQ_BAND6_FILTER_OPTIONS,
@@ -37,7 +46,6 @@ import {
   buildTimelineEqPatchFromResolvedSettings,
   clampFrequencyToAudioEqControlRange,
   getAudioEqControlRangeById,
-  inferAudioEqControlRangeId,
   normalizeUiEqPatch,
   toTimelineEqPatch,
   type AudioEqControlRangeId,
@@ -172,13 +180,6 @@ function SlopeButtons({
   )
 }
 
-function formatFrequencyRangeLabel(frequencyHz: number): string {
-  if (frequencyHz >= 1000) {
-    return `${(frequencyHz / 1000).toFixed(1)}K`
-  }
-  return `${Math.round(frequencyHz)}`
-}
-
 function RangeButtons({
   value,
   onChange,
@@ -244,54 +245,6 @@ function QFactorControl({
       </div>
     </>
   )
-}
-
-function getEffectiveGainBandControlRangeId(
-  selectedRangeId: AudioEqControlRangeId,
-  frequencyHz: number | 'mixed',
-  preferredRangeId: AudioEqControlRangeId,
-): AudioEqControlRangeId {
-  if (frequencyHz === 'mixed') return preferredRangeId
-  const selectedRange = getAudioEqControlRangeById(selectedRangeId)
-  if (frequencyHz >= selectedRange.minFrequencyHz && frequencyHz <= selectedRange.maxFrequencyHz) {
-    return selectedRangeId
-  }
-  return inferAudioEqControlRangeId(frequencyHz, preferredRangeId)
-}
-
-function clampOutputGainDb(value: number): number {
-  if (!Number.isFinite(value)) return 0
-  return Math.max(AUDIO_EQ_GAIN_DB_MIN, Math.min(AUDIO_EQ_GAIN_DB_MAX, value))
-}
-
-/**
- * Resolves one EQ display value with live-preview priority: live patch edits
- * win, then track settings, then the mixed multi-clip value.
- * `resolveAudioEqSettings` always fills every field, so a present track object
- * never falls through to the mixed value. Key pairings below are moved
- * verbatim from the previous inline expressions.
- */
-function resolveEqDisplayValue<TValue>(
-  livePatch: AudioEqPatch | null,
-  liveKey: keyof AudioEqPatch,
-  resolvedTrackEq: ResolvedAudioEqSettings | null,
-  trackKey: keyof ResolvedAudioEqSettings,
-  itemSettings: ResolvedAudioEqSettings[],
-  getItemValue: (item: ResolvedAudioEqSettings) => TValue | undefined,
-  fallback: TValue,
-) {
-  const liveValue = livePatch?.[liveKey] as unknown as TValue | undefined
-  const trackValue = resolvedTrackEq?.[trackKey] as unknown as TValue | undefined
-  return liveValue ?? trackValue ?? getMixedValue(itemSettings, getItemValue, fallback)
-}
-
-function roundOutputGainDb(value: number): number {
-  return Math.round(clampOutputGainDb(value) * 10) / 10
-}
-
-function formatOutputGainDb(value: number | 'mixed'): string {
-  if (value === 'mixed') return 'Mixed'
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`
 }
 
 interface EqOutputGainControlProps {
@@ -972,303 +925,45 @@ export function AudioEqPanelContent({
     setGainBandControlRanges(DEFAULT_GAIN_BAND_CONTROL_RANGES)
   }, [targetLabel])
 
-  const eqOutputGainDb = resolveEqDisplayValue(
-    livePatch,
-    'audioEqOutputGainDb',
-    resolvedTrackEq,
-    'outputGainDb',
-    resolvedItemEqSettings,
-    (item) => item.outputGainDb,
-    0,
+  const eqValues = useMemo(
+    () => resolveEqDisplayValues(livePatch, resolvedTrackEq, resolvedItemEqSettings),
+    [livePatch, resolvedTrackEq, resolvedItemEqSettings],
   )
-  const eqBand1Enabled = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand1Enabled',
-    resolvedTrackEq,
-    'band1Enabled',
-    resolvedItemEqSettings,
-    (item) => item.band1Enabled,
-    false,
-  )
-  const eqBand1Type = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand1Type',
-    resolvedTrackEq,
-    'band1Type',
-    resolvedItemEqSettings,
-    (item) => item.band1Type,
-    'high-pass',
-  )
-  const eqBand1FrequencyHz = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand1FrequencyHz',
-    resolvedTrackEq,
-    'band1FrequencyHz',
-    resolvedItemEqSettings,
-    (item) => item.band1FrequencyHz,
-    AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
-  )
-  const eqBand1GainDb = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand1GainDb',
-    resolvedTrackEq,
-    'band1GainDb',
-    resolvedItemEqSettings,
-    (item) => item.band1GainDb,
-    0,
-  )
-  const eqBand1Q = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand1Q',
-    resolvedTrackEq,
-    'band1Q',
-    resolvedItemEqSettings,
-    (item) => item.band1Q,
-    AUDIO_EQ_LOW_MID_Q,
-  )
-  const eqBand1SlopeDbPerOct = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand1SlopeDbPerOct',
-    resolvedTrackEq,
-    'band1SlopeDbPerOct',
-    resolvedItemEqSettings,
-    (item) => item.band1SlopeDbPerOct,
-    12,
-  )
-  const eqLowEnabled = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowEnabled',
-    resolvedTrackEq,
-    'lowEnabled',
-    resolvedItemEqSettings,
-    (item) => item.lowEnabled,
-    true,
-  )
-  const eqLowType = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowType',
-    resolvedTrackEq,
-    'lowType',
-    resolvedItemEqSettings,
-    (item) => item.lowType,
-    'low-shelf',
-  )
-  const eqLow = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowGainDb',
-    resolvedTrackEq,
-    'lowGainDb',
-    resolvedItemEqSettings,
-    (item) => item.lowGainDb,
-    0,
-  )
-  const eqLowFrequencyHz = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowFrequencyHz',
-    resolvedTrackEq,
-    'lowFrequencyHz',
-    resolvedItemEqSettings,
-    (item) => item.lowFrequencyHz,
-    AUDIO_EQ_LOW_FREQUENCY_HZ,
-  )
-  const eqLowQ = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowQ',
-    resolvedTrackEq,
-    'lowQ',
-    resolvedItemEqSettings,
-    (item) => item.lowQ,
-    AUDIO_EQ_LOW_MID_Q,
-  )
-  const eqLowMidEnabled = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowMidEnabled',
-    resolvedTrackEq,
-    'lowMidEnabled',
-    resolvedItemEqSettings,
-    (item) => item.lowMidEnabled,
-    true,
-  )
-  const eqLowMidType = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowMidType',
-    resolvedTrackEq,
-    'lowMidType',
-    resolvedItemEqSettings,
-    (item) => item.lowMidType,
-    'peaking',
-  )
-  const eqLowMid = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowMidGainDb',
-    resolvedTrackEq,
-    'lowMidGainDb',
-    resolvedItemEqSettings,
-    (item) => item.lowMidGainDb,
-    0,
-  )
-  const eqLowMidFrequencyHz = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowMidFrequencyHz',
-    resolvedTrackEq,
-    'lowMidFrequencyHz',
-    resolvedItemEqSettings,
-    (item) => item.lowMidFrequencyHz,
-    AUDIO_EQ_LOW_MID_FREQUENCY_HZ,
-  )
-  const eqLowMidQ = resolveEqDisplayValue(
-    livePatch,
-    'audioEqLowMidQ',
-    resolvedTrackEq,
-    'lowMidQ',
-    resolvedItemEqSettings,
-    (item) => item.lowMidQ,
-    AUDIO_EQ_LOW_MID_Q,
-  )
-  const eqHighMidEnabled = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighMidEnabled',
-    resolvedTrackEq,
-    'highMidEnabled',
-    resolvedItemEqSettings,
-    (item) => item.highMidEnabled,
-    true,
-  )
-  const eqHighMidType = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighMidType',
-    resolvedTrackEq,
-    'highMidType',
-    resolvedItemEqSettings,
-    (item) => item.highMidType,
-    'peaking',
-  )
-  const eqHighMid = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighMidGainDb',
-    resolvedTrackEq,
-    'highMidGainDb',
-    resolvedItemEqSettings,
-    (item) => item.highMidGainDb,
-    0,
-  )
-  const eqHighMidFrequencyHz = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighMidFrequencyHz',
-    resolvedTrackEq,
-    'highMidFrequencyHz',
-    resolvedItemEqSettings,
-    (item) => item.highMidFrequencyHz,
-    AUDIO_EQ_HIGH_MID_FREQUENCY_HZ,
-  )
-  const eqHighMidQ = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighMidQ',
-    resolvedTrackEq,
-    'highMidQ',
-    resolvedItemEqSettings,
-    (item) => item.highMidQ,
-    AUDIO_EQ_HIGH_MID_Q,
-  )
-  const eqHighEnabled = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighEnabled',
-    resolvedTrackEq,
-    'highEnabled',
-    resolvedItemEqSettings,
-    (item) => item.highEnabled,
-    true,
-  )
-  const eqHighType = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighType',
-    resolvedTrackEq,
-    'highType',
-    resolvedItemEqSettings,
-    (item) => item.highType,
-    'high-shelf',
-  )
-  const eqHigh = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighGainDb',
-    resolvedTrackEq,
-    'highGainDb',
-    resolvedItemEqSettings,
-    (item) => item.highGainDb,
-    0,
-  )
-  const eqHighFrequencyHz = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighFrequencyHz',
-    resolvedTrackEq,
-    'highFrequencyHz',
-    resolvedItemEqSettings,
-    (item) => item.highFrequencyHz,
-    AUDIO_EQ_HIGH_FREQUENCY_HZ,
-  )
-  const eqHighQ = resolveEqDisplayValue(
-    livePatch,
-    'audioEqHighQ',
-    resolvedTrackEq,
-    'highQ',
-    resolvedItemEqSettings,
-    (item) => item.highQ,
-    AUDIO_EQ_HIGH_MID_Q,
-  )
-  const eqBand6Enabled = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand6Enabled',
-    resolvedTrackEq,
-    'band6Enabled',
-    resolvedItemEqSettings,
-    (item) => item.band6Enabled,
-    false,
-  )
-  const eqBand6Type = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand6Type',
-    resolvedTrackEq,
-    'band6Type',
-    resolvedItemEqSettings,
-    (item) => item.band6Type,
-    'low-pass',
-  )
-  const eqBand6FrequencyHz = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand6FrequencyHz',
-    resolvedTrackEq,
-    'band6FrequencyHz',
-    resolvedItemEqSettings,
-    (item) => item.band6FrequencyHz,
-    AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
-  )
-  const eqBand6GainDb = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand6GainDb',
-    resolvedTrackEq,
-    'band6GainDb',
-    resolvedItemEqSettings,
-    (item) => item.band6GainDb,
-    0,
-  )
-  const eqBand6Q = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand6Q',
-    resolvedTrackEq,
-    'band6Q',
-    resolvedItemEqSettings,
-    (item) => item.band6Q,
-    AUDIO_EQ_HIGH_MID_Q,
-  )
-  const eqBand6SlopeDbPerOct = resolveEqDisplayValue(
-    livePatch,
-    'audioEqBand6SlopeDbPerOct',
-    resolvedTrackEq,
-    'band6SlopeDbPerOct',
-    resolvedItemEqSettings,
-    (item) => item.band6SlopeDbPerOct,
-    12,
-  )
+  const {
+    outputGainDb: eqOutputGainDb,
+    band1Enabled: eqBand1Enabled,
+    band1Type: eqBand1Type,
+    band1FrequencyHz: eqBand1FrequencyHz,
+    band1GainDb: eqBand1GainDb,
+    band1Q: eqBand1Q,
+    band1SlopeDbPerOct: eqBand1SlopeDbPerOct,
+    lowEnabled: eqLowEnabled,
+    lowType: eqLowType,
+    lowGainDb: eqLow,
+    lowFrequencyHz: eqLowFrequencyHz,
+    lowQ: eqLowQ,
+    lowMidEnabled: eqLowMidEnabled,
+    lowMidType: eqLowMidType,
+    lowMidGainDb: eqLowMid,
+    lowMidFrequencyHz: eqLowMidFrequencyHz,
+    lowMidQ: eqLowMidQ,
+    highMidEnabled: eqHighMidEnabled,
+    highMidType: eqHighMidType,
+    highMidGainDb: eqHighMid,
+    highMidFrequencyHz: eqHighMidFrequencyHz,
+    highMidQ: eqHighMidQ,
+    highEnabled: eqHighEnabled,
+    highType: eqHighType,
+    highGainDb: eqHigh,
+    highFrequencyHz: eqHighFrequencyHz,
+    highQ: eqHighQ,
+    band6Enabled: eqBand6Enabled,
+    band6Type: eqBand6Type,
+    band6FrequencyHz: eqBand6FrequencyHz,
+    band6GainDb: eqBand6GainDb,
+    band6Q: eqBand6Q,
+    band6SlopeDbPerOct: eqBand6SlopeDbPerOct,
+  } = eqValues
   // Pre-resolved band type/enabled states shared by the band cards below, so
   // the per-card JSX does not re-derive the same 'mixed' fallbacks.
   const eqBand1TypeOrDefault = demixValue(eqBand1Type, 'high-pass')
@@ -1310,43 +1005,14 @@ export function AudioEqPanelContent({
   const highMidRange = getAudioEqControlRangeById(highMidRangeId)
   const highRange = getAudioEqControlRangeById(highRangeId)
 
-  const hasMixedEqSettings = [
-    eqOutputGainDb,
-    eqBand1Enabled,
-    eqBand1Type,
-    eqBand1FrequencyHz,
-    eqBand1GainDb,
-    eqBand1Q,
-    eqBand1SlopeDbPerOct,
-    eqLowEnabled,
-    eqLowType,
-    eqLow,
-    eqLowFrequencyHz,
-    eqLowQ,
-    eqLowMidEnabled,
-    eqLowMidType,
-    eqLowMid,
-    eqLowMidFrequencyHz,
-    eqLowMidQ,
-    eqHighMidEnabled,
-    eqHighMidType,
-    eqHighMid,
-    eqHighMidFrequencyHz,
-    eqHighMidQ,
-    eqHighEnabled,
-    eqHighType,
-    eqHigh,
-    eqHighFrequencyHz,
-    eqHighQ,
-    eqBand6Enabled,
-    eqBand6Type,
-    eqBand6FrequencyHz,
-    eqBand6GainDb,
-    eqBand6Q,
-    eqBand6SlopeDbPerOct,
-  ].some((value) => value === 'mixed')
+  const hasMixedEqValues = hasMixedEqDisplayValues(eqValues)
 
-  const eqControlsDisabled = hasMixedEqSettings || (isCompactLayout ? !clipEqEnabled : !eqEnabled)
+  const eqControlsDisabled = getEqControlsDisabled(
+    hasMixedEqValues,
+    isCompactLayout,
+    eqEnabled,
+    clipEqEnabled,
+  )
 
   const eqCurveSettings = useMemo(
     () =>
@@ -1423,15 +1089,11 @@ export function AudioEqPanelContent({
     ],
   )
   const selectedEqPresetId = useMemo(
-    () => (hasMixedEqSettings ? null : findAudioEqPresetId(eqCurveSettings)),
-    [eqCurveSettings, hasMixedEqSettings],
+    () => (hasMixedEqValues ? null : findAudioEqPresetId(eqCurveSettings)),
+    [eqCurveSettings, hasMixedEqValues],
   )
 
-  const eqPresetPlaceholder = hasMixedEqSettings
-    ? 'Mixed'
-    : selectedEqPresetId
-      ? (getAudioEqPresetById(selectedEqPresetId)?.label ?? 'Custom')
-      : 'Custom'
+  const eqPresetPlaceholder = getEqPresetPlaceholder(hasMixedEqValues, selectedEqPresetId)
 
   const previewThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingPreviewRef = useRef<AudioEqPatch | null>(null)
