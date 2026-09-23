@@ -42,7 +42,6 @@ import {
 import { getSourceDimensions, resolveTransform } from '@/features/editor/deps/composition-runtime'
 import {
   getAnimatablePropertiesForItem,
-  getKeyframePropertyLabel,
   getMotionPresetAnchorFrame,
   MOTION_MODULATORS,
   MOTION_PRESET_CATEGORIES,
@@ -80,6 +79,10 @@ import {
   hasVisibleMotionResults,
   isMotionClipSelection,
 } from './motion-library-status'
+import {
+  collectKeyframeApplications,
+  summarizeManualKeyframes,
+} from './motion-clip-summary'
 import { MotionPresetStages } from './motion-preset-stages'
 import { SavedAnimationList } from './saved-animation-list'
 import type { ModifierEditSettings } from './continuous-motion-row'
@@ -755,69 +758,14 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
   )
 
   // --- "Applied to this clip" summary (state the panel otherwise hides) ---
-  const keyframeApplications = useMemo(() => {
-    const applications = new Map<
-      string,
-      {
-        source: NonNullable<import('@/types/keyframe').Keyframe['source']>
-        properties: Set<string>
-        keyframeCount: number
-        firstFrame: number
-      }
-    >()
-    const add = (
-      propertyLabel: string,
-      frame: number,
-      source: import('@/types/keyframe').Keyframe['source'],
-    ) => {
-      if (!source) return
-      const current = applications.get(source.applicationId) ?? {
-        source,
-        properties: new Set<string>(),
-        keyframeCount: 0,
-        firstFrame: frame,
-      }
-      current.properties.add(propertyLabel)
-      current.keyframeCount += 1
-      current.firstFrame = Math.min(current.firstFrame, frame)
-      applications.set(source.applicationId, current)
-    }
-    for (const property of selectedItemKeyframes?.properties ?? []) {
-      const label = getKeyframePropertyLabel(t, property.property)
-      for (const keyframe of property.keyframes) add(label, keyframe.frame, keyframe.source)
-    }
-    for (const property of selectedItemKeyframes?.vectorProperties ?? []) {
-      const label = t(`editor.animateStages.vectorProperties.${property.property}`)
-      for (const keyframe of property.keyframes) add(label, keyframe.frame, keyframe.source)
-    }
-    return [...applications.values()]
-  }, [selectedItemKeyframes, t])
-  const manualKeyframeSummary = useMemo(() => {
-    const properties = new Set<string>()
-    let keyframeCount = 0
-    let firstFrame = Number.POSITIVE_INFINITY
-    for (const property of selectedItemKeyframes?.properties ?? []) {
-      const manualKeyframes = property.keyframes.filter((keyframe) => !keyframe.source)
-      const count = manualKeyframes.length
-      if (count === 0) continue
-      properties.add(getKeyframePropertyLabel(t, property.property))
-      keyframeCount += count
-      for (const keyframe of manualKeyframes) firstFrame = Math.min(firstFrame, keyframe.frame)
-    }
-    for (const property of selectedItemKeyframes?.vectorProperties ?? []) {
-      const manualKeyframes = property.keyframes.filter((keyframe) => !keyframe.source)
-      const count = manualKeyframes.length
-      if (count === 0) continue
-      properties.add(t(`editor.animateStages.vectorProperties.${property.property}`))
-      keyframeCount += count
-      for (const keyframe of manualKeyframes) firstFrame = Math.min(firstFrame, keyframe.frame)
-    }
-    return {
-      properties: [...properties],
-      keyframeCount,
-      firstFrame: Number.isFinite(firstFrame) ? firstFrame : null,
-    }
-  }, [selectedItemKeyframes, t])
+  const keyframeApplications = useMemo(
+    () => collectKeyframeApplications(selectedItemKeyframes, t),
+    [selectedItemKeyframes, t],
+  )
+  const manualKeyframeSummary = useMemo(
+    () => summarizeManualKeyframes(selectedItemKeyframes, t),
+    [selectedItemKeyframes, t],
+  )
   const trimmedKeyframeCount = useMemo(
     () =>
       selectedItem

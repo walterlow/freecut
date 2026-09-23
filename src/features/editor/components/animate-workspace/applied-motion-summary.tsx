@@ -2,26 +2,15 @@ import { memo } from 'react'
 import type { TextMotionEffect, TextMotionSlot } from '@/types/text-motion'
 import type { TimelineItem } from '@/types/timeline'
 import type { CanvasSettings } from '@/types/transform'
-import type { Keyframe } from '@/types/keyframe'
 import { getTextMotionPreset } from '@/shared/typography/text-motion'
 import { AppliedContinuousMotionControls } from './applied-continuous-motion-controls'
 import { AppliedMotionRow } from './applied-motion-row'
+import type {
+  KeyframeApplicationSummary,
+  ManualKeyframeSummary,
+} from './motion-clip-summary'
 
-/** Manual keyframes on the selected clip, summarised for the Applied rows. */
-export interface ManualKeyframeSummary {
-  properties: string[]
-  keyframeCount: number
-  firstFrame: number | null
-}
-
-/** One preset application (all keyframes sharing an applicationId). */
-export interface KeyframeApplicationSummary {
-  source: NonNullable<Keyframe['source']>
-  properties: Set<string>
-  keyframeCount: number
-  firstFrame: number
-}
-
+/** One live text-motion slot applied to the selected clip. */
 export interface ActiveTextMotionEntry {
   slot: TextMotionSlot
   effect: TextMotionEffect
