@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test'
 import type { Project, ProjectTimeline } from '@/types/project'
 import type { MediaMetadata } from '@/types/storage'
-import { editProject, type EditOp } from './edit'
+import { editProject } from './edit'
+import type { EditOp } from './edit-op-support'
 
 /**
  * Integration tests through the REAL timeline stores/actions (the module

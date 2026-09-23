@@ -8,14 +8,7 @@
  * storage layer is required.
  */
 import type { Project } from '@/types/project'
-import type {
-  TimelineItem,
-  TimelineTrack,
-  TextItem,
-  VideoItem,
-  AudioItem,
-  ImageItem,
-} from '@/types/timeline'
+import type { TimelineItem, VideoItem, AudioItem, ImageItem } from '@/types/timeline'
 import type { MediaMetadata } from '@/types/storage'
 import type { Transition } from '@/types/transition'
 import type { AnimatableProperty, EasingType } from '@/types/keyframe'
@@ -28,7 +21,6 @@ import {
   hydrateTimelineStoresFromProject,
   buildTimelineFromStores,
 } from '@/features/timeline/stores/timeline-persistence'
-import { useItemsStore } from '@/features/timeline/stores/items-store'
 import { useTransitionsStore } from '@/features/timeline/stores/transitions-store'
 import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store'
@@ -59,29 +51,24 @@ import { getGpuEffect } from '@/infrastructure/gpu-effects'
 
 const log = createLogger('HeadlessEdit')
 
-export type EditOperationName =
-  | 'addText'
-  | 'addItem'
-  | 'updateItem'
-  | 'moveItem'
-  | 'removeItems'
-  | 'split'
-  | 'trimStart'
-  | 'trimEnd'
-  | 'addTransition'
-  | 'updateTransition'
-  | 'removeTransition'
-  | 'addTrack'
-  | 'addClip'
-  | 'addKeyframe'
-  | 'removeKeyframes'
-  | 'setTransformParent'
-  | 'addEffect'
-  | 'removeEffect'
-  | 'setTransform'
-
-/** A wire operation. Node validates its discriminator and fields before this browser boundary. */
-export type EditOp = Record<string, unknown> & { op: EditOperationName }
+import {
+  type EditOp,
+  type EditOperationName,
+  assertTransitionUpdateApplied,
+  asNumber,
+  asString,
+  buildTextItem,
+  getEditCanvas,
+  getOrCreateTrack,
+  newId,
+  resolveOrCreateTrack,
+  requireItem,
+  requireTrack,
+  requireTransition,
+  setEditCanvas,
+  sourceFieldsFor,
+  tracks,
+} from './edit-op-support'
 
 export interface HeadlessEditInput {
   project: Project
@@ -151,143 +138,6 @@ function resolveOperationRefs(
     return value
   }
   return visit(op) as EditOp
-}
-
-// Canvas of the project being edited (set per editProject call) — transform-parent
-// binds resolve world transforms against it.
-let editCanvas = { width: 1920, height: 1080, fps: 30 }
-
-const asString = (value: unknown, fallback?: string): string | undefined =>
-  typeof value === 'string' ? value : fallback
-const asNumber = (value: unknown, fallback?: number): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value : fallback
-
-function tracks(): TimelineTrack[] {
-  return useItemsStore.getState().tracks
-}
-
-function requireItem(id: string, field = 'id'): TimelineItem {
-  const item = useItemsStore.getState().itemById[id]
-  if (!item) throw new Error(`${field}: item "${id}" does not exist`)
-  return item
-}
-
-function requireTransition(id: string, field = 'id'): Transition {
-  const transition = useTransitionsStore.getState().transitions.find((t) => t.id === id)
-  if (!transition) throw new Error(`${field}: transition "${id}" does not exist`)
-  return transition
-}
-
-/**
- * Confirm an `updateTransition` actually landed.
- *
- * `updateTransition` runs handle validation for `durationInFrames` / `alignment`
- * and, on rejection, only logs — its signature is `void`, so a caller cannot tell
- * a rejected edit from an applied one. Comparing against the post-update state
- * catches every rejection path, present and future, without changing the shared
- * store API.
- */
-function assertTransitionUpdateApplied(
-  id: string,
-  updates: Parameters<typeof updateTransition>[1],
-): void {
-  const applied = requireTransition(id)
-  const rejected = Object.entries(updates)
-    .filter(([field, requested]) => {
-      const actual = (applied as unknown as Record<string, unknown>)[field]
-      // `properties` is a plain object; the rest are scalars.
-      return JSON.stringify(actual) !== JSON.stringify(requested)
-    })
-    .map(([field, requested]) => `${field}=${JSON.stringify(requested)}`)
-
-  if (rejected.length === 0) return
-  throw new Error(
-    `updateTransition("${id}") was rejected: ${rejected.join(', ')} — the transition is unchanged. ` +
-      'Duration and alignment must fit the handles available on both clips.',
-  )
-}
-
-function requireTrack(id: string, field = 'trackId'): TimelineTrack {
-  const track = tracks().find((candidate) => candidate.id === id)
-  if (!track) throw new Error(`${field}: track "${id}" does not exist`)
-  if (track.isGroup) throw new Error(`${field}: track "${id}" is a group and cannot contain items`)
-  return track
-}
-
-/** Resolve a usable trackId: the requested one if it exists, else the first non-group video track. */
-function resolveTrackId(preferred: unknown, kind: 'video' | 'audio' = 'video'): string {
-  const all = tracks()
-  const requested = asString(preferred)
-  if (requested) {
-    const track = requireTrack(requested)
-    if ((track.kind ?? 'video') !== kind)
-      throw new Error(`trackId: track "${requested}" is not ${kind}`)
-    return requested
-  }
-  const match = all.find((t) => !t.isGroup && (t.kind ?? 'video') === kind)
-  const fallback = match ?? all.find((t) => !t.isGroup)
-  if (!fallback) throw new Error('No track available to place item on (add a track first)')
-  return fallback.id
-}
-
-function newId(): string {
-  return crypto.randomUUID()
-}
-
-/** Find a non-group track of the given kind, or create one (video on top, audio at bottom). */
-function getOrCreateTrack(kind: 'video' | 'audio'): string {
-  const all = tracks()
-  const existing = all.find((t) => !t.isGroup && (t.kind ?? 'video') === kind)
-  if (existing) return existing.id
-  const orders = all.map((t) => t.order)
-  const order = kind === 'video' ? Math.min(0, ...orders) - 1 : Math.max(0, ...orders) + 1
-  const track = createClassicTrack({ tracks: all, kind, order })
-  setTracks([...all, track])
-  return track.id
-}
-
-/** The requested track if it exists, else find-or-create one of the given kind. */
-function resolveOrCreateTrack(preferred: unknown, kind: 'video' | 'audio'): string {
-  const requested = asString(preferred)
-  if (requested) {
-    const track = requireTrack(requested)
-    if ((track.kind ?? 'video') !== kind)
-      throw new Error(`trackId: track "${requested}" is not ${kind}`)
-    return requested
-  }
-  return getOrCreateTrack(kind)
-}
-
-/** Source-frame fields for a media clip (source* are in source-native fps). */
-function sourceFieldsFor(media: MediaMetadata, projectFps: number) {
-  const sourceFps = media.fps && media.fps > 0 ? media.fps : projectFps
-  const durationSec = media.duration ?? 0
-  const sourceEnd = Math.max(1, Math.round(durationSec * sourceFps))
-  return { sourceFps, sourceStart: 0, sourceEnd, sourceDuration: sourceEnd, speed: 1 }
-}
-
-function buildTextItem(op: EditOp): TextItem {
-  return {
-    id: asString(op.id) ?? newId(),
-    type: 'text',
-    trackId: resolveTrackId(op.trackId, 'video'),
-    from: asNumber(op.from, 0)!,
-    durationInFrames: asNumber(op.durationInFrames, 90)!,
-    label: asString(op.label) ?? 'Text',
-    text: asString(op.text) ?? 'Text',
-    color: asString(op.color) ?? '#ffffff',
-    fontSize: asNumber(op.fontSize, 80)!,
-    ...(asString(op.fontFamily) && { fontFamily: asString(op.fontFamily) }),
-    ...(op.fontWeight === 'bold' || op.fontWeight === 'semibold' || op.fontWeight === 'medium'
-      ? { fontWeight: op.fontWeight }
-      : {}),
-    ...(op.textAlign === 'left' || op.textAlign === 'center' || op.textAlign === 'right'
-      ? { textAlign: op.textAlign }
-      : {}),
-    ...(op.verticalAlign === 'top' || op.verticalAlign === 'middle' || op.verticalAlign === 'bottom'
-      ? { verticalAlign: op.verticalAlign }
-      : {}),
-  }
 }
 
 /** Apply a single op by driving the real timeline action modules. Throws on bad input. */
@@ -579,7 +429,7 @@ function applyOp(op: EditOp): unknown {
         ...(parentItemId ? { parentItemId } : {}),
         behavior: asString(op.behavior) as Parameters<typeof setTransformParent>[0]['behavior'],
         frame: asNumber(op.frame) ?? child.from,
-        canvas: editCanvas,
+        canvas: getEditCanvas(),
       })
       if (!ok) {
         throw new Error(
@@ -688,11 +538,11 @@ function applyOpTracked(
 
 export async function editProject(input: HeadlessEditInput): Promise<HeadlessEditResult> {
   const { project: migrated } = migrateProject(input.project)
-  editCanvas = {
+  setEditCanvas({
     width: migrated.metadata?.width ?? 1920,
     height: migrated.metadata?.height ?? 1080,
     fps: migrated.metadata?.fps ?? 30,
-  }
+  })
   await hydrateTimelineStoresFromProject(migrated)
   seedMediaLibrary(input.media)
 
