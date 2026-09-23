@@ -15,13 +15,6 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe'
-import { getFrameAxisX, getFrameFromAxisX, getVisibleKeyframeX } from './layout'
-import {
-  buildDopesheetTicks,
-  buildMarqueeKeyframePoints,
-  buildRenderedKeyframeXById,
-  buildRenderedSheetEntries,
-} from './dopesheet-sheet-geometry'
 import { CompactNavigator } from './compact-navigator'
 
 import { DopesheetGraphPane } from './dopesheet-graph-pane'
@@ -36,6 +29,7 @@ import { useDopesheetViewport } from './use-dopesheet-viewport'
 import { useDopesheetPropertyDerivations } from './use-dopesheet-property-derivations'
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
 import { useDopesheetSheetMetrics } from './use-dopesheet-sheet-metrics'
+import { useDopesheetCoordinates } from './use-dopesheet-coordinates'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
   useDopesheetPointerDispatch,
@@ -97,7 +91,6 @@ import {
 import { keyframeValueToHexColor } from '@/features/keyframes/utils/color-keyframes'
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
-import { clampFrame } from './frame-utils'
 import { getKeyframePropertyLabel } from '@/features/keyframes/utils/property-i18n'
 import type { DopesheetEditorProps } from './dopesheet-editor-props'
 
@@ -700,146 +693,46 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     hasLinkedTimelineAxis,
   })
 
-  const frameToX = useCallback(
-    (frame: number) => getFrameAxisX(frame, viewport, effectiveTimelineWidth, timelineEdgeInset),
-    [effectiveTimelineWidth, timelineEdgeInset, viewport],
-  )
-  const affectedFrameRangeGeometry = useMemo(() => {
-    if (!affectedFrameRange || affectedFrameRange.toFrame <= affectedFrameRange.fromFrame) {
-      return null
-    }
-    const rawLeft = frameToX(affectedFrameRange.fromFrame)
-    const rawRight = frameToX(affectedFrameRange.toFrame)
-    const left = Math.max(0, Math.min(effectiveTimelineWidth, rawLeft))
-    const right = Math.max(0, Math.min(effectiveTimelineWidth, rawRight))
-    if (right <= left) return null
-    return { left, width: right - left }
-  }, [affectedFrameRange, effectiveTimelineWidth, frameToX])
-  const sharedGridFrameToX = useCallback(
-    (frame: number) =>
-      getFrameAxisX(
-        frame,
-        viewport,
-        effectiveTimelineWidth + timelineCellBorderWidth,
-        0,
-      ) - timelineCellBorderWidth,
-    [effectiveTimelineWidth, timelineCellBorderWidth, viewport],
-  )
-  const getRenderedKeyframeX = useCallback(
-    (frame: number) =>
-      getVisibleKeyframeX(frame, viewport, effectiveTimelineWidth, timelineEdgeInset),
-    [effectiveTimelineWidth, timelineEdgeInset, viewport],
-  )
-  const renderedKeyframeXById = useMemo(
-    () => buildRenderedKeyframeXById(sheetRowsStructure, getRenderedKeyframeX),
-    [sheetRowsStructure, getRenderedKeyframeX],
-  )
-  const renderedSheetEntries = useMemo(
-    () =>
-      buildRenderedSheetEntries({
-        groupedSheetRows,
-        presentation,
-        textMotionBandCount: textMotionBands.length,
-        inlinePropertyGroupIdSet,
-        expandedGroups,
-      }),
-    [
-      expandedGroups,
-      groupedSheetRows,
-      inlinePropertyGroupIdSet,
-      presentation,
-      textMotionBands.length,
-    ],
-  )
+  const {
+    frameToX,
+    affectedFrameRangeGeometry,
+    sharedGridFrameToX,
+    getRenderedKeyframeX,
+    renderedKeyframeXById,
+    renderedSheetEntries,
+    getKeyframePoints,
+    getFrameFromClientX,
+    getTimelineXFromClientX,
+    getContentYFromClientY,
+    ticks,
+  } = useDopesheetCoordinates({
+    viewport,
+    effectiveTimelineWidth,
+    timelineEdgeInset,
+    timelineCellBorderWidth,
+    timelineGridDivisions,
+    timelineScrollContainerRef,
+    sheetRowsStructure,
+    groupedSheetRows,
+    presentation,
+    textMotionBandCount: textMotionBands.length,
+    inlinePropertyGroupIdSet,
+    expandedGroups,
+    isPropertyLocked,
+    affectedFrameRange,
+    timelineRef,
+    scrollAreaRef,
+    currentFrame,
+    scrubClampToItemBounds,
+    scrubFrameBounds,
+    totalFrames,
+    frameRange,
+  })
+
   useLayoutEffect(() => {
     if (presentation !== 'lanes') return
     onLaneContentHeightChange?.(renderedSheetEntries.contentHeight)
   }, [onLaneContentHeightChange, presentation, renderedSheetEntries.contentHeight])
-  // Marquee points are only needed while a selection marquee is moving.
-  // Building them eagerly duplicated the viewport-sensitive keyframe position
-  // pass on every zoom frame, even when no marquee interaction was active.
-  const getKeyframePoints = useCallback(
-    () =>
-      buildMarqueeKeyframePoints(
-        renderedSheetEntries.entries,
-        getRenderedKeyframeX,
-        renderedKeyframeXById,
-        isPropertyLocked,
-      ),
-    [getRenderedKeyframeX, isPropertyLocked, renderedKeyframeXById, renderedSheetEntries.entries],
-  )
-
-  const xToFrame = useCallback(
-    (x: number) => getFrameFromAxisX(x, viewport, effectiveTimelineWidth, timelineEdgeInset),
-    [effectiveTimelineWidth, timelineEdgeInset, viewport],
-  )
-
-  const getFrameFromClientX = useCallback(
-    (clientX: number) => {
-      const node = timelineRef.current
-      if (!node) return currentFrame
-      const rect = node.getBoundingClientRect()
-      const frame = xToFrame(clientX - rect.left - timelineCellBorderWidth)
-      if (scrubClampToItemBounds) return clampFrame(frame, totalFrames)
-      if (!scrubFrameBounds) return frame
-      return Math.max(scrubFrameBounds.minFrame, Math.min(scrubFrameBounds.maxFrame, frame))
-    },
-    [
-      currentFrame,
-      scrubClampToItemBounds,
-      scrubFrameBounds,
-      timelineCellBorderWidth,
-      totalFrames,
-      xToFrame,
-    ],
-  )
-
-  const getTimelineXFromClientX = useCallback(
-    (clientX: number) => {
-      const node = timelineRef.current
-      if (!node) return 0
-      const rect = node.getBoundingClientRect()
-      return Math.max(
-        0,
-        Math.min(effectiveTimelineWidth - 1, clientX - rect.left - timelineCellBorderWidth),
-      )
-    },
-    [effectiveTimelineWidth, timelineCellBorderWidth],
-  )
-
-  const getContentYFromClientY = useCallback(
-    (clientY: number) => {
-      const node = scrollAreaRef.current
-      if (!node) return 0
-      const rect = node.getBoundingClientRect()
-      const y = clientY - rect.top + node.scrollTop
-      const maxY = Math.max(0, renderedSheetEntries.contentHeight)
-      return Math.max(0, Math.min(maxY, y))
-    },
-    [renderedSheetEntries.contentHeight],
-  )
-
-  const ticks = useMemo(
-    () =>
-      buildDopesheetTicks({
-        startFrame: viewport.startFrame,
-        endFrame: viewport.endFrame,
-        frameRange,
-        timelineGridDivisions,
-        // Edit pans the already-rendered sheet on the compositor while expensive
-        // keyframe rows settle less frequently. Keep a generous ruler-only buffer
-        // on both sides so incoming tick marks are already present and move with
-        // the main ruler instead of appearing at the next settled React update.
-        rulerOverscanFrames: timelineScrollContainerRef ? frameRange * 2 : 0,
-      }),
-    [
-      viewport.startFrame,
-      viewport.endFrame,
-      frameRange,
-      timelineGridDivisions,
-      timelineScrollContainerRef,
-    ],
-  )
 
   const selectedRefs = useMemo(() => {
     const refs: KeyframeRef[] = []
