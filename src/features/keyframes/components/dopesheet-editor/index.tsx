@@ -14,7 +14,6 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AnimatableProperty, Keyframe } from '@/types/keyframe'
-import { CompactNavigator } from './compact-navigator'
 
 import { useGraphViewState } from './use-graph-view-state'
 import { useHeaderFrameInputs } from './use-header-frame-inputs'
@@ -55,17 +54,16 @@ import { perfMarkRender } from '@/shared/logging/perf-marks'
 import {
 } from '@/shared/timeline/main-timeline-scrub'
 
-import { DopesheetToolbar } from './dopesheet-toolbar'
 import { useDopesheetHotkeys } from './use-dopesheet-hotkeys'
 import { usePropertyExpressionEditor } from './use-property-expression-editor'
 import type { CompoundPropertyInputConfig } from './compound-property-inputs'
-import { KeyframeTimingStrip } from './keyframe-timing-strip'
 import {
   buildDopesheetAffectedFrameRangeOverlayElement,
   buildDopesheetGraphPaneElement,
   buildDopesheetHeaderFrameInputs,
   buildDopesheetSheetPaneElements,
 } from './dopesheet-pane-elements'
+import { buildDopesheetWorkspaceChrome } from './dopesheet-workspace-chrome'
 
 import {
 } from '@/features/keyframes/deps/timeline-playhead'
@@ -1039,95 +1037,28 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   // Workspace chrome: only the default shell renders these, so they are built
   // after the two exclusive shells have already returned.
-  const { inputsEnabled: headerFrameInputsEnabled, ...headerFrameInputProps } = headerFrameInputs
-  const toolbarElement = (
-      <DopesheetToolbar
-        hasAvailableProperties={availableProperties.length > 0}
-        filterKeyframedOnly={filterKeyframedOnly}
-        onToggleKeyframedOnly={() => setShowKeyframedOnly((prev) => !prev)}
-        allPropertyGroups={allPropertyGroups}
-        visibleGroups={visibleGroups}
-        onToggleVisibleGroup={toggleVisibleGroup}
-        onExpandAllGroups={() => setAllGroupsExpanded(true)}
-        onCollapseAllGroups={() => setAllGroupsExpanded(false)}
-        onResetParameterView={resetParameterView}
-        hasPropertyFilters={hasPropertyFilters}
-        showGraphPane={showGraphPane}
-        graphDisplayProperty={graphDisplayProperty}
-        compoundPropertyRows={compoundPropertyRows}
-        speedGraphContent={speedGraphContent}
-        onGraphModeChange={onGraphModeChange}
-        graphMode={graphMode}
-        keyframeCount={visibleKeyframes.length}
-        isCurrentFrameBlocked={isCurrentFrameBlocked}
-        canBakeMotion={canBakeMotion}
-        onBakeMotion={onBakeMotion}
-        headerFrameInputsEnabled={headerFrameInputsEnabled}
-        {...headerFrameInputProps}
-        interpolationOptions={interpolationOptions}
-        selectedInterpolation={selectedInterpolation}
-        interpolationDisabled={interpolationDisabled}
-        onInterpolationChange={onInterpolationChange}
-        hasSelection={selectedRefs.length > 0}
-        hasKeyframeClipboard={hasKeyframeClipboard}
-        isKeyframeClipboardCut={isKeyframeClipboardCut}
-        onCopyKeyframes={onCopyKeyframes}
-        onCutKeyframes={onCutKeyframes}
-        onPasteKeyframes={onPasteKeyframes}
-        removeKeyframesAvailable={Boolean(onRemoveKeyframes)}
-        handleRemoveKeyframes={handleRemoveKeyframes}
-        horizontalZoomValue={horizontalZoomValue}
-        horizontalZoomRatioBase={horizontalZoomRatioBase}
-        setHorizontalZoomValue={setHorizontalZoomValue}
-        resetViewport={resetViewport}
-        graphVerticalZoomValue={graphVerticalZoomValue}
-        graphPropertyCount={visibleGraphProperties.length}
-        verticalZoomRatioBase={verticalZoomRatioBase}
-        setGraphVerticalZoomValue={setGraphVerticalZoomValue}
-        graphRulerUnit={graphRulerUnit}
-        onChangeRulerUnit={setGraphRulerUnit}
-        showAllGraphHandles={showAllGraphHandles}
-        onToggleGraphHandleVisibility={() => setShowAllGraphHandles((prev) => !prev)}
-        autoZoomGraphHeight={autoZoomGraphHeight}
-        onToggleAutoZoomGraphHeight={() => setAutoZoomGraphHeight((prev) => !prev)}
-      />
-  )
-  const timingStripElement = showGraphPane ? (
-        <div className="grid" style={propertyGridStyle}>
-          <div className="h-4 border-t border-r border-border/60 bg-background/80" />
-          <div data-testid="keyframe-timing-strip-viewport-column">
-            <KeyframeTimingStrip
-              viewport={viewport}
-              contentFrameMax={contentFrameMax}
-              markers={timingStripMarkers}
-              previewFrames={timingStripPreviewFrames}
-              disabled={disabled || timingStripMarkers.length === 0}
-              onSelectionChange={handleTimingStripSelectionChange}
-              onSlideStart={handleTimingStripSlideStart}
-              onSlideChange={handleTimingStripSlideChange}
-              onSlideEnd={handleTimingStripSlideEnd}
-            />
-          </div>
-        </div>
-  ) : null
-  const navigatorElement = (
-      <div className="grid" style={propertyGridStyle}>
-        <div
-          data-testid="keyframe-navigator-property-column"
-          className="h-5 border-t border-r border-border/60 bg-background/80"
-        />
-        <div data-testid="keyframe-navigator-viewport-column">
-          <CompactNavigator
-            viewport={viewport}
-            currentFrame={currentFrame}
-            contentFrameMax={contentFrameMax}
-            minVisibleFrames={minViewportFrames}
-            disabled={disabled}
-            onViewportChange={updateViewport}
-          />
-        </div>
-      </div>
-  )
+  const chromeState = {
+    propertyGridStyle, viewport, contentFrameMax, disabled, currentFrame,
+    minViewportFrames, updateViewport, timingStripMarkers,
+    timingStripPreviewFrames, handleTimingStripSelectionChange,
+    handleTimingStripSlideStart, handleTimingStripSlideChange,
+    handleTimingStripSlideEnd, headerFrameInputs, availableProperties,
+    filterKeyframedOnly, setShowKeyframedOnly, allPropertyGroups, visibleGroups,
+    toggleVisibleGroup, setAllGroupsExpanded, resetParameterView,
+    hasPropertyFilters, showGraphPane, graphDisplayProperty, compoundPropertyRows,
+    speedGraphContent, onGraphModeChange, graphMode, visibleKeyframes,
+    isCurrentFrameBlocked, canBakeMotion, onBakeMotion, interpolationOptions,
+    selectedInterpolation, interpolationDisabled, onInterpolationChange,
+    selectedRefs, hasKeyframeClipboard, isKeyframeClipboardCut,
+    onCopyKeyframes, onCutKeyframes, onPasteKeyframes, onRemoveKeyframes,
+    handleRemoveKeyframes, horizontalZoomValue, horizontalZoomRatioBase,
+    setHorizontalZoomValue, resetViewport, graphVerticalZoomValue,
+    visibleGraphProperties, verticalZoomRatioBase, setGraphVerticalZoomValue,
+    graphRulerUnit, setGraphRulerUnit, showAllGraphHandles, setShowAllGraphHandles,
+    autoZoomGraphHeight, setAutoZoomGraphHeight,
+  }
+  const { toolbarElement, timingStripElement, navigatorElement } =
+    buildDopesheetWorkspaceChrome(chromeState)
   return (
     <DopesheetEditorPresentation
       pickWhipRootRef={pickWhipRootRef}
