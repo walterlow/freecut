@@ -1,6 +1,11 @@
 import type { AnimatableProperty, Keyframe } from '@/types/keyframe'
 import { getPropertyDisplayGroups } from './property-groups'
 import type { DopesheetPropertyGroup, DopesheetPropertyRow } from './dopesheet-types'
+import {
+  PROPERTY_VALUE_RANGES,
+  isColorAnimatableProperty,
+} from '@/features/keyframes/property-value-ranges'
+import { keyframeValueToHexColor } from '@/features/keyframes/utils/color-keyframes'
 
 /** Minimal row shape needed to build the frame-independent group structure. */
 interface GroupableRow {
@@ -142,4 +147,30 @@ export function buildGroupedPropertyRows(
     ...group,
     ...computeGroupFrameState(group.frameGroups, currentFrame),
   }))
+}
+
+/** Frame span of every keyframe in a property map, or null when it holds none. */
+export function computeKeyframeFrameBounds(
+  keyframesByProperty: Partial<Record<AnimatableProperty, Keyframe[]>>,
+): { min: number; max: number } | null {
+  let min = Infinity
+  let max = -Infinity
+  for (const list of Object.values(keyframesByProperty)) {
+    for (const keyframe of list ?? []) {
+      if (keyframe.frame < min) min = keyframe.frame
+      if (keyframe.frame > max) max = keyframe.frame
+    }
+  }
+  return max >= min ? { min, max } : null
+}
+
+/** Display text for a property value: hex for colours, fixed decimals otherwise. */
+export function formatDopesheetPropertyValue(
+  property: AnimatableProperty,
+  value: number | undefined,
+): string {
+  if (value === undefined || Number.isNaN(value)) return ''
+  if (isColorAnimatableProperty(property)) return keyframeValueToHexColor(value)
+  const decimals = PROPERTY_VALUE_RANGES[property]?.decimals ?? 2
+  return decimals === 0 ? String(Math.round(value)) : value.toFixed(decimals)
 }

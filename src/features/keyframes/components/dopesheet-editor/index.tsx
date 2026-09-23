@@ -51,8 +51,6 @@ import {
 import { useLivePixelGeometrySync } from './use-live-pixel-geometry-sync'
 
 import { perfMarkRender } from '@/shared/logging/perf-marks'
-import {
-} from '@/shared/timeline/main-timeline-scrub'
 
 import { useDopesheetHotkeys } from './use-dopesheet-hotkeys'
 import { usePropertyExpressionEditor } from './use-property-expression-editor'
@@ -66,18 +64,15 @@ import {
 import { buildDopesheetWorkspaceChrome } from './dopesheet-workspace-chrome'
 
 import {
-} from '@/features/keyframes/deps/timeline-playhead'
+  computeKeyframeFrameBounds,
+  formatDopesheetPropertyValue,
+} from './dopesheet-helpers'
 import {
   EMPTY_AUTO_KEY_ENABLED_BY_PROPERTY,
   PROPERTY_COLUMN_WIDTH,
   SPACIOUS_PROPERTY_COLUMN_WIDTH,
 } from './dopesheet-constants'
 import type { DragState } from './dopesheet-types'
-import {
-  PROPERTY_VALUE_RANGES,
-  isColorAnimatableProperty,
-} from '@/features/keyframes/property-value-ranges'
-import { keyframeValueToHexColor } from '@/features/keyframes/utils/color-keyframes'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
 import type { DopesheetEditorProps } from './dopesheet-editor-props'
 
@@ -262,17 +257,10 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     string[] | null
   >(null)
 
-  const keyframeFrameBounds = useMemo(() => {
-    let min = Infinity
-    let max = -Infinity
-    for (const list of Object.values(keyframesByProperty)) {
-      for (const keyframe of list ?? []) {
-        if (keyframe.frame < min) min = keyframe.frame
-        if (keyframe.frame > max) max = keyframe.frame
-      }
-    }
-    return max >= min ? { min, max } : null
-  }, [keyframesByProperty])
+  const keyframeFrameBounds = useMemo(
+    () => computeKeyframeFrameBounds(keyframesByProperty),
+    [keyframesByProperty],
+  )
 
   const { viewport, updateViewport, normalizeViewport, contentFrameMax, minViewportFrames } =
     useDopesheetViewport({
@@ -405,16 +393,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     enabled: showGraphPane,
     deps: [visualizationMode, propertyRows.length],
   })
-
-  const formatPropertyValue = useCallback(
-    (property: AnimatableProperty, value: number | undefined) => {
-      if (value === undefined || Number.isNaN(value)) return ''
-      if (isColorAnimatableProperty(property)) return keyframeValueToHexColor(value)
-      const decimals = PROPERTY_VALUE_RANGES[property]?.decimals ?? 2
-      return decimals === 0 ? String(Math.round(value)) : value.toFixed(decimals)
-    },
-    [],
-  )
 
   const rowKeyframesByProperty = sheetKeyframesByProperty
 
@@ -661,7 +639,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   } = usePropertyValueEditing({
     propertyColumnProperties,
     propertyValues,
-    formatPropertyValue,
+    formatPropertyValue: formatDopesheetPropertyValue,
     isPropertyLocked,
     activateProperty,
     onPropertyValueCommit,
@@ -850,7 +828,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   beginPropertyLink, canClearRow, compoundPropertyRows,
   compoundSecondaryProperties, itemId, itemFrom,
   currentFrame, fps, disabled,
-  expressionEditor, formatPropertyValue, globalFrame,
+  expressionEditor, formatPropertyValue: formatDopesheetPropertyValue, globalFrame,
   graphVisibleProperties, handleClearProperty, handleRowAutoKeyToggle,
   handleRowNavigate, handleRowToggleKeyframe, handleRowValueChange,
   handleRowValueCommit, handleValueScrubEnd, handleValueScrubCancel,
