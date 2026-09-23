@@ -13,7 +13,6 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import type { AnimatableProperty, Keyframe } from '@/types/keyframe'
 import { CompactNavigator } from './compact-navigator'
 
@@ -33,6 +32,7 @@ import { useDopesheetSelectionMeta } from './use-dopesheet-selection-meta'
 import { useDopesheetGraphDisplay } from './use-dopesheet-graph-display'
 import { useDopesheetSheetStructure } from './use-dopesheet-sheet-structure'
 import { useDopesheetExpressionDock } from './use-dopesheet-expression-dock'
+import { useDopesheetFrameTargets } from './use-dopesheet-frame-targets'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
   useDopesheetPointerDispatch,
@@ -75,7 +75,6 @@ import {
   EMPTY_AUTO_KEY_ENABLED_BY_PROPERTY,
   PROPERTY_COLUMN_WIDTH,
   SPACIOUS_PROPERTY_COLUMN_WIDTH,
-  SNAP_THRESHOLD_PX,
 } from './dopesheet-constants'
 import type { DragState } from './dopesheet-types'
 import {
@@ -560,53 +559,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     onLaneContentHeightChange?.(renderedSheetEntries.contentHeight)
   }, [onLaneContentHeightChange, presentation, renderedSheetEntries.contentHeight])
 
-  const isCurrentFrameBlocked = useMemo(
-    () =>
-      transitionBlockedRanges.some(
-        (range) => currentFrame >= range.start && currentFrame < range.end,
-      ),
-    [transitionBlockedRanges, currentFrame],
-  )
-
-  // Adds inside a transition region are rejected by the action layer; surface
-  // that instead of failing silently. A fixed toast id prevents stacking on
-  // repeated clicks.
-  const notifyKeyframeBlocked = useCallback(() => {
-    toast.warning(t('timeline.keyframeEditor.transitionBlocked'), {
-      id: 'keyframe-transition-blocked',
-    })
-  }, [t])
-
-  const snapFrameTargets = useMemo(() => {
-    const targets: number[] = [0, currentFrame, ...additionalSnapFrames]
-    for (const { keyframe } of visibleKeyframes) {
-      if (!selectedKeyframeIds.has(keyframe.id)) {
-        targets.push(keyframe.frame)
-      }
-    }
-    return [...new Set(targets)]
-  }, [additionalSnapFrames, visibleKeyframes, selectedKeyframeIds, currentFrame])
-
-  const snapThresholdFrames = useMemo(
-    () => (SNAP_THRESHOLD_PX / effectiveTimelineWidth) * frameRange,
-    [effectiveTimelineWidth, frameRange],
-  )
-
-  const snapFrame = useCallback(
-    (frame: number) => {
-      let closest = frame
-      let minDistance = Infinity
-      for (const target of snapFrameTargets) {
-        const distance = Math.abs(frame - target)
-        if (distance <= snapThresholdFrames && distance < minDistance) {
-          minDistance = distance
-          closest = target
-        }
-      }
-      return closest
-    },
-    [snapFrameTargets, snapThresholdFrames],
-  )
+  const { snapFrame, isCurrentFrameBlocked, notifyKeyframeBlocked } = useDopesheetFrameTargets({
+    visibleKeyframes,
+    selectedKeyframeIds,
+    additionalSnapFrames,
+    currentFrame,
+    effectiveTimelineWidth,
+    frameRange,
+    transitionBlockedRanges,
+  })
 
   const { setHorizontalZoomValue, resetViewport, fitKeyframesInView, handleWheel } =
     useDopesheetNavigation({
