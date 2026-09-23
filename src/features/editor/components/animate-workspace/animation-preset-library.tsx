@@ -1,6 +1,5 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { WandSparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import type { CanvasSettings } from '@/types/transform'
@@ -9,9 +8,8 @@ import type { TextItem } from '@/types/timeline'
 import type { TextMotionSlot } from '@/types/text-motion'
 import type { MotionModifierType } from '@/types/motion'
 import { cn } from '@/shared/ui/cn'
-import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { MotionBakeConfirmationDialog } from '@/shared/ui/motion-bake-confirmation-dialog'
 import { useSelectionStore } from '@/shared/state/selection'
 import { usePlaybackStore } from '@/shared/state/playback'
@@ -71,21 +69,19 @@ import {
   type AnimationPreset,
 } from '@/infrastructure/storage'
 import { SaveAnimationPresetDialog } from './save-animation-preset-dialog'
-import { TextMotionSlotRows } from '../text-motion/text-motion-slot-rows'
 import { filterAnimationPresetCandidates } from './animation-preset-filter'
 import { AppliedMotionSummary } from './applied-motion-summary'
 import { AnimationPresetLibraryEdit } from './animation-preset-library-edit'
 import { AnimationPresetToolbar } from './animation-preset-toolbar'
+import { ContinuousMotionStage } from './continuous-motion-stage'
+import { MotionPresetStages } from './motion-preset-stages'
 import { SavedAnimationList } from './saved-animation-list'
-import { ContinuousMotionRow, type ModifierEditSettings } from './continuous-motion-row'
+import type { ModifierEditSettings } from './continuous-motion-row'
 import { MotionPresetControls } from './motion-preset-controls'
-import { MotionPresetSection } from './motion-preset-section'
-import { StageSection } from './stage-section'
 import {
   EDIT_QUICK_PRESET_IDS,
   MOTION_PRESET_PROPERTIES,
   presetsByCategory,
-  TEXT_SLOT_BY_MOTION_CATEGORY,
 } from './animation-preset-catalogue'
 import { selectPresetSelectedItems } from './preset-selection'
 
@@ -152,6 +148,7 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
 
   const openSaveDialog = useCallback(() => setDialogOpen(true), [])
   const toggleCompatibleOnly = useCallback(() => setCompatibleOnly((current) => !current), [])
+  const openBakeDialog = useCallback(() => setBakeDialogOpen(true), [])
 
   useEffect(() => {
     if (!projectId) {
@@ -1056,119 +1053,34 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
 
             <MotionPresetControls onSettingsChange={handleMotionGeneratorSettingsChange} t={t} />
 
-            {MOTION_PRESET_CATEGORIES.map((category) => {
-              const textSlot = TEXT_SLOT_BY_MOTION_CATEGORY[category]
-              const layerPresets = filteredMotionPresetsByCategory[category]
-              const showTextScope = selectedTextItems.length > 0 && textSlot
-              if (layerPresets.length === 0 && !showTextScope) return null
-              return (
-                <StageSection
-                  key={category}
-                  title={t(`editor.motionPresets.categories.${category}`)}
-                >
-                  {layerPresets.length > 0 ? (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        {t('editor.animateStages.scopeLayer')}
-                      </span>
-                      <MotionPresetSection
-                        category={category}
-                        presets={layerPresets}
-                        reasonFor={motionReason}
-                        onApply={handleApplyMotion}
-                        showHeading={false}
-                        t={t}
-                      />
-                    </div>
-                  ) : null}
-                  {showTextScope ? (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        {t('editor.animateStages.scopeText')}
-                      </span>
-                      <TextMotionSlotRows
-                        items={selectedTextItems}
-                        query={deferredSearchQuery}
-                        slots={[textSlot]}
-                        showSlotHeading={false}
-                        showEmptyState={false}
-                      />
-                    </div>
-                  ) : null}
-                </StageSection>
-              )
-            })}
+            <MotionPresetStages
+              presetsByCategory={filteredMotionPresetsByCategory}
+              selectedTextItems={selectedTextItems}
+              query={deferredSearchQuery}
+              reasonFor={motionReason}
+              onApply={handleApplyMotion}
+              t={t}
+            />
 
             {/* Layer behaviours and text loops share the same user intent even
                 though only the layer behaviours can be baked to keyframes. */}
-            {filteredModulators.length > 0 || selectedTextItems.length > 0 ? (
-              <StageSection
-                title={t('editor.animateStages.continuousTitle')}
-                hint={t('editor.animateStages.continuousHint')}
-                defaultOpen={false}
-              >
-                {filteredModulators.length > 0 ? (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      {t('editor.animateStages.scopeLayer')}
-                    </span>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {filteredModulators.map((modulator) => (
-                        <ContinuousMotionRow
-                          key={modulator.id}
-                          modulator={modulator}
-                          active={activeModulatorIds.has(modulator.id)}
-                          reason={modulatorReason(modulator)}
-                          settings={modulatorSettingsByType.get(modulator.id) ?? null}
-                          onApply={() => handleApplyModulator(modulator)}
-                          onRemove={() => handleRemoveModulator(modulator)}
-                          onLiveEdit={(settings) => handleModulatorLiveEdit(modulator.id, settings)}
-                          onCommitEdit={(settings) =>
-                            handleModulatorCommitEdit(modulator.id, settings)
-                          }
-                          t={t}
-                        />
-                      ))}
-                    </div>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-full justify-start gap-1.5 px-2 text-[11px]"
-                            disabled={!hasBakeableMotion}
-                            onClick={() => setBakeDialogOpen(true)}
-                          >
-                            <WandSparkles className="h-3.5 w-3.5" />
-                            {t('editor.motionGenerator.bakeToKeyframes')}
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {t('editor.motionGenerator.bakeToKeyframesHint')}
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                ) : null}
-                {selectedTextItems.length > 0 ? (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      {t('editor.animateStages.scopeText')}
-                    </span>
-                    <TextMotionSlotRows
-                      items={selectedTextItems}
-                      query={deferredSearchQuery}
-                      slots={['loop']}
-                      showSlotHeading={false}
-                      showEmptyState={false}
-                    />
-                  </div>
-                ) : null}
-              </StageSection>
-            ) : null}
+            {/* Layer behaviours and text loops share the same user intent even
+                though only the layer behaviours can be baked to keyframes. */}
+            <ContinuousMotionStage
+              modulators={filteredModulators}
+              activeModulatorIds={activeModulatorIds}
+              settingsByModulator={modulatorSettingsByType}
+              selectedTextItems={selectedTextItems}
+              query={deferredSearchQuery}
+              reasonFor={modulatorReason}
+              onApplyModulator={handleApplyModulator}
+              onRemoveModulator={handleRemoveModulator}
+              onLiveEdit={handleModulatorLiveEdit}
+              onCommitEdit={handleModulatorCommitEdit}
+              hasBakeableMotion={hasBakeableMotion}
+              onOpenBakeDialog={openBakeDialog}
+              t={t}
+            />
 
             <SavedAnimationList
               presets={presets}
