@@ -75,7 +75,6 @@ import {
   type MotionGeneratorSettings,
   type MotionModulator,
 } from '@/features/editor/deps/keyframes'
-import { getTextMotionPreset } from '@/shared/typography/text-motion'
 import { getTextMotionTimelineBands } from '@/shared/timeline/text-motion-timeline'
 import {
   readAnimationPresets,
@@ -86,8 +85,7 @@ import { MotionPresetThumbnail } from './motion-preset-thumbnail'
 import { SaveAnimationPresetDialog } from './save-animation-preset-dialog'
 import { TextMotionSlotRows } from '../text-motion/text-motion-slot-rows'
 import { filterAnimationPresetCandidates } from './animation-preset-filter'
-import { AppliedContinuousMotionControls } from './applied-continuous-motion-controls'
-import { AppliedMotionRow } from './applied-motion-row'
+import { AppliedMotionSummary } from './applied-motion-summary'
 import { ContinuousMotionRow, type ModifierEditSettings } from './continuous-motion-row'
 import { MotionPresetControls } from './motion-preset-controls'
 import { MotionPresetSection } from './motion-preset-section'
@@ -1003,71 +1001,22 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
           {hasAnyAnimation ? (
             <>
               <Separator />
-              <section className="flex flex-col gap-2">
-                <div>
-                  <h3 className="text-xs font-medium">{t('editor.animateStages.appliedTitle')}</h3>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {t('editor.editAnimation.appliedHint')}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-1 rounded-md border border-border/60 bg-secondary/20 p-2">
-                  {manualKeyframeSummary.keyframeCount > 0 ? (
-                    <AppliedMotionRow
-                      label={t('editor.animateStages.manualKeyframes')}
-                      detail={`${manualKeyframeSummary.properties.join(', ')} · ${t('editor.animateStages.keyframeCount', { count: manualKeyframeSummary.keyframeCount })}`}
-                      removeLabel={t('editor.animateStages.removeManualKeyframes')}
-                      onRemove={handleRemoveManualKeyframes}
-                      onNavigate={
-                        manualKeyframeSummary.firstFrame === null
-                          ? undefined
-                          : () => navigateToItemFrame(manualKeyframeSummary.firstFrame ?? 0)
-                      }
-                    />
-                  ) : null}
-                  {trimmedKeyframeCount > 0 ? (
-                    <AppliedMotionRow
-                      label={t('timeline.keyframeEditor.trimmedKeyframesLabel')}
-                      detail={t('timeline.keyframeEditor.trimmedKeyframesDetail', {
-                        count: trimmedKeyframeCount,
-                      })}
-                      removeLabel={t('timeline.keyframeEditor.trimAnimation')}
-                      onRemove={handleTrimAnimation}
-                    />
-                  ) : null}
-                  {keyframeApplications.map((application) => (
-                    <AppliedMotionRow
-                      key={application.source.applicationId}
-                      label={application.source.presetName}
-                      detail={`${t('editor.animateStages.generatedKeyframes')} · ${t('editor.animateStages.keyframeCount', { count: application.keyframeCount })}`}
-                      removeLabel={t('editor.animateStages.removePresetApplication', {
-                        name: application.source.presetName,
-                      })}
-                      onRemove={() =>
-                        handleRemovePresetApplication(application.source.applicationId)
-                      }
-                      onNavigate={() => navigateToItemFrame(application.firstFrame)}
-                    />
-                  ))}
-                  <AppliedContinuousMotionControls
-                    items={selectedItems}
-                    canvas={canvas}
-                    variant="rows"
-                    showBakeAction
-                  />
-                  {activeTextMotion.map(({ slot, effect }) => (
-                    <AppliedMotionRow
-                      key={slot}
-                      label={t(getTextMotionPreset(effect.presetId).labelKey)}
-                      detail={`${t('editor.animateStages.scopeText')} · ${t(`textMotion.slots.${slot}`)} · ${t('editor.animateStages.liveBadge')}`}
-                      removeLabel={t('textMotion.removePreset', {
-                        name: t(getTextMotionPreset(effect.presetId).labelKey),
-                      })}
-                      onRemove={() => handleRemoveTextMotion(slot)}
-                      onNavigate={() => navigateToTextMotion(slot)}
-                    />
-                  ))}
-                </div>
-              </section>
+              <AppliedMotionSummary
+            variant="edit"
+            manualKeyframeSummary={manualKeyframeSummary}
+            trimmedKeyframeCount={trimmedKeyframeCount}
+            keyframeApplications={keyframeApplications}
+            activeTextMotion={activeTextMotion}
+            selectedItems={selectedItems}
+            canvas={canvas}
+            onRemoveManualKeyframes={handleRemoveManualKeyframes}
+            onTrimAnimation={handleTrimAnimation}
+            onRemovePresetApplication={handleRemovePresetApplication}
+            onNavigateToItemFrame={navigateToItemFrame}
+            onRemoveTextMotion={handleRemoveTextMotion}
+            onNavigateToTextMotion={navigateToTextMotion}
+            t={t}
+              />
             </>
           ) : null}
 
@@ -1203,57 +1152,22 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
             {/* ── Applied state for the selected clip — keyframes, live
                 modulators, audio pulse. Each removable thing carries an ✕. ── */}
             {hasAnyAnimation && (
-              <section className="flex flex-col gap-2 rounded-md border border-border/60 bg-secondary/20 p-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  {t('editor.animateStages.appliedTitle')}
-                </span>
-                <div className="flex flex-col gap-1">
-                  {manualKeyframeSummary.keyframeCount > 0 ? (
-                    <AppliedMotionRow
-                      label={t('editor.animateStages.manualKeyframes')}
-                      detail={`${manualKeyframeSummary.properties.join(', ')} · ${t('editor.animateStages.keyframeCount', { count: manualKeyframeSummary.keyframeCount })}`}
-                      removeLabel={t('editor.animateStages.removeManualKeyframes')}
-                      onRemove={handleRemoveManualKeyframes}
-                      onNavigate={
-                        manualKeyframeSummary.firstFrame === null
-                          ? undefined
-                          : () => navigateToItemFrame(manualKeyframeSummary.firstFrame ?? 0)
-                      }
-                    />
-                  ) : null}
-                  {keyframeApplications.map((application) => (
-                    <AppliedMotionRow
-                      key={application.source.applicationId}
-                      label={application.source.presetName}
-                      detail={`${t('editor.animateStages.generatedKeyframes')} · ${[...application.properties].join(', ')} · ${t('editor.animateStages.keyframeCount', { count: application.keyframeCount })}`}
-                      removeLabel={t('editor.animateStages.removePresetApplication', {
-                        name: application.source.presetName,
-                      })}
-                      onRemove={() =>
-                        handleRemovePresetApplication(application.source.applicationId)
-                      }
-                      onNavigate={() => navigateToItemFrame(application.firstFrame)}
-                    />
-                  ))}
-                  <AppliedContinuousMotionControls
-                    items={selectedItems}
-                    canvas={canvas}
-                    variant="rows"
-                  />
-                  {activeTextMotion.map(({ slot, effect }) => (
-                    <AppliedMotionRow
-                      key={slot}
-                      label={t(getTextMotionPreset(effect.presetId).labelKey)}
-                      detail={`${t('editor.animateStages.scopeText')} · ${t(`textMotion.slots.${slot}`)} · ${t('editor.animateStages.liveBadge')}`}
-                      removeLabel={t('textMotion.removePreset', {
-                        name: t(getTextMotionPreset(effect.presetId).labelKey),
-                      })}
-                      onRemove={() => handleRemoveTextMotion(slot)}
-                      onNavigate={() => navigateToTextMotion(slot)}
-                    />
-                  ))}
-                </div>
-              </section>
+              <AppliedMotionSummary
+              variant="panel"
+              manualKeyframeSummary={manualKeyframeSummary}
+              trimmedKeyframeCount={trimmedKeyframeCount}
+              keyframeApplications={keyframeApplications}
+              activeTextMotion={activeTextMotion}
+              selectedItems={selectedItems}
+              canvas={canvas}
+              onRemoveManualKeyframes={handleRemoveManualKeyframes}
+              onTrimAnimation={handleTrimAnimation}
+              onRemovePresetApplication={handleRemovePresetApplication}
+              onNavigateToItemFrame={navigateToItemFrame}
+              onRemoveTextMotion={handleRemoveTextMotion}
+              onNavigateToTextMotion={navigateToTextMotion}
+              t={t}
+              />
             )}
 
             {/* ── Start: presets (declarative). Picking one fills the dopesheet
