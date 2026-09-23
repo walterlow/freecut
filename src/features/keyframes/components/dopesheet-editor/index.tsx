@@ -48,12 +48,9 @@ import {
 } from './dopesheet-presentation'
 import { DopesheetRulerHeader } from './dopesheet-ruler-header'
 import { DopesheetLiveRulerCanvas } from './dopesheet-live-ruler-canvas'
-import { syncDopesheetLivePixelGeometry } from './dopesheet-live-pixel-geometry'
+import { useLivePixelGeometrySync } from './use-live-pixel-geometry-sync'
 
 import { perfMarkRender } from '@/shared/logging/perf-marks'
-import {
-  TIMELINE_LIVE_SCROLL_EVENT,
-} from '@/shared/timeline/live-scroll-sync'
 import {
 } from '@/shared/timeline/main-timeline-scrub'
 import { DopesheetSheetBody } from './dopesheet-sheet-body'
@@ -758,72 +755,17 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [fps, getTimelineLivePixelsPerSecond, timelinePixelsPerSecond],
   )
 
-  useLayoutEffect(() => {
-    const scrollContainer = timelineScrollContainerRef?.current
-    const root = pickWhipRootRef.current
-    if (!scrollContainer || !root || timelinePanBaseScrollLeft === undefined) {
-      syncLivePixelGeometryRef.current = () => {}
-      return
-    }
-
-    let scrollFrame: number | null = null
-    const syncLiveGeometry = () => {
-      const pixelsPerSecond =
-        getTimelineLivePixelsPerSecond?.() ??
-        timelinePanBasePixelsPerSecond ??
-        timelinePixelsPerSecond
-      syncDopesheetLivePixelGeometry({
-        root,
-        pixelsPerSecond,
-        fps,
-        scrollLeft: scrollContainer.scrollLeft,
-        itemFrom,
-        // Linked Edit cells retain a one-pixel left border. Their absolutely
-        // positioned contents begin just inside it, so compensate without
-        // transforming or scaling the surface.
-        originOffset: hasLinkedTimelineAxis ? -1 : 0,
-      })
-    }
-    const scheduleScrollSync = () => {
-      if (scrollFrame !== null) return
-      scrollFrame = requestAnimationFrame(() => {
-        scrollFrame = null
-        syncLiveGeometry()
-      })
-    }
-    const syncLiveEvent = () => {
-      if (scrollFrame !== null) {
-        cancelAnimationFrame(scrollFrame)
-        scrollFrame = null
-      }
-      syncLiveGeometry()
-    }
-
-    syncLivePixelGeometryRef.current = syncLiveGeometry
-    syncLiveGeometry()
-    scrollContainer.addEventListener('scroll', scheduleScrollSync, { passive: true })
-    scrollContainer.addEventListener(TIMELINE_LIVE_SCROLL_EVENT, syncLiveEvent)
-    return () => {
-      if (scrollFrame !== null) cancelAnimationFrame(scrollFrame)
-      scrollContainer.removeEventListener('scroll', scheduleScrollSync)
-      scrollContainer.removeEventListener(TIMELINE_LIVE_SCROLL_EVENT, syncLiveEvent)
-      syncLivePixelGeometryRef.current = () => {}
-    }
-  }, [
-    fps,
-    getTimelineLivePixelsPerSecond,
-    hasLinkedTimelineAxis,
-    itemFrom,
-    timelinePanBasePixelsPerSecond,
-    timelinePanBaseScrollLeft,
-    timelinePixelsPerSecond,
+  useLivePixelGeometrySync({
+    syncLivePixelGeometryRef,
+    rootRef: pickWhipRootRef,
     timelineScrollContainerRef,
-  ])
-  useLayoutEffect(() => {
-    // React may add drag previews or filtered rows without changing the live
-    // axis inputs. Bring those new nodes onto the same current pixel axis before
-    // the browser paints them.
-    syncLivePixelGeometryRef.current()
+    getTimelineLivePixelsPerSecond,
+    timelinePanBaseScrollLeft,
+    timelinePanBasePixelsPerSecond,
+    timelinePixelsPerSecond,
+    fps,
+    itemFrom,
+    hasLinkedTimelineAxis,
   })
 
   const frameToX = useCallback(
