@@ -35,6 +35,7 @@ import {
 } from './use-dopesheet-pointer-dispatch'
 import { useSelectionFrameActions } from './use-selection-frame-actions'
 import { usePropertyValueEditing } from './use-property-value-editing'
+import { useDopesheetRowActions } from './use-dopesheet-row-actions'
 import { useElementSize } from './use-element-size'
 import { useKeyframeDrag } from './use-keyframe-drag'
 import { useSheetPreviewDom } from './sheet-preview-dom'
@@ -85,7 +86,6 @@ import {
   SNAP_THRESHOLD_PX,
 } from './dopesheet-constants'
 import type {
-  DopesheetPropertyGroup,
   DopesheetPropertyRow,
   DragState,
   KeyframeMeta,
@@ -103,11 +103,6 @@ import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
 import { getProceduralBands } from '@/features/keyframes/utils/procedural-preview'
 import { clampFrame } from './frame-utils'
-import {
-  buildPropertyKeyframeRefs,
-  buildRowKeyframeRefs,
-  removeSelectionIds,
-} from './row-action-helpers'
 import { getKeyframePropertyLabel } from '@/features/keyframes/utils/property-i18n'
 import type { DopesheetEditorProps } from './dopesheet-editor-props'
 
@@ -1074,15 +1069,37 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   })
 
 
-  const canClearRow = useCallback(
-    (row: DopesheetPropertyRow) => {
-      if (disabled || !onRemoveKeyframes) return false
-      if (isPropertyLocked(row.property)) return false
-      return row.keyframes.length > 0
-    },
-    [disabled, isPropertyLocked, onRemoveKeyframes],
-  )
-
+  const {
+    canClearRow,
+    activateProperty,
+    showSinglePropertyCurve,
+    handleClearProperty,
+    handleClearGroup,
+    handleRowToggleKeyframe,
+    handleRowAddKeyframe,
+    handleRowAutoKeyToggle,
+    nudgeSelectedKeyframes,
+  } = useDopesheetRowActions({
+    disabled,
+    isPropertyLocked,
+    itemId,
+    currentFrame,
+    isCurrentFrameBlocked,
+    notifyKeyframeBlocked,
+    propertyRowByProperty,
+    selectedKeyframeIds,
+    showGraphPane,
+    singleCurveMode,
+    setGraphVisibleProperties,
+    onCurveVisibilityChange,
+    onPropertyChange,
+    onActivePropertyChange,
+    onRemoveKeyframes,
+    onSelectionChange,
+    onAddKeyframe,
+    toggleAutoKeyframeEnabled,
+    moveSelectedKeyframesByDelta,
+  })
 
   const {
     localFrameInputValue,
@@ -1104,78 +1121,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     moveSelectedKeyframesByDelta,
   })
 
-  const activateProperty = useCallback(
-    (property: AnimatableProperty) => {
-      if (showGraphPane) {
-        if (singleCurveMode) {
-          setGraphVisibleProperties(new Set([property]))
-          onCurveVisibilityChange?.(property, true)
-        }
-        onPropertyChange?.(property)
-      }
-      onActivePropertyChange?.(property)
-    },
-    [
-      onActivePropertyChange,
-      onCurveVisibilityChange,
-      onPropertyChange,
-      setGraphVisibleProperties,
-      showGraphPane,
-      singleCurveMode,
-    ],
-  )
-
-  const showSinglePropertyCurve = useCallback(
-    (property: AnimatableProperty) => {
-      setGraphVisibleProperties(new Set([property]))
-      onPropertyChange?.(property)
-      onActivePropertyChange?.(property)
-      onCurveVisibilityChange?.(property, true)
-    },
-    [onActivePropertyChange, onCurveVisibilityChange, onPropertyChange, setGraphVisibleProperties],
-  )
-
-  const removeKeyframesForRows = useCallback(
-    (rows: DopesheetPropertyRow[]) => {
-      if (!onRemoveKeyframes) return
-
-      const refs = buildRowKeyframeRefs(itemId, rows)
-
-      if (refs.length === 0) return
-
-      onRemoveKeyframes(refs)
-
-      if (onSelectionChange) {
-        onSelectionChange(
-          removeSelectionIds(
-            selectedKeyframeIds,
-            refs.map((ref) => ref.keyframeId),
-          ),
-          { preserveExternalSelection: true },
-        )
-      }
-    },
-    [itemId, onRemoveKeyframes, onSelectionChange, selectedKeyframeIds],
-  )
-
-  const handleClearProperty = useCallback(
-    (property: AnimatableProperty) => {
-      const row = propertyRowByProperty.get(property)
-      if (!row || !canClearRow(row)) return
-
-      activateProperty(property)
-      removeKeyframesForRows([row])
-    },
-    [activateProperty, canClearRow, propertyRowByProperty, removeKeyframesForRows],
-  )
-
-  const handleClearGroup = useCallback(
-    (group: DopesheetPropertyGroup) => {
-      removeKeyframesForRows(group.rows.filter((row) => canClearRow(row)))
-    },
-    [canClearRow, removeKeyframesForRows],
-  )
-
   const handleRowNavigate = useCallback(
     (property: AnimatableProperty, keyframe: Keyframe | null) => {
       if (!keyframe || !onNavigateToKeyframe) return
@@ -1185,68 +1130,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       selectionAnchorByPropertyRef.current.set(property, keyframe.id)
     },
     [activateProperty, onNavigateToKeyframe, onSelectionChange],
-  )
-
-  const handleRowToggleKeyframe = useCallback(
-    (property: AnimatableProperty, currentKeyframes: Keyframe[]) => {
-      if (isPropertyLocked(property)) return
-      activateProperty(property)
-      if (currentKeyframes.length > 0) {
-        if (!onRemoveKeyframes) return
-        const refs = buildPropertyKeyframeRefs(itemId, property, currentKeyframes)
-        onRemoveKeyframes(refs)
-        if (onSelectionChange) {
-          onSelectionChange(
-            removeSelectionIds(
-              selectedKeyframeIds,
-              currentKeyframes.map((keyframe) => keyframe.id),
-            ),
-            { preserveExternalSelection: true },
-          )
-        }
-        return
-      }
-
-      if (isCurrentFrameBlocked) {
-        notifyKeyframeBlocked()
-        return
-      }
-      if (!onAddKeyframe) return
-      onAddKeyframe(property, currentFrame)
-    },
-    [
-      currentFrame,
-      isCurrentFrameBlocked,
-      notifyKeyframeBlocked,
-      itemId,
-      onAddKeyframe,
-      onRemoveKeyframes,
-      onSelectionChange,
-      selectedKeyframeIds,
-      activateProperty,
-      isPropertyLocked,
-    ],
-  )
-
-  const handleRowAddKeyframe = useCallback(
-    (property: AnimatableProperty, currentKeyframes: Keyframe[]) => {
-      if (isPropertyLocked(property)) return
-      activateProperty(property)
-      if (currentKeyframes.length > 0) return
-      if (isCurrentFrameBlocked) {
-        notifyKeyframeBlocked()
-        return
-      }
-      onAddKeyframe?.(property, currentFrame)
-    },
-    [
-      activateProperty,
-      currentFrame,
-      isCurrentFrameBlocked,
-      isPropertyLocked,
-      notifyKeyframeBlocked,
-      onAddKeyframe,
-    ],
   )
 
   const {
@@ -1274,22 +1157,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     onDragCancel,
   })
 
-  const handleRowAutoKeyToggle = useCallback(
-    (property: AnimatableProperty) => {
-      if (isPropertyLocked(property)) return
-      activateProperty(property)
-      toggleAutoKeyframeEnabled(itemId, property)
-    },
-    [activateProperty, isPropertyLocked, itemId, toggleAutoKeyframeEnabled],
-  )
-
-
-  const nudgeSelectedKeyframes = useCallback(
-    (deltaFrames: number) => {
-      moveSelectedKeyframesByDelta(deltaFrames)
-    },
-    [moveSelectedKeyframesByDelta],
-  )
 
   const activePropertyRow = selectedProperty
     ? propertyRowByProperty.get(selectedProperty)
