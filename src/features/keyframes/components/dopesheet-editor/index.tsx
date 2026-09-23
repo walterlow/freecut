@@ -19,7 +19,6 @@ import { CompactNavigator } from './compact-navigator'
 
 import { DopesheetGraphPane } from './dopesheet-graph-pane'
 import { useGraphViewState } from './use-graph-view-state'
-import { useGroupExpansion } from './use-group-expansion'
 import { useHeaderFrameInputs } from './use-header-frame-inputs'
 import { usePropertyFilters } from './use-property-filters'
 import { useRulerScrub } from './use-ruler-scrub'
@@ -32,6 +31,7 @@ import { useDopesheetSheetMetrics } from './use-dopesheet-sheet-metrics'
 import { useDopesheetCoordinates } from './use-dopesheet-coordinates'
 import { useDopesheetSelectionMeta } from './use-dopesheet-selection-meta'
 import { useDopesheetGraphDisplay } from './use-dopesheet-graph-display'
+import { useDopesheetSheetStructure } from './use-dopesheet-sheet-structure'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
   useDopesheetPointerDispatch,
@@ -70,10 +70,6 @@ import type {
 } from './dopesheet-row-renderers'
 import type { CompoundPropertyInputConfig } from './compound-property-inputs'
 import { KeyframeTimingStrip } from './keyframe-timing-strip'
-import {
-  buildGroupedPropertyRows,
-  buildGroupedPropertyStructure,
-} from './dopesheet-helpers'
 
 import {
 } from '@/features/keyframes/deps/timeline-playhead'
@@ -83,8 +79,7 @@ import {
   SPACIOUS_PROPERTY_COLUMN_WIDTH,
   SNAP_THRESHOLD_PX,
 } from './dopesheet-constants'
-import type { DopesheetPropertyRow, DragState } from './dopesheet-types'
-import { getDopesheetRowControlState } from './row-controls'
+import type { DragState } from './dopesheet-types'
 import {
   PROPERTY_VALUE_RANGES,
   isColorAnimatableProperty,
@@ -380,118 +375,41 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     availableProperties,
     initialVisibleGroupIds,
   })
-  const filterKeyframedOnly =
-    propertyFilter === undefined ? showKeyframedOnly : propertyFilter === 'keyframed'
-  const linkedTransformPropertyIds = useMemo(
-    () =>
-      new Set<string>(
-        resolvedPropertyLinks.map((link) => {
-          if (link.targetProperty === 'position') return 'x'
-          if (link.targetProperty === 'scale') return 'width'
-          if (link.targetProperty === 'anchor') return 'anchorX'
-          return link.targetProperty
-        }),
-      ),
-    [resolvedPropertyLinks],
-  )
-
-  const filteredProperties = useMemo(
-    () =>
-      availableProperties
-        .filter((property) => !hiddenPropertyRowSet.has(property))
-        .filter((property) => {
-          const groupId = propertyGroupIdByProperty.get(property)
-          const groupVisible = groupId ? (visibleGroups[groupId] ?? true) : true
-          if (!groupVisible) return false
-          if (
-            filterKeyframedOnly &&
-            !keyframedPropertyIds.has(property) &&
-            !linkedTransformPropertyIds.has(property) &&
-            !proceduralBandByProperty.has(property)
-          )
-            return false
-          return true
-        }),
-    [
-      availableProperties,
-      hiddenPropertyRowSet,
-      keyframedPropertyIds,
-      linkedTransformPropertyIds,
-      proceduralBandByProperty,
-      propertyGroupIdByProperty,
-      filterKeyframedOnly,
-      visibleGroups,
-    ],
-  )
-  const activeSelectedProperty =
-    selectedProperty && filteredProperties.includes(selectedProperty) ? selectedProperty : null
-  const visibleProperties = filteredProperties
-  const propertyColumnProperties = filteredProperties
-  const hasPropertyFilters =
-    filterKeyframedOnly || allPropertyGroups.some((group) => visibleGroups[group.id] === false)
-
-  // Frame-independent keyframe data. These references only change when the
-  // properties or keyframes change — NOT when the playhead moves — so the
-  // memoized timeline grid cells can skip re-rendering during scrubs.
-  const sheetKeyframesByProperty = useMemo(() => {
-    const map = new Map<AnimatableProperty, Keyframe[]>()
-    for (const property of visibleProperties) {
-      map.set(
-        property,
-        (keyframesByProperty[property] ?? []).toSorted((a, b) => a.frame - b.frame),
-      )
-    }
-    return map
-  }, [visibleProperties, keyframesByProperty])
-
-  const sheetRowsStructure = useMemo(
-    () =>
-      visibleProperties.map((property) => ({
-        property,
-        keyframes: sheetKeyframesByProperty.get(property) ?? [],
-      })),
-    [visibleProperties, sheetKeyframesByProperty],
-  )
-
-  // Stable, frame-independent group structure keyed by group id — used to feed
-  // the memoized group timeline cells.
-  const groupTimelineById = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof buildGroupedPropertyStructure>[number]>()
-    for (const group of buildGroupedPropertyStructure(sheetRowsStructure)) {
-      map.set(group.id, group)
-    }
-    return map
-  }, [sheetRowsStructure])
-
-  // Playhead-dependent rows (carry the per-frame `controls`). `propertyColumnProperties`
-  // is the same list as `visibleProperties`, so the column/sheet rows are identical.
-  const sheetRows = useMemo<DopesheetPropertyRow[]>(
-    () =>
-      sheetRowsStructure.map((row) => ({
-        ...row,
-        controls: getDopesheetRowControlState(row.keyframes, currentFrame),
-      })),
-    [sheetRowsStructure, currentFrame],
-  )
-
-  const propertyRows = sheetRows
-  const groupedSheetRows = useMemo(
-    () => buildGroupedPropertyRows(sheetRows, currentFrame),
-    [currentFrame, sheetRows],
-  )
-  const groupedPropertyRows = groupedSheetRows
-  const propertyRowByProperty = useMemo(
-    () => new Map(propertyRows.map((row) => [row.property, row])),
-    [propertyRows],
-  )
-  const { expandedGroups, toggleGroup, setAllGroupsExpanded } = useGroupExpansion({
-    allPropertyGroups,
-    groupedSheetRows,
-    groupedPropertyRows,
+  const {
+    filterKeyframedOnly,
+    visibleProperties,
+    propertyColumnProperties,
     activeSelectedProperty,
+    hasPropertyFilters,
+    sheetKeyframesByProperty,
+    sheetRowsStructure,
+    groupTimelineById,
+    sheetRows,
+    groupedSheetRows,
+    propertyRowByProperty,
+    visibleKeyframes,
+    expandedGroups,
+    toggleGroup,
+    setAllGroupsExpanded,
+  } = useDopesheetSheetStructure({
+    availableProperties,
+    hiddenPropertyRowSet,
+    propertyGroupIdByProperty,
+    keyframedPropertyIds,
+    proceduralBandByProperty,
+    visibleGroups,
+    propertyFilter,
+    showKeyframedOnly,
+    resolvedPropertyLinks,
+    keyframesByProperty,
+    currentFrame,
+    selectedProperty,
+    allPropertyGroups,
     initialExpandedGroups,
     onExpandedGroupsChange,
   })
+  const propertyRows = sheetRows
+  const groupedPropertyRows = groupedSheetRows
 
   // Shift-clicking any row's lock icon applies that row's next lock state to
   // every visible row, so "lock everything except this one" is two clicks.
@@ -563,16 +481,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     showGraphPane,
   ])
 
-  const visibleKeyframes = useMemo(
-    () =>
-      sheetRows.flatMap((row) =>
-        row.keyframes.map((keyframe) => ({
-          property: row.property,
-          keyframe,
-        })),
-      ),
-    [sheetRows],
-  )
 
   const frameRange = Math.max(1, viewport.endFrame - viewport.startFrame)
   const {

@@ -27,7 +27,7 @@ export interface UseDopesheetPropertyDerivationsOptions {
   proceduralFrameOffset: number
 }
 
-interface DopesheetPropertyDerivations {
+export interface DopesheetPropertyDerivations {
   availableProperties: AnimatableProperty[]
   hiddenPropertyRowSet: Set<AnimatableProperty>
   graphableProperties: AnimatableProperty[]
