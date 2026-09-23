@@ -16,7 +16,6 @@ import { useTranslation } from 'react-i18next'
 import type { AnimatableProperty, Keyframe } from '@/types/keyframe'
 import { CompactNavigator } from './compact-navigator'
 
-import { DopesheetGraphPane } from './dopesheet-graph-pane'
 import { useGraphViewState } from './use-graph-view-state'
 import { useHeaderFrameInputs } from './use-header-frame-inputs'
 import { usePropertyFilters } from './use-property-filters'
@@ -50,21 +49,23 @@ import {
   DopesheetEditorPresentation,
   DopesheetLanesPresentation,
 } from './dopesheet-presentation'
-import { DopesheetRulerHeader } from './dopesheet-ruler-header'
-import { DopesheetLiveRulerCanvas } from './dopesheet-live-ruler-canvas'
 import { useLivePixelGeometrySync } from './use-live-pixel-geometry-sync'
 
 import { perfMarkRender } from '@/shared/logging/perf-marks'
 import {
 } from '@/shared/timeline/main-timeline-scrub'
-import { DopesheetSheetBody } from './dopesheet-sheet-body'
 
 import { DopesheetToolbar } from './dopesheet-toolbar'
-import { buildDopesheetPlayheadElements } from './dopesheet-playhead-elements'
 import { useDopesheetHotkeys } from './use-dopesheet-hotkeys'
 import { usePropertyExpressionEditor } from './use-property-expression-editor'
 import type { CompoundPropertyInputConfig } from './compound-property-inputs'
 import { KeyframeTimingStrip } from './keyframe-timing-strip'
+import {
+  buildDopesheetAffectedFrameRangeOverlayElement,
+  buildDopesheetGraphPaneElement,
+  buildDopesheetHeaderFrameInputs,
+  buildDopesheetSheetPaneElements,
+} from './dopesheet-pane-elements'
 
 import {
 } from '@/features/keyframes/deps/timeline-playhead'
@@ -91,27 +92,6 @@ const EMPTY_COMPOUND_SECONDARIES: Partial<Record<AnimatableProperty, AnimatableP
 const EMPTY_DIMENSION_SEPARATION: NonNullable<
   DopesheetEditorProps['dimensionSeparationByProperty']
 > = {}
-
-/**
- * Properties shown in the graph pane: in single-curve mode only the selected
- * property (plus its compound secondary), otherwise all visible properties.
- */
-function resolveGraphVisiblePropertyList(
-  singleCurveMode: boolean | undefined,
-  graphDisplayProperty: AnimatableProperty | null,
-  compoundSecondaryProperties: Partial<Record<AnimatableProperty, AnimatableProperty>>,
-  visibleGraphProperties: AnimatableProperty[],
-): AnimatableProperty[] {
-  return singleCurveMode && graphDisplayProperty
-    ? [
-        graphDisplayProperty,
-        ...(compoundSecondaryProperties[graphDisplayProperty]
-          ? [compoundSecondaryProperties[graphDisplayProperty]!]
-          : []),
-      ]
-    : visibleGraphProperties
-}
-
 
 
 export const DopesheetEditor = memo(function DopesheetEditor({
@@ -866,17 +846,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     commitSelectionFramePreview,
     scheduleDragPreviewFrames,
   })
-  const rulerLabelFrameOffset = timelineScrollContainerRef ? itemFrom : 0
-  const liveRulerCanvas =
-    hasLinkedTimelineAxis && timelineScrollContainerRef ? (
-      <DopesheetLiveRulerCanvas
-        scrollContainerRef={timelineScrollContainerRef}
-        getLivePixelsPerSecond={getTimelineLivePixelsPerSecond}
-        fallbackPixelsPerSecond={timelinePixelsPerSecond}
-        fps={fps}
-        rulerUnit={graphRulerUnit}
-      />
-    ) : null
   // Shared row and group-header bundles, built once per change by the hook.
   const { rowContentProps, groupHeaderProps } = useDopesheetRowProps({
   activateProperty, axisConstraintByProperty, autoKeyEnabledByProperty,
@@ -979,172 +948,43 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       onBandClick: onTextMotionBandClick,
     },
   })
-  const emptyStateMessage = hasPropertyFilters
-    ? t('timeline.keyframeEditor.noParametersMatch')
-    : t('timeline.keyframeEditor.noKeyframesToDisplay')
-  const showEmptyGuidance = !hasPropertyFilters
-  // A clip can be animated by procedural modulators / audio pulse yet have no
-  // keyframes — the sheet would otherwise look empty and "unanimated".
-  const proceduralHint =
-    showEmptyGuidance && hasProceduralMotion
-      ? t('timeline.keyframeEditor.proceduralMotionHint')
-      : undefined
-
-  // Hoisted so the graph pane and sheet body can be composed once and reused
-  // across the exclusive (`graph`/`dopesheet`) and the `split` placements.
-  const rulerHeaderElement = (
-    <DopesheetRulerHeader
-      propertyGridStyle={propertyGridStyle}
-      timelineRef={timelineRef}
-      onRulerPointerDown={handleRulerPointerDown}
-      onRulerPointerMove={handleRulerPointerMove}
-      onRulerPointerUp={handleRulerPointerUp}
-      onRulerPointerLeave={handleRulerPointerLeave}
-      ticks={ticks}
-      frameToX={frameToX}
-      fps={fps}
-      rulerUnit={graphRulerUnit}
-      rulerLabelFrameOffset={rulerLabelFrameOffset}
-      liveRulerCanvas={liveRulerCanvas}
-      reservedRightGutterWidth={reservedScrollbarGutterWidth}
-      propertyFilter={filterKeyframedOnly ? 'keyframed' : 'all'}
-      onPropertyFilterChange={
-        presentation === 'classic' && propertyFilter === undefined
-          ? (filter) => setShowKeyframedOnly(filter === 'keyframed')
-          : undefined
-      }
-    />
-  )
-  // Standalone cells begin after their 1px border. A linked Edit axis pulls its
-  // cell surfaces over that border, so its playhead must begin at the shared
-  // main-timeline origin too.
-  const timelineContentLeft = columnWidth + (hasLinkedTimelineAxis ? 0 : 1)
-  const {
-    sheet: playheadOverlayElement,
-    split: splitPlayheadOverlayElement,
-    skim: skimPlayheadOverlayElement,
-  } = buildDopesheetPlayheadElements({
-    showPlayhead,
-    skim: Boolean(onSkim),
-    left: timelineContentLeft,
-    playheadFrame,
-    currentFrame,
-    itemFrom,
-    totalFrames,
-    clampToItemBounds: playheadClampToItemBounds,
-    localScrubActiveRef: rulerScrubActiveRef,
-    localScrubHandoffFrameRef: rulerScrubHandoffFrameRef,
-    frameToX,
-    globalFrameToX: globalFrameToPixels,
-    positionSyncTargetRef: timelineScrollContainerRef,
-    maxLeft: effectiveTimelineWidth - 1,
-    fps,
-    isRulerScrubbing,
-  })
-  const sheetBodyElement = (
-    <DopesheetSheetBody
-      scrollAreaRef={scrollAreaRef}
-      // Classic also lists text-motion bands, so bands alone give the body rows.
-      hasRows={sheetRows.length > 0 || (presentation === 'classic' && textMotionBands.length > 0)}
-      emptyStateMessage={emptyStateMessage}
-      showEmptyGuidance={showEmptyGuidance}
-      proceduralHint={proceduralHint}
-      rowElements={rowElements}
-      marqueeOverlayRef={marqueeOverlayRef}
-      propertyColumnWidth={columnWidth}
-      subtractRulerHeight={presentation !== 'lanes'}
-      onTimelineBackgroundPointerDown={handleTimelineBackgroundPointerDown}
-    />
-  )
-  const graphPaneElement = (
-    <DopesheetGraphPane
-      hasRows={propertyRows.length > 0}
-      emptyStateMessage={emptyStateMessage}
-      showEmptyGuidance={showEmptyGuidance}
-      proceduralHint={proceduralHint}
-      propertyColumnElements={propertyColumnElements}
-      propertyColumnWidth={columnWidth}
-      graphPaneRef={graphPaneRef}
-      disabled={disabled}
-      graphDisplayPropertyLocked={graphDisplayPropertyLocked}
-      focusGraphPane={focusGraphPane}
-      handleGraphPaneKeyDown={handleGraphPaneKeyDown}
-      graphPaneSize={graphPaneSize}
-      graphVisiblePropertiesSize={visibleGraphProperties.length}
-      viewport={viewport}
-      updateViewport={updateViewport}
-      itemId={itemId}
-      keyframesByProperty={keyframesByProperty}
-      graphDisplayProperty={graphDisplayProperty}
-      graphVisibleProperties={resolveGraphVisiblePropertyList(
-        singleCurveMode,
-        graphDisplayProperty,
-        compoundSecondaryProperties,
-        visibleGraphProperties,
-      )}
-      selectedKeyframeIds={selectedKeyframeIds}
-      currentFrame={currentFrame}
-      itemFrom={itemFrom}
-      totalFrames={totalFrames}
-      fps={fps}
-      onKeyframeMove={onKeyframeMove}
-      timingStripPreviewFrames={timingStripPreviewFrames}
-      constrainGraphFrameDelta={constrainGraphFrameDelta}
-      onBezierHandleMove={onBezierHandleMove}
-      onSelectionChange={onSelectionChange}
-      onPropertyChange={onPropertyChange}
-      onScrub={onScrub}
-      onScrubStart={onScrubStart}
-      onScrubEnd={onScrubEnd}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onAddKeyframe={onAddKeyframe}
-      onRemoveKeyframes={onRemoveKeyframes}
-      onNavigateToKeyframe={onNavigateToKeyframe}
-      transitionBlockedRanges={transitionBlockedRanges}
-      proceduralPreview={proceduralPreview}
-      snapEnabled={snapEnabled}
-      graphHandleVisibility={showAllGraphHandles ? 'all' : 'selected'}
-      graphRulerUnit={graphRulerUnit}
-      autoZoomGraphHeight={autoZoomGraphHeight}
-      graphVerticalZoomValue={graphVerticalZoomValue}
-      hidePlayhead={!showPlayhead || isSplitView}
-      subtractRulerHeight={presentation !== 'lanes'}
-      customGraphContent={graphMode === 'speed' ? speedGraphContent : undefined}
-    />
-  )
-  const affectedFrameRangeOverlayElement =
-    affectedFrameRange && affectedFrameRangeGeometry ? (
-      <div
-        data-testid="dopesheet-affected-frame-range"
-        data-from-frame={affectedFrameRange.fromFrame}
-        data-to-frame={affectedFrameRange.toFrame}
-        data-dopesheet-from-frame={affectedFrameRange.fromFrame}
-        data-dopesheet-to-frame={affectedFrameRange.toFrame}
-        className="absolute inset-y-0 border-x border-foreground/[0.10] bg-foreground/[0.035]"
-        style={affectedFrameRangeGeometry}
-      />
-    ) : null
-
-  // The workspace toolbar and the classic shell render the same header frame
-  // inputs, so both build them from one source.
-  const headerFrameInputs = {
-    disabled,
-    inputsEnabled:
-      Boolean(onKeyframeMove) &&
-      selectedFrameSummary.hasSelection &&
-      !selectedFrameSummary.hasMixedFrames,
-    totalFrames,
-    globalFrame,
-    localFrameInputValue,
-    globalFrameInputValue,
-    setLocalFrameInputValue,
-    setGlobalFrameInputValue,
-    skipNextHeaderFrameBlurRef,
-    commitLocalFrameInput,
-    commitGlobalFrameInput,
+  const paneState = {
+    t, hasPropertyFilters, hasProceduralMotion,
+    propertyGridStyle, timelineRef, graphRulerUnit, reservedScrollbarGutterWidth,
+    ticks, frameToX, handleRulerPointerDown, handleRulerPointerMove,
+    handleRulerPointerUp, handleRulerPointerLeave, filterKeyframedOnly,
+    setShowKeyframedOnly, presentation, propertyFilter, hasLinkedTimelineAxis,
+    timelineScrollContainerRef, getTimelineLivePixelsPerSecond,
+    timelinePixelsPerSecond, itemFrom, columnWidth, showPlayhead, onSkim,
+    playheadFrame, currentFrame, totalFrames, playheadClampToItemBounds,
+    globalFrameToPixels, rulerScrubActiveRef, rulerScrubHandoffFrameRef,
+    effectiveTimelineWidth, fps, isRulerScrubbing, scrollAreaRef, sheetRows,
+    textMotionBands, rowElements, marqueeOverlayRef,
+    handleTimelineBackgroundPointerDown, propertyColumnElements, graphPaneRef,
+    disabled, graphDisplayPropertyLocked, focusGraphPane, handleGraphPaneKeyDown,
+    graphPaneSize, visibleGraphProperties, viewport, updateViewport, itemId,
+    keyframesByProperty, graphDisplayProperty, singleCurveMode,
+    compoundSecondaryProperties, selectedKeyframeIds, onKeyframeMove,
+    timingStripPreviewFrames, constrainGraphFrameDelta, onBezierHandleMove,
+    onSelectionChange, onPropertyChange, onScrub, onScrubStart, onScrubEnd,
+    onDragStart, onDragEnd, onAddKeyframe, onRemoveKeyframes,
+    onNavigateToKeyframe, transitionBlockedRanges, proceduralPreview,
+    snapEnabled, showAllGraphHandles, autoZoomGraphHeight,
+    graphVerticalZoomValue, isSplitView, graphMode, speedGraphContent,
+    affectedFrameRange, affectedFrameRangeGeometry, selectedFrameSummary,
+    globalFrame, localFrameInputValue, globalFrameInputValue,
+    setLocalFrameInputValue, setGlobalFrameInputValue,
+    skipNextHeaderFrameBlurRef, commitLocalFrameInput, commitGlobalFrameInput,
     handleHeaderFrameInputKeyDown,
   }
+  const {
+    rulerHeaderElement, sheetBodyElement, playheadOverlayElement,
+    splitPlayheadOverlayElement, skimPlayheadOverlayElement,
+  } = buildDopesheetSheetPaneElements(paneState)
+  const graphPaneElement = buildDopesheetGraphPaneElement(paneState)
+  const affectedFrameRangeOverlayElement =
+    buildDopesheetAffectedFrameRangeOverlayElement(paneState)
+  const headerFrameInputs = buildDopesheetHeaderFrameInputs(paneState)
 
   if (presentation === 'lanes') {
     return (

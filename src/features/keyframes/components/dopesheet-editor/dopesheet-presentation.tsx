@@ -28,7 +28,7 @@ export type DopesheetHeaderFrameInputsProps = React.ComponentProps<
 >
 
 /** The panes every shell places, built once by the editor. */
-interface DopesheetPaneElements {
+export interface DopesheetPaneElements {
   rulerHeaderElement: ReactNode
   sheetBodyElement: ReactNode
   graphPaneElement: ReactNode
