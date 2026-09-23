@@ -1,15 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  ExternalLink,
-  Layers3,
-  ListFilter,
-  Plus,
-  Search,
-  Trash2,
-  WandSparkles,
-  X,
-} from 'lucide-react'
+import { ListFilter, Plus, Search, Trash2, WandSparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import type { CanvasSettings } from '@/types/transform'
@@ -81,11 +72,11 @@ import {
   saveAnimationPresets,
   type AnimationPreset,
 } from '@/infrastructure/storage'
-import { MotionPresetThumbnail } from './motion-preset-thumbnail'
 import { SaveAnimationPresetDialog } from './save-animation-preset-dialog'
 import { TextMotionSlotRows } from '../text-motion/text-motion-slot-rows'
 import { filterAnimationPresetCandidates } from './animation-preset-filter'
 import { AppliedMotionSummary } from './applied-motion-summary'
+import { AnimationPresetLibraryEdit } from './animation-preset-library-edit'
 import { ContinuousMotionRow, type ModifierEditSettings } from './continuous-motion-row'
 import { MotionPresetControls } from './motion-preset-controls'
 import { MotionPresetSection } from './motion-preset-section'
@@ -960,114 +951,28 @@ export const AnimationPresetLibrary = memo(function AnimationPresetLibrary({
 
   if (variant === 'edit') {
     return (
-      <TooltipProvider delayDuration={300}>
-        <div className="flex flex-col gap-4" data-testid="edit-animation-panel">
-          <section className="flex flex-col gap-2">
-            <div>
-              <h3 className="text-xs font-medium">{t('editor.editAnimation.quickTitle')}</h3>
-              <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-                {t('editor.editAnimation.quickHint')}
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {editQuickPresets.map((preset) => {
-                const disabledReason = motionReason(preset)
-                const label = t(`editor.motionPresets.items.${preset.labelKey}`)
-                return (
-                  <Tooltip key={preset.id}>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        disabled={disabledReason !== null}
-                        onClick={() => handleApplyMotion(preset)}
-                        className={cn(
-                          'group flex min-h-14 flex-col items-center gap-1 rounded-md border border-border/60 p-1.5 text-[10px]',
-                          disabledReason
-                            ? 'cursor-not-allowed text-muted-foreground/40'
-                            : 'text-muted-foreground hover:border-border hover:bg-secondary/40 hover:text-foreground',
-                        )}
-                      >
-                        <MotionPresetThumbnail thumbnail={preset.thumbnail} />
-                        <span className="w-full truncate text-center">{label}</span>
-                      </button>
-                    </TooltipTrigger>
-                    {disabledReason ? <TooltipContent>{disabledReason}</TooltipContent> : null}
-                  </Tooltip>
-                )
-              })}
-            </div>
-          </section>
-
-          {hasAnyAnimation ? (
-            <>
-              <Separator />
-              <AppliedMotionSummary
-            variant="edit"
-            manualKeyframeSummary={manualKeyframeSummary}
-            trimmedKeyframeCount={trimmedKeyframeCount}
-            keyframeApplications={keyframeApplications}
-            activeTextMotion={activeTextMotion}
-            selectedItems={selectedItems}
-            canvas={canvas}
-            onRemoveManualKeyframes={handleRemoveManualKeyframes}
-            onTrimAnimation={handleTrimAnimation}
-            onRemovePresetApplication={handleRemovePresetApplication}
-            onNavigateToItemFrame={navigateToItemFrame}
-            onRemoveTextMotion={handleRemoveTextMotion}
-            onNavigateToTextMotion={navigateToTextMotion}
-            t={t}
-              />
-            </>
-          ) : null}
-
-          {selectedTextItems.length > 0 ? (
-            <>
-              <Separator />
-              <section className="flex flex-col gap-2">
-                <div>
-                  <h3 className="text-xs font-medium">{t('textMotion.sectionTitle')}</h3>
-                  <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-                    {t('editor.editAnimation.textHint')}
-                  </p>
-                </div>
-                <TextMotionSlotRows items={selectedTextItems} />
-              </section>
-            </>
-          ) : null}
-
-          <Separator />
-
-          <section className="rounded-md border border-border/60 bg-secondary/20 p-2.5">
-            <div className="flex items-start gap-2">
-              <Layers3 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <h3 className="text-xs font-medium">{t('editor.editAnimation.motionClipTitle')}</h3>
-                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-                  {isMotionClip
-                    ? t('editor.editAnimation.motionClipOpenHint')
-                    : t('editor.editAnimation.motionClipCreateHint')}
-                </p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="mt-2 h-7 gap-1.5 px-2 text-[10px]"
-                  onClick={handleMotionClip}
-                >
-                  {isMotionClip ? (
-                    <ExternalLink className="h-3 w-3" />
-                  ) : (
-                    <Layers3 className="h-3 w-3" />
-                  )}
-                  {isMotionClip
-                    ? t('editor.editAnimation.openInMotion')
-                    : t('editor.editAnimation.createMotionClip')}
-                </Button>
-              </div>
-            </div>
-          </section>
-        </div>
-      </TooltipProvider>
+      <AnimationPresetLibraryEdit
+        quickPresets={editQuickPresets}
+        reasonFor={motionReason}
+        onApplyPreset={handleApplyMotion}
+        hasAnyAnimation={hasAnyAnimation}
+        manualKeyframeSummary={manualKeyframeSummary}
+        trimmedKeyframeCount={trimmedKeyframeCount}
+        keyframeApplications={keyframeApplications}
+        activeTextMotion={activeTextMotion}
+        selectedItems={selectedItems}
+        selectedTextItems={selectedTextItems}
+        canvas={canvas}
+        onRemoveManualKeyframes={handleRemoveManualKeyframes}
+        onTrimAnimation={handleTrimAnimation}
+        onRemovePresetApplication={handleRemovePresetApplication}
+        onNavigateToItemFrame={navigateToItemFrame}
+        onRemoveTextMotion={handleRemoveTextMotion}
+        onNavigateToTextMotion={navigateToTextMotion}
+        isMotionClip={isMotionClip}
+        onMotionClip={handleMotionClip}
+        t={t}
+      />
     )
   }
 
