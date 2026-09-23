@@ -24,7 +24,7 @@ import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import type { CanvasSettings } from '@/types/transform'
 import type { AnimationKeyframeSource, AnimatableProperty } from '@/types/keyframe'
-import type { TextItem, TimelineItem, TimelineTrack } from '@/types/timeline'
+import type { TextItem } from '@/types/timeline'
 import type { TextMotionSlot } from '@/types/text-motion'
 import type {
   MotionModifierChannel,
@@ -104,94 +104,13 @@ import { SaveAnimationPresetDialog } from './save-animation-preset-dialog'
 import { TextMotionSlotRows } from '../text-motion/text-motion-slot-rows'
 import { filterAnimationPresetCandidates } from './animation-preset-filter'
 import { AppliedContinuousMotionControls } from './applied-continuous-motion-controls'
-
-// Every transform/opacity property any built-in motion preset can write. In
-// Replace mode we clear these (within the new preset's frame window) so a fresh
-// preset fully supersedes whatever animation occupied that region.
-const MOTION_PRESET_PROPERTIES: AnimatableProperty[] = Array.from(
-  new Set(MOTION_PRESETS.flatMap((preset) => preset.properties)),
-)
-
-const presetsByCategory = MOTION_PRESET_CATEGORIES.reduce(
-  (map, category) => {
-    map[category] = MOTION_PRESETS.filter((preset) => preset.category === category)
-    return map
-  },
-  {} as Record<MotionPresetCategory, MotionPreset[]>,
-)
-
-const TEXT_SLOT_BY_MOTION_CATEGORY: Partial<Record<MotionPresetCategory, TextMotionSlot>> = {
-  entrance: 'in',
-  exit: 'out',
-}
-
-const EDIT_QUICK_PRESET_IDS = new Set([
-  'fade-in',
-  'slide-in-left',
-  'pop-in',
-  'fade-out',
-  'slide-out-right',
-  'pulse',
-])
-
-function isTimelineItem(item: TimelineItem | undefined): item is TimelineItem {
-  return Boolean(item)
-}
-
-// Items-keyed cache for the ordered selection. The library only needs the
-// selected items, but a raw Map+filter+sort selector rebuilt the track-order
-// map and re-sorted on every items-store update while the panel was open.
-let presetSelectedItemsCache: {
-  items: TimelineItem[]
-  tracks: TimelineTrack[]
-  ids: string[]
-  result: TimelineItem[]
-} | null = null
-
-function areSelectionIdListsEqual(previous: readonly string[], next: readonly string[]): boolean {
-  if (previous.length !== next.length) return false
-  for (let index = 0; index < previous.length; index += 1) {
-    if (previous[index] !== next[index]) return false
-  }
-  return true
-}
-
-function selectPresetSelectedItems(
-  state: {
-    items: TimelineItem[]
-    tracks: TimelineTrack[]
-    itemById: Record<string, TimelineItem>
-  },
-  selectedItemIds: readonly string[],
-): TimelineItem[] {
-  const cached = presetSelectedItemsCache
-  if (
-    cached &&
-    cached.items === state.items &&
-    cached.tracks === state.tracks &&
-    areSelectionIdListsEqual(cached.ids, selectedItemIds)
-  ) {
-    return cached.result
-  }
-
-  const orderByTrack = new Map(state.tracks.map((track) => [track.id, track.order ?? 0]))
-  const result = selectedItemIds
-    .map((id) => state.itemById[id])
-    .filter(isTimelineItem)
-    .sort((left, right) => {
-      const frameDelta = left.from - right.from
-      if (frameDelta !== 0) return frameDelta
-      return (orderByTrack.get(left.trackId) ?? 0) - (orderByTrack.get(right.trackId) ?? 0)
-    })
-
-  presetSelectedItemsCache = {
-    items: state.items,
-    tracks: state.tracks,
-    ids: [...selectedItemIds],
-    result,
-  }
-  return result
-}
+import {
+  EDIT_QUICK_PRESET_IDS,
+  MOTION_PRESET_PROPERTIES,
+  presetsByCategory,
+  TEXT_SLOT_BY_MOTION_CATEGORY,
+} from './animation-preset-catalogue'
+import { selectPresetSelectedItems } from './preset-selection'
 
 interface ModifierEditSettings {
   intensityScale?: number
