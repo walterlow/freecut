@@ -32,6 +32,7 @@ import { useDopesheetCoordinates } from './use-dopesheet-coordinates'
 import { useDopesheetSelectionMeta } from './use-dopesheet-selection-meta'
 import { useDopesheetGraphDisplay } from './use-dopesheet-graph-display'
 import { useDopesheetSheetStructure } from './use-dopesheet-sheet-structure'
+import { useDopesheetExpressionDock } from './use-dopesheet-expression-dock'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
   useDopesheetPointerDispatch,
@@ -61,9 +62,6 @@ import { DopesheetToolbar } from './dopesheet-toolbar'
 import { buildDopesheetPlayheadElements } from './dopesheet-playhead-elements'
 import { useDopesheetHotkeys } from './use-dopesheet-hotkeys'
 import { usePropertyExpressionEditor } from './use-property-expression-editor'
-import { buildExpressionDockContext } from './expression-dock-context'
-
-import { DopesheetExpressionDockLayer } from './dopesheet-expression-dock-layer'
 import type {
   DopesheetGroupHeaderProps,
   DopesheetPropertyRowContentProps,
@@ -87,7 +85,6 @@ import {
 import { keyframeValueToHexColor } from '@/features/keyframes/utils/color-keyframes'
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints'
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store'
-import { getKeyframePropertyLabel } from '@/features/keyframes/utils/property-i18n'
 import type { DopesheetEditorProps } from './dopesheet-editor-props'
 
 
@@ -1140,58 +1137,29 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       toggleGroupCurves,
     ],
   )
-  const expressionDockContext = useMemo(() => {
-    if (!expressionEditor) return null
-    return buildExpressionDockContext({
-      editor: expressionEditor,
-      rows: propertyRows,
-      compoundRows: compoundPropertyRows,
-      preExpressionValues: preExpressionPropertyValues,
-      propertyValues,
-      expressions: propertyExpressions,
-      currentGlobalFrame: globalFrame ?? itemFrom + currentFrame,
-      fps,
-      resolveExpressionReference,
-      getPropertyLabel: (property) => getKeyframePropertyLabel(t, property),
-    })
-  }, [
-    compoundPropertyRows,
+  const expressionDockElement = useDopesheetExpressionDock({
+    editor: expressionEditor,
+    referencePick: expressionReferencePick,
+    dockRef: expressionDockRef,
+    textareaRef: expressionTextareaRef,
+    setEditor: setExpressionEditor,
+    setReferencePick: setExpressionReferencePick,
+    beginReferenceDrag: beginExpressionReferenceDrag,
+    applyPreset: applyExpressionPreset,
+    itemId,
+    rows: propertyRows,
+    compoundRows: compoundPropertyRows,
+    preExpressionValues: preExpressionPropertyValues,
+    propertyValues,
+    expressions: propertyExpressions,
     currentFrame,
-    expressionEditor,
-    fps,
     globalFrame,
     itemFrom,
-    preExpressionPropertyValues,
-    propertyExpressions,
-    propertyRows,
-    propertyValues,
+    fps,
     resolveExpressionReference,
-    t,
-  ])
-  useEffect(() => {
-    if (expressionEditor && !expressionDockContext) {
-      setExpressionReferencePick(null)
-      setExpressionEditor(null)
-    }
-  }, [expressionDockContext, expressionEditor, setExpressionEditor, setExpressionReferencePick])
-
-  const expressionDockElement =
-    expressionEditor && expressionDockContext ? (
-      <DopesheetExpressionDockLayer
-        context={expressionDockContext}
-        editor={expressionEditor}
-        pickingReference={expressionReferencePick?.property === expressionDockContext.property}
-        itemId={itemId}
-        rootRef={expressionDockRef}
-        textareaRef={expressionTextareaRef}
-        setEditor={setExpressionEditor}
-        setReferencePick={setExpressionReferencePick}
-        beginReferenceDrag={beginExpressionReferenceDrag}
-        applyPreset={applyExpressionPreset}
-        onSetPropertyExpression={onSetPropertyExpression}
-        onRemovePropertyExpression={onRemovePropertyExpression}
-      />
-    ) : null
+    onSetPropertyExpression,
+    onRemovePropertyExpression,
+  })
 
   // The row controls are substantially heavier than the timeline cells, and
   // their output does not depend on the time viewport. The hook caches those
