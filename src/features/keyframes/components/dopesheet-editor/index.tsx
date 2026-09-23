@@ -14,7 +14,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe'
+import type { AnimatableProperty, Keyframe } from '@/types/keyframe'
 import { CompactNavigator } from './compact-navigator'
 
 import { DopesheetGraphPane } from './dopesheet-graph-pane'
@@ -30,6 +30,7 @@ import { useDopesheetPropertyDerivations } from './use-dopesheet-property-deriva
 import { useDopesheetNavigation } from './use-dopesheet-navigation'
 import { useDopesheetSheetMetrics } from './use-dopesheet-sheet-metrics'
 import { useDopesheetCoordinates } from './use-dopesheet-coordinates'
+import { useDopesheetSelectionMeta } from './use-dopesheet-selection-meta'
 import { useDopesheetSheetRows } from './use-dopesheet-sheet-rows'
 import {
   useDopesheetPointerDispatch,
@@ -81,7 +82,7 @@ import {
   SPACIOUS_PROPERTY_COLUMN_WIDTH,
   SNAP_THRESHOLD_PX,
 } from './dopesheet-constants'
-import type { DopesheetPropertyRow, DragState, KeyframeMeta } from './dopesheet-types'
+import type { DopesheetPropertyRow, DragState } from './dopesheet-types'
 import { getDopesheetRowControlState } from './row-controls'
 import { getCombinedGraphValueRange } from '../value-graph-editor/value-range-utils'
 import {
@@ -529,72 +530,21 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const rowKeyframesByProperty = sheetKeyframesByProperty
 
-  const keyframeMetaById = useMemo(() => {
-    const map = new Map<string, KeyframeMeta>()
-    for (const row of sheetRowsStructure) {
-      for (const keyframe of row.keyframes) {
-        map.set(keyframe.id, { property: row.property, keyframe })
-      }
-    }
-    return map
-  }, [sheetRowsStructure])
-
-  const keyframeMetaByIdRef = useRef(keyframeMetaById)
-  keyframeMetaByIdRef.current = keyframeMetaById
-
-  const selectedFrameSummary = useMemo(() => {
-    const selectedFrames: number[] = []
-    for (const keyframeId of selectedKeyframeIds) {
-      const meta = keyframeMetaById.get(keyframeId)
-      if (meta) {
-        selectedFrames.push(meta.keyframe.frame)
-      }
-    }
-
-    if (selectedFrames.length === 0) {
-      return {
-        hasSelection: false,
-        hasMixedFrames: false,
-        localFrame: null as number | null,
-        globalFrame: null as number | null,
-      }
-    }
-
-    const firstFrame = selectedFrames[0] ?? null
-    const hasMixedFrames = selectedFrames.some((frame) => frame !== firstFrame)
-    const frameOffset = globalFrame === null ? null : globalFrame - currentFrame
-
-    return {
-      hasSelection: true,
-      hasMixedFrames,
-      localFrame: hasMixedFrames ? null : firstFrame,
-      globalFrame:
-        hasMixedFrames || firstFrame === null || frameOffset === null
-          ? null
-          : firstFrame + frameOffset,
-    }
-  }, [currentFrame, globalFrame, keyframeMetaById, selectedKeyframeIds])
-  const selectedCurveProperty = useMemo(() => {
-    let property: AnimatableProperty | null = null
-
-    for (const keyframeId of selectedKeyframeIds) {
-      const meta = keyframeMetaById.get(keyframeId)
-      if (!meta) {
-        continue
-      }
-
-      if (property === null) {
-        property = meta.property
-        continue
-      }
-
-      if (property !== meta.property) {
-        return null
-      }
-    }
-
-    return property
-  }, [keyframeMetaById, selectedKeyframeIds])
+  const {
+    keyframeMetaById,
+    keyframeMetaByIdRef,
+    selectedFrameSummary,
+    selectedCurveProperty,
+    selectedRefs,
+    selectedRefIds,
+  } = useDopesheetSelectionMeta({
+    sheetRowsStructure,
+    selectedKeyframeIds,
+    currentFrame,
+    globalFrame,
+    isPropertyLocked,
+    itemId,
+  })
 
   useEffect(() => {
     if (!showGraphPane || !selectedCurveProperty) {
@@ -733,22 +683,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     if (presentation !== 'lanes') return
     onLaneContentHeightChange?.(renderedSheetEntries.contentHeight)
   }, [onLaneContentHeightChange, presentation, renderedSheetEntries.contentHeight])
-
-  const selectedRefs = useMemo(() => {
-    const refs: KeyframeRef[] = []
-    for (const keyframeId of selectedKeyframeIds) {
-      const meta = keyframeMetaById.get(keyframeId)
-      if (!meta) continue
-      if (isPropertyLocked(meta.property)) continue
-      refs.push({
-        itemId,
-        property: meta.property,
-        keyframeId,
-      })
-    }
-    return refs
-  }, [selectedKeyframeIds, keyframeMetaById, isPropertyLocked, itemId])
-  const selectedRefIds = useMemo(() => selectedRefs.map((ref) => ref.keyframeId), [selectedRefs])
 
   const isCurrentFrameBlocked = useMemo(
     () =>
