@@ -26,6 +26,7 @@ import {
   resolveRenderScalePlan,
   resolveTranscriptSubtitleExport,
   shouldUseWindowedAudioProcessing,
+  summarizeCompositionForRender,
 } from './render-export-policy'
 
 // Subsystems
@@ -289,6 +290,57 @@ async function addEncodedAudioTrack(params: {
   return audioSource
 }
 
+/**
+ * Encode-phase reporting for the audio task. Audio and video advance together,
+ * so once frames start rendering the audio phases stop being worth reporting.
+ */
+function createAudioProgressReporter(params: {
+  onProgress: (progress: RenderProgress) => void
+  totalFrames: number
+  durationSeconds: number
+  hasVideoRenderingStarted: () => boolean
+}): (completedSeconds: number, mode: 'copying' | 'processing') => void {
+  const { onProgress, totalFrames, durationSeconds, hasVideoRenderingStarted } = params
+
+  return (completedSeconds, mode) => {
+    if (hasVideoRenderingStarted()) return
+    const boundedSeconds = Math.min(durationSeconds, completedSeconds)
+    const progress = 20 + Math.round((boundedSeconds / durationSeconds) * 15)
+    onProgress({
+      phase: 'preparing',
+      progress,
+      totalFrames,
+      message: `${mode === 'copying' ? 'Copying' : 'Processing'} audio ${formatClock(boundedSeconds)} / ${formatClock(durationSeconds)}`,
+    })
+  }
+}
+
+/**
+ * Register the soft (muxed) transcript subtitle track and hand it back so the
+ * caller can flush the WebVTT payload after `output.start()`.
+ */
+function addTranscriptSubtitleTrack(params: {
+  output: InstanceType<MediabunnyModule['Output']>
+  TextSubtitleSource: MediabunnyModule['TextSubtitleSource']
+  container: ClientExportSettings['container']
+}): InstanceType<MediabunnyModule['TextSubtitleSource']> {
+  const { output, TextSubtitleSource, container } = params
+
+  const transcriptSubtitleSource = new TextSubtitleSource('webvtt')
+  output.addSubtitleTrack(transcriptSubtitleSource, {
+    languageCode: 'eng',
+    name: 'Transcript',
+    disposition: {
+      default: true,
+    },
+  })
+  getLog().info('Transcript subtitles will be embedded as WebVTT track', {
+    container,
+  })
+
+  return transcriptSubtitleSource
+}
+
 export interface RenderEngineOptions {
   settings: ClientExportSettings
   composition: CompositionInputProps
@@ -498,9 +550,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     width: settings.resolution.width,
     height: settings.resolution.height,
     codec: settings.codec,
-    tracksCount: composition.tracks?.length ?? 0,
-    hasTransitions: (composition.transitions?.length ?? 0) > 0,
-    hasKeyframes: (composition.keyframes?.length ?? 0) > 0,
+    ...summarizeCompositionForRender(composition),
   })
 
   // Validate inputs
@@ -601,20 +651,9 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     )
   }
 
-  let transcriptSubtitleSource: InstanceType<typeof TextSubtitleSource> | null = null
-  if (embedTranscriptSubtitles) {
-    transcriptSubtitleSource = new TextSubtitleSource('webvtt')
-    output.addSubtitleTrack(transcriptSubtitleSource, {
-      languageCode: 'eng',
-      name: 'Transcript',
-      disposition: {
-        default: true,
-      },
-    })
-    getLog().info('Transcript subtitles will be embedded as WebVTT track', {
-      container: settings.container,
-    })
-  }
+  const transcriptSubtitleSource = embedTranscriptSubtitles
+    ? addTranscriptSubtitleTrack({ output, TextSubtitleSource, container: settings.container })
+    : null
 
   // Get composition (project) resolution – this is what we render at, and the
   // export resolution we output, plus whether the two differ.
@@ -721,17 +760,12 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
   let videoRenderingStarted = false
   let audioError: unknown
-  const reportAudioProgress = (completedSeconds: number, mode: 'copying' | 'processing') => {
-    if (videoRenderingStarted) return
-    const boundedSeconds = Math.min(durationSeconds, completedSeconds)
-    const progress = 20 + Math.round((boundedSeconds / durationSeconds) * 15)
-    onProgress({
-      phase: 'preparing',
-      progress,
-      totalFrames,
-      message: `${mode === 'copying' ? 'Copying' : 'Processing'} audio ${formatClock(boundedSeconds)} / ${formatClock(durationSeconds)}`,
-    })
-  }
+  const reportAudioProgress = createAudioProgressReporter({
+    onProgress,
+    totalFrames,
+    durationSeconds,
+    hasVideoRenderingStarted: () => videoRenderingStarted,
+  })
 
   // Audio and video now advance together. Mediabunny's source backpressure
   // bounds encoded data while windowed processing bounds decoded PCM memory.

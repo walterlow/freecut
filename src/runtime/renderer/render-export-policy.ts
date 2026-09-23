@@ -1,12 +1,13 @@
 /**
- * Pure policy for the client render orchestrator.
+ * Pure policy and derivations for the client render orchestrator.
  *
- * These derivations were inline in `canvas-render-orchestrator.ts`. They decide
+ * These decisions were inline in `canvas-render-orchestrator.ts`. They decide
  * *what* an export does — windowed audio, subtitle muxing vs burn-in, render vs
- * export resolution, muxed audio codec — while the orchestrator keeps owning
- * every resource (canvas, encoder sources, output target) and the frame loop.
- * Nothing here allocates GPU/encoder resources, so moving a decision out can
- * never change when the render starts.
+ * export resolution, muxed audio codec — and describe it for the start-of-render
+ * log line, while the orchestrator keeps owning every resource (canvas, encoder
+ * sources, output target) and the frame loop. Nothing here allocates GPU or
+ * encoder resources, so moving a decision out can never change when the render
+ * starts.
  */
 
 import type { CompositionInputProps, SubtitleExportMode } from '@/types/export'
@@ -40,6 +41,27 @@ export function shouldUseWindowedAudioProcessing(options: WindowedAudioProcessin
     options.durationSeconds >= WINDOWED_AUDIO_MIN_DURATION_SECONDS &&
     options.supportsWindowedProcessing()
   )
+}
+
+/**
+ * Structured fields for the start-of-render log line. Reporters (and the
+ * headless harness) key off these to spot an export that renders an empty or
+ * animation-free timeline, so they are derived in one place.
+ */
+export interface RenderStartSummary {
+  tracksCount: number
+  hasTransitions: boolean
+  hasKeyframes: boolean
+}
+
+export function summarizeCompositionForRender(
+  composition: CompositionInputProps,
+): RenderStartSummary {
+  return {
+    tracksCount: composition.tracks?.length ?? 0,
+    hasTransitions: (composition.transitions?.length ?? 0) > 0,
+    hasKeyframes: (composition.keyframes?.length ?? 0) > 0,
+  }
 }
 
 export interface RenderScalePlan {
