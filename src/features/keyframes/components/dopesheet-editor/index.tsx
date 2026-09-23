@@ -16,6 +16,12 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe'
 import { getFrameAxisX, getFrameFromAxisX, getVisibleKeyframeX } from './layout'
+import {
+  buildDopesheetTicks,
+  buildMarqueeKeyframePoints,
+  buildRenderedKeyframeXById,
+  buildRenderedSheetEntries,
+} from './dopesheet-sheet-geometry'
 import { CompactNavigator } from './compact-navigator'
 
 import { DopesheetGraphPane } from './dopesheet-graph-pane'
@@ -72,25 +78,17 @@ import { KeyframeTimingStrip } from './keyframe-timing-strip'
 import {
   buildGroupedPropertyRows,
   buildGroupedPropertyStructure,
-  getNiceTickStep,
 } from './dopesheet-helpers'
 
 import {
 } from '@/features/keyframes/deps/timeline-playhead'
 import {
   EMPTY_AUTO_KEY_ENABLED_BY_PROPERTY,
-  GROUP_HEADER_HEIGHT,
   PROPERTY_COLUMN_WIDTH,
   SPACIOUS_PROPERTY_COLUMN_WIDTH,
-  ROW_HEIGHT,
   SNAP_THRESHOLD_PX,
 } from './dopesheet-constants'
-import type {
-  DopesheetPropertyRow,
-  DragState,
-  KeyframeMeta,
-  RenderedSheetEntry,
-} from './dopesheet-types'
+import type { DopesheetPropertyRow, DragState, KeyframeMeta } from './dopesheet-types'
 import { getDopesheetRowControlState } from './row-controls'
 import { getPropertyAccordionGroups } from './property-groups'
 import { getCombinedGraphValueRange } from '../value-graph-editor/value-range-utils'
@@ -793,51 +791,27 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       getVisibleKeyframeX(frame, viewport, effectiveTimelineWidth, timelineEdgeInset),
     [effectiveTimelineWidth, timelineEdgeInset, viewport],
   )
-  const renderedKeyframeXById = useMemo(() => {
-    const positions = new Map<string, number>()
-    for (const row of sheetRowsStructure) {
-      for (const keyframe of row.keyframes) {
-        const x = getRenderedKeyframeX(keyframe.frame)
-        if (x !== null) {
-          positions.set(keyframe.id, x)
-        }
-      }
-    }
-    return positions
-  }, [sheetRowsStructure, getRenderedKeyframeX])
-  const renderedSheetEntries = useMemo(() => {
-    const entries: RenderedSheetEntry[] = []
-    const textMotionRowCount = presentation === 'classic' ? textMotionBands.length : 0
-    let top = textMotionRowCount * ROW_HEIGHT
-
-    for (const group of groupedSheetRows) {
-      const inline = presentation === 'classic' || inlinePropertyGroupIdSet.has(group.id)
-      if (!inline) {
-        entries.push({ type: 'group', group, top })
-        top += GROUP_HEADER_HEIGHT
-      }
-
-      if (!inline && !(expandedGroups[group.id] ?? true)) {
-        continue
-      }
-
-      for (const row of group.rows) {
-        entries.push({ type: 'row', row, top, indented: !inline })
-        top += ROW_HEIGHT
-      }
-    }
-
-    return {
-      entries,
-      contentHeight: top,
-    }
-  }, [
-    expandedGroups,
-    groupedSheetRows,
-    inlinePropertyGroupIdSet,
-    presentation,
-    textMotionBands.length,
-  ])
+  const renderedKeyframeXById = useMemo(
+    () => buildRenderedKeyframeXById(sheetRowsStructure, getRenderedKeyframeX),
+    [sheetRowsStructure, getRenderedKeyframeX],
+  )
+  const renderedSheetEntries = useMemo(
+    () =>
+      buildRenderedSheetEntries({
+        groupedSheetRows,
+        presentation,
+        textMotionBandCount: textMotionBands.length,
+        inlinePropertyGroupIdSet,
+        expandedGroups,
+      }),
+    [
+      expandedGroups,
+      groupedSheetRows,
+      inlinePropertyGroupIdSet,
+      presentation,
+      textMotionBands.length,
+    ],
+  )
   useLayoutEffect(() => {
     if (presentation !== 'lanes') return
     onLaneContentHeightChange?.(renderedSheetEntries.contentHeight)
@@ -847,38 +821,12 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   // pass on every zoom frame, even when no marquee interaction was active.
   const getKeyframePoints = useCallback(
     () =>
-      renderedSheetEntries.entries.flatMap((entry) => {
-        if (entry.type === 'group') {
-          return entry.group.frameGroups.flatMap((frameGroup) => {
-            const x = getRenderedKeyframeX(frameGroup.frame)
-            if (x === null) return []
-
-            return frameGroup.keyframes
-              .filter(({ property }) => !isPropertyLocked(property))
-              .map(({ keyframe }) => ({
-                keyframeId: keyframe.id,
-                x,
-                y: entry.top + GROUP_HEADER_HEIGHT / 2,
-              }))
-          })
-        }
-
-        if (isPropertyLocked(entry.row.property)) {
-          return []
-        }
-
-        return entry.row.keyframes.flatMap((keyframe) => {
-          const x = renderedKeyframeXById.get(keyframe.id)
-          if (x === undefined) return []
-          return [
-            {
-              keyframeId: keyframe.id,
-              x,
-              y: entry.top + ROW_HEIGHT / 2,
-            },
-          ]
-        })
-      }),
+      buildMarqueeKeyframePoints(
+        renderedSheetEntries.entries,
+        getRenderedKeyframeX,
+        renderedKeyframeXById,
+        isPropertyLocked,
+      ),
     [getRenderedKeyframeX, isPropertyLocked, renderedKeyframeXById, renderedSheetEntries.entries],
   )
 
@@ -932,34 +880,27 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [renderedSheetEntries.contentHeight],
   )
 
-  const ticks = useMemo(() => {
-    if (timelineGridDivisions && timelineGridDivisions > 0) {
-      return Array.from(
-        { length: timelineGridDivisions + 1 },
-        (_, index) =>
-          viewport.startFrame + (index / timelineGridDivisions) * frameRange,
-      )
-    }
-    const step = getNiceTickStep(frameRange)
-    // Edit pans the already-rendered sheet on the compositor while expensive
-    // keyframe rows settle less frequently. Keep a generous ruler-only buffer
-    // on both sides so incoming tick marks are already present and move with
-    // the main ruler instead of appearing at the next settled React update.
-    const rulerOverscanFrames = timelineScrollContainerRef ? frameRange * 2 : 0
-    const first = Math.floor((viewport.startFrame - rulerOverscanFrames) / step) * step
-    const last = viewport.endFrame + rulerOverscanFrames
-    const result: number[] = []
-    for (let frame = first; frame <= last; frame += step) {
-      result.push(frame)
-    }
-    return result
-  }, [
-    viewport.startFrame,
-    viewport.endFrame,
-    frameRange,
-    timelineGridDivisions,
-    timelineScrollContainerRef,
-  ])
+  const ticks = useMemo(
+    () =>
+      buildDopesheetTicks({
+        startFrame: viewport.startFrame,
+        endFrame: viewport.endFrame,
+        frameRange,
+        timelineGridDivisions,
+        // Edit pans the already-rendered sheet on the compositor while expensive
+        // keyframe rows settle less frequently. Keep a generous ruler-only buffer
+        // on both sides so incoming tick marks are already present and move with
+        // the main ruler instead of appearing at the next settled React update.
+        rulerOverscanFrames: timelineScrollContainerRef ? frameRange * 2 : 0,
+      }),
+    [
+      viewport.startFrame,
+      viewport.endFrame,
+      frameRange,
+      timelineGridDivisions,
+      timelineScrollContainerRef,
+    ],
+  )
 
   const propertyGridStyle = useMemo(() => {
     return { gridTemplateColumns: `${columnWidth}px 1fr` }
