@@ -116,21 +116,20 @@ export function resolveRemuxTrimBounds(
 /**
  * Stream-level preflight for the fast path: the source's primary streams must
  * already be what the export asked for, so `Conversion` can copy packets
- * instead of transcoding them. The facts compared here are probed from the
- * source file; the probes themselves (and every decoder, muxer and output
- * resource) stay in the orchestrator.
+ * instead of transcoding them. Probing the file, decoding it, muxing it and
+ * reporting progress all stay in the orchestrator; this decides whether the
+ * probed streams are usable at all.
  */
-export interface RemuxSourceStream {
-  /** Codec of the primary stream, or null when the source has none. */
-  codec: string | null | undefined
-  /**
-   * Deferred so the probe keeps its original short-circuit: the container's
-   * codec list is only consulted for a stream that actually has a codec.
-   */
-  getSupportedCodecs: () => string[]
+
+/** The output container's muxable codecs. Absent methods mean "nothing muxable". */
+export interface RemuxContainerSupport {
+  getSupportedVideoCodecs?: () => string[]
+  getSupportedAudioCodecs?: () => string[]
 }
 
-export interface RemuxSourceVideoStream extends RemuxSourceStream {
+/** The source file's primary video stream, as probed by the caller. */
+export interface RemuxSourceVideoTrack {
+  codec: string | null
   displayWidth: number
   displayHeight: number
 }
@@ -139,29 +138,37 @@ export interface RemuxSourceVideoStream extends RemuxSourceStream {
 export type RemuxExpectedVideo = Pick<ClientExportSettings, 'codec' | 'resolution'>
 
 /**
- * The source video stream must be a codec the container can mux and the codec
- * the export requests, at the export resolution — anything else forces a
- * transcode, so the fast path is off.
+ * A source without a video stream can't be remuxed, and neither can one whose
+ * codec the container can't mux, that isn't the export codec, or that isn't at
+ * the export resolution — each of those would need a transcode.
  */
 export function isRemuxEligibleSourceVideo(
-  stream: RemuxSourceVideoStream,
-  settings: RemuxExpectedVideo,
+  videoTrack: RemuxSourceVideoTrack | null,
+  options: { settings: RemuxExpectedVideo; containerSupport: RemuxContainerSupport },
 ): boolean {
-  const codec = stream.codec
+  const codec = videoTrack?.codec
   if (!codec) return false
+  const supportedCodecs = options.containerSupport.getSupportedVideoCodecs?.() ?? []
   return (
-    stream.getSupportedCodecs().includes(codec) &&
-    codec === settings.codec &&
-    stream.displayWidth === settings.resolution.width &&
-    stream.displayHeight === settings.resolution.height
+    supportedCodecs.includes(codec) &&
+    codec === options.settings.codec &&
+    videoTrack.displayWidth === options.settings.resolution.width &&
+    videoTrack.displayHeight === options.settings.resolution.height
   )
 }
 
-/** Audio is optional: a source with no audio stream still remuxes. */
-export function isRemuxEligibleSourceAudio(stream: RemuxSourceStream): boolean {
-  const codec = stream.codec
+/**
+ * Audio is optional: a source without an audio stream still remuxes, but one
+ * whose codec the container can't mux does not (it would have to be discarded
+ * or transcoded, which the plan doesn't ask for).
+ */
+export function isRemuxEligibleSourceAudio(
+  audioTrack: { codec: string | null } | null,
+  containerSupport: RemuxContainerSupport,
+): boolean {
+  const codec = audioTrack?.codec
   if (!codec) return true
-  return stream.getSupportedCodecs().includes(codec)
+  return (containerSupport.getSupportedAudioCodecs?.() ?? []).includes(codec)
 }
 
 export function getPacketRemuxPlan(

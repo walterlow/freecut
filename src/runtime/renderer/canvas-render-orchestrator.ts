@@ -22,6 +22,7 @@ import {
   getPacketRemuxPlan,
   isRemuxEligibleSourceAudio,
   isRemuxEligibleSourceVideo,
+  type RemuxContainerSupport,
 } from './packet-remux-plan'
 import { createExportOutputTarget } from './export-output-target'
 import {
@@ -385,10 +386,9 @@ async function tryPacketRemuxComposition(
   const mediabunny: MediabunnyModule = await import('mediabunny')
   const { Input, Output, Conversion, ALL_FORMATS } = mediabunny
 
-  const validationFormat = (await createOutputFormat(settings.container, { fastStart: false })) as {
-    getSupportedVideoCodecs?: () => string[]
-    getSupportedAudioCodecs?: () => string[]
-  }
+  const containerSupport: RemuxContainerSupport = await createOutputFormat(settings.container, {
+    fastStart: false,
+  })
 
   const input = new Input({
     formats: ALL_FORMATS,
@@ -410,28 +410,13 @@ async function tryPacketRemuxComposition(
 
   try {
     const videoTrack = await input.getPrimaryVideoTrack()
-    if (
-      !isRemuxEligibleSourceVideo(
-        {
-          codec: videoTrack?.codec ?? null,
-          displayWidth: videoTrack?.displayWidth ?? 0,
-          displayHeight: videoTrack?.displayHeight ?? 0,
-          getSupportedCodecs: () => validationFormat.getSupportedVideoCodecs?.() ?? [],
-        },
-        settings,
-      )
-    ) {
+    if (!isRemuxEligibleSourceVideo(videoTrack, { settings, containerSupport })) {
       return null
     }
 
     if (plan.includeAudio) {
       const audioTrack = await input.getPrimaryAudioTrack()
-      if (
-        !isRemuxEligibleSourceAudio({
-          codec: audioTrack?.codec ?? null,
-          getSupportedCodecs: () => validationFormat.getSupportedAudioCodecs?.() ?? [],
-        })
-      ) {
+      if (!isRemuxEligibleSourceAudio(audioTrack, containerSupport)) {
         return null
       }
     }
