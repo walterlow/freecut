@@ -937,8 +937,10 @@ export function usePreviewRenderPump({
                 isTransportSettling: true,
                 renderedFrame: frameToRender,
                 displayedFrame,
-                probeRenderedFrameBlank: () => presentation.isEffectivelyBlankPreviewSource(renderedSource),
-                probeDisplayedFrameBlank: () => presentation.isEffectivelyBlankPreviewSource(displayedSource),
+                probeRenderedFrameBlank: () =>
+                  presentation.isEffectivelyBlankPreviewSource(renderedSource),
+                probeDisplayedFrameBlank: () =>
+                  presentation.isEffectivelyBlankPreviewSource(displayedSource),
               })
             ) {
               // The known-good same-frame front buffer remains visible. The
@@ -1035,8 +1037,17 @@ export function usePreviewRenderPump({
               }
               // The offscreen canvas now holds the first frame after the
               // paused playhead. Keep the visible display canvas on the
-              // paused frame until the Clock reaches this prepared frame.
-              if (playbackState.currentFrame !== frameToRender) {
+              // paused frame until the Clock reaches this prepared frame —
+              // but only while no scrub target is asking for a frame. A ruler
+              // hover that lands on the very frame the lookahead prepared is
+              // an explicit presentation request, and its requested-frame
+              // slot was already consumed when this render was dequeued:
+              // swallowing it here strands the overlay on the previous frame
+              // until the next pointer move.
+              if (
+                playbackState.previewFrame === null &&
+                playbackState.currentFrame !== frameToRender
+              ) {
                 continue
               }
               pausedPlaybackLookaheadFrameRef.current = null
