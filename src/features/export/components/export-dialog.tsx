@@ -77,6 +77,7 @@ import { ExportCapabilityAlerts } from './export-capability-alerts'
 import { ExportVideoFormatFields } from './export-video-format-fields'
 import { ExportRateControlFields } from './export-rate-control-fields'
 import { ExportSmartCopyBlock } from './export-smart-copy-block'
+import { ExportSubtitleFields } from './export-subtitle-fields'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -709,34 +710,12 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                         />
                       </div>
 
-                      <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <Label htmlFor="subtitle-mode" className="text-sm font-medium">
-                            {t('export.settings.subtitles', { defaultValue: 'Subtitles' })}
-                          </Label>
-                          <Select
-                            value={effectiveSubtitleMode}
-                            onValueChange={(value) => setSubtitleMode(value as SubtitleExportMode)}
-                            disabled={!hasTranscriptSubtitles}
-                          >
-                            <SelectTrigger id="subtitle-mode" className="w-[160px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {subtitleModeOptions.map((mode) => (
-                                <SelectItem key={mode} value={mode}>
-                                  {t(`export.settings.subtitleMode.${mode}`)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {hasTranscriptSubtitles
-                            ? t(`export.settings.subtitleMode.${effectiveSubtitleMode}Description`)
-                            : t('export.settings.noTranscriptSegments')}
-                        </p>
-                      </div>
+                      <ExportSubtitleFields
+                        mode={effectiveSubtitleMode}
+                        onModeChange={setSubtitleMode}
+                        modeOptions={subtitleModeOptions}
+                        hasTranscriptSubtitles={hasTranscriptSubtitles}
+                      />
                     </div>
                   </>
                 )}
