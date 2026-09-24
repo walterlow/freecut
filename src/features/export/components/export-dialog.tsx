@@ -42,13 +42,7 @@ import {
 } from '../deps/renderer'
 import { ExportPreviewPlayer } from './export-preview-player'
 import { ExportDialogHeading } from './export-dialog-heading'
-import { ExportSequencePicker } from './export-sequence-picker'
-import { ExportModeToggle } from './export-mode-toggle'
-import { ExportVideoSettings } from './export-video-settings'
-import { ExportAudioSettings } from './export-audio-settings'
-import { ExportSettingsFooter } from './export-settings-footer'
-import { ExportRangeSummary } from './export-range-summary'
-import { ExportPreflightPanel } from './export-preflight-panel'
+import { ExportSettingsView } from './export-settings-view'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
 import { resolveVideoBitrate } from '../deps/renderer'
@@ -597,106 +591,83 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
         {/* Settings View */}
         {view === 'settings' && (
-          <div className="py-4">
-            <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="space-y-4">
-                {/* Sequence picker — only when there's more than the Main timeline */}
-                {sequenceOptions.length > 1 && (
-                  <ExportSequencePicker
-                    options={sequenceOptions}
-                    selectedId={selectedSequenceId}
-                    onSelect={handleSelectSequence}
-                  />
-                )}
-
-                {/* Export Mode: Video or Audio Toggle Group */}
-                <ExportModeToggle mode={exportMode} onChange={setExportMode} />
-
-                {/* Export Range Section */}
-                <ExportRangeSummary
-                  range={exportRange}
-                  fps={fps}
-                  hasInOutPoints={hasInOutPoints}
-                  renderWholeProject={renderWholeProject}
-                  onRenderWholeProjectChange={setRenderWholeProject}
-                />
-
-                <ExportPreflightPanel preflight={preflight} />
-              </div>
-
-              <div className="space-y-5 min-w-0">
-                {/* Video Export Settings */}
-                {exportMode === 'video' && (
-                  <ExportVideoSettings
-                    presets={{
-                      presets: EXPORT_PRESETS,
-                      activePresetId,
-                      onApplyPreset: applyPreset,
-                    }}
-                    alerts={{
-                      isCheckingSupport: isCheckingVideoSupport,
-                      supportError: videoSupportError,
-                      hasSupportedPath: hasSupportedVideoPath,
-                      width: settings.resolution.width,
-                      height: settings.resolution.height,
-                    }}
-                    format={{
-                      settings,
-                      setSettings,
-                      container: videoContainer,
-                      setContainer: setVideoContainer,
-                      containerOptions: videoContainerOptions,
-                      codecOptions,
-                      resolutionOptions,
-                      projectWidth,
-                      projectHeight,
-                    }}
-                    rateControl={{
-                      settings,
-                      setSettings,
-                      resolvedVideoBitrate,
-                      sourceVideo,
-                    }}
-                    smartCopy={{
-                      settings,
-                      setSettings,
-                      assessment: smartCopyAssessment,
-                      willRun: smartCopyWillRun,
-                      resolvedVideoBitrate,
-                      estimatedFileSizeBytes,
-                      sourceVideo,
-                    }}
-                    subtitles={{
-                      mode: effectiveSubtitleMode,
-                      onModeChange: setSubtitleMode,
-                      modeOptions: subtitleModeOptions,
-                      hasTranscriptSubtitles,
-                    }}
-                  />
-                )}
-
-                {/* Audio Export Settings */}
-                {exportMode === 'audio' && (
-                  <ExportAudioSettings
-                    settings={settings}
-                    setSettings={setSettings}
-                    container={audioContainer}
-                    setContainer={setAudioContainer}
-                  />
-                )}
-              </div>
-            </div>
-
-            <ExportSettingsFooter
-              mode={exportMode}
-              actionsDisabled={exportActionsDisabled}
-              onClose={handleClose}
-              onExport={handleStartExport}
-              onAddCurrentRange={handleAddCurrentRange}
-              onAddMarkerSegments={handleAddMarkerSegments}
-              onSplitChunks={handleSplitChunks}
-            />
-          </div>
+          <ExportSettingsView
+            sequencePicker={{
+              options: sequenceOptions,
+              selectedId: selectedSequenceId,
+              onSelect: handleSelectSequence,
+            }}
+            modeToggle={{ mode: exportMode, onChange: setExportMode }}
+            rangeSummary={{
+              range: exportRange,
+              fps,
+              hasInOutPoints,
+              renderWholeProject,
+              onRenderWholeProjectChange: setRenderWholeProject,
+            }}
+            preflight={preflight}
+            video={{
+              presets: {
+                presets: EXPORT_PRESETS,
+                activePresetId,
+                onApplyPreset: applyPreset,
+              },
+              alerts: {
+                isCheckingSupport: isCheckingVideoSupport,
+                supportError: videoSupportError,
+                hasSupportedPath: hasSupportedVideoPath,
+                width: settings.resolution.width,
+                height: settings.resolution.height,
+              },
+              format: {
+                settings,
+                setSettings,
+                container: videoContainer,
+                setContainer: setVideoContainer,
+                containerOptions: videoContainerOptions,
+                codecOptions,
+                resolutionOptions,
+                projectWidth,
+                projectHeight,
+              },
+              rateControl: {
+                settings,
+                setSettings,
+                resolvedVideoBitrate,
+                sourceVideo,
+              },
+              smartCopy: {
+                settings,
+                setSettings,
+                assessment: smartCopyAssessment,
+                willRun: smartCopyWillRun,
+                resolvedVideoBitrate,
+                estimatedFileSizeBytes,
+                sourceVideo,
+              },
+              subtitles: {
+                mode: effectiveSubtitleMode,
+                onModeChange: setSubtitleMode,
+                modeOptions: subtitleModeOptions,
+                hasTranscriptSubtitles,
+              },
+            }}
+            audio={{
+              settings,
+              setSettings,
+              container: audioContainer,
+              setContainer: setAudioContainer,
+            }}
+            footer={{
+              mode: exportMode,
+              actionsDisabled: exportActionsDisabled,
+              onClose: handleClose,
+              onExport: handleStartExport,
+              onAddCurrentRange: handleAddCurrentRange,
+              onAddMarkerSegments: handleAddMarkerSegments,
+              onSplitChunks: handleSplitChunks,
+            }}
+          />
         )}
 
         {/* Progress View */}
