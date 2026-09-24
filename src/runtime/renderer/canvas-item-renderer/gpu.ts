@@ -13,6 +13,7 @@ import type {
   TimelineItem,
   VideoItem,
 } from '@/types/timeline'
+import type { BlendMode } from '@/types/blend-modes'
 import type { ItemEffect } from '@/types/effects'
 import {
   computeCornerPinHomography,
@@ -71,6 +72,15 @@ import {
   getActiveSubCompMasks,
 } from './composition'
 import { resolveVideoParticipantSourceTime } from './video'
+import {
+  resolveSubCompLayerCapabilityGap,
+  resolveSubCompLayerCompositeFlags,
+  resolveSubCompLayerMode,
+  resolveSubCompLayerScratchLayout,
+  resolveSubCompMaskCombineSteps,
+  type SubCompLayerCompositeFlags,
+  type SubCompLayerMode,
+} from './gpu-subcomp-layer-policy'
 import {
   canUseGpuVideoExtractorSource,
   parseGpuColor,
@@ -536,7 +546,7 @@ export async function prepareGpuMediaParticipant(
     if (transformRect.width <= 0 || transformRect.height <= 0) return null
     return {
       timelineTimeSeconds: frame / rctx.fps,
-    participant,
+      participant,
       media,
       sourceRect: { x: 0, y: 0, width: media.sourceWidth, height: media.sourceHeight },
       destRect: transformRect,
@@ -568,7 +578,7 @@ export async function prepareGpuMediaParticipant(
     }
     return {
       timelineTimeSeconds: frame / rctx.fps,
-    participant,
+      participant,
       media,
       sourceRect: { x: 0, y: 0, width: media.sourceWidth, height: media.sourceHeight },
       destRect: transformRect,
@@ -1122,23 +1132,53 @@ async function renderGpuSubCompChildrenToTexture(
   }
 }
 
+type SubCompMaskTextures = ReturnType<typeof getActiveSubCompMasks>
+
+/** Every scratch texture one layer owns, named by the role the composite phases read it as. */
+interface SubCompLayerStage {
+  /** All acquired textures, released in this order once the layer is done. */
+  textures: GPUTexture[]
+  base: GPUTexture
+  effected: GPUTexture
+  blendOutput: GPUTexture | null
+  blendLayer: GPUTexture | null
+  maskTextures: GPUTexture[]
+  combinedMaskTextures: GPUTexture[]
+}
+
+/**
+ * One sub-composition layer composite in flight: the prepared participant, the
+ * scratch textures acquired for it, and the write request resolved up front.
+ */
+interface SubCompLayerRenderContext {
+  prepared: PreparedGpuMediaParticipant
+  rctx: ItemRenderContext
+  device: GPUDevice
+  stage: SubCompLayerStage
+  outputTexture: GPUTexture
+  masks: SubCompMaskTextures
+  enabledEffects: ItemEffect[]
+  options: { clear: boolean; blend: boolean }
+  mode: SubCompLayerMode
+  blendMode: BlendMode
+}
+
 async function renderPreparedGpuSubCompLayerToTexture(
   prepared: PreparedGpuMediaParticipant,
   rctx: ItemRenderContext,
   outputTexture: GPUTexture,
-  masks: ReturnType<typeof getActiveSubCompMasks>,
+  masks: SubCompMaskTextures,
   options: { clear: boolean; blend: boolean },
 ): Promise<boolean> {
   const enabledEffects = prepared.participant.effects.filter((effect) => effect.enabled)
-  const blendMode = prepared.participant.item.blendMode ?? 'normal'
-  const needsLayerComposite = options.blend && !options.clear
-  const gpuPipeline = rctx.gpuPipeline
-  const gpuMediaPipeline = rctx.gpuMediaPipeline
-  const gpuMediaBlendPipeline = rctx.gpuMediaBlendPipeline
-  const gpuShapePipeline = rctx.gpuShapePipeline
-  const gpuMaskCombinePipeline = rctx.gpuMaskCombinePipeline
-  const usesShaderComposite = needsLayerComposite && Boolean(gpuMediaBlendPipeline)
-  if (enabledEffects.length === 0 && masks.length === 0 && !usesShaderComposite) {
+  const mode = resolveSubCompLayerMode({
+    blend: options.blend,
+    clear: options.clear,
+    hasBlendPipeline: Boolean(rctx.gpuMediaBlendPipeline),
+    enabledEffectCount: enabledEffects.length,
+    maskCount: masks.length,
+  })
+  if (mode.rendersDirectly) {
     return renderGpuMediaParticipantToTexture(
       prepared,
       rctx,
@@ -1152,152 +1192,235 @@ async function renderPreparedGpuSubCompLayerToTexture(
   }
 
   if (
-    !gpuPipeline ||
-    !gpuMediaPipeline ||
-    (masks.length > 0 && !gpuShapePipeline) ||
-    (masks.length > 1 && !gpuMaskCombinePipeline)
+    resolveSubCompLayerCapabilityGap({
+      hasEffectsPipeline: Boolean(rctx.gpuPipeline),
+      hasMediaPipeline: Boolean(rctx.gpuMediaPipeline),
+      hasShapePipeline: Boolean(rctx.gpuShapePipeline),
+      hasMaskCombinePipeline: Boolean(rctx.gpuMaskCombinePipeline),
+      maskCount: masks.length,
+    }) !== null
   ) {
     return false
   }
 
-  const device = gpuPipeline.getDevice()
-  const scratchTextures: GPUTexture[] = []
-  const acquireScratchTexture = () => {
-    const texture = acquireGpuScratchTexture(
+  const device = rctx.gpuPipeline!.getDevice()
+  const stage = acquireSubCompLayerStage(rctx, device, mode, masks.length)
+  try {
+    return await compositeSubCompLayerIntoTexture({
+      prepared,
       rctx,
       device,
-      rctx.canvasSettings.width,
-      rctx.canvasSettings.height,
-    )
-    scratchTextures.push(texture)
-    return texture
-  }
-
-  const baseTexture = acquireScratchTexture()
-  const effectedTexture = acquireScratchTexture()
-  const blendOutputTexture =
-    usesShaderComposite && gpuMediaBlendPipeline ? acquireScratchTexture() : null
-  const blendLayerTexture = usesShaderComposite ? acquireScratchTexture() : null
-  const maskTextures = masks.map(() => acquireScratchTexture())
-  const combinedMaskTextures = Array.from({ length: Math.max(0, masks.length - 1) }, () =>
-    acquireScratchTexture(),
-  )
-
-  try {
-    const preparedWithoutEffects: PreparedGpuMediaParticipant = {
-      ...prepared,
-      participant: { ...prepared.participant, effects: [] },
-    }
-    const renderedBase = await renderGpuMediaParticipantToTexture(
-      preparedWithoutEffects,
-      rctx,
-      {
-        acquire: () => baseTexture,
-        release: () => undefined,
-      },
-      baseTexture,
-      { clear: true, blend: false },
-    )
-    if (!renderedBase) return false
-
-    let compositeSourceTexture = baseTexture
-    if (enabledEffects.length > 0) {
-      const effectsApplied = gpuPipeline.applyTextureEffectsToTexture(
-        baseTexture,
-        getGpuEffectInstances(enabledEffects, prepared.timelineTimeSeconds ?? 0),
-        effectedTexture,
-        rctx.canvasSettings.width,
-        rctx.canvasSettings.height,
-      )
-      if (!effectsApplied) return false
-      compositeSourceTexture = effectedTexture
-    }
-
-    let layerMaskTexture: GPUTexture | null = null
-    if (masks.length > 0) {
-      for (let i = 0; i < masks.length; i++) {
-        const renderedMask = renderGpuSubCompMaskToTexture(masks[i]!, rctx, maskTextures[i]!)
-        if (!renderedMask) return false
-      }
-      if (masks.length === 1) {
-        layerMaskTexture = maskTextures[0]!
-      } else {
-        let currentMaskTexture = maskTextures[0]!
-        let currentMaskInverted = masks[0]?.inverted ?? false
-        for (let i = 1; i < maskTextures.length; i++) {
-          const targetTexture = combinedMaskTextures[i - 1]!
-          if (
-            !gpuMaskCombinePipeline?.combine(currentMaskTexture, maskTextures[i]!, targetTexture, {
-              invertBase: currentMaskInverted,
-              invertNext: masks[i]?.inverted ?? false,
-            })
-          ) {
-            return false
-          }
-          currentMaskTexture = targetTexture
-          currentMaskInverted = false
-        }
-        layerMaskTexture = currentMaskTexture
-      }
-    }
-
-    const layerOutputTexture =
-      usesShaderComposite && blendLayerTexture ? blendLayerTexture : outputTexture
-    const renderedLayer = gpuMediaPipeline.renderTextureToTexture(
-      compositeSourceTexture,
-      layerOutputTexture,
-      {
-        sourceWidth: rctx.canvasSettings.width,
-        sourceHeight: rctx.canvasSettings.height,
-        outputWidth: rctx.canvasSettings.width,
-        outputHeight: rctx.canvasSettings.height,
-        sourceRect: {
-          x: 0,
-          y: 0,
-          width: rctx.canvasSettings.width,
-          height: rctx.canvasSettings.height,
-        },
-        destRect: {
-          x: 0,
-          y: 0,
-          width: rctx.canvasSettings.width,
-          height: rctx.canvasSettings.height,
-        },
-        transformRect: {
-          x: 0,
-          y: 0,
-          width: rctx.canvasSettings.width,
-          height: rctx.canvasSettings.height,
-        },
-        opacity: 1,
-        rotationRad: 0,
-        clear: usesShaderComposite ? true : options.clear,
-        blend: usesShaderComposite ? false : options.blend,
-        maskTexture: layerMaskTexture ?? undefined,
-        maskInvert: masks.length === 1 ? masks[0]?.inverted : false,
-      },
-    )
-    if (!renderedLayer) return false
-    if (!usesShaderComposite || !gpuMediaBlendPipeline || !blendOutputTexture) return true
-
-    const blended = gpuMediaBlendPipeline.blend(
+      stage,
       outputTexture,
-      layerOutputTexture,
-      blendOutputTexture,
-      blendMode,
-    )
-    if (!blended) return false
-    const commandEncoder = device.createCommandEncoder()
-    commandEncoder.copyTextureToTexture(
-      { texture: blendOutputTexture },
-      { texture: outputTexture },
-      { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
-    )
-    device.queue.submit([commandEncoder.finish()])
-    return true
+      masks,
+      enabledEffects,
+      options,
+      mode,
+      blendMode: prepared.participant.item.blendMode ?? 'normal',
+    })
   } finally {
-    for (const texture of scratchTextures) releaseGpuScratchTexture(rctx, texture)
+    for (const texture of stage.textures) releaseGpuScratchTexture(rctx, texture)
   }
+}
+
+/** Acquires every scratch texture the layer needs, in the policy-planned slot order. */
+function acquireSubCompLayerStage(
+  rctx: ItemRenderContext,
+  device: GPUDevice,
+  mode: SubCompLayerMode,
+  maskCount: number,
+): SubCompLayerStage {
+  const layout = resolveSubCompLayerScratchLayout({
+    usesShaderComposite: mode.usesShaderComposite,
+    hasBlendPipeline: Boolean(rctx.gpuMediaBlendPipeline),
+    maskCount,
+  })
+  const textures: GPUTexture[] = []
+  for (let slot = 0; slot < layout.textureCount; slot++) {
+    textures.push(
+      acquireGpuScratchTexture(rctx, device, rctx.canvasSettings.width, rctx.canvasSettings.height),
+    )
+  }
+  return {
+    textures,
+    base: textures[0]!,
+    effected: textures[layout.effectedSlot]!,
+    blendOutput: selectSubCompLayerTexture(textures, layout.blendOutputSlot),
+    blendLayer: selectSubCompLayerTexture(textures, layout.blendLayerSlot),
+    maskTextures: layout.maskSlots.map((slot) => textures[slot]!),
+    combinedMaskTextures: layout.combinedMaskSlots.map((slot) => textures[slot]!),
+  }
+}
+
+function selectSubCompLayerTexture(textures: GPUTexture[], slot: number | null): GPUTexture | null {
+  if (slot === null) return null
+  return textures[slot] ?? null
+}
+
+/** Composites the layer: media and its GPU effects, then masks, then an optional shader blend. */
+async function compositeSubCompLayerIntoTexture(
+  context: SubCompLayerRenderContext,
+): Promise<boolean> {
+  const { rctx, stage, outputTexture, masks, options, mode } = context
+  const sourceTexture = await renderSubCompLayerMedia(context)
+  if (!sourceTexture) return false
+  const mask = renderSubCompLayerMask(context)
+  if (mask.failed) return false
+  const layerTexture = stage.blendLayer ?? outputTexture
+  const flags = resolveSubCompLayerCompositeFlags({
+    usesShaderComposite: mode.usesShaderComposite,
+    clear: options.clear,
+    blend: options.blend,
+    masks,
+  })
+  const rendered = renderSubCompLayerComposite(
+    rctx,
+    sourceTexture,
+    layerTexture,
+    mask.texture,
+    flags,
+  )
+  if (!rendered) return false
+  return finishSubCompLayerBlend(context, layerTexture)
+}
+
+/** Renders the layer's media plus its enabled GPU effects; null when the layer cannot render. */
+async function renderSubCompLayerMedia(
+  context: SubCompLayerRenderContext,
+): Promise<GPUTexture | null> {
+  const { prepared, rctx, stage, enabledEffects } = context
+  const preparedWithoutEffects: PreparedGpuMediaParticipant = {
+    ...prepared,
+    participant: { ...prepared.participant, effects: [] },
+  }
+  const renderedBase = await renderGpuMediaParticipantToTexture(
+    preparedWithoutEffects,
+    rctx,
+    {
+      acquire: () => stage.base,
+      release: () => undefined,
+    },
+    stage.base,
+    { clear: true, blend: false },
+  )
+  if (!renderedBase) return null
+  if (enabledEffects.length === 0) return stage.base
+  const effectsApplied = rctx.gpuPipeline!.applyTextureEffectsToTexture(
+    stage.base,
+    getGpuEffectInstances(enabledEffects, prepared.timelineTimeSeconds ?? 0),
+    stage.effected,
+    rctx.canvasSettings.width,
+    rctx.canvasSettings.height,
+  )
+  return effectsApplied ? stage.effected : null
+}
+
+interface SubCompLayerMaskResult {
+  failed: boolean
+  texture: GPUTexture | null
+}
+
+/** Renders every layer mask into its own texture, then folds the set pairwise. */
+function renderSubCompLayerMask(context: SubCompLayerRenderContext): SubCompLayerMaskResult {
+  const { masks, rctx, stage } = context
+  if (masks.length === 0) return { failed: false, texture: null }
+  for (let index = 0; index < masks.length; index++) {
+    const rendered = renderGpuSubCompMaskToTexture(masks[index]!, rctx, stage.maskTextures[index]!)
+    if (!rendered) return { failed: true, texture: null }
+  }
+  if (masks.length === 1) return { failed: false, texture: stage.maskTextures[0]! }
+  const combined = combineSubCompLayerMasks(context)
+  if (!combined) return { failed: true, texture: null }
+  return { failed: false, texture: combined }
+}
+
+/** Pairwise mask fold: each step combines the running result with the next mask. */
+function combineSubCompLayerMasks(context: SubCompLayerRenderContext): GPUTexture | null {
+  const { masks, rctx, stage } = context
+  const steps = resolveSubCompMaskCombineSteps(masks)
+  let currentTexture = stage.maskTextures[0]!
+  for (let step = 0; step < steps.length; step++) {
+    const targetTexture = stage.combinedMaskTextures[step]!
+    const combined = rctx.gpuMaskCombinePipeline?.combine(
+      currentTexture,
+      stage.maskTextures[step + 1]!,
+      targetTexture,
+      steps[step]!,
+    )
+    if (!combined) return null
+    currentTexture = targetTexture
+  }
+  return currentTexture
+}
+
+/** Composites the layer source into its output texture, masked when the layer has one. */
+function renderSubCompLayerComposite(
+  rctx: ItemRenderContext,
+  sourceTexture: GPUTexture,
+  outputTexture: GPUTexture,
+  maskTexture: GPUTexture | null,
+  flags: SubCompLayerCompositeFlags,
+): boolean {
+  const { width, height } = rctx.canvasSettings
+  return rctx.gpuMediaPipeline!.renderTextureToTexture(sourceTexture, outputTexture, {
+    sourceWidth: width,
+    sourceHeight: height,
+    outputWidth: width,
+    outputHeight: height,
+    sourceRect: {
+      x: 0,
+      y: 0,
+      width,
+      height,
+    },
+    destRect: {
+      x: 0,
+      y: 0,
+      width,
+      height,
+    },
+    transformRect: {
+      x: 0,
+      y: 0,
+      width,
+      height,
+    },
+    opacity: 1,
+    rotationRad: 0,
+    clear: flags.clear,
+    blend: flags.blend,
+    maskTexture: maskTexture ?? undefined,
+    maskInvert: flags.maskInvert,
+  })
+}
+
+/**
+ * Shader-composites the isolated layer over the target content and copies the
+ * result back. Returns true when the layer is done, including when there is no
+ * shader composite to finish: a blend output texture is only acquired for one.
+ */
+function finishSubCompLayerBlend(
+  context: SubCompLayerRenderContext,
+  layerTexture: GPUTexture,
+): boolean {
+  const { rctx, device, outputTexture, stage, blendMode } = context
+  const blendOutputTexture = stage.blendOutput
+  if (!blendOutputTexture) return true
+  const blended = rctx.gpuMediaBlendPipeline!.blend(
+    outputTexture,
+    layerTexture,
+    blendOutputTexture,
+    blendMode,
+  )
+  if (!blended) return false
+  copyGpuTextureToTexture(
+    device,
+    blendOutputTexture,
+    outputTexture,
+    rctx.canvasSettings.width,
+    rctx.canvasSettings.height,
+  )
+  return true
 }
 
 function acquireGpuScratchTexture(
