@@ -1,7 +1,8 @@
 /**
  * GPU-effect / GPU-direct rendering: media participant preparation, sub-comp
  * GPU layer rendering, scratch texture pooling, text / mask / shape texture
- * uploads, and color/path helpers used by the GPU shape pipeline.
+ * uploads, and path helpers used by the GPU shape pipeline. Participant source
+ * selection policy lives in `gpu-participant-policy.ts`.
  */
 
 import type {
@@ -20,7 +21,7 @@ import {
   invertCornerPinHomography,
   resolveCornerPinForSize,
 } from '@/runtime/renderer/deps/composition-runtime-contract'
-import { resolveAnimatedShapeItem, resolveAnimatedTextItem } from '@/runtime/renderer/deps/keyframes-contract'
+import { resolveAnimatedTextItem } from '@/runtime/renderer/deps/keyframes-contract'
 import type { GpuTexturePool } from '@/infrastructure/gpu-compositor'
 import type { GpuMediaRect, GpuMediaRenderParams } from '@/infrastructure/gpu-media'
 import { MAX_GPU_SHAPE_PATH_VERTICES } from '@/infrastructure/gpu-shapes'
@@ -33,7 +34,6 @@ import { getAnimatedTransform } from '../canvas-keyframes'
 import {
   getCanvasRenderScale,
   getLogicalCanvasSize,
-  scaleShapeItemForCanvas,
   scaleTextItemForCanvas,
 } from '../canvas-render-scale'
 import { combineEffects, getAdjustmentLayerEffects, getGpuEffectInstances } from '../canvas-effects'
@@ -47,6 +47,7 @@ import {
   resolvePreviewDomVideoDrawDecision,
   shouldHoldPreviewGpuEffectFrame,
 } from '../frame-source-policy'
+import type { CaptureFrameResult } from '../canvas-video-extractor'
 import type {
   GpuBitmapMaskTextureCacheEntry,
   GpuTextTextureCacheEntry,
@@ -70,6 +71,13 @@ import {
   getActiveSubCompMasks,
 } from './composition'
 import { resolveVideoParticipantSourceTime } from './video'
+import {
+  canUseGpuVideoExtractorSource,
+  parseGpuColor,
+  resolveGpuDomVideoDrawDecision,
+  resolveGpuShapeSourceItem,
+  resolveGpuShapeStyle,
+} from './gpu-participant-policy'
 
 type GpuParticipantRenderOptions = { clear?: boolean; blend?: boolean }
 
@@ -626,77 +634,16 @@ async function resolveGpuMediaParticipantSource(
   if (transform.opacity < 0 || transform.opacity > 1) return null
 
   if (participant.item.type === 'shape') {
-    const itemKeyframes =
-      rctx.getCurrentKeyframes?.(participant.item.id) ?? rctx.keyframesMap.get(participant.item.id)
-    const logicalCanvasSettings = getLogicalCanvasSize(rctx.canvasSettings)
-    const shape = scaleShapeItemForCanvas(
-      resolveAnimatedShapeItem(
-        participant.item,
-        itemKeyframes,
-        frame - participant.item.from,
-        rctx.canvasSettings.getExpressionItem && rctx.canvasSettings.getExpressionKeyframes
-          ? {
-              globalFrame: frame,
-              canvas: logicalCanvasSettings,
-              getItem: rctx.canvasSettings.getExpressionItem,
-              getKeyframes: rctx.canvasSettings.getExpressionKeyframes,
-            }
-          : undefined,
-      ),
-      rctx.canvasSettings,
+    return resolveGpuShapeParticipantSource(
+      participant as TransitionParticipantRenderState<ShapeItem>,
+      transform,
+      frame,
+      rctx,
     )
-    if (getGpuShapeUnsupportedReason(shape, transform, participant.effects, rctx)) return null
-    const resolvedPathVertices =
-      shape.shapeType === 'path' ? resolveGpuShapePathVertices(shape, transform) : undefined
-    const pathVertices = resolvedPathVertices ?? undefined
-    const linearGradient = resolveShapeLinearGradient(shape)
-    const parsedFillColor = parseGpuColor(linearGradient?.startColor ?? shape.fillColor)
-    const parsedGradientEndColor = linearGradient
-      ? parseGpuColor(linearGradient.endColor)
-      : undefined
-    const parsedStrokeColor =
-      (shape.strokeEnabled ?? true) &&
-      shape.strokeWidth &&
-      shape.strokeWidth > 0 &&
-      shape.strokeColor
-        ? parseGpuColor(shape.strokeColor)
-        : undefined
-    if (!parsedFillColor || (linearGradient && !parsedGradientEndColor)) return null
-    const fillEnabled =
-      shape.shapeType === 'path' && shape.pathClosed === false ? false : (shape.fillEnabled ?? true)
-    const fillColor: [number, number, number, number] = fillEnabled
-      ? parsedFillColor
-      : [parsedFillColor[0], parsedFillColor[1], parsedFillColor[2], 0]
-    const strokeColor = parsedStrokeColor ?? undefined
-    const gradientEndColor: [number, number, number, number] | undefined =
-      parsedGradientEndColor && linearGradient
-        ? fillEnabled
-          ? parsedGradientEndColor
-          : [parsedGradientEndColor[0], parsedGradientEndColor[1], parsedGradientEndColor[2], 0]
-        : undefined
-    return {
-      kind: 'shape',
-      item: shape,
-      sourceWidth: transform.width,
-      sourceHeight: transform.height,
-      fillColor,
-      gradientEndColor,
-      gradientAngleRad: linearGradient ? (linearGradient.angle * Math.PI) / 180 : undefined,
-      strokeColor,
-      pathVertices,
-    }
   }
 
   if (participant.item.type === 'image') {
-    const loadedImage = rctx.imageElements.get(participant.item.id)
-    if (!loadedImage) return null
-    return {
-      kind: 'media',
-      item: participant.item,
-      source: loadedImage.source,
-      sourceWidth: loadedImage.width,
-      sourceHeight: loadedImage.height,
-    }
+    return resolveGpuImageParticipantSource(participant.item, rctx)
   }
 
   if (participant.item.type === 'text') {
@@ -716,59 +663,133 @@ async function resolveGpuMediaParticipantSource(
   }
 
   if (participant.item.type !== 'video') return null
-  const sourceTime = resolveVideoParticipantSourceTime(
-    participant.item,
-    participant.renderSpan,
+  return resolveGpuVideoParticipantSource(
+    participant as TransitionParticipantRenderState<VideoItem>,
     frame,
     rctx,
   )
-  const domVideo = rctx.domVideoElementProvider?.(participant.item.id) ?? null
-  const hasActiveRamp =
-    participant.renderSpan.sourceTimeRamp !== undefined &&
-    frame >= participant.renderSpan.sourceTimeRamp.rampStart &&
-    frame <= participant.renderSpan.sourceTimeRamp.rampEnd
-  const canUseSynchronizedDomVideo =
-    !hasActiveRamp || domVideo?.dataset.transitionSourceRamp === '1'
-  const domDecision = resolvePreviewDomVideoDrawDecision({
-    domVideo: canUseSynchronizedDomVideo ? domVideo : null,
-    sourceTime,
-    speed: domVideo?.playbackRate ?? participant.item.speed ?? 1,
-    isRenderingTransition: true,
-  })
-  if (domVideo && domDecision.shouldDraw) {
-    recordPreviewVideoSource({
-      frame,
-      itemId: participant.item.id,
-      path: 'dom-video',
-      sourceTime,
-    })
-    return {
-      kind: 'media',
-      item: participant.item,
-      source: domVideo,
-      sourceWidth: domVideo.videoWidth,
-      sourceHeight: domVideo.videoHeight,
-    }
+}
+
+function resolveGpuShapeParticipantSource(
+  participant: TransitionParticipantRenderState<ShapeItem>,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+): ResolvedGpuMediaParticipantSource | null {
+  const itemKeyframes =
+    rctx.getCurrentKeyframes?.(participant.item.id) ?? rctx.keyframesMap.get(participant.item.id)
+  const shape = resolveGpuShapeSourceItem(
+    participant.item,
+    itemKeyframes,
+    frame,
+    rctx.canvasSettings,
+  )
+  if (getGpuShapeUnsupportedReason(shape, transform, participant.effects, rctx)) return null
+  const style = resolveGpuShapeStyle(shape)
+  if (!style) return null
+
+  return {
+    kind: 'shape',
+    item: shape,
+    sourceWidth: transform.width,
+    sourceHeight: transform.height,
+    fillColor: style.fillColor,
+    gradientEndColor: style.gradientEndColor,
+    gradientAngleRad: style.gradientAngleRad,
+    strokeColor: style.strokeColor,
+    pathVertices:
+      shape.shapeType === 'path'
+        ? (resolveGpuShapePathVertices(shape, transform) ?? undefined)
+        : undefined,
   }
-  if (!rctx.useMediabunny.has(participant.item.id)) return null
-  if (rctx.mediabunnyDisabledItems.has(participant.item.id)) return null
+}
 
-  const extractor = rctx.videoExtractors.get(participant.item.id)
-  if (!extractor) return null
-
-  const captured = await extractor.captureFrame(sourceTime)
-  if (!captured.success || !captured.frame) return null
-  const sourceWidth =
-    'displayWidth' in captured.frame ? captured.frame.displayWidth : captured.frame.width
-  const sourceHeight =
-    'displayHeight' in captured.frame ? captured.frame.displayHeight : captured.frame.height
+function resolveGpuImageParticipantSource(
+  item: ImageItem,
+  rctx: ItemRenderContext,
+): ResolvedGpuMediaParticipantSource | null {
+  const loadedImage = rctx.imageElements.get(item.id)
+  if (!loadedImage) return null
 
   return {
     kind: 'media',
-    item: participant.item,
-    source: captured.frame,
-    sourceWidth,
-    sourceHeight,
+    item,
+    source: loadedImage.source,
+    sourceWidth: loadedImage.width,
+    sourceHeight: loadedImage.height,
+  }
+}
+
+async function resolveGpuVideoParticipantSource(
+  participant: TransitionParticipantRenderState<VideoItem>,
+  frame: number,
+  rctx: ItemRenderContext,
+): Promise<ResolvedGpuMediaParticipantSource | null> {
+  const item = participant.item
+  const sourceTime = resolveVideoParticipantSourceTime(item, participant.renderSpan, frame, rctx)
+  const domSource = resolveGpuDomVideoParticipantSource(participant, frame, sourceTime, rctx)
+  if (domSource) return domSource
+
+  const extractor = rctx.videoExtractors.get(item.id)
+  if (!extractor) return null
+  if (
+    !canUseGpuVideoExtractorSource({
+      supportsMediabunny: rctx.useMediabunny.has(item.id),
+      mediabunnyDisabled: rctx.mediabunnyDisabledItems.has(item.id),
+    })
+  ) {
+    return null
+  }
+
+  return resolveGpuCapturedVideoSource(await extractor.captureFrame(sourceTime), item)
+}
+
+function resolveGpuDomVideoParticipantSource(
+  participant: TransitionParticipantRenderState<VideoItem>,
+  frame: number,
+  sourceTime: number,
+  rctx: ItemRenderContext,
+): ResolvedGpuMediaParticipantSource | null {
+  const item = participant.item
+  const domVideo = rctx.domVideoElementProvider?.(item.id) ?? null
+  const domDecision = resolveGpuDomVideoDrawDecision({
+    domVideo,
+    sourceTimeRamp: participant.renderSpan.sourceTimeRamp,
+    frame,
+    sourceTime,
+    itemSpeed: item.speed,
+  })
+  if (!domVideo || !domDecision.shouldDraw) return null
+
+  recordPreviewVideoSource({
+    frame,
+    itemId: item.id,
+    path: 'dom-video',
+    sourceTime,
+  })
+  return {
+    kind: 'media',
+    item,
+    source: domVideo,
+    sourceWidth: domVideo.videoWidth,
+    sourceHeight: domVideo.videoHeight,
+  }
+}
+
+function resolveGpuCapturedVideoSource(
+  captured: CaptureFrameResult,
+  item: VideoItem,
+): ResolvedGpuMediaParticipantSource | null {
+  const frame = captured.frame
+  if (!captured.success || !frame) return null
+
+  return {
+    kind: 'media',
+    item,
+    source: frame,
+    sourceWidth: 'displayWidth' in frame ? frame.displayWidth : frame.width,
+    sourceHeight: 'displayHeight' in frame ? frame.displayHeight : frame.height,
+    // Ownership of the captured frame transfers to the caller.
     close: () => captured.frame?.close(),
   }
 }
@@ -1602,37 +1623,6 @@ function resolveGpuMediaCornerPin(
     height: mediaRect.height,
     inverseMatrix,
   }
-}
-
-function parseGpuColor(color: string): [number, number, number, number] | null {
-  const trimmed = color.trim()
-  const hex = trimmed.match(/^#([\da-f]{3}|[\da-f]{6}|[\da-f]{8})$/i)
-  if (hex) {
-    let value = hex[1]!
-    if (value.length === 3) {
-      value = value
-        .split('')
-        .map((ch) => ch + ch)
-        .join('')
-    }
-    const r = Number.parseInt(value.slice(0, 2), 16) / 255
-    const g = Number.parseInt(value.slice(2, 4), 16) / 255
-    const b = Number.parseInt(value.slice(4, 6), 16) / 255
-    const a = value.length === 8 ? Number.parseInt(value.slice(6, 8), 16) / 255 : 1
-    return [r, g, b, a]
-  }
-  const rgb = trimmed.match(/^rgba?\(([^)]+)\)$/i)
-  if (!rgb) return null
-  const parts = rgb[1]!.split(',').map((part) => part.trim())
-  if (parts.length < 3) return null
-  const parseChannel = (part: string) =>
-    part.endsWith('%') ? Number.parseFloat(part) / 100 : Number.parseFloat(part) / 255
-  const r = parseChannel(parts[0]!)
-  const g = parseChannel(parts[1]!)
-  const b = parseChannel(parts[2]!)
-  const a = parts[3] === undefined ? 1 : Number.parseFloat(parts[3])
-  if (![r, g, b, a].every(Number.isFinite)) return null
-  return [r, g, b, a]
 }
 
 // fallow-ignore-next-line complexity
