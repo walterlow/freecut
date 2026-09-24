@@ -12,7 +12,6 @@ import {
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
-import { Switch } from '@/components/ui/switch'
 import {
   CheckCircle2,
   AlertCircle,
@@ -77,6 +76,7 @@ import { ExportPresetGrid } from './export-preset-grid'
 import { ExportCapabilityAlerts } from './export-capability-alerts'
 import { ExportVideoFormatFields } from './export-video-format-fields'
 import { ExportRateControlFields } from './export-rate-control-fields'
+import { ExportSmartCopyBlock } from './export-smart-copy-block'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -698,45 +698,15 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                           sourceVideo={sourceVideo}
                         />
 
-                        <div className="flex items-start justify-between gap-4 border-t border-border pt-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="smart-copy" className="text-sm font-medium">
-                              {t('export.settings.smartCopy')}
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              {t(`export.settings.smartCopyStatus.${smartCopyAssessment.reason}`)}
-                            </p>
-                          </div>
-                          <Switch
-                            id="smart-copy"
-                            checked={settings.smartCopy !== false}
-                            onCheckedChange={(checked) =>
-                              setSettings((previous) => ({ ...previous, smartCopy: checked }))
-                            }
-                          />
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-background/60 px-3 py-2 text-xs">
-                          <span className="font-medium text-foreground">
-                            {smartCopyWillRun
-                              ? t('export.settings.smartCopyPath')
-                              : `${(resolvedVideoBitrate / 1_000_000).toFixed(2)} Mbps ${
-                                  (settings.rateControl ?? 'auto') === 'constant' ? 'CBR' : 'VBR'
-                                }`}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {t('export.settings.estimatedSize', {
-                              size: formatFileSize(estimatedFileSizeBytes),
-                            })}
-                          </span>
-                          {sourceVideo && (
-                            <span className="text-muted-foreground">
-                              {t('export.settings.sourceBitrate', {
-                                bitrate: (sourceVideo.bitrate / 1_000_000).toFixed(2),
-                              })}
-                            </span>
-                          )}
-                        </div>
+                        <ExportSmartCopyBlock
+                          settings={settings}
+                          setSettings={setSettings}
+                          assessment={smartCopyAssessment}
+                          willRun={smartCopyWillRun}
+                          resolvedVideoBitrate={resolvedVideoBitrate}
+                          estimatedFileSizeBytes={estimatedFileSizeBytes}
+                          sourceVideo={sourceVideo}
+                        />
                       </div>
 
                       <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
