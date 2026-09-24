@@ -1,9 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type {
   ExportSettings,
@@ -42,6 +39,7 @@ import { ExportDialogHeading } from './export-dialog-heading'
 import { ExportSettingsView } from './export-settings-view'
 import { ExportProgressView } from './export-progress-view'
 import { ExportCompleteView } from './export-complete-view'
+import { ExportNoticeView } from './export-notice-view'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
 import { resolveVideoBitrate } from '../deps/renderer'
@@ -697,34 +695,12 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
         {/* Error View */}
         {view === 'error' && (
-          <div className="space-y-4 py-4">
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={handleClose}>
-                {t('common.close')}
-              </Button>
-            </div>
-          </div>
+          <ExportNoticeView variant="error" message={error} onClose={handleClose} />
         )}
 
         {/* Cancelled View */}
         {view === 'cancelled' && (
-          <div className="space-y-4 py-4">
-            <Alert>
-              <X className="h-4 w-4" />
-              <AlertDescription>{t('export.cancelled.message')}</AlertDescription>
-            </Alert>
-
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={handleClose}>
-                {t('common.close')}
-              </Button>
-            </div>
-          </div>
+          <ExportNoticeView variant="cancelled" message={null} onClose={handleClose} />
         )}
       </DialogContent>
     </Dialog>
