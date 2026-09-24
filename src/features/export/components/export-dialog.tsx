@@ -75,6 +75,7 @@ import { ExportSequencePicker } from './export-sequence-picker'
 import { ExportModeToggle } from './export-mode-toggle'
 import { ExportRangeSummary } from './export-range-summary'
 import { ExportPresetGrid } from './export-preset-grid'
+import { ExportCapabilityAlerts } from './export-capability-alerts'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -668,26 +669,13 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                     />
 
                     <div className="space-y-4">
-                      {!isCheckingVideoSupport && videoSupportError && (
-                        <Alert>
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            {t('export.settings.codecSupportUnverified')}
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {!isCheckingVideoSupport && !videoSupportError && !hasSupportedVideoPath && (
-                        <Alert>
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            {t('export.settings.cannotEncode', {
-                              width: settings.resolution.width,
-                              height: settings.resolution.height,
-                            })}
-                          </AlertDescription>
-                        </Alert>
-                      )}
+                      <ExportCapabilityAlerts
+                        isCheckingSupport={isCheckingVideoSupport}
+                        supportError={videoSupportError}
+                        hasSupportedPath={hasSupportedVideoPath}
+                        width={settings.resolution.width}
+                        height={settings.resolution.height}
+                      />
 
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-2">
