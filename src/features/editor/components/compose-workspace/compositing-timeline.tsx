@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { toast } from 'sonner'
-import { ChevronDown, ChevronRight, ClipboardPaste, Blend, Copy, Crop, CopyPlus, Crosshair, EllipsisVertical, Eye, EyeOff, Group, Lock, Maximize2, Plus, Pencil, Spline, Square, Type, Trash2, Ungroup, Unlock } from 'lucide-react'
+import { ChevronDown, ClipboardPaste, Blend, Copy, Crop, CopyPlus, Crosshair, Group, Maximize2, Plus, Pencil, Spline, Square, Type, Trash2, Ungroup } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { useRafDeferredValue } from '@/shared/hooks/use-raf-deferred-value'
 import { PlayheadMarks } from '@/shared/ui/playhead-marks'
@@ -37,16 +37,16 @@ import { useTransformParentPickWhip } from './use-transform-parent-pick-whip'
 import { buildMotionSelectionDragState, buildMotionSelectionRetimeUpdates, getMotionSelectionTimeRange } from './motion-keyframe-selection'
 import { MotionIoLane, MOTION_IO_LANE_HEIGHT } from './motion-io-lane'
 import { MotionActiveRegionOverlay, MotionCompEndRulerDim } from './motion-region-overlay'
-import { buildMotionLayerRowModel, type LayerEntry, type MotionRow } from './motion-layer-row-model'
+import { buildMotionGroupRowModel, buildMotionLayerRowModel, type LayerEntry, type MotionRow } from './motion-layer-row-model'
 import { MotionLayerLane } from './motion-layer-lane'
 import { MotionLayerPropertyRows } from './motion-layer-property-rows'
 import {
-  LayerRenameInput,
   MotionLayerModeCell,
   MotionLayerNameCell,
   MotionLayerParentCell,
   MotionLayerTimingCell,
 } from './motion-layer-row-cells'
+import { MotionGroupLaneCell, MotionGroupNameCell } from './motion-group-row-cells'
 
 const TIMELINE_CONTENT_LEFT = LAYER_COLUMN_WIDTH + 1
 // Tick labels on top, the in/out render-range lane along the bottom.
@@ -1268,10 +1268,6 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
       visibleFrameRange,
     ],
   )
-  const beginSpanDrag = spanDrag.begin
-  const moveSpanDrag = spanDrag.move
-  const endSpanDrag = spanDrag.end
-  const cancelSpanDrag = spanDrag.cancel
   const spanTrim = useMemo(
     () =>
       createMotionSpanTrimCommands({
@@ -1292,10 +1288,6 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
       }),
     [],
   )
-  const beginRowReorder = rowReorder.begin
-  const moveRowReorder = rowReorder.move
-  const finishRowReorder = rowReorder.end
-  const cancelRowReorder = rowReorder.cancel
   const isRowReordering = rowReorderDrag !== null
   useEffect(() => {
     if (!isRowReordering) return
@@ -1803,17 +1795,8 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
   }
 
   const renderGroupRow = (row: Extract<MotionRow, { kind: 'group' }>) => {
-    const groupSelected =
-      row.items.length > 0 && row.items.every((item) => selectedItemIdSet.has(item.id))
-    const groupFrom = row.items.length ? Math.min(...row.items.map((item) => item.from)) : 0
-    const groupEnd = row.items.length
-      ? Math.max(...row.items.map((item) => item.from + item.durationInFrames))
-      : 0
-    const groupItemIds = row.items.map((item) => item.id)
-    const groupTrackIds = tracks
-      .filter((track) => track.parentTrackId === row.track.id)
-      .map((track) => track.id)
-    const isDragging = rowReorderDrag?.sourceTrackId === row.track.id
+    const { groupSelected, groupFrom, groupEnd, groupItemIds, groupTrackIds, isDragging } =
+      buildMotionGroupRowModel({ row, tracks, selectedItemIdSet, rowReorderDrag })
 
     return (
       <div
@@ -1844,175 +1827,36 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
             style={{ height: LAYER_ROW_HEIGHT }}
             data-testid={`motion-group-${row.track.id}`}
           >
-            <div
-              className="flex shrink-0 items-center gap-1 border-r border-border px-1.5"
-              style={{ width: LAYER_COLUMN_WIDTH }}
-            >
-              <button
-                type="button"
-                data-testid={`motion-reorder-handle-${row.track.id}`}
-                onPointerDown={(event) => beginRowReorder(event, row.track)}
-                onPointerMove={moveRowReorder}
-                onPointerUp={finishRowReorder}
-                onPointerCancel={cancelRowReorder}
-                className="flex h-6 w-3.5 shrink-0 touch-none items-center justify-center rounded-sm text-muted-foreground/65 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-primary active:text-primary"
-                title={t('editor.compose.reorderGroup')}
-                aria-label={t('editor.compose.reorderGroup')}
-              >
-                <EllipsisVertical className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  updateLayerTrack(row.track.id, { isCollapsed: !row.track.isCollapsed })
-                }
-                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label={
-                  row.track.isCollapsed
-                    ? t('editor.compose.expandGroup')
-                    : t('editor.compose.collapseGroup')
-                }
-              >
-                {row.track.isCollapsed ? (
-                  <ChevronRight className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => updateLayerTrack(row.track.id, { visible: !row.track.visible })}
-                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label={
-                  row.track.visible === false
-                    ? t('editor.compose.showGroup')
-                    : t('editor.compose.hideGroup')
-                }
-              >
-                {row.track.visible === false ? (
-                  <EyeOff className="h-3.5 w-3.5" />
-                ) : (
-                  <Eye className="h-3.5 w-3.5" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={(event) => {
-                  if (event.shiftKey) {
-                    setAllTracksLocked(!row.track.locked)
-                    return
-                  }
-                  updateLayerTrack(row.track.id, { locked: !row.track.locked })
-                }}
-                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label={
-                  row.track.locked ? t('editor.compose.unlockGroup') : t('editor.compose.lockGroup')
-                }
-                title={`${
-                  row.track.locked ? t('editor.compose.unlockGroup') : t('editor.compose.lockGroup')
-                } — ${t('editor.compose.lockAllLayersHint')}`}
-              >
-                {row.track.locked ? (
-                  <Lock className="h-3.5 w-3.5" />
-                ) : (
-                  <Unlock className="h-3.5 w-3.5" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => updateLayerTrack(row.track.id, { solo: !row.track.solo })}
-                className={cn(
-                  'h-5 w-5 rounded text-[9px] font-bold',
-                  row.track.solo
-                    ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-                )}
-                aria-label={
-                  row.track.solo ? t('editor.compose.disableSolo') : t('editor.compose.soloGroup')
-                }
-              >
-                S
-              </button>
-              {renameTarget?.kind === 'group' && renameTarget.id === row.track.id ? (
-                <LayerRenameInput
-                  value={renameDraft}
-                  ariaLabel={t('editor.compose.layerGroupName')}
-                  bold
-                  onDraftChange={setRenameDraft}
-                  onCommit={commitRename}
-                  onCancel={() => setRenameTarget(null)}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => selectItems(groupItemIds)}
-                  onDoubleClick={() =>
-                    beginRename({ kind: 'group', id: row.track.id }, row.track.name)
-                  }
-                  className="min-w-0 flex-1 truncate px-1 text-left text-[11px] font-semibold text-foreground"
-                  title={row.track.name}
-                >
-                  {row.track.name}
-                  <span className="ml-1.5 text-[9px] font-normal text-muted-foreground">
-                    {t('editor.compose.groupLayerCount', { count: row.items.length })}
-                  </span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => ungroupTracks(row.track.id)}
-                className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                title={t('editor.compose.ungroup')}
-                aria-label={t('editor.compose.ungroup')}
-              >
-                <Ungroup className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div
-              className="relative min-w-0 flex-1 touch-none overflow-hidden"
-              onPointerDown={beginPlayheadScrub}
-              onPointerMove={movePlayheadScrub}
-              onPointerUp={endPlayheadScrub}
-              onPointerCancel={endPlayheadScrub}
-            >
-              <div data-motion-viewport-surface className="absolute inset-0 overflow-hidden">
-                {Array.from({ length: RULER_DIVISIONS + 1 }, (_, tick) => (
-                  <div
-                    key={tick}
-                    data-motion-static-x
-                    className="pointer-events-none absolute inset-y-0 border-l border-border/45"
-                    style={{ left: `${(tick / RULER_DIVISIONS) * 100}%` }}
-                  />
-                ))}
-                {!activeInlineCurve && row.items.length > 0 && (
-                  <button
-                    type="button"
-                    data-testid={`motion-group-span-${row.track.id}`}
-                    data-from-frame={groupFrom}
-                    data-to-frame={groupEnd}
-                    disabled={row.track.locked}
-                    onPointerDown={(event) =>
-                      !row.track.locked && beginSpanDrag(event, groupItemIds)
-                    }
-                    onPointerMove={moveSpanDrag}
-                    onPointerUp={endSpanDrag}
-                    onPointerCancel={cancelSpanDrag}
-                    className={cn(
-                      'absolute top-1/2 h-6 -translate-y-1/2 touch-none rounded-sm border border-timeline-motion-segment/80 bg-timeline-motion-segment/70 px-1 text-left text-[9px] text-foreground',
-                      row.track.locked
-                        ? 'cursor-not-allowed opacity-55'
-                        : 'cursor-grab active:cursor-grabbing',
-                    )}
-                    style={{
-                      left: `${frameToMotionPercent(groupFrom)}%`,
-                      width: `${Math.max(0.6, ((groupEnd - groupFrom) / visibleFrameRange) * 100)}%`,
-                    }}
-                  >
-                    <span className="block truncate">{row.track.name}</span>
-                  </button>
-                )}
-              </div>
-            </div>
+            <MotionGroupNameCell
+              track={row.track}
+              layerCount={row.items.length}
+              groupItemIds={groupItemIds}
+              renameTarget={renameTarget}
+              renameDraft={renameDraft}
+              t={t}
+              rowReorder={rowReorder}
+              updateLayerTrack={updateLayerTrack}
+              setAllTracksLocked={setAllTracksLocked}
+              selectGroupItems={selectItems}
+              ungroup={ungroupTracks}
+              beginRename={beginRename}
+              commitRename={commitRename}
+              setRenameDraft={setRenameDraft}
+              setRenameTarget={setRenameTarget}
+            />
+            <MotionGroupLaneCell
+              track={row.track}
+              groupItemIds={groupItemIds}
+              groupFrom={groupFrom}
+              groupEnd={groupEnd}
+              activeInlineCurve={activeInlineCurve}
+              frameToMotionPercent={frameToMotionPercent}
+              visibleFrameRange={visibleFrameRange}
+              spanDrag={spanDrag}
+              beginPlayheadScrub={beginPlayheadScrub}
+              movePlayheadScrub={movePlayheadScrub}
+              endPlayheadScrub={endPlayheadScrub}
+            />
           </div>
         </MotionRowContextMenu>
       </div>
