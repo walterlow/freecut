@@ -20,7 +20,7 @@ import {
 } from '@/shared/utils/audio-eq'
 import { getAudioPitchShiftSemitones } from '@/shared/utils/audio-pitch'
 import type { AudioSegment } from './types'
-import { buildClipFadeSpan } from './clip-fades'
+import { buildClipFadeSpan, resolveItemFadeFields } from './clip-fades'
 
 type TransitionAudioItem = VideoItem | AudioItem
 
@@ -35,6 +35,38 @@ export interface TransitionAudioEntry<TItem extends TransitionAudioItem> {
   audioCodec?: string
   volumeKeyframes?: VolumeKeyframe[]
   itemFrom: number
+}
+
+/** How far a transition reaches into each side, plus the overlap fades it implies. */
+interface TransitionAudioExtension {
+  before: number
+  after: number
+  overlapFadeOut: number
+  overlapFadeIn: number
+  fadeInDelay: number
+  fadeOutLead: number
+}
+
+/** A resolved transition window, as far as segment planning needs it. */
+interface TransitionWindowSpan {
+  startFrame: number
+  endFrame: number
+  durationInFrames: number
+  leftPortion: number
+  rightPortion: number
+}
+
+/** A clip's segment carrying the extension it needs to cover its transition window. */
+type ExpandedTransitionAudioSegment = AudioSegment & {
+  clip: TransitionAudioItem
+  beforeFrames: number
+  afterFrames: number
+}
+
+type EntryInTrackOrder<TItem extends TransitionAudioItem> = {
+  id: string
+  trackId: string
+  item: TItem
 }
 
 function getTransitionAudioTrimBefore(item: TransitionAudioItem): number {
@@ -82,58 +114,96 @@ function isContinuousAudioTransition(
   return !hasExplicitTransitionAudioTrimStart(right)
 }
 
-export function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
+function createTransitionAudioExtension(): TransitionAudioExtension {
+  return {
+    before: 0,
+    after: 0,
+    overlapFadeOut: 0,
+    overlapFadeIn: 0,
+    fadeInDelay: 0,
+    fadeOutLead: 0,
+  }
+}
+
+function getTransitionAudioExtension(
+  extensions: Map<string, TransitionAudioExtension>,
+  clipId: string,
+): TransitionAudioExtension {
+  const existing = extensions.get(clipId)
+  if (existing) return existing
+  const created = createTransitionAudioExtension()
+  extensions.set(clipId, created)
+  return created
+}
+
+/**
+ * Raise one extension field to at least `value`. Extensions only ever grow, and
+ * a non-positive value carries no extension at all.
+ */
+function raiseExtension(
+  extensions: Map<string, TransitionAudioExtension>,
+  clipId: string,
+  key: 'before' | 'after' | 'overlapFadeOut' | 'overlapFadeIn' | 'fadeInDelay' | 'fadeOutLead',
+  value: number,
+): void {
+  if (value <= 0) return
+  const extension = getTransitionAudioExtension(extensions, clipId)
+  extension[key] = Math.max(extension[key], value)
+}
+
+/**
+ * Pre-roll and post-roll a window reaches beyond its clips: the incoming clip
+ * can start early, the outgoing clip keeps playing past its own end.
+ */
+function accumulateRollExtensions(
+  extensions: Map<string, TransitionAudioExtension>,
+  left: TransitionAudioItem,
+  right: TransitionAudioItem,
+  window: TransitionWindowSpan,
+): void {
+  raiseExtension(extensions, right.id, 'before', right.from - window.startFrame)
+  raiseExtension(
+    extensions,
+    left.id,
+    'after',
+    window.endFrame - (left.from + left.durationInFrames),
+  )
+}
+
+/** The crossfade each side of the cut carries, and how long it holds full gain. */
+function accumulateFadeExtensions(
+  extensions: Map<string, TransitionAudioExtension>,
+  left: TransitionAudioItem,
+  right: TransitionAudioItem,
+  window: TransitionWindowSpan,
+): void {
+  if (window.durationInFrames <= 0) return
+
+  raiseExtension(extensions, left.id, 'overlapFadeOut', window.durationInFrames)
+  raiseExtension(extensions, left.id, 'fadeOutLead', window.leftPortion)
+  raiseExtension(extensions, right.id, 'overlapFadeIn', window.durationInFrames)
+  raiseExtension(extensions, right.id, 'fadeInDelay', window.rightPortion)
+}
+
+/**
+ * Collect the extension every clip needs across all resolved transition
+ * windows. Entries that don't participate in any transition still yield plain
+ * segments later (zero extensions) — bailing out on empty `transitions` would
+ * silently drop the embedded audio of every video item in compositions without
+ * transitions.
+ */
+function collectTransitionAudioExtensions<TItem extends TransitionAudioItem>(
   entriesById: Map<string, TransitionAudioEntry<TItem>>,
   transitions: Transition[],
   fps: number,
-): AudioSegment[] {
-  // Entries that don't participate in any transition still yield plain segments below
-  // (zero extensions) — bailing out on empty `transitions` would silently drop the
-  // embedded audio of every video item in compositions without transitions.
-  if (entriesById.size === 0) return []
-
-  const extensionByClipId = new Map<
-    string,
-    {
-      before: number
-      after: number
-      overlapFadeOut: number
-      overlapFadeIn: number
-      fadeInDelay: number
-      fadeOutLead: number
-    }
-  >()
-  const ensureExtension = (
-    clipId: string,
-  ): {
-    before: number
-    after: number
-    overlapFadeOut: number
-    overlapFadeIn: number
-    fadeInDelay: number
-    fadeOutLead: number
-  } => {
-    const existing = extensionByClipId.get(clipId)
-    if (existing) return existing
-    const created = {
-      before: 0,
-      after: 0,
-      overlapFadeOut: 0,
-      overlapFadeIn: 0,
-      fadeInDelay: 0,
-      fadeOutLead: 0,
-    }
-    extensionByClipId.set(clipId, created)
-    return created
-  }
-
+): Map<string, TransitionAudioExtension> {
   const clipsById = new Map<string, TItem>()
   for (const [id, entry] of entriesById) {
     clipsById.set(id, entry.item)
   }
 
-  const resolvedWindows = resolveTransitionWindows(transitions, clipsById)
-  for (const window of resolvedWindows) {
+  const extensions = new Map<string, TransitionAudioExtension>()
+  for (const window of resolveTransitionWindows(transitions, clipsById)) {
     const leftEntry = entriesById.get(window.transition.leftClipId)
     const rightEntry = entriesById.get(window.transition.rightClipId)
     if (!leftEntry || !rightEntry) continue
@@ -142,31 +212,17 @@ export function buildManagedTransitionAudioSegments<TItem extends TransitionAudi
     const right = rightEntry.item
     if (isContinuousAudioTransition(left, right, fps)) continue
 
-    const rightPreRoll = Math.max(0, right.from - window.startFrame)
-    const leftPostRoll = Math.max(0, window.endFrame - (left.from + left.durationInFrames))
-
-    if (rightPreRoll > 0) {
-      const rightExt = ensureExtension(right.id)
-      rightExt.before = Math.max(rightExt.before, rightPreRoll)
-    }
-
-    if (leftPostRoll > 0) {
-      const leftExt = ensureExtension(left.id)
-      leftExt.after = Math.max(leftExt.after, leftPostRoll)
-    }
-
-    if (window.durationInFrames > 0) {
-      const leftExt = ensureExtension(left.id)
-      leftExt.overlapFadeOut = Math.max(leftExt.overlapFadeOut, window.durationInFrames)
-      leftExt.fadeOutLead = Math.max(leftExt.fadeOutLead, window.leftPortion)
-      const rightExt = ensureExtension(right.id)
-      rightExt.overlapFadeIn = Math.max(rightExt.overlapFadeIn, window.durationInFrames)
-      rightExt.fadeInDelay = Math.max(rightExt.fadeInDelay, window.rightPortion)
-    }
+    accumulateRollExtensions(extensions, left, right, window)
+    accumulateFadeExtensions(extensions, left, right, window)
   }
 
-  const resolvedTrimBeforeById = new Map<string, number>()
-  const sortedByTrackAndTime = Array.from(entriesById.entries())
+  return extensions
+}
+
+function listEntriesInTrackOrder<TItem extends TransitionAudioItem>(
+  entriesById: Map<string, TransitionAudioEntry<TItem>>,
+): Array<EntryInTrackOrder<TItem>> {
+  return Array.from(entriesById.entries())
     .map(([id, entry]) => ({
       id,
       trackId: entry.trackId,
@@ -177,9 +233,20 @@ export function buildManagedTransitionAudioSegments<TItem extends TransitionAudi
       if (a.item.from !== b.item.from) return a.item.from - b.item.from
       return a.id.localeCompare(b.id)
     })
+}
 
+/**
+ * A clip whose predecessor plays the same source continuously has no trim of
+ * its own: its source position follows on from the predecessor's.
+ */
+function resolveContinuityTrimBeforeById<TItem extends TransitionAudioItem>(
+  entriesById: Map<string, TransitionAudioEntry<TItem>>,
+  fps: number,
+): Map<string, number> {
+  const resolvedTrimBeforeById = new Map<string, number>()
   const previousByTrack = new Map<string, TItem>()
-  for (const entry of sortedByTrackAndTime) {
+
+  for (const entry of listEntriesInTrackOrder(entriesById)) {
     const clip = entry.item
     const explicitTrimBefore = getTransitionAudioTrimBefore(clip)
     let resolvedTrimBefore = explicitTrimBefore
@@ -204,113 +271,160 @@ export function buildManagedTransitionAudioSegments<TItem extends TransitionAudi
     previousByTrack.set(entry.trackId, clip)
   }
 
-  type ExpandedTransitionAudioSegment = AudioSegment & {
-    clip: TransitionAudioItem
-    beforeFrames: number
-    afterFrames: number
+  return resolvedTrimBeforeById
+}
+
+/**
+ * The crossfade the segment carries: the overlap window when the transition has
+ * one, otherwise whatever pre-roll or post-roll the clip gained.
+ */
+function resolveCrossfadeFrames(
+  extension: TransitionAudioExtension,
+  before: number,
+  after: number,
+): { crossfadeFadeInFrames: number | undefined; crossfadeFadeOutFrames: number | undefined } {
+  const crossfadeFadeInFrames =
+    extension.overlapFadeIn > 0 ? extension.overlapFadeIn : before > 0 ? before : undefined
+  const crossfadeFadeOutFrames =
+    extension.overlapFadeOut > 0 ? extension.overlapFadeOut : after > 0 ? after : undefined
+  return { crossfadeFadeInFrames, crossfadeFadeOutFrames }
+}
+
+function expandTransitionEntry<TItem extends TransitionAudioItem>(params: {
+  entry: TransitionAudioEntry<TItem>
+  extensions: Map<string, TransitionAudioExtension>
+  resolvedTrimBeforeById: Map<string, number>
+  fps: number
+}): ExpandedTransitionAudioSegment {
+  const { entry, extensions, resolvedTrimBeforeById, fps } = params
+  const item = entry.item
+  const speed = item.speed ?? 1
+  const sourceFps = item.sourceFps ?? fps
+  const baseTrimBefore = resolvedTrimBeforeById.get(item.id) ?? getTransitionAudioTrimBefore(item)
+  const extension = extensions.get(item.id) ?? createTransitionAudioExtension()
+  const maxBeforeBySource =
+    speed > 0 ? sourceToTimelineFrames(baseTrimBefore, speed, sourceFps, fps) : 0
+  const before = Math.max(0, Math.min(extension.before, maxBeforeBySource))
+  const after = Math.max(0, extension.after)
+  const { crossfadeFadeInFrames, crossfadeFadeOutFrames } = resolveCrossfadeFrames(
+    extension,
+    before,
+    after,
+  )
+  const fades = resolveItemFadeFields(item, fps)
+
+  return {
+    itemId: item.id,
+    trackId: entry.trackId,
+    clip: item,
+    src: item.src,
+    startFrame: item.from - before,
+    durationFrames: item.durationInFrames + before + after,
+    sourceStartFrame: baseTrimBefore - timelineToSourceFrames(before, speed, fps, sourceFps),
+    sourceFps,
+    volume: (item.volume ?? 0) + entry.trackVolume,
+    ...fades,
+    pitchShiftSemitones: getAudioPitchShiftSemitones(item),
+    contentStartOffsetFrames: before,
+    contentEndOffsetFrames: after,
+    fadeInDelayFrames: extension.fadeInDelay,
+    fadeOutLeadFrames: extension.fadeOutLead,
+    clipFadeSpans: [
+      buildClipFadeSpan({
+        startFrame: before,
+        durationInFrames: item.durationInFrames,
+        ...fades,
+      }),
+    ],
+    crossfadeFadeInFrames,
+    crossfadeFadeOutFrames,
+    speed,
+    isReversed: item.isReversed === true,
+    muted: entry.muted,
+    type: entry.type,
+    audioCodec: entry.audioCodec,
+    audioEqStages: appendResolvedAudioEqSources(
+      entry.audioEqStages,
+      entry.trackAudioEq,
+      getAudioEqSettings(item),
+    ),
+    beforeFrames: before,
+    afterFrames: after,
+    volumeKeyframes: entry.volumeKeyframes,
+    itemFrom: entry.itemFrom,
   }
+}
 
-  const expandedSegments: ExpandedTransitionAudioSegment[] = []
-  for (const [, entry] of entriesById) {
-    const item = entry.item
-    const speed = item.speed ?? 1
-    const sourceFps = item.sourceFps ?? fps
-    const baseTrimBefore = resolvedTrimBeforeById.get(item.id) ?? getTransitionAudioTrimBefore(item)
-    const extension = extensionByClipId.get(item.id) ?? {
-      before: 0,
-      after: 0,
-      overlapFadeOut: 0,
-      overlapFadeIn: 0,
-      fadeInDelay: 0,
-      fadeOutLead: 0,
-    }
-    const maxBeforeBySource =
-      speed > 0 ? sourceToTimelineFrames(baseTrimBefore, speed, sourceFps, fps) : 0
-    const before = Math.max(0, Math.min(extension.before, maxBeforeBySource))
-    const after = Math.max(0, extension.after)
-    const crossfadeFadeInFrames =
-      extension.overlapFadeIn > 0 ? extension.overlapFadeIn : before > 0 ? before : undefined
-    const crossfadeFadeOutFrames =
-      extension.overlapFadeOut > 0 ? extension.overlapFadeOut : after > 0 ? after : undefined
+/** The two clips play the same source back to back, so their audio can merge. */
+function haveSameSourceForMerge(
+  left: ExpandedTransitionAudioSegment,
+  right: ExpandedTransitionAudioSegment,
+  fps: number,
+): boolean {
+  if (!isContinuousAudioTransition(left.clip, right.clip, fps)) return false
+  if (left.src !== right.src) return false
+  if (Math.abs(left.speed - right.speed) > 0.0001) return false
+  return left.isReversed === right.isReversed
+}
 
-    expandedSegments.push({
-      itemId: item.id,
-      trackId: entry.trackId,
-      clip: item,
-      src: item.src,
-      startFrame: item.from - before,
-      durationFrames: item.durationInFrames + before + after,
-      sourceStartFrame: baseTrimBefore - timelineToSourceFrames(before, speed, fps, sourceFps),
-      sourceFps,
-      volume: (item.volume ?? 0) + entry.trackVolume,
-      fadeInFrames: (item.audioFadeIn ?? 0) * fps,
-      fadeOutFrames: (item.audioFadeOut ?? 0) * fps,
-      fadeInCurve: item.audioFadeInCurve ?? 0,
-      fadeOutCurve: item.audioFadeOutCurve ?? 0,
-      fadeInCurveX: item.audioFadeInCurveX ?? 0.52,
-      fadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
-      pitchShiftSemitones: getAudioPitchShiftSemitones(item),
-      contentStartOffsetFrames: before,
-      contentEndOffsetFrames: after,
-      fadeInDelayFrames: extension.fadeInDelay,
-      fadeOutLeadFrames: extension.fadeOutLead,
-      clipFadeSpans: [
-        buildClipFadeSpan({
-          startFrame: before,
-          durationInFrames: item.durationInFrames,
-          fadeInFrames: (item.audioFadeIn ?? 0) * fps,
-          fadeOutFrames: (item.audioFadeOut ?? 0) * fps,
-          fadeInCurve: item.audioFadeInCurve,
-          fadeOutCurve: item.audioFadeOutCurve,
-          fadeInCurveX: item.audioFadeInCurveX,
-          fadeOutCurveX: item.audioFadeOutCurveX,
-        }),
-      ],
-      crossfadeFadeInFrames,
-      crossfadeFadeOutFrames,
-      speed,
-      isReversed: item.isReversed === true,
-      muted: entry.muted,
-      type: entry.type,
-      audioCodec: entry.audioCodec,
-      audioEqStages: appendResolvedAudioEqSources(
-        entry.audioEqStages,
-        entry.trackAudioEq,
-        getAudioEqSettings(item),
-      ),
-      beforeFrames: before,
-      afterFrames: after,
-      volumeKeyframes: entry.volumeKeyframes,
-      itemFrom: entry.itemFrom,
-    })
-  }
+/** Gain, mute and EQ agree, so neither side colours the merged audio differently. */
+function haveSameMixForMerge(
+  left: ExpandedTransitionAudioSegment,
+  right: ExpandedTransitionAudioSegment,
+): boolean {
+  if (Math.abs(left.volume - right.volume) > 0.0001) return false
+  if (left.muted !== right.muted) return false
+  if (!areAudioEqStagesEqual(left.audioEqStages, right.audioEqStages)) return false
+  return Math.abs(left.pitchShiftSemitones - right.pitchShiftSemitones) <= 0.0001
+}
 
-  const sortedSegments = expandedSegments.toSorted((a, b) => {
-    if (a.startFrame !== b.startFrame) return a.startFrame - b.startFrame
-    return a.itemId.localeCompare(b.itemId)
-  })
+/** Neither clip extends past the cut, and no keyframed volume needs its own item. */
+function haveMergeableBoundaries(
+  left: ExpandedTransitionAudioSegment,
+  right: ExpandedTransitionAudioSegment,
+): boolean {
+  if (left.afterFrames !== 0 || right.beforeFrames !== 0) return false
+  return !left.volumeKeyframes && !right.volumeKeyframes
+}
 
-  const mergedSegments: AudioSegment[] = []
-  let active: ExpandedTransitionAudioSegment | null = null
+function canMergeContinuousBoundary(
+  left: ExpandedTransitionAudioSegment,
+  right: ExpandedTransitionAudioSegment,
+  fps: number,
+): boolean {
+  return (
+    haveSameSourceForMerge(left, right, fps) &&
+    haveSameMixForMerge(left, right) &&
+    haveMergeableBoundaries(left, right)
+  )
+}
 
-  const canMergeContinuousBoundary = (
-    left: ExpandedTransitionAudioSegment,
-    right: ExpandedTransitionAudioSegment,
-  ): boolean => {
-    if (!isContinuousAudioTransition(left.clip, right.clip, fps)) return false
-    if (left.src !== right.src) return false
-    if (Math.abs(left.speed - right.speed) > 0.0001) return false
-    if (left.isReversed !== right.isReversed) return false
-    if (Math.abs(left.volume - right.volume) > 0.0001) return false
-    if (left.muted !== right.muted) return false
-    if (!areAudioEqStagesEqual(left.audioEqStages, right.audioEqStages)) return false
-    if (Math.abs(left.pitchShiftSemitones - right.pitchShiftSemitones) > 0.0001) return false
-    if (left.afterFrames !== 0 || right.beforeFrames !== 0) return false
-    if (left.volumeKeyframes || right.volumeKeyframes) return false
-    return true
-  }
+function mergeContinuationIntoActive(
+  active: ExpandedTransitionAudioSegment,
+  segment: ExpandedTransitionAudioSegment,
+): void {
+  const activeStartFrame = active.startFrame
+  const mergedEnd = segment.startFrame + segment.durationFrames
+  active.durationFrames = mergedEnd - active.startFrame
+  active.fadeOutFrames = segment.fadeOutFrames
+  active.fadeOutCurve = segment.fadeOutCurve
+  active.fadeOutCurveX = segment.fadeOutCurveX
+  active.contentEndOffsetFrames = segment.contentEndOffsetFrames
+  active.fadeOutLeadFrames = segment.fadeOutLeadFrames
+  active.crossfadeFadeOutFrames = segment.crossfadeFadeOutFrames
+  active.clipFadeSpans = [
+    ...(active.clipFadeSpans ?? []),
+    ...(segment.clipFadeSpans ?? []).map((span) => ({
+      ...span,
+      startFrame: span.startFrame + (segment.startFrame - activeStartFrame),
+    })),
+  ]
+  active.clip = segment.clip
+  active.afterFrames = segment.afterFrames
+}
 
-  const toAudioSegment = (segment: ExpandedTransitionAudioSegment): AudioSegment => ({
+function toAudioSegment(segment: ExpandedTransitionAudioSegment): AudioSegment {
+  return {
     itemId: segment.itemId,
     trackId: segment.trackId,
     src: segment.src,
@@ -341,7 +455,16 @@ export function buildManagedTransitionAudioSegments<TItem extends TransitionAudi
     audioCodec: segment.audioCodec,
     volumeKeyframes: segment.volumeKeyframes,
     itemFrom: segment.itemFrom,
-  })
+  }
+}
+
+/** Clips play in timeline order, so a continuous cut merges into one segment. */
+function mergeContinuationSegments(
+  sortedSegments: ExpandedTransitionAudioSegment[],
+  fps: number,
+): AudioSegment[] {
+  const mergedSegments: AudioSegment[] = []
+  let active: ExpandedTransitionAudioSegment | null = null
 
   for (const segment of sortedSegments) {
     if (!active) {
@@ -349,25 +472,8 @@ export function buildManagedTransitionAudioSegments<TItem extends TransitionAudi
       continue
     }
 
-    if (canMergeContinuousBoundary(active, segment)) {
-      const activeStartFrame = active.startFrame
-      const mergedEnd = segment.startFrame + segment.durationFrames
-      active.durationFrames = mergedEnd - active.startFrame
-      active.fadeOutFrames = segment.fadeOutFrames
-      active.fadeOutCurve = segment.fadeOutCurve
-      active.fadeOutCurveX = segment.fadeOutCurveX
-      active.contentEndOffsetFrames = segment.contentEndOffsetFrames
-      active.fadeOutLeadFrames = segment.fadeOutLeadFrames
-      active.crossfadeFadeOutFrames = segment.crossfadeFadeOutFrames
-      active.clipFadeSpans = [
-        ...(active.clipFadeSpans ?? []),
-        ...(segment.clipFadeSpans ?? []).map((span) => ({
-          ...span,
-          startFrame: span.startFrame + (segment.startFrame - activeStartFrame),
-        })),
-      ]
-      active.clip = segment.clip
-      active.afterFrames = segment.afterFrames
+    if (canMergeContinuousBoundary(active, segment, fps)) {
+      mergeContinuationIntoActive(active, segment)
       continue
     }
 
@@ -380,4 +486,25 @@ export function buildManagedTransitionAudioSegments<TItem extends TransitionAudi
   }
 
   return mergedSegments
+}
+
+export function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
+  entriesById: Map<string, TransitionAudioEntry<TItem>>,
+  transitions: Transition[],
+  fps: number,
+): AudioSegment[] {
+  if (entriesById.size === 0) return []
+
+  const extensions = collectTransitionAudioExtensions(entriesById, transitions, fps)
+  const resolvedTrimBeforeById = resolveContinuityTrimBeforeById(entriesById, fps)
+  const expandedSegments = Array.from(entriesById.values(), (entry) =>
+    expandTransitionEntry({ entry, extensions, resolvedTrimBeforeById, fps }),
+  )
+
+  const sortedSegments = expandedSegments.toSorted((a, b) => {
+    if (a.startFrame !== b.startFrame) return a.startFrame - b.startFrame
+    return a.itemId.localeCompare(b.itemId)
+  })
+
+  return mergeContinuationSegments(sortedSegments, fps)
 }
