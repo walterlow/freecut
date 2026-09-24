@@ -20,7 +20,7 @@ import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, getKeyframeNavigatorThumbMetrics, getNiceTickStep, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
 import { clearSpanDragVisuals, clearSpanTrimVisuals, createMotionSpanDragCommands, createMotionSpanTrimCommands, type SpanDragState, type SpanTrimState } from './motion-span-interactions'
 import { createMotionRowReorderCommands, type RowReorderDragState } from './motion-row-reorder'
-import { createMotionTimeViewportController, formatFrameTime, getMotionPlayheadEdgeScrollVelocity, normalizeMotionTimeViewport, panMotionTimeViewport, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
+import { createMotionTimeViewportController, formatFrameTime, normalizeMotionTimeViewport, resolveMotionScrubViewport, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
 import { createMotionLayerClipboardCommands } from './motion-layer-clipboard'
 import { createMotionLayerSelectionCommands } from './motion-layer-selection'
 import { getVisibleMotionRetimeRange, getRetimeKeyboardDelta, applyMotionSelectionFrameUpdates, restoreMotionSelectionRetimeVisuals, type MotionSelectionRetimeDragState, createMotionSelectionRetimeCommands } from './motion-selection-retime'
@@ -1639,47 +1639,24 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
       let viewport: MotionTimeViewport = activeViewport
 
       const rect = surface.getBoundingClientRect()
-      const visibleRange = Math.max(1, viewport.endFrame - viewport.startFrame)
       const autoEdgeEndFrame = compositionEndFrame ?? durationInFrames
-      const velocity =
-        visibleRange < autoEdgeEndFrame
-          ? getMotionPlayheadEdgeScrollVelocity(clientX, rect)
-          : 0
+      const pannedViewport = resolveMotionScrubViewport({
+        viewport,
+        clientX,
+        bounds: rect,
+        totalFrames: autoEdgeEndFrame,
+        previousTimestamp: scrubAnimationTimeRef.current,
+        timestamp,
+      })
       let keepScrolling = false
-      if (velocity !== 0 && rect.width > 0) {
-        const previousTimestamp = scrubAnimationTimeRef.current ?? timestamp - 1000 / 60
-        const elapsedSeconds = Math.min(32, Math.max(0, timestamp - previousTimestamp)) / 1000
+      if (pannedViewport) {
         scrubAnimationTimeRef.current = timestamp
-        const pannedViewport = panMotionTimeViewport(
-          viewport,
-          velocity * elapsedSeconds,
-          rect.width,
-          autoEdgeEndFrame,
-        )
-        const boundaryVisibleRange =
-          Math.abs(visibleRange - Math.round(visibleRange)) < 1e-9
-            ? Math.round(visibleRange)
-            : visibleRange
-        // Preserve fractional motion inside the range, but canonicalize the
-        // terminal edge. Floating-point residue at 0/comp-end otherwise leaves
-        // the imperative preview a fraction away from the settled boundary.
-        const nextViewport =
-          velocity < 0 && pannedViewport.startFrame <= Number.EPSILON * autoEdgeEndFrame * 4
-            ? { startFrame: 0, endFrame: boundaryVisibleRange }
-            : velocity > 0 &&
-                autoEdgeEndFrame - pannedViewport.endFrame <=
-                  Number.EPSILON * autoEdgeEndFrame * 4
-              ? {
-                  startFrame: Math.max(0, autoEdgeEndFrame - boundaryVisibleRange),
-                  endFrame: autoEdgeEndFrame,
-                }
-              : pannedViewport
         if (
-          nextViewport.startFrame !== viewport.startFrame ||
-          nextViewport.endFrame !== viewport.endFrame
+          pannedViewport.startFrame !== viewport.startFrame ||
+          pannedViewport.endFrame !== viewport.endFrame
         ) {
-          viewport = nextViewport
-          playheadScrubViewportRef.current = nextViewport
+          viewport = pannedViewport
+          playheadScrubViewportRef.current = pannedViewport
           keepScrolling = true
         }
       } else {

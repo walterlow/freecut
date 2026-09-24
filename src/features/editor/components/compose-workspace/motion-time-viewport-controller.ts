@@ -86,6 +86,53 @@ export function panMotionTimeViewport(
   )
 }
 
+/**
+ * One animation frame of viewport motion while the playhead is scrubbed.
+ *
+ * `null` means the pointer is not held deep enough into a pane edge to pan (or
+ * the pane has no measurable width), which is also the caller's signal that the
+ * scrub clock has stalled. The caller owns the clock: it hands over the reading
+ * it stored on the previous frame so this stays a pure function of the pointer
+ * position and the elapsed frame time.
+ */
+export function resolveMotionScrubViewport(input: {
+  viewport: MotionTimeViewport
+  clientX: number
+  bounds: Pick<DOMRect, 'left' | 'right' | 'width'>
+  totalFrames: number
+  previousTimestamp: number | null
+  timestamp: number
+}): MotionTimeViewport | null {
+  const { viewport, clientX, bounds, totalFrames, previousTimestamp, timestamp } = input
+  const visibleRange = Math.max(1, viewport.endFrame - viewport.startFrame)
+  const velocity =
+    visibleRange < totalFrames ? getMotionPlayheadEdgeScrollVelocity(clientX, bounds) : 0
+  if (velocity === 0 || bounds.width <= 0) return null
+
+  const elapsedSeconds =
+    Math.min(32, Math.max(0, timestamp - (previousTimestamp ?? timestamp - 1000 / 60))) / 1000
+  const pannedViewport = panMotionTimeViewport(
+    viewport,
+    velocity * elapsedSeconds,
+    bounds.width,
+    totalFrames,
+  )
+  const boundaryVisibleRange =
+    Math.abs(visibleRange - Math.round(visibleRange)) < 1e-9
+      ? Math.round(visibleRange)
+      : visibleRange
+  // Preserve fractional motion inside the range, but canonicalize the terminal
+  // edge. Floating-point residue at 0/comp-end otherwise leaves the imperative
+  // preview a fraction away from the settled boundary.
+  if (velocity < 0 && pannedViewport.startFrame <= Number.EPSILON * totalFrames * 4) {
+    return { startFrame: 0, endFrame: boundaryVisibleRange }
+  }
+  if (velocity > 0 && totalFrames - pannedViewport.endFrame <= Number.EPSILON * totalFrames * 4) {
+    return { startFrame: Math.max(0, totalFrames - boundaryVisibleRange), endFrame: totalFrames }
+  }
+  return pannedViewport
+}
+
 function zoomMotionTimeViewport(
   viewport: MotionTimeViewport,
   pivotRatio: number,
