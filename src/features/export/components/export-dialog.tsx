@@ -4,25 +4,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
-import {
-  CheckCircle2,
-  AlertCircle,
-  X,
-  Download,
-  Film,
-  Clock,
-  HardDrive,
-  ListPlus,
-  ChevronDown,
-} from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { CheckCircle2, AlertCircle, X, Download, Film, Clock, HardDrive } from 'lucide-react'
 import { toast } from 'sonner'
 import type {
   ExportSettings,
@@ -64,6 +46,7 @@ import { ExportSequencePicker } from './export-sequence-picker'
 import { ExportModeToggle } from './export-mode-toggle'
 import { ExportVideoSettings } from './export-video-settings'
 import { ExportAudioSettings } from './export-audio-settings'
+import { ExportSettingsFooter } from './export-settings-footer'
 import { ExportRangeSummary } from './export-range-summary'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
@@ -704,46 +687,15 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-2 border-t border-border pt-4">
-              <Button variant="outline" onClick={handleClose}>
-                {t('common.cancel')}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-1.5" disabled={exportActionsDisabled}>
-                    <ListPlus className="h-4 w-4" />
-                    {t('export.renderQueue.addToQueue')}
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleAddCurrentRange}>
-                    {t('export.renderQueue.addCurrentRange')}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">
-                    {t('export.renderQueue.segmentsHeading')}
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem onClick={handleAddMarkerSegments}>
-                    {t('export.renderQueue.perMarker')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleSplitChunks(10)}>
-                    {t('export.renderQueue.splitChunks', { seconds: 10 })}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleSplitChunks(30)}>
-                    {t('export.renderQueue.splitChunks', { seconds: 30 })}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleSplitChunks(60)}>
-                    {t('export.renderQueue.splitChunks', { seconds: 60 })}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button onClick={handleStartExport} disabled={exportActionsDisabled}>
-                {exportMode === 'audio'
-                  ? t('export.settings.exportAudio')
-                  : t('export.settings.exportVideo')}
-              </Button>
-            </div>
+            <ExportSettingsFooter
+              mode={exportMode}
+              actionsDisabled={exportActionsDisabled}
+              onClose={handleClose}
+              onExport={handleStartExport}
+              onAddCurrentRange={handleAddCurrentRange}
+              onAddMarkerSegments={handleAddMarkerSegments}
+              onSplitChunks={handleSplitChunks}
+            />
           </div>
         )}
 
