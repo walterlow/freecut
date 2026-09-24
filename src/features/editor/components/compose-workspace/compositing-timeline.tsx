@@ -4,7 +4,6 @@ import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { toast } from 'sonner'
-import type { TFunction } from 'i18next'
 import { ChevronDown, ChevronRight, ClipboardPaste, Blend, Copy, Crop, CopyPlus, Crosshair, EllipsisVertical, Eye, EyeOff, Group, Lock, Maximize2, Plus, Pencil, Spline, Square, Type, Trash2, Ungroup, Unlock } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { useRafDeferredValue } from '@/shared/hooks/use-raf-deferred-value'
@@ -16,19 +15,16 @@ import { createLogger } from '@/shared/logging/logger'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useClipboardStore } from '@/shared/state/clipboard'
-import type { ItemKeyframes, DirectLinkableProperty } from '@/types/keyframe'
-import type { BlendMode } from '@/types/blend-modes'
-import { BLEND_MODE_GROUPS, BLEND_MODE_LABELS } from '@/types/blend-modes'
+import type { DirectLinkableProperty } from '@/types/keyframe'
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
-import type { CanvasSettings } from '@/types/transform'
-import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, getKeyframeNavigatorThumbMetrics, getNiceTickStep, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PickWhipIcon, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setTransformParents, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
+import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, getKeyframeNavigatorThumbMetrics, getNiceTickStep, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
 import { clearSpanDragVisuals, clearSpanTrimVisuals, createMotionSpanDragCommands, createMotionSpanTrimCommands, type SpanDragState, type SpanTrimState } from './motion-span-interactions'
 import { createMotionRowReorderCommands, type RowReorderDragState } from './motion-row-reorder'
 import { createMotionTimeViewportController, formatFrameTime, getMotionPlayheadEdgeScrollVelocity, normalizeMotionTimeViewport, panMotionTimeViewport, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
 import { createMotionLayerClipboardCommands } from './motion-layer-clipboard'
 import { createMotionLayerSelectionCommands } from './motion-layer-selection'
 import { getVisibleMotionRetimeRange, getRetimeKeyboardDelta, applyMotionSelectionFrameUpdates, restoreMotionSelectionRetimeVisuals, type MotionSelectionRetimeDragState, createMotionSelectionRetimeCommands } from './motion-selection-retime'
-import { LAYER_COLUMN_WIDTH, LAYER_ROW_HEIGHT, RULER_DIVISIONS, useSettledMotionFrame, type MotionViewportPreviewElement, type MotionViewportPreviewGrid, type MotionViewportPreviewState, type MotionMiddlePanState, type InlineCurveState, type RenameTarget } from './motion-timeline-primitives'
+import { LAYER_COLUMN_WIDTH, LAYER_MODE_COLUMN_WIDTH, LAYER_PARENT_COLUMN_WIDTH, LAYER_ROW_HEIGHT, LAYER_TIMING_COLUMN_WIDTH, RULER_DIVISIONS, useSettledMotionFrame, type MotionViewportPreviewElement, type MotionViewportPreviewGrid, type MotionViewportPreviewState, type MotionMiddlePanState, type InlineCurveState, type RenameTarget } from './motion-timeline-primitives'
 import { TextMotionTimelineLanes } from './motion-timeline-lanes'
 import { useGizmoStore, useMaskEditorStore } from '@/features/editor/deps/preview'
 import { getLinkedAudioCompanion } from '@/shared/utils/linked-media'
@@ -38,15 +34,18 @@ import { useComposeUiStore } from './compose-ui-store'
 import { NewCompositionDialog } from './new-composition-dialog'
 import { TransformParentPickWhipOverlay } from './transform-parent-pick-whip-overlay'
 import { useTransformParentPickWhip } from './use-transform-parent-pick-whip'
-import { getTransformParentRejection, getTransformParentRejectionMessage } from './transform-parent-validation'
 import { buildMotionSelectionDragState, buildMotionSelectionRetimeUpdates, getMotionSelectionTimeRange } from './motion-keyframe-selection'
 import { MotionIoLane, MOTION_IO_LANE_HEIGHT } from './motion-io-lane'
 import { MotionActiveRegionOverlay, MotionCompEndRulerDim } from './motion-region-overlay'
 import { buildMotionLayerRowModel, type LayerEntry, type MotionRow } from './motion-layer-row-model'
+import {
+  LayerRenameInput,
+  MotionLayerModeCell,
+  MotionLayerNameCell,
+  MotionLayerParentCell,
+  MotionLayerTimingCell,
+} from './motion-layer-row-cells'
 
-const LAYER_PARENT_COLUMN_WIDTH = 148
-const LAYER_TIMING_COLUMN_WIDTH = 128
-const LAYER_MODE_COLUMN_WIDTH = 100
 const TIMELINE_CONTENT_LEFT = LAYER_COLUMN_WIDTH + 1
 // Tick labels on top, the in/out render-range lane along the bottom.
 const RULER_HEIGHT = 28 + MOTION_IO_LANE_HEIGHT
@@ -71,50 +70,6 @@ function createGeneratedLayerItem(
   }
 }
 const EMPTY_LAYER_IDS: string[] = []
-const NO_TRANSFORM_PARENT = '__none__'
-
-interface TransformParentMenuSelection {
-  value: string
-  currentParentItemId: string | undefined
-  childItemId: string
-  itemById: Record<string, TimelineItem>
-  keyframesByItemId: Record<string, ItemKeyframes>
-  canvas: CanvasSettings
-  t: TFunction
-}
-
-function applyTransformParentMenuSelection({
-  value,
-  currentParentItemId,
-  childItemId,
-  itemById,
-  keyframesByItemId,
-  canvas,
-  t,
-}: TransformParentMenuSelection): void {
-  const nextParentItemId = value === NO_TRANSFORM_PARENT ? undefined : value
-  if (nextParentItemId === currentParentItemId) return
-  const rejection = nextParentItemId
-    ? getTransformParentRejection({
-        childItemId,
-        parentItemId: nextParentItemId,
-        itemById,
-        keyframesByItemId,
-      })
-    : null
-  if (rejection) {
-    toast.error(getTransformParentRejectionMessage(t, rejection))
-    return
-  }
-  const playback = usePlaybackStore.getState()
-  setTransformParents({
-    childItemIds: [childItemId],
-    parentItemId: nextParentItemId,
-    frame: playback.previewFrame ?? playback.currentFrame,
-    canvas,
-  })
-}
-
 
 
 
@@ -126,8 +81,6 @@ function resolveMotionInlinePixels(value: string, referenceWidth: number, fallba
 
 
 const logger = createLogger('MotionTimeline')
-
-const ALL_BLEND_MODES = BLEND_MODE_GROUPS.flatMap((group) => group.modes)
 
 
 
@@ -474,53 +427,6 @@ function createLayerTrack(params: {
   }
 }
 
-interface LayerFrameInputProps {
-  label: string
-  ariaLabel: string
-  value: number
-  min: number
-  max: number
-  onCommit: (value: number) => void
-  disabled?: boolean
-}
-
-const LayerFrameInput = memo(function LayerFrameInput({
-  label,
-  ariaLabel,
-  value,
-  min,
-  max,
-  onCommit,
-  disabled = false,
-}: LayerFrameInputProps) {
-  return (
-    <label className="flex items-center gap-0.5 text-[8px] text-muted-foreground" title={ariaLabel}>
-      <span className="sr-only">{label}</span>
-      <input
-        key={value}
-        type="number"
-        autoComplete="off"
-        data-bwignore="true"
-        defaultValue={value}
-        min={min}
-        max={max}
-        disabled={disabled}
-        onBlur={(event) => {
-          const parsed = Number(event.currentTarget.value)
-          if (!Number.isFinite(parsed)) return
-          const next = Math.max(min, Math.min(max, Math.round(parsed)))
-          event.currentTarget.value = String(next)
-          if (next !== value) onCommit(next)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') event.currentTarget.blur()
-        }}
-        className="h-5 w-14 rounded border border-input bg-background px-1.5 text-[9px] tabular-nums text-muted-foreground outline-none focus:border-primary/60"
-        aria-label={ariaLabel}
-      />
-    </label>
-  )
-})
 
 /**
  * Dedicated layer/property timeline for the Motion workspace.
@@ -2135,18 +2041,13 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
                 S
               </button>
               {renameTarget?.kind === 'group' && renameTarget.id === row.track.id ? (
-                <input
-                  autoFocus
+                <LayerRenameInput
                   value={renameDraft}
-                  onChange={(event) => setRenameDraft(event.target.value)}
-                  onFocus={(event) => event.currentTarget.select()}
-                  onBlur={commitRename}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.currentTarget.blur()
-                    if (event.key === 'Escape') setRenameTarget(null)
-                  }}
-                  aria-label={t('editor.compose.layerGroupName')}
-                  className="h-5 min-w-24 flex-1 rounded border border-primary/50 bg-background px-1.5 text-[11px] font-semibold outline-none"
+                  ariaLabel={t('editor.compose.layerGroupName')}
+                  bold
+                  onDraftChange={setRenameDraft}
+                  onCommit={commitRename}
+                  onCancel={() => setRenameTarget(null)}
                 />
               ) : (
                 <button
@@ -2561,336 +2462,57 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
                           className="flex shrink-0 border-r border-border"
                           style={{ width: LAYER_COLUMN_WIDTH }}
                         >
-                          <div
-                            data-testid={`motion-layer-name-cell-${item.id}`}
-                            className="flex min-w-0 flex-1 items-center gap-1 px-1.5"
-                            style={{ paddingLeft: 6 + depth * 16 }}
-                          >
-                            {track && (
-                              <button
-                                type="button"
-                                data-testid={`motion-reorder-handle-${track.id}`}
-                                disabled={isLayerLocked}
-                                onPointerDown={(event) =>
-                                  !isLayerLocked && beginRowReorder(event, track)
-                                }
-                                onPointerMove={moveRowReorder}
-                                onPointerUp={finishRowReorder}
-                                onPointerCancel={cancelRowReorder}
-                                className="flex h-6 w-3.5 shrink-0 touch-none items-center justify-center rounded-sm text-muted-foreground/65 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-primary active:text-primary"
-                                title={t('editor.compose.reorderLayer')}
-                                aria-label={t('editor.compose.reorderLayer')}
-                              >
-                                <EllipsisVertical className="h-4 w-4" />
-                              </button>
-                            )}
-                            {hasVisibleChildProperties ? (
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  if (event.shiftKey) {
-                                    setAllLayersExpanded(
-                                      activeCompositionId,
-                                      layerEntries.map((entry) => entry.item.id),
-                                      !expanded,
-                                    )
-                                    return
-                                  }
-                                  toggleLayerExpanded(activeCompositionId, item.id)
-                                }}
-                                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                                title={t('editor.compose.shiftToggleAllLayers', {
-                                  defaultValue: 'Shift-click to expand or collapse all layers',
-                                })}
-                                aria-label={
-                                  expanded
-                                    ? t('editor.compose.collapseLayerProperties')
-                                    : t('editor.compose.expandLayerProperties')
-                                }
-                              >
-                                {expanded ? (
-                                  <ChevronDown className="h-3.5 w-3.5" />
-                                ) : (
-                                  <ChevronRight className="h-3.5 w-3.5" />
-                                )}
-                              </button>
-                            ) : (
-                              <span className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-                            )}
-                            {item.type === 'controller' ? (
-                              <span
-                                className="h-[18px] w-[18px] shrink-0"
-                                data-testid={`motion-null-object-icon-slot-${item.id}`}
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  track && updateLayerTrack(track.id, { visible: !track.visible })
-                                }
-                                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                                aria-label={
-                                  track?.visible === false
-                                    ? t('editor.compose.showLayer')
-                                    : t('editor.compose.hideLayer')
-                                }
-                              >
-                                {track?.visible === false ? (
-                                  <EyeOff className="h-3.5 w-3.5" />
-                                ) : (
-                                  <Eye className="h-3.5 w-3.5" />
-                                )}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                if (!track || isParentLayerGroupLocked) return
-                                if (event.shiftKey) {
-                                  setAllTracksLocked(!track.locked)
-                                  return
-                                }
-                                updateLayerTrack(track.id, { locked: !track.locked })
-                              }}
-                              disabled={isParentLayerGroupLocked}
-                              className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-55"
-                              aria-label={
-                                isParentLayerGroupLocked
-                                  ? t('editor.compose.lockedByLayerGroup')
-                                  : isLayerLocked
-                                    ? t('editor.compose.unlockLayer')
-                                    : t('editor.compose.lockLayer')
-                              }
-                              title={
-                                isParentLayerGroupLocked
-                                  ? t('editor.compose.lockedByLayerGroup')
-                                  : `${
-                                      isLayerLocked
-                                        ? t('editor.compose.unlockLayer')
-                                        : t('editor.compose.lockLayer')
-                                    } — ${t('editor.compose.lockAllLayersHint')}`
-                              }
-                            >
-                              {isLayerLocked ? (
-                                <Lock className="h-3.5 w-3.5" />
-                              ) : (
-                                <Unlock className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                            {item.type === 'controller' ? (
-                              <span className="h-5 w-5 shrink-0" aria-hidden="true" />
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  track && updateLayerTrack(track.id, { solo: !track.solo })
-                                }
-                                className={cn(
-                                  'h-5 w-5 rounded text-[9px] font-bold',
-                                  track?.solo
-                                    ? 'bg-primary/15 text-primary'
-                                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-                                )}
-                                aria-label={
-                                  track?.solo
-                                    ? t('editor.compose.disableSolo')
-                                    : t('editor.compose.soloLayer')
-                                }
-                              >
-                                S
-                              </button>
-                            )}
-                            {renameTarget?.kind === 'layer' && renameTarget.id === item.id ? (
-                              <input
-                                autoFocus
-                                value={renameDraft}
-                                onChange={(event) => setRenameDraft(event.target.value)}
-                                onFocus={(event) => event.currentTarget.select()}
-                                onBlur={commitRename}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') event.currentTarget.blur()
-                                  if (event.key === 'Escape') setRenameTarget(null)
-                                }}
-                                aria-label="Layer name"
-                                className="h-5 min-w-24 flex-1 rounded border border-primary/50 bg-background px-1.5 text-[11px] font-medium outline-none"
-                              />
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(event) =>
-                                  selectLayer(item.id, {
-                                    toggle: event.metaKey || event.ctrlKey,
-                                    range: event.shiftKey,
-                                  })
-                                }
-                                onDoubleClick={() =>
-                                  beginRename(
-                                    { kind: 'layer', id: item.id },
-                                    item.label || item.type,
-                                  )
-                                }
-                                className="min-w-0 flex-1 truncate px-0 text-left text-[11px] font-medium text-foreground"
-                                title={nullObjectNonRenderingLabel ?? (item.label || item.type)}
-                                aria-label={
-                                  nullObjectNonRenderingLabel
-                                    ? `${index + 1}. ${nullObjectNonRenderingLabel}`
-                                    : undefined
-                                }
-                              >
-                                <span className="mr-0.5 inline-block w-3 shrink-0 text-right text-[9px] tabular-nums text-muted-foreground/70">
-                                  {index + 1}
-                                </span>
-                                <MotionLayerTypeIcon
-                                  className="mr-1 inline-block h-3 w-3 shrink-0 align-[-2px] text-muted-foreground"
-                                  data-testid={`motion-layer-type-icon-${item.id}`}
-                                  data-motion-layer-type-icon={item.type}
-                                  aria-hidden="true"
-                                />
-                                {item.label || item.type}
-                              </button>
-                            )}
-                          </div>
-                          <div
-                            data-testid={`motion-parent-cell-${item.id}`}
-                            className="flex shrink-0 items-center gap-1 border-l border-border px-1"
-                            style={{ width: LAYER_PARENT_COLUMN_WIDTH }}
-                          >
-                            <button
-                              type="button"
-                              data-testid={`motion-parent-pick-whip-${item.id}`}
-                              disabled={isLayerLocked}
-                              onPointerDown={(event) =>
-                                !isLayerLocked &&
-                                beginTransformParentDrag(event, item.id, parentItemId)
-                              }
-                              aria-label={t('editor.compose.parentPickWhipForLayer', {
-                                defaultValue: 'Parent pick whip for {{name}}',
-                                name: item.label || item.type,
-                              })}
-                              title={t('editor.compose.parentPickWhipHelp', {
-                                defaultValue:
-                                  'Drag to a parent layer. Shift: snap position. Alt: use local pose. Ctrl/Cmd-click: detach.',
-                              })}
-                              className={cn(
-                                'flex h-6 w-6 shrink-0 touch-none items-center justify-center rounded-sm outline-none transition-colors hover:bg-accent focus-visible:ring-1 focus-visible:ring-primary',
-                                parentItemId
-                                  ? 'text-orange-400'
-                                  : 'text-muted-foreground hover:text-foreground',
-                              )}
-                            >
-                              <PickWhipIcon className="h-3.5 w-3.5" />
-                            </button>
-                            <Select
-                              disabled={isLayerLocked}
-                              value={parentItemId ?? NO_TRANSFORM_PARENT}
-                              onValueChange={(value) =>
-                                applyTransformParentMenuSelection({
-                                  value,
-                                  currentParentItemId: parentItemId,
-                                  childItemId: item.id,
-                                  itemById,
-                                  keyframesByItemId,
-                                  canvas: transformParentCanvas,
-                                  t,
-                                })
-                              }
-                            >
-                              <SelectTrigger
-                                aria-label={t('editor.compose.parentForLayer', {
-                                  defaultValue: 'Parent for {{name}}',
-                                  name: item.label || item.type,
-                                })}
-                                className="h-6 min-w-0 flex-1 gap-1 border-transparent bg-transparent px-1.5 py-0 text-[9px] shadow-none hover:border-input hover:bg-background data-[state=open]:border-primary/50 data-[state=open]:bg-background [&>svg]:h-3 [&>svg]:w-3"
-                              >
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value={NO_TRANSFORM_PARENT} className="text-[10px]">
-                                  {t('editor.transformHierarchy.none', { defaultValue: 'None' })}
-                                </SelectItem>
-                                {parentCandidates.map(({ item: candidate, layerNumber }) => (
-                                  <SelectItem
-                                    key={candidate.id}
-                                    value={candidate.id}
-                                    className="text-[10px]"
-                                  >
-                                    <span className="mr-1 text-muted-foreground">
-                                      {layerNumber}.
-                                    </span>
-                                    {candidate.type === 'controller'
-                                      ? t('editor.transformHierarchy.controllerOption', {
-                                          defaultValue: 'Null: {{name}}',
-                                          name: candidate.label,
-                                        })
-                                      : candidate.label || candidate.type}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div
-                            data-testid={`motion-timing-cell-${item.id}`}
-                            className="flex shrink-0 items-center gap-1 border-l border-border px-1"
-                            style={{ width: LAYER_TIMING_COLUMN_WIDTH }}
-                          >
-                            <LayerFrameInput
-                              label="I"
-                              ariaLabel={t('editor.compose.inFrame')}
-                              value={item.from}
-                              min={0}
-                              max={Math.max(0, item.from + item.durationInFrames - 1)}
-                              disabled={isLayerLocked}
-                              onCommit={(nextFrom) =>
-                                updateItem(item.id, {
-                                  from: nextFrom,
-                                  durationInFrames: Math.max(
-                                    1,
-                                    item.from + item.durationInFrames - nextFrom,
-                                  ),
-                                })
-                              }
-                            />
-                            <LayerFrameInput
-                              label="O"
-                              ariaLabel={t('editor.compose.outFrame')}
-                              value={item.from + item.durationInFrames}
-                              min={item.from + 1}
-                              max={durationInFrames}
-                              disabled={isLayerLocked}
-                              onCommit={(nextOut) =>
-                                updateItem(item.id, {
-                                  durationInFrames: Math.max(1, nextOut - item.from),
-                                })
-                              }
-                            />
-                          </div>
-                          <div
-                            className="flex shrink-0 items-center border-l border-border px-1"
-                            style={{ width: LAYER_MODE_COLUMN_WIDTH }}
-                          >
-                            <Select
-                              disabled={isLayerLocked}
-                              value={item.blendMode ?? 'normal'}
-                              onValueChange={(value) =>
-                                updateItem(item.id, { blendMode: value as BlendMode })
-                              }
-                            >
-                              <SelectTrigger
-                                className="h-5 w-full gap-1 bg-background px-2 text-[9px] text-muted-foreground"
-                                aria-label={t('editor.compose.blendMode')}
-                              >
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-72">
-                                {ALL_BLEND_MODES.map((mode) => (
-                                  <SelectItem key={mode} value={mode} className="text-[10px]">
-                                    {BLEND_MODE_LABELS[mode]}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          <MotionLayerNameCell
+                            item={item}
+                            index={index}
+                            depth={depth}
+                            track={track}
+                            LayerTypeIcon={MotionLayerTypeIcon}
+                            activeCompositionId={activeCompositionId}
+                            layerEntries={layerEntries}
+                            expanded={expanded}
+                            hasVisibleChildProperties={hasVisibleChildProperties}
+                            isLayerLocked={isLayerLocked}
+                            isParentLayerGroupLocked={isParentLayerGroupLocked}
+                            nullObjectNonRenderingLabel={nullObjectNonRenderingLabel}
+                            renameTarget={renameTarget}
+                            renameDraft={renameDraft}
+                            t={t}
+                            rowReorder={rowReorder}
+                            layerSelection={layerSelection}
+                            updateLayerTrack={updateLayerTrack}
+                            setAllTracksLocked={setAllTracksLocked}
+                            toggleLayerExpanded={toggleLayerExpanded}
+                            setAllLayersExpanded={setAllLayersExpanded}
+                            beginRename={beginRename}
+                            commitRename={commitRename}
+                            setRenameDraft={setRenameDraft}
+                            setRenameTarget={setRenameTarget}
+                          />
+                          <MotionLayerParentCell
+                            item={item}
+                            parentItemId={parentItemId}
+                            parentCandidates={parentCandidates}
+                            isLayerLocked={isLayerLocked}
+                            itemById={itemById}
+                            keyframesByItemId={keyframesByItemId}
+                            canvas={transformParentCanvas}
+                            t={t}
+                            beginTransformParentDrag={beginTransformParentDrag}
+                          />
+                          <MotionLayerTimingCell
+                            item={item}
+                            isLayerLocked={isLayerLocked}
+                            durationInFrames={durationInFrames}
+                            t={t}
+                            updateItem={updateItem}
+                          />
+                          <MotionLayerModeCell
+                            item={item}
+                            isLayerLocked={isLayerLocked}
+                            t={t}
+                            updateItem={updateItem}
+                          />
                         </div>
                         <div className="relative min-w-0 flex-1 cursor-default overflow-hidden">
                           <div

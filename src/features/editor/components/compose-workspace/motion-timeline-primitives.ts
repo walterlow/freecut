@@ -5,9 +5,18 @@ import { useEffect, useRef, useState } from 'react'
 
 export const LAYER_COLUMN_WIDTH = 620
 
+export const LAYER_PARENT_COLUMN_WIDTH = 148
+
+export const LAYER_TIMING_COLUMN_WIDTH = 128
+
+export const LAYER_MODE_COLUMN_WIDTH = 100
+
 export const LAYER_ROW_HEIGHT = 34
 
 export const RULER_DIVISIONS = 10
+
+/** Sentinel for the parent column's "no parent" option. */
+export const NO_TRANSFORM_PARENT = '__none__'
 
 export interface MotionViewportPreviewElement {
   element: HTMLElement
