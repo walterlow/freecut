@@ -17,10 +17,11 @@ import { useSelectionStore } from '@/shared/state/selection'
 import { useClipboardStore } from '@/shared/state/clipboard'
 import type { DirectLinkableProperty } from '@/types/keyframe'
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
-import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, getKeyframeNavigatorThumbMetrics, getNiceTickStep, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
+import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
 import { clearSpanDragVisuals, clearSpanTrimVisuals, createMotionSpanDragCommands, createMotionSpanTrimCommands, type SpanDragState, type SpanTrimState } from './motion-span-interactions'
 import { createMotionRowReorderCommands, type RowReorderDragState } from './motion-row-reorder'
 import { createMotionTimeViewportController, formatFrameTime, normalizeMotionTimeViewport, resolveMotionScrubViewport, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
+import { paintMotionViewportGrids, paintMotionViewportNavigator, paintMotionViewportPlayhead, paintMotionViewportRulerLabels, paintMotionViewportTargets } from './motion-time-viewport-preview'
 import { createMotionLayerClipboardCommands } from './motion-layer-clipboard'
 import { createMotionLayerSelectionCommands } from './motion-layer-selection'
 import { getVisibleMotionRetimeRange, getRetimeKeyboardDelta, applyMotionSelectionFrameUpdates, restoreMotionSelectionRetimeVisuals, type MotionSelectionRetimeDragState, createMotionSelectionRetimeCommands } from './motion-selection-retime'
@@ -834,95 +835,20 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
       if (!preview) return
       const nextRange = Math.max(1, viewport.endFrame - viewport.startFrame)
 
-      for (const grid of preview.grids) {
-        const sharedGridRoot = grid.element.closest<HTMLElement>(
-          '[data-motion-shared-grid-divisions]',
-        )
-        const sharedDivisionCount = Number(sharedGridRoot?.dataset.motionSharedGridDivisions)
-        const sharedBorderWidth = Math.max(
-          0,
-          Number(sharedGridRoot?.dataset.motionSharedGridBorderWidth) || 0,
-        )
-        const usesSharedGrid = Number.isFinite(sharedDivisionCount) && sharedDivisionCount > 0
-        const frames: number[] = []
-        if (usesSharedGrid) {
-          for (let index = 0; index <= sharedDivisionCount; index += 1) {
-            frames.push(viewport.startFrame + (index / sharedDivisionCount) * nextRange)
-          }
-        } else {
-          const tickStep = getNiceTickStep(nextRange)
-          const firstTick = Math.floor(viewport.startFrame / tickStep) * tickStep
-          for (let frame = firstTick; frame <= viewport.endFrame; frame += tickStep) {
-            frames.push(frame)
-          }
-        }
-        if (frames.length === 0) continue
-        const gridOrigin = usesSharedGrid ? -sharedBorderWidth : grid.edgeInset
-        const gridWidth = usesSharedGrid
-          ? grid.usableWidth + grid.edgeInset * 2 + sharedBorderWidth
-          : grid.usableWidth
-        const firstX = Math.round(
-          gridOrigin + ((frames[0]! - viewport.startFrame) / nextRange) * gridWidth,
-        )
-        const shadows: string[] = []
-        for (let index = 1; index < frames.length; index += 1) {
-          const x = Math.round(
-            gridOrigin + ((frames[index]! - viewport.startFrame) / nextRange) * gridWidth,
-          )
-          shadows.push(`${x - firstX}px 0 currentColor`)
-        }
-        grid.element.dataset.motionGridFrames = frames.join(',')
-        grid.element.style.cssText = `left: ${firstX}px; box-shadow: ${shadows.join(', ')}; will-change: left, box-shadow;`
-      }
-      for (const target of preview.elements) {
-        const rawLeft =
-          target.edgeInset +
-          ((target.frame - viewport.startFrame) / nextRange) * target.usableWidth
-        const clampX = (x: number) =>
-          Math.max(target.edgeInset, Math.min(target.edgeInset + target.usableWidth, x))
-        const left = target.clampToSurface ? clampX(rawLeft) : rawLeft
-        target.element.style.left = `${left}px`
-        if (target.frameSpan !== null) {
-          const rawRight =
-            rawLeft + (target.frameSpan / nextRange) * target.usableWidth
-          const right = target.clampToSurface ? clampX(rawRight) : rawRight
-          target.element.style.width = `${Math.max(0, right - left)}px`
-        }
-      }
+      paintMotionViewportGrids(preview.grids, viewport, nextRange)
+      paintMotionViewportTargets(preview.elements, viewport, nextRange)
       if (preview.playhead) {
         const playback = usePlaybackStore.getState()
-        const frame = playback.previewFrame ?? playback.currentFrame
-        const isScrubbing = scrubPlayheadProgress !== undefined
-        preview.playhead.element.hidden = isScrubbing
-          ? false
-          : frame < viewport.startFrame || frame > viewport.endFrame
-        const playheadX = isScrubbing
-          ? Math.max(
-              0,
-              Math.min(
-                Math.max(0, preview.playhead.width - 1),
-                Math.max(0, Math.min(1, scrubPlayheadProgress)) * preview.playhead.width,
-              ),
-            )
-          : ((frame - viewport.startFrame) / nextRange) * preview.playhead.width
-        preview.playhead.element.style.transform = `translate3d(${playheadX}px, 0, 0)`
+        paintMotionViewportPlayhead(preview.playhead, {
+          frame: playback.previewFrame ?? playback.currentFrame,
+          viewport,
+          nextRange,
+          scrubProgress: scrubPlayheadProgress,
+        })
       }
-      for (const label of preview.rulerLabels) {
-        const frame = Math.round(viewport.startFrame + (label.index / RULER_DIVISIONS) * nextRange)
-        label.element.textContent = formatFrameTime(frame, fps)
-      }
+      paintMotionViewportRulerLabels(preview.rulerLabels, viewport, nextRange, fps)
       if (preview.navigator) {
-        preview.navigator.element.dataset.startFrame = String(viewport.startFrame)
-        preview.navigator.element.dataset.endFrame = String(viewport.endFrame)
-        if (preview.navigator.trackWidth > 0) {
-          const metrics = getKeyframeNavigatorThumbMetrics({
-            viewport,
-            contentFrameMax: durationInFrames,
-            trackWidth: preview.navigator.trackWidth,
-          })
-          preview.navigator.thumb.style.left = `${metrics.thumbLeft}px`
-          preview.navigator.thumb.style.width = `${metrics.thumbWidth}px`
-        }
+        paintMotionViewportNavigator(preview.navigator, viewport, durationInFrames)
       }
     },
     [clearMotionTimeViewportPreview, durationInFrames, fps, prepareMotionTimeViewportPreview],
