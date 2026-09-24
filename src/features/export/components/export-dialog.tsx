@@ -71,13 +71,8 @@ import { ExportPreviewPlayer } from './export-preview-player'
 import { ExportDialogHeading } from './export-dialog-heading'
 import { ExportSequencePicker } from './export-sequence-picker'
 import { ExportModeToggle } from './export-mode-toggle'
+import { ExportVideoSettings } from './export-video-settings'
 import { ExportRangeSummary } from './export-range-summary'
-import { ExportPresetGrid } from './export-preset-grid'
-import { ExportCapabilityAlerts } from './export-capability-alerts'
-import { ExportVideoFormatFields } from './export-video-format-fields'
-import { ExportRateControlFields } from './export-rate-control-fields'
-import { ExportSmartCopyBlock } from './export-smart-copy-block'
-import { ExportSubtitleFields } from './export-subtitle-fields'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -663,61 +658,52 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
               <div className="space-y-5 min-w-0">
                 {/* Video Export Settings */}
                 {exportMode === 'video' && (
-                  <>
-                    <ExportPresetGrid
-                      presets={EXPORT_PRESETS}
-                      activePresetId={activePresetId}
-                      onApplyPreset={applyPreset}
-                    />
-
-                    <div className="space-y-4">
-                      <ExportCapabilityAlerts
-                        isCheckingSupport={isCheckingVideoSupport}
-                        supportError={videoSupportError}
-                        hasSupportedPath={hasSupportedVideoPath}
-                        width={settings.resolution.width}
-                        height={settings.resolution.height}
-                      />
-
-                      <ExportVideoFormatFields
-                        settings={settings}
-                        setSettings={setSettings}
-                        container={videoContainer}
-                        setContainer={setVideoContainer}
-                        containerOptions={videoContainerOptions}
-                        codecOptions={codecOptions}
-                        resolutionOptions={resolutionOptions}
-                        projectWidth={projectWidth}
-                        projectHeight={projectHeight}
-                      />
-
-                      <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-                        <ExportRateControlFields
-                          settings={settings}
-                          setSettings={setSettings}
-                          resolvedVideoBitrate={resolvedVideoBitrate}
-                          sourceVideo={sourceVideo}
-                        />
-
-                        <ExportSmartCopyBlock
-                          settings={settings}
-                          setSettings={setSettings}
-                          assessment={smartCopyAssessment}
-                          willRun={smartCopyWillRun}
-                          resolvedVideoBitrate={resolvedVideoBitrate}
-                          estimatedFileSizeBytes={estimatedFileSizeBytes}
-                          sourceVideo={sourceVideo}
-                        />
-                      </div>
-
-                      <ExportSubtitleFields
-                        mode={effectiveSubtitleMode}
-                        onModeChange={setSubtitleMode}
-                        modeOptions={subtitleModeOptions}
-                        hasTranscriptSubtitles={hasTranscriptSubtitles}
-                      />
-                    </div>
-                  </>
+                  <ExportVideoSettings
+                    presets={{
+                      presets: EXPORT_PRESETS,
+                      activePresetId,
+                      onApplyPreset: applyPreset,
+                    }}
+                    alerts={{
+                      isCheckingSupport: isCheckingVideoSupport,
+                      supportError: videoSupportError,
+                      hasSupportedPath: hasSupportedVideoPath,
+                      width: settings.resolution.width,
+                      height: settings.resolution.height,
+                    }}
+                    format={{
+                      settings,
+                      setSettings,
+                      container: videoContainer,
+                      setContainer: setVideoContainer,
+                      containerOptions: videoContainerOptions,
+                      codecOptions,
+                      resolutionOptions,
+                      projectWidth,
+                      projectHeight,
+                    }}
+                    rateControl={{
+                      settings,
+                      setSettings,
+                      resolvedVideoBitrate,
+                      sourceVideo,
+                    }}
+                    smartCopy={{
+                      settings,
+                      setSettings,
+                      assessment: smartCopyAssessment,
+                      willRun: smartCopyWillRun,
+                      resolvedVideoBitrate,
+                      estimatedFileSizeBytes,
+                      sourceVideo,
+                    }}
+                    subtitles={{
+                      mode: effectiveSubtitleMode,
+                      onModeChange: setSubtitleMode,
+                      modeOptions: subtitleModeOptions,
+                      hasTranscriptSubtitles,
+                    }}
+                  />
                 )}
 
                 {/* Audio Export Settings */}
