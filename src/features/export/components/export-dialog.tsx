@@ -74,6 +74,7 @@ import { ExportDialogHeading } from './export-dialog-heading'
 import { ExportSequencePicker } from './export-sequence-picker'
 import { ExportModeToggle } from './export-mode-toggle'
 import { ExportRangeSummary } from './export-range-summary'
+import { ExportPresetGrid } from './export-preset-grid'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -660,36 +661,11 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                 {/* Video Export Settings */}
                 {exportMode === 'video' && (
                   <>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>{t('export.settings.presetLabel')}</Label>
-                        {activePresetId === null && (
-                          <span className="text-xs text-muted-foreground">
-                            {t('export.settings.presetCustom')}
-                          </span>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {EXPORT_PRESETS.map((preset) => {
-                          const isActive = activePresetId === preset.id
-                          return (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              onClick={() => applyPreset(preset)}
-                              aria-pressed={isActive}
-                              className={`rounded-md border px-3 py-2 text-left text-sm font-medium transition-colors ${
-                                isActive
-                                  ? 'border-primary bg-primary/10 text-foreground'
-                                  : 'border-border bg-muted/20 text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                              }`}
-                            >
-                              {t(preset.labelKey)}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
+                    <ExportPresetGrid
+                      presets={EXPORT_PRESETS}
+                      activePresetId={activePresetId}
+                      onApplyPreset={applyPreset}
+                    />
 
                     <div className="space-y-4">
                       {!isCheckingVideoSupport && videoSupportError && (
