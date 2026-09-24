@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { CheckCircle2, AlertCircle, X, Download, Clock, HardDrive } from 'lucide-react'
+import { AlertCircle, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type {
   ExportSettings,
@@ -28,7 +28,6 @@ import {
   type ExportableSequence,
 } from '@/features/export/deps/timeline-compositions'
 import { framesToSeconds } from '@/shared/utils/time-utils'
-import { formatFileSize, formatTime } from '../utils/export-format'
 import type { ExportPreflightResult } from '../utils/export-preflight'
 import { assessExportPreflight } from '../utils/export-preflight'
 import {
@@ -39,10 +38,10 @@ import {
   type ClientVideoContainer,
   type ClientAudioContainer,
 } from '../deps/renderer'
-import { ExportPreviewPlayer } from './export-preview-player'
 import { ExportDialogHeading } from './export-dialog-heading'
 import { ExportSettingsView } from './export-settings-view'
 import { ExportProgressView } from './export-progress-view'
+import { ExportCompleteView } from './export-complete-view'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
 import { resolveVideoBitrate } from '../deps/renderer'
@@ -685,49 +684,15 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
         {/* Complete View */}
         {view === 'complete' && (
-          <div className="space-y-4 py-4">
-            {previewUrl && <ExportPreviewPlayer src={previewUrl} isVideo={isVideoResult} />}
-
-            <Alert className="border-green-900 bg-green-950">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-              <AlertDescription className="text-green-400">
-                {exportMode === 'audio'
-                  ? t('export.complete.audioSuccess')
-                  : t('export.complete.videoSuccess')}
-              </AlertDescription>
-            </Alert>
-
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
-              {fileSize && (
-                <div className="flex items-center gap-2 text-sm">
-                  <HardDrive className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">
-                    {t('export.complete.fileSizeLabel')}
-                  </span>
-                  <span className="font-medium">{formatFileSize(fileSize)}</span>
-                </div>
-              )}
-              {elapsedSeconds > 0 && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">
-                    {t('export.complete.timeTakenLabel')}
-                  </span>
-                  <span className="font-medium">{formatTime(elapsedSeconds)}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={handleClose}>
-                {t('common.close')}
-              </Button>
-              <Button onClick={downloadVideo}>
-                <Download className="mr-2 h-4 w-4" />
-                {t('export.complete.download')}
-              </Button>
-            </div>
-          </div>
+          <ExportCompleteView
+            mode={exportMode}
+            previewUrl={previewUrl}
+            isVideoResult={isVideoResult}
+            fileSize={fileSize}
+            elapsedSeconds={elapsedSeconds}
+            onClose={handleClose}
+            onDownload={downloadVideo}
+          />
         )}
 
         {/* Error View */}
