@@ -23,7 +23,6 @@ import {
   Clock,
   HardDrive,
   Music,
-  Video,
   Scissors,
   ListPlus,
   ChevronDown,
@@ -73,6 +72,7 @@ import {
 import { ExportPreviewPlayer } from './export-preview-player'
 import { ExportDialogHeading } from './export-dialog-heading'
 import { ExportSequencePicker } from './export-sequence-picker'
+import { ExportModeToggle } from './export-mode-toggle'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -655,35 +655,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                 )}
 
                 {/* Export Mode: Video or Audio Toggle Group */}
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">{t('export.settings.exportType')}</Label>
-                  <div className="flex rounded-md border border-border p-0.5 bg-muted/30">
-                    <button
-                      type="button"
-                      onClick={() => setExportMode('video')}
-                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-colors ${
-                        exportMode === 'video'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <Video className="h-3.5 w-3.5" />
-                      {t('export.settings.video')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setExportMode('audio')}
-                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-colors ${
-                        exportMode === 'audio'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <Music className="h-3.5 w-3.5" />
-                      {t('export.settings.audio')}
-                    </button>
-                  </div>
-                </div>
+                <ExportModeToggle mode={exportMode} onChange={setExportMode} />
 
                 {/* Export Range Section */}
                 <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/20">
