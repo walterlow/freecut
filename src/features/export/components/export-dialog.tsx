@@ -72,6 +72,7 @@ import {
 } from '../deps/renderer'
 import { ExportPreviewPlayer } from './export-preview-player'
 import { ExportDialogHeading } from './export-dialog-heading'
+import { ExportSequencePicker } from './export-sequence-picker'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -199,7 +200,10 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
   // Soft (toggleable) subtitle tracks only work for Matroska (WebM/MKV). MP4/MOV
   // can't — mediabunny's WebVTT-in-ISOBMFF muxing is broken and players barely
   // support it anyway — so the "Embedded track" option is hidden there.
-  const subtitleModeOptions = useMemo(() => getSubtitleModeOptions(videoContainer), [videoContainer])
+  const subtitleModeOptions = useMemo(
+    () => getSubtitleModeOptions(videoContainer),
+    [videoContainer],
+  )
   // Coerce away a now-unavailable mode (e.g. "embedded" after switching to MP4).
   const effectiveSubtitleMode = subtitleModeOptions.includes(subtitleMode) ? subtitleMode : 'burn'
 
@@ -545,9 +549,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
   // Codec the probe rules out: fall back to one it can encode, unless smart
   // copy keeps the source bytes (and their codec) untouched.
-  const fallbackCodec = smartCopyWillRun
-    ? null
-    : resolveFallbackCodec(codecOptions, settings.codec)
+  const fallbackCodec = smartCopyWillRun ? null : resolveFallbackCodec(codecOptions, settings.codec)
   useEffect(() => {
     if (fallbackCodec === null) return
 
@@ -645,28 +647,11 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
               <div className="space-y-4">
                 {/* Sequence picker — only when there's more than the Main timeline */}
                 {sequenceOptions.length > 1 && (
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="sequence" className="text-sm font-medium">
-                      {t('export.settings.sequence')}
-                    </Label>
-                    <Select
-                      value={selectedSequenceId ?? '__main__'}
-                      onValueChange={(value) =>
-                        handleSelectSequence(value === '__main__' ? null : value)
-                      }
-                    >
-                      <SelectTrigger id="sequence" className="w-[180px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sequenceOptions.map((option) => (
-                          <SelectItem key={option.id ?? '__main__'} value={option.id ?? '__main__'}>
-                            {option.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <ExportSequencePicker
+                    options={sequenceOptions}
+                    selectedId={selectedSequenceId}
+                    onSelect={handleSelectSequence}
+                  />
                 )}
 
                 {/* Export Mode: Video or Audio Toggle Group */}
@@ -1191,8 +1176,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                 </div>
                 <div className="flex items-center justify-between text-sm gap-2">
                   <span className="text-muted-foreground truncate">
-                    {status === 'preparing' &&
-                      (progressMessage ?? t('export.progress.preparing'))}
+                    {status === 'preparing' && (progressMessage ?? t('export.progress.preparing'))}
                     {status === 'rendering' && t('export.progress.rendering')}
                     {status === 'encoding' && t('export.progress.encoding')}
                     {status === 'finalizing' && t('export.progress.finalizing')}
