@@ -38,6 +38,7 @@ import { buildMotionSelectionDragState, buildMotionSelectionRetimeUpdates, getMo
 import { MotionIoLane, MOTION_IO_LANE_HEIGHT } from './motion-io-lane'
 import { MotionActiveRegionOverlay, MotionCompEndRulerDim } from './motion-region-overlay'
 import { buildMotionLayerRowModel, type LayerEntry, type MotionRow } from './motion-layer-row-model'
+import { MotionLayerLane } from './motion-layer-lane'
 import {
   LayerRenameInput,
   MotionLayerModeCell,
@@ -1353,10 +1354,6 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
       }),
     [durationInFrames, pause, selectItems, visibleFrameRange],
   )
-  const beginSpanTrim = spanTrim.begin
-  const moveSpanTrim = spanTrim.move
-  const endSpanTrim = spanTrim.end
-  const cancelSpanTrim = spanTrim.cancel
   const rowReorder = useMemo(
     () =>
       createMotionRowReorderCommands({
@@ -2514,110 +2511,23 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
                             updateItem={updateItem}
                           />
                         </div>
-                        <div className="relative min-w-0 flex-1 cursor-default overflow-hidden">
-                          <div
-                            data-motion-timeline-lane
-                            data-motion-viewport-surface
-                            className="absolute inset-0 overflow-hidden"
-                            onPointerDown={beginPlayheadScrub}
-                            onPointerMove={movePlayheadScrub}
-                            onPointerUp={endPlayheadScrub}
-                            onPointerCancel={endPlayheadScrub}
-                          >
-                            {Array.from({ length: RULER_DIVISIONS + 1 }, (_, tick) => (
-                              <div
-                                key={tick}
-                                data-motion-static-x
-                                className="pointer-events-none absolute inset-y-0 border-l border-border/45"
-                                style={{ left: `${(tick / RULER_DIVISIONS) * 100}%` }}
-                              />
-                            ))}
-                            {!activeInlineCurve ? (
-                              <button
-                                type="button"
-                                data-testid={`motion-layer-span-${item.id}`}
-                                data-motion-span-drag-visual
-                                data-from-frame={item.from}
-                                data-to-frame={item.from + item.durationInFrames}
-                                disabled={isLayerLocked}
-                                onPointerDown={(event) =>
-                                  !isLayerLocked &&
-                                  beginSpanDrag(
-                                    event,
-                                    selected && !(event.metaKey || event.ctrlKey || event.shiftKey)
-                                      ? selectedItemIds
-                                      : [item.id],
-                                  )
-                                }
-                                onPointerMove={moveSpanDrag}
-                                onPointerUp={endSpanDrag}
-                                onPointerCancel={cancelSpanDrag}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                }}
-                                className={cn(
-                                  '@container absolute top-1/2 h-5 -translate-y-1/2 touch-none overflow-hidden rounded-sm border px-1 text-left text-[9px] shadow-sm transition-colors',
-                                  isLayerLocked
-                                    ? 'cursor-not-allowed opacity-55'
-                                    : 'cursor-grab active:cursor-grabbing',
-                                  selected
-                                    ? 'border-foreground/80 bg-timeline-motion-segment/90 text-foreground'
-                                    : 'border-timeline-motion-segment/80 bg-timeline-motion-segment/70 text-foreground hover:bg-timeline-motion-segment/85',
-                                )}
-                                style={{
-                                  left: `${frameToMotionPercent(item.from)}%`,
-                                  width: `${Math.max(0.6, (item.durationInFrames / visibleFrameRange) * 100)}%`,
-                                }}
-                                title={`${item.from}–${item.from + item.durationInFrames - 1}`}
-                              >
-                                {!isLayerLocked ? (
-                                  <>
-                                    <span
-                                      role="slider"
-                                      aria-label={`Trim ${item.label || item.type} start`}
-                                      aria-valuemin={0}
-                                      aria-valuemax={item.from + item.durationInFrames - 1}
-                                      aria-valuenow={item.from}
-                                      tabIndex={-1}
-                                      data-testid={`motion-trim-start-${item.id}`}
-                                      onPointerDown={(event) => beginSpanTrim(event, item, 'start')}
-                                      onPointerMove={moveSpanTrim}
-                                      onPointerUp={endSpanTrim}
-                                      onPointerCancel={cancelSpanTrim}
-                                      className="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize touch-none bg-foreground/10 opacity-70 hover:bg-foreground/25 hover:opacity-100"
-                                    />
-                                    <span
-                                      role="slider"
-                                      aria-label={`Trim ${item.label || item.type} end`}
-                                      aria-valuemin={item.from + 1}
-                                      aria-valuemax={durationInFrames}
-                                      aria-valuenow={item.from + item.durationInFrames}
-                                      tabIndex={-1}
-                                      data-testid={`motion-trim-end-${item.id}`}
-                                      onPointerDown={(event) => beginSpanTrim(event, item, 'end')}
-                                      onPointerMove={moveSpanTrim}
-                                      onPointerUp={endSpanTrim}
-                                      onPointerCancel={cancelSpanTrim}
-                                      className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize touch-none bg-foreground/10 opacity-70 hover:bg-foreground/25 hover:opacity-100"
-                                    />
-                                  </>
-                                ) : null}
-                                <span className="pointer-events-none block truncate px-1.5">
-                                  {item.label || item.type}
-                                </span>
-                                {hasProceduralMotion ? (
-                                  <span
-                                    data-testid={`motion-procedural-badge-${item.id}`}
-                                    className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-sm border border-sky-300/45 bg-sky-950/75 px-1 font-mono text-[8px] font-semibold text-sky-200 @min-[44px]:block"
-                                    title={t('timeline.clipIndicators.hasMotion')}
-                                  >
-                                    ƒx
-                                  </span>
-                                ) : null}
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
+                        <MotionLayerLane
+                          item={item}
+                          isLayerLocked={isLayerLocked}
+                          selected={selected}
+                          selectedItemIds={selectedItemIds}
+                          activeInlineCurve={activeInlineCurve}
+                          hasProceduralMotion={hasProceduralMotion}
+                          durationInFrames={durationInFrames}
+                          frameToMotionPercent={frameToMotionPercent}
+                          visibleFrameRange={visibleFrameRange}
+                          t={t}
+                          spanDrag={spanDrag}
+                          spanTrim={spanTrim}
+                          beginPlayheadScrub={beginPlayheadScrub}
+                          movePlayheadScrub={movePlayheadScrub}
+                          endPlayheadScrub={endPlayheadScrub}
+                        />
                       </div>
                     </MotionRowContextMenu>
 
