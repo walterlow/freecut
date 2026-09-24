@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { WandSparkles } from 'lucide-react'
 import {
@@ -14,46 +14,21 @@ import {
   setStoredTtsEngine,
   type StoredTtsEngine,
 } from '@/shared/utils/tts-settings'
-import {
-  importMediaLibraryService,
-  useMediaLibraryStore,
-} from '@/features/editor/deps/media-library'
-import {
-  addItem,
-  useItemsStore,
-  useTimelineSettingsStore,
-} from '@/features/editor/deps/timeline-store'
-import {
-  findCompatibleTrackForItemType,
-  findNearestAvailableSpace,
-  linkItems,
-} from '@/features/editor/deps/timeline-utils'
-import { useTtsGenerateDialogStore } from '@/shared/state/tts-generate-dialog'
-import type { AudioItem } from '@/types/timeline'
-import type { MediaMetadata } from '@/types/storage'
-import {
-  getMossTtsVoiceOption,
-  mossTtsService,
-  type MossTtsVoice,
-} from '@/features/editor/services/moss-tts-service'
+import { useMediaLibraryStore } from '@/features/editor/deps/media-library'
 import {
   KOKORO_TTS_BEST_MODEL,
-  KOKORO_TTS_VOICE_OPTIONS,
   kokoroTtsService,
   type KokoroTtsModel,
   type KokoroTtsVoice,
 } from '@/features/editor/services/kokoro-tts-service'
+import { mossTtsService, type MossTtsVoice } from '@/features/editor/services/moss-tts-service'
 import {
   supertonicTtsService,
-  SUPERTONIC_TTS_VOICE_OPTIONS,
   type SupertonicTtsLanguageSelection,
   type SupertonicTtsVoice,
 } from '@/features/editor/services/supertonic-tts-service'
-import { TtsDialogActions } from './tts-dialog-actions'
-import { TtsErrorNotice, TtsProgressNotice, TtsUnsupportedNotice } from './tts-dialog-notices'
-import { TtsEngineVoiceFields } from './tts-engine-voice-fields'
-import { TtsResultPreview } from './tts-result-preview'
-import { TtsTextPanel } from './tts-text-panel'
+import { useTtsGenerateDialogStore } from '@/shared/state/tts-generate-dialog'
+import { useTtsGeneration } from '../hooks/use-tts-generation'
 import {
   NATIVE_SPEED_ENGINES,
   TTS_SPEED_RANGE_BY_ENGINE,
@@ -63,77 +38,11 @@ import {
   TTS_VOICE_OPTIONS_BY_ENGINE,
   type TtsVoiceSelection,
 } from '../utils/tts-generate-options'
-
-/**
- * Insert an audio item aligned to the source text item's position,
- * then link the two together.
- */
-function insertAndLinkAudioAtTextItem(
-  media: MediaMetadata,
-  blobUrl: string,
-  sourceItemId: string,
-): { inserted: boolean; audioItemId: string | null } {
-  const { tracks, items } = useItemsStore.getState()
-  const { fps } = useTimelineSettingsStore.getState()
-  const sourceItem = items.find((i) => i.id === sourceItemId)
-  if (!sourceItem) return { inserted: false, audioItemId: null }
-
-  const targetTrack = findCompatibleTrackForItemType({
-    tracks,
-    items,
-    itemType: 'audio',
-    preferredTrackId: null,
-  })
-
-  if (!targetTrack) return { inserted: false, audioItemId: null }
-
-  const sourceFps = media.fps || fps
-  const durationInFrames = Math.max(1, Math.round(media.duration * fps))
-  const sourceDurationFrames = Math.round(media.duration * sourceFps)
-
-  // Place at the text item's start position, nudging if occupied
-  const finalPosition =
-    findNearestAvailableSpace(sourceItem.from, durationInFrames, targetTrack.id, items) ??
-    sourceItem.from
-
-  const audioItemId = crypto.randomUUID()
-  const audioItem: AudioItem = {
-    id: audioItemId,
-    type: 'audio',
-    trackId: targetTrack.id,
-    from: finalPosition,
-    durationInFrames,
-    label: media.fileName,
-    mediaId: media.id,
-    originId: crypto.randomUUID(),
-    src: blobUrl,
-    sourceStart: 0,
-    sourceEnd: sourceDurationFrames,
-    sourceDuration: sourceDurationFrames,
-    sourceFps,
-    trimStart: 0,
-    trimEnd: 0,
-  }
-
-  addItem(audioItem)
-
-  const added = useItemsStore.getState().items.some((i) => i.id === audioItemId)
-  if (!added) return { inserted: false, audioItemId: null }
-
-  // Link the text item and audio item (linkItems also updates selection)
-  linkItems([sourceItemId, audioItemId])
-
-  return { inserted: true, audioItemId }
-}
-
-interface GenerationResult {
-  file: File
-  objectUrl: string
-  duration: number
-  voice: string
-  model: string
-  tags: string[]
-}
+import { TtsDialogActions } from './tts-dialog-actions'
+import { TtsErrorNotice, TtsProgressNotice, TtsUnsupportedNotice } from './tts-dialog-notices'
+import { TtsEngineVoiceFields } from './tts-engine-voice-fields'
+import { TtsResultPreview } from './tts-result-preview'
+import { TtsTextPanel } from './tts-text-panel'
 
 export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
   const { t } = useTranslation()
@@ -155,50 +64,6 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     useState<SupertonicTtsLanguageSelection>('auto')
   const model: KokoroTtsModel = KOKORO_TTS_BEST_MODEL
   const [speed, setSpeed] = useState(1)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [isInserting, setIsInserting] = useState(false)
-  const [progress, setProgress] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<GenerationResult | null>(null)
-  const [inserted, setInserted] = useState(false)
-
-  const resultUrlRef = useRef<string | null>(null)
-  const sessionIdRef = useRef(0)
-  const insertedRef = useRef(inserted)
-  insertedRef.current = inserted
-
-  // Reset state when dialog opens
-  useEffect(() => {
-    if (isOpen) {
-      sessionIdRef.current++
-      // Revoke previous result URL if not inserted
-      if (resultUrlRef.current && !insertedRef.current) {
-        URL.revokeObjectURL(resultUrlRef.current)
-        resultUrlRef.current = null
-      }
-      setText(initialText)
-      setEngine(getStoredTtsEngine())
-      setError(null)
-      setProgress(null)
-      setResult(null)
-      setInserted(false)
-    }
-  }, [isOpen, initialText])
-
-  useEffect(() => {
-    setStoredTtsEngine(engine)
-  }, [engine])
-
-  // Cleanup blob URL when dialog closes
-  useEffect(() => {
-    if (!isOpen && resultUrlRef.current) {
-      // Don't revoke if we inserted — the timeline item references it
-      if (!inserted) {
-        URL.revokeObjectURL(resultUrlRef.current)
-      }
-      resultUrlRef.current = null
-    }
-  }, [isOpen, inserted])
 
   const isKokoroSupported = kokoroTtsService.isSupported()
   const isMossSupported = mossTtsService.isSupported()
@@ -208,198 +73,70 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     moss: isMossSupported,
     supertonic: isSupertonicSupported,
   }
+  const isTtsSupported = engineSupport[engine]
   const supportsNativeSpeed = NATIVE_SPEED_ENGINES.includes(engine)
   const { min: speedMin, max: speedMax } = TTS_SPEED_RANGE_BY_ENGINE[engine]
-
-  useEffect(() => {
-    setSpeed((current) => Math.min(speedMax, Math.max(speedMin, current)))
-  }, [speedMax, speedMin])
-
   const effectiveSpeed = supportsNativeSpeed ? speed : 1
-  const isTtsSupported = engineSupport[engine]
   const trimmedText = text.trim()
   const voices: TtsVoiceSelection = {
     kokoro: kokoroVoice,
     moss: mossVoice,
     supertonic: supertonicVoice,
   }
-  const voice = TTS_VOICE_OPTION_RESOLVERS[engine](voices[TTS_VOICE_KEY_BY_ENGINE[engine]]).value
+  const { value: voice, label: voiceLabel } = TTS_VOICE_OPTION_RESOLVERS[engine](
+    voices[TTS_VOICE_KEY_BY_ENGINE[engine]],
+  )
   const voiceOptions = TTS_VOICE_OPTIONS_BY_ENGINE[engine]
-  const busy = isGenerating || isInserting
 
-  const handleGenerate = useCallback(async () => {
-    if (!currentProjectId) {
-      setError(t('editor.tts.errors.openProject'))
-      return
-    }
-    if (!trimmedText) {
-      setError(t('editor.tts.errors.enterText'))
-      return
-    }
-    if (!isTtsSupported) {
-      setError(
-        engine === 'kokoro'
-          ? t('editor.tts.errors.kokoroUnsupported')
-          : engine === 'moss'
-            ? t('editor.tts.errors.mossUnsupported')
-            : t('editor.tts.errors.supertonicUnsupported', {
-                defaultValue:
-                  'This browser cannot run the local Supertonic TTS runtime. Try a recent Chrome or Edge browser.',
-              }),
-      )
-      return
-    }
-
-    // Clean up previous result
-    if (resultUrlRef.current && !inserted) {
-      URL.revokeObjectURL(resultUrlRef.current)
-      resultUrlRef.current = null
-    }
-
-    setError(null)
-    setResult(null)
-    setInserted(false)
-    setIsGenerating(true)
-    setProgress(t('editor.tts.progressPreparing'))
-
-    const thisSession = sessionIdRef.current
-
-    try {
-      const onProgress = (msg: string) => {
-        if (sessionIdRef.current === thisSession) setProgress(msg)
-      }
-      const result =
-        engine === 'kokoro'
-          ? await kokoroTtsService.generateSpeechFile({
-              text: trimmedText,
-              voice: kokoroVoice,
-              speed: effectiveSpeed,
-              model,
-              onProgress,
-            })
-          : engine === 'moss'
-            ? await mossTtsService.generateSpeechFile({
-                text: trimmedText,
-                voice: mossVoice,
-                speed: effectiveSpeed,
-                onProgress,
-              })
-            : await supertonicTtsService.generateSpeechFile({
-                text: trimmedText,
-                voice: supertonicVoice,
-                language: supertonicLanguage,
-                speed: effectiveSpeed,
-                onProgress,
-              })
-
-      const { blob, file, duration } = result
-
-      if (sessionIdRef.current !== thisSession) {
-        // Dialog was closed/reopened — discard stale result
-        return
-      }
-
-      const objectUrl = URL.createObjectURL(blob)
-      resultUrlRef.current = objectUrl
-
-      const voiceLabel =
-        engine === 'kokoro'
-          ? (KOKORO_TTS_VOICE_OPTIONS.find((option) => option.value === kokoroVoice)?.label ??
-            kokoroVoice)
-          : engine === 'moss'
-            ? getMossTtsVoiceOption(mossVoice).label
-            : (SUPERTONIC_TTS_VOICE_OPTIONS.find((option) => option.value === supertonicVoice)
-                ?.label ?? supertonicVoice)
-      const modelLabel =
-        engine === 'kokoro' ? 'Best' : engine === 'moss' ? 'Multilingual Nano' : 'Supertonic 3'
-      const tags =
-        engine === 'kokoro'
-          ? [
-              'ai-generated',
-              'kokoro-tts',
-              'tts-engine:kokoro',
-              `kokoro-quality:${model}`,
-              `kokoro-voice:${kokoroVoice}`,
-            ]
-          : engine === 'moss'
-            ? ['ai-generated', 'moss-tts', 'tts-engine:moss', `moss-voice:${mossVoice}`]
-            : [
-                'ai-generated',
-                'supertonic-tts',
-                'tts-engine:supertonic',
-                `supertonic-voice:${supertonicVoice}`,
-              ]
-
-      setResult({ file, objectUrl, duration, voice: voiceLabel, model: modelLabel, tags })
-      setProgress(null)
-    } catch (generationError) {
-      if (sessionIdRef.current !== thisSession) return
-      setError(
-        generationError instanceof Error
-          ? generationError.message
-          : t('editor.tts.errors.generateFailed'),
-      )
-      setProgress(null)
-    } finally {
-      if (sessionIdRef.current === thisSession) {
-        setIsGenerating(false)
-      }
-    }
-  }, [
-    currentProjectId,
-    effectiveSpeed,
-    engine,
+  const {
+    isGenerating,
+    isInserting,
+    busy,
+    canGenerate,
+    progress,
+    error,
+    result,
     inserted,
-    isTtsSupported,
-    kokoroVoice,
+    generate,
+    insert,
+    resetSession,
+    releaseResult,
+  } = useTtsGeneration({
+    projectId: currentProjectId,
+    sourceItemId,
+    text: trimmedText,
+    engine,
+    voice,
+    voiceLabel,
+    language: supertonicLanguage,
+    speed: effectiveSpeed,
     model,
-    mossVoice,
-    supertonicLanguage,
-    supertonicVoice,
-    trimmedText,
-    t,
-  ])
+    isSupported: isTtsSupported,
+    loadMediaItems,
+    showNotification,
+  })
 
-  const handleInsert = useCallback(async () => {
-    if (!result || !currentProjectId || !sourceItemId) return
-
-    setIsInserting(true)
-    setError(null)
-
-    try {
-      const { mediaLibraryService } = await importMediaLibraryService()
-      const media = await mediaLibraryService.importGeneratedAudio(result.file, currentProjectId, {
-        tags: result.tags,
-      })
-
-      await loadMediaItems()
-
-      const { inserted: didInsert } = insertAndLinkAudioAtTextItem(
-        media,
-        result.objectUrl,
-        sourceItemId,
-      )
-
-      if (didInsert) {
-        setInserted(true)
-        showNotification({
-          type: 'success',
-          message: t('editor.tts.notifications.addedAndLinked', { fileName: media.fileName }),
-        })
-      } else {
-        showNotification({
-          type: 'warning',
-          message: t('editor.tts.notifications.savedNoTrack', { fileName: media.fileName }),
-        })
-      }
-    } catch (insertError) {
-      setError(
-        insertError instanceof Error ? insertError.message : t('editor.tts.errors.insertFailed'),
-      )
-    } finally {
-      setIsInserting(false)
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      resetSession()
+      setText(initialText)
+      setEngine(getStoredTtsEngine())
     }
-  }, [result, currentProjectId, sourceItemId, loadMediaItems, showNotification, t])
+  }, [isOpen, initialText, resetSession])
+
+  useEffect(() => {
+    setStoredTtsEngine(engine)
+  }, [engine])
+
+  // Cleanup blob URL when dialog closes
+  useEffect(() => {
+    if (!isOpen) releaseResult(inserted)
+  }, [isOpen, inserted, releaseResult])
+
+  useEffect(() => {
+    setSpeed((current) => Math.min(speedMax, Math.max(speedMin, current)))
+  }, [speedMax, speedMin])
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
@@ -420,20 +157,12 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
   )
 
   const handleGenerateClick = useCallback(() => {
-    void handleGenerate()
-  }, [handleGenerate])
+    void generate()
+  }, [generate])
 
   const handleInsertClick = useCallback(() => {
-    void handleInsert()
-  }, [handleInsert])
-
-  const canGenerate = [
-    isGenerating,
-    isInserting,
-    !trimmedText,
-    !currentProjectId,
-    !isTtsSupported,
-  ].every((isBlocked) => !isBlocked)
+    void insert()
+  }, [insert])
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>

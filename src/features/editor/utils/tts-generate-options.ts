@@ -83,6 +83,39 @@ export const TTS_SPEED_RANGE_BY_ENGINE: Record<StoredTtsEngine, { min: number; m
 // Engines whose runtime applies the slider speed itself; the others synthesize at 1x.
 export const NATIVE_SPEED_ENGINES: readonly StoredTtsEngine[] = ['kokoro', 'supertonic']
 
+export interface TtsGenerateGuards {
+  hasProject: boolean
+  trimmedText: string
+  engine: StoredTtsEngine
+  isSupported: boolean
+}
+
+export const TTS_MODEL_LABEL_BY_ENGINE: Record<StoredTtsEngine, string> = {
+  kokoro: 'Best',
+  moss: 'Multilingual Nano',
+  supertonic: 'Supertonic 3',
+}
+
+export const TTS_RESULT_TAGS_BY_ENGINE: Record<
+  StoredTtsEngine,
+  (voice: string, model: string) => string[]
+> = {
+  kokoro: (voice, model) => [
+    'ai-generated',
+    'kokoro-tts',
+    'tts-engine:kokoro',
+    `kokoro-quality:${model}`,
+    `kokoro-voice:${voice}`,
+  ],
+  moss: (voice) => ['ai-generated', 'moss-tts', 'tts-engine:moss', `moss-voice:${voice}`],
+  supertonic: (voice) => [
+    'ai-generated',
+    'supertonic-tts',
+    'tts-engine:supertonic',
+    `supertonic-voice:${voice}`,
+  ],
+}
+
 const SUPERTONIC_UNSUPPORTED_FALLBACK =
   'This browser cannot run the local Supertonic TTS runtime. Try a recent Chrome or Edge browser.'
 
@@ -101,4 +134,12 @@ const TTS_UNSUPPORTED_MESSAGE_BY_ENGINE: Record<
 export function resolveTtsUnsupportedMessage(engine: StoredTtsEngine, t: TtsTranslate): string {
   const { key, fallback } = TTS_UNSUPPORTED_MESSAGE_BY_ENGINE[engine]
   return fallback === null ? t(key) : t(key, { defaultValue: fallback })
+}
+
+/** First reason the dialog cannot start a generation, or null when it can. */
+export function resolveTtsGenerateError(guards: TtsGenerateGuards, t: TtsTranslate): string | null {
+  if (!guards.hasProject) return t('editor.tts.errors.openProject')
+  if (guards.trimmedText.length === 0) return t('editor.tts.errors.enterText')
+  if (!guards.isSupported) return resolveTtsUnsupportedMessage(guards.engine, t)
+  return null
 }
