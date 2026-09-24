@@ -47,7 +47,7 @@ function getMotionTimelinePanGesture(
   return { axis, delta: axis === 'x' ? event.deltaX : event.deltaY }
 }
 
-export function getMotionPlayheadEdgeScrollVelocity(
+function getMotionPlayheadEdgeScrollVelocity(
   clientX: number,
   bounds: Pick<DOMRect, 'left' | 'right'>,
 ): number {
@@ -68,7 +68,7 @@ export function getMotionPlayheadEdgeScrollVelocity(
   return 0
 }
 
-export function panMotionTimeViewport(
+function panMotionTimeViewport(
   viewport: MotionTimeViewport,
   panPixels: number,
   timelineWidth: number,
@@ -86,6 +86,116 @@ export function panMotionTimeViewport(
   )
 }
 
+/** What one animation frame of a playhead scrub means for the axis. */
+export interface MotionScrubPanStep {
+  /** Viewport the rest of the frame should use; the previous one when nothing panned. */
+  viewport: MotionTimeViewport
+  /** Reading to store for the next frame's elapsed time; `null` once the pointer stops panning. */
+  clock: number | null
+  /** Whether the pane is still auto-panning and wants another animation frame. */
+  panning: boolean
+}
+
+/**
+ * Advance a scrubbed viewport by one frame of edge auto-scroll.
+ *
+ * Wraps `resolveMotionScrubViewport` with the loop's own bookkeeping — the pan
+ * clock and whether to keep requesting frames — so the caller only has to store
+ * what it gets back. The axis ends at the authored comp end when the comp has
+ * one: a layer may overhang the duration, but there is no frame past the comp.
+ */
+export function advanceMotionScrubPan(input: {
+  viewport: MotionTimeViewport
+  clientX: number
+  bounds: Pick<DOMRect, 'left' | 'right' | 'width'>
+  compositionEndFrame: number | null
+  durationInFrames: number
+  previousTimestamp: number | null
+  timestamp: number
+}): MotionScrubPanStep {
+  const { viewport, clientX, bounds, compositionEndFrame, durationInFrames } = input
+  const pannedViewport = resolveMotionScrubViewport({
+    viewport,
+    clientX,
+    bounds,
+    totalFrames: compositionEndFrame ?? durationInFrames,
+    previousTimestamp: input.previousTimestamp,
+    timestamp: input.timestamp,
+  })
+  if (!pannedViewport) return { viewport, clock: null, panning: false }
+  const panning =
+    pannedViewport.startFrame !== viewport.startFrame ||
+    pannedViewport.endFrame !== viewport.endFrame
+  return {
+    viewport: panning ? pannedViewport : viewport,
+    clock: input.timestamp,
+    panning,
+  }
+}
+
+/** What a scrubbed frame publishes to the preview, if anything. */
+export interface MotionScrubFramePaint {
+  /** Frame worth storing and previewing; `null` when it repeats the last one. */
+  frame: number | null
+  /** Viewport the drag visuals should follow; `null` when the committed one already matches. */
+  viewport: MotionTimeViewport | null
+  /** Pointer progress across the pane, when the pane can be measured. */
+  progress: number | undefined
+}
+
+/**
+ * Decide what a scrubbed frame publishes.
+ *
+ * The preview frame stays integer-quantized while the viewport advances by
+ * fractional frames, so progress is only handed over when the drag actually has
+ * a moved viewport to lock its visuals to.
+ */
+export function resolveMotionScrubFramePaint(input: {
+  frame: number | null
+  latestFrame: number | null
+  viewport: MotionTimeViewport
+  committedViewport: MotionTimeViewport
+  clientX: number
+  bounds: Pick<DOMRect, 'left' | 'width'>
+}): MotionScrubFramePaint {
+  const publishes = input.frame !== null && input.frame !== input.latestFrame
+  const locksViewport = input.viewport !== input.committedViewport
+  return {
+    frame: publishes ? input.frame : null,
+    viewport: locksViewport ? input.viewport : null,
+    progress:
+      locksViewport && input.bounds.width > 0
+        ? (input.clientX - input.bounds.left) / input.bounds.width
+        : undefined,
+  }
+}
+
+/**
+ * Snap a panned viewport to a terminal edge once the axis has run past it.
+ *
+ * Fractional motion is preserved inside the range; only the ends are
+ * canonicalized. Floating-point residue at 0/comp-end otherwise leaves the
+ * imperative preview a fraction away from the settled boundary.
+ */
+function clampMotionScrubEdge(
+  viewport: MotionTimeViewport,
+  velocity: number,
+  totalFrames: number,
+  visibleRange: number,
+): MotionTimeViewport {
+  const boundaryVisibleRange =
+    Math.abs(visibleRange - Math.round(visibleRange)) < 1e-9
+      ? Math.round(visibleRange)
+      : visibleRange
+  if (velocity < 0 && viewport.startFrame <= Number.EPSILON * totalFrames * 4) {
+    return { startFrame: 0, endFrame: boundaryVisibleRange }
+  }
+  if (velocity > 0 && totalFrames - viewport.endFrame <= Number.EPSILON * totalFrames * 4) {
+    return { startFrame: Math.max(0, totalFrames - boundaryVisibleRange), endFrame: totalFrames }
+  }
+  return viewport
+}
+
 /**
  * One animation frame of viewport motion while the playhead is scrubbed.
  *
@@ -95,7 +205,7 @@ export function panMotionTimeViewport(
  * it stored on the previous frame so this stays a pure function of the pointer
  * position and the elapsed frame time.
  */
-export function resolveMotionScrubViewport(input: {
+function resolveMotionScrubViewport(input: {
   viewport: MotionTimeViewport
   clientX: number
   bounds: Pick<DOMRect, 'left' | 'right' | 'width'>
@@ -111,26 +221,12 @@ export function resolveMotionScrubViewport(input: {
 
   const elapsedSeconds =
     Math.min(32, Math.max(0, timestamp - (previousTimestamp ?? timestamp - 1000 / 60))) / 1000
-  const pannedViewport = panMotionTimeViewport(
-    viewport,
-    velocity * elapsedSeconds,
-    bounds.width,
+  return clampMotionScrubEdge(
+    panMotionTimeViewport(viewport, velocity * elapsedSeconds, bounds.width, totalFrames),
+    velocity,
     totalFrames,
+    visibleRange,
   )
-  const boundaryVisibleRange =
-    Math.abs(visibleRange - Math.round(visibleRange)) < 1e-9
-      ? Math.round(visibleRange)
-      : visibleRange
-  // Preserve fractional motion inside the range, but canonicalize the terminal
-  // edge. Floating-point residue at 0/comp-end otherwise leaves the imperative
-  // preview a fraction away from the settled boundary.
-  if (velocity < 0 && pannedViewport.startFrame <= Number.EPSILON * totalFrames * 4) {
-    return { startFrame: 0, endFrame: boundaryVisibleRange }
-  }
-  if (velocity > 0 && totalFrames - pannedViewport.endFrame <= Number.EPSILON * totalFrames * 4) {
-    return { startFrame: Math.max(0, totalFrames - boundaryVisibleRange), endFrame: totalFrames }
-  }
-  return pannedViewport
 }
 
 function zoomMotionTimeViewport(

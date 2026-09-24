@@ -20,7 +20,7 @@ import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
 import { clearSpanDragVisuals, clearSpanTrimVisuals, createMotionSpanDragCommands, createMotionSpanTrimCommands, type SpanDragState, type SpanTrimState } from './motion-span-interactions'
 import { createMotionRowReorderCommands, type RowReorderDragState } from './motion-row-reorder'
-import { createMotionTimeViewportController, formatFrameTime, normalizeMotionTimeViewport, resolveMotionScrubViewport, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
+import { advanceMotionScrubPan, createMotionTimeViewportController, formatFrameTime, normalizeMotionTimeViewport, resolveMotionScrubFramePaint, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
 import { paintMotionViewportGrids, paintMotionViewportNavigator, paintMotionViewportPlayhead, paintMotionViewportRulerLabels, paintMotionViewportTargets } from './motion-time-viewport-preview'
 import { createMotionLayerClipboardCommands } from './motion-layer-clipboard'
 import { createMotionLayerSelectionCommands } from './motion-layer-selection'
@@ -1565,44 +1565,37 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
       let viewport: MotionTimeViewport = activeViewport
 
       const rect = surface.getBoundingClientRect()
-      const autoEdgeEndFrame = compositionEndFrame ?? durationInFrames
-      const pannedViewport = resolveMotionScrubViewport({
+      const pan = advanceMotionScrubPan({
         viewport,
         clientX,
         bounds: rect,
-        totalFrames: autoEdgeEndFrame,
+        compositionEndFrame,
+        durationInFrames,
         previousTimestamp: scrubAnimationTimeRef.current,
         timestamp,
       })
-      let keepScrolling = false
-      if (pannedViewport) {
-        scrubAnimationTimeRef.current = timestamp
-        if (
-          pannedViewport.startFrame !== viewport.startFrame ||
-          pannedViewport.endFrame !== viewport.endFrame
-        ) {
-          viewport = pannedViewport
-          playheadScrubViewportRef.current = pannedViewport
-          keepScrolling = true
-        }
-      } else {
-        scrubAnimationTimeRef.current = null
-      }
+      scrubAnimationTimeRef.current = pan.clock
+      viewport = pan.viewport
+      if (pan.panning) playheadScrubViewportRef.current = pan.viewport
 
-      const frame = frameFromClientX(clientX, surface, viewport)
-      if (frame !== null && frame !== latestScrubFrameRef.current) {
-        latestScrubFrameRef.current = frame
-        setPreviewFrame(frame)
+      const paint = resolveMotionScrubFramePaint({
+        frame: frameFromClientX(clientX, surface, viewport),
+        latestFrame: latestScrubFrameRef.current,
+        viewport,
+        committedViewport: timeViewportRef.current,
+        clientX,
+        bounds: rect,
+      })
+      if (paint.frame !== null) {
+        latestScrubFrameRef.current = paint.frame
+        setPreviewFrame(paint.frame)
       }
-      if (viewport !== timeViewportRef.current) {
-        // Keep the drag visual locked to the pointer. The preview frame remains
-        // integer-quantized, which otherwise produces a visible sawtooth while
-        // the viewport itself advances by fractional frames.
-        const playheadProgress = rect.width > 0 ? (clientX - rect.left) / rect.width : undefined
-        previewMotionTimeViewport(viewport, playheadProgress)
-      }
+      // Keep the drag visual locked to the pointer. The preview frame remains
+      // integer-quantized, which otherwise produces a visible sawtooth while
+      // the viewport itself advances by fractional frames.
+      if (paint.viewport) previewMotionTimeViewport(paint.viewport, paint.progress)
 
-      if (keepScrolling) {
+      if (pan.panning) {
         scrubAnimationFrameRef.current = requestAnimationFrame(runPlayheadScrubLoop)
       }
     },
