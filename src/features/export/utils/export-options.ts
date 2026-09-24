@@ -26,6 +26,11 @@ export type VideoCodecOption = {
   supported: boolean
 }
 
+export type ResolutionOption = {
+  value: string
+  label: string
+}
+
 const VIDEO_CODEC_LABELS: Record<string, string> = {
   h264: 'H.264',
   h265: 'H.265/HEVC',
@@ -117,7 +122,7 @@ export function getResolutionOptions(
   projectWidth: number,
   projectHeight: number,
   t: (key: string, options?: Record<string, unknown>) => string,
-) {
+): ResolutionOption[] {
   const scales = [1, 0.666, 0.5]
 
   return scales.map((scale) => {

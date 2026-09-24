@@ -76,6 +76,7 @@ import { ExportModeToggle } from './export-mode-toggle'
 import { ExportRangeSummary } from './export-range-summary'
 import { ExportPresetGrid } from './export-preset-grid'
 import { ExportCapabilityAlerts } from './export-capability-alerts'
+import { ExportVideoFormatFields } from './export-video-format-fields'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -677,108 +678,17 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                         height={settings.resolution.height}
                       />
 
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="container">{t('export.settings.format')}</Label>
-                          <Select
-                            value={videoContainer}
-                            onValueChange={(v) => setVideoContainer(v as ClientVideoContainer)}
-                          >
-                            <SelectTrigger id="container">
-                              <SelectValue placeholder={t('export.settings.selectFormat')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {videoContainerOptions.map((option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                  disabled={!option.supported}
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="codec">{t('export.settings.codec')}</Label>
-                          <Select
-                            value={settings.codec}
-                            onValueChange={(value) =>
-                              setSettings({ ...settings, codec: value as ExportSettings['codec'] })
-                            }
-                          >
-                            <SelectTrigger id="codec">
-                              <SelectValue placeholder={t('export.settings.selectCodec')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {codecOptions.map((option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                  disabled={!option.supported}
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="quality">{t('export.settings.quality')}</Label>
-                          <Select
-                            value={settings.quality}
-                            onValueChange={(value) =>
-                              setSettings({
-                                ...settings,
-                                quality: value as ExportSettings['quality'],
-                              })
-                            }
-                          >
-                            <SelectTrigger id="quality">
-                              <SelectValue placeholder={t('export.settings.selectQuality')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="low">{t('export.settings.qualityLow')}</SelectItem>
-                              <SelectItem value="medium">
-                                {t('export.settings.qualityMedium')}
-                              </SelectItem>
-                              <SelectItem value="high">
-                                {t('export.settings.qualityHigh')}
-                              </SelectItem>
-                              <SelectItem value="ultra">
-                                {t('export.settings.qualityUltra')}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="resolution">{t('export.settings.resolution')}</Label>
-                          <Select
-                            value={`${settings.resolution.width}x${settings.resolution.height}`}
-                            onValueChange={(value) => {
-                              const parts = value.split('x').map(Number)
-                              const width = parts[0] ?? projectWidth
-                              const height = parts[1] ?? projectHeight
-                              setSettings({ ...settings, resolution: { width, height } })
-                            }}
-                          >
-                            <SelectTrigger id="resolution">
-                              <SelectValue placeholder={t('export.settings.selectResolution')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {resolutionOptions.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
+                      <ExportVideoFormatFields
+                        settings={settings}
+                        setSettings={setSettings}
+                        container={videoContainer}
+                        setContainer={setVideoContainer}
+                        containerOptions={videoContainerOptions}
+                        codecOptions={codecOptions}
+                        resolutionOptions={resolutionOptions}
+                        projectWidth={projectWidth}
+                        projectHeight={projectHeight}
+                      />
 
                       <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
                         <div className="grid gap-3 md:grid-cols-2">
