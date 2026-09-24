@@ -25,7 +25,6 @@ import { createMotionLayerClipboardCommands } from './motion-layer-clipboard'
 import { createMotionLayerSelectionCommands } from './motion-layer-selection'
 import { getVisibleMotionRetimeRange, getRetimeKeyboardDelta, applyMotionSelectionFrameUpdates, restoreMotionSelectionRetimeVisuals, type MotionSelectionRetimeDragState, createMotionSelectionRetimeCommands } from './motion-selection-retime'
 import { LAYER_COLUMN_WIDTH, LAYER_MODE_COLUMN_WIDTH, LAYER_PARENT_COLUMN_WIDTH, LAYER_ROW_HEIGHT, LAYER_TIMING_COLUMN_WIDTH, RULER_DIVISIONS, useSettledMotionFrame, type MotionViewportPreviewElement, type MotionViewportPreviewGrid, type MotionViewportPreviewState, type MotionMiddlePanState, type InlineCurveState, type RenameTarget } from './motion-timeline-primitives'
-import { TextMotionTimelineLanes } from './motion-timeline-lanes'
 import { useGizmoStore, useMaskEditorStore } from '@/features/editor/deps/preview'
 import { getLinkedAudioCompanion } from '@/shared/utils/linked-media'
 import { trimCompositionToActiveRegion, useMarkersStore } from '@/features/editor/deps/timeline-store'
@@ -39,6 +38,7 @@ import { MotionIoLane, MOTION_IO_LANE_HEIGHT } from './motion-io-lane'
 import { MotionActiveRegionOverlay, MotionCompEndRulerDim } from './motion-region-overlay'
 import { buildMotionLayerRowModel, type LayerEntry, type MotionRow } from './motion-layer-row-model'
 import { MotionLayerLane } from './motion-layer-lane'
+import { MotionLayerPropertyRows } from './motion-layer-property-rows'
 import {
   LayerRenameInput,
   MotionLayerModeCell,
@@ -2531,98 +2531,36 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
                       </div>
                     </MotionRowContextMenu>
 
-                    {expanded ? (
-                      <div inert={isLayerLocked ? true : undefined} aria-disabled={isLayerLocked}>
-                        {isPathShape ? (
-                          <div
-                            className="flex h-7 border-b border-border/70 bg-background/45"
-                            data-testid={`motion-path-vertex-toolbar-${item.id}`}
-                          >
-                            <div
-                              className="flex items-center justify-between gap-2 border-r border-border px-2 text-[10px] text-muted-foreground"
-                              style={{ width: LAYER_COLUMN_WIDTH }}
-                            >
-                              <span>
-                                {showAllPathVertices
-                                  ? 'All path vertices'
-                                  : maskEditingItemId === item.id &&
-                                      selectedPathVertexIndices.length > 0
-                                    ? `${selectedPathVertexIndices.length} selected ${
-                                        selectedPathVertexIndices.length === 1
-                                          ? 'vertex'
-                                          : 'vertices'
-                                      }`
-                                    : 'Vertex 1'}
-                              </span>
-                              <button
-                                type="button"
-                                className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground hover:bg-accent"
-                                data-testid={`motion-toggle-all-path-vertices-${item.id}`}
-                                aria-pressed={showAllPathVertices}
-                                onClick={() =>
-                                  setAllPathVertexItemIds((current) => {
-                                    const next = new Set(current)
-                                    if (next.has(item.id)) next.delete(item.id)
-                                    else next.add(item.id)
-                                    return next
-                                  })
-                                }
-                              >
-                                {showAllPathVertices ? 'Selected vertices' : 'All vertices'}
-                              </button>
-                            </div>
-                            <div className="flex flex-1 items-center px-2 text-[10px] text-muted-foreground/70">
-                              Select path points in the preview to focus these channels.
-                            </div>
-                          </div>
-                        ) : null}
-                        {textMotionBands.length > 0 ? (
-                          <TextMotionTimelineLanes
-                            itemId={item.id}
-                            bands={textMotionBands}
-                            timeViewport={timeViewport}
-                          />
-                        ) : null}
-                        <MotionDopesheetLanes
-                          item={item}
-                          itemById={itemById}
-                          itemKeyframes={keyframesByItemId[item.id]}
-                          properties={properties}
-                          compositionDurationInFrames={durationInFrames}
-                          fps={fps}
-                          canvas={composition}
-                          propertyFilter={propertyFilter}
-                          timeViewport={timeViewport}
-                          inlineCurveProperty={
-                            activeInlineCurve?.itemId === item.id
-                              ? activeInlineCurve.property
-                              : null
-                          }
-                          disabled={isLayerLocked}
-                          onSelectItem={(itemId) => selectItems([itemId])}
-                          onInlineCurveChange={(property) => {
-                            setInlineCurve(
-                              property
-                                ? {
-                                    compositionId: activeCompositionId,
-                                    itemId: item.id,
-                                    property,
-                                  }
-                                : null,
-                            )
-                          }}
-                          onScrub={(frame) => {
-                            pause()
-                            setScrubFrame(frame)
-                          }}
-                          onTimeViewportChange={updateTimeViewport}
-                          onPropertyLinkPointerDown={beginPropertyLinkDrag}
-                          onRemovePropertyLink={handleRemovePropertyLink}
-                          onSetPropertyExpression={handleSetPropertyExpression}
-                          onRemovePropertyExpression={handleRemovePropertyExpression}
-                        />
-                      </div>
-                    ) : null}
+                    <MotionLayerPropertyRows
+                      item={item}
+                      expanded={expanded}
+                      isLayerLocked={isLayerLocked}
+                      isPathShape={isPathShape}
+                      showAllPathVertices={showAllPathVertices}
+                      maskEditingItemId={maskEditingItemId}
+                      selectedPathVertexIndices={selectedPathVertexIndices}
+                      setAllPathVertexItemIds={setAllPathVertexItemIds}
+                      textMotionBands={textMotionBands}
+                      timeViewport={timeViewport}
+                      itemById={itemById}
+                      itemKeyframes={keyframesByItemId[item.id]}
+                      properties={properties}
+                      durationInFrames={durationInFrames}
+                      fps={fps}
+                      canvas={composition}
+                      propertyFilter={propertyFilter}
+                      activeInlineCurve={activeInlineCurve}
+                      activeCompositionId={activeCompositionId}
+                      selectItems={selectItems}
+                      setInlineCurve={setInlineCurve}
+                      pause={pause}
+                      setScrubFrame={setScrubFrame}
+                      updateTimeViewport={updateTimeViewport}
+                      beginPropertyLinkDrag={beginPropertyLinkDrag}
+                      handleRemovePropertyLink={handleRemovePropertyLink}
+                      handleSetPropertyExpression={handleSetPropertyExpression}
+                      handleRemovePropertyExpression={handleRemovePropertyExpression}
+                    />
                   </div>
                 )
               })
