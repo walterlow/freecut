@@ -2,14 +2,6 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -20,7 +12,6 @@ import {
   Film,
   Clock,
   HardDrive,
-  Music,
   ListPlus,
   ChevronDown,
 } from 'lucide-react'
@@ -72,6 +63,7 @@ import { ExportDialogHeading } from './export-dialog-heading'
 import { ExportSequencePicker } from './export-sequence-picker'
 import { ExportModeToggle } from './export-mode-toggle'
 import { ExportVideoSettings } from './export-video-settings'
+import { ExportAudioSettings } from './export-audio-settings'
 import { ExportRangeSummary } from './export-range-summary'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
@@ -474,12 +466,6 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
     wasOpenRef.current = open
   }, [open, projectHeight, projectWidth, resetState, resetView])
 
-  const getAudioContainerOptions = () => [
-    { value: 'mp3', label: 'MP3', description: t('export.audioContainer.mp3') },
-    { value: 'aac', label: 'AAC', description: t('export.audioContainer.aac') },
-    { value: 'wav', label: 'WAV', description: t('export.audioContainer.wav') },
-  ]
-
   useEffect(() => {
     if (!open || view !== 'settings' || exportMode !== 'video') return
 
@@ -708,62 +694,12 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
                 {/* Audio Export Settings */}
                 {exportMode === 'audio' && (
-                  <div className="space-y-4">
-                    <Alert>
-                      <Music className="h-4 w-4" />
-                      <AlertDescription>{t('export.settings.audioOnlyNote')}</AlertDescription>
-                    </Alert>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="audio-format">{t('export.settings.format')}</Label>
-                      <Select
-                        value={audioContainer}
-                        onValueChange={(v) => setAudioContainer(v as ClientAudioContainer)}
-                      >
-                        <SelectTrigger id="audio-format">
-                          <SelectValue placeholder={t('export.settings.selectFormat')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {getAudioContainerOptions().map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              <span>{option.label}</span>
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                {option.description}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="audio-quality">{t('export.settings.quality')}</Label>
-                      <Select
-                        value={settings.quality}
-                        onValueChange={(value) =>
-                          setSettings({ ...settings, quality: value as ExportSettings['quality'] })
-                        }
-                      >
-                        <SelectTrigger id="audio-quality">
-                          <SelectValue placeholder={t('export.settings.selectQuality')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low">
-                            {t('export.settings.audioQualityLow')}
-                          </SelectItem>
-                          <SelectItem value="medium">
-                            {t('export.settings.audioQualityMedium')}
-                          </SelectItem>
-                          <SelectItem value="high">
-                            {t('export.settings.audioQualityHigh')}
-                          </SelectItem>
-                          <SelectItem value="ultra">
-                            {t('export.settings.audioQualityUltra')}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                  <ExportAudioSettings
+                    settings={settings}
+                    setSettings={setSettings}
+                    container={audioContainer}
+                    setContainer={setAudioContainer}
+                  />
                 )}
               </div>
             </div>
