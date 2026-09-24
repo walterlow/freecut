@@ -23,7 +23,6 @@ import {
   Clock,
   HardDrive,
   Music,
-  Scissors,
   ListPlus,
   ChevronDown,
 } from 'lucide-react'
@@ -58,7 +57,8 @@ import {
   listExportableSequences,
   type ExportableSequence,
 } from '@/features/export/deps/timeline-compositions'
-import { formatTimecode, framesToSeconds } from '@/shared/utils/time-utils'
+import { framesToSeconds } from '@/shared/utils/time-utils'
+import { formatFileSize, formatTime } from '../utils/export-format'
 import type { ExportPreflightResult } from '../utils/export-preflight'
 import { assessExportPreflight } from '../utils/export-preflight'
 import {
@@ -73,6 +73,7 @@ import { ExportPreviewPlayer } from './export-preview-player'
 import { ExportDialogHeading } from './export-dialog-heading'
 import { ExportSequencePicker } from './export-sequence-picker'
 import { ExportModeToggle } from './export-mode-toggle'
+import { ExportRangeSummary } from './export-range-summary'
 import { ExportPreflightPanel } from './export-preflight-panel'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
@@ -107,20 +108,6 @@ export interface ExportDialogProps {
   onClose: () => void
   /** Open the render queue panel (called after jobs are added to the queue). */
   onOpenRenderQueue?: () => void
-}
-
-function formatTime(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = Math.round(seconds % 60)
-  return `${minutes}m ${remainingSeconds}s`
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
 function getDefaultCodecForFormat(format: 'mp4' | 'webm'): ExportSettings['codec'] {
@@ -658,59 +645,13 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                 <ExportModeToggle mode={exportMode} onChange={setExportMode} />
 
                 {/* Export Range Section */}
-                <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/20">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Scissors className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">
-                        {t('export.settings.exportRange')}
-                      </span>
-                    </div>
-                    {hasInOutPoints && (
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor="render-whole" className="text-xs text-muted-foreground">
-                          {t('export.settings.renderWholeProject')}
-                        </Label>
-                        <Switch
-                          id="render-whole"
-                          checked={renderWholeProject}
-                          onCheckedChange={setRenderWholeProject}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 text-sm">
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-0.5">
-                        {t('export.settings.in')}
-                      </div>
-                      <div className="font-mono text-foreground">
-                        {formatTimecode(exportRange.start, fps)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-0.5">
-                        {t('export.settings.out')}
-                      </div>
-                      <div className="font-mono text-foreground">
-                        {formatTimecode(exportRange.end, fps)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-0.5">
-                        {t('export.settings.duration')}
-                      </div>
-                      <div className="font-mono text-foreground">
-                        {formatTime(framesToSeconds(exportRange.duration, fps))}
-                      </div>
-                    </div>
-                  </div>
-                  {hasInOutPoints && !renderWholeProject && (
-                    <p className="text-xs text-muted-foreground">
-                      {t('export.settings.inOutRangeHint')}
-                    </p>
-                  )}
-                </div>
+                <ExportRangeSummary
+                  range={exportRange}
+                  fps={fps}
+                  hasInOutPoints={hasInOutPoints}
+                  renderWholeProject={renderWholeProject}
+                  onRenderWholeProjectChange={setRenderWholeProject}
+                />
 
                 <ExportPreflightPanel preflight={preflight} />
               </div>
